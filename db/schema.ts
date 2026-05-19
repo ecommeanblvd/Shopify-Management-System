@@ -70,3 +70,5 @@ export const settingsSnapshots = pgTable('settings_snapshots', {
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   capturedBy: uuid('captured_by').references(() => users.id),
 });
+
+export * from './auth-schema';
