@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Shopify Management System
 
-## Getting Started
+Central management for multiple Shopify stores. Spec #1: foundation + read-only settings viewer.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Next.js (App Router) · TypeScript · Drizzle ORM + Postgres · Better-Auth · `@shopify/shopify-api` · Vitest + Playwright · Railway.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. `cp .env.example .env` and fill in values. Generate keys with `openssl rand -hex 32`.
+2. Start a local Postgres (or use a Railway dev database) and set `DATABASE_URL`.
+3. `npm install && npm run db:migrate && npm run dev`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy (Railway)
 
-## Learn More
+- One service for the Next.js app + an attached Postgres plugin.
+- Set every variable from `.env.example` in the Railway service. `DATABASE_URL` is provided automatically by the Postgres plugin.
+- `SHOPIFY_APP_URL` and `BETTER_AUTH_URL` must be the Railway public URL.
+- The deploy `startCommand` runs migrations then starts the server (see `railway.json`).
 
-To learn more about Next.js, take a look at the following resources:
+## Shopify Dev Dashboard app
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Create one app, unlisted. Set the OAuth redirect URL to `<APP_URL>/api/auth/shopify/callback`.
+- Scopes: `read_shipping,read_checkout_branding,read_products`.
+- Install the app into each store via the in-app "Connect a store" flow.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Testing
 
-## Deploy on Vercel
+- `npm run test` — unit + integration tests (Vitest).
+- `npm run test -- --coverage` — coverage; the 80% gate applies to the pure-logic core (crypto, registry, rbac, connector). DB-bound modules, route handlers, and UI are integration/E2E surface.
+- `npm run test:e2e` — Playwright E2E. Requires a running app with a provisioned `DATABASE_URL`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## GitHub branch protection (set once, manually)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+On `main`: require a PR, 1 approval, and the `verify` CI check. Replace `@REPLACE_WITH_GITHUB_OWNER` in `.github/CODEOWNERS` with the repo owner's handle after the repo is pushed.
+
+## Roadmap
+
+This is sub-project #1 of 6. See `docs/superpowers/specs/` for the full design and the roadmap (settings write, theme control, feature-module framework, debug/monitoring, customer service).
