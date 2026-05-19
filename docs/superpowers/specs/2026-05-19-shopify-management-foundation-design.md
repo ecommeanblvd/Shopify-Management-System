@@ -1,7 +1,7 @@
 # Shopify Management System — Spec #1: Foundation + Settings Viewer (read-only)
 
 - **Ngày:** 2026-05-19
-- **Trạng thái:** Design — chờ user review
+- **Trạng thái:** Design — đã review, sẵn sàng cho bước planning
 - **Sub-project:** #1 / 6 (xem Lộ trình ở cuối)
 
 ## 1. Bối cảnh & mục tiêu
@@ -19,10 +19,10 @@ sub-project #1.**
 Foundation (hạ tầng dùng chung) **cộng** một feature đọc-thuần đầu tiên:
 
 - App OAuth trên Shopify Dev Dashboard + luồng install/callback vào store.
-- Lưu access token mỗi store, mã hoá at-rest.
+- Lưu access token mỗi store, mã hoá at-rest có versioning khoá.
 - Auth nhiều người dùng + RBAC ba vai: `admin`, `operator`, `viewer`.
 - Các bảng dữ liệu lõi: `stores`, `users`, `roles`, `feature_flags`,
-  `audit_log`, `settings_snapshots`.
+  `access_log`, `audit_log`, `settings_snapshots`.
 - Connector `lib/shopify` — cổng duy nhất ra Shopify, **chỉ mở query đọc**.
 - Shell dashboard + registry feature-module.
 - Feature `settings-viewer`: xem shipping + checkout branding của tất cả store
@@ -44,7 +44,8 @@ Foundation (hạ tầng dùng chung) **cộng** một feature đọc-thuần đ�
 - Kết nối được cả 2–5 store qua một lần cài app OAuth mỗi store.
 - Mọi user đăng nhập được và bị giới hạn đúng theo vai.
 - Màn hình settings-viewer hiển thị shipping + checkout branding của tất cả store.
-- Mỗi lần xem tạo một bản ghi `settings_snapshots` và một bản ghi `audit_log`.
+- Mỗi lần xem tạo một bản ghi `access_log`; chỉ tạo `settings_snapshots` mới
+  khi dữ liệu thực sự khác snapshot gần nhất.
 - **Không tồn tại đường code nào ghi lên store** — bảo đảm ở tầng type.
 - CI xanh: typecheck + lint + test + build.
 
@@ -56,9 +57,9 @@ Foundation (hạ tầng dùng chung) **cộng** một feature đọc-thuần đ�
 | Framework  | Next.js (App Router) + TypeScript | Một codebase UI + API; dễ cho collaborator web |
 | Host       | Railway (service dashboard + Postgres; worker thêm sau khi cần) | Một nền tảng, bao được worker nền về sau |
 | Database   | Postgres trên Railway | Cùng nền tảng host |
-| Auth       | Auth.js (NextAuth) hoặc Better-Auth + bảng `roles` | RBAC tự kiểm ở lớp server |
+| Auth       | Better-Auth + bảng `roles` | Nhẹ, type-safe, kiến trúc plugin; map RBAC tự nhiên hơn Auth.js |
 | Shopify SDK | `@shopify/shopify-api` (Node, chính chủ) | Lo sẵn OAuth, đổi token, verify HMAC/webhook |
-| Mã hoá token | AES-256-GCM, khoá ở env Railway | Token là tài sản nhạy cảm nhất |
+| Mã hoá token | AES-256-GCM, khoá ở env Railway, có versioning | Token là tài sản nhạy cảm nhất; versioning để xoay khoá an toàn |
 
 ## 3. Kiến trúc & mô hình module
 
@@ -135,10 +136,16 @@ docs/superpowers/specs/   # các spec
 
 ### Bảo mật token
 
-- Mã hoá at-rest bằng AES-256-GCM; khoá ở env Railway `ENCRYPTION_KEY`,
-  không bao giờ commit.
+- Mã hoá at-rest bằng AES-256-GCM; khoá ở env Railway, không bao giờ commit.
 - Token chỉ giải mã trong bộ nhớ server khi gọi API; **không gửi xuống client,
   không ghi log**.
+- **Versioning khoá để xoay khoá an toàn.** Chuỗi mã hoá lưu trong DB có tiền tố
+  phiên bản: `v1:<ciphertext>`. Env giữ map khoá theo phiên bản
+  (`ENCRYPTION_KEY_V1`, `ENCRYPTION_KEY_V2`, ...) và một biến `ENCRYPTION_KEY_CURRENT`
+  trỏ phiên bản dùng để mã hoá mới. Khi đổi sang `v2`: vẫn giữ khoá `v1` để giải
+  mã token cũ; mỗi lần đọc một token còn ở `v1`, sau khi giải mã hệ thống tự mã
+  hoá lại bằng `v2` và update DB (re-encrypt lười — lazy). Nhờ vậy xoay khoá
+  không cần downtime và không làm sập store đang kết nối.
 - RBAC quanh token:
   - `viewer` — xem store và settings; không thấy token.
   - `operator` — chạy thao tác của feature đã bật; không thấy token thô.
@@ -149,11 +156,20 @@ docs/superpowers/specs/   # các spec
 - Mọi feature gọi store qua connector, không gọi thẳng API.
 - Connector lo: chọn token đúng store, gắn header `X-Shopify-Access-Token`,
   cố định `api_version`, xử lý **rate limit** (Shopify tính cost theo điểm —
-  connector tự backoff + retry khi gần cạn), và **ghi `audit_log`** mỗi lời gọi.
+  connector tự backoff + retry khi gần cạn).
 - Trước mỗi lời gọi connector kiểm tra `feature_flags`: feature chưa bật cho
   store đó → chặn. Thiếu `requiredScopes` → chặn trước khi gọi Shopify.
 - **Spec #1 connector chỉ export `query()` (đọc). Không có `mutate()`.**
   Thao tác ghi bị chặn ở tầng TypeScript; muốn ghi cũng không compile được.
+
+**Ghi log — hai mức tách biệt:**
+- Connector **không** ghi log mỗi lời gọi API (sẽ làm phình DB rất nhanh).
+- Thao tác **đọc** được ghi ở mức *feature-entry* vào `access_log` — một bản
+  ghi mỗi lần user mở một feature cho một store (vd "user A xem settings-viewer
+  của store B"), không phải mỗi cú API call. `access_log` có chính sách giữ
+  ngắn hạn (mặc định 30 ngày).
+- Thao tác **ghi/đổi cấu hình** (từ spec #2) được ghi vào `audit_log` —
+  append-only, giữ vĩnh viễn.
 - Mỗi store có chức năng "test connection": gọi query nhẹ (`shop { name }`)
   xác nhận token còn sống, scope đủ, version API hợp lệ.
 
@@ -177,22 +193,34 @@ cho mọi route và mọi lời gọi connector.
 Một feature có thể bật ở store A, tắt ở store B. Đây là "công tắc" chống lỗi lan.
 `config` để jsonb nên mỗi feature tự định nghĩa cấu hình mà không đổi schema chung.
 
-**`audit_log`** — append-only, không UPDATE/DELETE
+**`access_log`** — nhật ký thao tác **đọc**, mức feature-entry, giữ ngắn hạn
+`id · user_id · store_id · feature_key · created_at`
+Một bản ghi mỗi lần user mở một feature cho một store. Có job dọn định kỳ
+(mặc định giữ 30 ngày) để bảng không phình. Không phải nguồn dữ liệu pháp lý —
+chỉ phục vụ quan sát/usage.
+
+**`audit_log`** — nhật ký thao tác **ghi/đổi cấu hình**, append-only, vĩnh viễn
 `id · user_id · store_id · feature_key · action · target · request_summary
 · result(success|error) · error_detail · created_at`
-Mọi lời gọi connector tự ghi vào đây. Spec #1 toàn bản ghi `read`.
+Không bao giờ UPDATE/DELETE. Spec #1 hầu như rỗng (chưa có thao tác ghi);
+từ spec #2 trở đi mỗi thao tác ghi settings ghi một bản ghi vào đây.
 
-**`settings_snapshots`** — append-only
+**`settings_snapshots`** — append-only, **chống trùng**
 `id · store_id · domain(shipping|checkout|...) · payload(jsonb)
-· captured_at · captured_by`
-Spec #1 chụp snapshot mỗi lần xem settings. Tác dụng: (a) xem lịch sử settings
-đổi thế nào, (b) làm sẵn điểm khôi phục để spec #2 rollback khi ghi đè.
+· payload_hash · captured_at · captured_by`
+Trước khi insert, hệ thống lấy snapshot gần nhất của cùng `store_id` + `domain`,
+so `payload_hash`. **Chỉ insert bản ghi mới khi hash khác** — xem lại nhiều lần
+mà settings không đổi thì không tạo bản ghi trùng. Tác dụng: (a) xem lịch sử
+settings đổi thế nào, (b) làm sẵn điểm khôi phục để spec #2 rollback khi ghi đè.
 
 **`feature_registry`** *(tuỳ chọn — có thể chỉ để trong code)*
 Manifest các feature: `feature_key · name · version · required_scopes[]`.
 
-Hai nguyên tắc thiết kế: `audit_log` và `settings_snapshots` **append-only** —
-không bao giờ sửa/xoá, luôn truy được nguyên nhân sự cố.
+Nguyên tắc thiết kế:
+- `audit_log` và `settings_snapshots` **append-only** — không bao giờ sửa/xoá,
+  luôn truy được nguyên nhân sự cố.
+- `access_log` tách riêng và giữ ngắn hạn để thao tác đọc tần suất cao không
+  làm phình DB; `settings_snapshots` chống trùng bằng `payload_hash`.
 
 ## 6. Cơ chế an toàn — tránh làm hỏng store
 
@@ -229,8 +257,14 @@ không bao giờ sửa/xoá, luôn truy được nguyên nhân sự cố.
 - Hiển thị, cho tất cả store đã kết nối:
   - **Shipping:** delivery profiles, zones, rates (đọc qua connector).
   - **Checkout branding:** cấu hình branding của Checkout Extensibility (đọc).
-- Mỗi lần xem: connector đọc dữ liệu → ghi một `audit_log` (action `read`) →
-  lưu một `settings_snapshots` (`domain` = `shipping` hoặc `checkout`).
+- Mỗi lần mở feature cho một store: ghi một bản ghi `access_log` (feature-entry)
+  → connector đọc dữ liệu → tính `payload_hash`, chỉ lưu `settings_snapshots`
+  mới khi hash khác snapshot gần nhất của cùng `store_id` + `domain`.
+- **Graceful degradation cho checkout branding:** đọc `checkout_branding` yêu
+  cầu store đã migrate lên Checkout Extensibility. Nếu API trả lỗi do store
+  chưa đủ điều kiện, feature **không crash** — phần checkout của store đó hiển
+  thị trạng thái "chưa khả dụng / cần migrate", phần shipping vẫn hiển thị bình
+  thường. Lỗi được ghi nhận để admin biết.
 - Chỉ đọc — không có nút ghi nào.
 - `requiredScopes`: `read_shipping`, `read_checkout_branding`.
 
@@ -241,22 +275,28 @@ không bao giờ sửa/xoá, luôn truy được nguyên nhân sự cố.
 - **Token chết / scope thiếu:** "test connection" phát hiện → đánh dấu store
   `status = error`, hướng dẫn admin cài lại app.
 - **Shopify rate limit:** connector backoff + retry; quá ngưỡng thì trả lỗi
-  thân thiện, ghi audit, không làm sập trang.
+  thân thiện, không làm sập trang.
+- **Checkout Extensibility chưa đủ điều kiện:** store chưa migrate → query
+  `checkout_branding` lỗi. Bắt lỗi này riêng, hiển thị trạng thái "cần migrate"
+  cho phần checkout, không ảnh hưởng phần shipping (xem mục 7).
 - **Feature lỗi runtime:** error boundary theo namespace `/f/<key>`; shell và
   các feature khác vẫn chạy.
-- **Lỗi DB:** thao tác đọc store vẫn cố hoàn tất; lỗi ghi `audit_log`/snapshot
+- **Lỗi DB:** thao tác đọc store vẫn cố hoàn tất; lỗi ghi `access_log`/snapshot
   được log lại nhưng không chặn người dùng xem dữ liệu (degraded, không sập).
 
 ## 9. Kiểm thử
 
-- **Unit:** `lib/crypto` (mã hoá/giải mã token), `lib/flags` (logic bật/tắt),
-  RBAC (mỗi vai chặn/cho đúng), parser dữ liệu shipping/checkout.
+- **Unit:** `lib/crypto` (mã hoá/giải mã token; **re-encrypt lười khi đổi
+  phiên bản khoá** `v1`→`v2`); `lib/flags` (logic bật/tắt); RBAC (mỗi vai
+  chặn/cho đúng); parser dữ liệu shipping/checkout; **logic chống trùng
+  snapshot** (cùng `payload_hash` → không insert).
 - **Integration:** luồng OAuth callback (verify HMAC + đổi token, mock Shopify);
-  connector ghi `audit_log` + `settings_snapshots` đúng; connector chặn khi
-  feature tắt cờ hoặc thiếu scope.
+  feature-entry ghi `access_log` đúng; snapshot chỉ tạo khi payload đổi;
+  connector chặn khi feature tắt cờ hoặc thiếu scope; checkout branding lỗi
+  "chưa migrate" được degrade chứ không crash.
 - **E2E:** đăng nhập theo từng vai; kết nối một store (mock OAuth); xem
-  settings-viewer; xác nhận có bản ghi audit + snapshot; xác nhận `viewer`
-  không thấy token và không thấy chức năng của admin.
+  settings-viewer; xác nhận có bản ghi `access_log` và snapshot tạo đúng lúc;
+  xác nhận `viewer` không thấy token và không thấy chức năng của admin.
 - Mục tiêu coverage ≥ 80%. Connector dùng mock Shopify API trong test, không
   gọi store thật.
 
@@ -275,9 +315,10 @@ Mỗi sub-project có spec → plan → implementation riêng.
 5. **Debug & monitoring** — log, health check, lỗi từng store.
 6. **Customer service**.
 
-## 11. Câu hỏi mở
+## 11. Quyết định đã chốt & lưu ý khi implement
 
-- Chọn cụ thể thư viện auth: Auth.js hay Better-Auth (quyết định ở bước
-  writing-plans).
-- API version Shopify cố định sẽ chốt khi bắt đầu implement (dùng bản stable
-  mới nhất tại thời điểm đó).
+- **Thư viện auth: Better-Auth** — nhẹ, type-safe, kiến trúc plugin, map RBAC
+  ba vai tự nhiên hơn Auth.js.
+- **API version Shopify: ghim cứng một version** khi bắt đầu implement (dùng
+  bản stable mới nhất tại thời điểm đó). Shopify cập nhật mỗi quý; ghim version
+  giữ ứng dụng ổn định ~9 tháng và cho phép chủ động lên lịch upgrade.
