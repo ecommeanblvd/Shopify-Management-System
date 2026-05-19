@@ -8,7 +8,7 @@ import { recordAudit } from '@/lib/logging/audit';
 import { getEnv } from '@/lib/env';
 
 // Matches the same regex used in the install route.
-const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // Step 1: Get Better-Auth session; userId may be null (unauthenticated callback).
@@ -29,10 +29,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // Step 4: CSRF check — verify the state nonce from the cookie.
     const stateCookie = req.cookies.get('shopify_oauth_state');
-    if (!stateCookie) {
+    if (!stateCookie || !state) {
       throw new Error('Missing state cookie — possible CSRF or expired nonce');
     }
-    if (stateCookie.value !== state) {
+    // Use timing-safe comparison to prevent timing-based CSRF bypass.
+    if (stateCookie.value.length !== state.length) {
+      throw new Error('State mismatch — possible CSRF attack');
+    }
+    if (!timingSafeEqual(Buffer.from(stateCookie.value, 'utf8'), Buffer.from(state, 'utf8'))) {
       throw new Error('State mismatch — possible CSRF attack');
     }
 
@@ -77,6 +81,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       },
     );
 
+    if (!tokenResponse.ok) {
+      throw new Error(`Token exchange failed with status ${tokenResponse.status}`);
+    }
     const tokenData = (await tokenResponse.json()) as { access_token?: string };
     if (!tokenData.access_token) {
       throw new Error('No access_token in Shopify token exchange response');
@@ -141,7 +148,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       errorDetail: String(err),
     });
     return NextResponse.json(
-      { error: 'OAuth callback failed', detail: String(err) },
+      { error: 'OAuth callback failed' },
       { status: 400 },
     );
   }

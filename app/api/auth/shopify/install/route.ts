@@ -19,7 +19,7 @@ import { getEnv } from '@/lib/env';
 // so we build the URL ourselves. We store the nonce in a signed, HttpOnly cookie
 // so the callback handler (Task 13) can verify it against the `state` query param.
 
-const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   // 1. Require an authenticated Better-Auth session.
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     sameSite: 'lax',
     secure: true,
     path: '/api/auth/shopify/callback',
-    maxAge: 60, // 60 seconds — just long enough to complete the redirect
+    maxAge: 300, // 300 seconds (5 minutes) — enough time to complete the OAuth redirect
   });
 
   return response;
