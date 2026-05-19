@@ -39,4 +39,62 @@ describe('runQuery', () => {
     const mod = await import('./connector');
     expect((mod as Record<string, unknown>).mutate).toBeUndefined();
   });
+
+  it('surfaces GraphQL errors as ConnectorError', async () => {
+    const errGraphql = vi.fn(async () => ({ data: null, errors: [{ message: 'bad' }] }));
+    await expect(runQuery({
+      store, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { shop { name } }',
+      deps: { isEnabled: async () => true, graphql: errGraphql, decryptToken: async () => 'tok' },
+    })).rejects.toThrow(ConnectorError);
+  });
+
+  it('retries on throttle and succeeds on second attempt', async () => {
+    vi.useFakeTimers();
+    const throttledThenOk = vi.fn()
+      .mockRejectedValueOnce(new Error('throttled by Shopify'))
+      .mockResolvedValueOnce({ data: { ok: true } });
+
+    const promise = runQuery({
+      store, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { ok }',
+      deps: { isEnabled: async () => true, graphql: throttledThenOk, decryptToken: async () => 'tok' },
+    });
+
+    // advance past the 500ms (2**0 * 500) backoff for attempt 0
+    await vi.advanceTimersByTimeAsync(600);
+    const result = await promise;
+
+    vi.useRealTimers();
+    expect(result).toEqual({ ok: true });
+    expect(throttledThenOk).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry on a non-throttle error', async () => {
+    const boomGraphql = vi.fn().mockRejectedValue(new Error('boom'));
+    await expect(runQuery({
+      store, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { shop { name } }',
+      deps: { isEnabled: async () => true, graphql: boomGraphql, decryptToken: async () => 'tok' },
+    })).rejects.toThrow(ConnectorError);
+    expect(boomGraphql).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks when store status is not active', async () => {
+    const disconnectedStore = { ...store, status: 'disconnected' as const };
+    await expect(runQuery({
+      store: disconnectedStore, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { shop { name } }',
+      deps: { isEnabled: async () => true, graphql: okGraphql, decryptToken: async () => 'tok' },
+    })).rejects.toThrow(ConnectorError);
+  });
+
+  it('blocks when maintenanceMode is true', async () => {
+    const maintenanceStore = { ...store, maintenanceMode: true };
+    await expect(runQuery({
+      store: maintenanceStore, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { shop { name } }',
+      deps: { isEnabled: async () => true, graphql: okGraphql, decryptToken: async () => 'tok' },
+    })).rejects.toThrow(ConnectorError);
+  });
 });
