@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -30,7 +30,9 @@ export const featureFlags = pgTable('feature_flags', {
   config: jsonb('config').notNull().default({}),
   updatedBy: text('updated_by').references(() => user.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex('feature_flags_feature_key_store_id_idx').on(table.featureKey, table.storeId),
+]);
 
 // Read activity — short retention, pruned by a scheduled job.
 export const accessLog = pgTable('access_log', {
@@ -63,6 +65,8 @@ export const settingsSnapshots = pgTable('settings_snapshots', {
   payloadHash: text('payload_hash').notNull(),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   capturedBy: text('captured_by').references(() => user.id),
-});
+}, (table) => [
+  index('settings_snapshots_store_domain_captured_idx').on(table.storeId, table.domain, table.capturedAt),
+]);
 
 export * from './auth-schema';

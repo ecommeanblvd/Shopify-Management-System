@@ -27,4 +27,19 @@ describe('crypto', () => {
   it('throws when the ciphertext key version is unknown', () => {
     expect(() => decrypt('v9:aa:bb:cc', { keys, current: 'v1' })).toThrow();
   });
+
+  it('throws when the auth tag has been tampered with', () => {
+    const cipher = encrypt('shpat_secret', { keys, current: 'v1' });
+    // Format: version:ivHex:tagHex:dataHex
+    const parts = cipher.split(':');
+    // Replace the tag segment (index 2) with a different valid-length hex string
+    const originalTag = parts[2];
+    const tamperedTag = originalTag
+      .split('')
+      .map((c, i) => (i === 0 ? (c === 'a' ? 'b' : 'a') : c))
+      .join('');
+    parts[2] = tamperedTag;
+    const tampered = parts.join(':');
+    expect(() => decrypt(tampered, { keys, current: 'v1' })).toThrow();
+  });
 });

@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { auth } from '@/lib/auth/auth';
+import { hasPermission } from '@/lib/auth/rbac';
+import type { Role } from '@/lib/auth/rbac';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
+  if (!roleRow || !hasPermission(roleRow.role as Role, 'manage_stores')) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
   const { id } = await params;
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, id)).limit(1);
   if (!store) return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 });
@@ -17,8 +28,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const ok = !res.errors;
     await db.update(schema.stores).set({ status: ok ? 'active' : 'error' }).where(eq(schema.stores.id, id));
     return NextResponse.json({ ok });
-  } catch (err) {
+  } catch {
     await db.update(schema.stores).set({ status: 'error' }).where(eq(schema.stores.id, id));
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 502 });
+    return NextResponse.json({ ok: false, error: 'connection test failed' }, { status: 502 });
   }
 }

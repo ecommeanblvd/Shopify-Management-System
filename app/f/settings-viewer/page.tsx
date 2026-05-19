@@ -1,6 +1,8 @@
 import { headers } from 'next/headers';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
+import type { Role } from '@/lib/auth/rbac';
 import { readShipping, readCheckout } from '@/features/settings-viewer/queries';
 import { settingsViewerManifest } from '@/features/settings-viewer/manifest';
 import { recordAccess } from '@/lib/logging/access';
@@ -20,6 +22,12 @@ export default async function SettingsViewerPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return <p>Please sign in.</p>;
 
+  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
+  if (!roleRow) return <p>Your account has no assigned role. Contact an administrator.</p>;
+
+  // All valid roles have 'view' permission — roleRow existing is sufficient.
+  const _role = roleRow.role as Role;
+
   const stores = await db.select().from(schema.stores);
   const results: StoreSettings[] = [];
 
@@ -38,8 +46,8 @@ export default async function SettingsViewerPage() {
       const checkout = await readCheckout(connectorStore);
       checkoutStatus = checkout.status;
       await captureSnapshot({ storeId: store.id, domain: 'checkout', payload: checkout.data, capturedBy: session.user.id });
-    } catch (err) {
-      shipping = { error: String(err) };
+    } catch {
+      shipping = { error: 'Failed to load shipping settings' };
     }
     results.push({ storeName: store.name, shipping, checkoutStatus });
   }

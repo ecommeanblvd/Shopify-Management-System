@@ -1,5 +1,5 @@
 {
-  "id": "589f7296-fdfc-4a84-9f78-c5f2d576a3e6",
+  "id": "31569437-78bf-495c-ab0a-15ca46c351d8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -229,7 +229,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "feature_flags_feature_key_store_id_idx": {
+          "name": "feature_flags_feature_key_store_id_idx",
+          "columns": [
+            {
+              "expression": "feature_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "feature_flags_store_id_stores_id_fk": {
           "name": "feature_flags_store_id_stores_id_fk",
@@ -354,7 +376,35 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "settings_snapshots_store_domain_captured_idx": {
+          "name": "settings_snapshots_store_domain_captured_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "domain",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "captured_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "settings_snapshots_store_id_stores_id_fk": {
           "name": "settings_snapshots_store_id_stores_id_fk",

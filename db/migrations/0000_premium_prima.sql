@@ -119,6 +119,8 @@ ALTER TABLE "settings_snapshots" ADD CONSTRAINT "settings_snapshots_store_id_sto
 ALTER TABLE "settings_snapshots" ADD CONSTRAINT "settings_snapshots_captured_by_user_id_fk" FOREIGN KEY ("captured_by") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "feature_flags_feature_key_store_id_idx" ON "feature_flags" USING btree ("feature_key","store_id");--> statement-breakpoint
+CREATE INDEX "settings_snapshots_store_domain_captured_idx" ON "settings_snapshots" USING btree ("store_id","domain","captured_at");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");
