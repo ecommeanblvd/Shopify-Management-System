@@ -1,0 +1,6 @@
+# Replace @REPLACE_WITH_GITHUB_OWNER below with the repo owner's GitHub handle
+# once the repo is pushed to GitHub. These paths require owner review.
+/lib/shopify/   @REPLACE_WITH_GITHUB_OWNER
+/lib/crypto/    @REPLACE_WITH_GITHUB_OWNER
+/lib/auth/      @REPLACE_WITH_GITHUB_OWNER
+/db/schema.ts   @REPLACE_WITH_GITHUB_OWNER
