@@ -1,0 +1,48 @@
+import { headers } from 'next/headers';
+import { db, schema } from '@/db/client';
+import { auth } from '@/lib/auth/auth';
+import { readShipping, readCheckout } from '@/features/settings-viewer/queries';
+import { settingsViewerManifest } from '@/features/settings-viewer/manifest';
+import { recordAccess } from '@/lib/logging/access';
+import { captureSnapshot } from '@/lib/snapshots/snapshots';
+import { SettingsViewer } from '@/features/settings-viewer/ui/SettingsViewer';
+import type { ConnectorStore } from '@/lib/shopify/connector';
+
+export const dynamic = 'force-dynamic';
+
+interface StoreSettings {
+  storeName: string;
+  shipping: unknown;
+  checkoutStatus: 'available' | 'needs_migration';
+}
+
+export default async function SettingsViewerPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return <p>Please sign in.</p>;
+
+  const stores = await db.select().from(schema.stores);
+  const results: StoreSettings[] = [];
+
+  for (const store of stores) {
+    const connectorStore: ConnectorStore = {
+      id: store.id, shopDomain: store.shopDomain, apiVersion: store.apiVersion,
+      status: store.status, maintenanceMode: store.maintenanceMode, scopes: store.scopes,
+    };
+    await recordAccess({ userId: session.user.id, storeId: store.id, featureKey: settingsViewerManifest.key });
+
+    let shipping: unknown = null;
+    let checkoutStatus: 'available' | 'needs_migration' = 'needs_migration';
+    try {
+      shipping = await readShipping(connectorStore);
+      await captureSnapshot({ storeId: store.id, domain: 'shipping', payload: shipping, capturedBy: session.user.id });
+      const checkout = await readCheckout(connectorStore);
+      checkoutStatus = checkout.status;
+      await captureSnapshot({ storeId: store.id, domain: 'checkout', payload: checkout.data, capturedBy: session.user.id });
+    } catch (err) {
+      shipping = { error: String(err) };
+    }
+    results.push({ storeName: store.name, shipping, checkoutStatus });
+  }
+
+  return <SettingsViewer stores={results} />;
+}
