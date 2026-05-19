@@ -21,7 +21,7 @@ describe('parseEnv', () => {
 
   it('throws when a required variable is missing', () => {
     const { DATABASE_URL, ...rest } = valid;
-    expect(() => parseEnv(rest)).toThrow();
+    expect(() => parseEnv(rest)).toThrow(/DATABASE_URL/);
   });
 
   it('throws when ENCRYPTION_KEY_CURRENT has no matching key', () => {
