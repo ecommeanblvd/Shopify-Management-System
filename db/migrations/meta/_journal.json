@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1779203894145,
-      "tag": "0000_low_black_knight",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1779204956101,
-      "tag": "0001_light_mimic",
+      "when": 1779205099289,
+      "tag": "0000_light_maverick",
       "breakpoints": true
     }
   ]

@@ -1,17 +1,11 @@
 import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
 export const storeStatusEnum = pgEnum('store_status', ['active', 'disconnected', 'error']);
 
-export const users = pgTable('users', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  email: text('email').notNull().unique(),
-  name: text('name'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
 export const roles = pgTable('roles', {
-  userId: uuid('user_id').references(() => users.id).primaryKey(),
+  userId: text('user_id').references(() => user.id).primaryKey(),
   role: roleEnum('role').notNull().default('viewer'),
 });
 
@@ -34,14 +28,14 @@ export const featureFlags = pgTable('feature_flags', {
   storeId: uuid('store_id').references(() => stores.id).notNull(),
   enabled: boolean('enabled').notNull().default(false),
   config: jsonb('config').notNull().default({}),
-  updatedBy: uuid('updated_by').references(() => users.id),
+  updatedBy: text('updated_by').references(() => user.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Read activity — short retention, pruned by a scheduled job.
 export const accessLog = pgTable('access_log', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id),
+  userId: text('user_id').references(() => user.id),
   storeId: uuid('store_id').references(() => stores.id),
   featureKey: text('feature_key').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -50,7 +44,7 @@ export const accessLog = pgTable('access_log', {
 // Write/config changes — append-only, retained permanently.
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id),
+  userId: text('user_id').references(() => user.id),
   storeId: uuid('store_id').references(() => stores.id),
   featureKey: text('feature_key'),
   action: text('action').notNull(),
@@ -68,7 +62,7 @@ export const settingsSnapshots = pgTable('settings_snapshots', {
   payload: jsonb('payload').notNull(),
   payloadHash: text('payload_hash').notNull(),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
-  capturedBy: uuid('captured_by').references(() => users.id),
+  capturedBy: text('captured_by').references(() => user.id),
 });
 
 export * from './auth-schema';
