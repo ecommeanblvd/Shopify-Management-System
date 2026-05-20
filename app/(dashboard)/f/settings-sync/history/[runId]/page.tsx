@@ -16,6 +16,9 @@ async function rollbackAction(runId: string, userId: string) {
   const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, userId)).limit(1);
   const role = roleRow?.role as Role | undefined;
   if (!role || !hasPermission(role, 'apply_settings')) return;
+  // Spec #2 MVP: this only marks the run as rolled_back. A follow-up PR
+  // implements the inverse-apply flow that re-runs apply with the snapshot
+  // payload as the effective tree (see spec #2 section 5).
   await db.update(schema.applyRuns).set({ status: 'rolled_back', finishedAt: new Date() }).where(eq(schema.applyRuns.id, runId));
 }
 

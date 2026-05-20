@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { hasPermission, type Role } from '@/lib/auth/rbac';
@@ -11,9 +12,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function TemplatesPage() {
   const session = await auth.api.getSession({ headers: await headers() });
-  const [roleRow] = session
-    ? await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1)
-    : [undefined];
+  if (!session) redirect('/sign-in');
+  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
   const canEdit = roleRow && hasPermission(roleRow.role as Role, 'manage_settings_template');
 
   const all = await db.select().from(schema.settingTemplates);

@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { eq } from 'drizzle-orm';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
+import { hasPermission, type Role } from '@/lib/auth/rbac';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +19,12 @@ function statusVariant(status: string): 'default' | 'destructive' | 'secondary' 
 }
 
 export default async function HomePage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const callerRole = session
+    ? (await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1))[0]?.role as Role | undefined
+    : undefined;
+  const canManageStores = callerRole && hasPermission(callerRole, 'manage_stores');
+
   const stores = await db.select().from(schema.stores);
   const pendingReconciliation = await db.select().from(schema.reconciliationStatus)
     .where(eq(schema.reconciliationStatus.status, 'pending'));
@@ -27,9 +36,11 @@ export default async function HomePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <Link href="/stores/connect" className={buttonVariants()}>
-          <Plus className="size-4 mr-1" /> Connect a store
-        </Link>
+        {canManageStores && (
+          <Link href="/stores/connect" className={buttonVariants()}>
+            <Plus className="size-4 mr-1" /> Connect a store
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
