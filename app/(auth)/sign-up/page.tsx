@@ -4,6 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -13,74 +18,50 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    try {
-      const result = await authClient.signUp.email({ email, password, name });
-      if (result.error) {
-        setError(result.error.message ?? 'Sign-up failed. Please try again.');
-      } else {
-        router.push('/');
-      }
-    } catch {
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
+    const { error: signUpError } = await authClient.signUp.email({ email, password, name });
+    setLoading(false);
+    if (signUpError) {
+      setError(signUpError.message ?? 'Sign-up failed');
+      return;
     }
+    router.push('/');
+    router.refresh();
   }
 
   return (
-    <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '320px' }}
-      >
-        <h1 style={{ marginBottom: '8px' }}>Create Account</h1>
-        {error && (
-          <p role="alert" style={{ color: 'red', margin: 0 }}>
-            {error}
-          </p>
-        )}
-        <label>
-          Name
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
-          />
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
-          />
-        </label>
-        <button type="submit" disabled={loading} style={{ padding: '10px', cursor: loading ? 'not-allowed' : 'pointer' }}>
-          {loading ? 'Creating account…' : 'Sign Up'}
-        </button>
-        <p style={{ margin: 0, textAlign: 'center', fontSize: '14px' }}>
-          Already have an account? <Link href="/sign-in">Sign in</Link>
+    <Card>
+      <CardHeader>
+        <CardTitle>Create account</CardTitle>
+        <CardDescription>The first user to sign up becomes an admin.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+            <p className="text-xs text-[var(--color-muted)]">At least 8 characters.</p>
+          </div>
+          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Creating…' : 'Sign up'}
+          </Button>
+        </form>
+        <p className="text-sm text-center mt-6 text-[var(--color-muted)]">
+          Already have an account? <Link href="/sign-in" className="text-[var(--color-primary)] hover:underline">Sign in</Link>
         </p>
-      </form>
-    </main>
+      </CardContent>
+    </Card>
   );
 }

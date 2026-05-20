@@ -4,6 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -12,63 +17,45 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    try {
-      const result = await authClient.signIn.email({ email, password });
-      if (result.error) {
-        setError(result.error.message ?? 'Sign-in failed. Please check your credentials.');
-      } else {
-        router.push('/');
-      }
-    } catch {
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
+    const { error: signInError } = await authClient.signIn.email({ email, password });
+    setLoading(false);
+    if (signInError) {
+      setError(signInError.message ?? 'Sign-in failed');
+      return;
     }
+    router.push('/');
+    router.refresh();
   }
 
   return (
-    <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '320px' }}
-      >
-        <h1 style={{ marginBottom: '8px' }}>Sign In</h1>
-        {error && (
-          <p role="alert" style={{ color: 'red', margin: 0 }}>
-            {error}
-          </p>
-        )}
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
-          />
-        </label>
-        <button type="submit" disabled={loading} style={{ padding: '10px', cursor: loading ? 'not-allowed' : 'pointer' }}>
-          {loading ? 'Signing in…' : 'Sign In'}
-        </button>
-      </form>
-      <p style={{ marginTop: 24 }}>
-        Need an account? <Link href="/sign-up">Sign up</Link>
-      </p>
-    </main>
+    <Card>
+      <CardHeader>
+        <CardTitle>Sign in</CardTitle>
+        <CardDescription>Welcome back to Shopify Management.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+          </div>
+          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+        <p className="text-sm text-center mt-6 text-[var(--color-muted)]">
+          Need an account? <Link href="/sign-up" className="text-[var(--color-primary)] hover:underline">Sign up</Link>
+        </p>
+      </CardContent>
+    </Card>
   );
 }
