@@ -1,0 +1,8 @@
+# Railway/Nixpacks build override.
+# We use `npm install` (not `npm ci`) because the lockfile generated locally
+# on macOS doesn't list all platform-specific @esbuild/* optional dep paths
+# in a way Railway's npm ci validator accepts (npm GitHub issue, nested deps).
+# `npm install` is more lenient and still respects pinned versions.
+
+[phases.install]
+cmds = ["npm install --no-audit --no-fund --prefer-offline"]
