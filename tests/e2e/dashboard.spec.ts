@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('home page renders the shell dashboard', async ({ page }) => {
+test('home redirects unauthenticated visitors to sign-in', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Shopify Management' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '+ Connect a store' })).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in/);
 });
 
-test('connect-store page redirects unauthenticated users away from the form', async ({ page }) => {
-  await page.goto('/stores/connect');
-  // The connect page is auth-guarded: an unauthenticated visit must NOT show the form.
-  await expect(page.getByPlaceholder('your-shop.myshopify.com')).toHaveCount(0);
+test('sign-in page renders heading + form', async ({ page }) => {
+  await page.goto('/sign-in');
+  await expect(page.getByRole('heading', { name: /Sign in/i })).toBeVisible();
+  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByLabel('Password')).toBeVisible();
 });
