@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -17,9 +18,9 @@ export default function SignInPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await authClient.signIn.email({ email, password });
+      const result = await authClient.signUp.email({ email, password, name });
       if (result.error) {
-        setError(result.error.message ?? 'Sign-in failed. Please check your credentials.');
+        setError(result.error.message ?? 'Sign-up failed. Please try again.');
       } else {
         router.push('/');
       }
@@ -36,12 +37,22 @@ export default function SignInPage() {
         onSubmit={handleSubmit}
         style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '320px' }}
       >
-        <h1 style={{ marginBottom: '8px' }}>Sign In</h1>
+        <h1 style={{ marginBottom: '8px' }}>Create Account</h1>
         {error && (
           <p role="alert" style={{ color: 'red', margin: 0 }}>
             {error}
           </p>
         )}
+        <label>
+          Name
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
+          />
+        </label>
         <label>
           Email
           <input
@@ -59,16 +70,17 @@ export default function SignInPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={8}
             style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px' }}
           />
         </label>
         <button type="submit" disabled={loading} style={{ padding: '10px', cursor: loading ? 'not-allowed' : 'pointer' }}>
-          {loading ? 'Signing in…' : 'Sign In'}
+          {loading ? 'Creating account…' : 'Sign Up'}
         </button>
+        <p style={{ margin: 0, textAlign: 'center', fontSize: '14px' }}>
+          Already have an account? <Link href="/sign-in">Sign in</Link>
+        </p>
       </form>
-      <p style={{ marginTop: 24 }}>
-        Need an account? <Link href="/sign-up">Sign up</Link>
-      </p>
     </main>
   );
 }
