@@ -5,8 +5,18 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { hasPermission, type Role } from '@/lib/auth/rbac';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
 export const dynamic = 'force-dynamic';
+
+function statusVariant(s: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (s === 'success') return 'default';
+  if (s === 'failed' || s === 'partial') return 'destructive';
+  if (s === 'rolled_back') return 'outline';
+  return 'secondary';
+}
 
 export default async function HistoryPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,22 +27,30 @@ export default async function HistoryPage() {
 
   const runs = await db.select().from(schema.applyRuns).orderBy(desc(schema.applyRuns.startedAt)).limit(50);
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Apply history</h1>
-      <table>
-        <thead><tr><th>When</th><th>Domain</th><th>Stores</th><th>Status</th><th /></tr></thead>
-        <tbody>
-          {runs.map((r) => (
-            <tr key={r.id}>
-              <td>{r.startedAt.toString()}</td>
-              <td>{r.domain}</td>
-              <td>{r.targetStoreIds.length}</td>
-              <td>{r.status}</td>
-              <td><Link href={`/f/settings-sync/history/${r.id}`}>Detail</Link></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Apply history</h1>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead><TableHead>Domain</TableHead><TableHead>Stores</TableHead><TableHead>Status</TableHead><TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {runs.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="text-xs">{new Date(r.startedAt).toLocaleString()}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.domain}</TableCell>
+                  <TableCell>{r.targetStoreIds.length}</TableCell>
+                  <TableCell><Badge variant={statusVariant(r.status)}>{r.status}</Badge></TableCell>
+                  <TableCell><Link className="text-[var(--color-primary)] hover:underline text-sm" href={`/f/settings-sync/history/${r.id}`}>Detail</Link></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
