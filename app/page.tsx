@@ -1,15 +1,27 @@
 import Link from 'next/link';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const stores = await db.select().from(schema.stores);
+  const pendingReconciliation = await db.select().from(schema.reconciliationStatus)
+    .where(eq(schema.reconciliationStatus.status, 'pending'));
+
   return (
     <main style={{ padding: 24 }}>
       <h1>Shopify Management</h1>
       <p><Link href="/stores/connect">+ Connect a store</Link></p>
       <p><Link href="/f/settings-viewer">Open Settings Viewer</Link></p>
+      <p>
+        <Link href="/f/settings-sync">Open Settings Sync</Link>
+        {pendingReconciliation.length > 0 && (
+          <span style={{ marginLeft: 8, color: '#b58900' }}>
+            ({pendingReconciliation.length} pending reconciliation)
+          </span>
+        )}
+      </p>
       <h2>Connected stores ({stores.length})</h2>
       <ul>
         {stores.map((s) => (
