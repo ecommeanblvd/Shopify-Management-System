@@ -1,55 +1,33 @@
-import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { auth } from '@/lib/auth/auth';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-export default async function ConnectStorePage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    redirect('/sign-in');
-  }
-
+export default function ConnectStorePage() {
   return (
-    <main style={{ maxWidth: 480, margin: '4rem auto', padding: '0 1rem' }}>
-      <h1>Connect a Shopify Store</h1>
-      <p style={{ color: '#555', marginBottom: '1.5rem' }}>
-        Enter your store domain to begin the installation flow.
-      </p>
-      <form method="GET" action="/api/auth/shopify/install">
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="shop" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-            Store domain
-          </label>
-          <input
-            id="shop"
-            name="shop"
-            type="text"
-            required
-            placeholder="your-shop.myshopify.com"
-            style={{
-              width: '100%',
-              padding: '0.5rem 0.75rem',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              fontSize: '1rem',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-        <button
-          type="submit"
-          style={{
-            padding: '0.5rem 1.25rem',
-            background: '#5c6ac4',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            fontSize: '1rem',
-            cursor: 'pointer',
-          }}
-        >
-          Connect store
-        </button>
-      </form>
-    </main>
+    <div className="max-w-xl mx-auto">
+      <Card>
+        <CardHeader>
+          <CardTitle>Connect a store</CardTitle>
+          <CardDescription>Install the management app into a Shopify store.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action="/api/auth/shopify/install" method="get" className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="shop">Shop domain</Label>
+              <Input id="shop" name="shop" placeholder="your-shop.myshopify.com" required pattern="[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com" />
+              <p className="text-xs text-[var(--color-muted)]">Format: lowercase letters/numbers/dashes, ending in <span className="font-mono">.myshopify.com</span>.</p>
+            </div>
+            <Alert>
+              <AlertDescription>
+                After connecting, run "Test connection" on the dashboard. If the store reports missing scopes, re-install to grant the new permissions.
+              </AlertDescription>
+            </Alert>
+            <Button type="submit" className="w-full">Connect via Shopify OAuth</Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
