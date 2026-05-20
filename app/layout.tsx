@@ -1,6 +1,8 @@
 import './globals.css';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { ThemeProvider } from '@/lib/theme/provider';
+import { Toaster } from '@/components/ui/sonner';
 
 export const metadata = {
   title: 'Shopify Management',
@@ -14,7 +16,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
