@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
 
@@ -65,6 +66,9 @@ export default function SignInPage() {
           {loading ? 'Signing in…' : 'Sign In'}
         </button>
       </form>
+      <p style={{ marginTop: 24 }}>
+        Need an account? <Link href="/sign-up">Sign up</Link>
+      </p>
     </main>
   );
 }
