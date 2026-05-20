@@ -10,12 +10,18 @@ import { db } from '@/db/client';
  * AND no existing admin row commits the INSERT.
  */
 export async function assignFirstAdmin(userId: string): Promise<void> {
-  await db.execute(sql`
-    INSERT INTO roles (user_id, role)
-    SELECT ${userId}, 'admin'::role
-    WHERE (SELECT COUNT(*) FROM "user") = 1
-      AND NOT EXISTS (SELECT 1 FROM roles WHERE role = 'admin')
-  `);
+  try {
+    await db.execute(sql`
+      INSERT INTO roles (user_id, role)
+      SELECT ${userId}, 'admin'::role
+      WHERE (SELECT COUNT(*) FROM "user") = 1
+        AND NOT EXISTS (SELECT 1 FROM roles WHERE role = 'admin')
+    `);
+  } catch {
+    // Race loser: another concurrent signup already won the unique constraint
+    // on roles.userId. Safe to ignore — the winning transaction has already
+    // assigned admin to the first user.
+  }
 }
 
 // Read directly from process.env — NOT via getEnv() — so this module is

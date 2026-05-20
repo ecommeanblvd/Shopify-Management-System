@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { eq, asc } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
@@ -25,6 +26,14 @@ async function setRoleAction(callerUserId: string, formData: FormData) {
   const newRole: Role | null = submitted === 'none' ? null : submitted as Role;
   if (!canChangeRole({ callerUserId, callerRole, targetUserId, newRole })) return;
 
+  const [targetRoleRow] = await db.select().from(schema.roles)
+    .where(eq(schema.roles.userId, targetUserId)).limit(1);
+  const currentRole = targetRoleRow?.role as Role | undefined;
+  const isNoOp = (newRole === null && !currentRole) || (newRole !== null && currentRole === newRole);
+  if (isNoOp) {
+    return;
+  }
+
   if (newRole === null) {
     await db.delete(schema.roles).where(eq(schema.roles.userId, targetUserId));
   } else {
@@ -45,6 +54,8 @@ async function setRoleAction(callerUserId: string, formData: FormData) {
     requestSummary: `role=${submitted}`,
     result: 'success',
   });
+
+  revalidatePath('/admin/users');
 }
 
 export default async function AdminUsersPage() {
