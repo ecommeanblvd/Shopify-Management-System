@@ -55,7 +55,7 @@ export default async function HomePage() {
         <CardHeader><CardTitle>Connected stores</CardTitle></CardHeader>
         <CardContent>
           {stores.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted)]">No stores connected yet. Click "Connect a store" to begin.</p>
+            <p className="text-sm text-[var(--color-muted)]">No stores connected yet. Click &quot;Connect a store&quot; to begin.</p>
           ) : (
             <Table>
               <TableHeader>

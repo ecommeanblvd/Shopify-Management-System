@@ -21,7 +21,7 @@ export default function ConnectStorePage() {
             </div>
             <Alert>
               <AlertDescription>
-                After connecting, run "Test connection" on the dashboard. If the store reports missing scopes, re-install to grant the new permissions.
+                After connecting, run &quot;Test connection&quot; on the dashboard. If the store reports missing scopes, re-install to grant the new permissions.
               </AlertDescription>
             </Alert>
             <Button type="submit" className="w-full">Connect via Shopify OAuth</Button>
