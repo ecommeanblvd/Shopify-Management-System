@@ -5,69 +5,20 @@ import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { hasPermission, type Role } from '@/lib/auth/rbac';
 import { previewApply, executeApply } from '@/features/settings-sync/actions';
-import {
-  SHIPPING_QUERY,
-  SHIPPING_MUTATION,
-  normalizeShopifyDeliveryProfile,
-  denormalizeToMutationInput,
-} from '@/features/settings-sync/domain/shipping';
-import {
-  BUYER_EXPERIENCE_QUERY,
-  BUYER_EXPERIENCE_MUTATION,
-  normalizeBuyerExperience,
-  denormalizeBuyerExperience,
-} from '@/features/settings-sync/domain/checkout-buyer-experience';
-import type { DomainAdapter } from '@/features/settings-sync/apply';
 
 export const dynamic = 'force-dynamic';
 
 type Domain = 'shipping' | 'checkout_buyer_experience';
 
-// Adapters are defined at module scope so they are available inside the
-// server action without being captured by closure across the action boundary.
-const SHIPPING_ADAPTER: DomainAdapter = {
-  fetchQuery: SHIPPING_QUERY,
-  normalize: (data) => {
-    const n = normalizeShopifyDeliveryProfile(data);
-    return {
-      tree: n.tree as unknown as Record<string, unknown>,
-      shopifyIds: n.shopifyIds as unknown as Record<string, unknown>,
-    };
-  },
-  buildMutation: (current, effective) => {
-    const input = denormalizeToMutationInput(
-      { tree: current.tree as never, shopifyIds: current.shopifyIds as never },
-      effective as never,
-    );
-    return { mutation: SHIPPING_MUTATION, variables: { id: input.profileId, profile: input } };
-  },
-};
-
-const BUYER_EXP_ADAPTER: DomainAdapter = {
-  fetchQuery: BUYER_EXPERIENCE_QUERY,
-  normalize: (data) => ({
-    tree: normalizeBuyerExperience(data) as unknown as Record<string, unknown>,
-    shopifyIds: {},
-  }),
-  buildMutation: (current, effective) => {
-    const diff = denormalizeBuyerExperience(current.tree as never, effective as never);
-    return { mutation: BUYER_EXPERIENCE_MUTATION, variables: { input: diff } };
-  },
-};
-
-function adapterFor(domain: Domain): DomainAdapter {
-  return domain === 'shipping' ? SHIPPING_ADAPTER : BUYER_EXP_ADAPTER;
-}
-
-// Server action — accepts only JSON-serialisable arguments.
-// The adapter is selected inside the action by domain key so that no
-// function references cross the Next.js server-action serialisation boundary.
 async function runApplyAction(userId: string, formData: FormData) {
   'use server';
+  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, userId)).limit(1);
+  const role = roleRow?.role as Role | undefined;
+  if (!role || !hasPermission(role, 'apply_settings')) return;
   const ids = formData.getAll('storeIds').map(String);
   const d = formData.get('domain') as Domain;
   const v = Number(formData.get('version'));
-  await executeApply(ids, d, v, adapterFor(d), userId);
+  await executeApply(ids, d, v, userId);
   redirect('/f/settings-sync/history');
 }
 
@@ -103,7 +54,7 @@ export default async function ApplyPage({
   let preview: unknown = null;
   if (storeId && version != null) {
     try {
-      preview = await previewApply(storeId, domain, version, adapterFor(domain));
+      preview = await previewApply(storeId, domain, version);
     } catch (err) {
       preview = {
         error: 'Preview failed',

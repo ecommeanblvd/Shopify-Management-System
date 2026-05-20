@@ -63,7 +63,7 @@ export const settingsSnapshots = pgTable('settings_snapshots', {
   domain: text('domain').notNull(),
   payload: jsonb('payload').notNull(),
   payloadHash: text('payload_hash').notNull(),
-  applyRunId: uuid('apply_run_id'),
+  applyRunId: uuid('apply_run_id').references(() => applyRuns.id),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   capturedBy: text('captured_by').references(() => user.id),
 }, (table) => [

@@ -1,0 +1,1 @@
+ALTER TABLE "settings_snapshots" ADD CONSTRAINT "settings_snapshots_apply_run_id_apply_runs_id_fk" FOREIGN KEY ("apply_run_id") REFERENCES "public"."apply_runs"("id") ON DELETE no action ON UPDATE no action;

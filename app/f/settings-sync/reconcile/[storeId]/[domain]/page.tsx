@@ -10,6 +10,7 @@ import { isFeatureEnabled } from '@/lib/flags/flags';
 import { settingsSyncManifest } from '@/features/settings-sync/manifest';
 import { listUnreconciledPaths } from '@/features/settings-sync/reconciliation';
 import { getLatestTemplate, setStoreReconciled } from '@/features/settings-sync/actions';
+import { recordAudit } from '@/lib/logging/audit';
 import {
   SHIPPING_QUERY,
   normalizeShopifyDeliveryProfile,
@@ -109,12 +110,28 @@ async function submitReconcile(
     }
   }
   await setStoreReconciled(storeId, domain, userId);
+  await recordAudit({
+    userId,
+    storeId,
+    featureKey: settingsSyncManifest.key,
+    action: 'reconcile_store',
+    target: domain,
+    result: 'success',
+  });
   redirect('/f/settings-sync');
 }
 
 async function markReconciled(storeId: string, domain: Domain, userId: string) {
   'use server';
   await setStoreReconciled(storeId, domain, userId);
+  await recordAudit({
+    userId,
+    storeId,
+    featureKey: settingsSyncManifest.key,
+    action: 'reconcile_store',
+    target: domain,
+    result: 'success',
+  });
   redirect('/f/settings-sync');
 }
 

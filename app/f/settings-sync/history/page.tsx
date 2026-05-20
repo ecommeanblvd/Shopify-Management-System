@@ -1,10 +1,20 @@
 import Link from 'next/link';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
+import { hasPermission, type Role } from '@/lib/auth/rbac';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect('/sign-in');
+  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
+  const role = roleRow?.role as Role | undefined;
+  if (!role || !hasPermission(role, 'view_settings_history')) return <p>Forbidden.</p>;
+
   const runs = await db.select().from(schema.applyRuns).orderBy(desc(schema.applyRuns.startedAt)).limit(50);
   return (
     <main style={{ padding: 24 }}>

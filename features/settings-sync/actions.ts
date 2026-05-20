@@ -10,8 +10,44 @@ import { recordAudit } from '@/lib/logging/audit';
 import { hashPayload } from '@/lib/snapshots/snapshots';
 import { settingsSyncManifest } from './manifest';
 import { runApplyForStore, type ApplyDeps, type ApplyStore, type DomainAdapter } from './apply';
+import {
+  SHIPPING_QUERY, SHIPPING_MUTATION,
+  normalizeShopifyDeliveryProfile, denormalizeToMutationInput,
+} from './domain/shipping';
+import {
+  BUYER_EXPERIENCE_QUERY, BUYER_EXPERIENCE_MUTATION,
+  normalizeBuyerExperience, denormalizeBuyerExperience,
+} from './domain/checkout-buyer-experience';
 
 type Domain = 'shipping' | 'checkout_buyer_experience';
+
+const SHIPPING_ADAPTER: DomainAdapter = {
+  fetchQuery: SHIPPING_QUERY,
+  normalize: (data) => {
+    const n = normalizeShopifyDeliveryProfile(data);
+    return { tree: n.tree as unknown as Record<string, unknown>, shopifyIds: n.shopifyIds as unknown as Record<string, unknown> };
+  },
+  buildMutation: (current, effective) => {
+    const input = denormalizeToMutationInput(
+      { tree: current.tree as never, shopifyIds: current.shopifyIds as never },
+      effective as never,
+    );
+    return { mutation: SHIPPING_MUTATION, variables: { id: input.profileId, profile: input } };
+  },
+};
+
+const BUYER_EXP_ADAPTER: DomainAdapter = {
+  fetchQuery: BUYER_EXPERIENCE_QUERY,
+  normalize: (data) => ({ tree: normalizeBuyerExperience(data) as unknown as Record<string, unknown>, shopifyIds: {} }),
+  buildMutation: (current, effective) => {
+    const diff = denormalizeBuyerExperience(current.tree as never, effective as never);
+    return { mutation: BUYER_EXPERIENCE_MUTATION, variables: { input: diff } };
+  },
+};
+
+function adapterFor(domain: Domain): DomainAdapter {
+  return domain === 'shipping' ? SHIPPING_ADAPTER : BUYER_EXP_ADAPTER;
+}
 
 export async function getLatestTemplate(domain: Domain) {
   const [row] = await db
@@ -77,7 +113,7 @@ async function captureSnapshot(args: { storeId: string; domain: string; payload:
   });
 }
 
-function buildApplyDeps(): ApplyDeps {
+function buildApplyDeps(userId: string | null): ApplyDeps {
   return {
     isReconciled: (storeId, domain) => isStoreReconciled(storeId, domain as Domain),
     readCurrent: async (store, query) => {
@@ -128,7 +164,7 @@ function buildApplyDeps(): ApplyDeps {
     },
     recordAudit: async (entry) =>
       recordAudit({
-        userId: null,
+        userId,
         storeId: entry.storeId,
         featureKey: settingsSyncManifest.key,
         action: entry.action,
@@ -144,7 +180,6 @@ export async function previewApply(
   storeId: string,
   domain: Domain,
   templateVersion: number,
-  adapter: DomainAdapter,
 ) {
   const [template] = await db.select().from(schema.settingTemplates).where(
     and(eq(schema.settingTemplates.domain, domain), eq(schema.settingTemplates.version, templateVersion)),
@@ -163,9 +198,9 @@ export async function previewApply(
     applyRunId: 'preview',
     domain,
     template: template.payload as Record<string, unknown>,
-    adapter,
+    adapter: adapterFor(domain),
     dryRun: true,
-    deps: buildApplyDeps(),
+    deps: buildApplyDeps(null),
   });
 }
 
@@ -173,7 +208,6 @@ export async function executeApply(
   storeIds: string[],
   domain: Domain,
   templateVersion: number,
-  adapter: DomainAdapter,
   userId: string,
 ) {
   const [template] = await db.select().from(schema.settingTemplates).where(
@@ -190,7 +224,7 @@ export async function executeApply(
   }).returning();
 
   const summary: Record<string, unknown> = {};
-  const deps = buildApplyDeps();
+  const deps = buildApplyDeps(userId);
 
   for (const storeId of storeIds) {
     const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
@@ -206,7 +240,7 @@ export async function executeApply(
       const result = await runApplyForStore({
         store: applyStore, applyRunId: run.id, domain,
         template: template.payload as Record<string, unknown>,
-        adapter, dryRun: false, deps,
+        adapter: adapterFor(domain), dryRun: false, deps,
       });
       summary[storeId] = { status: 'success', ops: { creates: result.ops.creates.length, updates: result.ops.updates.length, deletes: result.ops.deletes.length } };
     } catch (err) {

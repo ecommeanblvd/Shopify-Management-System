@@ -46,7 +46,10 @@ export default async function RunDetail({ params }: { params: Promise<{ runId: s
       <h2>Snapshots ({snapshots.length})</h2>
       <ul>{snapshots.map((s) => <li key={s.id}>{s.storeId} / {s.domain} — {s.capturedAt.toString()}</li>)}</ul>
       {canRollback && (
-        <form action={rollbackBound}><button type="submit" style={{ background: '#e57', color: '#fff', padding: 8 }}>Rollback</button></form>
+        <form action={rollbackBound}>
+          <p style={{ color: '#666', fontSize: 14 }}>Note: this only marks the run as rolled back. Restoring store settings from the snapshot is not yet implemented and must be done manually.</p>
+          <button type="submit" style={{ border: '1px solid #aaa', background: '#f5f5f5', color: '#333', padding: 8 }}>Mark as rolled back (manual restore required)</button>
+        </form>
       )}
     </main>
   );
