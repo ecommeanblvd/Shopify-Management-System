@@ -2,7 +2,6 @@ import { headers } from 'next/headers';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
-import type { Role } from '@/lib/auth/rbac';
 import { readShipping, readCheckout } from '@/features/settings-viewer/queries';
 import { settingsViewerManifest } from '@/features/settings-viewer/manifest';
 import { recordAccess } from '@/lib/logging/access';
@@ -24,9 +23,7 @@ export default async function SettingsViewerPage() {
 
   const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
   if (!roleRow) return <p>Your account has no assigned role. Contact an administrator.</p>;
-
-  // All valid roles have 'view' permission — roleRow existing is sufficient.
-  const _role = roleRow.role as Role;
+  // All three roles include the 'view' permission, so a row existing is sufficient.
 
   const stores = await db.select().from(schema.stores);
   const results: StoreSettings[] = [];

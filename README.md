@@ -1,5 +1,8 @@
 # Shopify Management System
 
+[![CI](https://github.com/ecommeanblvd/Shopify-Management-System/actions/workflows/ci.yml/badge.svg)](https://github.com/ecommeanblvd/Shopify-Management-System/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Central management for multiple Shopify stores. Spec #1: foundation + read-only settings viewer.
 
 ## Stack
@@ -31,9 +34,13 @@ Next.js (App Router) · TypeScript · Drizzle ORM + Postgres · Better-Auth · `
 - `npm run test -- --coverage` — coverage; the 80% gate applies to the pure-logic core (crypto, registry, rbac, connector). DB-bound modules, route handlers, and UI are integration/E2E surface.
 - `npm run test:e2e` — Playwright E2E. Requires a running app with a provisioned `DATABASE_URL`.
 
-## GitHub branch protection (set once, manually)
+## Branch protection
 
-On `main`: require a PR, 1 approval, and the `verify` CI check. Replace `@REPLACE_WITH_GITHUB_OWNER` in `.github/CODEOWNERS` with the repo owner's handle after the repo is pushed.
+`main` is protected by the `protect-main` ruleset: pull request required, 1 approval, the `verify` CI check must pass, linear history, no force pushes, no direct deletions. `.github/CODEOWNERS` routes review of `lib/shopify/`, `lib/crypto/`, `lib/auth/`, and `db/schema.ts` to `@ecommeanblvd`.
+
+## Contributing
+
+Open an issue first for non-trivial changes. PRs should be focused, include tests, and pass the CI gate. Features live in `features/<key>/` folders; they may not touch `lib/` or another feature's folder. The `lib/shopify` connector is read-only by design in spec #1 — do not introduce write paths until spec #2.
 
 ## Roadmap
 
