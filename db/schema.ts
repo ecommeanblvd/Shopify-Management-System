@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -63,10 +63,73 @@ export const settingsSnapshots = pgTable('settings_snapshots', {
   domain: text('domain').notNull(),
   payload: jsonb('payload').notNull(),
   payloadHash: text('payload_hash').notNull(),
+  applyRunId: uuid('apply_run_id'),
   capturedAt: timestamp('captured_at').defaultNow().notNull(),
   capturedBy: text('captured_by').references(() => user.id),
 }, (table) => [
   index('settings_snapshots_store_domain_captured_idx').on(table.storeId, table.domain, table.capturedAt),
+]);
+
+// --- Spec #2: settings-sync tables ---
+
+export const settingDomainEnum = pgEnum('setting_domain', [
+  'shipping',
+  'checkout_buyer_experience',
+]);
+
+export const applyStatusEnum = pgEnum('apply_status', [
+  'preview', 'in_progress', 'success', 'partial', 'failed', 'rolled_back',
+]);
+
+export const reconciliationStatusEnum = pgEnum('reconciliation_status_enum', [
+  'pending', 'reconciled',
+]);
+
+export const settingTemplates = pgTable('setting_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  domain: settingDomainEnum('domain').notNull(),
+  payload: jsonb('payload').notNull(),
+  version: integer('version').notNull(),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('setting_templates_domain_version_idx').on(table.domain, table.version),
+]);
+
+export const settingOverrides = pgTable('setting_overrides', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id).notNull(),
+  domain: settingDomainEnum('domain').notNull(),
+  path: text('path').notNull(),
+  value: jsonb('value').notNull(),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('setting_overrides_store_domain_path_idx').on(table.storeId, table.domain, table.path),
+]);
+
+export const applyRuns = pgTable('apply_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  templateId: uuid('template_id').references(() => settingTemplates.id).notNull(),
+  domain: settingDomainEnum('domain').notNull(),
+  targetStoreIds: uuid('target_store_ids').array().notNull(),
+  status: applyStatusEnum('status').notNull().default('preview'),
+  startedBy: text('started_by').references(() => user.id),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  finishedAt: timestamp('finished_at'),
+  summary: jsonb('summary').notNull().default({}),
+  parentRunId: uuid('parent_run_id'),
+});
+
+export const reconciliationStatus = pgTable('reconciliation_status', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id).notNull(),
+  domain: settingDomainEnum('domain').notNull(),
+  status: reconciliationStatusEnum('status').notNull().default('pending'),
+  reconciledAt: timestamp('reconciled_at'),
+  reconciledBy: text('reconciled_by').references(() => user.id),
+}, (table) => [
+  uniqueIndex('reconciliation_status_store_domain_idx').on(table.storeId, table.domain),
 ]);
 
 export * from './auth-schema';
