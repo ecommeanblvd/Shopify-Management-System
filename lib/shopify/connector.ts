@@ -15,7 +15,7 @@ export interface ConnectorDeps {
   decryptToken: (storeId: string) => Promise<string>;
 }
 
-export interface RunQueryArgs<T> {
+export interface RunQueryArgs {
   store: ConnectorStore;
   featureKey: string;
   requiredScopes: string[];
@@ -26,8 +26,13 @@ export interface RunQueryArgs<T> {
 
 const MAX_RETRIES = 3;
 
-/** The only path to Shopify. Read-only by design — there is no mutate() in this module. */
-export async function runQuery<T = any>(args: RunQueryArgs<T>): Promise<T> {
+/**
+ * The only path to Shopify. Read-only by design — there is no mutate() in this module.
+ * `T = any` is a deliberate ergonomic default so callers can access fields without
+ * boilerplate casts; specify T explicitly when the response shape is known.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function runQuery<T = any>(args: RunQueryArgs): Promise<T> {
   const { store, featureKey, requiredScopes, query, variables, deps } = args;
 
   if (store.status !== 'active') {

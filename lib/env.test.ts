@@ -20,7 +20,9 @@ describe('parseEnv', () => {
   });
 
   it('throws when a required variable is missing', () => {
-    const { DATABASE_URL, ...rest } = valid;
+    const rest = Object.fromEntries(
+      Object.entries(valid).filter(([k]) => k !== 'DATABASE_URL'),
+    );
     expect(() => parseEnv(rest)).toThrow(/DATABASE_URL/);
   });
 

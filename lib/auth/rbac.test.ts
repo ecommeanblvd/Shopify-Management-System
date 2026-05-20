@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasPermission, type Role } from './rbac';
+import { hasPermission } from './rbac';
 
 describe('hasPermission', () => {
   it('admin can manage stores', () => {
