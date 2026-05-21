@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -136,6 +136,10 @@ export const reconciliationStatus = pgTable('reconciliation_status', {
 
 export const marketTypeEnum = pgEnum('market_type', ['regional', 'international']);
 
+// Markets apply uses its own status enum (separate from settings-sync apply_runs).
+// 'partial_error' is more descriptive than the parallel 'partial' value.
+// 'rolled_back' is intentionally absent — spec scope is manual rollback only
+// (snapshots in market_apply_history give enough data for offline restore).
 export const marketApplyStatusEnum = pgEnum('market_apply_status', [
   'preview', 'in_progress', 'success', 'partial_error', 'failed',
 ]);
@@ -157,14 +161,14 @@ export const marketTemplates = pgTable('market_templates', {
 
 export const marketStoreOverrides = pgTable('market_store_overrides', {
   storeId: uuid('store_id').references(() => stores.id).notNull(),
-  marketHandle: text('market_handle').references(() => marketTemplates.handle).notNull(),
+  marketHandle: text('market_handle').references(() => marketTemplates.handle, { onUpdate: 'cascade' }).notNull(),
   priceAdjustment: jsonb('price_adjustment'),
   shipping: jsonb('shipping'),
   version: integer('version').notNull().default(1),
   updatedBy: text('updated_by').references(() => user.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex('market_store_overrides_store_handle_idx').on(table.storeId, table.marketHandle),
+  primaryKey({ columns: [table.storeId, table.marketHandle] }),
 ]);
 
 export const marketApplyHistory = pgTable('market_apply_history', {
