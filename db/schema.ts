@@ -132,4 +132,55 @@ export const reconciliationStatus = pgTable('reconciliation_status', {
   uniqueIndex('reconciliation_status_store_domain_idx').on(table.storeId, table.domain),
 ]);
 
+// --- Markets feature tables ---
+
+export const marketTypeEnum = pgEnum('market_type', ['regional', 'international']);
+
+export const marketApplyStatusEnum = pgEnum('market_apply_status', [
+  'preview', 'in_progress', 'success', 'partial_error', 'failed',
+]);
+
+export const marketTemplates = pgTable('market_templates', {
+  handle: text('handle').primaryKey(),
+  name: text('name').notNull(),
+  type: marketTypeEnum('type').notNull(),
+  countries: jsonb('countries').notNull().default([]),
+  primaryCurrency: text('primary_currency').notNull(),
+  alternativeCurrencies: jsonb('alternative_currencies').notNull().default([]),
+  primaryLanguage: text('primary_language').notNull(),
+  alternativeLanguages: jsonb('alternative_languages').notNull().default([]),
+  enabled: boolean('enabled').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const marketStoreOverrides = pgTable('market_store_overrides', {
+  storeId: uuid('store_id').references(() => stores.id).notNull(),
+  marketHandle: text('market_handle').references(() => marketTemplates.handle).notNull(),
+  priceAdjustment: jsonb('price_adjustment'),
+  shipping: jsonb('shipping'),
+  version: integer('version').notNull().default(1),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('market_store_overrides_store_handle_idx').on(table.storeId, table.marketHandle),
+]);
+
+export const marketApplyHistory = pgTable('market_apply_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id).notNull(),
+  marketHandle: text('market_handle'),
+  userId: text('user_id').references(() => user.id),
+  action: text('action').notNull(),
+  status: marketApplyStatusEnum('status').notNull(),
+  diff: jsonb('diff'),
+  preSnapshot: jsonb('pre_snapshot'),
+  postSnapshot: jsonb('post_snapshot'),
+  errorDetail: text('error_detail'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('market_apply_history_store_created_idx').on(table.storeId, table.createdAt),
+]);
+
 export * from './auth-schema';
