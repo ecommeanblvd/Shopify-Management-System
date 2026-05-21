@@ -103,6 +103,7 @@ describe('runMarketsApply', () => {
       store, applyRunId: 'run-4', ops, effectiveByHandle: {}, dryRun: false, deps,
     });
     expect(result.kind).toBe('applied');
+    if (result.kind !== 'applied') throw new Error('expected applied result');
     expect(result.errors).toHaveLength(1);
   });
 });
