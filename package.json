@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "dotenv -- drizzle-kit migrate"
+    "db:migrate": "dotenv -- drizzle-kit migrate",
+    "probe:markets": "dotenv -- tsx scripts/probe-markets-api.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -53,6 +54,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "tsx": "^4.22.3",
     "typescript": "^5",
     "vitest": "^4.1.6"
   }
