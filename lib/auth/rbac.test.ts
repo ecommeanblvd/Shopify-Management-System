@@ -37,6 +37,26 @@ describe('hasPermission — manage_users', () => {
   });
 });
 
+describe('markets permissions', () => {
+  it('grants admin manage_markets_template, apply_markets, view_markets_history', () => {
+    expect(hasPermission('admin', 'manage_markets_template')).toBe(true);
+    expect(hasPermission('admin', 'apply_markets')).toBe(true);
+    expect(hasPermission('admin', 'view_markets_history')).toBe(true);
+  });
+
+  it('grants operator apply_markets and view_markets_history (no template edit)', () => {
+    expect(hasPermission('operator', 'manage_markets_template')).toBe(false);
+    expect(hasPermission('operator', 'apply_markets')).toBe(true);
+    expect(hasPermission('operator', 'view_markets_history')).toBe(true);
+  });
+
+  it('grants viewer view_markets_history only', () => {
+    expect(hasPermission('viewer', 'manage_markets_template')).toBe(false);
+    expect(hasPermission('viewer', 'apply_markets')).toBe(false);
+    expect(hasPermission('viewer', 'view_markets_history')).toBe(true);
+  });
+});
+
 describe('canChangeRole', () => {
   it('admin can change another user role', () => {
     expect(canChangeRole({
