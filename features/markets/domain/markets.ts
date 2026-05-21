@@ -1,4 +1,4 @@
-import type { MarketPriceAdjustment } from '../types';
+import type { Market, MarketPriceAdjustment } from '../types';
 
 export const MARKETS_QUERY = `
   query Markets {
@@ -100,3 +100,77 @@ export function normalizeMarkets(data: unknown): NormalizedMarket[] {
     };
   });
 }
+
+export interface MarketCreateInput {
+  name: string;
+  handle: string;
+  enabled: boolean;
+  regions: Array<{ countryCode: string }>;
+}
+
+export function buildMarketCreateInput(m: Market): MarketCreateInput {
+  return {
+    name: m.name,
+    handle: m.handle,
+    enabled: m.enabled,
+    regions: m.countries.map((c) => ({ countryCode: c })),
+  };
+}
+
+export interface MarketUpdateInput {
+  name: string;
+  enabled: boolean;
+}
+
+export function buildMarketUpdateInput(m: Market): MarketUpdateInput {
+  return { name: m.name, enabled: m.enabled };
+}
+
+export function buildMarketRegionsCreate(countries: string[]): Array<{ countryCode: string }> {
+  return countries.map((c) => ({ countryCode: c }));
+}
+
+export const MARKET_CREATE_MUTATION = `
+  mutation MarketCreate($input: MarketCreateInput!) {
+    marketCreate(input: $input) {
+      market { id handle }
+      userErrors { field message }
+    }
+  }
+`;
+
+export const MARKET_UPDATE_MUTATION = `
+  mutation MarketUpdate($id: ID!, $input: MarketUpdateInput!) {
+    marketUpdate(id: $id, input: $input) {
+      market { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+export const MARKET_DELETE_MUTATION = `
+  mutation MarketDelete($id: ID!) {
+    marketDelete(id: $id) {
+      deletedId
+      userErrors { field message }
+    }
+  }
+`;
+
+export const MARKET_REGIONS_CREATE_MUTATION = `
+  mutation MarketRegionsCreate($marketId: ID!, $regions: [MarketRegionCreateInput!]!) {
+    marketRegionsCreate(marketId: $marketId, regions: $regions) {
+      market { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+export const MARKET_REGION_DELETE_MUTATION = `
+  mutation MarketRegionDelete($id: ID!) {
+    marketRegionDelete(id: $id) {
+      deletedId
+      userErrors { field message }
+    }
+  }
+`;

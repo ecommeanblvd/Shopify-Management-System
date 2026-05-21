@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { MARKETS_QUERY, normalizeMarkets } from './markets';
+import {
+  MARKETS_QUERY,
+  normalizeMarkets,
+  buildMarketCreateInput,
+  buildMarketUpdateInput,
+  buildMarketRegionsCreate,
+  MARKET_CREATE_MUTATION,
+  MARKET_UPDATE_MUTATION,
+  MARKET_DELETE_MUTATION,
+  MARKET_REGIONS_CREATE_MUTATION,
+  MARKET_REGION_DELETE_MUTATION,
+} from './markets';
+import type { Market } from '../types';
 
 describe('MARKETS_QUERY', () => {
   it('is a non-empty GraphQL query string', () => {
@@ -121,5 +133,61 @@ describe('normalizeMarkets', () => {
       },
     });
     expect(result[0].priceAdjustment).toEqual({ type: 'percentage', value: -5 });
+  });
+});
+
+const europe: Market = {
+  handle: 'europe',
+  name: 'Europe',
+  type: 'regional',
+  countries: ['DE', 'FR'],
+  primaryCurrency: 'EUR',
+  alternativeCurrencies: [],
+  primaryLanguage: 'en',
+  alternativeLanguages: [],
+  enabled: true,
+};
+
+describe('buildMarketCreateInput', () => {
+  it('produces a marketCreate input with regions and enabled', () => {
+    expect(buildMarketCreateInput(europe)).toEqual({
+      name: 'Europe',
+      handle: 'europe',
+      enabled: true,
+      regions: [{ countryCode: 'DE' }, { countryCode: 'FR' }],
+    });
+  });
+
+  it('produces empty regions for international markets', () => {
+    expect(buildMarketCreateInput({ ...europe, type: 'international', countries: [] }))
+      .toEqual({ name: 'Europe', handle: 'europe', enabled: true, regions: [] });
+  });
+});
+
+describe('buildMarketUpdateInput', () => {
+  it('produces a marketUpdate input with name and enabled only', () => {
+    expect(buildMarketUpdateInput({ ...europe, enabled: false })).toEqual({
+      name: 'Europe',
+      enabled: false,
+    });
+  });
+});
+
+describe('buildMarketRegionsCreate', () => {
+  it('builds regions array for added countries', () => {
+    expect(buildMarketRegionsCreate(['IT', 'ES'])).toEqual([
+      { countryCode: 'IT' },
+      { countryCode: 'ES' },
+    ]);
+  });
+});
+
+describe('mutation strings', () => {
+  it('all are non-empty GraphQL mutations', () => {
+    expect(MARKET_CREATE_MUTATION).toContain('marketCreate');
+    expect(MARKET_UPDATE_MUTATION).toContain('marketUpdate');
+    expect(MARKET_DELETE_MUTATION).toContain('marketDelete');
+    expect(MARKET_REGIONS_CREATE_MUTATION).toContain('marketRegionsCreate');
+    expect(MARKET_REGION_DELETE_MUTATION).toContain('marketRegionDelete');
   });
 });
