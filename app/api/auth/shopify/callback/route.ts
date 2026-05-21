@@ -130,7 +130,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // Step 10–11: Redirect to home and clear the state cookie.
-    const response = NextResponse.redirect(new URL('/', req.url));
+    // Use the configured public URL — `req.url` resolves to the internal
+    // container host (e.g. 0.0.0.0:8080) when running behind a reverse proxy
+    // like Railway, which would send the browser to an unreachable address.
+    const response = NextResponse.redirect(new URL('/', env.SHOPIFY_APP_URL));
     response.cookies.set('shopify_oauth_state', '', {
       httpOnly: true,
       sameSite: 'lax',
