@@ -5,10 +5,34 @@ import { settingsViewerManifest } from './manifest';
 
 const SHIPPING_QUERY = `query {
   deliveryProfiles(first: 10) {
-    edges { node { name profileItems(first: 50) { edges { node { product { title } } } }
-      profileLocationGroups { locationGroupZones(first: 20) {
-        edges { node { zone { name } methodDefinitions(first: 20) {
-          edges { node { name rateProvider { __typename } } } } } } } } } }
+    edges {
+      node {
+        name
+        profileLocationGroups {
+          locationGroupZones(first: 20) {
+            edges {
+              node {
+                zone { name countries { code } }
+                methodDefinitions(first: 20) {
+                  edges {
+                    node {
+                      name
+                      rateProvider {
+                        __typename
+                        ... on DeliveryRateDefinition {
+                          price { amount currencyCode }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }`;
 
 const CHECKOUT_QUERY = `query {
