@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listTemplates, seedDefaultMarkets } from '@/features/markets/actions';
+
+export const dynamic = 'force-dynamic';
 
 export default async function MarketsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -24,6 +27,7 @@ export default async function MarketsPage() {
     const r = await getRole(s.user.id);
     if (!hasPermission(r, 'manage_markets_template')) throw new Error('forbidden');
     await seedDefaultMarkets(s.user.id);
+    revalidatePath('/f/markets');
   }
 
   return (
