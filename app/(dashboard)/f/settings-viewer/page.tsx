@@ -40,11 +40,20 @@ export default async function SettingsViewerPage() {
     try {
       shipping = await readShipping(connectorStore);
       await captureSnapshot({ storeId: store.id, domain: 'shipping', payload: shipping, capturedBy: session.user.id });
-      const checkout = await readCheckout(connectorStore);
-      checkoutStatus = checkout.status;
-      await captureSnapshot({ storeId: store.id, domain: 'checkout', payload: checkout.data, capturedBy: session.user.id });
     } catch (err) {
       shipping = { error: 'Failed to load shipping settings', detail: err instanceof Error ? err.message : String(err) };
+    }
+    try {
+      const checkout = await readCheckout(connectorStore);
+      checkoutStatus = checkout.status;
+      // payload column is NOT NULL — skip snapshot when the store has no checkout
+      // branding to capture (Checkout Extensibility migration pending).
+      if (checkout.data !== null && checkout.data !== undefined) {
+        await captureSnapshot({ storeId: store.id, domain: 'checkout', payload: checkout.data, capturedBy: session.user.id });
+      }
+    } catch {
+      // Read-only viewer: a checkout fetch failure should not blank the shipping panel.
+      checkoutStatus = 'needs_migration';
     }
     results.push({ storeName: store.name, shipping, checkoutStatus });
   }
