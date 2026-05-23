@@ -35,6 +35,16 @@ describe('runQuery', () => {
     })).rejects.toThrow(/scope/i);
   });
 
+  it('accepts write_X to satisfy a required read_X scope (Shopify grants read with write)', async () => {
+    const writeStore = { ...store, scopes: ['write_shipping'] };
+    const result = await runQuery({
+      store: writeStore, featureKey: 'settings-viewer', requiredScopes: ['read_shipping'],
+      query: 'query { shop { name } }',
+      deps: { isEnabled: async () => true, graphql: okGraphql, decryptToken: async () => 'tok' },
+    });
+    expect(result.shop.name).toBe('Shop');
+  });
+
   it('blocks reads are still allowed but writes are unrepresentable (no mutate export)', async () => {
     const mod = await import('./connector');
     expect((mod as Record<string, unknown>).mutate).toBeUndefined();
