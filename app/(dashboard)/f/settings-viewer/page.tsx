@@ -43,8 +43,8 @@ export default async function SettingsViewerPage() {
       const checkout = await readCheckout(connectorStore);
       checkoutStatus = checkout.status;
       await captureSnapshot({ storeId: store.id, domain: 'checkout', payload: checkout.data, capturedBy: session.user.id });
-    } catch {
-      shipping = { error: 'Failed to load shipping settings' };
+    } catch (err) {
+      shipping = { error: 'Failed to load shipping settings', detail: err instanceof Error ? err.message : String(err) };
     }
     results.push({ storeName: store.name, shipping, checkoutStatus });
   }

@@ -44,7 +44,14 @@ export async function runQuery<T = any>(args: RunQueryArgs): Promise<T> {
   if (!(await deps.isEnabled(featureKey, store.id))) {
     throw new ConnectorError(`Feature "${featureKey}" is not enabled for ${store.shopDomain}`);
   }
-  const missing = requiredScopes.filter((s) => !store.scopes.includes(s));
+  // Shopify grants read access implicitly when write access is granted. A required
+  // `read_X` scope is satisfied by `write_X` in the store's installed scope set.
+  const hasScope = (s: string): boolean => {
+    if (store.scopes.includes(s)) return true;
+    if (s.startsWith('read_') && store.scopes.includes('write_' + s.slice(5))) return true;
+    return false;
+  };
+  const missing = requiredScopes.filter((s) => !hasScope(s));
   if (missing.length > 0) {
     throw new ConnectorError(`Missing scope(s) for ${store.shopDomain}: ${missing.join(', ')}`);
   }
