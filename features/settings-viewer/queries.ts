@@ -12,7 +12,15 @@ const SHIPPING_QUERY = `query {
           locationGroupZones(first: 20) {
             edges {
               node {
-                zone { name countries { code } }
+                zone {
+                  name
+                  countries {
+                    code {
+                      countryCode
+                      restOfWorld
+                    }
+                  }
+                }
                 methodDefinitions(first: 20) {
                   edges {
                     node {

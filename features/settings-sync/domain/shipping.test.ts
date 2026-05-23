@@ -14,7 +14,7 @@ const shopifyResponse = {
                 edges: [
                   {
                     node: {
-                      zone: { id: 'gid://shopify/DeliveryZone/10', name: 'Domestic', countries: [{ code: 'VN' }] },
+                      zone: { id: 'gid://shopify/DeliveryZone/10', name: 'Domestic', countries: [{ code: { countryCode: 'VN', restOfWorld: false } }] },
                       methodDefinitions: {
                         edges: [
                           {
