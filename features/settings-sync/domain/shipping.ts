@@ -34,7 +34,16 @@ export const SHIPPING_QUERY = `
             locationGroupZones(first: 50) {
               edges {
                 node {
-                  zone { id name countries { code } }
+                  zone {
+                    id
+                    name
+                    countries {
+                      code {
+                        countryCode
+                        restOfWorld
+                      }
+                    }
+                  }
                   methodDefinitions(first: 50) {
                     edges {
                       node {
@@ -69,7 +78,7 @@ interface ShopifyProfileNode {
     locationGroupZones: {
       edges: Array<{
         node: {
-          zone: { id: string; name: string; countries: Array<{ code: string }> };
+          zone: { id: string; name: string; countries: Array<{ code: { countryCode: string; restOfWorld: boolean } }> };
           methodDefinitions: {
             edges: Array<{
               node: {
@@ -135,7 +144,9 @@ export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShippi
       }
 
       tree.zones[zoneName] = {
-        countries: (z.zone.countries ?? []).map((c) => c.code),
+        countries: (z.zone.countries ?? [])
+          .filter((c) => !c.code.restOfWorld)
+          .map((c) => c.code.countryCode),
         rates,
       };
     }

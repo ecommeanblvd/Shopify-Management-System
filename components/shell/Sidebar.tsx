@@ -20,7 +20,7 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
                 'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ' +
                 (active
                   ? 'bg-[var(--color-muted-surface)] text-[var(--color-text)] font-medium'
-                  : 'text-[var(--color-muted)] hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)]')
+                  : 'text-[var(--color-text)]/80 hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)]')
               }
             >
               <Icon className="size-4" />
