@@ -7,7 +7,7 @@ interface SidebarProps { role: Role; currentPath: string }
 export function Sidebar({ role, currentPath }: SidebarProps) {
   const visible = NAV.filter((item) => item.requires === null || hasPermission(role, item.requires));
   return (
-    <aside className="w-60 shrink-0 border-r h-full bg-[var(--color-surface)]">
+    <aside className="w-60 shrink-0 border-r overflow-y-auto bg-[var(--color-surface)]">
       <nav className="p-3 space-y-1">
         {visible.map((item) => {
           const Icon = item.icon;
