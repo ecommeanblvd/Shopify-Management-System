@@ -241,6 +241,11 @@ function SurchargeRow({ row, currency, canManage, updateBound, deleteBound }: Su
                 {row.tier}
               </Badge>
             )}
+            {row.valuePerKg && Number(row.valuePerKg) > 0 && (
+              <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                or max {VND_FMT.format(Number(row.valuePerKg))}/kg
+              </span>
+            )}
           </div>
           <Input
             name="note"

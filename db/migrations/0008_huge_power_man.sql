@@ -1,0 +1,1 @@
+ALTER TABLE "carrier_surcharges" ADD COLUMN "value_per_kg" numeric(14, 4);

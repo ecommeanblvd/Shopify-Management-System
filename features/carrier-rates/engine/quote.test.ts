@@ -171,6 +171,33 @@ describe('quote engine', () => {
       expect(r.ok && r.breakdown.remote).toBe(1_050_000);
     });
 
+    it('applies max(value, valuePerKg × weight) — FedEx ODA Tier B/C model', () => {
+      // Tier B: 550,000 VND/shipment OR 9,200 VND/kg, whichever higher.
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 550_000, valuePerKg: 9_200, active: true, tier: 'Tier B' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([['ZIP-B', 'Tier B']])]]),
+      });
+      // 1 kg: per-kg = 9,200 → 550,000 wins
+      const light = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: 'ZIP-B' });
+      // 100 kg: per-kg = 920,000 → per-kg wins
+      const heavy = quote(snap, { weightKg: 100, destinationCountry: 'SG', destinationPostcode: 'ZIP-B' });
+      expect(light.ok && light.breakdown.remote).toBe(550_000);
+      expect(heavy.ok && heavy.breakdown.remote).toBe(920_000);
+    });
+
+    it('valuePerKg=0 or missing falls back to plain value (Tier A model)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 82_200, valuePerKg: null, active: true, tier: 'Tier A' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([['ZIP-A', 'Tier A']])]]),
+      });
+      const r = quote(snap, { weightKg: 50, destinationCountry: 'SG', destinationPostcode: 'ZIP-A' });
+      expect(r.ok && r.breakdown.remote).toBe(82_200);
+    });
+
     it('skips remote surcharges whose tier does not match the postcode tier', () => {
       const snap = makeSnap({
         surcharges: [

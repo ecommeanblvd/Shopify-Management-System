@@ -275,6 +275,11 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   kind: carrierSurchargeKindEnum('kind').notNull(),
   value: numeric('value', { precision: 14, scale: 4 }).notNull(),
+  // Optional per-kg companion: when set, the surcharge applies max(value,
+  // value_per_kg × weightKg) instead of just `value`. Used by FedEx ODA Tier
+  // B/C which charge "550,000 VND per shipment OR 9,200 VND per kg, whichever
+  // is HIGHER". Only meaningful for remote_fixed and similar floor-style kinds.
+  valuePerKg: numeric('value_per_kg', { precision: 14, scale: 4 }),
   // Optional tier label (e.g. 'Tier A', 'Tier B') so remote_fixed surcharges
   // can apply only to postcodes carrying that tier. NULL means catch-all.
   tier: text('tier'),

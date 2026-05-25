@@ -9,6 +9,7 @@ export interface SurchargeRow {
   id: string;
   kind: SurchargeKind;
   value: string;
+  valuePerKg: string | null;
   tier: string | null;
   active: boolean;
   note: string | null;
@@ -23,6 +24,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       id: schema.carrierSurcharges.id,
       kind: schema.carrierSurcharges.kind,
       value: schema.carrierSurcharges.value,
+      valuePerKg: schema.carrierSurcharges.valuePerKg,
       tier: schema.carrierSurcharges.tier,
       active: schema.carrierSurcharges.active,
       note: schema.carrierSurcharges.note,
