@@ -19,7 +19,7 @@ export async function AppShell({ email, name, role, children }: AppShellProps) {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar role={role} currentPath={currentPath} />
         <main className="flex-1 overflow-auto">
-          <div className="p-6 mx-auto max-w-7xl">{children}</div>
+          {children}
         </main>
       </div>
     </div>
