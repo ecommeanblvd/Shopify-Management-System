@@ -38,13 +38,13 @@
    - primary keeps the brand purple, brightened for dark contrast
    --------------------------------------------------------------- */
 [data-theme="dark"] {
-  --color-bg: oklch(12% 0 0);
-  --color-surface: oklch(18% 0 0);
-  --color-border: oklch(26% 0 0);
-  --color-input: oklch(22% 0 0);
+  --color-bg: oklch(15% 0 0);
+  --color-surface: oklch(23% 0 0);
+  --color-border: oklch(33% 0 0);
+  --color-input: oklch(26% 0 0);
   --color-text: oklch(96% 0 0);
-  --color-muted: oklch(68% 0 0);
-  --color-muted-surface: oklch(22% 0 0);
+  --color-muted: oklch(72% 0 0);
+  --color-muted-surface: oklch(28% 0 0);
   --color-primary: oklch(70% 0.22 280);
   --color-primary-foreground: oklch(15% 0.03 270);
   --color-success: oklch(70% 0.18 145);
@@ -116,34 +116,34 @@
 }
 
 [data-theme="dark"] {
-  /* Surfaces — calibrated so cards visibly elevate above the page */
-  --background:          oklch(12% 0 0);
+  /* Surfaces — strong elevation so cards stand out clearly above the canvas */
+  --background:          oklch(15% 0 0);
   --foreground:          oklch(96% 0 0);
-  --card:                oklch(18% 0 0);
+  --card:                oklch(23% 0 0);
   --card-foreground:     oklch(96% 0 0);
-  --popover:             oklch(18% 0 0);
+  --popover:             oklch(23% 0 0);
   --popover-foreground:  oklch(96% 0 0);
 
   /* Brand — keep the purple so primary buttons and active items pop */
   --primary:             oklch(70% 0.22 280);
   --primary-foreground:  oklch(15% 0.03 270);
 
-  /* Secondary / muted — distinct from card so chips and accent regions read */
-  --secondary:           oklch(22% 0 0);
+  /* Secondary / muted — distinct from card so chips, accent regions, and nested rows read */
+  --secondary:           oklch(28% 0 0);
   --secondary-foreground: oklch(96% 0 0);
-  --muted:               oklch(22% 0 0);
-  --muted-foreground:    oklch(68% 0 0);
+  --muted:               oklch(28% 0 0);
+  --muted-foreground:    oklch(72% 0 0);
 
   /* Accent */
-  --accent:              oklch(22% 0 0);
+  --accent:              oklch(28% 0 0);
   --accent-foreground:   oklch(96% 0 0);
 
   /* Danger / destructive */
   --destructive:         oklch(65% 0.22 25);
 
   /* Structural — borders strong enough to delineate cards on dark bg */
-  --border:              oklch(26% 0 0);
-  --input:               oklch(22% 0 0);
+  --border:              oklch(33% 0 0);
+  --input:               oklch(26% 0 0);
   --ring:                oklch(70% 0.22 280);
 
   /* Charts */
@@ -153,14 +153,14 @@
   --chart-4: oklch(65% 0.22 25);
   --chart-5: oklch(60% 0 0);
 
-  /* Sidebar — slightly recessed from main content (darker than card, between bg and card) */
-  --sidebar:                  oklch(14% 0 0);
+  /* Sidebar — sits at the canvas level (no extra fill) but with a clear right border */
+  --sidebar:                  oklch(13% 0 0);
   --sidebar-foreground:       oklch(96% 0 0);
   --sidebar-primary:          oklch(70% 0.22 280);
   --sidebar-primary-foreground: oklch(15% 0.03 270);
-  --sidebar-accent:           oklch(22% 0 0);
+  --sidebar-accent:           oklch(28% 0 0);
   --sidebar-accent-foreground: oklch(96% 0 0);
-  --sidebar-border:           oklch(26% 0 0);
+  --sidebar-border:           oklch(33% 0 0);
   --sidebar-ring:             oklch(70% 0.22 280);
 }
 
