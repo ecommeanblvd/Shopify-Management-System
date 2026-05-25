@@ -31,9 +31,27 @@ interface Props {
 
 type CellState = 'idle' | 'saving' | 'saved' | 'error';
 
+// VND has no fractional unit. We strip decimals on display and group thousands.
+const VND_FORMATTER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+function formatVnd(raw: string): string {
+  if (!raw) return '';
+  const n = Number(String(raw).replace(/[,_\s]/g, ''));
+  if (!Number.isFinite(n)) return raw;
+  return VND_FORMATTER.format(Math.round(n));
+}
+
+function parseVnd(input: string): number | null {
+  if (!input.trim()) return null;
+  const n = Number(input.replace(/[,_\s]/g, ''));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+}
+
 export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction }: Props) {
-  // Pre-build a map of values keyed by `${zoneId}|${tierId}` → cost string
-  const initialMap = new Map<string, string>(initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, c.costAmount]));
+  // Map raw DB values to formatted display values ("401928.00" → "401,928")
+  const initialMap = new Map<string, string>(
+    initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, formatVnd(c.costAmount)]),
+  );
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(initialMap.entries()));
   const [state, setState] = useState<Record<string, CellState>>({});
 
@@ -43,7 +61,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
 
   if (zones.length === 0 || tiers.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground italic py-6 text-center">
+      <div className="text-sm text-muted-foreground italic py-12 text-center">
         {zones.length === 0 && tiers.length === 0
           ? 'Define at least one zone and one weight tier before filling the matrix.'
           : zones.length === 0
@@ -54,28 +72,33 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
   }
 
   return (
-    <div className="overflow-x-auto -mx-1">
+    <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-card text-left px-3 py-2.5 border-b border-r border-border text-xs uppercase tracking-wider text-muted-foreground">
-              kg ↑ / zone →
+            <th className="sticky left-0 z-20 bg-muted text-left px-4 py-3 border-b-2 border-r border-border text-[11px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap">
+              kg ↑ &nbsp;/&nbsp; zone →
             </th>
             {zones.map((z) => (
-              <th key={z.id} className="text-left px-3 py-2.5 border-b border-border text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap font-medium">
+              <th
+                key={z.id}
+                className="bg-muted text-right px-4 py-3 border-b-2 border-border text-[11px] uppercase tracking-wider text-foreground font-semibold whitespace-nowrap min-w-[110px]"
+              >
                 {z.label}
               </th>
             ))}
+            <th className="bg-muted border-b-2 border-border w-full" aria-hidden />
           </tr>
         </thead>
         <tbody>
           {tiers.map((t, i) => {
             const prev = i === 0 ? 0 : Number(tiers[i - 1].upperKg);
             const upper = Number(t.upperKg);
+            const zebra = i % 2 === 1 ? 'bg-muted/15' : '';
             return (
-              <tr key={t.id}>
-                <th className="sticky left-0 z-10 bg-card text-left px-3 py-2 border-b border-r border-border font-mono text-xs tabular-nums whitespace-nowrap">
-                  ({prev}–{upper}] kg
+              <tr key={t.id} className={zebra}>
+                <th className={`sticky left-0 z-10 ${zebra || 'bg-card'} text-left px-4 py-2.5 border-b border-r border-border whitespace-nowrap font-mono text-xs tabular-nums text-foreground font-medium`}>
+                  ({fmtKg(prev)}–{fmtKg(upper)}] kg
                 </th>
                 {zones.map((z) => {
                   const key = `${z.id}|${t.id}`;
@@ -83,8 +106,6 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                     <Cell
                       key={key}
                       cellKey={key}
-                      zoneId={z.id}
-                      tierId={t.id}
                       value={values[key] ?? ''}
                       state={state[key] ?? 'idle'}
                       currency={costCurrency}
@@ -92,30 +113,42 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                       onChange={(v) => setValues((p) => ({ ...p, [key]: v }))}
                       onCommit={async (v) => {
                         const trimmed = v.trim();
-                        if (trimmed === '' || trimmed === (initialMap.get(key) ?? '')) {
-                          if (trimmed === '' && (initialMap.get(key) ?? '') !== '') {
-                            setCellState(key, 'saving');
-                            try {
-                              await clearCellAction({ zoneId: z.id, tierId: t.id });
-                              initialMap.delete(key);
-                              setCellState(key, 'saved');
-                              setTimeout(() => setCellState(key, 'idle'), 1500);
-                            } catch {
-                              setCellState(key, 'error');
-                            }
+                        const isEmpty = trimmed === '';
+                        const hadValue = (initialMap.get(key) ?? '') !== '';
+
+                        if (isEmpty && hadValue) {
+                          setCellState(key, 'saving');
+                          try {
+                            await clearCellAction({ zoneId: z.id, tierId: t.id });
+                            initialMap.delete(key);
+                            setCellState(key, 'saved');
+                            setTimeout(() => setCellState(key, 'idle'), 1500);
+                          } catch {
+                            setCellState(key, 'error');
                           }
                           return;
                         }
-                        const n = Number(trimmed.replace(/[,_\s]/g, ''));
-                        if (!Number.isFinite(n) || n < 0) {
+
+                        if (isEmpty) return; // no-op
+
+                        const parsed = parseVnd(trimmed);
+                        if (parsed === null) {
                           setCellState(key, 'error');
                           return;
                         }
+
+                        const formatted = formatVnd(String(parsed));
+                        if (formatted === (initialMap.get(key) ?? '')) {
+                          // no change after rounding
+                          setValues((p) => ({ ...p, [key]: formatted }));
+                          return;
+                        }
+
                         setCellState(key, 'saving');
                         try {
-                          await setCellAction({ zoneId: z.id, tierId: t.id, costAmount: n.toString() });
-                          initialMap.set(key, n.toFixed(2));
-                          setValues((p) => ({ ...p, [key]: n.toFixed(2) }));
+                          await setCellAction({ zoneId: z.id, tierId: t.id, costAmount: String(parsed) });
+                          initialMap.set(key, formatted);
+                          setValues((p) => ({ ...p, [key]: formatted }));
                           setCellState(key, 'saved');
                           setTimeout(() => setCellState(key, 'idle'), 1500);
                         } catch {
@@ -125,6 +158,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                     />
                   );
                 })}
+                <td className={`border-b border-border ${zebra}`} aria-hidden />
               </tr>
             );
           })}
@@ -134,10 +168,13 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
   );
 }
 
+function fmtKg(kg: number): string {
+  // 0.5 → "0.5", 30 → "30", 0 → "0"
+  return Number.isInteger(kg) ? kg.toString() : kg.toString();
+}
+
 interface CellProps {
   cellKey: string;
-  zoneId: string;
-  tierId: string;
   value: string;
   state: CellState;
   currency: string;
@@ -151,22 +188,24 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
   const ref = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
 
-  // Auto-revert error state when user starts typing again
+  // Clear error styling once user begins typing again
   useEffect(() => {
-    if (state === 'error' && focused) {
-      // intentional no-op; cleared by next onCommit
+    if (focused && state === 'error') {
+      // visual reset only — actual error fires on next commit
     }
-  }, [state, focused]);
+  }, [focused, state]);
 
   if (!canEdit) {
     return (
-      <td className="px-3 py-2 border-b border-border font-mono tabular-nums text-right whitespace-nowrap">
-        {value ? formatCost(value, currency) : <span className="text-muted-foreground/40">—</span>}
+      <td className="px-4 py-2.5 border-b border-border tabular-nums text-right whitespace-nowrap text-foreground">
+        {value ? value : <span className="text-muted-foreground/40">—</span>}
+        {value && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
       </td>
     );
   }
 
-  const stateStyle = state === 'saving' ? 'ring-1 ring-muted-foreground/30'
+  const stateRing =
+    state === 'saving' ? 'ring-1 ring-muted-foreground/30'
     : state === 'saved' ? 'ring-1 ring-emerald-500/50'
     : state === 'error' ? 'ring-1 ring-destructive'
     : '';
@@ -177,7 +216,7 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
         <input
           ref={ref}
           type="text"
-          inputMode="decimal"
+          inputMode="numeric"
           value={value}
           onFocus={() => setFocused(true)}
           onBlur={(e) => {
@@ -197,30 +236,27 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
           onChange={(e) => onChange(e.target.value)}
           placeholder="—"
           className={
-            'w-full bg-transparent text-right font-mono tabular-nums px-3 py-2 outline-none focus:bg-muted/40 ' +
-            stateStyle
+            'w-full bg-transparent text-right tabular-nums px-4 py-2.5 outline-none transition-colors ' +
+            'focus:bg-primary/[0.08] focus:text-foreground placeholder:text-muted-foreground/40 ' +
+            stateRing
           }
         />
         {state === 'saving' && (
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"><Loader2 className="size-3 animate-spin" /></span>
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden>
+            <Loader2 className="size-3 animate-spin" />
+          </span>
         )}
         {state === 'saved' && (
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-emerald-500"><Check className="size-3" /></span>
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-emerald-500" aria-hidden>
+            <Check className="size-3" />
+          </span>
         )}
         {state === 'error' && (
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-destructive"><X className="size-3" /></span>
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-destructive" aria-hidden>
+            <X className="size-3" />
+          </span>
         )}
       </div>
     </td>
   );
-}
-
-function formatCost(s: string, currency: string): string {
-  const n = Number(s);
-  if (!Number.isFinite(n)) return s;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
-  } catch {
-    return `${n.toLocaleString()} ${currency}`;
-  }
 }
