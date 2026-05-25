@@ -25,6 +25,21 @@ function iso2ToFlag(code: string): string {
   return chars.join('');
 }
 
+// Intl.DisplayNames is part of Node 18+ and every modern browser — works in
+// server components without any extra wiring. We instantiate once at module
+// load so each chip render avoids the constructor cost.
+const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
+
+function countryName(code: string): string {
+  if (!ISO2_RE.test(code)) return code;
+  try {
+    const name = REGION_NAMES.of(code);
+    return name && name !== code ? name : code;
+  } catch {
+    return code;
+  }
+}
+
 async function addZoneAction(accountId: string, formData: FormData) {
   'use server';
   const label = String(formData.get('label') ?? '');
@@ -169,7 +184,7 @@ interface Zone {
 }
 
 function ZonePreviewCard({ accountId, zone }: { accountId: string; zone: Zone }) {
-  const previewLimit = 12;
+  const previewLimit = 8;
   const previewed = zone.countries.slice(0, previewLimit);
   const remaining = zone.countries.length - previewed.length;
 
@@ -189,7 +204,9 @@ function ZonePreviewCard({ accountId, zone }: { accountId: string; zone: Zone })
           </div>
 
           {zone.countries.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">No countries assigned</p>
+            <p className="text-xs text-muted-foreground italic">
+              No countries assigned · click to add some
+            </p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {previewed.map((c) => <CountryChip key={c} code={c} />)}
@@ -306,10 +323,14 @@ function ZoneEditCard({
 
 function CountryChip({ code }: { code: string }) {
   const flag = iso2ToFlag(code);
+  const name = countryName(code);
   return (
-    <div className="inline-flex flex-col items-center justify-center gap-0.5 min-w-[44px] rounded-md border border-border bg-card px-2 py-1.5 hover:border-foreground/30 transition-colors">
-      <span className="text-base leading-none" aria-hidden>{flag}</span>
-      <span className="text-[10px] font-mono tracking-wider text-foreground/80">{code}</span>
+    <div
+      className="inline-flex items-center gap-2.5 rounded-lg border border-border bg-card pl-2 pr-3 py-1.5 hover:border-foreground/30 transition-colors"
+      title={code}
+    >
+      <span className="text-2xl leading-none" aria-hidden>{flag}</span>
+      <span className="text-sm font-medium text-foreground whitespace-nowrap">{name}</span>
     </div>
   );
 }
