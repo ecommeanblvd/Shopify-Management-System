@@ -1,10 +1,13 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { ChevronLeft, Sparkles } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { saveTemplate } from '@/features/markets/actions';
 import { MarketForm } from '@/components/markets/MarketForm';
+import { Card, CardContent } from '@/components/ui/card';
 import type { Market } from '@/features/markets/types';
 
 const EMPTY: Market = {
@@ -30,9 +33,31 @@ export default async function NewMarketPage() {
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-6">New market</h1>
-      <MarketForm initial={EMPTY} isNew onSubmit={handleSubmit} />
+    <div className="max-w-5xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+      <Link
+        href="/f/markets"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="size-4" />
+        Markets
+      </Link>
+
+      <header className="space-y-3">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Sparkles className="size-3.5" />
+          New template
+        </div>
+        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">New market</h1>
+        <p className="text-sm text-muted-foreground max-w-xl">
+          Define a region with its countries, currencies, and languages. You&rsquo;ll add per-store overrides on the next screen.
+        </p>
+      </header>
+
+      <Card>
+        <CardContent className="p-6 md:p-10">
+          <MarketForm initial={EMPTY} isNew onSubmit={handleSubmit} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
