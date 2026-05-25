@@ -172,10 +172,11 @@ export default async function CarrierAccountDetailPage({
           status="Ready"
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/push`}
           icon={<Send className="size-4" />}
           title="Recalculate &amp; push"
-          desc="Regenerate per-store overrides for linked markets."
-          status="Phase 3"
+          desc="Regenerate per-store overrides for every linked market."
+          status="Ready"
         />
       </div>
     </div>
