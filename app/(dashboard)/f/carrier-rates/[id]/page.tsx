@@ -165,10 +165,11 @@ export default async function CarrierAccountDetailPage({
           status="Ready"
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/calculator`}
           icon={<Calculator className="size-4" />}
           title="Calculator"
           desc="Try a quote: country + postcode + weight → breakdown."
-          status="Phase 2c"
+          status="Ready"
         />
         <SubSection
           icon={<Send className="size-4" />}
