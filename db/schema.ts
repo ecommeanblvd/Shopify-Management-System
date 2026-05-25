@@ -266,6 +266,8 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   'remote_fixed',
   'residential_fixed',
   'markup_percent',
+  // Added Phase 2b: per-kg surcharges like DHL GoGreen Plus (SAF) at 3,800 VND/kg.
+  'per_kg_fixed',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {

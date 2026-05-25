@@ -151,10 +151,11 @@ export default async function CarrierAccountDetailPage({
           accent
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/surcharges`}
           icon={<Wrench className="size-4" />}
           title="Surcharges"
-          desc="Fuel %, peak fixed, remote fixed, residential fixed, markup %."
-          status="Phase 2b"
+          desc="Fuel %, peak fixed, remote fixed, residential fixed, per-kg green, markup %."
+          status="Ready"
         />
         <SubSection
           icon={<MapPin className="size-4" />}
