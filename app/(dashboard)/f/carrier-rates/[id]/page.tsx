@@ -122,47 +122,50 @@ export default async function CarrierAccountDetailPage({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
         <StatTile label="FX rate" value={fxFormatted} sub={`${account.costCurrency} per 1 ${account.displayCurrency}`} tone={fxStale ? 'warning' : 'default'} />
         <StatTile label="Updated" value={`${fxAge}d ago`} sub={new Date(account.fxUpdatedAt).toLocaleDateString()} />
-        <StatTile label="Zones" value="—" sub="Coming in Phase 2" />
-        <StatTile label="Tiers" value="—" sub="Coming in Phase 2" />
+        <StatTile label="Weight unit" value={account.weightUnit} sub="Cost sheet basis" />
+        <StatTile label="Phase" value="2a" sub="Authoring live" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SubSection
+          href={`/f/carrier-rates/${id}/zones`}
           icon={<Globe2 className="size-4" />}
           title="Zones"
           desc="Group countries into the carrier's zones (Zone 1, Zone A, …)."
-          status="Phase 2"
+          status="Ready"
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/weight-tiers`}
           icon={<Layers className="size-4" />}
           title="Weight tiers"
           desc="Breakpoints for the rate matrix rows."
-          status="Phase 2"
+          status="Ready"
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/matrix`}
           icon={<Coins className="size-4" />}
           title="Rate matrix"
-          desc="Cost per (zone × tier). Manual entry + CSV import."
-          status="Phase 2"
+          desc="Cost per (zone × tier). Inline edit + CSV import."
+          status="Ready"
           accent
         />
         <SubSection
           icon={<Wrench className="size-4" />}
           title="Surcharges"
           desc="Fuel %, peak fixed, remote fixed, residential fixed, markup %."
-          status="Phase 2"
+          status="Phase 2b"
         />
         <SubSection
           icon={<MapPin className="size-4" />}
           title="Remote postcodes"
           desc="CSV upload of DHL/FedEx remote-area postal codes by country."
-          status="Phase 2"
+          status="Phase 2b"
         />
         <SubSection
           icon={<Calculator className="size-4" />}
           title="Calculator"
           desc="Try a quote: country + postcode + weight → breakdown."
-          status="Phase 2"
+          status="Phase 2c"
         />
         <SubSection
           icon={<Send className="size-4" />}
@@ -189,23 +192,30 @@ function StatTile({
 }
 
 function SubSection({
-  icon, title, desc, status, accent = false,
-}: { icon: React.ReactNode; title: string; desc: string; status: string; accent?: boolean }) {
-  return (
-    <Card>
-      <CardContent className={'p-5 flex items-start gap-4 ' + (accent ? 'bg-primary/[0.03]' : '')}>
-        <div className={'size-10 rounded-xl flex items-center justify-center shrink-0 ' + (accent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-          {icon}
+  href, icon, title, desc, status, accent = false,
+}: { href?: string; icon: React.ReactNode; title: string; desc: string; status: string; accent?: boolean }) {
+  const body = (
+    <CardContent className={'p-5 flex items-start gap-4 ' + (accent ? 'bg-primary/[0.03]' : '')}>
+      <div className={'size-10 rounded-xl flex items-center justify-center shrink-0 ' + (accent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="font-semibold tracking-tight">{title}</h3>
+          <Badge variant={status === 'Ready' ? 'secondary' : 'outline'} className="h-5 text-[10px] uppercase tracking-wider shrink-0">{status}</Badge>
         </div>
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h3 className="font-semibold tracking-tight">{title}</h3>
-            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider shrink-0">{status}</Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{desc}</p>
-        </div>
-        <ArrowRight className="size-4 text-muted-foreground/30 shrink-0" />
-      </CardContent>
-    </Card>
+        <p className="text-sm text-muted-foreground">{desc}</p>
+      </div>
+      <ArrowRight className={'size-4 shrink-0 transition-transform ' + (href ? 'text-muted-foreground group-hover:translate-x-0.5 group-hover:text-foreground' : 'text-muted-foreground/30')} />
+    </CardContent>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="group block">
+        <Card className="hover:border-foreground/30 transition-colors">{body}</Card>
+      </Link>
+    );
+  }
+  return <Card className="opacity-70">{body}</Card>;
 }
