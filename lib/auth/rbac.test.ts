@@ -57,6 +57,21 @@ describe('markets permissions', () => {
   });
 });
 
+describe('carrier-rates permissions', () => {
+  it('grants admin both manage_carrier_rates and view_carrier_rates', () => {
+    expect(hasPermission('admin', 'manage_carrier_rates')).toBe(true);
+    expect(hasPermission('admin', 'view_carrier_rates')).toBe(true);
+  });
+  it('grants operator manage + view (carrier rates are ops-day work)', () => {
+    expect(hasPermission('operator', 'manage_carrier_rates')).toBe(true);
+    expect(hasPermission('operator', 'view_carrier_rates')).toBe(true);
+  });
+  it('grants viewer view-only', () => {
+    expect(hasPermission('viewer', 'manage_carrier_rates')).toBe(false);
+    expect(hasPermission('viewer', 'view_carrier_rates')).toBe(true);
+  });
+});
+
 describe('canChangeRole', () => {
   it('admin can change another user role', () => {
     expect(canChangeRole({

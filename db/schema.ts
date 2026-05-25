@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -185,6 +185,152 @@ export const marketApplyHistory = pgTable('market_apply_history', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('market_apply_history_store_created_idx').on(table.storeId, table.createdAt),
+]);
+
+// --- Carrier Rates feature (spec 2026-05-25) ---
+
+// Top-level carrier brand. Seed: dhl, fedex. Add more carriers without code.
+export const carriers = pgTable('carriers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const carrierWeightUnitEnum = pgEnum('carrier_weight_unit', ['kg', 'lb']);
+
+// One contract per row. Operators may have multiple per carrier.
+export const carrierAccounts = pgTable('carrier_accounts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierId: uuid('carrier_id').references(() => carriers.id, { onDelete: 'restrict' }).notNull(),
+  name: text('name').notNull(),
+  weightUnit: carrierWeightUnitEnum('weight_unit').notNull().default('kg'),
+  costCurrency: text('cost_currency').notNull(),
+  displayCurrency: text('display_currency').notNull(),
+  // fx_cost_per_display: how many cost-currency units equal one display-currency unit.
+  // For VND cost / USD display, value is e.g. 26000 (1 USD = 26 000 VND).
+  fxCostPerDisplay: numeric('fx_cost_per_display', { precision: 14, scale: 4 }).notNull(),
+  fxUpdatedAt: timestamp('fx_updated_at').defaultNow().notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  notes: text('notes'),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const carrierZones = pgTable('carrier_zones', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  label: text('label').notNull(),
+  position: integer('position').notNull().default(0),
+}, (table) => [
+  uniqueIndex('carrier_zones_account_label_idx').on(table.carrierAccountId, table.label),
+]);
+
+// Country lives in exactly one zone per account.
+export const carrierZoneCountries = pgTable('carrier_zone_countries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
+  countryCode: text('country_code').notNull(),
+}, (table) => [
+  uniqueIndex('carrier_zone_countries_account_country_idx').on(table.carrierAccountId, table.countryCode),
+  index('carrier_zone_countries_zone_idx').on(table.carrierZoneId),
+]);
+
+// Tier price covers weights in (previous.upperKg, this.upperKg]. Highest tier = ∞.
+export const carrierWeightTiers = pgTable('carrier_weight_tiers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  upperKg: numeric('upper_kg', { precision: 8, scale: 3 }).notNull(),
+  position: integer('position').notNull().default(0),
+}, (table) => [
+  uniqueIndex('carrier_weight_tiers_account_upper_idx').on(table.carrierAccountId, table.upperKg),
+]);
+
+// Rate matrix cell. Cost is in account.costCurrency.
+export const carrierRateCells = pgTable('carrier_rate_cells', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
+  carrierWeightTierId: uuid('carrier_weight_tier_id').references(() => carrierWeightTiers.id, { onDelete: 'cascade' }).notNull(),
+  costAmount: numeric('cost_amount', { precision: 14, scale: 2 }).notNull(),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('carrier_rate_cells_zone_tier_idx').on(table.carrierZoneId, table.carrierWeightTierId),
+]);
+
+export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
+  'fuel_percent',
+  'peak_fixed',
+  'remote_fixed',
+  'residential_fixed',
+  'markup_percent',
+]);
+
+export const carrierSurcharges = pgTable('carrier_surcharges', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  kind: carrierSurchargeKindEnum('kind').notNull(),
+  value: numeric('value', { precision: 14, scale: 4 }).notNull(),
+  active: boolean('active').notNull().default(true),
+  startsAt: timestamp('starts_at'),
+  endsAt: timestamp('ends_at'),
+  note: text('note'),
+  updatedBy: text('updated_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_surcharges_account_kind_idx').on(table.carrierAccountId, table.kind),
+]);
+
+export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  countryCode: text('country_code').notNull(),
+  postcodePattern: text('postcode_pattern').notNull(),
+  source: text('source'),
+  uploadedBy: text('uploaded_by').references(() => user.id),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('carrier_remote_postcodes_account_country_pattern_idx')
+    .on(table.carrierAccountId, table.countryCode, table.postcodePattern),
+  index('carrier_remote_postcodes_lookup_idx').on(table.carrierAccountId, table.countryCode),
+]);
+
+// Link table: which carrier account serves which market.
+export const marketCarrierLinks = pgTable('market_carrier_links', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  marketHandle: text('market_handle')
+    .references(() => marketTemplates.handle, { onUpdate: 'cascade', onDelete: 'cascade' })
+    .notNull(),
+  carrierAccountId: uuid('carrier_account_id')
+    .references(() => carrierAccounts.id, { onDelete: 'cascade' })
+    .notNull(),
+  serviceLabel: text('service_label').notNull(),
+  position: integer('position').notNull().default(0),
+  enabled: boolean('enabled').notNull().default(true),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('market_carrier_links_market_account_idx').on(table.marketHandle, table.carrierAccountId),
+]);
+
+// Audit log of every quote produced.
+export const carrierQuoteLogContextEnum = pgEnum('carrier_quote_context', ['calculator', 'push_recalc']);
+
+export const carrierQuoteLogs = pgTable('carrier_quote_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  destinationCountry: text('destination_country').notNull(),
+  destinationPostcode: text('destination_postcode'),
+  weightKg: numeric('weight_kg', { precision: 8, scale: 3 }).notNull(),
+  breakdown: jsonb('breakdown').notNull(),
+  context: carrierQuoteLogContextEnum('context').notNull(),
+  computedBy: text('computed_by').references(() => user.id),
+  computedAt: timestamp('computed_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_quote_logs_account_computed_idx').on(table.carrierAccountId, table.computedAt),
 ]);
 
 export * from './auth-schema';

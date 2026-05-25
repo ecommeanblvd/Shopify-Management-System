@@ -10,7 +10,9 @@ export type Permission =
   | 'manage_users'
   | 'manage_markets_template'
   | 'apply_markets'
-  | 'view_markets_history';
+  | 'view_markets_history'
+  | 'manage_carrier_rates'
+  | 'view_carrier_rates';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -19,13 +21,15 @@ const MATRIX: Record<Role, Permission[]> = {
     'reconcile_store', 'view_settings_history',
     'manage_users',
     'manage_markets_template', 'apply_markets', 'view_markets_history',
+    'manage_carrier_rates', 'view_carrier_rates',
   ],
   operator: [
     'view', 'run_feature',
     'apply_settings', 'reconcile_store', 'view_settings_history',
     'apply_markets', 'view_markets_history',
+    'manage_carrier_rates', 'view_carrier_rates',
   ],
-  viewer: ['view', 'view_settings_history', 'view_markets_history'],
+  viewer: ['view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

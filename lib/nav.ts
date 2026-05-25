@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck } from 'lucide-react';
 import type { Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { href: '/f/settings-sync/history', label: 'History',         icon: History,         requires: 'view_settings_history' },
   { href: '/f/markets',               label: 'Markets',         icon: Globe,           requires: 'view_markets_history' },
   { href: '/f/markets/history',       label: 'Markets history', icon: History,         requires: 'view_markets_history' },
+  { href: '/f/carrier-rates',         label: 'Carrier rates',   icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/admin/users',             label: 'Users',           icon: Users,           requires: 'manage_users' },
   { href: '/admin/feature-flags',     label: 'Feature flags',   icon: ToggleRight,     requires: 'manage_users' },
 ];
