@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { ChevronLeft, Globe2, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Globe2, Plus, Trash2, AlertCircle, X } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -15,6 +15,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 export const dynamic = 'force-dynamic';
+
+const ISO2_RE = /^[A-Z]{2}$/;
+const FLAG_OFFSET = 0x1F1E6 - 'A'.charCodeAt(0);
+
+function iso2ToFlag(code: string): string {
+  if (!ISO2_RE.test(code)) return '🏳️';
+  const chars = [...code].map((c) => String.fromCodePoint(c.charCodeAt(0) + FLAG_OFFSET));
+  return chars.join('');
+}
 
 async function addZoneAction(accountId: string, formData: FormData) {
   'use server';
@@ -48,8 +57,15 @@ async function setCountriesAction(accountId: string, zoneId: string, existing: s
   revalidatePath(`/f/carrier-rates/${accountId}/zones`);
 }
 
-export default async function ZonesPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ZonesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ zone?: string }>;
+}) {
   const { id } = await params;
+  const { zone: activeZoneId } = await searchParams;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -66,7 +82,7 @@ export default async function ZonesPage({ params }: { params: Promise<{ id: stri
   const addBound = addZoneAction.bind(null, id);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
       <Link href={`/f/carrier-rates/${id}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ChevronLeft className="size-4" />
         {account.name}
@@ -79,7 +95,7 @@ export default async function ZonesPage({ params }: { params: Promise<{ id: stri
         </div>
         <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">Zone scheme</h1>
         <p className="text-sm text-muted-foreground max-w-xl">
-          Group countries into the labels {account.carrierName} uses on its rate sheet. A country can only sit in one zone per account.
+          Click any zone to edit. A country can sit in only one zone per account.
         </p>
       </header>
 
@@ -97,7 +113,7 @@ export default async function ZonesPage({ params }: { params: Promise<{ id: stri
             <form action={addBound} className="flex items-end gap-3">
               <div className="flex-1 space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">New zone label</Label>
-                <Input name="label" required placeholder="Zone 1, Zone A, Domestic …" />
+                <Input name="label" required placeholder="Zone 1, Zone A, Domestic…" />
               </div>
               <Button type="submit" className="gap-1.5">
                 <Plus className="size-4" />
@@ -119,70 +135,142 @@ export default async function ZonesPage({ params }: { params: Promise<{ id: stri
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {zones.map((z) => (
-            <ZoneCard
-              key={z.id}
-              accountId={id}
-              zone={z}
-              canManage={canManage}
-              renameAction={renameZoneAction.bind(null, id, z.id)}
-              setCountriesAction={setCountriesAction.bind(null, id, z.id, z.countries)}
-              deleteAction={deleteZoneAction.bind(null, id, z.id)}
-            />
-          ))}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {zones.map((z) => {
+            const isActive = activeZoneId === z.id;
+            return (
+              <div key={z.id} className={isActive ? 'lg:col-span-2' : ''}>
+                {isActive ? (
+                  <ZoneEditCard
+                    accountId={id}
+                    zone={z}
+                    canManage={canManage}
+                    renameAction={renameZoneAction.bind(null, id, z.id)}
+                    setCountriesAction={setCountriesAction.bind(null, id, z.id, z.countries)}
+                    deleteAction={deleteZoneAction.bind(null, id, z.id)}
+                  />
+                ) : (
+                  <ZonePreviewCard accountId={id} zone={z} />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-interface ZoneCardProps {
+interface Zone {
+  id: string;
+  label: string;
+  position: number;
+  countries: string[];
+}
+
+function ZonePreviewCard({ accountId, zone }: { accountId: string; zone: Zone }) {
+  const previewLimit = 12;
+  const previewed = zone.countries.slice(0, previewLimit);
+  const remaining = zone.countries.length - previewed.length;
+
+  return (
+    <Link
+      href={`/f/carrier-rates/${accountId}/zones?zone=${zone.id}#${zone.id}`}
+      className="group block h-full"
+      id={zone.id}
+    >
+      <Card className="hover:border-foreground/30 hover:bg-card/80 transition-colors h-full">
+        <CardContent className="p-5 md:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">{zone.label}</h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider shrink-0">
+              {zone.countries.length} {zone.countries.length === 1 ? 'country' : 'countries'}
+            </Badge>
+          </div>
+
+          {zone.countries.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No countries assigned</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {previewed.map((c) => <CountryChip key={c} code={c} />)}
+              {remaining > 0 && (
+                <div className="inline-flex items-center px-2 py-1 rounded-md border border-dashed border-border text-xs text-muted-foreground">
+                  +{remaining} more
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border text-xs text-muted-foreground group-hover:text-foreground inline-flex items-center gap-1">
+            Click to edit →
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+interface ZoneEditCardProps {
   accountId: string;
-  zone: { id: string; label: string; position: number; countries: string[] };
+  zone: Zone;
   canManage: boolean;
   renameAction: (formData: FormData) => void | Promise<void>;
   setCountriesAction: (formData: FormData) => void | Promise<void>;
   deleteAction: () => void | Promise<void>;
 }
 
-function ZoneCard({ zone, canManage, renameAction, setCountriesAction, deleteAction }: ZoneCardProps) {
-  const ISO2_RE = /^[A-Z]{2}$/;
-  const invalid = zone.countries.filter((c) => !ISO2_RE.test(c));
+function ZoneEditCard({
+  accountId, zone, canManage, renameAction, setCountriesAction, deleteAction,
+}: ZoneEditCardProps) {
+  const validCountries = zone.countries.filter((c) => ISO2_RE.test(c));
+  const invalidCount = zone.countries.length - validCountries.length;
+
   return (
-    <Card>
-      <CardContent className="p-5 md:p-6 space-y-4">
+    <Card className="border-primary/40 bg-primary/[0.02]" id={zone.id}>
+      <CardContent className="p-5 md:p-6 space-y-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          {canManage ? (
-            <form action={renameAction} className="flex items-center gap-2 flex-1 min-w-0">
-              <Input
-                name="label"
-                defaultValue={zone.label}
-                className="text-base font-semibold tracking-tight max-w-xs"
-                required
-              />
-              <Button type="submit" variant="ghost" size="sm" className="h-8 px-3 text-xs">Rename</Button>
-            </form>
-          ) : (
-            <h2 className="text-base font-semibold tracking-tight">{zone.label}</h2>
-          )}
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
-              {zone.countries.length} {zone.countries.length === 1 ? 'country' : 'countries'}
-            </Badge>
-            {canManage && (
-              <form action={deleteAction}>
-                <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 px-2">
-                  <Trash2 className="size-3.5" />
-                  <span className="sr-only">Remove zone</span>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {canManage ? (
+              <form action={renameAction} className="flex items-center gap-2 flex-1 min-w-0">
+                <Input
+                  name="label"
+                  defaultValue={zone.label}
+                  className="text-lg font-semibold tracking-tight max-w-xs"
+                  required
+                />
+                <Button type="submit" variant="ghost" size="sm" className="h-8 px-3 text-xs shrink-0">
+                  Rename
                 </Button>
               </form>
+            ) : (
+              <h2 className="text-lg font-semibold tracking-tight">{zone.label}</h2>
             )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Badge variant="secondary" className="h-6 text-[10px] uppercase tracking-wider">
+              {zone.countries.length} {zone.countries.length === 1 ? 'country' : 'countries'}
+            </Badge>
+            <Link
+              href={`/f/carrier-rates/${accountId}/zones`}
+              className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close editor"
+            >
+              <X className="size-4" />
+            </Link>
           </div>
         </div>
 
+        {validCountries.length > 0 && (
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block">Current countries</Label>
+            <div className="flex flex-wrap gap-2">
+              {validCountries.map((c) => <CountryChip key={c} code={c} />)}
+            </div>
+          </div>
+        )}
+
         {canManage ? (
-          <form action={setCountriesAction} className="space-y-2">
+          <form action={setCountriesAction} className="space-y-3">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Countries (ISO-2, comma-separated)</Label>
             <Input
               name="countries"
@@ -190,34 +278,39 @@ function ZoneCard({ zone, canManage, renameAction, setCountriesAction, deleteAct
               placeholder="VN, TH, SG, MY"
               className="font-mono"
             />
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-1">
-                {zone.countries.filter((c) => ISO2_RE.test(c)).map((c) => (
-                  <Badge key={c} variant="secondary" className="h-5 px-1.5 font-mono text-[10px]">{c}</Badge>
-                ))}
-              </div>
-              <Button type="submit" variant="outline" size="sm" className="h-8 px-3 text-xs shrink-0">
+            {invalidCount > 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="size-3" />
+                {invalidCount} entry not a valid ISO-2 code — will be rejected on save.
+              </p>
+            )}
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+              <form action={deleteAction}>
+                <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5">
+                  <Trash2 className="size-3.5" />
+                  Delete zone
+                </Button>
+              </form>
+              <Button type="submit" className="gap-1.5">
                 Save countries
               </Button>
             </div>
-            {invalid.length > 0 && (
-              <p className="text-xs text-destructive flex items-center gap-1.5">
-                <AlertCircle className="size-3" />
-                {invalid.length} entry not a valid ISO-2 code — will be rejected on save.
-              </p>
-            )}
           </form>
         ) : (
-          <div className="flex flex-wrap gap-1">
-            {zone.countries.length === 0
-              ? <span className="text-xs text-muted-foreground italic">No countries</span>
-              : zone.countries.map((c) => (
-                  <Badge key={c} variant="secondary" className="h-5 px-1.5 font-mono text-[10px]">{c}</Badge>
-                ))}
-          </div>
+          <p className="text-xs text-muted-foreground">Read-only view. Ask an admin to edit.</p>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function CountryChip({ code }: { code: string }) {
+  const flag = iso2ToFlag(code);
+  return (
+    <div className="inline-flex flex-col items-center justify-center gap-0.5 min-w-[44px] rounded-md border border-border bg-card px-2 py-1.5 hover:border-foreground/30 transition-colors">
+      <span className="text-base leading-none" aria-hidden>{flag}</span>
+      <span className="text-[10px] font-mono tracking-wider text-foreground/80">{code}</span>
+    </div>
   );
 }
 
