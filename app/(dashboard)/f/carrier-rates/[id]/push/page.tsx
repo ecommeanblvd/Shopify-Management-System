@@ -60,9 +60,16 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
   }
 
   const totalStores = new Set(plan.rows.map((r) => r.storeId)).size;
-  const totalRates = plan.rows.reduce((sum, r) => sum + r.rates.length, 0);
+  const totalZones = plan.rows.reduce((sum, r) => sum + r.zones.length, 0);
+  const totalRates = plan.rows.reduce(
+    (sum, r) => sum + r.zones.reduce((s, z) => s + z.rates.length, 0),
+    0,
+  );
   const totalWarnings = plan.rows.reduce(
-    (sum, r) => sum + r.rates.filter((rt) => rt.warning).length,
+    (sum, r) => sum + r.zones.reduce(
+      (s, z) => s + z.rates.filter((rt) => rt.warning).length,
+      0,
+    ),
     0,
   );
 
@@ -87,9 +94,10 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
       </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
-        <StatTile label="Markets" value={String(byMarket.size)} sub="Linked to this account" />
+      <div className="grid grid-cols-5 gap-px bg-border rounded-2xl overflow-hidden border border-border">
+        <StatTile label="Markets" value={String(byMarket.size)} sub="Linked" />
         <StatTile label="Stores" value={String(totalStores)} sub="Active" />
+        <StatTile label="Zones" value={String(totalZones)} sub="Shopify zones" />
         <StatTile label="Rates" value={String(totalRates)} sub="To stage" />
         <StatTile label="Warnings" value={String(totalWarnings)} sub={totalWarnings === 0 ? 'Clean' : 'Skipped quotes'} tone={totalWarnings > 0 ? 'warning' : 'default'} />
       </div>
@@ -128,26 +136,52 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
                     {rows.length} {rows.length === 1 ? 'store' : 'stores'}
                   </Badge>
                 </div>
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {rows.map((r) => (
-                    <li key={r.storeId} className="rounded-xl border border-border px-4 py-3 space-y-2">
+                    <li key={r.storeId} className="rounded-xl border border-border px-4 py-4 space-y-4">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="font-medium text-sm">{r.storeName}</div>
                         <div className="text-xs text-muted-foreground">
-                          {r.currentRateNames.length === 0
-                            ? <span className="italic">No existing carrier-managed zone — fresh insert</span>
-                            : <>Existing: <span className="font-mono">{r.currentRateNames.length}</span> rate{r.currentRateNames.length === 1 ? '' : 's'} will be replaced</>}
+                          {r.currentZoneNames.length === 0
+                            ? <span className="italic">No existing auto-zones — fresh insert</span>
+                            : <>Existing: <span className="font-mono">{r.currentZoneNames.length}</span> auto-zone{r.currentZoneNames.length === 1 ? '' : 's'} will be replaced</>}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {r.rates.map((rt) => (
-                          <RatePill
-                            key={rt.name}
-                            name={rt.name}
-                            price={rt.price}
-                            currency={account.displayCurrency}
-                            warning={rt.warning}
-                          />
+                      <div className="space-y-3">
+                        {r.zones.map((z) => (
+                          <div key={z.zoneName} className="rounded-lg border border-border/70 bg-muted/20 px-3 py-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="text-sm font-semibold tracking-tight">{z.zoneName}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {z.countries.length} {z.countries.length === 1 ? 'country' : 'countries'}
+                                {' · '}
+                                {z.rates.length} {z.rates.length === 1 ? 'rate' : 'rates'}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {z.countries.map((c) => (
+                                <span key={c} className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-card border border-border/60 text-foreground/80">
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                            <details className="mt-1">
+                              <summary className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer select-none">
+                                Show {z.rates.length} rates
+                              </summary>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {z.rates.map((rt) => (
+                                  <RatePill
+                                    key={rt.name}
+                                    name={rt.name}
+                                    price={rt.price}
+                                    currency={account.displayCurrency}
+                                    warning={rt.warning}
+                                  />
+                                ))}
+                              </div>
+                            </details>
+                          </div>
                         ))}
                       </div>
                     </li>
@@ -165,10 +199,11 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
                     <div className="text-sm font-semibold tracking-tight">Ready to commit</div>
                     <div className="text-xs text-muted-foreground mt-1">
                       Writes <span className="font-mono">{totalRates}</span> rate{totalRates === 1 ? '' : 's'}
-                      {' '}across <span className="font-mono">{byMarket.size}</span> market{byMarket.size === 1 ? '' : 's'} ×
+                      {' '}across <span className="font-mono">{totalZones}</span> zone{totalZones === 1 ? '' : 's'} ·
+                      {' '}<span className="font-mono">{byMarket.size}</span> market{byMarket.size === 1 ? '' : 's'} ×
                       {' '}<span className="font-mono">{totalStores}</span> store{totalStores === 1 ? '' : 's'} into
                       {' '}<span className="font-mono">market_store_overrides.shipping</span>.
-                      Existing zones for other carriers are preserved.
+                      Manually-authored zones with other names are preserved.
                     </div>
                   </div>
                   <Button type="submit" size="lg" className="gap-2 shrink-0">
