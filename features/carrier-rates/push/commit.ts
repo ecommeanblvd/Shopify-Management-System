@@ -19,15 +19,21 @@ async function carrierKeyFor(carrierAccountId: string): Promise<string> {
   return row?.key ?? 'carrier';
 }
 
+export interface PushPlanZone {
+  zoneName: string;
+  countries: string[];
+  rates: { name: string; price: number; warning: string | null }[];
+}
+
 export interface PushPlanRow {
   marketHandle: string;
   marketName: string;
   storeId: string;
   storeName: string;
-  /** Rate name → new price (display currency). NaN for failed quotes. */
-  rates: { name: string; price: number; warning: string | null }[];
-  /** Existing rate names already stored on market_store_overrides.shipping. */
-  currentRateNames: string[];
+  /** Zones grouped within this market for the store. */
+  zones: PushPlanZone[];
+  /** Existing zone names already stored on market_store_overrides.shipping. */
+  currentZoneNames: string[];
 }
 
 export interface PushPlan {
@@ -174,20 +180,32 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
 
     for (const store of stores) {
       const existing = overrideByKey.get(`${store.id}::${market.handle}`);
-      const existingZone = (existing?.shipping as MarketShipping | null | undefined)?.zones?.[market.handle];
-      const currentRateNames = existingZone ? Object.keys(existingZone.rates) : [];
+      const existingShipping = existing?.shipping as MarketShipping | null | undefined;
+      // Any previously committed auto-zones for this market start with
+      // "${marketName} — " — those will be replaced. Manual zones with other
+      // names are preserved and listed but not in the count.
+      const autoPrefix = `${market.name} — `;
+      const currentZoneNames = Object.keys(existingShipping?.zones ?? {})
+        .filter((k) => k.startsWith(autoPrefix));
+
+      // Group recalc breakdown by zoneName for display
+      const byZone = new Map<string, PushPlanZone>();
+      for (const b of recalc.breakdown) {
+        let z = byZone.get(b.zoneName);
+        if (!z) {
+          z = { zoneName: b.zoneName, countries: b.zoneCountries, rates: [] };
+          byZone.set(b.zoneName, z);
+        }
+        z.rates.push({ name: b.rateName, price: b.finalDisplay, warning: b.warning });
+      }
 
       rows.push({
         marketHandle: market.handle,
         marketName: market.name,
         storeId: store.id,
         storeName: store.name,
-        rates: recalc.breakdown.map((b) => ({
-          name: b.rateName,
-          price: b.finalDisplay,
-          warning: b.warning,
-        })),
-        currentRateNames,
+        zones: Array.from(byZone.values()),
+        currentZoneNames,
       });
 
       for (const b of recalc.breakdown) {
