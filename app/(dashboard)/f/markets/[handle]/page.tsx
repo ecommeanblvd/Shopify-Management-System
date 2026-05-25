@@ -1,17 +1,21 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Globe2, Coins, Languages, Store, Trash2, ArrowRight, Sparkles } from 'lucide-react';
+import { ChevronLeft, Globe2, Coins, Languages, Store, Trash2, ArrowRight, Sparkles, Truck, Plus, Power } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { listTemplates, saveTemplate, deleteTemplate } from '@/features/markets/actions';
+import { listLinksForMarket, listLinkableCarrierAccounts, createLink, deleteLink, updateLink } from '@/features/carrier-rates/links-actions';
 import { MarketForm } from '@/components/markets/MarketForm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import type { Market } from '@/features/markets/types';
 
@@ -54,6 +58,44 @@ export default async function MarketDetailPage({
     await deleteTemplate(handle);
     redirect('/f/markets');
   }
+
+  async function handleAddLink(formData: FormData) {
+    'use server';
+    const s = await auth.api.getSession({ headers: await headers() });
+    if (!s) throw new Error('unauthenticated');
+    const r = await getRole(s.user.id);
+    if (!hasPermission(r, 'manage_carrier_rates')) throw new Error('forbidden');
+    const carrierAccountId = String(formData.get('carrierAccountId') ?? '');
+    const serviceLabel = String(formData.get('serviceLabel') ?? '');
+    if (!carrierAccountId) return;
+    await createLink({ marketHandle: handle, carrierAccountId, serviceLabel }, s.user.id);
+    revalidatePath(`/f/markets/${handle}`);
+  }
+
+  async function handleDeleteLink(linkId: string) {
+    'use server';
+    const s = await auth.api.getSession({ headers: await headers() });
+    if (!s) throw new Error('unauthenticated');
+    const r = await getRole(s.user.id);
+    if (!hasPermission(r, 'manage_carrier_rates')) throw new Error('forbidden');
+    await deleteLink(linkId);
+    revalidatePath(`/f/markets/${handle}`);
+  }
+
+  async function handleToggleLink(linkId: string, next: boolean) {
+    'use server';
+    const s = await auth.api.getSession({ headers: await headers() });
+    if (!s) throw new Error('unauthenticated');
+    const r = await getRole(s.user.id);
+    if (!hasPermission(r, 'manage_carrier_rates')) throw new Error('forbidden');
+    await updateLink({ id: linkId, enabled: next }, s.user.id);
+    revalidatePath(`/f/markets/${handle}`);
+  }
+
+  const carrierLinks = await listLinksForMarket(handle);
+  const linkableAccounts = await listLinkableCarrierAccounts();
+  const linkedAccountIds = new Set(carrierLinks.map((l) => l.carrierAccountId));
+  const availableAccounts = linkableAccounts.filter((a) => !linkedAccountIds.has(a.id));
 
   const storesWithOverrides = stores.filter((s) => overrideByStore.has(s.id)).length;
 
@@ -152,6 +194,144 @@ export default async function MarketDetailPage({
             <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
               {JSON.stringify(market, null, 2)}
             </pre>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Carrier links */}
+      <Card>
+        <CardContent className="p-6 md:p-10">
+          <div className="mb-8 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="size-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <Truck className="size-4" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Carrier services</h2>
+                <p className="text-sm text-muted-foreground">
+                  Link a carrier-rates account so its quotes back the shipping rates pushed to Shopify for this market.
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="h-6">
+              {carrierLinks.length} {carrierLinks.length === 1 ? 'service' : 'services'}
+            </Badge>
+          </div>
+
+          {carrierLinks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border px-5 py-6 text-center">
+              <div className="text-sm font-medium">No carrier services yet</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Add one below to enable carrier-rate quoting for this market.
+              </div>
+            </div>
+          ) : (
+            <ul className="space-y-2 mb-5">
+              {carrierLinks.map((l) => (
+                <li
+                  key={l.id}
+                  className={
+                    'flex items-center justify-between gap-4 rounded-xl border border-border px-5 py-4 ' +
+                    (l.enabled ? 'bg-card' : 'bg-muted/30 opacity-75')
+                  }
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <span
+                      className={
+                        'size-2 rounded-full shrink-0 ' +
+                        (l.enabled ? 'bg-emerald-500' : 'bg-muted-foreground/30')
+                      }
+                      aria-hidden
+                    />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{l.serviceLabel}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        <span className="font-mono">{l.carrierKey ?? 'carrier'}</span>
+                        <span className="mx-1.5">·</span>
+                        {l.carrierAccountName}
+                        <span className="mx-1.5">·</span>
+                        <span className="font-mono">{l.costCurrency} → {l.displayCurrency}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {canManage && (
+                    <div className="flex items-center gap-1.5">
+                      <form action={handleToggleLink.bind(null, l.id, !l.enabled)}>
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 gap-1 text-xs"
+                          title={l.enabled ? 'Disable service' : 'Enable service'}
+                        >
+                          <Power className={'size-3.5 ' + (l.enabled ? 'text-emerald-500' : 'text-muted-foreground')} />
+                          {l.enabled ? 'On' : 'Off'}
+                        </Button>
+                      </form>
+                      <form action={handleDeleteLink.bind(null, l.id)}>
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Remove service"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </form>
+                      <Link
+                        href={`/f/carrier-rates/${l.carrierAccountId}`}
+                        className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 px-2"
+                      >
+                        Open
+                        <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canManage && availableAccounts.length > 0 && (
+            <form action={handleAddLink} className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_auto] gap-3 items-end pt-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Service label</Label>
+                <Input
+                  name="serviceLabel"
+                  required
+                  placeholder="e.g. DHL Express · Worldwide"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Carrier account</Label>
+                <select
+                  name="carrierAccountId"
+                  required
+                  defaultValue=""
+                  className="w-full border border-input bg-input/30 rounded-lg px-3 h-9 text-sm"
+                >
+                  <option value="" disabled>Pick one…</option>
+                  {availableAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.carrierKey ? `[${a.carrierKey}] ` : ''}{a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button type="submit" className="gap-1.5 h-9">
+                <Plus className="size-4" />
+                Link
+              </Button>
+            </form>
+          )}
+          {canManage && linkableAccounts.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">
+              No carrier-rates accounts yet. <Link href="/f/carrier-rates/new" className="underline">Create one</Link> to start linking.
+            </p>
+          )}
+          {canManage && linkableAccounts.length > 0 && availableAccounts.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">All carrier accounts are already linked to this market.</p>
           )}
         </CardContent>
       </Card>
