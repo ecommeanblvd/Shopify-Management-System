@@ -3,12 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { UserPlus, AlertCircle } from 'lucide-react';
 import { authClient } from '@/lib/auth/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -33,35 +32,45 @@ export default function SignUpPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create account</CardTitle>
-        <CardDescription>The first user to sign up becomes an admin.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
-            <p className="text-xs text-[var(--color-muted)]">At least 8 characters.</p>
-          </div>
-          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating…' : 'Sign up'}
-          </Button>
-        </form>
-        <p className="text-sm text-center mt-6 text-[var(--color-muted)]">
-          Already have an account? <Link href="/sign-in" className="text-[var(--color-primary)] hover:underline">Sign in</Link>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Create your account</h1>
+        <p className="text-sm text-muted-foreground">
+          The first user to sign up is granted admin. Subsequent users have no role until an admin assigns one.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <div className="space-y-1.5">
+          <Label htmlFor="name" className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
+          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Lê Minh Tiệp" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">Email</Label>
+          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground">Password</Label>
+          <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+          <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 text-sm flex items-start gap-2">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <Button type="submit" size="lg" className="w-full gap-2" disabled={loading}>
+          <UserPlus className="size-4" />
+          {loading ? 'Creating…' : 'Create account'}
+        </Button>
+      </form>
+
+      <p className="text-sm text-center text-muted-foreground">
+        Already have an account? <Link href="/sign-in" className="text-primary hover:underline font-medium">Sign in</Link>
+      </p>
+    </div>
   );
 }

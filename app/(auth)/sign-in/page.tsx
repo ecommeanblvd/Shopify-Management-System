@@ -3,12 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { authClient } from '@/lib/auth/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -32,30 +31,38 @@ export default function SignInPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>Welcome back to Shopify Management.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
+        <p className="text-sm text-muted-foreground">Sign in to continue managing your stores.</p>
+      </div>
+
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">Email</Label>
+          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground">Password</Label>
+          <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 text-destructive px-4 py-3 text-sm flex items-start gap-2">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-          </div>
-          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </form>
-        <p className="text-sm text-center mt-6 text-[var(--color-muted)]">
-          Need an account? <Link href="/sign-up" className="text-[var(--color-primary)] hover:underline">Sign up</Link>
-        </p>
-      </CardContent>
-    </Card>
+        )}
+
+        <Button type="submit" size="lg" className="w-full gap-2" disabled={loading}>
+          <LogIn className="size-4" />
+          {loading ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </form>
+
+      <p className="text-sm text-center text-muted-foreground">
+        Need an account? <Link href="/sign-up" className="text-primary hover:underline font-medium">Sign up</Link>
+      </p>
+    </div>
   );
 }

@@ -1,13 +1,16 @@
+import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { and, eq } from 'drizzle-orm';
+import { ChevronLeft, Layers, Plus, Trash2, Code } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { hasPermission, type Role } from '@/lib/auth/rbac';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export const dynamic = 'force-dynamic';
 type Domain = 'shipping' | 'checkout_buyer_experience';
@@ -40,13 +43,21 @@ async function removeOverrideAction(userId: string, formData: FormData) {
 
 export default async function OverridesPage({ params }: { params: Promise<{ id: string; domain: string }> }) {
   const { id: storeId, domain } = await params;
-  if (domain !== 'shipping' && domain !== 'checkout_buyer_experience') return <p>Unknown domain.</p>;
+  if (domain !== 'shipping' && domain !== 'checkout_buyer_experience') {
+    return (
+      <div className="max-w-3xl mx-auto px-6 md:px-10 py-16 text-center space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Unknown domain</h1>
+      </div>
+    );
+  }
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
   const role = roleRow?.role as Role | undefined;
-  const canEdit = role && hasPermission(role, 'apply_settings');
+  const canEdit = !!role && hasPermission(role, 'apply_settings');
+
+  const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
 
   const overrides = await db.select().from(schema.settingOverrides).where(and(
     eq(schema.settingOverrides.storeId, storeId),
@@ -57,48 +68,102 @@ export default async function OverridesPage({ params }: { params: Promise<{ id: 
   const removeBound = removeOverrideAction.bind(null, session.user.id);
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-semibold">Overrides</h1>
-        <p className="text-sm text-[var(--color-muted)] mt-1"><span className="font-mono">{domain}</span> for store <span className="font-mono text-xs">{storeId.slice(0, 8)}</span></p>
-      </div>
+    <div className="max-w-5xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+      <Link
+        href="/f/settings-sync"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="size-4" />
+        Settings Sync
+      </Link>
+
+      <header className="space-y-3">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Layers className="size-3.5" />
+          Per-store overrides
+        </div>
+        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+          {store?.name ?? storeId.slice(0, 8)}
+          <span className="text-muted-foreground"> · </span>
+          <span className="font-mono">{domain}</span>
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-xl">
+          Overrides are leaf-level patches applied on top of the template for this single store. Use dotted paths; values are parsed as JSON, falling back to string.
+        </p>
+      </header>
+
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader><TableRow><TableHead>Path</TableHead><TableHead>Value</TableHead><TableHead /></TableRow></TableHeader>
-            <TableBody>
-              {overrides.length === 0 ? (
-                <TableRow><TableCell colSpan={3} className="text-sm text-[var(--color-muted)] text-center py-6">No overrides for this store + domain yet.</TableCell></TableRow>
-              ) : overrides.map((o) => (
-                <TableRow key={o.id}>
-                  <TableCell className="font-mono text-xs">{o.path}</TableCell>
-                  <TableCell><pre className="font-mono text-xs">{JSON.stringify(o.value)}</pre></TableCell>
-                  <TableCell>{canEdit && (
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Code className="size-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">{overrides.length} {overrides.length === 1 ? 'override' : 'overrides'}</h2>
+            </div>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+              {domain}
+            </Badge>
+          </div>
+          {overrides.length === 0 ? (
+            <div className="text-center py-12 px-5">
+              <Layers className="size-8 mx-auto text-muted-foreground mb-3" />
+              <div className="text-sm font-medium">No overrides yet</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {canEdit ? 'Add the first one below.' : 'This store inherits everything from the template.'}
+              </div>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {overrides.map((o) => (
+                <li key={o.id} className="px-5 py-4 flex items-start justify-between gap-4 hover:bg-muted/30 transition-colors">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="font-mono text-xs break-all">{o.path}</div>
+                    <pre className="font-mono text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-lg px-3 py-2 overflow-auto max-h-32">
+                      {JSON.stringify(o.value, null, 2)}
+                    </pre>
+                  </div>
+                  {canEdit && (
                     <form action={removeBound}>
                       <input type="hidden" name="id" value={o.id} />
-                      <Button type="submit" variant="ghost" size="sm">Remove</Button>
+                      <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2">
+                        <Trash2 className="size-3.5" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
                     </form>
-                  )}</TableCell>
-                </TableRow>
+                  )}
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+          )}
         </CardContent>
       </Card>
+
       {canEdit && (
         <Card>
-          <CardHeader><CardTitle>Add or update an override</CardTitle><CardDescription>Path uses dotted notation. Value is parsed as JSON; falls back to string.</CardDescription></CardHeader>
-          <CardContent>
-            <form action={addBound} className="flex flex-wrap gap-2 items-end">
-              <div className="flex-1 min-w-64 space-y-1">
-                <label className="text-xs text-[var(--color-muted)]">Path</label>
-                <Input name="path" placeholder="zones.Domestic.rates.Standard.price" />
+          <CardContent className="p-6 md:p-8 space-y-5">
+            <div className="flex items-center gap-2">
+              <Plus className="size-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold uppercase tracking-wider">Add or update override</h2>
+            </div>
+            <form action={addBound} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="path" className="text-xs uppercase tracking-wider text-muted-foreground">Path</Label>
+                  <Input id="path" name="path" placeholder="zones.Domestic.rates.Standard.price" className="font-mono text-xs" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="value" className="text-xs uppercase tracking-wider text-muted-foreground">Value</Label>
+                  <Input id="value" name="value" placeholder='35000 or {"price":35000}' className="font-mono text-xs" />
+                </div>
               </div>
-              <div className="flex-1 min-w-48 space-y-1">
-                <label className="text-xs text-[var(--color-muted)]">Value</label>
-                <Input name="value" placeholder='35000 or {"price":35000}' />
+              <p className="text-xs text-muted-foreground">
+                Path uses dot notation. Value is JSON-parsed first; otherwise stored as a string. Existing paths are upserted in place.
+              </p>
+              <div className="pt-3 border-t border-border flex items-center justify-end">
+                <Button type="submit" className="gap-2">
+                  <Plus className="size-4" />
+                  Add / update
+                </Button>
               </div>
-              <Button type="submit">Add / update</Button>
             </form>
           </CardContent>
         </Card>
