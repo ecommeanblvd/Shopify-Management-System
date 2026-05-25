@@ -43,6 +43,13 @@
       "when": 1779707938666,
       "tag": "0005_adorable_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779714885881,
+      "tag": "0006_jittery_paladin",
+      "breakpoints": true
     }
   ]
 }

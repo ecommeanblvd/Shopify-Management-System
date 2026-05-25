@@ -1,0 +1,97 @@
+'use server';
+
+import { asc, eq } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
+
+export type SurchargeKind = typeof schema.carrierSurchargeKindEnum.enumValues[number];
+
+export interface SurchargeRow {
+  id: string;
+  kind: SurchargeKind;
+  value: string;
+  active: boolean;
+  note: string | null;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  updatedAt: Date;
+}
+
+export async function listSurcharges(carrierAccountId: string): Promise<SurchargeRow[]> {
+  return db
+    .select({
+      id: schema.carrierSurcharges.id,
+      kind: schema.carrierSurcharges.kind,
+      value: schema.carrierSurcharges.value,
+      active: schema.carrierSurcharges.active,
+      note: schema.carrierSurcharges.note,
+      startsAt: schema.carrierSurcharges.startsAt,
+      endsAt: schema.carrierSurcharges.endsAt,
+      updatedAt: schema.carrierSurcharges.updatedAt,
+    })
+    .from(schema.carrierSurcharges)
+    .where(eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId))
+    .orderBy(asc(schema.carrierSurcharges.kind), asc(schema.carrierSurcharges.createdAt));
+}
+
+export interface CreateSurchargeInput {
+  carrierAccountId: string;
+  kind: SurchargeKind;
+  value: string;
+  note?: string;
+}
+
+function parseValue(raw: string, kind: SurchargeKind): number {
+  const n = Number(String(raw).replace(/[,_\s]/g, ''));
+  if (!Number.isFinite(n)) throw new Error('Value must be a number.');
+  if (kind === 'fuel_percent' || kind === 'markup_percent') {
+    if (n < -100 || n > 1000) throw new Error('Percentage must be between -100 and 1000.');
+  } else {
+    if (n < 0) throw new Error('Fixed amount must be ≥ 0.');
+  }
+  return n;
+}
+
+export async function createSurcharge(input: CreateSurchargeInput, userId: string): Promise<string> {
+  const n = parseValue(input.value, input.kind);
+  const [row] = await db
+    .insert(schema.carrierSurcharges)
+    .values({
+      carrierAccountId: input.carrierAccountId,
+      kind: input.kind,
+      value: n.toString(),
+      note: input.note?.trim() || null,
+      updatedBy: userId,
+    })
+    .returning({ id: schema.carrierSurcharges.id });
+  return row!.id;
+}
+
+export interface UpdateSurchargeInput {
+  id: string;
+  value?: string;
+  note?: string;
+  active?: boolean;
+}
+
+export async function updateSurcharge(input: UpdateSurchargeInput, userId: string): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(schema.carrierSurcharges)
+    .where(eq(schema.carrierSurcharges.id, input.id))
+    .limit(1);
+  if (!existing) throw new Error('Surcharge not found.');
+
+  const patch: Partial<typeof schema.carrierSurcharges.$inferInsert> = {
+    updatedBy: userId,
+    updatedAt: new Date(),
+  };
+  if (input.value !== undefined) patch.value = parseValue(input.value, existing.kind).toString();
+  if (input.note !== undefined) patch.note = input.note.trim() || null;
+  if (input.active !== undefined) patch.active = input.active;
+
+  await db.update(schema.carrierSurcharges).set(patch).where(eq(schema.carrierSurcharges.id, input.id));
+}
+
+export async function deleteSurcharge(id: string): Promise<void> {
+  await db.delete(schema.carrierSurcharges).where(eq(schema.carrierSurcharges.id, id));
+}
