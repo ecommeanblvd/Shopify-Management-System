@@ -32,17 +32,21 @@
 
 /* ---------------------------------------------------------------
    Dark-mode overrides — using data-theme attribute (next-themes)
+   Calibrated for clear card/background separation:
+   - bg sits at 12% so cards (18%) read as elevated surfaces
+   - borders at 26% read clearly against both bg and card
+   - primary keeps the brand purple, brightened for dark contrast
    --------------------------------------------------------------- */
 [data-theme="dark"] {
-  --color-bg: oklch(8% 0 0);
-  --color-surface: oklch(11% 0 0);
-  --color-border: oklch(20% 0 0);
-  --color-input: oklch(18% 0 0);
-  --color-text: oklch(95% 0 0);
-  --color-muted: oklch(60% 0 0);
-  --color-muted-surface: oklch(14% 0 0);
-  --color-primary: oklch(100% 0 0);
-  --color-primary-foreground: oklch(8% 0 0);
+  --color-bg: oklch(12% 0 0);
+  --color-surface: oklch(18% 0 0);
+  --color-border: oklch(26% 0 0);
+  --color-input: oklch(22% 0 0);
+  --color-text: oklch(96% 0 0);
+  --color-muted: oklch(68% 0 0);
+  --color-muted-surface: oklch(22% 0 0);
+  --color-primary: oklch(70% 0.22 280);
+  --color-primary-foreground: oklch(15% 0.03 270);
   --color-success: oklch(70% 0.18 145);
   --color-danger: oklch(65% 0.22 25);
   --color-warning: oklch(80% 0.18 75);
@@ -112,52 +116,52 @@
 }
 
 [data-theme="dark"] {
-  /* Surfaces */
-  --background:          oklch(8% 0 0);
-  --foreground:          oklch(95% 0 0);
-  --card:                oklch(11% 0 0);
-  --card-foreground:     oklch(95% 0 0);
-  --popover:             oklch(11% 0 0);
-  --popover-foreground:  oklch(95% 0 0);
+  /* Surfaces — calibrated so cards visibly elevate above the page */
+  --background:          oklch(12% 0 0);
+  --foreground:          oklch(96% 0 0);
+  --card:                oklch(18% 0 0);
+  --card-foreground:     oklch(96% 0 0);
+  --popover:             oklch(18% 0 0);
+  --popover-foreground:  oklch(96% 0 0);
 
-  /* Brand */
-  --primary:             oklch(100% 0 0);
-  --primary-foreground:  oklch(8% 0 0);
+  /* Brand — keep the purple so primary buttons and active items pop */
+  --primary:             oklch(70% 0.22 280);
+  --primary-foreground:  oklch(15% 0.03 270);
 
-  /* Secondary / muted */
-  --secondary:           oklch(14% 0 0);
-  --secondary-foreground: oklch(95% 0 0);
-  --muted:               oklch(14% 0 0);
-  --muted-foreground:    oklch(60% 0 0);
+  /* Secondary / muted — distinct from card so chips and accent regions read */
+  --secondary:           oklch(22% 0 0);
+  --secondary-foreground: oklch(96% 0 0);
+  --muted:               oklch(22% 0 0);
+  --muted-foreground:    oklch(68% 0 0);
 
   /* Accent */
-  --accent:              oklch(14% 0 0);
-  --accent-foreground:   oklch(95% 0 0);
+  --accent:              oklch(22% 0 0);
+  --accent-foreground:   oklch(96% 0 0);
 
   /* Danger / destructive */
   --destructive:         oklch(65% 0.22 25);
 
-  /* Structural */
-  --border:              oklch(20% 0 0);
-  --input:               oklch(18% 0 0);
-  --ring:                oklch(100% 0 0);
+  /* Structural — borders strong enough to delineate cards on dark bg */
+  --border:              oklch(26% 0 0);
+  --input:               oklch(22% 0 0);
+  --ring:                oklch(70% 0.22 280);
 
   /* Charts */
-  --chart-1: oklch(100% 0 0);
+  --chart-1: oklch(70% 0.22 280);
   --chart-2: oklch(70% 0.18 145);
   --chart-3: oklch(80% 0.18 75);
   --chart-4: oklch(65% 0.22 25);
   --chart-5: oklch(60% 0 0);
 
-  /* Sidebar (uses dark surface palette) */
-  --sidebar:                  oklch(11% 0 0);
-  --sidebar-foreground:       oklch(95% 0 0);
-  --sidebar-primary:          oklch(100% 0 0);
-  --sidebar-primary-foreground: oklch(8% 0 0);
-  --sidebar-accent:           oklch(14% 0 0);
-  --sidebar-accent-foreground: oklch(95% 0 0);
-  --sidebar-border:           oklch(20% 0 0);
-  --sidebar-ring:             oklch(100% 0 0);
+  /* Sidebar — slightly recessed from main content (darker than card, between bg and card) */
+  --sidebar:                  oklch(14% 0 0);
+  --sidebar-foreground:       oklch(96% 0 0);
+  --sidebar-primary:          oklch(70% 0.22 280);
+  --sidebar-primary-foreground: oklch(15% 0.03 270);
+  --sidebar-accent:           oklch(22% 0 0);
+  --sidebar-accent-foreground: oklch(96% 0 0);
+  --sidebar-border:           oklch(26% 0 0);
+  --sidebar-ring:             oklch(70% 0.22 280);
 }
 
 /* ---------------------------------------------------------------
