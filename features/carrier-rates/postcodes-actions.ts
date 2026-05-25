@@ -8,6 +8,7 @@ export interface PostcodeRowDb {
   id: string;
   countryCode: string;
   postcodePattern: string;
+  tier: string | null;
   source: string | null;
   uploadedAt: Date;
 }
@@ -47,6 +48,7 @@ export async function loadPostcodeSummary(
       id: schema.carrierRemotePostcodes.id,
       countryCode: schema.carrierRemotePostcodes.countryCode,
       postcodePattern: schema.carrierRemotePostcodes.postcodePattern,
+      tier: schema.carrierRemotePostcodes.tier,
       source: schema.carrierRemotePostcodes.source,
       uploadedAt: schema.carrierRemotePostcodes.uploadedAt,
     })
@@ -69,6 +71,7 @@ export async function listPostcodesByCountry(
       id: schema.carrierRemotePostcodes.id,
       countryCode: schema.carrierRemotePostcodes.countryCode,
       postcodePattern: schema.carrierRemotePostcodes.postcodePattern,
+      tier: schema.carrierRemotePostcodes.tier,
       source: schema.carrierRemotePostcodes.source,
       uploadedAt: schema.carrierRemotePostcodes.uploadedAt,
     })

@@ -50,6 +50,13 @@
       "when": 1779714885881,
       "tag": "0006_jittery_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779718677305,
+      "tag": "0007_military_the_call",
+      "breakpoints": true
     }
   ]
 }

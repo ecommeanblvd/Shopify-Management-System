@@ -9,6 +9,7 @@ export interface SurchargeRow {
   id: string;
   kind: SurchargeKind;
   value: string;
+  tier: string | null;
   active: boolean;
   note: string | null;
   startsAt: Date | null;
@@ -22,6 +23,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       id: schema.carrierSurcharges.id,
       kind: schema.carrierSurcharges.kind,
       value: schema.carrierSurcharges.value,
+      tier: schema.carrierSurcharges.tier,
       active: schema.carrierSurcharges.active,
       note: schema.carrierSurcharges.note,
       startsAt: schema.carrierSurcharges.startsAt,
@@ -38,6 +40,8 @@ export interface CreateSurchargeInput {
   kind: SurchargeKind;
   value: string;
   note?: string;
+  /** Optional tier label — only meaningful for kind='remote_fixed'. */
+  tier?: string;
 }
 
 function parseValue(raw: string, kind: SurchargeKind): number {
@@ -59,6 +63,7 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       carrierAccountId: input.carrierAccountId,
       kind: input.kind,
       value: n.toString(),
+      tier: input.tier?.trim() || null,
       note: input.note?.trim() || null,
       updatedBy: userId,
     })

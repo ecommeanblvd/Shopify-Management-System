@@ -70,12 +70,12 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
     if (zs) zonesByCountry.set(zc.countryCode, zs);
   }
 
-  // Remote postcodes grouped by country
-  const remotePostcodes = new Map<string, Set<string>>();
+  // Remote postcodes grouped by country, carrying tier alongside each pattern
+  const remotePostcodes = new Map<string, Map<string, string | null>>();
   for (const p of postcodes) {
-    const set = remotePostcodes.get(p.countryCode) ?? new Set<string>();
-    set.add(p.postcodePattern);
-    remotePostcodes.set(p.countryCode, set);
+    const inner = remotePostcodes.get(p.countryCode) ?? new Map<string, string | null>();
+    inner.set(p.postcodePattern, p.tier ?? null);
+    remotePostcodes.set(p.countryCode, inner);
   }
 
   return {
@@ -89,6 +89,7 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
       kind: s.kind,
       value: Number(s.value),
       active: s.active,
+      tier: s.tier ?? null,
     })),
     remotePostcodes,
   };
