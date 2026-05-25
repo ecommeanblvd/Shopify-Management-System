@@ -73,15 +73,15 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth: `${160 + zones.length * 130}px` }}>
+      <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth: `${180 + zones.length * 140}px` }}>
         <colgroup>
-          <col style={{ width: '160px' }} />
-          {zones.map((z) => <col key={z.id} style={{ minWidth: '130px' }} />)}
+          <col style={{ width: '180px' }} />
+          {zones.map((z) => <col key={z.id} style={{ minWidth: '140px' }} />)}
         </colgroup>
         <thead className="sticky top-0 z-20">
           <tr>
             <th
-              className="sticky left-0 z-30 text-left px-4 py-3 border-b-2 border-r border-border text-[11px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap"
+              className="sticky left-0 z-30 text-left px-5 py-4 border-b-2 border-r-2 border-border text-xs uppercase tracking-wide text-muted-foreground font-bold whitespace-nowrap"
               style={{ backgroundColor: 'var(--muted)' }}
             >
               kg ↑ &nbsp;/&nbsp; zone →
@@ -89,7 +89,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
             {zones.map((z) => (
               <th
                 key={z.id}
-                className="text-right px-4 py-3 border-b-2 border-border text-[11px] uppercase tracking-wider text-foreground font-semibold whitespace-nowrap"
+                className="text-right px-5 py-4 border-b-2 border-border text-sm uppercase tracking-wide text-foreground font-bold whitespace-nowrap"
                 style={{ backgroundColor: 'var(--muted)' }}
               >
                 {z.label}
@@ -106,7 +106,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
             return (
               <tr key={t.id} className={dataBg}>
                 <th
-                  className="sticky left-0 z-20 text-left px-4 py-2.5 border-b border-r border-border whitespace-nowrap font-mono text-xs tabular-nums text-foreground font-medium"
+                  className="sticky left-0 z-20 text-left px-5 py-3 border-b border-r-2 border-border whitespace-nowrap font-mono text-sm tabular-nums text-foreground font-semibold"
                   style={{ backgroundColor: 'var(--muted)' }}
                 >
                   ({fmtKg(prev)}–{fmtKg(upper)}] kg
@@ -207,7 +207,7 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
 
   if (!canEdit) {
     return (
-      <td className="px-4 py-2.5 border-b border-border tabular-nums text-right whitespace-nowrap text-foreground">
+      <td className="px-5 py-3 border-b border-border tabular-nums text-right whitespace-nowrap text-foreground">
         {value ? value : <span className="text-muted-foreground/40">—</span>}
         {value && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
       </td>
@@ -246,7 +246,7 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
           onChange={(e) => onChange(e.target.value)}
           placeholder="—"
           className={
-            'w-full bg-transparent text-right tabular-nums px-4 py-2.5 outline-none transition-colors ' +
+            'w-full bg-transparent text-right tabular-nums px-5 py-3 outline-none transition-colors ' +
             'focus:bg-primary/[0.08] focus:text-foreground placeholder:text-muted-foreground/40 ' +
             stateRing
           }
