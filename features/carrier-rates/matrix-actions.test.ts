@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMatrixCsv } from './matrix-actions';
+import { parseMatrixCsv } from './matrix-csv';
 
 describe('parseMatrixCsv', () => {
   it('parses a clean matrix', () => {
