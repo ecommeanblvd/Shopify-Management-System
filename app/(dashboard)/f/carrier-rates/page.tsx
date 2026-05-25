@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listAccounts, listCarriers } from '@/features/carrier-rates/actions';
+import { daysSince } from '@/features/carrier-rates/lib';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -104,7 +105,7 @@ interface AccountSummary {
 function AccountCard({ account }: { account: AccountSummary }) {
   const fxNumber = Number(account.fxCostPerDisplay);
   const fxFormatted = Number.isFinite(fxNumber) ? fxNumber.toLocaleString() : account.fxCostPerDisplay;
-  const fxAge = Math.floor((Date.now() - new Date(account.fxUpdatedAt).getTime()) / (1000 * 60 * 60 * 24));
+  const fxAge = daysSince(account.fxUpdatedAt);
   const fxStale = fxAge >= FX_STALE_DAYS;
 
   return (
