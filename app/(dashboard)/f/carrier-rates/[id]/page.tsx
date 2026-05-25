@@ -158,10 +158,11 @@ export default async function CarrierAccountDetailPage({
           status="Ready"
         />
         <SubSection
+          href={`/f/carrier-rates/${id}/remote-postcodes`}
           icon={<MapPin className="size-4" />}
           title="Remote postcodes"
           desc="CSV upload of DHL/FedEx remote-area postal codes by country."
-          status="Phase 2b"
+          status="Ready"
         />
         <SubSection
           icon={<Calculator className="size-4" />}
