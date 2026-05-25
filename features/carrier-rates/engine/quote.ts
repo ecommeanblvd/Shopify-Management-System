@@ -14,6 +14,12 @@ export interface SurchargeSnap {
   kind: SurchargeKind;
   value: number;
   active: boolean;
+  /**
+   * Optional tier label. Currently only meaningful for kind='remote_fixed':
+   * the surcharge applies only when the matched postcode belongs to the same
+   * tier. NULL = catch-all (applies to any remote-postcode match).
+   */
+  tier?: string | null;
 }
 
 export interface WeightTierSnap {
@@ -38,8 +44,12 @@ export interface CarrierAccountSnapshot {
   weightTiers: WeightTierSnap[];
   /** Only active surcharges. */
   surcharges: SurchargeSnap[];
-  /** ISO-2 country → set of remote postcode patterns. */
-  remotePostcodes: Map<string, Set<string>>;
+  /**
+   * ISO-2 country → (postcode pattern → tier or null).
+   * Tier is carried alongside each pattern so the engine can pick the
+   * right tier-scoped remote_fixed surcharge when a postcode matches.
+   */
+  remotePostcodes: Map<string, Map<string, string | null>>;
 }
 
 export interface QuoteInput {
@@ -94,6 +104,18 @@ function sumActiveOfKind(surcharges: SurchargeSnap[], kind: SurchargeKind): numb
     .reduce((sum, s) => sum + s.value, 0);
 }
 
+/**
+ * Tier-aware sum for remote_fixed surcharges. A surcharge applies if it has no
+ * tier (catch-all) OR its tier matches the matched postcode's tier exactly.
+ * Surcharges that specify a different tier are skipped.
+ */
+function sumRemoteFixed(surcharges: SurchargeSnap[], matchedTier: string | null): number {
+  return surcharges
+    .filter((s) => s.active && s.kind === 'remote_fixed')
+    .filter((s) => !s.tier || s.tier === matchedTier)
+    .reduce((sum, s) => sum + s.value, 0);
+}
+
 export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteResult {
   if (!Number.isFinite(input.weightKg) || input.weightKg <= 0) {
     return { ok: false, code: 'invalid_weight', message: 'Weight must be a positive number.' };
@@ -143,8 +165,12 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   let remote = 0;
   if (input.destinationPostcode) {
     const patterns = snap.remotePostcodes.get(country);
-    if (patterns && patterns.has(input.destinationPostcode.trim())) {
-      remote = sumActiveOfKind(snap.surcharges, 'remote_fixed');
+    const matchedTier = patterns?.get(input.destinationPostcode.trim());
+    if (matchedTier !== undefined) {
+      // matchedTier may be null (no tier) or a label like 'Tier A'.
+      remote = sumRemoteFixed(snap.surcharges, matchedTier);
+      if (matchedTier) notes.push(`remote_match (${matchedTier})`);
+      else notes.push('remote_match');
     }
   }
 

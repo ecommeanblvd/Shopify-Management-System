@@ -236,6 +236,11 @@ function SurchargeRow({ row, currency, canManage, updateBound, deleteBound }: Su
               disabled={!canManage}
             />
             <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{unitSuffix}</span>
+            {row.tier && (
+              <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider whitespace-nowrap shrink-0">
+                {row.tier}
+              </Badge>
+            )}
           </div>
           <Input
             name="note"

@@ -70,7 +70,7 @@ describe('quote engine', () => {
           { kind: 'markup_percent', value: 12, active: true },
           { kind: 'remote_fixed', value: 150_000, active: true },
         ],
-        remotePostcodes: new Map([['TH', new Set(['REMOTE-1'])]]),
+        remotePostcodes: new Map([['TH', new Map([['REMOTE-1', null]])]]),
       });
       const r = quote(snap, { weightKg: 1, destinationCountry: 'TH', destinationPostcode: 'REMOTE-1' });
       expect(r.ok).toBe(true);
@@ -136,6 +136,51 @@ describe('quote engine', () => {
       });
       const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
       expect(r.ok && r.breakdown.peak).toBe(150_000);
+    });
+
+    it('matches the tier-specific remote_fixed surcharge by postcode tier', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 1_170_000, active: true, tier: 'Tier A' },
+          { kind: 'remote_fixed', value: 780_000,   active: true, tier: 'Tier B' },
+          { kind: 'remote_fixed', value: 650_000,   active: true, tier: 'Tier C' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([
+          ['018989', 'Tier A'],
+          ['208000', 'Tier B'],
+          ['460000', 'Tier C'],
+        ])]]),
+      });
+      const a = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '018989' });
+      const b = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '208000' });
+      const c = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '460000' });
+      expect(a.ok && a.breakdown.remote).toBe(1_170_000);
+      expect(b.ok && b.breakdown.remote).toBe(780_000);
+      expect(c.ok && c.breakdown.remote).toBe(650_000);
+    });
+
+    it('catch-all surcharge (no tier) applies to every match alongside tiered ones', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 1_000_000, active: true, tier: 'Tier A' },
+          { kind: 'remote_fixed', value: 50_000,    active: true, tier: null }, // base remote handling
+        ],
+        remotePostcodes: new Map([['SG', new Map([['ZIP-1', 'Tier A']])]]),
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: 'ZIP-1' });
+      expect(r.ok && r.breakdown.remote).toBe(1_050_000);
+    });
+
+    it('skips remote surcharges whose tier does not match the postcode tier', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 999_999, active: true, tier: 'Tier B' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([['ZIP-A', 'Tier A']])]]),
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: 'ZIP-A' });
+      // matched the postcode but no Tier A surcharge → remote stays 0
+      expect(r.ok && r.breakdown.remote).toBe(0);
     });
 
     it('emits a note when the weight exceeds the top tier', () => {

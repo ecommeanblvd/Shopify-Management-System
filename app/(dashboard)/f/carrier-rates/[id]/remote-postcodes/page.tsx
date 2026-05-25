@@ -195,9 +195,16 @@ export default async function RemotePostcodesPage({
                 <ul className="divide-y divide-border">
                   {countryRows.map((row) => (
                     <li key={row.id} className="px-5 py-2.5 flex items-center justify-between gap-3 hover:bg-muted/30">
-                      <div className="font-mono text-sm tabular-nums">{row.postcodePattern}</div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="font-mono text-sm tabular-nums">{row.postcodePattern}</div>
+                        {row.tier && (
+                          <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider shrink-0">
+                            {row.tier}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        {row.source && <span className="font-mono">{row.source}</span>}
+                        {row.source && <span className="font-mono truncate max-w-[180px]">{row.source}</span>}
                         <span>{new Date(row.uploadedAt).toLocaleDateString()}</span>
                         {canManage && (
                           <form action={deleteOneAction.bind(null, id, row.id)}>

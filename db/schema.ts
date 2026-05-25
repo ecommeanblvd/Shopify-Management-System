@@ -275,6 +275,9 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   kind: carrierSurchargeKindEnum('kind').notNull(),
   value: numeric('value', { precision: 14, scale: 4 }).notNull(),
+  // Optional tier label (e.g. 'Tier A', 'Tier B') so remote_fixed surcharges
+  // can apply only to postcodes carrying that tier. NULL means catch-all.
+  tier: text('tier'),
   active: boolean('active').notNull().default(true),
   startsAt: timestamp('starts_at'),
   endsAt: timestamp('ends_at'),
@@ -291,6 +294,9 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   countryCode: text('country_code').notNull(),
   postcodePattern: text('postcode_pattern').notNull(),
+  // FedEx ODA tiers are 'Tier A' / 'Tier B' / 'Tier C'. Carrier-agnostic free
+  // text so future carriers (UPS, DPD) can use their own labels.
+  tier: text('tier'),
   source: text('source'),
   uploadedBy: text('uploaded_by').references(() => user.id),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
