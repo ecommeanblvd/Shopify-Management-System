@@ -15,6 +15,13 @@ export interface SurchargeSnap {
   value: number;
   active: boolean;
   /**
+   * Optional per-kg companion. When set, the surcharge applies
+   * max(value, valuePerKg × weightKg) instead of just value.
+   * Used by FedEx ODA Tier B/C which charge "X per shipment or Y per kg,
+   * whichever is higher".
+   */
+  valuePerKg?: number | null;
+  /**
    * Optional tier label. Currently only meaningful for kind='remote_fixed':
    * the surcharge applies only when the matched postcode belongs to the same
    * tier. NULL = catch-all (applies to any remote-postcode match).
@@ -108,12 +115,22 @@ function sumActiveOfKind(surcharges: SurchargeSnap[], kind: SurchargeKind): numb
  * Tier-aware sum for remote_fixed surcharges. A surcharge applies if it has no
  * tier (catch-all) OR its tier matches the matched postcode's tier exactly.
  * Surcharges that specify a different tier are skipped.
+ *
+ * When the surcharge has a valuePerKg companion, the contributed amount is
+ * max(value, valuePerKg × weightKg) — FedEx ODA Tier B/C semantics.
  */
-function sumRemoteFixed(surcharges: SurchargeSnap[], matchedTier: string | null): number {
+function sumRemoteFixed(
+  surcharges: SurchargeSnap[],
+  matchedTier: string | null,
+  weightKg: number,
+): number {
   return surcharges
     .filter((s) => s.active && s.kind === 'remote_fixed')
     .filter((s) => !s.tier || s.tier === matchedTier)
-    .reduce((sum, s) => sum + s.value, 0);
+    .reduce((sum, s) => {
+      const perKgAmt = s.valuePerKg && s.valuePerKg > 0 ? s.valuePerKg * weightKg : 0;
+      return sum + Math.max(s.value, perKgAmt);
+    }, 0);
 }
 
 export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteResult {
@@ -168,7 +185,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     const matchedTier = patterns?.get(input.destinationPostcode.trim());
     if (matchedTier !== undefined) {
       // matchedTier may be null (no tier) or a label like 'Tier A'.
-      remote = sumRemoteFixed(snap.surcharges, matchedTier);
+      remote = sumRemoteFixed(snap.surcharges, matchedTier, input.weightKg);
       if (matchedTier) notes.push(`remote_match (${matchedTier})`);
       else notes.push('remote_match');
     }

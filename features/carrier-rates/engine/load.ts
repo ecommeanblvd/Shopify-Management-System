@@ -88,6 +88,7 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
     surcharges: surcharges.map((s) => ({
       kind: s.kind,
       value: Number(s.value),
+      valuePerKg: s.valuePerKg !== null ? Number(s.valuePerKg) : null,
       active: s.active,
       tier: s.tier ?? null,
     })),
