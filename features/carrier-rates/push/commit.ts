@@ -8,6 +8,17 @@ import { recalcMarket, type CarrierServiceForRecalc, type RecalcRateBreakdown } 
 import { carrierRatesManifest } from '../manifest';
 import type { MarketShipping } from '@/features/markets/types';
 
+/** Fetch the carrier brand key (e.g. 'dhl', 'fedex') for an account row. */
+async function carrierKeyFor(carrierAccountId: string): Promise<string> {
+  const [row] = await db
+    .select({ key: schema.carriers.key })
+    .from(schema.carrierAccounts)
+    .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(eq(schema.carrierAccounts.id, carrierAccountId))
+    .limit(1);
+  return row?.key ?? 'carrier';
+}
+
 export interface PushPlanRow {
   marketHandle: string;
   marketName: string;
@@ -88,6 +99,48 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
     overrides.map((o) => [`${o.storeId}::${o.marketHandle}`, o] as const),
   );
 
+  // Load ALL carriers linked to ANY of the affected markets — not just this
+  // account. Multiple carriers per market need to compose into the same recalc
+  // so the zone signatures partition countries consistently and don't end up
+  // duplicating countries across different zones.
+  const allLinksForMarkets = await db
+    .select({
+      marketHandle: schema.marketCarrierLinks.marketHandle,
+      carrierAccountId: schema.marketCarrierLinks.carrierAccountId,
+      serviceLabel: schema.marketCarrierLinks.serviceLabel,
+      carrierKey: schema.carriers.key,
+    })
+    .from(schema.marketCarrierLinks)
+    .innerJoin(
+      schema.carrierAccounts,
+      eq(schema.carrierAccounts.id, schema.marketCarrierLinks.carrierAccountId),
+    )
+    .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(and(
+      inArray(schema.marketCarrierLinks.marketHandle, handles),
+      eq(schema.marketCarrierLinks.enabled, true),
+    ));
+
+  // Cache snapshots so we don't reload the same account twice.
+  const snapshotCache = new Map<string, typeof snap>();
+  snapshotCache.set(carrierAccountId, snap);
+  const otherAccountIds = Array.from(
+    new Set(allLinksForMarkets.map((l) => l.carrierAccountId).filter((id) => id !== carrierAccountId)),
+  );
+  for (const id of otherAccountIds) {
+    const s = await loadAccountSnapshot(id);
+    if (s) snapshotCache.set(id, s);
+    else warnings.push(`Linked account ${id} could not be loaded — its rates skipped.`);
+  }
+
+  // Group every link by market so recalc sees every carrier serving it.
+  const linksByMarket = new Map<string, typeof allLinksForMarkets>();
+  for (const l of allLinksForMarkets) {
+    const list = linksByMarket.get(l.marketHandle) ?? [];
+    list.push(l);
+    linksByMarket.set(l.marketHandle, list);
+  }
+
   const rows: PushPlanRow[] = [];
   const allBreakdown: (RecalcRateBreakdown & { marketHandle: string; storeId: string })[] = [];
 
@@ -97,11 +150,23 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
       warnings.push(`Linked market "${link.marketHandle}" no longer exists.`);
       continue;
     }
-    const services: CarrierServiceForRecalc[] = [
-      { carrierAccountId, serviceLabel: link.serviceLabel, snapshot: snap },
-    ];
+    const marketLinks = linksByMarket.get(market.handle) ?? [];
+    const services: CarrierServiceForRecalc[] = marketLinks
+      .map((ml): CarrierServiceForRecalc | null => {
+        const accSnap = snapshotCache.get(ml.carrierAccountId);
+        if (!accSnap) return null;
+        return {
+          carrierAccountId: ml.carrierAccountId,
+          carrierKey: ml.carrierKey ?? 'carrier',
+          serviceLabel: ml.serviceLabel,
+          snapshot: accSnap,
+        };
+      })
+      .filter((x): x is CarrierServiceForRecalc => x !== null);
+
     const recalc = recalcMarket({
       marketHandle: market.handle,
+      marketName: market.name,
       countries: market.countries as string[],
       primaryCurrency: market.primaryCurrency,
       services,
@@ -157,16 +222,15 @@ export async function commitPushPlan(
     return { marketsWritten: 0, storesAffected: 0, ratesEmitted: 0, warnings: plan.warnings };
   }
 
-  // Re-resolve recalc per (market, store) — same call shape used during preview.
-  const snap = await loadAccountSnapshot(carrierAccountId);
-  if (!snap) {
-    return { marketsWritten: 0, storesAffected: 0, ratesEmitted: 0, warnings: ['Account vanished mid-commit.'] };
-  }
-
+  // We rebuild from plan.rows so the "all carriers per market" composition
+  // already done during buildPushPlan is preserved. We cache snapshots so we
+  // don't reload the same account twice during the commit loop.
   const distinctMarkets = new Set<string>();
   const distinctStores = new Set<string>();
   let totalRates = 0;
+  const snapshotCache = new Map<string, NonNullable<Awaited<ReturnType<typeof loadAccountSnapshot>>>>();
 
+  // Process each (market, store) combo from the plan
   for (const row of plan.rows) {
     const marketRow = await db
       .select()
@@ -177,27 +241,52 @@ export async function commitPushPlan(
     const market = marketRow[0];
 
     const linksForMarket = await db
-      .select()
+      .select({
+        carrierAccountId: schema.marketCarrierLinks.carrierAccountId,
+        serviceLabel: schema.marketCarrierLinks.serviceLabel,
+        carrierKey: schema.carriers.key,
+      })
       .from(schema.marketCarrierLinks)
+      .innerJoin(
+        schema.carrierAccounts,
+        eq(schema.carrierAccounts.id, schema.marketCarrierLinks.carrierAccountId),
+      )
+      .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
       .where(and(
         eq(schema.marketCarrierLinks.marketHandle, market.handle),
-        eq(schema.marketCarrierLinks.carrierAccountId, carrierAccountId),
         eq(schema.marketCarrierLinks.enabled, true),
       ));
     if (linksForMarket.length === 0) continue;
 
+    const services: CarrierServiceForRecalc[] = [];
+    for (const l of linksForMarket) {
+      let cached = snapshotCache.get(l.carrierAccountId);
+      if (!cached) {
+        const loaded = await loadAccountSnapshot(l.carrierAccountId);
+        if (!loaded) continue;
+        snapshotCache.set(l.carrierAccountId, loaded);
+        cached = loaded;
+      }
+      services.push({
+        carrierAccountId: l.carrierAccountId,
+        carrierKey: l.carrierKey ?? 'carrier',
+        serviceLabel: l.serviceLabel,
+        snapshot: cached,
+      });
+    }
+
     const recalc = recalcMarket({
       marketHandle: market.handle,
+      marketName: market.name,
       countries: market.countries as string[],
       primaryCurrency: market.primaryCurrency,
-      services: linksForMarket.map((l) => ({
-        carrierAccountId,
-        serviceLabel: l.serviceLabel,
-        snapshot: snap,
-      })),
+      services,
     });
 
-    // Merge into existing shipping (preserve other zones)
+    // Merge into existing shipping. The recalc emits ALL auto-generated zones
+    // for this market — we drop every prior zone that starts with `${market.name} — `
+    // so old splits don't linger when carrier linking changes, then layer the
+    // fresh recalc on top. Manually-authored zones with other names survive.
     const existing = await db
       .select()
       .from(schema.marketStoreOverrides)
@@ -208,14 +297,17 @@ export async function commitPushPlan(
       .limit(1);
 
     const existingShipping = (existing[0]?.shipping as MarketShipping | null | undefined) ?? null;
+    const autoPrefix = `${market.name} — `;
+    const preservedZones = Object.fromEntries(
+      Object.entries(existingShipping?.zones ?? {}).filter(([key]) => !key.startsWith(autoPrefix)),
+    );
     const mergedShipping: MarketShipping = {
-      zones: {
-        ...(existingShipping?.zones ?? {}),
-        // Recalc currently emits exactly one zone keyed by market.handle.
-        ...recalc.shipping.zones,
-      },
+      zones: { ...preservedZones, ...recalc.shipping.zones },
     };
-    const ratesInThisCommit = Object.keys(recalc.shipping.zones[market.handle]?.rates ?? {}).length;
+    const ratesInThisCommit = Object.values(recalc.shipping.zones).reduce(
+      (sum, z) => sum + Object.keys(z.rates).length,
+      0,
+    );
     totalRates += ratesInThisCommit;
 
     if (existing.length === 0) {
