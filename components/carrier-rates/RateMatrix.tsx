@@ -73,31 +73,35 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-sm">
+      <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth: `${160 + zones.length * 130}px` }}>
+        <colgroup>
+          <col style={{ width: '160px' }} />
+          {zones.map((z) => <col key={z.id} style={{ minWidth: '130px' }} />)}
+        </colgroup>
         <thead>
-          <tr>
-            <th className="sticky left-0 z-20 bg-muted text-left px-4 py-3 border-b-2 border-r border-border text-[11px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap">
+          <tr className="bg-muted">
+            <th className="sticky left-0 z-30 bg-muted text-left px-4 py-3 border-b-2 border-r border-border text-[11px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap">
               kg ↑ &nbsp;/&nbsp; zone →
             </th>
             {zones.map((z) => (
               <th
                 key={z.id}
-                className="bg-muted text-right px-4 py-3 border-b-2 border-border text-[11px] uppercase tracking-wider text-foreground font-semibold whitespace-nowrap min-w-[110px]"
+                className="bg-muted text-right px-4 py-3 border-b-2 border-border text-[11px] uppercase tracking-wider text-foreground font-semibold whitespace-nowrap"
               >
                 {z.label}
               </th>
             ))}
-            <th className="bg-muted border-b-2 border-border w-full" aria-hidden />
           </tr>
         </thead>
         <tbody>
           {tiers.map((t, i) => {
             const prev = i === 0 ? 0 : Number(tiers[i - 1].upperKg);
             const upper = Number(t.upperKg);
-            const zebra = i % 2 === 1 ? 'bg-muted/15' : '';
+            const zebra = i % 2 === 1;
+            const dataBg = zebra ? 'bg-muted/15' : '';
             return (
-              <tr key={t.id} className={zebra}>
-                <th className={`sticky left-0 z-10 ${zebra || 'bg-card'} text-left px-4 py-2.5 border-b border-r border-border whitespace-nowrap font-mono text-xs tabular-nums text-foreground font-medium`}>
+              <tr key={t.id} className={dataBg}>
+                <th className="sticky left-0 z-20 bg-muted/60 dark:bg-muted/80 text-left px-4 py-2.5 border-b border-r border-border whitespace-nowrap font-mono text-xs tabular-nums text-foreground font-medium">
                   ({fmtKg(prev)}–{fmtKg(upper)}] kg
                 </th>
                 {zones.map((z) => {
@@ -158,7 +162,6 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                     />
                   );
                 })}
-                <td className={`border-b border-border ${zebra}`} aria-hidden />
               </tr>
             );
           })}
