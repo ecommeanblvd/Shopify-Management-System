@@ -16,6 +16,9 @@ export interface SurchargeRow {
   startsAt: Date | null;
   endsAt: Date | null;
   updatedAt: Date;
+  /** Set when a scraper/cron wrote this row (e.g. FedEx fuel weekly refresh). */
+  lastAutoFetchedAt: Date | null;
+  lastAutoSource: string | null;
 }
 
 export async function listSurcharges(carrierAccountId: string): Promise<SurchargeRow[]> {
@@ -31,6 +34,8 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       startsAt: schema.carrierSurcharges.startsAt,
       endsAt: schema.carrierSurcharges.endsAt,
       updatedAt: schema.carrierSurcharges.updatedAt,
+      lastAutoFetchedAt: schema.carrierSurcharges.lastAutoFetchedAt,
+      lastAutoSource: schema.carrierSurcharges.lastAutoSource,
     })
     .from(schema.carrierSurcharges)
     .where(eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId))

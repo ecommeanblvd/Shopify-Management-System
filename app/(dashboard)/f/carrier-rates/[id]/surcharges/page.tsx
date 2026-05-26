@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
+  RefreshCw, Zap,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -13,8 +14,10 @@ import {
   listSurcharges, createSurcharge, updateSurcharge, deleteSurcharge,
   type SurchargeKind, type SurchargeRow,
 } from '@/features/carrier-rates/surcharges-actions';
+import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { SurchargeEditDialog } from '@/components/carrier-rates/SurchargeEditDialog';
 
 export const dynamic = 'force-dynamic';
@@ -157,6 +160,27 @@ async function deleteAction(accountId: string, id: string) {
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 
+/**
+ * Fetch the current weekly fuel surcharge directly from FedEx's public AEM
+ * endpoint, then upsert it into this account's `fuel_percent` row. Bound at
+ * call-site with the accountId + the operator's user id so the row records
+ * who triggered the refresh.
+ *
+ * Scoped to the FedEx carrier — the page only mounts this button when
+ * `account.carrierKey === 'fedex'`.
+ */
+async function refreshFuelAction(accountId: string, userId: string) {
+  'use server';
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('unauthenticated');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_carrier_rates')) {
+    throw new Error('forbidden');
+  }
+  await refreshFedExFuel({ carrierAccountId: accountId, triggeredBy: userId });
+  revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
+}
+
 export default async function SurchargesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
@@ -221,6 +245,7 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
               accountId={id}
               userId={session.user.id}
               currency={account.costCurrency}
+              carrierKey={account.carrierKey}
               canManage={canManage}
             />
           );
@@ -237,13 +262,30 @@ interface KindCardProps {
   accountId: string;
   userId: string;
   currency: string;
+  /** Carrier brand (`'fedex'`, `'dhl'`, ...) — gates the auto-refresh button. */
+  carrierKey: string | null | undefined;
   canManage: boolean;
 }
 
-function KindCard({ kind, meta, list, accountId, userId, currency, canManage }: KindCardProps) {
+function KindCard({
+  kind, meta, list, accountId, userId, currency, carrierKey, canManage,
+}: KindCardProps) {
   const unitSuffix = unitSuffixFor(kind, currency);
   const perKgUnitSuffix = kind === 'remote_fixed' ? `${currency}/kg` : undefined;
   const activeCount = list.filter((s) => s.active).length;
+  // FedEx publishes a weekly fuel % we can scrape directly off their
+  // surcharges page. DHL would need a separate scraper — surface only when
+  // we actually have one wired up.
+  const supportsAutoRefresh = kind === 'fuel_percent' && carrierKey === 'fedex';
+  const lastAutoFetchedAt = supportsAutoRefresh
+    ? list.find((s) => s.lastAutoFetchedAt)?.lastAutoFetchedAt ?? null
+    : null;
+  const lastAutoSource = supportsAutoRefresh
+    ? list.find((s) => s.lastAutoFetchedAt)?.lastAutoSource ?? null
+    : null;
+  const refreshBound = supportsAutoRefresh && canManage
+    ? refreshFuelAction.bind(null, accountId, userId)
+    : null;
 
   return (
     <Card className="overflow-hidden">
@@ -259,12 +301,39 @@ function KindCard({ kind, meta, list, accountId, userId, currency, canManage }: 
               <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
                 {list.length === 0 ? 'none' : `${activeCount}/${list.length} on`}
               </Badge>
+              {supportsAutoRefresh && (
+                <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider gap-1 px-1.5">
+                  <Zap className="size-2.5" />
+                  Auto
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">{meta.desc}</p>
             <p className="text-[10px] font-mono text-muted-foreground/80 mt-1">
               {meta.formula}
             </p>
+            {supportsAutoRefresh && (
+              <p className="text-[10px] text-muted-foreground/80 mt-1">
+                {lastAutoFetchedAt
+                  ? <>Last auto-fetched <span className="font-mono">{new Date(lastAutoFetchedAt).toLocaleString()}</span>{lastAutoSource && <> · <span className="font-mono">{lastAutoSource}</span></>}</>
+                  : <>No auto-fetch yet — click <span className="font-mono">Refresh from FedEx</span> to pull the current weekly %.</>}
+              </p>
+            )}
           </div>
+          {refreshBound && (
+            <form action={refreshBound}>
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5 shrink-0"
+                title="Pull the current week from fedex.com"
+              >
+                <RefreshCw className="size-3" />
+                Refresh
+              </Button>
+            </form>
+          )}
         </div>
 
         {/* Rows */}
