@@ -288,6 +288,11 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   endsAt: timestamp('ends_at'),
   note: text('note'),
   updatedBy: text('updated_by').references(() => user.id),
+  // Bookkeeping for auto-refresh (e.g. FedEx weekly fuel surcharge scraper).
+  // Lets the UI display "Last auto-refreshed Xh ago" and distinguish operator
+  // edits from cron writes without bloating the row with an audit log.
+  lastAutoFetchedAt: timestamp('last_auto_fetched_at'),
+  lastAutoSource: text('last_auto_source'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [

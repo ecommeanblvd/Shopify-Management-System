@@ -64,6 +64,13 @@
       "when": 1779719168207,
       "tag": "0008_huge_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779792190103,
+      "tag": "0009_high_talkback",
+      "breakpoints": true
     }
   ]
 }
