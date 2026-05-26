@@ -38,7 +38,7 @@ export default async function MarketsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       {/* Hero */}
       <header className="space-y-6">
         <div className="flex items-start justify-between gap-6 flex-wrap">

@@ -100,7 +100,7 @@ export default async function MarketDetailPage({
   const storesWithOverrides = stores.filter((s) => overrideByStore.has(s.id)).length;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       {/* Breadcrumb */}
       <Link
         href="/f/markets"

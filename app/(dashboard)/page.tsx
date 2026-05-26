@@ -39,7 +39,7 @@ export default async function HomePage() {
   const userName = session?.user?.name ?? session?.user?.email ?? 'there';
 
   return (
-    <div className="max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       {/* Hero */}
       <header className="flex items-start justify-between gap-6 flex-wrap">
         <div className="space-y-2 min-w-0">

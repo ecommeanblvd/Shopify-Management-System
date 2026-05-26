@@ -41,6 +41,11 @@ export interface CreateSurchargeInput {
   carrierAccountId: string;
   kind: SurchargeKind;
   value: string;
+  /**
+   * Optional per-kg companion. When set, the engine bills max(value, valuePerKg × weight).
+   * Only meaningful for kind='remote_fixed' (FedEx ODA Tier B/C model).
+   */
+  valuePerKg?: string;
   note?: string;
   /** Optional tier label — only meaningful for kind='remote_fixed'. */
   tier?: string;
@@ -57,14 +62,25 @@ function parseValue(raw: string, kind: SurchargeKind): number {
   return n;
 }
 
+function parsePerKg(raw: string): number | null {
+  const cleaned = String(raw).replace(/[,_\s]/g, '');
+  if (cleaned === '') return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) throw new Error('Per-kg value must be a number.');
+  if (n < 0) throw new Error('Per-kg value must be ≥ 0.');
+  return n;
+}
+
 export async function createSurcharge(input: CreateSurchargeInput, userId: string): Promise<string> {
   const n = parseValue(input.value, input.kind);
+  const perKg = input.valuePerKg !== undefined ? parsePerKg(input.valuePerKg) : null;
   const [row] = await db
     .insert(schema.carrierSurcharges)
     .values({
       carrierAccountId: input.carrierAccountId,
       kind: input.kind,
       value: n.toString(),
+      valuePerKg: perKg !== null ? perKg.toString() : null,
       tier: input.tier?.trim() || null,
       note: input.note?.trim() || null,
       updatedBy: userId,
@@ -76,6 +92,8 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
 export interface UpdateSurchargeInput {
   id: string;
   value?: string;
+  /** Pass '' to clear the per-kg companion; pass a number to set it; omit to leave unchanged. */
+  valuePerKg?: string;
   note?: string;
   active?: boolean;
 }
@@ -93,6 +111,10 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
     updatedAt: new Date(),
   };
   if (input.value !== undefined) patch.value = parseValue(input.value, existing.kind).toString();
+  if (input.valuePerKg !== undefined) {
+    const perKg = parsePerKg(input.valuePerKg);
+    patch.valuePerKg = perKg !== null ? perKg.toString() : null;
+  }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;
 

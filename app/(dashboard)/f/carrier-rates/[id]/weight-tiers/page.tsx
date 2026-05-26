@@ -53,7 +53,7 @@ export default async function WeightTiersPage({ params }: { params: Promise<{ id
   const seedBound = seedAction.bind(null, id);
 
   return (
-    <div className="max-w-3xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <Link href={`/f/carrier-rates/${id}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ChevronLeft className="size-4" />
         {account.name}
