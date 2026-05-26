@@ -1,18 +1,21 @@
 /**
- * Weekly cron: refresh the FedEx fuel-surcharge percentage for every
+ * HTTP endpoint that refreshes the FedEx fuel-surcharge percentage for every
  * enabled FedEx carrier account.
+ *
+ * Primary cron path on Railway uses the standalone script at
+ * `scripts/cron/refresh-fedex-fuel.ts` (run via `npm run cron:refresh-fuel`
+ * on a separate Railway cron service that shares DATABASE_URL with the
+ * main app). This HTTP route is kept for two cases:
+ *
+ *   1. External cron providers that prefer HTTPS pings over running a
+ *      Node process (cron-job.org, EasyCron, GitHub Actions schedule).
+ *   2. Manual force-refresh from outside the UI ("just hit the URL with
+ *      curl + the bearer token").
  *
  * Authentication
  * --------------
- * Vercel Cron automatically attaches `Authorization: Bearer ${CRON_SECRET}`
- * to scheduled invocations when the env var is set on the project. We require
- * a match here, which also keeps random internet traffic from triggering DB
- * writes.
- *
- * Local testing
- * -------------
- *   CRON_SECRET=dev node -e "fetch('http://localhost:3000/api/cron/refresh-fuel',
- *     { headers: { Authorization: 'Bearer dev' } }).then(r => r.json()).then(console.log)"
+ *   curl -H "Authorization: Bearer $CRON_SECRET" \
+ *        https://<your-railway-url>/api/cron/refresh-fuel
  *
  * Response shape
  * --------------
@@ -29,8 +32,6 @@ import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 // Don't pre-render or cache.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-// FedEx page + JSON service may take a couple of seconds; raise the ceiling.
-export const maxDuration = 60;
 
 interface PerAccountResult {
   accountId: string;
