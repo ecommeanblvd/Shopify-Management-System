@@ -22,6 +22,29 @@ Next.js (App Router) · TypeScript · Drizzle ORM + Postgres · Better-Auth · `
 - `SHOPIFY_APP_URL` and `BETTER_AUTH_URL` must be the Railway public URL.
 - The deploy `startCommand` runs migrations then starts the server (see `railway.json`).
 
+### Scheduled jobs (cron)
+
+The FedEx fuel-surcharge scraper needs to run weekly. Pick one of:
+
+**Option A — Railway cron service (recommended):** in the Railway project, add a new service from the same repo with:
+
+- **Start command:** `npm run cron:refresh-fuel`
+- **Cron schedule:** `0 4 * * 1` (Monday 04:00 UTC = 11:00 ICT)
+- **Shared env:** must see the same `DATABASE_URL` as the main app (Railway → service → Variables → Reference variable).
+
+The script writes directly to Postgres; no HTTP layer, no auth token needed.
+
+**Option B — External HTTPS cron:** point cron-job.org / EasyCron / GitHub Actions schedule at:
+
+```
+GET https://<your-railway-url>/api/cron/refresh-fuel
+Authorization: Bearer <CRON_SECRET>
+```
+
+Set `CRON_SECRET` (generate with `openssl rand -hex 32`) in the Railway service env.
+
+Both paths share the same core logic in `features/carrier-rates/fuel-fetcher/apply.ts`. The "Refresh from FedEx" button on the Surcharges page also calls the same function, so manual + scheduled refreshes are consistent.
+
 ## Shopify Dev Dashboard app
 
 - Create one app, unlisted. Set the OAuth redirect URL to `<APP_URL>/api/auth/shopify/callback`.
