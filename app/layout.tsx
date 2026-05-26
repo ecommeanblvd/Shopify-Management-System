@@ -1,14 +1,16 @@
 import './globals.css';
 import { GeistSans } from 'geist/font/sans';
-import { JetBrains_Mono } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/lib/theme/provider';
 import { Toaster } from '@/components/ui/sonner';
 
-// Mono font for code, IDs, currency, and tabular numbers across the system.
-// JetBrains Mono + stylistic set 20 (ss20) gives a clean plain zero — no slash,
-// no dot — which is what the operator dashboard wants for shipping rates and
-// VND amounts (Geist Mono's default slashed zero made amounts hard to read).
-const mono = JetBrains_Mono({
+// Number / "mono-slot" font used by .font-mono and .tabular-nums.
+// Inter is a sans-serif UI font with a fully plain zero (no slash, no dot)
+// and proper tabular figures via the `tnum` OpenType feature — so currency,
+// weight tiers, and percentages line up in columns without the slashed-0
+// problem of Geist Mono / JetBrains Mono. We pull the entire variable
+// weight axis so headings and emphasis still work crisply.
+const numFont = Inter({
   subsets: ['latin'],
   variable: '--font-mono-raw',
   display: 'swap',
@@ -24,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${GeistSans.variable} ${mono.variable}`}
+      className={`${GeistSans.variable} ${numFont.variable}`}
     >
       <body>
         <ThemeProvider>
