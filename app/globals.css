@@ -27,7 +27,7 @@
   --radius-lg: 0.5rem;
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: var(--font-mono-raw), ui-monospace, "SFMono-Regular", "Menlo", monospace;
 }
 
 /* ---------------------------------------------------------------
@@ -222,4 +222,20 @@ html, body {
 
 code, pre, .font-mono {
   font-family: var(--font-mono);
+  /*
+   * ss20 = plain zero (no slash). JetBrains Mono ships with a slashed zero
+   * by default; enabling stylistic set 20 swaps it for the unambiguous
+   * non-slashed variant — much easier to read for big VND amounts and
+   * tariff weights where "0" appears often.
+   */
+  font-feature-settings: "ss20" on;
+}
+
+/*
+ * Tabular nums anywhere on the page should also pick up the plain zero,
+ * even if the element didn't opt into .font-mono — keeps currency tables
+ * consistent with the rest of the system.
+ */
+.tabular-nums {
+  font-feature-settings: "tnum" on, "ss20" on;
 }
