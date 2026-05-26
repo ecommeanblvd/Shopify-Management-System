@@ -40,7 +40,7 @@ export default async function ApplyPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-8">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
       <Link
         href="/f/markets"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"

@@ -91,7 +91,7 @@ export default async function AdminUsersPage() {
   const none = rows.filter((r) => !r.role).length;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <header className="space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <ShieldCheck className="size-3.5" />
