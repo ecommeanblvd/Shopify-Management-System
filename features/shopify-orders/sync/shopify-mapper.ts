@@ -48,15 +48,10 @@ export interface MappedOrder {
 
 export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): MappedOrder {
   const lines = payload.lineItems.nodes.map((node) => mapLine(node));
-  // grossLineTotal = revenue from line items before discounts
-  // Derived from order totals to stay consistent with Shopify's own accounting:
-  // totalPrice - totalShipping - totalTax + totalDiscounts
-  const grossLineTotal = (
-    Number(payload.totalPriceSet.shopMoney.amount) -
-    Number(payload.totalShippingPriceSet.shopMoney.amount) -
-    Number(payload.totalTaxSet.shopMoney.amount) +
-    Number(payload.totalDiscountsSet.shopMoney.amount)
-  ).toFixed(2);
+  // grossLineTotal = Σ(original_unit_price × qty) — true GMV before any discount
+  const grossLineTotal = lines
+    .reduce((sum, l) => sum + Number(l.unitPrice) * l.quantity, 0)
+    .toFixed(2);
 
   return {
     order: {

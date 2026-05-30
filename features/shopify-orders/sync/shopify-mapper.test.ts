@@ -50,8 +50,8 @@ describe('mapShopifyOrder', () => {
     expect(m.lines[0].total).toBe('90.00');
     // Line 2: 10 × 1 − 0 = 10.00
     expect(m.lines[1].total).toBe('10.00');
-    // grossLineTotal = Σ(unit_price × qty) = 100, total_discount comes from order header
-    expect(m.order.grossLineTotal).toBe('100.00');
+    // grossLineTotal = Σ(unit_price × qty) = 110, total_discount comes from order header
+    expect(m.order.grossLineTotal).toBe('110.00');
     expect(m.order.totalDiscount).toBe('10.00');
   });
 
