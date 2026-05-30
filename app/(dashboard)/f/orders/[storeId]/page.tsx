@@ -1,12 +1,15 @@
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { eq, sql } from 'drizzle-orm';
+import { Tag, Truck } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { getStoreMetrics, type Grouping } from '@/features/shopify-orders/dashboard-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
+import { Button } from '@/components/ui/button';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
@@ -136,19 +139,37 @@ export default async function StoreOrders({
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
-      <header className="flex items-start justify-between gap-3">
-        <div>
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
           <h1 className="text-3xl font-semibold tracking-tight">{store.name}</h1>
           <p className="text-sm text-muted-foreground mt-1 font-mono">
             {store.shopDomain}
             {total.currency ? ` · ${total.currency}` : ''}
           </p>
         </div>
-        <HealthPopover
-          storeName={store.name}
-          snapshot={snapshot}
-          startBackfillAction={startBackfill.bind(null, storeId)}
-        />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {hasPermission(role, 'manage_sku_costs') && (
+            <Link href={`/f/orders/${storeId}/costs`}>
+              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs">
+                <Tag className="size-3.5" />
+                SKU costs
+              </Button>
+            </Link>
+          )}
+          {hasPermission(role, 'manage_shipping_invoices') && (
+            <Link href={`/f/orders/${storeId}/shipping-invoices`}>
+              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs">
+                <Truck className="size-3.5" />
+                Shipping invoices
+              </Button>
+            </Link>
+          )}
+          <HealthPopover
+            storeName={store.name}
+            snapshot={snapshot}
+            startBackfillAction={startBackfill.bind(null, storeId)}
+          />
+        </div>
       </header>
 
       <MetricsFilters
