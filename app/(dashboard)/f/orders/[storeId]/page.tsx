@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { eq, sql } from 'drizzle-orm';
-import { Tag, Truck } from 'lucide-react';
+import { Tag } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -156,14 +156,10 @@ export default async function StoreOrders({
               </Button>
             </Link>
           )}
-          {hasPermission(role, 'manage_shipping_invoices') && (
-            <Link href={`/f/orders/${storeId}/shipping-invoices`}>
-              <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs">
-                <Truck className="size-3.5" />
-                Shipping invoices
-              </Button>
-            </Link>
-          )}
+          {/*
+            Shipping invoices are uploaded globally — one carrier invoice spans
+            many stores. The Orders landing page (/f/orders) hosts the upload.
+          */}
           <HealthPopover
             storeName={store.name}
             snapshot={snapshot}

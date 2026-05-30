@@ -7,7 +7,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { Card, CardContent } from '@/components/ui/card';
-import { ShoppingBag } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ShoppingBag, Truck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,18 +26,30 @@ export default async function OrdersLanding() {
 
   const stores = await db.select().from(schema.stores).where(eq(schema.stores.status, 'active'));
 
+  const canManageInvoices = hasPermission(role, 'manage_shipping_invoices');
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
-      <header className="space-y-2">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <ShoppingBag className="size-3.5" />
-          Orders
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="space-y-2 min-w-0">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <ShoppingBag className="size-3.5" />
+            Orders
+          </div>
+          <h1 className="text-4xl font-semibold tracking-tight">Revenue dashboard</h1>
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Per-store GMV, net revenue, and margin. Time-versioned cost-of-goods and reconciled
+            shipping cost.
+          </p>
         </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Revenue dashboard</h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Per-store GMV, net revenue, and margin. Time-versioned cost-of-goods and reconciled
-          shipping cost.
-        </p>
+        {canManageInvoices && (
+          <Link href="/f/orders/shipping-invoices">
+            <Button type="button" size="sm" variant="outline" className="h-9 gap-2">
+              <Truck className="size-4" />
+              Shipping invoices
+            </Button>
+          </Link>
+        )}
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
