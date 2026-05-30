@@ -20,7 +20,7 @@
  * displayCurrency.
  */
 
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
@@ -54,13 +54,18 @@ export async function resolveShippingEstimate(
   if (markets.length === 0) return { amount: 0, source: 'unknown' };
 
   // 2. Carrier accounts linked to any of those markets (enabled links only).
+  // Use Drizzle's inArray helper rather than raw `ANY(${handles})`: the sql
+  // template binds the JS array as a single text param, which Postgres then
+  // rejects as a malformed array literal.
   const handles = markets.map((m) => m.handle);
   const links = await db
     .select({ carrierAccountId: schema.marketCarrierLinks.carrierAccountId })
     .from(schema.marketCarrierLinks)
     .where(
-      // Filter by market handle and enabled
-      sql`${schema.marketCarrierLinks.marketHandle} = ANY(${handles}) AND ${schema.marketCarrierLinks.enabled} = TRUE`,
+      and(
+        inArray(schema.marketCarrierLinks.marketHandle, handles),
+        eq(schema.marketCarrierLinks.enabled, true),
+      ),
     );
   const carrierIds = Array.from(new Set(links.map((l) => l.carrierAccountId)));
   if (carrierIds.length === 0) return { amount: 0, source: 'unknown' };
