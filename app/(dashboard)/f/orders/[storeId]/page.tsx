@@ -1,15 +1,16 @@
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { getStoreMetrics, type Grouping } from '@/features/shopify-orders/dashboard-actions';
+import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
-import { HealthCard } from '@/components/shopify-orders/HealthCard';
+import { HealthPopover, type HealthSnapshot } from '@/components/shopify-orders/HealthPopover';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,17 +84,45 @@ export default async function StoreOrders({
         )
     : [];
 
+  // Health snapshot — pre-format here so the client component stays
+  // purely presentational (no DB import in client bundle).
+  const [syncState] = await db
+    .select()
+    .from(schema.shopifySyncState)
+    .where(eq(schema.shopifySyncState.storeId, storeId));
+  const webhookCountsRes = await db.execute<{ ok: string; failed: string }>(sql`
+    SELECT SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END)::text AS ok,
+           SUM(CASE WHEN status IN ('failed','rejected') THEN 1 ELSE 0 END)::text AS failed
+      FROM shopify_webhook_log
+     WHERE store_id = ${storeId} AND received_at > NOW() - INTERVAL '24 hours';
+  `);
+  const webhookCounts = webhookCountsRes as unknown as Array<{ ok: string; failed: string }>;
+  const ago = (d: Date | null | undefined): string =>
+    d ? `${Math.round((nowMs - new Date(d).getTime()) / 60000)} min ago` : '—';
+  const snapshot: HealthSnapshot = {
+    lastWebhookAgo: ago(syncState?.lastWebhookAt),
+    lastCronAgo: ago(syncState?.lastCronSyncAt),
+    backfillStatus: syncState?.backfillStatus ?? 'idle',
+    webhooksOk: webhookCounts[0]?.ok ?? '0',
+    webhooksFailed: webhookCounts[0]?.failed ?? '0',
+  };
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">{store.name}</h1>
-        <p className="text-sm text-muted-foreground mt-1 font-mono">
-          {store.shopDomain}
-          {total.currency ? ` · ${total.currency}` : ''}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">{store.name}</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-mono">
+            {store.shopDomain}
+            {total.currency ? ` · ${total.currency}` : ''}
+          </p>
+        </div>
+        <HealthPopover
+          storeName={store.name}
+          snapshot={snapshot}
+          startBackfillAction={startBackfill.bind(null, storeId)}
+        />
       </header>
-
-      <HealthCard storeId={storeId} />
 
       <MetricsFilters
         defaultFrom={dateFrom.toISOString().slice(0, 10)}
