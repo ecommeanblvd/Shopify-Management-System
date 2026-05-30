@@ -43,12 +43,14 @@ export async function resolveShippingEstimate(
   }
 
   // 1. Markets containing this country. `countries` is jsonb of ISO-2 strings.
+  // `db.execute` on drizzle/node-postgres returns a pg QueryResult — the
+  // actual rows live under `.rows`, NOT on the top-level object.
   const marketRows = await db.execute<{ handle: string }>(sql`
     SELECT handle FROM market_templates
      WHERE countries @> ${JSON.stringify([input.shipCountry])}::jsonb
        AND enabled = TRUE
   `);
-  const markets = marketRows as unknown as Array<{ handle: string }>;
+  const markets = marketRows.rows;
   if (markets.length === 0) return { amount: 0, source: 'unknown' };
 
   // 2. Carrier accounts linked to any of those markets (enabled links only).

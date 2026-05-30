@@ -50,10 +50,10 @@ export async function runHourlySync(): Promise<StoreSyncResult[]> {
 
   for (const store of stores) {
     const lockKey = hash(store.id);
-    const lockRes = await db.execute(
+    const lockRes = await db.execute<{ locked: boolean }>(
       sql`SELECT pg_try_advisory_xact_lock(${lockKey}) AS locked`,
     );
-    const lockedRow = (lockRes as unknown as { locked: boolean }[])[0];
+    const lockedRow = lockRes.rows[0];
     if (!lockedRow?.locked) {
       results.push({ storeId: store.id, storeName: store.name, ingested: 0, error: 'locked' });
       continue;
