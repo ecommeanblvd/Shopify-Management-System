@@ -4,6 +4,7 @@ import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
+import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
 
 export type Grouping = 'day' | 'week' | 'month' | 'vendor';
 
@@ -108,16 +109,21 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     const wholeOrderGross = sumNumeric(oLines.map((l) => Number(l.unitPrice) * l.quantity));
     const share = wholeOrderGross > 0 ? grossLineTotal / wholeOrderGross : 1;
 
-    // Shipping cost — invoice if matching tracking, else surface as unknown.
-    // Task 19a will wire in the live carrier-engine estimate for the
-    // no-invoice branch.
+    // Shipping cost — invoice when we have one, otherwise live carrier-engine
+    // estimate via the existing quote() pipeline. `source='unknown'` means
+    // neither path produced a number (no invoice + no linked carrier covers
+    // the destination, or weight/country are missing).
     let shippingCost: { amount: number; source: 'invoice' | 'engine_estimate' | 'unknown' };
     const tracking = trackingByOrder.get(o.id) ?? [];
     const matchingInvoice = tracking.map((t) => invoiceIndex.get(t)).find((i) => !!i);
     if (matchingInvoice) {
       shippingCost = { amount: Number(matchingInvoice.actualCost) * share, source: 'invoice' };
     } else {
-      shippingCost = { amount: 0, source: 'unknown' };
+      const est = await resolveShippingEstimate({
+        shipCountry: o.shipCountry,
+        shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
+      });
+      shippingCost = { amount: est.amount * share, source: est.source };
     }
 
     const skuCosts = filteredLines.map((l) => {
