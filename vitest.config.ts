@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { config as dotenvConfig } from 'dotenv';
+
+dotenvConfig({ path: path.resolve(__dirname, '.env') });
 
 export default defineConfig({
   resolve: {
