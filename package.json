@@ -20,7 +20,8 @@
     "probe:markets": "dotenv -- tsx scripts/probe-markets-api.ts",
     "probe:fedex-fuel": "dotenv -- tsx scripts/probe-fedex-fuel.ts",
     "cron:refresh-fuel": "dotenv -- tsx scripts/cron/refresh-fedex-fuel.ts",
-    "cron:backfill-orders": "dotenv -- tsx scripts/cron/backfill-shopify-orders.ts"
+    "cron:backfill-orders": "dotenv -- tsx scripts/cron/backfill-shopify-orders.ts",
+    "cron:sync-orders": "dotenv -- tsx scripts/cron/sync-shopify-orders.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

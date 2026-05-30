@@ -45,6 +45,17 @@ Set `CRON_SECRET` (generate with `openssl rand -hex 32`) in the Railway service 
 
 Both paths share the same core logic in `features/carrier-rates/fuel-fetcher/apply.ts`. The "Refresh from FedEx" button on the Surcharges page also calls the same function, so manual + scheduled refreshes are consistent.
 
+**Orders safety-net** (in addition to FedEx fuel):
+
+Add another Railway cron service from the same repo:
+
+- **Start command:** `npm run cron:sync-orders`
+- **Cron schedule:** `5 * * * *` (every hour at minute 5)
+- **Reference variable:** `DATABASE_URL` from the Postgres service
+- Set `restartPolicyType` to `NEVER` and leave the healthcheck path empty (it's a one-shot per fire).
+
+This service polls every active store for orders with `updated_at >= last_cron_sync_at` and reconciles them through the same `upsertOrder()` path the webhook handler uses. It's an idempotent safety net; webhooks remain the primary real-time channel.
+
 ## Shopify Dev Dashboard app
 
 - Create one app, unlisted. Set the OAuth redirect URL to `<APP_URL>/api/auth/shopify/callback`.
