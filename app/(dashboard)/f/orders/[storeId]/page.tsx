@@ -9,6 +9,7 @@ import { getStoreMetrics, type Grouping } from '@/features/shopify-orders/dashbo
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
+import { HealthCard } from '@/components/shopify-orders/HealthCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,6 +87,8 @@ export default async function StoreOrders({
           {total.currency ? ` · ${total.currency}` : ''}
         </p>
       </header>
+
+      <HealthCard storeId={storeId} />
 
       <MetricsFilters
         defaultFrom={dateFrom.toISOString().slice(0, 10)}
