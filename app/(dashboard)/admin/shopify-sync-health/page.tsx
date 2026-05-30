@@ -7,6 +7,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { registerOrderWebhooks } from '@/features/shopify-orders/webhook/register-subscriptions';
+import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { getStoreToken } from '@/lib/shopify/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,12 @@ export default async function SyncHealth() {
   `);
   const webhookCounts = webhookCountsRes as unknown as Array<{ store_id: string; ok: string; failed: string }>;
   const wcMap = new Map(webhookCounts.map((w) => [w.store_id, w]));
+
+  async function backfillTriggerAction(formData: FormData): Promise<void> {
+    'use server';
+    const storeId = String(formData.get('storeId'));
+    await startBackfill(storeId);
+  }
 
   async function reregisterAction(formData: FormData): Promise<void> {
     'use server';
@@ -99,10 +106,24 @@ export default async function SyncHealth() {
                       {wc?.ok ?? '0'} / <span className="text-destructive">{wc?.failed ?? '0'}</span>
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <form action={reregisterAction}>
-                        <input type="hidden" name="storeId" value={s.id} />
-                        <Button type="submit" size="sm" variant="outline">Re-register</Button>
-                      </form>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <form action={backfillTriggerAction}>
+                          <input type="hidden" name="storeId" value={s.id} />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            disabled={s.state?.backfillStatus === 'running'}
+                            title="Pull the last 12 months of orders via Shopify bulkOperation"
+                          >
+                            {s.state?.backfillStatus === 'running' ? 'Backfilling…' : 'Backfill 12mo'}
+                          </Button>
+                        </form>
+                        <form action={reregisterAction}>
+                          <input type="hidden" name="storeId" value={s.id} />
+                          <Button type="submit" size="sm" variant="outline">Re-register</Button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );
