@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { encryptToken } from '@/lib/shopify/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { getEnv } from '@/lib/env';
+import { registerOrderWebhooks } from '@/features/shopify-orders/webhook/register-subscriptions';
 
 // Matches the same regex used in the install route.
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
@@ -118,6 +119,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         scopes,
         apiVersion: env.SHOPIFY_API_VERSION,
         status: 'active',
+      });
+    }
+
+    // Step 8b: Register order-related webhooks against the freshly-issued token.
+    // Non-fatal — a failure here just means the operator will have to retry
+    // from /admin/shopify-sync-health. Don't lock them out of the dashboard.
+    try {
+      await registerOrderWebhooks({
+        shopDomain: shop,
+        accessToken: tokenData.access_token,
+        apiVersion: env.SHOPIFY_API_VERSION,
+      });
+    } catch (webhookErr) {
+      await recordAudit({
+        userId,
+        action: 'connect_store_webhook_register',
+        target: shop,
+        result: 'error',
+        errorDetail: String(webhookErr),
       });
     }
 

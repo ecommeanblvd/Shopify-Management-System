@@ -115,3 +115,21 @@ describe('canChangeRole', () => {
   });
 });
 
+
+describe('orders permissions', () => {
+  it('admin can do everything', () => {
+    expect(hasPermission('admin', 'view_orders')).toBe(true);
+    expect(hasPermission('admin', 'manage_sku_costs')).toBe(true);
+    expect(hasPermission('admin', 'manage_shipping_invoices')).toBe(true);
+  });
+  it('operator can view + manage', () => {
+    expect(hasPermission('operator', 'view_orders')).toBe(true);
+    expect(hasPermission('operator', 'manage_sku_costs')).toBe(true);
+    expect(hasPermission('operator', 'manage_shipping_invoices')).toBe(true);
+  });
+  it('viewer can only view orders', () => {
+    expect(hasPermission('viewer', 'view_orders')).toBe(true);
+    expect(hasPermission('viewer', 'manage_sku_costs')).toBe(false);
+    expect(hasPermission('viewer', 'manage_shipping_invoices')).toBe(false);
+  });
+});

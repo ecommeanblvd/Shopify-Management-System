@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -352,3 +352,123 @@ export const carrierQuoteLogs = pgTable('carrier_quote_logs', {
 ]);
 
 export * from './auth-schema';
+
+// ──────────────────────────────────────────────────────────────────────────
+// Shopify orders (spec: docs/superpowers/specs/2026-05-28-shopify-orders-design.md)
+// ──────────────────────────────────────────────────────────────────────────
+
+export const shopifyOrders = pgTable('shopify_orders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  shopifyOrderId: text('shopify_order_id').notNull().unique(),
+  shopifyOrderNumber: text('shopify_order_number').notNull(),
+  createdAtShopify: timestamp('created_at_shopify').notNull(),
+  processedAtShopify: timestamp('processed_at_shopify').notNull(),
+  cancelledAtShopify: timestamp('cancelled_at_shopify'),
+  financialStatus: text('financial_status').notNull(),
+  fulfillmentStatus: text('fulfillment_status'),
+  currency: text('currency').notNull(),
+  // grossLineTotal = Σ(originalUnitPrice × qty), pre-any-discount; this is GMV.
+  grossLineTotal: numeric('gross_line_total', { precision: 14, scale: 2 }).notNull(),
+  // totalDiscount maps Shopify's totalDiscountsSet — covers line + order discounts combined.
+  totalDiscount: numeric('total_discount', { precision: 14, scale: 2 }).notNull(),
+  totalShipping: numeric('total_shipping', { precision: 14, scale: 2 }).notNull(),
+  totalTax: numeric('total_tax', { precision: 14, scale: 2 }).notNull(),
+  totalPrice: numeric('total_price', { precision: 14, scale: 2 }).notNull(),
+  shipCountry: text('ship_country'),
+  shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
+  rawPayload: jsonb('raw_payload').notNull(),
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  source: text('source').notNull(),
+}, (t) => [
+  index('shopify_orders_store_processed_idx').on(t.storeId, t.processedAtShopify),
+  index('shopify_orders_cancelled_idx').on(t.cancelledAtShopify),
+]);
+
+export const shopifyOrderLines = pgTable('shopify_order_lines', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  shopifyLineId: text('shopify_line_id').notNull(),
+  sku: text('sku'),
+  vendor: text('vendor'),
+  productTitle: text('product_title').notNull(),
+  variantTitle: text('variant_title'),
+  quantity: integer('quantity').notNull(),
+  unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
+  discountAlloc: numeric('discount_alloc', { precision: 14, scale: 2 }).notNull(),
+  total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+}, (t) => [
+  index('shopify_order_lines_order_idx').on(t.orderId),
+  index('shopify_order_lines_sku_idx').on(t.sku),
+  index('shopify_order_lines_vendor_idx').on(t.vendor),
+]);
+
+export const shopifyOrderRefunds = pgTable('shopify_order_refunds', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  shopifyRefundId: text('shopify_refund_id').notNull().unique(),
+  refundedAt: timestamp('refunded_at').notNull(),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  reason: text('reason'),
+}, (t) => [
+  index('shopify_order_refunds_order_idx').on(t.orderId),
+  index('shopify_order_refunds_refunded_at_idx').on(t.refundedAt),
+]);
+
+export const skuCosts = pgTable('sku_costs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  sku: text('sku').notNull(),
+  costPerUnit: numeric('cost_per_unit', { precision: 14, scale: 4 }).notNull(),
+  currency: text('currency').notNull(),
+  effectiveFrom: date('effective_from').notNull(),
+  source: text('source').notNull(),
+  uploadedBy: text('uploaded_by').references(() => user.id),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('sku_costs_store_sku_from_idx').on(t.storeId, t.sku, t.effectiveFrom),
+  index('sku_costs_lookup_idx').on(t.storeId, t.sku, t.effectiveFrom),
+]);
+
+export const shippingInvoices = pgTable('shipping_invoices', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id).notNull(),
+  trackingNumber: text('tracking_number').notNull(),
+  invoicePeriodStart: date('invoice_period_start').notNull(),
+  invoicePeriodEnd: date('invoice_period_end').notNull(),
+  actualCost: numeric('actual_cost', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+  source: text('source').notNull(),
+}, (t) => [
+  uniqueIndex('shipping_invoices_store_tracking_idx').on(t.storeId, t.trackingNumber),
+  index('shipping_invoices_carrier_period_idx').on(t.carrierAccountId, t.invoicePeriodStart),
+]);
+
+export const shopifySyncState = pgTable('shopify_sync_state', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),
+  backfillStatus: text('backfill_status').notNull().default('idle'),
+  backfillCursor: text('backfill_cursor'),
+  backfillStartedAt: timestamp('backfill_started_at'),
+  backfillFinishedAt: timestamp('backfill_finished_at'),
+  backfillError: text('backfill_error'),
+  lastWebhookAt: timestamp('last_webhook_at'),
+  lastCronSyncAt: timestamp('last_cron_sync_at'),
+  lastCronCursor: text('last_cron_cursor'),
+});
+
+export const shopifyWebhookLog = pgTable('shopify_webhook_log', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  topic: text('topic').notNull(),
+  shopifyWebhookId: text('shopify_webhook_id').notNull().unique(),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  processedAt: timestamp('processed_at'),
+  status: text('status').notNull(),
+  error: text('error'),
+  payloadHash: text('payload_hash').notNull(),
+}, (t) => [
+  index('shopify_webhook_log_store_received_idx').on(t.storeId, t.receivedAt),
+]);

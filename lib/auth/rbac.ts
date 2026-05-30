@@ -12,7 +12,10 @@ export type Permission =
   | 'apply_markets'
   | 'view_markets_history'
   | 'manage_carrier_rates'
-  | 'view_carrier_rates';
+  | 'view_carrier_rates'
+  | 'view_orders'
+  | 'manage_sku_costs'
+  | 'manage_shipping_invoices';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -22,14 +25,19 @@ const MATRIX: Record<Role, Permission[]> = {
     'manage_users',
     'manage_markets_template', 'apply_markets', 'view_markets_history',
     'manage_carrier_rates', 'view_carrier_rates',
+    'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
   ],
   operator: [
     'view', 'run_feature',
     'apply_settings', 'reconcile_store', 'view_settings_history',
     'apply_markets', 'view_markets_history',
     'manage_carrier_rates', 'view_carrier_rates',
+    'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
   ],
-  viewer: ['view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates'],
+  viewer: [
+    'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
+    'view_orders',
+  ],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {
