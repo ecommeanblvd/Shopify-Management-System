@@ -7,6 +7,7 @@ import { encryptToken } from '@/lib/shopify/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { getEnv } from '@/lib/env';
 import { registerOrderWebhooks } from '@/features/shopify-orders/webhook/register-subscriptions';
+import { runBackfillForStore } from '@/features/shopify-orders/backfill/run-backfill';
 
 // Matches the same regex used in the install route.
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
@@ -94,13 +95,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const encryptedToken = encryptToken(tokenData.access_token);
     const scopes = env.SHOPIFY_SCOPES.split(',');
 
-    // Step 8: Upsert the store row.
+    // Step 8: Upsert the store row, capturing the id either way so we can
+    // chain webhook registration + auto-backfill against it.
     const [existing] = await db
       .select({ id: schema.stores.id })
       .from(schema.stores)
       .where(eq(schema.stores.shopDomain, shop))
       .limit(1);
 
+    let storeId: string;
     if (existing) {
       await db
         .update(schema.stores)
@@ -111,15 +114,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           apiVersion: env.SHOPIFY_API_VERSION,
         })
         .where(eq(schema.stores.shopDomain, shop));
+      storeId = existing.id;
     } else {
-      await db.insert(schema.stores).values({
-        name: shop.replace('.myshopify.com', ''),
-        shopDomain: shop,
-        encryptedToken,
-        scopes,
-        apiVersion: env.SHOPIFY_API_VERSION,
-        status: 'active',
-      });
+      const [inserted] = await db
+        .insert(schema.stores)
+        .values({
+          name: shop.replace('.myshopify.com', ''),
+          shopDomain: shop,
+          encryptedToken,
+          scopes,
+          apiVersion: env.SHOPIFY_API_VERSION,
+          status: 'active',
+        })
+        .returning({ id: schema.stores.id });
+      storeId = inserted!.id;
     }
 
     // Step 8b: Register order-related webhooks against the freshly-issued token.
@@ -138,6 +146,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         target: shop,
         result: 'error',
         errorDetail: String(webhookErr),
+      });
+    }
+
+    // Step 8c: Auto-trigger a 12-month order backfill on first connect.
+    // Skip when the store already has a backfill that's running or done so
+    // a re-install (token refresh, scope upgrade) doesn't burn API quota.
+    // Fire-and-forget: the backfill polls Shopify for minutes-to-hours;
+    // we just need the OAuth callback to return inside Shopify's timeout.
+    const [syncState] = await db
+      .select({ status: schema.shopifySyncState.backfillStatus })
+      .from(schema.shopifySyncState)
+      .where(eq(schema.shopifySyncState.storeId, storeId))
+      .limit(1);
+    const shouldBackfill = !syncState || syncState.status === 'idle' || syncState.status === 'failed';
+    if (shouldBackfill) {
+      void runBackfillForStore(storeId).catch(async (backfillErr) => {
+        // Status + error are also recorded inside runBackfillForStore; this
+        // catch only exists so an unhandled rejection doesn't crash the
+        // Node process.
+        await recordAudit({
+          userId,
+          action: 'connect_store_backfill',
+          target: shop,
+          result: 'error',
+          errorDetail: String(backfillErr),
+        });
       });
     }
 
