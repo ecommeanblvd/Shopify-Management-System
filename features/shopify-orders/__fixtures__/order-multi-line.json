@@ -1,0 +1,45 @@
+{
+  "id": "gid://shopify/Order/5000000003",
+  "name": "#1003",
+  "createdAt": "2026-05-04T11:00:00Z",
+  "processedAt": "2026-05-04T11:00:30Z",
+  "cancelledAt": null,
+  "displayFinancialStatus": "PAID",
+  "displayFulfillmentStatus": "FULFILLED",
+  "currencyCode": "USD",
+  "subtotalLineItemsQuantity": 3,
+  "totalDiscountsSet": { "shopMoney": { "amount": "10.00", "currencyCode": "USD" } },
+  "totalShippingPriceSet": { "shopMoney": { "amount": "15.00", "currencyCode": "USD" } },
+  "totalTaxSet": { "shopMoney": { "amount": "0.00", "currencyCode": "USD" } },
+  "totalPriceSet": { "shopMoney": { "amount": "105.00", "currencyCode": "USD" } },
+  "shippingAddress": { "countryCodeV2": "VN" },
+  "totalWeight": 1200,
+  "lineItems": {
+    "nodes": [
+      {
+        "id": "gid://shopify/LineItem/9000000003",
+        "sku": "MEAN-SHIRT-001",
+        "vendor": "MEAN Studio",
+        "title": "Logo Tee",
+        "variantTitle": "M",
+        "quantity": 2,
+        "originalUnitPriceSet": { "shopMoney": { "amount": "50.00", "currencyCode": "USD" } },
+        "discountAllocations": [
+          { "allocatedAmountSet": { "shopMoney": { "amount": "10.00", "currencyCode": "USD" } } }
+        ]
+      },
+      {
+        "id": "gid://shopify/LineItem/9000000004",
+        "sku": "OTHER-VENDOR-B",
+        "vendor": "Other Brand",
+        "title": "Sticker Pack",
+        "variantTitle": null,
+        "quantity": 1,
+        "originalUnitPriceSet": { "shopMoney": { "amount": "10.00", "currencyCode": "USD" } },
+        "discountAllocations": []
+      }
+    ]
+  },
+  "refunds": [],
+  "fulfillments": [{ "trackingInfo": [{ "number": "TRK-003", "company": "DHL" }] }]
+}

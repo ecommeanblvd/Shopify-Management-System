@@ -1,0 +1,40 @@
+{
+  "id": "gid://shopify/Order/5000000002",
+  "name": "#1002",
+  "createdAt": "2026-05-02T09:00:00Z",
+  "processedAt": "2026-05-02T09:00:30Z",
+  "cancelledAt": null,
+  "displayFinancialStatus": "REFUNDED",
+  "displayFulfillmentStatus": "FULFILLED",
+  "currencyCode": "USD",
+  "subtotalLineItemsQuantity": 1,
+  "totalDiscountsSet": { "shopMoney": { "amount": "0.00", "currencyCode": "USD" } },
+  "totalShippingPriceSet": { "shopMoney": { "amount": "8.00", "currencyCode": "USD" } },
+  "totalTaxSet": { "shopMoney": { "amount": "0.00", "currencyCode": "USD" } },
+  "totalPriceSet": { "shopMoney": { "amount": "38.00", "currencyCode": "USD" } },
+  "shippingAddress": { "countryCodeV2": "US" },
+  "totalWeight": 500,
+  "lineItems": {
+    "nodes": [
+      {
+        "id": "gid://shopify/LineItem/9000000002",
+        "sku": "MEAN-MUG-A",
+        "vendor": "MEAN Studio",
+        "title": "Logo Mug",
+        "variantTitle": null,
+        "quantity": 1,
+        "originalUnitPriceSet": { "shopMoney": { "amount": "30.00", "currencyCode": "USD" } },
+        "discountAllocations": []
+      }
+    ]
+  },
+  "refunds": [
+    {
+      "id": "gid://shopify/Refund/4000000001",
+      "createdAt": "2026-05-03T10:00:00Z",
+      "totalRefundedSet": { "shopMoney": { "amount": "38.00", "currencyCode": "USD" } },
+      "note": "customer returned"
+    }
+  ],
+  "fulfillments": [{ "trackingInfo": [{ "number": "TRK-002", "company": "FedEx" }] }]
+}
