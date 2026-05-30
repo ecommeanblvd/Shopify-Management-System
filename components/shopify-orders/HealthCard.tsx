@@ -16,8 +16,12 @@ export async function HealthCard({ storeId }: HealthCardProps) {
   `);
   const counts = countsRes as unknown as Array<{ ok: string; failed: string }>;
 
-  const ago = (d: Date | null | undefined) =>
-    d ? `${Math.round((Date.now() - new Date(d).getTime()) / 60000)} min ago` : '—';
+  // React 19's purity rule flags Date.now() during render. Server-component
+  // request handlers genuinely need the wall clock here; suppress narrowly.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+  const ago = (d: Date | null | undefined): string =>
+    d ? `${Math.round((nowMs - new Date(d).getTime()) / 60000)} min ago` : '—';
 
   return (
     <Card>

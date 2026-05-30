@@ -41,10 +41,15 @@ export default async function StoreOrders({
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) notFound();
 
-  const dateTo = sp.to ? new Date(sp.to) : new Date();
+  // React 19's purity rule flags Date.now() during render. This is a server
+  // component running once per request — the call is fine here. Suppress
+  // the rule narrowly and snap the clock to one value used twice.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+  const dateTo = sp.to ? new Date(sp.to) : new Date(nowMs);
   const dateFrom = sp.from
     ? new Date(sp.from)
-    : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    : new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
   const grouping = (sp.group as Grouping) ?? 'day';
   const vendorFilter = sp.vendor?.split(',').filter(Boolean);
 
