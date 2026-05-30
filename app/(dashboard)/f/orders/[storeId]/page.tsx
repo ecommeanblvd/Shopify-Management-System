@@ -10,7 +10,7 @@ import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
-import { HealthPopover, type HealthSnapshot } from '@/components/shopify-orders/HealthPopover';
+import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,12 +97,39 @@ export default async function StoreOrders({
      WHERE store_id = ${storeId} AND received_at > NOW() - INTERVAL '24 hours';
   `);
   const webhookCounts = webhookCountsRes as unknown as Array<{ ok: string; failed: string }>;
+  const orderCountRes = await db.execute<{ n: string }>(sql`
+    SELECT COUNT(*)::text AS n FROM shopify_orders WHERE store_id = ${storeId};
+  `);
+  const orderCount = Number((orderCountRes as unknown as Array<{ n: string }>)[0]?.n ?? '0');
+
   const ago = (d: Date | null | undefined): string =>
     d ? `${Math.round((nowMs - new Date(d).getTime()) / 60000)} min ago` : '—';
+  const duration = (a: Date | null, b: Date | null): string => {
+    if (!a || !b) return '—';
+    const secs = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 1000);
+    if (secs < 60) return `${secs} s`;
+    if (secs < 3600) return `${Math.round(secs / 60)} min`;
+    return `${(secs / 3600).toFixed(1)} h`;
+  };
+
+  // Narrow to the typed union; fallback to 'idle' for anything unrecognised so
+  // the UI keeps rendering even if the DB ever carries an unexpected value.
+  const ALLOWED: ReadonlySet<BackfillStatus> = new Set(['idle', 'running', 'done', 'failed']);
+  const rawStatus = syncState?.backfillStatus ?? 'idle';
+  const backfillStatus: BackfillStatus = ALLOWED.has(rawStatus as BackfillStatus)
+    ? (rawStatus as BackfillStatus)
+    : 'idle';
+
   const snapshot: HealthSnapshot = {
     lastWebhookAgo: ago(syncState?.lastWebhookAt),
     lastCronAgo: ago(syncState?.lastCronSyncAt),
-    backfillStatus: syncState?.backfillStatus ?? 'idle',
+    backfillStatus,
+    backfillStartedAgo: ago(syncState?.backfillStartedAt),
+    backfillFinishedAgo: ago(syncState?.backfillFinishedAt),
+    backfillDurationLabel: duration(syncState?.backfillStartedAt ?? null, syncState?.backfillFinishedAt ?? null),
+    backfillError: syncState?.backfillError ?? null,
+    backfillCursor: syncState?.backfillCursor ?? null,
+    ordersInDb: orderCount,
     webhooksOk: webhookCounts[0]?.ok ?? '0',
     webhooksFailed: webhookCounts[0]?.failed ?? '0',
   };
