@@ -96,11 +96,11 @@ export default async function StoreOrders({
       FROM shopify_webhook_log
      WHERE store_id = ${storeId} AND received_at > NOW() - INTERVAL '24 hours';
   `);
-  const webhookCounts = webhookCountsRes as unknown as Array<{ ok: string; failed: string }>;
+  const webhookCounts = webhookCountsRes.rows;
   const orderCountRes = await db.execute<{ n: string }>(sql`
     SELECT COUNT(*)::text AS n FROM shopify_orders WHERE store_id = ${storeId};
   `);
-  const orderCount = Number((orderCountRes as unknown as Array<{ n: string }>)[0]?.n ?? '0');
+  const orderCount = Number(orderCountRes.rows[0]?.n ?? '0');
 
   const ago = (d: Date | null | undefined): string =>
     d ? `${Math.round((nowMs - new Date(d).getTime()) / 60000)} min ago` : '—';

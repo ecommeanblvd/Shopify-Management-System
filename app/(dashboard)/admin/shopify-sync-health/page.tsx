@@ -42,7 +42,10 @@ export default async function SyncHealth() {
      WHERE received_at > NOW() - INTERVAL '24 hours'
      GROUP BY store_id;
   `);
-  const webhookCounts = webhookCountsRes as unknown as Array<{ store_id: string; ok: string; failed: string }>;
+  // db.execute returns pg's QueryResult — the rows live under `.rows`,
+  // not the top-level object. Casting it as an array directly silently
+  // breaks `.map`/`.length` calls (b.map is not a function in production).
+  const webhookCounts = webhookCountsRes.rows;
   const wcMap = new Map(webhookCounts.map((w) => [w.store_id, w]));
 
   async function backfillTriggerAction(formData: FormData): Promise<void> {

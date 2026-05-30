@@ -267,9 +267,8 @@ export async function getMissingCostOrders(
      ORDER BY o.processed_at_shopify DESC
      LIMIT 100;
   `);
-  return (rows as unknown as Array<{
-    order_id: string; shopify_order_number: string; processed_at_shopify: Date | string; missing_skus: string[] | null;
-  }>).map((r) => ({
+  // db.execute returns pg.QueryResult; rows are under `.rows`.
+  return rows.rows.map((r) => ({
     orderId: r.order_id,
     shopifyOrderNumber: r.shopify_order_number,
     processedAt: r.processed_at_shopify instanceof Date ? r.processed_at_shopify : new Date(r.processed_at_shopify),
@@ -309,5 +308,9 @@ export async function getMissingInvoiceShipments(
      ORDER BY t.shopify_order_number
      LIMIT 100;
   `);
-  return rows as unknown as MissingInvoiceShipment[];
+  return rows.rows.map((r) => ({
+    orderId: r.order_id,
+    shopifyOrderNumber: r.shopify_order_number,
+    trackingNumber: r.tracking_number,
+  }));
 }

@@ -33,9 +33,7 @@ export async function applySkuCosts(input: ApplySkuCostsInput): Promise<ApplySku
        AND (sku, effective_from) IN
            (${sql.join(rows.map((r) => sql`(${r.sku}, ${r.effectiveFrom}::date)`), sql`, `)})
   `);
-  const overwritten = Number(
-    (existingCountRes as unknown as { count: string }[])[0]?.count ?? 0,
-  );
+  const overwritten = Number(existingCountRes.rows[0]?.count ?? 0);
 
   for (const r of rows) {
     await db.insert(schema.skuCosts)
