@@ -75,7 +75,13 @@ export interface QuoteBreakdown {
   perKg: number;
   markup: number;
   subtotalBeforeMarkup: number;
+  /** What we pay the carrier (subtotalBeforeMarkup), in cost currency. */
+  carrierCost: number;
+  /** Same as `carrierCost` but converted via `fxCostPerDisplay`. */
+  carrierCostDisplay: number;
+  /** Customer-facing offer: subtotalBeforeMarkup + markup, in cost currency. */
   finalCost: number;
+  /** Same as `finalCost` but in display currency. */
   finalDisplay: number;
 }
 
@@ -171,9 +177,6 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     };
   }
 
-  const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
-  const fuel = base * (fuelPct / 100);
-
   const peak = sumActiveOfKind(snap.surcharges, 'peak_fixed');
 
   const perKgUnit = sumActiveOfKind(snap.surcharges, 'per_kg_fixed');
@@ -195,11 +198,25 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     ? sumActiveOfKind(snap.surcharges, 'residential_fixed')
     : 0;
 
-  const subtotalBeforeMarkup = base + fuel + peak + remote + residential + perKg;
+  // Carrier billing model: fuel surcharge is charged as a % of the entire
+  // freight + accessorial subtotal — NOT just the base rate. So fuel
+  // applies to (base + peak + remote + residential + perKg). Markup is
+  // our operator margin layered on top of that carrier bill.
+  const fuelable = base + peak + remote + residential + perKg;
+  const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
+  const fuel = fuelable * (fuelPct / 100);
+
+  const subtotalBeforeMarkup = fuelable + fuel;
   const markupPct = sumActiveOfKind(snap.surcharges, 'markup_percent');
   const markup = subtotalBeforeMarkup * (markupPct / 100);
   const finalCost = Math.round(subtotalBeforeMarkup + markup);
   const finalDisplay = Math.round((finalCost / snap.fxCostPerDisplay) * 100) / 100;
+
+  // What we PAY the carrier — pre-markup, in the carrier's cost currency
+  // and its display equivalent. Distinct from `finalCost` (which includes
+  // our markup, i.e. the customer-facing offer).
+  const carrierCost = Math.round(subtotalBeforeMarkup);
+  const carrierCostDisplay = Math.round((carrierCost / snap.fxCostPerDisplay) * 100) / 100;
 
   return {
     ok: true,
@@ -214,6 +231,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       perKg: Math.round(perKg),
       markup: Math.round(markup),
       subtotalBeforeMarkup: Math.round(subtotalBeforeMarkup),
+      carrierCost,
+      carrierCostDisplay,
       finalCost,
       finalDisplay,
     },

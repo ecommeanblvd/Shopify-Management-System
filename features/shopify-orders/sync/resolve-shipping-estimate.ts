@@ -80,7 +80,10 @@ export async function resolveShippingEstimate(
       destinationCountry: input.shipCountry,
     });
     if (q.ok) {
-      const amt = q.breakdown.finalDisplay;
+      // We want what we PAY the carrier, not the customer-facing offer.
+      // `finalDisplay` includes our markup; `carrierCostDisplay` is the
+      // pre-markup carrier bill in the display currency.
+      const amt = q.breakdown.carrierCostDisplay;
       if (best === null || amt < best) best = amt;
     }
   }

@@ -56,6 +56,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     .select({
       costCurrency: schema.stores.costCurrency,
       fxCostPerOrderCurrency: schema.stores.fxCostPerOrderCurrency,
+      packagingFee: schema.stores.packagingFee,
     })
     .from(schema.stores)
     .where(eq(schema.stores.id, args.storeId));
@@ -65,6 +66,11 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
       ? Number(store.fxCostPerOrderCurrency)
       : null,
   };
+  // Flat per-order packaging fee in the order currency. Added to every
+  // shipping cost computation (invoice, override, engine estimate).
+  const packagingFee = store?.packagingFee !== null && store?.packagingFee !== undefined
+    ? Number(store.packagingFee)
+    : 0;
   const convertCost = (amount: number, fromCurrency: string | null, orderCurrency: string): number => {
     if (!fromCurrency || fromCurrency === orderCurrency) return amount;
     if (!storeFx.costCurrency || !storeFx.fxRate || storeFx.fxRate === 0) return amount;
@@ -166,6 +172,16 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         });
         shippingCost = { amount: est.amount * share, source: est.source };
       }
+    }
+    // Add flat packaging fee on top of whatever path produced the shipping
+    // cost — boxes / labels / dunnage are paid regardless of which carrier
+    // ends up shipping. Splits pro-rata with the same `share` as the rest
+    // of the order-level costs when a vendor filter is active.
+    if (packagingFee > 0 && shippingCost.source !== 'unknown') {
+      shippingCost = {
+        amount: shippingCost.amount + packagingFee * share,
+        source: shippingCost.source,
+      };
     }
 
     // Per-line SKU cost — line-level override wins over the sku_costs lookup.

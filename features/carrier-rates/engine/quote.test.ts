@@ -76,10 +76,13 @@ describe('quote engine', () => {
       expect(r.ok).toBe(true);
       if (!r.ok) return;
       expect(r.breakdown.remote).toBe(150_000);
-      expect(r.breakdown.subtotalBeforeMarkup).toBe(514_000); // 280 + 84 + 150
-      expect(r.breakdown.markup).toBe(61_680); // 12% of 514_000
-      expect(r.breakdown.finalCost).toBe(575_680);
-      expect(r.breakdown.finalDisplay).toBeCloseTo(22.14, 2);
+      // Fuel applies to (base + remote) = 430,000 × 30% = 129,000
+      expect(r.breakdown.fuel).toBe(129_000);
+      expect(r.breakdown.subtotalBeforeMarkup).toBe(559_000); // 430 + 129 fuel
+      expect(r.breakdown.carrierCost).toBe(559_000);
+      expect(r.breakdown.markup).toBe(67_080); // 12% of 559_000
+      expect(r.breakdown.finalCost).toBe(626_080);
+      expect(r.breakdown.finalDisplay).toBeCloseTo(24.08, 2);
     });
 
     it('rounds up to the next tier (1.2 kg → 2 kg tier)', () => {

@@ -34,6 +34,11 @@ export const stores = pgTable('stores', {
   costCurrency: text('cost_currency'),
   fxCostPerOrderCurrency: numeric('fx_cost_per_order_currency', { precision: 14, scale: 4 }),
   costFxUpdatedAt: timestamp('cost_fx_updated_at'),
+  // Flat per-order packaging fee the operator pays on top of the carrier
+  // bill — boxes, dunnage, labels, fulfilment labour. Currently set per
+  // store (e.g. $5/order for Mirer). Stored in the order currency so the
+  // dashboard can subtract it directly without an FX step.
+  packagingFee: numeric('packaging_fee', { precision: 14, scale: 2 }),
 });
 
 export const featureFlags = pgTable('feature_flags', {

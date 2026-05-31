@@ -155,6 +155,7 @@ export default async function StoreOrders({
               orderCurrency={total.currency || 'USD'}
               initialCostCurrency={store.costCurrency}
               initialFxRate={store.fxCostPerOrderCurrency}
+              initialPackagingFee={store.packagingFee}
               saveAction={updateStoreCostFx}
             />
           )}

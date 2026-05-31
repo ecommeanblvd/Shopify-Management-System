@@ -12,7 +12,10 @@ interface CostFxButtonProps {
   orderCurrency: string;
   initialCostCurrency: string | null;
   initialFxRate: string | null;
-  saveAction: (input: { storeId: string; costCurrency: string; fxRate: string }) => Promise<void>;
+  initialPackagingFee: string | null;
+  saveAction: (input: {
+    storeId: string; costCurrency: string; fxRate: string; packagingFee: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -23,22 +26,29 @@ interface CostFxButtonProps {
  * is treated as $7.50 of COGs, not $180,000).
  */
 export function CostFxButton({
-  storeId, orderCurrency, initialCostCurrency, initialFxRate, saveAction,
+  storeId, orderCurrency, initialCostCurrency, initialFxRate, initialPackagingFee, saveAction,
 }: CostFxButtonProps) {
   const [open, setOpen] = useState(false);
   const [costCurrency, setCostCurrency] = useState(initialCostCurrency ?? '');
   const [fxRate, setFxRate] = useState(initialFxRate ?? '');
+  const [packagingFee, setPackagingFee] = useState(initialPackagingFee ?? '');
   const [pending, startTransition] = useTransition();
 
   const onSave = (): void => {
     startTransition(async () => {
-      await saveAction({ storeId, costCurrency, fxRate });
+      await saveAction({ storeId, costCurrency, fxRate, packagingFee });
       setOpen(false);
     });
   };
 
-  const summary = initialCostCurrency && initialFxRate
-    ? `Cost: ${initialCostCurrency} @ ${Number(initialFxRate).toLocaleString()}`
+  const fxLabel = initialCostCurrency && initialFxRate
+    ? `${initialCostCurrency} @ ${Number(initialFxRate).toLocaleString()}`
+    : null;
+  const packagingLabel = initialPackagingFee
+    ? `+${Number(initialPackagingFee)}/${orderCurrency}`
+    : null;
+  const summary = fxLabel
+    ? `Cost: ${fxLabel}${packagingLabel ? ` · pkg ${packagingLabel}` : ''}`
     : 'Cost FX';
 
   return (
@@ -106,6 +116,30 @@ export function CostFxButton({
               <span className="block text-[11px] text-muted-foreground">
                 How many <span className="font-mono">{costCurrency || 'cost-currency'}</span> units equal 1
                 {' '}<span className="font-mono">{orderCurrency || 'order-currency'}</span> unit.
+              </span>
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Packaging fee / order
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="e.g. 5 (USD per order)"
+                  value={packagingFee}
+                  onChange={(e) => setPackagingFee(e.target.value)}
+                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+                />
+                <span className="text-xs font-mono text-muted-foreground shrink-0">
+                  {orderCurrency || 'USD'}
+                </span>
+              </div>
+              <span className="block text-[11px] text-muted-foreground">
+                Boxes, labels, fulfilment labour — added to every order's shipping
+                cost. In the order currency, NOT the cost currency.
               </span>
             </label>
           </div>
