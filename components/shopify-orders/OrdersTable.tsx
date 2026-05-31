@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -8,9 +8,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MoneyInput } from '@/components/ui/money-input';
 import { currencyDecimals } from '@/lib/currency-format';
-import { Pencil, Save, RotateCcw, Loader2 } from 'lucide-react';
+import {
+  Pencil, Save, RotateCcw, Loader2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+} from 'lucide-react';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
+type PageSize = typeof PAGE_SIZE_OPTIONS[number];
 
 interface OrdersTableProps {
   orders: OrderRow[];
@@ -33,6 +38,9 @@ export function OrdersTable({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<PageSize>(25);
 
   const openRow = async (orderId: string): Promise<void> => {
     if (!canEdit) return;
@@ -45,9 +53,74 @@ export function OrdersTable({
     }
   };
 
+  // Substring match against the order number. Case-insensitive, ignores
+  // a leading "#" so operators can paste from Shopify admin's "#1234" or
+  // type "1234" — both work. Memoised so we don't re-scan thousands of
+  // orders on every keystroke.
+  const filtered = useMemo(() => {
+    const q = search.trim().replace(/^#/, '').toLowerCase();
+    if (!q) return orders;
+    return orders.filter((o) => o.shopifyOrderNumber.toLowerCase().includes(q));
+  }, [orders, search]);
+
+  // Reset to page 0 when the result set shrinks under the operator's feet.
+  useEffect(() => { setPage(0); }, [search, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const startIdx = safePage * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, filtered.length);
+  const visible = filtered.slice(startIdx, endIdx);
+
   return (
     <>
       <Card>
+        {/* Toolbar: search + page-size selector + result count */}
+        <div className="flex items-center gap-3 px-3 py-2.5 border-b border-border flex-wrap">
+          <div className="relative flex-1 min-w-[220px] max-w-md">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by order number — e.g. 1234 or #MR1234"
+              className="w-full h-8 pl-8 pr-8 border border-input bg-input/30 rounded-md text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              aria-label="Search orders by order number"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+            {filtered.length === 0
+              ? 'No matches'
+              : `${(startIdx + 1).toLocaleString()}–${endIdx.toLocaleString()} of ${filtered.length.toLocaleString()}`}
+            {search && filtered.length !== orders.length && (
+              <span className="text-muted-foreground/60"> (filtered from {orders.length.toLocaleString()})</span>
+            )}
+          </div>
+          <div className="ml-auto flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground uppercase tracking-wider">Rows</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+              className="h-7 border border-input bg-input/30 rounded-md px-1.5 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              aria-label="Rows per page"
+            >
+              {PAGE_SIZE_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
@@ -68,14 +141,16 @@ export function OrdersTable({
               </tr>
             </thead>
             <tbody>
-              {orders.length === 0 && (
+              {visible.length === 0 && (
                 <tr>
                   <td colSpan={canEdit ? 13 : 12} className="px-4 py-6 text-center text-muted-foreground">
-                    No orders in this window.
+                    {orders.length === 0
+                      ? 'No orders in this window.'
+                      : `No orders match "${search}".`}
                   </td>
                 </tr>
               )}
-              {orders.map((o) => (
+              {visible.map((o) => (
                 <tr
                   key={o.orderId}
                   onClick={() => canEdit && openRow(o.orderId)}
@@ -127,6 +202,29 @@ export function OrdersTable({
             </tbody>
           </table>
         </CardContent>
+
+        {/* Pagination — hide entirely when there's no more than one page. */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 px-3 py-2 border-t border-border text-xs">
+            <span className="text-muted-foreground font-mono tabular-nums">
+              Page {safePage + 1} of {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <PageButton onClick={() => setPage(0)} disabled={safePage === 0} ariaLabel="First page">
+                <ChevronsLeft className="size-3.5" />
+              </PageButton>
+              <PageButton onClick={() => setPage(safePage - 1)} disabled={safePage === 0} ariaLabel="Previous page">
+                <ChevronLeft className="size-3.5" />
+              </PageButton>
+              <PageButton onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages - 1} ariaLabel="Next page">
+                <ChevronRight className="size-3.5" />
+              </PageButton>
+              <PageButton onClick={() => setPage(totalPages - 1)} disabled={safePage >= totalPages - 1} ariaLabel="Last page">
+                <ChevronsRight className="size-3.5" />
+              </PageButton>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -334,6 +432,31 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
         </Button>
       </DialogFooter>
     </div>
+  );
+}
+
+interface PageButtonProps {
+  onClick: () => void;
+  disabled: boolean;
+  ariaLabel: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Square chevron button used by the pagination strip. Disabled buttons
+ * stay rendered (so the row doesn't reflow) but lose their hover state.
+ */
+function PageButton({ onClick, disabled, ariaLabel, children }: PageButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className="size-7 inline-flex items-center justify-center rounded-md border border-input bg-input/30 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40 disabled:hover:bg-input/30 disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+    >
+      {children}
+    </button>
   );
 }
 
