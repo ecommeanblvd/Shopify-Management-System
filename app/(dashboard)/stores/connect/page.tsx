@@ -1,9 +1,7 @@
 import Link from 'next/link';
 import { ChevronLeft, Store, ShieldCheck, Plug } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { ShopHandleInput } from '@/components/stores/ShopHandleInput';
 
 export default function ConnectStorePage() {
   return (
@@ -36,31 +34,11 @@ export default function ConnectStorePage() {
                 <Store className="size-4" />
               </div>
               <div>
-                <h2 className="text-base font-semibold">Shop domain</h2>
-                <p className="text-xs text-muted-foreground">The {`{handle}`}.myshopify.com URL of the store.</p>
+                <h2 className="text-base font-semibold">Shop handle</h2>
+                <p className="text-xs text-muted-foreground">Just the handle — we attach .myshopify.com for you.</p>
               </div>
             </div>
-            <form action="/api/auth/shopify/install" method="get" className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="shop" className="text-xs uppercase tracking-wider text-muted-foreground">Shop domain</Label>
-                <Input
-                  id="shop"
-                  name="shop"
-                  placeholder="your-shop.myshopify.com"
-                  required
-                  pattern="[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com"
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Lowercase letters, numbers, or dashes — ending in{' '}
-                  <span className="font-mono">.myshopify.com</span>.
-                </p>
-              </div>
-              <Button type="submit" size="lg" className="w-full gap-2">
-                <Plug className="size-4" />
-                Continue to Shopify
-              </Button>
-            </form>
+            <ShopHandleInput installPath="/api/auth/shopify/install" />
           </CardContent>
         </Card>
 
