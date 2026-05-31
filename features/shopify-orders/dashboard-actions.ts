@@ -140,14 +140,25 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     //   2. Matching shipping_invoices row
     //   3. Live carrier-engine estimate
     //   4. unknown
+    //
+    // Overrides and invoices are entered in the store's cost currency
+    // (Vietnamese brands pay carriers in VND even though the customer
+    // settled in USD). The same convertCost() helper folds them back to
+    // the order currency before the revenue formula sees them. Engine
+    // quotes already come back in the carrier-account's display currency,
+    // which we treat as the order currency.
     let shippingCost: { amount: number; source: 'override' | 'invoice' | 'engine_estimate' | 'unknown' };
     if (o.shippingCostOverride !== null) {
-      shippingCost = { amount: Number(o.shippingCostOverride) * share, source: 'override' };
+      const raw = Number(o.shippingCostOverride);
+      const converted = convertCost(raw, storeFx.costCurrency ?? o.currency, o.currency);
+      shippingCost = { amount: converted * share, source: 'override' };
     } else {
       const tracking = trackingByOrder.get(o.id) ?? [];
       const matchingInvoice = tracking.map((t) => invoiceIndex.get(t)).find((i) => !!i);
       if (matchingInvoice) {
-        shippingCost = { amount: Number(matchingInvoice.actualCost) * share, source: 'invoice' };
+        const raw = Number(matchingInvoice.actualCost);
+        const converted = convertCost(raw, matchingInvoice.currency, o.currency);
+        shippingCost = { amount: converted * share, source: 'invoice' };
       } else {
         const est = await resolveShippingEstimate({
           shipCountry: o.shipCountry,
