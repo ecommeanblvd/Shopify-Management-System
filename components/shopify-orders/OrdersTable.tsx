@@ -165,9 +165,27 @@ export function OrdersTable({
           </div>
         )}
 
-        <CardContent className="p-0 overflow-x-auto">
+        {/*
+          Constrain the table to its own scroll context so the column
+          headers can stay sticky as the operator scrolls through long
+          pages. `max-h: viewport - chrome` keeps the toolbar, KPIs, and
+          filters visible above the table; `min-h` prevents the table
+          from collapsing to nothing on tall datasets.
+
+          `overflow-auto` (not just `-x`) is required for sticky to take
+          effect inside the card — sticky positioning needs a scroll
+          container.
+        */}
+        <CardContent className="p-0 overflow-auto max-h-[calc(100vh-22rem)] min-h-[280px]">
           <table className="w-full text-sm">
-            <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
+            {/*
+              Sticky to the CardContent scroll viewport. `bg-card` covers
+              the rows scrolling underneath; the shadow gives a subtle
+              depth cue when the user has scrolled past the start.
+              z-10 keeps the header above sticky cells should we ever
+              add a sticky first column.
+            */}
+            <thead className="sticky top-0 z-10 bg-card text-xs uppercase tracking-wider text-muted-foreground border-b border-border shadow-[0_1px_0_0_var(--color-border)]">
               <tr>
                 <th className="text-left px-3 py-2">Order #</th>
                 <th className="text-left px-3 py-2">Date</th>
