@@ -162,7 +162,11 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     // the order currency before the revenue formula sees them. Engine
     // quotes already come back in the carrier-account's display currency,
     // which we treat as the order currency.
-    let shippingCost: { amount: number; source: 'override' | 'invoice' | 'engine_estimate' | 'unknown' };
+    let shippingCost: {
+      amount: number;
+      source: 'override' | 'invoice' | 'engine_estimate' | 'unknown';
+      reason?: 'no_country' | 'no_weight' | 'no_market' | 'no_carrier_link' | 'no_quote';
+    };
     if (o.shippingCostOverride !== null) {
       const raw = Number(o.shippingCostOverride);
       const converted = convertCost(raw, storeFx.costCurrency ?? o.currency, o.currency);
@@ -179,7 +183,11 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
           shipCountry: o.shipCountry,
           shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
         });
-        shippingCost = { amount: est.amount * share, source: est.source };
+        shippingCost = {
+          amount: est.amount * share,
+          source: est.source,
+          reason: est.reason,
+        };
       }
     }
     // Add flat packaging fee on top of whatever path produced the shipping
@@ -190,6 +198,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
       shippingCost = {
         amount: shippingCost.amount + packagingFee * share,
         source: shippingCost.source,
+        reason: shippingCost.reason,
       };
     }
 
