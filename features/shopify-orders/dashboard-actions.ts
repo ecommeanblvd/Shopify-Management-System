@@ -49,6 +49,32 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
   }
   const orderIds = orders.map((o) => o.id);
 
+  // Per-store cost FX — used to convert COGs that were entered in a brand
+  // currency (e.g. Mirer's VND) into the order currency (USD) before the
+  // revenue formula subtracts them.
+  const [store] = await db
+    .select({
+      costCurrency: schema.stores.costCurrency,
+      fxCostPerOrderCurrency: schema.stores.fxCostPerOrderCurrency,
+    })
+    .from(schema.stores)
+    .where(eq(schema.stores.id, args.storeId));
+  const storeFx = {
+    costCurrency: store?.costCurrency ?? null,
+    fxRate: store?.fxCostPerOrderCurrency !== null && store?.fxCostPerOrderCurrency !== undefined
+      ? Number(store.fxCostPerOrderCurrency)
+      : null,
+  };
+  const convertCost = (amount: number, fromCurrency: string | null, orderCurrency: string): number => {
+    if (!fromCurrency || fromCurrency === orderCurrency) return amount;
+    if (!storeFx.costCurrency || !storeFx.fxRate || storeFx.fxRate === 0) return amount;
+    // We only know how to convert the store's configured cost currency.
+    // Anything else falls back uncorrected — the caller will see margins
+    // skew but won't blow up.
+    if (fromCurrency !== storeFx.costCurrency) return amount;
+    return amount / storeFx.fxRate;
+  };
+
   const lines = await db
     .select()
     .from(schema.shopifyOrderLines)
@@ -132,23 +158,40 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     }
 
     // Per-line SKU cost — line-level override wins over the sku_costs lookup.
+    // Costs that arrive in a different currency than the order are converted
+    // to the order currency via the per-store FX rate before the revenue
+    // formula sees them, so revenue/margin stay in a single currency.
     const skuCosts = filteredLines.map((l) => {
       if (l.costOverride !== null) {
+        // Manual override on the line — interpreted as the store's
+        // configured cost currency (Mirer's VND), or the order's own
+        // currency when the store has no FX set up.
+        const rawCurrency = storeFx.costCurrency ?? o.currency;
+        const converted = convertCost(Number(l.costOverride), rawCurrency, o.currency);
         return {
           lineId: l.id,
           quantity: l.quantity,
-          costPerUnit: Number(l.costOverride),
+          costPerUnit: converted,
           costCurrency: o.currency,
         };
       }
       const cost = l.sku
         ? (costIndex.get(l.sku) ?? []).find((c) => new Date(c.effectiveFrom) <= o.processedAtShopify)
         : null;
+      if (!cost) {
+        return {
+          lineId: l.id,
+          quantity: l.quantity,
+          costPerUnit: null,
+          costCurrency: null,
+        };
+      }
+      const converted = convertCost(Number(cost.costPerUnit), cost.currency, o.currency);
       return {
         lineId: l.id,
         quantity: l.quantity,
-        costPerUnit: cost ? Number(cost.costPerUnit) : null,
-        costCurrency: cost?.currency ?? null,
+        costPerUnit: converted,
+        costCurrency: o.currency,
       };
     });
 

@@ -20,6 +20,20 @@ export const stores = pgTable('stores', {
   status: storeStatusEnum('status').notNull().default('active'),
   maintenanceMode: boolean('maintenance_mode').notNull().default(false),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
+  // Brand cost-of-goods accounting can use a different currency than the
+  // Shopify store currency — Mirer for example takes USD orders but pays
+  // suppliers in VND. When `cost_currency` is set, all COGs numbers
+  // (sku_costs rows whose currency matches, plus per-line cost overrides
+  // entered against this store) are converted to the order currency at
+  // compute time using `fx_cost_per_order_currency`.
+  //
+  // Semantics: how many `cost_currency` units equal 1 unit of the order
+  // currency. For Mirer: cost_currency='VND', fx_cost_per_order_currency
+  // = 24000 means 1 USD = 24,000 VND. To translate a VND COGs figure
+  // into the USD revenue formula: divide by 24,000.
+  costCurrency: text('cost_currency'),
+  fxCostPerOrderCurrency: numeric('fx_cost_per_order_currency', { precision: 14, scale: 4 }),
+  costFxUpdatedAt: timestamp('cost_fx_updated_at'),
 });
 
 export const featureFlags = pgTable('feature_flags', {

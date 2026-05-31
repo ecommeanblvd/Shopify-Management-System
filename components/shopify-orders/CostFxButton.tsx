@@ -1,0 +1,126 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Coins, Save } from 'lucide-react';
+
+interface CostFxButtonProps {
+  storeId: string;
+  orderCurrency: string;
+  initialCostCurrency: string | null;
+  initialFxRate: string | null;
+  saveAction: (input: { storeId: string; costCurrency: string; fxRate: string }) => Promise<void>;
+}
+
+/**
+ * Header chip that surfaces the brand's COGs currency + FX rate against
+ * the order currency. Click → modal to set both. Once set, the metrics
+ * pipeline divides COGs by the FX rate before subtracting from revenue
+ * (so a Mirer order in USD whose SKU costs 180,000 VND with rate 24000
+ * is treated as $7.50 of COGs, not $180,000).
+ */
+export function CostFxButton({
+  storeId, orderCurrency, initialCostCurrency, initialFxRate, saveAction,
+}: CostFxButtonProps) {
+  const [open, setOpen] = useState(false);
+  const [costCurrency, setCostCurrency] = useState(initialCostCurrency ?? '');
+  const [fxRate, setFxRate] = useState(initialFxRate ?? '');
+  const [pending, startTransition] = useTransition();
+
+  const onSave = (): void => {
+    startTransition(async () => {
+      await saveAction({ storeId, costCurrency, fxRate });
+      setOpen(false);
+    });
+  };
+
+  const summary = initialCostCurrency && initialFxRate
+    ? `Cost: ${initialCostCurrency} @ ${Number(initialFxRate).toLocaleString()}`
+    : 'Cost FX';
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="h-8 gap-2 px-2.5 text-xs"
+        title="Brand cost-of-goods currency + FX rate to the order currency"
+      >
+        <Coins className="size-3.5" />
+        {summary}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="size-4" />
+              Brand COGs currency
+            </DialogTitle>
+            <DialogDescription>
+              Some brands invoice in a currency different from the order currency
+              (e.g. Mirer pays suppliers in <span className="font-mono">VND</span> for orders
+              that settle in <span className="font-mono">{orderCurrency || 'USD'}</span>). Set
+              the COGs currency and the FX rate; the dashboard will convert every COGs number
+              (CSV uploads + per-line overrides) into the order currency before subtracting
+              from revenue.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <label className="block space-y-1 text-sm">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Cost currency (ISO-3)
+              </span>
+              <input
+                type="text"
+                placeholder="e.g. VND, USD"
+                value={costCurrency}
+                onChange={(e) => setCostCurrency(e.target.value.toUpperCase())}
+                maxLength={3}
+                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono uppercase"
+              />
+              <span className="block text-[11px] text-muted-foreground">
+                Leave blank to treat all COGs as already in the order currency.
+              </span>
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                FX rate
+              </span>
+              <input
+                type="number"
+                step="0.0001"
+                inputMode="decimal"
+                placeholder="e.g. 24000 (1 USD = 24,000 VND)"
+                value={fxRate}
+                onChange={(e) => setFxRate(e.target.value)}
+                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+              />
+              <span className="block text-[11px] text-muted-foreground">
+                How many <span className="font-mono">{costCurrency || 'cost-currency'}</span> units equal 1
+                {' '}<span className="font-mono">{orderCurrency || 'order-currency'}</span> unit.
+              </span>
+            </label>
+          </div>
+
+          <DialogFooter className="flex-row sm:justify-between gap-2 pt-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={onSave} disabled={pending} className="gap-1.5">
+              <Save className="size-3.5" />
+              {pending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

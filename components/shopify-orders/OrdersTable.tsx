@@ -13,6 +13,9 @@ import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 interface OrdersTableProps {
   orders: OrderRow[];
   canEdit: boolean;
+  /** Currency the operator enters COGs/shipping overrides in (e.g. 'VND'
+   *  for Mirer). Falls back to the order currency when not set. */
+  costCurrency: string | null;
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
     orderId: string;
@@ -22,7 +25,9 @@ interface OrdersTableProps {
   }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>;
 }
 
-export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: OrdersTableProps) {
+export function OrdersTable({
+  orders, canEdit, costCurrency, getDetailAction, saveAction,
+}: OrdersTableProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
@@ -139,6 +144,7 @@ export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: Or
           ) : (
             <OrderEditForm
               detail={detail}
+              costCurrency={costCurrency}
               saveAction={saveAction}
               onSaved={() => setOpen(false)}
             />
@@ -151,11 +157,14 @@ export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: Or
 
 interface OrderEditFormProps {
   detail: OrderDetail;
+  costCurrency: string | null;
   saveAction: OrdersTableProps['saveAction'];
   onSaved: () => void;
 }
 
-function OrderEditForm({ detail, saveAction, onSaved }: OrderEditFormProps) {
+function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditFormProps) {
+  const cogsCcy = costCurrency || detail.currency;
+  const sameCcy = cogsCcy === detail.currency;
   // Initial state mirrors whatever's already in the DB. Empty string = no
   // override; falls back to defaults at compute time.
   const [lineCosts, setLineCosts] = useState<Record<string, string>>(
@@ -207,7 +216,14 @@ function OrderEditForm({ detail, saveAction, onSaved }: OrderEditFormProps) {
                   <th className="text-right px-3 py-2">Qty</th>
                   <th className="text-right px-3 py-2">Unit price</th>
                   <th className="text-right px-3 py-2">Default cost</th>
-                  <th className="text-right px-3 py-2 w-44">Cost override / unit</th>
+                  <th className="text-right px-3 py-2 w-44">
+                    Cost override / unit
+                    {!sameCcy && (
+                      <span className="ml-1 px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono">
+                        {cogsCcy}
+                      </span>
+                    )}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -229,19 +245,22 @@ function OrderEditForm({ detail, saveAction, onSaved }: OrderEditFormProps) {
                         : <span className="italic text-amber-600 dark:text-amber-400">no cost</span>}
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
-                        placeholder={l.defaultCostPerUnit !== null
-                          ? `default: ${l.defaultCostPerUnit}`
-                          : 'blank = no cost'}
-                        value={lineCosts[l.lineId] ?? ''}
-                        onChange={(e) =>
-                          setLineCosts((s) => ({ ...s, [l.lineId]: e.target.value }))
-                        }
-                        className="w-full h-8 border border-input bg-input/30 rounded-md px-2 text-xs font-mono text-right"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder={l.defaultCostPerUnit !== null
+                            ? `default: ${l.defaultCostPerUnit}`
+                            : 'blank = no cost'}
+                          value={lineCosts[l.lineId] ?? ''}
+                          onChange={(e) =>
+                            setLineCosts((s) => ({ ...s, [l.lineId]: e.target.value }))
+                          }
+                          className="w-full h-8 border border-input bg-input/30 rounded-md px-2 text-xs font-mono text-right"
+                        />
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
+                      </div>
                     </td>
                   </tr>
                 ))}
