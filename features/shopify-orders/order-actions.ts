@@ -38,6 +38,9 @@ export interface OrderShippingDetail {
   defaultShippingCost: number;
   /** Where the default would come from: 'invoice' | 'engine_estimate' | 'unknown'. */
   defaultSource: 'invoice' | 'engine_estimate' | 'unknown';
+  /** Present only when `defaultSource === 'unknown'`. Tells the operator
+   *  what's missing — see `EngineEstimateReason`. */
+  defaultUnknownReason: 'no_country' | 'no_weight' | 'no_market' | 'no_carrier_link' | 'no_quote' | null;
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
 }
@@ -78,9 +81,14 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
 
   // Shipping default — invoice if matched by tracking, else engine estimate, else unknown.
   const trackings = extractTrackingNumbers(order.rawPayload);
-  let defaultShipping: { amount: number; source: 'invoice' | 'engine_estimate' | 'unknown' } = {
+  let defaultShipping: {
+    amount: number;
+    source: 'invoice' | 'engine_estimate' | 'unknown';
+    reason: OrderShippingDetail['defaultUnknownReason'];
+  } = {
     amount: 0,
     source: 'unknown',
+    reason: null,
   };
   if (trackings.length > 0) {
     const invRes = await db.execute<{ tracking_number: string; actual_cost: string }>(sql`
@@ -91,7 +99,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     `);
     const inv = invRes.rows[0];
     if (inv) {
-      defaultShipping = { amount: Number(inv.actual_cost), source: 'invoice' };
+      defaultShipping = { amount: Number(inv.actual_cost), source: 'invoice', reason: null };
     }
   }
   if (defaultShipping.source === 'unknown') {
@@ -100,7 +108,11 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
     });
     if (est.source !== 'unknown') {
-      defaultShipping = { amount: est.amount, source: 'engine_estimate' };
+      defaultShipping = { amount: est.amount, source: 'engine_estimate', reason: null };
+    } else {
+      // Still unknown — capture WHY so the modal can show the operator
+      // exactly which prerequisite is missing.
+      defaultShipping = { amount: 0, source: 'unknown', reason: est.reason ?? null };
     }
   }
 
@@ -132,6 +144,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       shippingRevenue: Number(order.totalShipping),
       defaultShippingCost: defaultShipping.amount,
       defaultSource: defaultShipping.source,
+      defaultUnknownReason: defaultShipping.reason,
       shippingCostOverride: order.shippingCostOverride !== null ? Number(order.shippingCostOverride) : null,
       shippingCostOverrideNote: order.shippingCostOverrideNote,
     },

@@ -10,6 +10,7 @@ import { MoneyInput } from '@/components/ui/money-input';
 import { currencyDecimals } from '@/lib/currency-format';
 import {
   Pencil, Save, RotateCcw, Loader2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  AlertCircle, ExternalLink,
 } from 'lucide-react';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
@@ -433,6 +434,18 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                 }
               />
             </div>
+
+            {/* Diagnostic panel — only when the engine couldn't price this
+                shipment. Surfaces the EXACT missing input (country, weight,
+                market, link, or carrier zone match) plus a deep link to
+                the page where the operator can fix it. */}
+            {detail.shipping.defaultSource === 'unknown' && (
+              <UnknownShippingDiagnostic
+                reason={detail.shipping.defaultUnknownReason}
+                shipCountry={detail.shipCountry}
+                shipWeightKg={detail.shipWeightKg}
+              />
+            )}
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 Shipping cost override
@@ -521,6 +534,111 @@ function Field({ label, value }: { label: string; value: string }) {
  * Operator-facing explanation for a `shippingCostSource === 'unknown'`
  * row. Keep these short — they render inside a native `title` tooltip.
  */
+interface UnknownShippingDiagnosticProps {
+  reason: OrderRow['shippingCostReason'];
+  shipCountry: string | null;
+  shipWeightKg: number | null;
+}
+
+/**
+ * Full-width amber panel shown inside the order edit modal when the
+ * engine couldn't quote this shipment. Surfaces:
+ *
+ *   - what the order's actual ship-to + weight values look like (so
+ *     "no weight" is obviously a Shopify variant fix, not a system bug)
+ *   - the single sentence cause + fix
+ *   - a deep link to the page where the operator goes to fix it
+ *
+ * The deep links are deliberately generic — Markets and Carriers
+ * landing pages — rather than hand-built deep-deep links to specific
+ * rows, since the right row to edit depends on context (which market
+ * to extend, which carrier zone to add the country to).
+ */
+function UnknownShippingDiagnostic({
+  reason, shipCountry, shipWeightKg,
+}: UnknownShippingDiagnosticProps) {
+  const country = shipCountry ?? null;
+  const weight = shipWeightKg !== null && shipWeightKg > 0 ? shipWeightKg : null;
+
+  const fix = getUnknownShippingFix(reason, country);
+
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/[0.06] p-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden />
+        <div className="space-y-1.5 min-w-0 flex-1">
+          <div className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            Can&rsquo;t compute shipping cost yet
+          </div>
+          <p className="text-xs text-amber-900/80 dark:text-amber-200/80 leading-relaxed">
+            {reasonLabel(reason)}
+          </p>
+
+          {/* What the system actually sees on this order — helps spot
+              the gap fast (a missing country/weight is immediately
+              actionable; a present one points at config). */}
+          <div className="text-[11px] font-mono tabular-nums text-amber-900/70 dark:text-amber-200/70 flex flex-wrap gap-x-3 gap-y-0.5 pt-1">
+            <span>
+              Ship to: <span className="font-medium">{country ?? '—'}</span>
+            </span>
+            <span>
+              Weight: <span className="font-medium">{weight !== null ? `${weight.toFixed(3)} kg` : '—'}</span>
+            </span>
+          </div>
+
+          {fix.href && (
+            <div className="pt-1">
+              <a
+                href={fix.href}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline underline-offset-2"
+              >
+                {fix.label}
+                <ExternalLink className="size-3" aria-hidden />
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Where to send the operator to fix this specific cause. `null` href
+ * means there's no in-app fix (`no_country` is a Shopify-side data
+ * issue we can't link directly to from here).
+ */
+function getUnknownShippingFix(
+  reason: OrderRow['shippingCostReason'],
+  shipCountry: string | null,
+): { label: string; href: string | null } {
+  switch (reason) {
+    case 'no_country':
+      return { label: 'Check order in Shopify admin', href: null };
+    case 'no_weight':
+      return { label: 'Open Shopify products to set variant weights', href: null };
+    case 'no_market':
+      return {
+        label: shipCountry ? `Add ${shipCountry} to a market` : 'Open Markets',
+        href: '/f/markets',
+      };
+    case 'no_carrier_link':
+      return {
+        label: shipCountry ? `Link a carrier to a market covering ${shipCountry}` : 'Open Markets',
+        href: '/f/markets',
+      };
+    case 'no_quote':
+      return {
+        label: shipCountry ? `Extend carrier zones/tiers for ${shipCountry}` : 'Open carrier rates',
+        href: '/f/carrier-rates',
+      };
+    default:
+      return { label: 'Open Markets', href: '/f/markets' };
+  }
+}
+
 /**
  * Compact 1-2 word label for the diagnostic chip strip. The full
  * sentence lives in `reasonLabel` on hover.
