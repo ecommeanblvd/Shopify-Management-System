@@ -38,17 +38,28 @@ export interface EngineEstimateInput {
  * carrier, etc.) instead of guessing.
  */
 export type EngineEstimateReason =
-  | 'no_country'        // order has no shipping country (pickup, digital, etc.)
-  | 'no_weight'         // order has no chargeable weight on its line items
-  | 'no_market'         // no enabled market_template covers this country
-  | 'no_carrier_link'   // markets exist for the country but no enabled carrier link
-  | 'no_quote';         // carriers exist but none could produce a tier-+zone-matched quote
+  | 'no_country'           // order has no shipping country (pickup, digital, etc.)
+  | 'no_weight'            // order has no chargeable weight on its line items
+  | 'no_carrier_accounts'  // there are no enabled carrier accounts in the system at all
+  | 'no_quote';            // carriers exist but none could produce a tier-+zone-matched quote
+//
+// NOTE: `no_market` and `no_carrier_link` are deliberately retired now that
+// the estimator falls back to ANY enabled carrier whose zones cover the
+// country — the operator told us their carriers are all FedEx and they want
+// orders priced even when the market-link table is incomplete. The shape is
+// kept (legacy DB rows / strings may still contain these values) and the UI
+// keeps friendly labels for them, but the estimator no longer emits them.
 
 export interface EngineEstimateResult {
   amount: number;
   source: 'engine_estimate' | 'unknown';
   /** Present only when `source === 'unknown'`. */
   reason?: EngineEstimateReason;
+  /** True when the engine had to fall back from the configured
+   *  market_carrier_links to "any enabled carrier whose zones cover this
+   *  country". Useful for the dashboard to flag implicit FedEx pricing
+   *  vs. operator-intentional carrier choice. */
+  fallback?: boolean;
 }
 
 export interface BatchShippingEstimator {
@@ -97,9 +108,19 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
     carriersByMarket.set(l.marketHandle, arr);
   }
 
-  // 3. Snapshots for every distinct carrier ever reached by an enabled
-  // link. Parallel so the total wait is one snapshot, not N.
-  const allCarrierIds = Array.from(new Set(links.map((l) => l.carrierAccountId)));
+  // 3. Every enabled carrier account in the system — superset of the
+  // ones reached by `market_carrier_links`. The operator told us their
+  // carriers are all FedEx, so we load every active account and use it
+  // as the fallback when an order's market has no explicit link. The
+  // operator-intentional path (linked carriers) is tried first; the
+  // fallback engages only when the primary path returns nothing.
+  const allAccountRows = await db
+    .select({ id: schema.carrierAccounts.id })
+    .from(schema.carrierAccounts)
+    .where(eq(schema.carrierAccounts.enabled, true));
+  const allCarrierIds = allAccountRows.map((r) => r.id);
+
+  // Parallel so the total wait is one snapshot, not N.
   const snapshotEntries = await Promise.all(
     allCarrierIds.map(async (id): Promise<[string, CarrierAccountSnapshot | null]> => {
       return [id, await loadAccountSnapshot(id)];
@@ -124,6 +145,25 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
     return [...set];
   }
 
+  /**
+   * Cheapest successful quote across the given carrier ids, or null if
+   * none of them can quote the country+weight. Reused by the primary
+   * (linked) path and the fallback (any-enabled) path.
+   */
+  function bestQuote(carrierIds: readonly string[], country: string, weightKg: number): number | null {
+    let best: number | null = null;
+    for (const id of carrierIds) {
+      const snap = snapshotsByCarrier.get(id);
+      if (!snap) continue;
+      const q = quote(snap, { weightKg, destinationCountry: country });
+      if (q.ok) {
+        const amt = q.breakdown.carrierCostDisplay;
+        if (best === null || amt < best) best = amt;
+      }
+    }
+    return best;
+  }
+
   return {
     estimate(input: EngineEstimateInput): EngineEstimateResult {
       // Country and weight come from `shipping_address.country_code_v2`
@@ -140,41 +180,49 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       const cached = memo.get(key);
       if (cached) return cached;
 
-      const marketHandles = marketsByCountry.get(input.shipCountry) ?? [];
-      if (marketHandles.length === 0) {
-        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_market' };
-        memo.set(key, r);
-        return r;
-      }
-      const carrierIds = carriersFor(input.shipCountry);
-      if (carrierIds.length === 0) {
-        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_carrier_link' };
+      // System has no enabled carrier accounts at all. There's nothing
+      // to fall back to — the operator needs to configure a carrier
+      // before any order can be priced.
+      if (allCarrierIds.length === 0) {
+        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_carrier_accounts' };
         memo.set(key, r);
         return r;
       }
 
-      let best: number | null = null;
-      for (const id of carrierIds) {
-        const snap = snapshotsByCarrier.get(id);
-        if (!snap) continue;
-        const q = quote(snap, {
-          weightKg: input.shipWeightKg,
-          destinationCountry: input.shipCountry,
-        });
-        if (q.ok) {
-          const amt = q.breakdown.carrierCostDisplay;
-          if (best === null || amt < best) best = amt;
-        }
+      // Primary path: carriers explicitly linked to a market that
+      // covers this country. Cheapest of those wins.
+      const linkedCarrierIds = carriersFor(input.shipCountry);
+      const linkedBest = bestQuote(linkedCarrierIds, input.shipCountry, input.shipWeightKg);
+      if (linkedBest !== null) {
+        const r: EngineEstimateResult = { amount: linkedBest, source: 'engine_estimate' };
+        memo.set(key, r);
+        return r;
       }
 
-      // Carriers exist for this country but none could produce a quote
-      // — usually means the country isn't in any zone, or the weight
-      // overflows the last tier.
-      const result: EngineEstimateResult = best === null
-        ? { amount: 0, source: 'unknown', reason: 'no_quote' }
-        : { amount: best, source: 'engine_estimate' };
-      memo.set(key, result);
-      return result;
+      // Fallback path: every other enabled carrier the operator has on
+      // file. The operator pre-confirmed that their carriers are all
+      // FedEx rate sheets (manual import), so silently picking any of
+      // them keeps orders priced without requiring an exhaustive
+      // market_carrier_links setup. Surface `fallback: true` so the UI
+      // can flag implicit FedEx pricing.
+      const fallbackCarrierIds = allCarrierIds.filter((id) => !linkedCarrierIds.includes(id));
+      const fallbackBest = bestQuote(fallbackCarrierIds, input.shipCountry, input.shipWeightKg);
+      if (fallbackBest !== null) {
+        const r: EngineEstimateResult = {
+          amount: fallbackBest,
+          source: 'engine_estimate',
+          fallback: true,
+        };
+        memo.set(key, r);
+        return r;
+      }
+
+      // No carrier could quote this destination/weight at all. Usually
+      // means the country isn't in ANY zone, or the weight overflows
+      // every carrier's last tier.
+      const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_quote' };
+      memo.set(key, r);
+      return r;
     },
   };
 }

@@ -629,6 +629,11 @@ function getUnknownShippingFix(
         label: shipCountry ? `Link a carrier to a market covering ${shipCountry}` : 'Open Markets',
         href: '/f/markets',
       };
+    case 'no_carrier_accounts':
+      return {
+        label: 'Add a carrier account to start pricing',
+        href: '/f/carrier-rates/new',
+      };
     case 'no_quote':
       return {
         label: shipCountry ? `Extend carrier zones/tiers for ${shipCountry}` : 'Open carrier rates',
@@ -649,6 +654,7 @@ function reasonShortLabel(reason: OrderRow['shippingCostReason']): string {
     case 'no_weight': return 'no weight';
     case 'no_market': return 'no market';
     case 'no_carrier_link': return 'no carrier';
+    case 'no_carrier_accounts': return 'no carriers';
     case 'no_quote': return 'no quote';
     default: return 'unknown';
   }
@@ -664,8 +670,10 @@ function reasonLabel(reason: OrderRow['shippingCostReason']): string {
       return 'No enabled market covers this country. Add the country to a market_template.';
     case 'no_carrier_link':
       return 'Markets exist for this country, but no enabled carrier link. Link a carrier in the market.';
+    case 'no_carrier_accounts':
+      return 'No enabled carrier accounts in the system. Add a FedEx (or other) account in Carrier rates.';
     case 'no_quote':
-      return 'Carriers are linked, but none produced a quote (country missing from a zone, or weight past the last tier).';
+      return 'None of the configured carriers cover this destination + weight. Extend a carrier zone or add a higher weight tier.';
     default:
       return 'Shipping cost unavailable.';
   }

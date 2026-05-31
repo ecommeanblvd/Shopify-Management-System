@@ -165,7 +165,13 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     let shippingCost: {
       amount: number;
       source: 'override' | 'invoice' | 'engine_estimate' | 'unknown';
-      reason?: 'no_country' | 'no_weight' | 'no_market' | 'no_carrier_link' | 'no_quote';
+      reason?:
+        | 'no_country'
+        | 'no_weight'
+        | 'no_market'
+        | 'no_carrier_link'
+        | 'no_carrier_accounts'
+        | 'no_quote';
     };
     if (o.shippingCostOverride !== null) {
       const raw = Number(o.shippingCostOverride);
