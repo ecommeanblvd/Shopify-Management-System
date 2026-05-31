@@ -8,11 +8,15 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { getStoreMetrics, type Grouping } from '@/features/shopify-orders/dashboard-actions';
+import {
+  listStoreOrders, getOrderDetail, updateOrderOverrides,
+} from '@/features/shopify-orders/order-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { Button } from '@/components/ui/button';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
+import { OrdersTable } from '@/components/shopify-orders/OrdersTable';
 import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
 
 export const dynamic = 'force-dynamic';
@@ -66,6 +70,9 @@ export default async function StoreOrders({
     vendorFilter: showVendor ? vendorFilter : undefined,
     grouping,
   });
+
+  // Individual orders in the same window, for the clickable list at the bottom.
+  const orderList = await listStoreOrders({ storeId, dateFrom, dateTo, limit: 100 });
 
   // Distinct vendors across all lines in the window. We re-query just the
   // vendor column rather than threading it through getStoreMetrics — keeps
@@ -180,6 +187,30 @@ export default async function StoreOrders({
       <MetricsKpis metrics={total} />
 
       <MetricsTable buckets={buckets} grouping={grouping} currency={total.currency} />
+
+      {/* Individual orders — click any row to edit per-line COGs and the
+          shipping cost. Limited to the most recent 100 in the active window. */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Orders ({orderList.length}{orderList.length === 100 ? '+' : ''})
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Click any row to override per-line costs or the shipping cost for that order.
+          </p>
+        </div>
+        <OrdersTable
+          orders={orderList}
+          canEdit={hasPermission(role, 'manage_sku_costs')}
+          getDetailAction={getOrderDetail}
+          saveAction={updateOrderOverrides as unknown as (input: {
+            orderId: string;
+            lineCosts: Record<string, number | null>;
+            shippingCostOverride: number | null;
+            shippingCostOverrideNote: string | null;
+          }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>}
+        />
+      </section>
     </div>
   );
 }

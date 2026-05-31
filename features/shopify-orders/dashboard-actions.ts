@@ -109,24 +109,38 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     const wholeOrderGross = sumNumeric(oLines.map((l) => Number(l.unitPrice) * l.quantity));
     const share = wholeOrderGross > 0 ? grossLineTotal / wholeOrderGross : 1;
 
-    // Shipping cost — invoice when we have one, otherwise live carrier-engine
-    // estimate via the existing quote() pipeline. `source='unknown'` means
-    // neither path produced a number (no invoice + no linked carrier covers
-    // the destination, or weight/country are missing).
-    let shippingCost: { amount: number; source: 'invoice' | 'engine_estimate' | 'unknown' };
-    const tracking = trackingByOrder.get(o.id) ?? [];
-    const matchingInvoice = tracking.map((t) => invoiceIndex.get(t)).find((i) => !!i);
-    if (matchingInvoice) {
-      shippingCost = { amount: Number(matchingInvoice.actualCost) * share, source: 'invoice' };
+    // Shipping cost — precedence:
+    //   1. Per-order manual override (operator-set on the order edit modal)
+    //   2. Matching shipping_invoices row
+    //   3. Live carrier-engine estimate
+    //   4. unknown
+    let shippingCost: { amount: number; source: 'override' | 'invoice' | 'engine_estimate' | 'unknown' };
+    if (o.shippingCostOverride !== null) {
+      shippingCost = { amount: Number(o.shippingCostOverride) * share, source: 'override' };
     } else {
-      const est = await resolveShippingEstimate({
-        shipCountry: o.shipCountry,
-        shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
-      });
-      shippingCost = { amount: est.amount * share, source: est.source };
+      const tracking = trackingByOrder.get(o.id) ?? [];
+      const matchingInvoice = tracking.map((t) => invoiceIndex.get(t)).find((i) => !!i);
+      if (matchingInvoice) {
+        shippingCost = { amount: Number(matchingInvoice.actualCost) * share, source: 'invoice' };
+      } else {
+        const est = await resolveShippingEstimate({
+          shipCountry: o.shipCountry,
+          shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
+        });
+        shippingCost = { amount: est.amount * share, source: est.source };
+      }
     }
 
+    // Per-line SKU cost — line-level override wins over the sku_costs lookup.
     const skuCosts = filteredLines.map((l) => {
+      if (l.costOverride !== null) {
+        return {
+          lineId: l.id,
+          quantity: l.quantity,
+          costPerUnit: Number(l.costOverride),
+          costCurrency: o.currency,
+        };
+      }
       const cost = l.sku
         ? (costIndex.get(l.sku) ?? []).find((c) => new Date(c.effectiveFrom) <= o.processedAtShopify)
         : null;
