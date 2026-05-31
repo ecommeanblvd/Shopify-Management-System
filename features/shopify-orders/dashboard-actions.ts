@@ -6,25 +6,24 @@ import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
 import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
 
-export type Grouping = 'day' | 'week' | 'month' | 'vendor';
-
 export interface GetStoreMetricsArgs {
   storeId: string;
   dateFrom: Date;
   dateTo: Date;
   vendorFilter?: string[];
-  grouping: Grouping;
 }
 
-export interface MetricsBucket {
-  bucketKey: string;
-  bucketLabel: string;
-  metrics: AggregateMetrics;
+/** One row per Shopify order, ready for the dashboard's orders table. */
+export interface OrderRow extends OrderMetrics {
+  shopifyOrderNumber: string;
+  processedAt: Date;
+  lineCount: number;
+  hasOverrides: boolean;
 }
 
 export interface GetStoreMetricsResult {
   total: AggregateMetrics;
-  buckets: MetricsBucket[];
+  orders: OrderRow[];
 }
 
 /**
@@ -46,7 +45,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
 
   const orders = await db.select().from(schema.shopifyOrders).where(where);
   if (orders.length === 0) {
-    return { total: emptyAgg(), buckets: [] };
+    return { total: emptyAgg(), orders: [] };
   }
   const orderIds = orders.map((o) => o.id);
 
@@ -92,7 +91,8 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
   const invoiceIndex = new Map(invoices.map((i) => [i.trackingNumber, i]));
 
   // Compute per-order metrics.
-  const allMetrics: Array<OrderMetrics & { vendor: string[]; bucketKey: string; bucketLabel: string }> = [];
+  const allMetrics: OrderMetrics[] = [];
+  const rows: OrderRow[] = [];
   for (const o of orders) {
     const oLines = lines.filter((l) => l.orderId === o.id);
     const filteredLines = args.vendorFilter && args.vendorFilter.length > 0
@@ -164,14 +164,21 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
       skuCosts,
     });
 
-    const vendor = filteredLines.map((l) => l.vendor).filter((v): v is string => !!v);
-    const { key, label } = bucketize(o.processedAtShopify, vendor, args.grouping);
-    allMetrics.push({ ...m, vendor, bucketKey: key, bucketLabel: label });
+    const hasLineOverride = filteredLines.some((l) => l.costOverride !== null);
+    const hasOverrides = hasLineOverride || o.shippingCostOverride !== null;
+    allMetrics.push(m);
+    rows.push({
+      ...m,
+      shopifyOrderNumber: o.shopifyOrderNumber,
+      processedAt: o.processedAtShopify,
+      lineCount: filteredLines.length,
+      hasOverrides,
+    });
   }
 
-  const buckets = groupBucketMetrics(allMetrics);
+  rows.sort((a, b) => b.processedAt.getTime() - a.processedAt.getTime());
   const total = aggregateMetrics(allMetrics);
-  return { total, buckets };
+  return { total, orders: rows };
 }
 
 function indexCostsBySku(
@@ -200,38 +207,6 @@ function extractTrackingNumbers(payload: unknown): string[] {
 
 function sumNumeric(nums: number[]): number {
   return nums.reduce((a, b) => a + b, 0);
-}
-
-function bucketize(date: Date, vendors: string[], grouping: Grouping): { key: string; label: string } {
-  if (grouping === 'vendor') {
-    const v = vendors[0] ?? '(no vendor)';
-    return { key: v, label: v };
-  }
-  const iso = date.toISOString().slice(0, 10);
-  if (grouping === 'day') return { key: iso, label: iso };
-  if (grouping === 'week') {
-    const monday = new Date(date);
-    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
-    const k = monday.toISOString().slice(0, 10);
-    return { key: k, label: `Week of ${k}` };
-  }
-  // month
-  const k = iso.slice(0, 7);
-  return { key: k, label: k };
-}
-
-function groupBucketMetrics(
-  items: Array<OrderMetrics & { bucketKey: string; bucketLabel: string }>,
-): MetricsBucket[] {
-  const grouped = new Map<string, { label: string; items: OrderMetrics[] }>();
-  for (const m of items) {
-    const g = grouped.get(m.bucketKey) ?? { label: m.bucketLabel, items: [] };
-    g.items.push(m);
-    grouped.set(m.bucketKey, g);
-  }
-  return [...grouped.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, g]) => ({ bucketKey: k, bucketLabel: g.label, metrics: aggregateMetrics(g.items) }));
 }
 
 function emptyAgg(): AggregateMetrics {
