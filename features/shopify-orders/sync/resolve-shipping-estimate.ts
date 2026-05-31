@@ -24,6 +24,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
+import type { EngineEstimateReason } from './batch-shipping-estimator';
 
 export interface EngineEstimateInput {
   shipCountry: string | null;
@@ -33,13 +34,17 @@ export interface EngineEstimateInput {
 export interface EngineEstimateResult {
   amount: number;
   source: 'engine_estimate' | 'unknown';
+  /** Present only when `source === 'unknown'`. Matches the taxonomy
+   *  used by the batched dashboard estimator. */
+  reason?: EngineEstimateReason;
 }
 
 export async function resolveShippingEstimate(
   input: EngineEstimateInput,
 ): Promise<EngineEstimateResult> {
-  if (!input.shipCountry || !input.shipWeightKg || input.shipWeightKg <= 0) {
-    return { amount: 0, source: 'unknown' };
+  if (!input.shipCountry) return { amount: 0, source: 'unknown', reason: 'no_country' };
+  if (!input.shipWeightKg || input.shipWeightKg <= 0) {
+    return { amount: 0, source: 'unknown', reason: 'no_weight' };
   }
 
   // 1. Markets containing this country. `countries` is jsonb of ISO-2 strings.
@@ -51,7 +56,7 @@ export async function resolveShippingEstimate(
        AND enabled = TRUE
   `);
   const markets = marketRows.rows;
-  if (markets.length === 0) return { amount: 0, source: 'unknown' };
+  if (markets.length === 0) return { amount: 0, source: 'unknown', reason: 'no_market' };
 
   // 2. Carrier accounts linked to any of those markets (enabled links only).
   // Use Drizzle's inArray helper rather than raw `ANY(${handles})`: the sql
@@ -68,7 +73,7 @@ export async function resolveShippingEstimate(
       ),
     );
   const carrierIds = Array.from(new Set(links.map((l) => l.carrierAccountId)));
-  if (carrierIds.length === 0) return { amount: 0, source: 'unknown' };
+  if (carrierIds.length === 0) return { amount: 0, source: 'unknown', reason: 'no_carrier_link' };
 
   // 3. Quote each carrier; pick the cheapest successful display amount.
   let best: number | null = null;
@@ -87,6 +92,6 @@ export async function resolveShippingEstimate(
       if (best === null || amt < best) best = amt;
     }
   }
-  if (best === null) return { amount: 0, source: 'unknown' };
+  if (best === null) return { amount: 0, source: 'unknown', reason: 'no_quote' };
   return { amount: best, source: 'engine_estimate' };
 }
