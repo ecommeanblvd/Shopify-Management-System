@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'features/**/*.test.ts'],
+    include: ['lib/**/*.test.ts', 'features/**/*.test.ts', 'components/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       // Unit-coverage gate: pure-logic modules whose dependencies are fully injected

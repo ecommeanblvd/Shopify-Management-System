@@ -8,6 +8,8 @@ import type {
   Market, MarketStoreOverride, ShippingZone, ShippingRate, MarketShipping, MarketPriceAdjustment,
 } from '@/features/markets/types';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
+import { currencyDecimals } from '@/lib/currency-format';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -335,12 +337,12 @@ function ZoneCard({
               {Object.entries(zone.rates).map(([rateName, rate]) => (
                 <div key={rateName} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
                   <span className="text-sm font-medium truncate" title={rateName}>{rateName}</span>
-                  <Input
-                    type="number"
-                    value={rate.price}
-                    step={0.01}
-                    onChange={(e) => onUpdateRate(rateName, { price: Number(e.target.value) })}
-                    className="w-24 font-mono tabular-nums text-right"
+                  <MoneyInput
+                    value={String(rate.price ?? '')}
+                    onValueChange={(raw) => onUpdateRate(rateName, { price: raw === '' ? 0 : Number(raw) })}
+                    decimals={currencyDecimals(rate.currency)}
+                    className="w-28"
+                    inputClassName="text-right"
                   />
                   <Input
                     type="text"
