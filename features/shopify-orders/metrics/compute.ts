@@ -1,5 +1,18 @@
 export type ShippingCostSource = 'override' | 'invoice' | 'engine_estimate' | 'unknown';
 
+/**
+ * When the shipping cost couldn't be resolved (source === 'unknown'),
+ * this tells the operator WHY so they can fix the root cause instead
+ * of guessing. Engine-side reasons match
+ * `EngineEstimateReason` in batch-shipping-estimator.ts.
+ */
+export type ShippingCostReason =
+  | 'no_country'
+  | 'no_weight'
+  | 'no_market'
+  | 'no_carrier_link'
+  | 'no_quote';
+
 export interface ComputeInput {
   orderId: string;
   currency: string;
@@ -8,7 +21,7 @@ export interface ComputeInput {
   totalShipping: number;
   totalTax: number;
   totalRefunded: number;
-  shippingCost: { amount: number; source: ShippingCostSource };
+  shippingCost: { amount: number; source: ShippingCostSource; reason?: ShippingCostReason };
   skuCosts: Array<{
     lineId: string;
     quantity: number;
@@ -27,6 +40,10 @@ export interface OrderMetrics {
   shippingRevenue: number;
   shippingCost: number;
   shippingCostSource: ShippingCostSource;
+  /** Only populated when `shippingCostSource === 'unknown'`. Tells the
+   *  operator which prerequisite is missing — variant weight, market,
+   *  carrier link, etc. */
+  shippingCostReason: ShippingCostReason | null;
   skuCost: number;
   skuCostCoverage: number;
   tax: number;
@@ -58,6 +75,7 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
     shippingRevenue: input.totalShipping,
     shippingCost: input.shippingCost.amount,
     shippingCostSource: input.shippingCost.source,
+    shippingCostReason: input.shippingCost.reason ?? null,
     skuCost,
     skuCostCoverage: coverage,
     tax: input.totalTax,

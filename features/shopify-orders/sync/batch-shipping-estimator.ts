@@ -31,9 +31,24 @@ export interface EngineEstimateInput {
   shipWeightKg: number | null;
 }
 
+/**
+ * Why an order's shipping cost couldn't be priced by the carrier engine.
+ * Surfaced in the dashboard so the operator can see the root cause and
+ * fix it at the source (set variant weights, add a market, link a
+ * carrier, etc.) instead of guessing.
+ */
+export type EngineEstimateReason =
+  | 'no_country'        // order has no shipping country (pickup, digital, etc.)
+  | 'no_weight'         // order has no chargeable weight on its line items
+  | 'no_market'         // no enabled market_template covers this country
+  | 'no_carrier_link'   // markets exist for the country but no enabled carrier link
+  | 'no_quote';         // carriers exist but none could produce a tier-+zone-matched quote
+
 export interface EngineEstimateResult {
   amount: number;
   source: 'engine_estimate' | 'unknown';
+  /** Present only when `source === 'unknown'`. */
+  reason?: EngineEstimateReason;
 }
 
 export interface BatchShippingEstimator {
@@ -111,8 +126,12 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
 
   return {
     estimate(input: EngineEstimateInput): EngineEstimateResult {
-      if (!input.shipCountry || !input.shipWeightKg || input.shipWeightKg <= 0) {
-        return { amount: 0, source: 'unknown' };
+      // Country and weight come from `shipping_address.country_code_v2`
+      // and `total_weight` on the Shopify order respectively. Either
+      // missing means the order can't even start a quote — surface why.
+      if (!input.shipCountry) return { amount: 0, source: 'unknown', reason: 'no_country' };
+      if (!input.shipWeightKg || input.shipWeightKg <= 0) {
+        return { amount: 0, source: 'unknown', reason: 'no_weight' };
       }
       // Round weight to 3 dp so micro-fluctuations don't bust the memo;
       // the rate matrix only changes on tier boundaries anyway.
@@ -121,9 +140,15 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       const cached = memo.get(key);
       if (cached) return cached;
 
+      const marketHandles = marketsByCountry.get(input.shipCountry) ?? [];
+      if (marketHandles.length === 0) {
+        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_market' };
+        memo.set(key, r);
+        return r;
+      }
       const carrierIds = carriersFor(input.shipCountry);
       if (carrierIds.length === 0) {
-        const r: EngineEstimateResult = { amount: 0, source: 'unknown' };
+        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_carrier_link' };
         memo.set(key, r);
         return r;
       }
@@ -142,8 +167,11 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
         }
       }
 
+      // Carriers exist for this country but none could produce a quote
+      // — usually means the country isn't in any zone, or the weight
+      // overflows the last tier.
       const result: EngineEstimateResult = best === null
-        ? { amount: 0, source: 'unknown' }
+        ? { amount: 0, source: 'unknown', reason: 'no_quote' }
         : { amount: best, source: 'engine_estimate' };
       memo.set(key, result);
       return result;

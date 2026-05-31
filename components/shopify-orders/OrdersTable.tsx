@@ -72,6 +72,21 @@ export function OrdersTable({
   const endIdx = Math.min(startIdx + pageSize, filtered.length);
   const visible = filtered.slice(startIdx, endIdx);
 
+  // Tally unpriced shipments by reason so the operator can see at a
+  // glance which root cause is biting (set weights? add a market?).
+  // Counts the FILTERED set so vendor/search narrows the diagnostic.
+  const unpriced = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const o of filtered) {
+      if (o.shippingCostSource !== 'unknown') continue;
+      total += 1;
+      const key = o.shippingCostReason ?? 'unknown';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return { total, counts };
+  }, [filtered]);
+
   return (
     <>
       <Card>
@@ -121,6 +136,34 @@ export function OrdersTable({
           </div>
         </div>
 
+        {/* Diagnostic strip — only shown when at least one shipment in the
+            current view couldn't be priced. Breaks the count down by reason
+            so the operator can see whether the fix is in Shopify (weights),
+            in markets (no country coverage), or in carrier links. */}
+        {unpriced.total > 0 && (
+          <div className="flex items-start gap-2 px-3 py-2 border-b border-border bg-amber-500/[0.06] text-xs">
+            <span
+              className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium font-mono tabular-nums whitespace-nowrap"
+              title="Shipping cost couldn't be computed for these orders. Hover the breakdown for the cause."
+            >
+              {unpriced.total.toLocaleString()} unpriced
+            </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+              {Object.entries(unpriced.counts)
+                .sort(([, a], [, b]) => b - a)
+                .map(([reason, n]) => (
+                  <span
+                    key={reason}
+                    title={reasonLabel(reason as OrderRow['shippingCostReason'])}
+                    className="cursor-help underline decoration-dotted underline-offset-2"
+                  >
+                    {reasonShortLabel(reason as OrderRow['shippingCostReason'])}: <span className="font-mono tabular-nums">{n}</span>
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
@@ -167,7 +210,12 @@ export function OrdersTable({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.shippingRevenue, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {o.shippingCostSource === 'unknown' ? (
-                      <span className="text-muted-foreground/60">—</span>
+                      <span
+                        className="text-amber-600 dark:text-amber-400 cursor-help underline decoration-dotted underline-offset-2"
+                        title={reasonLabel(o.shippingCostReason)}
+                      >
+                        —
+                      </span>
                     ) : (
                       <span title={o.shippingCostSource}>{fmt(o.shippingCost, o.currency)}</span>
                     )}
@@ -467,6 +515,42 @@ function Field({ label, value }: { label: string; value: string }) {
       <div className="font-mono tabular-nums">{value}</div>
     </div>
   );
+}
+
+/**
+ * Operator-facing explanation for a `shippingCostSource === 'unknown'`
+ * row. Keep these short — they render inside a native `title` tooltip.
+ */
+/**
+ * Compact 1-2 word label for the diagnostic chip strip. The full
+ * sentence lives in `reasonLabel` on hover.
+ */
+function reasonShortLabel(reason: OrderRow['shippingCostReason']): string {
+  switch (reason) {
+    case 'no_country': return 'no country';
+    case 'no_weight': return 'no weight';
+    case 'no_market': return 'no market';
+    case 'no_carrier_link': return 'no carrier';
+    case 'no_quote': return 'no quote';
+    default: return 'unknown';
+  }
+}
+
+function reasonLabel(reason: OrderRow['shippingCostReason']): string {
+  switch (reason) {
+    case 'no_country':
+      return 'No shipping country on the order (pickup, digital, or draft).';
+    case 'no_weight':
+      return 'No chargeable weight. Set weights on the variants in Shopify.';
+    case 'no_market':
+      return 'No enabled market covers this country. Add the country to a market_template.';
+    case 'no_carrier_link':
+      return 'Markets exist for this country, but no enabled carrier link. Link a carrier in the market.';
+    case 'no_quote':
+      return 'Carriers are linked, but none produced a quote (country missing from a zone, or weight past the last tier).';
+    default:
+      return 'Shipping cost unavailable.';
+  }
 }
 
 function fmt(amount: number, currency: string): string {
