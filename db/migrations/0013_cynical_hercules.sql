@@ -1,0 +1,1 @@
+ALTER TABLE "stores" ADD COLUMN "packaging_fee" numeric(14, 2);

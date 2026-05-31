@@ -17,6 +17,9 @@ export interface StoreCostFxInput {
   /** How many `costCurrency` units equal 1 unit of the order currency.
    *  For Mirer (USD orders, VND costs): 24000. Empty string clears. */
   fxRate: string;
+  /** Flat per-order packaging fee in the order currency. Empty string
+   *  clears the field (no packaging cost added). */
+  packagingFee: string;
 }
 
 export async function updateStoreCostFx(input: StoreCostFxInput): Promise<void> {
@@ -41,11 +44,22 @@ export async function updateStoreCostFx(input: StoreCostFxInput): Promise<void> 
     parsedRate = n.toString();
   }
 
+  const trimmedPackaging = input.packagingFee.trim();
+  let parsedPackaging: string | null = null;
+  if (trimmedPackaging) {
+    const n = Number(trimmedPackaging);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error('Packaging fee must be 0 or a positive number');
+    }
+    parsedPackaging = n.toString();
+  }
+
   await db
     .update(schema.stores)
     .set({
       costCurrency: trimmedCurrency || null,
       fxCostPerOrderCurrency: parsedRate,
+      packagingFee: parsedPackaging,
       costFxUpdatedAt: new Date(),
     })
     .where(eq(schema.stores.id, input.storeId));
