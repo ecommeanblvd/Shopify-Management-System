@@ -4,7 +4,7 @@ import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
-import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
+import { createBatchShippingEstimator } from './sync/batch-shipping-estimator';
 
 export interface GetStoreMetricsArgs {
   storeId: string;
@@ -122,6 +122,15 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         ));
   const invoiceIndex = new Map(invoices.map((i) => [i.trackingNumber, i]));
 
+  // Pre-warm a shipping estimator. The old per-order
+  // `resolveShippingEstimate(...)` call ran ~2 SQL queries plus a full
+  // carrier snapshot load (5 more queries) for each order without an
+  // invoice — turning a single dashboard render into thousands of round
+  // trips on stores with many orders. The batched version loads markets,
+  // links, and snapshots once, then `estimate()` is pure compute with a
+  // per-(country, weight) memo for repeat shipments.
+  const estimator = await createBatchShippingEstimator();
+
   // Compute per-order metrics.
   const allMetrics: OrderMetrics[] = [];
   const rows: OrderRow[] = [];
@@ -166,7 +175,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         const converted = convertCost(raw, matchingInvoice.currency, o.currency);
         shippingCost = { amount: converted * share, source: 'invoice' };
       } else {
-        const est = await resolveShippingEstimate({
+        const est = estimator.estimate({
           shipCountry: o.shipCountry,
           shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
         });
