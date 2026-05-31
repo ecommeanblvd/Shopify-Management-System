@@ -12,11 +12,16 @@ import { getOrderDetail, updateOrderOverrides } from '@/features/shopify-orders/
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { updateStoreCostFx } from '@/features/shopify-orders/cost-fx-actions';
 import { Button } from '@/components/ui/button';
-import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
-import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
-import { OrdersTable } from '@/components/shopify-orders/OrdersTable';
+import { OrdersBoard } from '@/components/shopify-orders/OrdersBoard';
 import { CostFxButton } from '@/components/shopify-orders/CostFxButton';
 import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
+
+// Keep at least this many days warm in the server cache. The dashboard
+// filter presets (7d / 30d / 90d / YTD-if-≤90d) all live inside this
+// window, so toggling between them is a pure client-side filter — no
+// roundtrip, instant. URL ranges that extend further trigger the slower
+// path of pulling exactly what was requested.
+const CACHE_DAYS = 90;
 
 export const dynamic = 'force-dynamic';
 
@@ -54,19 +59,33 @@ export default async function StoreOrders({
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
   const dateTo = sp.to ? new Date(sp.to) : new Date(nowMs);
-  const dateFrom = sp.from
+  const userFrom = sp.from
     ? new Date(sp.from)
     : new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
   const vendorFilter = sp.vendor?.split(',').filter(Boolean);
 
   const showVendor = VENDOR_FILTER_DOMAINS.includes(store.shopDomain);
 
-  const { total, orders: orderList } = await getStoreMetrics({
+  // Cache window: the broader of (CACHE_DAYS, user-requested). Loading
+  // the wider window lets the client flip between 7d / 30d / 90d preset
+  // buttons without any server roundtrip — the slow paths users were
+  // hitting on every preset click are now an instant useMemo() filter.
+  const cacheFromCandidate = new Date(nowMs - CACHE_DAYS * 24 * 60 * 60 * 1000);
+  const dateFrom = userFrom < cacheFromCandidate ? userFrom : cacheFromCandidate;
+
+  const { orders: orderList } = await getStoreMetrics({
     storeId,
     dateFrom,
     dateTo,
     vendorFilter: showVendor ? vendorFilter : undefined,
   });
+
+  const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+  // Every order under a single Shopify store settles in one currency, so
+  // the first row is representative. Empty string when the cache is
+  // empty (brand-new store) so the header chip stays hidden — matches
+  // the previous behaviour where it read from the aggregate.
+  const storeCurrency = orderList[0]?.currency ?? '';
 
   // Distinct vendors across all lines in the window. We re-query just the
   // vendor column rather than threading it through getStoreMetrics — keeps
@@ -145,14 +164,14 @@ export default async function StoreOrders({
           <h1 className="text-3xl font-semibold tracking-tight">{store.name}</h1>
           <p className="text-sm text-muted-foreground mt-1 font-mono">
             {store.shopDomain}
-            {total.currency ? ` · ${total.currency}` : ''}
+            {storeCurrency ? ` · ${storeCurrency}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {hasPermission(role, 'manage_stores') && (
             <CostFxButton
               storeId={storeId}
-              orderCurrency={total.currency || 'USD'}
+              orderCurrency={storeCurrency || 'USD'}
               initialCostCurrency={store.costCurrency}
               initialFxRate={store.fxCostPerOrderCurrency}
               initialPackagingFee={store.packagingFee}
@@ -179,40 +198,29 @@ export default async function StoreOrders({
         </div>
       </header>
 
-      <MetricsFilters
-        defaultFrom={dateFrom.toISOString().slice(0, 10)}
-        defaultTo={dateTo.toISOString().slice(0, 10)}
-        defaultVendor={vendorFilter ?? []}
+      {/* Filters + KPIs + per-order P&L table.  Renders client-side
+          so 7d/30d/90d/YTD preset toggles re-filter the cached 90-day
+          window in-memory without a server roundtrip — the slow path
+          users were hitting on every preset click. */}
+      <OrdersBoard
+        cachedOrders={orderList}
+        cacheFromISO={isoDate(dateFrom)}
+        cacheToISO={isoDate(dateTo)}
+        initialFromISO={isoDate(userFrom)}
+        initialToISO={isoDate(dateTo)}
+        initialVendor={vendorFilter ?? []}
         showVendor={showVendor}
         availableVendors={vendors}
+        canEdit={hasPermission(role, 'manage_sku_costs')}
+        costCurrency={store.costCurrency}
+        getDetailAction={getOrderDetail}
+        saveAction={updateOrderOverrides as unknown as (input: {
+          orderId: string;
+          lineCosts: Record<string, number | null>;
+          shippingCostOverride: number | null;
+          shippingCostOverrideNote: string | null;
+        }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>}
       />
-
-      <MetricsKpis metrics={total} />
-
-      {/* Individual orders — full per-order P&L. Click any row to override
-          per-line COGs and the shipping cost. */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Orders <span className="text-muted-foreground/60 font-mono tabular-nums normal-case tracking-normal">({orderList.length.toLocaleString()})</span>
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Search by order #, or click any row to override per-line costs / shipping.
-          </p>
-        </div>
-        <OrdersTable
-          orders={orderList}
-          canEdit={hasPermission(role, 'manage_sku_costs')}
-          costCurrency={store.costCurrency}
-          getDetailAction={getOrderDetail}
-          saveAction={updateOrderOverrides as unknown as (input: {
-            orderId: string;
-            lineCosts: Record<string, number | null>;
-            shippingCostOverride: number | null;
-            shippingCostOverrideNote: string | null;
-          }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>}
-        />
-      </section>
     </div>
   );
 }
