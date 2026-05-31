@@ -6,6 +6,8 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { MoneyInput } from '@/components/ui/money-input';
+import { currencyDecimals } from '@/lib/currency-format';
 import { Pencil, Save, RotateCcw, Loader2 } from 'lucide-react';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
@@ -246,18 +248,17 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          step="0.01"
-                          inputMode="decimal"
-                          placeholder={l.defaultCostPerUnit !== null
-                            ? `default: ${l.defaultCostPerUnit}`
-                            : 'blank = no cost'}
+                        <MoneyInput
                           value={lineCosts[l.lineId] ?? ''}
-                          onChange={(e) =>
-                            setLineCosts((s) => ({ ...s, [l.lineId]: e.target.value }))
+                          onValueChange={(raw) =>
+                            setLineCosts((s) => ({ ...s, [l.lineId]: raw }))
                           }
-                          className="w-full h-8 border border-input bg-input/30 rounded-md px-2 text-xs font-mono text-right"
+                          decimals={currencyDecimals(cogsCcy)}
+                          placeholder={l.defaultCostPerUnit !== null
+                            ? `default: ${l.defaultCostPerUnit.toLocaleString()}`
+                            : 'blank = no cost'}
+                          inputClassName="h-8 text-xs text-right px-2"
+                          className="flex-1"
                         />
                         <span className="text-[10px] font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
                       </div>
@@ -296,14 +297,12 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                 )}
               </span>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  placeholder="blank = use default"
+                <MoneyInput
                   value={shippingOverride}
-                  onChange={(e) => setShippingOverride(e.target.value)}
-                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+                  onValueChange={setShippingOverride}
+                  decimals={currencyDecimals(cogsCcy)}
+                  placeholder="blank = use default"
+                  className="flex-1"
                 />
                 <span className="text-xs font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
               </div>

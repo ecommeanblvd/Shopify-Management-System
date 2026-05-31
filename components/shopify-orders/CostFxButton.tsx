@@ -5,6 +5,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { MoneyInput } from '@/components/ui/money-input';
+import { currencyDecimals } from '@/lib/currency-format';
 import { Coins, Save } from 'lucide-react';
 
 interface CostFxButtonProps {
@@ -104,14 +106,14 @@ export function CostFxButton({
               <span className="text-xs uppercase tracking-wider text-muted-foreground">
                 FX rate
               </span>
-              <input
-                type="number"
-                step="0.0001"
-                inputMode="decimal"
-                placeholder="e.g. 24000 (1 USD = 24,000 VND)"
+              <MoneyInput
                 value={fxRate}
-                onChange={(e) => setFxRate(e.target.value)}
-                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+                onValueChange={setFxRate}
+                /* FX rates can need 4 decimals (e.g. 0.0426 for VND→USD).
+                   We treat them as money-like since the magnitude often
+                   spans 5+ digits where separators matter most. */
+                decimals={4}
+                placeholder="e.g. 24000 (1 USD = 24,000 VND)"
               />
               <span className="block text-[11px] text-muted-foreground">
                 How many <span className="font-mono">{costCurrency || 'cost-currency'}</span> units equal 1
@@ -124,14 +126,12 @@ export function CostFxButton({
                 Packaging fee / order
               </span>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  placeholder="e.g. 5 (USD per order)"
+                <MoneyInput
                   value={packagingFee}
-                  onChange={(e) => setPackagingFee(e.target.value)}
-                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+                  onValueChange={setPackagingFee}
+                  decimals={currencyDecimals(orderCurrency)}
+                  placeholder="e.g. 5 (USD per order)"
+                  className="flex-1"
                 />
                 <span className="text-xs font-mono text-muted-foreground shrink-0">
                   {orderCurrency || 'USD'}

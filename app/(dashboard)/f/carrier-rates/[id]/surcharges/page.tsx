@@ -9,6 +9,7 @@ import {
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { currencyDecimals } from '@/lib/currency-format';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
   listSurcharges, createSurcharge, updateSurcharge, deleteSurcharge,
@@ -272,6 +273,12 @@ function KindCard({
 }: KindCardProps) {
   const unitSuffix = unitSuffixFor(kind, currency);
   const perKgUnitSuffix = kind === 'remote_fixed' ? `${currency}/kg` : undefined;
+  // Pass through MoneyInput formatting hints — `undefined` means "render as
+  // plain Input" (percent / dimensionless), a number means "render with
+  // thousand separators and this many decimal places".
+  const moneyDecimals = currencyDecimals(currency);
+  const valueDecimals = meta.unit === 'percent' ? undefined : moneyDecimals;
+  const perKgDecimals = meta.supportsPerKg ? moneyDecimals : undefined;
   const activeCount = list.filter((s) => s.active).length;
   // FedEx publishes a weekly fuel % we can scrape directly off their
   // surcharges page. DHL would need a separate scraper — surface only when
@@ -350,6 +357,8 @@ function KindCard({
                 meta={meta}
                 unitSuffix={unitSuffix}
                 perKgUnitSuffix={perKgUnitSuffix}
+                valueDecimals={valueDecimals}
+                perKgDecimals={perKgDecimals}
                 currency={currency}
                 canManage={canManage}
                 accountId={accountId}
@@ -369,6 +378,8 @@ function KindCard({
               description={meta.desc}
               unitSuffix={unitSuffix}
               perKgUnitSuffix={perKgUnitSuffix}
+              valueDecimals={valueDecimals}
+              perKgDecimals={perKgDecimals}
               defaultValue=""
               defaultPerKgValue=""
               defaultNote=""
@@ -388,6 +399,8 @@ interface SurchargeSummaryRowProps {
   meta: KindMeta;
   unitSuffix: string;
   perKgUnitSuffix: string | undefined;
+  valueDecimals: number | undefined;
+  perKgDecimals: number | undefined;
   currency: string;
   canManage: boolean;
   accountId: string;
@@ -395,7 +408,8 @@ interface SurchargeSummaryRowProps {
 }
 
 function SurchargeSummaryRow({
-  row, meta, unitSuffix, perKgUnitSuffix, currency, canManage, accountId, userId,
+  row, meta, unitSuffix, perKgUnitSuffix, valueDecimals, perKgDecimals,
+  currency, canManage, accountId, userId,
 }: SurchargeSummaryRowProps) {
   const perKgNumber = row.valuePerKg !== null ? Number(row.valuePerKg) : null;
   const hasPerKg = perKgNumber !== null && Number.isFinite(perKgNumber) && perKgNumber > 0;
@@ -438,6 +452,8 @@ function SurchargeSummaryRow({
           description={meta.desc}
           unitSuffix={unitSuffix}
           perKgUnitSuffix={perKgUnitSuffix}
+          valueDecimals={valueDecimals}
+          perKgDecimals={perKgDecimals}
           defaultValue={row.value}
           defaultPerKgValue={row.valuePerKg}
           defaultNote={row.note ?? ''}

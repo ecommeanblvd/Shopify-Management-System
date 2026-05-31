@@ -6,6 +6,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { MoneyInputField } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,12 @@ export interface SurchargeEditDialogProps {
   tier?: string | null;
   /** Whether to render the per-kg input. Only true for remote_fixed with max-of-two semantics. */
   perKgVisible?: boolean;
+  /** When set, the value input becomes a MoneyInput with this many decimals
+   *  (thousand-separator display). Leave undefined for percent / dimensionless
+   *  surcharges where separators would be confusing. */
+  valueDecimals?: number;
+  /** Same as valueDecimals, for the per-kg companion. */
+  perKgDecimals?: number;
   /** Server action: applied on Save. Form data carries value/note/active. */
   saveAction: (formData: FormData) => void | Promise<void>;
   /** Server action: applied on Remove. When undefined, the Remove button is hidden (add mode). */
@@ -38,7 +45,8 @@ export interface SurchargeEditDialogProps {
 
 export function SurchargeEditDialog({
   triggerLabel, title, description, unitSuffix, perKgUnitSuffix, defaultValue, defaultPerKgValue,
-  defaultNote, defaultActive, tier, perKgVisible, saveAction, deleteAction,
+  defaultNote, defaultActive, tier, perKgVisible, valueDecimals, perKgDecimals,
+  saveAction, deleteAction,
   triggerVariant = 'outline-sm',
 }: SurchargeEditDialogProps) {
   const [open, setOpen] = useState(false);
@@ -83,12 +91,22 @@ export function SurchargeEditDialog({
               Value
             </Label>
             <div className="flex items-center gap-2">
-              <Input
-                name="value"
-                defaultValue={defaultValue}
-                className="font-mono tabular-nums"
-                required
-              />
+              {valueDecimals !== undefined ? (
+                <MoneyInputField
+                  name="value"
+                  defaultValue={defaultValue}
+                  decimals={valueDecimals}
+                  required
+                  className="flex-1"
+                />
+              ) : (
+                <Input
+                  name="value"
+                  defaultValue={defaultValue}
+                  className="font-mono tabular-nums"
+                  required
+                />
+              )}
               <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{unitSuffix}</span>
             </div>
           </div>
@@ -99,12 +117,22 @@ export function SurchargeEditDialog({
                 Per-kg companion (optional)
               </Label>
               <div className="flex items-center gap-2">
-                <Input
-                  name="valuePerKg"
-                  defaultValue={defaultPerKgValue ?? ''}
-                  placeholder="leave blank for flat-only"
-                  className="font-mono tabular-nums"
-                />
+                {perKgDecimals !== undefined ? (
+                  <MoneyInputField
+                    name="valuePerKg"
+                    defaultValue={defaultPerKgValue ?? ''}
+                    decimals={perKgDecimals}
+                    placeholder="leave blank for flat-only"
+                    className="flex-1"
+                  />
+                ) : (
+                  <Input
+                    name="valuePerKg"
+                    defaultValue={defaultPerKgValue ?? ''}
+                    placeholder="leave blank for flat-only"
+                    className="font-mono tabular-nums"
+                  />
+                )}
                 <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{perKgUnitSuffix}</span>
               </div>
               <p className="text-xs text-muted-foreground">

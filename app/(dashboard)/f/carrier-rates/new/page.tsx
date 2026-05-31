@@ -8,6 +8,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { listCarriers, createAccount } from '@/features/carrier-rates/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { MoneyInputField } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
@@ -107,14 +108,11 @@ export default async function NewCarrierAccountPage() {
                 />
               </Field>
               <Field label="FX rate" hint="Cost per 1 display unit. e.g. 26000 = 1 USD = 26 000 VND.">
-                <Input
+                <MoneyInputField
                   name="fxCostPerDisplay"
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
                   defaultValue="26000"
+                  decimals={4}
                   required
-                  className="font-mono tabular-nums"
                 />
               </Field>
             </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Check, X, Loader2 } from 'lucide-react';
+import { sanitizeMoneyRaw, formatMoneyForDisplay } from '@/components/ui/money-input';
 
 export interface MatrixZone {
   id: string;
@@ -31,26 +32,24 @@ interface Props {
 
 type CellState = 'idle' | 'saving' | 'saved' | 'error';
 
-// VND has no fractional unit. We strip decimals on display and group thousands.
-const VND_FORMATTER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-
-function formatVnd(raw: string): string {
-  if (!raw) return '';
-  const n = Number(String(raw).replace(/[,_\s]/g, ''));
-  if (!Number.isFinite(n)) return raw;
-  return VND_FORMATTER.format(Math.round(n));
-}
+// VND has no fractional unit. We use the shared MoneyInput helpers so the
+// matrix shows live thousand separators while typing, not just on blur.
+// `sanitizeMoneyRaw(input, 0)` strips decimals + separators; the display
+// re-injects commas via `formatMoneyForDisplay`.
 
 function parseVnd(input: string): number | null {
-  if (!input.trim()) return null;
-  const n = Number(input.replace(/[,_\s]/g, ''));
+  const raw = sanitizeMoneyRaw(input, 0);
+  if (!raw) return null;
+  const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
 export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction }: Props) {
-  // Map raw DB values to formatted display values ("401928.00" → "401,928")
+  // Map raw DB values to CANONICAL raw values (no separators). The Cell
+  // component renders them through `formatMoneyForDisplay` so commas appear
+  // live as the operator types.
   const initialMap = new Map<string, string>(
-    initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, formatVnd(c.costAmount)]),
+    initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, sanitizeMoneyRaw(c.costAmount, 0)]),
   );
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(initialMap.entries()));
   const [state, setState] = useState<Record<string, CellState>>({});
@@ -148,18 +147,21 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                           return;
                         }
 
-                        const formatted = formatVnd(String(parsed));
-                        if (formatted === (initialMap.get(key) ?? '')) {
+                        // Both `values[key]` and `initialMap` store the
+                        // CANONICAL raw (no separators). Display formatting
+                        // happens in <Cell> via `formatMoneyForDisplay`.
+                        const canonical = String(parsed);
+                        if (canonical === (initialMap.get(key) ?? '')) {
                           // no change after rounding
-                          setValues((p) => ({ ...p, [key]: formatted }));
+                          setValues((p) => ({ ...p, [key]: canonical }));
                           return;
                         }
 
                         setCellState(key, 'saving');
                         try {
-                          await setCellAction({ zoneId: z.id, tierId: t.id, costAmount: String(parsed) });
-                          initialMap.set(key, formatted);
-                          setValues((p) => ({ ...p, [key]: formatted }));
+                          await setCellAction({ zoneId: z.id, tierId: t.id, costAmount: canonical });
+                          initialMap.set(key, canonical);
+                          setValues((p) => ({ ...p, [key]: canonical }));
                           setCellState(key, 'saved');
                           setTimeout(() => setCellState(key, 'idle'), 1500);
                         } catch {
@@ -205,11 +207,15 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
     }
   }, [focused, state]);
 
+  // `value` is the canonical raw (e.g. "401928"). Always render through the
+  // formatter so the read-only and editable cells both show "401,928".
+  const display = formatMoneyForDisplay(value);
+
   if (!canEdit) {
     return (
       <td className="px-5 py-3 border-b border-border tabular-nums text-right whitespace-nowrap text-foreground">
-        {value ? value : <span className="text-muted-foreground/40">—</span>}
-        {value && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
+        {display ? display : <span className="text-muted-foreground/40">—</span>}
+        {display && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
       </td>
     );
   }
@@ -227,7 +233,7 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
           ref={ref}
           type="text"
           inputMode="numeric"
-          value={value}
+          value={display}
           onFocus={() => setFocused(true)}
           onBlur={(e) => {
             setFocused(false);
@@ -243,7 +249,7 @@ function Cell({ value, state, currency, canEdit, onChange, onCommit }: CellProps
               ref.current?.blur();
             }
           }}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(sanitizeMoneyRaw(e.target.value, 0))}
           placeholder="—"
           className={
             'w-full bg-transparent text-right tabular-nums px-5 py-3 outline-none transition-colors ' +
