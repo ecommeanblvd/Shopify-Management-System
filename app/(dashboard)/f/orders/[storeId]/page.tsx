@@ -192,12 +192,12 @@ export default async function StoreOrders({
       {/* Individual orders — full per-order P&L. Click any row to override
           per-line COGs and the shipping cost. */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Orders ({orderList.length})
+            Orders <span className="text-muted-foreground/60 font-mono tabular-nums normal-case tracking-normal">({orderList.length.toLocaleString()})</span>
           </h2>
           <p className="text-xs text-muted-foreground">
-            Click any row to override per-line costs or the shipping cost for that order.
+            Search by order #, or click any row to override per-line costs / shipping.
           </p>
         </div>
         <OrdersTable
