@@ -7,10 +7,11 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pencil, Save, RotateCcw, Loader2 } from 'lucide-react';
-import type { OrderListRow, OrderDetail } from '@/features/shopify-orders/order-actions';
+import type { OrderDetail } from '@/features/shopify-orders/order-actions';
+import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 
 interface OrdersTableProps {
-  orders: OrderListRow[];
+  orders: OrderRow[];
   canEdit: boolean;
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
@@ -40,23 +41,29 @@ export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: Or
   return (
     <>
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
               <tr>
-                <th className="text-left px-4 py-2">Order #</th>
-                <th className="text-left px-4 py-2">Date</th>
-                <th className="text-right px-4 py-2">Lines</th>
-                <th className="text-right px-4 py-2">GMV</th>
-                <th className="text-right px-4 py-2">Refunded</th>
-                <th className="text-left px-4 py-2">Overrides</th>
-                {canEdit && <th className="px-4 py-2 w-12" aria-label="Edit" />}
+                <th className="text-left px-3 py-2">Order #</th>
+                <th className="text-left px-3 py-2">Date</th>
+                <th className="text-right px-3 py-2">Lines</th>
+                <th className="text-right px-3 py-2">GMV</th>
+                <th className="text-right px-3 py-2">Refunded</th>
+                <th className="text-right px-3 py-2">Discount</th>
+                <th className="text-right px-3 py-2">Ship rev</th>
+                <th className="text-right px-3 py-2">Ship cost</th>
+                <th className="text-right px-3 py-2">SKU cost</th>
+                <th className="text-right px-3 py-2">Revenue</th>
+                <th className="text-right px-3 py-2">Margin %</th>
+                <th className="text-left px-3 py-2">Overrides</th>
+                {canEdit && <th className="px-3 py-2 w-10" aria-label="Edit" />}
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 7 : 6} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={canEdit ? 13 : 12} className="px-4 py-6 text-center text-muted-foreground">
                     No orders in this window.
                   </td>
                 </tr>
@@ -67,14 +74,34 @@ export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: Or
                   onClick={() => canEdit && openRow(o.orderId)}
                   className={`border-b border-border/40 ${canEdit ? 'cursor-pointer hover:bg-muted/30' : ''}`}
                 >
-                  <td className="px-4 py-2 font-mono">{o.shopifyOrderNumber}</td>
-                  <td className="px-4 py-2 text-xs">{new Date(o.processedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-right font-mono tabular-nums">{o.lineCount}</td>
-                  <td className="px-4 py-2 text-right font-mono tabular-nums">{fmt(o.gmv, o.currency)}</td>
-                  <td className="px-4 py-2 text-right font-mono tabular-nums text-destructive">
+                  <td className="px-3 py-2 font-mono">{o.shopifyOrderNumber}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{new Date(o.processedAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{o.lineCount}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.gmv, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
                     {o.refundedAmount > 0 ? fmt(o.refundedAmount, o.currency) : '—'}
                   </td>
-                  <td className="px-4 py-2 text-xs">
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.discount, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.shippingRevenue, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {o.shippingCostSource === 'unknown' ? (
+                      <span className="text-muted-foreground/60">—</span>
+                    ) : (
+                      <span title={o.shippingCostSource}>{fmt(o.shippingCost, o.currency)}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {o.skuCostCoverage === 0 ? (
+                      <span className="text-amber-600 dark:text-amber-400" title="no SKU cost data">—</span>
+                    ) : (
+                      fmt(o.skuCost, o.currency)
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold">{fmt(o.revenue, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">
+                    {o.netGmv > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
                     {o.hasOverrides ? (
                       <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">
                         manual
@@ -84,7 +111,7 @@ export function OrdersTable({ orders, canEdit, getDetailAction, saveAction }: Or
                     )}
                   </td>
                   {canEdit && (
-                    <td className="px-4 py-2 text-right text-muted-foreground">
+                    <td className="px-3 py-2 text-right text-muted-foreground">
                       <Pencil className="size-3.5 inline" />
                     </td>
                   )}

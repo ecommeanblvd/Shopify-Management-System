@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, gte, lte, desc, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
@@ -10,77 +10,11 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
 
 // ─────────────────────────────────────────────────────────────────────
-// Listing orders (clickable rows on the dashboard)
-// ─────────────────────────────────────────────────────────────────────
-
-export interface OrderListRow {
-  orderId: string;
-  shopifyOrderNumber: string;
-  processedAt: Date;
-  currency: string;
-  lineCount: number;
-  gmv: number;                    // Σ(unit_price × qty), pre any discount
-  refundedAmount: number;
-  hasOverrides: boolean;          // cost or shipping override exists
-}
-
-export async function listStoreOrders(args: {
-  storeId: string;
-  dateFrom: Date;
-  dateTo: Date;
-  limit?: number;
-}): Promise<OrderListRow[]> {
-  const limit = args.limit ?? 100;
-  const rowsRes = await db.execute<{
-    order_id: string;
-    shopify_order_number: string;
-    processed_at_shopify: Date | string;
-    currency: string;
-    line_count: string;
-    gmv: string;
-    refunded_amount: string;
-    has_overrides: boolean;
-  }>(sql`
-    SELECT
-      o.id AS order_id,
-      o.shopify_order_number,
-      o.processed_at_shopify,
-      o.currency,
-      COUNT(l.*) AS line_count,
-      COALESCE(SUM(l.unit_price * l.quantity), 0)::text AS gmv,
-      COALESCE((
-        SELECT SUM(r.amount) FROM shopify_order_refunds r WHERE r.order_id = o.id
-      ), 0)::text AS refunded_amount,
-      (
-        o.shipping_cost_override IS NOT NULL
-        OR EXISTS (
-          SELECT 1 FROM shopify_order_lines l2
-           WHERE l2.order_id = o.id AND l2.cost_override IS NOT NULL
-        )
-      ) AS has_overrides
-    FROM shopify_orders o
-    LEFT JOIN shopify_order_lines l ON l.order_id = o.id
-    WHERE o.store_id = ${args.storeId}
-      AND o.processed_at_shopify BETWEEN ${args.dateFrom} AND ${args.dateTo}
-    GROUP BY o.id
-    ORDER BY o.processed_at_shopify DESC
-    LIMIT ${limit};
-  `);
-  return rowsRes.rows.map((r) => ({
-    orderId: r.order_id,
-    shopifyOrderNumber: r.shopify_order_number,
-    processedAt: r.processed_at_shopify instanceof Date ? r.processed_at_shopify : new Date(r.processed_at_shopify),
-    currency: r.currency,
-    lineCount: Number(r.line_count),
-    gmv: Number(r.gmv),
-    refundedAmount: Number(r.refunded_amount),
-    hasOverrides: r.has_overrides,
-  }));
-}
-
-// ─────────────────────────────────────────────────────────────────────
 // Order detail for the edit modal
 // ─────────────────────────────────────────────────────────────────────
+//
+// The list of orders themselves lives on getStoreMetrics() in
+// dashboard-actions.ts so each row already has its computed P&L.
 
 export interface OrderLineDetail {
   lineId: string;
@@ -281,6 +215,3 @@ export async function updateOrderOverrides(
 }
 
 // Silence unused-import warnings for helpers kept available to extend later.
-void desc;
-void gte;
-void lte;

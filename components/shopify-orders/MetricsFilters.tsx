@@ -1,13 +1,11 @@
 'use client';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useTransition } from 'react';
-import type { Grouping } from '@/features/shopify-orders/dashboard-actions';
 import { Button } from '@/components/ui/button';
 
 interface MetricsFiltersProps {
   defaultFrom: string;
   defaultTo: string;
-  defaultGrouping: Grouping;
   defaultVendor: string[];
   showVendor: boolean;
   availableVendors: string[];
@@ -23,7 +21,6 @@ const PRESETS: Array<{ label: string; days: number }> = [
 export function MetricsFilters({
   defaultFrom,
   defaultTo,
-  defaultGrouping,
   defaultVendor,
   showVendor,
   availableVendors,
@@ -95,20 +92,6 @@ export function MetricsFilters({
           onChange={(e) => update({ to: e.target.value })}
           className="h-7 border border-input bg-input/30 rounded-md px-2 text-xs"
         />
-      </label>
-
-      <label className="flex items-center gap-1.5">
-        <span className="text-xs uppercase tracking-wider text-muted-foreground">Group</span>
-        <select
-          value={defaultGrouping}
-          onChange={(e) => update({ group: e.target.value })}
-          className="h-7 border border-input bg-input/30 rounded-md px-2 text-xs"
-        >
-          <option value="day">Day</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
-          {showVendor && <option value="vendor">Vendor</option>}
-        </select>
       </label>
 
       {showVendor && availableVendors.length > 0 && (

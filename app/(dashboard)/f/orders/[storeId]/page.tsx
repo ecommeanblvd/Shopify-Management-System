@@ -7,14 +7,11 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
-import { getStoreMetrics, type Grouping } from '@/features/shopify-orders/dashboard-actions';
-import {
-  listStoreOrders, getOrderDetail, updateOrderOverrides,
-} from '@/features/shopify-orders/order-actions';
+import { getStoreMetrics } from '@/features/shopify-orders/dashboard-actions';
+import { getOrderDetail, updateOrderOverrides } from '@/features/shopify-orders/order-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { Button } from '@/components/ui/button';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
-import { MetricsTable } from '@/components/shopify-orders/MetricsTable';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
 import { OrdersTable } from '@/components/shopify-orders/OrdersTable';
 import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
@@ -30,7 +27,7 @@ export default async function StoreOrders({
   searchParams,
 }: {
   params: Promise<{ storeId: string }>;
-  searchParams: Promise<{ from?: string; to?: string; vendor?: string; group?: Grouping }>;
+  searchParams: Promise<{ from?: string; to?: string; vendor?: string }>;
 }) {
   const { storeId } = await params;
   const sp = await searchParams;
@@ -58,21 +55,16 @@ export default async function StoreOrders({
   const dateFrom = sp.from
     ? new Date(sp.from)
     : new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
-  const grouping = (sp.group as Grouping) ?? 'day';
   const vendorFilter = sp.vendor?.split(',').filter(Boolean);
 
   const showVendor = VENDOR_FILTER_DOMAINS.includes(store.shopDomain);
 
-  const { total, buckets } = await getStoreMetrics({
+  const { total, orders: orderList } = await getStoreMetrics({
     storeId,
     dateFrom,
     dateTo,
     vendorFilter: showVendor ? vendorFilter : undefined,
-    grouping,
   });
-
-  // Individual orders in the same window, for the clickable list at the bottom.
-  const orderList = await listStoreOrders({ storeId, dateFrom, dateTo, limit: 100 });
 
   // Distinct vendors across all lines in the window. We re-query just the
   // vendor column rather than threading it through getStoreMetrics — keeps
@@ -178,7 +170,6 @@ export default async function StoreOrders({
       <MetricsFilters
         defaultFrom={dateFrom.toISOString().slice(0, 10)}
         defaultTo={dateTo.toISOString().slice(0, 10)}
-        defaultGrouping={grouping}
         defaultVendor={vendorFilter ?? []}
         showVendor={showVendor}
         availableVendors={vendors}
@@ -186,14 +177,12 @@ export default async function StoreOrders({
 
       <MetricsKpis metrics={total} />
 
-      <MetricsTable buckets={buckets} grouping={grouping} currency={total.currency} />
-
-      {/* Individual orders — click any row to edit per-line COGs and the
-          shipping cost. Limited to the most recent 100 in the active window. */}
+      {/* Individual orders — full per-order P&L. Click any row to override
+          per-line COGs and the shipping cost. */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Orders ({orderList.length}{orderList.length === 100 ? '+' : ''})
+            Orders ({orderList.length})
           </h2>
           <p className="text-xs text-muted-foreground">
             Click any row to override per-line costs or the shipping cost for that order.
