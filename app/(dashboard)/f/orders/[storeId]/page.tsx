@@ -10,10 +10,12 @@ import { db, schema } from '@/db/client';
 import { getStoreMetrics } from '@/features/shopify-orders/dashboard-actions';
 import { getOrderDetail, updateOrderOverrides } from '@/features/shopify-orders/order-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
+import { updateStoreCostFx } from '@/features/shopify-orders/cost-fx-actions';
 import { Button } from '@/components/ui/button';
 import { MetricsKpis } from '@/components/shopify-orders/MetricsKpis';
 import { MetricsFilters } from '@/components/shopify-orders/MetricsFilters';
 import { OrdersTable } from '@/components/shopify-orders/OrdersTable';
+import { CostFxButton } from '@/components/shopify-orders/CostFxButton';
 import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
 
 export const dynamic = 'force-dynamic';
@@ -147,6 +149,15 @@ export default async function StoreOrders({
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          {hasPermission(role, 'manage_stores') && (
+            <CostFxButton
+              storeId={storeId}
+              orderCurrency={total.currency || 'USD'}
+              initialCostCurrency={store.costCurrency}
+              initialFxRate={store.fxCostPerOrderCurrency}
+              saveAction={updateStoreCostFx}
+            />
+          )}
           {hasPermission(role, 'manage_sku_costs') && (
             <Link href={`/f/orders/${storeId}/costs`}>
               <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 px-2.5 text-xs">
@@ -191,6 +202,7 @@ export default async function StoreOrders({
         <OrdersTable
           orders={orderList}
           canEdit={hasPermission(role, 'manage_sku_costs')}
+          costCurrency={store.costCurrency}
           getDetailAction={getOrderDetail}
           saveAction={updateOrderOverrides as unknown as (input: {
             orderId: string;
