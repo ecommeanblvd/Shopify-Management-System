@@ -287,18 +287,26 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
               />
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 Shipping cost override
+                {!sameCcy && (
+                  <span className="px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal">
+                    {cogsCcy}
+                  </span>
+                )}
               </span>
-              <input
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                placeholder="blank = use default"
-                value={shippingOverride}
-                onChange={(e) => setShippingOverride(e.target.value)}
-                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="blank = use default"
+                  value={shippingOverride}
+                  onChange={(e) => setShippingOverride(e.target.value)}
+                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums"
+                />
+                <span className="text-xs font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
+              </div>
             </label>
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">
