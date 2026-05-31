@@ -380,6 +380,13 @@ export const shopifyOrders = pgTable('shopify_orders', {
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
   source: text('source').notNull(),
+  // Optional per-order shipping cost override. When set, takes precedence
+  // over both `shipping_invoices` actuals AND the carrier-engine estimate
+  // — operators use this when they know the real shipping bill for an
+  // individual order before/instead of the invoice arriving (e.g. one-off
+  // courier, free shipping promo, comped order).
+  shippingCostOverride: numeric('shipping_cost_override', { precision: 14, scale: 2 }),
+  shippingCostOverrideNote: text('shipping_cost_override_note'),
 }, (t) => [
   index('shopify_orders_store_processed_idx').on(t.storeId, t.processedAtShopify),
   index('shopify_orders_cancelled_idx').on(t.cancelledAtShopify),
@@ -397,6 +404,9 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
   discountAlloc: numeric('discount_alloc', { precision: 14, scale: 2 }).notNull(),
   total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+  // Optional per-line COGs override. When set, takes precedence over the
+  // sku_costs lookup. Same per-unit precision as sku_costs.cost_per_unit.
+  costOverride: numeric('cost_override', { precision: 14, scale: 4 }),
 }, (t) => [
   index('shopify_order_lines_order_idx').on(t.orderId),
   index('shopify_order_lines_sku_idx').on(t.sku),

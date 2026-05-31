@@ -1,4 +1,4 @@
-export type ShippingCostSource = 'invoice' | 'engine_estimate' | 'unknown';
+export type ShippingCostSource = 'override' | 'invoice' | 'engine_estimate' | 'unknown';
 
 export interface ComputeInput {
   orderId: string;
