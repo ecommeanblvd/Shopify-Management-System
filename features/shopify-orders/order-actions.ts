@@ -40,7 +40,14 @@ export interface OrderShippingDetail {
   defaultSource: 'invoice' | 'engine_estimate' | 'unknown';
   /** Present only when `defaultSource === 'unknown'`. Tells the operator
    *  what's missing — see `EngineEstimateReason`. */
-  defaultUnknownReason: 'no_country' | 'no_weight' | 'no_market' | 'no_carrier_link' | 'no_quote' | null;
+  defaultUnknownReason:
+    | 'no_country'
+    | 'no_weight'
+    | 'no_market'
+    | 'no_carrier_link'
+    | 'no_carrier_accounts'
+    | 'no_quote'
+    | null;
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
 }

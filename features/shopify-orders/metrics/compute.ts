@@ -9,8 +9,9 @@ export type ShippingCostSource = 'override' | 'invoice' | 'engine_estimate' | 'u
 export type ShippingCostReason =
   | 'no_country'
   | 'no_weight'
-  | 'no_market'
-  | 'no_carrier_link'
+  | 'no_market'           // retired by the estimator's fallback path but kept for legacy rows
+  | 'no_carrier_link'     // retired by the estimator's fallback path but kept for legacy rows
+  | 'no_carrier_accounts'
   | 'no_quote';
 
 export interface ComputeInput {
