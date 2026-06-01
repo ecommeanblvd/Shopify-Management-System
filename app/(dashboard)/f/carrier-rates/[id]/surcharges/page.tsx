@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2, Receipt,
+  RefreshCw, Zap, Globe2, Receipt, PackageCheck,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -108,6 +108,16 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-fuchsia-500/10',
     supportsPerKg: false,
   },
+  country_fixed: {
+    label: 'Country fixed fee',
+    desc: 'Country-scoped FLAT per-shipment fee. Used by FedEx VN "Phí xử lý hàng nhập tại Hoa Kỳ" (US import handling / Duty Prepaid). Fuel applies on top.',
+    formula: '+ value (when destination in country list)',
+    unit: 'amount',
+    icon: <PackageCheck className="size-4" />,
+    accent: 'text-violet-600 dark:text-violet-400',
+    accentBg: 'bg-violet-500/10',
+    supportsPerKg: false,
+  },
   vat_percent: {
     label: 'VAT',
     desc: 'Value-added tax applied on (base + surcharges + fuel). FedEx Vietnam: 8 %.',
@@ -121,7 +131,7 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'vat_percent', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'country_fixed', 'vat_percent', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -326,7 +336,7 @@ function KindCard({
   const perKgDecimals = meta.supportsPerKg ? moneyDecimals : undefined;
   // Country scope is only meaningful for `demand_per_kg` — every other kind
   // applies globally so we hide the input to keep the dialog minimal.
-  const countriesVisible = kind === 'demand_per_kg';
+  const countriesVisible = kind === 'demand_per_kg' || kind === 'country_fixed';
   const activeCount = list.filter((s) => s.active).length;
   // FedEx publishes a weekly fuel % we can scrape directly off their
   // surcharges page. DHL would need a separate scraper — surface only when
@@ -510,7 +520,7 @@ function SurchargeSummaryRow({
                 : `${row.countryCodes.slice(0, 3).join(' · ')} +${row.countryCodes.length - 3}`}
             </span>
           )}
-          {row.kind === 'demand_per_kg' && (!row.countryCodes || row.countryCodes.length === 0) && (
+          {(row.kind === 'demand_per_kg' || row.kind === 'country_fixed') && (!row.countryCodes || row.countryCodes.length === 0) && (
             <Badge variant="outline" className="h-4 text-[9px] uppercase tracking-wider px-1.5">
               all destinations
             </Badge>

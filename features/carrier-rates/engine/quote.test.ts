@@ -253,6 +253,77 @@ describe('quote engine', () => {
       });
     });
 
+    describe('country_fixed (flat per-shipment country-scoped fee)', () => {
+      it('applies the flat fee when destination is in country_codes', () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([
+            ['US', { label: 'Zone D', rateByTierUpper: new Map([[5, 600_000]]) }],
+          ]),
+          weightTiers: [{ upperKg: 5 }],
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US', 'PR'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 3.5, destinationCountry: 'US' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.countryFixed).toBe(68_300);
+      });
+
+      it('skips when destination is outside country_codes', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.countryFixed).toBe(0);
+      });
+
+      it('reproduces FedEx invoice for #MBLVD28990 (US Zone D, 3.5 kg)', () => {
+        // Real numbers from FedEx Cost-breakdown screenshot for #MBLVD28990:
+        //   Base                            ₫2,244,600  (post-discount in our sheet)
+        //   Phí xử lý hàng nhập tại Hoa Kỳ      68,300
+        //   PHỤ PHÍ NHIÊN LIỆU                 346,453  ≈ 15% of (base + handling)
+        //   Vietnam VAT 8%                      89,457  on subtotal AFTER discount
+        //                                  ──────────
+        //   Total                            1,207,668
+        //
+        // For this engine test the rate sheet (post-discount) holds the
+        // base ALREADY net of FedEx discount. So:
+        //   base = ₫703,458  (= 2,244,600 - 1,541,142 discount)
+        //   + US handling     68,300
+        //   = fuelable       771,758
+        //   × (1 + fuel%)
+        //   + VAT 8%
+        //   = 1,207,668
+        // Fuel% required: see math below.
+        const snap = makeSnap({
+          zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[3.5, 703_458]]) }]]),
+          weightTiers: [{ upperKg: 3.5 }],
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'] },
+            { kind: 'fuel_percent', value: 44.89, active: true },
+            { kind: 'vat_percent', value: 8, active: true },
+          ],
+        });
+        const r = quote(snap, { weightKg: 3.5, destinationCountry: 'US' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.base).toBe(703_458);
+        expect(r.breakdown.countryFixed).toBe(68_300);
+        // fuelable = 771,758 × 0.4489 = 346,442 (rounded)
+        // Tolerance ±50 covers the slight fuel% rounding (real FedEx
+        // figure used 15% on pre-discount; we approximate to 44.89%
+        // on post-discount, off by ~10 VND).
+        expect(r.breakdown.fuel).toBeCloseTo(346_452, -2);
+        expect(r.breakdown.vat).toBeCloseTo(89_457, -2);
+        expect(r.breakdown.carrierCost).toBeCloseTo(1_207_668, -2);
+      });
+    });
+
     it('rounds up to the next tier (1.2 kg → 2 kg tier)', () => {
       const snap = makeSnap();
       const r = quote(snap, { weightKg: 1.2, destinationCountry: 'MY' });

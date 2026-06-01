@@ -113,6 +113,13 @@
       "when": 1780308870298,
       "tag": "0015_add_vat_percent",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780312404711,
+      "tag": "0016_add_country_fixed_surcharge",
+      "breakpoints": true
     }
   ]
 }

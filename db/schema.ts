@@ -294,6 +294,12 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // Multiple rows with overlapping country lists ALL apply (sum), matching
   // FedEx's "two demand surcharges can compound" semantics.
   'demand_per_kg',
+  // Country-scoped FLAT per-shipment fee — e.g. FedEx Vietnam "Phí xử lý
+  // hàng nhập tại Hoa Kỳ" (US import-handling / Duty Prepaid). Uses the
+  // same `country_codes` jsonb scoping as `demand_per_kg`. Folded into the
+  // fuelable subtotal so fuel applies on top — invoice math confirms the
+  // FedEx behaviour: fuel = 15% × (base + this fee).
+  'country_fixed',
   // VAT applied on (base + all surcharges + fuel). FedEx VN charges 8 %
   // (temporarily reduced from 10 %); operators in other jurisdictions can
   // set their own rate. Applied BEFORE markup so markup compounds on the

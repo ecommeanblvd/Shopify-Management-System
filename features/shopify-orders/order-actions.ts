@@ -64,6 +64,7 @@ export interface OrderShippingDetail {
     residential: number;
     perKg: number;
     demand: number;
+    countryFixed: number;
     fuel: number;
     /** Effective VAT % that was applied. */
     vatPercent: number;
@@ -168,6 +169,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           residential: est.breakdown.residential,
           perKg: est.breakdown.perKg,
           demand: est.breakdown.demand,
+          countryFixed: est.breakdown.countryFixed,
           fuel: est.breakdown.fuel,
           vatPercent: est.breakdown.vatPercent,
           vat: est.breakdown.vat,
