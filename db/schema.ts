@@ -440,6 +440,13 @@ export const shopifyOrders = pgTable('shopify_orders', {
   // courier, free shipping promo, comped order).
   shippingCostOverride: numeric('shipping_cost_override', { precision: 14, scale: 2 }),
   shippingCostOverrideNote: text('shipping_cost_override_note'),
+  // Optional per-order weight override. When set, the carrier-engine
+  // uses this weight instead of `ship_weight_kg` to look up the rate.
+  // Used for legacy orders where the variant weight was wrong at sync
+  // time and got snapshot — fixing the variant in Shopify doesn't
+  // retroactively update past orders, so the operator points the
+  // engine at the correct weight here.
+  shipWeightKgOverride: numeric('ship_weight_kg_override', { precision: 10, scale: 3 }),
 }, (t) => [
   index('shopify_orders_store_processed_idx').on(t.storeId, t.processedAtShopify),
   index('shopify_orders_cancelled_idx').on(t.cancelledAtShopify),

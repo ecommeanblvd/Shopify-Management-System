@@ -220,9 +220,15 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
           source: 'invoice',
         };
       } else {
+        // Use the per-order weight override when set — operator points the
+        // engine at the right weight after Shopify variant has been fixed
+        // but the snapshot still carries the old value.
+        const effectiveWeight = o.shipWeightKgOverride !== null
+          ? Number(o.shipWeightKgOverride)
+          : o.shipWeightKg !== null ? Number(o.shipWeightKg) : null;
         const est = estimator.estimate({
           shipCountry: o.shipCountry,
-          shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
+          shipWeightKg: effectiveWeight,
         });
         // Engine returns BOTH the display-currency value (USD) and the
         // cost-currency value (VND, straight from the rate sheet). When
@@ -302,7 +308,9 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     });
 
     const hasLineOverride = filteredLines.some((l) => l.costOverride !== null);
-    const hasOverrides = hasLineOverride || o.shippingCostOverride !== null;
+    const hasOverrides = hasLineOverride
+      || o.shippingCostOverride !== null
+      || o.shipWeightKgOverride !== null;
     allMetrics.push(m);
     rows.push({
       ...m,

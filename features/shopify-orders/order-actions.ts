@@ -89,7 +89,12 @@ export interface OrderDetail {
   processedAt: Date;
   currency: string;
   shipCountry: string | null;
+  /** Weight pulled from the Shopify order snapshot. Frozen at sync time. */
   shipWeightKg: number | null;
+  /** Operator-set override. When non-null, the engine uses this instead of
+   *  `shipWeightKg`. Lets operators correct legacy orders without
+   *  re-syncing from Shopify. */
+  shipWeightKgOverride: number | null;
   lines: OrderLineDetail[];
   shipping: OrderShippingDetail;
 }
@@ -151,9 +156,14 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     }
   }
   if (defaultShipping.source === 'unknown') {
+    // Operator weight override wins so the breakdown reflects the
+    // corrected weight, not the stale Shopify snapshot value.
+    const effectiveWeight = order.shipWeightKgOverride !== null
+      ? Number(order.shipWeightKgOverride)
+      : order.shipWeightKg !== null ? Number(order.shipWeightKg) : null;
     const est = await resolveShippingEstimate({
       shipCountry: order.shipCountry,
-      shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
+      shipWeightKg: effectiveWeight,
     });
     if (est.source !== 'unknown' && est.breakdown !== null) {
       defaultShipping = {
@@ -198,6 +208,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     currency: order.currency,
     shipCountry: order.shipCountry,
     shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
+    shipWeightKgOverride: order.shipWeightKgOverride !== null ? Number(order.shipWeightKgOverride) : null,
     lines: lines.map((l) => {
       const c = l.sku ? costMap.get(l.sku) : undefined;
       return {
@@ -255,6 +266,12 @@ export interface UpdateOrderOverridesInput {
   /** Per-order shipping cost override. `null` clears it. */
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
+  /** Per-order weight override (kg). When non-null, the engine uses this
+   *  to look up the rate instead of the Shopify-snapshot weight. `null`
+   *  clears it. Used for legacy orders whose variant weight was wrong
+   *  at sync time and got snapshotted — fixing the variant later doesn't
+   *  retroactively update past orders. */
+  shipWeightKgOverride: number | null;
 }
 
 export interface UpdateOrderOverridesResult {
@@ -299,6 +316,8 @@ export async function updateOrderOverrides(
         shippingCostOverride:
           input.shippingCostOverride === null ? null : input.shippingCostOverride.toString(),
         shippingCostOverrideNote: input.shippingCostOverrideNote,
+        shipWeightKgOverride:
+          input.shipWeightKgOverride === null ? null : input.shipWeightKgOverride.toString(),
       })
       .where(eq(schema.shopifyOrders.id, input.orderId));
   });

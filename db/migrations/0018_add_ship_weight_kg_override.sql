@@ -1,0 +1,1 @@
+ALTER TABLE "shopify_orders" ADD COLUMN "ship_weight_kg_override" numeric(10, 3);

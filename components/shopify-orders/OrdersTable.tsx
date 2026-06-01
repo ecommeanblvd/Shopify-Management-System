@@ -36,6 +36,7 @@ interface OrdersTableProps {
     lineCosts: Record<string, number | null>;
     shippingCostOverride: number | null;
     shippingCostOverrideNote: string | null;
+    shipWeightKgOverride: number | null;
   }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>;
 }
 
@@ -377,6 +378,9 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
     detail.shipping.shippingCostOverride !== null ? String(detail.shipping.shippingCostOverride) : '',
   );
   const [shippingNote, setShippingNote] = useState<string>(detail.shipping.shippingCostOverrideNote ?? '');
+  const [weightOverride, setWeightOverride] = useState<string>(
+    detail.shipWeightKgOverride !== null ? String(detail.shipWeightKgOverride) : '',
+  );
   const [pending, startTransition] = useTransition();
 
   const onSave = (): void => {
@@ -386,12 +390,14 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
       lineCostsPayload[id] = trimmed === '' ? null : Number(trimmed);
     }
     const ship = shippingOverride.trim() === '' ? null : Number(shippingOverride);
+    const weight = weightOverride.trim() === '' ? null : Number(weightOverride);
     startTransition(async () => {
       await saveAction({
         orderId: detail.orderId,
         lineCosts: lineCostsPayload,
         shippingCostOverride: ship,
         shippingCostOverrideNote: shippingNote.trim() === '' ? null : shippingNote.trim(),
+        shipWeightKgOverride: weight,
       });
       onSaved();
     });
@@ -401,6 +407,7 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
     setLineCosts(Object.fromEntries(detail.lines.map((l) => [l.lineId, ''])));
     setShippingOverride('');
     setShippingNote('');
+    setWeightOverride('');
   };
 
   return (
@@ -521,6 +528,33 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                 shipWeightKg={detail.shipWeightKg}
               />
             )}
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
+                Weight override
+                <span className="text-[10px] font-mono normal-case tracking-normal text-muted-foreground/80">
+                  snapshot: {detail.shipWeightKg !== null ? `${detail.shipWeightKg.toFixed(3)} kg` : '—'}
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.001"
+                  min="0"
+                  placeholder="blank = use Shopify snapshot weight"
+                  value={weightOverride}
+                  onChange={(e) => setWeightOverride(e.target.value)}
+                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                />
+                <span className="text-xs font-mono text-muted-foreground shrink-0">kg</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Use this when the variant weight was wrong at sync time
+                and got snapshotted. Fixing the Shopify variant doesn&rsquo;t
+                retroactively update past orders — this points the
+                carrier-engine at the correct weight for the rate lookup.
+              </p>
+            </label>
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 Shipping cost override
