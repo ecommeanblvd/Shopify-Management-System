@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
@@ -541,4 +542,92 @@ export const shopifyWebhookLog = pgTable('shopify_webhook_log', {
   payloadHash: text('payload_hash').notNull(),
 }, (t) => [
   index('shopify_webhook_log_store_received_idx').on(t.storeId, t.receivedAt),
+]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Functions module — pluggable storefront-side features (wishlist, etc.)
+// Each function is registered at code-level (lib/registry/functions.ts)
+// and can be enabled/disabled per store via the store_function_settings
+// table. Data lives in function-specific tables; only the activation
+// flag + per-store config blob is shared.
+// ─────────────────────────────────────────────────────────────────────
+
+export const storeFunctionSettings = pgTable('store_function_settings', {
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  functionKey: text('function_key').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  /** Function-specific configuration blob (e.g. wishlist accent colour,
+   *  email template overrides). Each function defines its own shape. */
+  config: jsonb('config'),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.storeId, t.functionKey] }),
+]);
+
+// One wishlist per (store, identity). Identity is either an authenticated
+// customer's email (preferred — survives device wipes) or a guest
+// device id (UUID written to localStorage by the storefront script).
+// Multi-store isolation enforced by the partial unique indexes below:
+// the same email at meanblvd and mirer are two distinct wishlists.
+export const wishlists = pgTable('wishlists', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  customerEmail: text('customer_email'),
+  /** Shopify customer GID when the storefront script can resolve it
+   *  (logged-in shopper). Helps reconcile with Shopify customer-level
+   *  analytics; not the primary identity. */
+  shopifyCustomerId: text('shopify_customer_id'),
+  /** Random UUID written to localStorage for anonymous shoppers. Merged
+   *  into a registered (email-keyed) wishlist on login. */
+  deviceId: text('device_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('wishlists_store_email_idx')
+    .on(t.storeId, t.customerEmail)
+    .where(sql`${t.customerEmail} IS NOT NULL`),
+  uniqueIndex('wishlists_store_device_idx')
+    .on(t.storeId, t.deviceId)
+    .where(sql`${t.deviceId} IS NOT NULL`),
+]);
+
+// One row per product (or variant) in a wishlist. We snapshot the
+// title/handle/image/price at add-time so the storefront can render the
+// wishlist page without a fan-out to Shopify Storefront API. A future
+// background job will refresh stale snapshots on price/stock change.
+export const wishlistItems = pgTable('wishlist_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  wishlistId: uuid('wishlist_id').references(() => wishlists.id, { onDelete: 'cascade' }).notNull(),
+  shopifyProductId: text('shopify_product_id').notNull(),
+  shopifyVariantId: text('shopify_variant_id'),
+  productTitle: text('product_title').notNull(),
+  variantTitle: text('variant_title'),
+  productHandle: text('product_handle').notNull(),
+  imageUrl: text('image_url'),
+  priceAmount: numeric('price_amount', { precision: 14, scale: 2 }),
+  priceCurrency: text('price_currency'),
+  addedAt: timestamp('added_at').defaultNow().notNull(),
+}, (t) => [
+  // Dedup: same product+variant added twice → noop. `COALESCE` so NULL
+  // variant ids collapse to a single canonical key.
+  uniqueIndex('wishlist_items_dedup_idx')
+    .on(t.wishlistId, t.shopifyProductId, sql`COALESCE(${t.shopifyVariantId}, '')`),
+  index('wishlist_items_product_idx').on(t.shopifyProductId),
+]);
+
+// Append-only event log for analytics. Every add/remove/share/view is
+// written here so the dashboard can compute funnel + cohort metrics
+// without scanning the wishlist tables.
+export const wishlistEvents = pgTable('wishlist_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  wishlistId: uuid('wishlist_id').references(() => wishlists.id, { onDelete: 'set null' }),
+  /** 'add' | 'remove' | 'merge' | 'share' | 'view' — kept as text so new
+   *  event types don't need a migration. */
+  eventType: text('event_type').notNull(),
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('wishlist_events_store_created_idx').on(t.storeId, t.createdAt),
 ]);

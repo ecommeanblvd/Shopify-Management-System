@@ -15,7 +15,9 @@ export type Permission =
   | 'view_carrier_rates'
   | 'view_orders'
   | 'manage_sku_costs'
-  | 'manage_shipping_invoices';
+  | 'manage_shipping_invoices'
+  | 'manage_functions'
+  | 'view_functions';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -26,6 +28,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'manage_markets_template', 'apply_markets', 'view_markets_history',
     'manage_carrier_rates', 'view_carrier_rates',
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
+    'manage_functions', 'view_functions',
   ],
   operator: [
     'view', 'run_feature',
@@ -33,10 +36,11 @@ const MATRIX: Record<Role, Permission[]> = {
     'apply_markets', 'view_markets_history',
     'manage_carrier_rates', 'view_carrier_rates',
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
+    'manage_functions', 'view_functions',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
-    'view_orders',
+    'view_orders', 'view_functions',
   ],
 };
 
