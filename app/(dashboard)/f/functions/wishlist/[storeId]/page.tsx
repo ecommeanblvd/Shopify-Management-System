@@ -2,13 +2,15 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity } from 'lucide-react';
+import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity, Code2 } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { WishlistInstallSnippet } from '@/components/functions/WishlistInstallSnippet';
 import {
   getWishlistSummary, getTopWishlistedProducts,
 } from '@/features/functions/wishlist/admin-actions';
@@ -38,6 +40,8 @@ export default async function WishlistStorePage({
     listWishlistsForStore(storeId, 50),
   ]);
 
+  const embedUrl = `${getEnv().SHOPIFY_APP_URL.replace(/\/$/, '')}/api/storefront/wishlist/embed`;
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <Link
@@ -62,6 +66,16 @@ export default async function WishlistStorePage({
         <Tile icon={<Package className="size-4" />} label="Items saved" value={summary.itemCount.toLocaleString()} sub="across all wishlists" />
         <Tile icon={<Activity className="size-4" />} label="Last 7 days" value={summary.recentEvents.toLocaleString()} sub="events recorded" />
       </div>
+
+      <Card>
+        <CardContent className="p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Code2 className="size-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Storefront install</h2>
+          </div>
+          <WishlistInstallSnippet shopDomain={store.shopDomain} embedUrl={embedUrl} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">

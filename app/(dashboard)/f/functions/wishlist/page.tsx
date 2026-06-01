@@ -109,16 +109,14 @@ export default async function WishlistAdminPage() {
         <CardContent className="p-5 space-y-2">
           <h3 className="text-sm font-semibold">Storefront integration</h3>
           <p className="text-xs text-muted-foreground">
-            The embed script that drops the heart button + wishlist page on a
-            Shopify storefront ships in the next release. The activation flag
-            here is what the script&rsquo;s opening fetch checks before it
-            mounts, so wiring up stores ahead of time is safe.
+            The wishlist embed script is now live. Activate a store above,
+            then open its analytics page to copy the script tag for the
+            theme &mdash; the script auto-mounts the heart button on PDPs
+            and the drawer site-wide.
           </p>
           <p className="text-[11px] font-mono text-muted-foreground/80 mt-1.5">
-            Coming next:{' '}
-            <span className="text-foreground">
-              /api/storefront/wishlist/embed.js?shop=&lt;handle&gt;.myshopify.com
-            </span>
+            Bundle:{' '}
+            <span className="text-foreground">/api/storefront/wishlist/embed</span>
           </p>
         </CardContent>
       </Card>

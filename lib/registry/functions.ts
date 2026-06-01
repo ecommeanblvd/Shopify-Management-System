@@ -38,7 +38,7 @@ export const FUNCTIONS: FunctionManifest[] = [
       'Customer-facing wishlist with multi-device sync, guest support, and ' +
       'conversion analytics. Replaces third-party Wishlist apps for stores that ' +
       'already use this operator dashboard.',
-    version: '0.1.0',
+    version: '0.2.0',
     icon: 'Heart',
     accent: { fg: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10' },
     routes: { admin: '/f/functions/wishlist', storefront: '/api/storefront/wishlist' },
