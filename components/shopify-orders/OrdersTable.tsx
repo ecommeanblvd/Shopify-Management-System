@@ -258,15 +258,14 @@ export function OrdersTable({
                         —
                       </span>
                     ) : showShipInCostCurrency ? (
-                      // Inverse-FX the already-converted USD value back to
-                      // the brand's cost currency. We round once at display
-                      // time — the precision matches the operator's
-                      // reconciliation use case (eyeballing against a
-                      // carrier invoice line).
+                      // Use the raw cost-currency value computed directly
+                      // from the rate sheet / invoice / override — no
+                      // USD→VND round-trip, so the number matches what the
+                      // carrier will actually invoice down to the integer.
                       <span
                         title={`${o.shippingCostSource} · ${fmt(o.shippingCost, o.currency)} in order currency`}
                       >
-                        {fmt(o.shippingCost * fxRate!, costCurrency!)}
+                        {fmt(o.shippingCostRaw, o.shippingCostRawCurrency || costCurrency!)}
                       </span>
                     ) : (
                       <span title={o.shippingCostSource}>{fmt(o.shippingCost, o.currency)}</span>

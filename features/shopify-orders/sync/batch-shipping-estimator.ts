@@ -51,7 +51,17 @@ export type EngineEstimateReason =
 // keeps friendly labels for them, but the estimator no longer emits them.
 
 export interface EngineEstimateResult {
+  /** Carrier cost in the carrier's DISPLAY currency (typically the order
+   *  currency, e.g. USD). Derived via `carrierCost / fxCostPerDisplay`. */
   amount: number;
+  /** Carrier cost in the carrier's COST currency (e.g. VND). This is the
+   *  raw integer from the rate sheet + surcharges — no FX round-trip. The
+   *  dashboard uses it for cost-currency display so the operator sees the
+   *  same VND number the engine actually computed (and that the carrier
+   *  will invoice), not a re-derived value. */
+  costAmount: number;
+  /** ISO-3 code of `costAmount`'s currency. */
+  costCurrency: string;
   source: 'engine_estimate' | 'unknown';
   /** Present only when `source === 'unknown'`. */
   reason?: EngineEstimateReason;
@@ -147,18 +157,28 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
 
   /**
    * Cheapest successful quote across the given carrier ids, or null if
-   * none of them can quote the country+weight. Reused by the primary
-   * (linked) path and the fallback (any-enabled) path.
+   * none of them can quote the country+weight. Returns both the
+   * display-currency value (USD) and the underlying cost-currency value
+   * (VND) so the dashboard can render the original VND directly without
+   * a USD→VND round-trip that loses 2dp precision.
    */
-  function bestQuote(carrierIds: readonly string[], country: string, weightKg: number): number | null {
-    let best: number | null = null;
+  function bestQuote(
+    carrierIds: readonly string[], country: string, weightKg: number,
+  ): { display: number; cost: number; costCurrency: string } | null {
+    let best: { display: number; cost: number; costCurrency: string } | null = null;
     for (const id of carrierIds) {
       const snap = snapshotsByCarrier.get(id);
       if (!snap) continue;
       const q = quote(snap, { weightKg, destinationCountry: country });
       if (q.ok) {
-        const amt = q.breakdown.carrierCostDisplay;
-        if (best === null || amt < best) best = amt;
+        const display = q.breakdown.carrierCostDisplay;
+        if (best === null || display < best.display) {
+          best = {
+            display,
+            cost: q.breakdown.carrierCost,
+            costCurrency: snap.costCurrency,
+          };
+        }
       }
     }
     return best;
@@ -169,9 +189,11 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // Country and weight come from `shipping_address.country_code_v2`
       // and `total_weight` on the Shopify order respectively. Either
       // missing means the order can't even start a quote — surface why.
-      if (!input.shipCountry) return { amount: 0, source: 'unknown', reason: 'no_country' };
+      if (!input.shipCountry) {
+        return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_country' };
+      }
       if (!input.shipWeightKg || input.shipWeightKg <= 0) {
-        return { amount: 0, source: 'unknown', reason: 'no_weight' };
+        return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_weight' };
       }
       // Round weight to 3 dp so micro-fluctuations don't bust the memo;
       // the rate matrix only changes on tier boundaries anyway.
@@ -184,7 +206,10 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // to fall back to — the operator needs to configure a carrier
       // before any order can be priced.
       if (allCarrierIds.length === 0) {
-        const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_carrier_accounts' };
+        const r: EngineEstimateResult = {
+          amount: 0, costAmount: 0, costCurrency: '',
+          source: 'unknown', reason: 'no_carrier_accounts',
+        };
         memo.set(key, r);
         return r;
       }
@@ -194,7 +219,12 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       const linkedCarrierIds = carriersFor(input.shipCountry);
       const linkedBest = bestQuote(linkedCarrierIds, input.shipCountry, input.shipWeightKg);
       if (linkedBest !== null) {
-        const r: EngineEstimateResult = { amount: linkedBest, source: 'engine_estimate' };
+        const r: EngineEstimateResult = {
+          amount: linkedBest.display,
+          costAmount: linkedBest.cost,
+          costCurrency: linkedBest.costCurrency,
+          source: 'engine_estimate',
+        };
         memo.set(key, r);
         return r;
       }
@@ -209,7 +239,9 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       const fallbackBest = bestQuote(fallbackCarrierIds, input.shipCountry, input.shipWeightKg);
       if (fallbackBest !== null) {
         const r: EngineEstimateResult = {
-          amount: fallbackBest,
+          amount: fallbackBest.display,
+          costAmount: fallbackBest.cost,
+          costCurrency: fallbackBest.costCurrency,
           source: 'engine_estimate',
           fallback: true,
         };
@@ -220,7 +252,10 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // No carrier could quote this destination/weight at all. Usually
       // means the country isn't in ANY zone, or the weight overflows
       // every carrier's last tier.
-      const r: EngineEstimateResult = { amount: 0, source: 'unknown', reason: 'no_quote' };
+      const r: EngineEstimateResult = {
+        amount: 0, costAmount: 0, costCurrency: '',
+        source: 'unknown', reason: 'no_quote',
+      };
       memo.set(key, r);
       return r;
     },

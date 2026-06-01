@@ -11,7 +11,7 @@ function input(overrides: Partial<ComputeInput> = {}): ComputeInput {
     totalShipping: 10,
     totalTax: 0,
     totalRefunded: 0,
-    shippingCost: { amount: 8, source: 'engine_estimate' },
+    shippingCost: { amount: 8, rawAmount: 8, rawCurrency: 'USD', source: 'engine_estimate' },
     skuCosts: [
       { lineId: 'l-1', quantity: 1, costPerUnit: 30, costCurrency: 'USD' },
     ],
@@ -20,9 +20,26 @@ function input(overrides: Partial<ComputeInput> = {}): ComputeInput {
 }
 
 describe('computeOrderMetrics', () => {
+  it('preserves the raw cost-currency value through the pipeline (no FX round-trip)', () => {
+    // A FedEx VN quote produces an exact integer (e.g. 1,034,000 VND) +
+    // a 2dp USD derived value (~39.77). The dashboard must surface the
+    // 1,034,000 verbatim, not 39.77 × 26,000 = 1,034,020 (off by ~20).
+    const m = computeOrderMetrics(input({
+      shippingCost: {
+        amount: 39.77,
+        rawAmount: 1_034_000,
+        rawCurrency: 'VND',
+        source: 'engine_estimate',
+      },
+    }));
+    expect(m.shippingCost).toBe(39.77);
+    expect(m.shippingCostRaw).toBe(1_034_000);
+    expect(m.shippingCostRawCurrency).toBe('VND');
+  });
+
   it('computes baseline revenue with no discount, no refund, invoice ship cost', () => {
     const m = computeOrderMetrics(input({
-      shippingCost: { amount: 8, source: 'invoice' },
+      shippingCost: { amount: 8, rawAmount: 8, rawCurrency: 'USD', source: 'invoice' },
     }));
     expect(m.gmv).toBe(100);
     expect(m.refundedAmount).toBe(0);
@@ -64,7 +81,7 @@ describe('computeOrderMetrics', () => {
 
   it('reports unknown ship source when both amount and source are absent', () => {
     const m = computeOrderMetrics(input({
-      shippingCost: { amount: 0, source: 'unknown' },
+      shippingCost: { amount: 0, rawAmount: 0, rawCurrency: 'USD', source: 'unknown' },
     }));
     expect(m.shippingCost).toBe(0);
     expect(m.shippingCostSource).toBe('unknown');
@@ -74,7 +91,7 @@ describe('computeOrderMetrics', () => {
     const m = computeOrderMetrics(input({
       grossLineTotal: 0,
       totalRefunded: 0,
-      shippingCost: { amount: 0, source: 'invoice' },
+      shippingCost: { amount: 0, rawAmount: 0, rawCurrency: 'USD', source: 'invoice' },
       skuCosts: [],
     }));
     expect(m.netGmv).toBe(0);

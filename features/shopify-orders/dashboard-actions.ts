@@ -162,8 +162,19 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     // the order currency before the revenue formula sees them. Engine
     // quotes already come back in the carrier-account's display currency,
     // which we treat as the order currency.
+    // We carry BOTH numbers through:
+    //   - `amount` in the order currency (USD) — what Revenue subtracts
+    //   - `rawAmount` in the source-of-truth cost currency (VND, taken
+    //     straight from the engine / invoice / override input)
+    //
+    // Computing rawAmount FROM the source value instead of inverse-FX'ing
+    // the USD value preserves precision (a VND→USD→VND round-trip loses
+    // up to ~half a VND per cent of rounding). The orders dashboard shows
+    // rawAmount when the store has a cost currency configured.
     let shippingCost: {
       amount: number;
+      rawAmount: number;
+      rawCurrency: string;
       source: 'override' | 'invoice' | 'engine_estimate' | 'unknown';
       reason?:
         | 'no_country'
@@ -173,24 +184,61 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         | 'no_carrier_accounts'
         | 'no_quote';
     };
+    // Currency the raw value lives in: store cost currency (Mirer's VND)
+    // when configured, else the order's own currency. The raw amount is
+    // ALWAYS expressed in this currency regardless of source.
+    const rawCurrency = storeFx.costCurrency ?? o.currency;
     if (o.shippingCostOverride !== null) {
+      // Override is entered IN the cost currency by convention. Raw is
+      // the entered value verbatim; amount is converted to order currency.
       const raw = Number(o.shippingCostOverride);
       const converted = convertCost(raw, storeFx.costCurrency ?? o.currency, o.currency);
-      shippingCost = { amount: converted * share, source: 'override' };
+      shippingCost = {
+        amount: converted * share,
+        rawAmount: raw * share,
+        rawCurrency,
+        source: 'override',
+      };
     } else {
       const tracking = trackingByOrder.get(o.id) ?? [];
       const matchingInvoice = tracking.map((t) => invoiceIndex.get(t)).find((i) => !!i);
       if (matchingInvoice) {
         const raw = Number(matchingInvoice.actualCost);
         const converted = convertCost(raw, matchingInvoice.currency, o.currency);
-        shippingCost = { amount: converted * share, source: 'invoice' };
+        // When the invoice already came in the brand's cost currency, the
+        // raw value is exact. Otherwise we fall back to the USD value × FX
+        // so the column still shows something coherent; this only happens
+        // for cross-currency invoices, which are an edge case.
+        const rawAmount = matchingInvoice.currency === rawCurrency
+          ? raw
+          : storeFx.fxRate
+            ? converted * storeFx.fxRate
+            : converted;
+        shippingCost = {
+          amount: converted * share,
+          rawAmount: rawAmount * share,
+          rawCurrency,
+          source: 'invoice',
+        };
       } else {
         const est = estimator.estimate({
           shipCountry: o.shipCountry,
           shipWeightKg: o.shipWeightKg !== null ? Number(o.shipWeightKg) : null,
         });
+        // Engine returns BOTH the display-currency value (USD) and the
+        // cost-currency value (VND, straight from the rate sheet). When
+        // the carrier's cost currency matches the store's, the VND is
+        // exact. Otherwise (rare) fall back via FX so the column doesn't
+        // go blank.
+        const rawAmount = est.costCurrency && est.costCurrency === rawCurrency
+          ? est.costAmount
+          : storeFx.fxRate
+            ? est.amount * storeFx.fxRate
+            : est.amount;
         shippingCost = {
           amount: est.amount * share,
+          rawAmount: rawAmount * share,
+          rawCurrency,
           source: est.source,
           reason: est.reason,
         };
@@ -201,8 +249,15 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     // ends up shipping. Splits pro-rata with the same `share` as the rest
     // of the order-level costs when a vendor filter is active.
     if (packagingFee > 0 && shippingCost.source !== 'unknown') {
+      // Packaging fee is stored in order currency. Convert to cost
+      // currency for the raw view so the column total stays consistent.
+      const packagingRaw = storeFx.costCurrency && storeFx.fxRate
+        ? packagingFee * storeFx.fxRate
+        : packagingFee;
       shippingCost = {
         amount: shippingCost.amount + packagingFee * share,
+        rawAmount: shippingCost.rawAmount + packagingRaw * share,
+        rawCurrency: shippingCost.rawCurrency,
         source: shippingCost.source,
         reason: shippingCost.reason,
       };

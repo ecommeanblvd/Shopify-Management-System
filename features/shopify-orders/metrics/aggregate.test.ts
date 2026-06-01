@@ -11,6 +11,8 @@ const baseMetric = (overrides: Partial<OrderMetrics>): OrderMetrics => ({
   discount: 0,
   shippingRevenue: 10,
   shippingCost: 8,
+  shippingCostRaw: 8,
+  shippingCostRawCurrency: 'USD',
   shippingCostSource: 'invoice',
   shippingCostReason: null,
   skuCost: 30,

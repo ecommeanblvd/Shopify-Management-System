@@ -22,7 +22,20 @@ export interface ComputeInput {
   totalShipping: number;
   totalTax: number;
   totalRefunded: number;
-  shippingCost: { amount: number; source: ShippingCostSource; reason?: ShippingCostReason };
+  shippingCost: {
+    /** In order currency (USD) — what Revenue subtracts. */
+    amount: number;
+    /** Original value in the cost currency (e.g. VND), no FX round-trip.
+     *  Mirrors `amount` × storeFx, but computed FROM the source value
+     *  (rate sheet integer for engine quotes; invoice raw for invoices;
+     *  override raw for overrides) instead of derived backward from USD. */
+    rawAmount: number;
+    /** ISO-3 of `rawAmount`. Equals the order currency when no store-level
+     *  cost currency is configured. */
+    rawCurrency: string;
+    source: ShippingCostSource;
+    reason?: ShippingCostReason;
+  };
   skuCosts: Array<{
     lineId: string;
     quantity: number;
@@ -40,6 +53,14 @@ export interface OrderMetrics {
   discount: number;
   shippingRevenue: number;
   shippingCost: number;
+  /** Same as `shippingCost` but in the brand's cost currency (e.g. VND),
+   *  preserved from the source — rate sheet for engine quotes, the invoice
+   *  for invoices, the operator's input for overrides. Used by the orders
+   *  table when the store has a cost currency set so the operator can
+   *  reconcile against the FedEx invoice without an FX round-trip. */
+  shippingCostRaw: number;
+  /** ISO-3 of `shippingCostRaw`. */
+  shippingCostRawCurrency: string;
   shippingCostSource: ShippingCostSource;
   /** Only populated when `shippingCostSource === 'unknown'`. Tells the
    *  operator which prerequisite is missing — variant weight, market,
@@ -75,6 +96,8 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
     discount: input.totalDiscount,
     shippingRevenue: input.totalShipping,
     shippingCost: input.shippingCost.amount,
+    shippingCostRaw: input.shippingCost.rawAmount,
+    shippingCostRawCurrency: input.shippingCost.rawCurrency,
     shippingCostSource: input.shippingCost.source,
     shippingCostReason: input.shippingCost.reason ?? null,
     skuCost,
