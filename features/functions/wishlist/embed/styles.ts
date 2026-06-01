@@ -86,6 +86,40 @@ export const WISHLIST_EMBED_CSS = `
   }
   .wl-toast--in { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .wl-capture {
+    position: relative; margin: 10px 12px 14px;
+    padding: 16px 14px 14px; border-radius: 10px;
+    background: linear-gradient(180deg, rgba(0,0,0,.03), rgba(0,0,0,.06));
+    border: 1px solid rgba(0,0,0,.08);
+  }
+  .wl-capture-close {
+    position: absolute; top: 6px; right: 8px;
+    background: none; border: 0; cursor: pointer;
+    font-size: 16px; line-height: 1; color: #999;
+    padding: 2px 6px;
+  }
+  .wl-capture-close:hover { color: #333; }
+  .wl-capture-headline {
+    margin: 0 0 10px; font-size: 13px; font-weight: 500;
+    color: #111; line-height: 1.4; padding-right: 16px;
+  }
+  .wl-capture-form { display: flex; gap: 6px; }
+  .wl-capture-input {
+    flex: 1; min-width: 0;
+    padding: 8px 10px; font: inherit; font-size: 12px;
+    border: 1px solid rgba(0,0,0,.15); border-radius: 6px;
+    background: #fff; color: #111;
+  }
+  .wl-capture-input:focus { outline: 2px solid var(--wl-accent, #e11d48); outline-offset: -1px; }
+  .wl-capture-cta {
+    padding: 8px 14px; font: inherit; font-size: 12px; font-weight: 600;
+    background: var(--wl-accent, #e11d48); color: #fff;
+    border: 0; border-radius: 6px; cursor: pointer;
+    transition: opacity .15s ease;
+  }
+  .wl-capture-cta:hover { opacity: .9; }
+  .wl-capture-cta:disabled { opacity: .5; cursor: not-allowed; }
+
   .wl-page { padding: 32px 0; }
   .wl-page .wl-list { padding: 0; max-height: none; overflow: visible; }
   .wl-page .wl-item { padding: 16px; border-bottom: 1px solid #eee; border-radius: 0; }

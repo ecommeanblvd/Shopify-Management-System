@@ -55,6 +55,26 @@ describe('buildEmbedScript', () => {
     expect(script).toContain('clipboard');
   });
 
+  it('respects per-store config from the boot response (PR4)', () => {
+    // Defaults baked in for cold-start before fetch completes
+    expect(script).toContain('DEFAULT_CONFIG');
+    expect(script).toContain("'#e11d48'");
+    expect(script).toContain('buttonLabel');
+    expect(script).toContain('buttonPosition');
+    // Accent applied via CSS variable so theme can still override
+    expect(script).toContain('--wl-accent');
+    expect(script).toContain('applyConfigSideEffects');
+  });
+
+  it('mounts the email-capture banner with dismiss persistence (PR4)', () => {
+    expect(script).toContain('wl-capture');
+    expect(script).toContain('__wl_email_capture_dismissed');
+    expect(script).toContain('maybeShowEmailCapture');
+    expect(script).toContain('renderEmailCapture');
+    // Submitting the form merges the guest list immediately
+    expect(script).toContain('/api/storefront/wishlist/merge');
+  });
+
   it('calls the merge endpoint exactly once per email per browser', () => {
     expect(script).toContain('/api/storefront/wishlist/merge');
     expect(script).toContain('__wl_merged_to');
