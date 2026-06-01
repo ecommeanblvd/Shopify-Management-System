@@ -45,15 +45,18 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
     : await db.select().from(schema.carrierRateCells)
         .where(inArray(schema.carrierRateCells.carrierZoneId, zoneIds));
 
-  // Index cells by (zoneId, tierId)
+  // Index cells by (zoneId, tierId) — split by package_type so the engine
+  // can pick Pak vs Package per the < 2kg rule.
   const tierUpperById = new Map(tiers.map((t) => [t.id, Number(t.upperKg)]));
-  const ratesByZoneId = new Map<string, Map<number, number>>();
+  const packageRatesByZoneId = new Map<string, Map<number, number>>();
+  const pakRatesByZoneId = new Map<string, Map<number, number>>();
   for (const c of cells) {
     const tierUpper = tierUpperById.get(c.carrierWeightTierId);
     if (tierUpper === undefined) continue;
-    const inner = ratesByZoneId.get(c.carrierZoneId) ?? new Map<number, number>();
+    const bucket = c.packageType === 'pak' ? pakRatesByZoneId : packageRatesByZoneId;
+    const inner = bucket.get(c.carrierZoneId) ?? new Map<number, number>();
     inner.set(tierUpper, Number(c.costAmount));
-    ratesByZoneId.set(c.carrierZoneId, inner);
+    bucket.set(c.carrierZoneId, inner);
   }
 
   // zonesByCountry: country → ZoneSnap (each zone is shared between its countries)
@@ -61,7 +64,8 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
   for (const z of zones) {
     zoneSnapById.set(z.id, {
       label: z.label,
-      rateByTierUpper: ratesByZoneId.get(z.id) ?? new Map(),
+      rateByTierUpper: packageRatesByZoneId.get(z.id) ?? new Map(),
+      pakRateByTierUpper: pakRatesByZoneId.get(z.id) ?? new Map(),
     });
   }
   const zonesByCountry = new Map<string, ZoneSnap>();
