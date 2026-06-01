@@ -127,6 +127,13 @@
       "when": 1780315720840,
       "tag": "0017_add_package_type_to_rate_cells",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780324438108,
+      "tag": "0018_add_ship_weight_kg_override",
+      "breakpoints": true
     }
   ]
 }
