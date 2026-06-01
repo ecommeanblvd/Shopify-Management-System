@@ -16,6 +16,7 @@ import {
   type SurchargeKind, type SurchargeRow,
 } from '@/features/carrier-rates/surcharges-actions';
 import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import { seedFedexVietnamDemand } from '@/features/carrier-rates/seed-fedex-vn-demand';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -198,6 +199,24 @@ async function refreshFuelAction(accountId: string, userId: string) {
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 
+/**
+ * One-click insert of the published FedEx Vietnam → world Demand
+ * Surcharge table. Idempotent (skips rows whose value + country list
+ * already exist), so the operator can re-run safely after tweaking
+ * individual rows.
+ */
+async function seedFedexVnDemandAction(accountId: string, userId: string) {
+  'use server';
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('unauthenticated');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_carrier_rates')) {
+    throw new Error('forbidden');
+  }
+  await seedFedexVietnamDemand(accountId, userId);
+  revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
+}
+
 export default async function SurchargesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
@@ -313,6 +332,14 @@ function KindCard({
     ? refreshFuelAction.bind(null, accountId, userId)
     : null;
 
+  // One-click seed of the FedEx Vietnam Demand Surcharge table. Only
+  // exposed on the Demand section of a FedEx account that hasn't been
+  // seeded yet — once a row exists, the operator manages from there.
+  const supportsDemandSeed = kind === 'demand_per_kg' && carrierKey === 'fedex';
+  const seedDemandBound = supportsDemandSeed && canManage && list.length === 0
+    ? seedFedexVnDemandAction.bind(null, accountId, userId)
+    : null;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
@@ -357,6 +384,20 @@ function KindCard({
               >
                 <RefreshCw className="size-3" />
                 Refresh
+              </Button>
+            </form>
+          )}
+          {seedDemandBound && (
+            <form action={seedDemandBound}>
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5 shrink-0"
+                title="Insert the 7 published FedEx Vietnam → world demand rows in one click. Idempotent; re-runs safely after edits."
+              >
+                <Zap className="size-3" />
+                Seed Vietnam demand
               </Button>
             </form>
           )}
