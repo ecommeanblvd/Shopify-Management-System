@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap,
+  RefreshCw, Zap, Globe2,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -97,10 +97,20 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-emerald-500/10',
     supportsPerKg: false,
   },
+  demand_per_kg: {
+    label: 'Demand surcharge',
+    desc: 'Country/region-scoped per-kg fee. Used by FedEx Demand Surcharge — different VND/kg for each destination group. Multiple rows can overlap and compound.',
+    formula: 'value × weight (when destination in country list)',
+    unit: 'amount_per_kg',
+    icon: <Globe2 className="size-4" />,
+    accent: 'text-fuchsia-600 dark:text-fuchsia-400',
+    accentBg: 'bg-fuchsia-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
@@ -125,6 +135,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
   'use server';
   const value = String(formData.get('value') ?? '');
   const valuePerKg = formData.get('valuePerKg');
+  const countryCodes = formData.get('countryCodes');
   const note = String(formData.get('note') ?? '');
   await createSurcharge(
     {
@@ -132,6 +143,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
       kind,
       value,
       valuePerKg: valuePerKg !== null ? String(valuePerKg) : undefined,
+      countryCodes: countryCodes !== null ? String(countryCodes) : undefined,
       note,
     },
     userId,
@@ -143,11 +155,15 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   'use server';
   const value = formData.get('value');
   const valuePerKg = formData.get('valuePerKg');
+  const countryCodes = formData.get('countryCodes');
   const note = formData.get('note');
   const activeRaw = formData.get('active');
-  const patch: { value?: string; valuePerKg?: string; note?: string; active?: boolean } = {};
+  const patch: {
+    value?: string; valuePerKg?: string; countryCodes?: string; note?: string; active?: boolean;
+  } = {};
   if (value !== null) patch.value = String(value);
   if (valuePerKg !== null) patch.valuePerKg = String(valuePerKg);
+  if (countryCodes !== null) patch.countryCodes = String(countryCodes);
   if (note !== null) patch.note = String(note);
   // checkbox absent in FormData when unchecked → treat as false; present → true
   patch.active = activeRaw !== null;
@@ -279,6 +295,9 @@ function KindCard({
   const moneyDecimals = currencyDecimals(currency);
   const valueDecimals = meta.unit === 'percent' ? undefined : moneyDecimals;
   const perKgDecimals = meta.supportsPerKg ? moneyDecimals : undefined;
+  // Country scope is only meaningful for `demand_per_kg` — every other kind
+  // applies globally so we hide the input to keep the dialog minimal.
+  const countriesVisible = kind === 'demand_per_kg';
   const activeCount = list.filter((s) => s.active).length;
   // FedEx publishes a weekly fuel % we can scrape directly off their
   // surcharges page. DHL would need a separate scraper — surface only when
@@ -359,6 +378,7 @@ function KindCard({
                 perKgUnitSuffix={perKgUnitSuffix}
                 valueDecimals={valueDecimals}
                 perKgDecimals={perKgDecimals}
+                countriesVisible={countriesVisible}
                 currency={currency}
                 canManage={canManage}
                 accountId={accountId}
@@ -380,6 +400,7 @@ function KindCard({
               perKgUnitSuffix={perKgUnitSuffix}
               valueDecimals={valueDecimals}
               perKgDecimals={perKgDecimals}
+              countriesVisible={countriesVisible}
               defaultValue=""
               defaultPerKgValue=""
               defaultNote=""
@@ -401,6 +422,7 @@ interface SurchargeSummaryRowProps {
   perKgUnitSuffix: string | undefined;
   valueDecimals: number | undefined;
   perKgDecimals: number | undefined;
+  countriesVisible: boolean;
   currency: string;
   canManage: boolean;
   accountId: string;
@@ -408,7 +430,7 @@ interface SurchargeSummaryRowProps {
 }
 
 function SurchargeSummaryRow({
-  row, meta, unitSuffix, perKgUnitSuffix, valueDecimals, perKgDecimals,
+  row, meta, unitSuffix, perKgUnitSuffix, valueDecimals, perKgDecimals, countriesVisible,
   currency, canManage, accountId, userId,
 }: SurchargeSummaryRowProps) {
   const perKgNumber = row.valuePerKg !== null ? Number(row.valuePerKg) : null;
@@ -428,6 +450,18 @@ function SurchargeSummaryRow({
           {row.tier && (
             <Badge variant="secondary" className="h-4 text-[9px] uppercase tracking-wider px-1.5">
               {row.tier}
+            </Badge>
+          )}
+          {row.countryCodes && row.countryCodes.length > 0 && (
+            <span className="text-[11px] font-mono text-muted-foreground" title={row.countryCodes.join(', ')}>
+              {row.countryCodes.length <= 4
+                ? row.countryCodes.join(' · ')
+                : `${row.countryCodes.slice(0, 3).join(' · ')} +${row.countryCodes.length - 3}`}
+            </span>
+          )}
+          {row.kind === 'demand_per_kg' && (!row.countryCodes || row.countryCodes.length === 0) && (
+            <Badge variant="outline" className="h-4 text-[9px] uppercase tracking-wider px-1.5">
+              all destinations
             </Badge>
           )}
           {hasPerKg && perKgNumber !== null && (
@@ -454,6 +488,8 @@ function SurchargeSummaryRow({
           perKgUnitSuffix={perKgUnitSuffix}
           valueDecimals={valueDecimals}
           perKgDecimals={perKgDecimals}
+          countriesVisible={countriesVisible}
+          defaultCountryCodes={row.countryCodes}
           defaultValue={row.value}
           defaultPerKgValue={row.valuePerKg}
           defaultNote={row.note ?? ''}

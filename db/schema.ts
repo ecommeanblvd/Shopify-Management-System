@@ -287,6 +287,13 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   'markup_percent',
   // Added Phase 2b: per-kg surcharges like DHL GoGreen Plus (SAF) at 3,800 VND/kg.
   'per_kg_fixed',
+  // Country/region-scoped per-kg surcharge — e.g. FedEx Demand Surcharge
+  // (https://www.fedex.com/en-vn/shipping/surcharges/demand-surcharge.html).
+  // Different VND/kg rates per country group; the engine applies the row
+  // whose `country_codes` array contains the order's destination country.
+  // Multiple rows with overlapping country lists ALL apply (sum), matching
+  // FedEx's "two demand surcharges can compound" semantics.
+  'demand_per_kg',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {
@@ -302,6 +309,12 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // Optional tier label (e.g. 'Tier A', 'Tier B') so remote_fixed surcharges
   // can apply only to postcodes carrying that tier. NULL means catch-all.
   tier: text('tier'),
+  // ISO-2 country codes the surcharge applies to. Only meaningful for
+  // `demand_per_kg` (FedEx Demand Surcharge). NULL on every other kind and
+  // on demand_per_kg rows that should apply globally. Stored as jsonb so a
+  // single row can list a whole regional group ("EU+UK" → ['DE','FR','IT',
+  // ...]) without an extra join table.
+  countryCodes: jsonb('country_codes'),
   active: boolean('active').notNull().default(true),
   startsAt: timestamp('starts_at'),
   endsAt: timestamp('ends_at'),

@@ -91,6 +91,12 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
       valuePerKg: s.valuePerKg !== null ? Number(s.valuePerKg) : null,
       active: s.active,
       tier: s.tier ?? null,
+      // `country_codes` is jsonb — already deserialised by node-postgres
+      // when present. Normalise to upper-case ISO-2 so the engine's
+      // `country` lookup (which also upper-cases) hits.
+      countryCodes: Array.isArray(s.countryCodes)
+        ? (s.countryCodes as string[]).map((c) => c.toUpperCase())
+        : null,
     })),
     remotePostcodes,
   };
