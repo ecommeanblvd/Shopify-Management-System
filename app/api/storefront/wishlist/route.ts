@@ -17,6 +17,7 @@ import {
 import {
   addItem, getWishlistWithItems, removeItem,
 } from '@/features/functions/wishlist/storefront';
+import { getWishlistConfig } from '@/features/functions/wishlist/admin-actions';
 import type { WishlistIdentity, WishlistItemSnapshot } from '@/features/functions/wishlist/types';
 
 export const dynamic = 'force-dynamic';
@@ -33,10 +34,14 @@ function identityFromSearch(req: NextRequest): WishlistIdentity {
 export async function GET(req: NextRequest) {
   const store = await resolveActiveStore(req);
   if (!store) return errorResponse(req, null, 'inactive_store', 'Wishlist is not active for this shop', 404);
+  // The per-store config is cheap (single row) and the embed needs it on
+  // every boot to apply theming + email-capture copy. Bundling here saves
+  // a second round-trip.
+  const config = await getWishlistConfig(store.storeId);
   try {
     const result = await getWishlistWithItems(store.storeId, identityFromSearch(req));
-    if (!result) return jsonResponse(req, store.shopDomain, { wishlist: null, items: [] });
-    return jsonResponse(req, store.shopDomain, result);
+    if (!result) return jsonResponse(req, store.shopDomain, { wishlist: null, items: [], config });
+    return jsonResponse(req, store.shopDomain, { ...result, config });
   } catch (err) {
     return errorResponse(req, store.shopDomain, 'bad_identity', (err as Error).message);
   }

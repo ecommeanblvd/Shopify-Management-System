@@ -103,8 +103,29 @@ export function buildEmbedScript(config: EmbedConfig): string {
   }
 
   // ---- State ----
-  var state = { items: [], wishlist: null, loaded: false };
+  // config is the resolved per-store config from the boot response.
+  // Defaults match DEFAULT_WISHLIST_CONFIG in features/functions/wishlist/config.ts
+  // (kept in sync via embed source tests).
+  var DEFAULT_CONFIG = {
+    accentColor: '#e11d48',
+    buttonLabel: { unsaved: 'Add to wishlist', saved: 'Saved to wishlist' },
+    buttonPosition: 'append',
+    emailCapture: {
+      enabled: true,
+      headline: 'Save your wishlist across devices',
+      cta: 'Save list',
+    },
+  };
+  var state = { items: [], wishlist: null, loaded: false, config: DEFAULT_CONFIG };
   var listeners = [];
+
+  function applyConfigSideEffects() {
+    // Accent → CSS variable. Theme can still override at the :root level.
+    try {
+      var accent = (state.config && state.config.accentColor) || DEFAULT_CONFIG.accentColor;
+      document.documentElement.style.setProperty('--wl-accent', accent);
+    } catch (e) {}
+  }
 
   function setState(patch) {
     for (var k in patch) state[k] = patch[k];
@@ -124,7 +145,13 @@ export function buildEmbedScript(config: EmbedConfig): string {
   function load() {
     return api('?' + buildIdentityQS()).then(function(r) {
       if (!r) return;
-      setState({ items: r.items || [], wishlist: r.wishlist || null, loaded: true });
+      setState({
+        items: r.items || [],
+        wishlist: r.wishlist || null,
+        loaded: true,
+        config: r.config || DEFAULT_CONFIG,
+      });
+      applyConfigSideEffects();
       renderAll();
     });
   }
@@ -218,17 +245,26 @@ export function buildEmbedScript(config: EmbedConfig): string {
     btn.type = 'button';
     btn.className = 'wl-pdp-btn';
     btn.setAttribute('aria-pressed', 'false');
-    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="wl-pdp-btn-label">Add to wishlist</span>';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="wl-pdp-btn-label">' + escapeHtml(state.config.buttonLabel.unsaved) + '</span>';
     btn.addEventListener('click', function() {
       var current = detectProduct();
       if (!current) return;
       btn.disabled = true;
       var op = isSaved(current.shopifyProductId)
         ? remove(current.shopifyProductId, current.shopifyVariantId).then(function() { toast('Removed from wishlist'); })
-        : add(current).then(function() { toast('Saved to wishlist'); });
+        : add(current).then(function() {
+            toast('Saved to wishlist');
+            maybeShowEmailCapture();
+          });
       op.finally(function() { btn.disabled = false; });
     });
-    form.appendChild(btn);
+    // Position controlled by config: most themes want the button at the
+    // end of the cart form, but some place it ABOVE the buy box.
+    if (state.config.buttonPosition === 'prepend') {
+      form.insertBefore(btn, form.firstChild);
+    } else {
+      form.appendChild(btn);
+    }
     watchVariantChanges(form);
     refreshPdpButton();
   }
@@ -242,7 +278,11 @@ export function buildEmbedScript(config: EmbedConfig): string {
     var saved = isSaved(snap.shopifyProductId);
     btn.classList.toggle('wl-pdp-btn--saved', saved);
     btn.setAttribute('aria-pressed', saved ? 'true' : 'false');
-    if (label) label.textContent = saved ? 'Saved to wishlist' : 'Add to wishlist';
+    if (label) {
+      label.textContent = saved
+        ? state.config.buttonLabel.saved
+        : state.config.buttonLabel.unsaved;
+    }
   }
 
   // Track variant id changes so the saved-state badge follows the
@@ -287,6 +327,70 @@ export function buildEmbedScript(config: EmbedConfig): string {
     d.querySelector('.wl-share-btn').addEventListener('click', shareWishlist);
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') closeDrawer();
+    });
+  }
+
+  // ---- Email capture (PR4) ----
+  // Shown once per device when a guest (no email yet) adds their first
+  // item. Hooks into the existing /merge endpoint so the typed email
+  // immediately upgrades the wishlist from device-keyed to email-keyed.
+  var EMAIL_CAPTURE_DISMISS_KEY = '__wl_email_capture_dismissed';
+
+  function emailCaptureDismissed() {
+    try { return localStorage.getItem(EMAIL_CAPTURE_DISMISS_KEY) === '1'; }
+    catch (e) { return false; }
+  }
+
+  function dismissEmailCapture() {
+    try { localStorage.setItem(EMAIL_CAPTURE_DISMISS_KEY, '1'); } catch (e) {}
+    var el = document.querySelector('.wl-capture');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function maybeShowEmailCapture() {
+    if (!state.config.emailCapture || !state.config.emailCapture.enabled) return;
+    if (emailCaptureDismissed()) return;
+    if (customerEmail()) return; // already known
+    if (state.items.length < 1) return;
+    openDrawer();
+    renderEmailCapture();
+  }
+
+  function renderEmailCapture() {
+    var host = document.querySelector('.wl-drawer .wl-list[data-region="drawer"]');
+    if (!host || host.querySelector('.wl-capture')) return;
+    var cfg = state.config.emailCapture || DEFAULT_CONFIG.emailCapture;
+    var div = document.createElement('div');
+    div.className = 'wl-capture';
+    div.innerHTML = '<button class="wl-capture-close" type="button" aria-label="Dismiss">\\u00D7</button>' +
+      '<p class="wl-capture-headline">' + escapeHtml(cfg.headline) + '</p>' +
+      '<form class="wl-capture-form">' +
+      '<input class="wl-capture-input" type="email" required placeholder="you@example.com" autocomplete="email" />' +
+      '<button class="wl-capture-cta" type="submit">' + escapeHtml(cfg.cta) + '</button>' +
+      '</form>';
+    host.insertBefore(div, host.firstChild);
+    div.querySelector('.wl-capture-close').addEventListener('click', dismissEmailCapture);
+    div.querySelector('.wl-capture-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var input = div.querySelector('.wl-capture-input');
+      var email = (input && input.value || '').trim();
+      if (!email) return;
+      var cta = div.querySelector('.wl-capture-cta');
+      if (cta) cta.disabled = true;
+      fetch(API_ORIGIN + '/api/storefront/wishlist/merge?shop=' + encodeURIComponent(SHOP || ''), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ deviceId: getDeviceId(), email: email }),
+        credentials: 'omit',
+      }).then(function() {
+        try { localStorage.setItem('__wl_merged_to:' + email.toLowerCase(), '1'); } catch (e) {}
+        dismissEmailCapture();
+        toast('List saved to ' + email);
+        load();
+      }).catch(function() {
+        if (cta) cta.disabled = false;
+        toast('Could not save list');
+      });
     });
   }
 

@@ -7,6 +7,10 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import {
+  resolveWishlistConfig, wishlistConfigSchema, type WishlistConfig,
+  DEFAULT_WISHLIST_CONFIG,
+} from './config';
 
 export interface StoreFunctionStatus {
   storeId: string;
@@ -131,5 +135,77 @@ export async function getTopWishlistedProducts(
   }));
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Per-store Wishlist configuration. Powers both the admin form and the
+// storefront embed (config is inlined into the boot response).
+// ─────────────────────────────────────────────────────────────────────
+
+export type ResolvedWishlistConfig = ReturnType<typeof resolveWishlistConfig>;
+
+/** Reads the wishlist config blob for a store. Returns defaults if the
+ *  store has never been customised. Safe to call without auth — used by
+ *  both admin pages and the storefront embed endpoint. */
+export async function getWishlistConfig(
+  storeId: string,
+): Promise<ResolvedWishlistConfig> {
+  const [row] = await db
+    .select({ config: schema.storeFunctionSettings.config })
+    .from(schema.storeFunctionSettings)
+    .where(and(
+      eq(schema.storeFunctionSettings.storeId, storeId),
+      eq(schema.storeFunctionSettings.functionKey, 'wishlist'),
+    ));
+  return resolveWishlistConfig(row?.config);
+}
+
+/** RBAC-gated server action used by the per-store admin form. Validates
+ *  the payload via the same zod schema before persisting. */
+export async function setWishlistConfig(
+  storeId: string, input: WishlistConfig,
+): Promise<void> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('unauthenticated');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_functions')) {
+    throw new Error('forbidden');
+  }
+  const parsed = wishlistConfigSchema.parse(input);
+  await db
+    .insert(schema.storeFunctionSettings)
+    .values({
+      storeId,
+      functionKey: 'wishlist',
+      enabled: true,
+      config: parsed,
+      updatedBy: session.user.id,
+    })
+    .onConflictDoUpdate({
+      target: [schema.storeFunctionSettings.storeId, schema.storeFunctionSettings.functionKey],
+      set: { config: parsed, updatedBy: session.user.id, updatedAt: new Date() },
+    });
+  revalidatePath(`/f/functions/wishlist/${storeId}`);
+}
+
+export interface WishlistEventBucket {
+  eventType: string;
+  count: number;
+}
+
+/** Roll-up of the last N days of events grouped by event_type. Drives
+ *  the per-store analytics breakdown chart. */
+export async function getWishlistEventBreakdown(
+  storeId: string, days = 7,
+): Promise<WishlistEventBucket[]> {
+  const rows = await db.execute<{ event_type: string; n: string }>(sql`
+    SELECT event_type, COUNT(*)::text AS n
+      FROM wishlist_events
+     WHERE store_id = ${storeId}
+       AND created_at > NOW() - (${days}::int * INTERVAL '1 day')
+     GROUP BY event_type
+     ORDER BY COUNT(*) DESC;
+  `);
+  return rows.rows.map((r) => ({ eventType: r.event_type, count: Number(r.n) }));
+}
+
 // Silence unused-import warnings for helpers kept available to extend later.
-void and;
+void DEFAULT_WISHLIST_CONFIG;

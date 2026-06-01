@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity, Code2 } from 'lucide-react';
+import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity, Code2, Settings, BarChart3 } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -11,8 +11,11 @@ import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { WishlistInstallSnippet } from '@/components/functions/WishlistInstallSnippet';
+import { WishlistSettingsForm } from '@/components/functions/WishlistSettingsForm';
+import { WishlistEventBreakdown } from '@/components/functions/WishlistEventBreakdown';
 import {
-  getWishlistSummary, getTopWishlistedProducts,
+  getWishlistSummary, getTopWishlistedProducts, getWishlistConfig,
+  setWishlistConfig, getWishlistEventBreakdown,
 } from '@/features/functions/wishlist/admin-actions';
 import { listWishlistsForStore } from '@/features/functions/wishlist/storefront';
 
@@ -34,10 +37,15 @@ export default async function WishlistStorePage({
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) notFound();
 
-  const [summary, topProducts, wishlists] = await Promise.all([
+  const canManage = hasPermission(role, 'manage_functions');
+  const breakdownDays = 7;
+
+  const [summary, topProducts, wishlists, config, eventBuckets] = await Promise.all([
     getWishlistSummary(storeId),
     getTopWishlistedProducts(storeId, 10),
     listWishlistsForStore(storeId, 50),
+    getWishlistConfig(storeId),
+    getWishlistEventBreakdown(storeId, breakdownDays),
   ]);
 
   const embedUrl = `${getEnv().SHOPIFY_APP_URL.replace(/\/$/, '')}/api/storefront/wishlist/embed`;
@@ -66,6 +74,36 @@ export default async function WishlistStorePage({
         <Tile icon={<Package className="size-4" />} label="Items saved" value={summary.itemCount.toLocaleString()} sub="across all wishlists" />
         <Tile icon={<Activity className="size-4" />} label="Last 7 days" value={summary.recentEvents.toLocaleString()} sub="events recorded" />
       </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="text-sm font-semibold inline-flex items-center gap-2">
+              <BarChart3 className="size-4 text-muted-foreground" />
+              Events — last {breakdownDays} days
+            </h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+              {eventBuckets.reduce((acc, b) => acc + b.count, 0).toLocaleString()}
+            </Badge>
+          </div>
+          <WishlistEventBreakdown buckets={eventBuckets} days={breakdownDays} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Settings className="size-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Storefront settings</h2>
+          </div>
+          <WishlistSettingsForm
+            storeId={storeId}
+            initial={config}
+            canManage={canManage}
+            saveAction={setWishlistConfig}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-5 space-y-5">
