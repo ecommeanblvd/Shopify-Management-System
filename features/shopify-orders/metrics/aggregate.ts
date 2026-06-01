@@ -3,6 +3,9 @@ import type { OrderMetrics } from './compute';
 export interface AggregateMetrics {
   orderCount: number;
   currency: string;
+  /** Σ line-items only — Subtotal across orders. */
+  subtotal: number;
+  /** Σ true GMV = Σ (subtotal + shippingRevenue). */
   gmv: number;
   refundedAmount: number;
   netGmv: number;
@@ -20,7 +23,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
   if (orders.length === 0) {
     return {
       orderCount: 0, currency: '',
-      gmv: 0, refundedAmount: 0, netGmv: 0, discount: 0,
+      subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, discount: 0,
       shippingRevenue: 0, shippingCost: 0, skuCost: 0, tax: 0,
       revenue: 0, margin: 0, skuCostCoverage: 0,
     };
@@ -32,6 +35,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
   return {
     orderCount: orders.length,
     currency: pickMostCommon(orders.map((o) => o.currency)),
+    subtotal: sum('subtotal'),
     gmv,
     refundedAmount: sum('refundedAmount'),
     netGmv,

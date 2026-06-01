@@ -202,10 +202,11 @@ export function OrdersTable({
                 <th className="text-left px-3 py-2">Order #</th>
                 <th className="text-left px-3 py-2">Date</th>
                 <th className="text-right px-3 py-2">Lines</th>
-                <th className="text-right px-3 py-2">GMV</th>
+                <th className="text-right px-3 py-2" title="Line items only — sum of unit_price × qty">Subtotal</th>
                 <th className="text-right px-3 py-2">Refunded</th>
                 <th className="text-right px-3 py-2">Discount</th>
                 <th className="text-right px-3 py-2">Ship rev</th>
+                <th className="text-right px-3 py-2" title="GMV = Subtotal + Ship rev">GMV</th>
                 <th className="text-right px-3 py-2">
                   Ship cost
                   {showShipInCostCurrency && (
@@ -227,7 +228,7 @@ export function OrdersTable({
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 13 : 12} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={canEdit ? 14 : 13} className="px-4 py-6 text-center text-muted-foreground">
                     {orders.length === 0
                       ? 'No orders in this window.'
                       : `No orders match "${search}".`}
@@ -243,12 +244,13 @@ export function OrdersTable({
                   <td className="px-3 py-2 font-mono">{o.shopifyOrderNumber}</td>
                   <td className="px-3 py-2 text-xs whitespace-nowrap">{new Date(o.processedAt).toLocaleDateString()}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{o.lineCount}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.gmv, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.subtotal, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
                     {o.refundedAmount > 0 ? fmt(o.refundedAmount, o.currency) : '—'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.discount, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.shippingRevenue, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums font-medium">{fmt(o.gmv, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {o.shippingCostSource === 'unknown' ? (
                       <span

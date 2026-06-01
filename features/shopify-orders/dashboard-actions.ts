@@ -349,7 +349,7 @@ function sumNumeric(nums: number[]): number {
 function emptyAgg(): AggregateMetrics {
   return {
     orderCount: 0, currency: '',
-    gmv: 0, refundedAmount: 0, netGmv: 0, discount: 0,
+    subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, discount: 0,
     shippingRevenue: 0, shippingCost: 0, skuCost: 0, tax: 0,
     revenue: 0, margin: 0, skuCostCoverage: 0,
   };
