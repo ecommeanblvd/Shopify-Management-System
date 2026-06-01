@@ -38,12 +38,15 @@ describe('computeOrderMetrics', () => {
   });
 
   it('computes baseline revenue with no discount, no refund, invoice ship cost', () => {
+    // GMV now = Subtotal + Ship rev (line items + customer-paid shipping).
+    // Revenue = GMV − Discount − ShipCost − SkuCost (= 110 − 0 − 8 − 30 = 72).
     const m = computeOrderMetrics(input({
       shippingCost: { amount: 8, rawAmount: 8, rawCurrency: 'USD', source: 'invoice' },
     }));
-    expect(m.gmv).toBe(100);
+    expect(m.subtotal).toBe(100);
+    expect(m.gmv).toBe(110); // 100 line items + 10 ship rev
     expect(m.refundedAmount).toBe(0);
-    expect(m.netGmv).toBe(100);
+    expect(m.netGmv).toBe(110);
     expect(m.discount).toBe(0);
     expect(m.shippingRevenue).toBe(10);
     expect(m.shippingCost).toBe(8);
@@ -51,15 +54,17 @@ describe('computeOrderMetrics', () => {
     expect(m.skuCost).toBe(30);
     expect(m.skuCostCoverage).toBe(1);
     expect(m.revenue).toBe(72);
-    expect(m.margin).toBeCloseTo(0.72, 4);
+    expect(m.margin).toBeCloseTo(72 / 110, 4);
   });
 
   it('subtracts discount + refunds from netGmv before revenue', () => {
+    // GMV = 100 + 10 = 110, netGmv = 110 − 30 refund = 80
+    // Revenue = 80 − 20 discount − 8 ship cost − 30 sku = 22
     const m = computeOrderMetrics(input({
       totalDiscount: 20,
       totalRefunded: 30,
     }));
-    expect(m.netGmv).toBe(70);
+    expect(m.netGmv).toBe(80);
     expect(m.revenue).toBe(22);
   });
 
@@ -88,8 +93,11 @@ describe('computeOrderMetrics', () => {
   });
 
   it('returns 0 margin when netGmv is 0 (avoids div-by-zero)', () => {
+    // netGmv = (subtotal + ship rev) − refunded — set all three to 0
+    // so the divisor is genuinely 0 and the safe-guard kicks in.
     const m = computeOrderMetrics(input({
       grossLineTotal: 0,
+      totalShipping: 0,
       totalRefunded: 0,
       shippingCost: { amount: 0, rawAmount: 0, rawCurrency: 'USD', source: 'invoice' },
       skuCosts: [],

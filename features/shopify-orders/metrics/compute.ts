@@ -47,8 +47,16 @@ export interface ComputeInput {
 export interface OrderMetrics {
   orderId: string;
   currency: string;
+  /** Line-items total (= sum of unit_price × qty across lines). What
+   *  finance calls "Subtotal" — the merchandise value the customer
+   *  paid for goods alone, excluding shipping. */
+  subtotal: number;
+  /** True Gross Merchandise Value = subtotal + shippingRevenue.
+   *  Matches the operator's mental model:
+   *    Revenue = GMV − Discount − ShipCost − SkuCost */
   gmv: number;
   refundedAmount: number;
+  /** GMV − refundedAmount. */
   netGmv: number;
   discount: number;
   shippingRevenue: number;
@@ -74,7 +82,12 @@ export interface OrderMetrics {
 }
 
 export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
-  const gmv = input.grossLineTotal;
+  // Subtotal = line items only. GMV = Subtotal + customer-paid shipping.
+  // This matches finance convention: GMV is the gross top-line including
+  // shipping revenue, not just the merchandise value.
+  const subtotal = input.grossLineTotal;
+  const shippingRevenue = input.totalShipping;
+  const gmv = subtotal + shippingRevenue;
   const refundedAmount = input.totalRefunded;
   const netGmv = gmv - refundedAmount;
   const skuCost = input.skuCosts.reduce(
@@ -83,18 +96,23 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
   );
   const knownCostLines = input.skuCosts.filter((c) => c.costPerUnit !== null).length;
   const coverage = input.skuCosts.length === 0 ? 1 : knownCostLines / input.skuCosts.length;
+  // Revenue = GMV − Discount − ShipCost − SkuCost (using netGmv to fold
+  // in refunds). Mathematically equivalent to the previous
+  // `netGmv − discount + shipRev − shipCost − skuCost` form since
+  // shipRev is now folded into gmv.
   const revenue =
-    netGmv - input.totalDiscount + input.totalShipping - input.shippingCost.amount - skuCost;
+    netGmv - input.totalDiscount - input.shippingCost.amount - skuCost;
   const margin = netGmv > 0 ? revenue / netGmv : 0;
 
   return {
     orderId: input.orderId,
     currency: input.currency,
+    subtotal,
     gmv,
     refundedAmount,
     netGmv,
     discount: input.totalDiscount,
-    shippingRevenue: input.totalShipping,
+    shippingRevenue,
     shippingCost: input.shippingCost.amount,
     shippingCostRaw: input.shippingCost.rawAmount,
     shippingCostRawCurrency: input.shippingCost.rawCurrency,

@@ -5,6 +5,7 @@ import type { OrderMetrics } from './compute';
 const baseMetric = (overrides: Partial<OrderMetrics>): OrderMetrics => ({
   orderId: 'o',
   currency: 'USD',
+  subtotal: 90,
   gmv: 100,
   refundedAmount: 0,
   netGmv: 100,
