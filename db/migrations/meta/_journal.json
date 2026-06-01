@@ -120,6 +120,13 @@
       "when": 1780312404711,
       "tag": "0016_add_country_fixed_surcharge",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780315720840,
+      "tag": "0017_add_package_type_to_rate_cells",
+      "breakpoints": true
     }
   ]
 }

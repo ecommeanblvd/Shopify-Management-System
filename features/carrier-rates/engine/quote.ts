@@ -43,8 +43,17 @@ export interface WeightTierSnap {
 
 export interface ZoneSnap {
   label: string;
-  /** Cost per weight tier, keyed by tier.upperKg. */
+  /** Package-type rates per weight tier, keyed by tier.upperKg. The
+   *  "Package" (box) cells — historical default and the only set
+   *  populated before migration 0017. */
   rateByTierUpper: Map<number, number>;
+  /** "Pak" (envelope / bag) rates per weight tier. Sparse — only
+   *  populated for the low tiers FedEx publishes Pak rates for
+   *  (typically ≤ 2.5 kg). Engine falls back to `rateByTierUpper`
+   *  when no Pak rate exists at the matched tier. Optional so existing
+   *  test fixtures stay valid; loader always provides an empty map at
+   *  minimum, never undefined. */
+  pakRateByTierUpper?: Map<number, number>;
 }
 
 export interface CarrierAccountSnapshot {
@@ -201,7 +210,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   }
   const tier = snap.weightTiers[tierIndex];
 
-  const base = zone.rateByTierUpper.get(tier.upperKg);
+  // Package-type selection follows the operator's business rule for FedEx:
+  // shipments under 2 kg ship in a Pak (envelope/bag), 2 kg and up ship as
+  // a Package (box). Pak rates are sparse — only published for the low
+  // tiers — so we fall back to Package when no Pak rate exists at the
+  // matched tier.
+  const usePak = input.weightKg < 2;
+  const pakBase = usePak ? zone.pakRateByTierUpper?.get(tier.upperKg) : undefined;
+  const base = pakBase ?? zone.rateByTierUpper.get(tier.upperKg);
   if (base === undefined) {
     return {
       ok: false,
@@ -209,6 +225,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       message: `No rate cell for zone ${zone.label} at tier ${tier.upperKg} kg.`,
     };
   }
+  if (usePak && pakBase !== undefined) notes.push('pak');
+  else if (usePak) notes.push('pak_fallback_to_package');
 
   const peak = sumActiveOfKind(snap.surcharges, 'peak_fixed');
 

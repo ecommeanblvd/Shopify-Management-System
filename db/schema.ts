@@ -268,15 +268,24 @@ export const carrierWeightTiers = pgTable('carrier_weight_tiers', {
 ]);
 
 // Rate matrix cell. Cost is in account.costCurrency.
+// FedEx (and likely future carriers) prices Pak (envelope/bag) and Package
+// (box) differently for the same destination + weight tier. Per the IPE
+// rate sheet, both packaging types are listed; the operator chooses one
+// per shipment based on weight (< 2kg = Pak, ≥ 2kg = Package by convention).
+export const carrierPackageTypeEnum = pgEnum('carrier_package_type', ['pak', 'package']);
+
 export const carrierRateCells = pgTable('carrier_rate_cells', {
   id: uuid('id').defaultRandom().primaryKey(),
   carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
   carrierWeightTierId: uuid('carrier_weight_tier_id').references(() => carrierWeightTiers.id, { onDelete: 'cascade' }).notNull(),
+  packageType: carrierPackageTypeEnum('package_type').notNull().default('package'),
   costAmount: numeric('cost_amount', { precision: 14, scale: 2 }).notNull(),
   updatedBy: text('updated_by').references(() => user.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex('carrier_rate_cells_zone_tier_idx').on(table.carrierZoneId, table.carrierWeightTierId),
+  // Unique per (zone, tier, package_type) — Pak and Package are independent
+  // rates for the same destination weight.
+  uniqueIndex('carrier_rate_cells_zone_tier_pkg_idx').on(table.carrierZoneId, table.carrierWeightTierId, table.packageType),
 ]);
 
 export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
