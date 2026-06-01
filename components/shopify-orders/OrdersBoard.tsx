@@ -29,6 +29,9 @@ interface OrdersBoardProps {
 
   canEdit: boolean;
   costCurrency: string | null;
+  /** Forwarded straight through to <OrdersTable> so the Ship cost column
+   *  can render in the brand's cost currency for FedEx reconciliation. */
+  fxRate: number | null;
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
     orderId: string;
@@ -59,6 +62,7 @@ export function OrdersBoard({
   availableVendors,
   canEdit,
   costCurrency,
+  fxRate,
   getDetailAction,
   saveAction,
 }: OrdersBoardProps) {
@@ -146,6 +150,7 @@ export function OrdersBoard({
           orders={visibleOrders}
           canEdit={canEdit}
           costCurrency={costCurrency}
+          fxRate={fxRate}
           getDetailAction={getDetailAction}
           saveAction={saveAction}
         />

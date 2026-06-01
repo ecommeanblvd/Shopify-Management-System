@@ -213,6 +213,7 @@ export default async function StoreOrders({
         availableVendors={vendors}
         canEdit={hasPermission(role, 'manage_sku_costs')}
         costCurrency={store.costCurrency}
+        fxRate={store.fxCostPerOrderCurrency !== null ? Number(store.fxCostPerOrderCurrency) : null}
         getDetailAction={getOrderDetail}
         saveAction={updateOrderOverrides as unknown as (input: {
           orderId: string;

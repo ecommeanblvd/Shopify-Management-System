@@ -24,6 +24,12 @@ interface OrdersTableProps {
   /** Currency the operator enters COGs/shipping overrides in (e.g. 'VND'
    *  for Mirer). Falls back to the order currency when not set. */
   costCurrency: string | null;
+  /** How many `costCurrency` units equal one order-currency unit (e.g.
+   *  26000 for USD orders + VND costs). When both this and `costCurrency`
+   *  are set, the Ship cost column flips into a cost-currency view so the
+   *  operator can reconcile against carrier invoices in their bank-side
+   *  currency without doing FX in their head. */
+  fxRate: number | null;
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
     orderId: string;
@@ -34,8 +40,14 @@ interface OrdersTableProps {
 }
 
 export function OrdersTable({
-  orders, canEdit, costCurrency, getDetailAction, saveAction,
+  orders, canEdit, costCurrency, fxRate, getDetailAction, saveAction,
 }: OrdersTableProps) {
+  // The Ship cost column flips into "cost currency" mode whenever both the
+  // brand's cost currency and the FX rate are known. Revenue and everything
+  // else stays in the order currency — the goal of this column flip is
+  // purely visual reconciliation against carrier invoices, not changing the
+  // P&L math (which still happens in the order currency upstream).
+  const showShipInCostCurrency = costCurrency !== null && fxRate !== null && fxRate > 0;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
@@ -194,7 +206,17 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2">Refunded</th>
                 <th className="text-right px-3 py-2">Discount</th>
                 <th className="text-right px-3 py-2">Ship rev</th>
-                <th className="text-right px-3 py-2">Ship cost</th>
+                <th className="text-right px-3 py-2">
+                  Ship cost
+                  {showShipInCostCurrency && (
+                    <span
+                      className="ml-1 px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal"
+                      title={`Displayed in ${costCurrency} at FX ${fxRate!.toLocaleString()}. Revenue still subtracts in ${orders[0]?.currency ?? 'order currency'}.`}
+                    >
+                      {costCurrency}
+                    </span>
+                  )}
+                </th>
                 <th className="text-right px-3 py-2">SKU cost</th>
                 <th className="text-right px-3 py-2">Revenue</th>
                 <th className="text-right px-3 py-2">Margin %</th>
@@ -234,6 +256,17 @@ export function OrdersTable({
                         title={reasonLabel(o.shippingCostReason)}
                       >
                         —
+                      </span>
+                    ) : showShipInCostCurrency ? (
+                      // Inverse-FX the already-converted USD value back to
+                      // the brand's cost currency. We round once at display
+                      // time — the precision matches the operator's
+                      // reconciliation use case (eyeballing against a
+                      // carrier invoice line).
+                      <span
+                        title={`${o.shippingCostSource} · ${fmt(o.shippingCost, o.currency)} in order currency`}
+                      >
+                        {fmt(o.shippingCost * fxRate!, costCurrency!)}
                       </span>
                     ) : (
                       <span title={o.shippingCostSource}>{fmt(o.shippingCost, o.currency)}</span>
