@@ -36,7 +36,12 @@ export interface EngineEstimateInput {
 }
 
 export interface EngineEstimateResult {
+  /** Carrier cost in display currency (USD), derived via FX. */
   amount: number;
+  /** Carrier cost in cost currency (VND), straight from the rate sheet. */
+  costAmount: number;
+  /** ISO-3 of `costAmount`. */
+  costCurrency: string;
   source: 'engine_estimate' | 'unknown';
   /** Present only when `source === 'unknown'`. Matches the taxonomy
    *  used by the batched dashboard estimator. */
@@ -49,9 +54,11 @@ export interface EngineEstimateResult {
 export async function resolveShippingEstimate(
   input: EngineEstimateInput,
 ): Promise<EngineEstimateResult> {
-  if (!input.shipCountry) return { amount: 0, source: 'unknown', reason: 'no_country' };
+  if (!input.shipCountry) {
+    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_country' };
+  }
   if (!input.shipWeightKg || input.shipWeightKg <= 0) {
-    return { amount: 0, source: 'unknown', reason: 'no_weight' };
+    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_weight' };
   }
 
   // Carriers explicitly linked to a market covering this country (the
@@ -80,7 +87,14 @@ export async function resolveShippingEstimate(
 
   if (linkedCarrierIds.length > 0) {
     const best = await tryCarriers(linkedCarrierIds, input.shipCountry, input.shipWeightKg);
-    if (best !== null) return { amount: best, source: 'engine_estimate' };
+    if (best !== null) {
+      return {
+        amount: best.display,
+        costAmount: best.cost,
+        costCurrency: best.costCurrency,
+        source: 'engine_estimate',
+      };
+    }
   }
 
   // Fall back to every enabled carrier account in the system. The
@@ -92,34 +106,47 @@ export async function resolveShippingEstimate(
     .from(schema.carrierAccounts)
     .where(eq(schema.carrierAccounts.enabled, true));
   if (allAccountRows.length === 0) {
-    return { amount: 0, source: 'unknown', reason: 'no_carrier_accounts' };
+    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_carrier_accounts' };
   }
   const fallbackCarrierIds = allAccountRows
     .map((r) => r.id)
     .filter((id) => !linkedCarrierIds.includes(id));
   const fallbackBest = await tryCarriers(fallbackCarrierIds, input.shipCountry, input.shipWeightKg);
   if (fallbackBest !== null) {
-    return { amount: fallbackBest, source: 'engine_estimate', fallback: true };
+    return {
+      amount: fallbackBest.display,
+      costAmount: fallbackBest.cost,
+      costCurrency: fallbackBest.costCurrency,
+      source: 'engine_estimate',
+      fallback: true,
+    };
   }
 
-  return { amount: 0, source: 'unknown', reason: 'no_quote' };
+  return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_quote' };
 }
 
 /**
- * Cheapest carrier-cost quote (pre-markup, in display currency) across
- * the given carriers, or null if none can cover the destination + weight.
+ * Cheapest carrier-cost quote across the given carriers — pre-markup, in
+ * BOTH the display currency (USD) and the carrier's cost currency (VND),
+ * so the dashboard can render either without an FX round-trip.
  */
 async function tryCarriers(
   carrierIds: readonly string[], country: string, weightKg: number,
-): Promise<number | null> {
-  let best: number | null = null;
+): Promise<{ display: number; cost: number; costCurrency: string } | null> {
+  let best: { display: number; cost: number; costCurrency: string } | null = null;
   for (const id of carrierIds) {
     const snap = await loadAccountSnapshot(id);
     if (!snap) continue;
     const q = quote(snap, { weightKg, destinationCountry: country });
     if (q.ok) {
-      const amt = q.breakdown.carrierCostDisplay;
-      if (best === null || amt < best) best = amt;
+      const display = q.breakdown.carrierCostDisplay;
+      if (best === null || display < best.display) {
+        best = {
+          display,
+          cost: q.breakdown.carrierCost,
+          costCurrency: snap.costCurrency,
+        };
+      }
     }
   }
   return best;
