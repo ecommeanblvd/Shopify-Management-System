@@ -1,0 +1,1 @@
+ALTER TYPE "public"."carrier_surcharge_kind" ADD VALUE 'country_fixed' BEFORE 'vat_percent';

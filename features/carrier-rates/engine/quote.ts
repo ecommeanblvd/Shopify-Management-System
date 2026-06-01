@@ -10,6 +10,7 @@ export type SurchargeKind =
   | 'markup_percent'
   | 'per_kg_fixed'
   | 'demand_per_kg'
+  | 'country_fixed'
   | 'vat_percent';
 
 export interface SurchargeSnap {
@@ -89,6 +90,14 @@ export interface QuoteBreakdown {
    * contains the destination — or whose list is NULL (catch-all).
    */
   demand: number;
+  /**
+   * Country-scoped FLAT per-shipment fee — e.g. FedEx VN "Phí xử lý hàng
+   * nhập tại Hoa Kỳ" / US Duty Prepaid. Sum across every active
+   * `country_fixed` row whose country_codes list contains the destination
+   * (or is NULL = catch-all). Folded into the fuelable subtotal so fuel
+   * applies on top — matches the invoice math we verified.
+   */
+  countryFixed: number;
   /**
    * Effective VAT % that was applied (sum of active `vat_percent` rows —
    * usually a single row). Surfaced so the modal can label the line
@@ -216,6 +225,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     .reduce((sum, s) => sum + s.value, 0);
   const demand = demandUnit * input.weightKg;
 
+  // Country-scoped FLAT per-shipment fee. Sum every active country_fixed
+  // row whose country_codes list contains the destination (or is NULL =
+  // catch-all). Same compounding semantics as demand_per_kg.
+  const countryFixed = snap.surcharges
+    .filter((s) => s.active && s.kind === 'country_fixed')
+    .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
+    .reduce((sum, s) => sum + s.value, 0);
+
   let remote = 0;
   if (input.destinationPostcode) {
     const patterns = snap.remotePostcodes.get(country);
@@ -234,10 +251,10 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
 
   // Carrier billing model: fuel surcharge is charged as a % of the entire
   // freight + accessorial subtotal — NOT just the base rate. So fuel
-  // applies to (base + peak + remote + residential + perKg + demand).
-  // VAT then applies to (everything-incl-fuel). Markup is our operator
-  // margin layered on top of the VAT-inclusive carrier bill.
-  const fuelable = base + peak + remote + residential + perKg + demand;
+  // applies to (base + peak + remote + residential + perKg + demand +
+  // countryFixed). VAT then applies to (everything-incl-fuel). Markup is
+  // our operator margin layered on top of the VAT-inclusive carrier bill.
+  const fuelable = base + peak + remote + residential + perKg + demand + countryFixed;
   const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
   const fuel = fuelable * (fuelPct / 100);
 
@@ -272,6 +289,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       residential: Math.round(residential),
       perKg: Math.round(perKg),
       demand: Math.round(demand),
+      countryFixed: Math.round(countryFixed),
       vatPercent: vatPct,
       vat: Math.round(vat),
       markup: Math.round(markup),

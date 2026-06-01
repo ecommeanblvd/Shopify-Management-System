@@ -747,6 +747,7 @@ function ShippingCostBreakdown({
     { label: 'Residential', value: breakdown.residential },
     { label: 'Per-kg surcharge', value: breakdown.perKg },
     { label: 'Demand surcharge', value: breakdown.demand },
+    { label: 'Country handling fee', value: breakdown.countryFixed },
     { label: 'Fuel surcharge', value: breakdown.fuel },
     {
       label: breakdown.vatPercent > 0 ? `VAT (${breakdown.vatPercent}%)` : 'VAT',
