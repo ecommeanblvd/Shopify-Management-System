@@ -8,7 +8,8 @@ export type SurchargeKind =
   | 'remote_fixed'
   | 'residential_fixed'
   | 'markup_percent'
-  | 'per_kg_fixed';
+  | 'per_kg_fixed'
+  | 'demand_per_kg';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -27,6 +28,11 @@ export interface SurchargeSnap {
    * tier. NULL = catch-all (applies to any remote-postcode match).
    */
   tier?: string | null;
+  /**
+   * ISO-2 country codes the surcharge applies to. Only meaningful for
+   * `demand_per_kg`. NULL = applies to every destination.
+   */
+  countryCodes?: string[] | null;
 }
 
 export interface WeightTierSnap {
@@ -73,6 +79,12 @@ export interface QuoteBreakdown {
   remote: number;
   residential: number;
   perKg: number;
+  /**
+   * Country-scoped per-kg surcharge (FedEx Demand Surcharge and equivalents).
+   * Sum across every active `demand_per_kg` row whose country_codes list
+   * contains the destination — or whose list is NULL (catch-all).
+   */
+  demand: number;
   markup: number;
   subtotalBeforeMarkup: number;
   /** What we pay the carrier (subtotalBeforeMarkup), in cost currency. */
@@ -182,6 +194,16 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const perKgUnit = sumActiveOfKind(snap.surcharges, 'per_kg_fixed');
   const perKg = perKgUnit * input.weightKg;
 
+  // FedEx Demand Surcharge: per-kg rate applied when the destination country
+  // is in the row's country_codes list. NULL country_codes means catch-all.
+  // Multiple matching rows COMPOUND — FedEx publishes overlapping regional +
+  // peak-week demand surcharges that both apply.
+  const demandUnit = snap.surcharges
+    .filter((s) => s.active && s.kind === 'demand_per_kg')
+    .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
+    .reduce((sum, s) => sum + s.value, 0);
+  const demand = demandUnit * input.weightKg;
+
   let remote = 0;
   if (input.destinationPostcode) {
     const patterns = snap.remotePostcodes.get(country);
@@ -200,9 +222,9 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
 
   // Carrier billing model: fuel surcharge is charged as a % of the entire
   // freight + accessorial subtotal — NOT just the base rate. So fuel
-  // applies to (base + peak + remote + residential + perKg). Markup is
-  // our operator margin layered on top of that carrier bill.
-  const fuelable = base + peak + remote + residential + perKg;
+  // applies to (base + peak + remote + residential + perKg + demand).
+  // Markup is our operator margin layered on top of that carrier bill.
+  const fuelable = base + peak + remote + residential + perKg + demand;
   const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
   const fuel = fuelable * (fuelPct / 100);
 
@@ -229,6 +251,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       remote: Math.round(remote),
       residential: Math.round(residential),
       perKg: Math.round(perKg),
+      demand: Math.round(demand),
       markup: Math.round(markup),
       subtotalBeforeMarkup: Math.round(subtotalBeforeMarkup),
       carrierCost,

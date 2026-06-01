@@ -11,6 +11,8 @@ export interface SurchargeRow {
   value: string;
   valuePerKg: string | null;
   tier: string | null;
+  /** ISO-2 country codes scoping `demand_per_kg`. NULL → applies globally. */
+  countryCodes: string[] | null;
   active: boolean;
   note: string | null;
   startsAt: Date | null;
@@ -29,6 +31,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       value: schema.carrierSurcharges.value,
       valuePerKg: schema.carrierSurcharges.valuePerKg,
       tier: schema.carrierSurcharges.tier,
+      countryCodes: schema.carrierSurcharges.countryCodes,
       active: schema.carrierSurcharges.active,
       note: schema.carrierSurcharges.note,
       startsAt: schema.carrierSurcharges.startsAt,
@@ -39,7 +42,11 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
     })
     .from(schema.carrierSurcharges)
     .where(eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId))
-    .orderBy(asc(schema.carrierSurcharges.kind), asc(schema.carrierSurcharges.createdAt));
+    .orderBy(asc(schema.carrierSurcharges.kind), asc(schema.carrierSurcharges.createdAt))
+    .then((rows) => rows.map((r) => ({
+      ...r,
+      countryCodes: Array.isArray(r.countryCodes) ? (r.countryCodes as string[]) : null,
+    })));
 }
 
 export interface CreateSurchargeInput {
@@ -54,6 +61,11 @@ export interface CreateSurchargeInput {
   note?: string;
   /** Optional tier label — only meaningful for kind='remote_fixed'. */
   tier?: string;
+  /**
+   * Comma-separated ISO-2 country codes scoping the surcharge. Only
+   * meaningful for kind='demand_per_kg'. Empty / missing = global.
+   */
+  countryCodes?: string;
 }
 
 function parseValue(raw: string, kind: SurchargeKind): number {
@@ -76,9 +88,34 @@ function parsePerKg(raw: string): number | null {
   return n;
 }
 
+const ISO2_RE = /^[A-Z]{2}$/;
+
+/**
+ * Accept a comma- / space- / newline-separated list of ISO-2 codes,
+ * upper-case and dedupe, throw on bad codes. Returns null when the
+ * trimmed input is empty (catch-all scope).
+ */
+function parseCountryCodes(raw: string): string[] | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const codes = trimmed
+    .split(/[,\s]+/)
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean);
+  for (const c of codes) {
+    if (!ISO2_RE.test(c)) {
+      throw new Error(`"${c}" is not a valid ISO-2 country code.`);
+    }
+  }
+  return Array.from(new Set(codes));
+}
+
 export async function createSurcharge(input: CreateSurchargeInput, userId: string): Promise<string> {
   const n = parseValue(input.value, input.kind);
   const perKg = input.valuePerKg !== undefined ? parsePerKg(input.valuePerKg) : null;
+  const countries = input.countryCodes !== undefined
+    ? parseCountryCodes(input.countryCodes)
+    : null;
   const [row] = await db
     .insert(schema.carrierSurcharges)
     .values({
@@ -87,6 +124,7 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       value: n.toString(),
       valuePerKg: perKg !== null ? perKg.toString() : null,
       tier: input.tier?.trim() || null,
+      countryCodes: countries,
       note: input.note?.trim() || null,
       updatedBy: userId,
     })
@@ -99,6 +137,8 @@ export interface UpdateSurchargeInput {
   value?: string;
   /** Pass '' to clear the per-kg companion; pass a number to set it; omit to leave unchanged. */
   valuePerKg?: string;
+  /** Pass '' to make the surcharge global; pass a code list to scope; omit to leave unchanged. */
+  countryCodes?: string;
   note?: string;
   active?: boolean;
 }
@@ -119,6 +159,9 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   if (input.valuePerKg !== undefined) {
     const perKg = parsePerKg(input.valuePerKg);
     patch.valuePerKg = perKg !== null ? perKg.toString() : null;
+  }
+  if (input.countryCodes !== undefined) {
+    patch.countryCodes = parseCountryCodes(input.countryCodes);
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;

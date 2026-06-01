@@ -85,6 +85,89 @@ describe('quote engine', () => {
       expect(r.breakdown.finalDisplay).toBeCloseTo(24.08, 2);
     });
 
+    describe('demand surcharge (country-scoped per-kg)', () => {
+      it('applies when destination is in the country list and scales by weight', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'demand_per_kg', value: 10_000, active: true, countryCodes: ['SG', 'MY'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 2, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.demand).toBe(20_000); // 10,000 × 2 kg
+        // Fuel applies to (base + demand) = 360,000 + 20,000 = 380,000 × 0% = 0
+        expect(r.breakdown.subtotalBeforeMarkup).toBe(380_000);
+      });
+
+      it('does NOT apply when destination is outside the country list', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'demand_per_kg', value: 10_000, active: true, countryCodes: ['SG'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 2, destinationCountry: 'MY' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.demand).toBe(0);
+      });
+
+      it('NULL country_codes acts as catch-all (every destination)', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'demand_per_kg', value: 5_000, active: true, countryCodes: null },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.demand).toBe(5_000);
+      });
+
+      it('multiple matching rows COMPOUND (regional + peak-week)', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'demand_per_kg', value: 8_000, active: true, countryCodes: ['SG', 'MY', 'TH'] },
+            { kind: 'demand_per_kg', value: 12_000, active: true, countryCodes: ['SG'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.demand).toBe(20_000); // (8,000 + 12,000) × 1 kg
+      });
+
+      it('fuel surcharge applies on top of demand (consistent with the carrier billing model)', () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'fuel_percent', value: 30, active: true },
+            { kind: 'demand_per_kg', value: 10_000, active: true, countryCodes: ['TH'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        // base 280k + demand 10k = 290k; fuel = 290k × 30% = 87k
+        expect(r.breakdown.demand).toBe(10_000);
+        expect(r.breakdown.fuel).toBe(87_000);
+        expect(r.breakdown.subtotalBeforeMarkup).toBe(377_000);
+      });
+
+      it('inactive rows are ignored', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'demand_per_kg', value: 10_000, active: false, countryCodes: ['SG'] },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.demand).toBe(0);
+      });
+    });
+
     it('rounds up to the next tier (1.2 kg → 2 kg tier)', () => {
       const snap = makeSnap();
       const r = quote(snap, { weightKg: 1.2, destinationCountry: 'MY' });

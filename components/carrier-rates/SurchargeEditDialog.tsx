@@ -35,6 +35,11 @@ export interface SurchargeEditDialogProps {
   valueDecimals?: number;
   /** Same as valueDecimals, for the per-kg companion. */
   perKgDecimals?: number;
+  /** Show the country-code list input. Only true for `demand_per_kg`
+   *  (FedEx Demand Surcharge). The input accepts a comma- or
+   *  whitespace-separated list of ISO-2 codes (e.g. "VN, TH, MY"). */
+  countriesVisible?: boolean;
+  defaultCountryCodes?: string[] | null;
   /** Server action: applied on Save. Form data carries value/note/active. */
   saveAction: (formData: FormData) => void | Promise<void>;
   /** Server action: applied on Remove. When undefined, the Remove button is hidden (add mode). */
@@ -46,6 +51,7 @@ export interface SurchargeEditDialogProps {
 export function SurchargeEditDialog({
   triggerLabel, title, description, unitSuffix, perKgUnitSuffix, defaultValue, defaultPerKgValue,
   defaultNote, defaultActive, tier, perKgVisible, valueDecimals, perKgDecimals,
+  countriesVisible, defaultCountryCodes,
   saveAction, deleteAction,
   triggerVariant = 'outline-sm',
 }: SurchargeEditDialogProps) {
@@ -138,6 +144,25 @@ export function SurchargeEditDialog({
               <p className="text-xs text-muted-foreground">
                 When set, the engine applies <span className="font-mono">max(value, perKg × weight)</span>.
                 Leave empty for a flat per-shipment fee.
+              </p>
+            </div>
+          )}
+
+          {countriesVisible && (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Country scope (ISO-2 codes)
+              </Label>
+              <Input
+                name="countryCodes"
+                defaultValue={(defaultCountryCodes ?? []).join(', ')}
+                placeholder="e.g. VN, TH, MY, ID  —  leave blank for all destinations"
+                className="font-mono uppercase tracking-widest text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Engine applies this surcharge only when the order&rsquo;s ship-to
+                country is in this list. Leave blank to apply to every
+                destination. Separate with commas, spaces, or new lines.
               </p>
             </div>
           )}
