@@ -60,8 +60,14 @@ export const WISHLIST_EMBED_CSS = `
     font-size: 18px; color: #999; padding: 4px 8px; line-height: 1; }
   .wl-item-remove:hover { color: #111; }
 
-  .wl-foot { padding: 14px 20px; border-top: 1px solid #eee; }
+  .wl-foot { padding: 14px 20px; border-top: 1px solid #eee;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .wl-foot-link { text-decoration: none; color: inherit; font-size: 13px; font-weight: 500; }
+  .wl-share-btn { background: none; border: 0; padding: 0; font: inherit;
+    color: inherit; cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: opacity .15s ease; }
+  .wl-share-btn:hover { opacity: .7; }
+  .wl-share-btn:disabled { opacity: .4; cursor: not-allowed; }
 
   .wl-trigger-count {
     display: inline-flex; align-items: center; justify-content: center;

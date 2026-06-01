@@ -581,6 +581,11 @@ export const wishlists = pgTable('wishlists', {
   /** Random UUID written to localStorage for anonymous shoppers. Merged
    *  into a registered (email-keyed) wishlist on login. */
   deviceId: text('device_id'),
+  /** Public, opaque token for /wl/[token] share page. Generated lazily
+   *  the first time the shopper hits "Share wishlist". Distinct from the
+   *  wishlist id so a leaked token can be rotated without touching the
+   *  primary key. */
+  shareToken: text('share_token'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
@@ -590,6 +595,9 @@ export const wishlists = pgTable('wishlists', {
   uniqueIndex('wishlists_store_device_idx')
     .on(t.storeId, t.deviceId)
     .where(sql`${t.deviceId} IS NOT NULL`),
+  uniqueIndex('wishlists_share_token_idx')
+    .on(t.shareToken)
+    .where(sql`${t.shareToken} IS NOT NULL`),
 ]);
 
 // One row per product (or variant) in a wishlist. We snapshot the

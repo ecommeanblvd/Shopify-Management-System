@@ -216,6 +216,91 @@ export async function logEvent(
   });
 }
 
+/** Generates a URL-safe opaque token. Format: `wl_<22 base62 chars>`
+ *  using crypto.randomUUID() for the entropy source. */
+function generateShareToken(): string {
+  const u = crypto.randomUUID().replace(/-/g, '');
+  // 32 hex chars → trim to 22 to keep URLs short. 88 bits of entropy is
+  // ample against guessing.
+  return `wl_${u.slice(0, 22)}`;
+}
+
+/** Returns the existing share token for the identity's wishlist or
+ *  creates one. Idempotent — calling twice returns the same token. */
+export async function getOrCreateShareToken(
+  storeId: string, id: WishlistIdentity,
+): Promise<{ token: string; wishlistId: string }> {
+  const { id: wishlistId } = await getOrCreateWishlist(storeId, id);
+  const [existing] = await db
+    .select({ shareToken: schema.wishlists.shareToken })
+    .from(schema.wishlists)
+    .where(eq(schema.wishlists.id, wishlistId));
+  if (existing?.shareToken) {
+    return { token: existing.shareToken, wishlistId };
+  }
+  const token = generateShareToken();
+  await db
+    .update(schema.wishlists)
+    .set({ shareToken: token, updatedAt: new Date() })
+    .where(eq(schema.wishlists.id, wishlistId));
+  await logEvent(storeId, wishlistId, 'share', { token });
+  return { token, wishlistId };
+}
+
+export interface PublicWishlistView {
+  storeId: string;
+  storeName: string;
+  shopDomain: string;
+  items: WishlistItemRow[];
+}
+
+/** Public read of a wishlist by its share token. Used by /wl/[token].
+ *  Does NOT expose the owner's email or device id — only the items and
+ *  the store branding needed to render the page. */
+export async function getWishlistByShareToken(
+  token: string,
+): Promise<PublicWishlistView | null> {
+  if (!token || !/^wl_[a-zA-Z0-9]{8,}$/.test(token)) return null;
+  const [w] = await db
+    .select({
+      id: schema.wishlists.id,
+      storeId: schema.wishlists.storeId,
+    })
+    .from(schema.wishlists)
+    .where(eq(schema.wishlists.shareToken, token));
+  if (!w) return null;
+  const [store] = await db
+    .select({ name: schema.stores.name, shopDomain: schema.stores.shopDomain })
+    .from(schema.stores)
+    .where(eq(schema.stores.id, w.storeId));
+  if (!store) return null;
+  const items = await db
+    .select()
+    .from(schema.wishlistItems)
+    .where(eq(schema.wishlistItems.wishlistId, w.id));
+  // Fire-and-forget view-event log so the share page can power analytics
+  // ("how many people viewed your shared wishlist?") later. Awaited to
+  // surface DB failures in tests.
+  await logEvent(w.storeId, w.id, 'view', { token, source: 'share_page' });
+  return {
+    storeId: w.storeId,
+    storeName: store.name,
+    shopDomain: store.shopDomain,
+    items: items.map((i) => ({
+      id: i.id,
+      shopifyProductId: i.shopifyProductId,
+      shopifyVariantId: i.shopifyVariantId,
+      productTitle: i.productTitle,
+      variantTitle: i.variantTitle,
+      productHandle: i.productHandle,
+      imageUrl: i.imageUrl,
+      priceAmount: i.priceAmount !== null ? Number(i.priceAmount) : null,
+      priceCurrency: i.priceCurrency,
+      addedAt: i.addedAt,
+    })),
+  };
+}
+
 /** Convenience query for the admin dashboard. Filters out guest-only
  *  wishlists with zero items so the list isn't polluted by abandoned
  *  page-loads. */

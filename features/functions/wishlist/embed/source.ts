@@ -229,6 +229,7 @@ export function buildEmbedScript(config: EmbedConfig): string {
       op.finally(function() { btn.disabled = false; });
     });
     form.appendChild(btn);
+    watchVariantChanges(form);
     refreshPdpButton();
   }
 
@@ -244,6 +245,28 @@ export function buildEmbedScript(config: EmbedConfig): string {
     if (label) label.textContent = saved ? 'Saved to wishlist' : 'Add to wishlist';
   }
 
+  // Track variant id changes so the saved-state badge follows the
+  // selection. Themes mutate either the <select> value or the hidden
+  // input's value attribute, so we cover both: a 'change' listener
+  // and a MutationObserver on the variant input(s).
+  function watchVariantChanges(form) {
+    if (!form || form.__wlVariantWatched) return;
+    form.__wlVariantWatched = true;
+    var inputs = form.querySelectorAll('[name="id"]');
+    for (var i = 0; i < inputs.length; i++) {
+      inputs[i].addEventListener('change', refreshPdpButton);
+      try {
+        new MutationObserver(refreshPdpButton).observe(inputs[i], {
+          attributes: true, attributeFilter: ['value'],
+        });
+      } catch (e) {}
+    }
+    // Some themes swap the entire form on variant change. Listen to
+    // popstate / hashchange / cart events as a coarse fallback.
+    window.addEventListener('popstate', refreshPdpButton);
+    document.addEventListener('variant:change', refreshPdpButton);
+  }
+
   // ---- Drawer ----
   function mountDrawer() {
     if (document.querySelector('.wl-drawer')) return;
@@ -253,14 +276,61 @@ export function buildEmbedScript(config: EmbedConfig): string {
     d.innerHTML = '<div class="wl-backdrop"></div><aside class="wl-panel" role="dialog" aria-label="Wishlist">' +
       '<header class="wl-head"><h2>Your wishlist</h2><button class="wl-close" type="button" aria-label="Close">\\u00D7</button></header>' +
       '<div class="wl-list" data-region="drawer"></div>' +
-      '<footer class="wl-foot"><a class="wl-foot-link" href="/cart">View cart \\u2192</a></footer>' +
+      '<footer class="wl-foot">' +
+        '<button class="wl-share-btn" type="button">Share wishlist \\u2192</button>' +
+        '<a class="wl-foot-link" href="/cart">View cart \\u2192</a>' +
+      '</footer>' +
       '</aside>';
     document.body.appendChild(d);
     d.querySelector('.wl-backdrop').addEventListener('click', closeDrawer);
     d.querySelector('.wl-close').addEventListener('click', closeDrawer);
+    d.querySelector('.wl-share-btn').addEventListener('click', shareWishlist);
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') closeDrawer();
     });
+  }
+
+  // ---- Share ----
+  function shareWishlist() {
+    if (state.items.length === 0) {
+      toast('Add an item before sharing');
+      return;
+    }
+    var btn = document.querySelector('.wl-share-btn');
+    if (btn) btn.disabled = true;
+    fetch(API_ORIGIN + '/api/storefront/wishlist/share?shop=' + encodeURIComponent(SHOP || ''), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ identity: identity() }),
+      credentials: 'omit',
+    }).then(function(r) { return r.json(); }).then(function(r) {
+      if (btn) btn.disabled = false;
+      if (!r || !r.url) { toast('Could not create share link'); return; }
+      // Prefer native share sheet on mobile, fall back to clipboard.
+      if (navigator.share) {
+        navigator.share({ title: 'My wishlist', url: r.url })
+          .catch(function() { copyShareUrl(r.url); });
+      } else {
+        copyShareUrl(r.url);
+      }
+    }).catch(function() {
+      if (btn) btn.disabled = false;
+      toast('Could not create share link');
+    });
+  }
+
+  function copyShareUrl(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function() {
+        toast('Share link copied');
+      }).catch(function() { promptShareUrl(url); });
+    } else {
+      promptShareUrl(url);
+    }
+  }
+
+  function promptShareUrl(url) {
+    try { window.prompt('Copy your wishlist link:', url); } catch (e) { toast(url); }
   }
 
   function openDrawer() {
