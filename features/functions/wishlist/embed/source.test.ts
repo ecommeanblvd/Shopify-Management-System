@@ -41,6 +41,20 @@ describe('buildEmbedScript', () => {
     expect(script).toContain('data-wishlist-trigger'); // open-drawer hook
   });
 
+  it('reacts to variant changes on PDP (PR3)', () => {
+    // Variant id changes should refresh the saved-state badge.
+    expect(script).toContain('watchVariantChanges');
+    expect(script).toContain('MutationObserver');
+    expect(script).toContain("'change'");
+  });
+
+  it('ships a share button wired to the share endpoint (PR3)', () => {
+    expect(script).toContain('wl-share-btn');
+    expect(script).toContain('/api/storefront/wishlist/share');
+    expect(script).toContain('navigator.share');
+    expect(script).toContain('clipboard');
+  });
+
   it('calls the merge endpoint exactly once per email per browser', () => {
     expect(script).toContain('/api/storefront/wishlist/merge');
     expect(script).toContain('__wl_merged_to');
