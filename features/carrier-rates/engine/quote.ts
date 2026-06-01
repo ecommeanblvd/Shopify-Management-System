@@ -267,19 +267,23 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     ? sumActiveOfKind(snap.surcharges, 'residential_fixed')
     : 0;
 
-  // Carrier billing model: fuel surcharge is charged as a % of the entire
-  // freight + accessorial subtotal — NOT just the base rate. So fuel
-  // applies to (base + peak + remote + residential + perKg + demand +
-  // countryFixed). VAT then applies to (everything-incl-fuel). Markup is
-  // our operator margin layered on top of the VAT-inclusive carrier bill.
-  const fuelable = base + peak + remote + residential + perKg + demand + countryFixed;
+  // Carrier billing model:
+  //   fuel   = (base + peak + remote + residential + perKg + demand) × fuel%
+  //   VAT    = (fuelable + fuel + countryFixed) × VAT%
+  //
+  // `countryFixed` (FedEx VN "Phí xử lý hàng nhập tại Hoa Kỳ" — US Duty
+  // Prepaid / import-handling) is a DESTINATION-side fee that fuel does
+  // NOT apply to. Verified against #MBLVD28990 invoice: fuel ₫346,453 =
+  // base ₫703,458 × 49.25 % (no handling in the fuelable subtotal). It
+  // does join the VAT base, since VAT covers the entire carrier bill.
+  const fuelable = base + peak + remote + residential + perKg + demand;
   const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
   const fuel = fuelable * (fuelPct / 100);
 
-  // VAT applies to base + surcharges + fuel. Operator-configurable rate
-  // (FedEx VN: 8 %; other jurisdictions vary). Multiple active rows sum,
-  // matching the existing convention for other percentage surcharges.
-  const vatable = fuelable + fuel;
+  // VAT applies to (fuelable + fuel + countryFixed). Operator-configurable
+  // rate (FedEx VN: 8 %; other jurisdictions vary). Multiple active rows
+  // sum, matching the existing convention for other % surcharges.
+  const vatable = fuelable + fuel + countryFixed;
   const vatPct = sumActiveOfKind(snap.surcharges, 'vat_percent');
   const vat = vatable * (vatPct / 100);
 
