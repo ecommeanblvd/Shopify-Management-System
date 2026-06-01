@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2,
+  RefreshCw, Zap, Globe2, Receipt,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -108,10 +108,20 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-fuchsia-500/10',
     supportsPerKg: false,
   },
+  vat_percent: {
+    label: 'VAT',
+    desc: 'Value-added tax applied on (base + surcharges + fuel). FedEx Vietnam: 8 %.',
+    formula: '(base + surcharges + fuel) × (value ÷ 100)',
+    unit: 'percent',
+    icon: <Receipt className="size-4" />,
+    accent: 'text-cyan-600 dark:text-cyan-400',
+    accentBg: 'bg-cyan-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'vat_percent', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });

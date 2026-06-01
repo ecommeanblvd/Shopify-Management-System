@@ -294,6 +294,12 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // Multiple rows with overlapping country lists ALL apply (sum), matching
   // FedEx's "two demand surcharges can compound" semantics.
   'demand_per_kg',
+  // VAT applied on (base + all surcharges + fuel). FedEx VN charges 8 %
+  // (temporarily reduced from 10 %); operators in other jurisdictions can
+  // set their own rate. Applied BEFORE markup so markup compounds on the
+  // VAT-inclusive carrier bill — matches "I want X % margin on what I pay
+  // the carrier" semantics.
+  'vat_percent',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {

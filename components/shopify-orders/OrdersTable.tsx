@@ -470,20 +470,43 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
 
       {/* Shipping */}
       <section>
-        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Shipping</div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Shipping cost</div>
         <Card>
           <CardContent className="p-4 space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Shipping revenue (customer paid)" value={fmt(detail.shipping.shippingRevenue, detail.currency)} />
-              <Field
-                label={`Default cost (${detail.shipping.defaultSource})`}
-                value={
-                  detail.shipping.defaultSource === 'unknown'
-                    ? '—'
-                    : fmt(detail.shipping.defaultShippingCost, detail.currency)
-                }
+            {/* Engine-produced breakdown: base + accessorial surcharges +
+                fuel + VAT. Rendered in the carrier's cost currency (VND)
+                so the numbers reconcile 1-for-1 against the FedEx invoice.
+                Shipping revenue from Shopify is deliberately NOT shown
+                here — that's a customer-side figure and was confusing
+                operators trying to verify cost math. */}
+            {detail.shipping.defaultBreakdown && detail.shipping.defaultSource === 'engine_estimate' && (
+              <ShippingCostBreakdown
+                breakdown={detail.shipping.defaultBreakdown}
+                rawTotal={detail.shipping.defaultShippingCostRaw}
+                currency={detail.shipping.defaultShippingCostRawCurrency || cogsCcy}
+                carrierLabel={detail.shipping.defaultCarrierLabel}
+                zone={detail.shipping.defaultZone}
+                tierUpperKg={detail.shipping.defaultTierUpperKg}
               />
-            </div>
+            )}
+
+            {/* Invoice path — no engine breakdown to show, just surface the
+                actual amount from the matched shipping invoice. */}
+            {detail.shipping.defaultSource === 'invoice' && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Carrier invoice (matched by tracking)
+                  </span>
+                  <span className="font-mono tabular-nums font-semibold">
+                    {fmt(detail.shipping.defaultShippingCostRaw, detail.shipping.defaultShippingCostRawCurrency || cogsCcy)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Loaded from a `shipping_invoices` row whose tracking number matched this order. Bypasses the engine.
+                </p>
+              </div>
+            )}
 
             {/* Diagnostic panel — only when the engine couldn't price this
                 shipment. Surfaces the EXACT missing input (country, weight,
@@ -698,6 +721,86 @@ function getUnknownShippingFix(
  * Compact 1-2 word label for the diagnostic chip strip. The full
  * sentence lives in `reasonLabel` on hover.
  */
+interface ShippingCostBreakdownProps {
+  breakdown: NonNullable<OrderDetail['shipping']['defaultBreakdown']>;
+  rawTotal: number;
+  currency: string;
+  carrierLabel: string | null;
+  zone: string | null;
+  tierUpperKg: number | null;
+}
+
+/**
+ * Engine-produced cost breakdown rendered as a labelled table — one row
+ * per non-zero leg (base, accessorial surcharges, fuel, VAT) plus the
+ * carrier-cost total. Everything in the carrier's cost currency (VND
+ * straight from the rate sheet) so the operator can compare line-by-line
+ * against the FedEx invoice without doing FX in their head.
+ */
+function ShippingCostBreakdown({
+  breakdown, rawTotal, currency, carrierLabel, zone, tierUpperKg,
+}: ShippingCostBreakdownProps) {
+  const legs: { label: string; value: number }[] = [
+    { label: 'Base rate', value: breakdown.base },
+    { label: 'Peak / premium', value: breakdown.peak },
+    { label: 'Remote area', value: breakdown.remote },
+    { label: 'Residential', value: breakdown.residential },
+    { label: 'Per-kg surcharge', value: breakdown.perKg },
+    { label: 'Demand surcharge', value: breakdown.demand },
+    { label: 'Fuel surcharge', value: breakdown.fuel },
+    {
+      label: breakdown.vatPercent > 0 ? `VAT (${breakdown.vatPercent}%)` : 'VAT',
+      value: breakdown.vat,
+    },
+  ];
+  const visibleLegs = legs.filter((l) => l.value !== 0);
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+      {(carrierLabel || zone || tierUpperKg !== null) && (
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-3 text-xs flex-wrap">
+          <span className="text-muted-foreground">
+            {carrierLabel && <span className="font-medium text-foreground">{carrierLabel}</span>}
+            {zone && (
+              <>
+                {carrierLabel && ' · '}
+                Zone <span className="font-mono">{zone}</span>
+              </>
+            )}
+            {tierUpperKg !== null && (
+              <>
+                {' · '}
+                Tier <span className="font-mono">≤ {tierUpperKg} kg</span>
+              </>
+            )}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {currency}
+          </span>
+        </div>
+      )}
+      <table className="w-full text-sm">
+        <tbody>
+          {visibleLegs.map((leg) => (
+            <tr key={leg.label} className="border-b border-border/30 last:border-b-0">
+              <td className="px-3 py-1.5 text-muted-foreground">{leg.label}</td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                {fmt(leg.value, currency)}
+              </td>
+            </tr>
+          ))}
+          <tr className="bg-muted/50 font-semibold">
+            <td className="px-3 py-2">Carrier cost (what we pay)</td>
+            <td className="px-3 py-2 text-right font-mono tabular-nums">
+              {fmt(rawTotal, currency)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function reasonShortLabel(reason: OrderRow['shippingCostReason']): string {
   switch (reason) {
     case 'no_country': return 'no country';

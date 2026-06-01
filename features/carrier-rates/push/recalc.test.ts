@@ -16,6 +16,7 @@ function snap(args: {
 }): CarrierAccountSnapshot {
   return {
     id: 'acc',
+    name: 'Test Account',
     costCurrency: 'VND',
     displayCurrency: 'USD',
     fxCostPerDisplay: 26_000,

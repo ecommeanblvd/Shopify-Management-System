@@ -80,6 +80,7 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
 
   return {
     id: account.id,
+    name: account.name,
     costCurrency: account.costCurrency,
     displayCurrency: account.displayCurrency,
     fxCostPerDisplay: Number(account.fxCostPerDisplay),

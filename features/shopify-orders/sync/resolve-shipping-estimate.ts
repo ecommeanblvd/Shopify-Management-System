@@ -26,7 +26,7 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { quote } from '@/features/carrier-rates/engine/quote';
+import { quote, type QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import type { EngineEstimateReason } from './batch-shipping-estimator';
 
@@ -42,6 +42,17 @@ export interface EngineEstimateResult {
   costAmount: number;
   /** ISO-3 of `costAmount`. */
   costCurrency: string;
+  /** Engine line-item breakdown (base, surcharges, fuel, VAT, …) in the
+   *  COST currency, present only when source === 'engine_estimate'. The
+   *  order-edit modal uses this to render the cost breakdown table. */
+  breakdown: QuoteBreakdown | null;
+  /** Carrier name (e.g. 'FedEx Vietnam 2026') of the cheapest quoting
+   *  carrier — labels the breakdown so operator knows which rate sheet
+   *  produced the numbers. */
+  carrierLabel: string | null;
+  /** Matched zone label + weight tier upper bound, for context. */
+  zone: string | null;
+  tierUpperKg: number | null;
   source: 'engine_estimate' | 'unknown';
   /** Present only when `source === 'unknown'`. Matches the taxonomy
    *  used by the batched dashboard estimator. */
@@ -51,15 +62,19 @@ export interface EngineEstimateResult {
   fallback?: boolean;
 }
 
+function emptyResult(reason: EngineEstimateReason): EngineEstimateResult {
+  return {
+    amount: 0, costAmount: 0, costCurrency: '',
+    breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+    source: 'unknown', reason,
+  };
+}
+
 export async function resolveShippingEstimate(
   input: EngineEstimateInput,
 ): Promise<EngineEstimateResult> {
-  if (!input.shipCountry) {
-    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_country' };
-  }
-  if (!input.shipWeightKg || input.shipWeightKg <= 0) {
-    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_weight' };
-  }
+  if (!input.shipCountry) return emptyResult('no_country');
+  if (!input.shipWeightKg || input.shipWeightKg <= 0) return emptyResult('no_weight');
 
   // Carriers explicitly linked to a market covering this country (the
   // "intentional" path). `db.execute` on drizzle/node-postgres returns
@@ -92,6 +107,10 @@ export async function resolveShippingEstimate(
         amount: best.display,
         costAmount: best.cost,
         costCurrency: best.costCurrency,
+        breakdown: best.breakdown,
+        carrierLabel: best.carrierLabel,
+        zone: best.zone,
+        tierUpperKg: best.tierUpperKg,
         source: 'engine_estimate',
       };
     }
@@ -105,9 +124,7 @@ export async function resolveShippingEstimate(
     .select({ id: schema.carrierAccounts.id })
     .from(schema.carrierAccounts)
     .where(eq(schema.carrierAccounts.enabled, true));
-  if (allAccountRows.length === 0) {
-    return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_carrier_accounts' };
-  }
+  if (allAccountRows.length === 0) return emptyResult('no_carrier_accounts');
   const fallbackCarrierIds = allAccountRows
     .map((r) => r.id)
     .filter((id) => !linkedCarrierIds.includes(id));
@@ -117,23 +134,39 @@ export async function resolveShippingEstimate(
       amount: fallbackBest.display,
       costAmount: fallbackBest.cost,
       costCurrency: fallbackBest.costCurrency,
+      breakdown: fallbackBest.breakdown,
+      carrierLabel: fallbackBest.carrierLabel,
+      zone: fallbackBest.zone,
+      tierUpperKg: fallbackBest.tierUpperKg,
       source: 'engine_estimate',
       fallback: true,
     };
   }
 
-  return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_quote' };
+  return emptyResult('no_quote');
+}
+
+interface CarrierAttempt {
+  display: number;
+  cost: number;
+  costCurrency: string;
+  breakdown: QuoteBreakdown;
+  carrierLabel: string;
+  zone: string;
+  tierUpperKg: number;
 }
 
 /**
  * Cheapest carrier-cost quote across the given carriers — pre-markup, in
  * BOTH the display currency (USD) and the carrier's cost currency (VND),
- * so the dashboard can render either without an FX round-trip.
+ * so the dashboard can render either without an FX round-trip. Also
+ * returns the full engine breakdown so the order-edit modal can render
+ * the line-item table (base, surcharges, fuel, VAT, …).
  */
 async function tryCarriers(
   carrierIds: readonly string[], country: string, weightKg: number,
-): Promise<{ display: number; cost: number; costCurrency: string } | null> {
-  let best: { display: number; cost: number; costCurrency: string } | null = null;
+): Promise<CarrierAttempt | null> {
+  let best: CarrierAttempt | null = null;
   for (const id of carrierIds) {
     const snap = await loadAccountSnapshot(id);
     if (!snap) continue;
@@ -145,6 +178,10 @@ async function tryCarriers(
           display,
           cost: q.breakdown.carrierCost,
           costCurrency: snap.costCurrency,
+          breakdown: q.breakdown,
+          carrierLabel: snap.name,
+          zone: q.zone,
+          tierUpperKg: q.tier.upperKg,
         };
       }
     }

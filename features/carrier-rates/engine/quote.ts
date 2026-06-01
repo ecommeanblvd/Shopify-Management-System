@@ -9,7 +9,8 @@ export type SurchargeKind =
   | 'residential_fixed'
   | 'markup_percent'
   | 'per_kg_fixed'
-  | 'demand_per_kg';
+  | 'demand_per_kg'
+  | 'vat_percent';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -47,6 +48,9 @@ export interface ZoneSnap {
 
 export interface CarrierAccountSnapshot {
   id: string;
+  /** Operator-visible name (e.g. 'FedEx Vietnam 2026'). Used by the
+   *  order modal to label the cost-breakdown table. */
+  name: string;
   costCurrency: string;
   displayCurrency: string;
   /** How many cost-currency units equal one display-currency unit. */
@@ -85,6 +89,14 @@ export interface QuoteBreakdown {
    * contains the destination — or whose list is NULL (catch-all).
    */
   demand: number;
+  /**
+   * Effective VAT % that was applied (sum of active `vat_percent` rows —
+   * usually a single row). Surfaced so the modal can label the line
+   * "VAT (8 %)" without re-querying the snapshot.
+   */
+  vatPercent: number;
+  /** VAT amount: (base + surcharges + fuel) × vatPercent / 100. */
+  vat: number;
   markup: number;
   subtotalBeforeMarkup: number;
   /** What we pay the carrier (subtotalBeforeMarkup), in cost currency. */
@@ -223,12 +235,20 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // Carrier billing model: fuel surcharge is charged as a % of the entire
   // freight + accessorial subtotal — NOT just the base rate. So fuel
   // applies to (base + peak + remote + residential + perKg + demand).
-  // Markup is our operator margin layered on top of that carrier bill.
+  // VAT then applies to (everything-incl-fuel). Markup is our operator
+  // margin layered on top of the VAT-inclusive carrier bill.
   const fuelable = base + peak + remote + residential + perKg + demand;
   const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
   const fuel = fuelable * (fuelPct / 100);
 
-  const subtotalBeforeMarkup = fuelable + fuel;
+  // VAT applies to base + surcharges + fuel. Operator-configurable rate
+  // (FedEx VN: 8 %; other jurisdictions vary). Multiple active rows sum,
+  // matching the existing convention for other percentage surcharges.
+  const vatable = fuelable + fuel;
+  const vatPct = sumActiveOfKind(snap.surcharges, 'vat_percent');
+  const vat = vatable * (vatPct / 100);
+
+  const subtotalBeforeMarkup = vatable + vat;
   const markupPct = sumActiveOfKind(snap.surcharges, 'markup_percent');
   const markup = subtotalBeforeMarkup * (markupPct / 100);
   const finalCost = Math.round(subtotalBeforeMarkup + markup);
@@ -252,6 +272,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       residential: Math.round(residential),
       perKg: Math.round(perKg),
       demand: Math.round(demand),
+      vatPercent: vatPct,
+      vat: Math.round(vat),
       markup: Math.round(markup),
       subtotalBeforeMarkup: Math.round(subtotalBeforeMarkup),
       carrierCost,
