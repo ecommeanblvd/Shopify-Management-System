@@ -36,6 +36,12 @@ export interface OrderShippingDetail {
   shippingRevenue: number;
   /** Default shipping cost the system would use absent an override. */
   defaultShippingCost: number;
+  /** Same as `defaultShippingCost` but in the carrier's cost currency
+   *  (e.g. VND straight from the rate sheet). Used by the modal so the
+   *  breakdown table mirrors the FedEx invoice 1-for-1. */
+  defaultShippingCostRaw: number;
+  /** ISO-3 of `defaultShippingCostRaw`. Empty when source is 'unknown'. */
+  defaultShippingCostRawCurrency: string;
   /** Where the default would come from: 'invoice' | 'engine_estimate' | 'unknown'. */
   defaultSource: 'invoice' | 'engine_estimate' | 'unknown';
   /** Present only when `defaultSource === 'unknown'`. Tells the operator
@@ -48,6 +54,29 @@ export interface OrderShippingDetail {
     | 'no_carrier_accounts'
     | 'no_quote'
     | null;
+  /** Engine breakdown of base + surcharges + fuel + VAT, in the cost
+   *  currency. Present only when `defaultSource === 'engine_estimate'`.
+   *  Modal renders it as a labelled cost table. */
+  defaultBreakdown: {
+    base: number;
+    peak: number;
+    remote: number;
+    residential: number;
+    perKg: number;
+    demand: number;
+    fuel: number;
+    /** Effective VAT % that was applied. */
+    vatPercent: number;
+    vat: number;
+    /** subtotalBeforeMarkup — i.e. base + accessorials + fuel + VAT. */
+    carrierCost: number;
+  } | null;
+  /** Operator-visible carrier name + zone label + matched tier (kg) when
+   *  the engine quoted. Helps the operator cross-reference against the
+   *  rate sheet that produced the breakdown. */
+  defaultCarrierLabel: string | null;
+  defaultZone: string | null;
+  defaultTierUpperKg: number | null;
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
 }
@@ -90,23 +119,34 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
   const trackings = extractTrackingNumbers(order.rawPayload);
   let defaultShipping: {
     amount: number;
+    rawAmount: number;
+    rawCurrency: string;
     source: 'invoice' | 'engine_estimate' | 'unknown';
     reason: OrderShippingDetail['defaultUnknownReason'];
+    breakdown: OrderShippingDetail['defaultBreakdown'];
+    carrierLabel: string | null;
+    zone: string | null;
+    tierUpperKg: number | null;
   } = {
-    amount: 0,
-    source: 'unknown',
-    reason: null,
+    amount: 0, rawAmount: 0, rawCurrency: '',
+    source: 'unknown', reason: null,
+    breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
   };
   if (trackings.length > 0) {
-    const invRes = await db.execute<{ tracking_number: string; actual_cost: string }>(sql`
-      SELECT tracking_number, actual_cost::text FROM shipping_invoices
+    const invRes = await db.execute<{ tracking_number: string; actual_cost: string; currency: string }>(sql`
+      SELECT tracking_number, actual_cost::text, currency FROM shipping_invoices
        WHERE store_id = ${order.storeId}
          AND tracking_number IN (${sql.join(trackings.map((t) => sql`${t}`), sql`, `)})
        LIMIT 1;
     `);
     const inv = invRes.rows[0];
     if (inv) {
-      defaultShipping = { amount: Number(inv.actual_cost), source: 'invoice', reason: null };
+      const raw = Number(inv.actual_cost);
+      defaultShipping = {
+        amount: raw, rawAmount: raw, rawCurrency: inv.currency,
+        source: 'invoice', reason: null,
+        breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+      };
     }
   }
   if (defaultShipping.source === 'unknown') {
@@ -114,12 +154,37 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       shipCountry: order.shipCountry,
       shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
     });
-    if (est.source !== 'unknown') {
-      defaultShipping = { amount: est.amount, source: 'engine_estimate', reason: null };
+    if (est.source !== 'unknown' && est.breakdown !== null) {
+      defaultShipping = {
+        amount: est.amount,
+        rawAmount: est.costAmount,
+        rawCurrency: est.costCurrency,
+        source: 'engine_estimate',
+        reason: null,
+        breakdown: {
+          base: est.breakdown.base,
+          peak: est.breakdown.peak,
+          remote: est.breakdown.remote,
+          residential: est.breakdown.residential,
+          perKg: est.breakdown.perKg,
+          demand: est.breakdown.demand,
+          fuel: est.breakdown.fuel,
+          vatPercent: est.breakdown.vatPercent,
+          vat: est.breakdown.vat,
+          carrierCost: est.breakdown.carrierCost,
+        },
+        carrierLabel: est.carrierLabel,
+        zone: est.zone,
+        tierUpperKg: est.tierUpperKg,
+      };
     } else {
       // Still unknown — capture WHY so the modal can show the operator
       // exactly which prerequisite is missing.
-      defaultShipping = { amount: 0, source: 'unknown', reason: est.reason ?? null };
+      defaultShipping = {
+        amount: 0, rawAmount: 0, rawCurrency: '',
+        source: 'unknown', reason: est.reason ?? null,
+        breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+      };
     }
   }
 
@@ -150,8 +215,14 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     shipping: {
       shippingRevenue: Number(order.totalShipping),
       defaultShippingCost: defaultShipping.amount,
+      defaultShippingCostRaw: defaultShipping.rawAmount,
+      defaultShippingCostRawCurrency: defaultShipping.rawCurrency,
       defaultSource: defaultShipping.source,
       defaultUnknownReason: defaultShipping.reason,
+      defaultBreakdown: defaultShipping.breakdown,
+      defaultCarrierLabel: defaultShipping.carrierLabel,
+      defaultZone: defaultShipping.zone,
+      defaultTierUpperKg: defaultShipping.tierUpperKg,
       shippingCostOverride: order.shippingCostOverride !== null ? Number(order.shippingCostOverride) : null,
       shippingCostOverrideNote: order.shippingCostOverrideNote,
     },

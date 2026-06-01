@@ -1,0 +1,1 @@
+ALTER TYPE "public"."carrier_surcharge_kind" ADD VALUE 'vat_percent';

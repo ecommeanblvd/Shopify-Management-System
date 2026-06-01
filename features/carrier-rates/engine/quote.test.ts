@@ -10,6 +10,7 @@ function makeSnap(overrides: Partial<CarrierAccountSnapshot> = {}): CarrierAccou
   ]);
   return {
     id: 'acc-1',
+    name: 'Test Account',
     costCurrency: 'VND',
     displayCurrency: 'USD',
     fxCostPerDisplay: 26_000,
@@ -165,6 +166,90 @@ describe('quote engine', () => {
         expect(r.ok).toBe(true);
         if (!r.ok) return;
         expect(r.breakdown.demand).toBe(0);
+      });
+    });
+
+    describe('VAT', () => {
+      it('applies on (base + surcharges + fuel) — FedEx Vietnam 8 %', () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'fuel_percent', value: 30, active: true },
+            { kind: 'vat_percent', value: 8, active: true },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        // base 280k, fuel 84k, vatable 364k, VAT 8% = 29,120
+        expect(r.breakdown.fuel).toBe(84_000);
+        expect(r.breakdown.vatPercent).toBe(8);
+        expect(r.breakdown.vat).toBe(29_120);
+        // carrierCost = vatable + vat = 364,000 + 29,120 = 393,120
+        expect(r.breakdown.carrierCost).toBe(393_120);
+      });
+
+      it('VAT applies on top of every accessorial (peak + remote + demand + fuel)', () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 100_000]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'peak_fixed', value: 20_000, active: true },
+            { kind: 'demand_per_kg', value: 10_000, active: true, countryCodes: ['TH'] },
+            { kind: 'fuel_percent', value: 50, active: true },
+            { kind: 'vat_percent', value: 10, active: true },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        // fuelable = 100 + 20 + 10 = 130k
+        // fuel = 130k × 50% = 65k
+        // vatable = 195k
+        // vat = 195k × 10% = 19,500
+        expect(r.breakdown.fuel).toBe(65_000);
+        expect(r.breakdown.vat).toBe(19_500);
+        expect(r.breakdown.carrierCost).toBe(214_500);
+      });
+
+      it('zero VAT row → vat = 0 (catch-all that nothing matches)', () => {
+        const snap = makeSnap({
+          surcharges: [],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.vat).toBe(0);
+        expect(r.breakdown.vatPercent).toBe(0);
+      });
+
+      it('inactive VAT row is ignored', () => {
+        const snap = makeSnap({
+          surcharges: [{ kind: 'vat_percent', value: 8, active: false }],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.vat).toBe(0);
+      });
+
+      it('markup compounds on VAT-inclusive carrier cost', () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([['SG', { label: 'Zone 1', rateByTierUpper: new Map([[1, 100_000]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'vat_percent', value: 10, active: true },
+            { kind: 'markup_percent', value: 20, active: true },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        // base 100k, vat 10k, carrierCost 110k, markup 110k × 20% = 22k
+        expect(r.breakdown.carrierCost).toBe(110_000);
+        expect(r.breakdown.markup).toBe(22_000);
+        expect(r.breakdown.finalCost).toBe(132_000);
       });
     });
 
