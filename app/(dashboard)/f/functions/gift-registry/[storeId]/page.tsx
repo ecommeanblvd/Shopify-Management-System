@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Gift, Layers, Activity, Calendar, Code2, ExternalLink, Download } from 'lucide-react';
+import { ChevronLeft, Gift, Layers, Activity, Calendar, Code2, ExternalLink, Download, BarChart3 } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -11,8 +11,9 @@ import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { GiftRegistryInstallSnippet } from '@/components/functions/GiftRegistryInstallSnippet';
+import { GiftRegistryEventBreakdown } from '@/components/functions/GiftRegistryEventBreakdown';
 import {
-  getGiftRegistrySummary, listRegistriesForStore,
+  getGiftRegistrySummary, listRegistriesForStore, getGiftRegistryEventBreakdown,
 } from '@/features/functions/gift-registry/admin-actions';
 
 export const dynamic = 'force-dynamic';
@@ -44,9 +45,11 @@ export default async function GiftRegistryStorePage({
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) notFound();
 
-  const [summary, registries] = await Promise.all([
+  const breakdownDays = 7;
+  const [summary, registries, breakdown] = await Promise.all([
     getGiftRegistrySummary(storeId),
     listRegistriesForStore(storeId, 50),
+    getGiftRegistryEventBreakdown(storeId, breakdownDays),
   ]);
 
   const base = getEnv().SHOPIFY_APP_URL.replace(/\/$/, '');
@@ -77,6 +80,21 @@ export default async function GiftRegistryStorePage({
         <Tile icon={<Activity className="size-4" />} label="Reservations" value={summary.reservationCount.toLocaleString()} sub="excludes cancelled" />
         <Tile icon={<Calendar className="size-4" />} label="Upcoming" value={summary.upcomingCount.toLocaleString()} sub="events with a date" />
       </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="text-sm font-semibold inline-flex items-center gap-2">
+              <BarChart3 className="size-4 text-muted-foreground" />
+              Activity — last {breakdownDays} days
+            </h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+              {breakdown.reduce((a, b) => a + b.count, 0).toLocaleString()}
+            </Badge>
+          </div>
+          <GiftRegistryEventBreakdown buckets={breakdown} days={breakdownDays} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-5 space-y-5">
