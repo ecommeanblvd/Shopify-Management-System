@@ -9,7 +9,7 @@
  * THIS file, not elsewhere.
  */
 
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, ilike, isNotNull, isNull, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import type {
   WishlistIdentity, WishlistItemRow, WishlistItemSnapshot, WishlistRow,
@@ -306,10 +306,25 @@ export async function getWishlistByShareToken(
 
 /** Convenience query for the admin dashboard. Filters out guest-only
  *  wishlists with zero items so the list isn't polluted by abandoned
- *  page-loads. */
+ *  page-loads.
+ *
+ *  Optional `search` does a case-insensitive substring match on
+ *  customer_email + device_id. Trimmed by the caller. */
 export async function listWishlistsForStore(
-  storeId: string, limit = 50,
+  storeId: string, limit = 50, search?: string,
 ): Promise<WishlistRow[]> {
+  const trimmed = search?.trim();
+  const baseConds = [
+    eq(schema.wishlists.storeId, storeId),
+    isNotNull(schema.wishlists.customerEmail),
+  ];
+  if (trimmed) {
+    const pattern = `%${trimmed.toLowerCase()}%`;
+    baseConds.push(or(
+      ilike(schema.wishlists.customerEmail, pattern),
+      ilike(schema.wishlists.deviceId, pattern),
+    )!);
+  }
   const rows = await db
     .select({
       id: schema.wishlists.id,
@@ -318,10 +333,7 @@ export async function listWishlistsForStore(
       deviceId: schema.wishlists.deviceId,
     })
     .from(schema.wishlists)
-    .where(and(
-      eq(schema.wishlists.storeId, storeId),
-      isNotNull(schema.wishlists.customerEmail),
-    ))
+    .where(and(...baseConds))
     .limit(limit);
   // Per-row item count via a separate batch — fine at small N. For
   // 10k+ wishlists this should move to a single grouped query.
