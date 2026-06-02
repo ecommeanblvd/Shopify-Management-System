@@ -19,7 +19,7 @@ export interface FunctionManifest {
   description: string;
   version: string;
   /** Lucide icon name (rendered by the dashboard nav + overview card). */
-  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles' | 'Eye';
+  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles' | 'Eye' | 'Bookmark';
   /** Tailwind accent classes for the icon tile on the overview page. */
   accent: { fg: string; bg: string };
   routes: {
@@ -66,6 +66,18 @@ export const FUNCTIONS: FunctionManifest[] = [
     icon: 'Gift',
     accent: { fg: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
     routes: { admin: '/f/functions/gift-registry', storefront: '/api/storefront/gift-registry' },
+  },
+  {
+    key: 'save-for-later',
+    name: 'Save for later',
+    description:
+      'Cart-context shelf — shoppers stash items they almost bought, then ' +
+      'move them back later. Captures high-intent abandons that wishlists ' +
+      'miss because the shopper already engaged at the cart step.',
+    version: '0.1.0',
+    icon: 'Bookmark',
+    accent: { fg: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10' },
+    routes: { admin: '/f/functions/save-for-later', storefront: '/api/storefront/save-for-later' },
   },
 ];
 

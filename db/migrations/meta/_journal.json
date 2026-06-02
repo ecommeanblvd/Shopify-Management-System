@@ -169,6 +169,13 @@
       "when": 1780362315900,
       "tag": "0023_gift_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780371019320,
+      "tag": "0024_save_for_later",
+      "breakpoints": true
     }
   ]
 }
