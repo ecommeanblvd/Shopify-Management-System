@@ -229,6 +229,12 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         const est = estimator.estimate({
           shipCountry: o.shipCountry,
           shipWeightKg: effectiveWeight,
+          // Anchor each order to its own ship-week so fuel%
+          // (time-versioned per carrier_surcharges.startsAt/endsAt)
+          // resolves to the rate sheet from when the carrier actually
+          // billed us. Without this, an April order is mis-priced
+          // against today's June fuel rate.
+          effectiveDate: o.processedAtShopify ?? undefined,
         });
         // Engine returns BOTH the display-currency value (USD) and the
         // cost-currency value (VND, straight from the rate sheet). When

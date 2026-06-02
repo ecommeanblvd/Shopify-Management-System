@@ -26,9 +26,29 @@ import { db, schema } from '@/db/client';
 import { quote, type CarrierAccountSnapshot } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 
+const DAY_MS = 86_400_000;
+
+/** Returns the UTC midnight epoch of the Monday-anchored ISO week the
+ *  date falls in. Used as a memo key so orders shipped in the same week
+ *  reuse the same engine quote — fuel% changes weekly. */
+function mondayUtcMs(d: Date): number {
+  const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  // getUTCDay: Sun=0..Sat=6; ISO week starts on Monday (=1). Convert to
+  // 0..6 with Mon=0.
+  const dow = (day.getUTCDay() + 6) % 7;
+  day.setUTCDate(day.getUTCDate() - dow);
+  return day.getTime();
+}
+
 export interface EngineEstimateInput {
   shipCountry: string | null;
   shipWeightKg: number | null;
+  /**
+   * Effective quote date — defaults to "now". Pass the order's
+   * `processed_at_shopify` so fuel-surcharge time-versioning resolves
+   * to the rate sheet from the order's ship week.
+   */
+  effectiveDate?: Date;
 }
 
 /**
@@ -163,13 +183,13 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
    * a USD→VND round-trip that loses 2dp precision.
    */
   function bestQuote(
-    carrierIds: readonly string[], country: string, weightKg: number,
+    carrierIds: readonly string[], country: string, weightKg: number, effectiveDate?: Date,
   ): { display: number; cost: number; costCurrency: string } | null {
     let best: { display: number; cost: number; costCurrency: string } | null = null;
     for (const id of carrierIds) {
       const snap = snapshotsByCarrier.get(id);
       if (!snap) continue;
-      const q = quote(snap, { weightKg, destinationCountry: country });
+      const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
       if (q.ok) {
         const display = q.breakdown.carrierCostDisplay;
         if (best === null || display < best.display) {
@@ -196,9 +216,15 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
         return { amount: 0, costAmount: 0, costCurrency: '', source: 'unknown', reason: 'no_weight' };
       }
       // Round weight to 3 dp so micro-fluctuations don't bust the memo;
-      // the rate matrix only changes on tier boundaries anyway.
+      // the rate matrix only changes on tier boundaries anyway. The
+      // effectiveDate bucket is the order's UTC week (Mon midnight) so
+      // many orders shipped the same week share one memo entry — fuel %
+      // only changes weekly, so finer granularity doesn't pay off.
       const wKey = Math.round(input.shipWeightKg * 1000) / 1000;
-      const key = `${input.shipCountry}|${wKey}`;
+      const dKey = input.effectiveDate
+        ? mondayUtcMs(input.effectiveDate)
+        : 'now';
+      const key = `${input.shipCountry}|${wKey}|${dKey}`;
       const cached = memo.get(key);
       if (cached) return cached;
 
@@ -217,7 +243,7 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // Primary path: carriers explicitly linked to a market that
       // covers this country. Cheapest of those wins.
       const linkedCarrierIds = carriersFor(input.shipCountry);
-      const linkedBest = bestQuote(linkedCarrierIds, input.shipCountry, input.shipWeightKg);
+      const linkedBest = bestQuote(linkedCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
       if (linkedBest !== null) {
         const r: EngineEstimateResult = {
           amount: linkedBest.display,
@@ -236,7 +262,7 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // market_carrier_links setup. Surface `fallback: true` so the UI
       // can flag implicit FedEx pricing.
       const fallbackCarrierIds = allCarrierIds.filter((id) => !linkedCarrierIds.includes(id));
-      const fallbackBest = bestQuote(fallbackCarrierIds, input.shipCountry, input.shipWeightKg);
+      const fallbackBest = bestQuote(fallbackCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
       if (fallbackBest !== null) {
         const r: EngineEstimateResult = {
           amount: fallbackBest.display,

@@ -164,6 +164,11 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     const est = await resolveShippingEstimate({
       shipCountry: order.shipCountry,
       shipWeightKg: effectiveWeight,
+      // Reproduce the carrier's rate sheet at the moment the order
+      // shipped — fuel surcharge changes weekly, so today's value would
+      // mis-price a 6-week-old order. processed_at_shopify is when
+      // Shopify accepted the order (≈ ship date for fulfilled orders).
+      effectiveDate: order.processedAtShopify ?? undefined,
     });
     if (est.source !== 'unknown' && est.breakdown !== null) {
       defaultShipping = {

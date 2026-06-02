@@ -11,7 +11,7 @@
  * signed-in user. Either way the audit columns get filled.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import {
   fetchFedExFuelPercent,
@@ -47,11 +47,50 @@ export interface ApplyFuelResult {
  * one and leave the rest alone so we never silently lose configuration.
  */
 export async function applyFuelFetch(input: ApplyFuelInput): Promise<ApplyFuelResult> {
-  const valueStr = input.fetched.current.percent.toString();
-  const sourceTag = describeSource(input.fetched.sourceUrl, input.fetched.current.weekRaw);
+  return upsertOpenFuelRow({
+    carrierAccountId: input.carrierAccountId,
+    percent: input.fetched.current.percent,
+    sourceTag: describeSource(input.fetched.sourceUrl, input.fetched.current.weekRaw),
+    weekLabel: input.fetched.current.weekRaw,
+    fetchedAt: input.fetched.fetchedAt,
+    triggeredBy: input.triggeredBy,
+    carrierTag: 'FedEx',
+  });
+}
 
-  // Look for the existing fuel_percent row (we may have several historically).
-  const existing = await db
+interface UpsertOpenFuelRowArgs {
+  carrierAccountId: string;
+  percent: number;
+  sourceTag: string;
+  weekLabel: string;
+  fetchedAt: Date;
+  triggeredBy: string | null;
+  /** Human label for the auto-note column ("FedEx" / "DHL" / ...). */
+  carrierTag: string;
+}
+
+/**
+ * Close + insert pattern: time-version the fuel_percent rate so historical
+ * quotes (e.g. re-pricing an order from 29/04) reproduce the carrier's
+ * rate sheet from THAT week, not whatever's current.
+ *
+ * Algorithm:
+ *   1. Find the currently-open row (endsAt IS NULL).
+ *   2. If its value matches the new one → update audit columns, no
+ *      close+insert (avoids stamping a duplicate window every refresh).
+ *   3. If it differs → set its endsAt = fetchedAt, insert a fresh row
+ *      with startsAt = fetchedAt, endsAt = NULL, active = true.
+ *   4. If no open row exists → just insert.
+ *
+ * The engine's `isApplicable(s, effectiveDate)` filter then resolves
+ * each quote to whichever row covers the date.
+ */
+async function upsertOpenFuelRow(args: UpsertOpenFuelRowArgs): Promise<ApplyFuelResult> {
+  const valueStr = args.percent.toString();
+
+  // The currently-open row is the one with endsAt IS NULL. Older closed
+  // rows (endsAt set) stay as-is so historical quotes keep resolving.
+  const open = await db
     .select({
       id: schema.carrierSurcharges.id,
       value: schema.carrierSurcharges.value,
@@ -59,53 +98,68 @@ export async function applyFuelFetch(input: ApplyFuelInput): Promise<ApplyFuelRe
     .from(schema.carrierSurcharges)
     .where(
       and(
-        eq(schema.carrierSurcharges.carrierAccountId, input.carrierAccountId),
+        eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
         eq(schema.carrierSurcharges.kind, 'fuel_percent'),
+        isNull(schema.carrierSurcharges.endsAt),
+        eq(schema.carrierSurcharges.active, true),
       ),
     )
     .orderBy(schema.carrierSurcharges.createdAt)
     .limit(1);
 
-  if (existing.length > 0) {
-    const prev = Number(existing[0].value);
-    const changed = !Number.isFinite(prev) || prev.toString() !== valueStr;
+  if (open.length > 0) {
+    const prev = Number(open[0].value);
+    const sameValue = Number.isFinite(prev) && prev.toString() === valueStr;
+    if (sameValue) {
+      // No window break — just stamp the audit columns so the operator
+      // sees "last refreshed N minutes ago".
+      await db
+        .update(schema.carrierSurcharges)
+        .set({
+          lastAutoFetchedAt: args.fetchedAt,
+          lastAutoSource: args.sourceTag,
+          updatedAt: new Date(),
+          ...(args.triggeredBy ? { updatedBy: args.triggeredBy } : {}),
+        })
+        .where(eq(schema.carrierSurcharges.id, open[0].id));
+      return {
+        surchargeId: open[0].id,
+        previousPercent: prev,
+        newPercent: args.percent,
+        changed: false,
+      };
+    }
+    // Value changed → close the open row and insert a fresh one.
     await db
       .update(schema.carrierSurcharges)
       .set({
-        value: valueStr,
-        active: true,
-        lastAutoFetchedAt: input.fetched.fetchedAt,
-        lastAutoSource: sourceTag,
+        endsAt: args.fetchedAt,
         updatedAt: new Date(),
-        ...(input.triggeredBy ? { updatedBy: input.triggeredBy } : {}),
+        ...(args.triggeredBy ? { updatedBy: args.triggeredBy } : {}),
       })
-      .where(eq(schema.carrierSurcharges.id, existing[0].id));
-    return {
-      surchargeId: existing[0].id,
-      previousPercent: Number.isFinite(prev) ? prev : null,
-      newPercent: input.fetched.current.percent,
-      changed,
-    };
+      .where(eq(schema.carrierSurcharges.id, open[0].id));
   }
 
   const [inserted] = await db
     .insert(schema.carrierSurcharges)
     .values({
-      carrierAccountId: input.carrierAccountId,
+      carrierAccountId: args.carrierAccountId,
       kind: 'fuel_percent',
       value: valueStr,
       active: true,
-      note: `Auto-fetched from FedEx (${input.fetched.current.weekRaw})`,
-      lastAutoFetchedAt: input.fetched.fetchedAt,
-      lastAutoSource: sourceTag,
-      updatedBy: input.triggeredBy ?? null,
+      note: `Auto-fetched from ${args.carrierTag} (${args.weekLabel})`,
+      startsAt: args.fetchedAt,
+      endsAt: null,
+      lastAutoFetchedAt: args.fetchedAt,
+      lastAutoSource: args.sourceTag,
+      updatedBy: args.triggeredBy ?? null,
     })
     .returning({ id: schema.carrierSurcharges.id });
 
   return {
     surchargeId: inserted!.id,
-    previousPercent: null,
-    newPercent: input.fetched.current.percent,
+    previousPercent: open.length > 0 ? Number(open[0].value) : null,
+    newPercent: args.percent,
     changed: true,
   };
 }
@@ -136,69 +190,17 @@ export async function refreshDhlFuel(args: {
   options?: DhlFuelFetchOptions;
 }): Promise<ApplyFuelResult & { fetched: DhlFuelFetchResult }> {
   const fetched = await fetchDhlFuelPercent(args.options);
-  const valueStr = fetched.current.percent.toString();
   const weekLabel = `CW ${fetched.current.weekNumber}, ${fetched.current.year}`;
-  const sourceTag = `dhl/${weekLabel}`;
-
-  const existing = await db
-    .select({
-      id: schema.carrierSurcharges.id,
-      value: schema.carrierSurcharges.value,
-    })
-    .from(schema.carrierSurcharges)
-    .where(
-      and(
-        eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
-        eq(schema.carrierSurcharges.kind, 'fuel_percent'),
-      ),
-    )
-    .orderBy(schema.carrierSurcharges.createdAt)
-    .limit(1);
-
-  if (existing.length > 0) {
-    const prev = Number(existing[0].value);
-    const changed = !Number.isFinite(prev) || prev.toString() !== valueStr;
-    await db
-      .update(schema.carrierSurcharges)
-      .set({
-        value: valueStr,
-        active: true,
-        lastAutoFetchedAt: fetched.fetchedAt,
-        lastAutoSource: sourceTag,
-        updatedAt: new Date(),
-        ...(args.triggeredBy ? { updatedBy: args.triggeredBy } : {}),
-      })
-      .where(eq(schema.carrierSurcharges.id, existing[0].id));
-    return {
-      surchargeId: existing[0].id,
-      previousPercent: Number.isFinite(prev) ? prev : null,
-      newPercent: fetched.current.percent,
-      changed,
-      fetched,
-    };
-  }
-
-  const [inserted] = await db
-    .insert(schema.carrierSurcharges)
-    .values({
-      carrierAccountId: args.carrierAccountId,
-      kind: 'fuel_percent',
-      value: valueStr,
-      active: true,
-      note: `Auto-fetched from DHL (${weekLabel})`,
-      lastAutoFetchedAt: fetched.fetchedAt,
-      lastAutoSource: sourceTag,
-      updatedBy: args.triggeredBy ?? null,
-    })
-    .returning({ id: schema.carrierSurcharges.id });
-
-  return {
-    surchargeId: inserted!.id,
-    previousPercent: null,
-    newPercent: fetched.current.percent,
-    changed: true,
-    fetched,
-  };
+  const applied = await upsertOpenFuelRow({
+    carrierAccountId: args.carrierAccountId,
+    percent: fetched.current.percent,
+    sourceTag: `dhl/${weekLabel}`,
+    weekLabel,
+    fetchedAt: fetched.fetchedAt,
+    triggeredBy: args.triggeredBy,
+    carrierTag: 'DHL',
+  });
+  return { ...applied, fetched };
 }
 
 /**

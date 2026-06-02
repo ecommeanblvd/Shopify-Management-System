@@ -624,6 +624,60 @@ describe('quote engine', () => {
       expect(r.breakdown.countryFixed).toBe(500_000);
     });
 
+    it('time-versioned fuel%: order from CW 18 keeps 48% even after CW 23 cron set 48.75%', () => {
+      const snap = makeSnap({
+        weightTiers: [{ upperKg: 8 }],
+        zonesByCountry: new Map([
+          ['SA', { label: 'Zone 9', rateByTierUpper: new Map([[8, 3_454_851]]) }],
+        ]),
+        surcharges: [
+          // Closed window: CW 18 fuel
+          {
+            kind: 'fuel_percent', value: 48, active: true,
+            startsAt: new Date('2026-04-27T00:00:00Z'),
+            endsAt:   new Date('2026-05-04T00:00:00Z'),
+          },
+          // Currently-open window: CW 23 fuel
+          {
+            kind: 'fuel_percent', value: 48.75, active: true,
+            startsAt: new Date('2026-06-01T00:00:00Z'),
+            endsAt: null,
+          },
+        ],
+      });
+      const old = quote(snap, {
+        weightKg: 8,
+        destinationCountry: 'SA',
+        effectiveDate: new Date('2026-04-29T11:08:30Z'),
+      });
+      expect(old.ok).toBe(true);
+      if (!old.ok) return;
+      expect(old.breakdown.fuel).toBe(Math.round(3_454_851 * 0.48));
+
+      const today = quote(snap, {
+        weightKg: 8,
+        destinationCountry: 'SA',
+        effectiveDate: new Date('2026-06-02T12:00:00Z'),
+      });
+      expect(today.ok).toBe(true);
+      if (!today.ok) return;
+      expect(today.breakdown.fuel).toBe(Math.round(3_454_851 * 0.4875));
+    });
+
+    it('rows without startsAt/endsAt apply regardless of effectiveDate (backwards compat)', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'fuel_percent', value: 30, active: true }],
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        effectiveDate: new Date('1999-01-01T00:00:00Z'),
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.fuel).toBe(Math.round(280_000 * 0.3));
+    });
+
     it('end-to-end DHL #MBLVD28558 invoice math (base 3,454,851 + DS 150k + ER 918k + GG 30,400 + fuel 48% on base+ER)', () => {
       const snap = makeSnap({
         weightTiers: [{ upperKg: 8 }],

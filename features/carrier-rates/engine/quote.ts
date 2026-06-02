@@ -50,6 +50,18 @@ export interface SurchargeSnap {
    * FedEx VN US-import-handling (country_fixed, fuelable=false).
    */
   fuelable?: boolean | null;
+  /**
+   * Effective-from / effective-to bounds. NULL on either side means
+   * "unbounded that direction". Engine considers a row applicable for
+   * a given effectiveDate when:
+   *   (startsAt == null || startsAt <= effectiveDate)
+   *   AND (endsAt == null || endsAt > effectiveDate)
+   * The fuel-fetcher uses these to time-version weekly rates so an
+   * order from 29/04 keeps quoting against the CW 18 fuel rate even
+   * after the cron has refreshed the value for the current week.
+   */
+  startsAt?: Date | null;
+  endsAt?: Date | null;
 }
 
 export interface WeightTierSnap {
@@ -99,6 +111,17 @@ export interface QuoteInput {
   destinationCountry: string;
   destinationPostcode?: string;
   isResidential?: boolean;
+  /**
+   * Quote-time anchor for time-versioned surcharges. Defaults to now.
+   * Pass the order's `processed_at_shopify` to reproduce the carrier's
+   * historical rate sheet — crucial for re-pricing past orders whose
+   * fuel surcharge has since changed (DHL publishes weekly).
+   *
+   * Rows with `startsAt > effectiveDate` or `endsAt <= effectiveDate`
+   * are excluded for that quote. Rows with no date bounds (NULL) keep
+   * applying always.
+   */
+  effectiveDate?: Date;
 }
 
 export interface QuoteBreakdown {
@@ -174,9 +197,25 @@ export type QuoteResult = QuoteOk | QuoteError;
 
 const ISO2_RE = /^[A-Z]{2}$/;
 
-function sumActiveOfKind(surcharges: SurchargeSnap[], kind: SurchargeKind): number {
+/**
+ * Active + within the (optional) start/end window for the given quote
+ * date. Rows without bounds keep applying as before, so existing data
+ * (with both columns NULL) is unaffected. The fuel-fetcher uses these
+ * bounds to time-version weekly rates without losing historical context.
+ */
+function isApplicable(s: SurchargeSnap, effectiveDate: Date): boolean {
+  if (!s.active) return false;
+  const t = effectiveDate.getTime();
+  if (s.startsAt && s.startsAt.getTime() > t) return false;
+  if (s.endsAt && s.endsAt.getTime() <= t) return false;
+  return true;
+}
+
+function sumApplicableOfKind(
+  surcharges: SurchargeSnap[], kind: SurchargeKind, effectiveDate: Date,
+): number {
   return surcharges
-    .filter((s) => s.active && s.kind === kind)
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === kind)
     .reduce((sum, s) => sum + s.value, 0);
 }
 
@@ -227,9 +266,10 @@ function sumRemoteFixed(
   surcharges: SurchargeSnap[],
   matchedTier: string | null,
   weightKg: number,
+  effectiveDate: Date,
 ): number {
   return surcharges
-    .filter((s) => s.active && s.kind === 'remote_fixed')
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'remote_fixed')
     .filter((s) => !s.tier || s.tier === matchedTier)
     .reduce((sum, s) => {
       const perKgAmt = s.valuePerKg && s.valuePerKg > 0 ? s.valuePerKg * weightKg : 0;
@@ -284,9 +324,13 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   if (usePak && pakBase !== undefined) notes.push('pak');
   else if (usePak) notes.push('pak_fallback_to_package');
 
-  const peak = sumActiveOfKind(snap.surcharges, 'peak_fixed');
+  // Anchor every surcharge gate to a single moment so the same row is
+  // either applicable for the whole quote or not at all.
+  const effectiveDate = input.effectiveDate ?? new Date();
 
-  const perKgUnit = sumActiveOfKind(snap.surcharges, 'per_kg_fixed');
+  const peak = sumApplicableOfKind(snap.surcharges, 'peak_fixed', effectiveDate);
+
+  const perKgUnit = sumApplicableOfKind(snap.surcharges, 'per_kg_fixed', effectiveDate);
   const perKg = perKgUnit * input.weightKg;
 
   // FedEx Demand Surcharge: per-kg rate applied when the destination country
@@ -294,16 +338,16 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // Multiple matching rows COMPOUND — FedEx publishes overlapping regional +
   // peak-week demand surcharges that both apply.
   const demandUnit = snap.surcharges
-    .filter((s) => s.active && s.kind === 'demand_per_kg')
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'demand_per_kg')
     .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
     .reduce((sum, s) => sum + s.value, 0);
   const demand = demandUnit * input.weightKg;
 
-  // Country-scoped FLAT per-shipment fee. Sum every active country_fixed
+  // Country-scoped FLAT per-shipment fee. Sum every applicable country_fixed
   // row whose country_codes list contains the destination (or is NULL =
   // catch-all). Same compounding semantics as demand_per_kg.
   const countryFixed = snap.surcharges
-    .filter((s) => s.active && s.kind === 'country_fixed')
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'country_fixed')
     .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
     .reduce((sum, s) => sum + s.value, 0);
 
@@ -313,14 +357,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     const matchedTier = patterns?.get(input.destinationPostcode.trim());
     if (matchedTier !== undefined) {
       // matchedTier may be null (no tier) or a label like 'Tier A'.
-      remote = sumRemoteFixed(snap.surcharges, matchedTier, input.weightKg);
+      remote = sumRemoteFixed(snap.surcharges, matchedTier, input.weightKg, effectiveDate);
       if (matchedTier) notes.push(`remote_match (${matchedTier})`);
       else notes.push('remote_match');
     }
   }
 
   const residential = input.isResidential
-    ? sumActiveOfKind(snap.surcharges, 'residential_fixed')
+    ? sumApplicableOfKind(snap.surcharges, 'residential_fixed', effectiveDate)
     : 0;
 
   // Stepped per-weight surcharge — DHL GoGreen Plus and equivalents.
@@ -328,7 +372,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // missing/invalid stepKg are skipped (defensive — shouldn't happen
   // because the loader would reject them).
   const perStep = snap.surcharges
-    .filter((s) => s.active && s.kind === 'per_step_fixed')
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'per_step_fixed')
     .filter((s) => s.stepKg && s.stepKg > 0)
     .reduce((sum, s) => sum + Math.ceil(input.weightKg / s.stepKg!) * s.value, 0);
 
@@ -337,7 +381,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // Rows that don't match (e.g. country_fixed for a different country)
   // return 0, so we never need to special-case them in the sums below.
   function rowContribution(s: SurchargeSnap): number {
-    if (!s.active) return 0;
+    if (!isApplicable(s, effectiveDate)) return 0;
     switch (s.kind) {
       case 'peak_fixed':
         return s.value;
@@ -381,16 +425,16 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   fuelableSurcharges += remote + residential;
 
   const fuelable = base + fuelableSurcharges;
-  const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
+  const fuelPct = sumApplicableOfKind(snap.surcharges, 'fuel_percent', effectiveDate);
   const fuel = fuelable * (fuelPct / 100);
 
   // VAT covers the entire carrier bill regardless of fuel eligibility.
   const vatable = fuelable + fuel + nonFuelableSurcharges;
-  const vatPct = sumActiveOfKind(snap.surcharges, 'vat_percent');
+  const vatPct = sumApplicableOfKind(snap.surcharges, 'vat_percent', effectiveDate);
   const vat = vatable * (vatPct / 100);
 
   const subtotalBeforeMarkup = vatable + vat;
-  const markupPct = sumActiveOfKind(snap.surcharges, 'markup_percent');
+  const markupPct = sumApplicableOfKind(snap.surcharges, 'markup_percent', effectiveDate);
   const markup = subtotalBeforeMarkup * (markupPct / 100);
   const finalCost = Math.round(subtotalBeforeMarkup + markup);
   const finalDisplay = Math.round((finalCost / snap.fxCostPerDisplay) * 100) / 100;
