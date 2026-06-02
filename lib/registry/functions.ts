@@ -19,7 +19,7 @@ export interface FunctionManifest {
   description: string;
   version: string;
   /** Lucide icon name (rendered by the dashboard nav + overview card). */
-  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles';
+  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles' | 'Eye';
   /** Tailwind accent classes for the icon tile on the overview page. */
   accent: { fg: string; bg: string };
   routes: {
@@ -42,6 +42,18 @@ export const FUNCTIONS: FunctionManifest[] = [
     icon: 'Heart',
     accent: { fg: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10' },
     routes: { admin: '/f/functions/wishlist', storefront: '/api/storefront/wishlist' },
+  },
+  {
+    key: 'recently-viewed',
+    name: 'Recently Viewed',
+    description:
+      'Track which products each shopper looks at and resurface them as a ' +
+      'carousel on PDPs, the cart, or any page the operator drops a marker ' +
+      'on. Conversion lever without intrusive popups; no email required.',
+    version: '0.1.0',
+    icon: 'Eye',
+    accent: { fg: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10' },
+    routes: { admin: '/f/functions/recently-viewed', storefront: '/api/storefront/recently-viewed' },
   },
 ];
 
