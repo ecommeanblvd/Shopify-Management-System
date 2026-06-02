@@ -119,8 +119,10 @@ export interface RegistryListRow {
 }
 
 export async function listRegistriesForStore(
-  storeId: string, limit = 50,
+  storeId: string, limit = 50, search?: string,
 ): Promise<RegistryListRow[]> {
+  const trimmed = search?.trim();
+  const pattern = trimmed ? `%${trimmed.toLowerCase()}%` : null;
   const rows = await db.execute<{
     id: string; share_token: string;
     owner_email: string; owner_name: string | null;
@@ -140,6 +142,11 @@ export async function listRegistriesForStore(
          WHERE status <> 'cancelled' GROUP BY registry_id
       ) s ON s.registry_id = r.id
      WHERE r.store_id = ${storeId}
+       ${pattern ? sql`AND (
+          r.owner_email ILIKE ${pattern}
+          OR r.owner_name ILIKE ${pattern}
+          OR r.event_name ILIKE ${pattern}
+        )` : sql``}
      ORDER BY r.created_at DESC
      LIMIT ${limit};
   `);

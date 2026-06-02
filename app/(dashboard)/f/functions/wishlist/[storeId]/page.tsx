@@ -11,6 +11,7 @@ import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { WishlistInstallSnippet } from '@/components/functions/WishlistInstallSnippet';
+import { ListSearchInput } from '@/components/functions/ListSearchInput';
 import { WishlistSettingsForm } from '@/components/functions/WishlistSettingsForm';
 import { WishlistEventBreakdown } from '@/components/functions/WishlistEventBreakdown';
 import {
@@ -23,10 +24,14 @@ export const dynamic = 'force-dynamic';
 
 export default async function WishlistStorePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ storeId: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   const { storeId } = await params;
+  const sp = await searchParams;
+  const q = sp.q?.trim() || undefined;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -43,7 +48,7 @@ export default async function WishlistStorePage({
   const [summary, topProducts, wishlists, config, eventBuckets] = await Promise.all([
     getWishlistSummary(storeId),
     getTopWishlistedProducts(storeId, 10),
-    listWishlistsForStore(storeId, 50),
+    listWishlistsForStore(storeId, 50, q),
     getWishlistConfig(storeId),
     getWishlistEventBreakdown(storeId, breakdownDays),
   ]);
@@ -147,9 +152,14 @@ export default async function WishlistStorePage({
 
       <Card>
         <CardContent className="p-0">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Active wishlists</h2>
-            <div className="flex items-center gap-3">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold shrink-0">Active wishlists</h2>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              <ListSearchInput
+                formAction={`/f/functions/wishlist/${storeId}`}
+                currentQuery={q}
+                placeholder="Search email or device id"
+              />
               <a
                 href={`/f/functions/wishlist/${storeId}/export.csv`}
                 className="text-[11px] inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
@@ -165,7 +175,9 @@ export default async function WishlistStorePage({
           </div>
           {wishlists.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-              No wishlists yet. The first shopper who adds an item gets a row here.
+              {q
+                ? <>No wishlists matched <code className="font-mono">{q}</code>.</>
+                : 'No wishlists yet. The first shopper who adds an item gets a row here.'}
             </div>
           ) : (
             <ul className="divide-y divide-border">

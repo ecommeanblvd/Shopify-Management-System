@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { GiftRegistryInstallSnippet } from '@/components/functions/GiftRegistryInstallSnippet';
 import { GiftRegistryEventBreakdown } from '@/components/functions/GiftRegistryEventBreakdown';
+import { ListSearchInput } from '@/components/functions/ListSearchInput';
 import {
   getGiftRegistrySummary, listRegistriesForStore, getGiftRegistryEventBreakdown,
 } from '@/features/functions/gift-registry/admin-actions';
@@ -31,10 +32,14 @@ function formatDate(iso: string | null): string {
 
 export default async function GiftRegistryStorePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ storeId: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   const { storeId } = await params;
+  const sp = await searchParams;
+  const q = sp.q?.trim() || undefined;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -48,7 +53,7 @@ export default async function GiftRegistryStorePage({
   const breakdownDays = 7;
   const [summary, registries, breakdown] = await Promise.all([
     getGiftRegistrySummary(storeId),
-    listRegistriesForStore(storeId, 50),
+    listRegistriesForStore(storeId, 50, q),
     getGiftRegistryEventBreakdown(storeId, breakdownDays),
   ]);
 
@@ -108,9 +113,14 @@ export default async function GiftRegistryStorePage({
 
       <Card>
         <CardContent className="p-0">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Active registries</h2>
-            <div className="flex items-center gap-3">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold shrink-0">Active registries</h2>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              <ListSearchInput
+                formAction={`/f/functions/gift-registry/${storeId}`}
+                currentQuery={q}
+                placeholder="Search owner or event"
+              />
               <a
                 href={`/f/functions/gift-registry/${storeId}/export.csv`}
                 className="text-[11px] inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
@@ -126,7 +136,9 @@ export default async function GiftRegistryStorePage({
           </div>
           {registries.length === 0 ? (
             <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-              No registries yet. Owners create one via the public storefront form.
+              {q
+                ? <>No registries matched <code className="font-mono">{q}</code>.</>
+                : 'No registries yet. Owners create one via the public storefront form.'}
             </div>
           ) : (
             <ul className="divide-y divide-border">
