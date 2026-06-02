@@ -2,9 +2,10 @@
  * Standalone Railway-friendly cron entry point.
  * Usage: `npm run cron:refresh-fuel`
  *
- * Iterates every enabled FedEx carrier account and refreshes its
- * fuel_percent surcharge from FedEx's public AEM service. Writes audit
- * columns (last_auto_fetched_at, last_auto_source).
+ * Iterates every enabled carrier account whose carrier key has an
+ * auto-fetcher (currently 'fedex' and 'dhl') and refreshes its
+ * fuel_percent surcharge. Writes audit columns (last_auto_fetched_at,
+ * last_auto_source).
  *
  * Why a script instead of HTTP-pinging the API route?
  * - On Railway we typically wire a "Cron" service that shares the DATABASE_URL
@@ -14,49 +15,58 @@
  *   cron services (cron-job.org, EasyCron) that want to fire over HTTPS.
  *
  * Exit codes:
- *   0 — all accounts succeeded (or there were no FedEx accounts to refresh)
+ *   0 — all accounts succeeded (or there were no auto-refresh accounts)
  *   1 — at least one account failed; details printed to stderr
+ *
+ * Filename note: kept as `refresh-fedex-fuel.ts` so the existing Railway
+ * cron service command (`npm run cron:refresh-fuel`) keeps working — the
+ * script now covers DHL too but the filename predates the dispatcher.
  */
 
-import { eq, and } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 
 async function main(): Promise<void> {
   const accounts = await db
     .select({
       id: schema.carrierAccounts.id,
       name: schema.carrierAccounts.name,
+      carrierKey: schema.carriers.key,
     })
     .from(schema.carrierAccounts)
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
     .where(
       and(
-        eq(schema.carriers.key, 'fedex'),
+        inArray(schema.carriers.key, ['fedex', 'dhl']),
         eq(schema.carrierAccounts.enabled, true),
       ),
     );
 
   if (accounts.length === 0) {
-    process.stdout.write('refresh-fedex-fuel: no enabled FedEx accounts; nothing to do.\n');
+    process.stdout.write('refresh-carrier-fuel: no enabled auto-refresh accounts; nothing to do.\n');
     return;
   }
 
   let failures = 0;
   for (const account of accounts) {
     try {
-      const applied = await refreshFedExFuel({
+      const applied = await refreshCarrierFuel({
         carrierAccountId: account.id,
         triggeredBy: null,
       });
       const change = applied.changed
         ? `${applied.previousPercent ?? '∅'}% → ${applied.newPercent}%`
         : `unchanged at ${applied.newPercent}%`;
-      process.stdout.write(`refresh-fedex-fuel: ${account.name} — ${change}\n`);
+      process.stdout.write(
+        `refresh-carrier-fuel: [${applied.carrierKey}] ${account.name} — ${change}\n`,
+      );
     } catch (err) {
       failures += 1;
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`refresh-fedex-fuel: ${account.name} — FAILED: ${msg}\n`);
+      process.stderr.write(
+        `refresh-carrier-fuel: [${account.carrierKey ?? '?'}] ${account.name} — FAILED: ${msg}\n`,
+      );
     }
   }
 
@@ -67,7 +77,7 @@ async function main(): Promise<void> {
 
 main()
   .catch((err) => {
-    process.stderr.write(`refresh-fedex-fuel: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
+    process.stderr.write(`refresh-carrier-fuel: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
     process.exitCode = 1;
   })
   .finally(() => {

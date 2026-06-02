@@ -25,9 +25,9 @@
  */
 
 import { NextResponse } from 'next/server';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 
 // Don't pre-render or cache.
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,7 @@ export const runtime = 'nodejs';
 interface PerAccountResult {
   accountId: string;
   accountName: string;
+  carrierKey: string;
   previousPercent: number | null;
   newPercent: number | null;
   changed: boolean;
@@ -55,17 +56,21 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
-  // All enabled FedEx accounts.
+  // Every enabled account whose carrier has an auto-fetcher (FedEx + DHL).
+  // The dispatcher (refreshCarrierFuel) throws on carriers without a
+  // fetcher, so we keep this filter narrow up-front to avoid noise in
+  // the result.
   const accounts = await db
     .select({
       id: schema.carrierAccounts.id,
       name: schema.carrierAccounts.name,
+      carrierKey: schema.carriers.key,
     })
     .from(schema.carrierAccounts)
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
     .where(
       and(
-        eq(schema.carriers.key, 'fedex'),
+        inArray(schema.carriers.key, ['fedex', 'dhl']),
         eq(schema.carrierAccounts.enabled, true),
       ),
     );
@@ -73,13 +78,14 @@ export async function GET(request: Request): Promise<Response> {
   const results: PerAccountResult[] = [];
   for (const account of accounts) {
     try {
-      const applied = await refreshFedExFuel({
+      const applied = await refreshCarrierFuel({
         carrierAccountId: account.id,
         triggeredBy: null, // Cron isn't a user — leave updatedBy untouched.
       });
       results.push({
         accountId: account.id,
         accountName: account.name,
+        carrierKey: applied.carrierKey,
         previousPercent: applied.previousPercent,
         newPercent: applied.newPercent,
         changed: applied.changed,
@@ -90,6 +96,7 @@ export async function GET(request: Request): Promise<Response> {
       results.push({
         accountId: account.id,
         accountName: account.name,
+        carrierKey: account.carrierKey ?? 'unknown',
         previousPercent: null,
         newPercent: null,
         changed: false,
