@@ -316,6 +316,11 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // VAT-inclusive carrier bill — matches "I want X % margin on what I pay
   // the carrier" semantics.
   'vat_percent',
+  // Stepped per-weight surcharge — e.g. DHL GoGreen Plus invoices as
+  // 1,900 VND × ceil(weight / 0.5 kg). The engine applies
+  // `ceil(weightKg / step_kg) × value`. Different from `per_kg_fixed`
+  // (which scales linearly). Default `fuelable = false`.
+  'per_step_fixed',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {
@@ -347,6 +352,20 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // edits from cron writes without bloating the row with an audit log.
   lastAutoFetchedAt: timestamp('last_auto_fetched_at'),
   lastAutoSource: text('last_auto_source'),
+  // Weight step in kg for `per_step_fixed` surcharges (NULL on every
+  // other kind). Engine applies `ceil(weightKg / stepKg) × value`.
+  stepKg: numeric('step_kg', { precision: 10, scale: 3 }),
+  // Per-row override for whether this surcharge is included in the
+  // fuelable subtotal (i.e. fuel% applies on top of it).
+  //   NULL  → use the per-kind default (see engine quote.ts isFuelable)
+  //   TRUE  → force into fuelable subtotal
+  //   FALSE → exclude from fuelable subtotal
+  // Needed because the same kind can be fuelable for one carrier and
+  // not for another. Example: DHL Elevated Risk is `country_fixed` AND
+  // fuelable=true (fuel applies to base + elevated risk per invoice);
+  // FedEx VN US-import-handling is also `country_fixed` but
+  // fuelable=false (per #MBLVD28990 invoice).
+  fuelable: boolean('fuelable'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
