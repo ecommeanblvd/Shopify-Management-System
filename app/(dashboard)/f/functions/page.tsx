@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText, AlertTriangle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { FUNCTIONS } from '@/lib/registry/functions';
 import { getAllFunctionsActivity, rollup } from '@/features/functions/registry-stats';
+import { getFunctionHealth, rollupHealth } from '@/features/functions/health';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -29,8 +30,18 @@ export default async function FunctionsOverviewPage() {
     );
   }
 
-  const stats = await getAllFunctionsActivity();
+  const [stats, healthRows] = await Promise.all([
+    getAllFunctionsActivity(),
+    getFunctionHealth(),
+  ]);
   const totals = rollup(stats);
+  const healthTotals = rollupHealth(healthRows);
+  const attentionPerFn = healthRows.reduce<Record<string, number>>((acc, r) => {
+    if (r.status === 'silent' || r.status === 'never') {
+      acc[r.functionKey] = (acc[r.functionKey] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
   const busiest = totals.busiestFunctionKey
     ? FUNCTIONS.find((f) => f.key === totals.busiestFunctionKey)
     : null;
@@ -54,13 +65,31 @@ export default async function FunctionsOverviewPage() {
               analytics + automations to support it.
             </p>
           </div>
-          <Link
-            href="/f/functions/audit"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border shrink-0"
-          >
-            <ScrollText className="size-3.5" />
-            Audit log
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/f/functions/health"
+              className={
+                'inline-flex items-center gap-1.5 text-xs transition-colors px-3 py-1.5 rounded-md border shrink-0 ' +
+                (healthTotals.needsAttention > 0
+                  ? 'border-rose-500/40 text-rose-700 dark:text-rose-400 bg-rose-500/5 hover:bg-rose-500/10'
+                  : 'border-border text-muted-foreground hover:text-foreground')
+              }
+            >
+              {healthTotals.needsAttention > 0
+                ? <AlertTriangle className="size-3.5" />
+                : <Activity className="size-3.5" />}
+              {healthTotals.needsAttention > 0
+                ? `${healthTotals.needsAttention} need attention`
+                : 'Health'}
+            </Link>
+            <Link
+              href="/f/functions/audit"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border shrink-0"
+            >
+              <ScrollText className="size-3.5" />
+              Audit log
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -110,7 +139,7 @@ export default async function FunctionsOverviewPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     {fn.description}
                   </p>
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-1 flex-wrap">
                     <Badge variant={activeCount > 0 ? 'secondary' : 'outline'} className="h-5 text-[10px] gap-1 px-1.5">
                       <Power className="size-2.5" />
                       {activeCount > 0 ? `${activeCount} active` : 'inactive'}
@@ -119,6 +148,12 @@ export default async function FunctionsOverviewPage() {
                       <Activity className="size-2.5" />
                       {events.toLocaleString()} / 7d
                     </Badge>
+                    {attentionPerFn[fn.key] && (
+                      <Badge className="h-5 text-[10px] gap-1 px-1.5 bg-rose-500/10 text-rose-700 dark:text-rose-400 hover:bg-rose-500/15 border-0">
+                        <AlertTriangle className="size-2.5" />
+                        {attentionPerFn[fn.key]} silent
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
