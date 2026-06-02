@@ -3,6 +3,8 @@ import { Gift } from 'lucide-react';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { GiftRegistryRecoveryForm } from '@/components/functions/GiftRegistryRecoveryForm';
+import { LocaleSwitcher } from '@/components/functions/LocaleSwitcher';
+import { getMessages, resolveLocale } from '@/features/functions/gift-registry/i18n';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,11 +16,13 @@ export const metadata = {
 export default async function FindGiftRegistryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ shop?: string }>;
+  searchParams: Promise<{ shop?: string; lang?: string }>;
 }) {
   const sp = await searchParams;
   const shop = sp.shop?.trim().toLowerCase();
   if (!shop) notFound();
+  const locale = resolveLocale(sp.lang);
+  const msg = getMessages(locale);
 
   const [store] = await db
     .select({ id: schema.stores.id, name: schema.stores.name, shopDomain: schema.stores.shopDomain })
@@ -35,23 +39,31 @@ export default async function FindGiftRegistryPage({
     ));
   if (!setting?.enabled) notFound();
 
+  const currentPath = `/gr/find?shop=${encodeURIComponent(shop)}&lang=${locale}`;
+
   return (
     <main className="min-h-screen bg-amber-50/30 text-neutral-900">
       <div className="max-w-md mx-auto px-6 py-16">
+        <div className="flex justify-end mb-6">
+          <LocaleSwitcher currentPath={currentPath} current={locale} />
+        </div>
         <header className="mb-8 text-center">
           <div className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
             <Gift className="size-3.5" />
-            {store.name}
+            {msg.findPage.eyebrow(store.name)}
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-            Find your registry
+            {msg.findPage.title}
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Enter the email you used when creating the registry. We&rsquo;ll
-            list every registry you own at {store.name}.
+            {msg.findPage.subtitle(store.name)}
           </p>
         </header>
-        <GiftRegistryRecoveryForm shopDomain={store.shopDomain} />
+        <GiftRegistryRecoveryForm
+          shopDomain={store.shopDomain}
+          msg={msg.findPage}
+          lang={locale}
+        />
       </div>
     </main>
   );
