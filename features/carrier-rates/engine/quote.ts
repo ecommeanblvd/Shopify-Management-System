@@ -11,7 +11,8 @@ export type SurchargeKind =
   | 'per_kg_fixed'
   | 'demand_per_kg'
   | 'country_fixed'
-  | 'vat_percent';
+  | 'vat_percent'
+  | 'per_step_fixed';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -35,6 +36,20 @@ export interface SurchargeSnap {
    * `demand_per_kg`. NULL = applies to every destination.
    */
   countryCodes?: string[] | null;
+  /**
+   * Weight step in kg for `per_step_fixed` surcharges. Engine applies
+   * `ceil(weightKg / stepKg) × value`. Required when kind='per_step_fixed'.
+   */
+  stepKg?: number | null;
+  /**
+   * Per-row override for whether this surcharge participates in the
+   * fuelable subtotal. NULL → use kind default (see isFuelable below).
+   *
+   * Allows the same kind to be fuelable for one carrier and not for
+   * another — e.g. DHL Elevated Risk (country_fixed, fuelable=true) vs
+   * FedEx VN US-import-handling (country_fixed, fuelable=false).
+   */
+  fuelable?: boolean | null;
 }
 
 export interface WeightTierSnap {
@@ -108,6 +123,12 @@ export interface QuoteBreakdown {
    */
   countryFixed: number;
   /**
+   * Sum of all active `per_step_fixed` contributions. Each row contributes
+   * `ceil(weightKg / stepKg) × value` (e.g. DHL GoGreen 1,900 VND × every
+   * 0.5 kg step). Default `fuelable = false`.
+   */
+  perStep: number;
+  /**
    * Effective VAT % that was applied (sum of active `vat_percent` rows —
    * usually a single row). Surfaced so the modal can label the line
    * "VAT (8 %)" without re-querying the snapshot.
@@ -157,6 +178,41 @@ function sumActiveOfKind(surcharges: SurchargeSnap[], kind: SurchargeKind): numb
   return surcharges
     .filter((s) => s.active && s.kind === kind)
     .reduce((sum, s) => sum + s.value, 0);
+}
+
+/**
+ * Decides whether a surcharge participates in the fuelable subtotal.
+ *
+ * Per-row override (`s.fuelable`) wins. If NULL, defaults per kind:
+ *   peak_fixed, remote_fixed, residential_fixed, per_kg_fixed, demand_per_kg
+ *     → true (transport-cost surcharges fuel applies on top of)
+ *   country_fixed, per_step_fixed
+ *     → false (destination-side fees / environmental fees that historically
+ *       sit OUTSIDE the fuelable subtotal — verified per #MBLVD28990 invoice
+ *       for FedEx VN US-import-handling and per DHL GoGreen invoice math)
+ *
+ * The per-row override lets a single kind behave differently between
+ * carriers — DHL Elevated Risk (country_fixed, fuelable=true) vs FedEx VN
+ * US-import-handling (country_fixed, fuelable=false) being the canonical
+ * case the column was added for.
+ */
+function isFuelable(s: SurchargeSnap): boolean {
+  if (s.fuelable === true) return true;
+  if (s.fuelable === false) return false;
+  switch (s.kind) {
+    case 'peak_fixed':
+    case 'remote_fixed':
+    case 'residential_fixed':
+    case 'per_kg_fixed':
+    case 'demand_per_kg':
+      return true;
+    case 'country_fixed':
+    case 'per_step_fixed':
+    case 'fuel_percent':
+    case 'markup_percent':
+    case 'vat_percent':
+      return false;
+  }
 }
 
 /**
@@ -267,23 +323,69 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     ? sumActiveOfKind(snap.surcharges, 'residential_fixed')
     : 0;
 
-  // Carrier billing model:
-  //   fuel   = (base + peak + remote + residential + perKg + demand) × fuel%
-  //   VAT    = (fuelable + fuel + countryFixed) × VAT%
-  //
-  // `countryFixed` (FedEx VN "Phí xử lý hàng nhập tại Hoa Kỳ" — US Duty
-  // Prepaid / import-handling) is a DESTINATION-side fee that fuel does
-  // NOT apply to. Verified against #MBLVD28990 invoice: fuel ₫346,453 =
-  // base ₫703,458 × 49.25 % (no handling in the fuelable subtotal). It
-  // does join the VAT base, since VAT covers the entire carrier bill.
-  const fuelable = base + peak + remote + residential + perKg + demand;
+  // Stepped per-weight surcharge — DHL GoGreen Plus and equivalents.
+  // Each row contributes `ceil(weight / stepKg) × value`. Rows with
+  // missing/invalid stepKg are skipped (defensive — shouldn't happen
+  // because the loader would reject them).
+  const perStep = snap.surcharges
+    .filter((s) => s.active && s.kind === 'per_step_fixed')
+    .filter((s) => s.stepKg && s.stepKg > 0)
+    .reduce((sum, s) => sum + Math.ceil(input.weightKg / s.stepKg!) * s.value, 0);
+
+  // Per-row fuelable check: helper computes the row's contributed amount
+  // to the carrier bill, given its kind + the current quote inputs.
+  // Rows that don't match (e.g. country_fixed for a different country)
+  // return 0, so we never need to special-case them in the sums below.
+  function rowContribution(s: SurchargeSnap): number {
+    if (!s.active) return 0;
+    switch (s.kind) {
+      case 'peak_fixed':
+        return s.value;
+      case 'per_kg_fixed':
+        return s.value * input.weightKg;
+      case 'demand_per_kg':
+        return (!s.countryCodes || s.countryCodes.includes(country))
+          ? s.value * input.weightKg : 0;
+      case 'country_fixed':
+        return (!s.countryCodes || s.countryCodes.includes(country))
+          ? s.value : 0;
+      case 'per_step_fixed':
+        return (s.stepKg && s.stepKg > 0)
+          ? Math.ceil(input.weightKg / s.stepKg) * s.value : 0;
+      // remote / residential already handled via dedicated paths above
+      // (postcode match / isResidential flag). Return 0 here so they
+      // aren't double-counted.
+      case 'remote_fixed':
+      case 'residential_fixed':
+      case 'fuel_percent':
+      case 'vat_percent':
+      case 'markup_percent':
+        return 0;
+    }
+  }
+
+  // Sum of surcharge contributions split by fuelable eligibility. Remote
+  // and residential already pre-computed above; bucketed here by their
+  // representative kind (they're always fuelable by default; per-row
+  // override on a remote_fixed / residential_fixed row still wins).
+  let fuelableSurcharges = 0;
+  let nonFuelableSurcharges = 0;
+  for (const s of snap.surcharges) {
+    const amt = rowContribution(s);
+    if (amt === 0) continue;
+    if (isFuelable(s)) fuelableSurcharges += amt;
+    else nonFuelableSurcharges += amt;
+  }
+  // remote + residential are computed above; classify them by the default
+  // (fuelable) since they have no per-row override path in v1.
+  fuelableSurcharges += remote + residential;
+
+  const fuelable = base + fuelableSurcharges;
   const fuelPct = sumActiveOfKind(snap.surcharges, 'fuel_percent');
   const fuel = fuelable * (fuelPct / 100);
 
-  // VAT applies to (fuelable + fuel + countryFixed). Operator-configurable
-  // rate (FedEx VN: 8 %; other jurisdictions vary). Multiple active rows
-  // sum, matching the existing convention for other % surcharges.
-  const vatable = fuelable + fuel + countryFixed;
+  // VAT covers the entire carrier bill regardless of fuel eligibility.
+  const vatable = fuelable + fuel + nonFuelableSurcharges;
   const vatPct = sumActiveOfKind(snap.surcharges, 'vat_percent');
   const vat = vatable * (vatPct / 100);
 
@@ -312,6 +414,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       perKg: Math.round(perKg),
       demand: Math.round(demand),
       countryFixed: Math.round(countryFixed),
+      perStep: Math.round(perStep),
       vatPercent: vatPct,
       vat: Math.round(vat),
       markup: Math.round(markup),

@@ -128,10 +128,20 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-cyan-500/10',
     supportsPerKg: false,
   },
+  per_step_fixed: {
+    label: 'Per step',
+    desc: 'Stepped per-weight fee — e.g. DHL GoGreen Plus 1,900 VND × every 0.5 kg.',
+    formula: 'ceil(weight ÷ step_kg) × value',
+    unit: 'amount',
+    icon: <PackageCheck className="size-4" />,
+    accent: 'text-lime-600 dark:text-lime-400',
+    accentBg: 'bg-lime-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'demand_per_kg', 'country_fixed', 'vat_percent', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'vat_percent', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });

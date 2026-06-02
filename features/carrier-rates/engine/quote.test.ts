@@ -509,4 +509,152 @@ describe('quote engine', () => {
       expect(r.code).toBe('invalid_fx');
     });
   });
+
+  describe('per_step_fixed surcharge', () => {
+    it('applies ceil(weight / step) × value (DHL GoGreen 1,900 × 0.5 kg)', () => {
+      // 8 kg ÷ 0.5 = 16 steps × 1,900 = 30,400 — invoice math
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0.5, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 8, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.perStep).toBe(30_400);
+    });
+
+    it('rounds up fractional weight (1.3 kg → 3 steps × 1,900 = 5,700)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0.5, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1.3, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.perStep).toBe(5_700);
+    });
+
+    it('skips rows with missing or zero stepKg (defensive)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_900, stepKg: null, active: true },
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 8, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.perStep).toBe(0);
+    });
+
+    it('per_step_fixed is NOT in fuelable subtotal by default', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_000, stepKg: 1, active: true },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      // base @ 1kg = 280_000; perStep = 1×1000 = 1_000; fuel applies only to base
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.fuel).toBe(140_000); // 280_000 × 50%, NOT 281_000 × 50%
+      expect(r.breakdown.perStep).toBe(1_000);
+    });
+  });
+
+  describe('fuelable per-row override', () => {
+    it('country_fixed with fuelable=true joins the fuel base (DHL Elevated Risk)', () => {
+      // base @ 8kg = ?, set up a custom rate sheet to match invoice exactly.
+      const rateByTierUpper = new Map<number, number>([[8, 3_454_851]]);
+      const snap = makeSnap({
+        weightTiers: [{ upperKg: 8 }],
+        zonesByCountry: new Map([['SA', { label: 'Zone 9', rateByTierUpper }]]),
+        surcharges: [
+          // Elevated Risk: country_fixed, fuelable=true
+          {
+            kind: 'country_fixed', value: 918_000, countryCodes: ['SA'],
+            active: true, fuelable: true,
+          },
+          // Fuel @ 48% (DHL week 18, 2026)
+          { kind: 'fuel_percent', value: 48, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 8, destinationCountry: 'SA' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // (3,454,851 + 918,000) × 48% = 2,098,968.48 → invoice rounds to 2,098,968
+      expect(r.breakdown.fuel).toBe(2_098_968);
+    });
+
+    it('peak_fixed with fuelable=false is OUT of fuel base (DHL Direct Signature)', () => {
+      // Direct Signature 150,000 VND, NOT fuelable
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'peak_fixed', value: 150_000, active: true, fuelable: false },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel = base × 50% only — Direct Signature stays out.
+      expect(r.breakdown.fuel).toBe(140_000); // 280_000 × 50%
+      expect(r.breakdown.peak).toBe(150_000);
+    });
+
+    it('default semantics preserved: country_fixed without override stays OUT of fuel base', () => {
+      // Regression — FedEx VN US-import-handling case.
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'country_fixed', value: 500_000, countryCodes: ['US'], active: true },
+          { kind: 'fuel_percent', value: 49.25, active: true },
+        ],
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone US', rateByTierUpper: new Map([[1, 700_000]]) }],
+        ]),
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel = base × 49.25% — country_fixed stays out.
+      expect(r.breakdown.fuel).toBe(Math.round(700_000 * 0.4925));
+      expect(r.breakdown.countryFixed).toBe(500_000);
+    });
+
+    it('end-to-end DHL #MBLVD28558 invoice math (base 3,454,851 + DS 150k + ER 918k + GG 30,400 + fuel 48% on base+ER)', () => {
+      const snap = makeSnap({
+        weightTiers: [{ upperKg: 8 }],
+        zonesByCountry: new Map([
+          ['SA', { label: 'Zone 9', rateByTierUpper: new Map([[8, 3_454_851]]) }],
+        ]),
+        surcharges: [
+          // Direct Signature 150k, NOT fuelable
+          { kind: 'peak_fixed', value: 150_000, active: true, fuelable: false },
+          // Elevated Risk 918k for Middle East, fuelable=true
+          {
+            kind: 'country_fixed', value: 918_000, countryCodes: ['SA'],
+            active: true, fuelable: true,
+          },
+          // GoGreen Plus 1,900 × 0.5kg
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0.5, active: true },
+          // Fuel 48% for week 18, 2026
+          { kind: 'fuel_percent', value: 48, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 8, destinationCountry: 'SA' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.base).toBe(3_454_851);
+      expect(r.breakdown.peak).toBe(150_000);
+      expect(r.breakdown.countryFixed).toBe(918_000);
+      expect(r.breakdown.perStep).toBe(30_400);
+      expect(r.breakdown.fuel).toBe(2_098_968);
+      // Total carrier cost = 3,454,851 + 150,000 + 918,000 + 30,400 + 2,098,968
+      //                    = 6,652,219 (excludes one-off Address Correction)
+      expect(r.breakdown.carrierCost).toBe(6_652_219);
+    });
+  });
 });

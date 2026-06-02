@@ -102,6 +102,8 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
       countryCodes: Array.isArray(s.countryCodes)
         ? (s.countryCodes as string[]).map((c) => c.toUpperCase())
         : null,
+      stepKg: s.stepKg !== null ? Number(s.stepKg) : null,
+      fuelable: s.fuelable,
     })),
     remotePostcodes,
   };
