@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -38,19 +38,30 @@ export default async function FunctionsOverviewPage() {
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <header className="space-y-3">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-          <Sparkles className="size-3.5" />
-          Functions
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-3">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
+              <Sparkles className="size-3.5" />
+              Functions
+            </div>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+              Storefront functions
+            </h1>
+            <p className="text-sm text-muted-foreground max-w-xl">
+              Pluggable, storefront-facing features the operator can apply to any
+              connected Shopify store. Each function ships a customer-facing
+              experience (e.g. wishlist heart icon, gift registry) plus the
+              analytics + automations to support it.
+            </p>
+          </div>
+          <Link
+            href="/f/functions/audit"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border shrink-0"
+          >
+            <ScrollText className="size-3.5" />
+            Audit log
+          </Link>
         </div>
-        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
-          Storefront functions
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-xl">
-          Pluggable, storefront-facing features the operator can apply to any
-          connected Shopify store. Each function ships a customer-facing
-          experience (e.g. wishlist heart icon, gift registry) plus the
-          analytics + automations to support it.
-        </p>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

@@ -11,6 +11,7 @@ import {
   resolveWishlistConfig, wishlistConfigSchema, type WishlistConfig,
   DEFAULT_WISHLIST_CONFIG,
 } from './config';
+import { logFunctionAudit } from '../audit-log';
 
 export interface StoreFunctionStatus {
   storeId: string;
@@ -56,6 +57,15 @@ export async function setWishlistEnabled(
   if (!role || !hasPermission(role, 'manage_functions')) {
     throw new Error('forbidden');
   }
+  // Snapshot the previous state so the audit row captures the
+  // transition rather than just the destination.
+  const [prev] = await db
+    .select({ enabled: schema.storeFunctionSettings.enabled })
+    .from(schema.storeFunctionSettings)
+    .where(and(
+      eq(schema.storeFunctionSettings.storeId, storeId),
+      eq(schema.storeFunctionSettings.functionKey, 'wishlist'),
+    ));
   await db
     .insert(schema.storeFunctionSettings)
     .values({
@@ -68,6 +78,13 @@ export async function setWishlistEnabled(
       target: [schema.storeFunctionSettings.storeId, schema.storeFunctionSettings.functionKey],
       set: { enabled, updatedBy: session.user.id, updatedAt: new Date() },
     });
+  await logFunctionAudit({
+    functionKey: 'wishlist',
+    storeId,
+    actorUserId: session.user.id,
+    action: 'toggle',
+    payload: { from: prev?.enabled ?? false, to: enabled },
+  });
   revalidatePath('/f/functions/wishlist');
   revalidatePath('/f/functions');
 }
@@ -170,6 +187,13 @@ export async function setWishlistConfig(
     throw new Error('forbidden');
   }
   const parsed = wishlistConfigSchema.parse(input);
+  const [prev] = await db
+    .select({ config: schema.storeFunctionSettings.config })
+    .from(schema.storeFunctionSettings)
+    .where(and(
+      eq(schema.storeFunctionSettings.storeId, storeId),
+      eq(schema.storeFunctionSettings.functionKey, 'wishlist'),
+    ));
   await db
     .insert(schema.storeFunctionSettings)
     .values({
@@ -183,6 +207,13 @@ export async function setWishlistConfig(
       target: [schema.storeFunctionSettings.storeId, schema.storeFunctionSettings.functionKey],
       set: { config: parsed, updatedBy: session.user.id, updatedAt: new Date() },
     });
+  await logFunctionAudit({
+    functionKey: 'wishlist',
+    storeId,
+    actorUserId: session.user.id,
+    action: 'config_update',
+    payload: { before: prev?.config ?? null, after: parsed },
+  });
   revalidatePath(`/f/functions/wishlist/${storeId}`);
 }
 

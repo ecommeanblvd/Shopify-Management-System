@@ -7,6 +7,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { logFunctionAudit } from '../audit-log';
 
 export interface RecentlyViewedStoreStatus {
   storeId: string;
@@ -48,6 +49,13 @@ export async function setRecentlyViewedEnabled(
   if (!role || !hasPermission(role, 'manage_functions')) {
     throw new Error('forbidden');
   }
+  const [prev] = await db
+    .select({ enabled: schema.storeFunctionSettings.enabled })
+    .from(schema.storeFunctionSettings)
+    .where(and(
+      eq(schema.storeFunctionSettings.storeId, storeId),
+      eq(schema.storeFunctionSettings.functionKey, 'recently-viewed'),
+    ));
   await db
     .insert(schema.storeFunctionSettings)
     .values({
@@ -60,10 +68,13 @@ export async function setRecentlyViewedEnabled(
       target: [schema.storeFunctionSettings.storeId, schema.storeFunctionSettings.functionKey],
       set: { enabled, updatedBy: session.user.id, updatedAt: new Date() },
     });
+  await logFunctionAudit({
+    functionKey: 'recently-viewed',
+    storeId,
+    actorUserId: session.user.id,
+    action: 'toggle',
+    payload: { from: prev?.enabled ?? false, to: enabled },
+  });
   revalidatePath('/f/functions/recently-viewed');
   revalidatePath('/f/functions');
 }
-
-// Silence unused-import warnings for helpers kept available to extend later.
-void and;
-void eq;
