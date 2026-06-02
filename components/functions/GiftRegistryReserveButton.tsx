@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import { Gift } from 'lucide-react';
+import type { GiftRegistryMessages } from '@/features/functions/gift-registry/i18n';
 
 interface GiftRegistryReserveButtonProps {
   token: string;
   itemId: string;
   remaining: number;
+  msg: GiftRegistryMessages['viewerPage'];
 }
 
-/** Interactive reservation flow on the public viewer page. Opens an
- *  inline form; submits to /api/storefront/gift-registry/:token/items/:itemId/reserve. */
-export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegistryReserveButtonProps) {
+/** Interactive reservation flow on the public viewer page. */
+export function GiftRegistryReserveButton({
+  token, itemId, remaining, msg,
+}: GiftRegistryReserveButtonProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,7 +27,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
   if (done) {
     return (
       <div className="mt-3 px-3 py-2 rounded-md bg-emerald-50 text-emerald-700 text-xs">
-        Reserved. The registry owner will see your name.
+        {msg.reservedSuccess}
       </div>
     );
   }
@@ -32,7 +35,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
   if (remaining <= 0) {
     return (
       <div className="mt-3 inline-block px-3 py-1 rounded-full bg-neutral-100 text-neutral-500 text-[10px] font-semibold uppercase tracking-wider">
-        Fully reserved
+        {msg.fullyReservedBadge}
       </div>
     );
   }
@@ -45,7 +48,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
         className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md border border-neutral-200 hover:bg-neutral-50 transition-colors"
       >
         <Gift className="size-3.5" />
-        I&apos;ll get this
+        {msg.reserveCta}
       </button>
     );
   }
@@ -66,10 +69,10 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
         }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.message || 'Could not reserve');
+      if (!r.ok) throw new Error(data?.message || msg.errorGeneric);
       setDone(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not reserve');
+      setError(err instanceof Error ? err.message : msg.errorGeneric);
     } finally {
       setPending(false);
     }
@@ -80,7 +83,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
       <div className="grid grid-cols-2 gap-2">
         <input
           type="text"
-          placeholder="Your name"
+          placeholder={msg.yourNamePlaceholder}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -89,7 +92,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
         />
         <input
           type="email"
-          placeholder="you@example.com"
+          placeholder={msg.yourEmailPlaceholder}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -98,7 +101,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
       </div>
       <div className="flex items-center gap-2">
         <label className="text-[11px] text-neutral-500">
-          Qty
+          {msg.qtyLabel}
           <input
             type="number"
             min={1}
@@ -109,11 +112,11 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
           />
         </label>
         <span className="text-[10px] text-neutral-400">
-          ({remaining} remaining)
+          {msg.remainingLabel(remaining)}
         </span>
       </div>
       <textarea
-        placeholder="Note for the owner (optional)"
+        placeholder={msg.notePlaceholder}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         maxLength={500}
@@ -127,15 +130,7 @@ export function GiftRegistryReserveButton({ token, itemId, remaining }: GiftRegi
           disabled={pending}
           className="text-xs font-medium px-3 py-1.5 rounded-md bg-neutral-900 text-white disabled:opacity-50"
         >
-          {pending ? 'Reserving…' : 'Reserve'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          disabled={pending}
-          className="text-xs text-neutral-500 hover:text-neutral-700 disabled:opacity-50"
-        >
-          Cancel
+          {pending ? msg.reserving : msg.reserveSubmit}
         </button>
       </div>
     </form>

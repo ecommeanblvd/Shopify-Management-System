@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { Copy, Check, ExternalLink } from 'lucide-react';
+import type { GiftRegistryMessages } from '@/features/functions/gift-registry/i18n';
 
 interface GiftRegistryCreateFormProps {
   shopDomain: string;
+  /** Pre-translated string bundle (server picks the right locale). */
+  msg: GiftRegistryMessages['newPage'];
 }
 
-export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormProps) {
+export function GiftRegistryCreateForm({ shopDomain, msg }: GiftRegistryCreateFormProps) {
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [eventName, setEventName] = useState('');
@@ -38,10 +41,10 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
         },
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.message || 'Could not create registry');
+      if (!r.ok) throw new Error(data?.message || msg.errorGeneric);
       setResult({ url: data.url, token: data.shareToken });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not create registry');
+      setError(err instanceof Error ? err.message : msg.errorGeneric);
     } finally {
       setPending(false);
     }
@@ -51,13 +54,11 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
     return (
       <div className="space-y-4 text-center">
         <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold uppercase tracking-wider">
-          Registry created
+          {msg.createdPill}
         </div>
-        <h2 className="text-2xl font-semibold">Your share link</h2>
+        <h2 className="text-2xl font-semibold">{msg.createdHeading}</h2>
         <p className="text-sm text-neutral-600 max-w-md mx-auto">
-          Save this link — it&rsquo;s how guests view and reserve items
-          on your registry. Keep it handy; we don&rsquo;t require an
-          account.
+          {msg.createdSubtitle}
         </p>
         <div className="flex items-center gap-2 max-w-md mx-auto p-3 rounded-lg border border-neutral-200 bg-white">
           <code className="flex-1 text-xs font-mono truncate text-neutral-700 text-left">
@@ -74,14 +75,14 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
             className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900 transition-colors shrink-0"
           >
             {copied ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? msg.copied : msg.copy}
           </button>
         </div>
         <a
           href={result.url}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-900"
         >
-          Open your registry
+          {msg.openRegistryLink}
           <ExternalLink className="size-3.5" />
         </a>
       </div>
@@ -90,17 +91,17 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Field label="Your email" hint="So we can find your registry later if you lose the link.">
+      <Field label={msg.ownerEmailLabel} hint={msg.ownerEmailHint}>
         <input
           type="email"
           required
           value={ownerEmail}
           onChange={(e) => setOwnerEmail(e.target.value)}
           className="w-full text-sm px-3 py-2 rounded-md border border-neutral-200 bg-white"
-          placeholder="you@example.com"
+          placeholder={msg.ownerEmailPlaceholder}
         />
       </Field>
-      <Field label="Your name (optional)">
+      <Field label={msg.ownerNameLabel}>
         <input
           type="text"
           maxLength={120}
@@ -109,7 +110,7 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
           className="w-full text-sm px-3 py-2 rounded-md border border-neutral-200 bg-white"
         />
       </Field>
-      <Field label="Event name" hint="What's the registry for?">
+      <Field label={msg.eventNameLabel} hint={msg.eventNameHint}>
         <input
           type="text"
           required
@@ -117,10 +118,10 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
           value={eventName}
           onChange={(e) => setEventName(e.target.value)}
           className="w-full text-sm px-3 py-2 rounded-md border border-neutral-200 bg-white"
-          placeholder="Jane &amp; John's Wedding"
+          placeholder={msg.eventNamePlaceholder}
         />
       </Field>
-      <Field label="Event date (optional)">
+      <Field label={msg.eventDateLabel}>
         <input
           type="date"
           value={eventDate}
@@ -128,14 +129,14 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
           className="w-full text-sm px-3 py-2 rounded-md border border-neutral-200 bg-white"
         />
       </Field>
-      <Field label="A note for guests (optional)">
+      <Field label={msg.messageLabel}>
         <textarea
           maxLength={2000}
           rows={3}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           className="w-full text-sm px-3 py-2 rounded-md border border-neutral-200 bg-white"
-          placeholder="Thanks for celebrating with us!"
+          placeholder={msg.messagePlaceholder}
         />
       </Field>
       {error && <div className="text-sm text-rose-600">{error}</div>}
@@ -144,7 +145,7 @@ export function GiftRegistryCreateForm({ shopDomain }: GiftRegistryCreateFormPro
         disabled={pending}
         className="w-full text-sm font-medium px-4 py-2.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
       >
-        {pending ? 'Creating…' : 'Create registry'}
+        {pending ? msg.submitting : msg.submitButton}
       </button>
     </form>
   );
