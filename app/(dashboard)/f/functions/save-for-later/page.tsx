@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ChevronLeft, Bookmark, Power, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Bookmark, Power, ExternalLink, Globe } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   listSaveForLaterStatusPerStore, setSaveForLaterEnabled,
 } from '@/features/functions/save-for-later/admin-actions';
+import { getCrossStoreActivity, rollupCrossStore } from '@/features/functions/cross-store';
 import { SaveForLaterToggle } from '@/components/functions/SaveForLaterToggle';
+import { CrossStoreActivityTable } from '@/components/functions/CrossStoreActivityTable';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +24,11 @@ export default async function SaveForLaterAdminPage() {
     return <div className="px-6 py-16 text-center"><h1 className="text-3xl">Forbidden</h1></div>;
   }
   const canManage = hasPermission(role, 'manage_functions');
-  const stores = await listSaveForLaterStatusPerStore();
+  const [stores, crossStore] = await Promise.all([
+    listSaveForLaterStatusPerStore(),
+    getCrossStoreActivity('save-for-later'),
+  ]);
+  const crossRollup = rollupCrossStore(crossStore);
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
@@ -98,6 +104,27 @@ export default async function SaveForLaterAdminPage() {
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold inline-flex items-center gap-2">
+              <Globe className="size-4 text-muted-foreground" />
+              Cross-store activity
+            </h2>
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono tabular-nums">
+              <span>{crossRollup.totalEvents7d.toLocaleString()} / 7d</span>
+              <span className="opacity-50">·</span>
+              <span>{crossRollup.totalEvents.toLocaleString()} lifetime</span>
+            </div>
+          </div>
+          <CrossStoreActivityTable
+            rows={crossStore}
+            adminPathPrefix="/f/functions/save-for-later"
+            accentDot="text-violet-500"
+          />
         </CardContent>
       </Card>
     </div>
