@@ -629,6 +629,38 @@ export const wishlistItems = pgTable('wishlist_items', {
   index('wishlist_items_product_idx').on(t.shopifyProductId),
 ]);
 
+// ─────────────────────────────────────────────────────────────────────
+// Recently Viewed — second function in the storefront registry. Logs
+// product views per shopper so the embed can render a "Recently
+// viewed" carousel on PDPs / cart / collection pages. Append-only;
+// deduplication happens at read time so the timestamp on each view
+// stays honest (drives a "viewed N times" cohort metric later).
+// ─────────────────────────────────────────────────────────────────────
+export const recentlyViewedEvents = pgTable('recently_viewed_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  /** Identity columns — same shape as wishlists for consistency. At
+   *  least one of email / deviceId is required (enforced by the
+   *  storefront action). */
+  customerEmail: text('customer_email'),
+  shopifyCustomerId: text('shopify_customer_id'),
+  deviceId: text('device_id'),
+  shopifyProductId: text('shopify_product_id').notNull(),
+  shopifyVariantId: text('shopify_variant_id'),
+  productTitle: text('product_title').notNull(),
+  productHandle: text('product_handle').notNull(),
+  imageUrl: text('image_url'),
+  priceAmount: numeric('price_amount', { precision: 14, scale: 2 }),
+  priceCurrency: text('price_currency'),
+  viewedAt: timestamp('viewed_at').defaultNow().notNull(),
+}, (t) => [
+  // Hot path: list last N for a device/email.
+  index('recently_viewed_device_time_idx').on(t.storeId, t.deviceId, t.viewedAt),
+  index('recently_viewed_email_time_idx').on(t.storeId, t.customerEmail, t.viewedAt),
+  // For top-N-products-viewed analytics.
+  index('recently_viewed_product_idx').on(t.storeId, t.shopifyProductId, t.viewedAt),
+]);
+
 // Append-only event log for analytics. Every add/remove/share/view is
 // written here so the dashboard can compute funnel + cohort metrics
 // without scanning the wishlist tables.
