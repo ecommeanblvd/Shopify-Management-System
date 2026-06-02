@@ -55,6 +55,18 @@ export const FUNCTIONS: FunctionManifest[] = [
     accent: { fg: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10' },
     routes: { admin: '/f/functions/recently-viewed', storefront: '/api/storefront/recently-viewed' },
   },
+  {
+    key: 'gift-registry',
+    name: 'Gift Registry',
+    description:
+      'Share-first wishlist for weddings, birthdays, baby showers. Owners ' +
+      'create a registry with an event date and message; guests reserve ' +
+      'items so duplicates are avoided. Public viewer at /gr/[token].',
+    version: '0.1.0',
+    icon: 'Gift',
+    accent: { fg: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
+    routes: { admin: '/f/functions/gift-registry', storefront: '/api/storefront/gift-registry' },
+  },
 ];
 
 export function getFunctionByKey(key: string): FunctionManifest | undefined {

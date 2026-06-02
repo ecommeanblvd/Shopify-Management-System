@@ -630,6 +630,77 @@ export const wishlistItems = pgTable('wishlist_items', {
 ]);
 
 // ─────────────────────────────────────────────────────────────────────
+// Gift Registry — share-first wishlist with event metadata and a
+// reservation flow so guests can claim items without duplicates.
+// Distinct from wishlists because:
+//   - every registry is intended to be public (carries a share_token
+//     from creation, not generated lazily on the first share click)
+//   - items carry a desired-quantity field that reservations decrement
+//   - non-owner reservations are first-class rows, not events
+// ─────────────────────────────────────────────────────────────────────
+export const giftRegistries = pgTable('gift_registries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  /** Email is REQUIRED — gift registries are inherently shareable and
+   *  need a stable owner across devices. Reservations also reach out
+   *  to the owner if the future email infra ships. */
+  ownerEmail: text('owner_email').notNull(),
+  ownerName: text('owner_name'),
+  eventName: text('event_name').notNull(),
+  /** Optional — open registries (no specific date) are valid too. */
+  eventDate: date('event_date'),
+  message: text('message'),
+  /** Public share token. Generated at creation so the URL is the
+   *  registry's primary public identity. Distinct from `id` so a leaked
+   *  token can be rotated without touching FKs. */
+  shareToken: text('share_token').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('gift_registries_token_idx').on(t.shareToken),
+  index('gift_registries_owner_idx').on(t.storeId, t.ownerEmail),
+]);
+
+export const giftRegistryItems = pgTable('gift_registry_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  registryId: uuid('registry_id').references(() => giftRegistries.id, { onDelete: 'cascade' }).notNull(),
+  shopifyProductId: text('shopify_product_id').notNull(),
+  shopifyVariantId: text('shopify_variant_id'),
+  productTitle: text('product_title').notNull(),
+  variantTitle: text('variant_title'),
+  productHandle: text('product_handle').notNull(),
+  imageUrl: text('image_url'),
+  priceAmount: numeric('price_amount', { precision: 14, scale: 2 }),
+  priceCurrency: text('price_currency'),
+  /** Desired quantity. Reservations subtract from this. */
+  qtyWanted: integer('qty_wanted').notNull().default(1),
+  /** Operator / owner notes shown alongside the item ("size 9", "rose
+   *  gold preferred"). */
+  notes: text('notes'),
+  addedAt: timestamp('added_at').defaultNow().notNull(),
+}, (t) => [
+  index('gift_registry_items_registry_idx').on(t.registryId),
+]);
+
+export const giftRegistryReservations = pgTable('gift_registry_reservations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  registryId: uuid('registry_id').references(() => giftRegistries.id, { onDelete: 'cascade' }).notNull(),
+  itemId: uuid('item_id').references(() => giftRegistryItems.id, { onDelete: 'cascade' }).notNull(),
+  reserverName: text('reserver_name').notNull(),
+  reserverEmail: text('reserver_email').notNull(),
+  qty: integer('qty').notNull().default(1),
+  message: text('message'),
+  /** 'reserved' until the giver marks it purchased; 'purchased' once
+   *  confirmed; 'cancelled' if the giver backs out (kept for audit). */
+  status: text('status').notNull().default('reserved'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('gift_registry_reservations_item_idx').on(t.itemId),
+  index('gift_registry_reservations_registry_idx').on(t.registryId),
+]);
+
+// ─────────────────────────────────────────────────────────────────────
 // Recently Viewed — second function in the storefront registry. Logs
 // product views per shopper so the embed can render a "Recently
 // viewed" carousel on PDPs / cart / collection pages. Append-only;
