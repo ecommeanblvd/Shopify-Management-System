@@ -9,6 +9,8 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { FUNCTIONS } from '@/lib/registry/functions';
 import { getAllFunctionsActivity, rollup } from '@/features/functions/registry-stats';
 import { getFunctionHealth, rollupHealth } from '@/features/functions/health';
+import { getActivityTrend } from '@/features/functions/activity-trend';
+import { ActivityStackedChart } from '@/components/functions/ActivityStackedChart';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -30,9 +32,11 @@ export default async function FunctionsOverviewPage() {
     );
   }
 
-  const [stats, healthRows] = await Promise.all([
+  const trendDays = 7;
+  const [stats, healthRows, trend] = await Promise.all([
     getAllFunctionsActivity(),
     getFunctionHealth(),
+    getActivityTrend(trendDays),
   ]);
   const totals = rollup(stats);
   const healthTotals = rollupHealth(healthRows);
@@ -113,6 +117,21 @@ export default async function FunctionsOverviewPage() {
           sub={busiest ? `${stats.get(busiest.key)?.last7DaysEvents.toLocaleString() ?? '0'} events` : 'no activity this week'}
         />
       </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="text-sm font-semibold inline-flex items-center gap-2">
+              <Activity className="size-4 text-muted-foreground" />
+              Activity — last {trendDays} days
+            </h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+              {totals.totalEvents7d.toLocaleString()}
+            </Badge>
+          </div>
+          <ActivityStackedChart buckets={trend} functions={FUNCTIONS} />
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {FUNCTIONS.map((fn) => {
