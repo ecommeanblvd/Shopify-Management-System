@@ -39,7 +39,11 @@ function originFor(req: NextRequest): string {
 
 export function GET(req: NextRequest): NextResponse {
   const apiOrigin = originFor(req);
-  const body = buildEmbedScript({ apiOrigin });
+  // Minify in production for a smaller wire payload; ship raw in dev so
+  // browser devtools maps directly to the source file.
+  const body = buildEmbedScript({ apiOrigin }, {
+    minify: process.env.NODE_ENV === 'production',
+  });
   return new NextResponse(body, {
     status: 200,
     headers: {

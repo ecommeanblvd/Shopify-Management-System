@@ -99,6 +99,7 @@ export async function getWishlistWithItems(
       imageUrl: i.imageUrl,
       priceAmount: i.priceAmount !== null ? Number(i.priceAmount) : null,
       priceCurrency: i.priceCurrency,
+      availableForSale: i.availableForSale,
       addedAt: i.addedAt,
     })),
   };
@@ -121,6 +122,7 @@ export async function addItem(
       imageUrl: snap.imageUrl ?? null,
       priceAmount: snap.priceAmount !== undefined ? snap.priceAmount.toString() : null,
       priceCurrency: snap.priceCurrency ?? null,
+      availableForSale: snap.availableForSale ?? null,
     })
     .onConflictDoNothing()
     .returning({ id: schema.wishlistItems.id });
@@ -296,6 +298,7 @@ export async function getWishlistByShareToken(
       imageUrl: i.imageUrl,
       priceAmount: i.priceAmount !== null ? Number(i.priceAmount) : null,
       priceCurrency: i.priceCurrency,
+      availableForSale: i.availableForSale,
       addedAt: i.addedAt,
     })),
   };

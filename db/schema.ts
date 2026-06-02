@@ -615,6 +615,11 @@ export const wishlistItems = pgTable('wishlist_items', {
   imageUrl: text('image_url'),
   priceAmount: numeric('price_amount', { precision: 14, scale: 2 }),
   priceCurrency: text('price_currency'),
+  /** Inventory snapshot from add-time. NULL when the storefront couldn't
+   *  determine availability; true/false otherwise. Drives the "Out of
+   *  stock" badge in the drawer + public share page. Refreshed lazily
+   *  by a future cron — see snapshot-refresh follow-up. */
+  availableForSale: boolean('available_for_sale'),
   addedAt: timestamp('added_at').defaultNow().notNull(),
 }, (t) => [
   // Dedup: same product+variant added twice → noop. `COALESCE` so NULL

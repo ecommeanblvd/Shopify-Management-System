@@ -148,6 +148,13 @@
       "when": 1780328972498,
       "tag": "0020_wishlist_share_token",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1780360270185,
+      "tag": "0021_wishlist_item_availability",
+      "breakpoints": true
     }
   ]
 }
