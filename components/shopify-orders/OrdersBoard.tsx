@@ -140,15 +140,19 @@ export function OrdersBoard({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Orders{' '}
             <span className="text-muted-foreground/60 font-mono tabular-nums normal-case tracking-normal">
-              ({visibleOrders.length.toLocaleString()})
+              ({cachedOrders.length.toLocaleString()}
+              {visibleOrders.length !== cachedOrders.length && (
+                <> &middot; <span className="text-foreground/70">{visibleOrders.length.toLocaleString()} in window</span></>
+              )})
             </span>
           </h2>
           <p className="text-xs text-muted-foreground">
             Search by order #, or click any row to override per-line costs / shipping.
+            Date filter narrows the KPIs above only — table keeps the full cache.
           </p>
         </div>
         <OrdersTable
-          orders={visibleOrders}
+          orders={cachedOrders}
           canEdit={canEdit}
           costCurrency={costCurrency}
           fxRate={fxRate}
