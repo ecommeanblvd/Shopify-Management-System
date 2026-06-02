@@ -747,3 +747,42 @@ export const wishlistEvents = pgTable('wishlist_events', {
 }, (t) => [
   index('wishlist_events_store_created_idx').on(t.storeId, t.createdAt),
 ]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Save-for-later — fourth function in the storefront registry. Lives
+// inside the cart context: shoppers move items from the cart to a
+// "saved" list (so they don't lose them) and back. Distinct from
+// Wishlist because:
+//   - cart-context UX (mounted on /cart, not PDP)
+//   - items carry a qty (vs wishlists where qty is implicit at 1)
+//   - intent is "I almost bought this" — high conversion signal
+// ─────────────────────────────────────────────────────────────────────
+export const saveForLaterItems = pgTable('save_for_later_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  /** Identity. Mirrors Wishlist: email when known, device id always. */
+  customerEmail: text('customer_email'),
+  shopifyCustomerId: text('shopify_customer_id'),
+  deviceId: text('device_id').notNull(),
+  shopifyProductId: text('shopify_product_id').notNull(),
+  shopifyVariantId: text('shopify_variant_id'),
+  productTitle: text('product_title').notNull(),
+  variantTitle: text('variant_title'),
+  productHandle: text('product_handle').notNull(),
+  imageUrl: text('image_url'),
+  priceAmount: numeric('price_amount', { precision: 14, scale: 2 }),
+  priceCurrency: text('price_currency'),
+  /** Quantity the shopper had in cart at the moment of saving. The
+   *  "move back to cart" action restores this quantity. */
+  qty: integer('qty').notNull().default(1),
+  savedAt: timestamp('saved_at').defaultNow().notNull(),
+}, (t) => [
+  // Hot path: list a shopper's saved items.
+  index('save_for_later_device_idx').on(t.storeId, t.deviceId, t.savedAt),
+  index('save_for_later_email_idx').on(t.storeId, t.customerEmail, t.savedAt),
+  // Dedup: same product+variant saved twice → keep the newest. The
+  // storefront action upserts, so a real conflict is rare; the partial
+  // unique guards against it anyway.
+  uniqueIndex('save_for_later_dedup_idx')
+    .on(t.storeId, t.deviceId, t.shopifyProductId, sql`COALESCE(${t.shopifyVariantId}, '')`),
+]);

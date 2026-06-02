@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, ChevronRight } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 export const dynamic = 'force-dynamic';
 
 const ICONS: Record<string, LucideIcon> = {
-  Heart, Gift, Bell, TrendingDown, Sparkles, Eye,
+  Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark,
 };
 
 export default async function FunctionsOverviewPage() {
