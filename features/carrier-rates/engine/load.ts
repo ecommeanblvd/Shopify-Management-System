@@ -104,6 +104,12 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
         : null,
       stepKg: s.stepKg !== null ? Number(s.stepKg) : null,
       fuelable: s.fuelable,
+      // Engine gates each row by (startsAt, endsAt) against the caller's
+      // effectiveDate inside `quote()`. Loader still filters `active=true`
+      // at SQL level to keep the working set small; rows whose window
+      // doesn't cover the quote date are excluded in JS.
+      startsAt: s.startsAt,
+      endsAt: s.endsAt,
     })),
     remotePostcodes,
   };

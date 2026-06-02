@@ -33,6 +33,13 @@ import type { EngineEstimateReason } from './batch-shipping-estimator';
 export interface EngineEstimateInput {
   shipCountry: string | null;
   shipWeightKg: number | null;
+  /**
+   * Effective quote date — defaults to "now". Pass the order's
+   * `processed_at_shopify` to reproduce the carrier's historical rate
+   * sheet (the fuel surcharge changes every week). Without this, an
+   * order from 29/04 would be priced against today's fuel %.
+   */
+  effectiveDate?: Date;
 }
 
 export interface EngineEstimateResult {
@@ -101,7 +108,7 @@ export async function resolveShippingEstimate(
       ));
 
   if (linkedCarrierIds.length > 0) {
-    const best = await tryCarriers(linkedCarrierIds, input.shipCountry, input.shipWeightKg);
+    const best = await tryCarriers(linkedCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
     if (best !== null) {
       return {
         amount: best.display,
@@ -128,7 +135,7 @@ export async function resolveShippingEstimate(
   const fallbackCarrierIds = allAccountRows
     .map((r) => r.id)
     .filter((id) => !linkedCarrierIds.includes(id));
-  const fallbackBest = await tryCarriers(fallbackCarrierIds, input.shipCountry, input.shipWeightKg);
+  const fallbackBest = await tryCarriers(fallbackCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
   if (fallbackBest !== null) {
     return {
       amount: fallbackBest.display,
@@ -164,13 +171,16 @@ interface CarrierAttempt {
  * the line-item table (base, surcharges, fuel, VAT, …).
  */
 async function tryCarriers(
-  carrierIds: readonly string[], country: string, weightKg: number,
+  carrierIds: readonly string[],
+  country: string,
+  weightKg: number,
+  effectiveDate?: Date,
 ): Promise<CarrierAttempt | null> {
   let best: CarrierAttempt | null = null;
   for (const id of carrierIds) {
     const snap = await loadAccountSnapshot(id);
     if (!snap) continue;
-    const q = quote(snap, { weightKg, destinationCountry: country });
+    const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
     if (q.ok) {
       const display = q.breakdown.carrierCostDisplay;
       if (best === null || display < best.display) {
