@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Gift, Layers, Activity, Calendar, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Gift, Layers, Activity, Calendar, Code2, ExternalLink } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -10,6 +10,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { GiftRegistryInstallSnippet } from '@/components/functions/GiftRegistryInstallSnippet';
 import {
   getGiftRegistrySummary, listRegistriesForStore,
 } from '@/features/functions/gift-registry/admin-actions';
@@ -49,6 +50,7 @@ export default async function GiftRegistryStorePage({
   ]);
 
   const base = getEnv().SHOPIFY_APP_URL.replace(/\/$/, '');
+  const embedUrl = `${base}/api/storefront/gift-registry/embed`;
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
@@ -75,6 +77,16 @@ export default async function GiftRegistryStorePage({
         <Tile icon={<Activity className="size-4" />} label="Reservations" value={summary.reservationCount.toLocaleString()} sub="excludes cancelled" />
         <Tile icon={<Calendar className="size-4" />} label="Upcoming" value={summary.upcomingCount.toLocaleString()} sub="events with a date" />
       </div>
+
+      <Card>
+        <CardContent className="p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <Code2 className="size-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Storefront install</h2>
+          </div>
+          <GiftRegistryInstallSnippet shopDomain={store.shopDomain} embedUrl={embedUrl} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
