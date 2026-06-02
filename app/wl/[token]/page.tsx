@@ -53,7 +53,7 @@ export default async function SharedWishlistPage({
         ) : (
           <ul className="space-y-3">
             {view.items.map((item) => (
-              <li key={item.id} className="rounded-xl border border-neutral-200 bg-white overflow-hidden">
+              <li key={item.id} className={`rounded-xl border border-neutral-200 bg-white overflow-hidden ${item.availableForSale === false ? 'opacity-75' : ''}`}>
                 <a
                   href={`https://${view.shopDomain}/products/${item.productHandle}`}
                   target="_blank"
@@ -67,7 +67,7 @@ export default async function SharedWishlistPage({
                       alt=""
                       width={80}
                       height={80}
-                      className="w-20 h-20 object-cover rounded-md bg-neutral-100"
+                      className={`w-20 h-20 object-cover rounded-md bg-neutral-100 ${item.availableForSale === false ? 'opacity-60' : ''}`}
                       loading="lazy"
                     />
                   ) : (
@@ -84,6 +84,11 @@ export default async function SharedWishlistPage({
                       <div className="text-sm font-medium tabular-nums mt-1.5">
                         {formatPrice(item.priceAmount, item.priceCurrency)}
                       </div>
+                    )}
+                    {item.availableForSale === false && (
+                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500 text-[10px] font-semibold tracking-wider uppercase">
+                        Out of stock
+                      </span>
                     )}
                   </div>
                   <div className="text-xs text-neutral-400 shrink-0">View →</div>

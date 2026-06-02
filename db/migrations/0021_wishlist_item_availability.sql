@@ -1,0 +1,1 @@
+ALTER TABLE "wishlist_items" ADD COLUMN "available_for_sale" boolean;

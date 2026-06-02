@@ -60,6 +60,15 @@ export const WISHLIST_EMBED_CSS = `
     font-size: 18px; color: #999; padding: 4px 8px; line-height: 1; }
   .wl-item-remove:hover { color: #111; }
 
+  .wl-oos-badge {
+    display: inline-block; margin-top: 6px; padding: 2px 8px;
+    background: rgba(0,0,0,.08); color: #666;
+    border-radius: 999px; font-size: 10px; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+  .wl-item--oos .wl-item-link img, .wl-item--oos .wl-thumb-placeholder { opacity: .55; }
+  .wl-item--oos .wl-item-title, .wl-item--oos .wl-item-price { color: #888; }
+
   .wl-foot { padding: 14px 20px; border-top: 1px solid #eee;
     display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .wl-foot-link { text-decoration: none; color: inherit; font-size: 13px; font-weight: 500; }

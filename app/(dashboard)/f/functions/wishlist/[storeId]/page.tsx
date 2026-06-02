@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity, Code2, Settings, BarChart3 } from 'lucide-react';
+import { ChevronLeft, Heart, Users as UsersIcon, Package, Activity, Code2, Settings, BarChart3, Download } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -149,9 +149,19 @@ export default async function WishlistStorePage({
         <CardContent className="p-0">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <h2 className="text-sm font-semibold">Active wishlists</h2>
-            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
-              {wishlists.length}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <a
+                href={`/f/functions/wishlist/${storeId}/export.csv`}
+                className="text-[11px] inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                title="Download all wishlists as CSV"
+              >
+                <Download className="size-3" />
+                Export CSV
+              </a>
+              <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+                {wishlists.length}
+              </Badge>
+            </div>
           </div>
           {wishlists.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-muted-foreground">

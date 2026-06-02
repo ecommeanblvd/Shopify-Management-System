@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEmbedScript } from './source';
+import { buildEmbedScript, minifyEmbed } from './source';
 
 describe('buildEmbedScript', () => {
   const script = buildEmbedScript({ apiOrigin: 'https://app.example.com' });
@@ -75,6 +75,21 @@ describe('buildEmbedScript', () => {
     expect(script).toContain('/api/storefront/wishlist/merge');
   });
 
+  it('captures availability at add-time and renders the OOS badge (PR5)', () => {
+    expect(script).toContain('availableForSale');
+    expect(script).toContain('product:availability');
+    expect(script).toContain('og:availability');
+    expect(script).toContain('wl-oos-badge');
+    expect(script).toContain('wl-item--oos');
+  });
+
+  it('falls back across multiple PDP form selectors (PR5)', () => {
+    expect(script).toContain('findCartForm');
+    expect(script).toContain('product-form form');
+    expect(script).toContain('data-product-form');
+    expect(script).toContain('data-type="add-to-cart-form"');
+  });
+
   it('calls the merge endpoint exactly once per email per browser', () => {
     expect(script).toContain('/api/storefront/wishlist/merge');
     expect(script).toContain('__wl_merged_to');
@@ -86,5 +101,50 @@ describe('buildEmbedScript', () => {
 
   it('opens with a leading semicolon to defuse ASI hazards on concatenation', () => {
     expect(script.charAt(0)).toBe(';');
+  });
+});
+
+describe('minifyEmbed', () => {
+  it('strips whole-line // comments and block comments', () => {
+    const out = minifyEmbed([
+      '// leading comment',
+      'var x = 1;',
+      '/* block */',
+      'var y = 2;',
+    ].join('\n'));
+    expect(out).not.toContain('leading comment');
+    expect(out).not.toContain('/*');
+    expect(out).toContain('var x = 1');
+    expect(out).toContain('var y = 2');
+  });
+
+  it('preserves // inside string literals', () => {
+    const out = minifyEmbed(`var url = 'https://example.com/path';`);
+    expect(out).toContain('https://example.com/path');
+  });
+
+  it('preserves // inside double-quoted string literals', () => {
+    const out = minifyEmbed(`var url = "https://example.com/path";`);
+    expect(out).toContain('https://example.com/path');
+  });
+
+  it('produces a smaller bundle than the raw source', () => {
+    const raw = buildEmbedScript({ apiOrigin: 'https://app.example.com' });
+    const min = buildEmbedScript({ apiOrigin: 'https://app.example.com' }, { minify: true });
+    expect(min.length).toBeLessThan(raw.length);
+  });
+
+  it('keeps the minified bundle valid JavaScript', () => {
+    const min = buildEmbedScript({ apiOrigin: 'https://app.example.com' }, { minify: true });
+    expect(() => new Function(min)).not.toThrow();
+  });
+
+  it('preserves the public window.__wishlist API after minify', () => {
+    const min = buildEmbedScript({ apiOrigin: 'https://app.example.com' }, { minify: true });
+    expect(min).toContain('window.__wishlist');
+    expect(min).toContain('open:');
+    expect(min).toContain('close:');
+    expect(min).toContain('add:');
+    expect(min).toContain('remove:');
   });
 });

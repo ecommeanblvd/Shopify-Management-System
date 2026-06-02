@@ -19,6 +19,10 @@ export interface WishlistItemSnapshot {
   imageUrl?: string;
   priceAmount?: number;
   priceCurrency?: string;
+  /** Inventory snapshot from the storefront at add-time. Optional — the
+   *  embed sets it from `og:availability` / product:availability meta;
+   *  absence is treated as "unknown" by the UI. */
+  availableForSale?: boolean;
 }
 
 export interface WishlistRow {
@@ -39,5 +43,6 @@ export interface WishlistItemRow {
   imageUrl: string | null;
   priceAmount: number | null;
   priceCurrency: string | null;
+  availableForSale: boolean | null;
   addedAt: Date;
 }
