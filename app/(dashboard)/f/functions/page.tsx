@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { FUNCTIONS } from '@/lib/registry/functions';
+import { getAllFunctionsActivity, rollup } from '@/features/functions/registry-stats';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,12 @@ export default async function FunctionsOverviewPage() {
     );
   }
 
+  const stats = await getAllFunctionsActivity();
+  const totals = rollup(stats);
+  const busiest = totals.busiestFunctionKey
+    ? FUNCTIONS.find((f) => f.key === totals.busiestFunctionKey)
+    : null;
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <header className="space-y-3">
@@ -45,9 +53,33 @@ export default async function FunctionsOverviewPage() {
         </p>
       </header>
 
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <RollupTile
+          icon={<Power className="size-4" />}
+          label="Total activations"
+          value={totals.totalActivations.toLocaleString()}
+          sub={`${FUNCTIONS.length} functions × stores`}
+        />
+        <RollupTile
+          icon={<Activity className="size-4" />}
+          label="Events — last 7 days"
+          value={totals.totalEvents7d.toLocaleString()}
+          sub="across all functions"
+        />
+        <RollupTile
+          icon={<Layers className="size-4" />}
+          label="Busiest function"
+          value={busiest ? busiest.name : 'None yet'}
+          sub={busiest ? `${stats.get(busiest.key)?.last7DaysEvents.toLocaleString() ?? '0'} events` : 'no activity this week'}
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {FUNCTIONS.map((fn) => {
           const Icon = ICONS[fn.icon];
+          const s = stats.get(fn.key);
+          const activeCount = s?.activeStoreCount ?? 0;
+          const events = s?.last7DaysEvents ?? 0;
           return (
             <Link key={fn.key} href={fn.routes.admin} className="block group">
               <Card className="h-full transition-colors hover:bg-muted/30">
@@ -67,6 +99,16 @@ export default async function FunctionsOverviewPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     {fn.description}
                   </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Badge variant={activeCount > 0 ? 'secondary' : 'outline'} className="h-5 text-[10px] gap-1 px-1.5">
+                      <Power className="size-2.5" />
+                      {activeCount > 0 ? `${activeCount} active` : 'inactive'}
+                    </Badge>
+                    <Badge variant="outline" className="h-5 text-[10px] gap-1 px-1.5 font-mono tabular-nums">
+                      <Activity className="size-2.5" />
+                      {events.toLocaleString()} / 7d
+                    </Badge>
+                  </div>
                 </CardContent>
               </Card>
             </Link>
@@ -74,5 +116,22 @@ export default async function FunctionsOverviewPage() {
         })}
       </div>
     </div>
+  );
+}
+
+function RollupTile({
+  icon, label, value, sub,
+}: { icon: React.ReactNode; label: string; value: string; sub: string }) {
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-1.5">
+        <div className="text-muted-foreground text-xs uppercase tracking-wider inline-flex items-center gap-1.5">
+          {icon}
+          {label}
+        </div>
+        <div className="text-2xl font-semibold tabular-nums truncate">{value}</div>
+        <div className="text-xs text-muted-foreground">{sub}</div>
+      </CardContent>
+    </Card>
   );
 }
