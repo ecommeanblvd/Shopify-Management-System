@@ -103,12 +103,17 @@ export default async function GiftRegistryAdminPage() {
 
       <Card>
         <CardContent className="p-5 space-y-2">
-          <h3 className="text-sm font-semibold">PDP integration</h3>
+          <h3 className="text-sm font-semibold">Storefront integration</h3>
           <p className="text-xs text-muted-foreground">
-            The storefront embed that adds &ldquo;Add to gift registry&rdquo;
-            buttons to product pages ships in a follow-up PR. Until then,
-            owners can create registries via the public form and the
-            operator adds items via the per-store manage page.
+            The PDP embed is live. Activate a store, open its analytics
+            page, and copy the script tag to drop the &ldquo;Add to gift
+            registry&rdquo; button on every product page. Shoppers can
+            also start a registry directly from{' '}
+            <code className="font-mono text-[11px]">/gr/new?shop=&lt;handle&gt;.myshopify.com</code>.
+          </p>
+          <p className="text-[11px] font-mono text-muted-foreground/80 mt-1.5">
+            Bundle:{' '}
+            <span className="text-foreground">/api/storefront/gift-registry/embed</span>
           </p>
         </CardContent>
       </Card>

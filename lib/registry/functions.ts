@@ -62,7 +62,7 @@ export const FUNCTIONS: FunctionManifest[] = [
       'Share-first wishlist for weddings, birthdays, baby showers. Owners ' +
       'create a registry with an event date and message; guests reserve ' +
       'items so duplicates are avoided. Public viewer at /gr/[token].',
-    version: '0.1.0',
+    version: '0.2.0',
     icon: 'Gift',
     accent: { fg: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
     routes: { admin: '/f/functions/gift-registry', storefront: '/api/storefront/gift-registry' },
