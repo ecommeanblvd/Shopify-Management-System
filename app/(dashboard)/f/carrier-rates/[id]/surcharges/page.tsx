@@ -15,7 +15,7 @@ import {
   listSurcharges, createSurcharge, updateSurcharge, deleteSurcharge,
   type SurchargeKind, type SurchargeRow,
 } from '@/features/carrier-rates/surcharges-actions';
-import { refreshFedExFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 import { seedFedexVietnamDemand } from '@/features/carrier-rates/seed-fedex-vn-demand';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -225,7 +225,9 @@ async function refreshFuelAction(accountId: string, userId: string) {
   if (!role || !hasPermission(role, 'manage_carrier_rates')) {
     throw new Error('forbidden');
   }
-  await refreshFedExFuel({ carrierAccountId: accountId, triggeredBy: userId });
+  // Carrier-agnostic — dispatches to the FedEx or DHL fetcher based on
+  // the carrier key linked to this account.
+  await refreshCarrierFuel({ carrierAccountId: accountId, triggeredBy: userId });
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 

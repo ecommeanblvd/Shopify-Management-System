@@ -18,6 +18,11 @@ import {
   type FuelFetchResult,
   type FuelFetchOptions,
 } from './fedex';
+import {
+  fetchDhlFuelPercent,
+  type DhlFuelFetchResult,
+  type DhlFuelFetchOptions,
+} from './dhl';
 
 export interface ApplyFuelInput {
   carrierAccountId: string;
@@ -118,6 +123,118 @@ export async function refreshFedExFuel(args: {
     triggeredBy: args.triggeredBy,
   });
   return { ...applied, fetched };
+}
+
+/**
+ * DHL counterpart of `refreshFedExFuel`. Same upsert semantics, same
+ * audit columns — the only difference is which weekly source we pull
+ * from and the `last_auto_source` tag.
+ */
+export async function refreshDhlFuel(args: {
+  carrierAccountId: string;
+  triggeredBy: string | null;
+  options?: DhlFuelFetchOptions;
+}): Promise<ApplyFuelResult & { fetched: DhlFuelFetchResult }> {
+  const fetched = await fetchDhlFuelPercent(args.options);
+  const valueStr = fetched.current.percent.toString();
+  const weekLabel = `CW ${fetched.current.weekNumber}, ${fetched.current.year}`;
+  const sourceTag = `dhl/${weekLabel}`;
+
+  const existing = await db
+    .select({
+      id: schema.carrierSurcharges.id,
+      value: schema.carrierSurcharges.value,
+    })
+    .from(schema.carrierSurcharges)
+    .where(
+      and(
+        eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
+        eq(schema.carrierSurcharges.kind, 'fuel_percent'),
+      ),
+    )
+    .orderBy(schema.carrierSurcharges.createdAt)
+    .limit(1);
+
+  if (existing.length > 0) {
+    const prev = Number(existing[0].value);
+    const changed = !Number.isFinite(prev) || prev.toString() !== valueStr;
+    await db
+      .update(schema.carrierSurcharges)
+      .set({
+        value: valueStr,
+        active: true,
+        lastAutoFetchedAt: fetched.fetchedAt,
+        lastAutoSource: sourceTag,
+        updatedAt: new Date(),
+        ...(args.triggeredBy ? { updatedBy: args.triggeredBy } : {}),
+      })
+      .where(eq(schema.carrierSurcharges.id, existing[0].id));
+    return {
+      surchargeId: existing[0].id,
+      previousPercent: Number.isFinite(prev) ? prev : null,
+      newPercent: fetched.current.percent,
+      changed,
+      fetched,
+    };
+  }
+
+  const [inserted] = await db
+    .insert(schema.carrierSurcharges)
+    .values({
+      carrierAccountId: args.carrierAccountId,
+      kind: 'fuel_percent',
+      value: valueStr,
+      active: true,
+      note: `Auto-fetched from DHL (${weekLabel})`,
+      lastAutoFetchedAt: fetched.fetchedAt,
+      lastAutoSource: sourceTag,
+      updatedBy: args.triggeredBy ?? null,
+    })
+    .returning({ id: schema.carrierSurcharges.id });
+
+  return {
+    surchargeId: inserted!.id,
+    previousPercent: null,
+    newPercent: fetched.current.percent,
+    changed: true,
+    fetched,
+  };
+}
+
+/**
+ * Carrier-agnostic dispatcher. Looks up the carrier key for the given
+ * account and delegates to the right per-carrier fetcher. Throws when
+ * the carrier doesn't have an auto-fetcher yet — operator gets a clear
+ * error in the admin button toast instead of silent no-op.
+ */
+export async function refreshCarrierFuel(args: {
+  carrierAccountId: string;
+  triggeredBy: string | null;
+}): Promise<ApplyFuelResult & { carrierKey: string }> {
+  const [row] = await db
+    .select({ carrierKey: schema.carriers.key })
+    .from(schema.carrierAccounts)
+    .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(eq(schema.carrierAccounts.id, args.carrierAccountId));
+  const key = row?.carrierKey;
+  if (!key) {
+    throw new Error(`refreshCarrierFuel: carrier account ${args.carrierAccountId} not found`);
+  }
+  if (key === 'fedex') {
+    const r = await refreshFedExFuel({
+      carrierAccountId: args.carrierAccountId,
+      triggeredBy: args.triggeredBy,
+    });
+    return { ...r, carrierKey: key };
+  }
+  if (key === 'dhl') {
+    const r = await refreshDhlFuel({
+      carrierAccountId: args.carrierAccountId,
+      triggeredBy: args.triggeredBy,
+    });
+    return { ...r, carrierKey: key };
+  }
+  throw new Error(`refreshCarrierFuel: no fuel auto-fetcher for carrier '${key}'`);
 }
 
 function describeSource(url: string, week: string): string {
