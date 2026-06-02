@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Bookmark, Package, Users as UsersIcon, Layers, Activity, Code2, Download } from 'lucide-react';
+import { ChevronLeft, Bookmark, Package, Users as UsersIcon, Layers, Activity, Code2, Download, BarChart3 } from 'lucide-react';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -11,9 +11,11 @@ import { getEnv } from '@/lib/env';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SaveForLaterInstallSnippet } from '@/components/functions/SaveForLaterInstallSnippet';
+import { DailyTrendChart } from '@/components/functions/DailyTrendChart';
 import {
   getSaveForLaterSummary, getTopSavedProducts,
 } from '@/features/functions/save-for-later/admin-actions';
+import { getDailyTrend } from '@/features/functions/daily-trend';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,9 +35,11 @@ export default async function SaveForLaterStorePage({
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) notFound();
 
-  const [summary, topSaved] = await Promise.all([
+  const trendDays = 7;
+  const [summary, topSaved, trend] = await Promise.all([
     getSaveForLaterSummary(storeId),
     getTopSavedProducts(storeId, 10),
+    getDailyTrend('save_for_later', storeId, trendDays),
   ]);
 
   const embedUrl = `${getEnv().SHOPIFY_APP_URL.replace(/\/$/, '')}/api/storefront/save-for-later/embed`;
@@ -65,6 +69,25 @@ export default async function SaveForLaterStorePage({
         <Tile icon={<UsersIcon className="size-4" />} label="Unique devices" value={summary.uniqueDevices.toLocaleString()} sub="approx. shoppers" />
         <Tile icon={<Activity className="size-4" />} label="Last 7 days" value={summary.last7Days.toLocaleString()} sub="new saves" />
       </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="text-sm font-semibold inline-flex items-center gap-2">
+              <BarChart3 className="size-4 text-muted-foreground" />
+              Saves — last {trendDays} days
+            </h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">
+              {trend.reduce((a, b) => a + b.count, 0).toLocaleString()}
+            </Badge>
+          </div>
+          <DailyTrendChart
+            buckets={trend}
+            accentClass="bg-violet-500"
+            emptyLabel={`No saves recorded in the last ${trendDays} days yet.`}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-5 space-y-5">

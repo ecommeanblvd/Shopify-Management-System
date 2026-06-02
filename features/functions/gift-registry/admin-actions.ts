@@ -140,6 +140,49 @@ export async function listRegistriesForStore(
   }));
 }
 
+export interface GiftRegistryEventBucket {
+  eventType: 'registry_created' | 'item_added' | 'reservation_made' | 'reservation_cancelled';
+  count: number;
+}
+
+/** Synthesises an event-type breakdown for the last N days from the
+ *  three tables — there's no dedicated events log for gift-registry,
+ *  so we run one count per source and stitch them together. The
+ *  output keeps every bucket (even zero-count ones) so the chart
+ *  legend stays stable. */
+export async function getGiftRegistryEventBreakdown(
+  storeId: string, days = 7,
+): Promise<GiftRegistryEventBucket[]> {
+  const rows = await db.execute<{
+    registries_created: string; items_added: string;
+    reservations_made: string; reservations_cancelled: string;
+  }>(sql`
+    WITH r AS (SELECT id FROM gift_registries WHERE store_id = ${storeId})
+    SELECT
+      (SELECT COUNT(*) FROM gift_registries
+        WHERE store_id = ${storeId}
+          AND created_at > NOW() - (${days}::int * INTERVAL '1 day'))::text AS registries_created,
+      (SELECT COUNT(*) FROM gift_registry_items
+        WHERE registry_id IN (SELECT id FROM r)
+          AND added_at > NOW() - (${days}::int * INTERVAL '1 day'))::text AS items_added,
+      (SELECT COUNT(*) FROM gift_registry_reservations
+        WHERE registry_id IN (SELECT id FROM r)
+          AND created_at > NOW() - (${days}::int * INTERVAL '1 day')
+          AND status <> 'cancelled')::text AS reservations_made,
+      (SELECT COUNT(*) FROM gift_registry_reservations
+        WHERE registry_id IN (SELECT id FROM r)
+          AND updated_at > NOW() - (${days}::int * INTERVAL '1 day')
+          AND status = 'cancelled')::text AS reservations_cancelled;
+  `);
+  const r = rows.rows[0];
+  return [
+    { eventType: 'registry_created', count: Number(r?.registries_created ?? '0') },
+    { eventType: 'item_added', count: Number(r?.items_added ?? '0') },
+    { eventType: 'reservation_made', count: Number(r?.reservations_made ?? '0') },
+    { eventType: 'reservation_cancelled', count: Number(r?.reservations_cancelled ?? '0') },
+  ];
+}
+
 // Re-exports kept available for future cron jobs.
 void and;
 void eq;
