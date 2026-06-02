@@ -749,6 +749,35 @@ export const wishlistEvents = pgTable('wishlist_events', {
 ]);
 
 // ─────────────────────────────────────────────────────────────────────
+// Audit log for every operator action on a function. Each row records
+// who changed what at which store, plus an opaque payload describing
+// the change (e.g. { from: false, to: true } for a toggle, or the
+// config diff for a settings update). Append-only; never delete.
+// ─────────────────────────────────────────────────────────────────────
+export const functionAuditLog = pgTable('function_audit_log', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  functionKey: text('function_key').notNull(),
+  /** Optional — some future actions (e.g. global config) won't be
+   *  scoped to a single store. Toggle + per-store-config actions
+   *  populate it. */
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
+  /** Short verb: 'toggle' | 'config_update' | future 'delete_item' / 'cron_run' / etc.
+   *  Free-text so new actions don't need a migration. */
+  action: text('action').notNull(),
+  /** Operator who triggered the action. Nullable so a future cron run
+   *  (no session) can still log. */
+  actorUserId: text('actor_user_id').references(() => user.id, { onDelete: 'set null' }),
+  /** Shape depends on action. For toggles: { from: boolean, to: boolean }.
+   *  For config updates: { before: {...}, after: {...} }. */
+  payload: jsonb('payload'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('function_audit_function_idx').on(t.functionKey, t.createdAt),
+  index('function_audit_store_idx').on(t.storeId, t.createdAt),
+  index('function_audit_actor_idx').on(t.actorUserId, t.createdAt),
+]);
+
+// ─────────────────────────────────────────────────────────────────────
 // Save-for-later — fourth function in the storefront registry. Lives
 // inside the cart context: shoppers move items from the cart to a
 // "saved" list (so they don't lose them) and back. Distinct from

@@ -176,6 +176,13 @@
       "when": 1780371019320,
       "tag": "0024_save_for_later",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1780402211506,
+      "tag": "0025_function_audit_log",
+      "breakpoints": true
     }
   ]
 }

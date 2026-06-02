@@ -7,6 +7,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { logFunctionAudit } from '../audit-log';
 
 export interface GiftRegistryStoreStatus {
   storeId: string;
@@ -47,6 +48,13 @@ export async function setGiftRegistryEnabled(
   if (!role || !hasPermission(role, 'manage_functions')) {
     throw new Error('forbidden');
   }
+  const [prev] = await db
+    .select({ enabled: schema.storeFunctionSettings.enabled })
+    .from(schema.storeFunctionSettings)
+    .where(and(
+      eq(schema.storeFunctionSettings.storeId, storeId),
+      eq(schema.storeFunctionSettings.functionKey, 'gift-registry'),
+    ));
   await db
     .insert(schema.storeFunctionSettings)
     .values({
@@ -59,6 +67,13 @@ export async function setGiftRegistryEnabled(
       target: [schema.storeFunctionSettings.storeId, schema.storeFunctionSettings.functionKey],
       set: { enabled, updatedBy: session.user.id, updatedAt: new Date() },
     });
+  await logFunctionAudit({
+    functionKey: 'gift-registry',
+    storeId,
+    actorUserId: session.user.id,
+    action: 'toggle',
+    payload: { from: prev?.enabled ?? false, to: enabled },
+  });
   revalidatePath('/f/functions/gift-registry');
   revalidatePath('/f/functions');
 }
