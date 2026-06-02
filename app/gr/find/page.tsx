@@ -2,11 +2,16 @@ import { notFound } from 'next/navigation';
 import { Gift } from 'lucide-react';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { GiftRegistryCreateForm } from '@/components/functions/GiftRegistryCreateForm';
+import { GiftRegistryRecoveryForm } from '@/components/functions/GiftRegistryRecoveryForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CreateGiftRegistryPage({
+export const metadata = {
+  title: 'Find your gift registry',
+  robots: { index: false, follow: false },
+};
+
+export default async function FindGiftRegistryPage({
   searchParams,
 }: {
   searchParams: Promise<{ shop?: string }>;
@@ -39,22 +44,14 @@ export default async function CreateGiftRegistryPage({
             {store.name}
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-            Start your registry
+            Find your registry
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            One short form. We&rsquo;ll hand you a share link to send to friends.
+            Enter the email you used when creating the registry. We&rsquo;ll
+            list every registry you own at {store.name}.
           </p>
         </header>
-        <GiftRegistryCreateForm shopDomain={store.shopDomain} />
-        <p className="mt-8 text-center text-xs text-neutral-500">
-          Lost the link to a registry you already created?{' '}
-          <a
-            href={`/gr/find?shop=${encodeURIComponent(store.shopDomain)}`}
-            className="underline hover:text-neutral-700"
-          >
-            Recover by email
-          </a>
-        </p>
+        <GiftRegistryRecoveryForm shopDomain={store.shopDomain} />
       </div>
     </main>
   );
