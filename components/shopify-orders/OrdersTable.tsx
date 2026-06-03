@@ -784,12 +784,24 @@ function ShippingCostBreakdown({
     { label: 'Per-kg surcharge', value: breakdown.perKg },
     { label: 'Demand surcharge', value: breakdown.demand },
     { label: 'Country handling fee', value: breakdown.countryFixed },
+    { label: 'Stepped surcharge (GoGreen)', value: breakdown.perStep },
     { label: 'Fuel surcharge', value: breakdown.fuel },
+    {
+      // Negotiated volume discount (FedEx Total Discount). Engine emits
+      // `discount` as a POSITIVE number; render with a leading minus so
+      // it reads as a deduction in the table.
+      label: breakdown.discountPercent > 0
+        ? `Volume discount (${breakdown.discountPercent.toFixed(1)}%)`
+        : 'Volume discount',
+      value: -breakdown.discount,
+    },
     {
       label: breakdown.vatPercent > 0 ? `VAT (${breakdown.vatPercent}%)` : 'VAT',
       value: breakdown.vat,
     },
   ];
+  // Keep zero-amount rows hidden, but ALWAYS show a non-zero discount even
+  // though it's negative — `l.value !== 0` covers both signs.
   const visibleLegs = legs.filter((l) => l.value !== 0);
 
   return (

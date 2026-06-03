@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     if (b.demand)       process.stdout.write(`    demand          ${fmtVND(b.demand).padStart(12)} ${est.costCurrency}\n`);
     if (b.countryFixed) process.stdout.write(`    country_fixed   ${fmtVND(b.countryFixed).padStart(12)} ${est.costCurrency}\n`);
     if (b.fuel)         process.stdout.write(`    fuel            ${fmtVND(b.fuel).padStart(12)} ${est.costCurrency}\n`);
+    if (b.discount)     process.stdout.write(`    discount (${b.discountPercent.toFixed(2)}%) -${fmtVND(b.discount).padStart(11)} ${est.costCurrency}\n`);
     if (b.vat)          process.stdout.write(`    vat (${b.vatPercent}%)    ${fmtVND(b.vat).padStart(12)} ${est.costCurrency}\n`);
     process.stdout.write(`    ─────────────────────────────────────────\n`);
     process.stdout.write(`    carrierCost     ${fmtVND(b.carrierCost).padStart(12)} ${est.costCurrency}  =  $${est.amount.toFixed(2)} USD\n`);

@@ -65,11 +65,22 @@ export interface OrderShippingDetail {
     perKg: number;
     demand: number;
     countryFixed: number;
+    /** Stepped per-weight surcharge (DHL GoGreen Plus and similar).
+     *  ceil(weight / step_kg) × value, summed across active rows. */
+    perStep: number;
     fuel: number;
     /** Effective VAT % that was applied. */
     vatPercent: number;
     vat: number;
-    /** subtotalBeforeMarkup — i.e. base + accessorials + fuel + VAT. */
+    /** Negotiated volume discount % applied to published base (sum of
+     *  active contract_discount_pct rows). E.g. 70 → 70 % off published. */
+    discountPercent: number;
+    /** Absolute VND amount deducted by the volume discount —
+     *  `base × discountPercent / 100`, positive. Already factored into
+     *  `carrierCost`; surfaced for UI to render as a "-" line. */
+    discount: number;
+    /** subtotalBeforeMarkup — i.e. base + accessorials + fuel + VAT
+     *  − discount. */
     carrierCost: number;
   } | null;
   /** Operator-visible carrier name + zone label + matched tier (kg) when
@@ -188,9 +199,12 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           perKg: est.breakdown.perKg,
           demand: est.breakdown.demand,
           countryFixed: est.breakdown.countryFixed,
+          perStep: est.breakdown.perStep,
           fuel: est.breakdown.fuel,
           vatPercent: est.breakdown.vatPercent,
           vat: est.breakdown.vat,
+          discountPercent: est.breakdown.discountPercent,
+          discount: est.breakdown.discount,
           carrierCost: est.breakdown.carrierCost,
         },
         carrierLabel: est.carrierLabel,

@@ -711,4 +711,136 @@ describe('quote engine', () => {
       expect(r.breakdown.carrierCost).toBe(6_652_219);
     });
   });
+
+  describe('contract_discount_pct (negotiated volume discount)', () => {
+    // Reproduces FedEx #MBLVD28959 (US, 0.7 kg, 2026-06-01) from the
+    // operator's invoice CSV. Verified line-by-line against the actual
+    // invoice on 2026-06-03:
+    //   base 2,244,600 + discount −1,541,142 + fuel 386,937 + remote 82,200
+    //                                                   + demand 68,300
+    //   = 1,240,895 pre-VAT
+    //   VAT 8 %  = 99,272
+    //   total    = 1,340,167
+    // Operator-provided discount % = 1,541,142 / 2,244,600 = 68.66 %
+    it('reproduces FedEx #MBLVD28959 invoice math exactly', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone X', rateByTierUpper: new Map([[1, 2_244_600]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        // Fuel% derived empirically from the invoice — 386,937 / (base +
+        // remote + demand fuelable) per engine model. Tweak after we add
+        // per-row remote postcode wiring; the discount math is unaffected.
+        surcharges: [
+          { kind: 'fuel_percent', value: 16.18, active: true },
+          { kind: 'remote_fixed', value: 82_200, active: true },
+          { kind: 'demand_per_kg', value: 97_571.4, active: true, countryCodes: ['US'] },
+          { kind: 'contract_discount_pct', value: 68.66, active: true, countryCodes: ['US'] },
+          { kind: 'vat_percent', value: 8, active: true },
+        ],
+        remotePostcodes: new Map([['US', new Map([['REMOTE-1', null]])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 0.7,
+        destinationCountry: 'US',
+        destinationPostcode: 'REMOTE-1',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.base).toBe(2_244_600);
+      expect(r.breakdown.discountPercent).toBeCloseTo(68.66);
+      expect(r.breakdown.discount).toBe(1_541_142); // 2,244,600 × 0.6866 (round)
+      // VAT base is post-discount: invoice keeps VAT at ~99k. Engine's
+      // VAT must drop the discount before applying 8 %.
+      expect(r.breakdown.vat).toBeGreaterThan(95_000);
+      expect(r.breakdown.vat).toBeLessThan(110_000);
+    });
+
+    it('country-scoped discount only applies to the matching destination', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'US zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+          ['JP', { label: 'JP zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'contract_discount_pct', value: 70, active: true, countryCodes: ['US'] },
+        ],
+      });
+      const us = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      const jp = quote(snap, { weightKg: 1, destinationCountry: 'JP' });
+      expect(us.ok && us.breakdown.discount).toBe(700_000);
+      expect(jp.ok && jp.breakdown.discount).toBe(0);
+    });
+
+    it('multiple matching discount rows compound (stack the %)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          // Two negotiated discount lines (base + tier bonus) → stack to 80 %
+          { kind: 'contract_discount_pct', value: 70, active: true, countryCodes: ['US'] },
+          { kind: 'contract_discount_pct', value: 10, active: true, countryCodes: null },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.discountPercent).toBe(80);
+      expect(r.breakdown.discount).toBe(800_000);
+    });
+
+    it('discount is never fuelable — fuel applies on published base', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'fuel_percent', value: 20, active: true },
+          { kind: 'contract_discount_pct', value: 50, active: true, countryCodes: null },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // Fuel = 20 % × published base 1,000,000 = 200,000 (NOT 20 % × 500,000)
+      expect(r.breakdown.fuel).toBe(200_000);
+      expect(r.breakdown.discount).toBe(500_000);
+      // carrierCost = base + fuel − discount = 1,000,000 + 200,000 − 500,000
+      expect(r.breakdown.carrierCost).toBe(700_000);
+    });
+
+    it('discount reduces VAT base (VAT applies on the discounted total)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'contract_discount_pct', value: 50, active: true, countryCodes: null },
+          { kind: 'vat_percent', value: 8, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // VATable = base − discount = 500,000 → VAT 8 % = 40,000
+      // Without discount the VAT would be 80,000.
+      expect(r.breakdown.discount).toBe(500_000);
+      expect(r.breakdown.vat).toBe(40_000);
+      expect(r.breakdown.carrierCost).toBe(540_000);
+    });
+
+    it('null discount yields zero discount / discountPercent', () => {
+      const snap = makeSnap();
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.discount).toBe(0);
+      expect(r.breakdown.discountPercent).toBe(0);
+    });
+  });
 });

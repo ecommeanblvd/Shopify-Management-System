@@ -12,7 +12,8 @@ export type SurchargeKind =
   | 'demand_per_kg'
   | 'country_fixed'
   | 'vat_percent'
-  | 'per_step_fixed';
+  | 'per_step_fixed'
+  | 'contract_discount_pct';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -157,8 +158,23 @@ export interface QuoteBreakdown {
    * "VAT (8 %)" without re-querying the snapshot.
    */
   vatPercent: number;
-  /** VAT amount: (base + surcharges + fuel) × vatPercent / 100. */
+  /** VAT amount: (base + surcharges + fuel − discount) × vatPercent / 100. */
   vat: number;
+  /**
+   * Sum of contract_discount_pct rows that matched the destination,
+   * expressed as a PERCENTAGE (e.g. 70 means 70 % off base). Surfaced so
+   * the modal can label the line "Volume discount (70 %)" without
+   * re-querying the snapshot. Zero when no discount applies.
+   */
+  discountPercent: number;
+  /**
+   * VND amount deducted from the published base via the contract volume
+   * discount: `base × discountPercent / 100`. Already factored into
+   * `vatable` / `vat` / `carrierCost` — surfaced as a positive number on
+   * the breakdown so the modal can render it as a separate line with a
+   * "−" sign.
+   */
+  discount: number;
   markup: number;
   subtotalBeforeMarkup: number;
   /** What we pay the carrier (subtotalBeforeMarkup), in cost currency. */
@@ -250,6 +266,12 @@ function isFuelable(s: SurchargeSnap): boolean {
     case 'fuel_percent':
     case 'markup_percent':
     case 'vat_percent':
+    // Discount is NEVER fuelable — fuel% is published by the carrier on
+    // the PUBLISHED base, not the discounted base (verified via Excel
+    // row 22: fuel/published_base ≈ 17 %; fuel/effective_base ≈ 55 %
+    // which is not a real fuel rate). Discount is its own line item
+    // that reduces the VATable subtotal, applied after fuel is added.
+    case 'contract_discount_pct':
       return false;
   }
 }
@@ -398,12 +420,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
           ? Math.ceil(input.weightKg / s.stepKg) * s.value : 0;
       // remote / residential already handled via dedicated paths above
       // (postcode match / isResidential flag). Return 0 here so they
-      // aren't double-counted.
+      // aren't double-counted. Discount handled via dedicated path below
+      // (it's a deduction, not a positive contribution).
       case 'remote_fixed':
       case 'residential_fixed':
       case 'fuel_percent':
       case 'vat_percent':
       case 'markup_percent':
+      case 'contract_discount_pct':
         return 0;
     }
   }
@@ -428,8 +452,22 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const fuelPct = sumApplicableOfKind(snap.surcharges, 'fuel_percent', effectiveDate);
   const fuel = fuelable * (fuelPct / 100);
 
-  // VAT covers the entire carrier bill regardless of fuel eligibility.
-  const vatable = fuelable + fuel + nonFuelableSurcharges;
+  // Contract volume discount applies to the PUBLISHED base only. Per-zone
+  // variation supported via `country_codes` — US-bound 68 %, SA-bound 77 %,
+  // etc. NULL country_codes = catch-all. Multiple matching rows COMPOUND
+  // (sum %), matching the carrier "stacked discount" semantics.
+  // `discountAmount` is positive; subtracted from the VATable subtotal so
+  // VAT applies on the post-discount total (verified vs invoice math
+  // on 2026-06-03 across 4 sample rows).
+  const discountPct = snap.surcharges
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'contract_discount_pct')
+    .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
+    .reduce((sum, s) => sum + s.value, 0);
+  const discount = base * (discountPct / 100);
+
+  // VAT covers the entire carrier bill regardless of fuel eligibility,
+  // minus the contract discount (so VAT is on the negotiated total).
+  const vatable = fuelable + fuel + nonFuelableSurcharges - discount;
   const vatPct = sumApplicableOfKind(snap.surcharges, 'vat_percent', effectiveDate);
   const vat = vatable * (vatPct / 100);
 
@@ -461,6 +499,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       perStep: Math.round(perStep),
       vatPercent: vatPct,
       vat: Math.round(vat),
+      discountPercent: discountPct,
+      discount: Math.round(discount),
       markup: Math.round(markup),
       subtotalBeforeMarkup: Math.round(subtotalBeforeMarkup),
       carrierCost,

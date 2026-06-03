@@ -321,6 +321,16 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // `ceil(weightKg / step_kg) × value`. Different from `per_kg_fixed`
   // (which scales linearly). Default `fuelable = false`.
   'per_step_fixed',
+  // Negotiated volume discount applied to the published base rate (FedEx
+  // "Total Discount" line on invoices). `value` is a PERCENTAGE (e.g. 70
+  // means 70 % off base). Engine computes `discountAmount = base × value
+  // / 100` and subtracts it from the VATable subtotal (so VAT applies on
+  // the discounted total, matching the invoice math we verified on
+  // 2026-06-03). Per-zone variation is supported via `country_codes`
+  // (US-bound vs SA-bound contracts often have different discount %).
+  // NEVER fuelable — fuel% is published by the carrier on the published
+  // base, not the discounted base.
+  'contract_discount_pct',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {
