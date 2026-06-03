@@ -181,6 +181,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       : order.shipWeightKg !== null ? Number(order.shipWeightKg) : null;
     const est = await resolveShippingEstimate({
       shipCountry: order.shipCountry,
+      shipPostcode: order.shipPostcode,
       shipWeightKg: effectiveWeight,
       // Reproduce the carrier's rate sheet at the moment the order
       // shipped — fuel surcharge changes weekly, so today's value would

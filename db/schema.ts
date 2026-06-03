@@ -471,6 +471,12 @@ export const shopifyOrders = pgTable('shopify_orders', {
   totalTax: numeric('total_tax', { precision: 14, scale: 2 }).notNull(),
   totalPrice: numeric('total_price', { precision: 14, scale: 2 }).notNull(),
   shipCountry: text('ship_country'),
+  // ZIP/postcode from Shopify shippingAddress.zip. Carried so the
+  // engine can match it against `carrier_remote_postcodes` and apply
+  // the right ODA tier (FedEx Out-of-Delivery-Area surcharge). NULL
+  // when Shopify didn't capture one (digital, pickup, or older orders
+  // backfilled before this column existed — re-resync to populate).
+  shipPostcode: text('ship_postcode'),
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),

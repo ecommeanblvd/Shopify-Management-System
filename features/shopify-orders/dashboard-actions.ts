@@ -228,6 +228,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
           : o.shipWeightKg !== null ? Number(o.shipWeightKg) : null;
         const est = estimator.estimate({
           shipCountry: o.shipCountry,
+          shipPostcode: o.shipPostcode,
           shipWeightKg: effectiveWeight,
           // Anchor each order to its own ship-week so fuel%
           // (time-versioned per carrier_surcharges.startsAt/endsAt)

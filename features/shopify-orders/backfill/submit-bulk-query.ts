@@ -22,7 +22,7 @@ const ORDERS_QUERY = `
       totalShippingPriceSet { shopMoney { amount currencyCode } }
       totalTaxSet { shopMoney { amount currencyCode } }
       totalPriceSet { shopMoney { amount currencyCode } }
-      shippingAddress { countryCodeV2 }
+      shippingAddress { countryCodeV2 zip }
       totalWeight
       lineItems { edges { node {
         id sku vendor title variantTitle quantity
@@ -34,7 +34,7 @@ const ORDERS_QUERY = `
         totalRefundedSet { shopMoney { amount currencyCode } }
       }
       fulfillments { trackingInfo { number company } }
-      shippingLines { title code }
+      shippingLines { edges { node { title code } } }
     } }
   }
 }`;

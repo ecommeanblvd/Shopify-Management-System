@@ -47,6 +47,7 @@ async function main(): Promise<void> {
 
     const est = await resolveShippingEstimate({
       shipCountry: o.shipCountry,
+      shipPostcode: o.shipPostcode,
       shipWeightKg: effectiveWeight,
       effectiveDate: o.processedAtShopify,
       shippingCarrierKey: o.shippingCarrierKey ?? null,

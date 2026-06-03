@@ -87,6 +87,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
+      shipPostcode: schema.shopifyOrders.shipPostcode,
       shipWeightKgOverride: schema.shopifyOrders.shipWeightKgOverride,
       processedAtShopify: schema.shopifyOrders.processedAtShopify,
       // store
@@ -156,6 +157,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       dimensions: dims,
       packagingType: r.packagingType,
       destinationCountry: r.shipCountry,
+      destinationPostcode: r.shipPostcode ?? undefined,
       effectiveDate: r.labelCreatedAt ?? r.processedAtShopify ?? undefined,
     });
 
