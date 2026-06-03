@@ -1,0 +1,1 @@
+ALTER TABLE "carrier_accounts" ADD COLUMN "chargeable_rounding_kg" numeric(6, 3);

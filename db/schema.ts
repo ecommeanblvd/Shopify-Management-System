@@ -237,6 +237,12 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   // FedEx & DHL air freight publish 5000; ground/road can be 6000.
   // NULL means "skip dim-weight entirely" (engine just uses actual).
   dimDivisorCm3PerKg: numeric('dim_divisor_cm3_per_kg', { precision: 8, scale: 2 }).default('5000'),
+  // Per-carrier rounding step applied to chargeable weight before the
+  // weight-tier lookup. NULL = use the raw computed value (DHL default —
+  // raw chargeable 2.52 kg → tier 3 kg). Set to 0.5 for FedEx which
+  // rounds to NEAREST 0.5 kg before tier lookup (chargeable 2.52 →
+  // 2.5 → tier 2.5; verified on 2026-06-03 across 15+ invoices).
+  chargeableRoundingKg: numeric('chargeable_rounding_kg', { precision: 6, scale: 3 }),
   enabled: boolean('enabled').notNull().default(true),
   notes: text('notes'),
   createdBy: text('created_by').references(() => user.id),

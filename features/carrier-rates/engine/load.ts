@@ -93,6 +93,9 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
     dimDivisorCm3PerKg: account.dimDivisorCm3PerKg !== null
       ? Number(account.dimDivisorCm3PerKg)
       : null,
+    chargeableRoundingKg: account.chargeableRoundingKg !== null
+      ? Number(account.chargeableRoundingKg)
+      : null,
     zonesByCountry,
     weightTiers: tiers.map((t) => ({ upperKg: Number(t.upperKg) })),
     surcharges: surcharges.map((s) => ({

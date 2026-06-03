@@ -958,6 +958,102 @@ describe('quote engine', () => {
     });
   });
 
+  describe('chargeableRoundingKg (per-carrier weight rounding before tier match)', () => {
+    // FedEx-specific behaviour confirmed against 15+ invoices on
+    // 2026-06-03: chargeable weight rounds to nearest 0.5 kg before
+    // the tier lookup. Without this, raw chargeable 2.52 (from dim
+    // 42×30×10 / 5000) picks tier 3.0 while the invoice charges
+    // tier 2.5.
+    it("applies FedEx 2-step rounding (nearest 0.1 then ceil 0.5)", () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        chargeableRoundingKg: 0.5,
+      });
+      // 42×30×10 = 12,600 cm³ / 5000 = 2.52 → rounded 2.5 → tier 2.5
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 42, widthCm: 30, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(2.52);
+      expect(r.breakdown.chargeableWeightKg).toBe(2.5);
+      // makeSnap fixture tiers are [0.5, 1, 2, 5]. 2.5 > 2 → next tier 5.
+      expect(r.tier.upperKg).toBe(5);
+      expect(r.breakdown.base).toBe(600_000);
+    });
+
+    it("keeps raw chargeable when chargeableRoundingKg is NULL (DHL rule)", () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 42×30×10 = 12,600 cm³ → 2.52 → engine picks first tier ≥ 2.52
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 42, widthCm: 30, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(2.52);
+      expect(r.tier.upperKg).toBe(5);
+    });
+
+    it("rounds UP correctly at .5 boundary (3.75 → 4.0, banker's rounding off)", () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        chargeableRoundingKg: 0.5,
+      });
+      // 75×50×5 cm = 18,750 cm³ / 5000 = 3.75 → rounded 4.0
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 75, widthCm: 50, heightCm: 5 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(3.75);
+      expect(r.breakdown.chargeableWeightKg).toBe(4);
+    });
+
+    it('rounds DOWN when fractional is below the half-step', () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        chargeableRoundingKg: 0.5,
+      });
+      // 50×30×6.79 cm = 10,185 cm³ → 2.037 → nearest 0.5 = 2.0
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 50, widthCm: 30, heightCm: 6.79 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(2);
+    });
+
+    it.each([
+      // Real production rows verified 2026-06-03 — every dim weight here
+      // has the FedEx 2-step rule producing the SAME tier the invoice
+      // billed at. Keeps the math airtight against future engine changes.
+      { dim_w: 2.04,  expected: 2.0 },  // MBLVD27562/27145 SA
+      { dim_w: 2.355, expected: 2.5 },  // MBLVD28124 US (32×23×16)
+      { dim_w: 2.52,  expected: 2.5 },  // MBLVD28163/27486 US/QA — most common
+      { dim_w: 3.75,  expected: 4.0 },  // MBLVD28186 US (30×25×25)
+      { dim_w: 5.0,   expected: 5.0 },  // MBLVD27424 SA (40×25×25)
+      { dim_w: 5.58,  expected: 6.0 },  // MBLVD28136 US (47×33×18)
+    ])('FedEx invoice math: dim $dim_w → tier $expected', ({ dim_w, expected }) => {
+      const snap = makeSnap({
+        // Disable dim divisor — drive chargeable purely from actual to
+        // isolate the rounding logic from dim-derivation.
+        chargeableRoundingKg: 0.5,
+      });
+      const r = quote(snap, { weightKg: dim_w, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(expected);
+    });
+  });
+
   describe('demand_per_kg default fuelable=false (FedEx invoice 2026-06-03)', () => {
     // The operator's LOG-Export Excel verified that FedEx Demand
     // Surcharge sits OUTSIDE the fuel base — proof via #MBLVD28959:
