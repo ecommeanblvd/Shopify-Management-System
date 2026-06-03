@@ -231,6 +231,12 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   // For VND cost / USD display, value is e.g. 26000 (1 USD = 26 000 VND).
   fxCostPerDisplay: numeric('fx_cost_per_display', { precision: 14, scale: 4 }).notNull(),
   fxUpdatedAt: timestamp('fx_updated_at').defaultNow().notNull(),
+  // Volumetric divisor in cm³/kg for chargeable-weight calc:
+  //   dimWeightKg = L_cm × W_cm × H_cm / dimDivisorCm3PerKg
+  //   chargeableKg = max(actualKg, dimWeightKg)
+  // FedEx & DHL air freight publish 5000; ground/road can be 6000.
+  // NULL means "skip dim-weight entirely" (engine just uses actual).
+  dimDivisorCm3PerKg: numeric('dim_divisor_cm3_per_kg', { precision: 8, scale: 2 }).default('5000'),
   enabled: boolean('enabled').notNull().default(true),
   notes: text('notes'),
   createdBy: text('created_by').references(() => user.id),
@@ -554,6 +560,58 @@ export const shippingInvoices = pgTable('shipping_invoices', {
 }, (t) => [
   uniqueIndex('shipping_invoices_store_tracking_idx').on(t.storeId, t.trackingNumber),
   index('shipping_invoices_carrier_period_idx').on(t.carrierAccountId, t.invoicePeriodStart),
+]);
+
+// Packaging discriminator — drives which rate-matrix the engine reads
+// (BAG → Pak rate, BOX → Package rate). Excel cột AA `Select VTĐG1` parses
+// to this: presence of "BAG"/"PAK" → bag, "BOX" → box, else null.
+export const packagingTypeEnum = pgEnum('packaging_type', ['bag', 'box']);
+
+/**
+ * One physical pack per row — what actually leaves the warehouse with
+ * a label. A Shopify order can map to N shipments (multi-pack orders
+ * split across labels), each with its own tracking, weight, dimensions,
+ * packaging type and ship date.
+ *
+ * Mirrors the operator's "LOG - Export" Excel sheet where 1 row = 1 pack.
+ * Populated by the Excel importer (Phase 2); the order-modal Quote and
+ * dashboard estimators can also create a virtual single shipment when no
+ * row exists yet so the engine still has dim/packaging input.
+ */
+export const shipments = pgTable('shipments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  /** Per-pack tracking number. NULL while label not yet generated. */
+  trackingNumber: text('tracking_number'),
+  /** Carrier the pack ships under ('fedex' | 'dhl' | …). Defaults via
+   *  the order's `shippingCarrierKey` when NULL — same FedEx-default
+   *  policy. Operator can override per pack when ops switches carrier. */
+  carrierKey: text('carrier_key'),
+  /** Physical dimensions in cm. All three required to compute dim weight. */
+  dimLengthCm: numeric('dim_length_cm', { precision: 8, scale: 2 }),
+  dimWidthCm: numeric('dim_width_cm', { precision: 8, scale: 2 }),
+  dimHeightCm: numeric('dim_height_cm', { precision: 8, scale: 2 }),
+  /** Scale weight in kg. Engine charges `max(actual, dim)`. */
+  actualWeightKg: numeric('actual_weight_kg', { precision: 10, scale: 3 }),
+  /** BAG → Pak rate, BOX → Package rate. NULL = unknown → engine falls
+   *  back to weight-based pick (Pak under 2 kg per existing rule). */
+  packagingType: packagingTypeEnum('packaging_type'),
+  /** Label creation timestamp ≈ ship date. Anchor for fuel-week lookup. */
+  labelCreatedAt: timestamp('label_created_at'),
+  /** Operator-side internal pack code (Excel col AS `Log Unique code`,
+   *  e.g. PK-19379). Useful for cross-referencing the ops sheet. */
+  logUniqueCode: text('log_unique_code'),
+  /** Origin hub Excel col F (`SG` / `HN`). Free-text — not yet modelled
+   *  in the carrier engine but useful for ops reports. */
+  originHub: text('origin_hub'),
+  /** Free-text note for one-off context. */
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('shipments_tracking_idx').on(t.trackingNumber),
+  index('shipments_order_idx').on(t.orderId),
+  index('shipments_log_unique_code_idx').on(t.logUniqueCode),
 ]);
 
 export const shopifySyncState = pgTable('shopify_sync_state', {

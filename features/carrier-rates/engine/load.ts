@@ -88,6 +88,11 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
     costCurrency: account.costCurrency,
     displayCurrency: account.displayCurrency,
     fxCostPerDisplay: Number(account.fxCostPerDisplay),
+    // NULL → skip dim-weight entirely (engine charges actual). Default
+    // 5000 cm³/kg (FedEx/DHL Air standard) set at the column level.
+    dimDivisorCm3PerKg: account.dimDivisorCm3PerKg !== null
+      ? Number(account.dimDivisorCm3PerKg)
+      : null,
     zonesByCountry,
     weightTiers: tiers.map((t) => ({ upperKg: Number(t.upperKg) })),
     surcharges: surcharges.map((s) => ({

@@ -822,6 +822,20 @@ function ShippingCostBreakdown({
                 Tier <span className="font-mono">≤ {tierUpperKg} kg</span>
               </>
             )}
+            {/* Surface dim-weight when it overrides actual — operator
+                needs to know the rate matrix was picked off the dim,
+                not scale. Hidden when actual = chargeable. */}
+            {breakdown.dimWeightKg > 0 && breakdown.dimWeightKg > breakdown.actualWeightKg && (
+              <>
+                {' · '}
+                Charged at{' '}
+                <span className="font-mono">{breakdown.chargeableWeightKg.toFixed(2)} kg</span>{' '}
+                <span className="text-[10px] uppercase tracking-wider">dim</span>{' '}
+                <span className="text-muted-foreground/70">
+                  (actual {breakdown.actualWeightKg.toFixed(2)} kg)
+                </span>
+              </>
+            )}
           </span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {currency}

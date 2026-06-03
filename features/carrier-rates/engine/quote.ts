@@ -93,6 +93,14 @@ export interface CarrierAccountSnapshot {
   displayCurrency: string;
   /** How many cost-currency units equal one display-currency unit. */
   fxCostPerDisplay: number;
+  /**
+   * Volumetric divisor in cm³/kg for chargeable-weight calc:
+   *   dimWeightKg = L_cm × W_cm × H_cm / dimDivisorCm3PerKg
+   *   chargeableKg = max(actualKg, dimWeightKg)
+   * FedEx/DHL Air = 5000 (default). NULL = skip dim-weight; engine
+   * charges actual weight regardless of dimensions.
+   */
+  dimDivisorCm3PerKg?: number | null;
   /** ISO-2 country code → zone snapshot. */
   zonesByCountry: Map<string, ZoneSnap>;
   /** Tiers sorted ascending by upperKg. */
@@ -108,7 +116,21 @@ export interface CarrierAccountSnapshot {
 }
 
 export interface QuoteInput {
+  /**
+   * Scale (actual) weight of the shipment in kg. The engine charges
+   * `max(weightKg, dimWeightKg)` when dimensions are provided AND the
+   * snapshot has a `dimDivisorCm3PerKg` — otherwise it charges
+   * `weightKg` directly. NEVER pass the dim weight pre-computed; let
+   * the engine derive it so the breakdown reports both numbers.
+   */
   weightKg: number;
+  /**
+   * Pack dimensions in cm. All three must be set for dim-weight to
+   * fire. If any is missing the engine quietly falls back to
+   * `weightKg`. The operator's Excel cột AC stores these as
+   * "L×W×H" — split before passing in.
+   */
+  dimensions?: { lengthCm: number; widthCm: number; heightCm: number } | null;
   destinationCountry: string;
   destinationPostcode?: string;
   isResidential?: boolean;
@@ -126,6 +148,21 @@ export interface QuoteInput {
 }
 
 export interface QuoteBreakdown {
+  /**
+   * Scale weight the operator passed in (kg). Surfaced so the modal can
+   * render "Actual 0.6 kg" alongside dim weight when they diverge.
+   */
+  actualWeightKg: number;
+  /**
+   * Dimensional weight derived from `dimensions × dimDivisor` (kg). Zero
+   * when no dimensions / no divisor. Rounded to 3 dp for display.
+   */
+  dimWeightKg: number;
+  /**
+   * What the engine actually billed against: `max(actual, dim)`. Equal
+   * to `actualWeightKg` when no dim provided.
+   */
+  chargeableWeightKg: number;
   base: number;
   fuel: number;
   peak: number;
@@ -320,8 +357,29 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   }
 
   const notes: string[] = [];
-  // Find first tier whose upperKg ≥ weight. If none, use the last tier and warn.
-  let tierIndex = snap.weightTiers.findIndex((t) => t.upperKg >= input.weightKg);
+
+  // Dimensional weight — chargeableWeight = max(actual, L×W×H/divisor).
+  // Falls back to actual weight when dimensions or divisor missing.
+  // 3-dp rounding matches operator's standard report precision.
+  let dimWeightKg = 0;
+  if (
+    input.dimensions &&
+    snap.dimDivisorCm3PerKg &&
+    snap.dimDivisorCm3PerKg > 0 &&
+    input.dimensions.lengthCm > 0 &&
+    input.dimensions.widthCm > 0 &&
+    input.dimensions.heightCm > 0
+  ) {
+    const volume = input.dimensions.lengthCm * input.dimensions.widthCm * input.dimensions.heightCm;
+    dimWeightKg = Math.round((volume / snap.dimDivisorCm3PerKg) * 1000) / 1000;
+  }
+  const chargeableWeightKg = Math.max(input.weightKg, dimWeightKg);
+  if (dimWeightKg > input.weightKg) notes.push(`dim_weight (${dimWeightKg} kg)`);
+
+  // Find first tier whose upperKg ≥ chargeable weight. If none, use the
+  // last tier and warn. Chargeable weight drives EVERY rate/surcharge
+  // calc below — fuel%/per-kg/per-step all apply on it.
+  let tierIndex = snap.weightTiers.findIndex((t) => t.upperKg >= chargeableWeightKg);
   if (tierIndex === -1) {
     tierIndex = snap.weightTiers.length - 1;
     notes.push(`weight_exceeds_top_tier (${snap.weightTiers[tierIndex].upperKg} kg)`);
@@ -333,7 +391,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // a Package (box). Pak rates are sparse — only published for the low
   // tiers — so we fall back to Package when no Pak rate exists at the
   // matched tier.
-  const usePak = input.weightKg < 2;
+  const usePak = chargeableWeightKg < 2;
   const pakBase = usePak ? zone.pakRateByTierUpper?.get(tier.upperKg) : undefined;
   const base = pakBase ?? zone.rateByTierUpper.get(tier.upperKg);
   if (base === undefined) {
@@ -353,7 +411,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const peak = sumApplicableOfKind(snap.surcharges, 'peak_fixed', effectiveDate);
 
   const perKgUnit = sumApplicableOfKind(snap.surcharges, 'per_kg_fixed', effectiveDate);
-  const perKg = perKgUnit * input.weightKg;
+  const perKg = perKgUnit * chargeableWeightKg;
 
   // FedEx Demand Surcharge: per-kg rate applied when the destination country
   // is in the row's country_codes list. NULL country_codes means catch-all.
@@ -363,7 +421,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'demand_per_kg')
     .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
     .reduce((sum, s) => sum + s.value, 0);
-  const demand = demandUnit * input.weightKg;
+  const demand = demandUnit * chargeableWeightKg;
 
   // Country-scoped FLAT per-shipment fee. Sum every applicable country_fixed
   // row whose country_codes list contains the destination (or is NULL =
@@ -379,7 +437,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     const matchedTier = patterns?.get(input.destinationPostcode.trim());
     if (matchedTier !== undefined) {
       // matchedTier may be null (no tier) or a label like 'Tier A'.
-      remote = sumRemoteFixed(snap.surcharges, matchedTier, input.weightKg, effectiveDate);
+      remote = sumRemoteFixed(snap.surcharges, matchedTier, chargeableWeightKg, effectiveDate);
       if (matchedTier) notes.push(`remote_match (${matchedTier})`);
       else notes.push('remote_match');
     }
@@ -396,7 +454,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const perStep = snap.surcharges
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'per_step_fixed')
     .filter((s) => s.stepKg && s.stepKg > 0)
-    .reduce((sum, s) => sum + Math.ceil(input.weightKg / s.stepKg!) * s.value, 0);
+    .reduce((sum, s) => sum + Math.ceil(chargeableWeightKg / s.stepKg!) * s.value, 0);
 
   // Per-row fuelable check: helper computes the row's contributed amount
   // to the carrier bill, given its kind + the current quote inputs.
@@ -408,16 +466,16 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       case 'peak_fixed':
         return s.value;
       case 'per_kg_fixed':
-        return s.value * input.weightKg;
+        return s.value * chargeableWeightKg;
       case 'demand_per_kg':
         return (!s.countryCodes || s.countryCodes.includes(country))
-          ? s.value * input.weightKg : 0;
+          ? s.value * chargeableWeightKg : 0;
       case 'country_fixed':
         return (!s.countryCodes || s.countryCodes.includes(country))
           ? s.value : 0;
       case 'per_step_fixed':
         return (s.stepKg && s.stepKg > 0)
-          ? Math.ceil(input.weightKg / s.stepKg) * s.value : 0;
+          ? Math.ceil(chargeableWeightKg / s.stepKg) * s.value : 0;
       // remote / residential already handled via dedicated paths above
       // (postcode match / isResidential flag). Return 0 here so they
       // aren't double-counted. Discount handled via dedicated path below
@@ -488,6 +546,9 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     zone: zone.label,
     tier: { upperKg: tier.upperKg, index: tierIndex },
     breakdown: {
+      actualWeightKg: input.weightKg,
+      dimWeightKg,
+      chargeableWeightKg,
       base: Math.round(base),
       fuel: Math.round(fuel),
       peak: Math.round(peak),

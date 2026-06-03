@@ -58,6 +58,13 @@ export interface OrderShippingDetail {
    *  currency. Present only when `defaultSource === 'engine_estimate'`.
    *  Modal renders it as a labelled cost table. */
   defaultBreakdown: {
+    /** Actual scale weight (kg) the engine was given. */
+    actualWeightKg: number;
+    /** Dim weight (kg) derived from L×W×H/divisor. Zero when dim not
+     *  provided or carrier has no `dimDivisorCm3PerKg`. */
+    dimWeightKg: number;
+    /** What was billed: max(actual, dim). Equals actual when no dim. */
+    chargeableWeightKg: number;
     base: number;
     peak: number;
     remote: number;
@@ -192,6 +199,9 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         source: 'engine_estimate',
         reason: null,
         breakdown: {
+          actualWeightKg: est.breakdown.actualWeightKg,
+          dimWeightKg: est.breakdown.dimWeightKg,
+          chargeableWeightKg: est.breakdown.chargeableWeightKg,
           base: est.breakdown.base,
           peak: est.breakdown.peak,
           remote: est.breakdown.remote,

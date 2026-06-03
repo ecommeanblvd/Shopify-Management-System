@@ -843,4 +843,115 @@ describe('quote engine', () => {
       expect(r.breakdown.discountPercent).toBe(0);
     });
   });
+
+  describe('dimensional weight (chargeable = max(actual, dim))', () => {
+    it('charges actual when dim is lower', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 30×20×10 = 6000 cm³ → 1.2 kg dim. Actual 2 kg wins.
+      const r = quote(snap, {
+        weightKg: 2,
+        dimensions: { lengthCm: 30, widthCm: 20, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.actualWeightKg).toBe(2);
+      expect(r.breakdown.dimWeightKg).toBe(1.2);
+      expect(r.breakdown.chargeableWeightKg).toBe(2);
+      expect(r.tier.upperKg).toBe(2);
+    });
+
+    it('charges dim when dim is higher (light bulky pack)', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 40×31×2 cm = 2480 cm³ → 0.496 kg dim. Actual 0.3 kg loses.
+      // But operator typically rounds UP: invoice charges next tier.
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 40, widthCm: 31, heightCm: 2 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.actualWeightKg).toBe(0.3);
+      expect(r.breakdown.dimWeightKg).toBe(0.496);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.496);
+      // Engine picks the 0.5 tier (200_000) because dim < 0.5 ≤ 0.5
+      expect(r.tier.upperKg).toBe(0.5);
+      expect(r.breakdown.base).toBe(200_000);
+    });
+
+    it('omits dim-weight when divisor is missing', () => {
+      const snap = makeSnap(); // no dimDivisorCm3PerKg
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 100, widthCm: 100, heightCm: 100 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.3);
+    });
+
+    it('omits dim-weight when any side is missing or zero', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 40, widthCm: 0, heightCm: 2 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.3);
+    });
+
+    it('per_kg and per_step surcharges scale with chargeable weight, not actual', () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        surcharges: [
+          { kind: 'per_kg_fixed', value: 10_000, active: true },
+          // 1900 × ceil(weight / 0.5) — GoGreen step
+          { kind: 'per_step_fixed', value: 1_900, active: true, stepKg: 0.5 },
+        ],
+      });
+      // 40×40×10 = 16_000 cm³ → 3.2 kg dim. Actual 1 kg.
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 40, widthCm: 40, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(3.2);
+      expect(r.breakdown.perKg).toBe(32_000);   // 10k × 3.2 chargeable
+      expect(r.breakdown.perStep).toBe(13_300); // 1900 × ceil(3.2/0.5)=7
+    });
+
+    it('dim weight pushes the rate matrix to a higher tier', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 50×30×15 = 22_500 cm³ → 4.5 kg dim. Actual 1 kg.
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 50, widthCm: 30, heightCm: 15 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // 4.5 kg lands in the ≤ 5 tier (600_000), not the ≤ 1 tier (280_000).
+      expect(r.breakdown.chargeableWeightKg).toBe(4.5);
+      expect(r.tier.upperKg).toBe(5);
+      expect(r.breakdown.base).toBe(600_000);
+    });
+
+    it('breakdown surfaces zero dim/actual=chargeable when no dimensions', () => {
+      const snap = makeSnap();
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.actualWeightKg).toBe(1);
+      expect(r.breakdown.chargeableWeightKg).toBe(1);
+    });
+  });
 });
