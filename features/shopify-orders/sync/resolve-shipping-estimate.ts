@@ -3,19 +3,15 @@
  * Single-order variant used by the order-edit modal — for the dashboard's
  * many-orders path, see `batch-shipping-estimator.ts`.
  *
- * Strategy:
- *   1. Find every market whose `countries` JSONB array contains the order's
- *      ship-to country, then the carrier accounts linked to those markets.
- *      Cheapest successful quote across those carriers wins (the "primary"
- *      path — explicit operator intent).
- *   2. If nothing's linked, fall back to ANY enabled carrier account whose
- *      zones cover the country. The operator has confirmed all their
- *      carrier accounts are FedEx rate sheets, so this lets orders price
- *      against existing rates even when `market_carrier_links` isn't yet
- *      populated for every country. Emits `fallback: true` so the UI can
- *      flag implicit-FedEx pricing.
- *   3. If nothing on the fallback either, return `unknown` with the most
- *      specific reason the diagnostic can surface.
+ * Strategy (per operator spec, 2026-06-03):
+ *   - Quote against the carrier the customer actually paid Shopify shipping
+ *     for (`shopify_orders.shipping_carrier_key`, parsed from the order's
+ *     shipping lines).
+ *   - When the order has no detectable shipping line (Shopify dropped it,
+ *     free fulfilment, manual pickup, etc.) default to FedEx and emit
+ *     `fallback: true` so the UI can flag implicit attribution.
+ *   - NEVER auto-pick the cheapest carrier — that mis-attributes cost
+ *     when the actual ship-line was the more expensive one.
  *
  * The carrier-engine's `carrierCostDisplay` is in the carrier account's
  * `displayCurrency` (typically the store's primary currency). v1 ships
@@ -24,7 +20,7 @@
  * displayCurrency.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote, type QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
@@ -40,7 +36,20 @@ export interface EngineEstimateInput {
    * order from 29/04 would be priced against today's fuel %.
    */
   effectiveDate?: Date;
+  /**
+   * Carrier key pinned per order. Resolves to the carrier the customer
+   * actually paid Shopify shipping for (parsed from `shippingLines`).
+   * NULL or unknown → defaults to 'fedex' per operator spec: never
+   * auto-pick the cheapest because that mis-attributes costs when DHL
+   * was the real carrier.
+   */
+  shippingCarrierKey?: string | null;
 }
+
+/** What the engine falls back to when no shipping line was detected on the
+ *  order (Shopify dropped it, free fulfilment, pickup, etc.). The operator
+ *  has confirmed every store routes to FedEx by default. */
+const DEFAULT_CARRIER_KEY = 'fedex';
 
 export interface EngineEstimateResult {
   /** Carrier cost in display currency (USD), derived via FX. */
@@ -83,74 +92,44 @@ export async function resolveShippingEstimate(
   if (!input.shipCountry) return emptyResult('no_country');
   if (!input.shipWeightKg || input.shipWeightKg <= 0) return emptyResult('no_weight');
 
-  // Carriers explicitly linked to a market covering this country (the
-  // "intentional" path). `db.execute` on drizzle/node-postgres returns
-  // a pg QueryResult — rows live under `.rows`, NOT on the top object.
-  const marketRows = await db.execute<{ handle: string }>(sql`
-    SELECT handle FROM market_templates
-     WHERE countries @> ${JSON.stringify([input.shipCountry])}::jsonb
-       AND enabled = TRUE
-  `);
-  const handles = marketRows.rows.map((m) => m.handle);
-  const linkedCarrierIds: string[] = handles.length === 0
-    ? []
-    : Array.from(new Set(
-        (await db
-          .select({ carrierAccountId: schema.marketCarrierLinks.carrierAccountId })
-          .from(schema.marketCarrierLinks)
-          .where(
-            and(
-              inArray(schema.marketCarrierLinks.marketHandle, handles),
-              eq(schema.marketCarrierLinks.enabled, true),
-            ),
-          ))
-          .map((l) => l.carrierAccountId),
-      ));
+  // Carrier is pinned per order — quote against the carrier the
+  // customer actually paid Shopify shipping for. NULL / unknown
+  // shipping line resolves to FedEx per operator spec.
+  const carrierKey = input.shippingCarrierKey?.trim().toLowerCase() || DEFAULT_CARRIER_KEY;
 
-  if (linkedCarrierIds.length > 0) {
-    const best = await tryCarriers(linkedCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
-    if (best !== null) {
-      return {
-        amount: best.display,
-        costAmount: best.cost,
-        costCurrency: best.costCurrency,
-        breakdown: best.breakdown,
-        carrierLabel: best.carrierLabel,
-        zone: best.zone,
-        tierUpperKg: best.tierUpperKg,
-        source: 'engine_estimate',
-      };
-    }
-  }
-
-  // Fall back to every enabled carrier account in the system. The
-  // operator told us their carriers are all FedEx rate sheets, so this
-  // is a deliberate silent default. The result carries `fallback: true`
-  // so the UI can flag implicit pricing if it wants to.
-  const allAccountRows = await db
+  const accountRows = await db
     .select({ id: schema.carrierAccounts.id })
     .from(schema.carrierAccounts)
-    .where(eq(schema.carrierAccounts.enabled, true));
-  if (allAccountRows.length === 0) return emptyResult('no_carrier_accounts');
-  const fallbackCarrierIds = allAccountRows
-    .map((r) => r.id)
-    .filter((id) => !linkedCarrierIds.includes(id));
-  const fallbackBest = await tryCarriers(fallbackCarrierIds, input.shipCountry, input.shipWeightKg, input.effectiveDate);
-  if (fallbackBest !== null) {
-    return {
-      amount: fallbackBest.display,
-      costAmount: fallbackBest.cost,
-      costCurrency: fallbackBest.costCurrency,
-      breakdown: fallbackBest.breakdown,
-      carrierLabel: fallbackBest.carrierLabel,
-      zone: fallbackBest.zone,
-      tierUpperKg: fallbackBest.tierUpperKg,
-      source: 'engine_estimate',
-      fallback: true,
-    };
-  }
+    .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(
+      and(
+        eq(schema.carriers.key, carrierKey),
+        eq(schema.carrierAccounts.enabled, true),
+      ),
+    );
+  if (accountRows.length === 0) return emptyResult('no_carrier_accounts');
 
-  return emptyResult('no_quote');
+  const best = await tryCarriers(
+    accountRows.map((r) => r.id),
+    input.shipCountry,
+    input.shipWeightKg,
+    input.effectiveDate,
+  );
+  if (best === null) return emptyResult('no_quote');
+  return {
+    amount: best.display,
+    costAmount: best.cost,
+    costCurrency: best.costCurrency,
+    breakdown: best.breakdown,
+    carrierLabel: best.carrierLabel,
+    zone: best.zone,
+    tierUpperKg: best.tierUpperKg,
+    source: 'engine_estimate',
+    // True when the order didn't carry a shipping line and we fell
+    // back to the DEFAULT_CARRIER_KEY — UI surfaces this so the
+    // operator sees implicit attribution.
+    fallback: input.shippingCarrierKey ? false : true,
+  };
 }
 
 interface CarrierAttempt {

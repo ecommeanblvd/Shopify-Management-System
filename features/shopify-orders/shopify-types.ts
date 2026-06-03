@@ -45,6 +45,14 @@ export interface ShopifyFulfillment {
   }>;
 }
 
+/** One shipping line from a Shopify order — operator-visible `title` plus
+ *  the machine-readable `code`. Either field is used to derive the carrier
+ *  key (fedex / dhl). NULL on both means we couldn't tag the order. */
+export interface ShopifyShippingLine {
+  title: string | null;
+  code: string | null;
+}
+
 export interface ShopifyOrderPayload {
   id: string;                                   // gid://shopify/Order/...
   name: string;                                 // e.g. "#1234"
@@ -69,4 +77,8 @@ export interface ShopifyOrderPayload {
   lineItems: { nodes: ShopifyLineItem[] };
   refunds: ShopifyRefund[];
   fulfillments: ShopifyFulfillment[];
+  // Always present on a paid order; empty on pickup-only or free
+  // fulfilment. Used to derive the carrier the quote engine should
+  // price against (per operator spec: never auto-pick cheapest).
+  shippingLines: ShopifyShippingLine[];
 }

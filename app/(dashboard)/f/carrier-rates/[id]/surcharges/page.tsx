@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2, Receipt, PackageCheck,
+  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -138,10 +138,20 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-lime-500/10',
     supportsPerKg: false,
   },
+  contract_discount_pct: {
+    label: 'Volume discount',
+    desc: 'Negotiated discount off the published base — FedEx Total Discount line. Per-country via country_codes (e.g. US 68 %, SA 77 %).',
+    formula: '− base × (value ÷ 100)',
+    unit: 'percent',
+    icon: <TicketPercent className="size-4" />,
+    accent: 'text-emerald-600 dark:text-emerald-400',
+    accentBg: 'bg-emerald-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'vat_percent', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'contract_discount_pct', 'vat_percent', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });

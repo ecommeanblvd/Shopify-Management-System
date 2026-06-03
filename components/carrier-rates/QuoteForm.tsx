@@ -179,6 +179,15 @@ function ResultPanel({ result, costCurrency, displayCurrency }: { result: Extrac
     { label: 'Per-kg fixed', value: breakdown.perKg, muted: breakdown.perKg === 0 },
     { label: 'Remote area', value: breakdown.remote, muted: breakdown.remote === 0 },
     { label: 'Residential', value: breakdown.residential, muted: breakdown.residential === 0 },
+    {
+      // Negotiated FedEx Total Discount — engine emits as a positive
+      // `discount`, render with a minus prefix so it reads as a deduction.
+      label: breakdown.discountPercent > 0
+        ? `Volume discount (${breakdown.discountPercent.toFixed(1)}%)`
+        : 'Volume discount',
+      value: -breakdown.discount,
+      muted: breakdown.discount === 0,
+    },
   ];
 
   return (

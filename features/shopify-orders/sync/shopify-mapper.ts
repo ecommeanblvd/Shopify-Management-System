@@ -4,6 +4,7 @@ import type {
   ShopifyRefund,
   ShopifyFulfillment,
 } from '../shopify-types';
+import { detectCarrierKey, type CarrierKey } from './detect-carrier';
 
 /** Internal shape ready for the upsert function. Numbers are strings to match
  *  Drizzle's numeric column representation; no float precision loss. */
@@ -25,6 +26,10 @@ export interface MappedOrder {
     totalPrice: string;
     shipCountry: string | null;
     shipWeightKg: string | null;
+    /** Carrier the customer paid Shopify shipping for, derived from
+     *  `shippingLines`. NULL when no line is matchable — the engine
+     *  defaults to FedEx per operator spec. */
+    shippingCarrierKey: CarrierKey | null;
   };
   lines: Array<{
     shopifyLineId: string;
@@ -71,6 +76,7 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       totalPrice: payload.totalPriceSet.shopMoney.amount,
       shipCountry: payload.shippingAddress?.countryCodeV2 ?? null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
+      shippingCarrierKey: detectCarrierKey(payload.shippingLines),
     },
     lines,
     refunds: payload.refunds.map((r) => mapRefund(r)),

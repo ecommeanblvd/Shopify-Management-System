@@ -58,6 +58,13 @@ export interface OrderShippingDetail {
    *  currency. Present only when `defaultSource === 'engine_estimate'`.
    *  Modal renders it as a labelled cost table. */
   defaultBreakdown: {
+    /** Actual scale weight (kg) the engine was given. */
+    actualWeightKg: number;
+    /** Dim weight (kg) derived from L×W×H/divisor. Zero when dim not
+     *  provided or carrier has no `dimDivisorCm3PerKg`. */
+    dimWeightKg: number;
+    /** What was billed: max(actual, dim). Equals actual when no dim. */
+    chargeableWeightKg: number;
     base: number;
     peak: number;
     remote: number;
@@ -65,11 +72,22 @@ export interface OrderShippingDetail {
     perKg: number;
     demand: number;
     countryFixed: number;
+    /** Stepped per-weight surcharge (DHL GoGreen Plus and similar).
+     *  ceil(weight / step_kg) × value, summed across active rows. */
+    perStep: number;
     fuel: number;
     /** Effective VAT % that was applied. */
     vatPercent: number;
     vat: number;
-    /** subtotalBeforeMarkup — i.e. base + accessorials + fuel + VAT. */
+    /** Negotiated volume discount % applied to published base (sum of
+     *  active contract_discount_pct rows). E.g. 70 → 70 % off published. */
+    discountPercent: number;
+    /** Absolute VND amount deducted by the volume discount —
+     *  `base × discountPercent / 100`, positive. Already factored into
+     *  `carrierCost`; surfaced for UI to render as a "-" line. */
+    discount: number;
+    /** subtotalBeforeMarkup — i.e. base + accessorials + fuel + VAT
+     *  − discount. */
     carrierCost: number;
   } | null;
   /** Operator-visible carrier name + zone label + matched tier (kg) when
@@ -169,6 +187,9 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       // mis-price a 6-week-old order. processed_at_shopify is when
       // Shopify accepted the order (≈ ship date for fulfilled orders).
       effectiveDate: order.processedAtShopify ?? undefined,
+      // Pin the quote to the carrier the customer actually paid for.
+      // NULL → estimator defaults to FedEx per operator spec.
+      shippingCarrierKey: order.shippingCarrierKey ?? null,
     });
     if (est.source !== 'unknown' && est.breakdown !== null) {
       defaultShipping = {
@@ -178,6 +199,9 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         source: 'engine_estimate',
         reason: null,
         breakdown: {
+          actualWeightKg: est.breakdown.actualWeightKg,
+          dimWeightKg: est.breakdown.dimWeightKg,
+          chargeableWeightKg: est.breakdown.chargeableWeightKg,
           base: est.breakdown.base,
           peak: est.breakdown.peak,
           remote: est.breakdown.remote,
@@ -185,9 +209,12 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           perKg: est.breakdown.perKg,
           demand: est.breakdown.demand,
           countryFixed: est.breakdown.countryFixed,
+          perStep: est.breakdown.perStep,
           fuel: est.breakdown.fuel,
           vatPercent: est.breakdown.vatPercent,
           vat: est.breakdown.vat,
+          discountPercent: est.breakdown.discountPercent,
+          discount: est.breakdown.discount,
           carrierCost: est.breakdown.carrierCost,
         },
         carrierLabel: est.carrierLabel,

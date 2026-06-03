@@ -41,6 +41,7 @@ async function main(): Promise<void> {
     process.stdout.write(`  Processed   : ${isoDate}\n`);
     process.stdout.write(`  Country     : ${o.shipCountry}\n`);
     process.stdout.write(`  Weight      : ${effectiveWeight} kg${o.shipWeightKgOverride !== null ? ' (operator override)' : ''}\n`);
+    process.stdout.write(`  Carrier (ship-line): ${o.shippingCarrierKey ?? '— (defaults to fedex)'}\n`);
     process.stdout.write(`  Customer paid (revenue): ${o.totalShipping} ${o.currency}\n`);
     process.stdout.write(`  Shipping cost override : ${o.shippingCostOverride ?? '—'}\n`);
 
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
       shipCountry: o.shipCountry,
       shipWeightKg: effectiveWeight,
       effectiveDate: o.processedAtShopify,
+      shippingCarrierKey: o.shippingCarrierKey ?? null,
     });
     if (est.source === 'unknown') {
       process.stdout.write(`\n  ENGINE: unknown (reason=${est.reason})\n`);
@@ -64,6 +66,7 @@ async function main(): Promise<void> {
     if (b.demand)       process.stdout.write(`    demand          ${fmtVND(b.demand).padStart(12)} ${est.costCurrency}\n`);
     if (b.countryFixed) process.stdout.write(`    country_fixed   ${fmtVND(b.countryFixed).padStart(12)} ${est.costCurrency}\n`);
     if (b.fuel)         process.stdout.write(`    fuel            ${fmtVND(b.fuel).padStart(12)} ${est.costCurrency}\n`);
+    if (b.discount)     process.stdout.write(`    discount (${b.discountPercent.toFixed(2)}%) -${fmtVND(b.discount).padStart(11)} ${est.costCurrency}\n`);
     if (b.vat)          process.stdout.write(`    vat (${b.vatPercent}%)    ${fmtVND(b.vat).padStart(12)} ${est.costCurrency}\n`);
     process.stdout.write(`    ─────────────────────────────────────────\n`);
     process.stdout.write(`    carrierCost     ${fmtVND(b.carrierCost).padStart(12)} ${est.costCurrency}  =  $${est.amount.toFixed(2)} USD\n`);

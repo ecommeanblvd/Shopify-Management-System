@@ -78,7 +78,16 @@ export function OrdersTable({
   }, [orders, search]);
 
   // Reset to page 0 when the result set shrinks under the operator's feet.
-  useEffect(() => { setPage(0); }, [search, pageSize]);
+  // React 19's react-hooks/set-state-in-effect rule rejects setState
+  // inside useEffect. Use the "computed-key-during-render" pattern:
+  // compare the current filter signature to the last one and reset on
+  // change. Identical to the effect at runtime, lint-clean.
+  const filterSignature = `${search}|${pageSize}`;
+  const [filterSignatureRef, setFilterSignatureRef] = useState(filterSignature);
+  if (filterSignature !== filterSignatureRef) {
+    setFilterSignatureRef(filterSignature);
+    setPage(0);
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages - 1);
@@ -784,12 +793,24 @@ function ShippingCostBreakdown({
     { label: 'Per-kg surcharge', value: breakdown.perKg },
     { label: 'Demand surcharge', value: breakdown.demand },
     { label: 'Country handling fee', value: breakdown.countryFixed },
+    { label: 'Stepped surcharge (GoGreen)', value: breakdown.perStep },
     { label: 'Fuel surcharge', value: breakdown.fuel },
+    {
+      // Negotiated volume discount (FedEx Total Discount). Engine emits
+      // `discount` as a POSITIVE number; render with a leading minus so
+      // it reads as a deduction in the table.
+      label: breakdown.discountPercent > 0
+        ? `Volume discount (${breakdown.discountPercent.toFixed(1)}%)`
+        : 'Volume discount',
+      value: -breakdown.discount,
+    },
     {
       label: breakdown.vatPercent > 0 ? `VAT (${breakdown.vatPercent}%)` : 'VAT',
       value: breakdown.vat,
     },
   ];
+  // Keep zero-amount rows hidden, but ALWAYS show a non-zero discount even
+  // though it's negative — `l.value !== 0` covers both signs.
   const visibleLegs = legs.filter((l) => l.value !== 0);
 
   return (
@@ -808,6 +829,20 @@ function ShippingCostBreakdown({
               <>
                 {' · '}
                 Tier <span className="font-mono">≤ {tierUpperKg} kg</span>
+              </>
+            )}
+            {/* Surface dim-weight when it overrides actual — operator
+                needs to know the rate matrix was picked off the dim,
+                not scale. Hidden when actual = chargeable. */}
+            {breakdown.dimWeightKg > 0 && breakdown.dimWeightKg > breakdown.actualWeightKg && (
+              <>
+                {' · '}
+                Charged at{' '}
+                <span className="font-mono">{breakdown.chargeableWeightKg.toFixed(2)} kg</span>{' '}
+                <span className="text-[10px] uppercase tracking-wider">dim</span>{' '}
+                <span className="text-muted-foreground/70">
+                  (actual {breakdown.actualWeightKg.toFixed(2)} kg)
+                </span>
               </>
             )}
           </span>

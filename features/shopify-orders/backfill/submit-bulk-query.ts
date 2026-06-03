@@ -34,6 +34,7 @@ const ORDERS_QUERY = `
         totalRefundedSet { shopMoney { amount currencyCode } }
       }
       fulfillments { trackingInfo { number company } }
+      shippingLines { title code }
     } }
   }
 }`;

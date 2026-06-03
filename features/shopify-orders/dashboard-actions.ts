@@ -235,6 +235,11 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
           // billed us. Without this, an April order is mis-priced
           // against today's June fuel rate.
           effectiveDate: o.processedAtShopify ?? undefined,
+          // Pin the quote to the carrier the customer actually paid
+          // Shopify shipping for. NULL → estimator defaults to FedEx
+          // per operator spec ("Không tự pick carrier"); never auto-
+          // pick cheapest across brands.
+          shippingCarrierKey: o.shippingCarrierKey ?? null,
         });
         // Engine returns BOTH the display-currency value (USD) and the
         // cost-currency value (VND, straight from the rate sheet). When

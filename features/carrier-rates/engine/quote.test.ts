@@ -138,7 +138,7 @@ describe('quote engine', () => {
         expect(r.breakdown.demand).toBe(20_000); // (8,000 + 12,000) × 1 kg
       });
 
-      it('fuel surcharge applies on top of demand (consistent with the carrier billing model)', () => {
+      it('demand surcharge is NOT in the fuel base (sits OUTSIDE fuel — verified via FedEx invoice 2026-06-03)', () => {
         const snap = makeSnap({
           zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }]]),
           weightTiers: [{ upperKg: 1 }],
@@ -150,10 +150,12 @@ describe('quote engine', () => {
         const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        // base 280k + demand 10k = 290k; fuel = 290k × 30% = 87k
+        // demand_per_kg defaults to fuelable=false. Fuel only on base.
+        // fuel = base 280k × 30% = 84k. Demand adds OUTSIDE fuel.
+        // subtotal = base 280k + demand 10k + fuel 84k = 374k
         expect(r.breakdown.demand).toBe(10_000);
-        expect(r.breakdown.fuel).toBe(87_000);
-        expect(r.breakdown.subtotalBeforeMarkup).toBe(377_000);
+        expect(r.breakdown.fuel).toBe(84_000);
+        expect(r.breakdown.subtotalBeforeMarkup).toBe(374_000);
       });
 
       it('inactive rows are ignored', () => {
@@ -190,7 +192,7 @@ describe('quote engine', () => {
         expect(r.breakdown.carrierCost).toBe(393_120);
       });
 
-      it('VAT applies on top of every accessorial (peak + remote + demand + fuel)', () => {
+      it('VAT applies on top of every accessorial (peak + demand + fuel)', () => {
         const snap = makeSnap({
           zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 100_000]]) }]]),
           weightTiers: [{ upperKg: 1 }],
@@ -204,13 +206,14 @@ describe('quote engine', () => {
         const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        // fuelable = 100 + 20 + 10 = 130k
-        // fuel = 130k × 50% = 65k
-        // vatable = 195k
-        // vat = 195k × 10% = 19,500
-        expect(r.breakdown.fuel).toBe(65_000);
-        expect(r.breakdown.vat).toBe(19_500);
-        expect(r.breakdown.carrierCost).toBe(214_500);
+        // peak_fixed fuelable=true, demand_per_kg fuelable=false (default).
+        // fuelable = base 100k + peak 20k = 120k
+        // fuel = 120k × 50% = 60k
+        // vatable = 120k + 60k fuel + 10k demand (nonFuelable) = 190k
+        // vat = 190k × 10% = 19,000
+        expect(r.breakdown.fuel).toBe(60_000);
+        expect(r.breakdown.vat).toBe(19_000);
+        expect(r.breakdown.carrierCost).toBe(209_000);
       });
 
       it('zero VAT row → vat = 0 (catch-all that nothing matches)', () => {
@@ -709,6 +712,431 @@ describe('quote engine', () => {
       // Total carrier cost = 3,454,851 + 150,000 + 918,000 + 30,400 + 2,098,968
       //                    = 6,652,219 (excludes one-off Address Correction)
       expect(r.breakdown.carrierCost).toBe(6_652_219);
+    });
+  });
+
+  describe('contract_discount_pct (negotiated volume discount)', () => {
+    // Reproduces FedEx #MBLVD28959 (US, 0.7 kg, 2026-06-01) from the
+    // operator's invoice CSV. Verified line-by-line against the actual
+    // invoice on 2026-06-03:
+    //   base 2,244,600 + discount −1,541,142 + fuel 386,937 + remote 82,200
+    //                                                   + demand 68,300
+    //   = 1,240,895 pre-VAT
+    //   VAT 8 %  = 99,272
+    //   total    = 1,340,167
+    // Operator-provided discount % = 1,541,142 / 2,244,600 = 68.66 %
+    it('reproduces FedEx #MBLVD28959 invoice math exactly', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone X', rateByTierUpper: new Map([[1, 2_244_600]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        // Fuel% derived empirically from the invoice — 386,937 / (base +
+        // remote + demand fuelable) per engine model. Tweak after we add
+        // per-row remote postcode wiring; the discount math is unaffected.
+        surcharges: [
+          { kind: 'fuel_percent', value: 16.18, active: true },
+          { kind: 'remote_fixed', value: 82_200, active: true },
+          { kind: 'demand_per_kg', value: 97_571.4, active: true, countryCodes: ['US'] },
+          { kind: 'contract_discount_pct', value: 68.66, active: true, countryCodes: ['US'] },
+          { kind: 'vat_percent', value: 8, active: true },
+        ],
+        remotePostcodes: new Map([['US', new Map([['REMOTE-1', null]])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 0.7,
+        destinationCountry: 'US',
+        destinationPostcode: 'REMOTE-1',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.base).toBe(2_244_600);
+      expect(r.breakdown.discountPercent).toBeCloseTo(68.66);
+      expect(r.breakdown.discount).toBe(1_541_142); // 2,244,600 × 0.6866 (round)
+      // VAT base is post-discount: invoice keeps VAT at ~99k. Engine's
+      // VAT must drop the discount before applying 8 %.
+      expect(r.breakdown.vat).toBeGreaterThan(95_000);
+      expect(r.breakdown.vat).toBeLessThan(110_000);
+    });
+
+    it('country-scoped discount only applies to the matching destination', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'US zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+          ['JP', { label: 'JP zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'contract_discount_pct', value: 70, active: true, countryCodes: ['US'] },
+        ],
+      });
+      const us = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      const jp = quote(snap, { weightKg: 1, destinationCountry: 'JP' });
+      expect(us.ok && us.breakdown.discount).toBe(700_000);
+      expect(jp.ok && jp.breakdown.discount).toBe(0);
+    });
+
+    it('multiple matching discount rows compound (stack the %)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          // Two negotiated discount lines (base + tier bonus) → stack to 80 %
+          { kind: 'contract_discount_pct', value: 70, active: true, countryCodes: ['US'] },
+          { kind: 'contract_discount_pct', value: 10, active: true, countryCodes: null },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.discountPercent).toBe(80);
+      expect(r.breakdown.discount).toBe(800_000);
+    });
+
+    it('discount is never fuelable — fuel applies on published base', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'fuel_percent', value: 20, active: true },
+          { kind: 'contract_discount_pct', value: 50, active: true, countryCodes: null },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // Fuel = 20 % × published base 1,000,000 = 200,000 (NOT 20 % × 500,000)
+      expect(r.breakdown.fuel).toBe(200_000);
+      expect(r.breakdown.discount).toBe(500_000);
+      // carrierCost = base + fuel − discount = 1,000,000 + 200,000 − 500,000
+      expect(r.breakdown.carrierCost).toBe(700_000);
+    });
+
+    it('discount reduces VAT base (VAT applies on the discounted total)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone', rateByTierUpper: new Map([[1, 1_000_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'contract_discount_pct', value: 50, active: true, countryCodes: null },
+          { kind: 'vat_percent', value: 8, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // VATable = base − discount = 500,000 → VAT 8 % = 40,000
+      // Without discount the VAT would be 80,000.
+      expect(r.breakdown.discount).toBe(500_000);
+      expect(r.breakdown.vat).toBe(40_000);
+      expect(r.breakdown.carrierCost).toBe(540_000);
+    });
+
+    it('null discount yields zero discount / discountPercent', () => {
+      const snap = makeSnap();
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.discount).toBe(0);
+      expect(r.breakdown.discountPercent).toBe(0);
+    });
+  });
+
+  describe('dimensional weight (chargeable = max(actual, dim))', () => {
+    it('charges actual when dim is lower', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 30×20×10 = 6000 cm³ → 1.2 kg dim. Actual 2 kg wins.
+      const r = quote(snap, {
+        weightKg: 2,
+        dimensions: { lengthCm: 30, widthCm: 20, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.actualWeightKg).toBe(2);
+      expect(r.breakdown.dimWeightKg).toBe(1.2);
+      expect(r.breakdown.chargeableWeightKg).toBe(2);
+      expect(r.tier.upperKg).toBe(2);
+    });
+
+    it('charges dim when dim is higher (light bulky pack)', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 40×31×2 cm = 2480 cm³ → 0.496 kg dim. Actual 0.3 kg loses.
+      // But operator typically rounds UP: invoice charges next tier.
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 40, widthCm: 31, heightCm: 2 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.actualWeightKg).toBe(0.3);
+      expect(r.breakdown.dimWeightKg).toBe(0.496);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.496);
+      // Engine picks the 0.5 tier (200_000) because dim < 0.5 ≤ 0.5
+      expect(r.tier.upperKg).toBe(0.5);
+      expect(r.breakdown.base).toBe(200_000);
+    });
+
+    it('omits dim-weight when divisor is missing', () => {
+      const snap = makeSnap(); // no dimDivisorCm3PerKg
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 100, widthCm: 100, heightCm: 100 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.3);
+    });
+
+    it('omits dim-weight when any side is missing or zero', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      const r = quote(snap, {
+        weightKg: 0.3,
+        dimensions: { lengthCm: 40, widthCm: 0, heightCm: 2 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.chargeableWeightKg).toBe(0.3);
+    });
+
+    it('per_kg and per_step surcharges scale with chargeable weight, not actual', () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        surcharges: [
+          { kind: 'per_kg_fixed', value: 10_000, active: true },
+          // 1900 × ceil(weight / 0.5) — GoGreen step
+          { kind: 'per_step_fixed', value: 1_900, active: true, stepKg: 0.5 },
+        ],
+      });
+      // 40×40×10 = 16_000 cm³ → 3.2 kg dim. Actual 1 kg.
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 40, widthCm: 40, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(3.2);
+      expect(r.breakdown.perKg).toBe(32_000);   // 10k × 3.2 chargeable
+      expect(r.breakdown.perStep).toBe(13_300); // 1900 × ceil(3.2/0.5)=7
+    });
+
+    it('dim weight pushes the rate matrix to a higher tier', () => {
+      const snap = makeSnap({ dimDivisorCm3PerKg: 5000 });
+      // 50×30×15 = 22_500 cm³ → 4.5 kg dim. Actual 1 kg.
+      const r = quote(snap, {
+        weightKg: 1,
+        dimensions: { lengthCm: 50, widthCm: 30, heightCm: 15 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // 4.5 kg lands in the ≤ 5 tier (600_000), not the ≤ 1 tier (280_000).
+      expect(r.breakdown.chargeableWeightKg).toBe(4.5);
+      expect(r.tier.upperKg).toBe(5);
+      expect(r.breakdown.base).toBe(600_000);
+    });
+
+    it('breakdown surfaces zero dim/actual=chargeable when no dimensions', () => {
+      const snap = makeSnap();
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.dimWeightKg).toBe(0);
+      expect(r.breakdown.actualWeightKg).toBe(1);
+      expect(r.breakdown.chargeableWeightKg).toBe(1);
+    });
+  });
+
+  describe('demand_per_kg default fuelable=false (FedEx invoice 2026-06-03)', () => {
+    // The operator's LOG-Export Excel verified that FedEx Demand
+    // Surcharge sits OUTSIDE the fuel base — proof via #MBLVD28959:
+    //   effective_base 703,458 + remote 82,200 = 785,658
+    //   × 49.25 % CW 23 fuel = 386,937  ← matches Excel col AK exactly
+    // Demand (68,300 in that invoice — actually country_fixed-style)
+    // does NOT appear in the fuel base. Engine default flipped to false.
+    it('demand_per_kg defaults to fuelable=false', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 700_000]]) }]]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'fuel_percent', value: 50, active: true },
+          { kind: 'demand_per_kg', value: 11_300, active: true, countryCodes: ['US'] },
+          // omit `fuelable` on the demand row → default kicks in
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel = 50% × base 700k = 350k (NOT 50% × (700k + 11.3k))
+      expect(r.breakdown.demand).toBe(11_300);
+      expect(r.breakdown.fuel).toBe(350_000);
+    });
+
+    it('per-row fuelable=true override forces demand_per_kg back into fuel base', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 700_000]]) }]]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          { kind: 'fuel_percent', value: 50, active: true },
+          // Some hypothetical carrier where demand IS in fuel base
+          { kind: 'demand_per_kg', value: 11_300, active: true, countryCodes: ['US'], fuelable: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel = 50% × (700k + 11.3k) = 355,650
+      expect(r.breakdown.fuel).toBe(355_650);
+    });
+
+    it('reproduces FedEx #MBLVD28959 fuel math (base + remote, demand OUTSIDE)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 703_458]]) }]]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [
+          // CW 23 FedEx Air fuel = 49.25 %
+          { kind: 'fuel_percent', value: 49.25, active: true },
+          { kind: 'remote_fixed', value: 82_200, active: true },
+          // Excel col AM "Demand" = FedEx VN US-handling — modelled as
+          // demand_per_kg with rate that yields 68,300 at 0.7 kg.
+          { kind: 'demand_per_kg', value: 97_571.4, active: true, countryCodes: ['US'] },
+        ],
+        remotePostcodes: new Map([['US', new Map([['ZIP-90001', null]])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 0.7,
+        destinationCountry: 'US',
+        destinationPostcode: 'ZIP-90001',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // Invoice math (Excel row 22):
+      //   base 703,458 + remote 82,200 = 785,658
+      //   × 49.25% fuel = 386,937 (Excel says 386,937 ✅)
+      expect(r.breakdown.remote).toBe(82_200);
+      expect(r.breakdown.fuel).toBe(386_937);
+    });
+  });
+
+  describe('packagingType (Pak vs Package selection)', () => {
+    function makeSnapWithBothRates(): CarrierAccountSnapshot {
+      // Distinct Package vs Pak rates so we can tell which matrix the
+      // engine read by looking at `base`. Pak rates exist only at the
+      // lower tiers — the historical FedEx pattern.
+      const rateByTierUpper = new Map<number, number>([
+        [0.5, 200_000],   // Package: 0.5 kg
+        [1, 280_000],     // Package: 1 kg
+        [2, 360_000],     // Package: 2 kg
+        [5, 600_000],     // Package: 5 kg
+      ]);
+      const pakRateByTierUpper = new Map<number, number>([
+        [0.5, 150_000],   // Pak: 0.5 kg (cheaper than Package)
+        [1, 210_000],     // Pak: 1 kg
+        // No Pak rate at 2+ kg → engine falls back to Package
+      ]);
+      return makeSnap({
+        zonesByCountry: new Map([
+          ['SG', { label: 'Zone 1', rateByTierUpper, pakRateByTierUpper }],
+        ]),
+      });
+    }
+
+    it("explicit 'box' forces Package rate even for a light pack", () => {
+      const snap = makeSnapWithBothRates();
+      // 0.4 kg would normally hit Pak via weight rule (<2 kg), but
+      // operator imported the pack as Box → force Package rate.
+      const r = quote(snap, {
+        weightKg: 0.4,
+        packagingType: 'box',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.tier.upperKg).toBe(0.5);
+      expect(r.breakdown.base).toBe(200_000); // Package rate, not 150k Pak
+      expect(r.notes).not.toContain('pak');
+    });
+
+    it("explicit 'bag' forces Pak rate even for a 2 kg+ pack (no Pak → fallback)", () => {
+      const snap = makeSnapWithBothRates();
+      // 2.5 kg lands in Package-only tier; explicit Bag → engine still
+      // tries Pak first, falls back to Package, leaves a note.
+      const r = quote(snap, {
+        weightKg: 2.5,
+        packagingType: 'bag',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.tier.upperKg).toBe(5);
+      expect(r.breakdown.base).toBe(600_000); // Package fallback
+      expect(r.notes).toContain('pak_fallback_to_package');
+    });
+
+    it("explicit 'bag' uses Pak rate when Pak rate exists at the tier", () => {
+      const snap = makeSnapWithBothRates();
+      const r = quote(snap, {
+        weightKg: 1,
+        packagingType: 'bag',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.base).toBe(210_000); // Pak rate
+      expect(r.notes).toContain('pak');
+    });
+
+    it('falls back to the legacy weight rule when packagingType is omitted', () => {
+      const snap = makeSnapWithBothRates();
+      // No packagingType → < 2 kg → Pak.
+      const r1 = quote(snap, { weightKg: 0.4, destinationCountry: 'SG' });
+      expect(r1.ok).toBe(true);
+      if (r1.ok) expect(r1.breakdown.base).toBe(150_000); // Pak at 0.5 tier
+      // No packagingType → ≥ 2 kg → Package.
+      const r2 = quote(snap, { weightKg: 2.5, destinationCountry: 'SG' });
+      expect(r2.ok).toBe(true);
+      if (r2.ok) expect(r2.breakdown.base).toBe(600_000);
+    });
+
+    it("a 'bag' pack uses the dim weight when dim > actual (max rule still wins)", () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        zonesByCountry: new Map([
+          ['SG', {
+            label: 'Zone',
+            rateByTierUpper: new Map([[1, 280_000], [2, 360_000]]),
+            pakRateByTierUpper: new Map([[1, 210_000]]), // no Pak ≥ 2
+          }],
+        ]),
+        weightTiers: [{ upperKg: 1 }, { upperKg: 2 }],
+      });
+      // 40×40×10 = 16,000 cm³ / 5000 = 3.2 kg dim. Actual 0.5 kg.
+      // Chargeable 3.2 kg → tier ≤ 2 (since 2 is the top tier), but
+      // 3.2 > 2 → note that weight exceeds top tier. With 'bag',
+      // engine still tries Pak first then falls back to Package.
+      const r = quote(snap, {
+        weightKg: 0.5,
+        packagingType: 'bag',
+        dimensions: { lengthCm: 40, widthCm: 40, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(3.2);
+      expect(r.tier.upperKg).toBe(2);
+      expect(r.breakdown.base).toBe(360_000); // Package at top tier
+      expect(r.notes).toContain('pak_fallback_to_package');
     });
   });
 });
