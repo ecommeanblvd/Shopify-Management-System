@@ -225,6 +225,13 @@
       "when": 1780481844191,
       "tag": "0031_sudden_callisto",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780506819107,
+      "tag": "0032_handy_mother_askani",
+      "breakpoints": true
     }
   ]
 }

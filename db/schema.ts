@@ -982,3 +982,157 @@ export const saveForLaterItems = pgTable('save_for_later_items', {
   uniqueIndex('save_for_later_dedup_idx')
     .on(t.storeId, t.deviceId, t.shopifyProductId, sql`COALESCE(${t.shopifyVariantId}, '')`),
 ]);
+
+// ─────────────────────────────────────────────────────────────────────
+// MEAN Merchant Portal (MMP) → SMS product ingestion
+// ─────────────────────────────────────────────────────────────────────
+// MMP pushes products from vendors/brands into SMS via signed HMAC
+// webhook. SMS curates the inbound catalog and (later) syncs selected
+// items to Shopify. Order-side flow: when a Shopify order can't be
+// fulfilled from MEAN stock, SMS calls back to MMP so the brand can
+// produce/ship.
+//
+// Idempotency: every product is keyed by `portal_product_id`, every
+// variant by (product, sku). Re-POST upserts; no duplicates.
+
+/** Lifecycle status sent by MMP for each product. Mirrors MMP's own
+ *  state so the operator can see why a product appeared/disappeared
+ *  in the inbound feed. */
+export const mmpProductStatusEnum = pgEnum('mmp_product_status', [
+  'live', 'draft', 'archived',
+]);
+
+/** SMS-side curation status — operator decides whether to push to
+ *  Shopify after receiving from MMP. */
+export const mmpCurationStatusEnum = pgEnum('mmp_curation_status', [
+  // Just landed; not reviewed yet.
+  'received',
+  // Operator marked OK to push.
+  'approved',
+  // Operator rejected — won't push to Shopify.
+  'rejected',
+  // Sent to Shopify; mmp_products.shopify_product_id populated.
+  'pushed',
+]);
+
+export const mmpBrands = pgTable('mmp_brands', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** Stable identifier MMP uses to namespace its products (e.g.
+   *  "denio"). Also the foreign key on `mmp_products.brand_slug`. */
+  slug: text('slug').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  /** Optional notes / contact. */
+  note: text('note'),
+  firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
+  lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+});
+
+export const mmpProducts = pgTable('mmp_products', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** MMP's stable product identifier — primary upsert key. */
+  portalProductId: text('portal_product_id').notNull().unique(),
+  brandSlug: text('brand_slug').references(() => mmpBrands.slug).notNull(),
+  /** Master / style SKU from MMP. */
+  sku: text('sku').notNull(),
+  name: text('name').notNull(),
+  globalName: text('global_name'),
+  shortSummary: text('short_summary'),
+  description: text('description'),
+  collection: text('collection'),
+  productType: text('product_type'),
+  status: mmpProductStatusEnum('status').notNull(),
+  /** VND integer per MMP contract — stored as numeric to avoid
+   *  precision loss on big amounts. */
+  basePrice: numeric('base_price', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('VND'),
+  priceUsd: numeric('price_usd', { precision: 10, scale: 2 }),
+  /** Loose-typed metadata from MMP — fabric, silhouette, neckline,
+   *  etc. Stored as jsonb so schema doesn't lock the operator to a
+   *  fixed set of attributes. */
+  attributes: jsonb('attributes'),
+  /** Production / sample / styling metadata — also jsonb-free-form. */
+  details: jsonb('details'),
+  /** Operator curation. */
+  curationStatus: mmpCurationStatusEnum('curation_status').notNull().default('received'),
+  curationNote: text('curation_note'),
+  /** Set when SMS pushes to Shopify; mirrors the GraphQL Product gid. */
+  shopifyProductId: text('shopify_product_id'),
+  pushedToShopifyAt: timestamp('pushed_to_shopify_at'),
+  /** Bookkeeping for incremental sync. */
+  lastReceivedAt: timestamp('last_received_at').defaultNow().notNull(),
+  /** SHA-256 of the canonical product payload — lets the importer skip
+   *  re-processing identical payloads on retries. */
+  sourceHash: text('source_hash').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('mmp_products_brand_idx').on(t.brandSlug),
+  index('mmp_products_status_idx').on(t.curationStatus),
+  index('mmp_products_sku_idx').on(t.sku),
+]);
+
+export const mmpProductVariants = pgTable('mmp_product_variants', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  productId: uuid('product_id').references(() => mmpProducts.id, { onDelete: 'cascade' }).notNull(),
+  /** Variant SKU — unique within the product. */
+  sku: text('sku').notNull(),
+  /** Free-text option values per MMP contract. */
+  color: text('color'),
+  size: text('size'),
+  inventory: integer('inventory').notNull().default(0),
+  price: numeric('price', { precision: 14, scale: 2 }).notNull(),
+  /** Garment length in cm — min / max for ranges. Optional. */
+  lengthCm: numeric('length_cm', { precision: 8, scale: 2 }),
+  lengthCmMax: numeric('length_cm_max', { precision: 8, scale: 2 }),
+  /** Position MMP wants this variant displayed at. */
+  position: integer('position').notNull().default(0),
+  /** Shopify linkage — populated after the SMS → Shopify push. */
+  shopifyVariantId: text('shopify_variant_id'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('mmp_product_variants_product_sku_idx').on(t.productId, t.sku),
+]);
+
+export const mmpProductImages = pgTable('mmp_product_images', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  productId: uuid('product_id').references(() => mmpProducts.id, { onDelete: 'cascade' }).notNull(),
+  url: text('url').notNull(),
+  position: integer('position').notNull().default(0),
+  /** MMP-defined role: full_body | back | front_close | detail | fabric
+   *  | unassigned. Stored free-text so MMP can extend without a
+   *  migration. */
+  role: text('role'),
+  isThumbnail: boolean('is_thumbnail').notNull().default(false),
+  altText: text('alt_text'),
+}, (t) => [
+  uniqueIndex('mmp_product_images_product_url_idx').on(t.productId, t.url),
+  index('mmp_product_images_product_position_idx').on(t.productId, t.position),
+]);
+
+/** One row per inbound HMAC webhook call — audit / debugging aid. The
+ *  endpoint writes a row even when the payload is rejected so the
+ *  operator can investigate signature failures, replay-window misses,
+ *  schema validation breaks. */
+export const mmpIngestionRuns = pgTable('mmp_ingestion_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** SHA-256 of the raw request body — idempotency / dedup. */
+  payloadHash: text('payload_hash').notNull(),
+  /** 'accepted' / 'signature_failed' / 'timestamp_skew' / 'schema_error'
+   *  / 'internal_error'. */
+  result: text('result').notNull(),
+  /** Count of products in this batch. */
+  productCount: integer('product_count').notNull().default(0),
+  acceptedCount: integer('accepted_count').notNull().default(0),
+  rejectedCount: integer('rejected_count').notNull().default(0),
+  /** First detail line — full errors live in `errors` jsonb. */
+  errorSummary: text('error_summary'),
+  errors: jsonb('errors'),
+  /** Source IP for forensic trail; not used for auth. */
+  sourceIp: text('source_ip'),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  processingMs: integer('processing_ms'),
+}, (t) => [
+  index('mmp_ingestion_runs_received_idx').on(t.receivedAt),
+  index('mmp_ingestion_runs_hash_idx').on(t.payloadHash),
+]);
