@@ -614,6 +614,70 @@ export const shipments = pgTable('shipments', {
   index('shipments_log_unique_code_idx').on(t.logUniqueCode),
 ]);
 
+/**
+ * Per-shipment carrier charge — what the carrier actually billed for a
+ * single pack. Imported from the operator's LOG-Export Excel (one row
+ * per pack, cols AI–BV). Same column shape works for FedEx + DHL.
+ *
+ * Linked to `shipments` 1:1 in v1 (carrier may bill the same tracking
+ * twice in rare adjustment cases — future extension). Engine's
+ * `quote()` produces a parallel breakdown; reconciliation report
+ * diffs the two.
+ *
+ * Amounts in `currency` (ops sheet is uniformly VND for Vietnam ops).
+ */
+export const shipmentCharges = pgTable('shipment_charges', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'cascade' }).notNull(),
+  /** Which carrier rate-card account the charge belongs to.
+   *  Mirrors `shipments.carrierKey` after resolution. */
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id),
+  /** Tracking number from the charge — denormalised so the importer
+   *  can match against shipments by tracking even when shipment_id
+   *  hasn't been resolved yet (e.g. dry-run / staging). */
+  trackingNumber: text('tracking_number').notNull(),
+  /** Excel col AI — Total cost the carrier billed. */
+  totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
+  /** Currency of every amount on this row (VND for Vietnam ops). */
+  currency: text('currency').notNull(),
+  /** Excel col AJ — Published base rate before discount (FedEx) or
+   *  applied base (DHL). NULL when row didn't carry the breakdown. */
+  base: numeric('base', { precision: 14, scale: 2 }),
+  /** Excel col AK — Fuel surcharge. */
+  fuel: numeric('fuel', { precision: 14, scale: 2 }),
+  /** Excel col AL — Remote-area / ODA fee. */
+  remote: numeric('remote', { precision: 14, scale: 2 }),
+  /** Excel col AM "EES / Theo nhu cầu" — FedEx Demand Surcharge OR the
+   *  US-import handling flat fee (operator labels both under "demand"
+   *  in the same column). Engine maps to `demand_per_kg` or
+   *  `country_fixed`; reconciliation handles either via the engine's
+   *  combined output. */
+  demand: numeric('demand', { precision: 14, scale: 2 }),
+  /** Excel col AN — Phí kí nhận trực tiếp (Direct Signature, flat
+   *  150,000 VND for DHL). */
+  directSignature: numeric('direct_signature', { precision: 14, scale: 2 }),
+  /** Excel col AO — VAT/Thuế phí khác. 8 % for Vietnam (FedEx + DHL). */
+  vat: numeric('vat', { precision: 14, scale: 2 }),
+  /** Excel col AP — GoGreen Plus-Basic stepped fee. */
+  gogreen: numeric('gogreen', { precision: 14, scale: 2 }),
+  /** Excel col AX — Volume contract discount. Stored as NEGATIVE VND
+   *  per the invoice convention (e.g. −3,820,388). */
+  discount: numeric('discount', { precision: 14, scale: 2 }),
+  /** Excel col BV — Elevated Risk surcharge (DHL Middle East 918,000). */
+  elevatedRisk: numeric('elevated_risk', { precision: 14, scale: 2 }),
+  /** Where the row came from — 'ops_xlsx' for current importer, future
+   *  values: 'fedex_csv', 'dhl_csv', etc. */
+  source: text('source').notNull(),
+  /** SHA-256 of (trackingNumber + totalAmount + currency) for idempotency:
+   *  re-importing the same Excel won't create duplicate rows. */
+  sourceHash: text('source_hash').notNull(),
+  importedAt: timestamp('imported_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('shipment_charges_source_hash_idx').on(t.sourceHash),
+  index('shipment_charges_shipment_idx').on(t.shipmentId),
+  index('shipment_charges_tracking_idx').on(t.trackingNumber),
+]);
+
 export const shopifySyncState = pgTable('shopify_sync_state', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),
