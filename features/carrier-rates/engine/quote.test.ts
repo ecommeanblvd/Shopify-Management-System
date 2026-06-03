@@ -954,4 +954,115 @@ describe('quote engine', () => {
       expect(r.breakdown.chargeableWeightKg).toBe(1);
     });
   });
+
+  describe('packagingType (Pak vs Package selection)', () => {
+    function makeSnapWithBothRates(): CarrierAccountSnapshot {
+      // Distinct Package vs Pak rates so we can tell which matrix the
+      // engine read by looking at `base`. Pak rates exist only at the
+      // lower tiers — the historical FedEx pattern.
+      const rateByTierUpper = new Map<number, number>([
+        [0.5, 200_000],   // Package: 0.5 kg
+        [1, 280_000],     // Package: 1 kg
+        [2, 360_000],     // Package: 2 kg
+        [5, 600_000],     // Package: 5 kg
+      ]);
+      const pakRateByTierUpper = new Map<number, number>([
+        [0.5, 150_000],   // Pak: 0.5 kg (cheaper than Package)
+        [1, 210_000],     // Pak: 1 kg
+        // No Pak rate at 2+ kg → engine falls back to Package
+      ]);
+      return makeSnap({
+        zonesByCountry: new Map([
+          ['SG', { label: 'Zone 1', rateByTierUpper, pakRateByTierUpper }],
+        ]),
+      });
+    }
+
+    it("explicit 'box' forces Package rate even for a light pack", () => {
+      const snap = makeSnapWithBothRates();
+      // 0.4 kg would normally hit Pak via weight rule (<2 kg), but
+      // operator imported the pack as Box → force Package rate.
+      const r = quote(snap, {
+        weightKg: 0.4,
+        packagingType: 'box',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.tier.upperKg).toBe(0.5);
+      expect(r.breakdown.base).toBe(200_000); // Package rate, not 150k Pak
+      expect(r.notes).not.toContain('pak');
+    });
+
+    it("explicit 'bag' forces Pak rate even for a 2 kg+ pack (no Pak → fallback)", () => {
+      const snap = makeSnapWithBothRates();
+      // 2.5 kg lands in Package-only tier; explicit Bag → engine still
+      // tries Pak first, falls back to Package, leaves a note.
+      const r = quote(snap, {
+        weightKg: 2.5,
+        packagingType: 'bag',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.tier.upperKg).toBe(5);
+      expect(r.breakdown.base).toBe(600_000); // Package fallback
+      expect(r.notes).toContain('pak_fallback_to_package');
+    });
+
+    it("explicit 'bag' uses Pak rate when Pak rate exists at the tier", () => {
+      const snap = makeSnapWithBothRates();
+      const r = quote(snap, {
+        weightKg: 1,
+        packagingType: 'bag',
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.base).toBe(210_000); // Pak rate
+      expect(r.notes).toContain('pak');
+    });
+
+    it('falls back to the legacy weight rule when packagingType is omitted', () => {
+      const snap = makeSnapWithBothRates();
+      // No packagingType → < 2 kg → Pak.
+      const r1 = quote(snap, { weightKg: 0.4, destinationCountry: 'SG' });
+      expect(r1.ok).toBe(true);
+      if (r1.ok) expect(r1.breakdown.base).toBe(150_000); // Pak at 0.5 tier
+      // No packagingType → ≥ 2 kg → Package.
+      const r2 = quote(snap, { weightKg: 2.5, destinationCountry: 'SG' });
+      expect(r2.ok).toBe(true);
+      if (r2.ok) expect(r2.breakdown.base).toBe(600_000);
+    });
+
+    it("a 'bag' pack uses the dim weight when dim > actual (max rule still wins)", () => {
+      const snap = makeSnap({
+        dimDivisorCm3PerKg: 5000,
+        zonesByCountry: new Map([
+          ['SG', {
+            label: 'Zone',
+            rateByTierUpper: new Map([[1, 280_000], [2, 360_000]]),
+            pakRateByTierUpper: new Map([[1, 210_000]]), // no Pak ≥ 2
+          }],
+        ]),
+        weightTiers: [{ upperKg: 1 }, { upperKg: 2 }],
+      });
+      // 40×40×10 = 16,000 cm³ / 5000 = 3.2 kg dim. Actual 0.5 kg.
+      // Chargeable 3.2 kg → tier ≤ 2 (since 2 is the top tier), but
+      // 3.2 > 2 → note that weight exceeds top tier. With 'bag',
+      // engine still tries Pak first then falls back to Package.
+      const r = quote(snap, {
+        weightKg: 0.5,
+        packagingType: 'bag',
+        dimensions: { lengthCm: 40, widthCm: 40, heightCm: 10 },
+        destinationCountry: 'SG',
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.chargeableWeightKg).toBe(3.2);
+      expect(r.tier.upperKg).toBe(2);
+      expect(r.breakdown.base).toBe(360_000); // Package at top tier
+      expect(r.notes).toContain('pak_fallback_to_package');
+    });
+  });
 });

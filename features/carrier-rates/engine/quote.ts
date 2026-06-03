@@ -131,6 +131,15 @@ export interface QuoteInput {
    * "L×W×H" — split before passing in.
    */
   dimensions?: { lengthCm: number; widthCm: number; heightCm: number } | null;
+  /**
+   * Packaging form factor — drives which rate matrix the engine reads:
+   *   'bag' → Pak rate (envelope/soft pouch, lower at light tiers)
+   *   'box' → Package rate (rigid box, full FedEx published)
+   * When NULL/undefined, engine falls back to the legacy weight rule
+   * (<2 kg → Pak, ≥2 kg → Package) for backwards compatibility with
+   * orders that haven't been imported via the shipments table yet.
+   */
+  packagingType?: 'bag' | 'box' | null;
   destinationCountry: string;
   destinationPostcode?: string;
   isResidential?: boolean;
@@ -386,12 +395,19 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   }
   const tier = snap.weightTiers[tierIndex];
 
-  // Package-type selection follows the operator's business rule for FedEx:
-  // shipments under 2 kg ship in a Pak (envelope/bag), 2 kg and up ship as
-  // a Package (box). Pak rates are sparse — only published for the low
-  // tiers — so we fall back to Package when no Pak rate exists at the
-  // matched tier.
-  const usePak = chargeableWeightKg < 2;
+  // Package-type selection:
+  //   1. Explicit `packagingType` wins — operator imported the Excel
+  //      pack record and we KNOW it shipped in a bag or a box.
+  //   2. Fallback rule (legacy): weight < 2 kg → Pak. Used when no
+  //      shipment record exists yet (order modal quoting orders that
+  //      pre-date the Phase 2 importer).
+  // Pak rates are sparse — only published for the low tiers — so we
+  // fall back to Package when no Pak rate exists at the matched tier.
+  const usePak = input.packagingType === 'bag'
+    ? true
+    : input.packagingType === 'box'
+      ? false
+      : chargeableWeightKg < 2;
   const pakBase = usePak ? zone.pakRateByTierUpper?.get(tier.upperKg) : undefined;
   const base = pakBase ?? zone.rateByTierUpper.get(tier.upperKg);
   if (base === undefined) {
