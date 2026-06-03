@@ -467,6 +467,16 @@ export const shopifyOrders = pgTable('shopify_orders', {
   // retroactively update past orders, so the operator points the
   // engine at the correct weight here.
   shipWeightKgOverride: numeric('ship_weight_kg_override', { precision: 10, scale: 3 }),
+  // Carrier the order was shipped with, derived from the Shopify
+  // `shippingLines.title` / `code` at sync time. One of:
+  //   'fedex'  — FedEx shipping line detected
+  //   'dhl'    — DHL shipping line detected
+  //   NULL     — no shipping line on the order, or unparseable → the
+  //              quote engine defaults to 'fedex' per operator spec
+  // Pinned per-order so a quote always asks the right carrier's rate
+  // sheet rather than picking the cheapest, which would mis-attribute
+  // costs when DHL was actually used.
+  shippingCarrierKey: text('shipping_carrier_key'),
 }, (t) => [
   index('shopify_orders_store_processed_idx').on(t.storeId, t.processedAtShopify),
   index('shopify_orders_cancelled_idx').on(t.cancelledAtShopify),

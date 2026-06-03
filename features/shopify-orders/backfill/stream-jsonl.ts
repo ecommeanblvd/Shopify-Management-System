@@ -41,12 +41,17 @@ export async function streamBulkResult(
         const row = JSON.parse(line) as ParentedRow;
         if (!row.__parentId) {
           const orderRow = row as unknown as ShopifyOrderPayload;
+          // shippingLines is a plain list (NOT a paginated connection) so
+          // it arrives inline on the parent row. Defensively default to []
+          // in case Shopify returns null/undefined for an order that's
+          // missing a shipping line (free fulfilment, pickup, etc.).
           orders.set(orderRow.id, {
             ...orderRow,
             refunds: [],
             fulfillments: [],
             lineItems: { nodes: [] },
             lineItemsRaw: [],
+            shippingLines: Array.isArray(orderRow.shippingLines) ? orderRow.shippingLines : [],
           });
         } else {
           const parent = orders.get(row.__parentId);

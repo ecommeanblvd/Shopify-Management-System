@@ -41,6 +41,7 @@ async function main(): Promise<void> {
     process.stdout.write(`  Processed   : ${isoDate}\n`);
     process.stdout.write(`  Country     : ${o.shipCountry}\n`);
     process.stdout.write(`  Weight      : ${effectiveWeight} kg${o.shipWeightKgOverride !== null ? ' (operator override)' : ''}\n`);
+    process.stdout.write(`  Carrier (ship-line): ${o.shippingCarrierKey ?? '— (defaults to fedex)'}\n`);
     process.stdout.write(`  Customer paid (revenue): ${o.totalShipping} ${o.currency}\n`);
     process.stdout.write(`  Shipping cost override : ${o.shippingCostOverride ?? '—'}\n`);
 
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
       shipCountry: o.shipCountry,
       shipWeightKg: effectiveWeight,
       effectiveDate: o.processedAtShopify,
+      shippingCarrierKey: o.shippingCarrierKey ?? null,
     });
     if (est.source === 'unknown') {
       process.stdout.write(`\n  ENGINE: unknown (reason=${est.reason})\n`);

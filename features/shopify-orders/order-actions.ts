@@ -169,6 +169,9 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       // mis-price a 6-week-old order. processed_at_shopify is when
       // Shopify accepted the order (≈ ship date for fulfilled orders).
       effectiveDate: order.processedAtShopify ?? undefined,
+      // Pin the quote to the carrier the customer actually paid for.
+      // NULL → estimator defaults to FedEx per operator spec.
+      shippingCarrierKey: order.shippingCarrierKey ?? null,
     });
     if (est.source !== 'unknown' && est.breakdown !== null) {
       defaultShipping = {
