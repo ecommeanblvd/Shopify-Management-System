@@ -1,0 +1,1 @@
+ALTER TABLE "shopify_orders" ADD COLUMN "ship_postcode" text;

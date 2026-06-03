@@ -25,6 +25,8 @@ export interface MappedOrder {
     totalTax: string;
     totalPrice: string;
     shipCountry: string | null;
+    /** Postcode/ZIP from Shopify shippingAddress.zip. NULL when missing. */
+    shipPostcode: string | null;
     shipWeightKg: string | null;
     /** Carrier the customer paid Shopify shipping for, derived from
      *  `shippingLines`. NULL when no line is matchable — the engine
@@ -75,6 +77,7 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       totalTax: payload.totalTaxSet.shopMoney.amount,
       totalPrice: payload.totalPriceSet.shopMoney.amount,
       shipCountry: payload.shippingAddress?.countryCodeV2 ?? null,
+      shipPostcode: payload.shippingAddress?.zip?.trim() || null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
       shippingCarrierKey: detectCarrierKey(payload.shippingLines),
     },

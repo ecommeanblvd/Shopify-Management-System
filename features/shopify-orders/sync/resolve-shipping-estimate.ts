@@ -28,6 +28,9 @@ import type { EngineEstimateReason } from './batch-shipping-estimator';
 
 export interface EngineEstimateInput {
   shipCountry: string | null;
+  /** Postcode/ZIP — used to match `carrier_remote_postcodes` and apply
+   *  the ODA (Out-of-Delivery-Area) tier. NULL when missing. */
+  shipPostcode?: string | null;
   shipWeightKg: number | null;
   /**
    * Effective quote date — defaults to "now". Pass the order's
@@ -114,6 +117,7 @@ export async function resolveShippingEstimate(
     input.shipCountry,
     input.shipWeightKg,
     input.effectiveDate,
+    input.shipPostcode ?? null,
   );
   if (best === null) return emptyResult('no_quote');
   return {
@@ -154,12 +158,18 @@ async function tryCarriers(
   country: string,
   weightKg: number,
   effectiveDate?: Date,
+  destinationPostcode?: string | null,
 ): Promise<CarrierAttempt | null> {
   let best: CarrierAttempt | null = null;
   for (const id of carrierIds) {
     const snap = await loadAccountSnapshot(id);
     if (!snap) continue;
-    const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
+    const q = quote(snap, {
+      weightKg,
+      destinationCountry: country,
+      destinationPostcode: destinationPostcode ?? undefined,
+      effectiveDate,
+    });
     if (q.ok) {
       const display = q.breakdown.carrierCostDisplay;
       if (best === null || display < best.display) {

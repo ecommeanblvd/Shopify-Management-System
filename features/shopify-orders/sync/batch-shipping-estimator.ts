@@ -44,6 +44,9 @@ function mondayUtcMs(d: Date): number {
 
 export interface EngineEstimateInput {
   shipCountry: string | null;
+  /** Postcode/ZIP — used to match ODA tier for FedEx/DHL remote
+   *  surcharges. NULL when missing. */
+  shipPostcode?: string | null;
   shipWeightKg: number | null;
   /**
    * Effective quote date — defaults to "now". Pass the order's
@@ -149,10 +152,16 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
     country: string,
     weightKg: number,
     effectiveDate?: Date,
+    destinationPostcode?: string | null,
   ): { display: number; cost: number; costCurrency: string } | null {
     let best: { display: number; cost: number; costCurrency: string } | null = null;
     for (const snap of snaps) {
-      const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
+      const q = quote(snap, {
+        weightKg,
+        destinationCountry: country,
+        destinationPostcode: destinationPostcode ?? undefined,
+        effectiveDate,
+      });
       if (!q.ok) continue;
       const display = q.breakdown.carrierCostDisplay;
       if (best === null || display < best.display) {
@@ -190,7 +199,8 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // same country/weight don't collide.
       const wKey = Math.round(input.shipWeightKg * 1000) / 1000;
       const dKey = input.effectiveDate ? mondayUtcMs(input.effectiveDate) : 'now';
-      const key = `${carrierKey}|${input.shipCountry}|${wKey}|${dKey}`;
+      const pKey = input.shipPostcode?.trim() || '-';
+      const key = `${carrierKey}|${input.shipCountry}|${pKey}|${wKey}|${dKey}`;
       const cached = memo.get(key);
       if (cached) return cached;
 
@@ -205,7 +215,13 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
         return r;
       }
 
-      const best = bestQuoteWithinCarrier(snaps, input.shipCountry, input.shipWeightKg, input.effectiveDate);
+      const best = bestQuoteWithinCarrier(
+        snaps,
+        input.shipCountry,
+        input.shipWeightKg,
+        input.effectiveDate,
+        input.shipPostcode ?? null,
+      );
       if (best !== null) {
         const r: EngineEstimateResult = {
           amount: best.display,

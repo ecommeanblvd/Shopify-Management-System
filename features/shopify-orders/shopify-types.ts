@@ -72,6 +72,9 @@ export interface ShopifyOrderPayload {
   totalPriceSet: ShopifyMoneyBag;
   shippingAddress: {
     countryCodeV2: string;
+    /** ZIP/postcode — NULL when Shopify didn't capture one. Engine uses
+     *  this to look up ODA (FedEx Out-of-Delivery-Area) postcode tier. */
+    zip: string | null;
   } | null;
   totalWeight: number | null;                   // in grams
   lineItems: { nodes: ShopifyLineItem[] };
