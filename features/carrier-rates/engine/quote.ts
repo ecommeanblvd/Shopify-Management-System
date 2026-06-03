@@ -101,6 +101,22 @@ export interface CarrierAccountSnapshot {
    * charges actual weight regardless of dimensions.
    */
   dimDivisorCm3PerKg?: number | null;
+  /**
+   * Rounding step applied to chargeable weight BEFORE tier lookup.
+   * NULL = use raw computed value (DHL — engine takes
+   * `first tier.upperKg >= chargeable`, so 2.52 → tier 3).
+   * 0.5 = FedEx 2-step rule (verified across 7 distinct dim_weights
+   * on 2026-06-03):
+   *    a) round to nearest 0.1 kg
+   *    b) ceiling to next 0.5 kg
+   *  Examples:
+   *    2.04 → 2.0 → 2.0
+   *    2.355 → 2.4 → 2.5
+   *    2.52 → 2.5 → 2.5
+   *    3.75 → 3.8 → 4.0
+   *    5.58 → 5.6 → 6.0
+   */
+  chargeableRoundingKg?: number | null;
   /** ISO-2 country code → zone snapshot. */
   zonesByCountry: Map<string, ZoneSnap>;
   /** Tiers sorted ascending by upperKg. */
@@ -385,8 +401,23 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     const volume = input.dimensions.lengthCm * input.dimensions.widthCm * input.dimensions.heightCm;
     dimWeightKg = Math.round((volume / snap.dimDivisorCm3PerKg) * 1000) / 1000;
   }
-  const chargeableWeightKg = Math.max(input.weightKg, dimWeightKg);
+  const rawChargeable = Math.max(input.weightKg, dimWeightKg);
   if (dimWeightKg > input.weightKg) notes.push(`dim_weight (${dimWeightKg} kg)`);
+
+  // Carrier-specific rounding before tier lookup. When set, the rule
+  // is FedEx 2-step: round to nearest 0.1 kg, then ceiling to next
+  // multiple of `chargeableRoundingKg` (typically 0.5). DHL uses raw.
+  let chargeableWeightKg = rawChargeable;
+  if (snap.chargeableRoundingKg && snap.chargeableRoundingKg > 0) {
+    const step = snap.chargeableRoundingKg;
+    const oneTenth = Math.round(rawChargeable * 10) / 10;
+    chargeableWeightKg = Math.ceil((oneTenth - 1e-9) / step) * step;
+    // Round to 3 dp to clean float drift on multiplication.
+    chargeableWeightKg = Math.round(chargeableWeightKg * 1000) / 1000;
+    if (chargeableWeightKg !== rawChargeable) {
+      notes.push(`chargeable_rounded (${rawChargeable} → ${chargeableWeightKg} kg)`);
+    }
+  }
 
   // Find first tier whose upperKg ≥ chargeable weight. If none, use the
   // last tier and warn. Chargeable weight drives EVERY rate/surcharge
