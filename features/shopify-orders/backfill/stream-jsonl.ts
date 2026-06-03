@@ -51,7 +51,10 @@ export async function streamBulkResult(
             fulfillments: [],
             lineItems: { nodes: [] },
             lineItemsRaw: [],
-            shippingLines: Array.isArray(orderRow.shippingLines) ? orderRow.shippingLines : [],
+            // shippingLines now a connection (edges/nodes) — children
+            // arrive as separate JSONL rows linked via __parentId.
+            // Initialise empty and accumulate below.
+            shippingLines: [],
           });
         } else {
           const parent = orders.get(row.__parentId);
@@ -59,6 +62,15 @@ export async function streamBulkResult(
           if ('quantity' in row) parent.lineItemsRaw.push(row as unknown as ShopifyLineItem);
           else if ('totalRefundedSet' in row) parent.refunds.push(row as unknown as ShopifyRefund);
           else if ('trackingInfo' in row) parent.fulfillments.push(row as unknown as ShopifyFulfillment);
+          // Shipping line child rows have `title` + `code` (no quantity,
+          // no totalRefundedSet, no trackingInfo). Detect by id prefix
+          // which is stable: gid://shopify/ShippingLine/...
+          else if (typeof row.id === 'string' && row.id.includes('/ShippingLine/')) {
+            parent.shippingLines.push({
+              title: (row.title as string | null) ?? null,
+              code: (row.code as string | null) ?? null,
+            });
+          }
         }
       }
       nl = buffer.indexOf('\n');
