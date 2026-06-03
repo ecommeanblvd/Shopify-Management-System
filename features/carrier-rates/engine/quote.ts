@@ -285,12 +285,15 @@ function sumApplicableOfKind(
  * Decides whether a surcharge participates in the fuelable subtotal.
  *
  * Per-row override (`s.fuelable`) wins. If NULL, defaults per kind:
- *   peak_fixed, remote_fixed, residential_fixed, per_kg_fixed, demand_per_kg
+ *   peak_fixed, remote_fixed, residential_fixed, per_kg_fixed
  *     → true (transport-cost surcharges fuel applies on top of)
- *   country_fixed, per_step_fixed
- *     → false (destination-side fees / environmental fees that historically
- *       sit OUTSIDE the fuelable subtotal — verified per #MBLVD28990 invoice
- *       for FedEx VN US-import-handling and per DHL GoGreen invoice math)
+ *   demand_per_kg, country_fixed, per_step_fixed
+ *     → false (destination-side fees / environmental fees that sit
+ *       OUTSIDE the fuelable subtotal — verified per the operator's
+ *       LOG-Export invoice column AK on 2026-06-03 across MBLVD28959,
+ *       MBLVD28988, etc.: fuel = pct × (effective_base + remote), so
+ *       FedEx Demand Surcharge is NOT in the fuel base. DHL Elevated
+ *       Risk (country_fixed) DOES need fuel — set per-row override.)
  *
  * The per-row override lets a single kind behave differently between
  * carriers — DHL Elevated Risk (country_fixed, fuelable=true) vs FedEx VN
@@ -305,8 +308,8 @@ function isFuelable(s: SurchargeSnap): boolean {
     case 'remote_fixed':
     case 'residential_fixed':
     case 'per_kg_fixed':
-    case 'demand_per_kg':
       return true;
+    case 'demand_per_kg':
     case 'country_fixed':
     case 'per_step_fixed':
     case 'fuel_percent':
