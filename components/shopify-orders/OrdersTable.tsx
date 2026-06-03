@@ -78,7 +78,16 @@ export function OrdersTable({
   }, [orders, search]);
 
   // Reset to page 0 when the result set shrinks under the operator's feet.
-  useEffect(() => { setPage(0); }, [search, pageSize]);
+  // React 19's react-hooks/set-state-in-effect rule rejects setState
+  // inside useEffect. Use the "computed-key-during-render" pattern:
+  // compare the current filter signature to the last one and reset on
+  // change. Identical to the effect at runtime, lint-clean.
+  const filterSignature = `${search}|${pageSize}`;
+  const [filterSignatureRef, setFilterSignatureRef] = useState(filterSignature);
+  if (filterSignature !== filterSignatureRef) {
+    setFilterSignatureRef(filterSignature);
+    setPage(0);
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages - 1);

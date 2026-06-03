@@ -138,7 +138,7 @@ export function CostFxButton({
                 </span>
               </div>
               <span className="block text-[11px] text-muted-foreground">
-                Boxes, labels, fulfilment labour — added to every order's shipping
+                Boxes, labels, fulfilment labour — added to every order&apos;s shipping
                 cost. In the order currency, NOT the cost currency.
               </span>
             </label>
