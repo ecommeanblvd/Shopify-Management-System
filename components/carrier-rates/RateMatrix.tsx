@@ -54,23 +54,36 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(initialMap.entries()));
   const [state, setState] = useState<Record<string, CellState>>({});
 
-  // Money-amount search — lifted here so the table can highlight the
-  // matching cells while <MatrixSearch> renders the result chip list.
+  // Money-amount search — lifted here so the table can colour the
+  // matching cells while <MatrixSearch> renders the chip summary.
+  //
+  // Two highlight tiers:
+  //   green  — exact match (amount === target after VND rounding)
+  //   blue   — near match  (|gap| ≤ NEAR_MATCH_PCT, but not exact)
+  //
+  // The operator reverse-looks-up an invoice amount → exact-match
+  // (green) means the rate sheet still has that price; near-match
+  // (blue) catches mid-period changes or invoice-side rounding.
+  const NEAR_MATCH_PCT = 0.5;
   const [searchRaw, setSearchRaw] = useState('');
-  const [tolPct, setTolPct] = useState(2);
   const searchTarget = useMemo(() => parseVnd(searchRaw), [searchRaw]);
   const matchedKeys = useMemo(() => {
-    if (searchTarget === null) return new Set<string>();
-    const out = new Set<string>();
+    const exact = new Set<string>();
+    const near = new Set<string>();
+    if (searchTarget === null) return { exact, near };
     for (const [key, str] of Object.entries(values)) {
       if (!str) continue;
       const amount = Number(str);
       if (!Number.isFinite(amount) || amount <= 0) continue;
+      if (amount === searchTarget) {
+        exact.add(key);
+        continue;
+      }
       const gapPct = Math.abs(amount - searchTarget) / Math.max(amount, 1) * 100;
-      if (gapPct <= tolPct) out.add(key);
+      if (gapPct <= NEAR_MATCH_PCT) near.add(key);
     }
-    return out;
-  }, [searchTarget, tolPct, values]);
+    return { exact, near };
+  }, [searchTarget, values]);
 
   function setCellState(key: string, s: CellState) {
     setState((prev) => ({ ...prev, [key]: s }));
@@ -97,8 +110,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
         costCurrency={costCurrency}
         searchRaw={searchRaw}
         onSearchChange={setSearchRaw}
-        tolPct={tolPct}
-        onTolPctChange={setTolPct}
+        nearMatchPct={NEAR_MATCH_PCT}
         target={searchTarget}
       />
       <div className="overflow-x-auto">
@@ -150,7 +162,11 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                       state={state[key] ?? 'idle'}
                       currency={costCurrency}
                       canEdit={canEdit}
-                      highlighted={matchedKeys.has(key)}
+                      matchTier={
+                        matchedKeys.exact.has(key) ? 'exact'
+                        : matchedKeys.near.has(key) ? 'near'
+                        : null
+                      }
                       onChange={(v) => setValues((p) => ({ ...p, [key]: v }))}
                       onCommit={async (v) => {
                         const trimmed = v.trim();
@@ -229,48 +245,63 @@ interface MatrixSearchProps {
   costCurrency: string;
   searchRaw: string;
   onSearchChange: (s: string) => void;
-  tolPct: number;
-  onTolPctChange: (n: number) => void;
+  nearMatchPct: number;
   target: number | null;
+}
+
+interface MatrixMatch {
+  zoneLabel: string;
+  tierUpper: number;
+  tierLower: number;
+  amount: number;
+  gapPct: number;
 }
 
 function MatrixSearch({
   values, zones, tiers, costCurrency,
   searchRaw: raw, onSearchChange: setRaw,
-  tolPct, onTolPctChange: setTolPct,
+  nearMatchPct,
   target,
 }: MatrixSearchProps): React.ReactNode {
-  const matches = useMemo(() => {
-    if (target === null) return [];
+  // Two buckets — exact-equality vs within nearMatchPct.
+  const matches = useMemo<{ exact: MatrixMatch[]; near: MatrixMatch[] }>(() => {
+    if (target === null) return { exact: [], near: [] };
     const zonesById = new Map(zones.map((z) => [z.id, z]));
     const tiersById = new Map(tiers.map((t) => [t.id, t]));
-    const out: Array<{ zoneLabel: string; tierUpper: number; tierLower: number; amount: number; gapPct: number }> = [];
+    const sortedTiers = [...tiers].sort((a, b) => Number(a.upperKg) - Number(b.upperKg));
+    const exact: MatrixMatch[] = [];
+    const near: MatrixMatch[] = [];
     for (const [key, str] of Object.entries(values)) {
       if (!str) continue;
       const amount = Number(str);
       if (!Number.isFinite(amount) || amount <= 0) continue;
+      const isExact = amount === target;
       const gapPct = Math.abs(amount - target) / Math.max(amount, 1) * 100;
-      if (gapPct > tolPct) continue;
+      if (!isExact && gapPct > nearMatchPct) continue;
       const [zoneId, tierId] = key.split('|');
       const z = zonesById.get(zoneId);
       const t = tiersById.get(tierId);
       if (!z || !t) continue;
-      // Compute tier lower bound — the matrix doesn't display it but
-      // operators read in "weight is BETWEEN X and Y kg" form, so we
-      // do the lookup once.
-      const sortedTiers = [...tiers].sort((a, b) => Number(a.upperKg) - Number(b.upperKg));
       const idx = sortedTiers.findIndex((x) => x.id === tierId);
       const lower = idx <= 0 ? 0 : Number(sortedTiers[idx - 1].upperKg);
-      out.push({
+      const m: MatrixMatch = {
         zoneLabel: z.label,
         tierUpper: Number(t.upperKg),
         tierLower: lower,
         amount,
         gapPct,
-      });
+      };
+      if (isExact) exact.push(m);
+      else near.push(m);
     }
-    return out.sort((a, b) => a.gapPct - b.gapPct);
-  }, [target, tolPct, values, zones, tiers]);
+    exact.sort((a, b) => a.tierUpper - b.tierUpper);
+    near.sort((a, b) => a.gapPct - b.gapPct);
+    return { exact, near };
+  }, [target, nearMatchPct, values, zones, tiers]);
+
+  const exactCount = matches.exact.length;
+  const nearCount = matches.near.length;
+  const totalCount = exactCount + nearCount;
 
   return (
     <div className="rounded border border-border bg-muted/30 p-3 space-y-2">
@@ -286,19 +317,6 @@ function MatrixSearch({
             className="text-sm h-9 pl-9 pr-3 rounded border border-border bg-background w-full focus:outline-none focus:ring-2 focus:ring-foreground/20"
           />
         </div>
-        <label className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-          ± tolerance
-          <input
-            type="number"
-            min={0}
-            max={50}
-            step={0.5}
-            value={tolPct}
-            onChange={(e) => setTolPct(Math.max(0, Math.min(50, Number(e.target.value) || 0)))}
-            className="text-sm h-9 w-16 px-2 rounded border border-border bg-background tabular-nums"
-          />
-          %
-        </label>
         {raw && (
           <button
             type="button"
@@ -310,37 +328,69 @@ function MatrixSearch({
         )}
       </div>
 
+      {/* Legend — only render when there's an active search. */}
       {target !== null && (
-        matches.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500/60" />
+            Exact match
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded bg-sky-500/40 border border-sky-500/60" />
+            Near match (±{nearMatchPct}%)
+          </span>
+        </div>
+      )}
+
+      {target !== null && (
+        totalCount === 0 ? (
           <p className="text-xs text-muted-foreground">
             Không có cell nào khớp{' '}
             <span className="font-mono font-medium">{formatMoneyForDisplay(String(target))}</span>
-            {' '}{costCurrency} (±{tolPct}%).
-            Tăng tolerance hoặc kiểm tra surcharge / discount đang làm số khác.
+            {' '}{costCurrency} (±{nearMatchPct}%).
+            Có thể số đã được carrier cộng thêm fuel / VAT / discount.
           </p>
         ) : (
-          <div className="text-xs space-y-1">
+          <div className="text-xs space-y-2">
             <p className="text-muted-foreground">
-              <span className="font-semibold text-foreground">{matches.length}</span>{' '}
-              {matches.length === 1 ? 'match' : 'matches'} cho{' '}
+              <span className="font-semibold text-foreground">{totalCount}</span>{' '}
+              {totalCount === 1 ? 'match' : 'matches'} cho{' '}
               <span className="font-mono font-medium">{formatMoneyForDisplay(String(target))}</span>{' '}
-              {costCurrency} (±{tolPct}%)
+              {costCurrency}
+              {exactCount > 0 && (
+                <> — <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{exactCount}</span> exact</>
+              )}
+              {nearCount > 0 && (
+                <>{exactCount > 0 ? ', ' : ' — '}<span className="text-sky-600 dark:text-sky-400 font-semibold">{nearCount}</span> near</>
+              )}
             </p>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 font-mono">
-              {matches.slice(0, 30).map((m, i) => (
-                <li key={i} className="bg-amber-500/20 dark:bg-amber-500/15 border border-amber-500/40 rounded px-2 py-1">
-                  <span className="font-semibold">{m.zoneLabel}</span>
-                  {' '}@ {fmtKg(m.tierLower)}–{fmtKg(m.tierUpper)} kg
-                  {' = '}
-                  <span className="font-semibold">{formatMoneyForDisplay(String(Math.round(m.amount)))}</span>
-                  {m.gapPct > 0.05 && (
-                    <span className="text-muted-foreground"> (Δ {m.gapPct.toFixed(1)}%)</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {matches.length > 30 && (
-              <p className="text-muted-foreground italic">… và {matches.length - 30} matches khác. Giảm tolerance để filter.</p>
+            {exactCount > 0 && (
+              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 font-mono">
+                {matches.exact.slice(0, 30).map((m, i) => (
+                  <li key={`e${i}`} className="bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/40 rounded px-2 py-1">
+                    <span className="font-semibold">{m.zoneLabel}</span>
+                    {' '}@ {fmtKg(m.tierLower)}–{fmtKg(m.tierUpper)} kg
+                    {' = '}
+                    <span className="font-semibold">{formatMoneyForDisplay(String(Math.round(m.amount)))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {nearCount > 0 && (
+              <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1 font-mono">
+                {matches.near.slice(0, 30).map((m, i) => (
+                  <li key={`n${i}`} className="bg-sky-500/15 dark:bg-sky-500/10 border border-sky-500/40 rounded px-2 py-1">
+                    <span className="font-semibold">{m.zoneLabel}</span>
+                    {' '}@ {fmtKg(m.tierLower)}–{fmtKg(m.tierUpper)} kg
+                    {' = '}
+                    <span className="font-semibold">{formatMoneyForDisplay(String(Math.round(m.amount)))}</span>
+                    <span className="text-muted-foreground"> (Δ {m.gapPct.toFixed(2)}%)</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(exactCount > 30 || nearCount > 30) && (
+              <p className="text-muted-foreground italic">… mỗi nhóm cap 30 chip, anh xem trong matrix các cell highlight.</p>
             )}
           </div>
         )
@@ -360,15 +410,15 @@ interface CellProps {
   state: CellState;
   currency: string;
   canEdit: boolean;
-  /** When true, the cell's value is within tolerance of the operator's
-   *  search amount — surface it with a coloured background so the eye
-   *  catches it even on a wide matrix. */
-  highlighted: boolean;
+  /** Match tier for the search box highlight. 'exact' = identical to
+   *  the target amount, 'near' = within NEAR_MATCH_PCT but not exact,
+   *  null = no match (no highlight). Drives the cell background only. */
+  matchTier: 'exact' | 'near' | null;
   onChange: (v: string) => void;
   onCommit: (v: string) => Promise<void>;
 }
 
-function Cell({ value, state, currency, canEdit, highlighted, onChange, onCommit }: CellProps) {
+function Cell({ value, state, currency, canEdit, matchTier, onChange, onCommit }: CellProps) {
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -384,7 +434,10 @@ function Cell({ value, state, currency, canEdit, highlighted, onChange, onCommit
   // formatter so the read-only and editable cells both show "401,928".
   const display = formatMoneyForDisplay(value);
 
-  const highlightBg = highlighted ? 'bg-amber-500/30 dark:bg-amber-500/25' : '';
+  const highlightBg =
+    matchTier === 'exact' ? 'bg-emerald-500/30 dark:bg-emerald-500/25'
+    : matchTier === 'near' ? 'bg-sky-500/30 dark:bg-sky-500/25'
+    : '';
 
   if (!canEdit) {
     return (
