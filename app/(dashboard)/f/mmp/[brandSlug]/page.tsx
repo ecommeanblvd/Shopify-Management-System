@@ -147,7 +147,7 @@ export default async function BrandProductsPage({ params, searchParams }: PagePr
               className="group"
             >
               <Card className="overflow-hidden h-full hover:border-foreground/30 transition-colors">
-                <div className="aspect-[3/4] bg-muted relative overflow-hidden">
+                <div className="aspect-[2/3] bg-muted relative overflow-hidden">
                   {p.thumbnailUrl ? (
                     <Image
                       src={p.thumbnailUrl}

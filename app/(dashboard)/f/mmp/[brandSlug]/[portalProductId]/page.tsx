@@ -97,16 +97,30 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
         {/* Left: gallery + metadata */}
         <div className="space-y-6">
           {images.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            // Horizontal carousel — saves vertical space on the detail
+            // page so the metadata + variant table sit closer to the
+            // viewport top. Each card is fixed-width with 2:3 portrait
+            // aspect (taller than wide) to match fashion product specs.
+            // CSS-only scroll-snap; arrow controls land in v2 if asked.
+            <div
+              className="
+                -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
+                flex gap-3 pb-3
+                [scrollbar-width:thin]
+              "
+            >
               {images.map((img) => (
-                <Card key={img.id} className="overflow-hidden">
-                  <div className="aspect-square relative bg-muted">
+                <Card
+                  key={img.id}
+                  className="overflow-hidden flex-none w-[200px] sm:w-[220px] md:w-[240px] snap-start"
+                >
+                  <div className="aspect-[2/3] relative bg-muted">
                     <Image
                       src={img.url}
                       alt={img.altText ?? `${product.name} ${img.role ?? 'image'}`}
                       fill
                       className="object-cover"
-                      sizes="(max-width: 768px) 50vw, 33vw"
+                      sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 240px"
                       unoptimized
                     />
                     {img.isThumbnail && (
