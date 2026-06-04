@@ -94,17 +94,21 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
       </header>
 
       <section className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-        {/* Left: gallery + metadata */}
-        <div className="space-y-6">
+        {/* Left: gallery + metadata.
+            min-w-0 is critical here: without it CSS Grid would size the
+            left column by its content (the flex carousel with flex-none
+            cards), pushing the 360 px right column off-screen. */}
+        <div className="space-y-6 min-w-0">
           {images.length > 0 ? (
-            // Horizontal carousel — cards sized so ~5 fit across the
-            // left column on wide monitors, filling the available width
-            // alongside the Attributes / Details cards below. When a
-            // product has more images, the row scrolls horizontally
-            // with snap-mandatory.
+            // Horizontal carousel — moderately sized cards so 4-5 fit
+            // across the left column at typical desktop widths, leaves
+            // breathing room beside the 360 px right rail (Base price /
+            // Variants), and keeps card height (~270 px) low enough that
+            // the Attributes / Details cards remain in the viewport
+            // without scrolling.
             <div
               className="
-                -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
+                overflow-x-auto snap-x snap-mandatory
                 flex gap-3 pb-3
                 [scrollbar-width:thin]
               "
@@ -112,7 +116,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
               {images.map((img) => (
                 <Card
                   key={img.id}
-                  className="overflow-hidden flex-none w-[220px] sm:w-[260px] lg:w-[280px] snap-start"
+                  className="overflow-hidden flex-none w-[150px] sm:w-[170px] lg:w-[180px] snap-start"
                 >
                   <div className="aspect-[2/3] relative bg-muted">
                     <Image
@@ -120,18 +124,18 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
                       alt={img.altText ?? `${product.name} ${img.role ?? 'image'}`}
                       fill
                       className="object-cover"
-                      sizes="(max-width: 640px) 220px, (max-width: 1024px) 260px, 280px"
+                      sizes="(max-width: 640px) 150px, (max-width: 1024px) 170px, 180px"
                       unoptimized
                     />
                     {img.isThumbnail && (
-                      <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] px-2 py-0.5">
+                      <Badge variant="secondary" className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0">
                         thumb
                       </Badge>
                     )}
                   </div>
-                  <CardContent className="p-2.5 text-xs text-muted-foreground flex items-center justify-between">
+                  <CardContent className="p-2 text-[11px] text-muted-foreground flex items-center justify-between">
                     <span className="truncate">{img.role ?? '—'}</span>
-                    <span className="font-mono shrink-0 ml-2">#{img.position}</span>
+                    <span className="font-mono shrink-0 ml-1.5">#{img.position}</span>
                   </CardContent>
                 </Card>
               ))}
