@@ -158,6 +158,17 @@ export interface QuoteInput {
   packagingType?: 'bag' | 'box' | null;
   destinationCountry: string;
   destinationPostcode?: string;
+  /**
+   * Destination city name. Used as a fallback key for the remote-area
+   * lookup when the carrier's surcharge list is published by city
+   * instead of by postal code — e.g. FedEx ODA Tier B for SA/AE/KW/QA/
+   * OM/BH lists Jeddah, Riyadh, Abu Dhabi… with no postcode.
+   *
+   * Comparison is case-insensitive and trim-normalised. Stored
+   * patterns are uppercased at import time so this stays a constant-
+   * time Map.get().
+   */
+  destinationCity?: string;
   isResidential?: boolean;
   /**
    * Quote-time anchor for time-versioned surcharges. Defaults to now.
@@ -481,16 +492,39 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
     .reduce((sum, s) => sum + s.value, 0);
 
+  // Remote-area lookup. Postcode first (more specific), then city
+  // name fallback when the postcode isn't on the list. Both keys live
+  // in the same per-country Map: postcodes are stored as-is (already
+  // digits), city patterns are stored UPPERCASED at import time so
+  // there's no collision between the two and lookup stays O(1).
   let remote = 0;
-  if (input.destinationPostcode) {
-    const patterns = snap.remotePostcodes.get(country);
-    const matchedTier = patterns?.get(input.destinationPostcode.trim());
-    if (matchedTier !== undefined) {
-      // matchedTier may be null (no tier) or a label like 'Tier A'.
-      remote = sumRemoteFixed(snap.surcharges, matchedTier, chargeableWeightKg, effectiveDate);
-      if (matchedTier) notes.push(`remote_match (${matchedTier})`);
-      else notes.push('remote_match');
+  let matchedTier: string | null | undefined;
+  let matchedBy: 'postcode' | 'city' | null = null;
+  const patterns = snap.remotePostcodes.get(country);
+  if (patterns) {
+    if (input.destinationPostcode) {
+      const t = patterns.get(input.destinationPostcode.trim());
+      if (t !== undefined) {
+        matchedTier = t;
+        matchedBy = 'postcode';
+      }
     }
+    if (matchedBy === null && input.destinationCity) {
+      const cityKey = input.destinationCity.trim().toUpperCase();
+      if (cityKey.length > 0) {
+        const t = patterns.get(cityKey);
+        if (t !== undefined) {
+          matchedTier = t;
+          matchedBy = 'city';
+        }
+      }
+    }
+  }
+  if (matchedBy !== null) {
+    // matchedTier may be null (no tier) or a label like 'Tier A'.
+    remote = sumRemoteFixed(snap.surcharges, matchedTier ?? null, chargeableWeightKg, effectiveDate);
+    const suffix = matchedTier ? ` (${matchedTier})` : '';
+    notes.push(`remote_match:${matchedBy}${suffix}`);
   }
 
   const residential = input.isResidential
