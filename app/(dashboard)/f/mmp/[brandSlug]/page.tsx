@@ -23,12 +23,23 @@ const CURATION_TABS: Array<{ key: CurationFilter; label: string }> = [
   { key: 'pushed', label: 'Pushed' },
 ];
 
-const CURATION_STYLES: Record<CurationFilter, string> = {
+// Filter-pill styles (text only, never over a photo).
+const CURATION_PILL_STYLES: Record<CurationFilter, string> = {
   all:      'border-foreground/30',
   received: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
   approved: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   rejected: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
   pushed:   'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+};
+
+// Badge styles for overlays on product photos. Soft fills disappear
+// against bright skin tones / white studio backdrops — use solid
+// chips with white text instead.
+const CURATION_BADGE_STYLES: Record<Exclude<CurationFilter, 'all'>, string> = {
+  received: 'bg-amber-500 text-white border-transparent',
+  approved: 'bg-emerald-500 text-white border-transparent',
+  rejected: 'bg-rose-500 text-white border-transparent',
+  pushed:   'bg-sky-500 text-white border-transparent',
 };
 
 function fmtVnd(s: string): string {
@@ -108,7 +119,7 @@ export default async function BrandProductsPage({ params, searchParams }: PagePr
               href={urlWith({ curation: t.key, page: '1' })}
               className={`text-xs px-2.5 py-1 rounded-full border ${
                 t.key === curation
-                  ? `border-transparent ${CURATION_STYLES[t.key]}`
+                  ? `border-transparent ${CURATION_PILL_STYLES[t.key]}`
                   : 'border-border text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -163,11 +174,17 @@ export default async function BrandProductsPage({ params, searchParams }: PagePr
                     </div>
                   )}
                   <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1.5">
-                    <Badge variant="secondary" className={`text-[10px] ${CURATION_STYLES[p.curationStatus]}`}>
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] font-medium shadow-sm ${CURATION_BADGE_STYLES[p.curationStatus]}`}
+                    >
                       {p.curationStatus}
                     </Badge>
                     {p.shopifyProductId && (
-                      <Badge variant="secondary" className={`text-[10px] gap-1 ${CURATION_STYLES.pushed}`}>
+                      <Badge
+                        variant="secondary"
+                        className={`text-[10px] gap-1 font-medium shadow-sm ${CURATION_BADGE_STYLES.pushed}`}
+                      >
                         <Truck className="size-2.5" /> Shopify
                       </Badge>
                     )}

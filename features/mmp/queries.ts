@@ -227,6 +227,107 @@ export async function listProductsForBrand(args: ListProductsArgs): Promise<{
   };
 }
 
+/** Cross-brand product search row — used by the landing page's
+ *  global search box. Same shape as ProductListItem plus a brand
+ *  label so the UI can show which brand each result belongs to. */
+export interface GlobalSearchItem extends ProductListItem {
+  brandSlug: string;
+  brandDisplayName: string;
+}
+
+/** Search products across every brand by name / sku / portal id.
+ *  Powers the landing-page search box.
+ *
+ *  Same `p.*` alias pattern as listProductsForBrand — see that
+ *  function's docblock for why we hand-build the WHERE fragment. */
+export async function searchAllProducts(args: {
+  search: string;
+  limit: number;
+  offset: number;
+}): Promise<{ items: GlobalSearchItem[]; total: number }> {
+  const q = `%${args.search.trim()}%`;
+
+  const [totalRow] = await db
+    .select({ n: count() })
+    .from(schema.mmpProducts)
+    .where(sql`(
+      ${ilike(schema.mmpProducts.name, q)}
+      OR ${ilike(schema.mmpProducts.sku, q)}
+      OR ${ilike(schema.mmpProducts.portalProductId, q)}
+    )`);
+
+  const rows = await db.execute<{
+    portal_product_id: string;
+    brand_slug: string;
+    brand_display_name: string | null;
+    sku: string;
+    name: string;
+    product_type: string | null;
+    collection: string | null;
+    status: 'live' | 'draft' | 'archived';
+    curation_status: 'received' | 'approved' | 'rejected' | 'pushed';
+    base_price: string;
+    variant_count: number;
+    thumbnail_url: string | null;
+    last_received_at: Date;
+    shopify_product_id: string | null;
+  }>(sql`
+    SELECT
+      p.portal_product_id,
+      p.brand_slug,
+      b.display_name AS brand_display_name,
+      p.sku,
+      p.name,
+      p.product_type,
+      p.collection,
+      p.status,
+      p.curation_status,
+      p.base_price,
+      p.last_received_at,
+      p.shopify_product_id,
+      (
+        SELECT COUNT(*)::int FROM ${schema.mmpProductVariants} v
+        WHERE v.product_id = p.id
+      ) AS variant_count,
+      (
+        SELECT i.url FROM ${schema.mmpProductImages} i
+        WHERE i.product_id = p.id
+        ORDER BY i.is_thumbnail DESC, i.position ASC
+        LIMIT 1
+      ) AS thumbnail_url
+    FROM ${schema.mmpProducts} p
+    LEFT JOIN ${schema.mmpBrands} b ON b.slug = p.brand_slug
+    WHERE (
+      p.name ILIKE ${q}
+      OR p.sku ILIKE ${q}
+      OR p.portal_product_id ILIKE ${q}
+    )
+    ORDER BY p.last_received_at DESC
+    LIMIT ${args.limit}
+    OFFSET ${args.offset}
+  `);
+
+  return {
+    total: totalRow?.n ?? 0,
+    items: rows.rows.map((r) => ({
+      portalProductId: r.portal_product_id,
+      brandSlug: r.brand_slug,
+      brandDisplayName: r.brand_display_name ?? r.brand_slug,
+      sku: r.sku,
+      name: r.name,
+      productType: r.product_type,
+      collection: r.collection,
+      status: r.status,
+      curationStatus: r.curation_status,
+      basePrice: r.base_price,
+      variantCount: r.variant_count,
+      thumbnailUrl: r.thumbnail_url,
+      lastReceivedAt: new Date(r.last_received_at),
+      shopifyProductId: r.shopify_product_id,
+    })),
+  };
+}
+
 /** Product detail (header). Variants/images loaded separately to keep
  *  the SQL readable. */
 export interface ProductDetail {
