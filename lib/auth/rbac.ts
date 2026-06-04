@@ -17,7 +17,13 @@ export type Permission =
   | 'manage_sku_costs'
   | 'manage_shipping_invoices'
   | 'manage_functions'
-  | 'view_functions';
+  | 'view_functions'
+  // MMP catalog: read-only browse of products received from MEAN
+  // Merchant Portal (viewer-level).
+  | 'view_mmp_products'
+  // MMP curation: approve / reject / trigger push-to-Shopify
+  // (operator+ only).
+  | 'manage_mmp_products';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -29,6 +35,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'manage_carrier_rates', 'view_carrier_rates',
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
+    'view_mmp_products', 'manage_mmp_products',
   ],
   operator: [
     'view', 'run_feature',
@@ -37,10 +44,12 @@ const MATRIX: Record<Role, Permission[]> = {
     'manage_carrier_rates', 'view_carrier_rates',
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
+    'view_mmp_products', 'manage_mmp_products',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
     'view_orders', 'view_functions',
+    'view_mmp_products',
   ],
 };
 
