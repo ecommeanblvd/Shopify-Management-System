@@ -97,22 +97,22 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
         {/* Left: gallery + metadata */}
         <div className="space-y-6">
           {images.length > 0 ? (
-            // Horizontal carousel — saves vertical space on the detail
-            // page so the metadata + variant table sit closer to the
-            // viewport top. Each card is fixed-width with 2:3 portrait
-            // aspect (taller than wide) to match fashion product specs.
-            // CSS-only scroll-snap; arrow controls land in v2 if asked.
+            // Horizontal carousel — narrower cards so the gallery
+            // doesn't dominate the workspace. Operator should see 3-4
+            // images at once and scroll for the rest, not the entire
+            // batch laid out. Container is capped at max-w-md (28 rem
+            // ≈ 448px) so even on wide monitors it stays compact.
             <div
               className="
-                -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
-                flex gap-3 pb-3
+                max-w-md -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
+                flex gap-2 pb-3
                 [scrollbar-width:thin]
               "
             >
               {images.map((img) => (
                 <Card
                   key={img.id}
-                  className="overflow-hidden flex-none w-[200px] sm:w-[220px] md:w-[240px] snap-start"
+                  className="overflow-hidden flex-none w-[120px] sm:w-[136px] snap-start"
                 >
                   <div className="aspect-[2/3] relative bg-muted">
                     <Image
@@ -120,18 +120,18 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
                       alt={img.altText ?? `${product.name} ${img.role ?? 'image'}`}
                       fill
                       className="object-cover"
-                      sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 240px"
+                      sizes="(max-width: 640px) 120px, 136px"
                       unoptimized
                     />
                     {img.isThumbnail && (
-                      <Badge variant="secondary" className="absolute top-2 left-2 text-[10px]">
-                        thumbnail
+                      <Badge variant="secondary" className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0">
+                        thumb
                       </Badge>
                     )}
                   </div>
-                  <CardContent className="p-2 text-[10px] text-muted-foreground flex items-center justify-between">
-                    <span>{img.role ?? '—'}</span>
-                    <span className="font-mono">#{img.position}</span>
+                  <CardContent className="p-1.5 text-[10px] text-muted-foreground flex items-center justify-between">
+                    <span className="truncate">{img.role ?? '—'}</span>
+                    <span className="font-mono shrink-0 ml-1">#{img.position}</span>
                   </CardContent>
                 </Card>
               ))}
