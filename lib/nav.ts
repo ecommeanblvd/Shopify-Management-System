@@ -19,7 +19,7 @@ export const NAV: NavItem[] = [
   { href: '/f/markets/history',       label: 'Markets history', icon: History,         requires: 'view_markets_history' },
   { href: '/f/carrier-rates',         label: 'Carrier rates',   icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/f/orders',                label: 'Orders',          icon: ShoppingBag,     requires: 'view_orders' },
-  { href: '/f/mmp',                   label: 'MMP Products',    icon: Package,         requires: 'view_mmp_products' },
+  { href: '/f/mmp',                   label: 'Products',        icon: Package,         requires: 'view_mmp_products' },
   { href: '/f/functions',             label: 'Functions',       icon: Sparkles,        requires: 'view_functions' },
   { href: '/admin/users',             label: 'Users',           icon: Users,           requires: 'manage_users' },
   { href: '/admin/feature-flags',     label: 'Feature flags',   icon: ToggleRight,     requires: 'manage_users' },
