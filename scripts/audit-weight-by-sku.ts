@@ -195,7 +195,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 4. Load lines for all flagged orders in one query.
+  // 4. Load lines for all flagged orders in one query, plus the
+  //    master variant weight from shopify_variants when we have it.
   const orderIds = [...new Set(badOrders.map((o) => o.orderId))];
   const lines = await db
     .select({
@@ -209,6 +210,22 @@ async function main(): Promise<void> {
     .from(schema.shopifyOrderLines)
     .where(inArray(schema.shopifyOrderLines.orderId, orderIds));
 
+  // Master weight per SKU, from the synced Shopify variants table.
+  // Multiple stores may have the same SKU — take the first non-null
+  // weight (the audit is scoped to one store so collisions are rare).
+  const skus = [...new Set(lines.map((l) => l.sku).filter((s): s is string => !!s))];
+  const variantRows = skus.length === 0 ? [] : await db
+    .select({ sku: schema.shopifyVariants.sku, weightGrams: schema.shopifyVariants.weightGrams })
+    .from(schema.shopifyVariants)
+    .where(inArray(schema.shopifyVariants.sku, skus));
+  const masterWeightBySku = new Map<string, number>();
+  for (const v of variantRows) {
+    if (v.sku && v.weightGrams !== null && !masterWeightBySku.has(v.sku)) {
+      masterWeightBySku.set(v.sku, Number(v.weightGrams));
+    }
+  }
+  console.error(`[audit-sku] master weight available for ${masterWeightBySku.size} / ${skus.length} SKUs`);
+
   const linesByOrder = new Map<string, typeof lines>();
   for (const l of lines) {
     const arr = linesByOrder.get(l.orderId) ?? [];
@@ -217,15 +234,33 @@ async function main(): Promise<void> {
   }
 
   // 5. Roll up by SKU.
+  // Attribution share: line.qty × master_weight_grams / Σ(qty × weight).
+  // This gives a SKU's actual contribution to the order's reported
+  // weight, instead of blaming small gift items the same as the
+  // dress that shares their box. Falls back to qty share when no
+  // master weight is available for any line in the order — best we
+  // can do until that SKU's variant is synced.
   const skuMap = new Map<string, SkuRollup>();
   for (const o of badOrders) {
     const orderLines = (linesByOrder.get(o.orderId) ?? []).filter((l) => l.sku);
-    const orderQty = orderLines.reduce((s, l) => s + l.quantity, 0);
-    if (orderQty === 0) continue;
+    if (orderLines.length === 0) continue;
 
-    for (const l of orderLines) {
+    const weightedQuantities = orderLines.map((l) => {
+      const mw = masterWeightBySku.get(l.sku!);
+      return { line: l, weight: mw !== undefined ? l.quantity * mw : null };
+    });
+    const orderTotalWeight = weightedQuantities.reduce(
+      (s, w) => s + (w.weight ?? 0), 0,
+    );
+    const useWeightShare = orderTotalWeight > 0 && weightedQuantities.every((w) => w.weight !== null);
+    const orderQty = orderLines.reduce((s, l) => s + l.quantity, 0);
+
+    for (const wq of weightedQuantities) {
+      const l = wq.line;
       const sku = l.sku!;
-      const qtyShare = l.quantity / orderQty;
+      const share = useWeightShare
+        ? (wq.weight ?? 0) / orderTotalWeight
+        : l.quantity / orderQty;
       const e = skuMap.get(sku) ?? {
         sku,
         vendor: l.vendor,
@@ -240,8 +275,8 @@ async function main(): Promise<void> {
       };
       e.orderCount++;
       e.totalQty += l.quantity;
-      e.weightedDeltaKg += o.deltaKg * qtyShare;
-      e.weightedDeltaVnd += o.deltaVnd * qtyShare;
+      e.weightedDeltaKg += o.deltaKg * share;
+      e.weightedDeltaVnd += o.deltaVnd * share;
       e.impliedKgs.push(o.impliedKg);
       e.reportedKgs.push(o.reportedKg);
       skuMap.set(sku, e);
