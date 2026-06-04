@@ -481,17 +481,20 @@ describe('quote engine', () => {
       expect(r.ok && r.breakdown.remote).toBe(550_000);
     });
 
-    it('city lookup is case-insensitive and trims whitespace', () => {
+    it('city lookup normalises uppercase + strips non-alphanumeric', () => {
+      // FedEx's published source is inconsistent — some entries have
+      // spaces ("Durrat Al Bahrain"), some don't ("ABAALWOROOD"). The
+      // import script strips separators, so the engine must too.
       const snap = makeSnap({
         surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' }],
-        remotePostcodes: new Map([['SG', new Map([['BIDA ZAYED', 'Tier B']])]]),
+        // Pattern is fully stripped — both spaces and punctuation removed.
+        remotePostcodes: new Map([['SG', new Map([['BIDAZAYED', 'Tier B']])]]),
       });
-      const r = quote(snap, {
-        weightKg: 1,
-        destinationCountry: 'SG',
-        destinationCity: '  bida zayed  ',
-      });
-      expect(r.ok && r.breakdown.remote).toBe(550_000);
+      // Various ways an order's city might come in — all should hit.
+      for (const city of ['Bida Zayed', '  bida-zayed ', 'BIDA  ZAYED', 'bidazayed']) {
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationCity: city });
+        expect(r.ok && r.breakdown.remote).toBe(550_000);
+      }
     });
 
     it('prefers postcode match over city match when both are provided', () => {
@@ -503,8 +506,8 @@ describe('quote engine', () => {
           { kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' },
         ],
         remotePostcodes: new Map([['SG', new Map([
-          ['10930',      'Tier A'], // postcode → A
-          ['TEL AVIV',   'Tier B'], // city → B
+          ['10930',    'Tier A'], // postcode → A
+          ['TELAVIV',  'Tier B'], // city normalised → B
         ])]]),
       });
       const r = quote(snap, {

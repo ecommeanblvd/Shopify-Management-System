@@ -510,7 +510,13 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       }
     }
     if (matchedBy === null && input.destinationCity) {
-      const cityKey = input.destinationCity.trim().toUpperCase();
+      // Normalise: uppercase + strip non-alphanumeric. FedEx's source
+      // is inconsistent (SA "ABAALWOROOD" vs BH "Durrat Al Bahrain"),
+      // and incoming Shopify city values vary even more ("aba al
+      // worood", "Aba Alworood"). Stripping all separators normalises
+      // both sides. MUST stay in sync with the import script's
+      // city-pattern normalisation.
+      const cityKey = input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (cityKey.length > 0) {
         const t = patterns.get(cityKey);
         if (t !== undefined) {
