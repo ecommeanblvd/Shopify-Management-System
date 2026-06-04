@@ -459,6 +459,89 @@ describe('quote engine', () => {
       expect(r.notes).toContain('weight_exceeds_top_tier (5 kg)');
       expect(r.tier.upperKg).toBe(5);
     });
+
+    // ----- destinationCity fallback ----------------------------------
+    // ME countries (SA, AE, KW, QA, OM, BH) have no postal-code-based
+    // ODA list — FedEx publishes only city names. The engine stores
+    // those cities UPPERCASED in the same patterns map so the lookup
+    // is a normal Map.get(), no scanning.
+
+    it('matches by city name when destinationPostcode is missing', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 550_000, valuePerKg: 9_200, active: true, tier: 'Tier B' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([['JEDDAH', 'Tier B']])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationCity: 'Jeddah',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(550_000);
+    });
+
+    it('city lookup is case-insensitive and trims whitespace', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' }],
+        remotePostcodes: new Map([['SG', new Map([['BIDA ZAYED', 'Tier B']])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationCity: '  bida zayed  ',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(550_000);
+    });
+
+    it('prefers postcode match over city match when both are provided', () => {
+      // Same country, two patterns mapped to different tiers. If both
+      // postcode and city would match, the more specific postcode wins.
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 82_200, active: true, tier: 'Tier A' },
+          { kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([
+          ['10930',      'Tier A'], // postcode → A
+          ['TEL AVIV',   'Tier B'], // city → B
+        ])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationPostcode: '10930',
+        destinationCity: 'Tel Aviv',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(82_200); // Tier A (postcode) wins
+    });
+
+    it('falls back to city when postcode does not match', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' }],
+        remotePostcodes: new Map([['SG', new Map([['SUR', 'Tier B']])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationPostcode: 'XXXXX', // doesn't exist in map
+        destinationCity: 'Sur',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(550_000);
+    });
+
+    it('does not apply remote when neither postcode nor city matches', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' }],
+        remotePostcodes: new Map([['SG', new Map([['DUBAI', 'Tier B']])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationCity: 'Abu Dhabi',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(0);
+    });
   });
 
   describe('error paths', () => {
