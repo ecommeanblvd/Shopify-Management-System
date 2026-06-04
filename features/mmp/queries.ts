@@ -118,29 +118,52 @@ export interface ListProductsArgs {
 }
 
 /** Products for the brand list view. Joins thumbnail + variant count
- *  in a single roundtrip. */
+ *  in a single roundtrip.
+ *
+ *  Why the raw SQL with manual `p.` aliases: Drizzle's `eq(schema.x, …)`
+ *  helper renders the fully-qualified `"mmp_products"."brand_slug"`,
+ *  which Postgres rejects when the outer query has aliased the same
+ *  table as `p` (`error 42P01 invalid reference to FROM-clause entry`).
+ *  We build the predicate fragments by hand so they reference `p.*`. */
 export async function listProductsForBrand(args: ListProductsArgs): Promise<{
   items: ProductListItem[];
   total: number;
 }> {
-  const conditions = [eq(schema.mmpProducts.brandSlug, args.brandSlug)];
+  const filters = [sql`p.brand_slug = ${args.brandSlug}`];
   if (args.curation !== 'all') {
-    conditions.push(eq(schema.mmpProducts.curationStatus, args.curation));
+    filters.push(sql`p.curation_status = ${args.curation}`);
   }
   if (args.search.trim()) {
     const q = `%${args.search.trim()}%`;
-    conditions.push(sql`(
+    filters.push(sql`(
+      p.name ILIKE ${q}
+      OR p.sku ILIKE ${q}
+      OR p.portal_product_id ILIKE ${q}
+    )`);
+  }
+  // Compose AND chain manually — `sql.join` keeps the parameter
+  // bindings intact and avoids accidental string interpolation.
+  const whereSql = sql.join(filters, sql` AND `);
+
+  // Total uses Drizzle-typed select so we get a proper count() output.
+  // The conditions here MUST use the unaliased schema columns because
+  // there's no `p` alias on this query path.
+  const totalConditions = [eq(schema.mmpProducts.brandSlug, args.brandSlug)];
+  if (args.curation !== 'all') {
+    totalConditions.push(eq(schema.mmpProducts.curationStatus, args.curation));
+  }
+  if (args.search.trim()) {
+    const q = `%${args.search.trim()}%`;
+    totalConditions.push(sql`(
       ${ilike(schema.mmpProducts.name, q)}
       OR ${ilike(schema.mmpProducts.sku, q)}
       OR ${ilike(schema.mmpProducts.portalProductId, q)}
     )`);
   }
-  const where = and(...conditions);
-
   const [totalRow] = await db
     .select({ n: count() })
     .from(schema.mmpProducts)
-    .where(where);
+    .where(and(...totalConditions));
 
   const rows = await db.execute<{
     portal_product_id: string;
@@ -178,7 +201,7 @@ export async function listProductsForBrand(args: ListProductsArgs): Promise<{
         LIMIT 1
       ) AS thumbnail_url
     FROM ${schema.mmpProducts} p
-    WHERE ${where}
+    WHERE ${whereSql}
     ORDER BY p.last_received_at DESC
     LIMIT ${args.limit}
     OFFSET ${args.offset}
