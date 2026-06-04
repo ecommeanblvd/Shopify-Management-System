@@ -1,21 +1,33 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { ArrowRight, Tag, Inbox, CheckCircle2, XCircle, Truck, Package, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Tag, Inbox, CheckCircle2, XCircle, Truck, Package, ShoppingBag, Search } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { listBrandsWithCounts } from '@/features/mmp/queries';
+import { buttonVariants } from '@/components/ui/button';
+import { listBrandsWithCounts, searchAllProducts } from '@/features/mmp/queries';
 
 export const dynamic = 'force-dynamic';
+
+const SEARCH_PAGE_SIZE = 30;
 
 function formatDate(d: Date): string {
   return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
-export default async function MmpProductsLanding(): Promise<React.ReactNode> {
+function fmtVnd(s: string): string {
+  return new Intl.NumberFormat('vi-VN').format(Number(s)) + ' ₫';
+}
+
+interface PageProps {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}
+
+export default async function MmpProductsLanding({ searchParams }: PageProps): Promise<React.ReactNode> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -30,6 +42,13 @@ export default async function MmpProductsLanding(): Promise<React.ReactNode> {
     );
   }
 
+  const sp = await searchParams;
+  const search = (sp.q ?? '').trim();
+  const page = Math.max(1, Number(sp.page ?? '1') || 1);
+
+  // When search is active we run a global product lookup instead of
+  // the brand-card view — the brand tally is still useful as a header,
+  // but the body becomes a flat product grid.
   const brands = await listBrandsWithCounts();
   const totals = brands.reduce(
     (acc, b) => ({
@@ -42,8 +61,27 @@ export default async function MmpProductsLanding(): Promise<React.ReactNode> {
     { products: 0, received: 0, approved: 0, rejected: 0, pushed: 0 },
   );
 
+  const searchResult = search
+    ? await searchAllProducts({
+        search,
+        limit: SEARCH_PAGE_SIZE,
+        offset: (page - 1) * SEARCH_PAGE_SIZE,
+      })
+    : null;
+  const lastSearchPage = searchResult ? Math.max(1, Math.ceil(searchResult.total / SEARCH_PAGE_SIZE)) : 1;
+
+  function urlWith(over: Record<string, string | undefined>): string {
+    const u = new URLSearchParams();
+    const v = { q: search, page: String(page), ...over };
+    for (const [k, val] of Object.entries(v)) {
+      if (val && val !== '1' && val !== '') u.set(k, val);
+    }
+    const qs = u.toString();
+    return `/f/mmp${qs ? `?${qs}` : ''}`;
+  }
+
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
       <header className="space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <ShoppingBag className="size-3.5" />
@@ -65,7 +103,37 @@ export default async function MmpProductsLanding(): Promise<React.ReactNode> {
         <Tally icon={<Truck className="size-3.5" />} label="Pushed" value={totals.pushed} tone="sky" />
       </div>
 
-      {brands.length === 0 ? (
+      {/* Global search — submits GET so the URL carries state and
+          back/forward + share work without client JS. */}
+      <form action="/f/mmp" className="flex items-center gap-2 max-w-xl">
+        <div className="relative flex-1">
+          <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            name="q"
+            defaultValue={search}
+            placeholder="Search products across all brands — name, SKU, portal ID"
+            className="text-sm h-10 pl-9 pr-3 rounded border border-border bg-background w-full focus:outline-none focus:ring-2 focus:ring-foreground/20"
+          />
+        </div>
+        <button type="submit" className={buttonVariants({ variant: 'default', size: 'default' })}>
+          Search
+        </button>
+        {search && (
+          <Link href="/f/mmp" className={buttonVariants({ variant: 'outline', size: 'default' })}>
+            Clear
+          </Link>
+        )}
+      </form>
+
+      {searchResult ? (
+        <SearchResults
+          search={search}
+          searchResult={searchResult}
+          page={page}
+          lastPage={lastSearchPage}
+          urlWith={urlWith}
+        />
+      ) : brands.length === 0 ? (
         <EmptyState />
       ) : (
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -124,11 +192,22 @@ export default async function MmpProductsLanding(): Promise<React.ReactNode> {
 }
 
 type Tone = 'amber' | 'emerald' | 'rose' | 'sky';
+
+/** Soft fill — used in dashboard cards on the standard surface. */
 const TONE_STYLES: Record<Tone, string> = {
   amber:   'bg-amber-500/10 text-amber-700 dark:text-amber-300',
   emerald: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   rose:    'bg-rose-500/10 text-rose-700 dark:text-rose-300',
   sky:     'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+};
+
+/** Solid fill — used for badges overlaid on product photos. The soft
+ *  variant is unreadable against bright skin tones / white backdrops. */
+const TONE_STYLES_SOLID: Record<Tone, string> = {
+  amber:   'bg-amber-500 text-white border-transparent',
+  emerald: 'bg-emerald-500 text-white border-transparent',
+  rose:    'bg-rose-500 text-white border-transparent',
+  sky:     'bg-sky-500 text-white border-transparent',
 };
 
 function Tally({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone?: Tone }): React.ReactNode {
@@ -167,5 +246,116 @@ function EmptyState(): React.ReactNode {
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+const CURATION_TONE_MAP: Record<'received' | 'approved' | 'rejected' | 'pushed', Tone> = {
+  received: 'amber',
+  approved: 'emerald',
+  rejected: 'rose',
+  pushed:   'sky',
+};
+
+interface SearchResultsProps {
+  search: string;
+  searchResult: Awaited<ReturnType<typeof searchAllProducts>>;
+  page: number;
+  lastPage: number;
+  urlWith: (over: Record<string, string | undefined>) => string;
+}
+
+function SearchResults({ search, searchResult, page, lastPage, urlWith }: SearchResultsProps): React.ReactNode {
+  const { items, total } = searchResult;
+
+  return (
+    <section className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">{total}</span>{' '}
+        {total === 1 ? 'product' : 'products'} matching{' '}
+        <code className="px-1 py-0.5 rounded bg-muted text-xs">{search}</code>
+      </p>
+
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="p-10 text-center text-sm text-muted-foreground">
+            No products match this query. Try a different name, SKU, or portal ID.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {items.map((p) => {
+            const tone = CURATION_TONE_MAP[p.curationStatus];
+            return (
+              <Link
+                key={`${p.brandSlug}-${p.portalProductId}`}
+                href={`/f/mmp/${encodeURIComponent(p.brandSlug)}/${encodeURIComponent(p.portalProductId)}`}
+                className="group"
+              >
+                <Card className="overflow-hidden h-full hover:border-foreground/30 transition-colors">
+                  <div className="aspect-[2/3] bg-muted relative overflow-hidden">
+                    {p.thumbnailUrl ? (
+                      <Image
+                        src={p.thumbnailUrl}
+                        alt={p.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        sizes="(max-width: 768px) 50vw, (max-width: 1024px) 25vw, 20vw"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="absolute inset-0 grid place-items-center text-muted-foreground">
+                        <Package className="size-8" />
+                      </div>
+                    )}
+                    <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1.5">
+                      <Badge variant="secondary" className={`text-[10px] ${TONE_STYLES_SOLID[tone]}`}>
+                        {p.curationStatus}
+                      </Badge>
+                      {p.shopifyProductId && (
+                        <Badge variant="secondary" className={`text-[10px] gap-1 ${TONE_STYLES_SOLID.sky}`}>
+                          <Truck className="size-2.5" /> Shopify
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <CardContent className="p-3 space-y-1">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1 truncate">
+                      <Tag className="size-2.5" />
+                      {p.brandDisplayName}
+                    </div>
+                    <h3 className="text-sm font-medium truncate">{p.name}</h3>
+                    <p className="text-[10px] font-mono text-muted-foreground truncate">{p.sku}</p>
+                    <div className="flex items-baseline justify-between gap-2 pt-1">
+                      <span className="text-xs font-semibold tabular-nums">{fmtVnd(p.basePrice)}</span>
+                      <span className="text-[10px] text-muted-foreground">{p.variantCount} variants</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {lastPage > 1 && (
+        <nav className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">
+            Page {page} of {lastPage}
+          </span>
+          <div className="flex gap-2">
+            {page > 1 && (
+              <Link href={urlWith({ page: String(page - 1) })} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Previous
+              </Link>
+            )}
+            {page < lastPage && (
+              <Link href={urlWith({ page: String(page + 1) })} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                Next
+              </Link>
+            )}
+          </div>
+        </nav>
+      )}
+    </section>
   );
 }
