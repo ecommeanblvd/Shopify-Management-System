@@ -499,7 +499,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // there's no collision between the two and lookup stays O(1).
   let remote = 0;
   let matchedTier: string | null | undefined;
-  let matchedBy: 'postcode' | 'city' | null = null;
+  let matchedBy: 'postcode' | 'city' | 'country_default' | null = null;
   const patterns = snap.remotePostcodes.get(country);
   if (patterns) {
     if (input.destinationPostcode) {
@@ -523,6 +523,23 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
           matchedTier = t;
           matchedBy = 'city';
         }
+      }
+    }
+    if (matchedBy === null) {
+      // Country-wide wildcard. When a single row for a country is
+      // stored with pattern '*', every destination in that country
+      // inherits its tier. Used when the carrier's published list is
+      // in a postal format we can't reconcile against modern Shopify
+      // data — e.g. FedEx IL ships its ODA list in legacy 5-digit
+      // codes while Israel Post switched to 7-digit in 2013, leaving
+      // no clean per-postcode mapping. Until FedEx publishes a 7-digit
+      // file we mark all of IL Tier B (every IL row in the published
+      // file is Tier B anyway, so the worst-case error is a small
+      // over-quote on the handful of non-remote IL postcodes).
+      const wildcard = patterns.get('*');
+      if (wildcard !== undefined) {
+        matchedTier = wildcard;
+        matchedBy = 'country_default';
       }
     }
   }

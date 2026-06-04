@@ -202,7 +202,6 @@ async function main(): Promise<void> {
       inArray(schema.carrierRemotePostcodes.countryCode, touchedCountries),
     ));
     console.log(`[oda-import] inserting ${rows.length} rows…`);
-    // Batched to keep statement size sane on large IL expansion.
     const CHUNK = 1000;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const slice = rows.slice(i, i + CHUNK).map((r) => ({
@@ -213,6 +212,31 @@ async function main(): Promise<void> {
         source: `${args.source} · ${r.tier}`,
       }));
       await db.insert(schema.carrierRemotePostcodes).values(slice);
+    }
+
+    // ── IL postal-format workaround ──
+    // FedEx publishes IL ODA codes in the legacy 5-digit format
+    // (10930, 12230-12232) while Israel Post switched to 7-digit in
+    // Feb 2013 — Shopify orders carry the new format. The first 5
+    // digits of a new 7-digit code do NOT correspond to the old
+    // 5-digit code (verified: 0 / 58 sample orders match by prefix).
+    //
+    // Every IL row in the published file is Tier B (309/309 — never
+    // Tier A or C), so until FedEx publishes a 7-digit replacement
+    // we insert a single wildcard row that the engine treats as a
+    // country-wide default: any IL destination → Tier B.
+    //
+    // REMOVE this block once FedEx ships an updated 7-digit file and
+    // the imported rows correctly match Shopify postcodes.
+    if (touchedCountries.includes('IL')) {
+      console.log('[oda-import] adding IL wildcard (legacy 5-digit format workaround)');
+      await db.insert(schema.carrierRemotePostcodes).values({
+        carrierAccountId: account.id,
+        countryCode: 'IL',
+        postcodePattern: '*',
+        tier: 'Tier B',
+        source: `${args.source} · Tier B · country-wide wildcard (5-digit format workaround)`,
+      });
     }
   }
 

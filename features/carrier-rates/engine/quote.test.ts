@@ -545,6 +545,42 @@ describe('quote engine', () => {
       });
       expect(r.ok && r.breakdown.remote).toBe(0);
     });
+
+    it('falls back to country-wide wildcard "*" when no specific match', () => {
+      // Special-case used for FedEx IL while we wait for a 7-digit
+      // postal file — every IL destination inherits Tier B.
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' }],
+        remotePostcodes: new Map([['SG', new Map([['*', 'Tier B']])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationPostcode: '9999999', // no specific match
+      });
+      expect(r.ok && r.breakdown.remote).toBe(550_000);
+      if (r.ok) expect(r.notes.some((n) => n.includes('country_default'))).toBe(true);
+    });
+
+    it('wildcard does not over-ride a specific match', () => {
+      // Specific postcode tier wins over the country-wide wildcard.
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 82_200, active: true, tier: 'Tier A' },
+          { kind: 'remote_fixed', value: 550_000, active: true, tier: 'Tier B' },
+        ],
+        remotePostcodes: new Map([['SG', new Map([
+          ['10930', 'Tier A'],
+          ['*',     'Tier B'],
+        ])]]),
+      });
+      const r = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        destinationPostcode: '10930',
+      });
+      expect(r.ok && r.breakdown.remote).toBe(82_200);
+    });
   });
 
   describe('error paths', () => {
