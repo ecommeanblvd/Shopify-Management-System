@@ -239,6 +239,13 @@
       "when": 1780545746839,
       "tag": "0033_lumpy_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780548739746,
+      "tag": "0034_flawless_vampiro",
+      "breakpoints": true
     }
   ]
 }

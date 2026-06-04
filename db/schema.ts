@@ -532,6 +532,51 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   index('shopify_order_lines_vendor_idx').on(t.vendor),
 ]);
 
+/**
+ * Master weight + variant info pulled from Shopify per store. Lets
+ * SMS compute the expected shipping weight of any order/shipment by
+ * summing line.qty × variant.weight_grams, and lets the per-SKU audit
+ * attribute the carrier delta proportionally to each line's weight
+ * contribution (instead of qty share, which over-weights small gift
+ * items that share an order with heavy dresses).
+ *
+ * Synced periodically by `scripts/sync-shopify-variants.ts`. Refreshed
+ * rows always overwrite the prior snapshot — there's no history kept,
+ * because Shopify itself is the source of truth.
+ */
+export const shopifyVariants = pgTable('shopify_variants', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  shopifyVariantId: text('shopify_variant_id').notNull(), // gid://shopify/ProductVariant/...
+  shopifyProductId: text('shopify_product_id').notNull(),
+  sku: text('sku'),
+  /** Variant title — e.g. "M / Cream". Null when the product has no options. */
+  variantTitle: text('variant_title'),
+  /** Parent product title — denormalised so audit reports don't need a second join. */
+  productTitle: text('product_title').notNull(),
+  /**
+   * Weight in GRAMS, regardless of the unit Shopify presents to the
+   * merchant — we normalise at sync time so callers can sum freely
+   * without re-checking the unit. Null when the merchant left weight
+   * unset on the variant (Shopify allows that).
+   */
+  weightGrams: numeric('weight_grams', { precision: 12, scale: 3 }),
+  /**
+   * Original unit Shopify reported (KILOGRAMS / GRAMS / POUNDS /
+   * OUNCES). Preserved so we can surface "weight set in lb on Shopify"
+   * for operators who want to audit at source.
+   */
+  weightUnit: text('weight_unit'),
+  /** True when Shopify marked the variant as taxable; not used by
+   *  the audit but cheap to carry for future analytics. */
+  taxable: boolean('taxable').notNull().default(true),
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('shopify_variants_unique').on(t.storeId, t.shopifyVariantId),
+  index('shopify_variants_sku_idx').on(t.sku),
+  index('shopify_variants_product_idx').on(t.shopifyProductId),
+]);
+
 export const shopifyOrderRefunds = pgTable('shopify_order_refunds', {
   id: uuid('id').defaultRandom().primaryKey(),
   orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
