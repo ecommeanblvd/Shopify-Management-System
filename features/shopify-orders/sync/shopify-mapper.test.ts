@@ -21,6 +21,8 @@ describe('mapShopifyOrder', () => {
     expect(m.order.totalShipping).toBe('12.00');
     expect(m.order.totalPrice).toBe('62.00');
     expect(m.order.shipCountry).toBe('US');
+    expect(m.order.shipCity).toBe('San Francisco');
+    expect(m.order.shipPostcode).toBe('94103');
     expect(m.order.shipWeightKg).toBe('0.800');
     expect(m.order.cancelledAtShopify).toBeNull();
     expect(m.lines).toHaveLength(1);
@@ -58,5 +60,32 @@ describe('mapShopifyOrder', () => {
   it('converts totalWeight grams to kg with 3 decimals', () => {
     const m = mapShopifyOrder(fixture('order-multi-line'), 'store-1');
     expect(m.order.shipWeightKg).toBe('1.200');
+  });
+
+  it('leaves city/postcode null when shippingAddress is missing (pickup, digital)', () => {
+    // shippingAddress is fully nullable on Shopify when the order has no
+    // ship-to (in-store pickup, digital goods). The mapper must keep
+    // every dependent field null instead of throwing.
+    const payload = {
+      ...fixture('order-simple'),
+      shippingAddress: null,
+    };
+    const m = mapShopifyOrder(payload, 'store-1');
+    expect(m.order.shipCountry).toBeNull();
+    expect(m.order.shipCity).toBeNull();
+    expect(m.order.shipPostcode).toBeNull();
+  });
+
+  it('leaves city/postcode null when shippingAddress has country only', () => {
+    // Some older Shopify orders only had countryCodeV2; defensive in case
+    // a legacy payload misses optional fields.
+    const payload = {
+      ...fixture('order-simple'),
+      shippingAddress: { countryCodeV2: 'VN', city: null, zip: null },
+    };
+    const m = mapShopifyOrder(payload, 'store-1');
+    expect(m.order.shipCountry).toBe('VN');
+    expect(m.order.shipCity).toBeNull();
+    expect(m.order.shipPostcode).toBeNull();
   });
 });

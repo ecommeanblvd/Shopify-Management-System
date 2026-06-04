@@ -29,6 +29,14 @@ import type { EngineEstimateReason } from './batch-shipping-estimator';
 export interface EngineEstimateInput {
   shipCountry: string | null;
   shipWeightKg: number | null;
+  /** Shopify `shippingAddress.zip`. Drives the engine's remote-area
+   *  lookup for carriers that publish remote postcodes (FedEx IL,
+   *  DHL most non-ME). Null → falls back to city, then to "not remote". */
+  shipPostcode?: string | null;
+  /** Shopify `shippingAddress.city`. Drives the same lookup when the
+   *  remote-area list is by city (FedEx ME, DHL ME). Normalised
+   *  upstream — see engine quote.ts for the matching rule. */
+  shipCity?: string | null;
   /**
    * Effective quote date — defaults to "now". Pass the order's
    * `processed_at_shopify` to reproduce the carrier's historical rate
@@ -113,6 +121,8 @@ export async function resolveShippingEstimate(
     accountRows.map((r) => r.id),
     input.shipCountry,
     input.shipWeightKg,
+    input.shipPostcode ?? null,
+    input.shipCity ?? null,
     input.effectiveDate,
   );
   if (best === null) return emptyResult('no_quote');
@@ -153,13 +163,21 @@ async function tryCarriers(
   carrierIds: readonly string[],
   country: string,
   weightKg: number,
+  postcode: string | null,
+  city: string | null,
   effectiveDate?: Date,
 ): Promise<CarrierAttempt | null> {
   let best: CarrierAttempt | null = null;
   for (const id of carrierIds) {
     const snap = await loadAccountSnapshot(id);
     if (!snap) continue;
-    const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
+    const q = quote(snap, {
+      weightKg,
+      destinationCountry: country,
+      destinationPostcode: postcode ?? undefined,
+      destinationCity: city ?? undefined,
+      effectiveDate,
+    });
     if (q.ok) {
       const display = q.breakdown.carrierCostDisplay;
       if (best === null || display < best.display) {

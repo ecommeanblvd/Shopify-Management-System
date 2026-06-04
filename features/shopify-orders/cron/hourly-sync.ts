@@ -18,7 +18,7 @@ const PAGED_QUERY = `
         totalShippingPriceSet { shopMoney { amount currencyCode } }
         totalTaxSet { shopMoney { amount currencyCode } }
         totalPriceSet { shopMoney { amount currencyCode } }
-        shippingAddress { countryCodeV2 }
+        shippingAddress { countryCodeV2 city zip }
         totalWeight
         lineItems(first: 250) {
           nodes {

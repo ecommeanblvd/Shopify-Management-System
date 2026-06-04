@@ -72,6 +72,13 @@ export interface ShopifyOrderPayload {
   totalPriceSet: ShopifyMoneyBag;
   shippingAddress: {
     countryCodeV2: string;
+    // Used by the carrier engine for remote-area surcharge lookup.
+    // FedEx/DHL publish remote areas by either postcode (zip) or city
+    // depending on country, and Shopify always populates both when
+    // available — we store both and let the engine fall back from
+    // postcode → city.
+    city: string | null;
+    zip: string | null;
   } | null;
   totalWeight: number | null;                   // in grams
   lineItems: { nodes: ShopifyLineItem[] };

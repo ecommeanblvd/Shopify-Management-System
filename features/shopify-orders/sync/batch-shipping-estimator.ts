@@ -46,6 +46,21 @@ export interface EngineEstimateInput {
   shipCountry: string | null;
   shipWeightKg: number | null;
   /**
+   * Destination postcode (Shopify `shippingAddress.zip`). When the
+   * carrier publishes its remote-area list by postcode (DE, NL, IL,
+   * etc.) this is what the engine matches against. Null → engine
+   * falls back to city, then to "not remote".
+   */
+  shipPostcode?: string | null;
+  /**
+   * Destination city (Shopify `shippingAddress.city`). Used when the
+   * carrier publishes remote areas by city name — e.g. FedEx ODA Tier
+   * B for SA/AE/KW/QA/OM/BH lists cities, no postcodes. The engine
+   * normalises both this and stored patterns to UPPERCASE +
+   * alphanumeric so spelling/case/whitespace variants resolve.
+   */
+  shipCity?: string | null;
+  /**
    * Effective quote date — defaults to "now". Pass the order's
    * `processed_at_shopify` so fuel-surcharge time-versioning resolves
    * to the rate sheet from the order's ship week.
@@ -148,11 +163,19 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
     snaps: readonly CarrierAccountSnapshot[],
     country: string,
     weightKg: number,
+    postcode: string | null | undefined,
+    city: string | null | undefined,
     effectiveDate?: Date,
   ): { display: number; cost: number; costCurrency: string } | null {
     let best: { display: number; cost: number; costCurrency: string } | null = null;
     for (const snap of snaps) {
-      const q = quote(snap, { weightKg, destinationCountry: country, effectiveDate });
+      const q = quote(snap, {
+        weightKg,
+        destinationCountry: country,
+        destinationPostcode: postcode ?? undefined,
+        destinationCity: city ?? undefined,
+        effectiveDate,
+      });
       if (!q.ok) continue;
       const display = q.breakdown.carrierCostDisplay;
       if (best === null || display < best.display) {
@@ -188,9 +211,17 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
       // only changes weekly, so finer granularity doesn't pay off. The
       // carrier key is part of the key so two FedEx-vs-DHL orders at the
       // same country/weight don't collide.
+      //
+      // Postcode and city are part of the memo key because remote-area
+      // surcharges flip the result by destination — two Israel orders
+      // at the same weight pay different totals if one ships to a
+      // remote postcode and the other doesn't. Empty strings reuse the
+      // "no destination detail" bucket.
       const wKey = Math.round(input.shipWeightKg * 1000) / 1000;
       const dKey = input.effectiveDate ? mondayUtcMs(input.effectiveDate) : 'now';
-      const key = `${carrierKey}|${input.shipCountry}|${wKey}|${dKey}`;
+      const pKey = input.shipPostcode?.trim() ?? '';
+      const cKey = input.shipCity?.trim() ?? '';
+      const key = `${carrierKey}|${input.shipCountry}|${wKey}|${dKey}|${pKey}|${cKey}`;
       const cached = memo.get(key);
       if (cached) return cached;
 
@@ -205,7 +236,14 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
         return r;
       }
 
-      const best = bestQuoteWithinCarrier(snaps, input.shipCountry, input.shipWeightKg, input.effectiveDate);
+      const best = bestQuoteWithinCarrier(
+        snaps,
+        input.shipCountry,
+        input.shipWeightKg,
+        input.shipPostcode,
+        input.shipCity,
+        input.effectiveDate,
+      );
       if (best !== null) {
         const r: EngineEstimateResult = {
           amount: best.display,

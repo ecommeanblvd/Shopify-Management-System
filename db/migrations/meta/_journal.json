@@ -232,6 +232,13 @@
       "when": 1780506819107,
       "tag": "0032_handy_mother_askani",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780545746839,
+      "tag": "0033_lumpy_bishop",
+      "breakpoints": true
     }
   ]
 }

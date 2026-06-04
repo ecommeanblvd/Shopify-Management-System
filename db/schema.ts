@@ -471,6 +471,13 @@ export const shopifyOrders = pgTable('shopify_orders', {
   totalTax: numeric('total_tax', { precision: 14, scale: 2 }).notNull(),
   totalPrice: numeric('total_price', { precision: 14, scale: 2 }).notNull(),
   shipCountry: text('ship_country'),
+  // City + postcode from Shopify shippingAddress, used by the carrier
+  // engine to look up remote-area surcharges. Either can be null —
+  // postcode-only countries (DE, NL) and city-only countries
+  // (SA, KW, OM, AE, QA, BH) both work because the engine falls back
+  // between the two keys against the same normalised lookup map.
+  shipCity: text('ship_city'),
+  shipPostcode: text('ship_postcode'),
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
