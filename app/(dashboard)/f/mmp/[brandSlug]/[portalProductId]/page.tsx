@@ -97,14 +97,13 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
         {/* Left: gallery + metadata */}
         <div className="space-y-6">
           {images.length > 0 ? (
-            // Horizontal carousel — narrower cards so the gallery
-            // doesn't dominate the workspace. Operator should see 3-4
-            // images at once and scroll for the rest, not the entire
-            // batch laid out. Container is capped at max-w-md (28 rem
-            // ≈ 448px) so even on wide monitors it stays compact.
+            // Horizontal carousel — fills the left column so its width
+            // matches the Attributes / Details cards stacked below
+            // (consistent visual rhythm). Cards stay narrow (120-136 px)
+            // so the operator sees several images and scrolls for more.
             <div
               className="
-                max-w-md -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
+                -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
                 flex gap-2 pb-3
                 [scrollbar-width:thin]
               "
