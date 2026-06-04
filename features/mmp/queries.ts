@@ -53,11 +53,14 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
     GROUP BY b.slug, b.display_name, b.first_seen_at, b.last_seen_at
     ORDER BY b.last_seen_at DESC
   `);
+  // pg's raw-query path returns timestamp columns as strings — Drizzle's
+  // typed `select()` path coerces them but `db.execute()` does not. Wrap
+  // to Date so callers can use Intl.DateTimeFormat directly.
   return rows.rows.map((r) => ({
     slug: r.slug,
     displayName: r.display_name,
-    firstSeenAt: r.first_seen_at,
-    lastSeenAt: r.last_seen_at,
+    firstSeenAt: new Date(r.first_seen_at),
+    lastSeenAt: new Date(r.last_seen_at),
     totalProducts: r.total,
     byCuration: {
       received: r.received,
@@ -194,7 +197,8 @@ export async function listProductsForBrand(args: ListProductsArgs): Promise<{
       basePrice: r.base_price,
       variantCount: r.variant_count,
       thumbnailUrl: r.thumbnail_url,
-      lastReceivedAt: r.last_received_at,
+      // Raw query → coerce timestamp string → Date (see brand list above).
+      lastReceivedAt: new Date(r.last_received_at),
       shopifyProductId: r.shopify_product_id,
     })),
   };
