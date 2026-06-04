@@ -97,21 +97,22 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
         {/* Left: gallery + metadata */}
         <div className="space-y-6">
           {images.length > 0 ? (
-            // Horizontal carousel — fills the left column so its width
-            // matches the Attributes / Details cards stacked below
-            // (consistent visual rhythm). Cards stay narrow (120-136 px)
-            // so the operator sees several images and scrolls for more.
+            // Horizontal carousel — cards sized so ~5 fit across the
+            // left column on wide monitors, filling the available width
+            // alongside the Attributes / Details cards below. When a
+            // product has more images, the row scrolls horizontally
+            // with snap-mandatory.
             <div
               className="
                 -mx-2 px-2 overflow-x-auto snap-x snap-mandatory
-                flex gap-2 pb-3
+                flex gap-3 pb-3
                 [scrollbar-width:thin]
               "
             >
               {images.map((img) => (
                 <Card
                   key={img.id}
-                  className="overflow-hidden flex-none w-[120px] sm:w-[136px] snap-start"
+                  className="overflow-hidden flex-none w-[220px] sm:w-[260px] lg:w-[280px] snap-start"
                 >
                   <div className="aspect-[2/3] relative bg-muted">
                     <Image
@@ -119,18 +120,18 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
                       alt={img.altText ?? `${product.name} ${img.role ?? 'image'}`}
                       fill
                       className="object-cover"
-                      sizes="(max-width: 640px) 120px, 136px"
+                      sizes="(max-width: 640px) 220px, (max-width: 1024px) 260px, 280px"
                       unoptimized
                     />
                     {img.isThumbnail && (
-                      <Badge variant="secondary" className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0">
+                      <Badge variant="secondary" className="absolute top-2 left-2 text-[10px] px-2 py-0.5">
                         thumb
                       </Badge>
                     )}
                   </div>
-                  <CardContent className="p-1.5 text-[10px] text-muted-foreground flex items-center justify-between">
+                  <CardContent className="p-2.5 text-xs text-muted-foreground flex items-center justify-between">
                     <span className="truncate">{img.role ?? '—'}</span>
-                    <span className="font-mono shrink-0 ml-1">#{img.position}</span>
+                    <span className="font-mono shrink-0 ml-2">#{img.position}</span>
                   </CardContent>
                 </Card>
               ))}
