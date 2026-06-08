@@ -201,6 +201,8 @@ export interface QuoteBreakdown {
   chargeableWeightKg: number;
   base: number;
   fuel: number;
+  /** Effective fuel surcharge % applied (sum of active `fuel_percent` rows). */
+  fuelPercent: number;
   peak: number;
   remote: number;
   residential: number;
@@ -658,6 +660,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       chargeableWeightKg,
       base: Math.round(base),
       fuel: Math.round(fuel),
+      fuelPercent: fuelPct,
       peak: Math.round(peak),
       remote: Math.round(remote),
       residential: Math.round(residential),
