@@ -1234,3 +1234,69 @@ export const mmpIngestionRuns = pgTable('mmp_ingestion_runs', {
   index('mmp_ingestion_runs_received_idx').on(t.receivedAt),
   index('mmp_ingestion_runs_hash_idx').on(t.payloadHash),
 ]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Order Operations / Fulfillment Phase 1
+// ─────────────────────────────────────────────────────────────────────
+
+export const fulfillmentLineStatusEnum = pgEnum('fulfillment_line_status', [
+  'pending_check', 'in_stock', 'out_of_stock', 'picked', 'packed', 'shipped',
+]);
+export const fulfillmentOrderStatusEnum = pgEnum('fulfillment_order_status', [
+  'received', 'checking', 'awaiting_brand', 'ready_to_pick', 'picking', 'packed', 'shipped',
+]);
+
+/** MEAN warehouse stock, keyed by SKU. Operator-managed (manual entry). */
+export const warehouseInventory = pgTable('warehouse_inventory', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  sku: text('sku').notNull().unique(),
+  productTitle: text('product_title'),
+  variantTitle: text('variant_title'),
+  qtyOnHand: integer('qty_on_hand').notNull().default(0),
+  qtyReserved: integer('qty_reserved').notNull().default(0),
+  shelf: text('shelf'),
+  floor: text('floor'),
+  bin: text('bin'),
+  note: text('note'),
+  updatedBy: text('updated_by'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/** One ops record per Shopify order. status = rollup derived from lines. */
+export const orderFulfillment = pgTable('order_fulfillment', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull().unique(),
+  status: fulfillmentOrderStatusEnum('status').notNull().default('received'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [index('order_fulfillment_status_idx').on(t.status)]);
+
+/** Per order-line fulfillment state. */
+export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fulfillmentId: uuid('fulfillment_id').references(() => orderFulfillment.id, { onDelete: 'cascade' }).notNull(),
+  orderLineId: uuid('order_line_id').references(() => shopifyOrderLines.id, { onDelete: 'cascade' }).notNull().unique(),
+  sku: text('sku'),
+  qty: integer('qty').notNull(),
+  status: fulfillmentLineStatusEnum('status').notNull().default('pending_check'),
+  warehouseInventoryId: uuid('warehouse_inventory_id').references(() => warehouseInventory.id),
+  allocatedQty: integer('allocated_qty').notNull().default(0),
+  shipmentId: uuid('shipment_id').references(() => shipments.id),
+  pickedAt: timestamp('picked_at'),
+  packedAt: timestamp('packed_at'),
+  shippedAt: timestamp('shipped_at'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [index('order_fulfillment_lines_ful_idx').on(t.fulfillmentId)]);
+
+/** Audit log of status transitions. */
+export const orderFulfillmentEvents = pgTable('order_fulfillment_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fulfillmentId: uuid('fulfillment_id').references(() => orderFulfillment.id, { onDelete: 'cascade' }).notNull(),
+  lineId: uuid('line_id'),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  actor: text('actor'),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
