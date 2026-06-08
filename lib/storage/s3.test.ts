@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const send = vi.fn();
 vi.mock('@aws-sdk/client-s3', () => ({
@@ -16,6 +16,8 @@ const ENV = {
   S3_ACCESS_KEY_ID: 'ak', S3_SECRET_ACCESS_KEY: 'sk', S3_BUCKET: 'bucket',
 };
 
+// Start each test from a clean slate — a real local .env may set S3_* vars.
+beforeEach(() => { for (const k of Object.keys(ENV)) delete process.env[k]; });
 afterEach(() => { vi.clearAllMocks(); for (const k of Object.keys(ENV)) delete process.env[k]; });
 
 describe('s3 storage', () => {
