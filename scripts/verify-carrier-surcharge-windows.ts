@@ -24,7 +24,7 @@ async function main(): Promise<void> {
       .from(schema.carrierSurcharges)
       .where(and(
         eq(schema.carrierSurcharges.carrierAccountId, a.id),
-        inArray(schema.carrierSurcharges.kind, KINDS as unknown as string[]),
+        inArray(schema.carrierSurcharges.kind, [...KINDS]),
       ))
       .orderBy(asc(schema.carrierSurcharges.kind));
 
