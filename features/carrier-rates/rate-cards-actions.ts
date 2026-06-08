@@ -10,6 +10,8 @@ export interface RateCardRow {
   effectiveFrom: string;       // 'YYYY-MM-DD'
   effectiveTo: string | null;
   isOpen: boolean;
+  hasPdf: boolean;
+  pdfFilename: string | null;
 }
 
 export async function listRateCardsForAccount(carrierAccountId: string): Promise<RateCardRow[]> {
@@ -24,6 +26,8 @@ export async function listRateCardsForAccount(carrierAccountId: string): Promise
     effectiveFrom: r.effectiveFrom,
     effectiveTo: r.effectiveTo,
     isOpen: r.effectiveTo === null,
+    hasPdf: r.sourcePdfKey !== null,
+    pdfFilename: r.sourcePdfFilename,
   }));
 }
 
