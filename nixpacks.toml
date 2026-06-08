@@ -4,5 +4,11 @@
 # in a way Railway's npm ci validator accepts (npm GitHub issue, nested deps).
 # `npm install` is more lenient and still respects pinned versions.
 
+# poppler-utils provides `pdftotext`, used server-side to parse uploaded
+# carrier rate-sheet PDFs. aptPkgs is additive — it does not replace the
+# nix defaults (nodejs etc.) the setup phase installs.
+[phases.setup]
+aptPkgs = ["poppler-utils"]
+
 [phases.install]
 cmds = ["npm install --no-audit --no-fund --prefer-offline"]
