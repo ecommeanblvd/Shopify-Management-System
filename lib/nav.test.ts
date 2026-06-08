@@ -21,6 +21,12 @@ describe('NAV structure', () => {
     expect(item).toBeDefined();
     expect(item!.requires).toBe('view_carrier_rates');
   });
+
+  it('includes fulfillment gated by view_fulfillment', () => {
+    const item = NAV.find((n) => n.href === '/f/fulfillment');
+    expect(item).toBeDefined();
+    expect(item!.requires).toBe('view_fulfillment');
+  });
 });
 
 describe('SETTINGS_ITEMS', () => {
