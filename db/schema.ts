@@ -287,8 +287,30 @@ export const carrierWeightTiers = pgTable('carrier_weight_tiers', {
 // per shipment based on weight (< 2kg = Pak, ≥ 2kg = Package by convention).
 export const carrierPackageTypeEnum = pgEnum('carrier_package_type', ['pak', 'package']);
 
+// One base-rate sheet with an effective window. A carrier account can have
+// several over time (2025 card, 2026 card…). Reconciliation picks the card
+// whose [effectiveFrom, effectiveTo] covers a shipment's ship date; the
+// calculator/push always use the open card (effectiveTo IS NULL).
+export const carrierRateCards = pgTable('carrier_rate_cards', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id')
+    .references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  label: text('label').notNull(),
+  // Inclusive lower bound.
+  effectiveFrom: date('effective_from').notNull(),
+  // Inclusive upper bound; NULL = open-ended "current" card. App logic keeps
+  // at most one open card per account and forbids overlapping windows.
+  effectiveTo: date('effective_to'),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('carrier_rate_cards_account_idx').on(t.carrierAccountId),
+]);
+
 export const carrierRateCells = pgTable('carrier_rate_cells', {
   id: uuid('id').defaultRandom().primaryKey(),
+  rateCardId: uuid('rate_card_id')
+    .references(() => carrierRateCards.id, { onDelete: 'cascade' }).notNull(),
   carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
   carrierWeightTierId: uuid('carrier_weight_tier_id').references(() => carrierWeightTiers.id, { onDelete: 'cascade' }).notNull(),
   packageType: carrierPackageTypeEnum('package_type').notNull().default('package'),
@@ -296,9 +318,10 @@ export const carrierRateCells = pgTable('carrier_rate_cells', {
   updatedBy: text('updated_by').references(() => user.id),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
-  // Unique per (zone, tier, package_type) — Pak and Package are independent
-  // rates for the same destination weight.
-  uniqueIndex('carrier_rate_cells_zone_tier_pkg_idx').on(table.carrierZoneId, table.carrierWeightTierId, table.packageType),
+  // Unique per (card, zone, tier, package_type) — Pak and Package are
+  // independent rates for the same destination weight, per rate card.
+  uniqueIndex('carrier_rate_cells_card_zone_tier_pkg_idx')
+    .on(table.rateCardId, table.carrierZoneId, table.carrierWeightTierId, table.packageType),
 ]);
 
 export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [

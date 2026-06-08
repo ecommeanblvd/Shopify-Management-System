@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import type { ParsedMatrixCsv } from './matrix-csv';
 
@@ -17,7 +17,7 @@ export interface MatrixSnapshot {
   cells: MatrixCell[];
 }
 
-export async function loadMatrix(carrierAccountId: string): Promise<MatrixSnapshot> {
+export async function loadMatrix(carrierAccountId: string, rateCardId: string): Promise<MatrixSnapshot> {
   const zones = await db
     .select({
       id: schema.carrierZones.id,
@@ -42,7 +42,6 @@ export async function loadMatrix(carrierAccountId: string): Promise<MatrixSnapsh
     return { zones, tiers, cells: [] };
   }
 
-  const zoneIds = zones.map((z) => z.id);
   const cellRows = await db
     .select({
       zoneId: schema.carrierRateCells.carrierZoneId,
@@ -51,7 +50,7 @@ export async function loadMatrix(carrierAccountId: string): Promise<MatrixSnapsh
       updatedAt: schema.carrierRateCells.updatedAt,
     })
     .from(schema.carrierRateCells)
-    .where(inArray(schema.carrierRateCells.carrierZoneId, zoneIds));
+    .where(eq(schema.carrierRateCells.rateCardId, rateCardId));
 
   const cells: MatrixCell[] = cellRows.map((r) => ({
     zoneId: r.zoneId,
@@ -64,27 +63,37 @@ export async function loadMatrix(carrierAccountId: string): Promise<MatrixSnapsh
 }
 
 export async function setCell({
-  zoneId, tierId, costAmount, userId,
-}: { zoneId: string; tierId: string; costAmount: string; userId: string }): Promise<void> {
+  rateCardId, zoneId, tierId, costAmount, userId,
+}: { rateCardId: string; zoneId: string; tierId: string; costAmount: string; userId: string }): Promise<void> {
   const n = Number(costAmount);
   if (!Number.isFinite(n) || n < 0) throw new Error('Cost must be a non-negative number.');
 
   await db
     .insert(schema.carrierRateCells)
     .values({
+      rateCardId,
       carrierZoneId: zoneId,
       carrierWeightTierId: tierId,
+      packageType: 'package',
       costAmount: n.toFixed(2),
       updatedBy: userId,
     })
     .onConflictDoUpdate({
-      target: [schema.carrierRateCells.carrierZoneId, schema.carrierRateCells.carrierWeightTierId],
+      target: [
+        schema.carrierRateCells.rateCardId,
+        schema.carrierRateCells.carrierZoneId,
+        schema.carrierRateCells.carrierWeightTierId,
+        schema.carrierRateCells.packageType,
+      ],
       set: { costAmount: n.toFixed(2), updatedBy: userId, updatedAt: new Date() },
     });
 }
 
-export async function clearCell({ zoneId, tierId }: { zoneId: string; tierId: string }): Promise<void> {
+export async function clearCell({
+  rateCardId, zoneId, tierId,
+}: { rateCardId: string; zoneId: string; tierId: string }): Promise<void> {
   await db.delete(schema.carrierRateCells).where(and(
+    eq(schema.carrierRateCells.rateCardId, rateCardId),
     eq(schema.carrierRateCells.carrierZoneId, zoneId),
     eq(schema.carrierRateCells.carrierWeightTierId, tierId),
   ));
@@ -97,6 +106,7 @@ export async function clearCell({ zoneId, tierId }: { zoneId: string; tierId: st
  */
 export async function importMatrix(
   carrierAccountId: string,
+  rateCardId: string,
   parsed: ParsedMatrixCsv,
   userId: string,
 ): Promise<{ zonesCreated: number; tiersCreated: number; cellsWritten: number; warnings: string[] }> {
@@ -160,13 +170,20 @@ export async function importMatrix(
       await db
         .insert(schema.carrierRateCells)
         .values({
+          rateCardId,
           carrierZoneId: zone.id,
           carrierWeightTierId: tier.id,
+          packageType: 'package',
           costAmount: r.cost.toFixed(2),
           updatedBy: userId,
         })
         .onConflictDoUpdate({
-          target: [schema.carrierRateCells.carrierZoneId, schema.carrierRateCells.carrierWeightTierId],
+          target: [
+            schema.carrierRateCells.rateCardId,
+            schema.carrierRateCells.carrierZoneId,
+            schema.carrierRateCells.carrierWeightTierId,
+            schema.carrierRateCells.packageType,
+          ],
           set: { costAmount: r.cost.toFixed(2), updatedBy: userId, updatedAt: new Date() },
         });
       cellsWritten += 1;

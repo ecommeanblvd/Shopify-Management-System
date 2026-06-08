@@ -13,6 +13,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
+import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
 
 export interface ReconcileRow {
   trackingNumber: string;
@@ -104,17 +105,29 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     return true;
   });
 
-  // 2. Pre-load snapshots, one per carrier brand.
-  const carriers = await db
+  // 2. Pre-load one snapshot PER rate card, grouped by carrier key.
+  // A carrier (fedex/dhl) has one account; that account has N dated cards.
+  // We load each card's snapshot once, then pick by ship date in the loop.
+  const accounts = await db
     .select({ id: schema.carrierAccounts.id, key: schema.carriers.key })
     .from(schema.carrierAccounts)
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
     .where(eq(schema.carrierAccounts.enabled, true));
-  const snapsByKey = new Map<string, Awaited<ReturnType<typeof loadAccountSnapshot>>>();
-  for (const c of carriers) {
-    if (c.key && (c.key === 'fedex' || c.key === 'dhl')) {
-      snapsByKey.set(c.key, await loadAccountSnapshot(c.id));
+
+  interface CarrierCards {
+    cards: RateCardWindow[];
+    snapByCard: Map<string, Awaited<ReturnType<typeof loadAccountSnapshot>>>;
+  }
+  const byKey = new Map<string, CarrierCards>();
+  for (const a of accounts) {
+    if (a.key !== 'fedex' && a.key !== 'dhl') continue;
+    const cards = await listRateCards(a.id);
+    const snapByCard = new Map<string, Awaited<ReturnType<typeof loadAccountSnapshot>>>();
+    for (const c of cards) {
+      // Anchor load to the card's own start date so it resolves that card.
+      snapByCard.set(c.id, await loadAccountSnapshot(a.id, c.effectiveFrom));
     }
+    byKey.set(a.key, { cards, snapByCard });
   }
 
   const rows: ReconcileRow[] = [];
@@ -122,10 +135,18 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
   let sumBilled = 0, sumEngine = 0;
 
   for (const r of filtered) {
-    const snap = r.carrierKey ? snapsByKey.get(r.carrierKey) : null;
+    const shipDate = r.labelCreatedAt ?? r.processedAtShopify ?? null;
+    const entry = r.carrierKey ? byKey.get(r.carrierKey) : undefined;
+    const card = entry && shipDate ? pickRateCardForDate(entry.cards, shipDate) : null;
+    const snap = card ? entry!.snapByCard.get(card.id) ?? null : null;
     const billedTotal = Number(r.billedTotal);
     sumBilled += billedTotal;
 
+    if (!entry || !shipDate || !card) {
+      unmatched += 1;
+      rows.push(buildRow(r, null, !shipDate ? 'no_ship_date' : 'no_rate_card'));
+      continue;
+    }
     if (!snap || !r.shipCountry) {
       unmatched += 1;
       rows.push(buildRow(r, null, 'no_snapshot_or_country'));

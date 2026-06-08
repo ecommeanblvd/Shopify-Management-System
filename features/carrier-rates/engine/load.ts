@@ -1,10 +1,11 @@
 'use server';
 
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
 import { quote, type CarrierAccountSnapshot, type QuoteInput, type QuoteResult, type ZoneSnap } from './quote';
+import { pickRateCardForDate, listRateCards } from './rate-cards';
 
 /**
  * Loads everything the quote engine needs in one round-trip burst:
@@ -12,13 +13,22 @@ import { quote, type CarrierAccountSnapshot, type QuoteInput, type QuoteResult, 
  * surcharges, remote postcodes. Heavy but cached by Next.js between
  * renders of the same page.
  */
-export async function loadAccountSnapshot(carrierAccountId: string): Promise<CarrierAccountSnapshot | null> {
+export async function loadAccountSnapshot(
+  carrierAccountId: string,
+  effectiveDate: Date = new Date(),
+): Promise<CarrierAccountSnapshot | null> {
   const [account] = await db
     .select()
     .from(schema.carrierAccounts)
     .where(eq(schema.carrierAccounts.id, carrierAccountId))
     .limit(1);
   if (!account) return null;
+
+  // Pick the base-rate card whose window covers effectiveDate. No card →
+  // no base rates for that date; return null so callers surface it clearly.
+  const cards = await listRateCards(carrierAccountId);
+  const card = pickRateCardForDate(cards, effectiveDate);
+  if (!card) return null;
 
   const [zones, zoneCountries, tiers, surcharges, postcodes] = await Promise.all([
     db.select().from(schema.carrierZones)
@@ -38,12 +48,9 @@ export async function loadAccountSnapshot(carrierAccountId: string): Promise<Car
       .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId)),
   ]);
 
-  // Cells loaded separately because the constraint is on zone × tier (not directly account)
-  const zoneIds = zones.map((z) => z.id);
-  const cells = zoneIds.length === 0
-    ? []
-    : await db.select().from(schema.carrierRateCells)
-        .where(inArray(schema.carrierRateCells.carrierZoneId, zoneIds));
+  // Cells scoped to the chosen rate card (NOT all cells for the account).
+  const cells = await db.select().from(schema.carrierRateCells)
+    .where(eq(schema.carrierRateCells.rateCardId, card.id));
 
   // Index cells by (zoneId, tierId) — split by package_type so the engine
   // can pick Pak vs Package per the < 2kg rule.
