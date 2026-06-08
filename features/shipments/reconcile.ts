@@ -16,6 +16,7 @@ import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
 
 export interface ReconcileRow {
+  shipmentId: string;
   trackingNumber: string;
   orderNumber: string;
   storeName: string;
@@ -230,6 +231,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
 }
 
 interface JoinedRow {
+  shipmentId: string;
   // shipments.tracking_number is nullable in DB (label not yet
   // generated for pre-ship rows), but every row we reach in
   // reconcile() has one — the import path requires it.
@@ -274,6 +276,7 @@ function buildRow(
     ? (deltaVnd / billedTotal) * 100
     : null;
   return {
+    shipmentId: r.shipmentId,
     trackingNumber: r.trackingNumber ?? '',
     orderNumber: r.orderNumber,
     storeName: r.storeName,
