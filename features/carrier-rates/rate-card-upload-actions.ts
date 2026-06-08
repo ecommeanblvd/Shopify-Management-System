@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { putObject, getObject } from '@/lib/storage/r2';
+import { putObject, getObject } from '@/lib/storage/s3';
 import { extractPdfText } from './import/pdf-text';
 import { resolveParser } from './import/parsers';
 import { buildRateCardCells, type RateCardPreview } from './import/preview';

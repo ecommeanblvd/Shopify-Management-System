@@ -3,25 +3,36 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-/** True when every R2_* env var the client needs is present. */
+/**
+ * Vendor-neutral S3-compatible object storage. Works with any S3 API:
+ * Supabase Storage (`https://<ref>.supabase.co/storage/v1/s3`), Cloudflare R2
+ * (`https://<account>.r2.cloudflarestorage.com`), AWS S3, MinIO, etc. — pick
+ * the backend purely via env. `forcePathStyle` is required by Supabase and
+ * harmless for the others.
+ */
+
+/** True when every S3_* env var the client needs is present. */
 export function isStorageConfigured(): boolean {
   return Boolean(
-    process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET,
+    process.env.S3_ENDPOINT && process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY && process.env.S3_BUCKET,
   );
 }
 
 function client(): { s3: S3Client; bucket: string } {
-  if (!isStorageConfigured()) throw new Error('R2 not configured (set R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET).');
+  if (!isStorageConfigured()) {
+    throw new Error('Object storage not configured (set S3_ENDPOINT/S3_REGION/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY/S3_BUCKET).');
+  }
   const s3 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    region: process.env.S3_REGION || 'auto',
+    endpoint: process.env.S3_ENDPOINT,
+    forcePathStyle: true,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
     },
   });
-  return { s3, bucket: process.env.R2_BUCKET! };
+  return { s3, bucket: process.env.S3_BUCKET! };
 }
 
 export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {

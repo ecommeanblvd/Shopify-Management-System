@@ -5,7 +5,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { getSignedDownloadUrl } from '@/lib/storage/r2';
+import { getSignedDownloadUrl } from '@/lib/storage/s3';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; cardId: string }> }) {
   const { cardId } = await params;
