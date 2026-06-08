@@ -27,10 +27,21 @@ export interface ReconcileRow {
   billedTotal: number;
   billedBase: number | null;
   billedFuel: number | null;
+  billedRemote: number | null;
+  billedDemand: number | null;
+  billedSignature: number | null;
+  billedVat: number | null;
+  billedGogreen: number | null;
+  billedDiscount: number | null;
   // Engine
   engineTotal: number | null;
   engineBase: number | null;
   engineFuel: number | null;
+  engineRemote: number | null;
+  engineDemand: number | null;
+  engineResidential: number | null;
+  engineVat: number | null;
+  engineDiscount: number | null;
   engineReason: string | null;
   // Delta
   deltaVnd: number | null;
@@ -85,6 +96,12 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedTotal: schema.shipmentCharges.totalAmount,
       billedBase: schema.shipmentCharges.base,
       billedFuel: schema.shipmentCharges.fuel,
+      billedRemote: schema.shipmentCharges.remote,
+      billedDemand: schema.shipmentCharges.demand,
+      billedSignature: schema.shipmentCharges.directSignature,
+      billedVat: schema.shipmentCharges.vat,
+      billedGogreen: schema.shipmentCharges.gogreen,
+      billedDiscount: schema.shipmentCharges.discount,
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
@@ -226,11 +243,22 @@ interface JoinedRow {
   billedTotal: string;
   billedBase: string | null;
   billedFuel: string | null;
+  billedRemote: string | null;
+  billedDemand: string | null;
+  billedSignature: string | null;
+  billedVat: string | null;
+  billedGogreen: string | null;
+  billedDiscount: string | null;
 }
 
 interface EngineBreakdown {
   base: number;
   fuel: number;
+  remote: number;
+  demand: number;
+  residential: number;
+  vat: number;
+  discount: number;
   carrierCost: number;
 }
 
@@ -256,9 +284,20 @@ function buildRow(
     billedTotal,
     billedBase: r.billedBase !== null ? Number(r.billedBase) : null,
     billedFuel: r.billedFuel !== null ? Number(r.billedFuel) : null,
+    billedRemote: r.billedRemote !== null ? Number(r.billedRemote) : null,
+    billedDemand: r.billedDemand !== null ? Number(r.billedDemand) : null,
+    billedSignature: r.billedSignature !== null ? Number(r.billedSignature) : null,
+    billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
+    billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
+    billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,
     engineTotal,
     engineBase: engine?.base ?? null,
     engineFuel: engine?.fuel ?? null,
+    engineRemote: engine?.remote ?? null,
+    engineDemand: engine?.demand ?? null,
+    engineResidential: engine?.residential ?? null,
+    engineVat: engine?.vat ?? null,
+    engineDiscount: engine?.discount ?? null,
     engineReason: unmatchedReason,
     deltaVnd,
     deltaPct,
