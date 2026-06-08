@@ -22,6 +22,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SurchargeEditDialog } from '@/components/carrier-rates/SurchargeEditDialog';
+import { FuelHistoryDialog } from '@/components/carrier-rates/FuelHistoryDialog';
+
+/** Fuel surcharge has a long weekly history — show only the latest few inline. */
+const FUEL_INLINE_LIMIT = 5;
 
 export const dynamic = 'force-dynamic';
 
@@ -446,14 +450,14 @@ function KindCard({
           )}
         </div>
 
-        {/* Rows */}
+        {/* Rows — fuel shows only the latest few inline; the rest live in a modal. */}
         <div className="divide-y divide-border">
           {list.length === 0 ? (
             <div className="px-5 py-6 text-xs text-muted-foreground italic text-center">
               No {meta.label.toLowerCase()} configured.
             </div>
           ) : (
-            list.map((s) => (
+            (kind === 'fuel_percent' ? list.slice(0, FUEL_INLINE_LIMIT) : list).map((s) => (
               <SurchargeSummaryRow
                 key={s.id}
                 row={s}
@@ -471,6 +475,22 @@ function KindCard({
             ))
           )}
         </div>
+
+        {/* Full fuel history lives behind a modal so the long weekly list
+            doesn't bury the rest of the surcharges. */}
+        {kind === 'fuel_percent' && list.length > FUEL_INLINE_LIMIT && (
+          <div className="px-5 py-3 border-t border-border flex justify-center">
+            <FuelHistoryDialog
+              count={list.length}
+              rows={list.map((s) => ({
+                value: s.value,
+                from: s.startsAt ? s.startsAt.toISOString() : null,
+                to: s.endsAt ? s.endsAt.toISOString() : null,
+                note: s.note,
+              }))}
+            />
+          </div>
+        )}
 
         {/* Add row */}
         {canManage && (
