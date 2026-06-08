@@ -1,0 +1,71 @@
+'use server';
+
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
+import { windowsOverlap } from './rate-cards-windows';
+
+export interface RateCardRow {
+  id: string;
+  label: string;
+  effectiveFrom: string;       // 'YYYY-MM-DD'
+  effectiveTo: string | null;
+  isOpen: boolean;
+}
+
+export async function listRateCardsForAccount(carrierAccountId: string): Promise<RateCardRow[]> {
+  const rows = await db
+    .select()
+    .from(schema.carrierRateCards)
+    .where(eq(schema.carrierRateCards.carrierAccountId, carrierAccountId))
+    .orderBy(asc(schema.carrierRateCards.effectiveFrom));
+  return rows.map((r) => ({
+    id: r.id,
+    label: r.label,
+    effectiveFrom: r.effectiveFrom,
+    effectiveTo: r.effectiveTo,
+    isOpen: r.effectiveTo === null,
+  }));
+}
+
+/** The current open card (effectiveTo IS NULL). Calculator/push use this. */
+export async function getCurrentCardId(carrierAccountId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: schema.carrierRateCards.id })
+    .from(schema.carrierRateCards)
+    .where(and(
+      eq(schema.carrierRateCards.carrierAccountId, carrierAccountId),
+      isNull(schema.carrierRateCards.effectiveTo),
+    ))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+export async function createRateCard(input: {
+  carrierAccountId: string;
+  label: string;
+  effectiveFrom: string;       // 'YYYY-MM-DD'
+  effectiveTo: string | null;
+  userId: string;
+}): Promise<{ id: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) throw new Error('effectiveFrom must be YYYY-MM-DD.');
+  if (input.effectiveTo !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveTo)) throw new Error('effectiveTo must be YYYY-MM-DD or empty.');
+  if (input.effectiveTo !== null && input.effectiveTo < input.effectiveFrom) throw new Error('effectiveTo must be on/after effectiveFrom.');
+  if (!input.label.trim()) throw new Error('Label is required.');
+
+  const existing = await listRateCardsForAccount(input.carrierAccountId);
+  if (windowsOverlap(existing, { effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo })) {
+    throw new Error('Window overlaps an existing rate card for this account.');
+  }
+
+  const [row] = await db
+    .insert(schema.carrierRateCards)
+    .values({
+      carrierAccountId: input.carrierAccountId,
+      label: input.label.trim(),
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo,
+      createdBy: input.userId,
+    })
+    .returning({ id: schema.carrierRateCards.id });
+  return { id: row.id };
+}
