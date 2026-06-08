@@ -8,7 +8,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import { loadMatrix, setCell, clearCell, importMatrix } from '@/features/carrier-rates/matrix-actions';
-import { listRateCardsForAccount, getCurrentCardId, createRateCard } from '@/features/carrier-rates/rate-cards-actions';
+import { listRateCardsForAccount, getCurrentCardId } from '@/features/carrier-rates/rate-cards-actions';
+import { stageRateCardPdf, commitRateCardFromPdf } from '@/features/carrier-rates/rate-card-upload-actions';
 import { parseMatrixCsv } from '@/features/carrier-rates/matrix-csv';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RateMatrix } from '@/components/carrier-rates/RateMatrix';
 import { RateCardSelect } from '@/components/carrier-rates/RateCardSelect';
+import { RateCardUpload } from '@/components/carrier-rates/RateCardUpload';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,16 +44,21 @@ async function importCsvAction(accountId: string, cardId: string, userId: string
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
 }
 
-async function createCardAction(accountId: string, userId: string, formData: FormData) {
+async function stageRateCardAction(accountId: string, formData: FormData) {
   'use server';
-  await createRateCard({
-    carrierAccountId: accountId,
-    label: String(formData.get('label') ?? ''),
-    effectiveFrom: String(formData.get('effectiveFrom') ?? ''),
-    effectiveTo: String(formData.get('effectiveTo') ?? '').trim() || null,
-    userId,
-  });
+  const file = formData.get('file') as File;
+  return stageRateCardPdf(accountId, file);
+}
+
+async function commitRateCardAction(
+  accountId: string,
+  userId: string,
+  input: { pdfKey: string; filename: string; effectiveFrom: string; effectiveTo: string | null },
+) {
+  'use server';
+  const r = await commitRateCardFromPdf({ carrierAccountId: accountId, userId, ...input });
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
+  return r;
 }
 
 export default async function MatrixPage({
@@ -75,7 +82,8 @@ export default async function MatrixPage({
     ? cardParam
     : (await getCurrentCardId(id)) ?? cards[cards.length - 1]?.id ?? null;
 
-  const createCardBound = createCardAction.bind(null, id, session.user.id);
+  const stageBound = stageRateCardAction.bind(null, id);
+  const commitBound = commitRateCardAction.bind(null, id, session.user.id);
 
   if (!selectedCardId) {
     return (
@@ -84,8 +92,8 @@ export default async function MatrixPage({
           <ChevronLeft className="size-4" />{account.name}
         </Link>
         <h1 className="text-3xl font-semibold">No rate card yet</h1>
-        <p className="text-sm text-muted-foreground">Create a rate card below to start entering the matrix.</p>
-        {canManage && <CreateCardForm action={createCardBound} />}
+        <p className="text-sm text-muted-foreground">Upload a carrier rate-sheet PDF to create the first card.</p>
+        {canManage && <RateCardUpload stageAction={stageBound} commitAction={commitBound} />}
       </div>
     );
   }
@@ -124,8 +132,20 @@ export default async function MatrixPage({
             <h2 className="text-sm font-semibold uppercase tracking-wider">Rate cards</h2>
             <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">By effective date</Badge>
           </div>
-          <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
-          {canManage && <CreateCardForm action={createCardBound} />}
+          <div className="flex items-center gap-3">
+            <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
+            {cards.find((c) => c.id === selectedCardId)?.hasPdf && (
+              <a
+                href={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs underline text-muted-foreground hover:text-foreground whitespace-nowrap"
+              >
+                View source PDF
+              </a>
+            )}
+          </div>
+          {canManage && <RateCardUpload stageAction={stageBound} commitAction={commitBound} />}
         </CardContent>
       </Card>
 
@@ -185,26 +205,6 @@ export default async function MatrixPage({
         </Card>
       )}
     </div>
-  );
-}
-
-function CreateCardForm({ action }: { action: (formData: FormData) => Promise<void> }) {
-  return (
-    <form action={action} className="flex flex-wrap items-end gap-3 pt-2 border-t border-border">
-      <label className="text-xs space-y-1">
-        <span className="block text-muted-foreground uppercase tracking-wider">Label</span>
-        <input name="label" required placeholder="FedEx 2025" className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
-      </label>
-      <label className="text-xs space-y-1">
-        <span className="block text-muted-foreground uppercase tracking-wider">Effective from</span>
-        <input name="effectiveFrom" type="date" required className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
-      </label>
-      <label className="text-xs space-y-1">
-        <span className="block text-muted-foreground uppercase tracking-wider">Effective to (blank = open)</span>
-        <input name="effectiveTo" type="date" className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
-      </label>
-      <Button type="submit" variant="outline" className="h-9">Create card</Button>
-    </form>
   );
 }
 
