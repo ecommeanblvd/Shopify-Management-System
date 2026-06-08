@@ -8,6 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import { loadMatrix, setCell, clearCell, importMatrix } from '@/features/carrier-rates/matrix-actions';
+import { listRateCardsForAccount, getCurrentCardId, createRateCard } from '@/features/carrier-rates/rate-cards-actions';
 import { parseMatrixCsv } from '@/features/carrier-rates/matrix-csv';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,31 +18,46 @@ import { RateMatrix } from '@/components/carrier-rates/RateMatrix';
 
 export const dynamic = 'force-dynamic';
 
-async function setCellWrapper(accountId: string, userId: string, input: { zoneId: string; tierId: string; costAmount: string }) {
+async function setCellWrapper(accountId: string, cardId: string, userId: string, input: { zoneId: string; tierId: string; costAmount: string }) {
   'use server';
-  await setCell({ ...input, userId });
+  await setCell({ rateCardId: cardId, ...input, userId });
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
 }
 
-async function clearCellWrapper(accountId: string, input: { zoneId: string; tierId: string }) {
+async function clearCellWrapper(accountId: string, cardId: string, input: { zoneId: string; tierId: string }) {
   'use server';
-  await clearCell(input);
+  await clearCell({ rateCardId: cardId, ...input });
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
 }
 
-async function importCsvAction(accountId: string, userId: string, formData: FormData) {
+async function importCsvAction(accountId: string, cardId: string, userId: string, formData: FormData) {
   'use server';
   const csv = String(formData.get('csv') ?? '');
   const parsed = parseMatrixCsv(csv);
   if (parsed.rows.length === 0) {
     throw new Error('CSV produced no rows. ' + (parsed.warnings.join(' · ') || ''));
   }
-  await importMatrix(accountId, parsed, userId);
+  await importMatrix(accountId, cardId, parsed, userId);
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
 }
 
-export default async function MatrixPage({ params }: { params: Promise<{ id: string }> }) {
+async function createCardAction(accountId: string, userId: string, formData: FormData) {
+  'use server';
+  await createRateCard({
+    carrierAccountId: accountId,
+    label: String(formData.get('label') ?? ''),
+    effectiveFrom: String(formData.get('effectiveFrom') ?? ''),
+    effectiveTo: String(formData.get('effectiveTo') ?? '').trim() || null,
+    userId,
+  });
+  revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
+}
+
+export default async function MatrixPage({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ card?: string }> }) {
   const { id } = await params;
+  const { card: cardParam } = await searchParams;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -52,11 +68,32 @@ export default async function MatrixPage({ params }: { params: Promise<{ id: str
   if (!account) notFound();
 
   const canManage = hasPermission(role, 'manage_carrier_rates');
-  const { zones, tiers, cells } = await loadMatrix(id);
+  const cards = await listRateCardsForAccount(id);
+  // Selected card: ?card= if valid, else the current open card, else newest.
+  const selectedCardId = (cardParam && cards.some((c) => c.id === cardParam))
+    ? cardParam
+    : (await getCurrentCardId(id)) ?? cards[cards.length - 1]?.id ?? null;
 
-  const setBound = setCellWrapper.bind(null, id, session.user.id);
-  const clearBound = clearCellWrapper.bind(null, id);
-  const importBound = importCsvAction.bind(null, id, session.user.id);
+  const createCardBound = createCardAction.bind(null, id, session.user.id);
+
+  if (!selectedCardId) {
+    return (
+      <div className="px-6 md:px-10 py-12 space-y-6">
+        <Link href={`/f/carrier-rates/${id}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="size-4" />{account.name}
+        </Link>
+        <h1 className="text-3xl font-semibold">No rate card yet</h1>
+        <p className="text-sm text-muted-foreground">Create a rate card below to start entering the matrix.</p>
+        {canManage && <CreateCardForm action={createCardBound} />}
+      </div>
+    );
+  }
+
+  const { zones, tiers, cells } = await loadMatrix(id, selectedCardId);
+
+  const setBound = setCellWrapper.bind(null, id, selectedCardId, session.user.id);
+  const clearBound = clearCellWrapper.bind(null, id, selectedCardId);
+  const importBound = importCsvAction.bind(null, id, selectedCardId, session.user.id);
 
   const totalCells = zones.length * tiers.length;
   const filled = cells.length;
@@ -79,6 +116,27 @@ export default async function MatrixPage({ params }: { params: Promise<{ id: str
           Inline-edit each cell to set the base cost in {account.costCurrency}. Tab/Enter commits and saves automatically; Esc cancels.
         </p>
       </header>
+
+      <Card>
+        <CardContent className="p-6 md:p-8 space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Rate cards</h2>
+            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">By effective date</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {cards.map((c) => (
+              <Link
+                key={c.id}
+                href={`/f/carrier-rates/${id}/matrix?card=${c.id}`}
+                className={`rounded-lg border px-3 py-1.5 text-xs ${c.id === selectedCardId ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:text-foreground'}`}
+              >
+                {c.label} · {c.effectiveFrom} → {c.effectiveTo ?? 'open'}
+              </Link>
+            ))}
+          </div>
+          {canManage && <CreateCardForm action={createCardBound} />}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-3 gap-px bg-border rounded-2xl overflow-hidden border border-border">
         <StatTile label="Zones" value={String(zones.length)} sub={zones.length === 0 ? 'Add some first' : 'Configured'} />
@@ -111,7 +169,7 @@ export default async function MatrixPage({ params }: { params: Promise<{ id: str
               <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">Creates missing zones &amp; tiers</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Paste a rate sheet with the first column = weight tier upper-bound (kg), and the rest of the columns = zone labels. Missing cells are skipped. Existing cells are overwritten.
+              Paste a rate sheet with the first column = weight tier upper-bound (kg), and the rest of the columns = zone labels. Missing cells are skipped. Existing cells in this card are overwritten.
             </p>
             <form action={importBound} className="space-y-3">
               <Textarea
@@ -136,6 +194,26 @@ export default async function MatrixPage({ params }: { params: Promise<{ id: str
         </Card>
       )}
     </div>
+  );
+}
+
+function CreateCardForm({ action }: { action: (formData: FormData) => Promise<void> }) {
+  return (
+    <form action={action} className="flex flex-wrap items-end gap-3 pt-2 border-t border-border">
+      <label className="text-xs space-y-1">
+        <span className="block text-muted-foreground uppercase tracking-wider">Label</span>
+        <input name="label" required placeholder="FedEx 2025" className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
+      </label>
+      <label className="text-xs space-y-1">
+        <span className="block text-muted-foreground uppercase tracking-wider">Effective from</span>
+        <input name="effectiveFrom" type="date" required className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
+      </label>
+      <label className="text-xs space-y-1">
+        <span className="block text-muted-foreground uppercase tracking-wider">Effective to (blank = open)</span>
+        <input name="effectiveTo" type="date" className="block rounded-md border border-border bg-card px-2 py-1.5 text-sm" />
+      </label>
+      <Button type="submit" variant="outline" className="h-9">Create card</Button>
+    </form>
   );
 }
 
