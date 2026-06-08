@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RateMatrix } from '@/components/carrier-rates/RateMatrix';
+import { RateCardSelect } from '@/components/carrier-rates/RateCardSelect';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,17 +124,7 @@ export default async function MatrixPage({
             <h2 className="text-sm font-semibold uppercase tracking-wider">Rate cards</h2>
             <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">By effective date</Badge>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {cards.map((c) => (
-              <Link
-                key={c.id}
-                href={`/f/carrier-rates/${id}/matrix?card=${c.id}`}
-                className={`rounded-lg border px-3 py-1.5 text-xs ${c.id === selectedCardId ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:text-foreground'}`}
-              >
-                {c.label} · {c.effectiveFrom} → {c.effectiveTo ?? 'open'}
-              </Link>
-            ))}
-          </div>
+          <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
           {canManage && <CreateCardForm action={createCardBound} />}
         </CardContent>
       </Card>
