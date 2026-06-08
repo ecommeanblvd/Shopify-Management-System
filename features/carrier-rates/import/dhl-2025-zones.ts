@@ -254,16 +254,18 @@ export const DHL_2025_ZONE_LABELS: string[] = Array.from(
 /**
  * The weight-tier upper bounds this rate card models, ascending:
  *   - 0.5 … 30.0 kg in 0.5 steps (the published light grid, exact)
- *   - 31 … 300 kg in 1 kg steps (covers multiplier bands 30.1–70 and
- *     70.1–300 exactly: DHL rounds chargeable weight up to the next 1 kg
- *     above 30 kg, and the engine charges the first tier ≥ weight).
- * Band 300.1–99,999 kg (>300 kg) is intentionally NOT modelled here —
- * such shipments are rare for express and would need a separate tier
- * strategy. Track as a follow-up.
+ *   - representative heavy points covering the three multiplier bands:
+ *     30.1–70 → 35,40,45,50,60,70 · 70.1–300 → 100,150,200,300 ·
+ *     300.1–99,999 → 500,1000.
+ *
+ * This matches the existing DHL Vietnam account's 72-tier scheme. The
+ * engine charges the first tier ≥ chargeable weight, and each heavy cell
+ * stores perKg(band) × tier.upperKg. 60 light + 12 heavy = 72 tiers →
+ * 720 cells across 10 zones.
  */
 export function dhl2025TierUppers(): number[] {
   const tiers: number[] = [];
   for (let w = 0.5; w <= 30.0 + 1e-9; w += 0.5) tiers.push(Math.round(w * 10) / 10);
-  for (let w = 31; w <= 300; w += 1) tiers.push(w);
+  tiers.push(35, 40, 45, 50, 60, 70, 100, 150, 200, 300, 500, 1000);
   return tiers;
 }
