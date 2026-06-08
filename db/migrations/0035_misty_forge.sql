@@ -13,7 +13,7 @@ ALTER TABLE "carrier_rate_cards" ADD CONSTRAINT "carrier_rate_cards_created_by_u
 CREATE INDEX "carrier_rate_cards_account_idx" ON "carrier_rate_cards" USING btree ("carrier_account_id");--> statement-breakpoint
 ALTER TABLE "carrier_rate_cells" ADD COLUMN "rate_card_id" uuid;--> statement-breakpoint
 INSERT INTO "carrier_rate_cards" ("carrier_account_id", "label", "effective_from", "effective_to")
-SELECT DISTINCT z."carrier_account_id", 'Current (migrated)', DATE '2020-01-01', NULL
+SELECT DISTINCT z."carrier_account_id", 'Current (migrated)', DATE '2020-01-01', NULL::date
 FROM "carrier_zones" z
 JOIN "carrier_rate_cells" c ON c."carrier_zone_id" = z."id";--> statement-breakpoint
 UPDATE "carrier_rate_cells" c
