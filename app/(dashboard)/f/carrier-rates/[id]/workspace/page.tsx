@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
+import { formatDateVN } from '@/features/carrier-rates/lib';
 import { loadMatrix } from '@/features/carrier-rates/matrix-actions';
 import { listZonesWithCountries } from '@/features/carrier-rates/zones-actions';
 import { listRateCardsForAccount, getCurrentCardId } from '@/features/carrier-rates/rate-cards-actions';
@@ -51,7 +52,7 @@ export default async function WorkspacePage({
   const cards = await listRateCardsForAccount(id);
   const selectedCardId = (cardParam && cards.some((c) => c.id === cardParam))
     ? cardParam
-    : (await getCurrentCardId(id)) ?? cards[cards.length - 1]?.id ?? null;
+    : (await getCurrentCardId(id)) ?? cards[0]?.id ?? null;
 
   const stageBound = stageRateCardAction.bind(null, id);
   const commitBound = commitRateCardAction.bind(null, id);
@@ -101,7 +102,7 @@ export default async function WorkspacePage({
       )}
       {selectedCard && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          Effective: {selectedCard.effectiveFrom}{selectedCard.effectiveTo ? ` → ${selectedCard.effectiveTo}` : ' → (open)'}
+          Hiệu lực: {formatDateVN(selectedCard.effectiveFrom)} → {formatDateVN(selectedCard.effectiveTo, 'nay')}
         </span>
       )}
     </div>

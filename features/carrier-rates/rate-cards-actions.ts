@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { requireManageCarrierRates } from './require-manage';
 import { windowsOverlap } from './rate-cards-windows';
@@ -20,7 +20,7 @@ export async function listRateCardsForAccount(carrierAccountId: string): Promise
     .select()
     .from(schema.carrierRateCards)
     .where(eq(schema.carrierRateCards.carrierAccountId, carrierAccountId))
-    .orderBy(asc(schema.carrierRateCards.effectiveFrom));
+    .orderBy(desc(schema.carrierRateCards.effectiveFrom));
   return rows.map((r) => ({
     id: r.id,
     label: r.label,

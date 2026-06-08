@@ -1,6 +1,6 @@
 'use server';
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export type SurchargeKind = typeof schema.carrierSurchargeKindEnum.enumValues[number];
@@ -42,7 +42,14 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
     })
     .from(schema.carrierSurcharges)
     .where(eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId))
-    .orderBy(asc(schema.carrierSurcharges.kind), asc(schema.carrierSurcharges.createdAt))
+    // Group by kind for the page sections, then newest → oldest within each
+    // kind by effective-window start (rows without a start date sort last),
+    // tie-breaking on creation time.
+    .orderBy(
+      asc(schema.carrierSurcharges.kind),
+      sql`${schema.carrierSurcharges.startsAt} desc nulls last`,
+      desc(schema.carrierSurcharges.createdAt),
+    )
     .then((rows) => rows.map((r) => ({
       ...r,
       countryCodes: Array.isArray(r.countryCodes) ? (r.countryCodes as string[]) : null,
