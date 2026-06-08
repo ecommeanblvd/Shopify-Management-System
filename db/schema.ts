@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 
@@ -1261,7 +1261,10 @@ export const warehouseInventory = pgTable('warehouse_inventory', {
   updatedBy: text('updated_by'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (t) => [
+  check('warehouse_qty_on_hand_nonneg', sql`${t.qtyOnHand} >= 0`),
+  check('warehouse_qty_reserved_nonneg', sql`${t.qtyReserved} >= 0`),
+]);
 
 /** One ops record per Shopify order. status = rollup derived from lines. */
 export const orderFulfillment = pgTable('order_fulfillment', {

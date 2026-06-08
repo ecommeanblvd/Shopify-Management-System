@@ -281,6 +281,13 @@
       "when": 1780935254465,
       "tag": "0039_stable_fulfillment_line_key",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780936477027,
+      "tag": "0040_add_warehouse_check_constraints",
+      "breakpoints": true
     }
   ]
 }
