@@ -15,6 +15,12 @@ describe('NAV structure', () => {
       expect(hrefs).not.toContain(item.href);
     }
   });
+
+  it('includes the shipping-reconcile module gated by view_carrier_rates', () => {
+    const item = NAV.find((n) => n.href === '/f/shipping-reconcile');
+    expect(item).toBeDefined();
+    expect(item!.requires).toBe('view_carrier_rates');
+  });
 });
 
 describe('SETTINGS_ITEMS', () => {

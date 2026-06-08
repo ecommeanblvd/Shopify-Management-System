@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt } from 'lucide-react';
 import { hasPermission, type Permission, type Role } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -23,6 +23,7 @@ export const NAV: NavItem[] = [
   { href: '/',                label: 'Dashboard',     icon: LayoutDashboard, requires: null },
   { href: '/f/orders',        label: 'Orders',        icon: ShoppingBag,     requires: 'view_orders' },
   { href: '/f/carrier-rates', label: 'Carrier rates', icon: Truck,           requires: 'view_carrier_rates' },
+  { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
   { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions' },
   { href: '/settings',        label: 'Settings',      icon: Settings,        requires: null },
