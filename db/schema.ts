@@ -303,6 +303,10 @@ export const carrierRateCards = pgTable('carrier_rate_cards', {
   effectiveTo: date('effective_to'),
   createdBy: text('created_by').references(() => user.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  // Source rate-sheet PDF kept as evidence in R2 (NULL for the migrated card).
+  sourcePdfKey: text('source_pdf_key'),
+  sourcePdfFilename: text('source_pdf_filename'),
+  sourcePdfUploadedAt: timestamp('source_pdf_uploaded_at'),
 }, (t) => [
   index('carrier_rate_cards_account_idx').on(t.carrierAccountId),
 ]);
