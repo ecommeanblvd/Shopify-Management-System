@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
-  ChevronLeft, Truck, Globe2, Coins, Layers, Wrench, MapPin, Calculator, Send, AlertCircle, Trash2, ArrowRight,
+  ChevronLeft, Truck, Layers, Wrench, MapPin, Calculator, Send, AlertCircle, Trash2, ArrowRight, LayoutGrid,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -129,11 +129,12 @@ export default async function CarrierAccountDetailPage({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SubSection
-          href={`/f/carrier-rates/${id}/zones`}
-          icon={<Globe2 className="size-4" />}
-          title="Zones"
-          desc="Group countries into the carrier's zones (Zone 1, Zone A, …)."
+          href={`/f/carrier-rates/${id}/workspace`}
+          icon={<LayoutGrid className="size-4" />}
+          title="Rate workspace"
+          desc="Zones + rate matrix trong một trang read-only. Search country → zone."
           status="Ready"
+          accent
         />
         <SubSection
           href={`/f/carrier-rates/${id}/weight-tiers`}
@@ -141,14 +142,6 @@ export default async function CarrierAccountDetailPage({
           title="Weight tiers"
           desc="Breakpoints for the rate matrix rows."
           status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/matrix`}
-          icon={<Coins className="size-4" />}
-          title="Rate matrix"
-          desc="Cost per (zone × tier). Inline edit + CSV import."
-          status="Ready"
-          accent
         />
         <SubSection
           href={`/f/carrier-rates/${id}/surcharges`}
