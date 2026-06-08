@@ -47,7 +47,7 @@ export function CountrySearch({ zones, onMatch }: Props) {
       {query.trim() !== '' && (
         match === null ? (
           <p className="text-xs text-muted-foreground">
-            Không tìm thấy country khớp "<span className="font-medium">{query.trim()}</span>" trong bất kỳ zone nào.
+            Không tìm thấy country khớp &ldquo;<span className="font-medium">{query.trim()}</span>&rdquo; trong bất kỳ zone nào.
           </p>
         ) : (
           <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">

@@ -87,7 +87,6 @@ export default async function CalculatorPage({ params }: { params: Promise<{ id:
               <div className="flex items-center justify-center gap-3 text-xs flex-wrap">
                 <Link href={`/f/carrier-rates/${id}/workspace`} className="text-primary hover:underline">Open rate workspace →</Link>
                 <Link href={`/f/carrier-rates/${id}/weight-tiers`} className="text-primary hover:underline">Add tiers →</Link>
-                <Link href={`/f/carrier-rates/${id}/workspace`} className="text-primary hover:underline">Open rate workspace →</Link>
               </div>
             </div>
           ) : (
