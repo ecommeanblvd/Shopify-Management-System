@@ -85,9 +85,8 @@ export default async function CalculatorPage({ params }: { params: Promise<{ id:
                 You need at least one zone with a country assigned and one weight tier with a filled rate cell.
               </div>
               <div className="flex items-center justify-center gap-3 text-xs flex-wrap">
-                <Link href={`/f/carrier-rates/${id}/zones`} className="text-primary hover:underline">Configure zones →</Link>
+                <Link href={`/f/carrier-rates/${id}/workspace`} className="text-primary hover:underline">Open rate workspace →</Link>
                 <Link href={`/f/carrier-rates/${id}/weight-tiers`} className="text-primary hover:underline">Add tiers →</Link>
-                <Link href={`/f/carrier-rates/${id}/matrix`} className="text-primary hover:underline">Fill matrix →</Link>
               </div>
             </div>
           ) : (
