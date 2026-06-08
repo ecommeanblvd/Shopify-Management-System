@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RateMatrix } from '@/components/carrier-rates/RateMatrix';
 import { RateCardSelect } from '@/components/carrier-rates/RateCardSelect';
-import { RateCardUpload } from '@/components/carrier-rates/RateCardUpload';
+import { RateCardUploadDialog } from '@/components/carrier-rates/RateCardUploadDialog';
 import { RateCardWindowEdit } from '@/components/carrier-rates/RateCardWindowEdit';
 
 export const dynamic = 'force-dynamic';
@@ -103,7 +103,14 @@ export default async function MatrixPage({
         </Link>
         <h1 className="text-3xl font-semibold">No rate card yet</h1>
         <p className="text-sm text-muted-foreground">Upload a carrier rate-sheet PDF to create the first card.</p>
-        {canManage && <RateCardUpload stageAction={stageBound} commitAction={commitBound} />}
+        {canManage && (
+          <RateCardUploadDialog
+            stageAction={stageBound}
+            commitAction={commitBound}
+            triggerLabel="Upload first rate card"
+            triggerVariant="default"
+          />
+        )}
       </div>
     );
   }
@@ -131,41 +138,18 @@ export default async function MatrixPage({
           <Coins className="size-3.5" />
           Rate matrix
         </div>
-        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">Cost per (zone × tier)</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">Cost per (zone × tier)</h1>
+          {canManage && (
+            <div className="ml-auto shrink-0">
+              <RateCardUploadDialog stageAction={stageBound} commitAction={commitBound} />
+            </div>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground max-w-xl">
           Inline-edit each cell to set the base cost in {account.costCurrency}. Tab/Enter commits and saves automatically; Esc cancels.
         </p>
       </header>
-
-      <Card>
-        <CardContent className="p-6 md:p-8 space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wider">Rate cards</h2>
-            <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">By effective date</Badge>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
-            {selectedCard?.hasPdf && (
-              <a
-                href={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs underline text-muted-foreground hover:text-foreground whitespace-nowrap"
-              >
-                View source PDF
-              </a>
-            )}
-            {canManage && selectedCard && (
-              <RateCardWindowEdit
-                effectiveFrom={selectedCard.effectiveFrom}
-                effectiveTo={selectedCard.effectiveTo}
-                updateAction={updateWindowAction.bind(null, id, selectedCardId)}
-              />
-            )}
-          </div>
-          {canManage && <RateCardUpload stageAction={stageBound} commitAction={commitBound} />}
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-3 gap-px bg-border rounded-2xl overflow-hidden border border-border">
         <StatTile label="Zones" value={String(zones.length)} sub={zones.length === 0 ? 'Add some first' : 'Configured'} />
@@ -185,6 +169,29 @@ export default async function MatrixPage({
             canEdit={canManage}
             setCellAction={setBound}
             clearCellAction={clearBound}
+            toolbarStart={
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Rate card</span>
+                <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
+                {selectedCard?.hasPdf && (
+                  <a
+                    href={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs underline text-muted-foreground hover:text-foreground whitespace-nowrap"
+                  >
+                    View source PDF
+                  </a>
+                )}
+                {canManage && selectedCard && (
+                  <RateCardWindowEdit
+                    effectiveFrom={selectedCard.effectiveFrom}
+                    effectiveTo={selectedCard.effectiveTo}
+                    updateAction={updateWindowAction.bind(null, id, selectedCardId)}
+                  />
+                )}
+              </div>
+            }
           />
         </CardContent>
       </Card>

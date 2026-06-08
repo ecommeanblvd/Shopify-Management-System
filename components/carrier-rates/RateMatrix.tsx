@@ -28,6 +28,9 @@ interface Props {
   canEdit: boolean;
   setCellAction: (input: { zoneId: string; tierId: string; costAmount: string }) => Promise<void>;
   clearCellAction: (input: { zoneId: string; tierId: string }) => Promise<void>;
+  /** Optional node rendered on the left of the search toolbar row — e.g. the
+   *  rate-card dropdown — so the matrix has a single `[card] … [search]` row. */
+  toolbarStart?: React.ReactNode;
 }
 
 type CellState = 'idle' | 'saving' | 'saved' | 'error';
@@ -44,7 +47,7 @@ function parseVnd(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
-export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction }: Props) {
+export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction, toolbarStart }: Props) {
   // Map raw DB values to CANONICAL raw values (no separators). The Cell
   // component renders them through `formatMoneyForDisplay` so commas appear
   // live as the operator types.
@@ -91,12 +94,17 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
 
   if (zones.length === 0 || tiers.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground italic py-12 text-center">
-        {zones.length === 0 && tiers.length === 0
-          ? 'Define at least one zone and one weight tier before filling the matrix.'
-          : zones.length === 0
-            ? 'Define at least one zone to fill the matrix.'
-            : 'Define at least one weight tier to fill the matrix.'}
+      <div className="space-y-3">
+        {toolbarStart && (
+          <div className="flex flex-wrap items-center gap-3">{toolbarStart}</div>
+        )}
+        <div className="text-sm text-muted-foreground italic py-12 text-center">
+          {zones.length === 0 && tiers.length === 0
+            ? 'Define at least one zone and one weight tier before filling the matrix.'
+            : zones.length === 0
+              ? 'Define at least one zone to fill the matrix.'
+              : 'Define at least one weight tier to fill the matrix.'}
+        </div>
       </div>
     );
   }
@@ -112,6 +120,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
         onSearchChange={setSearchRaw}
         nearMatchPct={NEAR_MATCH_PCT}
         target={searchTarget}
+        toolbarStart={toolbarStart}
       />
       <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-0 text-sm" style={{ minWidth: `${180 + zones.length * 140}px` }}>
@@ -247,6 +256,8 @@ interface MatrixSearchProps {
   onSearchChange: (s: string) => void;
   nearMatchPct: number;
   target: number | null;
+  /** Node rendered to the left of the search input on the same flex row. */
+  toolbarStart?: React.ReactNode;
 }
 
 interface MatrixMatch {
@@ -262,6 +273,7 @@ function MatrixSearch({
   searchRaw: raw, onSearchChange: setRaw,
   nearMatchPct,
   target,
+  toolbarStart,
 }: MatrixSearchProps): React.ReactNode {
   // Two buckets — exact-equality vs within nearMatchPct.
   const matches = useMemo<{ exact: MatrixMatch[]; near: MatrixMatch[] }>(() => {
@@ -305,8 +317,9 @@ function MatrixSearch({
 
   return (
     <div className="rounded border border-border bg-muted/30 p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="flex flex-wrap items-center gap-3">
+        {toolbarStart}
+        <div className="relative flex-1 min-w-[240px] sm:ml-auto">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"

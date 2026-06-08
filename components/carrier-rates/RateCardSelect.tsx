@@ -13,17 +13,29 @@ export interface RateCardOption {
   isOpen: boolean;
 }
 
+/** Friendly, human-readable label for a rate card. Used both in the trigger
+ *  display and the dropdown items so they stay consistent — e.g.
+ *  "FedEx IP 2026 · 2026-01-01 → open · Current". */
+function cardLabel(c: RateCardOption): string {
+  return `${c.label} · ${c.effectiveFrom} → ${c.effectiveTo ?? 'open'} · ${c.isOpen ? 'Current' : 'History'}`;
+}
+
 export function RateCardSelect({
   accountId, cards, selectedCardId,
 }: { accountId: string; cards: RateCardOption[]; selectedCardId: string }) {
   const router = useRouter();
+  const selected = cards.find((c) => c.id === selectedCardId) ?? null;
   return (
     <Select value={selectedCardId} onValueChange={(id) => router.push(`/f/carrier-rates/${accountId}/matrix?card=${id}`)}>
-      <SelectTrigger className="w-full max-w-md"><SelectValue /></SelectTrigger>
+      <SelectTrigger className="w-full max-w-md">
+        <SelectValue placeholder="Select a rate card">
+          {selected ? cardLabel(selected) : null}
+        </SelectValue>
+      </SelectTrigger>
       <SelectContent>
         {cards.map((c) => (
           <SelectItem key={c.id} value={c.id}>
-            {c.label} · {c.effectiveFrom} → {c.effectiveTo ?? 'open'} · {c.isOpen ? 'Current' : 'History'}
+            {cardLabel(c)}
           </SelectItem>
         ))}
       </SelectContent>

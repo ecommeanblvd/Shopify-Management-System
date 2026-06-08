@@ -8,9 +8,13 @@ import type { StagedRateCard } from '@/features/carrier-rates/rate-card-upload-a
 export function RateCardUpload({
   stageAction,
   commitAction,
+  onCommitted,
 }: {
   stageAction: (formData: FormData) => Promise<StagedRateCard>;
   commitAction: (input: { pdfKey: string; filename: string; effectiveFrom: string; effectiveTo: string | null }) => Promise<{ id: string }>;
+  /** Called after a successful commit (after state reset + router.refresh).
+   *  Lets a host dialog close itself. */
+  onCommitted?: () => void;
 }) {
   const router = useRouter();
   const [staged, setStaged] = useState<StagedRateCard | null>(null);
@@ -38,6 +42,7 @@ export function RateCardUpload({
         await commitAction({ pdfKey: staged.pdfKey, filename: staged.filename, effectiveFrom: from, effectiveTo: to.trim() || null });
         setStaged(null); setFrom(''); setTo('');
         router.refresh();
+        onCommitted?.();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -47,7 +52,7 @@ export function RateCardUpload({
   const blocked = !!staged?.preview && !staged.preview.selfCheckOk;
 
   return (
-    <div className="space-y-4 pt-2 border-t border-border">
+    <div className="space-y-4">
       <form action={onStage} className="flex items-end gap-3">
         <input type="file" name="file" accept="application/pdf" required className="text-sm" />
         <Button type="submit" variant="outline">Upload &amp; preview</Button>
