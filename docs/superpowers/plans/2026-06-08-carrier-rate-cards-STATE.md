@@ -55,13 +55,24 @@ Cấu trúc FedEx account: 22 zones ("Zone A".."Zone Z"), 59 tiers (0.5..1500kg)
 - **Pre-28-Oct-2025:** user sẽ gửi bảng cũ hơn sau → tạm thời đơn trước 28-Oct = `no_rate_card`.
 - DHL 2025: user sẽ gửi sau.
 
-## 📋 VIỆC CÒN LẠI
-1. **Importer 2025** (script mới): parse IP Package+Pak (nhẹ) + per-kg×upperKg (nặng) → cells card FedEx 2025. **HIỆN rates cho user confirm trước khi ghi** (dữ liệu tiền).
-2. Trên staging: tạo card 2025 + đổi window card 2026 (dùng SQL được) → reconcile before/after, xem Δ đơn 2025 cải thiện.
+## ✅ IMPORTER 2025 — XONG (committed `1064d68`) + ĐÃ CHẠY TRÊN STAGING
+- Parser thuần: `features/carrier-rates/import/fedex-2025-rates.ts` (`parseIpExport` + `toCells`) + test 10/10.
+- Script dry-run: `scripts/import-fedex-2025.ts` — self-check 1298 package + 110 pak + 9 spot-check PDF; `--apply` mới ghi.
+- Convention khớp 2026: light Package/Pak trực tiếp; heavy Package = perKg × tier.upperKg; Envelope bỏ; rate đã NET (không trừ discount).
+- **Trên staging đã làm:** card `FedEx IP 2025` (`02ff1855-8257-4bd2-a8fc-6ba9dc898b1e`, 2025-10-28→2026-01-04) + đổi card cũ thành `FedEx IP 2026` (2026-01-05→open). Import 1298+110 cells OK. Reconcile chọn đúng card theo ship date.
+
+## ⚠️ KẾT QUẢ RECONCILE 2025 + CAVEAT QUAN TRỌNG (đọc kỹ)
+Cửa sổ 2025-10-28→2026-01-04, 129 đơn FedEx matched, Σ Billed 203,746,047:
+- Trước (rate 2026): Σ Engine 165,811,815 · Δ 37,934,232 (18.62%).
+- Sau (rate 2025 đúng): Σ Engine 156,008,968 · Δ 47,737,079 (23.43%).
+- **Δ TĂNG không phải tiền thu hồi.** Base 2025 thật sự thấp hơn 2026 (engine giảm ~9.8M). Δ còn lại bị thổi phồng vì **THIẾU WINDOW FUEL 2025**: `carrier_surcharges` fuel_percent sớm nhất = 2026-03-09 (script `backfill-fedex-historical-fuel.ts` chỉ giữ 13 tuần gần nhất), nên engine tính 0% fuel cho toàn bộ đơn trước 2026-03. ⇒ **Không audit thu hồi 2025 được cho tới khi có window fuel/demand 2025.**
+
+## 📋 VIỆC CÒN LẠI (đã sắp lại ưu tiên)
+1. **[BLOCKER cho audit 2025] Window fuel 2025 cho FedEx & DHL** — fuel_percent hiện chỉ phủ từ 2026-03-09. Cần nguồn fuel% hằng tuần 2025-10→2026-03 (FedEx AEM history / DHL) rồi prepend các dòng closed `starts_at/ends_at`. Sau đó reconcile lại 2025 mới có nghĩa.
+2. Rà surcharge **demand/remote 2025** (FedEx & DHL) nếu khác 2026 — thêm dòng `endsAt ≤ cutover`. VAT 8% giữ nguyên cả 2 năm.
 3. **Action sửa-window-card qua UI** (user đã ĐỒNG Ý) — production cần để đặt window không cần SQL tay. (`updateRateCard` trong rate-cards-actions.ts + inline edit ở matrix/page.tsx.)
-4. Rà surcharge demand/remote 2025 (FedEx & DHL) nếu khác 2026 — thêm dòng có `endsAt ≤ cutover`. VAT 8% giữ nguyên cả 2 năm.
-5. **Apply migration lên PRODUCTION** (đã chứng minh an toàn) — chỉ sau khi user xác nhận backup/PITR. Cách an toàn: `psql -f db/migrations/0035_misty_forge.sql` hoặc drizzle migrate.
-6. Nhận bảng **FedEx pre-28-Oct-2025** + **DHL 2025** từ user → thêm card tương ứng.
+4. **Apply migration `0035` lên PRODUCTION** (đã chứng minh an toàn) — chỉ sau khi user xác nhận backup/PITR. `psql -f db/migrations/0035_misty_forge.sql` hoặc drizzle migrate. Rồi lặp lại quy trình tạo card 2025 + import trên production (importer dùng account-id giống nhau).
+5. Nhận bảng **FedEx pre-28-Oct-2025** + **DHL 2025** từ user → thêm card tương ứng.
 
 ## ⚠️ LƯU Ý
 - Engine `quote.ts` là vùng toán đã verify với invoice — KHÔNG sửa.
