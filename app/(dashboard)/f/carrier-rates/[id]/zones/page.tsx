@@ -13,32 +13,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { iso2ToFlag, countryName, CountryChip } from '@/components/carrier-rates/country-display';
 
 export const dynamic = 'force-dynamic';
 
 const ISO2_RE = /^[A-Z]{2}$/;
-const FLAG_OFFSET = 0x1F1E6 - 'A'.charCodeAt(0);
-
-function iso2ToFlag(code: string): string {
-  if (!ISO2_RE.test(code)) return '🏳️';
-  const chars = [...code].map((c) => String.fromCodePoint(c.charCodeAt(0) + FLAG_OFFSET));
-  return chars.join('');
-}
-
-// Intl.DisplayNames is part of Node 18+ and every modern browser — works in
-// server components without any extra wiring. We instantiate once at module
-// load so each chip render avoids the constructor cost.
-const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
-
-function countryName(code: string): string {
-  if (!ISO2_RE.test(code)) return code;
-  try {
-    const name = REGION_NAMES.of(code);
-    return name && name !== code ? name : code;
-  } catch {
-    return code;
-  }
-}
 
 async function addZoneAction(accountId: string, formData: FormData) {
   'use server';
@@ -321,19 +300,6 @@ function ZoneEditCard({
   );
 }
 
-function CountryChip({ code }: { code: string }) {
-  const flag = iso2ToFlag(code);
-  const name = countryName(code);
-  return (
-    <div
-      className="inline-flex items-center gap-2.5 rounded-lg border border-border bg-card pl-2 pr-3 py-1.5 hover:border-foreground/30 transition-colors"
-      title={code}
-    >
-      <span className="text-2xl leading-none" aria-hidden>{flag}</span>
-      <span className="text-sm font-medium text-foreground whitespace-nowrap">{name}</span>
-    </div>
-  );
-}
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
