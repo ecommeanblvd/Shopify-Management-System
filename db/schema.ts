@@ -1276,7 +1276,7 @@ export const orderFulfillment = pgTable('order_fulfillment', {
 export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
   id: uuid('id').defaultRandom().primaryKey(),
   fulfillmentId: uuid('fulfillment_id').references(() => orderFulfillment.id, { onDelete: 'cascade' }).notNull(),
-  orderLineId: uuid('order_line_id').references(() => shopifyOrderLines.id, { onDelete: 'cascade' }).notNull().unique(),
+  shopifyLineId: text('shopify_line_id').notNull(),
   sku: text('sku'),
   qty: integer('qty').notNull(),
   status: fulfillmentLineStatusEnum('status').notNull().default('pending_check'),
@@ -1287,7 +1287,10 @@ export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
   packedAt: timestamp('packed_at'),
   shippedAt: timestamp('shipped_at'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (t) => [index('order_fulfillment_lines_ful_idx').on(t.fulfillmentId)]);
+}, (t) => [
+  index('order_fulfillment_lines_ful_idx').on(t.fulfillmentId),
+  uniqueIndex('order_fulfillment_lines_ful_line_idx').on(t.fulfillmentId, t.shopifyLineId),
+]);
 
 /** Audit log of status transitions. */
 export const orderFulfillmentEvents = pgTable('order_fulfillment_events', {
