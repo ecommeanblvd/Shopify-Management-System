@@ -14,6 +14,7 @@ import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
+import { diagnoseReconcileRow, type ReconcileDiagnosis } from './reconcile-diagnose';
 
 export interface ReconcileRow {
   shipmentId: string;
@@ -47,6 +48,8 @@ export interface ReconcileRow {
   // Delta
   deltaVnd: number | null;
   deltaPct: number | null;
+  // Per-dong invoice diagnosis (null when engine could not quote).
+  diagnosis: ReconcileDiagnosis | null;
 }
 
 export interface ReconcileSummary {
@@ -206,7 +209,58 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
 
     matched += 1;
     sumEngine += q.breakdown.carrierCost;
-    rows.push(buildRow(r, q.breakdown, null));
+
+    // Build the package-appropriate gross list rate ladder for this zone so
+    // the diagnosis can invert the billed base back to a weight tier.
+    const zone = snap.zonesByCountry.get(r.shipCountry);
+    // Include BOTH the Package and Pak list rates per tier — we don't know
+    // which packaging the carrier billed at, so the inversion must be able to
+    // match either ladder.
+    const zoneRates = zone
+      ? snap.weightTiers.flatMap((t) => {
+          const out: Array<{ upperKg: number; rate: number }> = [];
+          const pkg = zone.rateByTierUpper.get(t.upperKg);
+          const pak = zone.pakRateByTierUpper?.get(t.upperKg);
+          if (pkg != null) out.push({ upperKg: t.upperKg, rate: pkg });
+          if (pak != null && pak !== pkg) out.push({ upperKg: t.upperKg, rate: pak });
+          return out;
+        })
+      : [];
+    // remote_fixed is fuelable by default in the engine — include it in the
+    // billed fuelable base so the implied fuel % comparison is apples-to-apples.
+    const billedFuelableBase = Number(r.billedBase ?? 0) + Number(r.billedRemote ?? 0);
+    const diagnosis = diagnoseReconcileRow({
+      billed: {
+        base: r.billedBase != null ? Number(r.billedBase) : null,
+        discount: r.billedDiscount != null ? Number(r.billedDiscount) : null,
+        fuel: r.billedFuel != null ? Number(r.billedFuel) : null,
+        remote: r.billedRemote != null ? Number(r.billedRemote) : null,
+        demand: r.billedDemand != null ? Number(r.billedDemand) : null,
+        signature: r.billedSignature != null ? Number(r.billedSignature) : null,
+        vat: r.billedVat != null ? Number(r.billedVat) : null,
+        gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
+        elevatedRisk: null,
+        total: Number(r.billedTotal),
+      },
+      engine: {
+        base: q.breakdown.base,
+        discount: q.breakdown.discount,
+        fuel: q.breakdown.fuel,
+        remote: q.breakdown.remote,
+        demand: q.breakdown.demand,
+        residential: q.breakdown.residential,
+        vat: q.breakdown.vat,
+        total: q.breakdown.carrierCost,
+      },
+      engineChargeableWeightKg: q.breakdown.chargeableWeightKg,
+      engineTierUpperKg: q.tier.upperKg,
+      zoneRates,
+      billedFuelableBase,
+      fuelPercent: q.breakdown.fuelPercent,
+      discountPercent: q.breakdown.discountPercent,
+      vatPercent: q.breakdown.vatPercent,
+    });
+    rows.push(buildRow(r, q.breakdown, null, diagnosis));
   }
 
   // 3. Sort by absolute delta descending — operator sees worst fits first.
@@ -268,6 +322,7 @@ function buildRow(
   r: JoinedRow,
   engine: EngineBreakdown | null,
   unmatchedReason: string | null,
+  diagnosis: ReconcileDiagnosis | null = null,
 ): ReconcileRow {
   const billedTotal = Number(r.billedTotal);
   const engineTotal = engine?.carrierCost ?? null;
@@ -304,5 +359,6 @@ function buildRow(
     engineReason: unmatchedReason,
     deltaVnd,
     deltaPct,
+    diagnosis,
   };
 }

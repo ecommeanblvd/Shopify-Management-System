@@ -12,7 +12,7 @@ function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
     engineTotal: 1_270_649, engineBase: 1_075_196, engineFuel: 310_312,
     engineRemote: 0, engineDemand: 76_920, engineResidential: 0,
     engineVat: 119_020, engineDiscount: 0, engineReason: null,
-    deltaVnd: 1_118_317, deltaPct: 46.8,
+    deltaVnd: 1_118_317, deltaPct: 46.8, diagnosis: null,
     ...over,
   };
 }

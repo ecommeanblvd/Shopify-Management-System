@@ -191,29 +191,53 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const residual = r(totalDelta - explained);
   components.push({ key: 'residual', billed: 0, engine: 0, delta: residual, cause: residual === 0 ? 'KHOP' : 'LAM_TRON' });
 
-  // verdict — priority order
-  const has = (cause: DiagnosisCause) => components.some((c) => c.cause === cause);
+  // verdict — weight inversion always headlines (it's the strongest evidence);
+  // otherwise the LARGEST-magnitude actionable component drives the headline,
+  // so the operator sees the dominant cause first rather than a fixed order.
   let verdict: string;
   let severity: DiagnosisSeverity;
   if (totalDelta === 0) {
     verdict = 'KHỚP TUYỆT ĐỐI (0đ)';
     severity = 'match';
-  } else if (has('SAI_CAN') && impliedWeight) {
+  } else if (impliedWeight && components.some((c) => c.cause === 'SAI_CAN')) {
     const [lo, hi] = impliedWeight.rangeKg;
     verdict = `Carrier tính ở mức cân cao hơn: ${lo}–${hi} kg (bậc ≤ ${hi} kg) vs hệ thống ${impliedWeight.engineChargeableKg} kg`;
     severity = 'weight';
-  } else if (has('THIEU_CAU_HINH_REMOTE')) {
-    verdict = 'Hệ thống thiếu cấu hình vùng xa cho nước này — cần bổ sung';
-    severity = 'config';
-  } else if (has('LECH_RATE_CARD')) {
-    verdict = 'Bảng giá hệ thống khác hóa đơn — cần cập nhật rate card';
-    severity = 'ratecard';
-  } else if (has('LECH_CHIET_KHAU')) {
-    verdict = 'Chiết khấu hợp đồng không khớp';
-    severity = 'discount';
   } else {
-    verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
-    severity = 'rounding';
+    // PHAI_SINH (downstream of base) and KHOP never headline.
+    const actionable = components
+      .filter((c) => c.key !== 'residual' && c.cause !== 'KHOP' && c.cause !== 'PHAI_SINH')
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const dominant = actionable[0];
+    if (!dominant) {
+      verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
+      severity = 'rounding';
+    } else {
+      switch (dominant.cause) {
+        case 'THIEU_CAU_HINH_REMOTE':
+          verdict = 'Hệ thống thiếu cấu hình vùng xa cho nước này — cần bổ sung';
+          severity = 'config';
+          break;
+        case 'REMOTE_KHONG_KHOP':
+          verdict = 'Phụ phí vùng xa không khớp hóa đơn';
+          severity = 'config';
+          break;
+        case 'LECH_CHIET_KHAU':
+          verdict = 'Chiết khấu hợp đồng không khớp';
+          severity = 'discount';
+          break;
+        case 'LECH_FUEL':
+          verdict = 'Phụ phí xăng dầu (%) không khớp';
+          severity = 'ratecard';
+          break;
+        case 'LECH_RATE_CARD':
+        case 'KHONG_KHOP':
+        default:
+          verdict = 'Bảng giá hệ thống khác hóa đơn — cần cập nhật rate card';
+          severity = 'ratecard';
+          break;
+      }
+    }
   }
 
   return { totalDelta, components, impliedWeight, verdict, severity };
