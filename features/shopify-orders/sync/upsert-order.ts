@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { mapShopifyOrder } from './shopify-mapper';
 import type { ShopifyOrderPayload } from '../shopify-types';
+import { ensureFulfillmentForOrder } from '@/features/fulfillment/ensure-fulfillment';
 
 export type UpsertSource = 'webhook' | 'cron' | 'backfill';
 
@@ -17,6 +18,8 @@ export async function upsertOrder(
   source: UpsertSource,
 ): Promise<void> {
   const mapped = mapShopifyOrder(payload, storeId);
+
+  let internalOrderId: string | undefined;
 
   await db.transaction(async (tx) => {
     const [row] = await tx
@@ -37,6 +40,8 @@ export async function upsertOrder(
       })
       .returning({ id: schema.shopifyOrders.id });
 
+    internalOrderId = row!.id;
+
     await tx.delete(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, row!.id));
     if (mapped.lines.length > 0) {
       await tx.insert(schema.shopifyOrderLines).values(
@@ -51,4 +56,8 @@ export async function upsertOrder(
         .onConflictDoNothing({ target: schema.shopifyOrderRefunds.shopifyRefundId });
     }
   });
+
+  if (internalOrderId) {
+    await ensureFulfillmentForOrder(internalOrderId);
+  }
 }
