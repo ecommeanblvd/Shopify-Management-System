@@ -1,6 +1,16 @@
 # Carrier Rate Cards — RESUME STATE (đọc file này để tiếp tục sau khi context bị tóm tắt)
 
-**Cập nhật:** 2026-06-08 · **Branch:** `feat/carrier-rate-cards-versioning` (chưa push, chưa đụng production)
+**Cập nhật:** 2026-06-08 · **ĐÃ MERGE vào `main` (PR #137 = commit `00acc1d`) + ĐÃ TRIỂN KHAI PRODUCTION**
+
+## 🚀 TRẠNG THÁI PRODUCTION (đã làm xong trong session này)
+- **Backup prod:** `/Users/macos/Documents/sms-prod-backups/railway-prod-20260608-124323.dump` (pg_dump -Fc, restorable, 53 bảng).
+- **Migration 0035 ĐÃ ÁP lên production** (atomic single-transaction; có fix sequence `setval` cho `drizzle.__drizzle_migrations_id_seq` vì nextval bị lệch). Verified: 2 cards (FedEx 1408 + DHL 720 cells), 0 orphan, index card-scoped, journal kết ở 0035. Lần áp đầu rollback sạch do lỗi sequence — không hư hại.
+- **Code đã deploy:** PR #137 squash-merge vào main → Railway tự build/deploy. (Kiểm lại matrix UI có card selector sau khi deploy xong ~vài phút.)
+- **Cards FedEx trên prod:** `FedEx IP 2025` (`64506f87-d299-4e3e-b2d9-c7c18f35b364`, 2025-10-28→2026-01-04, 1408 cells đã import) + `FedEx IP 2026` (`37d3b39a-8b17-4ab9-a8c2-a8b3f7c71790`, 2026-01-05→open). DHL vẫn 1 card "Current (migrated)" 2020-01-01→open (chờ bảng DHL 2025).
+- **Reconcile prod verified = staging:** 2025 window 129 đơn matched, Σ Engine 156,008,968; full FedEx 1187 matched 0 no_rate_card, Σ Engine 1,606,779,184.
+- ⚠️ Δ 2025 (23.43%) vẫn bị thổi phồng do **thiếu window fuel 2025** (xem caveat dưới) — chưa audit thu hồi được.
+
+**Branch cũ:** `feat/carrier-rate-cards-versioning` (đã merge, có thể xóa). Tiếp tục làm trên `main`.
 **Spec:** `docs/superpowers/specs/2026-06-08-carrier-rate-cards-versioning-design.md`
 **Plan:** `docs/superpowers/plans/2026-06-08-carrier-rate-cards-versioning.md`
 
@@ -71,7 +81,7 @@ Cửa sổ 2025-10-28→2026-01-04, 129 đơn FedEx matched, Σ Billed 203,746,0
 1. **[BLOCKER cho audit 2025] Window fuel 2025 cho FedEx & DHL** — fuel_percent hiện chỉ phủ từ 2026-03-09. Cần nguồn fuel% hằng tuần 2025-10→2026-03 (FedEx AEM history / DHL) rồi prepend các dòng closed `starts_at/ends_at`. Sau đó reconcile lại 2025 mới có nghĩa.
 2. Rà surcharge **demand/remote 2025** (FedEx & DHL) nếu khác 2026 — thêm dòng `endsAt ≤ cutover`. VAT 8% giữ nguyên cả 2 năm.
 3. **Action sửa-window-card qua UI** (user đã ĐỒNG Ý) — production cần để đặt window không cần SQL tay. (`updateRateCard` trong rate-cards-actions.ts + inline edit ở matrix/page.tsx.)
-4. **Apply migration `0035` lên PRODUCTION** (đã chứng minh an toàn) — chỉ sau khi user xác nhận backup/PITR. `psql -f db/migrations/0035_misty_forge.sql` hoặc drizzle migrate. Rồi lặp lại quy trình tạo card 2025 + import trên production (importer dùng account-id giống nhau).
+4. ✅ ~~Apply migration `0035` + tạo card 2025 + import lên PRODUCTION~~ — XONG (xem mục TRẠNG THÁI PRODUCTION trên).
 5. Nhận bảng **FedEx pre-28-Oct-2025** + **DHL 2025** từ user → thêm card tương ứng.
 
 ## ⚠️ LƯU Ý
