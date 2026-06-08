@@ -69,7 +69,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
         </tbody>
       </table>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Giảm giá hợp đồng đã được gộp vào "Cước gốc (sau giảm giá)". Billed gốc trên hóa đơn: {fmtVnd(row.billedBase)} − giảm {fmtVnd(row.billedDiscount)}.
+        Giảm giá hợp đồng đã được gộp vào &quot;Cước gốc (sau giảm giá)&quot;. Billed gốc trên hóa đơn: {fmtVnd(row.billedBase)} − giảm {fmtVnd(row.billedDiscount)}.
       </p>
     </div>
   );
