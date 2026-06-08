@@ -8,7 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import { loadMatrix, setCell, clearCell, importMatrix } from '@/features/carrier-rates/matrix-actions';
-import { listRateCardsForAccount, getCurrentCardId } from '@/features/carrier-rates/rate-cards-actions';
+import { listRateCardsForAccount, getCurrentCardId, updateRateCard } from '@/features/carrier-rates/rate-cards-actions';
 import { stageRateCardPdf, commitRateCardFromPdf } from '@/features/carrier-rates/rate-card-upload-actions';
 import { parseMatrixCsv } from '@/features/carrier-rates/matrix-csv';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { RateMatrix } from '@/components/carrier-rates/RateMatrix';
 import { RateCardSelect } from '@/components/carrier-rates/RateCardSelect';
 import { RateCardUpload } from '@/components/carrier-rates/RateCardUpload';
+import { RateCardWindowEdit } from '@/components/carrier-rates/RateCardWindowEdit';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,16 @@ async function commitRateCardAction(
   return r;
 }
 
+async function updateWindowAction(
+  accountId: string,
+  cardId: string,
+  input: { effectiveFrom: string; effectiveTo: string | null },
+) {
+  'use server';
+  await updateRateCard({ cardId, ...input });
+  revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
+}
+
 export default async function MatrixPage({
   params, searchParams,
 }: { params: Promise<{ id: string }>; searchParams: Promise<{ card?: string }> }) {
@@ -97,6 +108,7 @@ export default async function MatrixPage({
     );
   }
 
+  const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
   const { zones, tiers, cells } = await loadMatrix(id, selectedCardId);
 
   const setBound = setCellWrapper.bind(null, id, selectedCardId, session.user.id);
@@ -131,9 +143,9 @@ export default async function MatrixPage({
             <h2 className="text-sm font-semibold uppercase tracking-wider">Rate cards</h2>
             <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider ml-auto">By effective date</Badge>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
-            {cards.find((c) => c.id === selectedCardId)?.hasPdf && (
+            {selectedCard?.hasPdf && (
               <a
                 href={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
                 target="_blank"
@@ -142,6 +154,13 @@ export default async function MatrixPage({
               >
                 View source PDF
               </a>
+            )}
+            {canManage && selectedCard && (
+              <RateCardWindowEdit
+                effectiveFrom={selectedCard.effectiveFrom}
+                effectiveTo={selectedCard.effectiveTo}
+                updateAction={updateWindowAction.bind(null, id, selectedCardId)}
+              />
             )}
           </div>
           {canManage && <RateCardUpload stageAction={stageBound} commitAction={commitBound} />}
