@@ -26,8 +26,10 @@ interface Props {
   initialCells: MatrixInitialCell[];
   costCurrency: string;
   canEdit: boolean;
-  setCellAction: (input: { zoneId: string; tierId: string; costAmount: string }) => Promise<void>;
-  clearCellAction: (input: { zoneId: string; tierId: string }) => Promise<void>;
+  setCellAction?: (input: { zoneId: string; tierId: string; costAmount: string }) => Promise<void>;
+  clearCellAction?: (input: { zoneId: string; tierId: string }) => Promise<void>;
+  /** When set, the matching zone's column (header + cells) gets a highlight ring. */
+  highlightZoneId?: string | null;
   /** Optional node rendered on the left of the search toolbar row — e.g. the
    *  rate-card dropdown — so the matrix has a single `[card] … [search]` row. */
   toolbarStart?: React.ReactNode;
@@ -47,7 +49,7 @@ function parseVnd(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
-export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction, toolbarStart }: Props) {
+export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction, highlightZoneId = null, toolbarStart }: Props) {
   // Map raw DB values to CANONICAL raw values (no separators). The Cell
   // component renders them through `formatMoneyForDisplay` so commas appear
   // live as the operator types.
@@ -139,7 +141,12 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
             {zones.map((z) => (
               <th
                 key={z.id}
-                className="text-right px-5 py-4 border-b-2 border-border text-sm uppercase tracking-wide text-foreground font-bold whitespace-nowrap"
+                className={
+                  'text-right px-5 py-4 border-b-2 text-sm uppercase tracking-wide font-bold whitespace-nowrap ' +
+                  (z.id === highlightZoneId
+                    ? 'border-amber-400 text-amber-600 dark:text-amber-400'
+                    : 'border-border text-foreground')
+                }
                 style={{ backgroundColor: 'var(--muted)' }}
               >
                 {z.label}
@@ -171,6 +178,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                       state={state[key] ?? 'idle'}
                       currency={costCurrency}
                       canEdit={canEdit}
+                      zoneHighlighted={z.id === highlightZoneId}
                       matchTier={
                         matchedKeys.exact.has(key) ? 'exact'
                         : matchedKeys.near.has(key) ? 'near'
@@ -183,6 +191,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                         const hadValue = (initialMap.get(key) ?? '') !== '';
 
                         if (isEmpty && hadValue) {
+                          if (!clearCellAction) return;
                           setCellState(key, 'saving');
                           try {
                             await clearCellAction({ zoneId: z.id, tierId: t.id });
@@ -213,6 +222,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                           return;
                         }
 
+                        if (!setCellAction) return;
                         setCellState(key, 'saving');
                         try {
                           await setCellAction({ zoneId: z.id, tierId: t.id, costAmount: canonical });
@@ -427,11 +437,12 @@ interface CellProps {
    *  the target amount, 'near' = within NEAR_MATCH_PCT but not exact,
    *  null = no match (no highlight). Drives the cell background only. */
   matchTier: 'exact' | 'near' | null;
+  zoneHighlighted?: boolean;
   onChange: (v: string) => void;
   onCommit: (v: string) => Promise<void>;
 }
 
-function Cell({ value, state, currency, canEdit, matchTier, onChange, onCommit }: CellProps) {
+function Cell({ value, state, currency, canEdit, matchTier, zoneHighlighted = false, onChange, onCommit }: CellProps) {
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
@@ -454,7 +465,10 @@ function Cell({ value, state, currency, canEdit, matchTier, onChange, onCommit }
 
   if (!canEdit) {
     return (
-      <td className={`px-5 py-3 border-b border-border tabular-nums text-right whitespace-nowrap text-foreground ${highlightBg}`}>
+      <td className={
+        `px-5 py-3 border-b tabular-nums text-right whitespace-nowrap text-foreground ${highlightBg} ` +
+        (zoneHighlighted ? 'border-amber-400/40 bg-amber-400/[0.06]' : 'border-border')
+      }>
         {display ? display : <span className="text-muted-foreground/40">—</span>}
         {display && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
       </td>
