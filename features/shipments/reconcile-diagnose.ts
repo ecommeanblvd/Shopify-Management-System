@@ -114,29 +114,26 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const components: ComponentDelta[] = [];
   let impliedWeight: ImpliedWeight | null = null;
 
-  // base
-  const baseBilled = n0(b.base);
-  const baseDelta = r(baseBilled - e.base);
+  // base — compare NET vs NET. The FedEx invoice expresses base as a high
+  // published "list" figure minus a discount line; the base actually applied
+  // to the account = list − discount. Our rate card stores those NET account
+  // rates, so BOTH the weight inversion and the base delta run on the NET
+  // basis (billedBase + billedDiscount; discount is stored negative). The
+  // discount is therefore folded into the base line, not a separate component.
+  const billedNetBase = r(n0(b.base) + n0(b.discount));
+  const engineNetBase = r(e.base - e.discount);
+  const baseDelta = r(billedNetBase - engineNetBase);
   let baseCause: DiagnosisCause = 'KHOP';
   if (baseDelta !== 0) {
-    if (baseBilled === 0) {
+    if (billedNetBase <= 0) {
       baseCause = 'KHONG_KHOP';
     } else {
-      const inv = invertWeight(baseBilled, input.zoneRates, input.engineTierUpperKg, input.engineChargeableWeightKg);
+      const inv = invertWeight(billedNetBase, input.zoneRates, input.engineTierUpperKg, input.engineChargeableWeightKg);
       baseCause = inv.cause;
       impliedWeight = inv.implied;
     }
   }
-  components.push({ key: 'base', billed: baseBilled, engine: e.base, delta: baseDelta, cause: baseCause });
-
-  // discount
-  const discBilled = n0(b.discount);
-  const discDelta = r(discBilled - e.discount);
-  let discCause: DiagnosisCause = 'KHOP';
-  if (discDelta !== 0) {
-    discCause = baseBilled > 0 ? 'LECH_CHIET_KHAU' : 'KHONG_KHOP';
-  }
-  components.push({ key: 'discount', billed: discBilled, engine: e.discount, delta: discDelta, cause: discCause });
+  components.push({ key: 'base', billed: billedNetBase, engine: engineNetBase, delta: baseDelta, cause: baseCause });
 
   // remote
   const remBilled = n0(b.remote);
@@ -221,10 +218,6 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
         case 'REMOTE_KHONG_KHOP':
           verdict = 'Phụ phí vùng xa không khớp hóa đơn';
           severity = 'config';
-          break;
-        case 'LECH_CHIET_KHAU':
-          verdict = 'Chiết khấu hợp đồng không khớp';
-          severity = 'discount';
           break;
         case 'LECH_FUEL':
           verdict = 'Phụ phí xăng dầu (%) không khớp';
