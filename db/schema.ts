@@ -763,6 +763,25 @@ export const shipmentCharges = pgTable('shipment_charges', {
   index('shipment_charges_tracking_idx').on(t.trackingNumber),
 ]);
 
+export const reconcileStatusEnum = pgEnum('reconcile_status', ['reconciled', 'ignored']);
+
+/** Operator-set reconciliation state for a shipment's billed-vs-engine
+ *  comparison. ABSENCE of a row = "chưa đối soát" (pending). */
+export const shipmentReconcileStatus = pgTable('shipment_reconcile_status', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  shipmentId: uuid('shipment_id')
+    .references(() => shipments.id, { onDelete: 'cascade' })
+    .notNull()
+    .unique(),
+  status: reconcileStatusEnum('status').notNull(),
+  note: text('note'),
+  /** Snapshot of shipment_charges.total_amount when marked — lets the UI
+   *  flag "billed changed since you reviewed this". */
+  billedTotalAtReview: numeric('billed_total_at_review', { precision: 14, scale: 2 }),
+  reconciledBy: text('reconciled_by'),
+  reconciledAt: timestamp('reconciled_at').defaultNow().notNull(),
+});
+
 export const shopifySyncState = pgTable('shopify_sync_state', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),
