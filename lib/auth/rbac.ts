@@ -23,7 +23,10 @@ export type Permission =
   | 'view_mmp_products'
   // MMP curation: approve / reject / trigger push-to-Shopify
   // (operator+ only).
-  | 'manage_mmp_products';
+  | 'manage_mmp_products'
+  | 'view_fulfillment'
+  | 'manage_fulfillment'
+  | 'manage_warehouse';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -36,6 +39,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
     'view_mmp_products', 'manage_mmp_products',
+    'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
   ],
   operator: [
     'view', 'run_feature',
@@ -45,11 +49,13 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
     'view_mmp_products', 'manage_mmp_products',
+    'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
     'view_orders', 'view_functions',
     'view_mmp_products',
+    'view_fulfillment',
   ],
 };
 
