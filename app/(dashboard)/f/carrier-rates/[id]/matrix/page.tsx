@@ -52,11 +52,10 @@ async function stageRateCardAction(accountId: string, formData: FormData) {
 
 async function commitRateCardAction(
   accountId: string,
-  userId: string,
   input: { pdfKey: string; filename: string; effectiveFrom: string; effectiveTo: string | null },
 ) {
   'use server';
-  const r = await commitRateCardFromPdf({ carrierAccountId: accountId, userId, ...input });
+  const r = await commitRateCardFromPdf({ carrierAccountId: accountId, ...input });
   revalidatePath(`/f/carrier-rates/${accountId}/matrix`);
   return r;
 }
@@ -83,7 +82,7 @@ export default async function MatrixPage({
     : (await getCurrentCardId(id)) ?? cards[cards.length - 1]?.id ?? null;
 
   const stageBound = stageRateCardAction.bind(null, id);
-  const commitBound = commitRateCardAction.bind(null, id, session.user.id);
+  const commitBound = commitRateCardAction.bind(null, id);
 
   if (!selectedCardId) {
     return (

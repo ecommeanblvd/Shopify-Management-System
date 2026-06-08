@@ -1,14 +1,33 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { headers } from 'next/headers';
 import { asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { auth } from '@/lib/auth/auth';
+import { getRole } from '@/lib/auth/role';
+import { hasPermission } from '@/lib/auth/rbac';
 import { putObject, getObject } from '@/lib/storage/r2';
 import { extractPdfText } from './import/pdf-text';
 import { resolveParser } from './import/parsers';
 import { buildRateCardCells, type RateCardPreview } from './import/preview';
 import { listRateCardsForAccount } from './rate-cards-actions';
 import { windowsOverlap } from './rate-cards-windows';
+
+/**
+ * Gate every mutating upload action: server actions are independently callable,
+ * so they must verify the caller can manage rates rather than trust the page.
+ * Returns the authenticated user id.
+ */
+async function requireManage(): Promise<string> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('Not authenticated.');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_carrier_rates')) {
+    throw new Error('You do not have permission to manage carrier rates.');
+  }
+  return session.user.id;
+}
 
 export interface StagedRateCard {
   pdfKey: string;
@@ -43,6 +62,7 @@ async function accountContext(carrierAccountId: string) {
 
 /** Upload the PDF to R2, parse it, return a review preview (no DB writes). */
 export async function stageRateCardPdf(carrierAccountId: string, file: File): Promise<StagedRateCard> {
+  await requireManage();
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new Error('Please upload a PDF file.');
   }
@@ -79,8 +99,8 @@ export async function commitRateCardFromPdf(input: {
   filename: string;
   effectiveFrom: string;
   effectiveTo: string | null;
-  userId: string;
 }): Promise<{ id: string }> {
+  const userId = await requireManage();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) throw new Error('effectiveFrom must be YYYY-MM-DD.');
   if (input.effectiveTo !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveTo)) throw new Error('effectiveTo must be YYYY-MM-DD or empty.');
   if (input.effectiveTo !== null && input.effectiveTo < input.effectiveFrom) throw new Error('effectiveTo must be on/after effectiveFrom.');
@@ -93,40 +113,46 @@ export async function commitRateCardFromPdf(input: {
   const { account, zones, tiers } = await accountContext(input.carrierAccountId);
   const parser = resolveParser(account.carrierKey ?? null);
 
-  // Create the card first (evidence is always attached).
-  const [card] = await db.insert(schema.carrierRateCards).values({
+  const cardValues = {
     carrierAccountId: input.carrierAccountId,
     label: `${parser?.label ?? 'Rate card'} ${input.effectiveFrom}`,
     effectiveFrom: input.effectiveFrom,
     effectiveTo: input.effectiveTo,
-    createdBy: input.userId,
+    createdBy: userId,
     sourcePdfKey: input.pdfKey,
     sourcePdfFilename: input.filename,
     sourcePdfUploadedAt: new Date(),
-  }).returning({ id: schema.carrierRateCards.id });
+  };
 
-  if (!parser) return { id: card.id }; // evidence-only
+  // Evidence-only carrier (no parser): just record the card + PDF, no cells.
+  if (!parser) {
+    const [card] = await db.insert(schema.carrierRateCards).values(cardValues).returning({ id: schema.carrierRateCards.id });
+    return { id: card.id };
+  }
 
+  // Parse + self-check BEFORE opening a transaction (slow R2/pdftotext I/O),
+  // so a bad sheet never creates a card.
   const bytes = await getObject(input.pdfKey);
   const text = await extractPdfText(bytes);
   const built = buildRateCardCells(parser, text, tiers.map((t) => Number(t.upperKg)), zones.map((z) => z.label));
   if (built.problems.length) {
-    // Roll back the card we just created so a failed parse leaves no empty card.
-    await db.delete(schema.carrierRateCards).where(eq(schema.carrierRateCards.id, card.id));
     throw new Error('Parse self-check failed: ' + built.problems.join(' · '));
   }
 
   const zoneIdByLabel = new Map(zones.map((z) => [z.label, z.id]));
   const tierIdByUpper = new Map(tiers.map((t) => [Number(t.upperKg), t.id]));
-  for (const c of built.cells) {
-    await db.insert(schema.carrierRateCells).values({
+
+  // Card + all cells in one transaction — no partial/empty card on failure.
+  return db.transaction(async (tx) => {
+    const [card] = await tx.insert(schema.carrierRateCards).values(cardValues).returning({ id: schema.carrierRateCards.id });
+    await tx.insert(schema.carrierRateCells).values(built.cells.map((c) => ({
       rateCardId: card.id,
       carrierZoneId: zoneIdByLabel.get(c.zoneLabel)!,
       carrierWeightTierId: tierIdByUpper.get(c.upperKg)!,
       packageType: c.packageType,
       costAmount: c.cost.toFixed(2),
-      updatedBy: input.userId,
-    });
-  }
-  return { id: card.id };
+      updatedBy: userId,
+    })));
+    return { id: card.id };
+  });
 }
