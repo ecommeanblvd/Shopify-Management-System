@@ -530,6 +530,13 @@ function SurchargeSummaryRow({
           <span className="font-mono tabular-nums text-sm font-semibold text-foreground">
             {formatValue(row.kind, row.value, currency)}
           </span>
+          {(row.startsAt || row.endsAt) && (
+            <Badge variant="outline" className="h-4 text-[9px] font-mono tracking-wide px-1.5" title="Effective window">
+              {row.startsAt ? new Date(row.startsAt).toISOString().slice(0, 10) : '…'}
+              {' → '}
+              {row.endsAt ? new Date(row.endsAt).toISOString().slice(0, 10) : 'open'}
+            </Badge>
+          )}
           {row.tier && (
             <Badge variant="secondary" className="h-4 text-[9px] uppercase tracking-wider px-1.5">
               {row.tier}
