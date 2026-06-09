@@ -30,6 +30,14 @@ export function permissionsForRoleKey(roleKey: string): Set<PermissionKey> {
   return cache?.get(roleKey) ?? new Set();
 }
 
+/** Prime the cache directly (no DB) — for tests / deterministic seeding. */
+export function primeRoleCache(entries: Record<string, Iterable<PermissionKey>>): void {
+  const next = new Map<string, Set<PermissionKey>>();
+  for (const [roleKey, keys] of Object.entries(entries)) next.set(roleKey, new Set(keys));
+  cache = next;
+  cacheAt = Date.now();
+}
+
 /** Resolve the permission Set for a user (warms cache). */
 export async function getUserPermissions(userId: string): Promise<Set<PermissionKey>> {
   const { getRole } = await import('./role');
