@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
+import { refreshRoleCache } from './auth/access';
 import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings } from './nav';
+
+// canSeeSettings delegates to hasPermission which reads the DB-backed role cache.
+beforeAll(async () => { await refreshRoleCache(); });
 
 describe('NAV structure', () => {
   const hrefs = NAV.map((n) => n.href);
@@ -30,8 +34,8 @@ describe('NAV structure', () => {
 });
 
 describe('SETTINGS_ITEMS', () => {
-  it('has eight permission-gated, grouped, described items', () => {
-    expect(SETTINGS_ITEMS).toHaveLength(8);
+  it('has nine permission-gated, grouped, described items', () => {
+    expect(SETTINGS_ITEMS).toHaveLength(9);
     for (const item of SETTINGS_ITEMS) {
       expect(item.requires).toBeTruthy();
       expect(item.description.length).toBeGreaterThan(0);

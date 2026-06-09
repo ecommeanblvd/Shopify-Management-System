@@ -1,5 +1,5 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList } from 'lucide-react';
-import { hasPermission, type Permission, type Role } from '@/lib/auth/rbac';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck } from 'lucide-react';
+import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -39,6 +39,7 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
   { href: '/f/markets',               label: 'Markets',         icon: Globe,       requires: 'view_markets_history',  group: 'Markets',       description: 'Per-market shipping configuration.' },
   { href: '/f/markets/history',       label: 'Markets history', icon: History,     requires: 'view_markets_history',  group: 'Markets',       description: 'Changes to market configuration over time.' },
   { href: '/admin/users',             label: 'Users',           icon: Users,       requires: 'manage_users',          group: 'Admin',         description: 'Manage users and their roles.' },
+  { href: '/admin/roles',             label: 'Roles',           icon: ShieldCheck, requires: 'manage_users',          group: 'Admin',         description: 'Phân quyền theo role.' },
   { href: '/admin/feature-flags',     label: 'Feature flags',   icon: ToggleRight, requires: 'manage_users',          group: 'Admin',         description: 'Toggle features on or off.' },
 ];
 
@@ -46,6 +47,6 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
 export const SETTINGS_GROUPS: SettingsGroup[] = ['Stores', 'Settings Sync', 'Markets', 'Admin'];
 
 /** True when the role can access at least one Settings sub-module. */
-export function canSeeSettings(role: Role): boolean {
+export function canSeeSettings(role: string): boolean {
   return SETTINGS_ITEMS.some((item) => hasPermission(role, item.requires));
 }

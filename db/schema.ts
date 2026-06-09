@@ -5,9 +5,26 @@ import { user } from './auth-schema';
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
 export const storeStatusEnum = pgEnum('store_status', ['active', 'disconnected', 'error']);
 
+export const appRoles = pgTable('app_roles', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  key: text('key').notNull().unique(),
+  name: text('name').notNull(),
+  description: text('description'),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const rolePermissions = pgTable('role_permissions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roleId: uuid('role_id').references(() => appRoles.id, { onDelete: 'cascade' }).notNull(),
+  permissionKey: text('permission_key').notNull(),
+}, (t) => [uniqueIndex('role_permissions_role_key_idx').on(t.roleId, t.permissionKey)]);
+
 export const roles = pgTable('roles', {
   userId: text('user_id').references(() => user.id).primaryKey(),
   role: roleEnum('role').notNull().default('viewer'),
+  roleId: uuid('role_id').references(() => appRoles.id),
 });
 
 export const stores = pgTable('stores', {

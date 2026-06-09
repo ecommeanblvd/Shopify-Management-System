@@ -1,3 +1,6 @@
+import { OLD_TO_NEW } from './permission-map';
+import { permissionsForRoleKey } from './access';
+
 export type Role = 'admin' | 'operator' | 'viewer';
 export type Permission =
   | 'view'
@@ -59,13 +62,18 @@ const MATRIX: Record<Role, Permission[]> = {
   ],
 };
 
-export function hasPermission(role: Role, permission: Permission): boolean {
-  return MATRIX[role].includes(permission);
+/** Compat shim: a role "has" a legacy permission iff it holds ALL the new keys
+ *  that permission maps to. Reads the role cache (warmed by getRole). */
+export function hasPermission(roleKey: string, permission: Permission): boolean {
+  const perms = permissionsForRoleKey(roleKey);
+  const mapped = OLD_TO_NEW[permission];
+  if (!mapped) return false;
+  return mapped.every((k) => perms.has(k)); // empty mapping (e.g. 'view') => true
 }
 
 export interface CanChangeRoleArgs {
   callerUserId: string;
-  callerRole: Role;
+  callerRole: string;
   targetUserId: string;
   /** null = remove the target's role entirely. */
   newRole: Role | null;
