@@ -30,6 +30,9 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!body.requestId || (body.status !== 'confirmed' && body.status !== 'rejected')) {
     return NextResponse.json({ error: 'requestId + status(confirmed|rejected) required' }, { status: 400 });
   }
+  if (body.status === 'confirmed' && body.expectedDeliveryDate != null && !/^\d{4}-\d{2}-\d{2}$/.test(body.expectedDeliveryDate)) {
+    return NextResponse.json({ error: 'expectedDeliveryDate must be YYYY-MM-DD' }, { status: 400 });
+  }
 
   const [reqRow] = await db.select().from(schema.brandOrderRequests)
     .where(eq(schema.brandOrderRequests.id, body.requestId)).limit(1);

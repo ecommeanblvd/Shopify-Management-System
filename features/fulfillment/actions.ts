@@ -41,27 +41,37 @@ async function sendPendingBrandRequests(orderId: string): Promise<void> {
   const [ord] = await db.select({ number: schema.shopifyOrders.shopifyOrderNumber })
     .from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, orderId)).limit(1);
   const orderNumber = ord?.number ?? '';
-  const pending = await db.select().from(schema.brandOrderRequests)
+
+  const pending = await db.select({ id: schema.brandOrderRequests.id })
+    .from(schema.brandOrderRequests)
     .where(and(eq(schema.brandOrderRequests.orderId, orderId), eq(schema.brandOrderRequests.sendStatus, 'pending')));
-  for (const r of pending) {
+
+  for (const p of pending) {
+    // Atomic claim: only one concurrent caller flips pending -> sent and gets the row.
+    const claimed = await db.update(schema.brandOrderRequests)
+      .set({ sendStatus: 'sent', sentAt: sql`now()`, sendAttempts: sql`${schema.brandOrderRequests.sendAttempts} + 1`, updatedAt: sql`now()` })
+      .where(and(eq(schema.brandOrderRequests.id, p.id), eq(schema.brandOrderRequests.sendStatus, 'pending')))
+      .returning({ id: schema.brandOrderRequests.id, fulfillmentLineId: schema.brandOrderRequests.fulfillmentLineId, sku: schema.brandOrderRequests.sku, qty: schema.brandOrderRequests.qty });
+    if (claimed.length === 0) continue; // another run already claimed it
+    const r = claimed[0];
+
     const [line] = await db.select({ vendor: schema.shopifyOrderLines.vendor })
       .from(schema.orderFulfillmentLines)
       .innerJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
       .where(eq(schema.orderFulfillmentLines.id, r.fulfillmentLineId)).limit(1);
     const brandSlug = line?.vendor ?? null;
+
     const result = await sendBrandRequest({ id: r.id, brandSlug, sku: r.sku, qty: r.qty }, orderNumber);
     if (result.ok) {
       await db.update(schema.brandOrderRequests)
-        .set({ brandSlug, sendStatus: 'sent', sentAt: sql`now()`, externalRef: result.externalRef ?? null,
-               sendAttempts: sql`${schema.brandOrderRequests.sendAttempts} + 1`, lastError: null, updatedAt: sql`now()` })
-        .where(eq(schema.brandOrderRequests.id, r.id));
+        .set({ brandSlug, externalRef: result.externalRef ?? null, lastError: null, updatedAt: sql`now()` })
+        .where(eq(schema.brandOrderRequests.id, r.id)); // stays 'sent'
       await db.update(schema.orderFulfillmentLines)
         .set({ status: 'brand_requested', updatedAt: sql`now()` })
         .where(eq(schema.orderFulfillmentLines.id, r.fulfillmentLineId));
     } else {
       await db.update(schema.brandOrderRequests)
-        .set({ brandSlug, sendStatus: 'failed', lastError: result.error ?? 'failed',
-               sendAttempts: sql`${schema.brandOrderRequests.sendAttempts} + 1`, updatedAt: sql`now()` })
+        .set({ brandSlug, sendStatus: 'failed', lastError: result.error ?? 'failed', updatedAt: sql`now()` })
         .where(eq(schema.brandOrderRequests.id, r.id));
     }
   }
@@ -138,6 +148,9 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
         await tx.insert(schema.brandOrderRequests)
           .values({ fulfillmentLineId: l.id, orderId, brandSlug: null, sku: l.sku, qty: l.qty })
           .onConflictDoNothing({ target: schema.brandOrderRequests.fulfillmentLineId });
+      } else if (res.status === 'in_stock') {
+        await tx.delete(schema.brandOrderRequests)
+          .where(and(eq(schema.brandOrderRequests.fulfillmentLineId, l.id), eq(schema.brandOrderRequests.confirmStatus, 'awaiting')));
       }
     }
     await recomputeRollup(tx, ful.id);
