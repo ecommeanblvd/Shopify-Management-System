@@ -1276,6 +1276,10 @@ export const fulfillmentOrderStatusEnum = pgEnum('fulfillment_order_status', [
   'received', 'checking', 'awaiting_brand', 'ready_to_pick', 'picking', 'packed', 'shipped',
 ]);
 
+export const receiptSourceTypeEnum = pgEnum('receipt_source_type', ['retail_for_order', 'consignment', 'po']);
+export const qcResultEnum = pgEnum('qc_result', ['pending', 'pass', 'fail']);
+export const receiptItemDispositionEnum = pgEnum('receipt_item_disposition', ['pending', 'allocate_to_order', 'store', 'return_to_brand']);
+
 /** MEAN warehouse stock, keyed by SKU. Operator-managed (manual entry). */
 export const warehouseInventory = pgTable('warehouse_inventory', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -1365,3 +1369,55 @@ export const orderFulfillmentEvents = pgTable('order_fulfillment_events', {
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Goods Receiving & QC (sub-project A)
+// ─────────────────────────────────────────────────────────────────────
+
+/** A receiving session/document: one delivery of one source type from a vendor. */
+export const goodsReceipts = pgTable('goods_receipts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  warehouseCode: text('warehouse_code').notNull().default('HN'),
+  sourceType: receiptSourceTypeEnum('source_type').notNull(),
+  vendor: text('vendor'),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  receivedBy: text('received_by').references(() => user.id, { onDelete: 'set null' }),
+  handoverDocKey: text('handover_doc_key'),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [index('goods_receipts_source_idx').on(t.sourceType)]);
+
+/** One physical unit received. QC + disposition are per-unit. */
+export const goodsReceiptItems = pgTable('goods_receipt_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  receiptId: uuid('receipt_id').references(() => goodsReceipts.id, { onDelete: 'cascade' }).notNull(),
+  unitCode: text('unit_code').notNull().unique(),
+  sku: text('sku'),
+  productTitle: text('product_title'),
+  variantTitle: text('variant_title'),
+  photoKey: text('photo_key'),
+  qcResult: qcResultEnum('qc_result').notNull().default('pending'),
+  qcFailReason: text('qc_fail_reason'),
+  qcFailPhotoKey: text('qc_fail_photo_key'),
+  qcCheckedBy: text('qc_checked_by').references(() => user.id, { onDelete: 'set null' }),
+  qcCheckedAt: timestamp('qc_checked_at'),
+  disposition: receiptItemDispositionEnum('disposition').notNull().default('pending'),
+  vendorReturnDocKey: text('vendor_return_doc_key'),
+  brandRequestId: uuid('brand_request_id').references(() => brandOrderRequests.id, { onDelete: 'set null' }),
+  fulfillmentLineId: uuid('fulfillment_line_id').references(() => orderFulfillmentLines.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  domPrice: numeric('dom_price', { precision: 14, scale: 2 }),
+  domPriceCurrency: text('dom_price_currency'),
+  globalPrice: numeric('global_price', { precision: 14, scale: 2 }),
+  globalPriceCurrency: text('global_price_currency'),
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('goods_receipt_items_receipt_idx').on(t.receiptId),
+  index('goods_receipt_items_qc_idx').on(t.qcResult),
+  index('goods_receipt_items_line_idx').on(t.fulfillmentLineId),
+  index('goods_receipt_items_disposition_idx').on(t.disposition),
+]);
