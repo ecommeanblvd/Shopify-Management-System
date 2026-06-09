@@ -1,28 +1,14 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-
-/**
- * On user creation, atomically assign admin role to the first registered
- * user. The single SQL statement guards against the race where two signups
- * land simultaneously: only the transaction whose check sees count === 1
- * AND no existing admin row commits the INSERT.
- */
-export async function assignFirstAdmin(userId: string): Promise<void> {
-  try {
-    await db.execute(sql`
-      INSERT INTO roles (user_id, role)
-      SELECT ${userId}, 'admin'::role
-      WHERE (SELECT COUNT(*) FROM "user") = 1
-        AND NOT EXISTS (SELECT 1 FROM roles WHERE role = 'admin')
-    `);
-  } catch {
-    // Race loser: another concurrent signup already won the unique constraint
-    // on roles.userId. Safe to ignore — the winning transaction has already
-    // assigned admin to the first user.
-  }
-}
+import {
+  normalizeEmail,
+  isBootstrapAdmin,
+  findPendingInvite,
+  acceptInvite,
+  assignUserRole,
+  appRoleIdByKey,
+} from './invites';
 
 // Read directly from process.env — NOT via getEnv() — so this module is
 // safe to import at build time even when the env vars are unset.
@@ -30,12 +16,35 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: 'pg' }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
-  emailAndPassword: { enabled: true },
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    },
+  },
   databaseHooks: {
     user: {
       create: {
+        // Closed-model gate: only bootstrap admins or pending-invited emails
+        // may create an account. Returning false aborts user creation.
+        before: async (newUser) => {
+          const email = normalizeEmail(newUser.email);
+          if (isBootstrapAdmin(email)) return;
+          const invite = await findPendingInvite(email);
+          if (invite) return;
+          return false;
+        },
+        // On first successful sign-in, assign the role: bootstrap admins get
+        // 'admin'; invited users get their invite's role (if any).
         after: async (newUser) => {
-          await assignFirstAdmin(newUser.id);
+          const email = normalizeEmail(newUser.email);
+          if (isBootstrapAdmin(email)) {
+            const adminRoleId = await appRoleIdByKey('admin');
+            if (adminRoleId) await assignUserRole(newUser.id, adminRoleId);
+            return;
+          }
+          const roleId = await acceptInvite({ email, userId: newUser.id });
+          if (roleId) await assignUserRole(newUser.id, roleId);
         },
       },
     },
