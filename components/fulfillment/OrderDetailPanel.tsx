@@ -2,6 +2,7 @@
 
 import { useTransition } from 'react';
 import { checkStockForOrder, markLine, markOrder } from '@/features/fulfillment/actions';
+import { resendBrandRequest } from '@/features/fulfillment/brand-actions';
 
 type OrderStatus =
   | 'received'
@@ -55,6 +56,10 @@ type Line = {
   shelf: string | null;
   floor: string | null;
   bin: string | null;
+  brandRequestId: string | null;
+  brandSendStatus: string | null;
+  brandConfirmStatus: string | null;
+  brandExpectedDeliveryDate: string | null;
 };
 
 interface Props {
@@ -64,12 +69,56 @@ interface Props {
   canManage: boolean;
 }
 
-function LocationCell({ line }: { line: Line }) {
+function ResendLineButton({ id }: { id: string }) {
+  const [isPending, startTransition] = useTransition();
+  return (
+    <button
+      disabled={isPending}
+      onClick={() => startTransition(async () => { await resendBrandRequest(id); })}
+      className="ml-1.5 rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50"
+    >
+      Gửi lại
+    </button>
+  );
+}
+
+function LocationCell({ line, canManage }: { line: Line; canManage: boolean }) {
   const locStatuses: LineStatus[] = ['in_stock', 'picked', 'packed', 'shipped'];
   if (line.status === 'out_of_stock') {
     return (
+      <span className="inline-flex items-center gap-1">
+        <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+          Cần đặt brand
+        </span>
+        {canManage && line.brandSendStatus === 'failed' && line.brandRequestId && (
+          <ResendLineButton id={line.brandRequestId} />
+        )}
+      </span>
+    );
+  }
+  if (line.status === 'brand_requested') {
+    return (
+      <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+        Đã gửi brand
+      </span>
+    );
+  }
+  if (line.status === 'brand_confirmed') {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+          Brand xác nhận
+        </span>
+        {line.brandExpectedDeliveryDate && (
+          <span className="font-mono text-xs text-muted-foreground">{line.brandExpectedDeliveryDate}</span>
+        )}
+      </span>
+    );
+  }
+  if (line.status === 'brand_rejected') {
+    return (
       <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-        Cần đặt brand
+        Brand từ chối
       </span>
     );
   }
@@ -226,7 +275,7 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  <LocationCell line={line} />
+                  <LocationCell line={line} canManage={canManage} />
                 </td>
                 {canManage && (
                   <td className="px-3 py-2">
