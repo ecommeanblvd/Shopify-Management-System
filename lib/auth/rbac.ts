@@ -33,7 +33,9 @@ export type Permission =
   | 'view_receiving'
   | 'manage_receiving'
   | 'view_qc'
-  | 'manage_qc';
+  | 'manage_qc'
+  | 'view_pack_check'
+  | 'check_packed';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
