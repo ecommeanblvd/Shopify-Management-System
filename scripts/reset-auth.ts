@@ -89,6 +89,16 @@ async function main() {
     }
 
     for (const t of AUTH_TABLES) {
+      // Tolerate tables that don't exist yet (e.g. user_invites before the
+      // 0043 migration has been deployed) — skip rather than abort.
+      const { rows } = await client.query<{ exists: boolean }>(
+        `SELECT to_regclass($1) IS NOT NULL AS exists`,
+        [`public.${t}`],
+      );
+      if (!rows[0]?.exists) {
+        console.log(`  Skipped ${t} (table does not exist)`);
+        continue;
+      }
       const res = await client.query(`DELETE FROM "${t}"`);
       console.log(`  Deleted ${res.rowCount ?? 0} row(s) from ${t}`);
     }
