@@ -4,34 +4,37 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getFulfillmentDetail } from '@/features/fulfillment/queries';
+import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/queries';
 import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
+import { PackPanel } from '@/components/fulfillment/PackPanel';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FulfillmentDetailPage({
-  params,
-}: {
-  params: Promise<{ orderId: string }>;
-}) {
+export default async function FulfillmentDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;
-
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
-  if (!role || !hasPermission(role, 'view_fulfillment')) {
-    redirect('/');
-  }
+  if (!role || !hasPermission(role, 'view_fulfillment')) redirect('/');
 
   const detail = await getFulfillmentDetail(orderId);
   if (!detail) notFound();
+  const [picked, packs] = await Promise.all([pickedUnassignedLines(orderId), listPacksForOrder(orderId)]);
 
+  const canManage = hasPermission(role, 'manage_fulfillment');
   return (
     <div className="space-y-6 p-6">
-      <OrderDetailPanel
+      <OrderDetailPanel orderId={orderId} status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
+      <PackPanel
         orderId={orderId}
-        status={detail.fulfillment.status}
-        lines={detail.lines}
-        canManage={hasPermission(role, 'manage_fulfillment')}
+        picked={picked}
+        packs={packs.map((p) => ({
+          id: p.id, code: p.code, carrierKey: p.carrierKey, trackingNumber: p.trackingNumber,
+          checkPackedAt: p.checkPackedAt as Date | null, actualWeightKg: p.actualWeightKg,
+          lines: p.lines.map((l) => ({ id: l.id, sku: l.sku, qty: l.qty, status: l.status, productTitle: l.productTitle })),
+        }))}
+        canManage={canManage}
+        canCheckPacked={hasPermission(role, 'check_packed')}
       />
     </div>
   );
