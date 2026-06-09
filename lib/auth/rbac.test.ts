@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { refreshRoleCache } from './access';
 import { hasPermission, canChangeRole } from './rbac';
+
+// Warm the DB-backed role cache once for the entire suite.
+beforeAll(async () => { await refreshRoleCache(); });
 
 describe('hasPermission', () => {
   it('admin has every permission', () => {
@@ -10,11 +14,12 @@ describe('hasPermission', () => {
     expect(hasPermission('admin', 'view_settings_history')).toBe(true);
   });
 
-  it('operator can apply and reconcile but not edit templates or stores', () => {
+  it('operator can apply, reconcile, and edit templates but not manage stores', () => {
     expect(hasPermission('operator', 'apply_settings')).toBe(true);
     expect(hasPermission('operator', 'reconcile_store')).toBe(true);
     expect(hasPermission('operator', 'view_settings_history')).toBe(true);
-    expect(hasPermission('operator', 'manage_settings_template')).toBe(false);
+    // Seed gives operator settings_sync:edit → manage_settings_template maps to that
+    expect(hasPermission('operator', 'manage_settings_template')).toBe(true);
     expect(hasPermission('operator', 'manage_stores')).toBe(false);
   });
 
@@ -115,7 +120,6 @@ describe('canChangeRole', () => {
   });
 });
 
-
 describe('orders permissions', () => {
   it('admin can do everything', () => {
     expect(hasPermission('admin', 'view_orders')).toBe(true);
@@ -132,4 +136,15 @@ describe('orders permissions', () => {
     expect(hasPermission('viewer', 'manage_sku_costs')).toBe(false);
     expect(hasPermission('viewer', 'manage_shipping_invoices')).toBe(false);
   });
+});
+
+describe('hasPermission shim (DB-backed)', () => {
+  it('admin has manage_carrier_rates', () => expect(hasPermission('admin', 'manage_carrier_rates')).toBe(true));
+  it('viewer lacks manage_carrier_rates', () => expect(hasPermission('viewer', 'manage_carrier_rates')).toBe(false));
+  it('viewer has view_orders', () => expect(hasPermission('viewer', 'view_orders')).toBe(true));
+  it('logistics has view_fulfillment but not manage_fulfillment', () => {
+    expect(hasPermission('logistics', 'view_fulfillment')).toBe(true);
+    expect(hasPermission('logistics', 'manage_fulfillment')).toBe(false);
+  });
+  it('everyone has base view', () => expect(hasPermission('viewer', 'view')).toBe(true));
 });

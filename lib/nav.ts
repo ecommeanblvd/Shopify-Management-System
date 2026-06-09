@@ -1,5 +1,5 @@
 import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList } from 'lucide-react';
-import { hasPermission, type Permission, type Role } from '@/lib/auth/rbac';
+import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -46,6 +46,6 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
 export const SETTINGS_GROUPS: SettingsGroup[] = ['Stores', 'Settings Sync', 'Markets', 'Admin'];
 
 /** True when the role can access at least one Settings sub-module. */
-export function canSeeSettings(role: Role): boolean {
+export function canSeeSettings(role: string): boolean {
   return SETTINGS_ITEMS.some((item) => hasPermission(role, item.requires));
 }

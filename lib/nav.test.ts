@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
+import { refreshRoleCache } from './auth/access';
 import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings } from './nav';
+
+// canSeeSettings delegates to hasPermission which reads the DB-backed role cache.
+beforeAll(async () => { await refreshRoleCache(); });
 
 describe('NAV structure', () => {
   const hrefs = NAV.map((n) => n.href);
