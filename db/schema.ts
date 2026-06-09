@@ -1241,6 +1241,7 @@ export const mmpIngestionRuns = pgTable('mmp_ingestion_runs', {
 
 export const fulfillmentLineStatusEnum = pgEnum('fulfillment_line_status', [
   'pending_check', 'in_stock', 'out_of_stock', 'picked', 'packed', 'shipped',
+  'brand_requested', 'brand_confirmed', 'brand_rejected',
 ]);
 export const fulfillmentOrderStatusEnum = pgEnum('fulfillment_order_status', [
   'received', 'checking', 'awaiting_brand', 'ready_to_pick', 'picking', 'packed', 'shipped',
@@ -1293,6 +1294,35 @@ export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
 }, (t) => [
   index('order_fulfillment_lines_ful_idx').on(t.fulfillmentId),
   uniqueIndex('order_fulfillment_lines_ful_line_idx').on(t.fulfillmentId, t.shopifyLineId),
+]);
+
+export const brandRequestSendStatusEnum = pgEnum('brand_request_send_status', ['pending', 'sent', 'failed']);
+export const brandRequestConfirmStatusEnum = pgEnum('brand_request_confirm_status', ['awaiting', 'confirmed', 'rejected']);
+
+/** One production request to a brand (via MMP) per out-of-stock line. */
+export const brandOrderRequests = pgTable('brand_order_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fulfillmentLineId: uuid('fulfillment_line_id')
+    .references(() => orderFulfillmentLines.id, { onDelete: 'cascade' })
+    .notNull().unique(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  brandSlug: text('brand_slug'),
+  sku: text('sku'),
+  qty: integer('qty').notNull(),
+  sendStatus: brandRequestSendStatusEnum('send_status').notNull().default('pending'),
+  sendAttempts: integer('send_attempts').notNull().default(0),
+  lastError: text('last_error'),
+  sentAt: timestamp('sent_at'),
+  externalRef: text('external_ref'),
+  confirmStatus: brandRequestConfirmStatusEnum('confirm_status').notNull().default('awaiting'),
+  expectedDeliveryDate: date('expected_delivery_date'),
+  note: text('note'),
+  confirmedAt: timestamp('confirmed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('brand_order_requests_confirm_idx').on(t.confirmStatus),
+  index('brand_order_requests_order_idx').on(t.orderId),
 ]);
 
 /** Audit log of status transitions. */
