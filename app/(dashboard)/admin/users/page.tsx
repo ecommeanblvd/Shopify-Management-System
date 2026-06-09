@@ -5,48 +5,79 @@ import { redirect } from 'next/navigation';
 import { Users, ShieldCheck } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
-import { canChangeRole, hasPermission, type Role } from '@/lib/auth/rbac';
+import { canChangeRole, hasPermission } from '@/lib/auth/rbac';
+import { getRole } from '@/lib/auth/role';
+import { listRoles } from '@/features/users/role-queries';
 import { recordAudit } from '@/lib/logging/audit';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
-type RoleOrNone = Role | 'none';
-const ROLE_OPTIONS: RoleOrNone[] = ['admin', 'operator', 'viewer', 'none'];
+
+// Legacy enum values that can be written to roles.role
+const LEGACY_KEYS = new Set(['admin', 'operator', 'viewer']);
 
 async function setRoleAction(callerUserId: string, formData: FormData) {
   'use server';
   const targetUserId = String(formData.get('userId') ?? '');
-  const submitted = String(formData.get('role') ?? '') as RoleOrNone;
-  if (!targetUserId || !ROLE_OPTIONS.includes(submitted)) return;
+  // submitted value is either an appRole UUID or the sentinel 'none'
+  const submitted = String(formData.get('appRoleId') ?? '');
+  if (!targetUserId || !submitted) return;
 
-  const [callerRoleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, callerUserId)).limit(1);
-  const callerRole = callerRoleRow?.role as Role | undefined;
-  if (!callerRole || !hasPermission(callerRole, 'manage_users')) return;
+  // Gate: caller must have manage_users
+  const callerRoleKey = await getRole(callerUserId);
+  if (!hasPermission(callerRoleKey, 'manage_users')) return;
 
-  const newRole: Role | null = submitted === 'none' ? null : submitted as Role;
-  if (!canChangeRole({ callerUserId, callerRole, targetUserId, newRole })) return;
+  // Resolve the target appRole (null = remove role)
+  const isRemove = submitted === 'none';
+  const [appRole] = isRemove
+    ? [undefined]
+    : await db.select().from(schema.appRoles).where(eq(schema.appRoles.id, submitted)).limit(1);
 
-  const [targetRoleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, targetUserId)).limit(1);
-  const currentRole = targetRoleRow?.role as Role | undefined;
-  const isNoOp = (newRole === null && !currentRole) || (newRole !== null && currentRole === newRole);
-  if (isNoOp) return;
+  if (!isRemove && !appRole) return; // unknown role id
 
-  if (newRole === null) {
+  // Anti-self-lockout: admin cannot demote themselves
+  // canChangeRole expects a Role | null for newRole — pass the key if it's a
+  // legacy enum value, otherwise treat as non-admin (effectively blocks self-demote
+  // from 'admin' key → any non-admin key, which is correct).
+  const newRoleLegacy = (!isRemove && appRole && LEGACY_KEYS.has(appRole.key))
+    ? (appRole.key as 'admin' | 'operator' | 'viewer')
+    : null;
+  if (!canChangeRole({ callerUserId, callerRole: callerRoleKey, targetUserId, newRole: newRoleLegacy })) return;
+
+  if (isRemove) {
     await db.delete(schema.roles).where(eq(schema.roles.userId, targetUserId));
   } else {
-    const existing = await db.select().from(schema.roles).where(eq(schema.roles.userId, targetUserId)).limit(1);
-    if (existing[0]) {
-      await db.update(schema.roles).set({ role: newRole }).where(eq(schema.roles.userId, targetUserId));
+    // Determine what to write to the legacy role column (enum-constrained).
+    // If the new role's key is one of the three legacy values, sync it.
+    // Otherwise keep the current legacy value (or fall back to 'viewer').
+    const legacyValue = (appRole && LEGACY_KEYS.has(appRole.key))
+      ? (appRole.key as 'admin' | 'operator' | 'viewer')
+      : await (async () => {
+          const [cur] = await db.select({ role: schema.roles.role })
+            .from(schema.roles).where(eq(schema.roles.userId, targetUserId)).limit(1);
+          return cur?.role ?? 'viewer';
+        })();
+
+    const [existing] = await db.select({ userId: schema.roles.userId })
+      .from(schema.roles).where(eq(schema.roles.userId, targetUserId)).limit(1);
+    if (existing) {
+      await db.update(schema.roles)
+        .set({ roleId: appRole!.id, role: legacyValue })
+        .where(eq(schema.roles.userId, targetUserId));
     } else {
-      await db.insert(schema.roles).values({ userId: targetUserId, role: newRole });
+      await db.insert(schema.roles).values({
+        userId: targetUserId,
+        roleId: appRole!.id,
+        role: legacyValue,
+      });
     }
   }
 
   await recordAudit({
     userId: callerUserId, action: 'change_role', target: targetUserId,
-    requestSummary: `role=${submitted}`, result: 'success',
+    requestSummary: `appRoleId=${submitted}`, result: 'success',
   });
   revalidatePath('/admin/users');
 }
@@ -66,9 +97,8 @@ export default async function AdminUsersPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
 
-  const [callerRoleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
-  const callerRole = callerRoleRow?.role as Role | undefined;
-  if (!callerRole || !hasPermission(callerRole, 'manage_users')) {
+  const callerRoleKey = await getRole(session.user.id);
+  if (!hasPermission(callerRoleKey, 'manage_users')) {
     return (
       <div className="max-w-3xl mx-auto px-6 md:px-10 py-16 text-center space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Forbidden</h1>
@@ -77,18 +107,32 @@ export default async function AdminUsersPage() {
     );
   }
 
-  const rows = await db
-    .select({ userId: schema.user.id, email: schema.user.email, name: schema.user.name, role: schema.roles.role, createdAt: schema.user.createdAt })
-    .from(schema.user)
-    .leftJoin(schema.roles, eq(schema.roles.userId, schema.user.id))
-    .orderBy(asc(schema.user.createdAt));
+  const [rows, appRoles] = await Promise.all([
+    db
+      .select({
+        userId: schema.user.id,
+        email: schema.user.email,
+        name: schema.user.name,
+        role: schema.roles.role,
+        roleId: schema.roles.roleId,
+        createdAt: schema.user.createdAt,
+      })
+      .from(schema.user)
+      .leftJoin(schema.roles, eq(schema.roles.userId, schema.user.id))
+      .orderBy(asc(schema.user.createdAt)),
+    listRoles(),
+  ]);
 
   const setBound = setRoleAction.bind(null, session.user.id);
+
+  // Resolve the current appRole id for display/form default.
+  // If roleId is set use it directly; otherwise try matching by legacy key.
+  const keyToAppRoleId = new Map(appRoles.map((r) => [r.key, r.id]));
 
   const admins = rows.filter((r) => r.role === 'admin').length;
   const operators = rows.filter((r) => r.role === 'operator').length;
   const viewers = rows.filter((r) => r.role === 'viewer').length;
-  const none = rows.filter((r) => !r.role).length;
+  const none = rows.filter((r) => !r.role && !r.roleId).length;
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
@@ -119,6 +163,13 @@ export default async function AdminUsersPage() {
           <ul className="divide-y divide-border">
             {rows.map((r) => {
               const isSelf = r.userId === session.user.id;
+              // Resolve current role for display: prefer app_roles name, fall back to legacy
+              const currentAppRole = r.roleId
+                ? appRoles.find((ar) => ar.id === r.roleId)
+                : appRoles.find((ar) => ar.key === r.role);
+              const displayRole = currentAppRole?.name ?? r.role ?? null;
+              // The form value to pre-select: current appRole id, or 'none'
+              const currentAppRoleId = r.roleId ?? (r.role ? keyToAppRoleId.get(r.role) : undefined) ?? 'none';
               return (
                 <li key={r.userId} className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
@@ -135,20 +186,20 @@ export default async function AdminUsersPage() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <Badge variant={roleBadgeVariant(r.role)} className="h-5 text-[10px] uppercase tracking-wider">
-                      {r.role ?? 'no role'}
+                      {displayRole ?? 'no role'}
                     </Badge>
                     <form action={setBound} className="flex items-center gap-1.5">
                       <input type="hidden" name="userId" value={r.userId} />
                       <select
-                        name="role"
-                        defaultValue={r.role ?? 'none'}
+                        name="appRoleId"
+                        defaultValue={currentAppRoleId}
                         className="border border-input bg-input/30 rounded-md px-2 py-1 text-xs"
                         disabled={isSelf}
                       >
-                        <option value="admin">admin</option>
-                        <option value="operator">operator</option>
-                        <option value="viewer">viewer</option>
-                        <option value="none">none</option>
+                        {appRoles.map((ar) => (
+                          <option key={ar.id} value={ar.id}>{ar.name}</option>
+                        ))}
+                        <option value="none">— remove role —</option>
                       </select>
                       <Button type="submit" size="sm" variant="outline" disabled={isSelf} className="h-7 px-3 text-xs">
                         Save
