@@ -33,6 +33,9 @@ describe('rollupOrderStatus', () => {
   it('still pending_check -> checking', () => expect(roll(['pending_check', 'in_stock'])).toBe('checking'));
   it('empty -> received', () => expect(roll([])).toBe('received'));
   it('out_of_stock dominates pending_check', () => expect(roll(['pending_check', 'out_of_stock'])).toBe('awaiting_brand'));
+  it('brand_requested rolls up to awaiting_brand', () => expect(roll(['brand_requested', 'in_stock'])).toBe('awaiting_brand'));
+  it('brand_confirmed rolls up to awaiting_brand', () => expect(roll(['brand_confirmed', 'picked'])).toBe('awaiting_brand'));
+  it('brand_rejected rolls up to awaiting_brand', () => expect(roll(['brand_rejected', 'shipped'])).toBe('awaiting_brand'));
 });
 
 describe('canTransitionLine', () => {
