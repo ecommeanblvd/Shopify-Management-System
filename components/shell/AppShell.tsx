@@ -1,12 +1,12 @@
 import { headers } from 'next/headers';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
-import type { Role } from '@/lib/auth/rbac';
 
 interface AppShellProps {
   email: string;
   name: string | null;
-  role: Role;
+  /** Resolved app_role key (e.g. 'admin', 'logistics'), not the legacy enum. */
+  role: string;
   children: React.ReactNode;
 }
 

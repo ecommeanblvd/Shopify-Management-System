@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { NAV, canSeeSettings } from '@/lib/nav';
-import { hasPermission, type Role } from '@/lib/auth/rbac';
+import { hasPermission } from '@/lib/auth/rbac';
 
-interface SidebarProps { role: Role; currentPath: string }
+interface SidebarProps { role: string; currentPath: string }
 
 export function Sidebar({ role, currentPath }: SidebarProps) {
   const visible = NAV.filter((item) => {

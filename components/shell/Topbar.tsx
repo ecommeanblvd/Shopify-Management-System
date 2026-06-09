@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
-import type { Role } from '@/lib/auth/rbac';
 
-interface TopbarProps { email: string; name: string | null; role: Role }
+interface TopbarProps { email: string; name: string | null; role: string }
 
 export function Topbar({ email, name, role }: TopbarProps) {
   return (
