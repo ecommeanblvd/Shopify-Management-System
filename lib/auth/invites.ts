@@ -39,7 +39,12 @@ export async function appRoleIdByKey(key: string): Promise<string | null> {
 }
 
 /** Assign (or replace) a user's role given an app_role id. Mirrors the legacy
- *  enum sync used by /admin/users. */
+ *  enum sync used by /admin/users.
+ *
+ *  Caller assumption: invoked on a user's FIRST sign-in (from auth's
+ *  user.create.after), so no prior roles row exists and the non-legacy fallback
+ *  to 'viewer' is correct. If reused where a row may already exist, replicate
+ *  the "preserve existing legacy value" logic from /admin/users setRoleAction. */
 export async function assignUserRole(userId: string, appRoleId: string): Promise<void> {
   const [appRole] = await db
     .select()
@@ -93,6 +98,7 @@ export async function createInvite(args: {
         roleId: args.roleId,
         invitedByUserId: args.invitedByUserId,
         status: 'pending',
+        createdAt: new Date(),
         acceptedAt: null,
         acceptedUserId: null,
       },
@@ -117,11 +123,16 @@ export async function listPendingInvites() {
     .orderBy(schema.userInvites.createdAt);
 }
 
+/** Revoke a still-pending invite. No-op if the invite was already accepted or
+ *  revoked (guarded so a stray id can't flip an accepted invite). */
 export async function revokeInvite(id: string): Promise<void> {
   await db
     .update(schema.userInvites)
     .set({ status: 'revoked' })
-    .where(eq(schema.userInvites.id, id));
+    .where(and(
+      eq(schema.userInvites.id, id),
+      eq(schema.userInvites.status, 'pending'),
+    ));
 }
 
 /** Mark an email's pending invite accepted and return its roleId (or null). */
