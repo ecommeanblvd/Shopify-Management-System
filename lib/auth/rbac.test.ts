@@ -14,12 +14,12 @@ describe('hasPermission', () => {
     expect(hasPermission('admin', 'view_settings_history')).toBe(true);
   });
 
-  it('operator can apply, reconcile, and edit templates but not manage stores', () => {
+  it('operator can apply + reconcile but NOT manage templates or stores', () => {
     expect(hasPermission('operator', 'apply_settings')).toBe(true);
     expect(hasPermission('operator', 'reconcile_store')).toBe(true);
     expect(hasPermission('operator', 'view_settings_history')).toBe(true);
-    // Seed gives operator settings_sync:edit → manage_settings_template maps to that
-    expect(hasPermission('operator', 'manage_settings_template')).toBe(true);
+    // Parity with old MATRIX: operator had run_feature (view) but NOT template edit.
+    expect(hasPermission('operator', 'manage_settings_template')).toBe(false);
     expect(hasPermission('operator', 'manage_stores')).toBe(false);
   });
 

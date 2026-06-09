@@ -27,7 +27,10 @@ export const CATALOG: ScopeDef[] = [
   { key: 'mmp_products', label: 'Sản phẩm MMP', actions: ['view', 'create', 'edit', 'delete', 'push'] },
   { key: 'functions', label: 'Functions', actions: ['view', 'edit'] },
   { key: 'markets', label: 'Markets', actions: ['view', 'edit', 'apply'] },
-  { key: 'settings_sync', label: 'Settings Sync', actions: ['view', 'edit', 'apply'] },
+  // settings_sync needs 3 distinct non-apply capabilities to mirror the legacy
+  // perms exactly: view=xem lịch sử (view_settings_history), create=quản lý
+  // template (manage_settings_template), edit=chạy/dùng sync (run_feature).
+  { key: 'settings_sync', label: 'Settings Sync', actions: ['view', 'create', 'edit', 'apply'] },
   { key: 'stores', label: 'Stores', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'users_roles', label: 'Users & Roles', actions: ['view', 'create', 'edit', 'delete'] },
 ];

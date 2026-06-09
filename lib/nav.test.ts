@@ -34,8 +34,8 @@ describe('NAV structure', () => {
 });
 
 describe('SETTINGS_ITEMS', () => {
-  it('has eight permission-gated, grouped, described items', () => {
-    expect(SETTINGS_ITEMS).toHaveLength(8);
+  it('has nine permission-gated, grouped, described items', () => {
+    expect(SETTINGS_ITEMS).toHaveLength(9);
     for (const item of SETTINGS_ITEMS) {
       expect(item.requires).toBeTruthy();
       expect(item.description.length).toBeGreaterThan(0);

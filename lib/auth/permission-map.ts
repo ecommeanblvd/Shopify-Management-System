@@ -4,9 +4,13 @@ import { allPermissionKeys, type PermissionKey } from './permissions';
  *  derive system-role seeds so admin/operator/viewer behave exactly as before. */
 export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   view: [],
-  run_feature: ['settings_sync:view', 'settings_sync:edit'],
+  // The 3 legacy settings perms map to 3 DISTINCT settings_sync keys (see
+  // permissions.ts) so the shim's .every() distinguishes them — exact parity:
+  //   run_feature (use/run sync) → edit · manage_settings_template → create ·
+  //   view_settings_history → view · apply_settings/reconcile_store → apply.
+  run_feature: ['settings_sync:edit'],
   manage_stores: ['stores:view', 'stores:create', 'stores:edit', 'stores:delete'],
-  manage_settings_template: ['settings_sync:edit'],
+  manage_settings_template: ['settings_sync:create'],
   apply_settings: ['settings_sync:apply'],
   reconcile_store: ['settings_sync:apply'],
   view_settings_history: ['settings_sync:view'],
