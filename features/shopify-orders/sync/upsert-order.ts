@@ -58,6 +58,14 @@ export async function upsertOrder(
   });
 
   if (internalOrderId) {
-    await ensureFulfillmentForOrder(internalOrderId);
+    // Best-effort: creating the fulfillment ops record must never break order
+    // sync (the order itself is already committed above). Log and continue on
+    // any failure — e.g. the fulfillment tables not yet migrated on this env,
+    // or a transient error — so webhooks still return 2xx and orders keep flowing.
+    try {
+      await ensureFulfillmentForOrder(internalOrderId);
+    } catch (err) {
+      console.error(`ensureFulfillmentForOrder failed for order ${internalOrderId}:`, err);
+    }
   }
 }
