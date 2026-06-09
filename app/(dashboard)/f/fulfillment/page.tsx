@@ -6,6 +6,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listFulfillmentWorklist } from '@/features/fulfillment/queries';
 import { WorklistTable } from '@/components/fulfillment/WorklistTable';
+import { BackfillButton } from '@/components/fulfillment/BackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,12 +29,15 @@ export default async function FulfillmentWorklistPage() {
             Danh sách đơn hàng cần xử lý kho.
           </p>
         </div>
-        <Link
-          href="/f/fulfillment/warehouse"
-          className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
-        >
-          Kho MEAN
-        </Link>
+        <div className="flex items-center gap-2">
+          {hasPermission(role, 'manage_fulfillment') && <BackfillButton />}
+          <Link
+            href="/f/fulfillment/warehouse"
+            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            Kho MEAN
+          </Link>
+        </div>
       </div>
       <WorklistTable
         rows={rows}
