@@ -30,10 +30,15 @@ export async function getFulfillmentDetail(orderId: string) {
     shelf: schema.warehouseInventory.shelf,
     floor: schema.warehouseInventory.floor,
     bin: schema.warehouseInventory.bin,
+    brandRequestId: schema.brandOrderRequests.id,
+    brandSendStatus: schema.brandOrderRequests.sendStatus,
+    brandConfirmStatus: schema.brandOrderRequests.confirmStatus,
+    brandExpectedDeliveryDate: schema.brandOrderRequests.expectedDeliveryDate,
   })
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
     .leftJoin(schema.warehouseInventory, eq(schema.warehouseInventory.id, schema.orderFulfillmentLines.warehouseInventoryId))
+    .leftJoin(schema.brandOrderRequests, eq(schema.brandOrderRequests.fulfillmentLineId, schema.orderFulfillmentLines.id))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
   return { fulfillment: ful, lines };
 }

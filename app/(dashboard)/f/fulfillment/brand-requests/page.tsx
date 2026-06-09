@@ -4,13 +4,12 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { listFulfillmentWorklist } from '@/features/fulfillment/queries';
-import { WorklistTable } from '@/components/fulfillment/WorklistTable';
-import { BackfillButton } from '@/components/fulfillment/BackfillButton';
+import { listBrandRequests } from '@/features/fulfillment/brand-queries';
+import { BrandRequestsTable } from '@/components/fulfillment/BrandRequestsTable';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FulfillmentWorklistPage() {
+export default async function BrandRequestsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -18,34 +17,27 @@ export default async function FulfillmentWorklistPage() {
     redirect('/');
   }
 
-  const rows = await listFulfillmentWorklist();
+  const rows = await listBrandRequests();
 
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold">Vận hành đơn</h1>
+          <h1 className="text-2xl font-semibold">Yêu cầu brand</h1>
           <p className="text-sm text-muted-foreground">
-            Danh sách đơn hàng cần xử lý kho.
+            Danh sách các yêu cầu đặt hàng gửi tới brand.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {hasPermission(role, 'manage_fulfillment') && <BackfillButton />}
           <Link
-            href="/f/fulfillment/brand-requests"
+            href="/f/fulfillment"
             className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
           >
-            Yêu cầu brand
-          </Link>
-          <Link
-            href="/f/fulfillment/warehouse"
-            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Kho MEAN
+            Vận hành đơn
           </Link>
         </div>
       </div>
-      <WorklistTable
+      <BrandRequestsTable
         rows={rows}
         canManage={hasPermission(role, 'manage_fulfillment')}
       />
