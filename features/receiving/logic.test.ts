@@ -48,13 +48,13 @@ describe('inventoryEffect', () => {
 });
 
 describe('seq codes', () => {
-  it('formats with 5-digit padding', () => {
-    expect(nextSeqCode('WH', 4)).toBe('WH-00005');
-    expect(nextSeqCode('GRN', 0)).toBe('GRN-00001');
+  it('formats with 8-digit padding', () => {
+    expect(nextSeqCode('WH', 4)).toBe('WH-00000005');
+    expect(nextSeqCode('GRN', 0)).toBe('GRN-00000001');
   });
   it('parses a code back to its number, 0 for invalid/null', () => {
-    expect(parseSeq('WH', 'WH-00005')).toBe(5);
+    expect(parseSeq('WH', 'WH-00000005')).toBe(5);
     expect(parseSeq('WH', null)).toBe(0);
-    expect(parseSeq('WH', 'GRN-00005')).toBe(0);
+    expect(parseSeq('WH', 'GRN-00000005')).toBe(0);
   });
 });

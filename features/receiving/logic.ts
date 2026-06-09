@@ -37,14 +37,15 @@ export function inventoryEffect(disposition: Disposition, hasSku: boolean): InvE
   }
 }
 
-/** Next human code, e.g. nextSeqCode('WH', 4) => 'WH-00005'. */
+/** Next human code, e.g. nextSeqCode('WH', 4) => 'WH-00000005'. */
 export function nextSeqCode(prefix: string, maxSeq: number): string {
-  return `${prefix}-${String(maxSeq + 1).padStart(5, '0')}`;
+  return `${prefix}-${String(maxSeq + 1).padStart(8, '0')}`;
 }
 
 /** Parse the numeric suffix of a code for the given prefix; 0 if null/mismatch. */
 export function parseSeq(prefix: string, code: string | null): number {
   if (!code) return 0;
-  const m = new RegExp(`^${prefix}-(\\d+)$`).exec(code);
+  const p = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp(`^${p}-(\\d+)$`).exec(code);
   return m ? parseInt(m[1], 10) : 0;
 }
