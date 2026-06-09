@@ -1,9 +1,14 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import { refreshRoleCache } from './auth/access';
+import { primeRoleCache } from './auth/access';
+import { SYSTEM_ROLE_SEEDS } from './auth/permission-map';
 import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings } from './nav';
 
-// canSeeSettings delegates to hasPermission which reads the DB-backed role cache.
-beforeAll(async () => { await refreshRoleCache(); });
+// canSeeSettings → hasPermission reads the role cache; prime it from seeds (no DB).
+beforeAll(() => {
+  primeRoleCache(Object.fromEntries(
+    Object.entries(SYSTEM_ROLE_SEEDS).map(([k, v]) => [k, v.keys]),
+  ));
+});
 
 describe('NAV structure', () => {
   const hrefs = NAV.map((n) => n.href);

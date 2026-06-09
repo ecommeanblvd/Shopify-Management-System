@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { refreshRoleCache } from './access';
+import { primeRoleCache } from './access';
+import { SYSTEM_ROLE_SEEDS } from './permission-map';
 import { hasPermission, canChangeRole } from './rbac';
 
-// Warm the DB-backed role cache once for the entire suite.
-beforeAll(async () => { await refreshRoleCache(); });
+// Prime the role cache from the canonical seeds (no DB) — deterministic + CI-safe.
+// The DB merely persists these same seeds, so this exercises identical behavior.
+beforeAll(() => {
+  primeRoleCache(Object.fromEntries(
+    Object.entries(SYSTEM_ROLE_SEEDS).map(([k, v]) => [k, v.keys]),
+  ));
+});
 
 describe('hasPermission', () => {
   it('admin has every permission', () => {
