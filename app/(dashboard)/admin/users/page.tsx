@@ -8,6 +8,7 @@ import { db, schema } from '@/db/client';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getRole } from '@/lib/auth/role';
 import { listRoles, roleGrantsUserManagement, userIdsWhoCanManageUsers } from '@/features/users/role-queries';
+import { createInvite, listPendingInvites, revokeInvite } from '@/lib/auth/invites';
 import { recordAudit } from '@/lib/logging/audit';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -86,6 +87,40 @@ async function setRoleAction(callerUserId: string, formData: FormData) {
   revalidatePath('/admin/users');
 }
 
+async function inviteUserAction(callerUserId: string, formData: FormData) {
+  'use server';
+  const email = String(formData.get('email') ?? '').trim();
+  const submitted = String(formData.get('appRoleId') ?? 'none');
+  if (!email) return;
+
+  const callerRoleKey = await getRole(callerUserId);
+  if (!hasPermission(callerRoleKey, 'manage_users')) return;
+
+  const roleId = submitted === 'none' ? null : submitted;
+  await createInvite({ email, roleId, invitedByUserId: callerUserId });
+
+  await recordAudit({
+    userId: callerUserId, action: 'invite_user', target: email,
+    requestSummary: `appRoleId=${submitted}`, result: 'success',
+  });
+  revalidatePath('/admin/users');
+}
+
+async function revokeInviteAction(callerUserId: string, formData: FormData) {
+  'use server';
+  const inviteId = String(formData.get('inviteId') ?? '');
+  if (!inviteId) return;
+
+  const callerRoleKey = await getRole(callerUserId);
+  if (!hasPermission(callerRoleKey, 'manage_users')) return;
+
+  await revokeInvite(inviteId);
+  await recordAudit({
+    userId: callerUserId, action: 'revoke_invite', target: inviteId, result: 'success',
+  });
+  revalidatePath('/admin/users');
+}
+
 function roleBadgeVariant(role: string | null): 'default' | 'secondary' | 'outline' {
   if (role === 'admin') return 'default';
   if (!role) return 'outline';
@@ -111,7 +146,7 @@ export default async function AdminUsersPage() {
     );
   }
 
-  const [rows, appRoles] = await Promise.all([
+  const [rows, appRoles, invites] = await Promise.all([
     db
       .select({
         userId: schema.user.id,
@@ -128,9 +163,12 @@ export default async function AdminUsersPage() {
       .leftJoin(schema.appRoles, eq(schema.appRoles.id, schema.roles.roleId))
       .orderBy(asc(schema.user.createdAt)),
     listRoles(),
+    listPendingInvites(),
   ]);
 
   const setBound = setRoleAction.bind(null, session.user.id);
+  const inviteBound = inviteUserAction.bind(null, session.user.id);
+  const revokeBound = revokeInviteAction.bind(null, session.user.id);
 
   // Resolve the current appRole id for display/form default.
   // If roleId is set use it directly; otherwise try matching by legacy key.
@@ -162,6 +200,65 @@ export default async function AdminUsersPage() {
         <StatTile label="Viewers" value={String(viewers)} sub="Read-only" />
         <StatTile label="Pending" value={String(none)} sub={none === 0 ? 'All assigned' : 'No role yet'} tone={none > 0 ? 'warning' : 'default'} />
       </div>
+
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="size-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Mời người dùng</h2>
+          </div>
+          <form action={inviteBound} className="flex flex-col sm:flex-row gap-2 sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <label htmlFor="invite-email" className="text-xs uppercase tracking-wider text-muted-foreground">Email</label>
+              <input
+                id="invite-email"
+                name="email"
+                type="email"
+                required
+                placeholder="nguoi-moi@example.com"
+                className="w-full border border-input bg-input/30 rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="invite-role" className="text-xs uppercase tracking-wider text-muted-foreground">Role</label>
+              <select
+                id="invite-role"
+                name="appRoleId"
+                defaultValue="none"
+                className="border border-input bg-input/30 rounded-md px-2 py-2 text-sm"
+              >
+                <option value="none">— chưa gán role —</option>
+                {appRoles.map((ar) => (
+                  <option key={ar.id} value={ar.id}>{ar.name}</option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" size="sm" className="h-9">Gửi lời mời</Button>
+          </form>
+
+          {invites.length > 0 && (
+            <ul className="divide-y divide-border border-t border-border pt-2">
+              {invites.map((inv) => (
+                <li key={inv.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{inv.email}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {inv.roleName ?? 'chưa gán role'} · mời bởi {inv.invitedByEmail ?? '—'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className="h-5 text-[10px] uppercase tracking-wider">pending</Badge>
+                    <form action={revokeBound}>
+                      <input type="hidden" name="inviteId" value={inv.id} />
+                      <Button type="submit" size="sm" variant="outline" className="h-7 px-3 text-xs">Thu hồi</Button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
