@@ -4,6 +4,7 @@ import { user } from './auth-schema';
 
 export const roleEnum = pgEnum('role', ['admin', 'operator', 'viewer']);
 export const storeStatusEnum = pgEnum('store_status', ['active', 'disconnected', 'error']);
+export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'revoked']);
 
 export const appRoles = pgTable('app_roles', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -25,6 +26,17 @@ export const roles = pgTable('roles', {
   userId: text('user_id').references(() => user.id).primaryKey(),
   role: roleEnum('role').notNull().default('viewer'),
   roleId: uuid('role_id').references(() => appRoles.id),
+});
+
+export const userInvites = pgTable('user_invites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull().unique(),
+  roleId: uuid('role_id').references(() => appRoles.id, { onDelete: 'set null' }),
+  invitedByUserId: text('invited_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+  status: inviteStatusEnum('status').notNull().default('pending'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  acceptedAt: timestamp('accepted_at'),
+  acceptedUserId: text('accepted_user_id').references(() => user.id, { onDelete: 'set null' }),
 });
 
 export const stores = pgTable('stores', {
