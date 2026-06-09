@@ -30,6 +30,10 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   view_fulfillment: ['fulfillment.operations:view'],
   manage_fulfillment: ['fulfillment.operations:edit', 'fulfillment.brand_requests:edit'],
   manage_warehouse: ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
+  view_receiving: ['warehouse.receiving:view'],
+  manage_receiving: ['warehouse.receiving:view', 'warehouse.receiving:create', 'warehouse.receiving:edit'],
+  view_qc: ['warehouse.qc:view'],
+  manage_qc: ['warehouse.qc:view', 'warehouse.qc:create', 'warehouse.qc:edit'],
 };
 
 const OPERATOR_OLD = [
@@ -37,6 +41,7 @@ const OPERATOR_OLD = [
   'apply_markets', 'view_markets_history', 'manage_carrier_rates', 'view_carrier_rates',
   'view_orders', 'manage_sku_costs', 'manage_shipping_invoices', 'view_functions',
   'view_mmp_products', 'manage_mmp_products', 'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
+  'view_receiving', 'manage_receiving', 'view_qc', 'manage_qc',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',

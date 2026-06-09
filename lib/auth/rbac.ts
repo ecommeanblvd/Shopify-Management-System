@@ -29,7 +29,11 @@ export type Permission =
   | 'manage_mmp_products'
   | 'view_fulfillment'
   | 'manage_fulfillment'
-  | 'manage_warehouse';
+  | 'manage_warehouse'
+  | 'view_receiving'
+  | 'manage_receiving'
+  | 'view_qc'
+  | 'manage_qc';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [

@@ -20,6 +20,8 @@ export const CATALOG: ScopeDef[] = [
   { key: 'fulfillment.operations', label: 'Vận hành — thao tác (pick/pack/ship)', actions: ['view', 'edit'] },
   { key: 'fulfillment.logistics', label: 'Vận hành — logistics (tracking)', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'fulfillment.warehouse', label: 'Kho MEAN', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'warehouse.receiving', label: 'Kho — Nhập hàng', actions: ['view', 'create', 'edit'] },
+  { key: 'warehouse.qc', label: 'Kho — QC', actions: ['view', 'create', 'edit'] },
   { key: 'fulfillment.brand_requests', label: 'Yêu cầu brand', actions: ['view', 'edit'] },
   { key: 'carrier_rates', label: 'Carrier rates', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'carrier_rates.invoices', label: 'Hoá đơn nhà cung cấp', actions: ['view', 'create', 'edit'] },
