@@ -38,6 +38,8 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   check_packed: ['fulfillment.pack_check:view', 'fulfillment.pack_check:create'],
   view_transfers: ['warehouse.transfers:view'],
   manage_transfers: ['warehouse.transfers:view', 'warehouse.transfers:create', 'warehouse.transfers:edit'],
+  view_returns: ['warehouse.returns:view'],
+  manage_returns: ['warehouse.returns:view', 'warehouse.returns:create', 'warehouse.returns:edit'],
 };
 
 const OPERATOR_OLD = [
@@ -48,6 +50,7 @@ const OPERATOR_OLD = [
   'view_receiving', 'manage_receiving', 'view_qc', 'manage_qc',
   'view_pack_check', 'check_packed',
   'view_transfers', 'manage_transfers',
+  'view_returns', 'manage_returns',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
