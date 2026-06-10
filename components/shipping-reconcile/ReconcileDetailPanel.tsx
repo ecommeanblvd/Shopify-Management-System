@@ -13,7 +13,7 @@ const fmtVnd = (n: number | null): string =>
 const CAUSE_LABEL: Record<string, string> = {
   KHOP: '', SAI_CAN: 'sai cân', THIEU_CAU_HINH_REMOTE: 'thiếu cấu hình vùng xa',
   REMOTE_KHONG_KHOP: 'remote không khớp', LECH_RATE_CARD: 'lệch rate card',
-  LECH_CHIET_KHAU: 'lệch chiết khấu', LECH_FUEL: 'lệch % fuel',
+  LECH_CHIET_KHAU: 'lệch chiết khấu', LECH_FUEL: 'lệch % fuel', LECH_FUEL_BASE: 'fuel base khác',
   SAI_ZONE: 'lệch zone', PHAI_SINH_ZONE: 'khớp theo zone bill',
   PHAI_SINH: 'phái sinh', KHONG_KHOP: 'không khớp', LAM_TRON: 'làm tròn',
 };

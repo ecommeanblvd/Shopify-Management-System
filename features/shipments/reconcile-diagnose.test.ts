@@ -329,3 +329,55 @@ describe('diagnoseReconcileRow — elevated risk (ER) vs engine country_fixed', 
     expect(r.verdict).not.toContain('làm tròn');
   });
 });
+
+describe('diagnoseReconcileRow — fuel-base mismatch must not hide behind PHAI_SINH (real TA2171)', () => {
+  // FedEx KW: base & demand match exactly, fuel % identical (47.5%) on
+  // BOTH sides — but the carrier fueled (base + demand) while the engine
+  // fueled base only. A real 103,716đ gap: must be actionable, never
+  // 'Khớp'/'làm tròn'.
+  const input = () => baseInput({
+    billed: { base: 8_177_900, discount: -6_583_210, fuel: 861_194, remote: 0,
+              demand: 218_350, signature: 0, vat: 213_939, gogreen: 0,
+              elevatedRisk: 0, total: 2_888_173 },
+    engine: { base: 1_594_690, discount: 0, fuel: 757_478, remote: 0,
+              demand: 218_350, residential: 0, vat: 205_641, total: 2_776_159 },
+    engineChargeableWeightKg: 5.5,
+    engineTierUpperKg: 5.5,
+    zoneRates: [{ upperKg: 5.5, rate: 1_594_690 }],
+    billedFuelableBase: 1_594_690,
+    fuelPercent: 47.5,
+    vatPercent: 8,
+  });
+
+  it('flags fuel as LECH_FUEL_BASE when base matches but fuel rides a different base', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'base')!.cause).toBe('KHOP');
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('LECH_FUEL_BASE');
+  });
+
+  it('verdict surfaces the fuel-base issue — not làm tròn', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).not.toBe('rounding');
+    expect(r.severity).not.toBe('match');
+    expect(r.verdict).toContain('fuel');
+  });
+
+  it('keeps PHAI_SINH when the base itself is flagged (downstream fuel)', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 2_932_356, discount: 0, fuel: 1_245_851, remote: 0, demand: 0,
+                signature: 0, vat: 0, gogreen: 0, elevatedRisk: 0, total: 4_178_207 },
+      engine: { base: 2_805_365, discount: 0, fuel: 1_192_280, remote: 0, demand: 0,
+                residential: 0, vat: 0, total: 3_997_645 },
+      engineChargeableWeightKg: 7.5,
+      engineTierUpperKg: 7.5,
+      zoneRates: [
+        { upperKg: 7.5, rate: 2_805_365 },
+        { upperKg: 8.0, rate: 2_932_356 },
+      ],
+      billedFuelableBase: 2_932_356,
+      fuelPercent: 42.5,
+    }));
+    expect(r.components.find((c) => c.key === 'base')!.cause).toBe('SAI_CAN');
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH');
+  });
+});

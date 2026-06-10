@@ -78,6 +78,14 @@ export function issueInfo(r: ReconcileViewRow): IssueInfo {
           action: `Phụ phí vùng xa không khớp — bổ sung postcode/city vào cấu hình remote của ${carrier}`,
         };
       }
+      if (dom?.cause === 'LECH_FUEL_BASE') {
+        return {
+          label: 'Lệch fuel base',
+          className: ORANGE,
+          groupKey: `fuelbase|${r.carrierKey}`,
+          action: `Fuel đúng % nhưng ${carrier} tính trên cơ sở khác (demand trong/ngoài fuel base) — đối chiếu cờ fuelable của phụ phí demand/ESS theo vùng`,
+        };
+      }
       if (dom?.cause === 'LECH_FUEL') {
         return {
           label: 'Lệch % fuel',

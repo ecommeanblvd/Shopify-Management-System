@@ -19,6 +19,7 @@ export type DiagnosisCause =
   | 'LECH_RATE_CARD'
   | 'LECH_CHIET_KHAU'
   | 'LECH_FUEL'
+  | 'LECH_FUEL_BASE'
   | 'SAI_ZONE'
   | 'PHAI_SINH_ZONE'
   | 'PHAI_SINH'
@@ -225,7 +226,18 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     const candidates = [input.billedFuelableBase, input.billedFuelableBase + n0(b.demand)];
     const pctMatches = candidates.some((base) =>
       base > 0 && Math.abs((fuelBilled / base) * 100 - input.fuelPercent) < 0.05);
-    fuelCause = pctMatches ? (impliedZone ? 'PHAI_SINH_ZONE' : 'PHAI_SINH') : 'LECH_FUEL';
+    if (!pctMatches) {
+      fuelCause = 'LECH_FUEL';
+    } else {
+      // % is right — is the gap DOWNSTREAM of a flagged base/remote line
+      // (zone/weight/ratecard), or does fuel ride a different BASE
+      // COMPOSITION (e.g. carrier fuels the demand surcharge, we don't)?
+      const upstreamFlagged = components.some(
+        (c) => (c.key === 'base' || c.key === 'remote') && c.cause !== 'KHOP');
+      fuelCause = upstreamFlagged
+        ? (impliedZone ? 'PHAI_SINH_ZONE' : 'PHAI_SINH')
+        : 'LECH_FUEL_BASE';
+    }
   }
   components.push({ key: 'fuel', billed: fuelBilled, engine: e.fuel, delta: fuelDelta, cause: fuelCause });
 
@@ -333,6 +345,10 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
           break;
         case 'LECH_FUEL':
           verdict = 'Phụ phí xăng dầu (%) không khớp';
+          severity = 'ratecard';
+          break;
+        case 'LECH_FUEL_BASE':
+          verdict = 'Fuel đúng % nhưng tính trên cơ sở khác hóa đơn (demand trong/ngoài fuel base) — kiểm tra cờ fuelable của phụ phí';
           severity = 'ratecard';
           break;
         case 'LECH_RATE_CARD':
