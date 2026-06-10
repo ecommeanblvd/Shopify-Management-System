@@ -23,6 +23,9 @@ export interface ReconcileRow {
   storeName: string;
   carrierKey: string;
   shipCountry: string;
+  /** Order weight synced from Shopify (sum of line variant weights). */
+  shopifyWeightKg: number | null;
+  /** Scale weight from the ops sheet (net weight). */
   weightKg: number | null;
   /** Weight the engine actually priced: max(actual, dim) after carrier
    *  rounding. NULL when the engine produced no quote. */
@@ -121,6 +124,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
       shipWeightKgOverride: schema.shopifyOrders.shipWeightKgOverride,
+      shopifyWeightKg: schema.shopifyOrders.shipWeightKg,
       processedAtShopify: schema.shopifyOrders.processedAtShopify,
       // store
       storeName: schema.stores.name,
@@ -340,6 +344,7 @@ interface JoinedRow {
   carrierKey: string | null;
   shipCountry: string | null;
   actualWeightKg: string | null;
+  shopifyWeightKg?: string | null;
   labelCreatedAt: Date | null;
   billedTotal: string;
   billedBase: string | null;
@@ -387,6 +392,7 @@ function buildRow(
     storeName: r.storeName,
     carrierKey: r.carrierKey ?? '',
     shipCountry: r.shipCountry ?? '',
+    shopifyWeightKg: r.shopifyWeightKg != null ? Number(r.shopifyWeightKg) : null,
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,
     chargeableKg: engine?.chargeableWeightKg ?? null,
     labelDate: r.labelCreatedAt,

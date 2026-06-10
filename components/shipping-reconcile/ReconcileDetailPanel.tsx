@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import type { ReconcileViewRow } from '@/features/shipments/reconcile-view';
+import { setReconcileStatus, clearReconcileStatus } from '@/features/shipments/reconcile-status-actions';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -64,8 +66,11 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
 export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
   if (row.engineTotal === null) {
     return (
-      <div className="p-4 text-sm text-amber-600 dark:text-amber-400">
-        Hệ thống chưa tính được giá cho đơn này (lý do: {row.engineReason ?? 'không rõ'}). Không có số liệu để đối soát từng khoản.
+      <div className="p-4 space-y-4">
+        <div className="text-sm text-amber-600 dark:text-amber-400">
+          Hệ thống chưa tính được giá cho đơn này (lý do: {row.engineReason ?? 'không rõ'}). Không có số liệu để đối soát từng khoản.
+        </div>
+        <ReconcileActions row={row} />
       </div>
     );
   }
@@ -144,6 +149,93 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
       <p className="mt-2 text-[11px] text-muted-foreground">
         Giảm giá hợp đồng đã được gộp vào &quot;Cước gốc (sau giảm giá)&quot;. Billed gốc trên hóa đơn: {fmtVnd(row.billedBase)} − giảm {fmtVnd(row.billedDiscount)}.
       </p>
+      <ReconcileActions row={row} />
+    </div>
+  );
+}
+
+/**
+ * Per-shipment resolution block. Action chỉ nằm ở đây (không ở row ngoài
+ * bảng) để bắt buộc operator mở chi tiết soi từng khoản trước khi chốt.
+ * Đơn LỆCH muốn đánh "Đã đối soát" phải ghi rõ đã xử lý/xác nhận thế nào
+ * (vd: "FedEx confirm MC thuộc Zone M, đã sửa zone map").
+ */
+function ReconcileActions({ row }: { row: ReconcileViewRow }) {
+  const [note, setNote] = useState(row.note ?? '');
+  const [busy, setBusy] = useState(false);
+  const isClean = row.diagnosis?.severity === 'match' || row.diagnosis?.severity === 'rounding';
+  const needsNote = !isClean;
+  const noteMissing = needsNote && note.trim().length === 0;
+
+  async function act(status: 'reconciled' | 'ignored') {
+    setBusy(true);
+    try {
+      await setReconcileStatus({ shipmentId: row.shipmentId, status, note: note.trim() || null, billedTotal: row.billedTotal });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function undo() {
+    setBusy(true);
+    try { await clearReconcileStatus(row.shipmentId); } finally { setBusy(false); }
+  }
+
+  if (row.status !== 'pending') {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+        <span className={row.status === 'reconciled' ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-muted-foreground font-medium'}>
+          {row.status === 'reconciled' ? '✓ Đã đối soát' : 'Đã bỏ qua'}
+          {row.billedChangedSinceReview ? ' — ⚠ billed đã thay đổi sau khi review' : ''}
+        </span>
+        {row.note && <span className="text-muted-foreground">Ghi chú: {row.note}</span>}
+        <button type="button" disabled={busy} onClick={undo}
+          className="ml-auto rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
+          Hoàn tác
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-2 rounded-md border border-border bg-muted/20 p-3">
+      <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {needsNote
+          ? 'Đơn đang lệch — ghi rõ cách xử lý / kết quả xác nhận với carrier trước khi chốt'
+          : 'Ghi chú (không bắt buộc — đơn đã khớp)'}
+      </label>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={2}
+        placeholder={needsNote
+          ? 'VD: FedEx xác nhận MC bill theo Zone M — đã sửa zone mapping / DHL truy thu ER qua bill INV-123…'
+          : 'Ghi chú thêm nếu cần…'}
+        className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={busy || noteMissing}
+          title={noteMissing ? 'Cần ghi rõ cách xử lý vấn đề lệch trước khi đánh dấu đã đối soát' : undefined}
+          onClick={() => act('reconciled')}
+          className="rounded border border-emerald-500/50 px-3 py-1 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ✓ Đã đối soát
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => act('ignored')}
+          className="rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
+        >
+          Bỏ qua
+        </button>
+        {noteMissing && (
+          <span className="text-xs text-amber-600 dark:text-amber-400">
+            ↑ cần ghi chú xử lý để mở khóa nút &quot;Đã đối soát&quot;
+          </span>
+        )}
+      </div>
     </div>
   );
 }

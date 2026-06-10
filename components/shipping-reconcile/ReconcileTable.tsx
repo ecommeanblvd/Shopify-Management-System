@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
-import { setReconcileStatus, clearReconcileStatus } from '@/features/shipments/reconcile-status-actions';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
+import { issueInfo } from './issue-label';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -33,7 +33,7 @@ export function ReconcileTable({ rows }: Props) {
   const [minPct, setMinPct] = useState('');
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [showIssues, setShowIssues] = useState(true);
 
   const filtered = useMemo(() => {
     const minAbs = minPct ? Number(minPct) : null;
@@ -65,18 +65,22 @@ export function ReconcileTable({ rows }: Props) {
     return { billed, engine, delta, pct, over10, pendingCount, n: filtered.length };
   }, [filtered]);
 
-  async function mark(r: ReconcileViewRow, next: 'reconciled' | 'ignored') {
-    setPending(r.shipmentId);
-    try {
-      if (r.status === next) {
-        await clearReconcileStatus(r.shipmentId);
-      } else {
-        await setReconcileStatus({ shipmentId: r.shipmentId, status: next, billedTotal: r.billedTotal });
-      }
-    } finally {
-      setPending(null);
+  // Logistics to-check list: PENDING rows with an actionable issue, grouped
+  // by issue signature. One line per distinct problem with count + samples.
+  const issueGroups = useMemo(() => {
+    const groups = new Map<string, { action: string; label: string; count: number; sumDelta: number; samples: string[] }>();
+    for (const r of rows) {
+      if (r.status !== 'pending') continue;
+      const info = issueInfo(r);
+      if (!info.groupKey || !info.action) continue;
+      const g = groups.get(info.groupKey) ?? { action: info.action, label: info.label, count: 0, sumDelta: 0, samples: [] };
+      g.count += 1;
+      g.sumDelta += r.deltaVnd ?? 0;
+      if (g.samples.length < 4) g.samples.push(r.orderNumber);
+      groups.set(info.groupKey, g);
     }
-  }
+    return [...groups.values()].sort((a, b) => Math.abs(b.sumDelta) - Math.abs(a.sumDelta));
+  }, [rows]);
 
   const exportHref = useMemo(() => {
     const p = new URLSearchParams();
@@ -95,6 +99,38 @@ export function ReconcileTable({ rows }: Props) {
         <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
       </div>
+
+      {/* Logistics to-check summary */}
+      {issueGroups.length > 0 && (
+        <div className="rounded-lg border border-border">
+          <button
+            type="button"
+            onClick={() => setShowIssues(!showIssues)}
+            className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium"
+          >
+            <span>
+              Việc cần Logistics kiểm tra
+              <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                {issueGroups.length} vấn đề · {issueGroups.reduce((a, g) => a + g.count, 0)} đơn
+              </span>
+            </span>
+            <span className="text-muted-foreground">{showIssues ? '▾' : '▸'}</span>
+          </button>
+          {showIssues && (
+            <ul className="divide-y divide-border border-t border-border text-sm">
+              {issueGroups.map((g) => (
+                <li key={g.action} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums">{g.count} đơn</span>
+                  <span className="min-w-0 flex-1">{g.action}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    Σ lệch {fmtVnd(g.sumDelta)} đ · vd: {g.samples.join(', ')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -124,7 +160,9 @@ export function ReconcileTable({ rows }: Props) {
               <th className="px-3 py-2 text-left">Tracking</th>
               <th className="px-3 py-2 text-left">CC</th>
               <th className="px-3 py-2 text-left">Nước</th>
-              <th className="px-3 py-2 text-right">KG</th>
+              <th className="px-3 py-2 text-right" title="Cân đơn hàng sync từ Shopify (tổng cân variant)">KG Shopify</th>
+              <th className="px-3 py-2 text-right" title="Cân thực tế trên cân (file ops)">KG cân</th>
+              <th className="px-3 py-2 text-right" title="Cân carrier tính phí: max(cân thực, dim) + làm tròn bậc">KG bill</th>
               <th className="px-3 py-2 text-right">Billed</th>
               <th className="px-3 py-2 text-right">Hệ thống</th>
               <th className="px-3 py-2 text-right">Lệch</th>
@@ -138,13 +176,11 @@ export function ReconcileTable({ rows }: Props) {
                 key={r.shipmentId}
                 r={r}
                 expanded={expanded === r.shipmentId}
-                busy={pending === r.shipmentId}
                 onToggle={() => setExpanded(expanded === r.shipmentId ? null : r.shipmentId)}
-                onMark={mark}
               />
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
+              <tr><td colSpan={12} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
             )}
           </tbody>
         </table>
@@ -162,18 +198,19 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: string; className: string }> = {
+  reconciled: { label: 'Đã đối soát', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
+  ignored: { label: 'Bỏ qua', className: 'border border-border text-muted-foreground' },
+};
+
 function FragmentRow({
-  r, expanded, busy, onToggle, onMark,
+  r, expanded, onToggle,
 }: {
   r: ReconcileViewRow;
   expanded: boolean;
-  busy: boolean;
   onToggle: () => void;
-  onMark: (r: ReconcileViewRow, next: 'reconciled' | 'ignored') => void;
 }) {
-  const statusLabel: Record<ReconcileStatus, string> = {
-    pending: 'Chưa', reconciled: 'Đã đối soát', ignored: 'Bỏ qua',
-  };
+  const issue = issueInfo(r);
   return (
     <>
       <tr className="cursor-pointer border-t border-border hover:bg-muted/30" onClick={onToggle}>
@@ -181,14 +218,15 @@ function FragmentRow({
         <td className="px-3 py-2">{r.trackingNumber}</td>
         <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
         <td className="px-3 py-2">{r.shipCountry}</td>
-        <td className="px-3 py-2 text-right whitespace-nowrap">
-          {r.weightKg ?? '—'}
-          {r.chargeableKg !== null && r.weightKg !== null && r.chargeableKg !== r.weightKg && (
+        <td className="px-3 py-2 text-right text-muted-foreground">{r.shopifyWeightKg ?? '—'}</td>
+        <td className="px-3 py-2 text-right">{r.weightKg ?? '—'}</td>
+        <td className="px-3 py-2 text-right">
+          {r.chargeableKg === null ? '—' : (
             <span
-              className={r.chargeableKg > r.weightKg ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}
-              title="Cân tính phí (dim weight / làm tròn bậc carrier)"
+              className={r.weightKg !== null && r.chargeableKg > r.weightKg ? 'text-amber-600 dark:text-amber-400' : undefined}
+              title={r.weightKg !== null && r.chargeableKg > r.weightKg ? 'Bị đội bậc do dim weight / làm tròn carrier' : undefined}
             >
-              {' → '}{r.chargeableKg}
+              {r.chargeableKg}
             </span>
           )}
         </td>
@@ -196,15 +234,20 @@ function FragmentRow({
         <td className="px-3 py-2 text-right">{fmtVnd(r.engineTotal)}</td>
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{fmtVnd(r.deltaVnd)}</td>
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
-        <td className="px-3 py-2 font-sans" onClick={(e) => e.stopPropagation()}>
-          <span className="mr-2">{statusLabel[r.status]}{r.billedChangedSinceReview ? ' ⚠' : ''}</span>
-          <button disabled={busy} onClick={() => onMark(r, 'reconciled')} className="mr-1 rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50">✓</button>
-          <button disabled={busy} onClick={() => onMark(r, 'ignored')} className="rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50">Bỏ qua</button>
+        <td className="px-3 py-2 font-sans whitespace-nowrap">
+          {r.status === 'pending' ? (
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
+          ) : (
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
+              {OPERATOR_STATUS[r.status].label}
+              {r.billedChangedSinceReview ? ' ⚠' : ''}
+            </span>
+          )}
         </td>
       </tr>
       {expanded && (
         <tr className="border-t border-border bg-muted/10">
-          <td colSpan={10}><ReconcileDetailPanel row={r} /></td>
+          <td colSpan={12}><ReconcileDetailPanel row={r} /></td>
         </tr>
       )}
     </>
