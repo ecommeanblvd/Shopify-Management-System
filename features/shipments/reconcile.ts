@@ -42,6 +42,10 @@ export interface ReconcileRow {
   engineRemote: number | null;
   engineDemand: number | null;
   engineResidential: number | null;
+  /** DHL signature fee (peak_fixed). 0/null for FedEx. */
+  enginePeak: number | null;
+  /** DHL GoGreen (per_step_fixed). 0/null for FedEx. */
+  enginePerStep: number | null;
   engineVat: number | null;
   engineDiscount: number | null;
   engineReason: string | null;
@@ -249,6 +253,8 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         remote: q.breakdown.remote,
         demand: q.breakdown.demand,
         residential: q.breakdown.residential,
+        peak: q.breakdown.peak,
+        perStep: q.breakdown.perStep,
         vat: q.breakdown.vat,
         total: q.breakdown.carrierCost,
       },
@@ -313,6 +319,8 @@ interface EngineBreakdown {
   remote: number;
   demand: number;
   residential: number;
+  peak: number;
+  perStep: number;
   vat: number;
   discount: number;
   carrierCost: number;
@@ -354,6 +362,8 @@ function buildRow(
     engineRemote: engine?.remote ?? null,
     engineDemand: engine?.demand ?? null,
     engineResidential: engine?.residential ?? null,
+    enginePeak: engine?.peak ?? null,
+    enginePerStep: engine?.perStep ?? null,
     engineVat: engine?.vat ?? null,
     engineDiscount: engine?.discount ?? null,
     engineReason: unmatchedReason,

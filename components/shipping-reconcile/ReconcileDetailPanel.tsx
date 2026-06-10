@@ -26,7 +26,7 @@ function severityClass(s: string): string {
   }
 }
 
-type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'vat';
+type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'gogreen' | 'vat';
 
 interface ComponentLine {
   label: string;
@@ -36,13 +36,23 @@ interface ComponentLine {
   compKey: CompKey;
 }
 
+/** Sum engine sub-charges that share a display line, preserving null when the
+ *  engine produced no quote (every part null). */
+function sumEngine(...parts: Array<number | null>): number | null {
+  if (parts.every((p) => p === null)) return null;
+  return parts.reduce<number>((a, p) => a + (p ?? 0), 0);
+}
+
 function lines(row: ReconcileViewRow): ComponentLine[] {
   return [
     { label: 'Cước gốc (sau giảm giá)', billed: row.billedBaseNet, engine: row.engineBaseNet, compKey: 'base' },
     { label: 'Phụ phí xăng dầu (fuel)', billed: row.billedFuel, engine: row.engineFuel, compKey: 'fuel' },
     { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, compKey: 'remote' },
     { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, compKey: 'demand' },
-    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: row.engineResidential, compKey: 'signature' },
+    // signature: engine books DHL's fee under peak_fixed, FedEx under residential_fixed.
+    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.enginePeak), compKey: 'signature' },
+    // gogreen: engine books DHL GoGreen under per_step_fixed.
+    { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, compKey: 'vat' },
   ];
 }
@@ -102,6 +112,22 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
               </tr>
             );
           })}
+          {(() => {
+            // Residual = whatever the engine total includes that no display line
+            // above accounts for (e.g. country_fixed). Surfaced so the rows
+            // always reconcile to the total instead of hiding money.
+            const res = row.diagnosis?.components.find((x) => x.key === 'residual');
+            if (!res || res.delta === 0) return null;
+            return (
+              <tr className="border-t border-border">
+                <td className="py-1 font-sans">Khác / làm tròn</td>
+                <td className="py-1 text-right text-muted-foreground">—</td>
+                <td className="py-1 text-right text-muted-foreground">—</td>
+                <td className="py-1 text-right">{fmtVnd(res.delta)}</td>
+                <td className="py-1 text-right font-sans text-[11px] text-muted-foreground">{CAUSE_LABEL[res.cause] ?? ''}</td>
+              </tr>
+            );
+          })()}
           <tr className="border-t-2 border-border font-semibold">
             <td className="py-1 font-sans">Tổng</td>
             <td className="py-1 text-right">{fmtVnd(row.billedTotal)}</td>

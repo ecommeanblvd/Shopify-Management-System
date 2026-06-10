@@ -63,6 +63,17 @@ export interface DiagnoseInput {
   engine: {
     base: number; discount: number; fuel: number; remote: number;
     demand: number; residential: number; vat: number; total: number;
+    /**
+     * DHL models the per-shipment signature fee as a `peak_fixed` surcharge
+     * (FedEx has none — always 0). Folded into the signature line so it
+     * reconciles against the billed `directSignature`.
+     */
+    peak?: number;
+    /**
+     * DHL GoGreen is a `per_step_fixed` surcharge (FedEx has none — always 0).
+     * Reconciles against the billed `gogreen` line.
+     */
+    perStep?: number;
   };
   engineChargeableWeightKg: number;
   engineTierUpperKg: number;
@@ -160,10 +171,15 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const demDelta = r(demBilled - e.demand);
   components.push({ key: 'demand', billed: demBilled, engine: e.demand, delta: demDelta, cause: demDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
-  // signature  (engine side = residential)
+  // signature — engine side = residential_fixed + peak_fixed. DHL books the
+  // per-shipment signature fee under `peak_fixed`; FedEx books residential
+  // delivery under `residential_fixed`. Neither carrier uses both, so summing
+  // them onto one line reconciles each against the billed `directSignature`
+  // without a separate billed counterpart for residential.
   const sigBilled = n0(b.signature);
-  const sigDelta = r(sigBilled - e.residential);
-  components.push({ key: 'signature', billed: sigBilled, engine: e.residential, delta: sigDelta, cause: sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
+  const sigEngine = r(e.residential + n0(e.peak ?? null));
+  const sigDelta = r(sigBilled - sigEngine);
+  components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
   // vat
   const vatBilled = n0(b.vat);
@@ -175,9 +191,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   }
   components.push({ key: 'vat', billed: vatBilled, engine: e.vat, delta: vatDelta, cause: vatCause });
 
-  // gogreen (engine has no gogreen line -> engine 0)
+  // gogreen — engine side = per_step_fixed (DHL GoGreen, 1.900 VND × every
+  // 0.5 kg step). FedEx has no per_step row -> engine 0.
   const ggBilled = n0(b.gogreen);
-  components.push({ key: 'gogreen', billed: ggBilled, engine: 0, delta: r(ggBilled), cause: ggBilled === 0 ? 'KHOP' : 'KHONG_KHOP' });
+  const ggEngine = r(n0(e.perStep ?? null));
+  const ggDelta = r(ggBilled - ggEngine);
+  components.push({ key: 'gogreen', billed: ggBilled, engine: ggEngine, delta: ggDelta, cause: ggDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
   // elevatedRisk (engine has no line -> engine 0)
   const erBilled = n0(b.elevatedRisk);

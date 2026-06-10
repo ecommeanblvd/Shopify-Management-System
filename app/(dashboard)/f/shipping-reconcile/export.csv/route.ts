@@ -18,8 +18,15 @@ const HEADER = [
   'billed_base_net', 'engine_base_net',
   'billed_fuel', 'engine_fuel', 'billed_remote', 'engine_remote',
   'billed_demand', 'engine_demand', 'billed_signature', 'engine_signature',
+  'billed_gogreen', 'engine_gogreen',
   'billed_vat', 'engine_vat', 'engine_reason',
 ];
+
+/** Engine signature line = residential_fixed (FedEx) + peak_fixed (DHL). */
+function engineSignature(residential: number | null, peak: number | null): number | null {
+  if (residential === null && peak === null) return null;
+  return (residential ?? 0) + (peak ?? 0);
+}
 
 export async function GET(req: Request): Promise<Response> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -51,7 +58,8 @@ export async function GET(req: Request): Promise<Response> {
     r.billedTotal, r.engineTotal, r.deltaVnd, r.deltaPct, r.status,
     r.billedBaseNet, r.engineBaseNet,
     r.billedFuel, r.engineFuel, r.billedRemote, r.engineRemote,
-    r.billedDemand, r.engineDemand, r.billedSignature, r.engineResidential,
+    r.billedDemand, r.engineDemand, r.billedSignature, engineSignature(r.engineResidential, r.enginePeak),
+    r.billedGogreen, r.enginePerStep,
     r.billedVat, r.engineVat, r.engineReason,
   ]);
 

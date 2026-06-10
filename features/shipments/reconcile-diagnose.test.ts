@@ -98,6 +98,51 @@ describe('diagnoseReconcileRow — LECH_RATE_CARD', () => {
   });
 });
 
+describe('diagnoseReconcileRow — DHL signature↔peak & gogreen↔perStep (real #MBLVD27109)', () => {
+  // DHL models the signature fee as a peak_fixed surcharge and GoGreen as a
+  // per_step_fixed surcharge. The billed invoice lists them as `signature`
+  // and `gogreen`. Before the mapping fix these showed a false 150.000 +
+  // 3.800 discrepancy ("cần cập nhật rate card") even though the totals match.
+  const input = baseInput({
+    billed: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
+              demand: 0, signature: 150_000, vat: 95_079, gogreen: 3_800, elevatedRisk: 0, total: 1_283_555 },
+    engine: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
+              demand: 0, residential: 0, vat: 95_078, peak: 150_000, perStep: 3_800, total: 1_283_554 },
+    billedFuelableBase: 803_632,
+    fuelPercent: 28.75,
+    vatPercent: 8,
+  });
+
+  it('signature reconciles against engine peak (delta 0, KHOP)', () => {
+    const d = diagnoseReconcileRow(input);
+    const sig = d.components.find((c) => c.key === 'signature')!;
+    expect(sig.billed).toBe(150_000);
+    expect(sig.engine).toBe(150_000);
+    expect(sig.delta).toBe(0);
+    expect(sig.cause).toBe('KHOP');
+  });
+
+  it('gogreen reconciles against engine perStep (delta 0, KHOP)', () => {
+    const d = diagnoseReconcileRow(input);
+    const gg = d.components.find((c) => c.key === 'gogreen')!;
+    expect(gg.billed).toBe(3_800);
+    expect(gg.engine).toBe(3_800);
+    expect(gg.delta).toBe(0);
+    expect(gg.cause).toBe('KHOP');
+  });
+
+  it('no false rate-card verdict — only the 1đ VAT rounding remains', () => {
+    const d = diagnoseReconcileRow(input);
+    expect(d.totalDelta).toBe(1);
+    expect(d.verdict).not.toContain('cập nhật rate card');
+    expect(d.severity).toBe('rounding');
+    const residual = d.components.find((c) => c.key === 'residual')!;
+    expect(residual.delta).toBe(0);
+    // identity still holds
+    expect(d.components.reduce((a, c) => a + c.delta, 0)).toBe(d.totalDelta);
+  });
+});
+
 describe('diagnoseReconcileRow — rounding residual', () => {
   it('a few-dong gap lands in residual with LAM_TRON', () => {
     const d = diagnoseReconcileRow(baseInput({
