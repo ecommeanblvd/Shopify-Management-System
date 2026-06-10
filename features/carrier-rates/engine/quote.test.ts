@@ -1503,3 +1503,38 @@ describe('chargeable weight rounding — per-carrier mode', () => {
     expect(r.breakdown.chargeableWeightKg).toBe(2.5);
   });
 });
+
+describe("totals rounding mode — 'per_line' (FedEx invoice convention)", () => {
+  // FedEx rounds EACH line to whole VND then sums (measured on 1,338
+  // fuel + 1,057 VAT invoice lines). The engine default rounds once on
+  // the raw sum — off by ±1-2đ when line fractions accumulate past 0.5.
+  function snapPL(mode?: 'per_line') {
+    return makeSnap({
+      zonesByCountry: new Map([['SG', { label: 'Zone 1', rateByTierUpper: new Map([[1, 999_999]]) }]]),
+      weightTiers: [{ upperKg: 1 }],
+      surcharges: [
+        { kind: 'fuel_percent', value: 47.5, active: true },
+        { kind: 'vat_percent', value: 8, active: true },
+      ],
+      totalsRoundingMode: mode ?? null,
+    });
+  }
+
+  it('per_line: fuel and VAT round per line, total = sum of rounded lines', () => {
+    const r = quote(snapPL('per_line'), { weightKg: 1, destinationCountry: 'SG' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // fuel raw 474,999.525 -> 475,000 ; VAT 8% × 1,474,999 -> 117,999.92 -> 118,000
+    expect(r.breakdown.fuel).toBe(475_000);
+    expect(r.breakdown.vat).toBe(118_000);
+    expect(r.breakdown.carrierCost).toBe(999_999 + 475_000 + 118_000);
+  });
+
+  it('default (sum-once) stays unchanged for DHL until their rule is confirmed', () => {
+    const r = quote(snapPL(), { weightKg: 1, destinationCountry: 'SG' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // raw chain: 999,999 + 474,999.525 + 117,999.882 = 1,592,998.407 -> 1,592,998
+    expect(r.breakdown.carrierCost).toBe(1_592_998);
+  });
+});

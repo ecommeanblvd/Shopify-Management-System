@@ -1,0 +1,1 @@
+ALTER TABLE "carrier_accounts" ADD COLUMN "totals_rounding_mode" text;

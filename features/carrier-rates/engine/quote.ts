@@ -132,6 +132,15 @@ export interface CarrierAccountSnapshot {
    *                    (2.52 kg → 3.0, never down via the 0.1 pre-round)
    */
   chargeableRoundingMode?: 'ceil' | null;
+  /**
+   * How money lines roll into the total:
+   *   undefined/null → legacy: keep raw fractions, round ONCE on the sum
+   *   'per_line'     → carrier-invoice convention (FedEx, measured on
+   *                    2,400+ lines): round EACH line to whole VND
+   *                    (nearest), total = sum of rounded lines.
+   * DHL stays on the default until their VAT chain is confirmed.
+   */
+  totalsRoundingMode?: 'per_line' | null;
   /** ISO-2 country code → zone snapshot. */
   zonesByCountry: Map<string, ZoneSnap>;
   /** Tiers sorted ascending by upperKg. */
@@ -657,9 +666,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // (fuelable) since they have no per-row override path in v1.
   fuelableSurcharges += remote + residential;
 
+  // Per-line rounding (FedEx convention): every money line becomes a whole
+  // VND before it enters any downstream sum, mirroring the invoice.
+  const perLine = snap.totalsRoundingMode === 'per_line';
+  const rl = (x: number): number => (perLine ? Math.round(x) : x);
+
   const fuelable = base + fuelableSurcharges;
   const fuelPct = sumApplicableOfKind(snap.surcharges, 'fuel_percent', effectiveDate);
-  const fuel = fuelable * (fuelPct / 100);
+  const fuel = rl(fuelable * (fuelPct / 100));
 
   // Contract volume discount applies to the PUBLISHED base only. Per-zone
   // variation supported via `country_codes` — US-bound 68 %, SA-bound 77 %,
@@ -672,13 +686,13 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'contract_discount_pct')
     .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
     .reduce((sum, s) => sum + s.value, 0);
-  const discount = base * (discountPct / 100);
+  const discount = rl(base * (discountPct / 100));
 
   // VAT covers the entire carrier bill regardless of fuel eligibility,
   // minus the contract discount (so VAT is on the negotiated total).
   const vatable = fuelable + fuel + nonFuelableSurcharges - discount - nonVatableSurcharges;
   const vatPct = sumApplicableOfKind(snap.surcharges, 'vat_percent', effectiveDate);
-  const vat = vatable * (vatPct / 100);
+  const vat = rl(vatable * (vatPct / 100));
 
   const subtotalBeforeMarkup = vatable + vat + nonVatableSurcharges;
   const markupPct = sumApplicableOfKind(snap.surcharges, 'markup_percent', effectiveDate);

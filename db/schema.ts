@@ -274,6 +274,9 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   chargeableRoundingKg: numeric('chargeable_rounding_kg', { precision: 6, scale: 3 }),
   // NULL → FedEx 2-step (0.1 pre-round rồi ceil); 'ceil' → DHL ceil thẳng.
   chargeableRoundingMode: text('chargeable_rounding_mode'),
+  // NULL → làm tròn 1 lần ở tổng (legacy); 'per_line' → tròn từng dòng rồi
+  // cộng (quy ước hóa đơn FedEx — đo 2.400+ dòng). DHL chờ confirm.
+  totalsRoundingMode: text('totals_rounding_mode'),
   enabled: boolean('enabled').notNull().default(true),
   notes: text('notes'),
   createdBy: text('created_by').references(() => user.id),
