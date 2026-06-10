@@ -55,12 +55,13 @@ export async function createReturn(input: CreateReturnInput): Promise<string> {
 
     await tx.insert(schema.customerReturnLines).values(input.lines.map((l) => {
       const ol = orderLines.find((o) => o.shopifyLineId === l.shopifyLineId);
+      if (!ol) throw new Error('Dòng không thuộc đơn hàng');
       return {
         returnId: ret.id,
         shopifyLineId: l.shopifyLineId,
-        sku: ol?.sku ?? null,
-        productTitle: ol?.productTitle ?? null,
-        variantTitle: ol?.variantTitle ?? null,
+        sku: ol.sku ?? null,
+        productTitle: ol.productTitle ?? null,
+        variantTitle: ol.variantTitle ?? null,
         returnedQty: l.returnedQty,
       };
     }));
