@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, ne } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -47,7 +47,17 @@ export async function createReturn(input: CreateReturnInput): Promise<string> {
       sku: schema.shopifyOrderLines.sku,
       productTitle: schema.shopifyOrderLines.productTitle,
       variantTitle: schema.shopifyOrderLines.variantTitle,
+      quantity: schema.shopifyOrderLines.quantity,
     }).from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, input.orderId));
+
+    // prior non-cancelled returned quantities for this order (over-return guard)
+    const prior = await tx.select({
+      shopifyLineId: schema.customerReturnLines.shopifyLineId,
+      returnedQty: schema.customerReturnLines.returnedQty,
+    })
+      .from(schema.customerReturnLines)
+      .innerJoin(schema.customerReturns, eq(schema.customerReturns.id, schema.customerReturnLines.returnId))
+      .where(and(eq(schema.customerReturns.orderId, input.orderId), ne(schema.customerReturns.status, 'cancelled')));
 
     const [ret] = await tx.insert(schema.customerReturns).values({
       code, orderId: input.orderId, note: input.note ?? null, receivedBy: userId,
@@ -56,6 +66,12 @@ export async function createReturn(input: CreateReturnInput): Promise<string> {
     await tx.insert(schema.customerReturnLines).values(input.lines.map((l) => {
       const ol = orderLines.find((o) => o.shopifyLineId === l.shopifyLineId);
       if (!ol) throw new Error('Dòng không thuộc đơn hàng');
+      const already = prior
+        .filter((p) => p.shopifyLineId === l.shopifyLineId)
+        .reduce((s, p) => s + p.returnedQty, 0);
+      if (already + l.returnedQty > ol.quantity) {
+        throw new Error('Số lượng hoàn vượt số lượng đã đặt của dòng');
+      }
       return {
         returnId: ret.id,
         shopifyLineId: l.shopifyLineId,
