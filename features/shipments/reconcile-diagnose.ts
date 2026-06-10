@@ -20,6 +20,7 @@ export type DiagnosisCause =
   | 'LECH_CHIET_KHAU'
   | 'LECH_FUEL'
   | 'SAI_ZONE'
+  | 'PHAI_SINH_ZONE'
   | 'PHAI_SINH'
   | 'KHONG_KHOP'
   | 'LAM_TRON';
@@ -208,14 +209,18 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   }
   components.push({ key: 'remote', billed: remBilled, engine: e.remote, delta: remDelta, cause: remCause });
 
-  // fuel
+  // fuel — FedEx is inconsistent about whether the Demand surcharge sits
+  // inside the fuel base (measured 2026-06-10 across 1,362 invoices:
+  // ~2:1 include vs exclude, no date cutoff). Accept EITHER basis when
+  // checking the implied %, so a clean carrier % never flags as LECH_FUEL.
   const fuelBilled = n0(b.fuel);
   const fuelDelta = r(fuelBilled - e.fuel);
   let fuelCause: DiagnosisCause = 'KHOP';
   if (fuelDelta !== 0) {
-    const impliedPct = input.billedFuelableBase > 0 ? (fuelBilled / input.billedFuelableBase) * 100 : null;
-    const pctMatches = impliedPct != null && Math.abs(impliedPct - input.fuelPercent) < 0.05;
-    fuelCause = pctMatches ? 'PHAI_SINH' : 'LECH_FUEL';
+    const candidates = [input.billedFuelableBase, input.billedFuelableBase + n0(b.demand)];
+    const pctMatches = candidates.some((base) =>
+      base > 0 && Math.abs((fuelBilled / base) * 100 - input.fuelPercent) < 0.05);
+    fuelCause = pctMatches ? (impliedZone ? 'PHAI_SINH_ZONE' : 'PHAI_SINH') : 'LECH_FUEL';
   }
   components.push({ key: 'fuel', billed: fuelBilled, engine: e.fuel, delta: fuelDelta, cause: fuelCause });
 
@@ -240,7 +245,16 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   let vatCause: DiagnosisCause = 'KHOP';
   if (vatDelta !== 0) {
     // VAT is derived from the post-discount subtotal — treat as downstream.
+    // Under a zone mismatch, verify it against the BILLED pre-VAT sum: if
+    // it reproduces exactly, it is pure fallout of the zone difference.
     vatCause = 'PHAI_SINH';
+    if (impliedZone && input.vatPercent > 0) {
+      const billedPreVat = billedNetBase + n0(b.remote) + n0(b.demand) + n0(b.signature)
+        + n0(b.gogreen) + n0(b.elevatedRisk) + fuelBilled;
+      if (Math.abs(vatBilled - billedPreVat * (input.vatPercent / 100)) <= 2) {
+        vatCause = 'PHAI_SINH_ZONE';
+      }
+    }
   }
   components.push({ key: 'vat', billed: vatBilled, engine: e.vat, delta: vatDelta, cause: vatCause });
 
@@ -280,7 +294,8 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   } else {
     // PHAI_SINH (downstream of base) and KHOP never headline.
     const actionable = components
-      .filter((c) => c.key !== 'residual' && c.cause !== 'KHOP' && c.cause !== 'PHAI_SINH')
+      .filter((c) => c.key !== 'residual' && c.cause !== 'KHOP'
+        && c.cause !== 'PHAI_SINH' && c.cause !== 'PHAI_SINH_ZONE')
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     const dominant = actionable[0];
     if (!dominant) {

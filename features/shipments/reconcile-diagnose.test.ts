@@ -229,3 +229,48 @@ describe('diagnoseReconcileRow — SAI_ZONE (real #MBLVD28869, FedEx Monaco)', (
     expect(r.severity).toBe('weight');
   });
 });
+
+describe('diagnoseReconcileRow — SAI_ZONE suppresses derived fuel/VAT flags', () => {
+  // Same #MBLVD28869 fixture: under the implied Zone M base the billed fuel
+  // is exactly 42.5 % × (net base + demand) and VAT exactly 8 % × the
+  // pre-VAT sum -> both are CONSISTENT with the zone the carrier billed.
+  // The operator wants ONE conclusion (zone), not derived fuel/VAT noise.
+  const input = () => baseInput({
+    billed: { base: 6_550_000, discount: -4_934_770, fuel: 776_998, remote: 0,
+              demand: 213_000, signature: 0, vat: 208_418, gogreen: 0,
+              elevatedRisk: 0, total: 2_813_646 },
+    engine: { base: 2_805_365, discount: 0, fuel: 1_192_280, remote: 0,
+              demand: 213_000, residential: 0, vat: 336_852, total: 4_547_497 },
+    engineChargeableWeightKg: 7.5,
+    engineTierUpperKg: 7.5,
+    zoneRates: [
+      { upperKg: 7.5, rate: 2_805_365 },
+      { upperKg: 8.0, rate: 2_932_356 },
+    ],
+    engineZoneLabel: 'Zone E',
+    otherZoneRates: [
+      { zoneLabel: 'Zone M', rates: [{ upperKg: 7.5, rate: 1_615_230 }] },
+    ],
+    // NET basis: list − discount + remote (no demand — the check itself
+    // must tolerate FedEx's inconsistent demand-in-fuel-base behaviour).
+    billedFuelableBase: 1_615_230,
+    fuelPercent: 42.5,
+    vatPercent: 8,
+  });
+
+  it('fuel consistent under billed base (incl demand) -> PHAI_SINH_ZONE, not LECH_FUEL', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH_ZONE');
+  });
+
+  it('VAT consistent under billed pre-VAT sum -> PHAI_SINH_ZONE', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'vat')!.cause).toBe('PHAI_SINH_ZONE');
+  });
+
+  it('verdict stays a single zone conclusion', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).toBe('zone');
+    expect(r.verdict).toContain('Zone M');
+  });
+});

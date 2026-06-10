@@ -257,7 +257,11 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       : [];
     // remote_fixed is fuelable by default in the engine — include it in the
     // billed fuelable base so the implied fuel % comparison is apples-to-apples.
-    const billedFuelableBase = Number(r.billedBase ?? 0) + Number(r.billedRemote ?? 0);
+    // NET basis: the carrier computes fuel on the post-discount base (verified
+    // #MBLVD28869 et al.), and FedEx invoices express base as list + negative
+    // discount — so fold the discount in.
+    const billedFuelableBase = Number(r.billedBase ?? 0) + Number(r.billedDiscount ?? 0)
+      + Number(r.billedRemote ?? 0);
     const diagnosis = diagnoseReconcileRow({
       billed: {
         base: r.billedBase != null ? Number(r.billedBase) : null,
