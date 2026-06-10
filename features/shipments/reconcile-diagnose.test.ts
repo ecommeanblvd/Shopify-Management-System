@@ -526,6 +526,6 @@ describe('diagnoseReconcileRow — ER truy thu khô (bill bổ sung, real #MBLVD
   it('verdict: single supplementary-bill conclusion, severity passthrough', () => {
     const r = diagnoseReconcileRow(input());
     expect(r.severity).toBe('passthrough');
-    expect(r.verdict).toContain('bill bổ sung');
+    expect(r.verdict).toContain('KHÔNG tính fuel/VAT trên ER');
   });
 });

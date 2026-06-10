@@ -387,7 +387,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
         verdict = `Khớp — hóa đơn thu thêm phí ký nhận opt-in ${optIn.delta.toLocaleString('vi-VN')}đ (+fuel/VAT theo), số học khớp`;
         severity = 'passthrough';
       } else if (erUnfueled) {
-        verdict = `Khớp — ER ${erBothV.toLocaleString('vi-VN')}đ thu KHÔ qua bill bổ sung (không kèm fuel/VAT), số học hóa đơn khớp — chênh ${Math.abs(r(totalDelta)).toLocaleString('vi-VN')}đ có lợi`;
+        verdict = `Hóa đơn KHÔNG tính fuel/VAT trên ER ${erBothV.toLocaleString('vi-VN')}đ — số học tự khớp, chênh ${Math.abs(r(totalDelta)).toLocaleString('vi-VN')}đ có lợi; đối chiếu lại hóa đơn gốc trước khi chốt`;
         severity = 'passthrough';
       } else {
         verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
