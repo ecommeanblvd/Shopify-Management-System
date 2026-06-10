@@ -23,6 +23,12 @@ import {
   type DhlFuelFetchResult,
   type DhlFuelFetchOptions,
 } from './dhl';
+import {
+  fetchDhlVnFuelWeeks,
+  planWeeklyFuelActions,
+  DHL_VN_PAGE_URL,
+  type ExistingFuelRow,
+} from './dhl-vn';
 
 export interface ApplyFuelInput {
   carrierAccountId: string;
@@ -180,27 +186,102 @@ export async function refreshFedExFuel(args: {
 }
 
 /**
- * DHL counterpart of `refreshFedExFuel`. Same upsert semantics, same
- * audit columns — the only difference is which weekly source we pull
- * from and the `last_auto_source` tag.
+ * DHL fuel refresh. PRIMARY source is the DHL Express VIETNAM surcharges
+ * page (mydhl.express.dhl/vn) — that's the tariff the operator is billed
+ * under, and it publishes explicit week ranges INCLUDING the upcoming
+ * week. Every published week is diffed against existing fuel_percent
+ * rows via planWeeklyFuelActions (no-overlap invariant — the engine SUMS
+ * applicable rows). When the VN page fails (markup change, outage) we
+ * fall back to the legacy dhl.de current-week scraper so the cron never
+ * goes completely dark.
  */
 export async function refreshDhlFuel(args: {
   carrierAccountId: string;
   triggeredBy: string | null;
   options?: DhlFuelFetchOptions;
-}): Promise<ApplyFuelResult & { fetched: DhlFuelFetchResult }> {
-  const fetched = await fetchDhlFuelPercent(args.options);
-  const weekLabel = `CW ${fetched.current.weekNumber}, ${fetched.current.year}`;
-  const applied = await upsertOpenFuelRow({
-    carrierAccountId: args.carrierAccountId,
-    percent: fetched.current.percent,
-    sourceTag: `dhl/${weekLabel}`,
-    weekLabel,
-    fetchedAt: fetched.fetchedAt,
-    triggeredBy: args.triggeredBy,
-    carrierTag: 'DHL',
-  });
-  return { ...applied, fetched };
+}): Promise<ApplyFuelResult & { fetched?: DhlFuelFetchResult }> {
+  try {
+    const vn = await fetchDhlVnFuelWeeks();
+    const existingRows = await db
+      .select({
+        id: schema.carrierSurcharges.id,
+        value: schema.carrierSurcharges.value,
+        startsAt: schema.carrierSurcharges.startsAt,
+        endsAt: schema.carrierSurcharges.endsAt,
+      })
+      .from(schema.carrierSurcharges)
+      .where(
+        and(
+          eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
+          eq(schema.carrierSurcharges.kind, 'fuel_percent'),
+          eq(schema.carrierSurcharges.active, true),
+        ),
+      );
+    const existing: ExistingFuelRow[] = existingRows.map((r) => ({
+      id: r.id, value: Number(r.value), startsAt: r.startsAt, endsAt: r.endsAt,
+    }));
+    const actions = planWeeklyFuelActions(existing, vn.weeks);
+
+    let lastId = existing[existing.length - 1]?.id ?? '';
+    for (const a of actions) {
+      if (a.type === 'close') {
+        await db.update(schema.carrierSurcharges)
+          .set({ endsAt: a.endsAt, lastAutoFetchedAt: vn.fetchedAt, lastAutoSource: 'dhl-vn/weekly' })
+          .where(eq(schema.carrierSurcharges.id, a.id));
+      } else if (a.type === 'update') {
+        await db.update(schema.carrierSurcharges)
+          .set({
+            value: a.percent.toString(),
+            note: `Auto-fetched from DHL VN surcharges page (${a.raw})`,
+            lastAutoFetchedAt: vn.fetchedAt,
+            lastAutoSource: 'dhl-vn/weekly',
+            updatedBy: args.triggeredBy ?? null,
+          })
+          .where(eq(schema.carrierSurcharges.id, a.id));
+        lastId = a.id;
+      } else {
+        const [ins] = await db.insert(schema.carrierSurcharges)
+          .values({
+            carrierAccountId: args.carrierAccountId,
+            kind: 'fuel_percent',
+            value: a.percent.toString(),
+            active: true,
+            startsAt: a.startsAt,
+            endsAt: a.endsAt,
+            note: `Auto-fetched from DHL VN surcharges page (${a.raw}) — ${DHL_VN_PAGE_URL}`,
+            lastAutoFetchedAt: vn.fetchedAt,
+            lastAutoSource: 'dhl-vn/weekly',
+            updatedBy: args.triggeredBy ?? null,
+          })
+          .returning({ id: schema.carrierSurcharges.id });
+        lastId = ins!.id;
+      }
+    }
+
+    const newest = vn.weeks[vn.weeks.length - 1];
+    return {
+      surchargeId: lastId,
+      previousPercent: null,
+      newPercent: newest.percent,
+      changed: actions.length > 0,
+    };
+  } catch (vnErr) {
+    process.stderr.write(
+      `refreshDhlFuel: VN page failed (${vnErr instanceof Error ? vnErr.message : vnErr}); falling back to dhl.de\n`,
+    );
+    const fetched = await fetchDhlFuelPercent(args.options);
+    const weekLabel = `CW ${fetched.current.weekNumber}, ${fetched.current.year}`;
+    const applied = await upsertOpenFuelRow({
+      carrierAccountId: args.carrierAccountId,
+      percent: fetched.current.percent,
+      sourceTag: `dhl/${weekLabel}`,
+      weekLabel,
+      fetchedAt: fetched.fetchedAt,
+      triggeredBy: args.triggeredBy,
+      carrierTag: 'DHL',
+    });
+    return { ...applied, fetched };
+  }
 }
 
 /**
