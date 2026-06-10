@@ -1,14 +1,15 @@
 /**
  * Stream Shopify's bulkOperation JSONL output. Top-level rows are orders;
- * nested rows (lineItems, refunds, fulfillments) carry a `__parentId` that
- * links them back to the parent order. We accumulate all rows into a map,
- * then emit complete orders at end-of-stream.
+ * nested rows (lineItems, refunds, fulfillments, shippingLines) carry a
+ * `__parentId` that links them back to the parent order. We accumulate all
+ * rows into a map, then emit complete orders at end-of-stream.
  */
 import type {
   ShopifyOrderPayload,
   ShopifyLineItem,
   ShopifyRefund,
   ShopifyFulfillment,
+  ShopifyShippingLine,
 } from '../shopify-types';
 
 interface ParentedRow extends Record<string, unknown> { id: string; __parentId?: string }
@@ -41,17 +42,13 @@ export async function streamBulkResult(
         const row = JSON.parse(line) as ParentedRow;
         if (!row.__parentId) {
           const orderRow = row as unknown as ShopifyOrderPayload;
-          // shippingLines is a plain list (NOT a paginated connection) so
-          // it arrives inline on the parent row. Defensively default to []
-          // in case Shopify returns null/undefined for an order that's
-          // missing a shipping line (free fulfilment, pickup, etc.).
           orders.set(orderRow.id, {
             ...orderRow,
             refunds: [],
             fulfillments: [],
             lineItems: { nodes: [] },
             lineItemsRaw: [],
-            shippingLines: Array.isArray(orderRow.shippingLines) ? orderRow.shippingLines : [],
+            shippingLines: [],
           });
         } else {
           const parent = orders.get(row.__parentId);
@@ -59,6 +56,10 @@ export async function streamBulkResult(
           if ('quantity' in row) parent.lineItemsRaw.push(row as unknown as ShopifyLineItem);
           else if ('totalRefundedSet' in row) parent.refunds.push(row as unknown as ShopifyRefund);
           else if ('trackingInfo' in row) parent.fulfillments.push(row as unknown as ShopifyFulfillment);
+          // shippingLines is a connection in 2025-01, so its nodes arrive as
+          // child rows too. Among the child types this query selects, only
+          // ShippingLine carries `code`.
+          else if ('code' in row) parent.shippingLines.push(row as unknown as ShopifyShippingLine);
         }
       }
       nl = buffer.indexOf('\n');
