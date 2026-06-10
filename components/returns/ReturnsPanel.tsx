@@ -68,7 +68,7 @@ export function ReturnsPanel({ returns, canManage, searchOrders, loadOrderLines 
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm số đơn Shopify…"
                   className="flex-1 border border-input bg-input/30 rounded-md px-3 py-1.5 text-sm" />
                 <button onClick={doSearch} disabled={isPending}
-                  className="rounded-md border border-border px-3 py-1.5 text-sm">Tìm</button>
+                  className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">Tìm</button>
               </div>
               {hits.length > 0 && (
                 <ul className="divide-y divide-border rounded-md border border-border">
@@ -112,7 +112,7 @@ export function ReturnsPanel({ returns, canManage, searchOrders, loadOrderLines 
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú"
                 className="w-full border border-input bg-input/30 rounded-md px-3 py-1.5 text-sm" />
               <button onClick={handleCreate} disabled={isPending}
-                className="rounded-md bg-primary text-primary-foreground px-4 py-1.5 text-sm font-medium">
+                className="rounded-md bg-primary text-primary-foreground px-4 py-1.5 text-sm font-medium disabled:opacity-50">
                 Tạo phiếu
               </button>
             </div>

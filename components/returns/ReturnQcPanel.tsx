@@ -120,11 +120,11 @@ export function ReturnQcPanel({ returnId, status, refundFlag, refunds, lines, ca
       {isOpen && canManage && (
         <div className="flex items-center gap-2">
           <button onClick={submit} disabled={isPending}
-            className="rounded-md bg-primary text-primary-foreground px-4 py-1.5 text-sm font-medium">
+            className="rounded-md bg-primary text-primary-foreground px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             Hoàn tất QC (restock)
           </button>
           <button onClick={cancel} disabled={isPending}
-            className="rounded-md border border-border px-4 py-1.5 text-sm">Huỷ phiếu</button>
+            className="rounded-md border border-border px-4 py-1.5 text-sm disabled:opacity-50">Huỷ phiếu</button>
         </div>
       )}
       {status === 'completed' && <div className="text-sm text-emerald-600">Đã hoàn tất QC.</div>}
