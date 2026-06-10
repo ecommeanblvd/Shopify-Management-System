@@ -11,21 +11,33 @@ describe('pickWarehouse', () => {
   it('không kho nào có hàng -> null', () => {
     expect(pickWarehouse([{ code: 'HN', available: 0 }, { code: 'SG', available: 0 }])).toBeNull();
   });
+  it('mảng rỗng -> null', () => {
+    expect(pickWarehouse([])).toBeNull();
+  });
+  it('hoà giữa 2 kho non-HN -> alphabet', () => {
+    expect(pickWarehouse([{ code: 'SG', available: 2 }, { code: 'DN', available: 2 }])).toBe('DN');
+  });
 });
 
 describe('planAllocation — đủ-hoặc-không (v1, không partial)', () => {
   it('đủ ở một kho -> cấp từ kho đó', () => {
-    expect(planAllocation({ sku: 'A', qty: 2 }, [
+    expect(planAllocation({ qty: 2 }, [
       { code: 'HN', available: 1 }, { code: 'SG', available: 3 },
     ])).toEqual({ warehouseCode: 'SG', qty: 2 });
   });
   it('tổng 2 kho đủ nhưng mỗi kho thiếu -> null (không tách kiện v1)', () => {
-    expect(planAllocation({ sku: 'A', qty: 4 }, [
+    expect(planAllocation({ qty: 4 }, [
       { code: 'HN', available: 2 }, { code: 'SG', available: 3 },
     ])).toBeNull();
   });
-  it('qty 0 hoặc âm -> null', () => {
-    expect(planAllocation({ sku: 'A', qty: 0 }, [{ code: 'HN', available: 9 }])).toBeNull();
+  it('qty 0 -> null', () => {
+    expect(planAllocation({ qty: 0 }, [{ code: 'HN', available: 9 }])).toBeNull();
+  });
+  it('available === qty đúng biên -> cấp', () => {
+    expect(planAllocation({ qty: 3 }, [{ code: 'HN', available: 3 }])).toEqual({ warehouseCode: 'HN', qty: 3 });
+  });
+  it('qty âm -> null', () => {
+    expect(planAllocation({ qty: -1 }, [{ code: 'HN', available: 9 }])).toBeNull();
   });
 });
 
@@ -56,5 +68,11 @@ describe('validateMovement', () => {
   });
   it('chặn movement rỗng (cả hai delta = 0)', () => {
     expect(validateMovement(inv, { deltaOnHand: 0, deltaReserved: 0 }).ok).toBe(false);
+  });
+  it('chặn delta NaN/không nguyên', () => {
+    expect(validateMovement(inv, { deltaOnHand: NaN, deltaReserved: 0 }).ok).toBe(false);
+  });
+  it('reserved chạm đúng on-hand -> ok', () => {
+    expect(validateMovement({ qtyOnHand: 5, qtyReserved: 2 }, { deltaOnHand: 0, deltaReserved: 3 })).toEqual({ ok: true });
   });
 });

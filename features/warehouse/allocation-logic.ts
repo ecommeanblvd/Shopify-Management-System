@@ -9,15 +9,17 @@ export function pickWarehouse(stocks: StockCandidate[]): string | null {
   if (positive.length === 0) return null;
   positive.sort((a, b) =>
     b.available - a.available
-    || (a.code === 'HN' ? -1 : b.code === 'HN' ? 1 : a.code.localeCompare(b.code)));
+    || ((b.code === 'HN' ? 1 : 0) - (a.code === 'HN' ? 1 : 0))
+    || a.code.localeCompare(b.code));
   return positive[0].code;
 }
 
 export interface AllocationPlan { warehouseCode: string; qty: number }
 
 /** Đủ-hoặc-không tại MỘT kho (v1 không tách kiện giữa hai kho). */
+// NOTE(T4): caller chỉ cần truyền { qty }
 export function planAllocation(
-  line: { sku: string; qty: number },
+  line: { qty: number },
   stocks: StockCandidate[],
 ): AllocationPlan | null {
   if (line.qty <= 0) return null;
@@ -41,6 +43,9 @@ export function validateMovement(
   inv: { qtyOnHand: number; qtyReserved: number },
   d: MovementDelta,
 ): { ok: true } | { ok: false; error: string } {
+  if (!Number.isInteger(d.deltaOnHand) || !Number.isInteger(d.deltaReserved)) {
+    return { ok: false, error: 'Delta không phải số nguyên hợp lệ' };
+  }
   if (d.deltaOnHand === 0 && d.deltaReserved === 0) return { ok: false, error: 'Movement rỗng' };
   const onHand = inv.qtyOnHand + d.deltaOnHand;
   const reserved = inv.qtyReserved + d.deltaReserved;
