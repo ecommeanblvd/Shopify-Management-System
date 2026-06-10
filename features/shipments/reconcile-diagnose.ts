@@ -348,7 +348,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
           severity = 'ratecard';
           break;
         case 'LECH_FUEL_BASE':
-          verdict = 'Fuel đúng % nhưng tính trên cơ sở khác hóa đơn (demand trong/ngoài fuel base) — kiểm tra cờ fuelable của phụ phí';
+          verdict = 'Fuel đúng % nhưng tính trên cơ sở khác hóa đơn — một phụ phí (demand/ER…) nằm trong fuel base ở một bên; kiểm tra cờ fuelable hoặc bill bổ sung không kèm fuel';
           severity = 'ratecard';
           break;
         case 'LECH_RATE_CARD':
