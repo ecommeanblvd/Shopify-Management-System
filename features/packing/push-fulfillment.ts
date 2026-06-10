@@ -16,7 +16,7 @@ export async function pushPackFulfillmentCore(packId: string): Promise<void> {
     .where(and(
       eq(schema.shipments.id, packId),
       isNull(schema.shipments.shopifyFulfillmentId),
-      sql`${schema.shipments.shopifyPushStatus} is distinct from 'pending'`,
+      sql`(${schema.shipments.shopifyPushStatus} is distinct from 'pending' or ${schema.shipments.updatedAt} < now() - interval '10 minutes')`,
     ))
     .returning({ id: schema.shipments.id });
   if (claimed.length === 0) return; // already pushed, or another push in-flight

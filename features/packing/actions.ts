@@ -156,7 +156,7 @@ export async function shipPack(packId: string, trackingNumber: string): Promise<
   });
 
   try { await recordAudit({ userId, action: 'pack_ship', target: packId, requestSummary: `tracking=${tn}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
-  await pushPackFulfillmentCore(packId);
+  try { await pushPackFulfillmentCore(packId); } catch (e) { console.error('[shipPack] post-commit push failed', e); }
   const [s] = await db.select({ orderId: schema.shipments.orderId }).from(schema.shipments).where(eq(schema.shipments.id, packId)).limit(1);
   if (s) revalidatePath(`/f/fulfillment/${s.orderId}`);
   revalidatePath('/f/fulfillment');
