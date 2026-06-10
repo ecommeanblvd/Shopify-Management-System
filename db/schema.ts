@@ -720,6 +720,10 @@ export const shipments = pgTable('shipments', {
   originHub: text('origin_hub'),
   /** Free-text note for one-off context. */
   note: text('note'),
+  /** Operator who ran the secondary check-packed verification step. */
+  checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
+  /** Timestamp when the check-packed verification was completed. */
+  checkPackedAt: timestamp('check_packed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [

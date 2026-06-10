@@ -159,28 +159,6 @@ function LineActionButton({
       </button>
     );
   }
-  if (line.status === 'picked') {
-    return (
-      <button
-        disabled={busy}
-        onClick={() => handleMark('packed')}
-        className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
-      >
-        Đóng gói
-      </button>
-    );
-  }
-  if (line.status === 'packed') {
-    return (
-      <button
-        disabled={busy}
-        onClick={() => handleMark('shipped')}
-        className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
-      >
-        Giao carrier
-      </button>
-    );
-  }
   // orderId is used by parent scope, suppress unused warning
   void orderId;
   return null;
@@ -195,7 +173,7 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
     });
   };
 
-  const handleMarkOrder = (next: 'picked' | 'packed' | 'shipped') => {
+  const handleMarkOrder = (next: 'picked') => {
     startTransition(async () => {
       await markOrder(orderId, next);
     });
@@ -226,20 +204,6 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
               className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
             >
               Lấy cả đơn
-            </button>
-            <button
-              disabled={isPending}
-              onClick={() => handleMarkOrder('packed')}
-              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
-            >
-              Đóng gói cả đơn
-            </button>
-            <button
-              disabled={isPending}
-              onClick={() => handleMarkOrder('shipped')}
-              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
-            >
-              Giao cả đơn
             </button>
           </div>
         )}
