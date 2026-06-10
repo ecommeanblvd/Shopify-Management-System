@@ -351,6 +351,13 @@
       "when": 1781089266550,
       "tag": "0049_workable_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781098209265,
+      "tag": "0050_glorious_starhawk",
+      "breakpoints": true
     }
   ]
 }

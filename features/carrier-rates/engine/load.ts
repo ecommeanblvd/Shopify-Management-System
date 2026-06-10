@@ -106,6 +106,7 @@ export async function loadAccountSnapshot(
     dimDivisorCm3PerKg: account.dimDivisorCm3PerKg !== null
       ? Number(account.dimDivisorCm3PerKg)
       : null,
+    chargeableRoundingMode: (account.chargeableRoundingMode === 'ceil' ? 'ceil' : null),
     chargeableRoundingKg: account.chargeableRoundingKg !== null
       ? Number(account.chargeableRoundingKg)
       : null,

@@ -125,6 +125,13 @@ export interface CarrierAccountSnapshot {
    *    5.58 → 5.6 → 6.0
    */
   chargeableRoundingKg?: number | null;
+  /**
+   * How the rounding step applies:
+   *   undefined/null → FedEx 2-step: round to nearest 0.1 kg, then ceil
+   *   'ceil'         → DHL: straight ceiling to the next step
+   *                    (2.52 kg → 3.0, never down via the 0.1 pre-round)
+   */
+  chargeableRoundingMode?: 'ceil' | null;
   /** ISO-2 country code → zone snapshot. */
   zonesByCountry: Map<string, ZoneSnap>;
   /** Tiers sorted ascending by upperKg. */
@@ -427,14 +434,17 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const rawChargeable = Math.max(input.weightKg, dimWeightKg);
   if (dimWeightKg > input.weightKg) notes.push(`dim_weight (${dimWeightKg} kg)`);
 
-  // Carrier-specific rounding before tier lookup. When set, the rule
-  // is FedEx 2-step: round to nearest 0.1 kg, then ceiling to next
-  // multiple of `chargeableRoundingKg` (typically 0.5). DHL uses raw.
+  // Carrier-specific rounding before tier lookup. FedEx 2-step: round
+  // to nearest 0.1 kg, then ceiling to the next step. DHL ('ceil'):
+  // straight ceiling — 2.52 kg charges as 3.0, the 0.1 pre-round would
+  // wrongly pull it down to 2.5.
   let chargeableWeightKg = rawChargeable;
   if (snap.chargeableRoundingKg && snap.chargeableRoundingKg > 0) {
     const step = snap.chargeableRoundingKg;
-    const oneTenth = Math.round(rawChargeable * 10) / 10;
-    chargeableWeightKg = Math.ceil((oneTenth - 1e-9) / step) * step;
+    const preRounded = snap.chargeableRoundingMode === 'ceil'
+      ? rawChargeable
+      : Math.round(rawChargeable * 10) / 10;
+    chargeableWeightKg = Math.ceil((preRounded - 1e-9) / step) * step;
     // Round to 3 dp to clean float drift on multiplication.
     chargeableWeightKg = Math.round(chargeableWeightKg * 1000) / 1000;
     if (chargeableWeightKg !== rawChargeable) {

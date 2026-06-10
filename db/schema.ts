@@ -272,6 +272,8 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   // rounds to NEAREST 0.5 kg before tier lookup (chargeable 2.52 →
   // 2.5 → tier 2.5; verified on 2026-06-03 across 15+ invoices).
   chargeableRoundingKg: numeric('chargeable_rounding_kg', { precision: 6, scale: 3 }),
+  // NULL → FedEx 2-step (0.1 pre-round rồi ceil); 'ceil' → DHL ceil thẳng.
+  chargeableRoundingMode: text('chargeable_rounding_mode'),
   enabled: boolean('enabled').notNull().default(true),
   notes: text('notes'),
   createdBy: text('created_by').references(() => user.id),

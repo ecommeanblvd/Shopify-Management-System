@@ -1475,3 +1475,31 @@ describe('remote-area postcode lookup — format normalisation', () => {
     expect(r.breakdown.remote).toBe(0);
   });
 });
+
+describe('chargeable weight rounding — per-carrier mode', () => {
+  it("mode 'ceil' (DHL): straight ceiling to the step — 2.52 → 3.0, no 0.1 pre-round", () => {
+    const snap = makeSnap({
+      zonesByCountry: new Map([['SG', { label: 'Zone 1', rateByTierUpper: new Map([[2.5, 300_000], [3, 360_000]]) }]]),
+      weightTiers: [{ upperKg: 2.5 }, { upperKg: 3 }],
+      chargeableRoundingKg: 0.5,
+      chargeableRoundingMode: 'ceil',
+    });
+    const r = quote(snap, { weightKg: 2.52, destinationCountry: 'SG' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.chargeableWeightKg).toBe(3);
+    expect(r.breakdown.base).toBe(360_000);
+  });
+
+  it('default 2-step (FedEx): 2.52 rounds to 2.5 first, ceiling keeps 2.5', () => {
+    const snap = makeSnap({
+      zonesByCountry: new Map([['SG', { label: 'Zone 1', rateByTierUpper: new Map([[2.5, 300_000], [3, 360_000]]) }]]),
+      weightTiers: [{ upperKg: 2.5 }, { upperKg: 3 }],
+      chargeableRoundingKg: 0.5,
+    });
+    const r = quote(snap, { weightKg: 2.52, destinationCountry: 'SG' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.chargeableWeightKg).toBe(2.5);
+  });
+});
