@@ -88,6 +88,11 @@ export interface DiagnoseInput {
      * Reconciles against the billed `gogreen` line.
      */
     perStep?: number;
+    /**
+     * Engine country_fixed surcharge (DHL Elevated Risk / Restricted
+     * Destination). Reconciles against the billed `elevatedRisk` line.
+     */
+    countryFixed?: number;
   };
   engineChargeableWeightKg: number;
   engineTierUpperKg: number;
@@ -265,14 +270,21 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const ggDelta = r(ggBilled - ggEngine);
   components.push({ key: 'gogreen', billed: ggBilled, engine: ggEngine, delta: ggDelta, cause: ggDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
-  // elevatedRisk (engine has no line -> engine 0)
+  // elevatedRisk — engine side = country_fixed (DHL Elevated Risk /
+  // Restricted Destination). A mismatch usually means the surcharge's
+  // effective window or country list is off vs what the carrier billed.
   const erBilled = n0(b.elevatedRisk);
-  components.push({ key: 'elevatedRisk', billed: erBilled, engine: 0, delta: r(erBilled), cause: erBilled === 0 ? 'KHOP' : 'KHONG_KHOP' });
+  const erEngine = r(n0(e.countryFixed ?? null));
+  const erDelta = r(erBilled - erEngine);
+  components.push({ key: 'elevatedRisk', billed: erBilled, engine: erEngine, delta: erDelta, cause: erDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
   // residual = whatever is left so the identity holds exactly.
   const explained = components.reduce((a, c) => a + c.delta, 0);
   const residual = r(totalDelta - explained);
-  components.push({ key: 'residual', billed: 0, engine: 0, delta: residual, cause: residual === 0 ? 'KHOP' : 'LAM_TRON' });
+  // ±100đ covers per-line rounding accumulation; anything bigger is a real
+  // unexplained gap and must not hide behind a 'làm tròn' label.
+  const residualCause: DiagnosisCause = residual === 0 ? 'KHOP' : Math.abs(residual) <= 100 ? 'LAM_TRON' : 'KHONG_KHOP';
+  components.push({ key: 'residual', billed: 0, engine: 0, delta: residual, cause: residualCause });
 
   // verdict — weight inversion always headlines (it's the strongest evidence);
   // otherwise the LARGEST-magnitude actionable component drives the headline,
@@ -294,13 +306,21 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   } else {
     // PHAI_SINH (downstream of base) and KHOP never headline.
     const actionable = components
-      .filter((c) => c.key !== 'residual' && c.cause !== 'KHOP'
-        && c.cause !== 'PHAI_SINH' && c.cause !== 'PHAI_SINH_ZONE')
+      .filter((c) => c.cause !== 'KHOP' && c.cause !== 'PHAI_SINH'
+        && c.cause !== 'PHAI_SINH_ZONE' && c.cause !== 'LAM_TRON')
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     const dominant = actionable[0];
     if (!dominant) {
       verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
       severity = 'rounding';
+    } else if (dominant.key === 'elevatedRisk') {
+      verdict = dominant.delta < 0
+        ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
+        : 'Hóa đơn thu phụ phí rủi ro (ER) nhưng hệ thống không tính — kiểm tra danh sách nước áp dụng';
+      severity = 'config';
+    } else if (dominant.key === 'residual') {
+      verdict = `Lệch ${dominant.delta.toLocaleString('vi-VN')}đ không giải thích được bằng cấu trúc phí hiện tại`;
+      severity = 'config';
     } else {
       switch (dominant.cause) {
         case 'THIEU_CAU_HINH_REMOTE':

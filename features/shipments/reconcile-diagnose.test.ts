@@ -274,3 +274,58 @@ describe('diagnoseReconcileRow — SAI_ZONE suppresses derived fuel/VAT flags', 
     expect(r.verdict).toContain('Zone M');
   });
 });
+
+describe('diagnoseReconcileRow — elevated risk (ER) vs engine country_fixed', () => {
+  // Real #MBLVD27457 (DHL SA, 2026-03-04 transition day): engine charges
+  // ER 918,000 (config starts that day) but the carrier did NOT bill it.
+  // The 918,000 must surface as an ER mismatch — NOT as 'làm tròn'.
+  it('engine ER not billed -> elevatedRisk line mismatch + ER verdict, not rounding', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_743_851, discount: 0, fuel: 531_875, remote: 0, demand: 0,
+                signature: 150_000, vat: 194_970, gogreen: 11_400,
+                elevatedRisk: 0, total: 2_632_096 },
+      engine: { base: 1_743_851, discount: 0, fuel: 811_865, remote: 0, demand: 0,
+                residential: 0, peak: 150_000, perStep: 11_400, vat: 290_809,
+                countryFixed: 918_000, total: 3_925_925 },
+      engineChargeableWeightKg: 2.52,
+      engineTierUpperKg: 3,
+      zoneRates: [{ upperKg: 3, rate: 1_743_851 }],
+      billedFuelableBase: 1_743_851,
+      fuelPercent: 30.5,
+      vatPercent: 8,
+    }));
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.engine).toBe(918_000);
+    expect(er.delta).toBe(-918_000);
+    expect(er.cause).toBe('KHONG_KHOP');
+    expect(r.severity).not.toBe('rounding');
+    expect(r.verdict).toContain('rủi ro');
+  });
+
+  it('billed ER == engine country_fixed -> KHOP', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                signature: 0, vat: 0, gogreen: 0, elevatedRisk: 918_000,
+                total: 2_034_981 },
+      engine: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                residential: 0, vat: 0, countryFixed: 918_000, total: 2_034_981 },
+    }));
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.delta).toBe(0);
+    expect(er.cause).toBe('KHOP');
+    expect(r.severity).toBe('match');
+  });
+
+  it('large unexplained residual is NOT labelled làm tròn', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                signature: 0, vat: 0, gogreen: 0, elevatedRisk: 0,
+                total: 1_616_981 },  // 500,000 nobody explains
+      engine: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                residential: 0, vat: 0, total: 1_116_981 },
+    }));
+    const res = r.components.find((c) => c.key === 'residual')!;
+    expect(res.cause).toBe('KHONG_KHOP');
+    expect(r.verdict).not.toContain('làm tròn');
+  });
+});

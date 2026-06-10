@@ -38,6 +38,7 @@ export interface ReconcileRow {
   billedVat: number | null;
   billedGogreen: number | null;
   billedDiscount: number | null;
+  billedElevatedRisk: number | null;
   // Engine
   engineTotal: number | null;
   engineBase: number | null;
@@ -49,6 +50,8 @@ export interface ReconcileRow {
   enginePeak: number | null;
   /** DHL GoGreen (per_step_fixed). 0/null for FedEx. */
   enginePerStep: number | null;
+  /** DHL Elevated Risk / Restricted Destination (country_fixed). */
+  engineCountryFixed: number | null;
   engineVat: number | null;
   engineDiscount: number | null;
   engineReason: string | null;
@@ -113,6 +116,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedVat: schema.shipmentCharges.vat,
       billedGogreen: schema.shipmentCharges.gogreen,
       billedDiscount: schema.shipmentCharges.discount,
+      billedElevatedRisk: schema.shipmentCharges.elevatedRisk,
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
@@ -275,7 +279,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         signature: r.billedSignature != null ? Number(r.billedSignature) : null,
         vat: r.billedVat != null ? Number(r.billedVat) : null,
         gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
-        elevatedRisk: null,
+        elevatedRisk: r.billedElevatedRisk != null ? Number(r.billedElevatedRisk) : null,
         total: Number(r.billedTotal),
       },
       engine: {
@@ -287,6 +291,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         residential: q.breakdown.residential,
         peak: q.breakdown.peak,
         perStep: q.breakdown.perStep,
+        countryFixed: q.breakdown.countryFixed,
         vat: q.breakdown.vat,
         total: q.breakdown.carrierCost,
       },
@@ -345,10 +350,12 @@ interface JoinedRow {
   billedVat: string | null;
   billedGogreen: string | null;
   billedDiscount: string | null;
+  billedElevatedRisk: string | null;
 }
 
 interface EngineBreakdown {
   chargeableWeightKg: number;
+  countryFixed: number;
   base: number;
   fuel: number;
   remote: number;
@@ -392,6 +399,7 @@ function buildRow(
     billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
     billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,
+    billedElevatedRisk: r.billedElevatedRisk !== null ? Number(r.billedElevatedRisk) : null,
     engineTotal,
     engineBase: engine?.base ?? null,
     engineFuel: engine?.fuel ?? null,
@@ -400,6 +408,7 @@ function buildRow(
     engineResidential: engine?.residential ?? null,
     enginePeak: engine?.peak ?? null,
     enginePerStep: engine?.perStep ?? null,
+    engineCountryFixed: engine?.countryFixed ?? null,
     engineVat: engine?.vat ?? null,
     engineDiscount: engine?.discount ?? null,
     engineReason: unmatchedReason,

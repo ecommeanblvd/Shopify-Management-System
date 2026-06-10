@@ -28,7 +28,7 @@ function severityClass(s: string): string {
   }
 }
 
-type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'gogreen' | 'vat';
+type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'gogreen' | 'vat' | 'elevatedRisk';
 
 interface ComponentLine {
   label: string;
@@ -56,6 +56,8 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, compKey: 'vat' },
+    // elevated risk: engine books DHL ER / Restricted Destination under country_fixed.
+    { label: 'Phụ phí rủi ro (ER)', billed: row.billedElevatedRisk, engine: row.engineCountryFixed, compKey: 'elevatedRisk' },
   ];
 }
 
