@@ -1332,10 +1332,12 @@ export const receiptSourceTypeEnum = pgEnum('receipt_source_type', ['retail_for_
 export const qcResultEnum = pgEnum('qc_result', ['pending', 'pass', 'fail']);
 export const receiptItemDispositionEnum = pgEnum('receipt_item_disposition', ['pending', 'allocate_to_order', 'store', 'return_to_brand']);
 
-/** MEAN warehouse stock, keyed by SKU. Operator-managed (manual entry). */
+/** MEAN warehouse stock, keyed by (sku, warehouse_code). Operator-managed (manual entry). */
 export const warehouseInventory = pgTable('warehouse_inventory', {
   id: uuid('id').defaultRandom().primaryKey(),
-  sku: text('sku').notNull().unique(),
+  sku: text('sku').notNull(),
+  /** Kho vật lý chứa hàng: 'HN' | 'SG'. Tồn tách theo (sku, kho). */
+  warehouseCode: text('warehouse_code').notNull().default('HN'),
   productTitle: text('product_title'),
   variantTitle: text('variant_title'),
   qtyOnHand: integer('qty_on_hand').notNull().default(0),
@@ -1348,8 +1350,37 @@ export const warehouseInventory = pgTable('warehouse_inventory', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
+  uniqueIndex('warehouse_inventory_sku_warehouse_idx').on(t.sku, t.warehouseCode),
   check('warehouse_qty_on_hand_nonneg', sql`${t.qtyOnHand} >= 0`),
   check('warehouse_qty_reserved_nonneg', sql`${t.qtyReserved} >= 0`),
+  check('warehouse_reserved_lte_on_hand', sql`${t.qtyReserved} <= ${t.qtyOnHand}`),
+]);
+
+export const inventoryMovementReasonEnum = pgEnum('inventory_movement_reason', [
+  'receipt_po', 'receipt_consignment', 'receipt_return',
+  'auto_allocate', 'release_allocation', 'pick',
+  'manual_adjust', 'transfer_in', 'transfer_out', 'migration',
+]);
+
+/** Ledger append-only: MỌI biến động tồn đi qua applyMovement (ledger.ts),
+ *  không UPDATE qty trực tiếp ở bất kỳ đâu khác. */
+export const inventoryMovements = pgTable('inventory_movements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  warehouseInventoryId: uuid('warehouse_inventory_id')
+    .references(() => warehouseInventory.id, { onDelete: 'cascade' }).notNull(),
+  deltaOnHand: integer('delta_on_hand').notNull().default(0),
+  deltaReserved: integer('delta_reserved').notNull().default(0),
+  reason: inventoryMovementReasonEnum('reason').notNull(),
+  /** 'receipt_item' | 'fulfillment_line' | 'order' | 'transfer' */
+  refType: text('ref_type'),
+  refId: uuid('ref_id'),
+  note: text('note'),
+  /** user id hoặc 'system:allocator' */
+  actor: text('actor'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('inventory_movements_inv_idx').on(t.warehouseInventoryId, t.createdAt),
+  index('inventory_movements_reason_idx').on(t.reason),
 ]);
 
 /** One ops record per Shopify order. status = rollup derived from lines. */

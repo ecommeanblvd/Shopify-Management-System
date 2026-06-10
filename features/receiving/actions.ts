@@ -164,7 +164,7 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
         .values({ sku: item.sku!, productTitle: item.productTitle, variantTitle: item.variantTitle,
                   qtyOnHand: eff.onHandDelta, qtyReserved: eff.reservedDelta, updatedBy: userId })
         .onConflictDoUpdate({
-          target: schema.warehouseInventory.sku,
+          target: [schema.warehouseInventory.sku, schema.warehouseInventory.warehouseCode],
           set: {
             qtyOnHand: sql`${schema.warehouseInventory.qtyOnHand} + ${eff.onHandDelta}`,
             qtyReserved: sql`${schema.warehouseInventory.qtyReserved} + ${eff.reservedDelta}`,

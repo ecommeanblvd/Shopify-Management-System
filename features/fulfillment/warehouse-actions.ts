@@ -19,14 +19,15 @@ async function requireWarehouse(): Promise<string> {
 export interface WarehouseItemInput {
   sku: string; productTitle?: string | null; variantTitle?: string | null;
   qtyOnHand: number; shelf?: string | null; floor?: string | null; bin?: string | null; note?: string | null;
+  warehouseCode?: string;
 }
 
 export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<void> {
   const userId = await requireWarehouse();
   await db.insert(schema.warehouseInventory)
-    .values({ ...input, sku: input.sku.trim(), updatedBy: userId })
+    .values({ ...input, sku: input.sku.trim(), warehouseCode: input.warehouseCode ?? 'HN', updatedBy: userId })
     .onConflictDoUpdate({
-      target: schema.warehouseInventory.sku,
+      target: [schema.warehouseInventory.sku, schema.warehouseInventory.warehouseCode],
       set: {
         productTitle: input.productTitle ?? null, variantTitle: input.variantTitle ?? null,
         qtyOnHand: input.qtyOnHand, shelf: input.shelf ?? null, floor: input.floor ?? null,
@@ -38,6 +39,7 @@ export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<vo
 
 export async function adjustStock(sku: string, delta: number): Promise<void> {
   const userId = await requireWarehouse();
+  // TODO(T7): rewrite through ledger
   await db.update(schema.warehouseInventory)
     .set({ qtyOnHand: sql`${schema.warehouseInventory.qtyOnHand} + ${delta}`, updatedBy: userId, updatedAt: sql`now()` })
     .where(eq(schema.warehouseInventory.sku, sku.trim()));
