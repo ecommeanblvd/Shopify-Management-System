@@ -37,6 +37,9 @@ export async function listPacksForOrder(orderId: string) {
     trackingNumber: schema.shipments.trackingNumber,
     checkPackedAt: schema.shipments.checkPackedAt,
     labelCreatedAt: schema.shipments.labelCreatedAt,
+    shopifyPushStatus: schema.shipments.shopifyPushStatus,
+    shopifyPushError: schema.shipments.shopifyPushError,
+    shopifyFulfillmentId: schema.shipments.shopifyFulfillmentId,
   })
     .from(schema.shipments)
     .where(eq(schema.shipments.orderId, orderId))

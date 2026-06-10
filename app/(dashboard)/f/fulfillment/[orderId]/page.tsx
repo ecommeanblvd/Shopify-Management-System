@@ -32,6 +32,7 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
           id: p.id, code: p.code, carrierKey: p.carrierKey, trackingNumber: p.trackingNumber,
           checkPackedAt: p.checkPackedAt as Date | null, actualWeightKg: p.actualWeightKg,
           lines: p.lines.map((l) => ({ id: l.id, sku: l.sku, qty: l.qty, status: l.status, productTitle: l.productTitle })),
+          shopifyPushStatus: p.shopifyPushStatus, shopifyPushError: p.shopifyPushError,
         }))}
         canManage={canManage}
         canCheckPacked={hasPermission(role, 'check_packed')}

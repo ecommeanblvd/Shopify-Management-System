@@ -10,6 +10,8 @@ import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { rollupOrderStatus, type LineStatus } from '@/features/fulfillment/logic';
 import { recordAudit } from '@/lib/logging/audit';
 import { canShipPack, validatePackDims } from './logic';
+import { hasWriteFulfillmentsScope } from './shopify-push';
+import { pushPackFulfillmentCore } from './push-fulfillment';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -118,6 +120,16 @@ export async function shipPack(packId: string, trackingNumber: string): Promise<
   const tn = trackingNumber.trim();
   if (!tn) throw new Error('Cần nhập tracking number');
 
+  const [scopeRow] = await db.select({ scopes: schema.stores.scopes })
+    .from(schema.shipments)
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
+    .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
+    .where(eq(schema.shipments.id, packId)).limit(1);
+  if (!scopeRow) throw new Error('Pack not found');
+  if (!hasWriteFulfillmentsScope(scopeRow.scopes)) {
+    throw new Error('Store chưa cấp scope write_fulfillments — cần re-install store trước khi ship');
+  }
+
   await db.transaction(async (tx) => {
     const [pack] = await tx.select().from(schema.shipments).where(eq(schema.shipments.id, packId)).limit(1);
     if (!pack) throw new Error('Pack not found');
@@ -144,6 +156,7 @@ export async function shipPack(packId: string, trackingNumber: string): Promise<
   });
 
   try { await recordAudit({ userId, action: 'pack_ship', target: packId, requestSummary: `tracking=${tn}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
+  try { await pushPackFulfillmentCore(packId); } catch (e) { console.error('[shipPack] post-commit push failed', e); }
   const [s] = await db.select({ orderId: schema.shipments.orderId }).from(schema.shipments).where(eq(schema.shipments.id, packId)).limit(1);
   if (s) revalidatePath(`/f/fulfillment/${s.orderId}`);
   revalidatePath('/f/fulfillment');
