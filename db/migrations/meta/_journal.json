@@ -337,6 +337,13 @@
       "when": 1781084519483,
       "tag": "0047_complete_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1781085895991,
+      "tag": "0048_medical_maddog",
+      "breakpoints": true
     }
   ]
 }

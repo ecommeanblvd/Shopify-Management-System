@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
+import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,10 @@ export default async function ShippingReconcilePage() {
     redirect('/');
   }
 
-  const { rows } = await reconcileShipmentsWithStatus();
+  const [{ rows }, reports] = await Promise.all([
+    reconcileShipmentsWithStatus(),
+    listIssueReports(),
+  ]);
 
   return (
     <div className="space-y-6 p-6">
@@ -26,7 +30,7 @@ export default async function ShippingReconcilePage() {
           So giá hóa đơn carrier (billed) với giá hệ thống tính, theo từng đơn và từng khoản phí.
         </p>
       </div>
-      <ReconcileTable rows={rows} />
+      <ReconcileTable rows={rows} reports={reports} />
     </div>
   );
 }

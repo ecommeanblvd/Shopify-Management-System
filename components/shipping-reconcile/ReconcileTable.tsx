@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
+import { ReconcileIssuesModal, type OpenIssue } from './ReconcileIssuesModal';
+import type { IssueReportRecord } from '@/features/shipments/issue-report-actions';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -16,6 +18,7 @@ type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored';
 
 interface Props {
   rows: ReconcileViewRow[];
+  reports: IssueReportRecord[];
 }
 
 function deltaClass(pct: number | null): string {
@@ -26,14 +29,13 @@ function deltaClass(pct: number | null): string {
   return 'text-muted-foreground';
 }
 
-export function ReconcileTable({ rows }: Props) {
+export function ReconcileTable({ rows, reports }: Props) {
   const [carrier, setCarrier] = useState<CarrierFilter>('all');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [country, setCountry] = useState('');
   const [minPct, setMinPct] = useState('');
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showIssues, setShowIssues] = useState(true);
 
   const filtered = useMemo(() => {
     const minAbs = minPct ? Number(minPct) : null;
@@ -66,14 +68,18 @@ export function ReconcileTable({ rows }: Props) {
   }, [filtered]);
 
   // Logistics to-check list: PENDING rows with an actionable issue, grouped
-  // by issue signature. One line per distinct problem with count + samples.
-  const issueGroups = useMemo(() => {
-    const groups = new Map<string, { action: string; label: string; count: number; sumDelta: number; samples: string[] }>();
+  // by issue signature. Lives behind the "Vấn đề & Report" modal — an issue
+  // becomes a persistent report only after Logistics confirms the fix.
+  const openIssues = useMemo<OpenIssue[]>(() => {
+    const groups = new Map<string, OpenIssue>();
     for (const r of rows) {
       if (r.status !== 'pending') continue;
       const info = issueInfo(r);
       if (!info.groupKey || !info.action) continue;
-      const g = groups.get(info.groupKey) ?? { action: info.action, label: info.label, count: 0, sumDelta: 0, samples: [] };
+      const g = groups.get(info.groupKey) ?? {
+        groupKey: info.groupKey, carrierKey: r.carrierKey || null,
+        label: info.label, action: info.action, count: 0, sumDelta: 0, samples: [],
+      };
       g.count += 1;
       g.sumDelta += r.deltaVnd ?? 0;
       if (g.samples.length < 4) g.samples.push(r.orderNumber);
@@ -100,38 +106,6 @@ export function ReconcileTable({ rows }: Props) {
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
       </div>
 
-      {/* Logistics to-check summary */}
-      {issueGroups.length > 0 && (
-        <div className="rounded-lg border border-border">
-          <button
-            type="button"
-            onClick={() => setShowIssues(!showIssues)}
-            className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium"
-          >
-            <span>
-              Việc cần Logistics kiểm tra
-              <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400">
-                {issueGroups.length} vấn đề · {issueGroups.reduce((a, g) => a + g.count, 0)} đơn
-              </span>
-            </span>
-            <span className="text-muted-foreground">{showIssues ? '▾' : '▸'}</span>
-          </button>
-          {showIssues && (
-            <ul className="divide-y divide-border border-t border-border text-sm">
-              {issueGroups.map((g) => (
-                <li key={g.action} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
-                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums">{g.count} đơn</span>
-                  <span className="min-w-0 flex-1">{g.action}</span>
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    Σ lệch {fmtVnd(g.sumDelta)} đ · vd: {g.samples.join(', ')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <select value={carrier} onChange={(e) => setCarrier(e.target.value as CarrierFilter)} className="rounded border border-border bg-background px-2 py-1">
@@ -148,7 +122,10 @@ export function ReconcileTable({ rows }: Props) {
         <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
-        <a href={exportHref} className="ml-auto rounded border border-border px-3 py-1 hover:bg-muted">Export CSV</a>
+        <div className="ml-auto flex items-center gap-2">
+          <ReconcileIssuesModal openIssues={openIssues} reports={reports} />
+          <a href={exportHref} className="rounded border border-border px-3 py-1 hover:bg-muted">Export CSV</a>
+        </div>
       </div>
 
       {/* Table */}

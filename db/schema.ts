@@ -828,6 +828,31 @@ export const shipmentReconcileStatus = pgTable('shipment_reconcile_status', {
   reconciledAt: timestamp('reconciled_at').defaultNow().notNull(),
 });
 
+/**
+ * Reconcile issue reports — the Logistics audit trail. The reconcile page
+ * groups pending mismatches into issues (sai zone, lech ER, sai can...);
+ * an issue only becomes a REPORT when a Logistics staffer confirms what
+ * was fixed/verified with the carrier. Reports are append-only history.
+ */
+export const reconcileIssueReports = pgTable('reconcile_issue_reports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  /** Stable group signature, e.g. 'zone|fedex|MC|Zone E->Zone M'. */
+  issueKey: text('issue_key').notNull(),
+  carrierKey: text('carrier_key'),
+  /** Issue description shown at confirm time (action text). */
+  description: text('description').notNull(),
+  /** Snapshot of the group when confirmed. */
+  orderCount: integer('order_count').notNull(),
+  sumDeltaVnd: numeric('sum_delta_vnd', { precision: 16, scale: 2 }),
+  sampleOrders: jsonb('sample_orders'),
+  /** What Logistics did / what the carrier confirmed. Required. */
+  resolutionNote: text('resolution_note').notNull(),
+  confirmedBy: text('confirmed_by').references(() => user.id, { onDelete: 'set null' }),
+  confirmedAt: timestamp('confirmed_at').defaultNow().notNull(),
+}, (t) => [
+  index('reconcile_issue_reports_key_idx').on(t.issueKey),
+]);
+
 export const shopifySyncState = pgTable('shopify_sync_state', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),
