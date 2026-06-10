@@ -1,0 +1,1 @@
+ALTER TABLE "shipment_charges" ADD COLUMN "import_handling" numeric(14, 2);

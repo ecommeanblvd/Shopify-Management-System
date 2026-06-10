@@ -65,8 +65,13 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, compKey: 'vat' },
-    // elevated risk: engine books DHL ER / Restricted Destination under country_fixed.
-    { label: 'Phụ phí rủi ro (ER)', billed: row.billedElevatedRisk, engine: row.engineCountryFixed, compKey: 'elevatedRisk' },
+    // country_fixed counterpart: DHL Elevated Risk / FedEx US import handling.
+    {
+      label: row.carrierKey === 'fedex' ? 'Phí cố định nước (nhập US…)' : 'Phụ phí rủi ro (ER)',
+      billed: sumEngine(row.billedElevatedRisk, row.billedImportHandling),
+      engine: row.engineCountryFixed,
+      compKey: 'elevatedRisk',
+    },
   ];
 }
 

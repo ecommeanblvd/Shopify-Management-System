@@ -73,6 +73,9 @@ export interface DiagnoseInput {
     base: number | null; discount: number | null; fuel: number | null;
     remote: number | null; demand: number | null; signature: number | null;
     vat: number | null; gogreen: number | null; elevatedRisk: number | null;
+    /** Billed import/clearance handling — counterpart of engine
+     *  country_fixed alongside elevatedRisk (FedEx US import handling). */
+    importHandling?: number | null;
     total: number;
   };
   engine: {
@@ -285,7 +288,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   // elevatedRisk — engine side = country_fixed (DHL Elevated Risk /
   // Restricted Destination). A mismatch usually means the surcharge's
   // effective window or country list is off vs what the carrier billed.
-  const erBilled = n0(b.elevatedRisk);
+  const erBilled = r(n0(b.elevatedRisk) + n0(b.importHandling ?? null));
   const erEngine = r(n0(e.countryFixed ?? null));
   const erDelta = r(erBilled - erEngine);
   components.push({ key: 'elevatedRisk', billed: erBilled, engine: erEngine, delta: erDelta, cause: erDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });

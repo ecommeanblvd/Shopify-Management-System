@@ -42,6 +42,8 @@ export interface ReconcileRow {
   billedGogreen: number | null;
   billedDiscount: number | null;
   billedElevatedRisk: number | null;
+  /** Billed import/clearance handling (ops col CK khi nằm trong tổng). */
+  billedImportHandling: number | null;
   // Engine
   engineTotal: number | null;
   engineBase: number | null;
@@ -127,6 +129,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedGogreen: schema.shipmentCharges.gogreen,
       billedDiscount: schema.shipmentCharges.discount,
       billedElevatedRisk: schema.shipmentCharges.elevatedRisk,
+      billedImportHandling: schema.shipmentCharges.importHandling,
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
@@ -291,6 +294,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         vat: r.billedVat != null ? Number(r.billedVat) : null,
         gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
         elevatedRisk: r.billedElevatedRisk != null ? Number(r.billedElevatedRisk) : null,
+        importHandling: r.billedImportHandling != null ? Number(r.billedImportHandling) : null,
         total: Number(r.billedTotal),
       },
       engine: {
@@ -363,6 +367,7 @@ interface JoinedRow {
   billedGogreen: string | null;
   billedDiscount: string | null;
   billedElevatedRisk: string | null;
+  billedImportHandling?: string | null;
 }
 
 interface EngineBreakdown {
@@ -437,6 +442,7 @@ function buildRow(
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
     billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,
     billedElevatedRisk: r.billedElevatedRisk !== null ? Number(r.billedElevatedRisk) : null,
+    billedImportHandling: r.billedImportHandling != null ? Number(r.billedImportHandling) : null,
     engineTotal,
     engineBase: engine?.base ?? null,
     engineFuel: engine?.fuel ?? null,

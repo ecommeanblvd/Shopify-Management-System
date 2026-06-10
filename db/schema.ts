@@ -796,6 +796,11 @@ export const shipmentCharges = pgTable('shipment_charges', {
   discount: numeric('discount', { precision: 14, scale: 2 }),
   /** Excel col BV — Elevated Risk surcharge (DHL Middle East 918,000). */
   elevatedRisk: numeric('elevated_risk', { precision: 14, scale: 2 }),
+  /** Carrier import/clearance handling fee (ops col CK "Phí xử lý hàng
+   *  nhập" — FedEx US import handling 68,300đ…). Only imported when the
+   *  row's billed TOTAL arithmetic includes it; reconciles (together
+   *  with elevated_risk) against the engine's country_fixed line. */
+  importHandling: numeric('import_handling', { precision: 14, scale: 2 }),
   /** Where the row came from — 'ops_xlsx' for current importer, future
    *  values: 'fedex_csv', 'dhl_csv', etc. */
   source: text('source').notNull(),

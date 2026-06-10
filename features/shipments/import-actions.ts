@@ -281,6 +281,7 @@ export async function importLogExport(
         gogreen: parsed.gogreen?.toString() ?? null,
         discount: parsed.discount?.toString() ?? null,
         elevatedRisk: parsed.elevatedRisk?.toString() ?? null,
+        importHandling: parsed.importHandling?.toString() ?? null,
         source,
         sourceHash: hashCharge(parsed),
       })

@@ -183,3 +183,47 @@ describe('parseXlsxRow', () => {
     expect(r.row.orderNumber).toBe('MBLVD28959');
   });
 });
+
+describe('label date normalization (xlsx timezone/leap drift)', () => {
+  // xlsx `cellDates:true` materialises a date-only cell as LOCAL midnight
+  // minus a ~30s rounding drift — i.e. 23:59:30 of the previous LOCAL day.
+  // Parsed on a +07 machine, ops-sheet "05/03/2026" arrived as
+  // 2026-03-04T16:59:30Z and the whole DB ran a day behind the ops sheet.
+  // The parser must snap to the real date at UTC midnight regardless of
+  // the parsing machine's timezone.
+  it('snaps a drifted date-only cell to UTC midnight of the real date', () => {
+    const drifted = new Date(2026, 2, 4, 23, 59, 30); // local — exactly what xlsx emits for "05/03/2026"
+    const r = parseXlsxRow(rowFromIndex({ ...MBLVD28959_ROW, 15: drifted }));
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(r.row.labelCreatedAt?.toISOString()).toBe('2026-03-05T00:00:00.000Z');
+  });
+
+  it('leaves an already-clean UTC-midnight date unchanged', () => {
+    const clean = new Date('2026-04-28T00:00:00.000Z');
+    const r = parseXlsxRow(rowFromIndex({ ...MBLVD28959_ROW, 15: clean }));
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(r.row.labelCreatedAt?.toISOString()).toBe('2026-04-28T00:00:00.000Z');
+  });
+});
+
+describe('import handling (CK) consistency gate', () => {
+  it('keeps CK when the billed total includes it (MBLVD pattern)', () => {
+    const r = parseXlsxRow(rowFromIndex({
+      ...MBLVD28959_ROW,
+      34: 1_408_467, // total = old parts (1,340,167) + CK 68,300
+      88: 68_300,
+    }));
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(r.row.importHandling).toBe(68_300);
+  });
+
+  it('drops CK when the total does NOT include it (TA pattern)', () => {
+    const r = parseXlsxRow(rowFromIndex({ ...MBLVD28959_ROW, 88: 150_000 }));
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') return;
+    expect(r.row.importHandling).toBeNull();
+  });
+});

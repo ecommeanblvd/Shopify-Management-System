@@ -82,6 +82,7 @@ const COL = {
   logUniqueCode: 46,
   shippingLine: 64,
   elevatedRisk: 74,
+  importHandling: 88,
 } as const;
 
 export type CarrierKey = 'fedex' | 'dhl';
@@ -117,6 +118,11 @@ export interface ParsedShipment {
   gogreen: number | null;
   discount: number | null; // typically negative (Excel: -3,820,388)
   elevatedRisk: number | null;
+  /** Ops col CK "Phí xử lý hàng nhập". Semantics differ per store: on
+   *  MBLVD rows the billed TOTAL includes it (carrier fee); on TA rows
+   *  it does not (internal fee). Set ONLY when total arithmetic proves
+   *  the fee is part of the carrier bill — NULL otherwise. */
+  importHandling: number | null;
 }
 
 export type ParseResult =
@@ -156,12 +162,16 @@ function asString(v: Cell): string | null {
 }
 
 function asDate(v: Cell): Date | null {
-  if (v instanceof Date) return v;
-  if (typeof v === 'string') {
-    const d = new Date(v);
-    return Number.isFinite(d.getTime()) ? d : null;
-  }
-  return null;
+  const d = v instanceof Date ? v : typeof v === 'string' ? new Date(v) : null;
+  if (!d || !Number.isFinite(d.getTime())) return null;
+  // xlsx `cellDates:true` materialises a date-only cell as LOCAL midnight
+  // minus a ~30s serial-rounding drift — 23:59:30 of the previous local
+  // day. Snap forward one minute, then pin the LOCAL calendar date at UTC
+  // midnight so date-window comparisons (fuel weeks, ER effective dates)
+  // don't depend on which machine ran the import. Time-of-day is
+  // intentionally dropped — the ops column is date-only.
+  const snapped = new Date(d.getTime() + 60_000);
+  return new Date(Date.UTC(snapped.getFullYear(), snapped.getMonth(), snapped.getDate()));
 }
 
 /** "42x30x10" / "40 x 31 x 2" → {L, W, H}. NULL when missing a side. */
@@ -182,6 +192,20 @@ function parseCarrier(raw: string | null): CarrierKey | null {
   if (upper === 'FEDEX' || upper === 'FED EX') return 'fedex';
   if (upper === 'DHL') return 'dhl';
   return null;
+}
+
+/** CK fee counts as a billed component ONLY when total = Σ(parts) + CK
+ *  (±2đ rounding). TA rows carry a CK value the carrier never billed. */
+function consistentImportHandling(row: RawRow, totalAmount: number): number | null {
+  const ck = asNumber(row[COL.importHandling]);
+  if (!ck || ck <= 0) return null;
+  const parts =
+    (asNumber(row[COL.base]) ?? 0) + (asNumber(row[COL.fuel]) ?? 0) +
+    (asNumber(row[COL.remote]) ?? 0) + (asNumber(row[COL.demand]) ?? 0) +
+    (asNumber(row[COL.directSignature]) ?? 0) + (asNumber(row[COL.vat]) ?? 0) +
+    (asNumber(row[COL.gogreen]) ?? 0) + (asNumber(row[COL.discount]) ?? 0) +
+    (asNumber(row[COL.elevatedRisk]) ?? 0);
+  return Math.abs(parts + ck - totalAmount) <= 2 ? ck : null;
 }
 
 export function parseXlsxRow(row: RawRow): ParseResult {
@@ -232,6 +256,7 @@ export function parseXlsxRow(row: RawRow): ParseResult {
       gogreen: asNumber(row[COL.gogreen]),
       discount: asNumber(row[COL.discount]),
       elevatedRisk: asNumber(row[COL.elevatedRisk]),
+      importHandling: consistentImportHandling(row, totalAmount),
     };
     return { kind: 'ok', row: parsed };
   } catch (err) {

@@ -63,6 +63,14 @@ export function issueInfo(r: ReconcileViewRow): IssueInfo {
       const dom = actionable[0];
       if (dom?.key === 'elevatedRisk') {
         const direction = dom.delta < 0 ? 'hệ thống tính, hóa đơn chưa thu' : 'hóa đơn thu, hệ thống không tính';
+        if (r.carrierKey === 'fedex') {
+          return {
+            label: 'Lệch phí nhập',
+            className: ORANGE,
+            groupKey: `er|${r.carrierKey}|${dom.delta < 0 ? 'engine' : 'billed'}`,
+            action: `Phí xử lý hàng nhập (US import handling) ${direction} — đối chiếu cột CK ops sheet / invoice phí nhập riêng của FedEx`,
+          };
+        }
         return {
           label: 'Lệch ER',
           className: ORANGE,
