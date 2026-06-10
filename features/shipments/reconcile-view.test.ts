@@ -11,6 +11,7 @@ function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
     billedVat: 176_960, billedGogreen: null, billedDiscount: -4_001_823,
     billedElevatedRisk: null, engineCountryFixed: 0,
     engineTotal: 1_270_649, engineBase: 1_075_196, engineFuel: 310_312,
+    engineFuelPercent: 28.85, billedFuelPercent: 28.85,
     engineRemote: 0, engineDemand: 76_920, engineResidential: 0,
     enginePeak: 0, enginePerStep: 0,
     engineVat: 119_020, engineDiscount: 0, engineReason: null,

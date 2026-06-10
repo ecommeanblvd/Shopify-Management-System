@@ -38,6 +38,9 @@ interface ComponentLine {
   engine: number | null;
   /** Diagnosis component key this display line maps to. */
   compKey: CompKey;
+  /** Optional annotations rendered after the amounts (e.g. fuel %). */
+  billedSuffix?: string;
+  engineSuffix?: string;
 }
 
 /** Sum engine sub-charges that share a display line, preserving null when the
@@ -50,7 +53,11 @@ function sumEngine(...parts: Array<number | null>): number | null {
 function lines(row: ReconcileViewRow): ComponentLine[] {
   return [
     { label: 'Cước gốc (sau giảm giá)', billed: row.billedBaseNet, engine: row.engineBaseNet, compKey: 'base' },
-    { label: 'Phụ phí xăng dầu (fuel)', billed: row.billedFuel, engine: row.engineFuel, compKey: 'fuel' },
+    {
+      label: 'Phụ phí xăng dầu (fuel)', billed: row.billedFuel, engine: row.engineFuel, compKey: 'fuel',
+      billedSuffix: row.billedFuelPercent !== null ? `${row.billedFuelPercent}%` : undefined,
+      engineSuffix: row.engineFuelPercent !== null ? `${row.engineFuelPercent}%` : undefined,
+    },
     { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, compKey: 'remote' },
     { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, compKey: 'demand' },
     // signature: engine books DHL's fee under peak_fixed, FedEx under residential_fixed.
@@ -118,8 +125,14 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
             return (
               <tr key={l.label} className="border-t border-border">
                 <td className="py-1 font-sans">{l.label}</td>
-                <td className="py-1 text-right">{fmtVnd(l.billed)}</td>
-                <td className="py-1 text-right">{fmtVnd(l.engine)}</td>
+                <td className="py-1 text-right">
+                  {fmtVnd(l.billed)}
+                  {l.billedSuffix && <span className="ml-1 text-[11px] text-muted-foreground">({l.billedSuffix})</span>}
+                </td>
+                <td className="py-1 text-right">
+                  {fmtVnd(l.engine)}
+                  {l.engineSuffix && <span className="ml-1 text-[11px] text-muted-foreground">({l.engineSuffix})</span>}
+                </td>
                 <td className={`py-1 text-right ${delta && Math.abs(delta) > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {fmtVnd(delta)}
                 </td>

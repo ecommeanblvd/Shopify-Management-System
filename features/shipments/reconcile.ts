@@ -46,6 +46,13 @@ export interface ReconcileRow {
   engineTotal: number | null;
   engineBase: number | null;
   engineFuel: number | null;
+  /** Engine's weekly fuel % (carrier index) used for the quote. */
+  engineFuelPercent: number | null;
+  /** Implied billed fuel % = billedFuel / fuelable base. Base picked
+   *  between (net base + remote) and (+ demand) — whichever lands closer
+   *  to a clean carrier 0.25 %-step, since FedEx is inconsistent about
+   *  fueling the demand surcharge. NULL when not computable. */
+  billedFuelPercent: number | null;
   engineRemote: number | null;
   engineDemand: number | null;
   engineResidential: number | null;
@@ -361,6 +368,7 @@ interface JoinedRow {
 interface EngineBreakdown {
   chargeableWeightKg: number;
   countryFixed: number;
+  fuelPercent: number;
   base: number;
   fuel: number;
   remote: number;
@@ -371,6 +379,29 @@ interface EngineBreakdown {
   vat: number;
   discount: number;
   carrierCost: number;
+}
+
+/**
+ * Implied % the carrier actually applied: billedFuel / fuelable base.
+ * Tries (net base + remote) and (+ demand); returns the candidate whose
+ * value sits closest to a clean 0.25 %-step (carrier indices move in
+ * quarter-point steps), since FedEx fuels demand on some invoices only.
+ */
+function impliedBilledFuelPercent(r: JoinedRow): number | null {
+  const fuel = r.billedFuel != null ? Number(r.billedFuel) : 0;
+  if (fuel <= 0) return null;
+  const netBase = Number(r.billedBase ?? 0) + Number(r.billedDiscount ?? 0);
+  const remote = Number(r.billedRemote ?? 0);
+  const demand = Number(r.billedDemand ?? 0);
+  const candidates = [netBase + remote, netBase + remote + demand].filter((b) => b > 0);
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (const base of candidates) {
+    const pct = (fuel / base) * 100;
+    const dist = Math.abs(pct - Math.round(pct * 4) / 4);
+    if (dist < bestDist) { bestDist = dist; best = pct; }
+  }
+  return best !== null ? Math.round(best * 100) / 100 : null;
 }
 
 function buildRow(
@@ -409,6 +440,8 @@ function buildRow(
     engineTotal,
     engineBase: engine?.base ?? null,
     engineFuel: engine?.fuel ?? null,
+    engineFuelPercent: engine?.fuelPercent ?? null,
+    billedFuelPercent: impliedBilledFuelPercent(r),
     engineRemote: engine?.remote ?? null,
     engineDemand: engine?.demand ?? null,
     engineResidential: engine?.residential ?? null,
