@@ -74,6 +74,8 @@ export interface EngineEstimateResult {
    *  carrier — labels the breakdown so operator knows which rate sheet
    *  produced the numbers. */
   carrierLabel: string | null;
+  /** Resolved carrier key ('fedex' | 'dhl') the quote ran against. */
+  carrierKey: string | null;
   /** Matched zone label + weight tier upper bound, for context. */
   zone: string | null;
   tierUpperKg: number | null;
@@ -89,7 +91,7 @@ export interface EngineEstimateResult {
 function emptyResult(reason: EngineEstimateReason): EngineEstimateResult {
   return {
     amount: 0, costAmount: 0, costCurrency: '',
-    breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+    breakdown: null, carrierLabel: null, carrierKey: null, zone: null, tierUpperKg: null,
     source: 'unknown', reason,
   };
 }
@@ -132,6 +134,7 @@ export async function resolveShippingEstimate(
     costCurrency: best.costCurrency,
     breakdown: best.breakdown,
     carrierLabel: best.carrierLabel,
+    carrierKey,
     zone: best.zone,
     tierUpperKg: best.tierUpperKg,
     source: 'engine_estimate',

@@ -503,6 +503,7 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                 rawTotal={detail.shipping.defaultShippingCostRaw}
                 currency={detail.shipping.defaultShippingCostRawCurrency || cogsCcy}
                 carrierLabel={detail.shipping.defaultCarrierLabel}
+                carrierKey={detail.shipping.defaultCarrierKey}
                 zone={detail.shipping.defaultZone}
                 tierUpperKg={detail.shipping.defaultTierUpperKg}
               />
@@ -771,6 +772,7 @@ interface ShippingCostBreakdownProps {
   rawTotal: number;
   currency: string;
   carrierLabel: string | null;
+  carrierKey: string | null;
   zone: string | null;
   tierUpperKg: number | null;
 }
@@ -783,18 +785,24 @@ interface ShippingCostBreakdownProps {
  * against the FedEx invoice without doing FX in their head.
  */
 function ShippingCostBreakdown({
-  breakdown, rawTotal, currency, carrierLabel, zone, tierUpperKg,
+  breakdown, rawTotal, currency, carrierLabel, carrierKey, zone, tierUpperKg,
 }: ShippingCostBreakdownProps) {
+  // Carrier-specific display names so a DHL order reads like the DHL
+  // invoice (mydhl surcharges page) instead of generic engine kinds.
+  const isDhl = carrierKey === 'dhl';
+  const fuelLabel = breakdown.fuelPercent > 0
+    ? `Fuel surcharge (${breakdown.fuelPercent}%)`
+    : 'Fuel surcharge';
   const legs: { label: string; value: number }[] = [
     { label: 'Base rate', value: breakdown.base },
-    { label: 'Peak / premium', value: breakdown.peak },
-    { label: 'Remote area', value: breakdown.remote },
+    { label: isDhl ? 'Ký nhận (Direct Signature)' : 'Peak / premium', value: breakdown.peak },
+    { label: isDhl ? 'Vùng xa (Remote area)' : 'Remote area', value: breakdown.remote },
     { label: 'Residential', value: breakdown.residential },
     { label: 'Per-kg surcharge', value: breakdown.perKg },
     { label: 'Demand surcharge', value: breakdown.demand },
-    { label: 'Country handling fee', value: breakdown.countryFixed },
-    { label: 'Stepped surcharge (GoGreen)', value: breakdown.perStep },
-    { label: 'Fuel surcharge', value: breakdown.fuel },
+    { label: isDhl ? 'Phụ phí rủi ro (Elevated Risk)' : 'Country handling fee', value: breakdown.countryFixed },
+    { label: isDhl ? 'GoGreen Plus (SAF)' : 'Stepped surcharge', value: breakdown.perStep },
+    { label: fuelLabel, value: breakdown.fuel },
     {
       // Negotiated volume discount (FedEx Total Discount). Engine emits
       // `discount` as a POSITIVE number; render with a leading minus so

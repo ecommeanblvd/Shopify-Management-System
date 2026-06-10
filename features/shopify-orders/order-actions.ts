@@ -76,6 +76,8 @@ export interface OrderShippingDetail {
      *  ceil(weight / step_kg) × value, summed across active rows. */
     perStep: number;
     fuel: number;
+    /** Effective fuel % that was applied (weekly carrier index). */
+    fuelPercent: number;
     /** Effective VAT % that was applied. */
     vatPercent: number;
     vat: number;
@@ -94,6 +96,9 @@ export interface OrderShippingDetail {
    *  the engine quoted. Helps the operator cross-reference against the
    *  rate sheet that produced the breakdown. */
   defaultCarrierLabel: string | null;
+  /** Carrier key ('fedex' | 'dhl') — drives carrier-specific labels in the
+   *  cost breakdown (DHL Elevated Risk, GoGreen, Direct Signature…). */
+  defaultCarrierKey: string | null;
   defaultZone: string | null;
   defaultTierUpperKg: number | null;
   shippingCostOverride: number | null;
@@ -148,13 +153,14 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     source: 'invoice' | 'engine_estimate' | 'unknown';
     reason: OrderShippingDetail['defaultUnknownReason'];
     breakdown: OrderShippingDetail['defaultBreakdown'];
+    carrierKey: string | null;
     carrierLabel: string | null;
     zone: string | null;
     tierUpperKg: number | null;
   } = {
     amount: 0, rawAmount: 0, rawCurrency: '',
     source: 'unknown', reason: null,
-    breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+    breakdown: null, carrierLabel: null, carrierKey: null, zone: null, tierUpperKg: null,
   };
   if (trackings.length > 0) {
     const invRes = await db.execute<{ tracking_number: string; actual_cost: string; currency: string }>(sql`
@@ -169,7 +175,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       defaultShipping = {
         amount: raw, rawAmount: raw, rawCurrency: inv.currency,
         source: 'invoice', reason: null,
-        breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+        breakdown: null, carrierLabel: null, carrierKey: null, zone: null, tierUpperKg: null,
       };
     }
   }
@@ -213,6 +219,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           countryFixed: est.breakdown.countryFixed,
           perStep: est.breakdown.perStep,
           fuel: est.breakdown.fuel,
+          fuelPercent: est.breakdown.fuelPercent,
           vatPercent: est.breakdown.vatPercent,
           vat: est.breakdown.vat,
           discountPercent: est.breakdown.discountPercent,
@@ -220,6 +227,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           carrierCost: est.breakdown.carrierCost,
         },
         carrierLabel: est.carrierLabel,
+        carrierKey: est.carrierKey,
         zone: est.zone,
         tierUpperKg: est.tierUpperKg,
       };
@@ -229,7 +237,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       defaultShipping = {
         amount: 0, rawAmount: 0, rawCurrency: '',
         source: 'unknown', reason: est.reason ?? null,
-        breakdown: null, carrierLabel: null, zone: null, tierUpperKg: null,
+        breakdown: null, carrierLabel: null, carrierKey: null, zone: null, tierUpperKg: null,
       };
     }
   }
@@ -268,6 +276,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       defaultUnknownReason: defaultShipping.reason,
       defaultBreakdown: defaultShipping.breakdown,
       defaultCarrierLabel: defaultShipping.carrierLabel,
+      defaultCarrierKey: defaultShipping.carrierKey,
       defaultZone: defaultShipping.zone,
       defaultTierUpperKg: defaultShipping.tierUpperKg,
       shippingCostOverride: order.shippingCostOverride !== null ? Number(order.shippingCostOverride) : null,
