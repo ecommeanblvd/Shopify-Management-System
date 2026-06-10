@@ -445,3 +445,55 @@ describe('diagnoseReconcileRow — carrier bills a LIGHTER tier (real #MBLVD2807
     expect(r.verdict.toLowerCase()).toContain('thấp hơn');
   });
 });
+
+describe('diagnoseReconcileRow — FedEx Direct Signature opt-in (pass-through)', () => {
+  // ~23% FedEx orders carry an opt-in Direct Signature fee (88,000đ 2025 /
+  // 92,700đ 2026). The engine cannot predict per-order opt-ins, so billed
+  // has it and engine doesn't. When the invoice arithmetic closes exactly
+  // (fuel % reproduces WITH the fee in the base, VAT consistent), the row
+  // is correct billing — one PASS-THROUGH conclusion, not 3 mismatches.
+  const input = () => baseInput({
+    billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+              demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
+              elevatedRisk: 0, total: 1_740_672 },
+    engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+              demand: 0, residential: 0, vat: 118_000, total: 1_593_000 },
+    engineChargeableWeightKg: 1,
+    engineTierUpperKg: 1,
+    zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+    billedFuelableBase: 1_000_000,
+    fuelPercent: 47.5,
+    vatPercent: 8,
+  });
+
+  it('marks signature as PHI_TUY_CHON and fuel/VAT as derived', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'signature')!.cause).toBe('PHI_TUY_CHON');
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH');
+  });
+
+  it('verdict is a single pass-through conclusion, severity passthrough', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).toBe('passthrough');
+    expect(r.verdict.toLowerCase()).toContain('ký nhận');
+  });
+
+  it('signature with WRONG arithmetic still flags (no blind acceptance)', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_000_000, discount: 0, fuel: 600_000, remote: 0,
+                demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
+                elevatedRisk: 0, total: 1_821_639 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, vat: 118_000, total: 1_593_000 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    // fuel 600,000 không khớp % nào -> LECH_FUEL, không được pass-through
+    expect(r.severity).not.toBe('passthrough');
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('LECH_FUEL');
+  });
+});

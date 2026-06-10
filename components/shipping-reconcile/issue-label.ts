@@ -37,6 +37,9 @@ export function issueInfo(r: ReconcileViewRow): IssueInfo {
   if (!d || d.severity === 'match' || d.severity === 'rounding') {
     return { label: 'Khớp', className: GREEN, groupKey: null, action: null };
   }
+  if (d.severity === 'passthrough') {
+    return { label: 'Khớp (ký nhận)', className: GREEN, groupKey: null, action: null };
+  }
   const carrier = r.carrierKey.toUpperCase();
   switch (d.severity) {
     case 'weight':

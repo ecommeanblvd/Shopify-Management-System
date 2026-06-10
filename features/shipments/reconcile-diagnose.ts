@@ -22,12 +22,15 @@ export type DiagnosisCause =
   | 'LECH_FUEL_BASE'
   | 'SAI_ZONE'
   | 'PHAI_SINH_ZONE'
+  | 'PHI_TUY_CHON'
   | 'PHAI_SINH'
   | 'KHONG_KHOP'
   | 'LAM_TRON';
 
 export type DiagnosisSeverity =
-  | 'match' | 'weight' | 'zone' | 'config' | 'ratecard' | 'discount' | 'rounding';
+  | 'match' | 'weight' | 'zone' | 'config' | 'ratecard' | 'discount' | 'rounding'
+  /** Lệch chỉ gồm phí dịch vụ opt-in (ký nhận) hóa đơn thu thêm — đúng billing. */
+  | 'passthrough';
 
 export type ComponentKey =
   | 'base' | 'discount' | 'fuel' | 'remote' | 'demand'
@@ -252,9 +255,16 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // COMPOSITION (e.g. carrier fuels the demand surcharge, we don't)?
       const upstreamFlagged = components.some(
         (c) => (c.key === 'base' || c.key === 'remote') && c.cause !== 'KHOP');
+      // Opt-in signature (engine side 0) widens the billed fuel base by
+      // exactly the fee — that's derived from the pass-through, not a
+      // fuel-base config problem.
+      const sigPass = n0(b.signature) > 0 && r(e.residential + n0(e.peak ?? null)) === 0
+        ? n0(b.signature) : 0;
+      const explainedBySig = sigPass > 0
+        && Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2;
       fuelCause = upstreamFlagged
         ? (impliedZone ? 'PHAI_SINH_ZONE' : 'PHAI_SINH')
-        : 'LECH_FUEL_BASE';
+        : explainedBySig ? 'PHAI_SINH' : 'LECH_FUEL_BASE';
     }
   }
   components.push({ key: 'fuel', billed: fuelBilled, engine: e.fuel, delta: fuelDelta, cause: fuelCause });
@@ -272,7 +282,17 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const sigBilled = n0(b.signature);
   const sigEngine = r(e.residential + n0(e.peak ?? null));
   const sigDelta = r(sigBilled - sigEngine);
-  components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
+  let sigCause: DiagnosisCause = sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
+  // FedEx Direct Signature is an opt-in per-order fee the engine cannot
+  // predict. Accept it as PASS-THROUGH (correct billing, not a mismatch)
+  // ONLY when the rest of the invoice arithmetic closes: the fuel line's
+  // implied % must match the weekly index (checked above — fuel cause is
+  // not LECH_FUEL) so a mistyped fee can't sneak through.
+  const fuelComp = components.find((c) => c.key === 'fuel');
+  if (sigDelta > 0 && sigEngine === 0 && fuelComp && fuelComp.cause !== 'LECH_FUEL') {
+    sigCause = 'PHI_TUY_CHON';
+  }
+  components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigCause });
 
   // vat
   const vatBilled = n0(b.vat);
@@ -339,12 +359,18 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     // PHAI_SINH (downstream of base) and KHOP never headline.
     const actionable = components
       .filter((c) => c.cause !== 'KHOP' && c.cause !== 'PHAI_SINH'
-        && c.cause !== 'PHAI_SINH_ZONE' && c.cause !== 'LAM_TRON')
+        && c.cause !== 'PHAI_SINH_ZONE' && c.cause !== 'LAM_TRON' && c.cause !== 'PHI_TUY_CHON')
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     const dominant = actionable[0];
     if (!dominant) {
-      verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
-      severity = 'rounding';
+      const optIn = components.find((c) => c.cause === 'PHI_TUY_CHON');
+      if (optIn) {
+        verdict = `Khớp — hóa đơn thu thêm phí ký nhận opt-in ${optIn.delta.toLocaleString('vi-VN')}đ (+fuel/VAT theo), số học khớp`;
+        severity = 'passthrough';
+      } else {
+        verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
+        severity = 'rounding';
+      }
     } else if (dominant.key === 'elevatedRisk') {
       verdict = dominant.delta < 0
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
