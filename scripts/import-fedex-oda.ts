@@ -214,29 +214,18 @@ async function main(): Promise<void> {
       await db.insert(schema.carrierRemotePostcodes).values(slice);
     }
 
-    // ── IL postal-format workaround ──
-    // FedEx publishes IL ODA codes in the legacy 5-digit format
-    // (10930, 12230-12232) while Israel Post switched to 7-digit in
-    // Feb 2013 — Shopify orders carry the new format. The first 5
-    // digits of a new 7-digit code do NOT correspond to the old
-    // 5-digit code (verified: 0 / 58 sample orders match by prefix).
-    //
-    // Every IL row in the published file is Tier B (309/309 — never
-    // Tier A or C), so until FedEx publishes a 7-digit replacement
-    // we insert a single wildcard row that the engine treats as a
-    // country-wide default: any IL destination → Tier B.
-    //
-    // REMOVE this block once FedEx ships an updated 7-digit file and
-    // the imported rows correctly match Shopify postcodes.
+    // ── IL: NO country-wide wildcard ──
+    // FedEx publishes IL ODA codes in the legacy 5-digit format while
+    // Shopify carries post-2013 7-digit codes, so the rows above never
+    // match IL orders. A previous workaround inserted a country-wide
+    // '*' → Tier B wildcard, but real billing disproved it: across all
+    // 18 FedEx IL invoices on file (2026-06-10) the remote surcharge
+    // was billed on ZERO — our IL destinations simply aren't remote.
+    // The wildcard over-charged every IL quote by 550,000đ and broke
+    // reconciliation (#MBLVD28958). If FedEx ever ships a 7-digit ODA
+    // file, the normal rows above will start matching on their own.
     if (touchedCountries.includes('IL')) {
-      console.log('[oda-import] adding IL wildcard (legacy 5-digit format workaround)');
-      await db.insert(schema.carrierRemotePostcodes).values({
-        carrierAccountId: account.id,
-        countryCode: 'IL',
-        postcodePattern: '*',
-        tier: 'Tier B',
-        source: `${args.source} · Tier B · country-wide wildcard (5-digit format workaround)`,
-      });
+      console.log('[oda-import] IL: skipping wildcard — billing evidence shows no remote (see comment)');
     }
   }
 
