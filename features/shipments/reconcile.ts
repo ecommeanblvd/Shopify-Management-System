@@ -133,6 +133,8 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
+      shipCity: schema.shopifyOrders.shipCity,
+      shipPostcode: schema.shopifyOrders.shipPostcode,
       shipWeightKgOverride: schema.shopifyOrders.shipWeightKgOverride,
       shopifyWeightKg: schema.shopifyOrders.shipWeightKg,
       processedAtShopify: schema.shopifyOrders.processedAtShopify,
@@ -248,6 +250,11 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       dimensions: dims,
       packagingType: r.packagingType,
       destinationCountry: r.shipCountry,
+      // ODA/remote lookup needs the postcode (DE/NL/US…) or city
+      // (SA/KW/AE…) — without them every remote-billed shipment
+      // misdiagnosed as 'thiếu cấu hình vùng xa'.
+      destinationPostcode: r.shipPostcode ?? undefined,
+      destinationCity: r.shipCity ?? undefined,
       effectiveDate: r.labelCreatedAt ?? r.processedAtShopify ?? undefined,
     });
 
@@ -354,6 +361,8 @@ interface JoinedRow {
   storeName: string;
   carrierKey: string | null;
   shipCountry: string | null;
+  shipCity?: string | null;
+  shipPostcode?: string | null;
   actualWeightKg: string | null;
   shopifyWeightKg?: string | null;
   labelCreatedAt: Date | null;
