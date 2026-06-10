@@ -5,7 +5,7 @@ import { History } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { formatDateVN } from '@/features/carrier-rates/lib';
+import { formatDateVN, formatExclusiveEndVN } from '@/features/carrier-rates/lib';
 
 export interface FuelHistoryEntry {
   value: string;
@@ -53,7 +53,7 @@ export function FuelHistoryDialog({ count, rows }: { count: number; rows: FuelHi
                     {Number(r.value)}%
                   </td>
                   <td className="py-2 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDateVN(r.from, '…')} → {formatDateVN(r.to, 'nay')}
+                    {formatDateVN(r.from, '…')} → {formatExclusiveEndVN(r.to, 'nay')}
                   </td>
                 </tr>
               ))}

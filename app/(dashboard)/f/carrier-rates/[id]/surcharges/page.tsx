@@ -11,7 +11,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { currencyDecimals } from '@/lib/currency-format';
 import { getAccount } from '@/features/carrier-rates/actions';
-import { formatDateVN } from '@/features/carrier-rates/lib';
+import { formatDateVN, formatExclusiveEndVN } from '@/features/carrier-rates/lib';
 import {
   listSurcharges, createSurcharge, updateSurcharge, deleteSurcharge,
   type SurchargeKind, type SurchargeRow,
@@ -555,7 +555,7 @@ function SurchargeSummaryRow({
             <Badge variant="outline" className="h-4 text-[9px] font-mono tracking-wide px-1.5" title="Hiệu lực">
               {formatDateVN(row.startsAt, '…')}
               {' → '}
-              {formatDateVN(row.endsAt, 'nay')}
+              {formatExclusiveEndVN(row.endsAt, 'nay')}
             </Badge>
           )}
           {row.tier && (

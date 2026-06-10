@@ -31,6 +31,19 @@ export function formatDateVN(value: Date | string | null | undefined, fallback =
   return utcDmy(value);
 }
 
+/**
+ * Format an EXCLUSIVE end bound (carrier_surcharges.ends_at — the engine
+ * drops a row when `ends_at <= quoteDate`) as the last day it actually
+ * applies, i.e. minus one day. Prevents the "01-06 → 15-06" /
+ * "15-06 → nay" display where 15-06 looks owned by both rows.
+ */
+export function formatExclusiveEndVN(value: Date | string | null | undefined, fallback = 'nay'): string {
+  if (value == null) return fallback;
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return typeof value === 'string' ? value : fallback;
+  return utcDmy(new Date(d.getTime() - 24 * 60 * 60 * 1000));
+}
+
 function utcDmy(d: Date): string {
   const dd = String(d.getUTCDate()).padStart(2, '0');
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
