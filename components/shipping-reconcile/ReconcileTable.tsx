@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
@@ -36,6 +36,8 @@ export function ReconcileTable({ rows, reports }: Props) {
   const [minPct, setMinPct] = useState('');
   const [q, setQ] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 100;
 
   const filtered = useMemo(() => {
     const minAbs = minPct ? Number(minPct) : null;
@@ -53,6 +55,8 @@ export function ReconcileTable({ rows, reports }: Props) {
       )
       .sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
   }, [rows, carrier, status, country, minPct, q]);
+
+  useEffect(() => { setPage(0); }, [carrier, status, country, minPct, q]);
 
   const summary = useMemo(() => {
     let billed = 0, engine = 0, over10 = 0, pendingCount = 0;
@@ -87,6 +91,13 @@ export function ReconcileTable({ rows, reports }: Props) {
     }
     return [...groups.values()].sort((a, b) => Math.abs(b.sumDelta) - Math.abs(a.sumDelta));
   }, [rows]);
+
+  // Render only the current page — 2,500+ rows at once costs ~30k DOM
+  // nodes and seconds of mount time. Filters/summary still cover the
+  // FULL set; only painting is windowed.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const visible = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const exportHref = useMemo(() => {
     const p = new URLSearchParams();
@@ -148,7 +159,7 @@ export function ReconcileTable({ rows, reports }: Props) {
             </tr>
           </thead>
           <tbody className="font-mono tabular-nums">
-            {filtered.map((r) => (
+            {visible.map((r) => (
               <FragmentRow
                 key={r.shipmentId}
                 r={r}
@@ -162,6 +173,22 @@ export function ReconcileTable({ rows, reports }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Pager */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Hiển thị {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} / {filtered.length} đơn
+          </span>
+          <span className="flex items-center gap-1">
+            <button type="button" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}
+              className="rounded border border-border px-2.5 py-1 hover:bg-muted disabled:opacity-40">‹ Trước</button>
+            <span className="px-2 font-mono tabular-nums">{safePage + 1}/{totalPages}</span>
+            <button type="button" disabled={safePage >= totalPages - 1} onClick={() => setPage(safePage + 1)}
+              className="rounded border border-border px-2.5 py-1 hover:bg-muted disabled:opacity-40">Sau ›</button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
