@@ -6,7 +6,7 @@ import { Users, ShieldCheck } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { hasPermission } from '@/lib/auth/rbac';
-import { getRole } from '@/lib/auth/role';
+import { getRole, invalidateRoleInfo } from '@/lib/auth/role';
 import { listRoles, roleGrantsUserManagement, userIdsWhoCanManageUsers } from '@/features/users/role-queries';
 import { createInvite, listPendingInvites, revokeInvite } from '@/lib/auth/invites';
 import { recordAudit } from '@/lib/logging/audit';
@@ -80,6 +80,7 @@ async function setRoleAction(callerUserId: string, formData: FormData) {
     }
   }
 
+  invalidateRoleInfo(targetUserId);
   await recordAudit({
     userId: callerUserId, action: 'change_role', target: targetUserId,
     requestSummary: `appRoleId=${submitted}`, result: 'success',

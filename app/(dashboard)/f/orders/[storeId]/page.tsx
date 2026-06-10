@@ -55,9 +55,6 @@ export default async function StoreOrders({
     );
   }
 
-  const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
-  if (!store) notFound();
-
   // React 19's purity rule flags Date.now() during render. This is a server
   // component running once per request — the call is fine here. Suppress
   // the rule narrowly and snap the clock to one value used twice.
@@ -69,8 +66,6 @@ export default async function StoreOrders({
     : new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
   const vendorFilter = sp.vendor?.split(',').filter(Boolean);
 
-  const showVendor = VENDOR_FILTER_DOMAINS.includes(store.shopDomain);
-
   // Cache window: the broader of (CACHE_DAYS, user-requested). Loading
   // the wider window lets the client flip between 7d / 30d / 90d preset
   // buttons without any server roundtrip — the slow paths users were
@@ -78,12 +73,35 @@ export default async function StoreOrders({
   const cacheFromCandidate = new Date(nowMs - CACHE_DAYS * 24 * 60 * 60 * 1000);
   const dateFrom = userFrom < cacheFromCandidate ? userFrom : cacheFromCandidate;
 
-  const { orders: orderList } = await getStoreMetrics({
-    storeId,
-    dateFrom,
-    dateTo,
-    vendorFilter: showVendor ? vendorFilter : undefined,
-  });
+  // The store row decides `showVendor` (and thus the metrics vendor
+  // filter), so fetch it first; the metrics + three health-snapshot reads
+  // are mutually independent — one parallel batch instead of four
+  // sequential round trips.
+  const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
+  if (!store) notFound();
+
+  const showVendor = VENDOR_FILTER_DOMAINS.includes(store.shopDomain);
+
+  const [metricsRes, syncStateRows, webhookCountsRes, orderCountRes] = await Promise.all([
+    getStoreMetrics({
+      storeId,
+      dateFrom,
+      dateTo,
+      vendorFilter: showVendor ? vendorFilter : undefined,
+    }),
+    db.select().from(schema.shopifySyncState).where(eq(schema.shopifySyncState.storeId, storeId)),
+    db.execute<{ ok: string; failed: string }>(sql`
+      SELECT SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END)::text AS ok,
+             SUM(CASE WHEN status IN ('failed','rejected') THEN 1 ELSE 0 END)::text AS failed
+        FROM shopify_webhook_log
+       WHERE store_id = ${storeId} AND received_at > NOW() - INTERVAL '24 hours';
+    `),
+    db.execute<{ n: string }>(sql`
+      SELECT COUNT(*)::text AS n FROM shopify_orders WHERE store_id = ${storeId};
+    `),
+  ]);
+
+  const { orders: orderList } = metricsRes;
 
   const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
   // Every order under a single Shopify store settles in one currency, so
@@ -113,21 +131,10 @@ export default async function StoreOrders({
     : [];
 
   // Health snapshot — pre-format here so the client component stays
-  // purely presentational (no DB import in client bundle).
-  const [syncState] = await db
-    .select()
-    .from(schema.shopifySyncState)
-    .where(eq(schema.shopifySyncState.storeId, storeId));
-  const webhookCountsRes = await db.execute<{ ok: string; failed: string }>(sql`
-    SELECT SUM(CASE WHEN status = 'processed' THEN 1 ELSE 0 END)::text AS ok,
-           SUM(CASE WHEN status IN ('failed','rejected') THEN 1 ELSE 0 END)::text AS failed
-      FROM shopify_webhook_log
-     WHERE store_id = ${storeId} AND received_at > NOW() - INTERVAL '24 hours';
-  `);
+  // purely presentational (no DB import in client bundle). The reads
+  // themselves happened in the parallel batch above.
+  const [syncState] = syncStateRows;
   const webhookCounts = webhookCountsRes.rows;
-  const orderCountRes = await db.execute<{ n: string }>(sql`
-    SELECT COUNT(*)::text AS n FROM shopify_orders WHERE store_id = ${storeId};
-  `);
   const orderCount = Number(orderCountRes.rows[0]?.n ?? '0');
 
   const ago = (d: Date | null | undefined): string =>

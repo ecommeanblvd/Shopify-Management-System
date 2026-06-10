@@ -19,20 +19,25 @@ function statusVariant(status: string): 'default' | 'destructive' | 'outline' {
 
 export default async function HomePage() {
   const session = await auth.api.getSession({ headers: await headers() });
-  const callerRole = session
-    ? (await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1))[0]?.role as Role | undefined
-    : undefined;
+
+  // All five reads are independent — run them in one parallel batch so
+  // the page pays one DB round trip of latency, not five.
+  const [roleRows, stores, pendingReconciliation, recentRuns, recentMarketRuns] = await Promise.all([
+    session
+      ? db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1)
+      : Promise.resolve([]),
+    db.select().from(schema.stores),
+    db.select().from(schema.reconciliationStatus)
+      .where(eq(schema.reconciliationStatus.status, 'pending')),
+    db.select().from(schema.applyRuns)
+      .orderBy(desc(schema.applyRuns.startedAt)).limit(5),
+    db.select().from(schema.marketApplyHistory)
+      .orderBy(desc(schema.marketApplyHistory.createdAt)).limit(5),
+  ]);
+  const callerRole = roleRows[0]?.role as Role | undefined;
   const canManageStores = !!callerRole && hasPermission(callerRole, 'manage_stores');
   const canViewMarkets = !!callerRole && hasPermission(callerRole, 'view_markets_history');
   const canRunFeature = !!callerRole && hasPermission(callerRole, 'run_feature');
-
-  const stores = await db.select().from(schema.stores);
-  const pendingReconciliation = await db.select().from(schema.reconciliationStatus)
-    .where(eq(schema.reconciliationStatus.status, 'pending'));
-  const recentRuns = await db.select().from(schema.applyRuns)
-    .orderBy(desc(schema.applyRuns.startedAt)).limit(5);
-  const recentMarketRuns = await db.select().from(schema.marketApplyHistory)
-    .orderBy(desc(schema.marketApplyHistory.createdAt)).limit(5);
 
   const active = stores.filter((s) => s.status === 'active').length;
   const errored = stores.filter((s) => s.status === 'error').length;
