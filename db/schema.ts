@@ -681,6 +681,8 @@ export const shippingInvoices = pgTable('shipping_invoices', {
 // to this: presence of "BAG"/"PAK" → bag, "BOX" → box, else null.
 export const packagingTypeEnum = pgEnum('packaging_type', ['bag', 'box']);
 
+export const shopifyPushStatusEnum = pgEnum('shopify_push_status', ['pending', 'pushed', 'failed']);
+
 /**
  * One physical pack per row — what actually leaves the warehouse with
  * a label. A Shopify order can map to N shipments (multi-pack orders
@@ -724,6 +726,10 @@ export const shipments = pgTable('shipments', {
   checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
   /** Timestamp when the check-packed verification was completed. */
   checkPackedAt: timestamp('check_packed_at'),
+  shopifyFulfillmentId: text('shopify_fulfillment_id'),
+  shopifyPushStatus: shopifyPushStatusEnum('shopify_push_status'),
+  shopifyPushError: text('shopify_push_error'),
+  shopifyPushedAt: timestamp('shopify_pushed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
