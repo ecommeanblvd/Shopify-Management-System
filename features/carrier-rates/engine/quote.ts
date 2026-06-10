@@ -294,6 +294,8 @@ export interface QuoteError {
 
 export type QuoteResult = QuoteOk | QuoteError;
 
+import { hasArabicScript, arabicCityCandidates } from './arabic-city-aliases';
+
 const ISO2_RE = /^[A-Z]{2}$/;
 
 /**
@@ -526,12 +528,19 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       // worood", "Aba Alworood"). Stripping all separators normalises
       // both sides. MUST stay in sync with the import script's
       // city-pattern normalisation.
-      const cityKey = input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (cityKey.length > 0) {
+      // Arabic-script cities ("الرس") reduce to an empty key under the
+      // A-Z0-9 normaliser — translate via the alias table first and try
+      // every Latin spelling the carrier lists use.
+      const cityKeys = hasArabicScript(input.destinationCity)
+        ? arabicCityCandidates(input.destinationCity)
+        : [input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '')];
+      for (const cityKey of cityKeys) {
+        if (cityKey.length === 0) continue;
         const t = patterns.get(cityKey);
         if (t !== undefined) {
           matchedTier = t;
           matchedBy = 'city';
+          break;
         }
       }
     }

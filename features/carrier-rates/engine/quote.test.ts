@@ -1407,3 +1407,39 @@ describe('vatable=false per-row override (DHL retro Elevated Risk)', () => {
     expect(r.breakdown.carrierCost).toBe(1_000_000 + 575_400 + 126_032 + 918_000);
   });
 });
+
+describe('remote-area city lookup — Arabic city aliases', () => {
+  // Shopify SA/QA orders frequently carry the city in Arabic script
+  // ("الرس") while carrier remote lists are Latin ('ALRASS'/'ARRASS').
+  // The old normaliser stripped non-A-Z0-9 chars, reducing Arabic names
+  // to an empty key — remote never matched (real #MBLVD27749).
+  function snapWithRemote() {
+    return makeSnap({
+      zonesByCountry: new Map([['SA', { label: 'Zone 9', rateByTierUpper: new Map([[1, 1_000_000]]) }]]),
+      weightTiers: [{ upperKg: 1 }],
+      surcharges: [{ kind: 'remote_fixed', value: 735_000, active: true }],
+      remotePostcodes: new Map([['SA', new Map([['ALRASS', null], ['LAYLA', null]])]]),
+    });
+  }
+
+  it('matches an Arabic-script city via the alias table', () => {
+    const r = quote(snapWithRemote(), { weightKg: 1, destinationCountry: 'SA', destinationCity: 'الرس' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(735_000);
+  });
+
+  it('still matches the Latin spelling directly', () => {
+    const r = quote(snapWithRemote(), { weightKg: 1, destinationCountry: 'SA', destinationCity: 'Al Rass' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(735_000);
+  });
+
+  it('unknown Arabic city simply does not match (no crash, no remote)', () => {
+    const r = quote(snapWithRemote(), { weightKg: 1, destinationCountry: 'SA', destinationCity: 'مدينة غير معروفة' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(0);
+  });
+});
