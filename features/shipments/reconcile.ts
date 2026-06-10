@@ -159,6 +159,31 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
   let matched = 0, unmatched = 0;
   let sumBilled = 0, sumEngine = 0;
 
+  // All-zone NET ladders per snapshot (for the cross-zone inversion in the
+  // diagnosis). Built once per card snapshot — zonesByCountry shares one
+  // ZoneSnap object per zone, so dedupe by label.
+  type Snap = NonNullable<Awaited<ReturnType<typeof loadAccountSnapshot>>>;
+  const zoneLaddersBySnap = new Map<object, Array<{ zoneLabel: string; rates: Array<{ upperKg: number; rate: number }> }>>();
+  const allZoneLadders = (snap: Snap): Array<{ zoneLabel: string; rates: Array<{ upperKg: number; rate: number }> }> => {
+    const hit = zoneLaddersBySnap.get(snap as object);
+    if (hit) return hit;
+    const seen = new Map<string, { zoneLabel: string; rates: Array<{ upperKg: number; rate: number }> }>();
+    for (const z of snap.zonesByCountry.values()) {
+      if (seen.has(z.label)) continue;
+      const rates: Array<{ upperKg: number; rate: number }> = [];
+      for (const t of snap.weightTiers) {
+        const pkg = z.rateByTierUpper.get(t.upperKg);
+        const pak = z.pakRateByTierUpper?.get(t.upperKg);
+        if (pkg != null) rates.push({ upperKg: t.upperKg, rate: pkg });
+        if (pak != null && pak !== pkg) rates.push({ upperKg: t.upperKg, rate: pak });
+      }
+      seen.set(z.label, { zoneLabel: z.label, rates });
+    }
+    const out = [...seen.values()];
+    zoneLaddersBySnap.set(snap as object, out);
+    return out;
+  };
+
   for (const r of filtered) {
     const shipDate = r.labelCreatedAt ?? r.processedAtShopify ?? null;
     const entry = r.carrierKey ? byKey.get(r.carrierKey) : undefined;
@@ -261,6 +286,8 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       engineChargeableWeightKg: q.breakdown.chargeableWeightKg,
       engineTierUpperKg: q.tier.upperKg,
       zoneRates,
+      engineZoneLabel: zone?.label ?? '',
+      otherZoneRates: allZoneLadders(snap).filter((z) => z.zoneLabel !== zone?.label),
       billedFuelableBase,
       fuelPercent: q.breakdown.fuelPercent,
       discountPercent: q.breakdown.discountPercent,

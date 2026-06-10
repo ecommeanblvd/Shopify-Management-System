@@ -12,6 +12,7 @@ const CAUSE_LABEL: Record<string, string> = {
   KHOP: '', SAI_CAN: 'sai cân', THIEU_CAU_HINH_REMOTE: 'thiếu cấu hình vùng xa',
   REMOTE_KHONG_KHOP: 'remote không khớp', LECH_RATE_CARD: 'lệch rate card',
   LECH_CHIET_KHAU: 'lệch chiết khấu', LECH_FUEL: 'lệch % fuel',
+  SAI_ZONE: 'lệch zone',
   PHAI_SINH: 'phái sinh', KHONG_KHOP: 'không khớp', LAM_TRON: 'làm tròn',
 };
 
@@ -19,6 +20,7 @@ function severityClass(s: string): string {
   switch (s) {
     case 'match': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
     case 'weight': return 'bg-red-500/10 text-red-600 dark:text-red-400';
+    case 'zone': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400';
     case 'config': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
     case 'ratecard': return 'bg-orange-500/10 text-orange-600 dark:text-orange-400';
     case 'discount': return 'bg-sky-500/10 text-sky-600 dark:text-sky-400';

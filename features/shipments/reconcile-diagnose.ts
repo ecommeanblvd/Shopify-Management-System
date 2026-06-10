@@ -19,12 +19,13 @@ export type DiagnosisCause =
   | 'LECH_RATE_CARD'
   | 'LECH_CHIET_KHAU'
   | 'LECH_FUEL'
+  | 'SAI_ZONE'
   | 'PHAI_SINH'
   | 'KHONG_KHOP'
   | 'LAM_TRON';
 
 export type DiagnosisSeverity =
-  | 'match' | 'weight' | 'config' | 'ratecard' | 'discount' | 'rounding';
+  | 'match' | 'weight' | 'zone' | 'config' | 'ratecard' | 'discount' | 'rounding';
 
 export type ComponentKey =
   | 'base' | 'discount' | 'fuel' | 'remote' | 'demand'
@@ -45,10 +46,22 @@ export interface ImpliedWeight {
   deltaTiers: number;
 }
 
+/** Cross-zone inversion result — the carrier appears to have billed the
+ *  destination under a DIFFERENT zone than our country→zone map. */
+export interface ImpliedZone {
+  /** Zone whose NET ladder matches the billed net base exactly. */
+  zoneLabel: string;
+  /** Zone our country→zone map placed the destination in. */
+  engineZoneLabel: string;
+  /** Weight tier where the exact rate match was found. */
+  tierUpperKg: number;
+}
+
 export interface ReconcileDiagnosis {
   totalDelta: number;
   components: ComponentDelta[];
   impliedWeight: ImpliedWeight | null;
+  impliedZone: ImpliedZone | null;
   verdict: string;
   severity: DiagnosisSeverity;
 }
@@ -79,6 +92,11 @@ export interface DiagnoseInput {
   engineTierUpperKg: number;
   /** Package-appropriate gross list rate ladder, ascending by upperKg. */
   zoneRates: Array<{ upperKg: number; rate: number }>;
+  /** Label of the zone our country→zone map resolved (display only). */
+  engineZoneLabel?: string;
+  /** NET ladders of every OTHER zone on the same rate card, for the
+   *  cross-zone inversion. Optional — empty disables the check. */
+  otherZoneRates?: Array<{ zoneLabel: string; rates: Array<{ upperKg: number; rate: number }> }>;
   /** base + fuelable surcharges on the BILLED side (engine isFuelable rule). */
   billedFuelableBase: number;
   fuelPercent: number;
@@ -117,6 +135,26 @@ function invertWeight(
   };
 }
 
+/** Invert a billed net base across OTHER zones' NET ladders. Exact rate
+ *  match only; prefers the tier closest to the engine's tier so a same-tier
+ *  zone swap beats a zone+weight coincidence. */
+function invertZone(
+  billedNetBase: number,
+  otherZoneRates: Array<{ zoneLabel: string; rates: Array<{ upperKg: number; rate: number }> }>,
+  engineTierUpperKg: number,
+): { zoneLabel: string; tierUpperKg: number } | null {
+  let best: { zoneLabel: string; tierUpperKg: number } | null = null;
+  let bestDist = Infinity;
+  for (const z of otherZoneRates) {
+    for (const t of z.rates) {
+      if (r(t.rate) !== r(billedNetBase)) continue;
+      const dist = Math.abs(t.upperKg - engineTierUpperKg);
+      if (dist < bestDist) { bestDist = dist; best = { zoneLabel: z.zoneLabel, tierUpperKg: t.upperKg }; }
+    }
+  }
+  return best;
+}
+
 export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const b = input.billed;
   const e = input.engine;
@@ -124,6 +162,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
 
   const components: ComponentDelta[] = [];
   let impliedWeight: ImpliedWeight | null = null;
+  let impliedZone: ImpliedZone | null = null;
 
   // base — compare NET vs NET. The FedEx invoice expresses base as a high
   // published "list" figure minus a discount line; the base actually applied
@@ -142,6 +181,20 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       const inv = invertWeight(billedNetBase, input.zoneRates, input.engineTierUpperKg, input.engineChargeableWeightKg);
       baseCause = inv.cause;
       impliedWeight = inv.implied;
+      // Same-zone inversion found nothing -> does the billed net base sit on
+      // ANOTHER zone's ladder? (e.g. FedEx billed Monaco at Zone M while our
+      // map says Zone E — verified on #MBLVD28869, 2026-06-10.)
+      if (inv.cause === 'LECH_RATE_CARD' && (input.otherZoneRates?.length ?? 0) > 0) {
+        const zHit = invertZone(billedNetBase, input.otherZoneRates!, input.engineTierUpperKg);
+        if (zHit) {
+          baseCause = 'SAI_ZONE';
+          impliedZone = {
+            zoneLabel: zHit.zoneLabel,
+            engineZoneLabel: input.engineZoneLabel ?? '',
+            tierUpperKg: zHit.tierUpperKg,
+          };
+        }
+      }
     }
   }
   components.push({ key: 'base', billed: billedNetBase, engine: engineNetBase, delta: baseDelta, cause: baseCause });
@@ -219,6 +272,11 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     const [lo, hi] = impliedWeight.rangeKg;
     verdict = `Carrier tính ở mức cân cao hơn: ${lo}–${hi} kg (bậc ≤ ${hi} kg) vs hệ thống ${impliedWeight.engineChargeableKg} kg`;
     severity = 'weight';
+  } else if (impliedZone && components.some((c) => c.cause === 'SAI_ZONE')) {
+    verdict = `⚠ Carrier bill theo ${impliedZone.zoneLabel} (bậc ≤ ${impliedZone.tierUpperKg} kg)` +
+      ` — hệ thống đang map nước này vào ${impliedZone.engineZoneLabel}.` +
+      ' Cần xác nhận zone mapping với carrier trước khi cập nhật.';
+    severity = 'zone';
   } else {
     // PHAI_SINH (downstream of base) and KHOP never headline.
     const actionable = components
@@ -252,5 +310,5 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     }
   }
 
-  return { totalDelta, components, impliedWeight, verdict, severity };
+  return { totalDelta, components, impliedWeight, impliedZone, verdict, severity };
 }

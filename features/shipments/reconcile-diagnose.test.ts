@@ -155,3 +155,77 @@ describe('diagnoseReconcileRow — rounding residual', () => {
     expect(d.severity).toBe('rounding');
   });
 });
+
+describe('diagnoseReconcileRow — SAI_ZONE (real #MBLVD28869, FedEx Monaco)', () => {
+  // Carrier billed Monaco at Zone M while our country→zone map puts MC in
+  // Zone E. Billed NET base (list 6,550,000 − discount 4,934,770 =
+  // 1,615,230) matches Zone M's 7.5 kg NET rate EXACTLY; every downstream
+  // charge (fuel 42.5 %, demand, VAT 8 %) is consistent with that base.
+  const input = () => baseInput({
+    billed: { base: 6_550_000, discount: -4_934_770, fuel: 776_998, remote: 0,
+              demand: 213_000, signature: 0, vat: 208_418, gogreen: 0,
+              elevatedRisk: 0, total: 2_813_646 },
+    engine: { base: 2_805_365, discount: 0, fuel: 1_192_280, remote: 0,
+              demand: 213_000, residential: 0, vat: 336_852, total: 4_547_497 },
+    engineChargeableWeightKg: 7.5,
+    engineTierUpperKg: 7.5,
+    zoneRates: [
+      { upperKg: 7.0, rate: 2_678_374 },
+      { upperKg: 7.5, rate: 2_805_365 },
+      { upperKg: 8.0, rate: 2_932_356 },
+    ],
+    engineZoneLabel: 'Zone E',
+    otherZoneRates: [
+      { zoneLabel: 'Zone M', rates: [
+        { upperKg: 7.0, rate: 1_542_113 },
+        { upperKg: 7.5, rate: 1_615_230 },
+        { upperKg: 8.0, rate: 1_688_347 },
+      ] },
+    ],
+    billedFuelableBase: 1_615_230,
+    fuelPercent: 42.5,
+    vatPercent: 8,
+  });
+
+  it('billed NET base hits another zone at the same tier -> SAI_ZONE on base', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'base')!.cause).toBe('SAI_ZONE');
+  });
+
+  it('impliedZone carries billed zone, engine zone, and the matched tier', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.impliedZone).toEqual({
+      zoneLabel: 'Zone M', engineZoneLabel: 'Zone E', tierUpperKg: 7.5,
+    });
+  });
+
+  it('verdict headlines the zone mismatch with severity zone', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).toBe('zone');
+    expect(r.verdict).toContain('Zone M');
+    expect(r.verdict).toContain('Zone E');
+  });
+
+  it('same-zone weight inversion still wins over cross-zone match', () => {
+    // Billed net base = own zone's 8.0 kg rate AND (hypothetically) another
+    // zone's rate — weight inversion is stronger evidence, keep SAI_CAN.
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 2_932_356, discount: 0, fuel: 0, remote: 0, demand: 0,
+                signature: 0, vat: 0, gogreen: 0, elevatedRisk: 0, total: 2_932_356 },
+      engine: { base: 2_805_365, discount: 0, fuel: 0, remote: 0, demand: 0,
+                residential: 0, vat: 0, total: 2_805_365 },
+      engineChargeableWeightKg: 7.5,
+      engineTierUpperKg: 7.5,
+      zoneRates: [
+        { upperKg: 7.5, rate: 2_805_365 },
+        { upperKg: 8.0, rate: 2_932_356 },
+      ],
+      engineZoneLabel: 'Zone E',
+      otherZoneRates: [
+        { zoneLabel: 'Zone Q', rates: [{ upperKg: 7.5, rate: 2_932_356 }] },
+      ],
+    }));
+    expect(r.components.find((c) => c.key === 'base')!.cause).toBe('SAI_CAN');
+    expect(r.severity).toBe('weight');
+  });
+});
