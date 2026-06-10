@@ -86,6 +86,12 @@ export async function loadAccountSnapshot(
   for (const p of postcodes) {
     const inner = remotePostcodes.get(p.countryCode) ?? new Map<string, string | null>();
     inner.set(p.postcodePattern, p.tier ?? null);
+    // Also index the alphanumeric-stripped form so hyphen/space format
+    // differences between the carrier file and Shopify input can't
+    // break the O(1) match ('5000-289' ↔ '5000289'). '*' wildcard and
+    // already-clean keys collapse to themselves.
+    const stripped = p.postcodePattern.toUpperCase().replace(/[^A-Z0-9*]/g, '');
+    if (stripped && !inner.has(stripped)) inner.set(stripped, p.tier ?? null);
     remotePostcodes.set(p.countryCode, inner);
   }
 

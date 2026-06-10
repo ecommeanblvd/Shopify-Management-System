@@ -515,10 +515,21 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const patterns = snap.remotePostcodes.get(country);
   if (patterns) {
     if (input.destinationPostcode) {
-      const t = patterns.get(input.destinationPostcode.trim());
-      if (t !== undefined) {
-        matchedTier = t;
-        matchedBy = 'postcode';
+      // Postcode formats vary between Shopify input and carrier lists:
+      // US ZIP+4 '98077-5629' vs stored '98077', JP '818-0084' vs
+      // '8180084', PT '5000-289'… Try: raw → alphanumeric-stripped →
+      // first segment before a separator (ZIP+4 prefix).
+      const raw = input.destinationPostcode.trim();
+      const stripped = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const prefix = raw.split(/[-\s]/)[0]?.toUpperCase().replace(/[^A-Z0-9]/g, '') ?? '';
+      for (const key of [...new Set([raw, stripped, prefix])]) {
+        if (!key) continue;
+        const t = patterns.get(key);
+        if (t !== undefined) {
+          matchedTier = t;
+          matchedBy = 'postcode';
+          break;
+        }
       }
     }
     if (matchedBy === null && input.destinationCity) {

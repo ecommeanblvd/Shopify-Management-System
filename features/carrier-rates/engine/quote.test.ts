@@ -1443,3 +1443,35 @@ describe('remote-area city lookup — Arabic city aliases', () => {
     expect(r.breakdown.remote).toBe(0);
   });
 });
+
+describe('remote-area postcode lookup — format normalisation', () => {
+  function snapWithZips() {
+    return makeSnap({
+      zonesByCountry: new Map([['US', { label: 'Zone A', rateByTierUpper: new Map([[1, 1_000_000]]) }]]),
+      weightTiers: [{ upperKg: 1 }],
+      surcharges: [{ kind: 'remote_fixed', value: 550_000, active: true }],
+      remotePostcodes: new Map([['US', new Map([['98077', null], ['8180084', null]])]]),
+    });
+  }
+
+  it('ZIP+4 falls back to the 5-digit prefix (98077-5629 → 98077)', () => {
+    const r = quote(snapWithZips(), { weightKg: 1, destinationCountry: 'US', destinationPostcode: '98077-5629' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(550_000);
+  });
+
+  it('hyphenated JP-style code matches the digit-only stored key (818-0084 → 8180084)', () => {
+    const r = quote(snapWithZips(), { weightKg: 1, destinationCountry: 'US', destinationPostcode: '818-0084' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(550_000);
+  });
+
+  it('non-remote postcode still gets no surcharge', () => {
+    const r = quote(snapWithZips(), { weightKg: 1, destinationCountry: 'US', destinationPostcode: '10001' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.remote).toBe(0);
+  });
+});
