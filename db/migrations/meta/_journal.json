@@ -330,6 +330,13 @@
       "when": 1781054136158,
       "tag": "0046_smiling_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781059530143,
+      "tag": "0047_acoustic_black_knight",
+      "breakpoints": true
     }
   ]
 }

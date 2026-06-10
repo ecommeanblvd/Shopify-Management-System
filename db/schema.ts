@@ -683,6 +683,8 @@ export const packagingTypeEnum = pgEnum('packaging_type', ['bag', 'box']);
 
 export const shopifyPushStatusEnum = pgEnum('shopify_push_status', ['pending', 'pushed', 'failed']);
 
+export const transferStatusEnum = pgEnum('transfer_status', ['draft', 'in_transit', 'received', 'cancelled']);
+
 /**
  * One physical pack per row — what actually leaves the warehouse with
  * a label. A Shopify order can map to N shipments (multi-pack orders
@@ -1431,3 +1433,37 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   index('goods_receipt_items_line_idx').on(t.fulfillmentLineId),
   index('goods_receipt_items_disposition_idx').on(t.disposition),
 ]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Warehouse Registry + Transfer Log (sub-project C1)
+// ─────────────────────────────────────────────────────────────────────
+
+export const warehouses = pgTable('warehouses', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const inventoryTransfers = pgTable('inventory_transfers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  fromWarehouseId: uuid('from_warehouse_id').references(() => warehouses.id).notNull(),
+  toWarehouseId: uuid('to_warehouse_id').references(() => warehouses.id).notNull(),
+  status: transferStatusEnum('status').notNull().default('draft'),
+  note: text('note'),
+  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+  sentAt: timestamp('sent_at'),
+  receivedAt: timestamp('received_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [index('inventory_transfers_status_idx').on(t.status)]);
+
+export const inventoryTransferLines = pgTable('inventory_transfer_lines', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  transferId: uuid('transfer_id').references(() => inventoryTransfers.id, { onDelete: 'cascade' }).notNull(),
+  sku: text('sku').notNull(),
+  productTitle: text('product_title'),
+  qty: integer('qty').notNull(),
+}, (t) => [index('inventory_transfer_lines_transfer_idx').on(t.transferId)]);
