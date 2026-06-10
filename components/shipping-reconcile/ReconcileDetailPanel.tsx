@@ -106,7 +106,13 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
         </thead>
         <tbody className="font-mono tabular-nums">
           {lines(row).map((l) => {
-            const delta = l.billed !== null && l.engine !== null ? l.billed - l.engine : null;
+            // NULL one side = the bill/engine simply has no such line —
+            // numerically 0, so the gap must still surface (e.g. engine
+            // charges ER 918,000 the invoice never billed). Only show '—'
+            // when BOTH sides are empty.
+            const delta = l.billed === null && l.engine === null
+              ? null
+              : (l.billed ?? 0) - (l.engine ?? 0);
             const comp = row.diagnosis?.components.find((x) => x.key === l.compKey);
             const causeLabel = comp && comp.cause !== 'KHOP' ? CAUSE_LABEL[comp.cause] : '';
             return (
