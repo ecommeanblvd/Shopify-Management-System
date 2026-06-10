@@ -23,6 +23,7 @@ import crypto from 'node:crypto';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from './parse-xlsx-row';
+import { invalidateReconcileCache } from './reconcile-cache';
 
 export interface ImportSummary {
   totalRows: number;
@@ -296,5 +297,6 @@ export async function importLogExport(
   }
 
   summary.durationMs = Date.now() - start;
+  if (!dryRun && summary.imported > 0) invalidateReconcileCache();
   return summary;
 }

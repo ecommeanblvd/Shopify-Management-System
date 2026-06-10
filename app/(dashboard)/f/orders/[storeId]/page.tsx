@@ -17,16 +17,17 @@ import { CostFxButton } from '@/components/shopify-orders/CostFxButton';
 import { HealthPopover, type HealthSnapshot, type BackfillStatus } from '@/components/shopify-orders/HealthPopover';
 
 // Keep at least this many days warm in the server cache. The dashboard
-// filter presets (7d / 30d / 90d / 1Y / YTD) all live inside this
-// window, so toggling between them is a pure client-side filter — no
-// roundtrip, instant. URL ranges that extend further trigger the slower
-// path of pulling exactly what was requested.
+// filter presets (7d / 30d / 90d) all live inside this window, so
+// toggling between them is a pure client-side filter — no roundtrip,
+// instant. URL ranges that extend further trigger the slower path of
+// pulling exactly what was requested.
 //
-// 365 days because the Orders TABLE keeps showing the full cache window
-// regardless of the date filter (the filter only narrows the summary
-// KPIs above). Operators reconcile against orders months old when
-// shipping invoices arrive late, so the full year must be searchable.
-const CACHE_DAYS = 365;
+// 120 days (was 365): a year of orders made the SSR payload several
+// MB on the biggest store and the page took seconds to load. Late-
+// invoice reconciliation now lives in the Shipping Reconcile module,
+// and older orders remain reachable here by picking an explicit
+// from-date (the load widens automatically).
+const CACHE_DAYS = 120;
 
 export const dynamic = 'force-dynamic';
 

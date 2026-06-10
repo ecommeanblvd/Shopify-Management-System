@@ -9,7 +9,12 @@ import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ShippingReconcilePage() {
+export default async function ShippingReconcilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ refresh?: string }>;
+}) {
+  const sp = await searchParams;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -17,8 +22,8 @@ export default async function ShippingReconcilePage() {
     redirect('/');
   }
 
-  const [{ rows }, reports] = await Promise.all([
-    reconcileShipmentsWithStatus(),
+  const [{ rows, computedAt }, reports] = await Promise.all([
+    reconcileShipmentsWithStatus({ forceRecompute: sp.refresh === '1' }),
     listIssueReports(),
   ]);
 
@@ -28,6 +33,9 @@ export default async function ShippingReconcilePage() {
         <h1 className="text-2xl font-semibold">Đối soát phí ship</h1>
         <p className="text-sm text-muted-foreground">
           So giá hóa đơn carrier (billed) với giá hệ thống tính, theo từng đơn và từng khoản phí.
+          {' '}Số liệu engine tính lúc {computedAt.toLocaleTimeString('vi-VN')}
+          {' · '}
+          <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
       <ReconcileTable rows={rows} reports={reports} />

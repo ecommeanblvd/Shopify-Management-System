@@ -6,10 +6,10 @@
  */
 import { db, schema } from '@/db/client';
 import {
-  reconcileShipments,
   type ReconcileRow,
   type ReconcileSummary,
 } from './reconcile';
+import { getReconcileCached } from './reconcile-cache';
 
 export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored';
 
@@ -68,9 +68,11 @@ interface ReconcileViewOptions {
 
 /** Load all reconcile rows (no topN cap) joined with status. */
 export async function reconcileShipmentsWithStatus(
-  opts: ReconcileViewOptions = {},
-): Promise<ReconcileView> {
-  const summary = await reconcileShipments({ ...opts, topN: 1_000_000 });
+  opts: ReconcileViewOptions & { forceRecompute?: boolean } = {},
+): Promise<ReconcileView & { computedAt: Date }> {
+  // Engine pass is cached (15-min TTL, busted on import) — the status
+  // join below always runs fresh so marking rows reflects instantly.
+  const { result: summary, computedAt } = await getReconcileCached(opts.forceRecompute ?? false);
 
   const statusRows = await db
     .select({
@@ -90,5 +92,11 @@ export async function reconcileShipmentsWithStatus(
     });
   }
 
-  return { summary, rows: mergeStatus(summary.rows, map) };
+  // The cache always holds the FULL fleet; per-request filters (CSV
+  // export's carrier/date params) apply post-hoc on the cached rows.
+  let rows = mergeStatus(summary.rows, map);
+  if (opts.carrierKey) rows = rows.filter((r) => r.carrierKey === opts.carrierKey);
+  if (opts.fromDate) rows = rows.filter((r) => !r.labelDate || r.labelDate >= opts.fromDate!);
+  if (opts.toDate) rows = rows.filter((r) => !r.labelDate || r.labelDate <= opts.toDate!);
+  return { summary, rows, computedAt };
 }
