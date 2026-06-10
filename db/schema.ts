@@ -1362,12 +1362,12 @@ export const inventoryMovementReasonEnum = pgEnum('inventory_movement_reason', [
   'manual_adjust', 'transfer_in', 'transfer_out', 'migration',
 ]);
 
-/** Ledger append-only: MỌI biến động tồn đi qua applyMovement (ledger.ts),
+/** Ledger append-only: MỌI biến động tồn đi qua applyMovement (ledger.ts — Task 3+),
  *  không UPDATE qty trực tiếp ở bất kỳ đâu khác. */
 export const inventoryMovements = pgTable('inventory_movements', {
   id: uuid('id').defaultRandom().primaryKey(),
   warehouseInventoryId: uuid('warehouse_inventory_id')
-    .references(() => warehouseInventory.id, { onDelete: 'cascade' }).notNull(),
+    .references(() => warehouseInventory.id, { onDelete: 'restrict' }).notNull(),
   deltaOnHand: integer('delta_on_hand').notNull().default(0),
   deltaReserved: integer('delta_reserved').notNull().default(0),
   reason: inventoryMovementReasonEnum('reason').notNull(),

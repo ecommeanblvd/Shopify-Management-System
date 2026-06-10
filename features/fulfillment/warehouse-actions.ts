@@ -19,13 +19,17 @@ async function requireWarehouse(): Promise<string> {
 export interface WarehouseItemInput {
   sku: string; productTitle?: string | null; variantTitle?: string | null;
   qtyOnHand: number; shelf?: string | null; floor?: string | null; bin?: string | null; note?: string | null;
-  warehouseCode?: string;
 }
 
 export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<void> {
   const userId = await requireWarehouse();
   await db.insert(schema.warehouseInventory)
-    .values({ ...input, sku: input.sku.trim(), warehouseCode: input.warehouseCode ?? 'HN', updatedBy: userId })
+    .values({
+      ...input, sku: input.sku.trim(),
+      // Pinned to HN until T7/T9 rewrite — non-HN rows would break adjustStock & the legacy allocator today.
+      warehouseCode: 'HN',
+      updatedBy: userId,
+    })
     .onConflictDoUpdate({
       target: [schema.warehouseInventory.sku, schema.warehouseInventory.warehouseCode],
       set: {
