@@ -1,0 +1,1 @@
+ALTER TABLE "carrier_surcharges" ADD COLUMN "vatable" boolean;

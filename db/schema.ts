@@ -444,6 +444,13 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // FedEx VN US-import-handling is also `country_fixed` but
   // fuelable=false (per #MBLVD28990 invoice).
   fuelable: boolean('fuelable'),
+  // Per-row VAT override:
+  //   NULL  → vatable (VAT covers the whole carrier bill — default)
+  //   FALSE → excluded from the VAT base; the amount still reaches the
+  //           total. Models flat pass-through fees billed without VAT,
+  //           e.g. DHL's retroactive Elevated Risk supplementary bill
+  //           for pre-2026-03-04 shipments (ER only, no fuel, no VAT).
+  vatable: boolean('vatable'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [

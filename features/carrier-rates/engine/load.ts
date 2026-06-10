@@ -119,6 +119,7 @@ export async function loadAccountSnapshot(
         : null,
       stepKg: s.stepKg !== null ? Number(s.stepKg) : null,
       fuelable: s.fuelable,
+      vatable: s.vatable,
       // Engine gates each row by (startsAt, endsAt) against the caller's
       // effectiveDate inside `quote()`. Loader still filters `active=true`
       // at SQL level to keep the working set small; rows whose window

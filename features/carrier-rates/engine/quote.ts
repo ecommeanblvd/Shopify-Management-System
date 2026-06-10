@@ -52,6 +52,14 @@ export interface SurchargeSnap {
    */
   fuelable?: boolean | null;
   /**
+   * Per-row override for whether this surcharge participates in the
+   * VATable subtotal. NULL/undefined → true (VAT covers everything).
+   * vatable=false models flat pass-through fees the carrier bills
+   * without VAT — e.g. DHL's retroactive Elevated Risk supplementary
+   * bill for pre-2026-03-04 shipments (ER only, no fuel, no VAT).
+   */
+  vatable?: boolean | null;
+  /**
    * Effective-from / effective-to bounds. NULL on either side means
    * "unbounded that direction". Engine considers a row applicable for
    * a given effectiveDate when:
@@ -605,11 +613,15 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // override on a remote_fixed / residential_fixed row still wins).
   let fuelableSurcharges = 0;
   let nonFuelableSurcharges = 0;
+  // Row amounts excluded from the VAT base (vatable=false override). They
+  // still ride the fuel base when fuelable, and always reach the total.
+  let nonVatableSurcharges = 0;
   for (const s of snap.surcharges) {
     const amt = rowContribution(s);
     if (amt === 0) continue;
     if (isFuelable(s)) fuelableSurcharges += amt;
     else nonFuelableSurcharges += amt;
+    if (s.vatable === false) nonVatableSurcharges += amt;
   }
   // remote + residential are computed above; classify them by the default
   // (fuelable) since they have no per-row override path in v1.
@@ -634,11 +646,11 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
 
   // VAT covers the entire carrier bill regardless of fuel eligibility,
   // minus the contract discount (so VAT is on the negotiated total).
-  const vatable = fuelable + fuel + nonFuelableSurcharges - discount;
+  const vatable = fuelable + fuel + nonFuelableSurcharges - discount - nonVatableSurcharges;
   const vatPct = sumApplicableOfKind(snap.surcharges, 'vat_percent', effectiveDate);
   const vat = vatable * (vatPct / 100);
 
-  const subtotalBeforeMarkup = vatable + vat;
+  const subtotalBeforeMarkup = vatable + vat + nonVatableSurcharges;
   const markupPct = sumApplicableOfKind(snap.surcharges, 'markup_percent', effectiveDate);
   const markup = subtotalBeforeMarkup * (markupPct / 100);
   const finalCost = Math.round(subtotalBeforeMarkup + markup);

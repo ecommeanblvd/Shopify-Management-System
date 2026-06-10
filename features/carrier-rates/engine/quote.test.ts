@@ -1358,3 +1358,52 @@ describe('quote engine', () => {
     });
   });
 });
+
+describe('vatable=false per-row override (DHL retro Elevated Risk)', () => {
+  // DHL's supplementary bill for pre-2026-03-04 shipments charged the
+  // Elevated Risk 918,000đ FLAT — no fuel on it, no VAT on it. Model:
+  // country_fixed row with fuelable=false AND vatable=false.
+  it('excludes the row from both the fuel base and the VAT base, but keeps it in the total', () => {
+    const snap = makeSnap({
+      zonesByCountry: new Map([['SA', { label: 'Zone 9', rateByTierUpper: new Map([[1, 1_000_000]]) }]]),
+      weightTiers: [{ upperKg: 1 }],
+      surcharges: [
+        { kind: 'fuel_percent', value: 30, active: true },
+        { kind: 'vat_percent', value: 8, active: true },
+        { kind: 'country_fixed', value: 918_000, countryCodes: ['SA'], active: true,
+          fuelable: false, vatable: false },
+      ],
+    });
+    const r = quote(snap, { weightKg: 1, destinationCountry: 'SA' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // fuel on base only: 30% × 1,000,000 = 300,000 (ER NOT fueled)
+    expect(r.breakdown.fuel).toBe(300_000);
+    // VAT on base + fuel only: 8% × 1,300,000 = 104,000 (ER NOT vat-ed)
+    expect(r.breakdown.vat).toBe(104_000);
+    // total still includes the flat ER
+    expect(r.breakdown.countryFixed).toBe(918_000);
+    expect(r.breakdown.carrierCost).toBe(1_000_000 + 300_000 + 104_000 + 918_000);
+  });
+
+  it('vatable=false + fuelable=true keeps fuel but skips VAT on the row amount', () => {
+    const snap = makeSnap({
+      zonesByCountry: new Map([['SA', { label: 'Zone 9', rateByTierUpper: new Map([[1, 1_000_000]]) }]]),
+      weightTiers: [{ upperKg: 1 }],
+      surcharges: [
+        { kind: 'fuel_percent', value: 30, active: true },
+        { kind: 'vat_percent', value: 8, active: true },
+        { kind: 'country_fixed', value: 918_000, countryCodes: ['SA'], active: true,
+          fuelable: true, vatable: false },
+      ],
+    });
+    const r = quote(snap, { weightKg: 1, destinationCountry: 'SA' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // fuel on base + ER: 30% × 1,918,000 = 575,400
+    expect(r.breakdown.fuel).toBe(575_400);
+    // VAT on base + fuel (fuel IS vatable): 8% × 1,575,400 = 126,032
+    expect(r.breakdown.vat).toBe(126_032);
+    expect(r.breakdown.carrierCost).toBe(1_000_000 + 575_400 + 126_032 + 918_000);
+  });
+});
