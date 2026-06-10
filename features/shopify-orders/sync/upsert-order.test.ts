@@ -6,12 +6,18 @@ import { db, schema } from '@/db/client';
 import { upsertOrder } from './upsert-order';
 import type { ShopifyOrderPayload } from '../shopify-types';
 
-// These are integration tests that need a real Postgres. CI doesn't
-// provision one, so we skip the whole suite when DATABASE_URL isn't set
-// (e.g. CI runs `npm run test` with the placeholder DATABASE_URL=…@:5432
-// that nothing listens on). Pure-logic suites continue to run.
+// SAFETY: this suite's `beforeEach` DELETEs every row in shopify_orders /
+// shopify_order_lines / shopify_order_refunds, so it must NEVER run against a
+// real database. It only runs when the operator has explicitly designated the
+// connected DB as disposable — i.e. TEST_DATABASE_URL is set AND equals
+// DATABASE_URL (so the app is actually pointed at that throwaway DB). A normal
+// `npm test` (no TEST_DATABASE_URL), CI, or a production DATABASE_URL all skip
+// the suite. (Guard added after a 2026-06-10 incident where `npm test` against
+// a prod DATABASE_URL wiped order data. Pure-logic suites continue to run.)
 const hasLiveDb = await (async () => {
-  if (!process.env.DATABASE_URL) return false;
+  const url = process.env.DATABASE_URL;
+  const testUrl = process.env.TEST_DATABASE_URL;
+  if (!url || !testUrl || url !== testUrl) return false;
   try {
     await db.execute('SELECT 1');
     return true;
