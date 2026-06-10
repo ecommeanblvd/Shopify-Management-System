@@ -126,16 +126,18 @@ async function resolveStoreIds(handles: readonly string[]): Promise<Map<string, 
  */
 async function resolveOrderIds(orderNumbers: readonly string[]): Promise<Map<string, string>> {
   if (orderNumbers.length === 0) return new Map();
-  // Operator's order_number is stored WITH the '#' prefix in DB. We
-  // search both forms to be tolerant of either input.
-  const withHash = orderNumbers.map((n) => (n.startsWith('#') ? n : `#${n}`));
+  // Shopify's order `name` may or may not carry a '#' prefix depending on
+  // the store's order-number format (cici-mean stores '#1234', tinhatelier
+  // stores 'TA2209'). Search BOTH forms so either convention matches.
+  const bare = orderNumbers.map((n) => n.replace(/^#/, ''));
+  const bothForms = [...bare, ...bare.map((n) => `#${n}`)];
   const rows = await db
     .select({
       id: schema.shopifyOrders.id,
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
     })
     .from(schema.shopifyOrders)
-    .where(inArray(schema.shopifyOrders.shopifyOrderNumber, withHash));
+    .where(inArray(schema.shopifyOrders.shopifyOrderNumber, bothForms));
   const map = new Map<string, string>();
   for (const r of rows) {
     map.set(r.orderNumber.replace(/^#/, ''), r.id);

@@ -26,10 +26,16 @@
  *  39  AN  Direct Signature
  *  40  AO  VAT
  *  41  AP  GoGreen
- *  44  AS  Log Unique Code (PK-19379)
- *  49  AX  Discount
- *  63  BL  Line Ship Gốc
- *  73  BV  Elevated Risk
+ *  42  AQ  Giá chiết khấu — discount (negative)
+ *  46  AU  Log Unique Code (PK-19379)
+ *  64  BM  Line Ship Gốc
+ *  74  BW  Phí rủi ro gia tăng — elevated risk
+ *
+ * NOTE (2026-06-10): the operator's re-exported file shifted four
+ * columns vs the 2026-06-03 layout this parser was first built
+ * against (discount AX→AQ, log code AS→AU, line ship BL→BM,
+ * elevated risk BV→BW). Verified against live headers + row math
+ * (base+fuel+demand+vat+discount = total).
  *
  * Skip semantics — the parser returns a tagged result instead of
  * throwing so the importer can tally skips by reason:
@@ -72,10 +78,10 @@ const COL = {
   directSignature: 39,
   vat: 40,
   gogreen: 41,
-  logUniqueCode: 44,
-  discount: 49,
-  shippingLine: 63,
-  elevatedRisk: 73,
+  discount: 42,
+  logUniqueCode: 46,
+  shippingLine: 64,
+  elevatedRisk: 74,
 } as const;
 
 export type CarrierKey = 'fedex' | 'dhl';

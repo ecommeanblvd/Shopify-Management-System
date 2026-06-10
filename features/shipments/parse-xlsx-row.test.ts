@@ -26,8 +26,8 @@ const MBLVD28959_ROW: Record<number, Cell> = {
   37: 82200,                                            // remote
   38: 68300,                                            // demand
   40: 99272,                                            // VAT
-  44: 'PK-29103',                                       // log unique code
-  49: '-1541142',                                       // discount (string from operator)
+  42: '-1541142',                                       // discount (string from operator)
+  46: 'PK-29103',                                       // log unique code
 };
 
 describe('parseXlsxRow', () => {
@@ -79,8 +79,8 @@ describe('parseXlsxRow', () => {
       39: 150000,                 // Direct Sig
       40: 512208,                 // VAT
       41: 28500,                  // GoGreen
-      49: '0',                    // no discount
-      73: 918000,                 // Elevated Risk
+      42: '0',                    // no discount
+      74: 918000,                 // Elevated Risk
     }));
     expect(r.kind).toBe('ok');
     if (r.kind !== 'ok') return;
@@ -161,7 +161,7 @@ describe('parseXlsxRow', () => {
     const r = parseXlsxRow(rowFromIndex({
       ...MBLVD28959_ROW,
       34: '₫1,340,167',
-      49: '−1,541,142', // U+2212 minus sign
+      42: '−1,541,142', // U+2212 minus sign
     }));
     expect(r.kind).toBe('ok');
     if (r.kind !== 'ok') return;
