@@ -127,13 +127,17 @@ function invertWeight(
   const idx = zoneRates.findIndex((z) => r(z.rate) === r(billedBase));
   if (idx < 0) return { cause: 'LECH_RATE_CARD', implied: null };
   const tier = zoneRates[idx];
-  if (tier.upperKg <= engineTierUpperKg) {
-    // Matched a tier but not heavier — treat the price gap as a card mismatch.
+  if (tier.upperKg === engineTierUpperKg) {
+    // Same tier, different price — that's a card mismatch, not weight.
     return { cause: 'LECH_RATE_CARD', implied: null };
   }
+  // Heavier OR lighter tier both count as weight evidence: carrier billed
+  // a different chargeable weight (heavier = their scale/dim caught more;
+  // lighter = our ops dims overstate the pack — see #MBLVD28074 where the
+  // GoGreen step count independently confirmed the carrier's 3 kg).
   const prevUpper = idx > 0 ? zoneRates[idx - 1].upperKg : 0;
   const engineIdx = zoneRates.findIndex((z) => z.upperKg === engineTierUpperKg);
-  const deltaTiers = engineIdx >= 0 ? idx - engineIdx : 1;
+  const deltaTiers = engineIdx >= 0 ? idx - engineIdx : (tier.upperKg > engineTierUpperKg ? 1 : -1);
   return {
     cause: 'SAI_CAN',
     implied: {
@@ -322,7 +326,9 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     severity = 'match';
   } else if (impliedWeight && components.some((c) => c.cause === 'SAI_CAN')) {
     const [lo, hi] = impliedWeight.rangeKg;
-    verdict = `Carrier tính ở mức cân cao hơn: ${lo}–${hi} kg (bậc ≤ ${hi} kg) vs hệ thống ${impliedWeight.engineChargeableKg} kg`;
+    verdict = impliedWeight.deltaTiers >= 0
+      ? `Carrier tính ở mức cân cao hơn: ${lo}–${hi} kg (bậc ≤ ${hi} kg) vs hệ thống ${impliedWeight.engineChargeableKg} kg`
+      : `Carrier tính ở mức cân THẤP hơn: bậc ≤ ${hi} kg vs hệ thống ${impliedWeight.engineChargeableKg} kg — kiểm tra lại kích thước/dim trên ops sheet`;
     severity = 'weight';
   } else if (impliedZone && components.some((c) => c.cause === 'SAI_ZONE')) {
     verdict = `⚠ Carrier bill theo ${impliedZone.zoneLabel} (bậc ≤ ${impliedZone.tierUpperKg} kg)` +

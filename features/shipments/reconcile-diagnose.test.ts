@@ -407,3 +407,41 @@ describe('diagnoseReconcileRow — FedEx fuel base includes signature (real GB o
     expect(r.severity).toBe('config');
   });
 });
+
+describe('diagnoseReconcileRow — carrier bills a LIGHTER tier (real #MBLVD28074)', () => {
+  // Ops dims 33×24×33 → dim weight 5.227 → engine tier 5.5 (2,617,961).
+  // But DHL billed tier 3.0 EXACTLY (1,743,851) and the GoGreen step
+  // count (6 × 1,900 = 11,400) independently proves a 3.0 kg chargeable.
+  // Must flag SAI_CAN (lower direction), not 'lệch rate card'.
+  const input = () => baseInput({
+    billed: { base: 1_743_851, discount: 0, fuel: 811_865, remote: 0, demand: 0,
+              signature: 150_000, vat: 290_809, gogreen: 11_400,
+              elevatedRisk: 918_000, total: 3_925_925 },
+    engine: { base: 2_617_961, discount: 0, fuel: 1_078_468, remote: 0, demand: 0,
+              residential: 0, peak: 150_000, perStep: 20_900, vat: 382_826,
+              countryFixed: 918_000, total: 5_168_155 },
+    engineChargeableWeightKg: 5.227,
+    engineTierUpperKg: 5.5,
+    zoneRates: [
+      { upperKg: 2.5, rate: 1_567_168 },
+      { upperKg: 3.0, rate: 1_743_851 },
+      { upperKg: 3.5, rate: 1_920_534 },
+      { upperKg: 5.5, rate: 2_617_961 },
+    ],
+    billedFuelableBase: 1_743_851,
+    fuelPercent: 30.5,
+    vatPercent: 8,
+  });
+
+  it('inverts the billed base to the lighter tier -> SAI_CAN', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'base')!.cause).toBe('SAI_CAN');
+    expect(r.impliedWeight).toMatchObject({ tierUpperKg: 3.0, engineChargeableKg: 5.227 });
+  });
+
+  it('verdict says the carrier billed LOWER and points at dims', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).toBe('weight');
+    expect(r.verdict.toLowerCase()).toContain('thấp hơn');
+  });
+});
