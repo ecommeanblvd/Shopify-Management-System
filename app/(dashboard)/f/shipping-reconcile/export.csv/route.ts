@@ -13,7 +13,7 @@ import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-vie
 export const dynamic = 'force-dynamic';
 
 const HEADER = [
-  'order', 'tracking', 'carrier', 'country', 'weight_kg', 'label_date',
+  'order', 'tracking', 'carrier', 'country', 'weight_kg', 'chargeable_kg', 'label_date',
   'billed_total', 'engine_total', 'delta_vnd', 'delta_pct', 'status',
   'billed_base_net', 'engine_base_net',
   'billed_fuel', 'engine_fuel', 'billed_remote', 'engine_remote',
@@ -53,7 +53,7 @@ export async function GET(req: Request): Promise<Response> {
   filtered.sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
 
   const out: CsvValue[][] = filtered.map((r) => [
-    r.orderNumber, r.trackingNumber, r.carrierKey, r.shipCountry, r.weightKg,
+    r.orderNumber, r.trackingNumber, r.carrierKey, r.shipCountry, r.weightKg, r.chargeableKg,
     r.labelDate ? r.labelDate.toISOString().slice(0, 10) : null,
     r.billedTotal, r.engineTotal, r.deltaVnd, r.deltaPct, r.status,
     r.billedBaseNet, r.engineBaseNet,

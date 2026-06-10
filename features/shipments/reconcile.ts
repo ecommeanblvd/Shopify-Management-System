@@ -24,6 +24,9 @@ export interface ReconcileRow {
   carrierKey: string;
   shipCountry: string;
   weightKg: number | null;
+  /** Weight the engine actually priced: max(actual, dim) after carrier
+   *  rounding. NULL when the engine produced no quote. */
+  chargeableKg: number | null;
   labelDate: Date | null;
   // Billed
   billedTotal: number;
@@ -345,6 +348,7 @@ interface JoinedRow {
 }
 
 interface EngineBreakdown {
+  chargeableWeightKg: number;
   base: number;
   fuel: number;
   remote: number;
@@ -377,6 +381,7 @@ function buildRow(
     carrierKey: r.carrierKey ?? '',
     shipCountry: r.shipCountry ?? '',
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,
+    chargeableKg: engine?.chargeableWeightKg ?? null,
     labelDate: r.labelCreatedAt,
     billedTotal,
     billedBase: r.billedBase !== null ? Number(r.billedBase) : null,

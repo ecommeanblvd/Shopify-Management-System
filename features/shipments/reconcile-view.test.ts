@@ -5,7 +5,7 @@ import type { ReconcileRow } from './reconcile';
 function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
   return {
     shipmentId: 's1', trackingNumber: 't1', orderNumber: '#1', storeName: 'S',
-    carrierKey: 'fedex', shipCountry: 'SA', weightKg: 1, labelDate: null,
+    carrierKey: 'fedex', shipCountry: 'SA', weightKg: 1, chargeableKg: 1, labelDate: null,
     billedTotal: 2_388_966, billedBase: 5_079_100, billedFuel: 513_729,
     billedRemote: 550_000, billedDemand: 71_000, billedSignature: 0,
     billedVat: 176_960, billedGogreen: null, billedDiscount: -4_001_823,

@@ -181,7 +181,17 @@ function FragmentRow({
         <td className="px-3 py-2">{r.trackingNumber}</td>
         <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
         <td className="px-3 py-2">{r.shipCountry}</td>
-        <td className="px-3 py-2 text-right">{r.weightKg ?? '—'}</td>
+        <td className="px-3 py-2 text-right whitespace-nowrap">
+          {r.weightKg ?? '—'}
+          {r.chargeableKg !== null && r.weightKg !== null && r.chargeableKg !== r.weightKg && (
+            <span
+              className={r.chargeableKg > r.weightKg ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}
+              title="Cân tính phí (dim weight / làm tròn bậc carrier)"
+            >
+              {' → '}{r.chargeableKg}
+            </span>
+          )}
+        </td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.billedTotal)}</td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.engineTotal)}</td>
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{fmtVnd(r.deltaVnd)}</td>
