@@ -497,3 +497,35 @@ describe('diagnoseReconcileRow — FedEx Direct Signature opt-in (pass-through)'
     expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('LECH_FUEL');
   });
 });
+
+describe('diagnoseReconcileRow — ER truy thu khô (bill bổ sung, real #MBLVD27457)', () => {
+  // DHL supplementary bill charges the ER flat: no fuel on it, no VAT on
+  // it. Every line matches (incl. ER itself); the only deltas are
+  // fuel = -%×ER and VAT = -8%×(ER-fuel-part). When the billed arithmetic
+  // closes exactly on the ER-unfueled basis, conclude ONE pass-through.
+  const input = () => baseInput({
+    billed: { base: 1_743_851, discount: 0, fuel: 531_875, remote: 0, demand: 0,
+              signature: 150_000, vat: 194_970, gogreen: 11_400,
+              elevatedRisk: 918_000, total: 3_550_096 },
+    engine: { base: 1_743_851, discount: 0, fuel: 811_865, remote: 0, demand: 0,
+              residential: 0, peak: 150_000, perStep: 11_400, vat: 290_809,
+              countryFixed: 918_000, total: 3_925_925 },
+    engineChargeableWeightKg: 3,
+    engineTierUpperKg: 3,
+    zoneRates: [{ upperKg: 3, rate: 1_743_851 }],
+    billedFuelableBase: 1_743_851,
+    fuelPercent: 30.5,
+    vatPercent: 8,
+  });
+
+  it('fuel becomes derived (gap = % × unfueled ER), not lệch fuel base', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH');
+  });
+
+  it('verdict: single supplementary-bill conclusion, severity passthrough', () => {
+    const r = diagnoseReconcileRow(input());
+    expect(r.severity).toBe('passthrough');
+    expect(r.verdict).toContain('bill bổ sung');
+  });
+});

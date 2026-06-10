@@ -262,9 +262,16 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
         ? n0(b.signature) : 0;
       const explainedBySig = sigPass > 0
         && Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2;
+      // Supplementary-bill ER: the line itself matches (billed flat = engine)
+      // but the bill did NOT fuel it while the standard formula does —
+      // fuelDelta = -% × ER exactly. Derived, not a fuel-base config issue.
+      const erBoth = n0(b.elevatedRisk) + n0(b.importHandling ?? null);
+      const explainedByUnfueledEr = erBoth > 0
+        && r(erBoth) === r(n0(e.countryFixed ?? null))
+        && Math.abs(fuelDelta + (input.fuelPercent / 100) * erBoth) <= 2;
       fuelCause = upstreamFlagged
         ? (impliedZone ? 'PHAI_SINH_ZONE' : 'PHAI_SINH')
-        : explainedBySig ? 'PHAI_SINH' : 'LECH_FUEL_BASE';
+        : (explainedBySig || explainedByUnfueledEr) ? 'PHAI_SINH' : 'LECH_FUEL_BASE';
     }
   }
   components.push({ key: 'fuel', billed: fuelBilled, engine: e.fuel, delta: fuelDelta, cause: fuelCause });
@@ -364,8 +371,23 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     const dominant = actionable[0];
     if (!dominant) {
       const optIn = components.find((c) => c.cause === 'PHI_TUY_CHON');
+      // Supplementary-bill ER pattern: ER line matches, fuel gap = -%×ER,
+      // and the billed VAT reproduces on the ER-excluded basis — the
+      // carrier charged the ER flat (no fuel, no VAT). Favorable.
+      const erBothV = n0(b.elevatedRisk) + n0(b.importHandling ?? null);
+      const fuelC = components.find((c) => c.key === 'fuel');
+      const erUnfueled = erBothV > 0
+        && components.find((c) => c.key === 'elevatedRisk')?.delta === 0
+        && fuelC !== undefined && fuelC.delta < 0
+        && Math.abs(fuelC.delta + (input.fuelPercent / 100) * erBothV) <= 2
+        && (input.vatPercent <= 0 || Math.abs(
+          n0(b.vat) - (input.vatPercent / 100) * (billedNetBase + n0(b.remote) + n0(b.demand)
+            + n0(b.signature) + n0(b.gogreen) + n0(b.fuel))) <= 2);
       if (optIn) {
         verdict = `Khớp — hóa đơn thu thêm phí ký nhận opt-in ${optIn.delta.toLocaleString('vi-VN')}đ (+fuel/VAT theo), số học khớp`;
+        severity = 'passthrough';
+      } else if (erUnfueled) {
+        verdict = `Khớp — ER ${erBothV.toLocaleString('vi-VN')}đ thu KHÔ qua bill bổ sung (không kèm fuel/VAT), số học hóa đơn khớp — chênh ${Math.abs(r(totalDelta)).toLocaleString('vi-VN')}đ có lợi`;
         severity = 'passthrough';
       } else {
         verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
