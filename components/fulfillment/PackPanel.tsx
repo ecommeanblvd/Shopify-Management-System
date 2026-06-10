@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createPack, markCheckPacked, shipPack } from '@/features/packing/actions';
+import { pushPackFulfillment } from '@/features/packing/shopify-actions';
 
 type PickedLine = { id: string; sku: string | null; qty: number; productTitle: string | null };
 type PackLine = { id: string; sku: string | null; qty: number; status: string; productTitle: string | null };
@@ -9,6 +10,8 @@ type Pack = {
   id: string; code: string | null; carrierKey: string | null;
   trackingNumber: string | null; checkPackedAt: string | Date | null;
   actualWeightKg: string | null; lines: PackLine[];
+  shopifyPushStatus: 'pending' | 'pushed' | 'failed' | null;
+  shopifyPushError: string | null;
 };
 
 interface Props {
@@ -89,6 +92,11 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
                     {checked ? 'Đã check-packed' : 'Chưa check'}
                   </span>
                   {shipped && <span className="rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5">Đã ship</span>}
+                  {p.shopifyPushStatus === 'pushed' && <span className="rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5">Đã đồng bộ Shopify</span>}
+                  {p.shopifyPushStatus === 'pending' && <span className="rounded bg-muted text-muted-foreground px-2 py-0.5">Đang đẩy Shopify…</span>}
+                  {p.shopifyPushStatus === 'failed' && (
+                    <span className="rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5" title={p.shopifyPushError ?? ''}>Lỗi đẩy Shopify</span>
+                  )}
                 </div>
               </div>
               <ul className="text-sm text-muted-foreground">
@@ -112,6 +120,15 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
                     className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
                     Ship
                   </button>
+                </div>
+              )}
+              {canManage && shipped && p.shopifyPushStatus === 'failed' && (
+                <div className="flex items-center gap-2">
+                  <button disabled={isPending} onClick={() => startTransition(async () => { await pushPackFulfillment(p.id); })}
+                    className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
+                    Push lại Shopify
+                  </button>
+                  {p.shopifyPushError && <span className="text-xs text-red-600 truncate max-w-xs">{p.shopifyPushError}</span>}
                 </div>
               )}
             </div>
