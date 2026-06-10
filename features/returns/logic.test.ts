@@ -34,6 +34,9 @@ describe('validateReturnDraft', () => {
       { shopifyLineId: 'l1', returnedQty: 1 },
     ] }).ok).toBe(false);
   });
+  it('rejects a missing shopifyLineId', () => {
+    expect(validateReturnDraft({ orderId: 'o1', lines: [{ shopifyLineId: '', returnedQty: 1 }] }).ok).toBe(false);
+  });
 });
 
 describe('validateReturnQc', () => {
