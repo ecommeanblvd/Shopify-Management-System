@@ -410,9 +410,15 @@ function impliedBilledFuelPercent(r: JoinedRow, enginePct: number | null): numbe
   const remote = Number(r.billedRemote ?? 0);
   const demand = Number(r.billedDemand ?? 0);
   const signature = Number(r.billedSignature ?? 0);
+  // DHL fuels the Elevated Risk (country_fixed) too — include it in the
+  // combinations (verified #MBLVD27457-cohort: 30.5% × (base + ER)).
+  const er = Number(r.billedElevatedRisk ?? 0) + Number(r.billedImportHandling ?? 0);
   const c0 = netBase + remote;
-  const candidates = [...new Set([c0, c0 + demand, c0 + signature, c0 + demand + signature])]
-    .filter((b) => b > 0);
+  const adds = [demand, signature, er];
+  const candidates = [...new Set(
+    Array.from({ length: 8 }, (_, mask) =>
+      c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
+  )].filter((b) => b > 0);
   let best: number | null = null;
   let bestDist = Infinity;
   for (const base of candidates) {

@@ -232,12 +232,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     // base + ER only. Try every combination so a correct carrier %
     // is always recognised.
     const c0 = input.billedFuelableBase;
-    const candidates = [
-      c0,
-      c0 + n0(b.demand),
-      c0 + n0(b.signature),
-      c0 + n0(b.demand) + n0(b.signature),
-    ];
+    // DHL also fuels the Elevated Risk line; FedEx fuels demand+signature.
+    const adds = [n0(b.demand), n0(b.signature), n0(b.elevatedRisk) + n0(b.importHandling ?? null)];
+    const candidates = [...new Set(
+      Array.from({ length: 8 }, (_, mask) =>
+        c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
+    )];
     const pctMatches = candidates.some((base) =>
       base > 0 && Math.abs((fuelBilled / base) * 100 - input.fuelPercent) < 0.05);
     if (!pctMatches) {
