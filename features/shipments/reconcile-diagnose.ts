@@ -226,7 +226,18 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const fuelDelta = r(fuelBilled - e.fuel);
   let fuelCause: DiagnosisCause = 'KHOP';
   if (fuelDelta !== 0) {
-    const candidates = [input.billedFuelableBase, input.billedFuelableBase + n0(b.demand)];
+    // Carrier fuel base = net base + remote + (per-carrier subset of
+    // demand / signature). FedEx fuels signature + demand (verified GB
+    // order 2026-06-10: 45.25% × (net+remote+signature)); DHL fuels
+    // base + ER only. Try every combination so a correct carrier %
+    // is always recognised.
+    const c0 = input.billedFuelableBase;
+    const candidates = [
+      c0,
+      c0 + n0(b.demand),
+      c0 + n0(b.signature),
+      c0 + n0(b.demand) + n0(b.signature),
+    ];
     const pctMatches = candidates.some((base) =>
       base > 0 && Math.abs((fuelBilled / base) * 100 - input.fuelPercent) < 0.05);
     if (!pctMatches) {

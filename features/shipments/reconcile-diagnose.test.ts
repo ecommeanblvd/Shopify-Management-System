@@ -381,3 +381,29 @@ describe('diagnoseReconcileRow — fuel-base mismatch must not hide behind PHAI_
     expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH');
   });
 });
+
+describe('diagnoseReconcileRow — FedEx fuel base includes signature (real GB order)', () => {
+  // billed fuel 623,302 = 45.25% × (net 569,764 + remote 715,000 +
+  // signature 92,700). The implied-% check must try the full surcharge
+  // base so a correct carrier % is recognised — here remote is missing
+  // from OUR config (engine remote 0), so fuel must be PHAI_SINH
+  // (downstream of the flagged remote line), not LECH_FUEL.
+  it('recognises the % when signature rides the fuel base; fuel stays derived', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_989_400, discount: -1_419_636, fuel: 623_302, remote: 715_000,
+                demand: 0, signature: 92_700, vat: 160_061, gogreen: 0,
+                elevatedRisk: 0, total: 2_160_827 },
+      engine: { base: 569_764, discount: 0, fuel: 257_818, remote: 0, demand: 0,
+                residential: 0, vat: 66_207, total: 893_789 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 569_764 }],
+      billedFuelableBase: 569_764 + 715_000,
+      fuelPercent: 45.25,
+      vatPercent: 8,
+    }));
+    expect(r.components.find((c) => c.key === 'remote')!.cause).toBe('THIEU_CAU_HINH_REMOTE');
+    expect(r.components.find((c) => c.key === 'fuel')!.cause).toBe('PHAI_SINH');
+    expect(r.severity).toBe('config');
+  });
+});

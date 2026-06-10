@@ -388,21 +388,30 @@ interface EngineBreakdown {
 
 /**
  * Implied % the carrier actually applied: billedFuel / fuelable base.
- * Tries (net base + remote) and (+ demand); returns the candidate whose
- * value sits closest to a clean 0.25 %-step (carrier indices move in
- * quarter-point steps), since FedEx fuels demand on some invoices only.
+ * The carrier base = net base + remote + (per-carrier subset of demand
+ * and signature) — FedEx fuels signature + demand, DHL doesn't. Tries
+ * every combination; a candidate within 0.05 pp of the engine's weekly
+ * %% wins outright (that's the authoritative index), otherwise the one
+ * closest to a clean 0.25 %-step.
  */
-function impliedBilledFuelPercent(r: JoinedRow): number | null {
+function impliedBilledFuelPercent(r: JoinedRow, enginePct: number | null): number | null {
   const fuel = r.billedFuel != null ? Number(r.billedFuel) : 0;
   if (fuel <= 0) return null;
   const netBase = Number(r.billedBase ?? 0) + Number(r.billedDiscount ?? 0);
   const remote = Number(r.billedRemote ?? 0);
   const demand = Number(r.billedDemand ?? 0);
-  const candidates = [netBase + remote, netBase + remote + demand].filter((b) => b > 0);
+  const signature = Number(r.billedSignature ?? 0);
+  const c0 = netBase + remote;
+  const candidates = [...new Set([c0, c0 + demand, c0 + signature, c0 + demand + signature])]
+    .filter((b) => b > 0);
   let best: number | null = null;
   let bestDist = Infinity;
   for (const base of candidates) {
     const pct = (fuel / base) * 100;
+    if (enginePct !== null && Math.abs(pct - enginePct) < 0.05) {
+      best = pct;
+      break;
+    }
     const dist = Math.abs(pct - Math.round(pct * 4) / 4);
     if (dist < bestDist) { bestDist = dist; best = pct; }
   }
@@ -447,7 +456,7 @@ function buildRow(
     engineBase: engine?.base ?? null,
     engineFuel: engine?.fuel ?? null,
     engineFuelPercent: engine?.fuelPercent ?? null,
-    billedFuelPercent: impliedBilledFuelPercent(r),
+    billedFuelPercent: impliedBilledFuelPercent(r, engine?.fuelPercent ?? null),
     engineRemote: engine?.remote ?? null,
     engineDemand: engine?.demand ?? null,
     engineResidential: engine?.residential ?? null,
