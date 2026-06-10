@@ -93,6 +93,11 @@ interface UpsertOpenFuelRowArgs {
  */
 async function upsertOpenFuelRow(args: UpsertOpenFuelRowArgs): Promise<ApplyFuelResult> {
   const valueStr = args.percent.toString();
+  // Week boundaries must sit at UTC MIDNIGHT: shipment labels are stored
+  // at 00:00 UTC, so a boundary carrying the cron's run time (Mon 04:03)
+  // would push Monday-labeled shipments into the PREVIOUS week's rate.
+  const boundary = new Date(Date.UTC(
+    args.fetchedAt.getUTCFullYear(), args.fetchedAt.getUTCMonth(), args.fetchedAt.getUTCDate()));
 
   // The currently-open row is the one with endsAt IS NULL. Older closed
   // rows (endsAt set) stay as-is so historical quotes keep resolving.
@@ -139,7 +144,7 @@ async function upsertOpenFuelRow(args: UpsertOpenFuelRowArgs): Promise<ApplyFuel
     await db
       .update(schema.carrierSurcharges)
       .set({
-        endsAt: args.fetchedAt,
+        endsAt: boundary,
         updatedAt: new Date(),
         ...(args.triggeredBy ? { updatedBy: args.triggeredBy } : {}),
       })
@@ -154,7 +159,7 @@ async function upsertOpenFuelRow(args: UpsertOpenFuelRowArgs): Promise<ApplyFuel
       value: valueStr,
       active: true,
       note: `Auto-fetched from ${args.carrierTag} (${args.weekLabel})`,
-      startsAt: args.fetchedAt,
+      startsAt: boundary,
       endsAt: null,
       lastAutoFetchedAt: args.fetchedAt,
       lastAutoSource: args.sourceTag,
