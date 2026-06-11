@@ -120,8 +120,10 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
   let storedSku: string | null = null;
 
   await db.transaction(async (tx) => {
+    // FOR UPDATE: hai người cùng bấm QC một kiện → người sau chờ lock rồi
+    // dội ở guard 'đã QC' phía dưới, không thể double-book movement.
     const [item] = await tx.select().from(schema.goodsReceiptItems)
-      .where(eq(schema.goodsReceiptItems.id, input.itemId)).limit(1);
+      .where(eq(schema.goodsReceiptItems.id, input.itemId)).limit(1).for('update');
     if (!item) throw new Error('Item not found');
     if (item.qcResult !== 'pending') throw new Error('Đơn vị này đã QC');
     const [receipt] = await tx.select({
