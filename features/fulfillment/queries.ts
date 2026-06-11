@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export async function listFulfillmentWorklist() {
@@ -27,6 +27,8 @@ export async function getFulfillmentDetail(orderId: string) {
     status: schema.orderFulfillmentLines.status,
     productTitle: schema.shopifyOrderLines.productTitle,
     variantTitle: schema.shopifyOrderLines.variantTitle,
+    warehouseInventoryId: schema.orderFulfillmentLines.warehouseInventoryId,
+    warehouseCode: schema.warehouseInventory.warehouseCode,
     shelf: schema.warehouseInventory.shelf,
     floor: schema.warehouseInventory.floor,
     bin: schema.warehouseInventory.bin,
@@ -40,5 +42,26 @@ export async function getFulfillmentDetail(orderId: string) {
     .leftJoin(schema.warehouseInventory, eq(schema.warehouseInventory.id, schema.orderFulfillmentLines.warehouseInventoryId))
     .leftJoin(schema.brandOrderRequests, eq(schema.brandOrderRequests.fulfillmentLineId, schema.orderFulfillmentLines.id))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
-  return { fulfillment: ful, lines };
+
+  // Nguồn "Khu chờ" (spec §5.3): đếm bulk kiện allocate_to_order + QC pass theo dòng.
+  const stagedByLine = new Map<string, number>();
+  if (lines.length > 0) {
+    const staged = await db.select({
+      lineId: schema.goodsReceiptItems.fulfillmentLineId,
+      count: sql<number>`count(*)::int`,
+    })
+      .from(schema.goodsReceiptItems)
+      .where(and(
+        inArray(schema.goodsReceiptItems.fulfillmentLineId, lines.map((l) => l.id)),
+        eq(schema.goodsReceiptItems.disposition, 'allocate_to_order'),
+        eq(schema.goodsReceiptItems.qcResult, 'pass'),
+      ))
+      .groupBy(schema.goodsReceiptItems.fulfillmentLineId);
+    for (const r of staged) if (r.lineId) stagedByLine.set(r.lineId, r.count);
+  }
+
+  return {
+    fulfillment: ful,
+    lines: lines.map((l) => ({ ...l, stagedCount: stagedByLine.get(l.id) ?? 0 })),
+  };
 }

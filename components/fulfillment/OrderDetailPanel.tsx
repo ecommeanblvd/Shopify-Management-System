@@ -3,6 +3,8 @@
 import { useTransition } from 'react';
 import { checkStockForOrder, markLine, markOrder } from '@/features/fulfillment/actions';
 import { resendBrandRequest } from '@/features/fulfillment/brand-actions';
+import { lineSource } from '@/features/warehouse/staging-logic';
+import { SourceChip } from '@/components/fulfillment/SourceChip';
 
 type OrderStatus =
   | 'received'
@@ -53,6 +55,10 @@ type Line = {
   status: string;
   productTitle: string | null;
   variantTitle: string | null;
+  warehouseInventoryId: string | null;
+  warehouseCode: string | null;
+  /** Kiện khu chờ (allocate_to_order, QC pass) gắn dòng này. */
+  stagedCount: number;
   shelf: string | null;
   floor: string | null;
   bin: string | null;
@@ -218,6 +224,7 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
               <th className="px-3 py-2 text-left">Tên</th>
               <th className="px-3 py-2 text-right">SL</th>
               <th className="px-3 py-2 text-left">Trạng thái</th>
+              <th className="px-3 py-2 text-left">Nguồn</th>
               <th className="px-3 py-2 text-left">Vị trí</th>
               {canManage && <th className="px-3 py-2 text-left">Hành động</th>}
             </tr>
@@ -239,6 +246,17 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
                   </span>
                 </td>
                 <td className="px-3 py-2">
+                  <SourceChip
+                    source={lineSource({
+                      status: line.status,
+                      qty: line.qty,
+                      stagedCount: line.stagedCount,
+                      warehouseInventoryId: line.warehouseInventoryId,
+                      warehouseCode: line.warehouseCode,
+                    })}
+                  />
+                </td>
+                <td className="px-3 py-2">
                   <LocationCell line={line} canManage={canManage} />
                 </td>
                 {canManage && (
@@ -250,7 +268,7 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
             ))}
             {lines.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 6 : 5} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={canManage ? 7 : 6} className="px-3 py-6 text-center text-muted-foreground">
                   Không có dòng nào.
                 </td>
               </tr>
