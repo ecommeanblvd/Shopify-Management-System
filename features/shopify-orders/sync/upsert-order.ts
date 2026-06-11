@@ -19,6 +19,18 @@ export async function upsertOrder(
 ): Promise<void> {
   const mapped = mapShopifyOrder(payload, storeId);
 
+  // Cancel detection (spec §4e): the upsert below is last-write-wins, so the
+  // previous cancelled state is gone after it runs. One cheap indexed select
+  // (unique shopify_order_id) of the old timestamp before the upsert tells us
+  // whether this payload flips the order null → cancelled.
+  const [prev] = await db
+    .select({ cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify })
+    .from(schema.shopifyOrders)
+    .where(eq(schema.shopifyOrders.shopifyOrderId, payload.id))
+    .limit(1);
+  const becameCancelled =
+    mapped.order.cancelledAtShopify !== null && prev !== undefined && prev.cancelledAtShopify === null;
+
   let internalOrderId: string | undefined;
 
   await db.transaction(async (tx) => {
@@ -66,6 +78,18 @@ export async function upsertOrder(
       await ensureFulfillmentForOrder(internalOrderId);
     } catch (err) {
       console.error(`ensureFulfillmentForOrder failed for order ${internalOrderId}:`, err);
+    }
+
+    // Order just became cancelled: release its reservations back to the
+    // warehouse and hand them to the next waiting order. Best-effort — a
+    // release failure must never break order sync (order already committed).
+    if (becameCancelled) {
+      try {
+        const { releaseOrderAllocations } = await import('@/features/warehouse/release');
+        await releaseOrderAllocations(internalOrderId);
+      } catch (err) {
+        console.error(`releaseOrderAllocations failed for order ${internalOrderId}:`, err);
+      }
     }
   }
 }

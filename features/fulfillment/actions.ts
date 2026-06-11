@@ -10,6 +10,7 @@ import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { checkStock, canTransitionLine, type StockInfo, type LineStatus } from './logic';
 import { recomputeRollup } from './rollup';
 import { sendBrandRequest } from '@/features/mmp/outbound';
+import { applyMovement } from '@/features/warehouse/ledger';
 
 /** A drizzle transaction handle (same query surface as `db`). */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -70,14 +71,20 @@ async function sendPendingBrandRequests(orderId: string): Promise<void> {
  *  stock on 'picked'. Caller MUST have validated canTransitionLine first. */
 async function applyLineTransition(tx: Tx, l: LineRow, next: LineStatus, actor: string): Promise<void> {
   if (next === 'picked' && l.warehouseInventoryId && l.allocatedQty > 0) {
-    // The CHECK constraints (qty_on_hand >= 0, qty_reserved >= 0) make this
-    // throw + roll back rather than corrupt counts if stock went short.
-    await tx.update(schema.warehouseInventory)
-      .set({
-        qtyOnHand: sql`${schema.warehouseInventory.qtyOnHand} - ${l.allocatedQty}`,
-        qtyReserved: sql`${schema.warehouseInventory.qtyReserved} - ${l.allocatedQty}`,
-      })
-      .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId));
+    // Stock leaves through the ledger (applyMovement validates the invariants
+    // and writes the inventory_movements row). The inventory lock is taken
+    // here, BEFORE this tx touches the fulfillment-line row below — matching
+    // the inventory→line lock order used by allocateLine/checkStockForOrder.
+    const [inv] = await tx.select({ sku: schema.warehouseInventory.sku, wh: schema.warehouseInventory.warehouseCode })
+      .from(schema.warehouseInventory)
+      .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId)).limit(1);
+    if (inv) {
+      await applyMovement(tx, {
+        sku: inv.sku, warehouseCode: inv.wh,
+        deltaOnHand: -l.allocatedQty, deltaReserved: -l.allocatedQty,
+        reason: 'pick', refType: 'fulfillment_line', refId: l.id, actor,
+      });
+    }
   }
   const stamp = next === 'picked' ? { pickedAt: sql`now()` } : next === 'packed' ? { packedAt: sql`now()` } : { shippedAt: sql`now()` };
   await tx.update(schema.orderFulfillmentLines)

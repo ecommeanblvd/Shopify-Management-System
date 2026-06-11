@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { upsertOrder } from '../sync/upsert-order';
 import type { ShopifyOrderPayload, ShopifyRefund } from '../shopify-types';
@@ -41,10 +41,24 @@ export async function dispatchWebhook(
   }
   if (topic === 'orders/cancelled') {
     const p = payload as ShopifyOrderPayload;
-    await db
+    // The isNull guard makes the null→cancelled transition detection atomic:
+    // only the FIRST delivery flips the row (and gets it back via RETURNING),
+    // so re-delivered webhooks can't double-release reservations.
+    const flipped = await db
       .update(schema.shopifyOrders)
       .set({ cancelledAtShopify: new Date(p.cancelledAt ?? new Date().toISOString()) })
-      .where(eq(schema.shopifyOrders.shopifyOrderId, p.id));
+      .where(and(eq(schema.shopifyOrders.shopifyOrderId, p.id),
+                 isNull(schema.shopifyOrders.cancelledAtShopify)))
+      .returning({ id: schema.shopifyOrders.id });
+    if (flipped.length > 0) {
+      // Best-effort (spec §4e): release must never fail the webhook 2xx.
+      try {
+        const { releaseOrderAllocations } = await import('@/features/warehouse/release');
+        await releaseOrderAllocations(flipped[0].id);
+      } catch (err) {
+        console.error(`releaseOrderAllocations failed for order ${flipped[0].id}:`, err);
+      }
+    }
     return;
   }
   if (topic === 'refunds/create') {
