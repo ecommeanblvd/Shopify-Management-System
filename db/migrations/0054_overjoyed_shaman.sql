@@ -1,0 +1,1 @@
+ALTER TABLE "inventory_movements" ALTER COLUMN "actor" SET NOT NULL;

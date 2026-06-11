@@ -1376,7 +1376,7 @@ export const inventoryMovements = pgTable('inventory_movements', {
   refId: uuid('ref_id'),
   note: text('note'),
   /** user id hoặc 'system:allocator' */
-  actor: text('actor'),
+  actor: text('actor').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
   index('inventory_movements_inv_idx').on(t.warehouseInventoryId, t.createdAt),

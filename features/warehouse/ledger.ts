@@ -14,6 +14,8 @@ export interface MovementDraft {
   reason: 'receipt_po' | 'receipt_consignment' | 'receipt_return' | 'auto_allocate'
     | 'release_allocation' | 'pick' | 'manual_adjust' | 'transfer_in' | 'transfer_out' | 'migration';
   refType?: 'receipt_item' | 'fulfillment_line' | 'order' | 'transfer';
+  /** UUID của bản ghi tham chiếu (cột DB là uuid — KHÔNG truyền GID/chuỗi thường). */
+  /** UUID của bản ghi tham chiếu (cột DB là uuid — KHÔNG truyền GID/chuỗi thường). */
   refId?: string | null;
   note?: string | null;
   actor: string;
@@ -44,6 +46,7 @@ export async function applyMovement(tx: Tx, d: MovementDraft): Promise<string> {
         .for('update');
     }
   }
+  if (!inv) throw new Error(`Không có dòng tồn ${d.sku}@${d.warehouseCode} (race)`);
   // 2) Bất biến (logic thuần đã test ở allocation-logic)
   const v = validateMovement(inv, d);
   if (!v.ok) throw new Error(`Movement ${d.reason} ${d.sku}@${d.warehouseCode}: ${v.error}`);
