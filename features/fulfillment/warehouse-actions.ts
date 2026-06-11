@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -50,7 +50,7 @@ export async function adjustStock(input: {
   if (!input.delta) throw new Error('Delta phải khác 0');
   await db.transaction(async (tx) => {
     await applyMovement(tx, {
-      sku: input.sku.trim(), warehouseCode: input.warehouseCode,
+      sku: input.sku.trim(), warehouseCode: input.warehouseCode.trim(),
       deltaOnHand: input.delta, deltaReserved: 0,
       reason: 'manual_adjust', note: input.note.trim(), actor: userId,
       createIfMissing: {},
@@ -70,39 +70,43 @@ export async function transferStock(input: {
   sku: string; from: string; to: string; qty: number; note?: string | null;
 }): Promise<void> {
   const userId = await requireWarehouse();
+  const sku = input.sku.trim();
+  const from = input.from.trim();
+  const to = input.to.trim();
   if (input.qty <= 0) throw new Error('Số lượng chuyển phải > 0');
-  if (input.from === input.to) throw new Error('Kho nguồn trùng kho đích');
+  if (from === to) throw new Error('Kho nguồn trùng kho đích');
   await db.transaction(async (tx) => {
     // Deterministic lock order: always lock the lexicographically-smaller
     // warehouseCode first to prevent AB-BA deadlock when two opposite transfers
-    // run concurrently (e.g. HN→SG and SG→HN). The "smaller" side gets
-    // createIfMissing so a brand-new destination row can be created atomically.
+    // run concurrently (e.g. HN→SG and SG→HN). createIfMissing is always on
+    // the DESTINATION movement, regardless of which side is locked first —
+    // a missing source row must throw ("Không có dòng tồn").
     //
     // Note: transferring units that are reserved is intentionally blocked —
     // applyMovement validates reserved ≤ on_hand on the from-row; moving
     // reserved stock would leave reserved > on_hand after the out-movement.
-    if (input.to < input.from) {
+    if (to < from) {
       // to is lexicographically first → lock to (transfer_in) first
       await applyMovement(tx, {
-        sku: input.sku.trim(), warehouseCode: input.to,
+        sku, warehouseCode: to,
         deltaOnHand: input.qty, deltaReserved: 0,
         reason: 'transfer_in', refType: 'transfer', note: input.note ?? null, actor: userId,
         createIfMissing: {},
       });
       await applyMovement(tx, {
-        sku: input.sku.trim(), warehouseCode: input.from,
+        sku, warehouseCode: from,
         deltaOnHand: -input.qty, deltaReserved: 0,
         reason: 'transfer_out', refType: 'transfer', note: input.note ?? null, actor: userId,
       });
     } else {
       // from is lexicographically first (or equal, already rejected) → lock from (transfer_out) first
       await applyMovement(tx, {
-        sku: input.sku.trim(), warehouseCode: input.from,
+        sku, warehouseCode: from,
         deltaOnHand: -input.qty, deltaReserved: 0,
         reason: 'transfer_out', refType: 'transfer', note: input.note ?? null, actor: userId,
       });
       await applyMovement(tx, {
-        sku: input.sku.trim(), warehouseCode: input.to,
+        sku, warehouseCode: to,
         deltaOnHand: input.qty, deltaReserved: 0,
         reason: 'transfer_in', refType: 'transfer', note: input.note ?? null, actor: userId,
         createIfMissing: {},

@@ -1,7 +1,7 @@
 /** Auto-allocation hai chiều (spec §4a/§4b):
  *  docs/superpowers/specs/2026-06-10-warehouse-core-auto-allocation-design.md
  *  Best-effort: lỗi không được phá sync đơn — caller bọc try/catch. */
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { planAllocation, fifoOrder } from './allocation-logic';
 import { applyMovement } from './ledger';

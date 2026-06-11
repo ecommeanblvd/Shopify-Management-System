@@ -135,6 +135,21 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
             reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
           });
           cur.available += l.allocatedQty;
+        } else {
+          // SKU của dòng đã đổi sau khi cấp → dòng tồn CŨ không nằm trong tập
+          // đã lock theo SKU ở trên. Vẫn phải nhả qua ledger (applyMovement tự
+          // lock dòng đó), nếu không reserved rò rỉ vĩnh viễn khi dòng đơn bị
+          // ghi đè bên dưới.
+          const [old] = await tx.select({ sku: schema.warehouseInventory.sku, warehouseCode: schema.warehouseInventory.warehouseCode })
+            .from(schema.warehouseInventory)
+            .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId)).limit(1);
+          if (old) {
+            await applyMovement(tx, {
+              sku: old.sku, warehouseCode: old.warehouseCode,
+              deltaOnHand: 0, deltaReserved: -l.allocatedQty,
+              reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
+            });
+          }
         }
       }
       const res = checkStock({ sku: l.sku, qty: l.qty }, bySku);

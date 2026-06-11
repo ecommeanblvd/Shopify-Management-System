@@ -7,6 +7,7 @@ import type { WarehouseItemInput } from '@/features/fulfillment/warehouse-action
 interface WarehouseItem {
   id: string;
   sku: string;
+  warehouseCode: string;
   productTitle: string | null;
   variantTitle: string | null;
   qtyOnHand: number;
@@ -40,6 +41,7 @@ export function WarehouseTable({ items, canManage }: Props) {
   const [editingSku, setEditingSku] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [adjustPending, setAdjustPending] = useState<string | null>(null);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   function loadRow(item: WarehouseItem) {
@@ -84,15 +86,31 @@ export function WarehouseTable({ items, canManage }: Props) {
     });
   }
 
-  function handleAdjust(sku: string, delta: number) {
-    setAdjustPending(sku);
+  function handleAdjust(item: WarehouseItem, delta: number) {
+    setAdjustPending(item.id);
+    setAdjustError(null);
     startTransition(async () => {
-      await adjustStock({ sku, warehouseCode: 'HN', delta, note: 'Điều chỉnh nhanh từ bảng kho (legacy UI)' });
-      setAdjustPending(null);
+      try {
+        await adjustStock({
+          sku: item.sku,
+          warehouseCode: item.warehouseCode,
+          delta,
+          note: 'Điều chỉnh nhanh từ bảng kho (legacy UI)',
+        });
+      } catch (e) {
+        // adjustStock chặn kho âm / giữ vượt tồn — hiện lý do thay vì kẹt nút.
+        setAdjustError(
+          e instanceof Error && e.message
+            ? `Không điều chỉnh được ${item.sku}@${item.warehouseCode}: ${e.message}`
+            : `Không điều chỉnh được ${item.sku}@${item.warehouseCode}.`,
+        );
+      } finally {
+        setAdjustPending(null);
+      }
     });
   }
 
-  const colSpan = canManage ? 10 : 9;
+  const colSpan = canManage ? 11 : 10;
 
   return (
     <div className="space-y-4">
@@ -209,11 +227,15 @@ export function WarehouseTable({ items, canManage }: Props) {
       )}
 
       {/* Table */}
+      {adjustError && (
+        <p className="text-xs text-red-600 dark:text-red-400">{adjustError}</p>
+      )}
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left">SKU</th>
+              <th className="px-3 py-2 text-left">Kho</th>
               <th className="px-3 py-2 text-left">Tên</th>
               <th className="px-3 py-2 text-right">Khả dụng</th>
               <th className="px-3 py-2 text-right">Tồn</th>
@@ -238,7 +260,7 @@ export function WarehouseTable({ items, canManage }: Props) {
             ) : (
               items.map((item) => {
                 const available = item.qtyOnHand - item.qtyReserved;
-                const isAdjusting = adjustPending === item.sku;
+                const isAdjusting = adjustPending === item.id;
                 const name = [item.productTitle, item.variantTitle]
                   .filter(Boolean)
                   .join(' — ');
@@ -248,6 +270,7 @@ export function WarehouseTable({ items, canManage }: Props) {
                     className="border-t border-border hover:bg-muted/30"
                   >
                     <td className="px-3 py-2 font-sans">{item.sku}</td>
+                    <td className="px-3 py-2 font-sans">{item.warehouseCode}</td>
                     <td className="px-3 py-2 font-sans">{name || '—'}</td>
                     <td
                       className={`px-3 py-2 text-right ${
@@ -270,14 +293,14 @@ export function WarehouseTable({ items, canManage }: Props) {
                         <div className="flex items-center gap-1">
                           <button
                             disabled={isPending || isAdjusting}
-                            onClick={() => handleAdjust(item.sku, -1)}
+                            onClick={() => handleAdjust(item, -1)}
                             className="rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50"
                           >
                             &minus;1
                           </button>
                           <button
                             disabled={isPending || isAdjusting}
-                            onClick={() => handleAdjust(item.sku, 1)}
+                            onClick={() => handleAdjust(item, 1)}
                             className="rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50"
                           >
                             +1
