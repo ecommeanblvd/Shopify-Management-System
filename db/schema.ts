@@ -429,6 +429,11 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // single row can list a whole regional group ("EU+UK" → ['DE','FR','IT',
   // ...]) without an extra join table.
   countryCodes: jsonb('country_codes'),
+  // Danh sách nước MIỄN (ISO-2, jsonb) — dòng surcharge KHÔNG áp dụng khi
+  // nước đích nằm trong danh sách. NULL = không miễn nước nào. Đối ngẫu với
+  // countryCodes (danh sách BAO GỒM); nếu có cả hai, exclusion thắng.
+  // Dùng đầu tiên cho FedEx Direct Signature (13 nước miễn, spec 2026-06-11).
+  excludedCountryCodes: jsonb('excluded_country_codes'),
   active: boolean('active').notNull().default(true),
   startsAt: timestamp('starts_at'),
   endsAt: timestamp('ends_at'),

@@ -1,0 +1,1 @@
+ALTER TABLE "carrier_surcharges" ADD COLUMN "excluded_country_codes" jsonb;
