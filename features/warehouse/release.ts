@@ -21,9 +21,23 @@ export async function releaseOrderAllocations(orderId: string, actor = 'system:r
                  eq(schema.orderFulfillmentLines.status, 'in_stock')));
     for (const l of lines) {
       if (!l.invId || l.allocatedQty <= 0 || !l.sku) continue;
+      // Lock TỒN trước (đúng thứ tự inventory→line toàn hệ)…
       const [inv] = await tx.select({ sku: schema.warehouseInventory.sku, wh: schema.warehouseInventory.warehouseCode })
-        .from(schema.warehouseInventory).where(eq(schema.warehouseInventory.id, l.invId)).limit(1);
+        .from(schema.warehouseInventory).where(eq(schema.warehouseInventory.id, l.invId))
+        .limit(1).for('update');
       if (!inv) continue;
+      // …rồi lock + XÁC MINH LẠI dòng: nếu một pick đồng thời vừa chuyển dòng
+      // sang 'picked' (reserved đã trừ qua movement 'pick'), nhả tiếp ở đây
+      // sẽ trừ reserved lần hai — bỏ qua khi trạng thái đã đổi.
+      const [fresh] = await tx.select({
+        status: schema.orderFulfillmentLines.status,
+        allocatedQty: schema.orderFulfillmentLines.allocatedQty,
+        invId: schema.orderFulfillmentLines.warehouseInventoryId,
+      })
+        .from(schema.orderFulfillmentLines)
+        .where(eq(schema.orderFulfillmentLines.id, l.id)).limit(1).for('update');
+      if (!fresh || fresh.status !== 'in_stock'
+          || fresh.allocatedQty !== l.allocatedQty || fresh.invId !== l.invId) continue;
       await applyMovement(tx, {
         sku: inv.sku, warehouseCode: inv.wh,
         deltaOnHand: 0, deltaReserved: -l.allocatedQty,
