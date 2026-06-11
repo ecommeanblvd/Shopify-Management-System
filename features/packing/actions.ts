@@ -7,13 +7,11 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
-import { rollupOrderStatus, type LineStatus } from '@/features/fulfillment/logic';
+import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { recordAudit } from '@/lib/logging/audit';
 import { canShipPack, validatePackDims } from './logic';
 import { hasWriteFulfillmentsScope } from './shopify-push';
 import { pushPackFulfillmentCore } from './push-fulfillment';
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function requirePerm(perm: Permission): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -21,15 +19,6 @@ async function requirePerm(perm: Permission): Promise<string> {
   const role = await getRole(session.user.id);
   if (!role || !hasPermission(role, perm)) throw new Error('Forbidden');
   return session.user.id;
-}
-
-async function recomputeRollup(tx: Tx, fulfillmentId: string): Promise<void> {
-  const lines = await tx.select({ status: schema.orderFulfillmentLines.status })
-    .from(schema.orderFulfillmentLines)
-    .where(eq(schema.orderFulfillmentLines.fulfillmentId, fulfillmentId));
-  const status = rollupOrderStatus(lines.map((l) => l.status as LineStatus));
-  await tx.update(schema.orderFulfillment).set({ status, updatedAt: sql`now()` })
-    .where(eq(schema.orderFulfillment.id, fulfillmentId));
 }
 
 const num = (v: number | null | undefined) => (v == null ? null : String(v));

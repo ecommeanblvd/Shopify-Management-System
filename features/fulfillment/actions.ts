@@ -7,7 +7,8 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
-import { checkStock, rollupOrderStatus, canTransitionLine, type StockInfo, type LineStatus } from './logic';
+import { checkStock, canTransitionLine, type StockInfo, type LineStatus } from './logic';
+import { recomputeRollup } from './rollup';
 import { sendBrandRequest } from '@/features/mmp/outbound';
 
 /** A drizzle transaction handle (same query surface as `db`). */
@@ -21,18 +22,6 @@ async function requirePerm(perm: Permission): Promise<string> {
   const role = await getRole(session.user.id);
   if (!role || !hasPermission(role, perm)) throw new Error('Forbidden');
   return session.user.id;
-}
-
-/** Recompute + persist the order rollup status. MUST run inside the same tx
- *  as the line mutation so concurrent transitions can't leave a torn status. */
-async function recomputeRollup(tx: Tx, fulfillmentId: string): Promise<void> {
-  const lines = await tx.select({ status: schema.orderFulfillmentLines.status })
-    .from(schema.orderFulfillmentLines)
-    .where(eq(schema.orderFulfillmentLines.fulfillmentId, fulfillmentId));
-  const status = rollupOrderStatus(lines.map((l) => l.status as LineStatus));
-  await tx.update(schema.orderFulfillment)
-    .set({ status, updatedAt: sql`now()` })
-    .where(eq(schema.orderFulfillment.id, fulfillmentId));
 }
 
 /** Send any pending brand requests for an order (fire after commit; failures

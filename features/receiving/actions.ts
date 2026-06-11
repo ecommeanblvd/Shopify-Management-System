@@ -7,12 +7,10 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
-import { rollupOrderStatus, type LineStatus } from '@/features/fulfillment/logic';
+import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { recordAudit } from '@/lib/logging/audit';
 import { putObject } from '@/lib/storage/s3';
 import { decideDisposition, validateQc, inventoryEffect, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function requirePerm(perm: Permission): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -36,15 +34,6 @@ async function withUniqueRetry<R>(fn: () => Promise<R>, attempts = 4): Promise<R
     }
   }
   throw new Error('unreachable');
-}
-
-async function recomputeRollup(tx: Tx, fulfillmentId: string): Promise<void> {
-  const lines = await tx.select({ status: schema.orderFulfillmentLines.status })
-    .from(schema.orderFulfillmentLines)
-    .where(eq(schema.orderFulfillmentLines.fulfillmentId, fulfillmentId));
-  const status = rollupOrderStatus(lines.map((l) => l.status as LineStatus));
-  await tx.update(schema.orderFulfillment).set({ status, updatedAt: sql`now()` })
-    .where(eq(schema.orderFulfillment.id, fulfillmentId));
 }
 
 /** Upload an image to S3 under a receipts/ prefix; returns the object key. */

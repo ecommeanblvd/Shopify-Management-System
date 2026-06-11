@@ -38,6 +38,14 @@ export async function ensureFulfillmentForOrder(orderId: string): Promise<void> 
     .onConflictDoNothing({
       target: [schema.orderFulfillmentLines.fulfillmentId, schema.orderFulfillmentLines.shopifyLineId],
     });
+
+  // Auto-allocation (spec §4a): best-effort — không phá sync khi lỗi.
+  try {
+    const { allocateOrder } = await import('@/features/warehouse/allocate');
+    await allocateOrder(orderId);
+  } catch (err) {
+    console.error(`allocateOrder failed for ${orderId}:`, err);
+  }
 }
 
 /** One-time backfill for orders that predate this feature (skips cancelled). */
