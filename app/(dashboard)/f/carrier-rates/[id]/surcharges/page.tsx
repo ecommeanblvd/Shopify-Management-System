@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent,
+  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -153,10 +153,20 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-emerald-500/10',
     supportsPerKg: false,
   },
+  addon_fixed: {
+    label: 'Dịch vụ bổ sung',
+    desc: 'Phí dịch vụ cộng thêm theo lô hàng (Direct Signature…). Chế độ "always" cộng vào mọi quote; "when_billed" chỉ dùng làm giá tham chiếu khi đối soát.',
+    formula: "+ value (luôn) hoặc giá tham chiếu (khi bill có)",
+    unit: 'amount',
+    icon: <PenLine className="size-4" />,
+    accent: 'text-violet-600 dark:text-violet-400',
+    accentBg: 'bg-violet-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'contract_discount_pct', 'vat_percent', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'addon_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'contract_discount_pct', 'vat_percent', 'markup_percent',
 ];
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });

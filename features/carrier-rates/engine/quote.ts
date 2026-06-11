@@ -13,7 +13,8 @@ export type SurchargeKind =
   | 'country_fixed'
   | 'vat_percent'
   | 'per_step_fixed'
-  | 'contract_discount_pct';
+  | 'contract_discount_pct'
+  | 'addon_fixed';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -59,6 +60,8 @@ export interface SurchargeSnap {
    * bill for pre-2026-03-04 shipments (ER only, no fuel, no VAT).
    */
   vatable?: boolean | null;
+  /** Chế độ áp dụng của addon_fixed. Kind khác bỏ qua. NULL → 'always'. */
+  applyMode?: 'always' | 'when_billed' | null;
   /**
    * Effective-from / effective-to bounds. NULL on either side means
    * "unbounded that direction". Engine considers a row applicable for
@@ -228,6 +231,10 @@ export interface QuoteBreakdown {
   /** Effective fuel surcharge % applied (sum of active `fuel_percent` rows). */
   fuelPercent: number;
   peak: number;
+  /** Dịch vụ bổ sung apply_mode='always' (DHL Direct Signature). Vào total. */
+  addons: number;
+  /** Giá tham chiếu addon when_billed (FedEx Direct Signature) — KHÔNG vào total. */
+  addonReference: number;
   remote: number;
   residential: number;
   perKg: number;
@@ -367,6 +374,10 @@ function isFuelable(s: SurchargeSnap): boolean {
     case 'demand_per_kg':
     case 'country_fixed':
     case 'per_step_fixed':
+    // Dịch vụ bổ sung mặc định NGOÀI fuel base (DHL Direct Signature giữ
+    // fuelable=false; FedEx set per-row true nhưng when_billed không vào
+    // quote nên không ảnh hưởng).
+    case 'addon_fixed':
     case 'fuel_percent':
     case 'markup_percent':
     case 'vat_percent':
@@ -502,6 +513,17 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
 
   const peak = sumApplicableOfKind(snap.surcharges, 'peak_fixed', effectiveDate);
 
+  // Dịch vụ bổ sung (Direct Signature...): 'always' vào quote;
+  // 'when_billed' chỉ là giá tham chiếu cho đối soát, KHÔNG vào total.
+  const addons = snap.surcharges
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'addon_fixed')
+    .filter((s) => (s.applyMode ?? 'always') === 'always')
+    .reduce((sum, s) => sum + s.value, 0);
+  const addonReference = snap.surcharges
+    .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'addon_fixed')
+    .filter((s) => s.applyMode === 'when_billed')
+    .reduce((sum, s) => sum + s.value, 0);
+
   const perKgUnit = sumApplicableOfKind(snap.surcharges, 'per_kg_fixed', effectiveDate);
   const perKg = perKgUnit * chargeableWeightKg;
 
@@ -621,6 +643,10 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     switch (s.kind) {
       case 'peak_fixed':
         return s.value;
+      // Dịch vụ bổ sung: chỉ 'always' đóng góp vào bill; 'when_billed' là
+      // giá tham chiếu — KHÔNG lọt vào fuelable/vatable subtotal.
+      case 'addon_fixed':
+        return (s.applyMode ?? 'always') === 'always' ? s.value : 0;
       case 'per_kg_fixed':
         return s.value * chargeableWeightKg;
       case 'demand_per_kg':
@@ -718,6 +744,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       fuel: Math.round(fuel),
       fuelPercent: fuelPct,
       peak: Math.round(peak),
+      addons: Math.round(addons),
+      addonReference: Math.round(addonReference),
       remote: Math.round(remote),
       residential: Math.round(residential),
       perKg: Math.round(perKg),

@@ -837,6 +837,81 @@ describe('quote engine', () => {
     });
   });
 
+  describe('addon_fixed (Dịch vụ bổ sung)', () => {
+    it("apply_mode='always' cộng vào total, fuelable=false nằm NGOÀI fuel base (DHL Direct Signature)", () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'addon_fixed', value: 150_000, active: true, fuelable: false, applyMode: 'always' },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel = base × 50% only — addon stays OUT of the fuel base.
+      expect(r.breakdown.fuel).toBe(140_000); // 280_000 × 50%
+      expect(r.breakdown.addons).toBe(150_000);
+      expect(r.breakdown.addonReference).toBe(0);
+      // Total = base 280,000 + addon 150,000 + fuel 140,000
+      expect(r.breakdown.carrierCost).toBe(570_000);
+    });
+
+    it("apply_mode='when_billed' KHÔNG vào total — chỉ xuất hiện ở addonReference (FedEx)", () => {
+      const baseline = quote(
+        makeSnap({ surcharges: [{ kind: 'fuel_percent', value: 50, active: true }] }),
+        { weightKg: 1, destinationCountry: 'SG' },
+      );
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'addon_fixed', value: 92_700, active: true, fuelable: true, applyMode: 'when_billed' },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(baseline.ok).toBe(true);
+      expect(r.ok).toBe(true);
+      if (!baseline.ok || !r.ok) return;
+      expect(r.breakdown.addons).toBe(0);
+      expect(r.breakdown.addonReference).toBe(92_700);
+      // carrierCost and fuel UNCHANGED vs the no-addon snapshot — the
+      // when_billed price is reference-only, even with fuelable=true.
+      expect(r.breakdown.carrierCost).toBe(baseline.breakdown.carrierCost);
+      expect(r.breakdown.fuel).toBe(baseline.breakdown.fuel);
+    });
+
+    it('gate theo startsAt/endsAt như mọi surcharge', () => {
+      const snap = makeSnap({
+        surcharges: [
+          {
+            kind: 'addon_fixed', value: 130_000, active: true, fuelable: false,
+            applyMode: 'always', endsAt: new Date('2026-01-05T00:00:00Z'),
+          },
+          {
+            kind: 'addon_fixed', value: 150_000, active: true, fuelable: false,
+            applyMode: 'always', startsAt: new Date('2026-01-05T00:00:00Z'),
+          },
+        ],
+      });
+      const before = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        effectiveDate: new Date('2025-12-15T00:00:00Z'),
+      });
+      expect(before.ok).toBe(true);
+      if (!before.ok) return;
+      expect(before.breakdown.addons).toBe(130_000);
+
+      const after = quote(snap, {
+        weightKg: 1,
+        destinationCountry: 'SG',
+        effectiveDate: new Date('2026-02-01T00:00:00Z'),
+      });
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+      expect(after.breakdown.addons).toBe(150_000);
+    });
+  });
+
   describe('contract_discount_pct (negotiated volume discount)', () => {
     // Reproduces FedEx #MBLVD28959 (US, 0.7 kg, 2026-06-01) from the
     // operator's invoice CSV. Verified line-by-line against the actual
