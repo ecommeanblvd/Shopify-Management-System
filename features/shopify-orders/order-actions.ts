@@ -103,6 +103,17 @@ export interface OrderShippingDetail {
   defaultTierUpperKg: number | null;
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
+  /** Cost engine ước tính (cost currency = VND), tính LUÔN kể cả khi đã có
+   *  hóa đơn — để bảng so sánh hiện cả engine lẫn billed. null khi engine
+   *  không định giá được. */
+  engineCostVnd: number | null;
+  /** Cost thực tế từ shipping_invoices khớp tracking (VND). null khi chưa có. */
+  billedCostVnd: number | null;
+  /** Tiền của đơn (order.currency) + tiền cost (order.costCurrency) + tỉ giá,
+   *  cho UI quy đổi Rev về VND. */
+  orderCurrency: string;
+  costCurrency: string | null;
+  fxCostPerOrderCurrency: number | null;
 }
 
 export interface OrderDetail {
@@ -125,6 +136,17 @@ export interface OrderDetail {
 export async function getOrderDetail(orderId: string): Promise<OrderDetail | null> {
   const [order] = await db.select().from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, orderId));
   if (!order) return null;
+  // Cost FX lives per-store (e.g. Mirer takes USD orders but pays carriers
+  // in VND). costCurrency = the operational/cost currency; fx = how many
+  // cost-currency units per 1 order-currency unit. Used by the modal's ship
+  // comparison to normalise Rev (order ccy) into VND.
+  const [store] = await db
+    .select({
+      costCurrency: schema.stores.costCurrency,
+      fxCostPerOrderCurrency: schema.stores.fxCostPerOrderCurrency,
+    })
+    .from(schema.stores)
+    .where(eq(schema.stores.id, order.storeId));
   const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
 
   // Cost lookup for the order's processed_at date.
@@ -242,6 +264,24 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     }
   }
 
+  // billed: lấy từ invoice nếu khối default đã khớp invoice (cùng query), hoặc
+  // truy thẳng — defaultShipping.source==='invoice' nghĩa là rawAmount là billed.
+  const billedCostVnd = defaultShipping.source === 'invoice' ? defaultShipping.rawAmount : null;
+  // engine: tính LUÔN (kể cả khi đã có billed) để bảng so sánh có cả hai.
+  // Nếu khối default đã là engine_estimate thì tái dùng rawAmount, khỏi gọi lại.
+  let engineCostVnd: number | null =
+    defaultShipping.source === 'engine_estimate' ? defaultShipping.rawAmount : null;
+  if (engineCostVnd === null) {
+    const effW = order.shipWeightKgOverride !== null ? Number(order.shipWeightKgOverride)
+      : order.shipWeightKg !== null ? Number(order.shipWeightKg) : null;
+    const est = await resolveShippingEstimate({
+      shipCountry: order.shipCountry, shipCity: order.shipCity, shipPostcode: order.shipPostcode,
+      shipWeightKg: effW, effectiveDate: order.processedAtShopify ?? undefined,
+      shippingCarrierKey: order.shippingCarrierKey ?? null,
+    });
+    engineCostVnd = est.source !== 'unknown' ? est.costAmount : null;
+  }
+
   return {
     orderId: order.id,
     storeId: order.storeId,
@@ -281,6 +321,14 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       defaultTierUpperKg: defaultShipping.tierUpperKg,
       shippingCostOverride: order.shippingCostOverride !== null ? Number(order.shippingCostOverride) : null,
       shippingCostOverrideNote: order.shippingCostOverrideNote,
+      engineCostVnd,
+      billedCostVnd,
+      orderCurrency: order.currency,
+      costCurrency: store?.costCurrency ?? null,
+      fxCostPerOrderCurrency:
+        store?.fxCostPerOrderCurrency !== null && store?.fxCostPerOrderCurrency !== undefined
+          ? Number(store.fxCostPerOrderCurrency)
+          : null,
     },
   };
 }
