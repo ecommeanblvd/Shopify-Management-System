@@ -2,16 +2,16 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
-import { canTransitionLine, type StockInfo, type LineStatus } from './logic';
+import { canTransitionLine, type LineStatus } from './logic';
 import { recomputeRollup } from './rollup';
 import { sendBrandRequest } from '@/features/mmp/outbound';
 import { applyMovement } from '@/features/warehouse/ledger';
-import { planAllocation } from '@/features/warehouse/allocation-logic';
+import { pickItem } from '@/features/warehouse/allocation-logic';
 
 /** A drizzle transaction handle (same query surface as `db`). */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -72,20 +72,38 @@ async function sendPendingBrandRequests(orderId: string): Promise<void> {
  *  stock on 'picked'. Caller MUST have validated canTransitionLine first. */
 async function applyLineTransition(tx: Tx, l: LineRow, next: LineStatus, actor: string): Promise<void> {
   if (next === 'picked' && l.warehouseInventoryId && l.allocatedQty > 0) {
-    // Stock leaves through the ledger (applyMovement validates the invariants
-    // and writes the inventory_movements row). The inventory lock is taken
-    // here, BEFORE this tx touches the fulfillment-line row below — matching
-    // the inventory→line lock order used by allocateLine/checkStockForOrder.
-    const [inv] = await tx.select({ sku: schema.warehouseInventory.sku, wh: schema.warehouseInventory.warehouseCode })
-      .from(schema.warehouseInventory)
-      .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId)).limit(1);
-    if (inv) {
+    // Per-unit (spec §3): món rời kho — tìm + lock MÓN đang giữ cho dòng này
+    // (phía inventory) TRƯỚC khi tx chạm dòng đơn bên dưới, giữ thứ tự
+    // inventory→line như allocateLine/checkStockForOrder/release.
+    const [item] = await tx.select({
+      id: schema.goodsReceiptItems.id,
+      sku: schema.goodsReceiptItems.sku,
+      wh: schema.goodsReceiptItems.currentWarehouseCode,
+    })
+      .from(schema.goodsReceiptItems)
+      .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, l.id),
+                 eq(schema.goodsReceiptItems.stockStatus, 'allocated')))
+      .orderBy(asc(schema.goodsReceiptItems.id))
+      .limit(1).for('update');
+    if (item && item.sku && item.wh) {
+      // v1 mỗi dòng giữ đúng 1 món → trừ đúng 1 onHand + 1 reserved.
+      await tx.update(schema.goodsReceiptItems)
+        .set({ stockStatus: 'picked', updatedAt: sql`now()` })
+        .where(eq(schema.goodsReceiptItems.id, item.id));
       await applyMovement(tx, {
-        sku: inv.sku, warehouseCode: inv.wh,
-        deltaOnHand: -l.allocatedQty, deltaReserved: -l.allocatedQty,
-        reason: 'pick', refType: 'fulfillment_line', refId: l.id, actor,
+        sku: item.sku, warehouseCode: item.wh,
+        deltaOnHand: -1, deltaReserved: -1,
+        reason: 'pick', refType: 'item', refId: item.id, actor,
       });
     }
+  }
+  if (next === 'shipped') {
+    // Món đã pick rời kho — đánh dấu shipped (nếu tồn tại). Không movement:
+    // pick đã trừ onHand+reserved; shipped chỉ là vòng đời món.
+    await tx.update(schema.goodsReceiptItems)
+      .set({ stockStatus: 'shipped', updatedAt: sql`now()` })
+      .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, l.id),
+                 eq(schema.goodsReceiptItems.stockStatus, 'picked')));
   }
   const stamp = next === 'picked' ? { pickedAt: sql`now()` } : next === 'packed' ? { packedAt: sql`now()` } : { shippedAt: sql`now()` };
   // Update CÓ GUARD trên trạng thái cũ: hai pick đồng thời cùng qua được
@@ -113,79 +131,98 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
       .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
     const checkable = lines.filter((l) => l.status === 'pending_check' || l.status === 'out_of_stock' || l.status === 'in_stock');
     const skus = [...new Set(checkable.map((l) => l.sku).filter((s): s is string => !!s))];
+    const checkableIds = checkable.map((l) => l.id);
 
-    // Lock the relevant inventory rows so concurrent checks can't double-reserve.
-    // ORDER BY id keeps the multi-row lock order deterministic across callers.
-    const inv = skus.length
-      ? await tx.select().from(schema.warehouseInventory).where(inArray(schema.warehouseInventory.sku, skus)).orderBy(asc(schema.warehouseInventory.id)).for('update')
+    // Per-unit (spec §3): cùng mô hình với allocateLine — đặt giữ ĐÚNG MÓN
+    // cụ thể, không chỉ tăng reserved trên rollup. Khoá MÓN (phía inventory)
+    // TRƯỚC khi chạm dòng đơn — giữ thứ tự inventory→line toàn hệ; ORDER BY id
+    // để thứ tự khoá nhiều món xác định, hai checkStock không vòng chờ.
+    // Tập khoá: (a) món in_stock của các SKU liên quan (ứng viên để cấp), và
+    // (b) món allocated đang gắn các dòng đang xét (để nhả lại trước khi cấp
+    // lại). Một câu lock duy nhất theo id để thứ tự nhất quán.
+    const items = (skus.length || checkableIds.length)
+      ? await tx.select({
+          id: schema.goodsReceiptItems.id,
+          sku: schema.goodsReceiptItems.sku,
+          wh: schema.goodsReceiptItems.currentWarehouseCode,
+          stockStatus: schema.goodsReceiptItems.stockStatus,
+          fulfillmentLineId: schema.goodsReceiptItems.fulfillmentLineId,
+          receivedAt: schema.goodsReceiptItems.qcCheckedAt,
+        }).from(schema.goodsReceiptItems)
+          .where(and(
+            isNotNull(schema.goodsReceiptItems.currentWarehouseCode),
+            or(
+              skus.length
+                ? and(eq(schema.goodsReceiptItems.stockStatus, 'in_stock'),
+                      inArray(schema.goodsReceiptItems.sku, skus))
+                : sql`false`,
+              checkableIds.length
+                ? and(eq(schema.goodsReceiptItems.stockStatus, 'allocated'),
+                      inArray(schema.goodsReceiptItems.fulfillmentLineId, checkableIds))
+                : sql`false`,
+            ),
+          ))
+          .orderBy(asc(schema.goodsReceiptItems.id)).for('update')
       : [];
-    // Extended entry that carries sku+warehouseCode so applyMovement can be
-    // called without a second lookup — the locked inv rows already have them.
-    // bySku giữ MỌI kho của SKU (cùng object với byId — trừ available một nơi
-    // là thấy ở nơi kia); chọn kho bằng planAllocation như allocateLine.
-    type InvEntry = StockInfo & { sku: string; warehouseCode: string };
-    const bySku = new Map<string, InvEntry[]>();
-    const byId = new Map<string, InvEntry>();
-    for (const w of inv) {
-      const entry: InvEntry = { available: w.qtyOnHand - w.qtyReserved, warehouseInventoryId: w.id, sku: w.sku, warehouseCode: w.warehouseCode };
-      const list = bySku.get(w.sku) ?? [];
-      list.push(entry);
-      bySku.set(w.sku, list);
-      byId.set(w.id, entry);
+
+    type PoolItem = { id: string; warehouseCode: string; receivedAt: Date | null };
+    // Pool món in_stock khả dụng theo SKU (cập nhật tại chỗ khi cấp/nhả trong tx).
+    const available = new Map<string, PoolItem[]>();
+    // Món đang allocated cho từng dòng (để nhả).
+    const allocatedByLine = new Map<string, { id: string; sku: string; wh: string }>();
+    for (const it of items) {
+      if (!it.sku || !it.wh) continue;
+      if (it.stockStatus === 'in_stock') {
+        const list = available.get(it.sku) ?? [];
+        list.push({ id: it.id, warehouseCode: it.wh, receivedAt: it.receivedAt });
+        available.set(it.sku, list);
+      } else if (it.stockStatus === 'allocated' && it.fulfillmentLineId) {
+        allocatedByLine.set(it.fulfillmentLineId, { id: it.id, sku: it.sku, wh: it.wh });
+      }
     }
 
     for (const l of checkable) {
-      // Release any prior reservation through the ledger (row already locked
-      // FOR UPDATE above — applyMovement re-locks the same row, no-op extra lock).
+      // Nhả reservation cũ (nếu có) — trả MÓN về in_stock + −reserved, rồi đưa
+      // lại vào pool để có thể được cấp lại ngay trong lần check này.
       if (l.status === 'in_stock' && l.warehouseInventoryId && l.allocatedQty > 0) {
-        const cur = byId.get(l.warehouseInventoryId);
-        if (cur) {
+        const prev = allocatedByLine.get(l.id);
+        if (prev) {
+          await tx.update(schema.goodsReceiptItems)
+            .set({ stockStatus: 'in_stock', fulfillmentLineId: null, updatedAt: sql`now()` })
+            .where(eq(schema.goodsReceiptItems.id, prev.id));
           await applyMovement(tx, {
-            sku: cur.sku, warehouseCode: cur.warehouseCode,
-            deltaOnHand: 0, deltaReserved: -l.allocatedQty,
-            reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
+            sku: prev.sku, warehouseCode: prev.wh,
+            deltaOnHand: 0, deltaReserved: -1,
+            reason: 'release_allocation', refType: 'item', refId: prev.id, actor,
           });
-          cur.available += l.allocatedQty;
-        } else {
-          // SKU của dòng đã đổi sau khi cấp → dòng tồn CŨ không nằm trong tập
-          // đã lock theo SKU ở trên. Vẫn phải nhả qua ledger (applyMovement tự
-          // lock dòng đó), nếu không reserved rò rỉ vĩnh viễn khi dòng đơn bị
-          // ghi đè bên dưới.
-          const [old] = await tx.select({ sku: schema.warehouseInventory.sku, warehouseCode: schema.warehouseInventory.warehouseCode })
-            .from(schema.warehouseInventory)
-            .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId)).limit(1);
-          if (old) {
-            await applyMovement(tx, {
-              sku: old.sku, warehouseCode: old.warehouseCode,
-              deltaOnHand: 0, deltaReserved: -l.allocatedQty,
-              reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
-            });
-          }
+          allocatedByLine.delete(l.id);
+          const list = available.get(prev.sku) ?? [];
+          list.push({ id: prev.id, warehouseCode: prev.wh, receivedAt: null });
+          available.set(prev.sku, list);
         }
       }
-      // Chọn kho như allocateLine: đủ-hoặc-không trên từng kho, nhiều khả
-      // dụng nhất thắng, hoà → HN (checkStock cũ chỉ thấy 1 kho/SKU).
+      // Chọn đúng món như allocateLine: kho nhiều món nhất (tie GVM/AP/DM),
+      // FIFO. v1 qty=1 mỗi dòng — chỉ cấp 1 món (xem allocateLine).
       let res: { status: LineStatus; warehouseInventoryId: string | null; allocatedQty: number } =
         { status: 'out_of_stock', warehouseInventoryId: null, allocatedQty: 0 };
+      let chosenItem: PoolItem | null = null;
       if (l.sku) {
-        const rows = bySku.get(l.sku) ?? [];
-        const plan = planAllocation({ qty: l.qty },
-          rows.map((r) => ({ code: r.warehouseCode, available: r.available })));
-        const chosen = plan ? rows.find((r) => r.warehouseCode === plan.warehouseCode) : undefined;
-        if (plan && chosen) {
-          res = { status: 'in_stock', warehouseInventoryId: chosen.warehouseInventoryId, allocatedQty: plan.qty };
-        }
+        const pool = available.get(l.sku) ?? [];
+        chosenItem = pickItem(pool);
       }
-      if (res.status === 'in_stock') {
-        const cur = byId.get(res.warehouseInventoryId!);
-        if (cur) {
-          await applyMovement(tx, {
-            sku: cur.sku, warehouseCode: cur.warehouseCode,
-            deltaOnHand: 0, deltaReserved: res.allocatedQty,
-            reason: 'auto_allocate', refType: 'fulfillment_line', refId: l.id, actor,
-          });
-          cur.available -= res.allocatedQty;
-        }
+      if (l.sku && chosenItem) {
+        const invId = await applyMovement(tx, {
+          sku: l.sku, warehouseCode: chosenItem.warehouseCode,
+          deltaOnHand: 0, deltaReserved: 1,
+          reason: 'auto_allocate', refType: 'item', refId: chosenItem.id, actor,
+        });
+        await tx.update(schema.goodsReceiptItems)
+          .set({ stockStatus: 'allocated', fulfillmentLineId: l.id, updatedAt: sql`now()` })
+          .where(eq(schema.goodsReceiptItems.id, chosenItem.id));
+        // Rút món khỏi pool để dòng sau không cấp trùng.
+        const pool = available.get(l.sku) ?? [];
+        available.set(l.sku, pool.filter((p) => p.id !== chosenItem!.id));
+        res = { status: 'in_stock', warehouseInventoryId: invId, allocatedQty: 1 };
       }
       await tx.update(schema.orderFulfillmentLines)
         .set({ status: res.status, warehouseInventoryId: res.warehouseInventoryId, allocatedQty: res.allocatedQty, updatedAt: sql`now()` })
