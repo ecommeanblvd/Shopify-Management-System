@@ -910,6 +910,83 @@ describe('quote engine', () => {
       if (!after.ok) return;
       expect(after.breakdown.addons).toBe(150_000);
     });
+
+    it('when_billed bị miễn theo nước: addonReference=0 + addonExcludedForCountry=true', () => {
+      const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
+      const zonesByCountry = new Map([
+        ['SA', { label: 'Zone 9', rateByTierUpper }],
+        ['US', { label: 'Zone X', rateByTierUpper }],
+      ]);
+      const baseline = quote(
+        makeSnap({
+          zonesByCountry,
+          surcharges: [{ kind: 'fuel_percent', value: 50, active: true }],
+        }),
+        { weightKg: 1, destinationCountry: 'SA' },
+      );
+      const snap = makeSnap({
+        zonesByCountry,
+        surcharges: [
+          {
+            kind: 'addon_fixed', value: 92_700, active: true, fuelable: true,
+            applyMode: 'when_billed', excludedCountryCodes: ['SA', 'CZ'],
+          },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SA' });
+      expect(baseline.ok).toBe(true);
+      expect(r.ok).toBe(true);
+      if (!baseline.ok || !r.ok) return;
+      expect(r.breakdown.addons).toBe(0);
+      expect(r.breakdown.addonReference).toBe(0);
+      expect(r.breakdown.addonExcludedForCountry).toBe(true);
+      // total/fuel KHÔNG đổi so với snapshot không có addon.
+      expect(r.breakdown.carrierCost).toBe(baseline.breakdown.carrierCost);
+      expect(r.breakdown.fuel).toBe(baseline.breakdown.fuel);
+    });
+
+    it('nước ngoài danh sách miễn: reference bình thường, flag=false', () => {
+      const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['SA', { label: 'Zone 9', rateByTierUpper }],
+          ['US', { label: 'Zone X', rateByTierUpper }],
+        ]),
+        surcharges: [
+          {
+            kind: 'addon_fixed', value: 92_700, active: true, fuelable: true,
+            applyMode: 'when_billed', excludedCountryCodes: ['SA', 'CZ'],
+          },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addonReference).toBe(92_700);
+      expect(r.breakdown.addonExcludedForCountry).toBe(false);
+    });
+
+    it('addon always không exclusions (DHL) không bị ảnh hưởng', () => {
+      const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['SA', { label: 'Zone 9', rateByTierUpper }],
+        ]),
+        surcharges: [
+          {
+            kind: 'addon_fixed', value: 150_000, active: true, fuelable: false,
+            applyMode: 'always', excludedCountryCodes: null,
+          },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SA' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addons).toBe(150_000);
+      expect(r.breakdown.addonExcludedForCountry).toBe(false);
+    });
   });
 
   describe('contract_discount_pct (negotiated volume discount)', () => {

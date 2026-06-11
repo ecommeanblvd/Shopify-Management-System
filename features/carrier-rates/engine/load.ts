@@ -125,6 +125,9 @@ export async function loadAccountSnapshot(
       countryCodes: Array.isArray(s.countryCodes)
         ? (s.countryCodes as string[]).map((c) => c.toUpperCase())
         : null,
+      excludedCountryCodes: Array.isArray(s.excludedCountryCodes)
+        ? (s.excludedCountryCodes as string[]).map((c) => c.toUpperCase())
+        : null,
       stepKg: s.stepKg !== null ? Number(s.stepKg) : null,
       fuelable: s.fuelable,
       vatable: s.vatable,
