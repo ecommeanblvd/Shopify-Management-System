@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { primeRoleCache } from './auth/access';
 import { SYSTEM_ROLE_SEEDS } from './auth/permission-map';
-import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings } from './nav';
+import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings, canSeeNavItem } from './nav';
 
 // canSeeSettings → hasPermission reads the role cache; prime it from seeds (no DB).
 beforeAll(() => {
@@ -35,6 +35,34 @@ describe('NAV structure', () => {
     const item = NAV.find((n) => n.href === '/f/fulfillment');
     expect(item).toBeDefined();
     expect(item!.requires).toBe('view_fulfillment');
+  });
+
+  it('includes warehouse module OR-gated, and receiving no longer at top level', () => {
+    const item = NAV.find((n) => n.href === '/f/warehouse');
+    expect(item).toBeDefined();
+    expect(item!.requires).toEqual(['view_fulfillment', 'view_receiving']);
+    expect(hrefs).not.toContain('/f/fulfillment/receiving');
+  });
+});
+
+describe('canSeeNavItem', () => {
+  it('null requires is visible to everyone', () => {
+    expect(canSeeNavItem('viewer', null)).toBe(true);
+  });
+
+  it('scalar requires checks that single permission', () => {
+    expect(canSeeNavItem('admin', 'view_fulfillment')).toBe(true);
+  });
+
+  it('array requires is an OR — one matching permission is enough', () => {
+    // admin has both; the OR must also hold when only one side matches,
+    // so pair a real permission with one no role has.
+    expect(canSeeNavItem('admin', ['view_fulfillment', 'view_receiving'])).toBe(true);
+    expect(canSeeNavItem('admin', ['manage_users', 'view_fulfillment'])).toBe(true);
+  });
+
+  it('array requires is false when no permission matches', () => {
+    expect(canSeeNavItem('viewer', ['manage_users'])).toBe(false);
   });
 });
 
