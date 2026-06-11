@@ -94,6 +94,9 @@ export interface DiagnoseInput {
     addons?: number;
     /** Giá tham chiếu addon when_billed (FedEx) — kiểm giá pass-through. */
     addonReference?: number;
+    /** Addon bị MIỄN ở nước đích (excluded_country_codes) — carrier KHÔNG
+     *  được thu; bill có phí ⇒ khiếu nại, không phải pass-through. */
+    addonExcludedForCountry?: boolean;
     /**
      * DHL GoGreen is a `per_step_fixed` surcharge (FedEx has none — always 0).
      * Reconciles against the billed `gogreen` line.
@@ -119,6 +122,8 @@ export interface DiagnoseInput {
   fuelPercent: number;
   discountPercent: number;
   vatPercent: number;
+  /** Nước đích (ISO-2) — chỉ dùng cho verdict (vd nước miễn addon). */
+  shipCountry?: string;
 }
 
 const r = (n: number): number => Math.round(n);
@@ -298,6 +303,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const fuelComp = components.find((c) => c.key === 'fuel');
   const sigRef = n0(e.addonReference ?? null);
   if (sigDelta > 0 && sigEngine === 0 && fuelComp && fuelComp.cause !== 'LECH_FUEL'
+      && !e.addonExcludedForCountry
       && (sigRef === 0 || sigBilled === sigRef)) {
     sigCause = 'PHI_TUY_CHON';
   }
@@ -399,6 +405,9 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       verdict = dominant.delta < 0
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
         : 'Hóa đơn thu phụ phí rủi ro (ER) nhưng hệ thống không tính — kiểm tra danh sách nước áp dụng';
+      severity = 'config';
+    } else if (dominant.key === 'signature' && e.addonExcludedForCountry) {
+      verdict = `FedEx thu Direct Signature ở nước được miễn (${input.shipCountry ?? '?'}) — khiếu nại với carrier`;
       severity = 'config';
     } else if (dominant.key === 'signature' && n0(e.addonReference ?? null) > 0
         // Giá ĐÚNG bảng nhưng vẫn dominant (vd gate fuel chặn PHI_TUY_CHON):

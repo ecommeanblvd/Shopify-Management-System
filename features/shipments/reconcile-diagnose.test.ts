@@ -550,6 +550,60 @@ describe('diagnoseReconcileRow — addon_fixed (Dịch vụ bổ sung, spec 2026
     expect(r.severity).toBe('config');
   });
 
+  // (b2) FedEx billed the Direct Signature fee in a country the carrier
+  // EXEMPTS (excluded_country_codes) — engine reference dropped to 0 and the
+  // addonExcludedForCountry flag is up. The pass-through gate must REJECT
+  // (KHONG_KHOP) and the verdict must name the exempt country for the claim.
+  it('FedEx thu signature ở nước miễn (SA): KHONG_KHOP + verdict nước được miễn', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // fuel 519,033 = 47.5% × (1,000,000 + 92,700) — arithmetic closes,
+      // but the fee should not exist at all in SA.
+      billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
+                elevatedRisk: 0, total: 1_740_672 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, addons: 0, addonReference: 0,
+                addonExcludedForCountry: true,
+                vat: 118_000, total: 1_593_000 },
+      shipCountry: 'SA',
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.cause).toBe('KHONG_KHOP');
+    expect(sig.cause).not.toBe('PHI_TUY_CHON');
+    expect(r.verdict).toContain('nước được miễn (SA)');
+    expect(r.severity).toBe('config');
+  });
+
+  // (b3) regression: flag explicitly false + reference matches -> the
+  // pass-through path is untouched (PHI_TUY_CHON as today).
+  it('flag=false + addonReference khớp -> vẫn PHI_TUY_CHON (regression)', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
+                elevatedRisk: 0, total: 1_740_672 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, addons: 0, addonReference: 92_700,
+                addonExcludedForCountry: false,
+                vat: 118_000, total: 1_593_000 },
+      shipCountry: 'US',
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.cause).toBe('PHI_TUY_CHON');
+    expect(r.severity).toBe('passthrough');
+  });
+
   // (c) DHL Direct Signature re-kinded peak_fixed -> addon_fixed: the
   // signature line now reconciles against engine `addons`; `peak` is no
   // longer folded in (it stays Premium-only, 0 or absent here).

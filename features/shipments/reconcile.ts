@@ -316,6 +316,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         peak: q.breakdown.peak,
         addons: q.breakdown.addons,
         addonReference: q.breakdown.addonReference,
+        addonExcludedForCountry: q.breakdown.addonExcludedForCountry,
         perStep: q.breakdown.perStep,
         countryFixed: q.breakdown.countryFixed,
         vat: q.breakdown.vat,
@@ -330,6 +331,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       fuelPercent: q.breakdown.fuelPercent,
       discountPercent: q.breakdown.discountPercent,
       vatPercent: q.breakdown.vatPercent,
+      shipCountry: r.shipCountry,
     });
     rows.push(buildRow(r, q.breakdown, null, diagnosis));
   }
