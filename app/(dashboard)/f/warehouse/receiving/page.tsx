@@ -22,7 +22,7 @@ async function newReceiptAction(formData: FormData) {
   const sourceType = String(formData.get('sourceType') ?? 'consignment') as 'retail_for_order' | 'consignment' | 'po';
   const vendor = String(formData.get('vendor') ?? '').trim() || null;
   const id = await createReceipt({ sourceType, vendor });
-  redirect(`/f/fulfillment/receiving/${id}`);
+  redirect(`/f/warehouse/receiving/${id}`);
 }
 
 async function receiveForOrderAction(formData: FormData) {
@@ -35,7 +35,7 @@ async function receiveForOrderAction(formData: FormData) {
     fulfillmentLineId: String(formData.get('lineId') ?? '') || null,
     orderId: String(formData.get('orderId') ?? '') || null,
   });
-  redirect(`/f/fulfillment/receiving/${receiptId}`);
+  redirect(`/f/warehouse/receiving/${receiptId}`);
 }
 
 export default async function ReceivingPage() {
@@ -113,7 +113,7 @@ export default async function ReceivingPage() {
           <ul className="divide-y divide-border">
             {receipts.map((r) => (
               <li key={r.id} className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-muted/30">
-                <Link href={`/f/fulfillment/receiving/${r.id}`} className="min-w-0 flex-1">
+                <Link href={`/f/warehouse/receiving/${r.id}`} className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{r.code} · {r.vendor ?? '—'}</div>
                   <div className="text-xs text-muted-foreground">{r.warehouseCode} · {String(r.receivedAt).slice(0, 10)}</div>
                 </Link>

@@ -37,18 +37,6 @@ export default async function FulfillmentWorklistPage() {
           >
             Yêu cầu brand
           </Link>
-          <Link
-            href="/f/fulfillment/warehouse"
-            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Kho MEAN
-          </Link>
-          <Link
-            href="/f/fulfillment/staging"
-            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            Khu chờ
-          </Link>
         </div>
       </div>
       <WorklistTable

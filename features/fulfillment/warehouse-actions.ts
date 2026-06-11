@@ -58,7 +58,7 @@ export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<vo
         bin: input.bin ?? null, note: input.note ?? null, updatedBy: userId, updatedAt: sql`now()`,
       },
     });
-  revalidatePath('/f/fulfillment/warehouse');
+  revalidatePath('/f/warehouse');
 }
 
 /** Lịch sử movement cho drawer — load khi mở, không preload theo bảng. */
@@ -97,7 +97,7 @@ export async function adjustStock(input: {
       await reallocateSku(input.sku.trim());
     } catch (e) { console.error('reallocate after adjust:', e); }
   }
-  revalidatePath('/f/fulfillment/warehouse');
+  revalidatePath('/f/warehouse');
 }
 
 export async function transferStock(input: {
@@ -147,5 +147,5 @@ export async function transferStock(input: {
       });
     }
   });
-  revalidatePath('/f/fulfillment/warehouse');
+  revalidatePath('/f/warehouse');
 }

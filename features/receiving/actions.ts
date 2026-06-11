@@ -70,7 +70,7 @@ export async function createReceipt(input: CreateReceiptInput): Promise<string> 
     return row.id;
   }));
   try { await recordAudit({ userId, action: 'receiving_create', target: id, result: 'success' }); } catch (e) { console.error('audit failed', e); }
-  revalidatePath('/f/fulfillment/receiving');
+  revalidatePath('/f/warehouse/receiving');
   return id;
 }
 
@@ -100,7 +100,7 @@ export async function addReceiptItem(input: AddReceiptItemInput): Promise<string
     return row.id;
   }));
   try { await recordAudit({ userId, action: 'receiving_add_item', target: id, result: 'success' }); } catch (e) { console.error('audit failed', e); }
-  revalidatePath(`/f/fulfillment/receiving/${input.receiptId}`);
+  revalidatePath(`/f/warehouse/receiving/${input.receiptId}`);
   return id;
 }
 
@@ -227,6 +227,6 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
   }
 
   try { await recordAudit({ userId, action: 'receiving_qc', target: input.itemId, requestSummary: `result=${input.qcResult}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
-  revalidatePath('/f/fulfillment/receiving');
+  revalidatePath('/f/warehouse/receiving');
   revalidatePath('/f/fulfillment');
 }
