@@ -4,17 +4,42 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  upsertWarehouseItem, adjustStock, transferStock, getMovements,
+  upsertWarehouseItem, adjustStock, transferStock, getMovements, getItems,
 } from '@/features/fulfillment/warehouse-actions';
 import type { WarehouseItemInput } from '@/features/fulfillment/warehouse-actions';
-import type { InventoryRow, MovementRow } from '@/features/warehouse/queries';
+import type { InventoryRow, MovementRow, WarehouseItemRow } from '@/features/warehouse/queries';
 
 const fmtQty = (n: number) => new Intl.NumberFormat('vi-VN').format(n);
 const fmtDelta = (n: number) =>
   n > 0 ? `+${new Intl.NumberFormat('vi-VN').format(n)}` : new Intl.NumberFormat('vi-VN').format(n);
 
-const WAREHOUSES = ['HN', 'SG'] as const;
-type Tab = 'HN' | 'SG' | 'ALL';
+/** Thứ tự kho mặc định khi không suy ra được từ dữ liệu. */
+const WAREHOUSE_ORDER = ['GVM', 'AP', 'DM'] as const;
+type WarehouseCode = (typeof WAREHOUSE_ORDER)[number];
+type Tab = string; // mã kho hoặc 'ALL'
+
+/** Nhãn tiếng Việt cho stockStatus của từng món. */
+const STOCK_STATUS_LABEL: Record<string, string> = {
+  in_stock: 'Trong kho',
+  staging: 'Khu chờ',
+  allocated: 'Đã giữ',
+  picked: 'Đã pick',
+  shipped: 'Đã đi',
+  qc_failed: 'QC lỗi',
+  returned_to_vendor: 'Trả NCC',
+  pending: 'Chờ QC',
+};
+
+const STOCK_STATUS_CLASS: Record<string, string> = {
+  in_stock: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  staging: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  allocated: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  picked: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  shipped: 'bg-muted text-muted-foreground',
+  qc_failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  returned_to_vendor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  pending: 'bg-muted text-muted-foreground',
+};
 
 const REASON_LABEL: Record<string, string> = {
   receipt_po: 'Nhập PO',
@@ -35,13 +60,13 @@ interface Props {
 }
 
 type UpsertForm = {
-  sku: string; warehouseCode: 'HN' | 'SG';
+  sku: string; warehouseCode: WarehouseCode;
   productTitle: string; variantTitle: string;
   shelf: string; floor: string; bin: string; note: string;
 };
 
 const EMPTY_FORM: UpsertForm = {
-  sku: '', warehouseCode: 'HN', productTitle: '', variantTitle: '',
+  sku: '', warehouseCode: 'GVM', productTitle: '', variantTitle: '',
   shelf: '', floor: '', bin: '', note: '',
 };
 
@@ -49,8 +74,18 @@ export function WarehouseBoard({ items, canManage }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('ALL');
 
-  // Drawer lịch sử movement (tự load khi mở — xem HistoryDrawer)
-  const [historyItem, setHistoryItem] = useState<InventoryRow | null>(null);
+  // Mã kho hiển thị làm tab: suy từ dữ liệu, sắp theo GVM/AP/DM rồi tên lạ.
+  const warehouseCodes = (() => {
+    const present = Array.from(new Set(items.map((i) => i.warehouseCode)));
+    const ordered = WAREHOUSE_ORDER.filter((w) => present.includes(w));
+    const extras = present.filter((w) => !(WAREHOUSE_ORDER as readonly string[]).includes(w)).sort();
+    const all = [...ordered, ...extras];
+    return all.length > 0 ? all : [...WAREHOUSE_ORDER];
+  })();
+  const upsertCodes: WarehouseCode[] = [...WAREHOUSE_ORDER];
+
+  // Drawer per-unit (danh sách món + lịch sử movement, tự load khi mở)
+  const [drawerRow, setDrawerRow] = useState<InventoryRow | null>(null);
 
   // Dialog điều chỉnh / chuyển kho
   const [adjustItem, setAdjustItem] = useState<InventoryRow | null>(null);
@@ -69,7 +104,9 @@ export function WarehouseBoard({ items, canManage }: Props) {
     setEditingKey(`${item.sku}@${item.warehouseCode}`);
     setForm({
       sku: item.sku,
-      warehouseCode: item.warehouseCode === 'SG' ? 'SG' : 'HN',
+      warehouseCode: (WAREHOUSE_ORDER as readonly string[]).includes(item.warehouseCode)
+        ? (item.warehouseCode as WarehouseCode)
+        : 'GVM',
       productTitle: item.productTitle ?? '',
       variantTitle: item.variantTitle ?? '',
       shelf: item.shelf ?? '',
@@ -139,11 +176,11 @@ export function WarehouseBoard({ items, canManage }: Props) {
               <label className="text-xs text-muted-foreground">Kho</label>
               <select
                 value={form.warehouseCode}
-                onChange={(e) => setForm((f) => ({ ...f, warehouseCode: e.target.value === 'SG' ? 'SG' : 'HN' }))}
+                onChange={(e) => setForm((f) => ({ ...f, warehouseCode: e.target.value as WarehouseCode }))}
                 disabled={isPending || !!editingKey}
                 className="rounded border border-border bg-background px-2 py-1 text-sm disabled:opacity-60"
               >
-                {WAREHOUSES.map((w) => <option key={w} value={w}>{w}</option>)}
+                {upsertCodes.map((w) => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -234,9 +271,9 @@ export function WarehouseBoard({ items, canManage }: Props) {
         </div>
       )}
 
-      {/* Tabs kho */}
+      {/* Tabs kho — suy từ dữ liệu (GVM/AP/DM/…) + Tất cả */}
       <div className="flex items-center gap-1 text-sm">
-        {(['HN', 'SG', 'ALL'] as const).map((t) => (
+        {[...warehouseCodes, 'ALL'].map((t) => (
           <button
             key={t}
             type="button"
@@ -281,7 +318,7 @@ export function WarehouseBoard({ items, canManage }: Props) {
                 return (
                   <tr
                     key={item.id}
-                    onClick={() => setHistoryItem(item)}
+                    onClick={() => setDrawerRow(item)}
                     className="cursor-pointer border-t border-border hover:bg-muted/30"
                   >
                     <td className="px-3 py-2 font-sans">{item.sku}</td>
@@ -306,10 +343,10 @@ export function WarehouseBoard({ items, canManage }: Props) {
                       <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setHistoryItem(item)}
+                          onClick={() => setDrawerRow(item)}
                           className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
                         >
-                          Lịch sử
+                          Chi tiết
                         </button>
                         {canManage && (
                           <>
@@ -346,9 +383,14 @@ export function WarehouseBoard({ items, canManage }: Props) {
         </table>
       </div>
 
-      {historyItem && (
-        // key theo dòng tồn → đổi dòng là remount, state movements/error về null sạch sẽ.
-        <HistoryDrawer key={historyItem.id} item={historyItem} onClose={() => setHistoryItem(null)} />
+      {drawerRow && (
+        // key theo dòng tồn → đổi dòng là remount, state items/movements/error về null sạch sẽ.
+        <ItemDrawer
+          key={drawerRow.id}
+          item={drawerRow}
+          warehouseCode={tab === 'ALL' ? undefined : tab}
+          onClose={() => setDrawerRow(null)}
+        />
       )}
       {adjustItem && (
         <AdjustDialog
@@ -370,104 +412,207 @@ export function WarehouseBoard({ items, canManage }: Props) {
   );
 }
 
-/** Drawer lịch sử movement của một dòng tồn — load khi mở, guard chống
- *  response cũ đè response mới khi đổi dòng nhanh. */
-function HistoryDrawer({ item, onClose }: { item: InventoryRow; onClose: () => void }) {
+/** Giá vốn món: số + đơn vị tiền tệ. */
+function fmtMoney(amount: string | null, currency: string | null): string {
+  if (!amount) return '—';
+  const n = Number(amount);
+  const formatted = Number.isFinite(n) ? new Intl.NumberFormat('vi-VN').format(n) : amount;
+  return currency ? `${formatted} ${currency}` : formatted;
+}
+
+type DrawerTab = 'items' | 'history';
+
+/** Drawer per-unit của một dòng rollup: danh sách MÓN + lịch sử movement.
+ *  Cả hai tải lười khi mở tab tương ứng; key theo dòng → remount sạch state. */
+function ItemDrawer({
+  item, warehouseCode, onClose,
+}: {
+  item: InventoryRow;
+  warehouseCode?: string;
+  onClose: () => void;
+}) {
+  const [view, setView] = useState<DrawerTab>('items');
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
+      <div
+        className="flex h-full w-full max-w-3xl flex-col overflow-y-auto border-l border-border bg-background shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 border-b border-border bg-background px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {item.sku} @ {item.warehouseCode}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Tồn {fmtQty(item.qtyOnHand)} · Giữ {fmtQty(item.qtyReserved)} · Khả dụng {fmtQty(item.available)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded px-2 py-1 text-muted-foreground hover:bg-muted"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="mt-2 flex gap-1 text-sm">
+            {(['items', 'history'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setView(t)}
+                className={`rounded px-3 py-1 font-medium ${
+                  view === t ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                {t === 'items' ? 'Danh sách món' : 'Lịch sử kho'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="p-4">
+          {view === 'items'
+            ? <ItemList sku={item.sku} warehouseCode={warehouseCode} />
+            : <MovementHistory inventoryId={item.id} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Bảng từng MÓN của SKU — tải qua getItems khi hiển thị. */
+function ItemList({ sku, warehouseCode }: { sku: string; warehouseCode?: string }) {
+  const [items, setItems] = useState<WarehouseItemRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getItems(sku, warehouseCode)
+      .then((rows) => { if (alive) setItems(rows); })
+      .catch((e: unknown) => {
+        if (alive) setError(e instanceof Error && e.message ? e.message : 'Không tải được danh sách món.');
+      });
+    return () => { alive = false; };
+  }, [sku, warehouseCode]);
+
+  if (error) return <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (items === null) return <p className="py-8 text-center text-sm text-muted-foreground">Đang tải danh sách món…</p>;
+  if (items.length === 0) return <p className="py-8 text-center text-sm text-muted-foreground">Không có món nào cho SKU này.</p>;
+
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+        <tr>
+          <th className="py-1 pr-2 text-left">Mã WH</th>
+          <th className="py-1 pr-2 text-left">Vị trí</th>
+          <th className="py-1 pr-2 text-left">Trạng thái</th>
+          <th className="py-1 pr-2 text-left">Nguồn</th>
+          <th className="py-1 pr-2 text-left">Ngày nhập</th>
+          <th className="py-1 pr-2 text-right">Giá vốn</th>
+          <th className="py-1 text-left">Đơn</th>
+        </tr>
+      </thead>
+      <tbody className="font-mono tabular-nums">
+        {items.map((it) => (
+          <tr key={it.id} className="border-t border-border align-top">
+            <td className="py-1.5 pr-2 text-xs">{it.unitCode}</td>
+            <td className="py-1.5 pr-2 font-sans text-xs">{it.location ?? '—'}</td>
+            <td className="py-1.5 pr-2 font-sans text-xs">
+              <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] ${STOCK_STATUS_CLASS[it.stockStatus] ?? 'bg-muted text-muted-foreground'}`}>
+                {STOCK_STATUS_LABEL[it.stockStatus] ?? it.stockStatus}
+              </span>
+            </td>
+            <td className="py-1.5 pr-2 font-sans text-xs text-muted-foreground">{it.source ?? '—'}</td>
+            <td className="whitespace-nowrap py-1.5 pr-2 text-xs">
+              {it.receivedAt ? new Date(it.receivedAt).toLocaleDateString('vi-VN') : '—'}
+            </td>
+            <td className="py-1.5 pr-2 text-right text-xs">{fmtMoney(it.domPrice, it.domPriceCurrency)}</td>
+            <td className="py-1.5 font-sans text-xs">
+              {it.order ? (
+                <Link
+                  href={`/f/fulfillment/${it.order.orderId}`}
+                  className="text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
+                >
+                  #{it.order.orderNumber}
+                </Link>
+              ) : '—'}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Lịch sử movement của dòng rollup — tải qua getMovements khi hiển thị. */
+function MovementHistory({ inventoryId }: { inventoryId: string }) {
   const [movements, setMovements] = useState<MovementRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    getMovements(item.id)
+    getMovements(inventoryId)
       .then((rows) => { if (alive) setMovements(rows); })
       .catch((e: unknown) => {
         if (alive) setError(e instanceof Error && e.message ? e.message : 'Không tải được lịch sử.');
       });
     return () => { alive = false; };
-  }, [item.id]);
+  }, [inventoryId]);
+
+  if (error) return <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (movements === null) return <p className="py-8 text-center text-sm text-muted-foreground">Đang tải lịch sử…</p>;
+  if (movements.length === 0) return <p className="py-8 text-center text-sm text-muted-foreground">Chưa có biến động nào cho dòng tồn này.</p>;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-2xl flex-col overflow-y-auto border-l border-border bg-background shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-background px-5 py-3">
-          <div>
-            <h2 className="text-sm font-semibold">
-              Lịch sử kho: {item.sku} @ {item.warehouseCode}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Tồn {fmtQty(item.qtyOnHand)} · Giữ {fmtQty(item.qtyReserved)} · Khả dụng {fmtQty(item.available)}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded px-2 py-1 text-muted-foreground hover:bg-muted"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="p-4">
-          {error ? (
-            <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">{error}</p>
-          ) : movements === null ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Đang tải lịch sử…</p>
-          ) : movements.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Chưa có biến động nào cho dòng tồn này.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="py-1 pr-2 text-left">Lúc</th>
-                  <th className="py-1 pr-2 text-left">Lý do</th>
-                  <th className="py-1 pr-2 text-right">ΔTồn</th>
-                  <th className="py-1 pr-2 text-right">ΔGiữ</th>
-                  <th className="py-1 pr-2 text-left">Tham chiếu</th>
-                  <th className="py-1 pr-2 text-left">Ghi chú</th>
-                  <th className="py-1 text-left">Người</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono tabular-nums">
-                {movements.map((m) => (
-                  <tr key={m.id} className="border-t border-border align-top">
-                    <td className="whitespace-nowrap py-1.5 pr-2 text-xs">
-                      {new Date(m.createdAt).toLocaleString('vi-VN')}
-                    </td>
-                    <td className="py-1.5 pr-2 font-sans text-xs">
-                      {REASON_LABEL[m.reason] ?? m.reason}
-                    </td>
-                    <td className={`py-1.5 pr-2 text-right ${deltaClass(m.deltaOnHand)}`}>
-                      {m.deltaOnHand === 0 ? '—' : fmtDelta(m.deltaOnHand)}
-                    </td>
-                    <td className={`py-1.5 pr-2 text-right ${deltaClass(m.deltaReserved)}`}>
-                      {m.deltaReserved === 0 ? '—' : fmtDelta(m.deltaReserved)}
-                    </td>
-                    <td className="py-1.5 pr-2 font-sans text-xs">
-                      {m.ref === null ? (
-                        '—'
-                      ) : m.ref.kind === 'order' ? (
-                        <Link
-                          href={`/f/fulfillment/${m.ref.orderId}`}
-                          className="text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
-                        >
-                          #{m.ref.orderNumber}
-                        </Link>
-                      ) : (
-                        m.ref.code
-                      )}
-                    </td>
-                    <td className="py-1.5 pr-2 font-sans text-xs text-muted-foreground">{m.note ?? '—'}</td>
-                    <td className="py-1.5 font-sans text-xs text-muted-foreground">{m.actor}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-    </div>
+    <table className="w-full text-sm">
+      <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+        <tr>
+          <th className="py-1 pr-2 text-left">Lúc</th>
+          <th className="py-1 pr-2 text-left">Lý do</th>
+          <th className="py-1 pr-2 text-right">ΔTồn</th>
+          <th className="py-1 pr-2 text-right">ΔGiữ</th>
+          <th className="py-1 pr-2 text-left">Tham chiếu</th>
+          <th className="py-1 pr-2 text-left">Ghi chú</th>
+          <th className="py-1 text-left">Người</th>
+        </tr>
+      </thead>
+      <tbody className="font-mono tabular-nums">
+        {movements.map((m) => (
+          <tr key={m.id} className="border-t border-border align-top">
+            <td className="whitespace-nowrap py-1.5 pr-2 text-xs">
+              {new Date(m.createdAt).toLocaleString('vi-VN')}
+            </td>
+            <td className="py-1.5 pr-2 font-sans text-xs">
+              {REASON_LABEL[m.reason] ?? m.reason}
+            </td>
+            <td className={`py-1.5 pr-2 text-right ${deltaClass(m.deltaOnHand)}`}>
+              {m.deltaOnHand === 0 ? '—' : fmtDelta(m.deltaOnHand)}
+            </td>
+            <td className={`py-1.5 pr-2 text-right ${deltaClass(m.deltaReserved)}`}>
+              {m.deltaReserved === 0 ? '—' : fmtDelta(m.deltaReserved)}
+            </td>
+            <td className="py-1.5 pr-2 font-sans text-xs">
+              {m.ref === null ? (
+                '—'
+              ) : m.ref.kind === 'order' ? (
+                <Link
+                  href={`/f/fulfillment/${m.ref.orderId}`}
+                  className="text-sky-600 underline-offset-2 hover:underline dark:text-sky-400"
+                >
+                  #{m.ref.orderNumber}
+                </Link>
+              ) : (
+                m.ref.code
+              )}
+            </td>
+            <td className="py-1.5 pr-2 font-sans text-xs text-muted-foreground">{m.note ?? '—'}</td>
+            <td className="py-1.5 font-sans text-xs text-muted-foreground">{m.actor}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -568,8 +713,8 @@ function TransferDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const otherWarehouses = WAREHOUSES.filter((w) => w !== item.warehouseCode);
-  const [to, setTo] = useState<string>(otherWarehouses[0] ?? 'SG');
+  const otherWarehouses = WAREHOUSE_ORDER.filter((w) => w !== item.warehouseCode);
+  const [to, setTo] = useState<string>(otherWarehouses[0] ?? 'AP');
   const [qty, setQty] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);

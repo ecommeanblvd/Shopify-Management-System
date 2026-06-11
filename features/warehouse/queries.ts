@@ -1,5 +1,5 @@
 /** Read-side queries cho trang Kho (board + drawer lịch sử movement). */
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export interface InventoryRow {
@@ -30,6 +30,73 @@ export async function listInventory(filter?: { warehouse?: string }): Promise<In
     qtyOnHand: r.qtyOnHand, qtyReserved: r.qtyReserved,
     available: r.qtyOnHand - r.qtyReserved,
     shelf: r.shelf, floor: r.floor, bin: r.bin, note: r.note,
+  }));
+}
+
+/** Một MÓN tồn (goods_receipt_items) hiển thị trong drawer per-unit. */
+export interface WarehouseItemRow {
+  id: string;
+  unitCode: string;
+  currentWarehouseCode: string | null;
+  location: string | null;
+  stockStatus: string;
+  receivedAt: Date | null;
+  domPrice: string | null;
+  domPriceCurrency: string | null;
+  globalPrice: string | null;
+  globalPriceCurrency: string | null;
+  /** Nguồn nhập — note của phiếu nhập (goods_receipts.note). */
+  source: string | null;
+  /** Đơn đã gắn (qua fulfillmentLineId → fulfillment → shopify_orders); null nếu chưa cấp. */
+  order: { orderId: string; orderNumber: string } | null;
+}
+
+/**
+ * Danh sách MÓN của một SKU (tùy chọn lọc theo kho hiện tại). Một truy vấn
+ * joined (receipt cho source; fulfillment_line → fulfillment → shopify_orders
+ * cho đơn) — không N+1. Sắp theo stockStatus rồi receivedAt.
+ */
+export async function listItems(sku: string, warehouseCode?: string): Promise<WarehouseItemRow[]> {
+  const gri = schema.goodsReceiptItems;
+  const rows = await db.select({
+    id: gri.id,
+    unitCode: gri.unitCode,
+    currentWarehouseCode: gri.currentWarehouseCode,
+    location: gri.location,
+    stockStatus: gri.stockStatus,
+    receivedAt: gri.qcCheckedAt,
+    domPrice: gri.domPrice,
+    domPriceCurrency: gri.domPriceCurrency,
+    globalPrice: gri.globalPrice,
+    globalPriceCurrency: gri.globalPriceCurrency,
+    source: schema.goodsReceipts.note,
+    orderId: schema.shopifyOrders.id,
+    orderNumber: schema.shopifyOrders.shopifyOrderNumber,
+  }).from(gri)
+    .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, gri.receiptId))
+    .leftJoin(schema.orderFulfillmentLines, eq(schema.orderFulfillmentLines.id, gri.fulfillmentLineId))
+    .leftJoin(schema.orderFulfillment, eq(schema.orderFulfillment.id, schema.orderFulfillmentLines.fulfillmentId))
+    .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
+    .where(warehouseCode
+      ? and(eq(gri.sku, sku), eq(gri.currentWarehouseCode, warehouseCode))
+      : eq(gri.sku, sku))
+    .orderBy(asc(gri.stockStatus), asc(gri.qcCheckedAt));
+
+  return rows.map((r) => ({
+    id: r.id,
+    unitCode: r.unitCode,
+    currentWarehouseCode: r.currentWarehouseCode,
+    location: r.location,
+    stockStatus: r.stockStatus,
+    receivedAt: r.receivedAt,
+    domPrice: r.domPrice,
+    domPriceCurrency: r.domPriceCurrency,
+    globalPrice: r.globalPrice,
+    globalPriceCurrency: r.globalPriceCurrency,
+    source: r.source,
+    order: r.orderId && r.orderNumber
+      ? { orderId: r.orderId, orderNumber: r.orderNumber }
+      : null,
   }));
 }
 

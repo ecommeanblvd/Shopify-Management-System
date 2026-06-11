@@ -20,7 +20,7 @@ export default async function WarehousePage() {
       <div>
         <h1 className="text-2xl font-semibold">Kho MEAN</h1>
         <p className="text-sm text-muted-foreground">
-          Tồn theo SKU × kho (HN/SG). Mọi biến động số lượng đi qua sổ kho — xem lịch sử bằng cách click vào dòng.
+          Tồn theo SKU × kho (GVM/AP/DM). Click vào SKU để xem danh sách từng món và lịch sử biến động.
         </p>
       </div>
       <WarehouseBoard items={items} canManage={canManage} />

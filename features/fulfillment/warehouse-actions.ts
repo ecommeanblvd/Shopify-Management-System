@@ -8,7 +8,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { applyMovement } from '@/features/warehouse/ledger';
-import { listMovements, type MovementRow } from '@/features/warehouse/queries';
+import { listItems, listMovements, type MovementRow, type WarehouseItemRow } from '@/features/warehouse/queries';
 
 async function requireWarehouse(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -31,13 +31,13 @@ export interface WarehouseItemInput {
   sku: string; productTitle?: string | null; variantTitle?: string | null;
   /** Chỉ áp dụng khi TẠO MỚI dòng tồn (seed ban đầu). Mọi thay đổi sau đó đi qua adjust/transfer (ledger). */
   qtyOnHand?: number;
-  warehouseCode?: 'HN' | 'SG';
+  warehouseCode?: 'GVM' | 'AP' | 'DM';
   shelf?: string | null; floor?: string | null; bin?: string | null; note?: string | null;
 }
 
 export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<void> {
   const userId = await requireWarehouse();
-  const warehouseCode = input.warehouseCode === 'SG' ? 'SG' : 'HN';
+  const warehouseCode = requireKnownWarehouse(input.warehouseCode ?? 'GVM');
   await db.insert(schema.warehouseInventory)
     .values({
       sku: input.sku.trim(),
@@ -67,7 +67,13 @@ export async function getMovements(warehouseInventoryId: string): Promise<Moveme
   return listMovements(warehouseInventoryId);
 }
 
-const WAREHOUSES = ['HN', 'SG'] as const;
+/** Danh sách MÓN của một SKU (per-unit) cho drawer — load khi mở. */
+export async function getItems(sku: string, warehouseCode?: string): Promise<WarehouseItemRow[]> {
+  await requireWarehouseView();
+  return listItems(sku, warehouseCode);
+}
+
+const WAREHOUSES = ['GVM', 'AP', 'DM'] as const;
 /** Chặn tạo dòng tồn ở mã kho lạ (createIfMissing sẽ mint row mới). */
 function requireKnownWarehouse(code: string): string {
   const c = code.trim();
