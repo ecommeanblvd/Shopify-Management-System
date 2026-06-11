@@ -204,7 +204,9 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   if (input.countryCodes !== undefined) {
     patch.countryCodes = parseCountryCodes(input.countryCodes);
   }
-  if (input.excludedCountryCodes !== undefined) {
+  // Cột generic nhưng UI hiện chỉ cho addon_fixed — gate như applyMode để
+  // form kind khác không vô tình ghi đè danh sách miễn.
+  if (input.excludedCountryCodes !== undefined && existing.kind === 'addon_fixed') {
     patch.excludedCountryCodes = parseCountryCodes(input.excludedCountryCodes);
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;

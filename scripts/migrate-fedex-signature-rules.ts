@@ -28,39 +28,46 @@ async function main() {
   console.log(`Dòng hiện có: ${rows.rows.length} — pre-June row: ${hasPreJune ? 'CÓ' : 'CHƯA (sẽ insert)'}`);
   if (!apply) { console.log('DRY-RUN XONG.'); process.exit(0); }
 
-  // (1) Sửa mốc 2 dòng hiện có + set excluded list
-  const u88 = await db.execute(sql`
-    UPDATE carrier_surcharges cs SET
-      starts_at = '2025-06-01'::timestamp, ends_at = '2026-01-01'::timestamp,
-      excluded_country_codes = ${JSON.stringify(EXCLUDED)}::jsonb,
-      note = 'Direct Signature — 88k 01/06/2025→31/12/2025, miễn 13 nước (when_billed)'
-    FROM carrier_accounts ca
-    WHERE ca.id = cs.carrier_account_id AND ca.name = ${FEDEX_ACCOUNT}
-      AND cs.kind = 'addon_fixed' AND cs.value = 88000`);
-  const u927 = await db.execute(sql`
-    UPDATE carrier_surcharges cs SET
-      starts_at = '2026-01-01'::timestamp, ends_at = NULL,
-      excluded_country_codes = ${JSON.stringify(EXCLUDED)}::jsonb,
-      note = 'Direct Signature — 92.7k từ 01/01/2026, miễn 13 nước (when_billed)'
-    FROM carrier_accounts ca
-    WHERE ca.id = cs.carrier_account_id AND ca.name = ${FEDEX_ACCOUNT}
-      AND cs.kind = 'addon_fixed' AND cs.value = 92700 AND cs.ends_at IS NULL`);
-  if (Number(u88.rowCount ?? 0) !== 1 || Number(u927.rowCount ?? 0) !== 1) {
-    throw new Error(`UPDATE lệch kỳ vọng: 88k=${u88.rowCount}, 92.7k=${u927.rowCount} (mỗi cái phải 1)`);
-  }
-  console.log('✓ Sửa mốc 2 dòng hiện có');
-  // (2) Insert dòng pre-June nếu chưa có
-  if (!hasPreJune) {
-    const ins = await db.execute(sql`
-      INSERT INTO carrier_surcharges
-        (carrier_account_id, kind, value, fuelable, active, apply_mode, ends_at, excluded_country_codes, note)
-      SELECT ca.id, 'addon_fixed', 92700, true, true, 'when_billed',
-             '2025-06-01'::timestamp, ${JSON.stringify(EXCLUDED)}::jsonb,
-             'Direct Signature — 92.7k đến trước 01/06/2025, miễn 13 nước (when_billed)'
-      FROM carrier_accounts ca WHERE ca.name = ${FEDEX_ACCOUNT}`);
-    if (Number(ins.rowCount ?? 0) !== 1) throw new Error(`Insert pre-June được ${ins.rowCount}/1`);
-    console.log('✓ Insert dòng pre-June 92.7k');
-  } else console.log('Dòng pre-June đã có — bỏ qua.');
+  // Toàn bộ apply trong MỘT transaction: assert rowCount fail → rollback
+  // sạch, không để trạng thái nửa vời. Mọi UPDATE đều khoá thêm theo note
+  // 'Direct Signature' để không bao giờ đụng dòng addon khác cùng giá trị.
+  await db.transaction(async (tx) => {
+    // (1) Sửa mốc 2 dòng hiện có + set excluded list
+    const u88 = await tx.execute(sql`
+      UPDATE carrier_surcharges cs SET
+        starts_at = '2025-06-01'::timestamp, ends_at = '2026-01-01'::timestamp,
+        excluded_country_codes = ${JSON.stringify(EXCLUDED)}::jsonb,
+        note = 'Direct Signature — 88k 01/06/2025→31/12/2025, miễn 13 nước (when_billed)'
+      FROM carrier_accounts ca
+      WHERE ca.id = cs.carrier_account_id AND ca.name = ${FEDEX_ACCOUNT}
+        AND cs.kind = 'addon_fixed' AND cs.value = 88000
+        AND cs.note ILIKE '%Direct Signature%'`);
+    const u927 = await tx.execute(sql`
+      UPDATE carrier_surcharges cs SET
+        starts_at = '2026-01-01'::timestamp, ends_at = NULL,
+        excluded_country_codes = ${JSON.stringify(EXCLUDED)}::jsonb,
+        note = 'Direct Signature — 92.7k từ 01/01/2026, miễn 13 nước (when_billed)'
+      FROM carrier_accounts ca
+      WHERE ca.id = cs.carrier_account_id AND ca.name = ${FEDEX_ACCOUNT}
+        AND cs.kind = 'addon_fixed' AND cs.value = 92700 AND cs.ends_at IS NULL
+        AND cs.note ILIKE '%Direct Signature%'`);
+    if (Number(u88.rowCount ?? 0) !== 1 || Number(u927.rowCount ?? 0) !== 1) {
+      throw new Error(`UPDATE lệch kỳ vọng: 88k=${u88.rowCount}, 92.7k=${u927.rowCount} (mỗi cái phải 1) — rollback`);
+    }
+    console.log('✓ Sửa mốc 2 dòng hiện có');
+    // (2) Insert dòng pre-June nếu chưa có
+    if (!hasPreJune) {
+      const ins = await tx.execute(sql`
+        INSERT INTO carrier_surcharges
+          (carrier_account_id, kind, value, fuelable, active, apply_mode, ends_at, excluded_country_codes, note)
+        SELECT ca.id, 'addon_fixed', 92700, true, true, 'when_billed',
+               '2025-06-01'::timestamp, ${JSON.stringify(EXCLUDED)}::jsonb,
+               'Direct Signature — 92.7k đến trước 01/06/2025, miễn 13 nước (when_billed)'
+        FROM carrier_accounts ca WHERE ca.name = ${FEDEX_ACCOUNT}`);
+      if (Number(ins.rowCount ?? 0) !== 1) throw new Error(`Insert pre-June được ${ins.rowCount}/1 — rollback`);
+      console.log('✓ Insert dòng pre-June 92.7k');
+    } else console.log('Dòng pre-June đã có — bỏ qua.');
+  });
   console.log('ÁP DỤNG XONG. Refresh cache đối soát (?refresh=1).');
   process.exit(0);
 }
