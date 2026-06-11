@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { applyMovement } from '@/features/warehouse/ledger';
+import { listMovements, type MovementRow } from '@/features/warehouse/queries';
 
 async function requireWarehouse(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,29 +18,53 @@ async function requireWarehouse(): Promise<string> {
   return session.user.id;
 }
 
+/** Quyền XEM trang kho (drawer lịch sử) — cùng guard với page.tsx. */
+async function requireWarehouseView(): Promise<string> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('Unauthorized');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'view_fulfillment')) throw new Error('Forbidden');
+  return session.user.id;
+}
+
 export interface WarehouseItemInput {
   sku: string; productTitle?: string | null; variantTitle?: string | null;
-  qtyOnHand: number; shelf?: string | null; floor?: string | null; bin?: string | null; note?: string | null;
+  /** Chỉ áp dụng khi TẠO MỚI dòng tồn (seed ban đầu). Mọi thay đổi sau đó đi qua adjust/transfer (ledger). */
+  qtyOnHand?: number;
+  warehouseCode?: 'HN' | 'SG';
+  shelf?: string | null; floor?: string | null; bin?: string | null; note?: string | null;
 }
 
 export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<void> {
   const userId = await requireWarehouse();
+  const warehouseCode = input.warehouseCode === 'SG' ? 'SG' : 'HN';
   await db.insert(schema.warehouseInventory)
     .values({
-      ...input, sku: input.sku.trim(),
-      // Pinned to HN until T7/T9 rewrite — non-HN rows would break adjustStock & the legacy allocator today.
-      warehouseCode: 'HN',
+      sku: input.sku.trim(),
+      warehouseCode,
+      productTitle: input.productTitle ?? null, variantTitle: input.variantTitle ?? null,
+      qtyOnHand: input.qtyOnHand ?? 0,
+      shelf: input.shelf ?? null, floor: input.floor ?? null,
+      bin: input.bin ?? null, note: input.note ?? null,
       updatedBy: userId,
     })
     .onConflictDoUpdate({
       target: [schema.warehouseInventory.sku, schema.warehouseInventory.warehouseCode],
+      // Chỉ cập nhật metadata — KHÔNG đụng qtyOnHand/qtyReserved khi update
+      // (bypass ledger). Số lượng chỉ đổi qua adjustStock/transferStock.
       set: {
         productTitle: input.productTitle ?? null, variantTitle: input.variantTitle ?? null,
-        qtyOnHand: input.qtyOnHand, shelf: input.shelf ?? null, floor: input.floor ?? null,
+        shelf: input.shelf ?? null, floor: input.floor ?? null,
         bin: input.bin ?? null, note: input.note ?? null, updatedBy: userId, updatedAt: sql`now()`,
       },
     });
   revalidatePath('/f/fulfillment/warehouse');
+}
+
+/** Lịch sử movement cho drawer — load khi mở, không preload theo bảng. */
+export async function getMovements(warehouseInventoryId: string): Promise<MovementRow[]> {
+  await requireWarehouseView();
+  return listMovements(warehouseInventoryId);
 }
 
 export async function adjustStock(input: {

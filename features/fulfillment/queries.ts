@@ -42,7 +42,3 @@ export async function getFulfillmentDetail(orderId: string) {
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
   return { fulfillment: ful, lines };
 }
-
-export async function listWarehouse() {
-  return db.select().from(schema.warehouseInventory).orderBy(schema.warehouseInventory.sku);
-}
