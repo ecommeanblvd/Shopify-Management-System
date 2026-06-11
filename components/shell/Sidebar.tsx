@@ -1,14 +1,12 @@
 import Link from 'next/link';
-import { NAV, canSeeSettings } from '@/lib/nav';
-import { hasPermission } from '@/lib/auth/rbac';
+import { NAV, canSeeSettings, canSeeNavItem } from '@/lib/nav';
 
 interface SidebarProps { role: string; currentPath: string }
 
 export function Sidebar({ role, currentPath }: SidebarProps) {
   const visible = NAV.filter((item) => {
-    // The Settings hub entry shows only when the role can reach a sub-module.
     if (item.href === '/settings') return canSeeSettings(role);
-    return item.requires === null || hasPermission(role, item.requires);
+    return canSeeNavItem(role, item.requires);
   });
   return (
     <aside className="w-60 shrink-0 border-r overflow-y-auto bg-[var(--color-surface)]">

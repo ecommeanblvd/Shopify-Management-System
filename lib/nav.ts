@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, PackageCheck } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, Warehouse } from 'lucide-react';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -6,7 +6,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  requires: Permission | null;
+  /** null = ai cũng thấy; mảng = có MỘT trong các quyền là thấy (OR). */
+  requires: Permission | Permission[] | null;
   description?: string;
 }
 
@@ -23,7 +24,7 @@ export const NAV: NavItem[] = [
   { href: '/',                label: 'Dashboard',     icon: LayoutDashboard, requires: null },
   { href: '/f/orders',        label: 'Orders',        icon: ShoppingBag,     requires: 'view_orders' },
   { href: '/f/fulfillment',   label: 'Vận hành đơn', icon: ClipboardList,   requires: 'view_fulfillment' },
-  { href: '/f/fulfillment/receiving', label: 'Nhập kho & QC', icon: PackageCheck, requires: 'view_receiving' },
+  { href: '/f/warehouse',     label: 'Kho hàng',      icon: Warehouse,       requires: ['view_fulfillment', 'view_receiving'] },
   { href: '/f/carrier-rates', label: 'Carrier rates', icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
@@ -50,4 +51,11 @@ export const SETTINGS_GROUPS: SettingsGroup[] = ['Stores', 'Settings Sync', 'Mar
 /** True when the role can access at least one Settings sub-module. */
 export function canSeeSettings(role: string): boolean {
   return SETTINGS_ITEMS.some((item) => hasPermission(role, item.requires));
+}
+
+/** True khi role thấy được item (null = public, mảng = OR từng quyền). */
+export function canSeeNavItem(role: string, requires: NavItem['requires']): boolean {
+  if (requires === null) return true;
+  const list = Array.isArray(requires) ? requires : [requires];
+  return list.some((p) => hasPermission(role, p));
 }
