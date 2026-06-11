@@ -19,7 +19,7 @@ import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-or
 import { db, schema } from '@/db/client';
 import { fifoOrder } from '@/features/warehouse/allocation-logic';
 import { applyMovement } from '@/features/warehouse/ledger';
-import { computeStagingRemovals, type StagingRemoval } from '@/features/warehouse/migration-logic';
+import { computeStagingRemovals } from '@/features/warehouse/migration-logic';
 
 const ACTOR = 'system:migration';
 const NOTE = 'Gỡ staging khỏi tồn (spec §2.3 — hàng đi-đơn không nằm kho)';
@@ -156,6 +156,10 @@ async function phase2(apply: boolean): Promise<void> {
       inArray(schema.orderFulfillmentLines.status, ['pending_check', 'out_of_stock']),
       isNotNull(schema.orderFulfillmentLines.sku),
       isNull(schema.shopifyOrders.cancelledAtShopify),
+      // Đơn Shopify đã FULFILLED: hàng đã đi từ trước khi có hệ thống kho —
+      // không cấp/không flip out_of_stock (đo thực tế 06/2026: 7.635/8.858
+      // dòng chờ thuộc nhóm này). PARTIALLY_FULFILLED/UNFULFILLED/null giữ lại.
+      sql`coalesce(${schema.shopifyOrders.fulfillmentStatus}, '') <> 'FULFILLED'`,
     ));
 
   // FIFO theo processedAtShopify của ĐƠN — cùng hàm đã test của allocator.

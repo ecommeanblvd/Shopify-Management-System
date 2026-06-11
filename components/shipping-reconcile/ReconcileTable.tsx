@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
@@ -39,6 +39,15 @@ export function ReconcileTable({ rows, reports }: Props) {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
 
+  // Đổi filter -> về trang 0, reset NGAY TRONG render (pattern "adjusting
+  // state during render" của React) thay vì effect để khỏi render thừa.
+  const filterKey = `${carrier}|${status}|${country}|${minPct}|${q}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(0);
+  }
+
   const filtered = useMemo(() => {
     const minAbs = minPct ? Number(minPct) : null;
     const needle = q.trim().toLowerCase();
@@ -55,8 +64,6 @@ export function ReconcileTable({ rows, reports }: Props) {
       )
       .sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
   }, [rows, carrier, status, country, minPct, q]);
-
-  useEffect(() => { setPage(0); }, [carrier, status, country, minPct, q]);
 
   const summary = useMemo(() => {
     let billed = 0, engine = 0, over10 = 0, pendingCount = 0;
