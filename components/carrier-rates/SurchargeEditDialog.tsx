@@ -46,6 +46,13 @@ export interface SurchargeEditDialogProps {
   deleteAction?: () => void | Promise<void>;
   /** Trigger render override — e.g. an icon button or a full-width "Add" card. */
   triggerVariant?: 'outline-sm' | 'ghost-add-row';
+  /**
+   * Surcharge kind — used to conditionally render kind-specific fields.
+   * When 'addon_fixed', shows the apply-mode selector.
+   */
+  kind?: string;
+  /** Default apply mode for addon_fixed rows. */
+  defaultApplyMode?: 'always' | 'when_billed';
 }
 
 export function SurchargeEditDialog({
@@ -54,6 +61,7 @@ export function SurchargeEditDialog({
   countriesVisible, defaultCountryCodes,
   saveAction, deleteAction,
   triggerVariant = 'outline-sm',
+  kind, defaultApplyMode = 'always',
 }: SurchargeEditDialogProps) {
   const [open, setOpen] = useState(false);
   return (
@@ -173,6 +181,26 @@ export function SurchargeEditDialog({
             </Label>
             <Input name="note" defaultValue={defaultNote} placeholder="e.g. Premium 9:00 service" />
           </div>
+
+          {kind === 'addon_fixed' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Chế độ áp dụng
+              </Label>
+              <select
+                name="applyMode"
+                defaultValue={defaultApplyMode}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="always">Luôn cộng vào quote</option>
+                <option value="when_billed">Chỉ kiểm khi bill có</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Luôn cộng</span>: engine cộng vào mọi quote (DHL Direct Signature).{' '}
+                <span className="font-medium">Chỉ kiểm khi bill có</span>: không vào quote — chỉ làm giá tham chiếu đối soát (FedEx Direct Signature).
+              </p>
+            </div>
+          )}
 
           <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
             <div className="text-sm">

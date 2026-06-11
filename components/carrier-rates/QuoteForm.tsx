@@ -176,6 +176,7 @@ function ResultPanel({ result, costCurrency, displayCurrency }: { result: Extrac
     { label: 'Base rate', value: breakdown.base },
     { label: 'Fuel', value: breakdown.fuel, muted: breakdown.fuel === 0 },
     { label: 'Peak / premium', value: breakdown.peak, muted: breakdown.peak === 0 },
+    { label: 'Dịch vụ bổ sung', value: breakdown.addons, muted: breakdown.addons === 0 },
     { label: 'Per-kg fixed', value: breakdown.perKg, muted: breakdown.perKg === 0 },
     { label: 'Remote area', value: breakdown.remote, muted: breakdown.remote === 0 },
     { label: 'Residential', value: breakdown.residential, muted: breakdown.residential === 0 },

@@ -193,6 +193,9 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
   const valuePerKg = formData.get('valuePerKg');
   const countryCodes = formData.get('countryCodes');
   const note = String(formData.get('note') ?? '');
+  const applyModeRaw = kind === 'addon_fixed' ? String(formData.get('applyMode') ?? 'always') : undefined;
+  const applyMode: 'always' | 'when_billed' | undefined =
+    applyModeRaw === 'when_billed' ? 'when_billed' : applyModeRaw !== undefined ? 'always' : undefined;
   await createSurcharge(
     {
       carrierAccountId: accountId,
@@ -201,6 +204,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
       valuePerKg: valuePerKg !== null ? String(valuePerKg) : undefined,
       countryCodes: countryCodes !== null ? String(countryCodes) : undefined,
       note,
+      applyMode,
     },
     userId,
   );
@@ -214,8 +218,10 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   const countryCodes = formData.get('countryCodes');
   const note = formData.get('note');
   const activeRaw = formData.get('active');
+  const applyModeRaw = formData.get('applyMode');
   const patch: {
     value?: string; valuePerKg?: string; countryCodes?: string; note?: string; active?: boolean;
+    applyMode?: 'always' | 'when_billed';
   } = {};
   if (value !== null) patch.value = String(value);
   if (valuePerKg !== null) patch.valuePerKg = String(valuePerKg);
@@ -223,6 +229,9 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   if (note !== null) patch.note = String(note);
   // checkbox absent in FormData when unchecked → treat as false; present → true
   patch.active = activeRaw !== null;
+  if (applyModeRaw !== null) {
+    patch.applyMode = applyModeRaw === 'when_billed' ? 'when_billed' : 'always';
+  }
   await updateSurcharge({ id, ...patch }, userId);
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
@@ -520,6 +529,8 @@ function KindCard({
               defaultNote=""
               defaultActive
               perKgVisible={meta.supportsPerKg}
+              kind={kind}
+              defaultApplyMode="always"
               saveAction={createAction.bind(null, accountId, kind, userId)}
             />
           </div>
@@ -585,6 +596,18 @@ function SurchargeSummaryRow({
               all destinations
             </Badge>
           )}
+          {row.kind === 'addon_fixed' && (
+            <Badge
+              variant="secondary"
+              className={`h-4 text-[9px] uppercase tracking-wider px-1.5 ${
+                row.applyMode === 'when_billed'
+                  ? 'bg-sky-500/10 text-sky-700 dark:text-sky-400'
+                  : 'bg-violet-500/10 text-violet-700 dark:text-violet-400'
+              }`}
+            >
+              {row.applyMode === 'when_billed' ? 'Kiểm khi có bill' : 'Luôn cộng'}
+            </Badge>
+          )}
           {hasPerKg && perKgNumber !== null && (
             <span className="text-[11px] text-muted-foreground font-mono">
               or {VND_FMT.format(perKgNumber)} {currency}/kg
@@ -617,6 +640,8 @@ function SurchargeSummaryRow({
           defaultActive={row.active}
           tier={row.tier}
           perKgVisible={meta.supportsPerKg}
+          kind={row.kind}
+          defaultApplyMode={row.applyMode}
           saveAction={updateAction.bind(null, accountId, row.id, userId)}
           deleteAction={deleteAction.bind(null, accountId, row.id)}
         />

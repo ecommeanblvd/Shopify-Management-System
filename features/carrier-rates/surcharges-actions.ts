@@ -21,6 +21,12 @@ export interface SurchargeRow {
   /** Set when a scraper/cron wrote this row (e.g. FedEx fuel weekly refresh). */
   lastAutoFetchedAt: Date | null;
   lastAutoSource: string | null;
+  /**
+   * Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'.
+   *   'always'      → engine cộng vào mọi quote.
+   *   'when_billed' → KHÔNG vào quote; chỉ là giá tham chiếu đối soát.
+   */
+  applyMode: 'always' | 'when_billed';
 }
 
 export async function listSurcharges(carrierAccountId: string): Promise<SurchargeRow[]> {
@@ -39,6 +45,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       updatedAt: schema.carrierSurcharges.updatedAt,
       lastAutoFetchedAt: schema.carrierSurcharges.lastAutoFetchedAt,
       lastAutoSource: schema.carrierSurcharges.lastAutoSource,
+      applyMode: schema.carrierSurcharges.applyMode,
     })
     .from(schema.carrierSurcharges)
     .where(eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId))
@@ -53,6 +60,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
     .then((rows) => rows.map((r) => ({
       ...r,
       countryCodes: Array.isArray(r.countryCodes) ? (r.countryCodes as string[]) : null,
+      applyMode: (r.applyMode === 'when_billed' ? 'when_billed' : 'always') as 'always' | 'when_billed',
     })));
 }
 
@@ -73,6 +81,11 @@ export interface CreateSurchargeInput {
    * meaningful for kind='demand_per_kg'. Empty / missing = global.
    */
   countryCodes?: string;
+  /**
+   * Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'.
+   * 'always' (default) → cộng vào mọi quote; 'when_billed' → tham chiếu đối soát.
+   */
+  applyMode?: 'always' | 'when_billed';
 }
 
 function parseValue(raw: string, kind: SurchargeKind): number {
@@ -134,6 +147,9 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       countryCodes: countries,
       note: input.note?.trim() || null,
       updatedBy: userId,
+      applyMode: input.kind === 'addon_fixed'
+        ? (input.applyMode === 'when_billed' ? 'when_billed' : 'always')
+        : 'always',
     })
     .returning({ id: schema.carrierSurcharges.id });
   return row!.id;
@@ -148,6 +164,8 @@ export interface UpdateSurchargeInput {
   countryCodes?: string;
   note?: string;
   active?: boolean;
+  /** Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'. */
+  applyMode?: 'always' | 'when_billed';
 }
 
 export async function updateSurcharge(input: UpdateSurchargeInput, userId: string): Promise<void> {
@@ -172,6 +190,9 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;
+  if (input.applyMode !== undefined && existing.kind === 'addon_fixed') {
+    patch.applyMode = input.applyMode === 'when_billed' ? 'when_billed' : 'always';
+  }
 
   await db.update(schema.carrierSurcharges).set(patch).where(eq(schema.carrierSurcharges.id, input.id));
 }
