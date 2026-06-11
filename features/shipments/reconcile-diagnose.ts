@@ -400,7 +400,10 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
         : 'Hóa đơn thu phụ phí rủi ro (ER) nhưng hệ thống không tính — kiểm tra danh sách nước áp dụng';
       severity = 'config';
-    } else if (dominant.key === 'signature' && n0(e.addonReference ?? null) > 0) {
+    } else if (dominant.key === 'signature' && n0(e.addonReference ?? null) > 0
+        // Giá ĐÚNG bảng nhưng vẫn dominant (vd gate fuel chặn PHI_TUY_CHON):
+        // không in "X ≠ X" tự mâu thuẫn — rơi xuống verdict mặc định.
+        && dominant.billed !== n0(e.addonReference ?? null)) {
       verdict = `Direct Signature sai bảng giá: bill ${dominant.billed.toLocaleString('vi-VN')}đ ≠ ${n0(e.addonReference ?? null).toLocaleString('vi-VN')}đ — đối chiếu hóa đơn với biểu phí dịch vụ bổ sung`;
       severity = 'config';
     } else if (dominant.key === 'residual') {

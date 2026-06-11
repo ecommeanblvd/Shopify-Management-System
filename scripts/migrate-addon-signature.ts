@@ -20,8 +20,9 @@ async function main() {
 
   // (1) DHL re-kind
   const dhl = await db.execute(sql`
-    SELECT cs.id, cs.value::int, cs.starts_at::date, cs.ends_at::date
+    SELECT ca.name AS account, cs.id, cs.value::int, cs.starts_at::date, cs.ends_at::date
     FROM carrier_surcharges cs
+    JOIN carrier_accounts ca ON ca.id = cs.carrier_account_id
     WHERE cs.kind = 'peak_fixed' AND cs.note ILIKE '%Direct Signature%'`);
   console.log(`DHL peak_fixed 'Direct Signature' cần re-kind: ${dhl.rows.length} (kỳ vọng 2)`);
   console.table(dhl.rows);
@@ -46,20 +47,24 @@ async function main() {
   if (already === 0) {
     // 2 INSERT riêng (không VALUES + NULL timestamp — Postgres không suy
     // được kiểu cột khi NULL đứng đầu cột tham số hoá).
-    await db.execute(sql`
+    const ins88 = await db.execute(sql`
       INSERT INTO carrier_surcharges
         (carrier_account_id, kind, value, fuelable, active, apply_mode, ends_at, note)
       SELECT ca.id, 'addon_fixed', 88000, true, true, 'when_billed',
              ${BOUNDARY}::timestamp,
              'Direct Signature — 88k đến trước 05/01/2026 (when_billed)'
       FROM carrier_accounts ca WHERE ca.name = ${FEDEX_ACCOUNT}`);
-    await db.execute(sql`
+    const ins927 = await db.execute(sql`
       INSERT INTO carrier_surcharges
         (carrier_account_id, kind, value, fuelable, active, apply_mode, starts_at, note)
       SELECT ca.id, 'addon_fixed', 92700, true, true, 'when_billed',
              ${BOUNDARY}::timestamp,
              'Direct Signature — 92.7k từ 05/01/2026 (when_billed)'
       FROM carrier_accounts ca WHERE ca.name = ${FEDEX_ACCOUNT}`);
+    const n = Number(ins88.rowCount ?? 0) + Number(ins927.rowCount ?? 0);
+    // INSERT…SELECT chèn 0 dòng khi tên account lệch — phải báo lỗi to,
+    // không được im lặng in "đã chèn".
+    if (n !== 2) throw new Error(`FedEx insert được ${n}/2 dòng — kiểm tra tên account '${FEDEX_ACCOUNT}'`);
     console.log('✓ FedEx inserted 2 rows');
   } else {
     console.log('FedEx rows đã tồn tại — bỏ qua insert.');
