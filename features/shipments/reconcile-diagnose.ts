@@ -317,8 +317,21 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   }
   components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigCause });
 
+  // Phí nhập khẩu (FedEx US) bị gộp trong cột VAT của bill (VAT phẳng 8% —
+  // spec 2026-06-11). Bóc ra khi engine CÓ phí nhập (countryFixed>0) NHƯNG
+  // bill không để ở cột riêng (importHandling/elevatedRisk = 0) → phần dư
+  // trong cột VAT chính là phí nhập. Đơn thường: countryFixed=0 → không bóc.
+  // Bất biến Σ giữ nguyên: trueVat + importBundled === cột VAT gốc.
+  let vatBilled = n0(b.vat);
+  let importBundled = 0;
+  if (input.vatPercent > 0 && r(n0(e.countryFixed ?? null)) > 0
+      && n0(b.importHandling ?? null) === 0 && n0(b.elevatedRisk) === 0) {
+    const trueVat = r(b.total * input.vatPercent / (100 + input.vatPercent));
+    const excess = r(vatBilled - trueVat);
+    if (Math.abs(excess) > 1000) { importBundled = excess; vatBilled = trueVat; }
+  }
+
   // vat
-  const vatBilled = n0(b.vat);
   const vatDelta = r(vatBilled - e.vat);
   let vatCause: DiagnosisCause = 'KHOP';
   if (vatDelta !== 0) {
@@ -346,7 +359,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   // elevatedRisk — engine side = country_fixed (DHL Elevated Risk /
   // Restricted Destination). A mismatch usually means the surcharge's
   // effective window or country list is off vs what the carrier billed.
-  const erBilled = r(n0(b.elevatedRisk) + n0(b.importHandling ?? null));
+  const erBilled = r(n0(b.elevatedRisk) + n0(b.importHandling ?? null) + importBundled);
   const erEngine = r(n0(e.countryFixed ?? null));
   const erRef = r(n0(e.countryFixedReference ?? null));
   const erDelta = r(erBilled - erEngine);
@@ -432,6 +445,11 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       severity = 'config';
     } else if (dominant.key === 'signature' && e.addonExcludedForCountry && dominant.delta > 0) {
       verdict = `FedEx thu Direct Signature ở nước được miễn (${input.shipCountry ?? '?'}) — khiếu nại với carrier`;
+      severity = 'config';
+    } else if (dominant.key === 'signature' && dominant.delta < 0
+        && !e.addonExcludedForCountry) {
+      // Engine tính ký nhận (always) nhưng hóa đơn không thu.
+      verdict = 'Hệ thống tính phí ký nhận nhưng hóa đơn không thu — kiểm tra (đơn lẽ ra phải có ký nhận?)';
       severity = 'config';
     } else if (dominant.key === 'signature' && n0(e.addonReference ?? null) > 0
         // Giá ĐÚNG bảng nhưng vẫn dominant (vd gate fuel chặn PHI_TUY_CHON):

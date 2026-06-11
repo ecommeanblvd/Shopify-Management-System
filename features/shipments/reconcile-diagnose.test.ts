@@ -754,3 +754,118 @@ describe('import handling when_billed + fuel demand (spec 2026-06-11)', () => {
     expect(fuel.cause).not.toBe('LECH_FUEL_BASE');
   });
 });
+
+describe('FedEx fee model — phí nhập gộp VAT + ký nhận always (spec 2026-06-11)', () => {
+  // (a) US đủ: engine countryFixed 68.300 (import fee, NGOÀI fuel base),
+  // signature 92.700 always (TRONG fuel base), b.importHandling=0 +
+  // b.elevatedRisk=0 (cột riêng trống) nhưng b.vat = trueVat + 68.300 (phí
+  // nhập ẩn trong cột VAT). Sau khi bóc: vat khớp e.vat, elevatedRisk khớp
+  // e.countryFixed -> totalDelta 0 -> KHỚP TUYỆT ĐỐI.
+  it('(a) US đủ signature+import-fee (gộp VAT) -> bóc đúng, totalDelta 0', () => {
+    // fuel 519.033 = 47.5% × (1.000.000 + 92.700); subtotal 1.680.033;
+    // billTotal 1.814.436; trueVat 134.403; vat column = 134.403 + 68.300 = 202.703.
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, signature: 92_700, vat: 202_703, gogreen: 0,
+                elevatedRisk: 0, importHandling: 0, total: 1_814_436 },
+      engine: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, residential: 0, addons: 92_700, vat: 134_403,
+                countryFixed: 68_300, total: 1_814_436 },
+      shipCountry: 'US',
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    expect(r.totalDelta).toBe(0);
+    const vat = r.components.find((c) => c.key === 'vat')!;
+    expect(vat.billed).toBe(134_403); // VAT thật 8% (đã bóc phí nhập)
+    expect(vat.delta).toBe(0);
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.billed).toBe(68_300); // phí nhập bóc từ VAT, khớp engine countryFixed
+    expect(er.delta).toBe(0);
+    // identity preserved
+    expect(r.components.reduce((a, c) => a + c.delta, 0)).toBe(r.totalDelta);
+    expect(r.severity).toBe('match');
+    expect(r.verdict).toContain('KHỚP TUYỆT ĐỐI');
+  });
+
+  // (b) US thiếu ký nhận: engine addons 92.700 (always) nhưng bill signature 0
+  // -> sigDelta -92.700, KHONG_KHOP, dominant signature -> verdict
+  // "tính phí ký nhận nhưng hóa đơn không thu". countryFixed 0 (không có import
+  // fee) -> không bóc VAT.
+  it('(b) US engine thu ký nhận always, bill không thu -> verdict ký nhận', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, signature: 0, vat: 118_000, gogreen: 0,
+                elevatedRisk: 0, importHandling: 0, total: 1_593_000 },
+      engine: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, residential: 0, addons: 92_700, vat: 128_939,
+                countryFixed: 0, total: 1_740_672 },
+      shipCountry: 'US',
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.delta).toBe(-92_700);
+    expect(sig.cause).toBe('KHONG_KHOP');
+    expect(r.verdict).toContain('tính phí ký nhận nhưng hóa đơn không thu');
+    expect(r.severity).toBe('config');
+  });
+
+  // (c) đơn thường non-US: engine countryFixed 0 -> KHÔNG bóc VAT, component
+  // vat hành xử y như trước (regression guard). VAT đúng 8% trên subtotal.
+  it('(c) non-US, countryFixed 0 -> không bóc VAT, vat KHỚP như cũ', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // subtotal 1.000.000, vat 80.000 = 8% × 1.000.000, total 1.080.000.
+      billed: { base: 1_000_000, discount: 0, fuel: 0, remote: 0,
+                demand: 0, signature: 0, vat: 80_000, gogreen: 0,
+                elevatedRisk: 0, importHandling: 0, total: 1_080_000 },
+      engine: { base: 1_000_000, discount: 0, fuel: 0, remote: 0,
+                demand: 0, residential: 0, vat: 80_000,
+                countryFixed: 0, total: 1_080_000 },
+      shipCountry: 'GB',
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 0,
+      vatPercent: 8,
+    }));
+    const vat = r.components.find((c) => c.key === 'vat')!;
+    expect(vat.billed).toBe(80_000); // nguyên cột VAT, không bóc
+    expect(vat.delta).toBe(0);
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.billed).toBe(0);
+    expect(r.totalDelta).toBe(0);
+    expect(r.severity).toBe('match');
+  });
+
+  // (d) DHL ER: phí nằm ĐÚNG cột riêng (b.elevatedRisk>0) -> điều kiện bóc
+  // (b.elevatedRisk===0) sai -> KHÔNG bóc, giữ nguyên hành vi cũ.
+  it('(d) DHL ER ở cột riêng -> không bóc VAT, ER khớp như cũ', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                signature: 0, vat: 94_822, gogreen: 0, elevatedRisk: 68_300,
+                importHandling: 0, total: 1_280_103 },
+      engine: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                residential: 0, vat: 94_822, countryFixed: 68_300,
+                total: 1_280_103 },
+      shipCountry: 'US',
+      vatPercent: 8,
+    }));
+    const vat = r.components.find((c) => c.key === 'vat')!;
+    expect(vat.billed).toBe(94_822); // không bóc (ER đã ở cột riêng)
+    expect(vat.delta).toBe(0);
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.billed).toBe(68_300);
+    expect(er.delta).toBe(0);
+    expect(r.severity).toBe('match');
+  });
+});
