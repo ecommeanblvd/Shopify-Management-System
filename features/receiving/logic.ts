@@ -31,7 +31,9 @@ export interface InvEffect { onHandDelta: number; reservedDelta: number; lineSta
  *  since it depends on whether the item is linked to a fulfillment line.) */
 export function inventoryEffect(disposition: Disposition, hasSku: boolean): InvEffect {
   switch (disposition) {
-    case 'allocate_to_order': return { onHandDelta: hasSku ? 1 : 0, reservedDelta: hasSku ? 1 : 0, lineStatus: 'in_stock' };
+    // Staging đi-đơn: kiện KHÔNG vào tồn kho (cross-dock) — chỉ chuyển
+    // trạng thái dòng đơn. Spec 2026-06-10 warehouse-core §2.3.
+    case 'allocate_to_order': return { onHandDelta: 0, reservedDelta: 0, lineStatus: 'in_stock' };
     case 'store': return { onHandDelta: hasSku ? 1 : 0, reservedDelta: 0, lineStatus: null };
     default: return { onHandDelta: 0, reservedDelta: 0, lineStatus: null };
   }

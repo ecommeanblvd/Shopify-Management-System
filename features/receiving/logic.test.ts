@@ -32,11 +32,13 @@ describe('validateQc', () => {
 });
 
 describe('inventoryEffect', () => {
-  it('allocate_to_order with sku reserves and sets line in_stock', () => {
-    expect(inventoryEffect('allocate_to_order', true)).toEqual({ onHandDelta: 1, reservedDelta: 1, lineStatus: 'in_stock' });
+  it('allocate_to_order: KHÔNG đụng tồn kho (staging — spec C+ §2.3)', () => {
+    expect(inventoryEffect('allocate_to_order', true))
+      .toEqual({ onHandDelta: 0, reservedDelta: 0, lineStatus: 'in_stock' });
   });
-  it('allocate_to_order without sku still sets line in_stock, no stock change', () => {
-    expect(inventoryEffect('allocate_to_order', false)).toEqual({ onHandDelta: 0, reservedDelta: 0, lineStatus: 'in_stock' });
+  it('allocate_to_order without sku: cũng staging, chỉ chuyển trạng thái dòng', () => {
+    expect(inventoryEffect('allocate_to_order', false))
+      .toEqual({ onHandDelta: 0, reservedDelta: 0, lineStatus: 'in_stock' });
   });
   it('store with sku increments on-hand only', () => {
     expect(inventoryEffect('store', true)).toEqual({ onHandDelta: 1, reservedDelta: 0, lineStatus: null });

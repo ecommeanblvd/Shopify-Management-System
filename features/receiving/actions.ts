@@ -11,6 +11,7 @@ import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { recordAudit } from '@/lib/logging/audit';
 import { putObject } from '@/lib/storage/s3';
 import { decideDisposition, validateQc, inventoryEffect, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
+import { applyMovement } from '@/features/warehouse/ledger';
 
 async function requirePerm(perm: Permission): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -115,13 +116,18 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
   const v = validateQc(input);
   if (!v.ok) throw new Error(v.error);
 
+  // Captured inside the tx, read after commit for best-effort reallocation.
+  let storedSku: string | null = null;
+
   await db.transaction(async (tx) => {
     const [item] = await tx.select().from(schema.goodsReceiptItems)
       .where(eq(schema.goodsReceiptItems.id, input.itemId)).limit(1);
     if (!item) throw new Error('Item not found');
     if (item.qcResult !== 'pending') throw new Error('Đơn vị này đã QC');
-    const [receipt] = await tx.select({ sourceType: schema.goodsReceipts.sourceType })
-      .from(schema.goodsReceipts).where(eq(schema.goodsReceipts.id, item.receiptId)).limit(1);
+    const [receipt] = await tx.select({
+      sourceType: schema.goodsReceipts.sourceType,
+      warehouseCode: schema.goodsReceipts.warehouseCode,
+    }).from(schema.goodsReceipts).where(eq(schema.goodsReceipts.id, item.receiptId)).limit(1);
     if (!receipt) throw new Error('Receipt not found');
 
     let disposition = decideDisposition(receipt.sourceType as SourceType, input.qcResult);
@@ -141,6 +147,9 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
     const hasSku = !!item.sku;
     const eff = inventoryEffect(disposition, hasSku);
 
+    // Capture for post-tx reallocateSku (spec §4b).
+    if (disposition === 'store' && hasSku) storedSku = item.sku!;
+
     await tx.update(schema.goodsReceiptItems).set({
       qcResult: input.qcResult, qcFailReason: input.qcFailReason ?? null, qcFailPhotoKey: input.qcFailPhotoKey ?? null,
       vendorReturnDocKey: input.vendorReturnDocKey ?? null, disposition,
@@ -148,25 +157,33 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
     }).where(eq(schema.goodsReceiptItems.id, item.id));
 
     let inventoryRowId: string | null = null;
-    if (hasSku && (eff.onHandDelta !== 0 || eff.reservedDelta !== 0)) {
-      const [inv] = await tx.insert(schema.warehouseInventory)
-        .values({ sku: item.sku!, productTitle: item.productTitle, variantTitle: item.variantTitle,
-                  qtyOnHand: eff.onHandDelta, qtyReserved: eff.reservedDelta, updatedBy: userId })
-        .onConflictDoUpdate({
-          target: [schema.warehouseInventory.sku, schema.warehouseInventory.warehouseCode],
-          set: {
-            qtyOnHand: sql`${schema.warehouseInventory.qtyOnHand} + ${eff.onHandDelta}`,
-            qtyReserved: sql`${schema.warehouseInventory.qtyReserved} + ${eff.reservedDelta}`,
-            updatedBy: userId, updatedAt: sql`now()`,
-          },
-        })
-        .returning({ id: schema.warehouseInventory.id });
-      inventoryRowId = inv.id;
+    if (hasSku && eff.onHandDelta !== 0) {
+      // 'store' duy nhất tới đây (allocate_to_order giờ là staging, không đụng tồn).
+      // Vào kho của PHIẾU nhập; lý do theo nguồn.
+      const receiptWarehouseCode = receipt.warehouseCode ?? 'HN';
+      const reasonBySource = {
+        po: 'receipt_po',
+        consignment: 'receipt_consignment',
+        // retail_for_order chỉ rơi vào store khi surplus-divert — vẫn là hàng PO về dư
+        retail_for_order: 'receipt_po',
+      } as const;
+      inventoryRowId = await applyMovement(tx, {
+        sku: item.sku!,
+        warehouseCode: receiptWarehouseCode,
+        deltaOnHand: eff.onHandDelta,
+        deltaReserved: 0,
+        reason: reasonBySource[receipt.sourceType as keyof typeof reasonBySource],
+        refType: 'receipt_item', refId: item.id, actor: userId,
+        createIfMissing: { productTitle: item.productTitle, variantTitle: item.variantTitle },
+      });
     }
 
     if (disposition === 'allocate_to_order' && line) {
       await tx.update(schema.orderFulfillmentLines).set({
-        status: 'in_stock', warehouseInventoryId: inventoryRowId, allocatedQty: line.qty, updatedAt: sql`now()`,
+        status: 'in_stock',
+        warehouseInventoryId: inventoryRowId, // null = staging (kiện không qua kho)
+        allocatedQty: inventoryRowId ? line.qty : 0, // staging: không giữ kho — nguồn là kiện goods_receipt_items
+        updatedAt: sql`now()`,
       }).where(eq(schema.orderFulfillmentLines.id, line.id));
       await tx.insert(schema.orderFulfillmentEvents).values({
         fulfillmentId: line.fulfillmentId, lineId: line.id, fromStatus: line.status, toStatus: 'in_stock',
@@ -198,6 +215,14 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
       await recomputeRollup(tx, line.fulfillmentId);
     }
   });
+
+  if (storedSku) {
+    // Hàng vừa lên kệ → cấp cho đơn đang chờ cùng SKU (spec §4b), best-effort.
+    try {
+      const { reallocateSku } = await import('@/features/warehouse/allocate');
+      await reallocateSku(storedSku);
+    } catch (err) { console.error('reallocateSku failed:', err); }
+  }
 
   try { await recordAudit({ userId, action: 'receiving_qc', target: input.itemId, requestSummary: `result=${input.qcResult}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
   revalidatePath('/f/fulfillment/receiving');
