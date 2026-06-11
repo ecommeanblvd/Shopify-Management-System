@@ -1,7 +1,7 @@
 /** Auto-allocation hai chiều (spec §4a/§4b):
  *  docs/superpowers/specs/2026-06-10-warehouse-core-auto-allocation-design.md
  *  Best-effort: lỗi không được phá sync đơn — caller bọc try/catch. */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { planAllocation, fifoOrder } from './allocation-logic';
 import { applyMovement } from './ledger';
@@ -20,12 +20,16 @@ export function toCandidates(
 export async function allocateOrder(orderId: string): Promise<void> {
   // Một select duy nhất (index orderId unique + fulfillmentId) — chạy trên
   // MỌI lần sync đơn nên đường "không có gì để cấp" phải rẻ, không ghi gì.
-  const lines = await db.select({ id: schema.orderFulfillmentLines.id, sku: schema.orderFulfillmentLines.sku })
+  const lines = await db.select({ id: schema.orderFulfillmentLines.id, sku: schema.orderFulfillmentLines.sku, cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify })
     .from(schema.orderFulfillmentLines)
     .innerJoin(schema.orderFulfillment,
       eq(schema.orderFulfillment.id, schema.orderFulfillmentLines.fulfillmentId))
+    .innerJoin(schema.shopifyOrders,
+      eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
     .where(and(eq(schema.orderFulfillment.orderId, orderId),
                eq(schema.orderFulfillmentLines.status, 'pending_check')));
+  // Đơn đã huỷ: không cấp hàng (release hook lo phần đã giữ).
+  if (lines.length > 0 && lines[0].cancelledAtShopify != null) return;
   for (const line of lines) {
     if (!line.sku) continue;
     try {

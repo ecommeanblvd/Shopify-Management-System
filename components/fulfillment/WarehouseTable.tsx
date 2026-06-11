@@ -87,7 +87,7 @@ export function WarehouseTable({ items, canManage }: Props) {
   function handleAdjust(sku: string, delta: number) {
     setAdjustPending(sku);
     startTransition(async () => {
-      await adjustStock(sku, delta);
+      await adjustStock({ sku, warehouseCode: 'HN', delta, note: 'Điều chỉnh nhanh từ bảng kho (legacy UI)' });
       setAdjustPending(null);
     });
   }

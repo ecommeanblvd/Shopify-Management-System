@@ -7,6 +7,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { applyMovement } from '@/features/warehouse/ledger';
 
 async function requireWarehouse(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -41,11 +42,72 @@ export async function upsertWarehouseItem(input: WarehouseItemInput): Promise<vo
   revalidatePath('/f/fulfillment/warehouse');
 }
 
-export async function adjustStock(sku: string, delta: number): Promise<void> {
+export async function adjustStock(input: {
+  sku: string; warehouseCode: string; delta: number; note: string;
+}): Promise<void> {
   const userId = await requireWarehouse();
-  // TODO(T7): rewrite through ledger
-  await db.update(schema.warehouseInventory)
-    .set({ qtyOnHand: sql`${schema.warehouseInventory.qtyOnHand} + ${delta}`, updatedBy: userId, updatedAt: sql`now()` })
-    .where(eq(schema.warehouseInventory.sku, sku.trim()));
+  if (!input.note?.trim()) throw new Error('Điều chỉnh tay bắt buộc ghi lý do');
+  if (!input.delta) throw new Error('Delta phải khác 0');
+  await db.transaction(async (tx) => {
+    await applyMovement(tx, {
+      sku: input.sku.trim(), warehouseCode: input.warehouseCode,
+      deltaOnHand: input.delta, deltaReserved: 0,
+      reason: 'manual_adjust', note: input.note.trim(), actor: userId,
+      createIfMissing: {},
+    });
+  });
+  if (input.delta > 0) {
+    // Hàng mới xuất hiện → thử cấp cho đơn chờ (spec §4b), best-effort.
+    try {
+      const { reallocateSku } = await import('@/features/warehouse/allocate');
+      await reallocateSku(input.sku.trim());
+    } catch (e) { console.error('reallocate after adjust:', e); }
+  }
+  revalidatePath('/f/fulfillment/warehouse');
+}
+
+export async function transferStock(input: {
+  sku: string; from: string; to: string; qty: number; note?: string | null;
+}): Promise<void> {
+  const userId = await requireWarehouse();
+  if (input.qty <= 0) throw new Error('Số lượng chuyển phải > 0');
+  if (input.from === input.to) throw new Error('Kho nguồn trùng kho đích');
+  await db.transaction(async (tx) => {
+    // Deterministic lock order: always lock the lexicographically-smaller
+    // warehouseCode first to prevent AB-BA deadlock when two opposite transfers
+    // run concurrently (e.g. HN→SG and SG→HN). The "smaller" side gets
+    // createIfMissing so a brand-new destination row can be created atomically.
+    //
+    // Note: transferring units that are reserved is intentionally blocked —
+    // applyMovement validates reserved ≤ on_hand on the from-row; moving
+    // reserved stock would leave reserved > on_hand after the out-movement.
+    if (input.to < input.from) {
+      // to is lexicographically first → lock to (transfer_in) first
+      await applyMovement(tx, {
+        sku: input.sku.trim(), warehouseCode: input.to,
+        deltaOnHand: input.qty, deltaReserved: 0,
+        reason: 'transfer_in', refType: 'transfer', note: input.note ?? null, actor: userId,
+        createIfMissing: {},
+      });
+      await applyMovement(tx, {
+        sku: input.sku.trim(), warehouseCode: input.from,
+        deltaOnHand: -input.qty, deltaReserved: 0,
+        reason: 'transfer_out', refType: 'transfer', note: input.note ?? null, actor: userId,
+      });
+    } else {
+      // from is lexicographically first (or equal, already rejected) → lock from (transfer_out) first
+      await applyMovement(tx, {
+        sku: input.sku.trim(), warehouseCode: input.from,
+        deltaOnHand: -input.qty, deltaReserved: 0,
+        reason: 'transfer_out', refType: 'transfer', note: input.note ?? null, actor: userId,
+      });
+      await applyMovement(tx, {
+        sku: input.sku.trim(), warehouseCode: input.to,
+        deltaOnHand: input.qty, deltaReserved: 0,
+        reason: 'transfer_in', refType: 'transfer', note: input.note ?? null, actor: userId,
+        createIfMissing: {},
+      });
+    }
+  });
   revalidatePath('/f/fulfillment/warehouse');
 }

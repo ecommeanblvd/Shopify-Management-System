@@ -96,7 +96,7 @@ async function applyLineTransition(tx: Tx, l: LineRow, next: LineStatus, actor: 
 
 /** Run/re-run stock check for a single order. Reserves stock for in_stock lines. */
 export async function checkStockForOrder(orderId: string): Promise<void> {
-  await requirePerm('manage_fulfillment');
+  const actor = await requirePerm('manage_fulfillment');
   const [ful] = await db.select({ id: schema.orderFulfillment.id })
     .from(schema.orderFulfillment).where(eq(schema.orderFulfillment.orderId, orderId)).limit(1);
   if (!ful) throw new Error('No fulfillment record');
@@ -112,31 +112,42 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
     const inv = skus.length
       ? await tx.select().from(schema.warehouseInventory).where(inArray(schema.warehouseInventory.sku, skus)).orderBy(asc(schema.warehouseInventory.id)).for('update')
       : [];
-    // Share one entry object per warehouse row, indexed by both sku and id.
-    const bySku = new Map<string, StockInfo>();
-    const byId = new Map<string, StockInfo>();
+    // Extended entry that carries sku+warehouseCode so applyMovement can be
+    // called without a second lookup — the locked inv rows already have them.
+    type InvEntry = StockInfo & { sku: string; warehouseCode: string };
+    const bySku = new Map<string, InvEntry>();
+    const byId = new Map<string, InvEntry>();
     for (const w of inv) {
-      const entry: StockInfo = { available: w.qtyOnHand - w.qtyReserved, warehouseInventoryId: w.id };
+      const entry: InvEntry = { available: w.qtyOnHand - w.qtyReserved, warehouseInventoryId: w.id, sku: w.sku, warehouseCode: w.warehouseCode };
       bySku.set(w.sku, entry);
       byId.set(w.id, entry);
     }
 
     for (const l of checkable) {
-      // Release any prior reservation before re-evaluating (key by id, robust).
+      // Release any prior reservation through the ledger (row already locked
+      // FOR UPDATE above — applyMovement re-locks the same row, no-op extra lock).
       if (l.status === 'in_stock' && l.warehouseInventoryId && l.allocatedQty > 0) {
-        await tx.update(schema.warehouseInventory)
-          .set({ qtyReserved: sql`${schema.warehouseInventory.qtyReserved} - ${l.allocatedQty}` })
-          .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId));
         const cur = byId.get(l.warehouseInventoryId);
-        if (cur) cur.available += l.allocatedQty;
+        if (cur) {
+          await applyMovement(tx, {
+            sku: cur.sku, warehouseCode: cur.warehouseCode,
+            deltaOnHand: 0, deltaReserved: -l.allocatedQty,
+            reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
+          });
+          cur.available += l.allocatedQty;
+        }
       }
       const res = checkStock({ sku: l.sku, qty: l.qty }, bySku);
       if (res.status === 'in_stock') {
-        await tx.update(schema.warehouseInventory)
-          .set({ qtyReserved: sql`${schema.warehouseInventory.qtyReserved} + ${res.allocatedQty}` })
-          .where(eq(schema.warehouseInventory.id, res.warehouseInventoryId!));
         const cur = byId.get(res.warehouseInventoryId!);
-        if (cur) cur.available -= res.allocatedQty;
+        if (cur) {
+          await applyMovement(tx, {
+            sku: cur.sku, warehouseCode: cur.warehouseCode,
+            deltaOnHand: 0, deltaReserved: res.allocatedQty,
+            reason: 'auto_allocate', refType: 'fulfillment_line', refId: l.id, actor,
+          });
+          cur.available -= res.allocatedQty;
+        }
       }
       await tx.update(schema.orderFulfillmentLines)
         .set({ status: res.status, warehouseInventoryId: res.warehouseInventoryId, allocatedQty: res.allocatedQty, updatedAt: sql`now()` })
