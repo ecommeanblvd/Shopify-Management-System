@@ -27,7 +27,8 @@ async function main() {
       UPDATE carrier_surcharges cs SET apply_mode = 'when_billed'
       FROM carrier_accounts ca
       WHERE ca.id = cs.carrier_account_id AND ca.name = ${FEDEX_ACCOUNT}
-        AND cs.kind = 'country_fixed' AND cs.note ILIKE '%import handling%'`);
+        AND cs.kind = 'country_fixed' AND cs.note ILIKE '%import handling%'
+        AND cs.country_codes @> '["US"]'::jsonb`);
     if (Number(u.rowCount ?? 0) !== 2) throw new Error(`UPDATE ${u.rowCount}/2 — rollback`);
     console.log('✓ 2 dòng US import handling → when_billed');
   });

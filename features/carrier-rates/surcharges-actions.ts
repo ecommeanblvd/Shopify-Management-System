@@ -180,7 +180,7 @@ export interface UpdateSurchargeInput {
   excludedCountryCodes?: string;
   note?: string;
   active?: boolean;
-  /** Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'. */
+  /** Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed' hoặc 'country_fixed'. */
   applyMode?: 'always' | 'when_billed';
 }
 
