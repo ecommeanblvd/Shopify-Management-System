@@ -67,15 +67,24 @@ export async function getMovements(warehouseInventoryId: string): Promise<Moveme
   return listMovements(warehouseInventoryId);
 }
 
+const WAREHOUSES = ['HN', 'SG'] as const;
+/** Chặn tạo dòng tồn ở mã kho lạ (createIfMissing sẽ mint row mới). */
+function requireKnownWarehouse(code: string): string {
+  const c = code.trim();
+  if (!(WAREHOUSES as readonly string[]).includes(c)) throw new Error(`Mã kho không hợp lệ: ${code}`);
+  return c;
+}
+
 export async function adjustStock(input: {
   sku: string; warehouseCode: string; delta: number; note: string;
 }): Promise<void> {
   const userId = await requireWarehouse();
   if (!input.note?.trim()) throw new Error('Điều chỉnh tay bắt buộc ghi lý do');
   if (!input.delta) throw new Error('Delta phải khác 0');
+  const warehouseCode = requireKnownWarehouse(input.warehouseCode);
   await db.transaction(async (tx) => {
     await applyMovement(tx, {
-      sku: input.sku.trim(), warehouseCode: input.warehouseCode.trim(),
+      sku: input.sku.trim(), warehouseCode,
       deltaOnHand: input.delta, deltaReserved: 0,
       reason: 'manual_adjust', note: input.note.trim(), actor: userId,
       createIfMissing: {},
@@ -96,8 +105,8 @@ export async function transferStock(input: {
 }): Promise<void> {
   const userId = await requireWarehouse();
   const sku = input.sku.trim();
-  const from = input.from.trim();
-  const to = input.to.trim();
+  const from = requireKnownWarehouse(input.from);
+  const to = requireKnownWarehouse(input.to);
   if (input.qty <= 0) throw new Error('Số lượng chuyển phải > 0');
   if (from === to) throw new Error('Kho nguồn trùng kho đích');
   await db.transaction(async (tx) => {

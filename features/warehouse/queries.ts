@@ -59,7 +59,8 @@ export interface MovementRow {
 export async function listMovements(warehouseInventoryId: string, limit = 50): Promise<MovementRow[]> {
   const moves = await db.select().from(schema.inventoryMovements)
     .where(eq(schema.inventoryMovements.warehouseInventoryId, warehouseInventoryId))
-    .orderBy(desc(schema.inventoryMovements.createdAt))
+    // id làm tiebreaker: cặp transfer_in/out cùng transaction trùng createdAt.
+    .orderBy(desc(schema.inventoryMovements.createdAt), desc(schema.inventoryMovements.id))
     .limit(limit);
 
   const orderIds: string[] = [];

@@ -352,6 +352,7 @@ export function WarehouseBoard({ items, canManage }: Props) {
       )}
       {adjustItem && (
         <AdjustDialog
+          key={adjustItem.id}
           item={adjustItem}
           onClose={() => setAdjustItem(null)}
           onDone={() => { setAdjustItem(null); router.refresh(); }}
@@ -359,6 +360,7 @@ export function WarehouseBoard({ items, canManage }: Props) {
       )}
       {transferItem && (
         <TransferDialog
+          key={transferItem.id}
           item={transferItem}
           onClose={() => setTransferItem(null)}
           onDone={() => { setTransferItem(null); router.refresh(); }}
