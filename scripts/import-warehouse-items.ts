@@ -116,7 +116,9 @@ function mapRows(header: string[], rows: Cell[][]): MappedItem[] {
     action: col('WH - Action'),
     invType: col('Import - Inventory type'),
     domPrice: 21, // "Dom. Price (theo file báo đơn & BBGN)".
-    globalPriceImport: col('Import - Global Price'),
+    // "Import - Global Price (điền tay)" (col 46, số) — KHÔNG dùng prefix
+    // 'Import - Global Price' vì nó ăn nhầm "Import - Global Price Currency" (col 24, text).
+    globalPriceImport: col('Import - Global Price ('),
     globalPriceLookup: col('Global Price (look up)'),
     globalCurrencyImport: col('Import - Global Price Currency'),
     globalCurrencyLookup: col('Global Price Currency'),
@@ -257,7 +259,9 @@ async function main(): Promise<void> {
       })
       .from(schema.shopifyOrders)
       .where(inArray(schema.shopifyOrders.shopifyOrderNumber, orderRefs));
-    for (const f of found) orderIdByRef.set(f.num, f.id);
+    // shopify_order_number KHÔNG unique (trùng giữa các store) — giữ bản đầu,
+    // không để bản sau ghi đè (orderId là best-effort/nullable, tránh gắn nhầm).
+    for (const f of found) if (!orderIdByRef.has(f.num)) orderIdByRef.set(f.num, f.id);
     console.log(
       `  Order refs: ${orderRefs.length} distinct → ${orderIdByRef.size} khớp shopify_orders.`,
     );
