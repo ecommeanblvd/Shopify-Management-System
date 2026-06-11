@@ -13,6 +13,9 @@ export interface SurchargeRow {
   tier: string | null;
   /** ISO-2 country codes scoping `demand_per_kg`. NULL → applies globally. */
   countryCodes: string[] | null;
+  /** ISO-2 country codes the row is EXEMPT for (addon_fixed — FedEx Direct
+   *  Signature miễn 13 nước). NULL → no exemptions. Exclusion wins. */
+  excludedCountryCodes: string[] | null;
   active: boolean;
   note: string | null;
   startsAt: Date | null;
@@ -38,6 +41,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
       valuePerKg: schema.carrierSurcharges.valuePerKg,
       tier: schema.carrierSurcharges.tier,
       countryCodes: schema.carrierSurcharges.countryCodes,
+      excludedCountryCodes: schema.carrierSurcharges.excludedCountryCodes,
       active: schema.carrierSurcharges.active,
       note: schema.carrierSurcharges.note,
       startsAt: schema.carrierSurcharges.startsAt,
@@ -60,6 +64,7 @@ export async function listSurcharges(carrierAccountId: string): Promise<Surcharg
     .then((rows) => rows.map((r) => ({
       ...r,
       countryCodes: Array.isArray(r.countryCodes) ? (r.countryCodes as string[]) : null,
+      excludedCountryCodes: Array.isArray(r.excludedCountryCodes) ? (r.excludedCountryCodes as string[]) : null,
       applyMode: (r.applyMode === 'when_billed' ? 'when_billed' : 'always') as 'always' | 'when_billed',
     })));
 }
@@ -81,6 +86,11 @@ export interface CreateSurchargeInput {
    * meaningful for kind='demand_per_kg'. Empty / missing = global.
    */
   countryCodes?: string;
+  /**
+   * Comma-separated ISO-2 codes the surcharge is EXEMPT for. Only
+   * meaningful for kind='addon_fixed'. Empty / missing = no exemptions.
+   */
+  excludedCountryCodes?: string;
   /**
    * Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'.
    * 'always' (default) → cộng vào mọi quote; 'when_billed' → tham chiếu đối soát.
@@ -136,6 +146,9 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
   const countries = input.countryCodes !== undefined
     ? parseCountryCodes(input.countryCodes)
     : null;
+  const excludedCountries = input.excludedCountryCodes !== undefined
+    ? parseCountryCodes(input.excludedCountryCodes)
+    : null;
   const [row] = await db
     .insert(schema.carrierSurcharges)
     .values({
@@ -145,6 +158,7 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       valuePerKg: perKg !== null ? perKg.toString() : null,
       tier: input.tier?.trim() || null,
       countryCodes: countries,
+      excludedCountryCodes: excludedCountries,
       note: input.note?.trim() || null,
       updatedBy: userId,
       applyMode: input.kind === 'addon_fixed'
@@ -162,6 +176,8 @@ export interface UpdateSurchargeInput {
   valuePerKg?: string;
   /** Pass '' to make the surcharge global; pass a code list to scope; omit to leave unchanged. */
   countryCodes?: string;
+  /** Pass '' to clear exemptions; pass a code list to set; omit to leave unchanged. */
+  excludedCountryCodes?: string;
   note?: string;
   active?: boolean;
   /** Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed'. */
@@ -187,6 +203,9 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   }
   if (input.countryCodes !== undefined) {
     patch.countryCodes = parseCountryCodes(input.countryCodes);
+  }
+  if (input.excludedCountryCodes !== undefined) {
+    patch.excludedCountryCodes = parseCountryCodes(input.excludedCountryCodes);
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;

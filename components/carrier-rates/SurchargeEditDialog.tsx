@@ -53,6 +53,8 @@ export interface SurchargeEditDialogProps {
   kind?: string;
   /** Default apply mode for addon_fixed rows. */
   defaultApplyMode?: 'always' | 'when_billed';
+  /** Nước MIỄN (ISO-2) cho addon_fixed — row không áp dụng ở các nước này. */
+  defaultExcludedCountryCodes?: string[] | null;
 }
 
 export function SurchargeEditDialog({
@@ -61,7 +63,7 @@ export function SurchargeEditDialog({
   countriesVisible, defaultCountryCodes,
   saveAction, deleteAction,
   triggerVariant = 'outline-sm',
-  kind, defaultApplyMode = 'always',
+  kind, defaultApplyMode = 'always', defaultExcludedCountryCodes,
 }: SurchargeEditDialogProps) {
   const [open, setOpen] = useState(false);
   return (
@@ -198,6 +200,24 @@ export function SurchargeEditDialog({
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium">Luôn cộng</span>: engine cộng vào mọi quote (DHL Direct Signature).{' '}
                 <span className="font-medium">Chỉ kiểm khi bill có</span>: không vào quote — chỉ làm giá tham chiếu đối soát (FedEx Direct Signature).
+              </p>
+            </div>
+          )}
+
+          {kind === 'addon_fixed' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Nước miễn (ISO-2)
+              </Label>
+              <Input
+                name="excludedCountryCodes"
+                defaultValue={(defaultExcludedCountryCodes ?? []).join(', ')}
+                placeholder="VD: SA, QA, IL — bỏ trống nếu áp dụng mọi nước"
+                className="font-mono uppercase tracking-widest text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Phí KHÔNG áp dụng khi nước đích nằm trong danh sách này
+                (FedEx miễn Direct Signature cho 13 nước).
               </p>
             </div>
           )}

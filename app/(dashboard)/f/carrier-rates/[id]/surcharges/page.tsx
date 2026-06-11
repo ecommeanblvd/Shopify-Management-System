@@ -196,6 +196,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
   const applyModeRaw = kind === 'addon_fixed' ? String(formData.get('applyMode') ?? 'always') : undefined;
   const applyMode: 'always' | 'when_billed' | undefined =
     applyModeRaw === 'when_billed' ? 'when_billed' : applyModeRaw !== undefined ? 'always' : undefined;
+  const excludedCountryCodes = kind === 'addon_fixed' ? formData.get('excludedCountryCodes') : null;
   await createSurcharge(
     {
       carrierAccountId: accountId,
@@ -203,6 +204,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
       value,
       valuePerKg: valuePerKg !== null ? String(valuePerKg) : undefined,
       countryCodes: countryCodes !== null ? String(countryCodes) : undefined,
+      excludedCountryCodes: excludedCountryCodes !== null ? String(excludedCountryCodes) : undefined,
       note,
       applyMode,
     },
@@ -216,16 +218,19 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   const value = formData.get('value');
   const valuePerKg = formData.get('valuePerKg');
   const countryCodes = formData.get('countryCodes');
+  const excludedCountryCodes = formData.get('excludedCountryCodes');
   const note = formData.get('note');
   const activeRaw = formData.get('active');
   const applyModeRaw = formData.get('applyMode');
   const patch: {
-    value?: string; valuePerKg?: string; countryCodes?: string; note?: string; active?: boolean;
+    value?: string; valuePerKg?: string; countryCodes?: string; excludedCountryCodes?: string;
+    note?: string; active?: boolean;
     applyMode?: 'always' | 'when_billed';
   } = {};
   if (value !== null) patch.value = String(value);
   if (valuePerKg !== null) patch.valuePerKg = String(valuePerKg);
   if (countryCodes !== null) patch.countryCodes = String(countryCodes);
+  if (excludedCountryCodes !== null) patch.excludedCountryCodes = String(excludedCountryCodes);
   if (note !== null) patch.note = String(note);
   // checkbox absent in FormData when unchecked → treat as false; present → true
   patch.active = activeRaw !== null;
@@ -608,6 +613,16 @@ function SurchargeSummaryRow({
               {row.applyMode === 'when_billed' ? 'Kiểm khi có bill' : 'Luôn cộng'}
             </Badge>
           )}
+          {row.kind === 'addon_fixed' && row.excludedCountryCodes && row.excludedCountryCodes.length > 0 && (
+            <span
+              className="text-[11px] font-mono text-muted-foreground"
+              title={row.excludedCountryCodes.join(', ')}
+            >
+              {row.excludedCountryCodes.length <= 3
+                ? `Miễn ${row.excludedCountryCodes.join(' · ')}`
+                : `Miễn ${row.excludedCountryCodes.length} nước`}
+            </span>
+          )}
           {hasPerKg && perKgNumber !== null && (
             <span className="text-[11px] text-muted-foreground font-mono">
               or {VND_FMT.format(perKgNumber)} {currency}/kg
@@ -634,6 +649,7 @@ function SurchargeSummaryRow({
           perKgDecimals={perKgDecimals}
           countriesVisible={countriesVisible}
           defaultCountryCodes={row.countryCodes}
+          defaultExcludedCountryCodes={row.excludedCountryCodes}
           defaultValue={row.value}
           defaultPerKgValue={row.valuePerKg}
           defaultNote={row.note ?? ''}
