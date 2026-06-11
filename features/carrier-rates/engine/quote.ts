@@ -261,6 +261,9 @@ export interface QuoteBreakdown {
    * applies on top — matches the invoice math we verified.
    */
   countryFixed: number;
+  /** country_fixed apply_mode='when_billed' (FedEx US import handling) —
+   *  KHÔNG vào total, chỉ giá tham chiếu đối soát. */
+  countryFixedReference: number;
   /**
    * Sum of all active `per_step_fixed` contributions. Each row contributes
    * `ceil(weightKg / stepKg) × value` (e.g. DHL GoGreen 1,900 VND × every
@@ -556,12 +559,18 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     .reduce((sum, s) => sum + s.value, 0);
   const demand = demandUnit * chargeableWeightKg;
 
-  // Country-scoped FLAT per-shipment fee. Sum every applicable country_fixed
-  // row whose country_codes list contains the destination (or is NULL =
-  // catch-all). Same compounding semantics as demand_per_kg.
-  const countryFixed = snap.surcharges
+  // Country-scoped FLAT per-shipment fee. apply_mode='when_billed' (FedEx US
+  // import handling) KHÔNG vào quote — chỉ countryFixedReference cho đối soát;
+  // các dòng always/null (DHL Elevated Risk) vào countryFixed như cũ. Cả hai
+  // áp cùng filter country_codes + exclusions + ngày.
+  const countryFixedRows = snap.surcharges
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'country_fixed')
-    .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
+    .filter((s) => (!s.countryCodes || s.countryCodes.includes(country)) && !isCountryExcluded(s, country));
+  const countryFixed = countryFixedRows
+    .filter((s) => (s.applyMode ?? 'always') === 'always')
+    .reduce((sum, s) => sum + s.value, 0);
+  const countryFixedReference = countryFixedRows
+    .filter((s) => s.applyMode === 'when_billed')
     .reduce((sum, s) => sum + s.value, 0);
 
   // Remote-area lookup. Postcode first (more specific), then city
@@ -674,6 +683,8 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
           ? s.value * chargeableWeightKg : 0;
       case 'country_fixed':
         return (!s.countryCodes || s.countryCodes.includes(country))
+          && !isCountryExcluded(s, country)
+          && (s.applyMode ?? 'always') === 'always'
           ? s.value : 0;
       case 'per_step_fixed':
         return (s.stepKg && s.stepKg > 0)
@@ -772,6 +783,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       perKg: Math.round(perKg),
       demand: Math.round(demand),
       countryFixed: Math.round(countryFixed),
+      countryFixedReference: Math.round(countryFixedReference),
       perStep: Math.round(perStep),
       vatPercent: vatPct,
       vat: Math.round(vat),

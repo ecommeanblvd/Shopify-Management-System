@@ -323,6 +323,64 @@ describe('quote engine', () => {
       });
     });
 
+    describe('country_fixed apply_mode (import handling when_billed)', () => {
+      it("apply_mode='when_billed' KHÔNG vào quote — hiện ở countryFixedReference", () => {
+        const baseline = quote(
+          makeSnap({
+            zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 703_458]]) }]]),
+            weightTiers: [{ upperKg: 1 }],
+            surcharges: [{ kind: 'fuel_percent', value: 49.25, active: true }],
+          }),
+          { weightKg: 1, destinationCountry: 'US' },
+        );
+        const snap = makeSnap({
+          zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 703_458]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'], applyMode: 'when_billed' },
+            { kind: 'fuel_percent', value: 49.25, active: true },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+        expect(baseline.ok).toBe(true);
+        expect(r.ok).toBe(true);
+        if (!baseline.ok || !r.ok) return;
+        expect(r.breakdown.countryFixed).toBe(0);
+        expect(r.breakdown.countryFixedReference).toBe(68_300);
+        // carrierCost and fuel UNCHANGED vs the no-row snapshot.
+        expect(r.breakdown.carrierCost).toBe(baseline.breakdown.carrierCost);
+        expect(r.breakdown.fuel).toBe(baseline.breakdown.fuel);
+      });
+
+      it("apply_mode='always'/null vẫn vào quote như cũ", () => {
+        const snap = makeSnap({
+          zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 703_458]]) }]]),
+          weightTiers: [{ upperKg: 1 }],
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'], applyMode: 'always' },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.countryFixed).toBe(68_300);
+        expect(r.breakdown.countryFixedReference).toBe(0);
+      });
+
+      it('when_billed gate theo nước: quote tới VN (ngoài country_codes) → reference = 0', () => {
+        const snap = makeSnap({
+          surcharges: [
+            { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'], applyMode: 'when_billed' },
+          ],
+        });
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.countryFixed).toBe(0);
+        expect(r.breakdown.countryFixedReference).toBe(0);
+      });
+    });
+
     it('rounds up to the next tier (1.2 kg → 2 kg tier)', () => {
       const snap = makeSnap();
       const r = quote(snap, { weightKg: 1.2, destinationCountry: 'MY' });
