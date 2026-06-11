@@ -50,6 +50,8 @@ export interface StagedItemRow {
   sku: string | null;
   qcResult: string;
   receiptCode: string;
+  /** Signed URL ảnh kiện (spec §5.2) — null khi không có ảnh/storage. */
+  photoUrl?: string | null;
   stagedAt: Date;
   lineId: string;
   orderId: string;
@@ -85,6 +87,7 @@ export interface StagingGroupItem {
   sku: string | null;
   qcResult: string;
   receiptCode: string;
+  photoUrl: string | null;
 }
 
 export interface StagingOrderGroup {
@@ -120,6 +123,7 @@ export function groupStaging(items: StagedItemRow[], lines: OrderLineRow[]): Sta
     g.items.push({
       itemId: it.itemId, unitCode: it.unitCode, sku: it.sku,
       qcResult: it.qcResult, receiptCode: it.receiptCode,
+      photoUrl: it.photoUrl ?? null,
     });
   }
 

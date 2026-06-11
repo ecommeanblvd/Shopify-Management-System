@@ -105,7 +105,9 @@ export function StagingBoard({ groups }: Props) {
                 <tr>
                   <th className="px-4 py-2 text-left">Phiếu nhập</th>
                   <th className="px-3 py-2 text-left">Mã kiện</th>
-                  <th className="px-4 py-2 text-left">SKU</th>
+                  <th className="px-3 py-2 text-left">SKU</th>
+                  <th className="px-3 py-2 text-left">Ảnh</th>
+                  <th className="px-4 py-2 text-left">QC</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,7 +115,18 @@ export function StagingBoard({ groups }: Props) {
                   <tr key={it.itemId} className="border-t border-border">
                     <td className="px-4 py-2 font-mono text-xs">{it.receiptCode}</td>
                     <td className="px-3 py-2 font-mono text-xs">{it.unitCode}</td>
-                    <td className="px-4 py-2 font-mono text-xs">{it.sku ?? '—'}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{it.sku ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      {it.photoUrl ? (
+                        <a href={it.photoUrl} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- signed S3 URL, không qua next/image */}
+                          <img src={it.photoUrl} alt={`Ảnh kiện ${it.unitCode}`} className="h-10 w-10 rounded border border-border object-cover" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-emerald-600 dark:text-emerald-400">Pass</td>
                   </tr>
                 ))}
               </tbody>

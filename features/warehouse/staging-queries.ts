@@ -1,7 +1,8 @@
 /** Read-side queries cho Khu chờ đi đơn (spec §2.3, §5.2).
  *  SQL mỏng — nhóm/tính sẵn sàng nằm trong staging-logic.ts (pure, có test). */
-import { and, eq, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { getSignedDownloadUrl, isStorageConfigured } from '@/lib/storage/s3';
 import { groupStaging, type StagingOrderGroup } from './staging-logic';
 
 export type { StagingOrderGroup, StagingGroupLine, StagingGroupItem, LineSource } from './staging-logic';
@@ -12,11 +13,12 @@ export type { StagingOrderGroup, StagingGroupLine, StagingGroupItem, LineSource 
  * Hai truy vấn bulk (kiện + toàn bộ dòng của các đơn liên quan), không N+1.
  */
 export async function listStaging(): Promise<StagingOrderGroup[]> {
-  const items = await db.select({
+  const rawItems = await db.select({
     itemId: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
     sku: schema.goodsReceiptItems.sku,
     qcResult: schema.goodsReceiptItems.qcResult,
+    photoKey: schema.goodsReceiptItems.photoKey,
     receiptCode: schema.goodsReceipts.code,
     stagedAt: schema.goodsReceiptItems.createdAt,
     lineId: schema.orderFulfillmentLines.id,
@@ -38,8 +40,16 @@ export async function listStaging(): Promise<StagingOrderGroup[]> {
       eq(schema.goodsReceiptItems.qcResult, 'pass'),
       isNotNull(schema.goodsReceiptItems.fulfillmentLineId),
       ne(schema.orderFulfillmentLines.status, 'shipped'),
+      // Đơn huỷ rời khu chờ — đồng bộ với guard của allocator/ensure-fulfillment.
+      isNull(schema.shopifyOrders.cancelledAtShopify),
     ));
-  if (items.length === 0) return [];
+  if (rawItems.length === 0) return [];
+
+  // Ảnh kiện (spec §5.2): ký URL theo photoKey, null khi thiếu ảnh/storage.
+  const items = await Promise.all(rawItems.map(async ({ photoKey, ...it }) => ({
+    ...it,
+    photoUrl: photoKey && isStorageConfigured() ? await getSignedDownloadUrl(photoKey) : null,
+  })));
 
   const orderIds = [...new Set(items.map((i) => i.orderId))];
   const lines = await db.select({
