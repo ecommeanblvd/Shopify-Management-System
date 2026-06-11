@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickWarehouse, planAllocation, fifoOrder, validateMovement } from './allocation-logic';
+import { pickWarehouse, planAllocation, fifoOrder, validateMovement, pickItem } from './allocation-logic';
 
 describe('pickWarehouse', () => {
   it('chọn kho khả dụng nhiều hơn', () => {
@@ -75,4 +75,17 @@ describe('validateMovement', () => {
   it('reserved chạm đúng on-hand -> ok', () => {
     expect(validateMovement({ qtyOnHand: 5, qtyReserved: 2 }, { deltaOnHand: 0, deltaReserved: 3 })).toEqual({ ok: true });
   });
+});
+
+describe('pickItem (per-unit FIFO)', () => {
+  it('chọn món in_stock cũ nhất ở kho nhiều khả dụng nhất (hoà → GVM)', () => {
+    const items = [
+      { id: 'b', warehouseCode: 'AP', receivedAt: new Date('2024-01-01') },
+      { id: 'a', warehouseCode: 'GVM', receivedAt: new Date('2024-02-01') },
+      { id: 'c', warehouseCode: 'GVM', receivedAt: new Date('2024-01-15') },
+    ];
+    // GVM có 2 món, AP 1 → chọn GVM; trong GVM cũ nhất = 'c' (2024-01-15).
+    expect(pickItem(items)?.id).toBe('c');
+  });
+  it('rỗng → null', () => { expect(pickItem([])).toBeNull(); });
 });

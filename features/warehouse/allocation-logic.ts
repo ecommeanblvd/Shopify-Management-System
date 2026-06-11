@@ -36,6 +36,27 @@ export function fifoOrder<T extends { orderProcessedAt: Date | null }>(lines: T[
   });
 }
 
+export interface PickableItem { id: string; warehouseCode: string; receivedAt: Date | null }
+/** Chọn 1 món để cấp: kho nhiều món nhất (hoà → ưu tiên WAREHOUSE_PRIORITY),
+ *  trong kho đó lấy món NHẬN CŨ NHẤT (FIFO; receivedAt null xếp cuối). */
+export const WAREHOUSE_PRIORITY = ['GVM', 'AP', 'DM'];
+export function pickItem<T extends PickableItem>(items: T[]): T | null {
+  if (items.length === 0) return null;
+  const byWh = new Map<string, T[]>();
+  for (const it of items) { const l = byWh.get(it.warehouseCode) ?? []; l.push(it); byWh.set(it.warehouseCode, l); }
+  let best: string | null = null;
+  for (const [wh, list] of byWh) {
+    if (best === null) { best = wh; continue; }
+    const a = list.length, b = byWh.get(best)!.length;
+    if (a > b || (a === b && rank(wh) < rank(best))) best = wh;
+  }
+  const pool = byWh.get(best!)!;
+  return [...pool].sort((x, y) =>
+    (x.receivedAt?.getTime() ?? Infinity) - (y.receivedAt?.getTime() ?? Infinity)
+    || x.id.localeCompare(y.id))[0];
+}
+function rank(wh: string): number { const i = WAREHOUSE_PRIORITY.indexOf(wh); return i < 0 ? 99 : i; }
+
 export interface MovementDelta { deltaOnHand: number; deltaReserved: number }
 
 /** Bất biến tồn sau movement: on_hand ≥ 0, 0 ≤ reserved ≤ on_hand, delta ≠ rỗng. */
