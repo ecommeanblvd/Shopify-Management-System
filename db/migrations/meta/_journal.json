@@ -407,6 +407,13 @@
       "when": 1781166741662,
       "tag": "0057_surcharge-excluded-countries",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781191968964,
+      "tag": "0058_warehouse-item-status",
+      "breakpoints": true
     }
   ]
 }

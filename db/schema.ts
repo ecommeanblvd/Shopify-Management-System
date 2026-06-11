@@ -1345,6 +1345,10 @@ export const fulfillmentOrderStatusEnum = pgEnum('fulfillment_order_status', [
 export const receiptSourceTypeEnum = pgEnum('receipt_source_type', ['retail_for_order', 'consignment', 'po']);
 export const qcResultEnum = pgEnum('qc_result', ['pending', 'pass', 'fail']);
 export const receiptItemDispositionEnum = pgEnum('receipt_item_disposition', ['pending', 'allocate_to_order', 'store', 'return_to_brand']);
+export const warehouseItemStatusEnum = pgEnum('warehouse_item_status', [
+  'pending', 'in_stock', 'staging', 'allocated', 'picked', 'shipped',
+  'qc_failed', 'returned_to_vendor',
+]);
 
 /** MEAN warehouse stock, keyed by (sku, warehouse_code). Operator-managed (manual entry). */
 export const warehouseInventory = pgTable('warehouse_inventory', {
@@ -1512,6 +1516,12 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   globalPrice: numeric('global_price', { precision: 14, scale: 2 }),
   globalPriceCurrency: text('global_price_currency'),
   weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  /** Kho hiện tại của món (GVM/AP/DM) — đổi khi chuyển kho. NULL tới khi lưu kho. */
+  currentWarehouseCode: text('current_warehouse_code'),
+  /** Vị trí trong kho ("Kệ 6-F"). */
+  location: text('location'),
+  /** Vòng đời món trong kho. Default pending tới khi QC + lưu kho. */
+  stockStatus: warehouseItemStatusEnum('stock_status').notNull().default('pending'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
@@ -1519,4 +1529,5 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   index('goods_receipt_items_qc_idx').on(t.qcResult),
   index('goods_receipt_items_line_idx').on(t.fulfillmentLineId),
   index('goods_receipt_items_disposition_idx').on(t.disposition),
+  index('gri_stock_pick_idx').on(t.sku, t.stockStatus, t.currentWarehouseCode),
 ]);
