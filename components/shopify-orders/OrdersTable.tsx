@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
+import { computeShipComparison } from '@/features/shopify-orders/ship-comparison';
+import { CostFxButton } from '@/components/shopify-orders/CostFxButton';
+import { updateStoreCostFx } from '@/features/shopify-orders/cost-fx-actions';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
 type PageSize = typeof PAGE_SIZE_OPTIONS[number];
@@ -491,26 +494,144 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Shipping cost</div>
         <Card>
           <CardContent className="p-4 space-y-3 text-sm">
-            {/* Engine-produced breakdown: base + accessorial surcharges +
-                fuel + VAT. Rendered in the carrier's cost currency (VND)
-                so the numbers reconcile 1-for-1 against the FedEx invoice.
-                Shipping revenue from Shopify is deliberately NOT shown
-                here — that's a customer-side figure and was confusing
-                operators trying to verify cost math. */}
-            {detail.shipping.defaultBreakdown && detail.shipping.defaultSource === 'engine_estimate' && (
-              <ShippingCostBreakdown
-                breakdown={detail.shipping.defaultBreakdown}
-                rawTotal={detail.shipping.defaultShippingCostRaw}
-                currency={detail.shipping.defaultShippingCostRawCurrency || cogsCcy}
-                carrierLabel={detail.shipping.defaultCarrierLabel}
-                carrierKey={detail.shipping.defaultCarrierKey}
-                zone={detail.shipping.defaultZone}
-                tierUpperKg={detail.shipping.defaultTierUpperKg}
-              />
-            )}
+            {/* ── Ship comparison table: Rev · Engine · Billed · Biên ── */}
+            {(() => {
+              const cmp = computeShipComparison({
+                shippingRevenue: detail.shipping.shippingRevenue,
+                orderCurrency: detail.shipping.orderCurrency,
+                costCurrency: detail.shipping.costCurrency,
+                fxCostPerOrderCurrency: detail.shipping.fxCostPerOrderCurrency,
+                engineCostVnd: detail.shipping.engineCostVnd,
+                billedCostVnd: detail.shipping.billedCostVnd,
+                overrideVnd: detail.shipping.shippingCostOverride,
+              });
+              const orderCcy = detail.shipping.orderCurrency;
+              const costBasisLabel =
+                cmp.costBasis === 'override' ? 'override'
+                : cmp.costBasis === 'billed' ? 'billed thực tế'
+                : cmp.costBasis === 'engine' ? 'hệ thống'
+                : null;
+              return (
+                <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {/* Row: Rev ship (khách trả) */}
+                      <tr className="border-b border-border/50">
+                        <td className="px-3 py-2 text-xs text-muted-foreground">Rev ship (khách trả)</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums">
+                          {cmp.needsFx ? (
+                            <span className="inline-flex items-center gap-2 justify-end flex-wrap">
+                              <span className="text-muted-foreground">
+                                {detail.shipping.shippingRevenue.toLocaleString()} {orderCcy}
+                              </span>
+                              <CostFxButton
+                                storeId={detail.storeId}
+                                orderCurrency={orderCcy}
+                                initialCostCurrency={detail.shipping.costCurrency}
+                                initialFxRate={
+                                  detail.shipping.fxCostPerOrderCurrency !== null
+                                    ? String(detail.shipping.fxCostPerOrderCurrency)
+                                    : null
+                                }
+                                initialPackagingFee={null}
+                                saveAction={updateStoreCostFx}
+                              />
+                            </span>
+                          ) : (
+                            <span>
+                              {cmp.revVnd !== null ? fmt(cmp.revVnd, 'VND') : '—'}
+                              {orderCcy !== 'VND' && cmp.revVnd !== null && (
+                                <span className="ml-1.5 text-[11px] text-muted-foreground font-normal">
+                                  ({detail.shipping.shippingRevenue.toLocaleString()} {orderCcy})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
 
-            {/* Invoice path — no engine breakdown to show, just surface the
-                actual amount from the matched shipping invoice. */}
+                      {/* Row: Hệ thống tính (engine) */}
+                      <tr className="border-b border-border/50">
+                        <td className="px-3 py-2 text-xs text-muted-foreground align-top">
+                          Hệ thống tính (engine)
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums align-top">
+                          <div>
+                            {cmp.engineCostVnd !== null ? fmt(cmp.engineCostVnd, 'VND') : '—'}
+                          </div>
+                          {/* Keep existing engine breakdown + diagnostic below the value */}
+                          {detail.shipping.defaultBreakdown && detail.shipping.defaultSource === 'engine_estimate' && (
+                            <div className="mt-2 text-left">
+                              <ShippingCostBreakdown
+                                breakdown={detail.shipping.defaultBreakdown}
+                                rawTotal={detail.shipping.defaultShippingCostRaw}
+                                currency={detail.shipping.defaultShippingCostRawCurrency || cogsCcy}
+                                carrierLabel={detail.shipping.defaultCarrierLabel}
+                                carrierKey={detail.shipping.defaultCarrierKey}
+                                zone={detail.shipping.defaultZone}
+                                tierUpperKg={detail.shipping.defaultTierUpperKg}
+                              />
+                            </div>
+                          )}
+                          {detail.shipping.defaultSource === 'unknown' && (
+                            <div className="mt-2 text-left">
+                              <UnknownShippingDiagnostic
+                                reason={detail.shipping.defaultUnknownReason}
+                                shipCountry={detail.shipCountry}
+                                shipWeightKg={detail.shipWeightKg}
+                              />
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* Row: Billed thực tế */}
+                      <tr className="border-b border-border/50">
+                        <td className="px-3 py-2 text-xs text-muted-foreground">Billed thực tế</td>
+                        <td className="px-3 py-2 text-right font-mono tabular-nums">
+                          {cmp.billedCostVnd !== null
+                            ? fmt(cmp.billedCostVnd, 'VND')
+                            : <span className="text-muted-foreground italic text-xs">Chưa có hóa đơn</span>
+                          }
+                        </td>
+                      </tr>
+
+                      {/* Row: Biên ship — hidden when needsFx, show hint instead */}
+                      {cmp.needsFx ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-2 text-center text-xs text-muted-foreground italic">
+                            Đặt tỉ giá để xem biên ship
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">Biên ship</td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums">
+                            {cmp.marginVnd !== null ? (
+                              <span className={cmp.marginVnd >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                                {fmt(cmp.marginVnd, 'VND')}
+                                {cmp.marginPct !== null && (
+                                  <span className="ml-1.5 text-[11px]">({cmp.marginPct.toFixed(1)}%)</span>
+                                )}
+                                {costBasisLabel && (
+                                  <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                                    (theo {costBasisLabel})
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground italic text-xs">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            {/* Invoice path — surface the matched invoice amount for reference. */}
             {detail.shipping.defaultSource === 'invoice' && (
               <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
                 <div className="flex items-center justify-between gap-3">
@@ -527,17 +648,6 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
               </div>
             )}
 
-            {/* Diagnostic panel — only when the engine couldn't price this
-                shipment. Surfaces the EXACT missing input (country, weight,
-                market, link, or carrier zone match) plus a deep link to
-                the page where the operator can fix it. */}
-            {detail.shipping.defaultSource === 'unknown' && (
-              <UnknownShippingDiagnostic
-                reason={detail.shipping.defaultUnknownReason}
-                shipCountry={detail.shipCountry}
-                shipWeightKg={detail.shipWeightKg}
-              />
-            )}
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 Weight override
