@@ -404,6 +404,10 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // NEVER fuelable — fuel% is published by the carrier on the published
   // base, not the discounted base.
   'contract_discount_pct',
+  // Dịch vụ bổ sung cố định/lô hàng (Direct Signature DHL/FedEx).
+  // apply_mode quyết định: 'always' cộng vào quote; 'when_billed' chỉ là
+  // giá tham chiếu cho đối soát.
+  'addon_fixed',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {
@@ -456,6 +460,11 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   //           e.g. DHL's retroactive Elevated Risk supplementary bill
   //           for pre-2026-03-04 shipments (ER only, no fuel, no VAT).
   vatable: boolean('vatable'),
+  // Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed':
+  //   'always'      → engine cộng vào mọi quote (DHL Direct Signature).
+  //   'when_billed' → KHÔNG vào quote; đối soát dùng làm giá tham chiếu
+  //                   kiểm khi bill có dòng này (FedEx Direct Signature).
+  applyMode: text('apply_mode').notNull().default('always'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [

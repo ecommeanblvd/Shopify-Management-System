@@ -393,6 +393,13 @@
       "when": 1781140990385,
       "tag": "0055_overrated_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781163152076,
+      "tag": "0056_addon-fixed-apply-mode",
+      "breakpoints": true
     }
   ]
 }
