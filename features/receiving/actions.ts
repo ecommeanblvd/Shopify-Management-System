@@ -10,7 +10,7 @@ import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { recordAudit } from '@/lib/logging/audit';
 import { putObject } from '@/lib/storage/s3';
-import { decideDisposition, validateQc, inventoryEffect, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
+import { decideDisposition, validateQc, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
 import { applyMovement } from '@/features/warehouse/ledger';
 
 async function requirePerm(perm: Permission): Promise<string> {
@@ -147,7 +147,6 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
     }
 
     const hasSku = !!item.sku;
-    const eff = inventoryEffect(disposition, hasSku);
 
     // Capture for post-tx reallocateSku (spec §4b).
     if (disposition === 'store' && hasSku) storedSku = item.sku!;
@@ -158,26 +157,59 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
       qcCheckedBy: userId, qcCheckedAt: sql`now()`, updatedAt: sql`now()`,
     }).where(eq(schema.goodsReceiptItems.id, item.id));
 
+    const receiptWarehouseCode = receipt.warehouseCode ?? 'GVM';
+    const reasonBySource = {
+      po: 'receipt_po',
+      consignment: 'receipt_consignment',
+      // retail_for_order chỉ rơi vào store khi surplus-divert — vẫn là hàng PO về dư
+      retail_for_order: 'receipt_po',
+    } as const;
+    const receiptReason = reasonBySource[receipt.sourceType as keyof typeof reasonBySource];
+
     let inventoryRowId: string | null = null;
-    if (hasSku && eff.onHandDelta !== 0) {
-      // 'store' duy nhất tới đây (allocate_to_order giờ là staging, không đụng tồn).
-      // Vào kho của PHIẾU nhập; lý do theo nguồn.
-      const receiptWarehouseCode = receipt.warehouseCode ?? 'HN';
-      const reasonBySource = {
-        po: 'receipt_po',
-        consignment: 'receipt_consignment',
-        // retail_for_order chỉ rơi vào store khi surplus-divert — vẫn là hàng PO về dư
-        retail_for_order: 'receipt_po',
-      } as const;
-      inventoryRowId = await applyMovement(tx, {
-        sku: item.sku!,
-        warehouseCode: receiptWarehouseCode,
-        deltaOnHand: eff.onHandDelta,
-        deltaReserved: 0,
-        reason: reasonBySource[receipt.sourceType as keyof typeof reasonBySource],
-        refType: 'receipt_item', refId: item.id, actor: userId,
-        createIfMissing: { productTitle: item.productTitle, variantTitle: item.variantTitle },
-      });
+    if (disposition === 'store') {
+      // Set món vào trạng thái in_stock tại kho phiếu nhập.
+      await tx.update(schema.goodsReceiptItems).set({
+        stockStatus: 'in_stock',
+        currentWarehouseCode: receiptWarehouseCode,
+        updatedAt: sql`now()`,
+      }).where(eq(schema.goodsReceiptItems.id, item.id));
+
+      if (hasSku) {
+        // Movement per-item: refType 'item', refId = món cụ thể, +1 onHand.
+        // applyMovement tự tạo dòng tồn SKU×kho nếu chưa có.
+        inventoryRowId = await applyMovement(tx, {
+          sku: item.sku!,
+          warehouseCode: receiptWarehouseCode,
+          deltaOnHand: 1,
+          deltaReserved: 0,
+          reason: receiptReason,
+          refType: 'item', refId: item.id, actor: userId,
+          createIfMissing: { productTitle: item.productTitle, variantTitle: item.variantTitle },
+        });
+      }
+    } else if (disposition === 'allocate_to_order') {
+      // Staging: món vào khu chờ tại kho phiếu nhập — KHÔNG vào rollup tồn kho.
+      await tx.update(schema.goodsReceiptItems).set({
+        stockStatus: 'staging',
+        currentWarehouseCode: receiptWarehouseCode,
+        updatedAt: sql`now()`,
+      }).where(eq(schema.goodsReceiptItems.id, item.id));
+    } else if (disposition === 'return_to_brand') {
+      // QC fail → trả brand: món chuyển sang returned_to_vendor.
+      await tx.update(schema.goodsReceiptItems).set({
+        stockStatus: 'returned_to_vendor',
+        updatedAt: sql`now()`,
+      }).where(eq(schema.goodsReceiptItems.id, item.id));
+    } else {
+      // Mọi disposition khác (pending, v.v.) — nếu QC fail không có disposition
+      // rõ ràng, đánh dấu qc_failed.
+      if (input.qcResult === 'fail') {
+        await tx.update(schema.goodsReceiptItems).set({
+          stockStatus: 'qc_failed',
+          updatedAt: sql`now()`,
+        }).where(eq(schema.goodsReceiptItems.id, item.id));
+      }
     }
 
     if (disposition === 'allocate_to_order' && line) {
