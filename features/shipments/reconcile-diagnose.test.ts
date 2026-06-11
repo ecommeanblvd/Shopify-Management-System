@@ -658,3 +658,99 @@ describe('diagnoseReconcileRow — ER truy thu khô (bill bổ sung, real #MBLVD
     expect(r.verdict).toContain('KHÔNG tính fuel/VAT trên ER');
   });
 });
+
+describe('import handling when_billed + fuel demand (spec 2026-06-11)', () => {
+  // (a) FedEx US import handling is now when_billed: engine does NOT auto-add it
+  // (countryFixed 0) but declares the reference price (countryFixedReference
+  // 68.300). Bill carries the fee at the right price + fuel arithmetic closes
+  // -> elevatedRisk pass-through PHI_TUY_CHON, not "engine không tính ER".
+  it('bill importHandling 68.300 == reference (fuel khớp) -> elevatedRisk PHI_TUY_CHON', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // billed vat 122,464 = 8% × (1,000,000 + 475,000 + 68,300)
+      billed: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, signature: 0, vat: 122_464, gogreen: 0,
+                elevatedRisk: 0, importHandling: 68_300, total: 1_665_764 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, vat: 118_000,
+                countryFixed: 0, countryFixedReference: 68_300, total: 1_593_000 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.billed).toBe(68_300);
+    expect(er.engine).toBe(0);
+    expect(er.cause).toBe('PHI_TUY_CHON');
+  });
+
+  // (b) Bill carries import handling at a price (78.000) that differs from the
+  // declared reference (68.300) -> pass-through gate REJECTS (KHONG_KHOP) and
+  // the dominant verdict calls out the price-table mismatch.
+  it('bill importHandling 78.000 ≠ reference 68.300 -> KHONG_KHOP + verdict sai bảng giá', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // billed vat 124,240 = 8% × (1,000,000 + 475,000 + 78,000)
+      billed: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, signature: 0, vat: 124_240, gogreen: 0,
+                elevatedRisk: 0, importHandling: 78_000, total: 1_677_240 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, vat: 118_000,
+                countryFixed: 0, countryFixedReference: 68_300, total: 1_593_000 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.cause).toBe('KHONG_KHOP');
+    expect(r.verdict).toContain('sai bảng giá');
+    expect(r.severity).toBe('config');
+  });
+
+  // (c) DHL Elevated Risk stays apply_mode='always' (auto-apply): engine
+  // countryFixed 68.300 == billed elevatedRisk -> KHOP. Regression guard that
+  // the when_billed branch never touches the erEngine>0 path.
+  it('DHL engine countryFixed 68.300 == billed elevatedRisk -> KHOP (regression)', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                signature: 0, vat: 0, gogreen: 0, elevatedRisk: 68_300,
+                total: 1_185_281 },
+      engine: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+                residential: 0, vat: 0, countryFixed: 68_300,
+                countryFixedReference: 0, total: 1_185_281 },
+    }));
+    const er = r.components.find((c) => c.key === 'elevatedRisk')!;
+    expect(er.delta).toBe(0);
+    expect(er.cause).toBe('KHOP');
+    expect(r.severity).toBe('match');
+  });
+
+  // (d) FedEx #MBLVD28665: the bill fuels BOTH signature (92.700) and demand
+  // (28.250). Signature is opt-in pass-through (engine 0); demand matches.
+  // fuel = 47.5% × (base + signature + demand). The fuel credit must accept the
+  // signature+demand basis -> PHAI_SINH (derived), not LECH_FUEL_BASE.
+  it('fuel fuels signature+demand (demand khớp) -> PHAI_SINH, không LECH_FUEL_BASE', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // fuel 532,451 = 47.5% × (1,000,000 + 92,700 + 28,250)
+      billed: { base: 1_000_000, discount: 0, fuel: 532_451, remote: 0,
+                demand: 28_250, signature: 92_700, vat: 0, gogreen: 0,
+                elevatedRisk: 0, total: 1_653_401 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 28_250, residential: 0, addons: 0, addonReference: 92_700,
+                vat: 0, total: 1_503_250 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 0,
+    }));
+    const fuel = r.components.find((c) => c.key === 'fuel')!;
+    expect(fuel.cause).toBe('PHAI_SINH');
+    expect(fuel.cause).not.toBe('LECH_FUEL_BASE');
+  });
+});

@@ -319,6 +319,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         addonExcludedForCountry: q.breakdown.addonExcludedForCountry,
         perStep: q.breakdown.perStep,
         countryFixed: q.breakdown.countryFixed,
+        countryFixedReference: q.breakdown.countryFixedReference,
         vat: q.breakdown.vat,
         total: q.breakdown.carrierCost,
       },

@@ -107,6 +107,9 @@ export interface DiagnoseInput {
      * Destination). Reconciles against the billed `elevatedRisk` line.
      */
     countryFixed?: number;
+    /** Giá tham chiếu country_fixed when_billed (FedEx US import handling) —
+     *  engine KHÔNG tự cộng; kiểm giá pass-through dòng elevatedRisk. */
+    countryFixedReference?: number;
   };
   engineChargeableWeightKg: number;
   engineTierUpperKg: number;
@@ -269,8 +272,13 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // fuel-base config problem.
       const sigPass = n0(b.signature) > 0 && r(e.residential + n0(e.addons ?? null)) === 0
         ? n0(b.signature) : 0;
-      const explainedBySig = sigPass > 0
-        && Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2;
+      // FedEx có khi fuel cả Demand cùng signature (đo #MBLVD28665). Nhận CẢ
+      // hai cơ sở: chỉ-signature, hoặc signature+demand (khi demand khớp).
+      const demandMatched = r(n0(b.demand) - e.demand) === 0;
+      const extraFueled = sigPass + (demandMatched ? n0(b.demand) : 0);
+      const explainedBySig = sigPass > 0 && (
+        Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2
+        || Math.abs(fuelDelta - (input.fuelPercent / 100) * extraFueled) <= 2);
       // Supplementary-bill ER: the line itself matches (billed flat = engine)
       // but the bill did NOT fuel it while the standard formula does —
       // fuelDelta = -% × ER exactly. Derived, not a fuel-base config issue.
@@ -340,8 +348,15 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   // effective window or country list is off vs what the carrier billed.
   const erBilled = r(n0(b.elevatedRisk) + n0(b.importHandling ?? null));
   const erEngine = r(n0(e.countryFixed ?? null));
+  const erRef = r(n0(e.countryFixedReference ?? null));
   const erDelta = r(erBilled - erEngine);
-  components.push({ key: 'elevatedRisk', billed: erBilled, engine: erEngine, delta: erDelta, cause: erDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
+  let erCause: DiagnosisCause = erDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
+  // Phí xử lý hàng nhập opt-in (FedEx US): engine không tự cộng (when_billed).
+  // Bill có + đúng giá tham chiếu → pass-through hợp lệ; sai giá → flag.
+  if (erEngine === 0 && erBilled > 0 && erRef > 0) {
+    erCause = erBilled === erRef ? 'PHI_TUY_CHON' : 'KHONG_KHOP';
+  }
+  components.push({ key: 'elevatedRisk', billed: erBilled, engine: erEngine, delta: erDelta, cause: erCause });
 
   // residual = whatever is left so the identity holds exactly.
   const explained = components.reduce((a, c) => a + c.delta, 0);
@@ -401,6 +416,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
         verdict = `Chỉ lệch do làm tròn (${residual}đ)`;
         severity = 'rounding';
       }
+    } else if (dominant.key === 'elevatedRisk' && r(n0(e.countryFixed ?? null)) === 0
+        && r(n0(e.countryFixedReference ?? null)) > 0 && dominant.delta > 0) {
+      // FedEx US import handling when_billed: engine không tự cộng, bill có
+      // nhưng SAI giá so với bảng tham chiếu → khiếu nại carrier.
+      verdict = `Phí xử lý hàng nhập sai bảng giá: bill ${dominant.billed.toLocaleString('vi-VN')}đ ≠ ${r(n0(e.countryFixedReference ?? null)).toLocaleString('vi-VN')}đ — đối chiếu với carrier`;
+      severity = 'config';
     } else if (dominant.key === 'elevatedRisk') {
       verdict = dominant.delta < 0
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
