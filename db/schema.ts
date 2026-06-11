@@ -1354,8 +1354,8 @@ export const warehouseItemStatusEnum = pgEnum('warehouse_item_status', [
 export const warehouseInventory = pgTable('warehouse_inventory', {
   id: uuid('id').defaultRandom().primaryKey(),
   sku: text('sku').notNull(),
-  /** Kho vật lý chứa hàng: 'HN' | 'SG'. Tồn tách theo (sku, kho). */
-  warehouseCode: text('warehouse_code').notNull().default('HN'),
+  /** Kho vật lý chứa hàng: 'GVM' | 'AP' | 'DM'. Tồn tách theo (sku, kho). */
+  warehouseCode: text('warehouse_code').notNull().default('GVM'),
   productTitle: text('product_title'),
   variantTitle: text('variant_title'),
   qtyOnHand: integer('qty_on_hand').notNull().default(0),
@@ -1481,7 +1481,7 @@ export const orderFulfillmentEvents = pgTable('order_fulfillment_events', {
 export const goodsReceipts = pgTable('goods_receipts', {
   id: uuid('id').defaultRandom().primaryKey(),
   code: text('code').notNull().unique(),
-  warehouseCode: text('warehouse_code').notNull().default('HN'),
+  warehouseCode: text('warehouse_code').notNull().default('GVM'),
   sourceType: receiptSourceTypeEnum('source_type').notNull(),
   vendor: text('vendor'),
   receivedAt: timestamp('received_at').defaultNow().notNull(),

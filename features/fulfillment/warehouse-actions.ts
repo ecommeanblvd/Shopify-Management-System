@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -87,22 +87,41 @@ export async function adjustStock(input: {
   const userId = await requireWarehouse();
   if (!input.note?.trim()) throw new Error('Điều chỉnh tay bắt buộc ghi lý do');
   if (!input.delta) throw new Error('Delta phải khác 0');
+  // Per-unit: không thể bịa hàng từ số đếm. Tăng tay không hợp lệ — hàng vào kho
+  // qua Nhập kho & QC. Chỉ cho phép giảm (write-off) và phải có đủ món in_stock.
+  if (input.delta > 0) {
+    throw new Error('Kho per-unit không tăng số đếm tay — nhập hàng qua Nhập kho & QC');
+  }
   const warehouseCode = requireKnownWarehouse(input.warehouseCode);
+  const sku = input.sku.trim();
+  const note = input.note.trim();
+  const need = -input.delta; // delta < 0 ở đây → need > 0
   await db.transaction(async (tx) => {
+    // Chọn `need` món in_stock của SKU tại kho — lock theo id để xác định.
+    const items = await tx.select({ id: schema.goodsReceiptItems.id })
+      .from(schema.goodsReceiptItems)
+      .where(and(
+        eq(schema.goodsReceiptItems.sku, sku),
+        eq(schema.goodsReceiptItems.stockStatus, 'in_stock'),
+        eq(schema.goodsReceiptItems.currentWarehouseCode, warehouseCode),
+      ))
+      .orderBy(schema.goodsReceiptItems.id)
+      .limit(need)
+      .for('update');
+    if (items.length < need) throw new Error('Không đủ món in_stock để giảm');
+    // Write-off thủ công: đánh dấu qc_failed (note mang lý do).
+    for (const it of items) {
+      await tx.update(schema.goodsReceiptItems)
+        .set({ stockStatus: 'qc_failed', updatedAt: sql`now()` })
+        .where(eq(schema.goodsReceiptItems.id, it.id));
+    }
+    // Hạ rollup tương ứng (−onHand) qua cổng ledger.
     await applyMovement(tx, {
-      sku: input.sku.trim(), warehouseCode,
+      sku, warehouseCode,
       deltaOnHand: input.delta, deltaReserved: 0,
-      reason: 'manual_adjust', note: input.note.trim(), actor: userId,
-      createIfMissing: {},
+      reason: 'manual_adjust', note, actor: userId,
     });
   });
-  if (input.delta > 0) {
-    // Hàng mới xuất hiện → thử cấp cho đơn chờ (spec §4b), best-effort.
-    try {
-      const { reallocateSku } = await import('@/features/warehouse/allocate');
-      await reallocateSku(input.sku.trim());
-    } catch (e) { console.error('reallocate after adjust:', e); }
-  }
   revalidatePath('/f/warehouse');
 }
 
@@ -116,6 +135,24 @@ export async function transferStock(input: {
   if (input.qty <= 0) throw new Error('Số lượng chuyển phải > 0');
   if (from === to) throw new Error('Kho nguồn trùng kho đích');
   await db.transaction(async (tx) => {
+    // Per-unit: chọn `qty` món in_stock của SKU tại kho nguồn (lock theo id) và
+    // dời chúng sang kho đích — món THỰC SỰ di chuyển, không chỉ đổi số đếm.
+    const items = await tx.select({ id: schema.goodsReceiptItems.id })
+      .from(schema.goodsReceiptItems)
+      .where(and(
+        eq(schema.goodsReceiptItems.sku, sku),
+        eq(schema.goodsReceiptItems.stockStatus, 'in_stock'),
+        eq(schema.goodsReceiptItems.currentWarehouseCode, from),
+      ))
+      .orderBy(schema.goodsReceiptItems.id)
+      .limit(input.qty)
+      .for('update');
+    if (items.length < input.qty) throw new Error('Không đủ món in_stock ở kho nguồn');
+    for (const it of items) {
+      await tx.update(schema.goodsReceiptItems)
+        .set({ currentWarehouseCode: to, updatedAt: sql`now()` })
+        .where(eq(schema.goodsReceiptItems.id, it.id));
+    }
     // Deterministic lock order: always lock the lexicographically-smaller
     // warehouseCode first to prevent AB-BA deadlock when two opposite transfers
     // run concurrently (e.g. GVM→AP and AP→GVM). createIfMissing is always on

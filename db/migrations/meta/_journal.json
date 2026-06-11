@@ -414,6 +414,13 @@
       "when": 1781191968964,
       "tag": "0058_warehouse-item-status",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1781194684031,
+      "tag": "0059_warehouse-default-gvm",
+      "breakpoints": true
     }
   ]
 }

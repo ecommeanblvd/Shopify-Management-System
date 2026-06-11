@@ -13,6 +13,14 @@ import { putObject } from '@/lib/storage/s3';
 import { decideDisposition, validateQc, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
 import { applyMovement } from '@/features/warehouse/ledger';
 
+const WAREHOUSES = ['GVM', 'AP', 'DM'] as const;
+/** Chặn tạo phiếu/dòng tồn ở mã kho lạ (chỉ GVM/AP/DM hợp lệ). */
+function requireKnownWarehouse(code: string): string {
+  const c = code.trim();
+  if (!(WAREHOUSES as readonly string[]).includes(c)) throw new Error(`Mã kho không hợp lệ: ${code}`);
+  return c;
+}
+
 async function requirePerm(perm: Permission): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Unauthorized');
@@ -58,13 +66,14 @@ export interface CreateReceiptInput {
 /** Create a receipt header with an auto-generated GRN code. Returns its id. */
 export async function createReceipt(input: CreateReceiptInput): Promise<string> {
   const userId = await requirePerm('manage_receiving');
+  const warehouseCode = requireKnownWarehouse(input.warehouseCode?.trim() || 'GVM');
   const id = await withUniqueRetry(() => db.transaction(async (tx) => {
     const [last] = await tx.select({ code: schema.goodsReceipts.code })
       .from(schema.goodsReceipts).orderBy(desc(schema.goodsReceipts.code)).limit(1);
     const code = nextSeqCode('GRN', parseSeq('GRN', last?.code ?? null));
     const [row] = await tx.insert(schema.goodsReceipts).values({
       code, sourceType: input.sourceType, vendor: input.vendor ?? null,
-      warehouseCode: input.warehouseCode?.trim() || 'HN',
+      warehouseCode,
       handoverDocKey: input.handoverDocKey ?? null, note: input.note ?? null, receivedBy: userId,
     }).returning({ id: schema.goodsReceipts.id });
     return row.id;

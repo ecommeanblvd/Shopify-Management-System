@@ -21,7 +21,8 @@ async function newReceiptAction(formData: FormData) {
   'use server';
   const sourceType = String(formData.get('sourceType') ?? 'consignment') as 'retail_for_order' | 'consignment' | 'po';
   const vendor = String(formData.get('vendor') ?? '').trim() || null;
-  const id = await createReceipt({ sourceType, vendor });
+  const warehouseCode = String(formData.get('warehouseCode') ?? 'GVM');
+  const id = await createReceipt({ sourceType, vendor, warehouseCode });
   redirect(`/f/warehouse/receiving/${id}`);
 }
 
@@ -68,6 +69,14 @@ export default async function ReceivingPage() {
                   <option value="consignment">Consignment (ký gửi)</option>
                   <option value="po">PO</option>
                   <option value="retail_for_order">Retail (đi đơn)</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs uppercase tracking-wider text-muted-foreground">Kho</label>
+                <select name="warehouseCode" defaultValue="GVM" className="border border-input bg-input/30 rounded-md px-2 py-2 text-sm">
+                  <option value="GVM">GVM</option>
+                  <option value="AP">AP</option>
+                  <option value="DM">DM</option>
                 </select>
               </div>
               <div className="flex-1 space-y-1.5">

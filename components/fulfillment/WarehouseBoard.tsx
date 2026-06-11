@@ -658,7 +658,7 @@ function AdjustDialog({
   return (
     <DialogShell title={`Điều chỉnh: ${item.sku} @ ${item.warehouseCode}`} onClose={onClose}>
       <p className="text-xs text-muted-foreground">
-        Tồn hiện tại {fmtQty(item.qtyOnHand)} · Giữ {fmtQty(item.qtyReserved)}. Delta âm để trừ, dương để cộng.
+        Tồn hiện tại {fmtQty(item.qtyOnHand)} · Giữ {fmtQty(item.qtyReserved)}. Chỉ giảm (delta âm) để ghi giảm/hỏng — tăng tồn phải nhập qua Nhập kho &amp; QC.
       </p>
       <div className="flex flex-col gap-1">
         <label className="text-xs text-muted-foreground">Delta (≠ 0) *</label>
