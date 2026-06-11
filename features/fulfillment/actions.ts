@@ -7,10 +7,11 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
-import { checkStock, canTransitionLine, type StockInfo, type LineStatus } from './logic';
+import { canTransitionLine, type StockInfo, type LineStatus } from './logic';
 import { recomputeRollup } from './rollup';
 import { sendBrandRequest } from '@/features/mmp/outbound';
 import { applyMovement } from '@/features/warehouse/ledger';
+import { planAllocation } from '@/features/warehouse/allocation-logic';
 
 /** A drizzle transaction handle (same query surface as `db`). */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -87,9 +88,15 @@ async function applyLineTransition(tx: Tx, l: LineRow, next: LineStatus, actor: 
     }
   }
   const stamp = next === 'picked' ? { pickedAt: sql`now()` } : next === 'packed' ? { packedAt: sql`now()` } : { shippedAt: sql`now()` };
-  await tx.update(schema.orderFulfillmentLines)
+  // Update CÓ GUARD trên trạng thái cũ: hai pick đồng thời cùng qua được
+  // canTransitionLine (đọc ngoài lock) — bản thua phải fail Ở ĐÂY để rollback
+  // movement 'pick' phía trên, không thì trừ tồn hai lần.
+  const updated = await tx.update(schema.orderFulfillmentLines)
     .set({ status: next, updatedAt: sql`now()`, ...stamp })
-    .where(eq(schema.orderFulfillmentLines.id, l.id));
+    .where(and(eq(schema.orderFulfillmentLines.id, l.id),
+               eq(schema.orderFulfillmentLines.status, l.status)))
+    .returning({ id: schema.orderFulfillmentLines.id });
+  if (updated.length === 0) throw new Error(`Dòng đã bị thao tác đồng thời (${l.status} → ${next}) — tải lại và thử lại`);
   await tx.insert(schema.orderFulfillmentEvents)
     .values({ fulfillmentId: l.fulfillmentId, lineId: l.id, fromStatus: l.status, toStatus: next, actor });
 }
@@ -114,12 +121,16 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
       : [];
     // Extended entry that carries sku+warehouseCode so applyMovement can be
     // called without a second lookup — the locked inv rows already have them.
+    // bySku giữ MỌI kho của SKU (cùng object với byId — trừ available một nơi
+    // là thấy ở nơi kia); chọn kho bằng planAllocation như allocateLine.
     type InvEntry = StockInfo & { sku: string; warehouseCode: string };
-    const bySku = new Map<string, InvEntry>();
+    const bySku = new Map<string, InvEntry[]>();
     const byId = new Map<string, InvEntry>();
     for (const w of inv) {
       const entry: InvEntry = { available: w.qtyOnHand - w.qtyReserved, warehouseInventoryId: w.id, sku: w.sku, warehouseCode: w.warehouseCode };
-      bySku.set(w.sku, entry);
+      const list = bySku.get(w.sku) ?? [];
+      list.push(entry);
+      bySku.set(w.sku, list);
       byId.set(w.id, entry);
     }
 
@@ -152,7 +163,19 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
           }
         }
       }
-      const res = checkStock({ sku: l.sku, qty: l.qty }, bySku);
+      // Chọn kho như allocateLine: đủ-hoặc-không trên từng kho, nhiều khả
+      // dụng nhất thắng, hoà → HN (checkStock cũ chỉ thấy 1 kho/SKU).
+      let res: { status: LineStatus; warehouseInventoryId: string | null; allocatedQty: number } =
+        { status: 'out_of_stock', warehouseInventoryId: null, allocatedQty: 0 };
+      if (l.sku) {
+        const rows = bySku.get(l.sku) ?? [];
+        const plan = planAllocation({ qty: l.qty },
+          rows.map((r) => ({ code: r.warehouseCode, available: r.available })));
+        const chosen = plan ? rows.find((r) => r.warehouseCode === plan.warehouseCode) : undefined;
+        if (plan && chosen) {
+          res = { status: 'in_stock', warehouseInventoryId: chosen.warehouseInventoryId, allocatedQty: plan.qty };
+        }
+      }
       if (res.status === 'in_stock') {
         const cur = byId.get(res.warehouseInventoryId!);
         if (cur) {
