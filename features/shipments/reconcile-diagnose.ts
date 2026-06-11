@@ -394,6 +394,9 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     const dominant = actionable[0];
     if (!dominant) {
       const optIn = components.find((c) => c.cause === 'PHI_TUY_CHON');
+      // Nhãn phí opt-in theo dòng: signature = phí ký nhận, elevatedRisk
+      // (FedEx US) = phí xử lý hàng nhập — không gọi nhầm tên.
+      const optInLabel = optIn?.key === 'elevatedRisk' ? 'phí xử lý hàng nhập' : 'phí ký nhận';
       // Supplementary-bill ER pattern: ER line matches, fuel gap = -%×ER,
       // and the billed VAT reproduces on the ER-excluded basis — the
       // carrier charged the ER flat (no fuel, no VAT). Favorable.
@@ -407,7 +410,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
           n0(b.vat) - (input.vatPercent / 100) * (billedNetBase + n0(b.remote) + n0(b.demand)
             + n0(b.signature) + n0(b.gogreen) + n0(b.fuel))) <= 2);
       if (optIn) {
-        verdict = `Khớp — hóa đơn thu thêm phí ký nhận opt-in ${optIn.delta.toLocaleString('vi-VN')}đ (+fuel/VAT theo), số học khớp`;
+        verdict = `Khớp — hóa đơn thu thêm ${optInLabel} opt-in ${optIn.delta.toLocaleString('vi-VN')}đ (+fuel/VAT theo), số học khớp`;
         severity = 'passthrough';
       } else if (erUnfueled) {
         verdict = `Hóa đơn KHÔNG tính fuel/VAT trên ER ${erBothV.toLocaleString('vi-VN')}đ — số học tự khớp, chênh ${Math.abs(r(totalDelta)).toLocaleString('vi-VN')}đ có lợi; đối chiếu lại hóa đơn gốc trước khi chốt`;
