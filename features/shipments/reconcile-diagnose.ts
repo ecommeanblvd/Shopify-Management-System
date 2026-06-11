@@ -85,11 +85,15 @@ export interface DiagnoseInput {
     base: number; discount: number; fuel: number; remote: number;
     demand: number; residential: number; vat: number; total: number;
     /**
-     * DHL models the per-shipment signature fee as a `peak_fixed` surcharge
-     * (FedEx has none — always 0). Folded into the signature line so it
-     * reconciles against the billed `directSignature`.
+     * Peak/Premium (`peak_fixed`) — Premium only since 2026-06-11 (DHL
+     * Direct Signature re-kinded to `addon_fixed`). No longer folded into
+     * the signature line; usually 0.
      */
     peak?: number;
+    /** Dịch vụ bổ sung always (DHL Direct Signature). Nguồn dòng signature. */
+    addons?: number;
+    /** Giá tham chiếu addon when_billed (FedEx) — kiểm giá pass-through. */
+    addonReference?: number;
     /**
      * DHL GoGreen is a `per_step_fixed` surcharge (FedEx has none — always 0).
      * Reconciles against the billed `gogreen` line.
@@ -258,7 +262,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // Opt-in signature (engine side 0) widens the billed fuel base by
       // exactly the fee — that's derived from the pass-through, not a
       // fuel-base config problem.
-      const sigPass = n0(b.signature) > 0 && r(e.residential + n0(e.peak ?? null)) === 0
+      const sigPass = n0(b.signature) > 0 && r(e.residential + n0(e.addons ?? null)) === 0
         ? n0(b.signature) : 0;
       const explainedBySig = sigPass > 0
         && Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2;
@@ -281,22 +285,20 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const demDelta = r(demBilled - e.demand);
   components.push({ key: 'demand', billed: demBilled, engine: e.demand, delta: demDelta, cause: demDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
-  // signature — engine side = residential_fixed + peak_fixed. DHL books the
-  // per-shipment signature fee under `peak_fixed`; FedEx books residential
-  // delivery under `residential_fixed`. Neither carrier uses both, so summing
-  // them onto one line reconciles each against the billed `directSignature`
-  // without a separate billed counterpart for residential.
+  // signature — engine = residential_fixed + addon_fixed(always).
+  // (Trước 2026-06-11 DHL book dưới peak_fixed và bị fold ở đây — nay
+  // addon_fixed là chỗ ở chính thức; peak chỉ còn Premium, không fold nữa.)
   const sigBilled = n0(b.signature);
-  const sigEngine = r(e.residential + n0(e.peak ?? null));
+  const sigEngine = r(e.residential + n0(e.addons ?? null));
   const sigDelta = r(sigBilled - sigEngine);
   let sigCause: DiagnosisCause = sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
-  // FedEx Direct Signature is an opt-in per-order fee the engine cannot
-  // predict. Accept it as PASS-THROUGH (correct billing, not a mismatch)
-  // ONLY when the rest of the invoice arithmetic closes: the fuel line's
-  // implied % must match the weekly index (checked above — fuel cause is
-  // not LECH_FUEL) so a mistyped fee can't sneak through.
+  // Opt-in theo đơn (FedEx): chấp nhận pass-through CHỈ KHI số học fuel khớp
+  // VÀ giá đúng bảng addon when_billed (addonReference). Chưa khai giá
+  // (reference = 0) giữ hành vi cũ — không chặt hơn với carrier chưa cấu hình.
   const fuelComp = components.find((c) => c.key === 'fuel');
-  if (sigDelta > 0 && sigEngine === 0 && fuelComp && fuelComp.cause !== 'LECH_FUEL') {
+  const sigRef = n0(e.addonReference ?? null);
+  if (sigDelta > 0 && sigEngine === 0 && fuelComp && fuelComp.cause !== 'LECH_FUEL'
+      && (sigRef === 0 || sigBilled === sigRef)) {
     sigCause = 'PHI_TUY_CHON';
   }
   components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigCause });
@@ -397,6 +399,9 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       verdict = dominant.delta < 0
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
         : 'Hóa đơn thu phụ phí rủi ro (ER) nhưng hệ thống không tính — kiểm tra danh sách nước áp dụng';
+      severity = 'config';
+    } else if (dominant.key === 'signature' && n0(e.addonReference ?? null) > 0) {
+      verdict = `Direct Signature sai bảng giá: bill ${dominant.billed.toLocaleString('vi-VN')}đ ≠ ${n0(e.addonReference ?? null).toLocaleString('vi-VN')}đ — đối chiếu hóa đơn với biểu phí dịch vụ bổ sung`;
       severity = 'config';
     } else if (dominant.key === 'residual') {
       verdict = `Lệch ${dominant.delta.toLocaleString('vi-VN')}đ không giải thích được bằng cấu trúc phí hiện tại`;

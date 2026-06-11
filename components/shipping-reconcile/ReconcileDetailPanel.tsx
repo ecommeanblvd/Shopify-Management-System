@@ -60,8 +60,8 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     },
     { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, compKey: 'remote' },
     { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, compKey: 'demand' },
-    // signature: engine books DHL's fee under peak_fixed, FedEx under residential_fixed.
-    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.enginePeak), compKey: 'signature' },
+    // signature: engine books DHL's fee under addon_fixed (always), FedEx under residential_fixed.
+    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.engineAddons), compKey: 'signature' },
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, compKey: 'vat' },

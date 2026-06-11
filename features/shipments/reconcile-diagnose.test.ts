@@ -98,22 +98,23 @@ describe('diagnoseReconcileRow — LECH_RATE_CARD', () => {
   });
 });
 
-describe('diagnoseReconcileRow — DHL signature↔peak & gogreen↔perStep (real #MBLVD27109)', () => {
-  // DHL models the signature fee as a peak_fixed surcharge and GoGreen as a
-  // per_step_fixed surcharge. The billed invoice lists them as `signature`
-  // and `gogreen`. Before the mapping fix these showed a false 150.000 +
-  // 3.800 discrepancy ("cần cập nhật rate card") even though the totals match.
+describe('diagnoseReconcileRow — DHL signature↔addons & gogreen↔perStep (real #MBLVD27109)', () => {
+  // DHL models the signature fee as an addon_fixed surcharge (peak_fixed
+  // before 2026-06-11) and GoGreen as a per_step_fixed surcharge. The billed
+  // invoice lists them as `signature` and `gogreen`. Before the mapping fix
+  // these showed a false 150.000 + 3.800 discrepancy ("cần cập nhật rate
+  // card") even though the totals match.
   const input = baseInput({
     billed: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
               demand: 0, signature: 150_000, vat: 95_079, gogreen: 3_800, elevatedRisk: 0, total: 1_283_555 },
     engine: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
-              demand: 0, residential: 0, vat: 95_078, peak: 150_000, perStep: 3_800, total: 1_283_554 },
+              demand: 0, residential: 0, vat: 95_078, addons: 150_000, perStep: 3_800, total: 1_283_554 },
     billedFuelableBase: 803_632,
     fuelPercent: 28.75,
     vatPercent: 8,
   });
 
-  it('signature reconciles against engine peak (delta 0, KHOP)', () => {
+  it('signature reconciles against engine addons (delta 0, KHOP)', () => {
     const d = diagnoseReconcileRow(input);
     const sig = d.components.find((c) => c.key === 'signature')!;
     expect(sig.billed).toBe(150_000);
@@ -285,7 +286,7 @@ describe('diagnoseReconcileRow — elevated risk (ER) vs engine country_fixed', 
                 signature: 150_000, vat: 194_970, gogreen: 11_400,
                 elevatedRisk: 0, total: 2_632_096 },
       engine: { base: 1_743_851, discount: 0, fuel: 811_865, remote: 0, demand: 0,
-                residential: 0, peak: 150_000, perStep: 11_400, vat: 290_809,
+                residential: 0, addons: 150_000, perStep: 11_400, vat: 290_809,
                 countryFixed: 918_000, total: 3_925_925 },
       engineChargeableWeightKg: 2.52,
       engineTierUpperKg: 3,
@@ -418,7 +419,7 @@ describe('diagnoseReconcileRow — carrier bills a LIGHTER tier (real #MBLVD2807
               signature: 150_000, vat: 290_809, gogreen: 11_400,
               elevatedRisk: 918_000, total: 3_925_925 },
     engine: { base: 2_617_961, discount: 0, fuel: 1_078_468, remote: 0, demand: 0,
-              residential: 0, peak: 150_000, perStep: 20_900, vat: 382_826,
+              residential: 0, addons: 150_000, perStep: 20_900, vat: 382_826,
               countryFixed: 918_000, total: 5_168_155 },
     engineChargeableWeightKg: 5.227,
     engineTierUpperKg: 5.5,
@@ -498,6 +499,80 @@ describe('diagnoseReconcileRow — FedEx Direct Signature opt-in (pass-through)'
   });
 });
 
+describe('diagnoseReconcileRow — addon_fixed (Dịch vụ bổ sung, spec 2026-06-11)', () => {
+  // (a) FedEx opt-in Direct Signature now carries a when_billed reference
+  // price (addonReference). Billed fee == reference + fuel arithmetic
+  // closes -> still PHI_TUY_CHON (pass-through), as before but price-checked.
+  it('FedEx billed signature == addonReference (fuel khớp) -> PHI_TUY_CHON', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
+                demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
+                elevatedRisk: 0, total: 1_740_672 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, addons: 0, addonReference: 92_700,
+                vat: 118_000, total: 1_593_000 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.engine).toBe(0);
+    expect(sig.cause).toBe('PHI_TUY_CHON');
+    expect(r.severity).toBe('passthrough');
+  });
+
+  // (b) Billed fee deviates from the declared reference price -> the
+  // pass-through gate must REJECT it (KHONG_KHOP) and the verdict must
+  // call out the price-table mismatch, even though the fuel % closes.
+  it('FedEx billed 100.000 ≠ addonReference 92.700 -> KHONG_KHOP + verdict sai bảng giá', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      // fuel 522,500 = 47.5% × (1,000,000 + 100,000) — arithmetic closes,
+      // only the fee price is wrong.
+      billed: { base: 1_000_000, discount: 0, fuel: 522_500, remote: 0,
+                demand: 0, signature: 100_000, vat: 129_800, gogreen: 0,
+                elevatedRisk: 0, total: 1_752_300 },
+      engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
+                demand: 0, residential: 0, addons: 0, addonReference: 92_700,
+                vat: 118_000, total: 1_593_000 },
+      engineChargeableWeightKg: 1,
+      engineTierUpperKg: 1,
+      zoneRates: [{ upperKg: 1, rate: 1_000_000 }],
+      billedFuelableBase: 1_000_000,
+      fuelPercent: 47.5,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.cause).toBe('KHONG_KHOP');
+    expect(r.verdict).toContain('sai bảng giá');
+    expect(r.severity).toBe('config');
+  });
+
+  // (c) DHL Direct Signature re-kinded peak_fixed -> addon_fixed: the
+  // signature line now reconciles against engine `addons`; `peak` is no
+  // longer folded in (it stays Premium-only, 0 or absent here).
+  it('DHL engine addons == billed signature -> KHOP (peak không còn fold)', () => {
+    const r = diagnoseReconcileRow(baseInput({
+      billed: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
+                demand: 0, signature: 150_000, vat: 95_079, gogreen: 3_800,
+                elevatedRisk: 0, total: 1_283_555 },
+      engine: { base: 803_632, discount: 0, fuel: 231_044, remote: 0,
+                demand: 0, residential: 0, addons: 150_000, peak: 0,
+                perStep: 3_800, vat: 95_078, total: 1_283_554 },
+      billedFuelableBase: 803_632,
+      fuelPercent: 28.75,
+      vatPercent: 8,
+    }));
+    const sig = r.components.find((c) => c.key === 'signature')!;
+    expect(sig.billed).toBe(150_000);
+    expect(sig.engine).toBe(150_000);
+    expect(sig.delta).toBe(0);
+    expect(sig.cause).toBe('KHOP');
+  });
+});
+
 describe('diagnoseReconcileRow — ER truy thu khô (bill bổ sung, real #MBLVD27457)', () => {
   // DHL supplementary bill charges the ER flat: no fuel on it, no VAT on
   // it. Every line matches (incl. ER itself); the only deltas are
@@ -508,7 +583,7 @@ describe('diagnoseReconcileRow — ER truy thu khô (bill bổ sung, real #MBLVD
               signature: 150_000, vat: 194_970, gogreen: 11_400,
               elevatedRisk: 918_000, total: 3_550_096 },
     engine: { base: 1_743_851, discount: 0, fuel: 811_865, remote: 0, demand: 0,
-              residential: 0, peak: 150_000, perStep: 11_400, vat: 290_809,
+              residential: 0, addons: 150_000, perStep: 11_400, vat: 290_809,
               countryFixed: 918_000, total: 3_925_925 },
     engineChargeableWeightKg: 3,
     engineTierUpperKg: 3,
