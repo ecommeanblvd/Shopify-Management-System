@@ -1410,6 +1410,8 @@ export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
 }, (t) => [
   index('order_fulfillment_lines_ful_idx').on(t.fulfillmentId),
   uniqueIndex('order_fulfillment_lines_ful_line_idx').on(t.fulfillmentId, t.shopifyLineId),
+  // reallocateSku quét (sku, status='out_of_stock') trên mỗi lần nhập kho.
+  index('order_fulfillment_lines_sku_status_idx').on(t.sku, t.status),
 ]);
 
 export const brandRequestSendStatusEnum = pgEnum('brand_request_send_status', ['pending', 'sent', 'failed']);

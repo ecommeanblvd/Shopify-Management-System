@@ -1,0 +1,1 @@
+CREATE INDEX "order_fulfillment_lines_sku_status_idx" ON "order_fulfillment_lines" USING btree ("sku","status");

@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -101,8 +101,9 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
     const skus = [...new Set(checkable.map((l) => l.sku).filter((s): s is string => !!s))];
 
     // Lock the relevant inventory rows so concurrent checks can't double-reserve.
+    // ORDER BY id keeps the multi-row lock order deterministic across callers.
     const inv = skus.length
-      ? await tx.select().from(schema.warehouseInventory).where(inArray(schema.warehouseInventory.sku, skus)).for('update')
+      ? await tx.select().from(schema.warehouseInventory).where(inArray(schema.warehouseInventory.sku, skus)).orderBy(asc(schema.warehouseInventory.id)).for('update')
       : [];
     // Share one entry object per warehouse row, indexed by both sku and id.
     const bySku = new Map<string, StockInfo>();

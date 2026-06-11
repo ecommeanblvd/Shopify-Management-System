@@ -28,27 +28,45 @@ export async function allocateOrder(orderId: string): Promise<void> {
                eq(schema.orderFulfillmentLines.status, 'pending_check')));
   for (const line of lines) {
     if (!line.sku) continue;
-    await allocateLine(line.id);
+    try {
+      await allocateLine(line.id);
+    } catch (err) {
+      // Một dòng lỗi không được chặn các dòng còn lại của đơn.
+      console.error(`allocateOrder: allocateLine failed for line ${line.id}`, err);
+    }
   }
 }
 
-/** Cấp MỘT dòng trong transaction riêng. Trả về true nếu cấp được. */
+/** Cấp MỘT dòng trong transaction riêng. Trả về true nếu cấp được.
+ *  Thứ tự lock: TỒN KHO trước, DÒNG ĐƠN sau — khớp checkStockForOrder
+ *  (features/fulfillment/actions.ts) để hai luồng không deadlock nhau. */
 export async function allocateLine(lineId: string): Promise<boolean> {
   return db.transaction(async (tx) => {
-    // 1) Lock dòng đơn — chặn hai allocator cùng cấp một dòng.
+    // 1) Đọc dòng đơn KHÔNG lock — chỉ để biết SKU cần lock tồn.
+    const [peek] = await tx.select().from(schema.orderFulfillmentLines)
+      .where(eq(schema.orderFulfillmentLines.id, lineId));
+    if (!peek || !peek.sku) return false;
+    if (peek.status !== 'pending_check' && peek.status !== 'out_of_stock') return false;
+
+    // 2) Lock các dòng tồn của SKU (ORDER BY id để thứ tự lock nhiều dòng
+    //    luôn xác định — hai allocator lock cùng chiều, không vòng chờ).
+    const stocks = await tx.select().from(schema.warehouseInventory)
+      .where(eq(schema.warehouseInventory.sku, peek.sku))
+      .orderBy(asc(schema.warehouseInventory.id))
+      .for('update');
+
+    // 3) Giờ mới lock dòng đơn và RE-VALIDATE — trạng thái/SKU có thể đã
+    //    đổi giữa bước đọc không lock và bước lock.
     const [line] = await tx.select().from(schema.orderFulfillmentLines)
       .where(eq(schema.orderFulfillmentLines.id, lineId))
       .for('update');
-    if (!line || !line.sku) return false;
+    if (!line || line.sku !== peek.sku) return false;
     if (line.status !== 'pending_check' && line.status !== 'out_of_stock') return false;
 
-    // 2) Lock các dòng tồn của SKU rồi lập kế hoạch cấp.
-    const stocks = await tx.select().from(schema.warehouseInventory)
-      .where(eq(schema.warehouseInventory.sku, line.sku))
-      .for('update');
+    // 4) Lập kế hoạch cấp.
     const plan = planAllocation({ qty: line.qty }, toCandidates(stocks));
 
-    // 3) Không đủ tồn: pending_check -> out_of_stock (đi luồng brand như cũ).
+    // 5) Không đủ tồn: pending_check -> out_of_stock (đi luồng brand như cũ).
     if (!plan) {
       if (line.status === 'pending_check') {
         await tx.update(schema.orderFulfillmentLines)
@@ -64,7 +82,7 @@ export async function allocateLine(lineId: string): Promise<boolean> {
       return false;
     }
 
-    // 4) Đủ tồn: reserve qua ledger rồi chuyển dòng sang in_stock.
+    // 6) Đủ tồn: reserve qua ledger rồi chuyển dòng sang in_stock.
     const invId = await applyMovement(tx, {
       sku: line.sku, warehouseCode: plan.warehouseCode,
       deltaOnHand: 0, deltaReserved: plan.qty,
@@ -79,6 +97,10 @@ export async function allocateLine(lineId: string): Promise<boolean> {
       fromStatus: line.status, toStatus: 'in_stock',
       actor: ACTOR, note: `Auto-pick kho ${plan.warehouseCode}`,
     });
+    // Dòng từng out_of_stock có thể đã mở brand request — huỷ bản chưa gửi/chưa confirm để khỏi bị sendPendingBrandRequests kéo ngược về brand_requested.
+    await tx.delete(schema.brandOrderRequests)
+      .where(and(eq(schema.brandOrderRequests.fulfillmentLineId, line.id),
+                 eq(schema.brandOrderRequests.confirmStatus, 'awaiting')));
     await recomputeRollup(tx, line.fulfillmentId);
     return true;
   });
@@ -97,8 +119,8 @@ export async function reallocateSku(sku: string): Promise<number> {
     .innerJoin(schema.shopifyOrders,
       eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
     .where(and(eq(schema.orderFulfillmentLines.status, 'out_of_stock'),
-               eq(schema.orderFulfillmentLines.sku, sku)))
-    .orderBy(asc(schema.shopifyOrders.processedAtShopify));
+               eq(schema.orderFulfillmentLines.sku, sku)));
+  // Không ORDER BY trong SQL — fifoOrder() (đã test, xếp null cuối) là nguồn sắp xếp duy nhất.
 
   let granted = 0;
   for (const w of fifoOrder(waiting)) {
