@@ -15,7 +15,7 @@
  * features/warehouse/migration-logic.ts. Script này chỉ là I/O mỏng.
  */
 import 'dotenv/config';
-import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { fifoOrder } from '@/features/warehouse/allocation-logic';
 import { applyMovement } from '@/features/warehouse/ledger';
@@ -98,29 +98,41 @@ async function phase1(apply: boolean): Promise<void> {
 
   if (!apply) return;
 
-  let applied = 0;
+  let applied = 0, errored = 0;
   for (const r of plan.removals) {
-    await db.transaction(async (tx) => {
-      // applyMovement lock dòng tồn + kiểm bất biến lần cuối (trạng thái DB
-      // có thể đã đổi giữa lúc đọc và lúc ghi).
-      await applyMovement(tx, {
-        sku: r.sku, warehouseCode: r.warehouseCode,
-        deltaOnHand: r.deltaOnHand, deltaReserved: r.deltaReserved,
-        reason: 'migration', refType: 'receipt_item', refId: r.refId,
-        note: NOTE, actor: ACTOR,
+    try {
+      await db.transaction(async (tx) => {
+        // applyMovement lock dòng tồn + kiểm bất biến lần cuối (trạng thái DB
+        // có thể đã đổi giữa lúc đọc và lúc ghi).
+        await applyMovement(tx, {
+          sku: r.sku, warehouseCode: r.warehouseCode,
+          deltaOnHand: r.deltaOnHand, deltaReserved: r.deltaReserved,
+          reason: 'migration', refType: 'receipt_item', refId: r.refId,
+          // Movement nhiều kiện chỉ có refId của 1 kiện — ghi đủ id vào note
+          // để ledger tự đứng được, không phụ thuộc stdout của lần chạy.
+          note: `${NOTE} — kiện: ${r.itemIds.join(', ')}`, actor: ACTOR,
+        });
+        // Unlink CÓ GUARD: chỉ khi dòng vẫn trỏ đúng dòng tồn đã tính VÀ chưa
+        // bị pick (pick giữ nguyên warehouseInventoryId nhưng đã trừ tồn qua
+        // movement 'pick' — gỡ thêm ở đây sẽ trừ hai lần).
+        const unlinked = await tx.update(schema.orderFulfillmentLines)
+          .set({ warehouseInventoryId: null, allocatedQty: 0, updatedAt: sql`now()` })
+          .where(and(eq(schema.orderFulfillmentLines.id, r.lineId),
+                     eq(schema.orderFulfillmentLines.warehouseInventoryId, r.inventoryId),
+                     notInArray(schema.orderFulfillmentLines.status, ['picked', 'packed', 'shipped'])))
+          .returning({ id: schema.orderFulfillmentLines.id });
+        if (unlinked.length === 0) throw new Error(`dòng ${r.lineId} đã đổi (pick/relink) — rollback movement`);
       });
-      // Unlink CÓ GUARD: chỉ khi dòng vẫn trỏ đúng dòng tồn đã tính.
-      const unlinked = await tx.update(schema.orderFulfillmentLines)
-        .set({ warehouseInventoryId: null, allocatedQty: 0, updatedAt: sql`now()` })
-        .where(and(eq(schema.orderFulfillmentLines.id, r.lineId),
-                   eq(schema.orderFulfillmentLines.warehouseInventoryId, r.inventoryId)))
-        .returning({ id: schema.orderFulfillmentLines.id });
-      if (unlinked.length === 0) throw new Error(`dòng ${r.lineId} không còn trỏ ${r.inventoryId} — rollback movement`);
-    });
-    applied += 1;
-    console.log(`  ✓ gỡ ${fmt(r.deltaOnHand)}/${fmt(r.deltaReserved)} ${r.sku}@${r.warehouseCode}, unlink dòng ${r.lineId}`);
+      applied += 1;
+      console.log(`  ✓ gỡ ${fmt(r.deltaOnHand)}/${fmt(r.deltaReserved)} ${r.sku}@${r.warehouseCode}, unlink dòng ${r.lineId}`);
+    } catch (err) {
+      // Một dòng lỗi không chặn phần còn lại — chạy lại script tự hội tụ
+      // (dòng đã unlink rơi vào skipped ở lần sau).
+      errored += 1;
+      console.error(`  ✗ gỡ ${r.sku}@${r.warehouseCode} dòng ${r.lineId} lỗi:`, err);
+    }
   }
-  console.log(`  ÁP DỤNG PHASE 1: ${applied}/${plan.removals.length} dòng`);
+  console.log(`  ÁP DỤNG PHASE 1: ${applied}/${plan.removals.length} dòng${errored ? `, lỗi ${errored} (chạy lại để xử tiếp)` : ''}`);
 }
 
 interface BackfillCandidate { lineId: string; sku: string | null; status: string; orderProcessedAt: Date | null }
