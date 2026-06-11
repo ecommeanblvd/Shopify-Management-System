@@ -184,7 +184,7 @@ export function SurchargeEditDialog({
             <Input name="note" defaultValue={defaultNote} placeholder="e.g. Premium 9:00 service" />
           </div>
 
-          {kind === 'addon_fixed' && (
+          {(kind === 'addon_fixed' || kind === 'country_fixed') && (
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Chế độ áp dụng
@@ -198,8 +198,8 @@ export function SurchargeEditDialog({
                 <option value="when_billed">Chỉ kiểm khi bill có</option>
               </select>
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium">Luôn cộng</span>: engine cộng vào mọi quote (DHL Direct Signature).{' '}
-                <span className="font-medium">Chỉ kiểm khi bill có</span>: không vào quote — chỉ làm giá tham chiếu đối soát (FedEx Direct Signature).
+                <span className="font-medium">Luôn cộng</span>: engine cộng vào mọi quote.{' '}
+                <span className="font-medium">Chỉ kiểm khi bill có</span>: không vào quote — chỉ làm giá tham chiếu đối soát (FedEx US import handling, Direct Signature).
               </p>
             </div>
           )}

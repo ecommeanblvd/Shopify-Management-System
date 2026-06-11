@@ -193,7 +193,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
   const valuePerKg = formData.get('valuePerKg');
   const countryCodes = formData.get('countryCodes');
   const note = String(formData.get('note') ?? '');
-  const applyModeRaw = kind === 'addon_fixed' ? String(formData.get('applyMode') ?? 'always') : undefined;
+  const applyModeRaw = (kind === 'addon_fixed' || kind === 'country_fixed') ? String(formData.get('applyMode') ?? 'always') : undefined;
   const applyMode: 'always' | 'when_billed' | undefined =
     applyModeRaw === 'when_billed' ? 'when_billed' : applyModeRaw !== undefined ? 'always' : undefined;
   const excludedCountryCodes = kind === 'addon_fixed' ? formData.get('excludedCountryCodes') : null;
@@ -601,7 +601,7 @@ function SurchargeSummaryRow({
               all destinations
             </Badge>
           )}
-          {row.kind === 'addon_fixed' && (
+          {(row.kind === 'addon_fixed' || row.kind === 'country_fixed') && (
             <Badge
               variant="secondary"
               className={`h-4 text-[9px] uppercase tracking-wider px-1.5 ${

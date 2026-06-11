@@ -161,7 +161,7 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       excludedCountryCodes: excludedCountries,
       note: input.note?.trim() || null,
       updatedBy: userId,
-      applyMode: input.kind === 'addon_fixed'
+      applyMode: (input.kind === 'addon_fixed' || input.kind === 'country_fixed')
         ? (input.applyMode === 'when_billed' ? 'when_billed' : 'always')
         : 'always',
     })
@@ -211,7 +211,7 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;
-  if (input.applyMode !== undefined && existing.kind === 'addon_fixed') {
+  if (input.applyMode !== undefined && (existing.kind === 'addon_fixed' || existing.kind === 'country_fixed')) {
     patch.applyMode = input.applyMode === 'when_billed' ? 'when_billed' : 'always';
   }
 
