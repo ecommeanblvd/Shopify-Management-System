@@ -15,7 +15,6 @@ export interface MovementDraft {
     | 'release_allocation' | 'pick' | 'manual_adjust' | 'transfer_in' | 'transfer_out' | 'migration';
   refType?: 'receipt_item' | 'fulfillment_line' | 'order' | 'transfer' | 'item';
   /** UUID của bản ghi tham chiếu (cột DB là uuid — KHÔNG truyền GID/chuỗi thường). */
-  /** UUID của bản ghi tham chiếu (cột DB là uuid — KHÔNG truyền GID/chuỗi thường). */
   refId?: string | null;
   note?: string | null;
   actor: string;

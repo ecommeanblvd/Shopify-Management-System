@@ -199,6 +199,21 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
           const list = available.get(prev.sku) ?? [];
           list.push({ id: prev.id, warehouseCode: prev.wh, receivedAt: null });
           available.set(prev.sku, list);
+        } else {
+          // Drift: dòng in_stock có reserved trên rollup nhưng KHÔNG còn món
+          // allocated trỏ về nó (vd pick đồng thời vừa chuyển món sang picked).
+          // Vẫn phải nhả reserved cũ trên đúng rollup row (l.warehouseInventoryId)
+          // trước khi ghi đè bên dưới — nếu không reserved rò vĩnh viễn.
+          const [inv] = await tx.select({ sku: schema.warehouseInventory.sku, wh: schema.warehouseInventory.warehouseCode })
+            .from(schema.warehouseInventory)
+            .where(eq(schema.warehouseInventory.id, l.warehouseInventoryId)).limit(1);
+          if (inv) {
+            await applyMovement(tx, {
+              sku: inv.sku, warehouseCode: inv.wh,
+              deltaOnHand: 0, deltaReserved: -l.allocatedQty,
+              reason: 'release_allocation', refType: 'fulfillment_line', refId: l.id, actor,
+            });
+          }
         }
       }
       // Chọn đúng món như allocateLine: kho nhiều món nhất (tie GVM/AP/DM),
