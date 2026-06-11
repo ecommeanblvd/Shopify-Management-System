@@ -705,7 +705,7 @@ function AdjustDialog({
   );
 }
 
-/** Chuyển kho HN↔SG: from cố định theo dòng, to là kho còn lại. */
+/** Chuyển kho GVM/AP/DM: from cố định theo dòng, to là kho còn lại. */
 function TransferDialog({
   item, onClose, onDone,
 }: {

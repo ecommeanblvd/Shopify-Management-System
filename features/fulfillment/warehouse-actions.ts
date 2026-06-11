@@ -118,7 +118,7 @@ export async function transferStock(input: {
   await db.transaction(async (tx) => {
     // Deterministic lock order: always lock the lexicographically-smaller
     // warehouseCode first to prevent AB-BA deadlock when two opposite transfers
-    // run concurrently (e.g. HN→SG and SG→HN). createIfMissing is always on
+    // run concurrently (e.g. GVM→AP and AP→GVM). createIfMissing is always on
     // the DESTINATION movement, regardless of which side is locked first —
     // a missing source row must throw ("Không có dòng tồn").
     //
