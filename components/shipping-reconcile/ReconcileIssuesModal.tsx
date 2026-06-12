@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { confirmIssueReport, type IssueReportRecord } from '@/features/shipments/issue-report-actions';
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
+import { carrierErrorKindLabel } from '@/features/shipments/carrier-error-kinds';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -33,9 +34,9 @@ interface Props {
  * issues (live-computed from pending mismatches) become persistent
  * REPORTS only after a Logistics staffer confirms what was fixed.
  */
-export function ReconcileIssuesModal({ openIssues, reports }: Props) {
+export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], carrierErrorGroups = [] }: Props) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<'issues' | 'reports'>('issues');
+  const [tab, setTab] = useState<'issues' | 'reports' | 'carrier'>('issues');
   const reportedKeys = new Set(reports.map((r) => r.issueKey));
 
   return (
@@ -67,6 +68,9 @@ export function ReconcileIssuesModal({ openIssues, reports }: Props) {
                 <TabButton active={tab === 'reports'} onClick={() => setTab('reports')}>
                   Report đã lưu ({reports.length})
                 </TabButton>
+                <TabButton active={tab === 'carrier'} onClick={() => setTab('carrier')}>
+                  Lỗi carrier ({carrierErrors.length})
+                </TabButton>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded px-2 py-1 text-muted-foreground hover:bg-muted">✕</button>
             </div>
@@ -79,6 +83,43 @@ export function ReconcileIssuesModal({ openIssues, reports }: Props) {
                 {openIssues.map((g) => (
                   <OpenIssueItem key={g.groupKey} issue={g} alreadyReported={reportedKeys.has(g.groupKey)} />
                 ))}
+              </div>
+            ) : tab === 'carrier' ? (
+              <div>
+                <div className="flex items-center justify-between border-b border-border px-5 py-2">
+                  <span className="text-xs text-muted-foreground">Các đơn đã duyệt là lỗi carrier (FedEx/DHL tính sai).</span>
+                  <a href="/f/shipping-reconcile/carrier-errors.csv" download
+                    className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted">Xuất CSV</a>
+                </div>
+                {carrierErrorGroups.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-muted-foreground">Chưa có đơn lỗi carrier nào được duyệt.</p>
+                )}
+                {carrierErrorGroups.map((g) => (
+                  <div key={g.carrierKey ?? '—'} className="px-5 py-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
+                      <span className="uppercase">{g.carrierKey ?? '—'}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{g.count} đơn · Σ lệch {fmtVnd(g.sumDeltaVnd)} đ</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                      {g.byKind.map((k) => (
+                        <span key={k.kind}>{carrierErrorKindLabel(k.kind)}: {k.count} ({fmtVnd(k.sumDeltaVnd)} đ)</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="divide-y divide-border border-t border-border">
+                  {carrierErrors.map((r) => (
+                    <div key={r.shipmentId} className="px-5 py-2 text-sm">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">{carrierErrorKindLabel(r.kind)}</span>
+                        <span className="font-mono text-xs text-muted-foreground">{(r.carrierKey ?? '—').toUpperCase()} · {r.shipCountry ?? '—'} · lệch {fmtVnd(r.deltaVnd)} đ</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{r.note}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="divide-y divide-border">

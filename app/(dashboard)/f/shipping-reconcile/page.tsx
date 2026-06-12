@@ -5,6 +5,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
+import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
 
 export const dynamic = 'force-dynamic';
@@ -22,10 +23,12 @@ export default async function ShippingReconcilePage({
     redirect('/');
   }
 
-  const [{ rows, computedAt }, reports] = await Promise.all([
+  const [{ rows, computedAt }, reports, carrierErrors] = await Promise.all([
     reconcileShipmentsWithStatus({ forceRecompute: sp.refresh === '1' }),
     listIssueReports(),
+    listCarrierErrors(),
   ]);
+  const carrierErrorGroups = summariseCarrierErrors(carrierErrors);
 
   return (
     <div className="space-y-6 p-6">
@@ -38,7 +41,7 @@ export default async function ShippingReconcilePage({
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
-      <ReconcileTable rows={rows} reports={reports} carrierErrors={[]} carrierErrorGroups={[]} />
+      <ReconcileTable rows={rows} reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} />
     </div>
   );
 }
