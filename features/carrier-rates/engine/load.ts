@@ -129,6 +129,7 @@ export async function loadAccountSnapshot(
         ? (s.excludedCountryCodes as string[]).map((c) => c.toUpperCase())
         : null,
       stepKg: s.stepKg !== null ? Number(s.stepKg) : null,
+      stepFloorKg: s.stepFloorKg !== null ? Number(s.stepFloorKg) : null,
       fuelable: s.fuelable,
       vatable: s.vatable,
       applyMode: (s.applyMode === 'when_billed' ? 'when_billed' : 'always') as 'always' | 'when_billed',

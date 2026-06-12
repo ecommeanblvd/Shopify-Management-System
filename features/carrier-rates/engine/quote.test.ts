@@ -748,6 +748,50 @@ describe('quote engine', () => {
     });
   });
 
+  describe('per_step_fixed stepFloorKg (DHL GoGreen <ngưỡng phẳng, ≥ nhảy bước)', () => {
+    // No dimDivisor / no chargeableRoundingKg on the fixture → chargeable ==
+    // weightKg exactly. Weights are 0.5-multiples so no float drift. Below the
+    // floor → 1 flat step (value); at/above → ceil(w/stepKg) × value.
+    function perStepAt(weightKg: number, stepFloorKg: number | null): number {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0.5, active: true, stepFloorKg },
+        ],
+      });
+      const r = quote(snap, { weightKg, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) throw new Error('quote failed');
+      return r.breakdown.perStep;
+    }
+
+    it('stepFloorKg=2.0: below floor charges one flat step; at/above steps', () => {
+      expect(perStepAt(0.5, 2.0)).toBe(1_900);
+      expect(perStepAt(1.0, 2.0)).toBe(1_900);
+      expect(perStepAt(1.5, 2.0)).toBe(1_900);
+      expect(perStepAt(2.0, 2.0)).toBe(7_600); // ceil(2.0/0.5)=4 × 1_900
+      expect(perStepAt(2.5, 2.0)).toBe(9_500); // ceil(2.5/0.5)=5 × 1_900
+    });
+
+    it('stepFloorKg=null always steps (current behaviour)', () => {
+      expect(perStepAt(0.5, null)).toBe(1_900);
+      expect(perStepAt(1.0, null)).toBe(3_800);
+      expect(perStepAt(1.5, null)).toBe(5_700);
+      expect(perStepAt(2.0, null)).toBe(7_600);
+    });
+
+    it('omitted stepFloorKg behaves like null (always steps)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'per_step_fixed', value: 1_900, stepKg: 0.5, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1.0, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.perStep).toBe(3_800);
+    });
+  });
+
   describe('fuelable per-row override', () => {
     it('country_fixed with fuelable=true joins the fuel base (DHL Elevated Risk)', () => {
       // base @ 8kg = ?, set up a custom rate sheet to match invoice exactly.

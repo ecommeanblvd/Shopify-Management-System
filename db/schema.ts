@@ -447,6 +447,10 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // Weight step in kg for `per_step_fixed` surcharges (NULL on every
   // other kind). Engine applies `ceil(weightKg / stepKg) × value`.
   stepKg: numeric('step_kg', { precision: 10, scale: 3 }),
+  // Ngưỡng cân (kg) cho per_step_fixed: cân < step_floor_kg → tính 1 bước phẳng
+  // (value); cân ≥ ngưỡng → ceil(cân/step_kg)×value. NULL = luôn nhảy bước.
+  // DHL GoGreen trước 29/9/2025: 0–1.5kg phẳng 1.900, từ 2kg nhảy (stepFloor 2.0).
+  stepFloorKg: numeric('step_floor_kg', { precision: 10, scale: 3 }),
   // Per-row override for whether this surcharge is included in the
   // fuelable subtotal (i.e. fuel% applies on top of it).
   //   NULL  → use the per-kind default (see engine quote.ts isFuelable)

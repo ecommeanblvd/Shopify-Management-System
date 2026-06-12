@@ -46,6 +46,8 @@ export interface SurchargeSnap {
    * `ceil(weightKg / stepKg) × value`. Required when kind='per_step_fixed'.
    */
   stepKg?: number | null;
+  /** Ngưỡng cân cho per_step_fixed: cân < stepFloorKg → 1 bước phẳng; ≥ → ceil-step. NULL = luôn nhảy. */
+  stepFloorKg?: number | null;
   /**
    * Per-row override for whether this surcharge participates in the
    * fuelable subtotal. NULL → use kind default (see isFuelable below).
@@ -654,13 +656,20 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     : 0;
 
   // Stepped per-weight surcharge — DHL GoGreen Plus and equivalents.
-  // Each row contributes `ceil(weight / stepKg) × value`. Rows with
-  // missing/invalid stepKg are skipped (defensive — shouldn't happen
-  // because the loader would reject them).
+  // Each row contributes `ceil(weight / stepKg) × value`. When stepFloorKg is
+  // set, a weight BELOW it charges a single flat step (value) instead — DHL
+  // GoGreen trước 29/9/2025 (0–1.5kg phẳng 1.900, từ 2kg nhảy bước). NULL =
+  // luôn nhảy bước. Rows with missing/invalid stepKg are skipped (defensive —
+  // shouldn't happen because the loader would reject them).
   const perStep = snap.surcharges
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'per_step_fixed')
     .filter((s) => s.stepKg && s.stepKg > 0)
-    .reduce((sum, s) => sum + Math.ceil(chargeableWeightKg / s.stepKg!) * s.value, 0);
+    .reduce((sum, s) => {
+      const steps = (s.stepFloorKg != null && chargeableWeightKg < s.stepFloorKg)
+        ? 1
+        : Math.ceil(chargeableWeightKg / s.stepKg!);
+      return sum + steps * s.value;
+    }, 0);
 
   // Per-row fuelable check: helper computes the row's contributed amount
   // to the carrier bill, given its kind + the current quote inputs.
@@ -686,9 +695,13 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
           && !isCountryExcluded(s, country)
           && (s.applyMode ?? 'always') === 'always'
           ? s.value : 0;
-      case 'per_step_fixed':
-        return (s.stepKg && s.stepKg > 0)
-          ? Math.ceil(chargeableWeightKg / s.stepKg) * s.value : 0;
+      case 'per_step_fixed': {
+        if (!(s.stepKg && s.stepKg > 0)) return 0;
+        const steps = (s.stepFloorKg != null && chargeableWeightKg < s.stepFloorKg)
+          ? 1
+          : Math.ceil(chargeableWeightKg / s.stepKg);
+        return steps * s.value;
+      }
       // remote / residential already handled via dedicated paths above
       // (postcode match / isResidential flag). Return 0 here so they
       // aren't double-counted. Discount handled via dedicated path below
