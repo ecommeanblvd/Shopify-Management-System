@@ -98,6 +98,46 @@ export async function approveCarrierError(input: ApproveCarrierErrorInput): Prom
   revalidatePath(ROUTE);
 }
 
+export interface DisputeCarrierInput {
+  shipmentId: string;
+  kind: string;
+  note: string;
+  billedTotal: number;
+  deltaVnd: number;
+}
+
+/** Mở đòi NCC: đơn sang 'disputing', chốt loại lỗi + số lệch gốc đang đòi. */
+export async function disputeWithCarrier(input: DisputeCarrierInput): Promise<void> {
+  const userId = await requireUser();
+  const note = input.note.trim();
+  if (!note) throw new Error('Cần ghi rõ lý do đòi NCC');
+  if (!isCarrierErrorKind(input.kind)) throw new Error('Loại lỗi không hợp lệ');
+  await db
+    .insert(schema.shipmentReconcileStatus)
+    .values({
+      shipmentId: input.shipmentId,
+      status: 'disputing',
+      note,
+      carrierErrorKind: input.kind,
+      billedTotalAtReview: input.billedTotal.toString(),
+      deltaVndAtReview: input.deltaVnd.toString(),
+      reconciledBy: userId,
+    })
+    .onConflictDoUpdate({
+      target: schema.shipmentReconcileStatus.shipmentId,
+      set: {
+        status: 'disputing',
+        note,
+        carrierErrorKind: input.kind,
+        billedTotalAtReview: input.billedTotal.toString(),
+        deltaVndAtReview: input.deltaVnd.toString(),
+        reconciledBy: userId,
+        reconciledAt: sql`now()`,
+      },
+    });
+  revalidatePath(ROUTE);
+}
+
 /** Remove the status row → shipment returns to "pending". */
 export async function clearReconcileStatus(shipmentId: string): Promise<void> {
   await requireUser();

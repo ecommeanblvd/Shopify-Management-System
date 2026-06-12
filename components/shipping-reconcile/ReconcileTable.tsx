@@ -218,6 +218,7 @@ const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: stri
   reconciled: { label: 'Đã đối soát', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
   ignored: { label: 'Bỏ qua', className: 'border border-border text-muted-foreground' },
   carrier_error: { label: 'Lỗi carrier', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
+  disputing: { label: 'Đang đòi NCC', className: 'border border-sky-500/40 text-sky-600 dark:text-sky-400' },
 };
 
 function FragmentRow({

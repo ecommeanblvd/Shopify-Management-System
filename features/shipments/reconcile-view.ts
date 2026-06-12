@@ -11,7 +11,7 @@ import {
 } from './reconcile';
 import { getReconcileCached } from './reconcile-cache';
 
-export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error';
+export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
 
 export interface StatusRecord {
   status: 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
@@ -25,6 +25,7 @@ export interface ReconcileViewRow extends ReconcileRow {
   status: ReconcileStatus;
   note: string | null;
   carrierErrorKind: string | null;
+  deltaVndAtReview: number | null;
   billedChangedSinceReview: boolean;
   /** billedBase + billedDiscount (discount stored negative). Avoids the
    *  list-base/discount display artifact — see spec §3.6. */
@@ -57,6 +58,7 @@ export function mergeStatus(
       status: (rec?.status ?? 'pending') as ReconcileStatus,
       note: rec?.note ?? null,
       carrierErrorKind: rec?.carrierErrorKind ?? null,
+      deltaVndAtReview: rec?.deltaVndAtReview ?? null,
       billedChangedSinceReview,
       billedBaseNet: netBase(r.billedBase, r.billedDiscount),
       engineBaseNet: r.engineBase,

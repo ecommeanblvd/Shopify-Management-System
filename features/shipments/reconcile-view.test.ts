@@ -76,4 +76,16 @@ describe('mergeStatus', () => {
     expect(rows[1].status).toBe('pending');
     expect(rows[1].carrierErrorKind).toBeNull();
   });
+
+  it('dòng disputing mang status + carrierErrorKind + deltaVndAtReview', () => {
+    const base = [row({ shipmentId: 'a' }), row({ shipmentId: 'b' })];
+    const map = new Map<string, StatusRecord>([
+      ['a', { status: 'disputing', note: 'đòi NCC', carrierErrorKind: 'zone', deltaVndAtReview: 194306, billedTotalAtReview: 1741581 }],
+    ]);
+    const rows = mergeStatus(base, map);
+    expect(rows[0].status).toBe('disputing');
+    expect(rows[0].carrierErrorKind).toBe('zone');
+    expect(rows[0].deltaVndAtReview).toBe(194306);
+    expect(rows[1].deltaVndAtReview).toBeNull();
+  });
 });
