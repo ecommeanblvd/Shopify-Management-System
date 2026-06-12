@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   process.stdout.write(`${dataRows.length} data rows\n`);
   process.stdout.write(dryRun ? '⚠ DRY RUN — no DB writes\n\n' : '\n');
 
-  const summary = await importLogExport(dataRows, { dryRun });
+  const summary = await importLogExport(dataRows, { dryRun, header: allRows[0] });
 
   process.stdout.write(`\n=== Import summary (${(summary.durationMs / 1000).toFixed(1)}s) ===\n`);
   process.stdout.write(`  Total rows:        ${summary.totalRows.toString().padStart(6)}\n`);

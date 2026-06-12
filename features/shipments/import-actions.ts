@@ -25,6 +25,7 @@ import { db, schema } from '@/db/client';
 import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from './parse-xlsx-row';
 import { invalidateReconcileCache } from './reconcile-cache';
 import { classifyCharge } from './charge-classify';
+import { resolveColumns, LEGACY_COLUMN_MAP } from './xlsx-columns';
 
 export interface ImportSummary {
   totalRows: number;
@@ -58,6 +59,7 @@ export interface ImportSummary {
 interface ImportOptions {
   dryRun?: boolean;
   source?: string;
+  header?: ReadonlyArray<unknown>;
 }
 
 interface RowWithIndex {
@@ -204,10 +206,21 @@ export async function importLogExport(
   const dryRun = opts.dryRun ?? false;
   const source = opts.source ?? 'ops_xlsx';
 
+  let cols = LEGACY_COLUMN_MAP;
+  if (opts.header) {
+    const resolved = resolveColumns(opts.header);
+    if (!resolved.ok) {
+      summary.warnings.errors.push({ rowIndex: -1, reason: `Thiếu cột bắt buộc: ${resolved.missingRequired.join(', ')}` });
+      summary.durationMs = Date.now() - start;
+      return summary;
+    }
+    cols = resolved.columns;
+  }
+
   // PHASE 1 — pure parse. Bucket every row.
   const valid: RowWithIndex[] = [];
   for (let i = 0; i < rows.length; i++) {
-    const r = parseXlsxRow(rows[i]);
+    const r = parseXlsxRow(rows[i], cols);
     switch (r.kind) {
       case 'ok':                       summary.parsed += 1; valid.push({ rowIndex: i, parsed: r.row }); break;
       case 'skip_no_tracking':         summary.skipped.no_tracking += 1; break;
