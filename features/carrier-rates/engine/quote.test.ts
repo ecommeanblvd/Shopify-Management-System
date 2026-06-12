@@ -138,7 +138,7 @@ describe('quote engine', () => {
         expect(r.breakdown.demand).toBe(20_000); // (8,000 + 12,000) × 1 kg
       });
 
-      it('demand surcharge is NOT in the fuel base (sits OUTSIDE fuel — verified via FedEx invoice 2026-06-03)', () => {
+      it('demand surcharge IS in the fuel base (fuel = pct × (base + demand) — verified across 992/1009 FedEx + 40/40 DHL invoices, 2026-06-12)', () => {
         const snap = makeSnap({
           zonesByCountry: new Map([['TH', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }]]),
           weightTiers: [{ upperKg: 1 }],
@@ -150,12 +150,12 @@ describe('quote engine', () => {
         const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        // demand_per_kg defaults to fuelable=false. Fuel only on base.
-        // fuel = base 280k × 30% = 84k. Demand adds OUTSIDE fuel.
-        // subtotal = base 280k + demand 10k + fuel 84k = 374k
+        // demand_per_kg defaults to fuelable=true. Fuel on (base + demand).
+        // fuel = (base 280k + demand 10k) × 30% = 87k.
+        // subtotal = base 280k + demand 10k + fuel 87k = 377k
         expect(r.breakdown.demand).toBe(10_000);
-        expect(r.breakdown.fuel).toBe(84_000);
-        expect(r.breakdown.subtotalBeforeMarkup).toBe(374_000);
+        expect(r.breakdown.fuel).toBe(87_000);
+        expect(r.breakdown.subtotalBeforeMarkup).toBe(377_000);
       });
 
       it('inactive rows are ignored', () => {
@@ -206,14 +206,14 @@ describe('quote engine', () => {
         const r = quote(snap, { weightKg: 1, destinationCountry: 'TH' });
         expect(r.ok).toBe(true);
         if (!r.ok) return;
-        // peak_fixed fuelable=true, demand_per_kg fuelable=false (default).
-        // fuelable = base 100k + peak 20k = 120k
-        // fuel = 120k × 50% = 60k
-        // vatable = 120k + 60k fuel + 10k demand (nonFuelable) = 190k
-        // vat = 190k × 10% = 19,000
-        expect(r.breakdown.fuel).toBe(60_000);
-        expect(r.breakdown.vat).toBe(19_000);
-        expect(r.breakdown.carrierCost).toBe(209_000);
+        // peak_fixed + demand_per_kg both fuelable=true (default).
+        // fuelable = base 100k + peak 20k + demand 10k = 130k
+        // fuel = 130k × 50% = 65k
+        // vatable = base 100k + peak 20k + demand 10k + fuel 65k = 195k
+        // vat = 195k × 10% = 19,500
+        expect(r.breakdown.fuel).toBe(65_000);
+        expect(r.breakdown.vat).toBe(19_500);
+        expect(r.breakdown.carrierCost).toBe(214_500);
       });
 
       it('zero VAT row → vat = 0 (catch-all that nothing matches)', () => {
@@ -1430,27 +1430,27 @@ describe('quote engine', () => {
     });
   });
 
-  describe('demand_per_kg default fuelable=false (FedEx invoice 2026-06-03)', () => {
-    // The operator's LOG-Export Excel verified that FedEx Demand
-    // Surcharge sits OUTSIDE the fuel base — proof via #MBLVD28959:
-    //   effective_base 703,458 + remote 82,200 = 785,658
-    //   × 49.25 % CW 23 fuel = 386,937  ← matches Excel col AK exactly
-    // Demand (68,300 in that invoice — actually country_fixed-style)
-    // does NOT appear in the fuel base. Engine default flipped to false.
-    it('demand_per_kg defaults to fuelable=false', () => {
+  describe('demand_per_kg fuelable (verified across 992/1009 FedEx + 40/40 DHL invoices, 2026-06-12)', () => {
+    // demand_per_kg defaults to fuelable=TRUE: carriers fuel the demand
+    // surcharge (fuel = pct × (base + demand)). #MBLVD28959 looked like
+    // "demand outside fuel" but its 68,300 was US-import-handling
+    // (country_fixed, non-fuelable) and it had NO demand_per_kg:
+    //   base 703,458 + remote 82,200 = 785,658 × 49.25% = 386,937.
+    // The per-row override still lets a carrier exclude demand (fuelable=false).
+    it('per-row fuelable=false override excludes demand_per_kg from fuel base', () => {
       const snap = makeSnap({
         zonesByCountry: new Map([['US', { label: 'Zone D', rateByTierUpper: new Map([[1, 700_000]]) }]]),
         weightTiers: [{ upperKg: 1 }],
         surcharges: [
           { kind: 'fuel_percent', value: 50, active: true },
-          { kind: 'demand_per_kg', value: 11_300, active: true, countryCodes: ['US'] },
-          // omit `fuelable` on the demand row → default kicks in
+          // demand_per_kg defaults to fuelable; explicit false pulls it OUT.
+          { kind: 'demand_per_kg', value: 11_300, active: true, countryCodes: ['US'], fuelable: false },
         ],
       });
       const r = quote(snap, { weightKg: 1, destinationCountry: 'US' });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      // fuel = 50% × base 700k = 350k (NOT 50% × (700k + 11.3k))
+      // fuel = 50% × base 700k = 350k (demand excluded by fuelable=false)
       expect(r.breakdown.demand).toBe(11_300);
       expect(r.breakdown.fuel).toBe(350_000);
     });
@@ -1480,9 +1480,9 @@ describe('quote engine', () => {
           // CW 23 FedEx Air fuel = 49.25 %
           { kind: 'fuel_percent', value: 49.25, active: true },
           { kind: 'remote_fixed', value: 82_200, active: true },
-          // Excel col AM "Demand" = FedEx VN US-handling — modelled as
-          // demand_per_kg with rate that yields 68,300 at 0.7 kg.
-          { kind: 'demand_per_kg', value: 97_571.4, active: true, countryCodes: ['US'] },
+          // Excel col AM "Demand" on #MBLVD28959 = FedEx VN US-import-handling,
+          // a country_fixed (NOT fuelable) — the real pack had no demand_per_kg.
+          { kind: 'country_fixed', value: 68_300, active: true, countryCodes: ['US'] },
         ],
         remotePostcodes: new Map([['US', new Map([['ZIP-90001', null]])]]),
       });
