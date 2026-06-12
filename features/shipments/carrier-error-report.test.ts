@@ -4,7 +4,8 @@ import { summariseCarrierErrors, type CarrierErrorRow } from './carrier-error-re
 const row = (over: Partial<CarrierErrorRow>): CarrierErrorRow => ({
   shipmentId: 's', carrierKey: 'fedex', orderName: null, tracking: null,
   shipCountry: null, labelDate: null, kind: 'weight', note: 'x',
-  billedVnd: null, deltaVnd: 100, approvedByName: null, approvedAt: new Date(0), ...over,
+  billedVnd: null, deltaVnd: 100, approvedByName: null, approvedAt: new Date(0),
+  state: 'approved', ...over,
 });
 
 describe('summariseCarrierErrors', () => {
@@ -30,5 +31,14 @@ describe('summariseCarrierErrors', () => {
     ]);
     expect(g[0].byKind.map((k) => k.kind)).toEqual(['weight', 'zone']);
     expect(g[0].byKind[0].sumDeltaVnd).toBe(20);
+  });
+
+  it('summarise vẫn đúng trên rows approved (caller lọc state)', () => {
+    const g = summariseCarrierErrors([
+      row({ carrierKey: 'fedex', state: 'approved', deltaVnd: 100, kind: 'weight' }),
+      row({ carrierKey: 'fedex', state: 'approved', deltaVnd: null, kind: 'zone' }),
+    ]);
+    expect(g[0].count).toBe(2);
+    expect(g[0].sumDeltaVnd).toBe(100);
   });
 });

@@ -4,7 +4,7 @@
  * summariseCarrierErrors là thuần để TDD.
  */
 import { db, schema } from '@/db/client';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { CARRIER_ERROR_KINDS } from './carrier-error-kinds';
 
 export interface CarrierErrorRow {
@@ -20,6 +20,7 @@ export interface CarrierErrorRow {
   deltaVnd: number | null;
   approvedByName: string | null;
   approvedAt: Date;
+  state: 'disputing' | 'approved';
 }
 
 export interface CarrierErrorGroup {
@@ -78,12 +79,13 @@ export async function listCarrierErrors(): Promise<CarrierErrorRow[]> {
       deltaVnd: schema.shipmentReconcileStatus.deltaVndAtReview,
       approvedByName: schema.user.name,
       approvedAt: schema.shipmentReconcileStatus.reconciledAt,
+      status: schema.shipmentReconcileStatus.status,
     })
     .from(schema.shipmentReconcileStatus)
     .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentReconcileStatus.shipmentId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .leftJoin(schema.user, eq(schema.user.id, schema.shipmentReconcileStatus.reconciledBy))
-    .where(eq(schema.shipmentReconcileStatus.status, 'carrier_error'))
+    .where(inArray(schema.shipmentReconcileStatus.status, ['carrier_error', 'disputing']))
     .orderBy(desc(schema.shipmentReconcileStatus.reconciledAt));
   return rows.map((r) => ({
     shipmentId: r.shipmentId,
@@ -98,5 +100,6 @@ export async function listCarrierErrors(): Promise<CarrierErrorRow[]> {
     deltaVnd: r.deltaVnd !== null ? Number(r.deltaVnd) : null,
     approvedByName: r.approvedByName ?? null,
     approvedAt: r.approvedAt,
+    state: r.status === 'disputing' ? 'disputing' : 'approved',
   }));
 }
