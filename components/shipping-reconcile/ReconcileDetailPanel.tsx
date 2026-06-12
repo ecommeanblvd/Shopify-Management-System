@@ -189,9 +189,10 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
   const [note, setNote] = useState(row.note ?? '');
   const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
+  // 'default' = chọn kết quả; 'carrier' = đang khai loại lỗi carrier.
+  const [mode, setMode] = useState<'default' | 'carrier'>('default');
   const isClean = row.diagnosis?.severity === 'match' || row.diagnosis?.severity === 'rounding';
-  const needsNote = !isClean;
-  const noteMissing = needsNote && note.trim().length === 0;
+  const noteEmpty = note.trim().length === 0;
 
   async function act(status: 'reconciled' | 'ignored') {
     setBusy(true);
@@ -238,52 +239,79 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     );
   }
 
+  // Đơn KHỚP: gọn tối đa — 1 nút xác nhận, "Bỏ qua" mờ. Không cần lý do.
+  if (isClean) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+        <span className="text-muted-foreground">Đơn khớp — không cần xử lý.</span>
+        <button type="button" disabled={busy} onClick={() => act('reconciled')}
+          className="ml-auto rounded border border-emerald-500/50 px-3 py-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40">
+          ✓ Xác nhận khớp
+        </button>
+        <button type="button" disabled={busy} onClick={() => act('ignored')}
+          className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">
+          Bỏ qua
+        </button>
+      </div>
+    );
+  }
+
+  // Đơn LỆCH: ô lý do + chọn kết quả. Loại lỗi carrier chỉ hiện khi cần.
   return (
     <div className="mt-4 space-y-2 rounded-md border border-border bg-muted/20 p-3">
       <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {needsNote
-          ? 'Đơn đang lệch — ghi rõ cách xử lý / kết quả xác nhận với carrier trước khi chốt — hoặc chọn loại lỗi + lý do rồi bấm "Duyệt" nếu là lỗi carrier'
-          : 'Ghi chú (không bắt buộc — đơn đã khớp)'}
+        Đơn đang lệch — ghi rõ cách xử lý / kết quả với carrier, rồi chọn kết quả
       </label>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={2}
-        placeholder={needsNote
-          ? 'VD: FedEx xác nhận MC bill theo Zone M — đã sửa zone mapping / DHL truy thu ER qua bill INV-123…'
-          : 'Ghi chú thêm nếu cần…'}
+        placeholder="VD: FedEx xác nhận MC bill theo Zone M — đã sửa zone mapping / DHL truy thu ER qua bill INV-123…"
         className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
       />
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" disabled={busy || noteMissing} title={noteMissing ? 'Cần ghi rõ cách xử lý vấn đề lệch trước khi đánh dấu đã đối soát' : undefined}
-          onClick={() => act('reconciled')}
-          className="rounded border border-emerald-500/50 px-3 py-1 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40">
-          ✓ Đã đối soát
-        </button>
-        <button type="button" disabled={busy} onClick={() => act('ignored')}
-          className="rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50">
-          Bỏ qua
-        </button>
-        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-        <select value={kind} onChange={(e) => setKind(e.target.value)}
-          className="rounded border border-border bg-background px-2 py-1 text-sm">
-          <option value="">— loại lỗi carrier —</option>
-          {CARRIER_ERROR_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-        </select>
-        <button type="button" disabled={busy || note.trim().length === 0 || !kind}
-          title={!kind ? 'Chọn loại lỗi + ghi lý do' : note.trim().length === 0 ? 'Cần ghi lý do' : undefined}
-          onClick={approve}
-          className="rounded border border-amber-500/50 px-3 py-1 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40">
-          Duyệt (lỗi carrier)
-        </button>
-      </div>
-      <div className="flex items-center gap-2">
-        {noteMissing && (
-          <span className="text-xs text-amber-600 dark:text-amber-400">
-            ↑ cần ghi chú xử lý để mở khóa nút &quot;Đã đối soát&quot;
-          </span>
-        )}
-      </div>
+      {mode === 'default' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={busy || noteEmpty}
+            title={noteEmpty ? 'Cần ghi lý do trước khi chốt' : undefined}
+            onClick={() => act('reconciled')}
+            className="rounded border border-emerald-500/50 px-3 py-1 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40">
+            ✓ Đã xử lý
+          </button>
+          <button type="button" disabled={busy} onClick={() => setMode('carrier')}
+            className="rounded border border-amber-500/50 px-3 py-1 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:opacity-50">
+            Lỗi carrier →
+          </button>
+          <button type="button" disabled={busy} onClick={() => act('ignored')}
+            className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">
+            Bỏ qua
+          </button>
+          {noteEmpty && (
+            <span className="w-full text-xs text-amber-600 dark:text-amber-400">↑ ghi lý do để mở khóa &quot;Đã xử lý&quot;</span>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Lỗi carrier — chọn loại:</span>
+          <select value={kind} onChange={(e) => setKind(e.target.value)}
+            className="rounded border border-border bg-background px-2 py-1 text-sm">
+            <option value="">— loại lỗi —</option>
+            {CARRIER_ERROR_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+          <button type="button" disabled={busy || noteEmpty || !kind}
+            title={!kind ? 'Chọn loại lỗi' : noteEmpty ? 'Cần ghi lý do' : undefined}
+            onClick={approve}
+            className="rounded border border-amber-500/50 px-3 py-1 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40">
+            ✓ Duyệt lỗi carrier
+          </button>
+          <button type="button" disabled={busy} onClick={() => setMode('default')}
+            className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">
+            ← Quay lại
+          </button>
+          {noteEmpty && (
+            <span className="w-full text-xs text-amber-600 dark:text-amber-400">↑ ghi lý do trước khi duyệt</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
