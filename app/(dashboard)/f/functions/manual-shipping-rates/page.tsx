@@ -8,7 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listOverridesForStore, previewMarketsApply, executeMarketsApply, executeMarketsApplyAll } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
-import { ShippingMatrixTable } from '@/components/functions/ShippingMatrixTable';
+import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
 import { ApplyModal } from '@/components/markets/ApplyModal';
 import { ApplyAllBackupButton } from '@/components/functions/ApplyAllBackupButton';
 
@@ -31,6 +31,7 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
   const sp = await searchParams;
   const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
   const overrides = activeId ? await listOverridesForStore(activeId) : [];
+  const markets: MarketZones[] = overrides.map((o) => ({ marketHandle: o.marketHandle, zones: flattenShippingMatrix(o.shipping) }));
 
   async function preview(storeId: string) {
     'use server';
@@ -91,17 +92,11 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
             </div>
           )}
 
-          <div className="space-y-8">
-            {overrides.length === 0 && (
-              <p className="text-sm text-muted-foreground">Store này chưa có cấu hình market/giá ship.</p>
-            )}
-            {overrides.map((o) => (
-              <section key={o.marketHandle} className="space-y-3">
-                <h2 className="text-lg font-medium">{o.marketHandle}</h2>
-                <ShippingMatrixTable zones={flattenShippingMatrix(o.shipping)} />
-              </section>
-            ))}
-          </div>
+          {markets.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Store này chưa có cấu hình market/giá ship.</p>
+          ) : (
+            <ManualRatesBrowser markets={markets} />
+          )}
         </>
       )}
     </div>
