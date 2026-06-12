@@ -6,6 +6,7 @@ import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
 import { ReconcileIssuesModal, type OpenIssue } from './ReconcileIssuesModal';
 import type { IssueReportRecord } from '@/features/shipments/issue-report-actions';
+import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -14,11 +15,13 @@ const fmtVnd = (n: number | null): string =>
       new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.abs(Math.round(n)));
 
 type CarrierFilter = 'all' | 'fedex' | 'dhl';
-type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored';
+type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error';
 
 interface Props {
   rows: ReconcileViewRow[];
   reports: IssueReportRecord[];
+  carrierErrors: CarrierErrorRow[];
+  carrierErrorGroups: CarrierErrorGroup[];
 }
 
 function deltaClass(pct: number | null): string {
@@ -29,7 +32,7 @@ function deltaClass(pct: number | null): string {
   return 'text-muted-foreground';
 }
 
-export function ReconcileTable({ rows, reports }: Props) {
+export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroups }: Props) {
   const [carrier, setCarrier] = useState<CarrierFilter>('all');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [country, setCountry] = useState('');
@@ -136,12 +139,14 @@ export function ReconcileTable({ rows, reports }: Props) {
           <option value="pending">Chưa đối soát</option>
           <option value="reconciled">Đã đối soát</option>
           <option value="ignored">Bỏ qua</option>
+          <option value="carrier_error">Lỗi carrier</option>
         </select>
         <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
         <div className="ml-auto flex items-center gap-2">
-          <ReconcileIssuesModal openIssues={openIssues} reports={reports} />
+          <ReconcileIssuesModal openIssues={openIssues} reports={reports}
+            carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} />
           <a href={exportHref} className="rounded border border-border px-3 py-1 hover:bg-muted">Export CSV</a>
         </div>
       </div>

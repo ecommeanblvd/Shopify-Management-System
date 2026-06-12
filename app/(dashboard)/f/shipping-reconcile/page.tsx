@@ -38,7 +38,7 @@ export default async function ShippingReconcilePage({
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
-      <ReconcileTable rows={rows} reports={reports} />
+      <ReconcileTable rows={rows} reports={reports} carrierErrors={[]} carrierErrorGroups={[]} />
     </div>
   );
 }

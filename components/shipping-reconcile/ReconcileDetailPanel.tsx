@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { ReconcileViewRow } from '@/features/shipments/reconcile-view';
-import { setReconcileStatus, clearReconcileStatus } from '@/features/shipments/reconcile-status-actions';
+import { setReconcileStatus, clearReconcileStatus, approveCarrierError } from '@/features/shipments/reconcile-status-actions';
+import { CARRIER_ERROR_KINDS, carrierErrorKindLabel } from '@/features/shipments/carrier-error-kinds';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -186,6 +187,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
  */
 function ReconcileActions({ row }: { row: ReconcileViewRow }) {
   const [note, setNote] = useState(row.note ?? '');
+  const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
   const isClean = row.diagnosis?.severity === 'match' || row.diagnosis?.severity === 'rounding';
   const needsNote = !isClean;
@@ -203,12 +205,28 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     setBusy(true);
     try { await clearReconcileStatus(row.shipmentId); } finally { setBusy(false); }
   }
+  async function approve() {
+    if (!note.trim() || !kind) return;
+    setBusy(true);
+    try {
+      await approveCarrierError({
+        shipmentId: row.shipmentId, kind, note: note.trim(),
+        billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0,
+      });
+    } finally { setBusy(false); }
+  }
 
   if (row.status !== 'pending') {
     return (
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
-        <span className={row.status === 'reconciled' ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-muted-foreground font-medium'}>
-          {row.status === 'reconciled' ? '✓ Đã đối soát' : 'Đã bỏ qua'}
+        <span className={
+          row.status === 'reconciled' ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+          : row.status === 'carrier_error' ? 'text-amber-600 dark:text-amber-400 font-medium'
+          : 'text-muted-foreground font-medium'
+        }>
+          {row.status === 'reconciled' ? '✓ Đã đối soát'
+            : row.status === 'carrier_error' ? `✓ Đã duyệt — lỗi carrier (${carrierErrorKindLabel(row.carrierErrorKind ?? '')})`
+            : 'Đã bỏ qua'}
           {row.billedChangedSinceReview ? ' — ⚠ billed đã thay đổi sau khi review' : ''}
         </span>
         {row.note && <span className="text-muted-foreground">Ghi chú: {row.note}</span>}
@@ -224,7 +242,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     <div className="mt-4 space-y-2 rounded-md border border-border bg-muted/20 p-3">
       <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {needsNote
-          ? 'Đơn đang lệch — ghi rõ cách xử lý / kết quả xác nhận với carrier trước khi chốt'
+          ? 'Đơn đang lệch — ghi rõ cách xử lý / kết quả xác nhận với carrier trước khi chốt — hoặc chọn loại lỗi + lý do rồi bấm "Duyệt" nếu là lỗi carrier'
           : 'Ghi chú (không bắt buộc — đơn đã khớp)'}
       </label>
       <textarea
@@ -236,24 +254,30 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
           : 'Ghi chú thêm nếu cần…'}
         className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
       />
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          disabled={busy || noteMissing}
-          title={noteMissing ? 'Cần ghi rõ cách xử lý vấn đề lệch trước khi đánh dấu đã đối soát' : undefined}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={busy || noteMissing} title={noteMissing ? 'Cần ghi rõ cách xử lý vấn đề lệch trước khi đánh dấu đã đối soát' : undefined}
           onClick={() => act('reconciled')}
-          className="rounded border border-emerald-500/50 px-3 py-1 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-        >
+          className="rounded border border-emerald-500/50 px-3 py-1 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40">
           ✓ Đã đối soát
         </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => act('ignored')}
-          className="rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
-        >
+        <button type="button" disabled={busy} onClick={() => act('ignored')}
+          className="rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50">
           Bỏ qua
         </button>
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+        <select value={kind} onChange={(e) => setKind(e.target.value)}
+          className="rounded border border-border bg-background px-2 py-1 text-sm">
+          <option value="">— loại lỗi carrier —</option>
+          {CARRIER_ERROR_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+        </select>
+        <button type="button" disabled={busy || note.trim().length === 0 || !kind}
+          title={!kind ? 'Chọn loại lỗi + ghi lý do' : note.trim().length === 0 ? 'Cần ghi lý do' : undefined}
+          onClick={approve}
+          className="rounded border border-amber-500/50 px-3 py-1 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40">
+          Duyệt (lỗi carrier)
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
         {noteMissing && (
           <span className="text-xs text-amber-600 dark:text-amber-400">
             ↑ cần ghi chú xử lý để mở khóa nút &quot;Đã đối soát&quot;

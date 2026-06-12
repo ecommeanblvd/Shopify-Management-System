@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { confirmIssueReport, type IssueReportRecord } from '@/features/shipments/issue-report-actions';
+import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -22,6 +23,9 @@ export interface OpenIssue {
 interface Props {
   openIssues: OpenIssue[];
   reports: IssueReportRecord[];
+  // Wired by ReconcileTable now; the carrier-error tab is built in Task 5.
+  carrierErrors?: CarrierErrorRow[];
+  carrierErrorGroups?: CarrierErrorGroup[];
 }
 
 /**
