@@ -15,7 +15,7 @@ const fmtVnd = (n: number | null): string =>
       new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.abs(Math.round(n)));
 
 type CarrierFilter = 'all' | 'fedex' | 'dhl';
-type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error';
+type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
 
 interface Props {
   rows: ReconcileViewRow[];
@@ -69,16 +69,17 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
   }, [rows, carrier, status, country, minPct, q]);
 
   const summary = useMemo(() => {
-    let billed = 0, engine = 0, over10 = 0, pendingCount = 0;
+    let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
     for (const r of filtered) {
       billed += r.billedTotal;
       engine += r.engineTotal ?? 0;
       if (r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
       if (r.status === 'pending') pendingCount += 1;
+      if (r.status === 'disputing') disputingCount += 1;
     }
     const delta = billed - engine;
     const pct = billed > 0 ? (delta / billed) * 100 : 0;
-    return { billed, engine, delta, pct, over10, pendingCount, n: filtered.length };
+    return { billed, engine, delta, pct, over10, pendingCount, disputingCount, n: filtered.length };
   }, [filtered]);
 
   // Logistics to-check list: PENDING rows with an actionable issue, grouped
@@ -119,12 +120,13 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <Stat label="Σ Billed" value={`${fmtVnd(summary.billed)} đ`} />
         <Stat label="Σ Hệ thống" value={`${fmtVnd(summary.engine)} đ`} />
         <Stat label="Σ Lệch" value={`${fmtVnd(summary.delta)} đ (${summary.pct.toFixed(2)}%)`} />
         <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
+        <Stat label="Đang đòi NCC" value={String(summary.disputingCount)} />
       </div>
 
       {/* Filters */}
@@ -140,6 +142,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
           <option value="reconciled">Đã đối soát</option>
           <option value="ignored">Bỏ qua</option>
           <option value="carrier_error">Lỗi carrier</option>
+          <option value="disputing">Đang đòi NCC</option>
         </select>
         <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
