@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText, AlertTriangle } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText, AlertTriangle, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -132,6 +132,23 @@ export default async function FunctionsOverviewPage() {
           <ActivityStackedChart buckets={trend} functions={FUNCTIONS} />
         </CardContent>
       </Card>
+
+      {hasPermission(role, 'view_markets_history') && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Ops tools</h2>
+          <Link href="/f/functions/manual-shipping-rates" className="block max-w-md">
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <span className="rounded-lg bg-sky-500/10 p-2 text-sky-600 dark:text-sky-400"><Truck className="h-5 w-5" /></span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">Manual Shipping rates</span>
+                  <span className="block text-xs text-muted-foreground">Bảng giá ship flat backup — apply khi carrier API FedEx/DHL gãy.</span>
+                </span>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {FUNCTIONS.map((fn) => {
