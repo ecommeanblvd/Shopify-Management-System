@@ -1,7 +1,7 @@
 /**
- * Report các đơn đã DUYỆT là lỗi carrier (status='carrier_error'). Không có
- * bảng report riêng — đọc sống từ shipment_reconcile_status (snapshot delta).
- * summariseCarrierErrors là thuần để TDD.
+ * Report các đơn lỗi carrier: đang đòi NCC (status='disputing') + đã DUYỆT
+ * (status='carrier_error'), gắn `state`. Không có bảng report riêng — đọc sống
+ * từ shipment_reconcile_status (snapshot delta gốc). summariseCarrierErrors thuần để TDD.
  */
 import { db, schema } from '@/db/client';
 import { desc, eq, inArray } from 'drizzle-orm';

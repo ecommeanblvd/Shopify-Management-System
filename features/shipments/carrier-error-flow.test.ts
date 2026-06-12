@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { suggestCauseKind, needsCarrierClaim, isApprovableMatch } from './carrier-error-flow';
-import type { ReconcileDiagnosis } from './reconcile-diagnose';
+import type { ReconcileDiagnosis, ComponentDelta, DiagnosisSeverity } from './reconcile-diagnose';
 
-const diag = (components: any[], severity = 'config'): ReconcileDiagnosis =>
-  ({ totalDelta: 0, components, impliedWeight: null, impliedZone: null, verdict: '', severity } as ReconcileDiagnosis);
+const diag = (components: ComponentDelta[], severity: DiagnosisSeverity = 'config'): ReconcileDiagnosis =>
+  ({ totalDelta: 0, components, impliedWeight: null, impliedZone: null, verdict: '', severity });
 
 describe('suggestCauseKind', () => {
   it('chọn khoản |delta| lớn nhất khác KHOP', () => {
