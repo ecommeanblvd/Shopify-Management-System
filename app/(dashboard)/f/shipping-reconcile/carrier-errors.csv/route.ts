@@ -10,7 +10,7 @@ import { carrierErrorKindLabel } from '@/features/shipments/carrier-error-kinds'
 
 export const dynamic = 'force-dynamic';
 
-const HEADER = ['order', 'tracking', 'carrier', 'country', 'label_date', 'kind', 'reason', 'billed_vnd', 'delta_vnd', 'approved_by', 'approved_at'];
+const HEADER = ['order', 'tracking', 'carrier', 'country', 'label_date', 'kind', 'state', 'reason', 'billed_vnd', 'delta_vnd', 'approved_by', 'approved_at'];
 
 export async function GET(): Promise<Response> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -22,7 +22,7 @@ export async function GET(): Promise<Response> {
   const out: CsvValue[][] = rows.map((r) => [
     r.orderName, r.tracking, r.carrierKey, r.shipCountry,
     r.labelDate ? r.labelDate.toISOString().slice(0, 10) : null,
-    carrierErrorKindLabel(r.kind), r.note, r.billedVnd, r.deltaVnd,
+    carrierErrorKindLabel(r.kind), r.state === 'disputing' ? 'đang đòi' : 'đã duyệt', r.note, r.billedVnd, r.deltaVnd,
     r.approvedByName, r.approvedAt.toISOString().slice(0, 19).replace('T', ' '),
   ]);
 

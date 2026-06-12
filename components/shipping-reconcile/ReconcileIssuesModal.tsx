@@ -85,42 +85,55 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
                 ))}
               </div>
             ) : tab === 'carrier' ? (
-              <div>
-                <div className="flex items-center justify-between border-b border-border px-5 py-2">
-                  <span className="text-xs text-muted-foreground">Các đơn đã duyệt là lỗi carrier (FedEx/DHL tính sai).</span>
-                  <a href="/f/shipping-reconcile/carrier-errors.csv" download
-                    className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted">Xuất CSV</a>
-                </div>
-                {carrierErrorGroups.length === 0 && (
-                  <p className="px-5 py-8 text-center text-sm text-muted-foreground">Chưa có đơn lỗi carrier nào được duyệt.</p>
-                )}
-                {carrierErrorGroups.map((g) => (
-                  <div key={g.carrierKey ?? '—'} className="px-5 py-2">
-                    <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
-                      <span className="uppercase">{g.carrierKey ?? '—'}</span>
-                      <span className="font-mono text-xs text-muted-foreground">{g.count} đơn · Σ lệch {fmtVnd(g.sumDeltaVnd)} đ</span>
+              (() => {
+                const disputing = carrierErrors.filter((r) => r.state === 'disputing');
+                const approved = carrierErrors.filter((r) => r.state === 'approved');
+                const sumDisputing = disputing.reduce((a, r) => a + (r.deltaVnd ?? 0), 0);
+                const RowItem = ({ r }: { r: CarrierErrorRow }) => (
+                  <div key={r.shipmentId} className="px-5 py-2 text-sm">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-xs ${r.state === 'disputing' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+                        {carrierErrorKindLabel(r.kind)}
+                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">{(r.carrierKey ?? '—').toUpperCase()} · {r.shipCountry ?? '—'} · lệch gốc {fmtVnd(r.deltaVnd)}đ</span>
                     </div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                      {g.byKind.map((k) => (
-                        <span key={k.kind}>{carrierErrorKindLabel(k.kind)}: {k.count} ({fmtVnd(k.sumDeltaVnd)} đ)</span>
-                      ))}
-                    </div>
+                    {r.note && <p className="mt-0.5 text-xs text-muted-foreground">{r.note}</p>}
+                    <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
                   </div>
-                ))}
-                <div className="divide-y divide-border border-t border-border">
-                  {carrierErrors.map((r) => (
-                    <div key={r.shipmentId} className="px-5 py-2 text-sm">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
-                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">{carrierErrorKindLabel(r.kind)}</span>
-                        <span className="font-mono text-xs text-muted-foreground">{(r.carrierKey ?? '—').toUpperCase()} · {r.shipCountry ?? '—'} · lệch {fmtVnd(r.deltaVnd)} đ</span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{r.note}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
+                );
+                return (
+                  <div>
+                    <div className="flex items-center justify-between border-b border-border px-5 py-2">
+                      <span className="text-xs text-muted-foreground">Lỗi carrier — đang đòi NCC &amp; đã duyệt.</span>
+                      <a href="/f/shipping-reconcile/carrier-errors.csv" download className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted">Xuất CSV</a>
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    <div className="border-b border-border px-5 py-2 text-sm font-medium text-sky-600 dark:text-sky-400">
+                      ⏳ Đang đòi NCC ({disputing.length} · Σ lệch gốc {fmtVnd(sumDisputing)}đ)
+                    </div>
+                    {disputing.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Không có đơn nào đang đòi.</p>}
+                    <div className="divide-y divide-border">{disputing.map((r) => <RowItem key={r.shipmentId} r={r} />)}</div>
+
+                    <div className="border-y border-border px-5 py-2 text-sm font-medium text-amber-600 dark:text-amber-400">
+                      ✓ Đã duyệt ({approved.length})
+                    </div>
+                    {carrierErrorGroups.map((g) => (
+                      <div key={g.carrierKey ?? '—'} className="px-5 py-2">
+                        <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
+                          <span className="uppercase">{g.carrierKey ?? '—'}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{g.count} đơn · Σ lệch {fmtVnd(g.sumDeltaVnd)}đ</span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                          {g.byKind.map((k) => (<span key={k.kind}>{carrierErrorKindLabel(k.kind)}: {k.count} ({fmtVnd(k.sumDeltaVnd)}đ)</span>))}
+                        </div>
+                      </div>
+                    ))}
+                    {approved.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Chưa có đơn nào được duyệt.</p>}
+                    <div className="divide-y divide-border border-t border-border">{approved.map((r) => <RowItem key={r.shipmentId} r={r} />)}</div>
+                  </div>
+                );
+              })()
             ) : (
               <div className="divide-y divide-border">
                 {reports.length === 0 && (

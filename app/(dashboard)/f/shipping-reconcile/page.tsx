@@ -28,7 +28,7 @@ export default async function ShippingReconcilePage({
     listIssueReports(),
     listCarrierErrors(),
   ]);
-  const carrierErrorGroups = summariseCarrierErrors(carrierErrors);
+  const carrierErrorGroups = summariseCarrierErrors(carrierErrors.filter((r) => r.state === 'approved'));
 
   return (
     <div className="space-y-6 p-6">
