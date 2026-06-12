@@ -52,38 +52,12 @@
 import { lookupStorePrefix } from './store-prefix';
 import { countryNameToIso } from './country-name-to-iso';
 import { parsePackagingType, type PackagingType } from './parse-packaging';
+import { LEGACY_COLUMN_MAP, type ColumnMap } from './xlsx-columns';
 
 /** Raw cell value — xlsx returns Date for date cells, number for
  *  numbers, string otherwise. NULL for empty cells. */
 export type Cell = string | number | Date | boolean | null;
 export type RawRow = readonly Cell[];
-
-const COL = {
-  trackingNumber: 4,
-  originHub: 5,
-  carrier: 6,
-  orderNumber: 8,
-  sku: 9,
-  quantity: 10,
-  country: 12,
-  labelCreatedAt: 15,
-  packagingCode: 26,
-  weightKg: 27,
-  dimension: 28,
-  totalCost: 34,
-  base: 35,
-  fuel: 36,
-  remote: 37,
-  demand: 38,
-  directSignature: 39,
-  vat: 40,
-  gogreen: 41,
-  discount: 42,
-  logUniqueCode: 46,
-  shippingLine: 64,
-  elevatedRisk: 74,
-  importHandling: 88,
-} as const;
 
 export type CarrierKey = 'fedex' | 'dhl';
 
@@ -196,31 +170,31 @@ function parseCarrier(raw: string | null): CarrierKey | null {
 
 /** CK fee counts as a billed component ONLY when total = Σ(parts) + CK
  *  (±2đ rounding). TA rows carry a CK value the carrier never billed. */
-function consistentImportHandling(row: RawRow, totalAmount: number): number | null {
-  const ck = asNumber(row[COL.importHandling]);
+function consistentImportHandling(row: RawRow, totalAmount: number, cols: ColumnMap): number | null {
+  const ck = asNumber(row[cols.importHandling]);
   if (!ck || ck <= 0) return null;
   const parts =
-    (asNumber(row[COL.base]) ?? 0) + (asNumber(row[COL.fuel]) ?? 0) +
-    (asNumber(row[COL.remote]) ?? 0) + (asNumber(row[COL.demand]) ?? 0) +
-    (asNumber(row[COL.directSignature]) ?? 0) + (asNumber(row[COL.vat]) ?? 0) +
-    (asNumber(row[COL.gogreen]) ?? 0) + (asNumber(row[COL.discount]) ?? 0) +
-    (asNumber(row[COL.elevatedRisk]) ?? 0);
+    (asNumber(row[cols.base]) ?? 0) + (asNumber(row[cols.fuel]) ?? 0) +
+    (asNumber(row[cols.remote]) ?? 0) + (asNumber(row[cols.demand]) ?? 0) +
+    (asNumber(row[cols.directSignature]) ?? 0) + (asNumber(row[cols.vat]) ?? 0) +
+    (asNumber(row[cols.gogreen]) ?? 0) + (asNumber(row[cols.discount]) ?? 0) +
+    (asNumber(row[cols.elevatedRisk]) ?? 0);
   return Math.abs(parts + ck - totalAmount) <= 2 ? ck : null;
 }
 
-export function parseXlsxRow(row: RawRow): ParseResult {
+export function parseXlsxRow(row: RawRow, cols: ColumnMap = LEGACY_COLUMN_MAP): ParseResult {
   try {
-    const trackingNumber = asString(row[COL.trackingNumber]);
+    const trackingNumber = asString(row[cols.trackingNumber]);
     if (!trackingNumber) return { kind: 'skip_no_tracking' };
 
-    const totalAmount = asNumber(row[COL.totalCost]);
+    const totalAmount = asNumber(row[cols.totalCost]);
     if (totalAmount === null || totalAmount <= 0) return { kind: 'skip_no_cost' };
 
-    const carrierRaw = asString(row[COL.carrier]);
+    const carrierRaw = asString(row[cols.carrier]);
     const carrier = parseCarrier(carrierRaw);
     if (!carrier) return { kind: 'skip_carrier_unknown', carrier: carrierRaw };
 
-    const orderNumberRaw = asString(row[COL.orderNumber]);
+    const orderNumberRaw = asString(row[cols.orderNumber]);
     const storeLookup = lookupStorePrefix(orderNumberRaw);
     if (storeLookup.kind === 'partner_ship') return { kind: 'skip_store_partner' };
     if (storeLookup.kind === 'no_prefix') {
@@ -230,7 +204,7 @@ export function parseXlsxRow(row: RawRow): ParseResult {
       return { kind: 'skip_store_disconnected', storeHandle: storeLookup.info.handle };
     }
 
-    const countryRaw = asString(row[COL.country]);
+    const countryRaw = asString(row[cols.country]);
     const shipCountry = countryNameToIso(countryRaw);
     if (!shipCountry) return { kind: 'skip_no_country', rawCountry: countryRaw };
 
@@ -240,23 +214,23 @@ export function parseXlsxRow(row: RawRow): ParseResult {
       storeHandle: storeLookup.info.handle,
       carrier,
       shipCountry,
-      actualWeightKg: asNumber(row[COL.weightKg]),
-      dimensions: parseDimension(asString(row[COL.dimension])),
-      packagingType: parsePackagingType(asString(row[COL.packagingCode])),
-      labelCreatedAt: asDate(row[COL.labelCreatedAt]),
-      logUniqueCode: asString(row[COL.logUniqueCode]),
-      originHub: asString(row[COL.originHub]),
+      actualWeightKg: asNumber(row[cols.weightKg]),
+      dimensions: parseDimension(asString(row[cols.dimension])),
+      packagingType: parsePackagingType(asString(row[cols.packagingCode])),
+      labelCreatedAt: asDate(row[cols.labelCreatedAt]),
+      logUniqueCode: asString(row[cols.logUniqueCode]),
+      originHub: asString(row[cols.originHub]),
       totalAmount,
-      base: asNumber(row[COL.base]),
-      fuel: asNumber(row[COL.fuel]),
-      remote: asNumber(row[COL.remote]),
-      demand: asNumber(row[COL.demand]),
-      directSignature: asNumber(row[COL.directSignature]),
-      vat: asNumber(row[COL.vat]),
-      gogreen: asNumber(row[COL.gogreen]),
-      discount: asNumber(row[COL.discount]),
-      elevatedRisk: asNumber(row[COL.elevatedRisk]),
-      importHandling: consistentImportHandling(row, totalAmount),
+      base: asNumber(row[cols.base]),
+      fuel: asNumber(row[cols.fuel]),
+      remote: asNumber(row[cols.remote]),
+      demand: asNumber(row[cols.demand]),
+      directSignature: asNumber(row[cols.directSignature]),
+      vat: asNumber(row[cols.vat]),
+      gogreen: asNumber(row[cols.gogreen]),
+      discount: asNumber(row[cols.discount]),
+      elevatedRisk: asNumber(row[cols.elevatedRisk]),
+      importHandling: consistentImportHandling(row, totalAmount, cols),
     };
     return { kind: 'ok', row: parsed };
   } catch (err) {

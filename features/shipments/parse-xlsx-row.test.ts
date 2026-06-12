@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseXlsxRow, type Cell, type RawRow } from './parse-xlsx-row';
+import { resolveColumns } from './xlsx-columns';
 
 /** Build a row keyed by column index. Everything else is null. */
 function rowFromIndex(values: Record<number, Cell>): RawRow {
@@ -225,5 +226,27 @@ describe('import handling (CK) consistency gate', () => {
     expect(r.kind).toBe('ok');
     if (r.kind !== 'ok') return;
     expect(r.row.importHandling).toBeNull();
+  });
+});
+
+describe('parseXlsxRow with 2024-25 layout (resolveColumns)', () => {
+  it('đọc đúng row layout 2024-25 qua resolveColumns', () => {
+    const header: string[] = new Array(80).fill('');
+    header[1]='Label Created Date'; header[2]='Base'; header[3]='Couriers'; header[5]='Order Number';
+    header[16]='Weights'; header[19]='Country'; header[22]='Tracking Number';
+    header[23]='INS | Chi phí Tổng (đ)'; header[24]='Mức giá cơ sở'; header[25]='Phụ phí nhiên liệu';
+    const { columns } = resolveColumns(header);
+    const row: Cell[] = new Array(80).fill(null);
+    row[3]='FedEx'; row[5]='#MBLVD26831'; row[16]=0.5; row[19]='Saudi Arabia';
+    row[22]='887499675299'; row[23]=1504643; row[24]=4747300; row[25]=200000;
+    const r = parseXlsxRow(row, columns);
+    expect(r.kind).toBe('ok');
+    if (r.kind === 'ok') {
+      expect(r.row.trackingNumber).toBe('887499675299');
+      expect(r.row.carrier).toBe('fedex');
+      expect(r.row.totalAmount).toBe(1504643);
+      expect(r.row.base).toBe(4747300);
+      expect(r.row.fuel).toBe(200000);
+    }
   });
 });
