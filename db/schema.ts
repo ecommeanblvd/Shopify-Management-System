@@ -475,7 +475,9 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   //                   kiểm khi bill có dòng này (FedEx Direct Signature).
   applyMode: text('apply_mode').notNull().default('always'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  // $onUpdate bumps on every Drizzle .update() → reconcile cache auto-busts
+  // (latestConfigVersion reads MAX(updated_at)). Insert gets defaultNow.
+  updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
 }, (table) => [
   index('carrier_surcharges_account_kind_idx').on(table.carrierAccountId, table.kind),
 ]);
