@@ -47,7 +47,7 @@ export function MarketRateMatrix({ zones, highlightWeight }: { zones: ZoneView[]
       {matrix.rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Carrier này chưa có bậc giá ở các zone đang hiện.</p>
       ) : (
-        <div className="max-h-[70vh] overflow-auto rounded-md border border-border">
+        <div className="max-h-[70vh] w-fit max-w-full overflow-auto rounded-md border border-border">
           <table className="border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
