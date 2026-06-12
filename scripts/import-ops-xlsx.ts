@@ -33,7 +33,8 @@ async function main(): Promise<void> {
   process.stdout.write(`\n=== Import summary (${(summary.durationMs / 1000).toFixed(1)}s) ===\n`);
   process.stdout.write(`  Total rows:        ${summary.totalRows.toString().padStart(6)}\n`);
   process.stdout.write(`  Parsed valid:      ${summary.parsed.toString().padStart(6)}\n`);
-  process.stdout.write(`  Imported:          ${summary.imported.toString().padStart(6)}\n`);
+  process.stdout.write(`  Imported (new):    ${summary.imported.toString().padStart(6)}\n`);
+  process.stdout.write(`  Updated (in place):${summary.updated.toString().padStart(6)}\n`);
   process.stdout.write(`  Already imported:  ${summary.alreadyImported.toString().padStart(6)}\n`);
   process.stdout.write(`\n  --- Skipped ---\n`);
   for (const [k, v] of Object.entries(summary.skipped)) {

@@ -829,7 +829,10 @@ export const shipmentCharges = pgTable('shipment_charges', {
   importedAt: timestamp('imported_at').defaultNow().notNull(),
 }, (t) => [
   uniqueIndex('shipment_charges_source_hash_idx').on(t.sourceHash),
-  index('shipment_charges_shipment_idx').on(t.shipmentId),
+  // One charge per shipment (1:1). The importer upserts on this key — a
+  // re-export that corrects a row updates IN PLACE instead of inserting a
+  // duplicate (which reconcile would otherwise list twice).
+  uniqueIndex('shipment_charges_shipment_uniq').on(t.shipmentId),
   index('shipment_charges_tracking_idx').on(t.trackingNumber),
 ]);
 

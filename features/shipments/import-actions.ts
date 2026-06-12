@@ -24,11 +24,15 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from './parse-xlsx-row';
 import { invalidateReconcileCache } from './reconcile-cache';
+import { classifyCharge } from './charge-classify';
 
 export interface ImportSummary {
   totalRows: number;
   parsed: number;
   imported: number;
+  /** Existing pack whose billed breakdown changed in the re-export —
+   *  updated IN PLACE (one charge per shipment, no duplicate row). */
+  updated: number;
   alreadyImported: number;
   skipped: {
     no_tracking: number;
@@ -66,6 +70,7 @@ function emptySummary(): ImportSummary {
     totalRows: 0,
     parsed: 0,
     imported: 0,
+    updated: 0,
     alreadyImported: 0,
     skipped: {
       no_tracking: 0,
@@ -82,10 +87,12 @@ function emptySummary(): ImportSummary {
 }
 
 /**
- * Stable SHA-256 hash for dedup. Includes tracking, carrier, total +
- * the discount/fuel/base trio so re-importing a row whose breakdown
- * was corrected by the operator creates a NEW charge (rather than
- * silently overwriting — gives an audit trail).
+ * Stable SHA-256 hash for idempotency. Includes tracking, carrier, total +
+ * the discount/fuel/base trio: identical re-imports hash-match and are
+ * skipped (`unchanged`); a row whose breakdown the operator corrected
+ * hashes differently and is updated IN PLACE (one charge per shipment —
+ * see the shipment_id unique index). The hash drives that classification,
+ * not a new-row audit trail.
  */
 function hashCharge(p: ParsedShipment): string {
   const payload = JSON.stringify({
@@ -97,6 +104,25 @@ function hashCharge(p: ParsedShipment): string {
     d: p.discount,
   });
   return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+/**
+ * Preload the stored idempotency hash for every tracking we're about to
+ * import — one round-trip. Lets the per-row pass decide new/updated/
+ * unchanged (and gives an accurate dry-run preview) without an N+1.
+ */
+async function resolveExistingChargeHashes(trackings: readonly string[]): Promise<Map<string, string>> {
+  if (trackings.length === 0) return new Map();
+  const map = new Map<string, string>();
+  for (let i = 0; i < trackings.length; i += 500) {
+    const chunk = trackings.slice(i, i + 500);
+    const rows = await db
+      .select({ t: schema.shipmentCharges.trackingNumber, hash: schema.shipmentCharges.sourceHash })
+      .from(schema.shipmentCharges)
+      .where(inArray(schema.shipmentCharges.trackingNumber, [...chunk]));
+    for (const r of rows) if (r.t) map.set(r.t, r.hash);
+  }
+  return map;
 }
 
 /**
@@ -200,16 +226,19 @@ export async function importLogExport(
     return summary;
   }
 
-  // PHASE 2 — bulk lookups (one round-trip each).
+  // PHASE 2 — bulk lookups (one round-trip each). `existingHashes` lets
+  // the per-row pass tell new / updated / unchanged apart up front.
   const uniqueStoreHandles = [...new Set(valid.map((v) => v.parsed.storeHandle))];
   const uniqueOrderNumbers = [...new Set(valid.map((v) => v.parsed.orderNumber))];
-  const [storeIds, orderIds, carrierIds] = await Promise.all([
+  const uniqueTrackings = [...new Set(valid.map((v) => v.parsed.trackingNumber))];
+  const [storeIds, orderIds, carrierIds, existingHashes] = await Promise.all([
     resolveStoreIds(uniqueStoreHandles),
     resolveOrderIds(uniqueOrderNumbers),
     resolveCarrierAccountIds(),
+    resolveExistingChargeHashes(uniqueTrackings),
   ]);
 
-  // PHASE 3 — per-row upsert into shipments + insert into shipment_charges.
+  // PHASE 3 — per-row upsert into shipments + shipment_charges.
   // Done sequentially (not parallel) so the unique-index conflict
   // semantics stay deterministic. ~2k rows = single-digit seconds.
   for (const { rowIndex, parsed } of valid) {
@@ -227,8 +256,19 @@ export async function importLogExport(
     }
     const carrierAccountId = carrierIds.get(parsed.carrier) ?? null;
 
+    const newHash = hashCharge(parsed);
+    const decision = classifyCharge(existingHashes.get(parsed.trackingNumber), newHash);
+
+    // Identical re-import → nothing to write (skip the shipment upsert too;
+    // an existing charge implies an existing shipment).
+    if (decision === 'unchanged') {
+      summary.alreadyImported += 1;
+      continue;
+    }
+
     if (dryRun) {
-      summary.imported += 1;
+      if (decision === 'updated') summary.updated += 1;
+      else summary.imported += 1;
       continue;
     }
 
@@ -265,38 +305,58 @@ export async function importLogExport(
       continue;
     }
 
-    const inserted = await db
+    // Upsert the charge keyed on shipment_id (1:1). A corrected re-export
+    // updates the SAME row in place instead of inserting a duplicate that
+    // reconcile would list twice.
+    const chargeValues = {
+      shipmentId,
+      carrierAccountId,
+      trackingNumber: parsed.trackingNumber,
+      totalAmount: parsed.totalAmount.toString(),
+      currency: 'VND',
+      base: parsed.base?.toString() ?? null,
+      fuel: parsed.fuel?.toString() ?? null,
+      remote: parsed.remote?.toString() ?? null,
+      demand: parsed.demand?.toString() ?? null,
+      directSignature: parsed.directSignature?.toString() ?? null,
+      vat: parsed.vat?.toString() ?? null,
+      gogreen: parsed.gogreen?.toString() ?? null,
+      discount: parsed.discount?.toString() ?? null,
+      elevatedRisk: parsed.elevatedRisk?.toString() ?? null,
+      importHandling: parsed.importHandling?.toString() ?? null,
+      source,
+      sourceHash: newHash,
+    };
+    await db
       .insert(schema.shipmentCharges)
-      .values({
-        shipmentId,
-        carrierAccountId,
-        trackingNumber: parsed.trackingNumber,
-        totalAmount: parsed.totalAmount.toString(),
-        currency: 'VND',
-        base: parsed.base?.toString() ?? null,
-        fuel: parsed.fuel?.toString() ?? null,
-        remote: parsed.remote?.toString() ?? null,
-        demand: parsed.demand?.toString() ?? null,
-        directSignature: parsed.directSignature?.toString() ?? null,
-        vat: parsed.vat?.toString() ?? null,
-        gogreen: parsed.gogreen?.toString() ?? null,
-        discount: parsed.discount?.toString() ?? null,
-        elevatedRisk: parsed.elevatedRisk?.toString() ?? null,
-        importHandling: parsed.importHandling?.toString() ?? null,
-        source,
-        sourceHash: hashCharge(parsed),
-      })
-      .onConflictDoNothing({ target: schema.shipmentCharges.sourceHash })
-      .returning({ id: schema.shipmentCharges.id });
+      .values(chargeValues)
+      .onConflictDoUpdate({
+        target: schema.shipmentCharges.shipmentId,
+        set: {
+          carrierAccountId: chargeValues.carrierAccountId,
+          trackingNumber: chargeValues.trackingNumber,
+          totalAmount: chargeValues.totalAmount,
+          currency: chargeValues.currency,
+          base: chargeValues.base,
+          fuel: chargeValues.fuel,
+          remote: chargeValues.remote,
+          demand: chargeValues.demand,
+          directSignature: chargeValues.directSignature,
+          vat: chargeValues.vat,
+          gogreen: chargeValues.gogreen,
+          discount: chargeValues.discount,
+          elevatedRisk: chargeValues.elevatedRisk,
+          importHandling: chargeValues.importHandling,
+          source: chargeValues.source,
+          sourceHash: chargeValues.sourceHash,
+        },
+      });
 
-    if (inserted.length === 0) {
-      summary.alreadyImported += 1;
-    } else {
-      summary.imported += 1;
-    }
+    if (decision === 'updated') summary.updated += 1;
+    else summary.imported += 1;
   }
 
   summary.durationMs = Date.now() - start;
-  if (!dryRun && summary.imported > 0) invalidateReconcileCache();
+  if (!dryRun && summary.imported + summary.updated > 0) invalidateReconcileCache();
   return summary;
 }
