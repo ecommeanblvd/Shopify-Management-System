@@ -296,6 +296,31 @@ export async function executeMarketsApply(storeId: string, userId: string) {
   });
 }
 
+export interface BackupApplyAllResult {
+  storeId: string;
+  storeName: string;
+  ok: boolean;
+  errors: string[];
+}
+
+/** Apply backup (đẩy cấu hình market + flat rates) lên TẤT CẢ store active,
+ *  không bảo trì — tuần tự để không dội Shopify. Dùng khi carrier API gãy. */
+export async function executeMarketsApplyAll(userId: string): Promise<BackupApplyAllResult[]> {
+  const stores = await db.select().from(schema.stores)
+    .where(and(eq(schema.stores.status, 'active'), eq(schema.stores.maintenanceMode, false)));
+  const out: BackupApplyAllResult[] = [];
+  for (const s of stores) {
+    try {
+      const r = await executeMarketsApply(s.id, userId);
+      const errors = r.kind === 'applied' ? r.errors.map((e) => `${e.step}: ${e.error}`) : [];
+      out.push({ storeId: s.id, storeName: s.name, ok: errors.length === 0, errors });
+    } catch (e) {
+      out.push({ storeId: s.id, storeName: s.name, ok: false, errors: [e instanceof Error ? e.message : String(e)] });
+    }
+  }
+  return out;
+}
+
 export async function listApplyHistory(storeId: string, limit = 25) {
   return db.select().from(schema.marketApplyHistory)
     .where(eq(schema.marketApplyHistory.storeId, storeId))

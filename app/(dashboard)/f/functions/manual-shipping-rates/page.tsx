@@ -4,11 +4,13 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listOverridesForStore, previewMarketsApply, executeMarketsApply } from '@/features/markets/actions';
+import { listOverridesForStore, previewMarketsApply, executeMarketsApply, executeMarketsApplyAll } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { ShippingMatrixTable } from '@/components/functions/ShippingMatrixTable';
 import { ApplyModal } from '@/components/markets/ApplyModal';
+import { ApplyAllBackupButton } from '@/components/functions/ApplyAllBackupButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +25,9 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
 
   const stores = (await db.select().from(schema.stores))
     .map((s) => ({ id: s.id, name: s.name, shopDomain: s.shopDomain }));
+  const activeStores = await db.select({ id: schema.stores.id }).from(schema.stores)
+    .where(and(eq(schema.stores.status, 'active'), eq(schema.stores.maintenanceMode, false)));
+  const activeStoreCount = activeStores.length;
   const sp = await searchParams;
   const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
   const overrides = activeId ? await listOverridesForStore(activeId) : [];
@@ -40,6 +45,12 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
     if (!s) throw new Error('unauthenticated');
     const r = await executeMarketsApply(storeId, s.user.id);
     return { errors: r.kind === 'applied' ? r.errors : [] };
+  }
+  async function applyAll() {
+    'use server';
+    const s = await auth.api.getSession({ headers: await headers() });
+    if (!s) throw new Error('unauthenticated');
+    return executeMarketsApplyAll(s.user.id);
   }
 
   return (
@@ -71,6 +82,11 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
               <p className="mb-2 text-amber-700 dark:text-amber-400">
                 Apply đẩy <strong>toàn bộ cấu hình market</strong> của store lên Shopify (gồm flat rates). Dùng khi carrier API gãy.
               </p>
+              <div className="mb-3 border-b border-amber-500/30 pb-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-amber-700/80 dark:text-amber-400/80">Khẩn cấp — apply hàng loạt</p>
+                <ApplyAllBackupButton storeCount={activeStoreCount} onApplyAll={applyAll} />
+              </div>
+              <p className="mb-2 text-xs text-muted-foreground">Hoặc apply từng store:</p>
               <ApplyModal stores={stores} onPreview={preview} onApply={apply} />
             </div>
           )}
