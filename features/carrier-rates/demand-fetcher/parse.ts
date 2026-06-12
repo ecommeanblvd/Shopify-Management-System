@@ -1,14 +1,28 @@
 /**
  * Parser for the FedEx Vietnam Demand-Surcharge PDF text (as produced by
- * pdf-parse). Two layouts exist; we detect and handle both.
+ * pdf-parse). DATE detection and TABLE style are decoupled: a date header and
+ * a table layout vary independently across the PDFs FedEx has published.
  *
  * We only ever care about the **Export-from-Vietnam** value (our fleet ships
  * outbound from VN). The ImportOne column and the page-2+ Global Third-Party
  * (G3P) matrix are ignored.
  *
+ * DATE headers seen (tried in order):
+ *   - "Effective from <Month D, YYYY>"           → { from, to: null } (open).
+ *   - "from <Month D, YYYY> to <Month D, YYYY>"  → { from, to: <to + 1 day> }.
+ *     Matches BOTH "Demand Surcharge from X to Y" (OLD) AND the bare
+ *     "From X to Y" of the RANGE-consolidated PDFs (sep-oct / oct-dec 2025).
+ *
+ * TABLE layouts seen:
+ *   - CONSOLIDATED (NEW + RANGE): one page-1 table; each region row ends in two
+ *     integers "<export> <importone>". Used by both "Effective from" and the
+ *     "From X to Y" range PDFs.
+ *   - OLD mini-table: rows like "Vietnam to Israel 11200 VND 11200 VND".
+ *
  * The asserted ground-truth values come from the real PDFs:
- *   OLD 2025 (Jul 21 – Sep 21): Israel 11200.
- *   NEW 2026 (eff. Jun 18):     Israel 28400, Europe 28400, MEISA 39700.
+ *   OLD 2025   (Jul 21 – Sep 21): Israel 11200.
+ *   NEW 2026   (eff. Jun 18):     Israel 28400, Europe 28400, MEISA 39700.
+ *   RANGE 2025 (Oct 20 – Dec 7):  USA 28400, Canada 28400, …, MEISA 28400.
  *
  * The text below is what pdf-parse actually emits — NOT a clean visual read.
  * Notable real-text quirks handled here:
@@ -16,14 +30,16 @@
  *       "Vietnam to Israel 11200 VND 11200 VND"
  *     i.e. region + Priority-VND + Economy-VND glued together; the first
  *     number is the one we want.
- *   - NEW: each region row ends in two integers "<export> <importone>".
- *     Region names sometimes wrap across lines, e.g.
+ *   - CONSOLIDATED: region names sometimes WRAP across lines and the numbers
+ *     land on the continuation line, e.g.
+ *       "United States of America (USA) and"
+ *       "Puerto Rico 28400 8000"                  → usa 28400
  *       "Middle East/Indian Subcontinent/"
- *       "Africa3 (MEISA) 39700 28400"
- *     but the MEISA keyword still lands on the number-bearing line, so a
- *     per-line keyword match against the line carrying the numbers suffices.
- *   - NEW: the G3P matrix on page 2+ also contains numbers, so we cut the
- *     export section off at the first page break ("-- 1 of").
+ *       "Africa3 (MEISA) 28400 7700"              → meisa 28400
+ *     The "Puerto Rico" line carries NO region keyword, so we buffer preceding
+ *     name text and match the keyword against the COMBINED name.
+ *   - CONSOLIDATED: the G3P matrix on page 2+ also contains numbers, so we cut
+ *     the export section off at the first page break ("-- 1 of").
  */
 
 export interface DemandPeriod {
@@ -51,8 +67,10 @@ const REGION_MATCHERS: Array<{ key: string; re: RegExp }> = [
   { key: 'usa', re: /\bUSA\b|United States/i },
   { key: 'australia_nz', re: /Australia/i },
   { key: 'india', re: /\bIndia\b/i },
-  // Plain "Asia" but not when it is part of another word (e.g. inside a URL).
-  { key: 'asia', re: /\bAsia\b/i },
+  // Plain "Asia", optionally with a footnote digit ("Asia1"). Anchored on a
+  // leading boundary so it won't match "Asia" buried inside another word, but
+  // tolerant of the trailing superscript pdf-parse glues on.
+  { key: 'asia', re: /\bAsia\d*\b/i },
 ];
 
 /** "June 18, 2026" / "July 21, 2025" → UTC-midnight Date. */
@@ -76,41 +94,76 @@ function regionKeyForLine(line: string): string | null {
   return null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * DATE detection, decoupled from the table layout. Tried in order:
+ *   1. "Effective from <date>"            → { from, to: null }.
+ *   2. "from <date> to <date>" (ci)       → { from, to: <to + 1 day> }.
+ *      Matches BOTH "Demand Surcharge from X to Y" AND a bare "From X to Y".
+ * effectiveTo is EXCLUSIVE: the day AFTER the printed end date.
+ */
+function detectDates(text: string): { from: Date; to: Date | null } {
+  const eff = text.match(/Effective from\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})/i);
+  if (eff) {
+    return { from: parseLongDate(eff[1]), to: null };
+  }
+  const range = text.match(
+    /from\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})\s+to\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})/i,
+  );
+  if (range) {
+    const printedTo = parseLongDate(range[2]);
+    return {
+      from: parseLongDate(range[1]),
+      to: new Date(printedTo.getTime() + DAY_MS),
+    };
+  }
+  throw new Error(
+    'parseDemandPdfText: unrecognised PDF — no "Effective from" or "from … to …" date header',
+  );
+}
+
+/**
+ * TABLE-style detection, decoupled from the date header. The consolidated table
+ * (NEW + RANGE) carries the "Export shipments" + "ImportOne" + "Region /
+ * Country" markers and region rows with two trailing integers. Anything else is
+ * the OLD "Vietnam to <region> <n> VND <n> VND" mini-table.
+ */
+function isConsolidated(text: string): boolean {
+  if (!/Export shipments/i.test(text) || !/ImportOne/i.test(text)) {
+    return false;
+  }
+  if (!/Region\s*\/\s*Country/i.test(text)) {
+    return false;
+  }
+  // Discriminator vs the OLD mini-table: the consolidated table has region rows
+  // ending in two bare trailing integers ("28400 8000"). The OLD table's rows
+  // end in "<n> VND" instead, so this is false for OLD.
+  return text.split('\n').some((line) => /(\d[\d,]*)\s+(\d[\d,]*)\s*$/.test(line));
+}
+
 export function parseDemandPdfText(text: string): DemandPeriod {
   if (!text || !text.trim()) {
     throw new Error('parseDemandPdfText: empty text');
   }
 
-  if (/Effective from/i.test(text)) {
-    return parseNew(text);
-  }
-  if (/Demand Surcharge from/i.test(text)) {
-    return parseOld(text);
-  }
-  throw new Error(
-    'parseDemandPdfText: unrecognised PDF — no "Effective from" or "Demand Surcharge from" header',
-  );
+  const { from, to } = detectDates(text);
+  const exportRates = isConsolidated(text)
+    ? parseConsolidatedTable(text)
+    : parseOldTable(text);
+
+  return { effectiveFrom: from, effectiveTo: to, exportRates };
 }
 
 /**
- * OLD 2025 layout. Header:
+ * OLD mini-table. Header e.g.
  *   "Demand Surcharge from July 21, 2025 to September 21, 2025 (Vietnam)"
  * Export rows live between "Export shipments from" and the second
  * "Service Region" / "ImportOne" block, each like:
  *   "Vietnam to Israel 11200 VND 11200 VND"
+ * Returns region key → export VND/kg (rates > 0 only).
  */
-function parseOld(text: string): DemandPeriod {
-  const header = text.match(
-    /Demand Surcharge from\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})\s+to\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})/i,
-  );
-  if (!header) {
-    throw new Error('parseDemandPdfText: OLD format missing "from ... to ..." dates');
-  }
-  const effectiveFrom = parseLongDate(header[1]);
-  const printedTo = parseLongDate(header[2]);
-  // effectiveTo is exclusive: the day AFTER the printed end date.
-  const effectiveTo = new Date(printedTo.getTime() + 24 * 60 * 60 * 1000);
-
+function parseOldTable(text: string): Record<string, number> {
   const lines = text.split('\n');
   const exportRates: Record<string, number> = {};
   let inExport = false;
@@ -133,39 +186,50 @@ function parseOld(text: string): DemandPeriod {
     const value = Number(numMatch[1].replace(/,/g, ''));
     if (value > 0) exportRates[key] = value;
   }
-
-  return { effectiveFrom, effectiveTo, exportRates };
+  return exportRates;
 }
 
 /**
- * NEW 2026 layout. Header:
- *   "Demand Surcharge (Vietnam)" + "Effective from June 18, 2026"
+ * CONSOLIDATED table (NEW "Effective from" + RANGE "From X to Y").
  * One table on page 1; each region row ends with two integers
  *   "<export-from-VN> <importone>"
- * We take the FIRST integer. The export section ends at the first page
- * break ("-- 1 of") / the start of the G3P matrix.
+ * We take the FIRST integer. The export section ends at the first page break
+ * ("-- 1 of") / the start of the G3P matrix.
+ *
+ * Multi-line-region robust: a region name may wrap across lines with the
+ * numbers landing on the continuation line that itself carries NO keyword
+ * (e.g. "United States of America (USA) and" / "Puerto Rico 28400 8000"). We
+ * buffer the leading non-numeric text of each line; when a line ends in two
+ * integers we match the region keyword against (buffer + this line's leading
+ * text) and reset the buffer.
+ * Returns region key → export VND/kg (rates > 0 only).
  */
-function parseNew(text: string): DemandPeriod {
-  const dateMatch = text.match(/Effective from\s+([A-Za-z]+\s+\d{1,2},\s*\d{4})/i);
-  if (!dateMatch) {
-    throw new Error('parseDemandPdfText: NEW format missing "Effective from <date>"');
-  }
-  const effectiveFrom = parseLongDate(dateMatch[1]);
-
+function parseConsolidatedTable(text: string): Record<string, number> {
   // Cut off everything from the first page break onward (G3P matrix etc.).
   const pageBreak = text.search(/--\s*1 of|Global Third-Party/i);
   const section = pageBreak >= 0 ? text.slice(0, pageBreak) : text;
 
   const exportRates: Record<string, number> = {};
+  let nameBuffer = '';
   for (const line of section.split('\n')) {
     // Data rows end in "<int> <int>" — the export value then the ImportOne value.
     const nums = line.match(/(\d[\d,]*)\s+(\d[\d,]*)\s*$/);
-    if (!nums) continue;
-    const key = regionKeyForLine(line);
+    if (!nums) {
+      // Not a number row: treat as (possibly wrapping) region-name text.
+      const trimmed = line.trim();
+      if (trimmed) nameBuffer = nameBuffer ? `${nameBuffer} ${trimmed}` : trimmed;
+      continue;
+    }
+    // Region name = buffered preceding text + this line's leading non-numeric
+    // part (everything before the trailing two integers).
+    const leading = line.slice(0, line.length - nums[0].length);
+    const combinedName = `${nameBuffer} ${leading}`.trim();
+    nameBuffer = '';
+
+    const key = regionKeyForLine(combinedName);
     if (!key) continue;
-    const value = Number(nums[1].replace(/,/g, ''));
+    const value = Number(nums[1].replace(/,/g, '')); // FIRST integer = export.
     if (value > 0) exportRates[key] = value;
   }
-
-  return { effectiveFrom, effectiveTo: null, exportRates };
+  return exportRates;
 }

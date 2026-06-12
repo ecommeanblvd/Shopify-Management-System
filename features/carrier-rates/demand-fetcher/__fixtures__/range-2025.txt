@@ -1,0 +1,150 @@
+1
+Demand Surcharge (Vietnam)
+From October 20, 2025 to December 7, 2025
+Export/ImportOne#
+Surcharge per kg* (in VND)
+Export shipments
+from Vietnam to
+ImportOne#
+shipments to
+Vietnam from
+Region / Country
+Australia, New Zealand 5700 2800
+Asia1 2800 2800
+United States of America (USA) and
+Puerto Rico 28400 8000
+Canada 28400 0
+Israel 28400 0
+Europe2 (EU) 28400 0
+India 2800 7700
+Middle East/Indian Subcontinent/
+Africa3 (MEISA) 28400 7700
+Mexico 28400 6700
+Latin America4 (LAC) 38700 6700
+
+-- 1 of 3 --
+
+2
+Global Third-Party (G3P) ##
+Surcharge per kg* (in VND)
+Origin Region
+/
+Country
+Destination Region / Country
+Australia,
+New
+Zealand
+South
+East
+Asia6
+Asia7
+USA,
+Canada,
+Puerto
+Rico
+Israel Europe2
+(EU) India
+Middle
+East/Indian
+Subcontinent/
+Africa3
+(MEISA)
+Mexico
+Latin
+America4
+(LAC)
+Australia, New
+Zealand 2800 2800 2800 28400 28400 28400 2800 28400 28400 38700
+Mainland
+China, Hong
+Kong SAR
+China, Macau
+SAR China
+5700 2800 2800 28400 28400 28400 2800 28400 28400 49000
+Asia5 5700 2800 2800 28400 28400 28400 2800 28400 28400 38700
+USA, Puerto
+Rico 8000 8000 0 11300 12600 0 8500 8500 8000 8000
+Canada 5700 5700
+8 0 0 12600 0 5700 5700 9 0 5700 10
+Israel 14200 0 0 14200 - 0 14200 14200 14200 14200
+Europe2 (EU) 14200 0 0 14200 12600 0 14200 14200 14200 14200
+India 7700 7700 7700 33500 12600 12900 - 7700 7700 7700
+Middle
+East/Indian
+Subcontinent/
+Africa3
+(MEISA)
+7700 7700 7700 25800 12600 12900 7700 7700 7700 7700
+Mexico 6700 6700 6700 6700 12600 6700 6700 6700 - 6700
+Latin
+America4
+(LAC)
+6700 6700 6700 6700 12600 6700 6700 6700 6700 6700
+Demand Surcharge will be determined at FedEx’s sole discretion and subject to the terms and conditions
+provided in FedEx Service Guide and FedEx Standard Conditions of Carriage of shipment origin country.
+FedEx reserves the right to amend the Demand Surcharge, including but not limited to the rates, duration,
+applicable areas or any other conditions. FedEx may also, at its sole discretion, cancel, modify or adjust any
+waiver of Demand Surcharge by prior notice.
+The surcharge amounts presented above are indicative only and may differ depending on the rate scale or
+price list for which you have registered with FedEx. To find out the actual surcharge for your shipment, please
+log in to your FedEx account on fedex.com and use the “Rates & Transit Times” application. If you have any
+questions, please contact your local Sales or Customer Service team.
+* Minimum of 6,400 VND per shipment applies, regardless of the origin market. The actual surcharge amount
+will be converted to billing currency.
+
+-- 2 of 3 --
+
+3
+# For customers who have registered for the ImportOne service only. Customers registered for the ImportOne
+service will receive discounts based on the published destination-based International Import Express base
+rates, as indicated in their pricing agreement. For all other customers who have not registered for ImportOne
+service, surcharges applied on inbound shipments will be determined by the originating country/territory.
+## For customers who have registered for the Global Third-Party service only. For customers registered for
+the Global Third-Party service, discounts are based on the published Global Third-Party base rates, as
+indicated in their pricing agreement. For all other customers who have not registered for Global Third-Party
+service, surcharges applied on third-party shipments will be determined by the originating country/territory.
+Region / Country
+1. Asia: Includes American Samoa, Brunei, Cambodia, Mainland China, Cook Islands, East Timor (Timor-
+Leste), Fiji, French Polynesia, Guam, Hong Kong SAR China, Indonesia, Japan, Laos, Macau SAR China,
+Malaysia, Marshall Islands, Micronesia, Mongolia, New Caledonia, Northern Mariana Islands, Palau,
+Papua New Guinea, Philippines, Rota, Saipan, Samoa, Singapore, South Korea, Tahiti, Taiwan China,
+Thailand, Tinian, Tonga, Vanuatu, and Wallis and Futuna.
+2. EU: Includes Albania, Andorra, Armenia, Austria, Azerbaijan, Belarus, Belgium, Bosnia-Herzegovina,
+Bulgaria, Canary Islands, Channel Islands, Croatia, Cyprus, Czech Republic, Denmark, Estonia, Faeroe
+Islands, Finland, France, Georgia, Germany, Gibraltar, Greece, Greenland, Hungary, Iceland, Ireland,
+Italy, Latvia, Liechtenstein, Lithuania, Luxembourg, Macedonia, Malta, Moldova, Monaco,
+Montenegro, Netherlands, Norway, Poland, Portugal, Romania, Russia, San Marino, Serbia, Slovak
+Republic, Slovenia, Spain, Sweden, Switzerland, Turkey, Ukraine, United Kingdom and Vatican City.
+3. MEISA: Includes Afghanistan, Algeria, Angola, Bahrain, Bangladesh, Benin, Bhutan, Botswana, Burkina
+Faso, Burundi, Cameroon, Cape Verde, Chad, Congo, Congo, Dem Rep Of, Djibouti, Egypt, Eritrea,
+Ethiopia, Gabon, Gambia, Ghana, Guinea, Iraq, Ivory Coast, Jordan, Kazakhstan, Kenya, Kuwait,
+Kyrgyzstan, Lebanon, Lesotho, Liberia, Libya, Madagascar, Malawi, Maldives, Mali, Mauritania,
+Mauritius, Morocco, Mozambique, Namibia, Nepal, Niger, Nigeria, Oman, Pakistan, Palestine
+Autonomous, Qatar, Reunion, Rwanda, Saudi Arabia (as destination only), Senegal, Seychelles, South
+Africa, Sri Lanka, Swaziland, Tanzania, Togo, Tunisia, Uganda, United Arab Emirates, Uzbekistan,
+Zambia and Zimbabwe.
+4. LAC: Includes Anguilla, Antigua, Argentina, Aruba, Bahamas, Barbados, Barbuda, Belize, Bermuda,
+Bolivia, Bonaire, Brazil, British Virgin Islands, Cayman Islands, Chile, Colombia, Costa Rica, Curacao,
+Dominica, Dominican Republic, Ecuador, El Salvador, French Guiana, Grand Cayman, Great Thatch
+Island, Great Tobago Islands, Grenada, Guadeloupe, Guatemala, Guyana, Haiti, Honduras, Jamaica,
+Jost Van Dyke Islands, Martinique, Montserrat, Nevis, Nicaragua, Norman Island, Panama, Paraguay,
+Peru, Saba, St. Barthelemy, St. Christopher, St. Croix Island, St. Eustatius, St. John, St. Kitts & Nevis, St.
+Lucia, St. Maarten, St. Martin, St. Thomas, St. Vincent, Suriname, Tortola Island, Trinidad & Tobago,
+Turks & Caicos Islands, U.S. Virgin Islands, Union Island, Uruguay and Venezuela.
+5. Asia (as G3P origin): Includes Cambodia, Guam, Indonesia, Japan, Malaysia, Philippines, Singapore,
+South Korea, Taiwan China, and Thailand.
+6. South East Asia (as G3P destination): Includes Guam, Indonesia, Macau SAR China, Malaysia,
+Philippines and Thailand.
+7. Asia (as G3P destination): Includes American Samoa, Brunei, Cambodia, Mainland China, Cook
+Islands, East Timor (Timor-Leste), Fiji, French Polynesia, Hong Kong SAR China, Japan, Laos, Marshall
+Islands, Micronesia, Mongolia, New Caledonia, Northern Mariana Islands, Palau, Papua New Guinea,
+Rota, Saipan, Samoa, Singapore, South Korea, Tahiti, Taiwan China, Tinian, Tonga, Vanuatu and Wallis
+and Futuna.
+8. The surcharge amount applies to Indonesia.
+9. The surcharge amount applies to Afghanistan, Bahrain, Bangladesh, Bhutan, Egypt, Iraq, Jordan,
+Kuwait, Lebanon, Maldives, Nepal, Oman, Pakistan, Palestine Autonomous, Qatar, Saudi Arabia, South
+Africa, Sri Lanka and United Arab Emirates.
+10. The surcharge amount applies to Brazil.
+
+-- 3 of 3 --
+

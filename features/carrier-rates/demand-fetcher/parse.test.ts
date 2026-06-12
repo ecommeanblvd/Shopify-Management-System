@@ -42,6 +42,34 @@ describe('parseDemandPdfText — NEW 2026 format', () => {
   });
 });
 
+describe('parseDemandPdfText — RANGE 2025 format ("From X to Y" + consolidated table)', () => {
+  const period = parseDemandPdfText(fixture('range-2025.txt'));
+
+  it('parses effective-from from the "From <date> to <date>" header', () => {
+    expect(period.effectiveFrom.getTime()).toBe(Date.UTC(2025, 9, 20));
+  });
+
+  it('parses effective-to as the printed end date + 1 day (exclusive)', () => {
+    // Printed "to December 7, 2025" → exclusive end Dec 8, 2025.
+    expect(period.effectiveTo?.getTime()).toBe(Date.UTC(2025, 11, 8));
+  });
+
+  it('extracts export rates, incl. multi-line USA + MEISA regions (FIRST number per row)', () => {
+    expect(period.exportRates).toEqual({
+      australia_nz: 5700,
+      asia: 2800,
+      usa: 28400,
+      canada: 28400,
+      israel: 28400,
+      europe: 28400,
+      india: 2800,
+      meisa: 28400,
+      mexico: 28400,
+      lac: 38700,
+    });
+  });
+});
+
 describe('parseDemandPdfText — error handling', () => {
   it('throws on empty text', () => {
     expect(() => parseDemandPdfText('')).toThrow();
