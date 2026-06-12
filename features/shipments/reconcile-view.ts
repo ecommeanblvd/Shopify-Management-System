@@ -11,17 +11,20 @@ import {
 } from './reconcile';
 import { getReconcileCached } from './reconcile-cache';
 
-export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored';
+export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error';
 
 export interface StatusRecord {
   status: 'reconciled' | 'ignored' | 'carrier_error';
   note: string | null;
   billedTotalAtReview: number | null;
+  carrierErrorKind?: string | null;
+  deltaVndAtReview?: number | null;
 }
 
 export interface ReconcileViewRow extends ReconcileRow {
   status: ReconcileStatus;
   note: string | null;
+  carrierErrorKind: string | null;
   billedChangedSinceReview: boolean;
   /** billedBase + billedDiscount (discount stored negative). Avoids the
    *  list-base/discount display artifact — see spec §3.6. */
@@ -53,6 +56,7 @@ export function mergeStatus(
       ...r,
       status: (rec?.status ?? 'pending') as ReconcileStatus,
       note: rec?.note ?? null,
+      carrierErrorKind: rec?.carrierErrorKind ?? null,
       billedChangedSinceReview,
       billedBaseNet: netBase(r.billedBase, r.billedDiscount),
       engineBaseNet: r.engineBase,
@@ -80,6 +84,8 @@ export async function reconcileShipmentsWithStatus(
       status: schema.shipmentReconcileStatus.status,
       note: schema.shipmentReconcileStatus.note,
       billedTotalAtReview: schema.shipmentReconcileStatus.billedTotalAtReview,
+      carrierErrorKind: schema.shipmentReconcileStatus.carrierErrorKind,
+      deltaVndAtReview: schema.shipmentReconcileStatus.deltaVndAtReview,
     })
     .from(schema.shipmentReconcileStatus);
 
@@ -89,6 +95,8 @@ export async function reconcileShipmentsWithStatus(
       status: s.status,
       note: s.note,
       billedTotalAtReview: s.billedTotalAtReview !== null ? Number(s.billedTotalAtReview) : null,
+      carrierErrorKind: s.carrierErrorKind ?? null,
+      deltaVndAtReview: s.deltaVndAtReview !== null ? Number(s.deltaVndAtReview) : null,
     });
   }
 

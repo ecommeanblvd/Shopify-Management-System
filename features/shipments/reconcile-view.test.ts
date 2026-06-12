@@ -64,4 +64,16 @@ describe('mergeStatus', () => {
     expect(r.billedBaseNet).toBe(1_077_277);
     expect(r.engineBaseNet).toBe(1_075_196);
   });
+
+  it('dòng carrier_error mang status + carrierErrorKind; dòng khác kind=null', () => {
+    const base = [row({ shipmentId: 'a' }), row({ shipmentId: 'b' })];
+    const map = new Map<string, StatusRecord>([
+      ['a', { status: 'carrier_error', note: 'FedEx sai cân', carrierErrorKind: 'weight', deltaVndAtReview: 120000, billedTotalAtReview: 500000 }],
+    ]);
+    const rows = mergeStatus(base, map);
+    expect(rows[0].status).toBe('carrier_error');
+    expect(rows[0].carrierErrorKind).toBe('weight');
+    expect(rows[1].status).toBe('pending');
+    expect(rows[1].carrierErrorKind).toBeNull();
+  });
 });

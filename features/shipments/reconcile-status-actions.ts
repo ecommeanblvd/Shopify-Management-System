@@ -7,6 +7,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { isCarrierErrorKind } from './carrier-error-kinds';
 
 const ROUTE = '/f/shipping-reconcile';
 
@@ -37,6 +38,8 @@ export async function setReconcileStatus(input: SetReconcileStatusInput): Promis
       status: input.status,
       note: input.note?.trim() || null,
       billedTotalAtReview: input.billedTotal.toString(),
+      carrierErrorKind: null,
+      deltaVndAtReview: null,
       reconciledBy: userId,
     })
     .onConflictDoUpdate({
@@ -45,6 +48,49 @@ export async function setReconcileStatus(input: SetReconcileStatusInput): Promis
         status: input.status,
         note: input.note?.trim() || null,
         billedTotalAtReview: input.billedTotal.toString(),
+        carrierErrorKind: null,
+        deltaVndAtReview: null,
+        reconciledBy: userId,
+        reconciledAt: sql`now()`,
+      },
+    });
+  revalidatePath(ROUTE);
+}
+
+export interface ApproveCarrierErrorInput {
+  shipmentId: string;
+  kind: string;
+  note: string;
+  billedTotal: number;
+  deltaVnd: number;
+}
+
+/** Logistics duyệt: khoản này lệch THẬT do carrier tính sai. Trạng thái cuối
+ *  (đơn rời pending). Loại lỗi + lý do bắt buộc; snapshot delta để report. */
+export async function approveCarrierError(input: ApproveCarrierErrorInput): Promise<void> {
+  const userId = await requireUser();
+  const note = input.note.trim();
+  if (!note) throw new Error('Cần ghi rõ lý do lỗi carrier');
+  if (!isCarrierErrorKind(input.kind)) throw new Error('Loại lỗi không hợp lệ');
+  await db
+    .insert(schema.shipmentReconcileStatus)
+    .values({
+      shipmentId: input.shipmentId,
+      status: 'carrier_error',
+      note,
+      carrierErrorKind: input.kind,
+      billedTotalAtReview: input.billedTotal.toString(),
+      deltaVndAtReview: input.deltaVnd.toString(),
+      reconciledBy: userId,
+    })
+    .onConflictDoUpdate({
+      target: schema.shipmentReconcileStatus.shipmentId,
+      set: {
+        status: 'carrier_error',
+        note,
+        carrierErrorKind: input.kind,
+        billedTotalAtReview: input.billedTotal.toString(),
+        deltaVndAtReview: input.deltaVnd.toString(),
         reconciledBy: userId,
         reconciledAt: sql`now()`,
       },

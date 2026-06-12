@@ -212,6 +212,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: string; className: string }> = {
   reconciled: { label: 'Đã đối soát', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
   ignored: { label: 'Bỏ qua', className: 'border border-border text-muted-foreground' },
+  carrier_error: { label: 'Lỗi carrier', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
 };
 
 function FragmentRow({
