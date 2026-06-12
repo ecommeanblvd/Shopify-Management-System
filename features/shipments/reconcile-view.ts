@@ -14,7 +14,7 @@ import { getReconcileCached } from './reconcile-cache';
 export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error';
 
 export interface StatusRecord {
-  status: 'reconciled' | 'ignored' | 'carrier_error';
+  status: 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
   note: string | null;
   billedTotalAtReview: number | null;
   carrierErrorKind?: string | null;
