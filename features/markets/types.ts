@@ -24,6 +24,10 @@ export interface ShippingRate {
 export interface ShippingZone {
   countries: string[];
   rates: Record<string, ShippingRate>;
+  /** Nhãn mô tả gốc (vd "Middle East — DHL 9 / FedEx H"). Chỉ dùng nội bộ để
+   *  hiển thị dòng phụ + tra cứu mapping carrier — KHÔNG đẩy lên Shopify (Shopify
+   *  chỉ nhận key zone = mã ngắn ME1/US1…). Undefined với zone chưa đặt mã. */
+  label?: string;
 }
 
 export interface MarketShipping {
