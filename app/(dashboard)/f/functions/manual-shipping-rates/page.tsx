@@ -55,21 +55,18 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
   }
 
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
-      <Link href="/f/functions" className="text-sm text-muted-foreground hover:text-foreground">← Functions</Link>
-      <div>
-        <h1 className="text-4xl font-semibold tracking-tight">Manual Shipping rates</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Bảng giá ship flat (theo zone × bậc cân) đang cấu hình cho từng store — đây là rate
-          backup Shopify dùng khi API FedEx/DHL gãy. Apply để đẩy lại lên Shopify khi cần.
-        </p>
+    <div className="px-6 md:px-10 py-5 space-y-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <Link href="/f/functions" className="text-sm text-muted-foreground hover:text-foreground">← Functions</Link>
+        <h1 className="text-xl font-semibold tracking-tight">Manual Shipping rates</h1>
+        <span className="text-xs text-muted-foreground">Giá ship flat (zone × bậc cân) — backup Shopify khi carrier API gãy.</span>
       </div>
 
       {stores.length === 0 ? (
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">Chưa có store nào kết nối.</div>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {stores.map((s) => (
               <Link key={s.id} href={`/f/functions/manual-shipping-rates?store=${s.id}`}
                 className={`rounded border px-3 py-1 text-sm ${s.id === activeId ? 'border-foreground font-medium' : 'border-border text-muted-foreground hover:bg-muted'}`}>
@@ -79,17 +76,21 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           </div>
 
           {canApply && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-              <p className="mb-2 text-amber-700 dark:text-amber-400">
-                Apply đẩy <strong>toàn bộ cấu hình market</strong> của store lên Shopify (gồm flat rates). Dùng khi carrier API gãy.
-              </p>
-              <div className="mb-3 border-b border-amber-500/30 pb-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-amber-700/80 dark:text-amber-400/80">Khẩn cấp — apply hàng loạt</p>
-                <ApplyAllBackupButton storeCount={activeStoreCount} onApplyAll={applyAll} />
+            <details className="rounded-md border border-amber-500/40 bg-amber-500/5 text-sm">
+              <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
+                ⚡ Apply backup lên Shopify (khẩn cấp khi carrier API gãy)
+              </summary>
+              <div className="space-y-3 px-3 pb-3">
+                <div className="border-b border-amber-500/30 pb-3">
+                  <p className="mb-2 text-xs text-muted-foreground">Apply hàng loạt — đẩy toàn bộ cấu hình market (gồm flat rates) lên tất cả store:</p>
+                  <ApplyAllBackupButton storeCount={activeStoreCount} onApplyAll={applyAll} />
+                </div>
+                <div>
+                  <p className="mb-2 text-xs text-muted-foreground">Hoặc apply từng store:</p>
+                  <ApplyModal stores={stores} onPreview={preview} onApply={apply} />
+                </div>
               </div>
-              <p className="mb-2 text-xs text-muted-foreground">Hoặc apply từng store:</p>
-              <ApplyModal stores={stores} onPreview={preview} onApply={apply} />
-            </div>
+            </details>
           )}
 
           {markets.length === 0 ? (

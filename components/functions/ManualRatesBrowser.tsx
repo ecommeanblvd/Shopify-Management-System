@@ -13,6 +13,24 @@ function fmtPrice(price: number, currency: string): string {
   return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(price)} ${currency}`;
 }
 
+// Cho phép search theo TÊN quốc gia (vd "Saudi", "Nhật") chứ không chỉ mã ISO.
+const regionEn = typeof Intl !== 'undefined' && Intl.DisplayNames ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
+const regionVi = typeof Intl !== 'undefined' && Intl.DisplayNames ? new Intl.DisplayNames(['vi'], { type: 'region' }) : null;
+const countryTextCache = new Map<string, string>();
+/** Chuỗi search cho 1 mã nước: gồm mã + tên tiếng Anh + tên tiếng Việt (lowercase). */
+function countrySearchText(code: string): string {
+  const k = code.toUpperCase();
+  let v = countryTextCache.get(k);
+  if (v === undefined) {
+    const parts = [k];
+    try { const en = regionEn?.of(k); if (en) parts.push(en); } catch { /* mã lạ */ }
+    try { const vi = regionVi?.of(k); if (vi) parts.push(vi); } catch { /* mã lạ */ }
+    v = parts.join(' ').toLowerCase();
+    countryTextCache.set(k, v);
+  }
+  return v;
+}
+
 /** MỘT bảng cho cả store: cột = mọi zone (ME1, ME2, US1…) gộp ngang theo market,
  *  dòng = bậc cân (hợp nhất, sắp theo cận trên kg). Tab carrier chung; header zone
  *  dính trên, cột bậc cân dính trái; vạch ngăn giữa các market. Search lọc cột
@@ -39,7 +57,7 @@ export function ManualRatesBrowser({ markets }: { markets: MarketZones[] }) {
           z.zoneName.toLowerCase().includes(needle) ||
           z.market.toLowerCase().includes(needle) ||
           (z.label ?? '').toLowerCase().includes(needle) ||
-          z.countries.some((c) => c.toLowerCase().includes(needle)),
+          z.countries.some((c) => countrySearchText(c).includes(needle)),
         ),
     [allZones, active, needle],
   );
