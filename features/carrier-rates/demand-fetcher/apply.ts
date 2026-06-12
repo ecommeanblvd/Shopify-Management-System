@@ -33,7 +33,14 @@ export function buildDemandRows(
   const rows: DemandRowSpec[] = [];
   const unmapped = new Set<string>();
   sorted.forEach((p, i) => {
-    const end = p.effectiveTo ?? (i + 1 < sorted.length ? sorted[i + 1].effectiveFrom : null);
+    // Defensive clamp: an OLD-format period keeps its printed effectiveTo
+    // verbatim. If that extends past the NEXT period's effectiveFrom for the
+    // same region, the two windows overlap and the engine double-charges
+    // demand. Clamp endsAt down to the next period's start when that happens.
+    const nextFrom = i + 1 < sorted.length ? sorted[i + 1].effectiveFrom : null;
+    const rawEnd = p.effectiveTo ?? nextFrom;
+    const end =
+      rawEnd && nextFrom && rawEnd.getTime() > nextFrom.getTime() ? nextFrom : rawEnd;
     for (const [regionKey, value] of Object.entries(p.exportRates)) {
       const countryCodes = regionToCountries(regionKey);
       if (countryCodes.length === 0) {

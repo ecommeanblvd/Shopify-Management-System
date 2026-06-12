@@ -25,6 +25,16 @@ describe('buildDemandRows', () => {
     );
   });
 
+  it('clamp endsAt kỳ OLD khi effectiveTo vượt quá from kỳ kế (chống chồng cửa sổ)', () => {
+    const { rows } = buildDemandRows([
+      P('2025-07-21', '2025-12-31', { israel: 11200 }), // OLD effectiveTo vượt quá kỳ kế
+      P('2025-09-01', null, { israel: 28400 }),
+    ]);
+    const il = rows.filter((r) => r.regionKey === 'israel');
+    expect(il[0].endsAt?.toISOString()).toBe(new Date('2025-09-01').toISOString());
+    expect(il[1].endsAt).toBeNull();
+  });
+
   it('vùng không map → unmappedRegions, không tạo row', () => {
     const { rows, unmappedRegions } = buildDemandRows([P('2026-01-01', null, { israel: 1, narnia: 2 })]);
     expect(rows).toHaveLength(1);
