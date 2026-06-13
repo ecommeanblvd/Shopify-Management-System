@@ -83,7 +83,7 @@ export default async function WorkspacePage({
   }
 
   const selectedCard = cards.find((c) => c.id === selectedCardId) ?? null;
-  const { zones: matrixZones, tiers, cells } = await loadMatrix(id, selectedCardId);
+  const { zones: matrixZones, tiers, cells, pakCells, pakTiers } = await loadMatrix(id, selectedCardId);
   const zonesWithCountries = await listZonesWithCountries(id);
 
   const toolbarStart = (
@@ -134,6 +134,10 @@ export default async function WorkspacePage({
         matrixZones={matrixZones}
         tiers={tiers.map((t) => ({ id: t.id, upperKg: t.upperKg }))}
         cells={cells
+          .filter((c): c is typeof c & { costAmount: string } => c.costAmount !== null)
+          .map((c) => ({ zoneId: c.zoneId, tierId: c.tierId, costAmount: c.costAmount }))}
+        pakTiers={pakTiers.map((t) => ({ id: t.id, upperKg: t.upperKg }))}
+        pakCells={pakCells
           .filter((c): c is typeof c & { costAmount: string } => c.costAmount !== null)
           .map((c) => ({ zoneId: c.zoneId, tierId: c.tierId, costAmount: c.costAmount }))}
         zonesWithCountries={zonesWithCountries.map((z) => ({ id: z.id, label: z.label, countries: z.countries }))}

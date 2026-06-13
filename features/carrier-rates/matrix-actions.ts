@@ -3,6 +3,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import type { ParsedMatrixCsv } from './matrix-csv';
+import { splitPackageCells } from './matrix-package-split';
 
 export interface MatrixCell {
   zoneId: string;
@@ -14,7 +15,12 @@ export interface MatrixCell {
 export interface MatrixSnapshot {
   zones: { id: string; label: string; position: number }[];
   tiers: { id: string; upperKg: string; position: number }[];
+  /** Cells loại 'package' (hộp). */
   cells: MatrixCell[];
+  /** Cells loại 'pak' (FedEx có; DHL hiện chưa). Rỗng nếu card không có PAK. */
+  pakCells: MatrixCell[];
+  /** Bộ bậc PAK — subset của `tiers` có giá pak, sắp theo upper_kg. */
+  pakTiers: { id: string; upperKg: string; position: number }[];
 }
 
 export async function loadMatrix(carrierAccountId: string, rateCardId: string): Promise<MatrixSnapshot> {
@@ -39,7 +45,7 @@ export async function loadMatrix(carrierAccountId: string, rateCardId: string): 
     .orderBy(asc(sql`(${schema.carrierWeightTiers.upperKg})::numeric`));
 
   if (zones.length === 0 || tiers.length === 0) {
-    return { zones, tiers, cells: [] };
+    return { zones, tiers, cells: [], pakCells: [], pakTiers: [] };
   }
 
   const cellRows = await db
@@ -48,23 +54,20 @@ export async function loadMatrix(carrierAccountId: string, rateCardId: string): 
       tierId: schema.carrierRateCells.carrierWeightTierId,
       costAmount: schema.carrierRateCells.costAmount,
       updatedAt: schema.carrierRateCells.updatedAt,
+      packageType: schema.carrierRateCells.packageType,
     })
     .from(schema.carrierRateCells)
     .where(eq(schema.carrierRateCells.rateCardId, rateCardId));
 
-  const cells: MatrixCell[] = cellRows.map((r) => ({
-    zoneId: r.zoneId,
-    tierId: r.tierId,
-    costAmount: r.costAmount,
-    updatedAt: r.updatedAt,
-  }));
+  const { packageCells, pakCells, pakTierIds } = splitPackageCells(cellRows);
+  const pakTiers = tiers.filter((t) => pakTierIds.includes(t.id));
 
-  return { zones, tiers, cells };
+  return { zones, tiers, cells: packageCells, pakCells, pakTiers };
 }
 
 export async function setCell({
-  rateCardId, zoneId, tierId, costAmount, userId,
-}: { rateCardId: string; zoneId: string; tierId: string; costAmount: string; userId: string }): Promise<void> {
+  rateCardId, zoneId, tierId, costAmount, userId, packageType = 'package',
+}: { rateCardId: string; zoneId: string; tierId: string; costAmount: string; userId: string; packageType?: 'pak' | 'package' }): Promise<void> {
   const n = Number(costAmount);
   if (!Number.isFinite(n) || n < 0) throw new Error('Cost must be a non-negative number.');
 
@@ -74,7 +77,7 @@ export async function setCell({
       rateCardId,
       carrierZoneId: zoneId,
       carrierWeightTierId: tierId,
-      packageType: 'package',
+      packageType,
       costAmount: n.toFixed(2),
       updatedBy: userId,
     })
@@ -90,12 +93,13 @@ export async function setCell({
 }
 
 export async function clearCell({
-  rateCardId, zoneId, tierId,
-}: { rateCardId: string; zoneId: string; tierId: string }): Promise<void> {
+  rateCardId, zoneId, tierId, packageType = 'package',
+}: { rateCardId: string; zoneId: string; tierId: string; packageType?: 'pak' | 'package' }): Promise<void> {
   await db.delete(schema.carrierRateCells).where(and(
     eq(schema.carrierRateCells.rateCardId, rateCardId),
     eq(schema.carrierRateCells.carrierZoneId, zoneId),
     eq(schema.carrierRateCells.carrierWeightTierId, tierId),
+    eq(schema.carrierRateCells.packageType, packageType),
   ));
 }
 
