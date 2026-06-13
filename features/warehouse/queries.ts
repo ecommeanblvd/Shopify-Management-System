@@ -1,6 +1,57 @@
 /** Read-side queries cho trang Kho (board + drawer lịch sử movement). */
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+
+export interface WarehouseSummary {
+  /** Số dòng tồn (sku × kho). */
+  totalLines: number;
+  /** Số SKU khác nhau. */
+  totalSkus: number;
+  /** Σ qty_on_hand toàn kho. */
+  totalQtyOnHand: number;
+  /** Σ giá vốn (dom_price, VND) của các MÓN đang in_stock. */
+  totalValueVnd: number;
+  /** Số món in_stock CÓ giá vốn (dom_price) — coverage. */
+  valuedUnits: number;
+  /** Tổng món in_stock (để hiện coverage X/Y). */
+  inStockUnits: number;
+  /** Nhập (Σ delta_on_hand>0) trong [from,to). */
+  movementIn: number;
+  /** Xuất (Σ |delta_on_hand<0|) trong [from,to). */
+  movementOut: number;
+}
+
+/** Tổng quan kho: giá trị (Σ giá vốn dom_price của món in_stock, VND) + nhập/xuất
+ *  theo khoảng ngày (sổ inventory_movements). Toàn kho (mọi mã kho). */
+export async function getWarehouseSummary(from: Date, to: Date): Promise<WarehouseSummary> {
+  // Đếm dòng/sku/tồn từ warehouse_inventory.
+  const invRes = await db.execute(sql`
+    select count(*)::int as lines, count(distinct sku)::int as skus,
+           coalesce(sum(qty_on_hand),0)::int as qty
+    from warehouse_inventory`);
+  const v = (invRes.rows ?? (invRes as unknown as Array<Record<string, unknown>>))[0];
+
+  // Giá trị = Σ dom_price (VND) của món in_stock; coverage = số món có giá.
+  const valRes = await db.execute(sql`
+    select coalesce(sum(dom_price::float8),0)::float8 as val,
+           count(dom_price)::int as valued, count(*)::int as units
+    from goods_receipt_items where stock_status = 'in_stock'`);
+  const p = (valRes.rows ?? (valRes as unknown as Array<Record<string, unknown>>))[0];
+
+  const mvRes = await db.execute(sql`
+    select
+      coalesce(sum(case when delta_on_hand > 0 then delta_on_hand else 0 end),0)::int as inq,
+      coalesce(sum(case when delta_on_hand < 0 then -delta_on_hand else 0 end),0)::int as outq
+    from inventory_movements
+    where created_at >= ${from} and created_at < ${to}`);
+  const m = (mvRes.rows ?? (mvRes as unknown as Array<Record<string, unknown>>))[0];
+
+  return {
+    totalLines: Number(v.lines), totalSkus: Number(v.skus), totalQtyOnHand: Number(v.qty),
+    totalValueVnd: Math.round(Number(p.val)), valuedUnits: Number(p.valued), inStockUnits: Number(p.units),
+    movementIn: Number(m.inq), movementOut: Number(m.outq),
+  };
+}
 
 export interface InventoryRow {
   id: string;

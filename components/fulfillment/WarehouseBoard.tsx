@@ -7,9 +7,10 @@ import {
   upsertWarehouseItem, adjustStock, transferStock, getMovements, getItems,
 } from '@/features/fulfillment/warehouse-actions';
 import type { WarehouseItemInput } from '@/features/fulfillment/warehouse-actions';
-import type { InventoryRow, MovementRow, WarehouseItemRow } from '@/features/warehouse/queries';
+import type { InventoryRow, MovementRow, WarehouseItemRow, WarehouseSummary } from '@/features/warehouse/queries';
 
 const fmtQty = (n: number) => new Intl.NumberFormat('vi-VN').format(n);
+const fmtVnd = (n: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n);
 const fmtDelta = (n: number) =>
   n > 0 ? `+${new Intl.NumberFormat('vi-VN').format(n)}` : new Intl.NumberFormat('vi-VN').format(n);
 
@@ -57,6 +58,9 @@ const REASON_LABEL: Record<string, string> = {
 interface Props {
   items: InventoryRow[];
   canManage: boolean;
+  summary: WarehouseSummary;
+  /** Khoảng ngày đang chọn cho nhập/xuất (7/30/90/365). */
+  days: number;
 }
 
 type UpsertForm = {
@@ -70,9 +74,22 @@ const EMPTY_FORM: UpsertForm = {
   shelf: '', floor: '', bin: '', note: '',
 };
 
-export function WarehouseBoard({ items, canManage }: Props) {
+function SummaryCard({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'in' | 'out' }) {
+  const valColor = tone === 'in' ? 'text-emerald-600 dark:text-emerald-400' : tone === 'out' ? 'text-red-600 dark:text-red-400' : '';
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-1 whitespace-nowrap font-mono tabular-nums font-semibold ${valColor}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
+    </div>
+  );
+}
+
+export function WarehouseBoard({ items, canManage, summary, days }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('ALL');
+  const [q, setQ] = useState('');
+  const [showForm, setShowForm] = useState(false);
 
   // Mã kho hiển thị làm tab: suy từ dữ liệu, sắp theo GVM/AP/DM rồi tên lạ.
   const warehouseCodes = (() => {
@@ -97,10 +114,18 @@ export function WarehouseBoard({ items, canManage }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const visible = tab === 'ALL' ? items : items.filter((i) => i.warehouseCode === tab);
+  const byTab = tab === 'ALL' ? items : items.filter((i) => i.warehouseCode === tab);
+  const needle = q.trim().toLowerCase();
+  const visible = needle === ''
+    ? byTab
+    : byTab.filter((i) =>
+        i.sku.toLowerCase().includes(needle) ||
+        (i.productTitle ?? '').toLowerCase().includes(needle) ||
+        (i.variantTitle ?? '').toLowerCase().includes(needle));
   const showWarehouseCol = tab === 'ALL';
 
   function loadRow(item: InventoryRow) {
+    setShowForm(true);
     setEditingKey(`${item.sku}@${item.warehouseCode}`);
     setForm({
       sku: item.sku,
@@ -155,12 +180,51 @@ export function WarehouseBoard({ items, canManage }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Tổng quan kho */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <SummaryCard label="Mã hàng" value={fmtQty(summary.totalSkus)} sub={`${fmtQty(summary.totalLines)} dòng tồn`} />
+        <SummaryCard label="Tổng tồn" value={fmtQty(summary.totalQtyOnHand)} sub="sản phẩm" />
+        <SummaryCard label="Giá trị kho" value={`${fmtVnd(summary.totalValueVnd)} đ`} sub={`giá vốn · ${summary.valuedUnits}/${summary.inStockUnits} món có giá`} />
+        <SummaryCard label={`Nhập (${days}n)`} value={`+${fmtQty(summary.movementIn)}`} tone="in" />
+        <SummaryCard label={`Xuất (${days}n)`} value={`−${fmtQty(summary.movementOut)}`} tone="out" />
+      </div>
+
+      {/* Toolbar: search + khoảng ngày nhập/xuất + nút thêm */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Tìm SKU / tên sản phẩm…"
+          className="w-full max-w-xs rounded border border-border bg-background px-3 py-1.5 text-sm"
+        />
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>Nhập/xuất:</span>
+          {[7, 30, 90, 365].map((n) => (
+            <Link key={n} href={`?days=${n}`} scroll={false}
+              className={`rounded border px-2 py-0.5 ${n === days ? 'border-foreground font-medium text-foreground' : 'border-border hover:bg-muted'}`}>
+              {n}n
+            </Link>
+          ))}
+        </div>
+        {canManage && (
+          <button
+            onClick={() => { resetForm(); setShowForm((s) => !s); }}
+            className="ml-auto rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            {showForm ? 'Đóng' : '+ Thêm SKU'}
+          </button>
+        )}
+      </div>
+
       {/* Add / Edit metadata form — KHÔNG có ô số lượng: tồn chỉ đổi qua Điều chỉnh / Chuyển kho (ledger). */}
-      {canManage && (
+      {canManage && showForm && (
         <div className="rounded-lg border border-border bg-background p-4">
-          <h2 className="mb-3 text-sm font-semibold">
-            {editingKey ? `Sửa SKU: ${editingKey}` : 'Thêm / Sửa SKU (thông tin & vị trí)'}
-          </h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">
+              {editingKey ? `Sửa SKU: ${editingKey}` : 'Thêm SKU mới (thông tin & vị trí)'}
+            </h2>
+            <button onClick={() => { resetForm(); setShowForm(false); }} className="text-xs text-muted-foreground hover:text-foreground">✕ Đóng</button>
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">SKU *</label>
