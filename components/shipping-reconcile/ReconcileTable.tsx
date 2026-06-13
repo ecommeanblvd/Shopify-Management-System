@@ -17,6 +17,17 @@ const fmtVnd = (n: number | null): string =>
 type CarrierFilter = 'all' | 'fedex' | 'dhl';
 type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
 
+/** Ngưỡng "khớp hoàn toàn" — trùng ngưỡng KHỚP của engine (lệch nhỏ do làm tròn). */
+const MATCH_TOLERANCE_VND = 1000;
+/** Đơn pending NHƯNG lệch < ngưỡng → coi như tự đối soát (không cần người xác nhận). */
+function isAutoReconciled(r: ReconcileViewRow): boolean {
+  return r.status === 'pending' && Math.abs(r.deltaVnd ?? 0) < MATCH_TOLERANCE_VND;
+}
+/** Trạng thái HIỆU DỤNG cho view: đơn khớp-pending tính là 'reconciled' (auto). */
+function effStatus(r: ReconcileViewRow): ReconcileStatus {
+  return isAutoReconciled(r) ? 'reconciled' : r.status;
+}
+
 interface Props {
   rows: ReconcileViewRow[];
   reports: IssueReportRecord[];
@@ -56,7 +67,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
     const needle = q.trim().toLowerCase();
     return rows
       .filter((r) => carrier === 'all' || r.carrierKey === carrier)
-      .filter((r) => status === 'all' || r.status === status)
+      .filter((r) => status === 'all' || effStatus(r) === status)
       .filter((r) => !country || r.shipCountry.toLowerCase() === country.toLowerCase())
       .filter((r) => minAbs === null || (r.deltaPct !== null && Math.abs(r.deltaPct) >= minAbs))
       .filter(
@@ -74,7 +85,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       billed += r.billedTotal;
       engine += r.engineTotal ?? 0;
       if (r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
-      if (r.status === 'pending') pendingCount += 1;
+      if (effStatus(r) === 'pending') pendingCount += 1;
       if (r.status === 'disputing') disputingCount += 1;
     }
     const delta = billed - engine;
@@ -259,7 +270,9 @@ function FragmentRow({
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{fmtVnd(r.deltaVnd)}</td>
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
         <td className="px-3 py-2 font-sans whitespace-nowrap">
-          {r.status === 'pending' ? (
+          {isAutoReconciled(r) ? (
+            <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Tự đối soát</span>
+          ) : r.status === 'pending' ? (
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
           ) : (
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
