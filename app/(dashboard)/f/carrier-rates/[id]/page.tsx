@@ -76,7 +76,14 @@ export default async function CarrierAccountDetailPage({
               {account.carrierName ?? account.carrierKey ?? 'Unknown carrier'}
             </div>
             <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">{account.name}</h1>
-            {account.notes && <p className="text-sm text-muted-foreground max-w-xl">{account.notes}</p>}
+            {account.notes && (
+              <details className="max-w-xl">
+                <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                  Ghi chú hợp đồng &amp; quy tắc fuel
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{account.notes}</p>
+              </details>
+            )}
           </div>
           {canManage && (
             <div className="flex items-center gap-2">
