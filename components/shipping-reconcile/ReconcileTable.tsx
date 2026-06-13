@@ -131,13 +131,12 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="Σ Billed" value={`${fmtVnd(summary.billed)} đ`} />
         <Stat label="Σ Hệ thống" value={`${fmtVnd(summary.engine)} đ`} />
         <Stat label="Σ Lệch" value={`${fmtVnd(summary.delta)} đ`} sub={`${summary.pct.toFixed(2)}%`} />
         <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
-        <Stat label="Đang đòi NCC" value={String(summary.disputingCount)} />
       </div>
 
       {/* Filters */}
@@ -223,7 +222,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono tabular-nums font-semibold">
+      <div className="mt-1 whitespace-nowrap font-mono tabular-nums font-semibold">
         {value}
         {sub && <span className="ml-1 text-xs font-normal text-muted-foreground">({sub})</span>}
       </div>

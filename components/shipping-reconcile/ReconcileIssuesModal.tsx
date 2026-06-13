@@ -39,17 +39,31 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
   const [tab, setTab] = useState<'issues' | 'reports' | 'carrier'>('issues');
   const reportedKeys = new Set(reports.map((r) => r.issueKey));
 
+  const disputingCount = carrierErrors.filter((r) => r.state === 'disputing').length;
+
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { setTab('issues'); setOpen(true); }}
         className="rounded border border-border px-3 py-1 text-sm hover:bg-muted"
       >
         Vấn đề &amp; Report
         {openIssues.length > 0 && (
           <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
             {openIssues.length}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => { setTab('carrier'); setOpen(true); }}
+        className="rounded border border-border px-3 py-1 text-sm hover:bg-muted"
+      >
+        Đòi NCC
+        {disputingCount > 0 && (
+          <span className="ml-1.5 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-xs text-sky-600 dark:text-sky-400">
+            {disputingCount}
           </span>
         )}
       </button>
