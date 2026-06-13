@@ -1,4 +1,3 @@
-import { headers } from 'next/headers';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 
@@ -10,9 +9,7 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-export async function AppShell({ email, name, role, children }: AppShellProps) {
-  const hdrs = await headers();
-  const currentPath = hdrs.get('x-pathname') ?? '/';
+export function AppShell({ email, name, role, children }: AppShellProps) {
   // The shell is pinned to the viewport: topbar and sidebar never scroll.
   // Only <main> scrolls vertically, so any in-page sticky (matrix thead,
   // future toolbars) anchors below the topbar instead of inside the page body.
@@ -20,7 +17,7 @@ export async function AppShell({ email, name, role, children }: AppShellProps) {
     <div className="h-screen flex flex-col overflow-hidden">
       <Topbar email={email} name={name} role={role} />
       <div className="flex flex-1 min-h-0">
-        <Sidebar role={role} currentPath={currentPath} />
+        <Sidebar role={role} />
         <main className="flex-1 min-w-0 overflow-auto">
           {children}
         </main>

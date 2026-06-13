@@ -1,9 +1,15 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { NAV, canSeeSettings, canSeeNavItem } from '@/lib/nav';
 
-interface SidebarProps { role: string; currentPath: string }
+interface SidebarProps { role: string }
 
-export function Sidebar({ role, currentPath }: SidebarProps) {
+export function Sidebar({ role }: SidebarProps) {
+  // usePathname phản ứng theo client navigation — KHÔNG dùng prop server tĩnh,
+  // nếu không highlight sẽ kẹt ở trang được render server lần đầu.
+  const currentPath = usePathname() ?? '/';
   const visible = NAV.filter((item) => {
     if (item.href === '/settings') return canSeeSettings(role);
     return canSeeNavItem(role, item.requires);
