@@ -123,7 +123,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <Stat label="Σ Billed" value={`${fmtVnd(summary.billed)} đ`} />
         <Stat label="Σ Hệ thống" value={`${fmtVnd(summary.engine)} đ`} />
-        <Stat label="Σ Lệch" value={`${fmtVnd(summary.delta)} đ (${summary.pct.toFixed(2)}%)`} />
+        <Stat label="Σ Lệch" value={`${fmtVnd(summary.delta)} đ`} sub={`${summary.pct.toFixed(2)}%`} />
         <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
         <Stat label="Đang đòi NCC" value={String(summary.disputingCount)} />
@@ -208,11 +208,14 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono tabular-nums font-semibold">{value}</div>
+      <div className="mt-1 font-mono tabular-nums font-semibold">
+        {value}
+        {sub && <span className="ml-1 text-xs font-normal text-muted-foreground">({sub})</span>}
+      </div>
     </div>
   );
 }
