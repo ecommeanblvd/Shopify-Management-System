@@ -13,6 +13,7 @@ import { listZonesWithCountries } from '@/features/carrier-rates/zones-actions';
 import { listRateCardsForAccount, getCurrentCardId } from '@/features/carrier-rates/rate-cards-actions';
 import { stageRateCardPdf, commitRateCardFromPdf } from '@/features/carrier-rates/rate-card-upload-actions';
 import { RateCardSelect } from '@/components/carrier-rates/RateCardSelect';
+import { RateCardPdfButton } from '@/components/carrier-rates/RateCardPdfButton';
 import { RateCardUploadDialog } from '@/components/carrier-rates/RateCardUploadDialog';
 import { RateWorkspace } from '@/components/carrier-rates/RateWorkspace';
 
@@ -91,14 +92,10 @@ export default async function WorkspacePage({
       <span className="text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Rate card</span>
       <RateCardSelect accountId={id} cards={cards} selectedCardId={selectedCardId} />
       {selectedCard?.hasPdf && (
-        <a
-          href={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs underline text-muted-foreground hover:text-foreground whitespace-nowrap"
-        >
-          View source PDF
-        </a>
+        <RateCardPdfButton
+          pdfUrl={`/f/carrier-rates/${id}/cards/${selectedCardId}/pdf`}
+          title={`${account.name} — ${selectedCard.label}`}
+        />
       )}
       {selectedCard && (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
