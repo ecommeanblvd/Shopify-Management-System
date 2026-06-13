@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Check, X, Loader2, Search } from 'lucide-react';
 import { sanitizeMoneyRaw, formatMoneyForDisplay } from '@/components/ui/money-input';
 
@@ -12,6 +12,12 @@ export interface MatrixZone {
 export interface MatrixTier {
   id: string;
   upperKg: string;
+  /** Cận dưới (kg) của bậc — dùng khi list gộp nhiều nhóm (PAK + Package) nên
+   *  không thể suy từ dòng trước. Bỏ trống → suy từ upperKg dòng liền trước. */
+  prevKg?: number;
+  /** Nếu set, render một dòng tiêu đề nhóm (vd "PAK", "Package · hộp") NGAY TRƯỚC
+   *  bậc này — để gộp nhiều nhóm trong cùng 1 bảng, chung header zone + search. */
+  groupLabel?: string;
 }
 
 export interface MatrixInitialCell {
@@ -156,12 +162,25 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
         </thead>
         <tbody>
           {tiers.map((t, i) => {
-            const prev = i === 0 ? 0 : Number(tiers[i - 1].upperKg);
+            const prev = t.prevKg ?? (i === 0 ? 0 : Number(tiers[i - 1].upperKg));
             const upper = Number(t.upperKg);
             const zebra = i % 2 === 1;
             const dataBg = zebra ? 'bg-muted/15' : '';
+            const groupHeader = t.groupLabel ? (
+              <tr key={`grp-${t.id}`}>
+                <th
+                  colSpan={zones.length + 1}
+                  className="sticky left-0 z-20 text-left px-5 py-2 border-b-2 border-border text-[11px] uppercase tracking-wider font-bold text-muted-foreground"
+                  style={{ backgroundColor: 'var(--muted)' }}
+                >
+                  {t.groupLabel}
+                </th>
+              </tr>
+            ) : null;
             return (
-              <tr key={t.id} className={dataBg}>
+              <Fragment key={t.id}>
+              {groupHeader}
+              <tr className={dataBg}>
                 <th
                   className="sticky left-0 z-20 text-left px-5 py-3 border-b border-r-2 border-border whitespace-nowrap font-mono text-sm tabular-nums text-foreground font-semibold"
                   style={{ backgroundColor: 'var(--muted)' }}
@@ -238,6 +257,7 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                   );
                 })}
               </tr>
+              </Fragment>
             );
           })}
         </tbody>
