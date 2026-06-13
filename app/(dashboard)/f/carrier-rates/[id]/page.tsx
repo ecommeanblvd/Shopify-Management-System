@@ -59,7 +59,7 @@ export default async function CarrierAccountDetailPage({
   const deleteBound = deleteAction.bind(null, id);
 
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
+    <div className="px-6 md:px-10 py-6 space-y-6">
       <Link
         href="/f/carrier-rates"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -71,11 +71,22 @@ export default async function CarrierAccountDetailPage({
       <header className="space-y-3">
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div className="space-y-2 min-w-0">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Truck className="size-3.5" />
-              {account.carrierName ?? account.carrierKey ?? 'Unknown carrier'}
+            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <Truck className="size-3.5" />
+                {account.carrierName ?? account.carrierKey ?? 'Unknown carrier'}
+              </span>
+              <Badge variant={account.enabled ? 'default' : 'outline'} className="h-5 text-[10px] uppercase tracking-wider">
+                {account.enabled ? 'Active' : 'Disabled'}
+              </Badge>
+              <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider font-mono">
+                {account.costCurrency} → {account.displayCurrency}
+              </Badge>
+              <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider">
+                {account.weightUnit}
+              </Badge>
             </div>
-            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">{account.name}</h1>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{account.name}</h1>
             {account.notes && (
               <details className="max-w-xl">
                 <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
@@ -100,18 +111,6 @@ export default async function CarrierAccountDetailPage({
               </form>
             </div>
           )}
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant={account.enabled ? 'default' : 'outline'} className="h-6 text-[10px] uppercase tracking-wider">
-            {account.enabled ? 'Active' : 'Disabled'}
-          </Badge>
-          <Badge variant="secondary" className="h-6 text-[10px] uppercase tracking-wider font-mono">
-            {account.costCurrency} → {account.displayCurrency}
-          </Badge>
-          <Badge variant="secondary" className="h-6 text-[10px] uppercase tracking-wider">
-            Weights in {account.weightUnit}
-          </Badge>
         </div>
       </header>
 
