@@ -98,8 +98,9 @@ export default async function WorkspacePage({
         />
       )}
       {selectedCard && (
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          Hiệu lực: {formatDateVN(selectedCard.effectiveFrom)} → {formatDateVN(selectedCard.effectiveTo, 'nay')}
+        <span className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-xs whitespace-nowrap">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Hiệu lực</span>
+          <span className="text-foreground">{formatDateVN(selectedCard.effectiveFrom)} → {formatDateVN(selectedCard.effectiveTo, 'nay')}</span>
         </span>
       )}
     </div>

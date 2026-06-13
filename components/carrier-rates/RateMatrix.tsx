@@ -347,9 +347,11 @@ function MatrixSearch({
 
   return (
     <div className="rounded border border-border bg-muted/30 p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
-        {toolbarStart}
-        <div className="relative flex-1 min-w-[240px] sm:ml-auto">
+      {toolbarStart && (
+        <div className="flex flex-wrap items-center gap-3">{toolbarStart}</div>
+      )}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 min-w-[240px]">
           <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
