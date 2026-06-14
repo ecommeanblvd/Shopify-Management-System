@@ -1361,6 +1361,12 @@ export const mmpProducts = pgTable('mmp_products', {
   collection: text('collection'),
   productType: text('product_type'),
   status: mmpProductStatusEnum('status').notNull(),
+  /** Origin of the row: 'mmp' (pushed from Mean Merchant Portal) or 'shopify'
+   *  (backfilled history from an existing Shopify catalog). */
+  source: text('source').notNull().default('mmp'),
+  /** Cost price (giá vốn) — supplied by MMP later for brand reconciliation.
+   *  NULL until provided. Currency follows `currency`. */
+  costPrice: numeric('cost_price', { precision: 14, scale: 2 }),
   /** VND integer per MMP contract — stored as numeric to avoid
    *  precision loss on big amounts. */
   basePrice: numeric('base_price', { precision: 14, scale: 2 }).notNull(),
