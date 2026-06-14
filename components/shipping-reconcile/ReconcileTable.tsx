@@ -173,6 +173,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
               <th className="px-3 py-2 text-left">Tracking</th>
               <th className="px-3 py-2 text-left">CC</th>
               <th className="px-3 py-2 text-left">Nước</th>
+              <th className="px-3 py-2 text-left whitespace-nowrap" title="Ngày tạo label/ship — quyết định kỳ giá xăng dầu & phụ phí áp dụng">Ngày ship</th>
               <th className="px-3 py-2 text-right" title="Cân đơn hàng sync từ Shopify (tổng cân variant)">KG Shopify</th>
               <th className="px-3 py-2 text-right" title="Cân thực tế trên cân (file ops)">KG cân</th>
               <th className="px-3 py-2 text-right" title="Cân carrier tính phí: max(cân thực, dim) + làm tròn bậc">KG bill</th>
@@ -193,7 +194,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
               />
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={12} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
+              <tr><td colSpan={13} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
             )}
           </tbody>
         </table>
@@ -252,6 +253,7 @@ function FragmentRow({
         <td className="px-3 py-2">{r.trackingNumber}</td>
         <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
         <td className="px-3 py-2">{r.shipCountry}</td>
+        <td className="px-3 py-2 whitespace-nowrap tabular-nums">{r.labelDate ? new Date(r.labelDate).toLocaleDateString('vi-VN') : '—'}</td>
         <td className="px-3 py-2 text-right text-muted-foreground">{r.shopifyWeightKg ?? '—'}</td>
         <td className="px-3 py-2 text-right">{r.weightKg ?? '—'}</td>
         <td className="px-3 py-2 text-right">
@@ -283,7 +285,7 @@ function FragmentRow({
       </tr>
       {expanded && (
         <tr className="border-t border-border bg-muted/10">
-          <td colSpan={12}><ReconcileDetailPanel row={r} /></td>
+          <td colSpan={13}><ReconcileDetailPanel row={r} /></td>
         </tr>
       )}
     </>
