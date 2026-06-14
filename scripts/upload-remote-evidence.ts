@@ -51,7 +51,8 @@ function parseArgs(): { items: Item[]; apply: boolean } {
   const get = (k: string) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undefined; };
   const file = get('--file'); const account = get('--account'); const label = get('--label');
   if (!file || !account || !label) throw new Error('Need --batch, or --file --account --label [--from --to]');
-  return { items: [{ account, file, label, from: get('--from') ?? null, to: get('--to') ?? null }], apply };
+  const nz = (v: string | undefined) => (v && v !== 'null' ? v : null);
+  return { items: [{ account, file, label, from: nz(get('--from')), to: nz(get('--to')) }], apply };
 }
 
 async function main(): Promise<void> {
