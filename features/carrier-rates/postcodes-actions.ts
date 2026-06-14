@@ -10,8 +10,21 @@ export interface PostcodeRowDb {
   postcodePattern: string;
   tier: string | null;
   source: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
   uploadedAt: Date;
 }
+
+const POSTCODE_COLS = {
+  id: schema.carrierRemotePostcodes.id,
+  countryCode: schema.carrierRemotePostcodes.countryCode,
+  postcodePattern: schema.carrierRemotePostcodes.postcodePattern,
+  tier: schema.carrierRemotePostcodes.tier,
+  source: schema.carrierRemotePostcodes.source,
+  effectiveFrom: schema.carrierRemotePostcodes.effectiveFrom,
+  effectiveTo: schema.carrierRemotePostcodes.effectiveTo,
+  uploadedAt: schema.carrierRemotePostcodes.uploadedAt,
+} as const;
 
 export interface PostcodeSummary {
   totalRows: number;
@@ -44,14 +57,7 @@ export async function loadPostcodeSummary(
     .orderBy(sql`count(*) desc`);
 
   const recent = await db
-    .select({
-      id: schema.carrierRemotePostcodes.id,
-      countryCode: schema.carrierRemotePostcodes.countryCode,
-      postcodePattern: schema.carrierRemotePostcodes.postcodePattern,
-      tier: schema.carrierRemotePostcodes.tier,
-      source: schema.carrierRemotePostcodes.source,
-      uploadedAt: schema.carrierRemotePostcodes.uploadedAt,
-    })
+    .select(POSTCODE_COLS)
     .from(schema.carrierRemotePostcodes)
     .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId))
     .orderBy(sql`uploaded_at desc`)
@@ -60,28 +66,125 @@ export async function loadPostcodeSummary(
   return { totalRows, countries, recent };
 }
 
-/** Paged listing scoped to one country. Used on the country detail view. */
+/** Paged listing scoped to one country (optionally one period). Country detail view. */
 export async function listPostcodesByCountry(
   carrierAccountId: string,
   countryCode: string,
-  limit = 200,
+  opts: { period?: string | null; limit?: number } = {},
 ): Promise<PostcodeRowDb[]> {
+  const limit = opts.limit ?? 200;
   return db
-    .select({
-      id: schema.carrierRemotePostcodes.id,
-      countryCode: schema.carrierRemotePostcodes.countryCode,
-      postcodePattern: schema.carrierRemotePostcodes.postcodePattern,
-      tier: schema.carrierRemotePostcodes.tier,
-      source: schema.carrierRemotePostcodes.source,
-      uploadedAt: schema.carrierRemotePostcodes.uploadedAt,
-    })
+    .select(POSTCODE_COLS)
     .from(schema.carrierRemotePostcodes)
     .where(and(
       eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
       eq(schema.carrierRemotePostcodes.countryCode, countryCode),
+      ...(opts.period ? [eq(schema.carrierRemotePostcodes.effectiveFrom, opts.period)] : []),
     ))
     .orderBy(asc(schema.carrierRemotePostcodes.postcodePattern))
     .limit(limit);
+}
+
+export interface RemotePeriod {
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  count: number;
+  sources: string[];
+}
+
+/** Distinct effective windows present for this account — drives the period filter. */
+export async function listRemotePeriods(carrierAccountId: string): Promise<RemotePeriod[]> {
+  const rows = await db
+    .select({
+      effectiveFrom: schema.carrierRemotePostcodes.effectiveFrom,
+      effectiveTo: schema.carrierRemotePostcodes.effectiveTo,
+      count: sql<number>`count(*)::int`,
+      sources: sql<string[]>`array_agg(distinct ${schema.carrierRemotePostcodes.source})`,
+    })
+    .from(schema.carrierRemotePostcodes)
+    .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId))
+    .groupBy(schema.carrierRemotePostcodes.effectiveFrom, schema.carrierRemotePostcodes.effectiveTo)
+    .orderBy(asc(schema.carrierRemotePostcodes.effectiveFrom));
+  return rows.map((r) => ({
+    effectiveFrom: r.effectiveFrom,
+    effectiveTo: r.effectiveTo,
+    count: r.count,
+    sources: (r.sources ?? []).filter(Boolean),
+  }));
+}
+
+export interface PostcodeSearchResult {
+  rows: PostcodeRowDb[];
+  total: number;
+  truncated: boolean;
+}
+
+/**
+ * Free-text lookup across ALL countries by postcode OR town OR tier. The query
+ * is matched both raw and alphanumeric-normalised (towns/postcodes are stored
+ * normalised — "Buraydah"→BURAYDAH, "150-0012"→1500012), so a human-typed value
+ * with spaces/hyphens/casing still lands. Optional country/period narrowing.
+ */
+export async function searchPostcodes(
+  carrierAccountId: string,
+  query: string,
+  opts: { country?: string | null; period?: string | null; limit?: number } = {},
+): Promise<PostcodeSearchResult> {
+  const q = query.trim();
+  if (!q) return { rows: [], total: 0, truncated: false };
+  const limit = opts.limit ?? 300;
+  const norm = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  const filters = [
+    eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
+    opts.country ? eq(schema.carrierRemotePostcodes.countryCode, opts.country.toUpperCase()) : undefined,
+    opts.period ? eq(schema.carrierRemotePostcodes.effectiveFrom, opts.period) : undefined,
+    // pattern contains the normalised term, OR tier matches, OR country code matches
+    sql`(${schema.carrierRemotePostcodes.postcodePattern} ILIKE ${'%' + norm + '%'}
+         OR ${schema.carrierRemotePostcodes.postcodePattern} ILIKE ${'%' + q.toUpperCase() + '%'}
+         OR ${schema.carrierRemotePostcodes.tier} ILIKE ${'%' + q + '%'})`,
+  ].filter(Boolean);
+
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(schema.carrierRemotePostcodes)
+    .where(and(...(filters as Parameters<typeof and>)));
+
+  const rows = await db
+    .select(POSTCODE_COLS)
+    .from(schema.carrierRemotePostcodes)
+    .where(and(...(filters as Parameters<typeof and>)))
+    .orderBy(asc(schema.carrierRemotePostcodes.countryCode), asc(schema.carrierRemotePostcodes.postcodePattern))
+    .limit(limit);
+
+  return { rows, total, truncated: total > rows.length };
+}
+
+export interface RemoteEvidenceRow {
+  id: string;
+  label: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  filename: string;
+  byteSize: number | null;
+  uploadedAt: Date;
+}
+
+/** Source-file evidence attached to this account's remote lists. */
+export async function listRemoteEvidence(carrierAccountId: string): Promise<RemoteEvidenceRow[]> {
+  return db
+    .select({
+      id: schema.carrierRemoteEvidence.id,
+      label: schema.carrierRemoteEvidence.label,
+      effectiveFrom: schema.carrierRemoteEvidence.effectiveFrom,
+      effectiveTo: schema.carrierRemoteEvidence.effectiveTo,
+      filename: schema.carrierRemoteEvidence.filename,
+      byteSize: schema.carrierRemoteEvidence.byteSize,
+      uploadedAt: schema.carrierRemoteEvidence.uploadedAt,
+    })
+    .from(schema.carrierRemoteEvidence)
+    .where(eq(schema.carrierRemoteEvidence.carrierAccountId, carrierAccountId))
+    .orderBy(asc(schema.carrierRemoteEvidence.effectiveFrom), asc(schema.carrierRemoteEvidence.label));
 }
 
 const ISO2_RE = /^[A-Z]{2}$/;

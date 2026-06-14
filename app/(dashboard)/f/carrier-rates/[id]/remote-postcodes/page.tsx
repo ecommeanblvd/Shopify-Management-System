@@ -2,22 +2,32 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { ChevronLeft, MapPin, Upload, Trash2, FileSpreadsheet, Plus } from 'lucide-react';
+import { ChevronLeft, MapPin, Upload, Trash2, FileSpreadsheet, Plus, FileText, Download } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
-  loadPostcodeSummary, listPostcodesByCountry,
+  loadPostcodeSummary, listPostcodesByCountry, listRemotePeriods, listRemoteEvidence, searchPostcodes,
   addPostcode, deletePostcode, deletePostcodesByCountry, importPostcodes,
 } from '@/features/carrier-rates/postcodes-actions';
 import { parsePostcodeCsv } from '@/features/carrier-rates/postcodes-csv';
+import { RemotePostcodeSearch } from '@/components/carrier-rates/RemotePostcodeSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+
+function fmtPeriod(from: string | null, to: string | null): string {
+  if (!from && !to) return 'Mọi kỳ';
+  return `${from ? from.slice(0, 10) : '…'} → ${to ? to.slice(0, 10) : '∞'}`;
+}
+function fmtBytes(n: number | null): string {
+  if (!n) return '';
+  return n >= 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -70,10 +80,10 @@ export default async function RemotePostcodesPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ country?: string }>;
+  searchParams: Promise<{ country?: string; period?: string }>;
 }) {
   const { id } = await params;
-  const { country: activeCountry } = await searchParams;
+  const { country: activeCountry, period: activePeriod } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
@@ -85,13 +95,20 @@ export default async function RemotePostcodesPage({
   if (!account) notFound();
 
   const canManage = hasPermission(role, 'manage_carrier_rates');
-  const summary = await loadPostcodeSummary(id);
+  const [summary, periods, evidence] = await Promise.all([
+    loadPostcodeSummary(id),
+    listRemotePeriods(id),
+    listRemoteEvidence(id),
+  ]);
   const countryRows = activeCountry && ISO2_RE.test(activeCountry.toUpperCase())
-    ? await listPostcodesByCountry(id, activeCountry.toUpperCase())
+    ? await listPostcodesByCountry(id, activeCountry.toUpperCase(), { period: activePeriod ?? null })
     : null;
 
   const importBound = importCsvAction.bind(null, id, session.user.id);
   const addBound = addOneAction.bind(null, id, session.user.id);
+  const searchBound = searchPostcodes.bind(null, id);
+  const baseHref = `/f/carrier-rates/${id}/remote-postcodes`;
+  const periodQS = activePeriod ? `&period=${activePeriod}` : '';
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
@@ -117,6 +134,69 @@ export default async function RemotePostcodesPage({
         <StatTile label="Countries covered" value={String(summary.countries.length)} sub={summary.countries.length === 0 ? '—' : 'With at least one entry'} />
         <StatTile label="Latest source" value={summary.recent[0]?.source ?? '—'} sub={summary.recent[0] ? new Date(summary.recent[0].uploadedAt).toLocaleDateString() : 'No uploads yet'} />
       </div>
+
+      {/* Free-text search across all countries */}
+      {summary.totalRows > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tra cứu remote</h2>
+          <RemotePostcodeSearch search={searchBound} period={activePeriod ?? null} />
+        </section>
+      )}
+
+      {/* Period filter */}
+      {periods.length > 1 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Kỳ hiệu lực</h2>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={activeCountry ? `${baseHref}?country=${activeCountry}` : baseHref}
+              className={'rounded-lg border px-3 py-1.5 text-xs transition-colors ' + (!activePeriod ? 'border-primary/50 bg-primary/[0.04] font-medium' : 'border-border hover:border-foreground/30')}
+            >
+              Tất cả ({periods.reduce((s, p) => s + p.count, 0).toLocaleString()})
+            </Link>
+            {periods.map((p) => {
+              const key = p.effectiveFrom ?? 'null';
+              const isActive = activePeriod === p.effectiveFrom;
+              const href = `${baseHref}?${activeCountry ? `country=${activeCountry}&` : ''}period=${p.effectiveFrom ?? ''}`;
+              return (
+                <Link key={key} href={href} className={'rounded-lg border px-3 py-1.5 text-xs transition-colors ' + (isActive ? 'border-primary/50 bg-primary/[0.04] font-medium' : 'border-border hover:border-foreground/30')}>
+                  <span className="font-mono">{fmtPeriod(p.effectiveFrom, p.effectiveTo)}</span>
+                  <span className="ml-1.5 text-muted-foreground">· {p.count.toLocaleString()}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Evidence files */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">File gốc (bằng chứng)</h2>
+        {evidence.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Chưa có file gốc nào. Dùng <code className="font-mono">scripts/upload-remote-evidence.ts</code> để đính kèm bảng ODA/RAL/giá.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {evidence.map((e) => (
+              <a
+                key={e.id}
+                href={`${baseHref}/evidence/${e.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
+              >
+                <FileText className="size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{e.label}</div>
+                  <div className="truncate text-[11px] text-muted-foreground font-mono">
+                    {fmtPeriod(e.effectiveFrom, e.effectiveTo)} · {e.filename} {fmtBytes(e.byteSize) && `· ${fmtBytes(e.byteSize)}`}
+                  </div>
+                </div>
+                <Download className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Country list */}
       <section className="space-y-4">
@@ -144,7 +224,7 @@ export default async function RemotePostcodesPage({
               return (
                 <Link
                   key={code}
-                  href={`/f/carrier-rates/${id}/remote-postcodes${isActive ? '' : `?country=${code}`}#country`}
+                  href={`${baseHref}${isActive ? (activePeriod ? `?period=${activePeriod}` : '') : `?country=${code}${periodQS}`}#country`}
                   className={
                     'flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ' +
                     (isActive

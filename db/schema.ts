@@ -505,6 +505,32 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
   index('carrier_remote_postcodes_lookup_idx').on(table.carrierAccountId, table.countryCode),
 ]);
 
+/**
+ * Source-file evidence for a remote/ODA/RAL list import. The postcode rows
+ * themselves only carry a `source` text label; this table keeps the actual
+ * published file (FedEx ODA xlsx, DHL Remote Area List PDF, rate-surcharge
+ * sheet…) in object storage so the import can be audited / disputed against the
+ * original. One row per uploaded file, tagged with the period it documents.
+ */
+export const carrierRemoteEvidence = pgTable('carrier_remote_evidence', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  /** Human label, ideally matching the rows' `source` (e.g. "DHL Remote Areas 2025"). */
+  label: text('label').notNull(),
+  /** Period this file documents — mirrors the postcode rows' effective window. */
+  effectiveFrom: date('effective_from'),
+  effectiveTo: date('effective_to'),
+  /** Object-storage key (R2/S3) + original filename for download. */
+  fileKey: text('file_key').notNull(),
+  filename: text('filename').notNull(),
+  contentType: text('content_type'),
+  byteSize: integer('byte_size'),
+  uploadedBy: text('uploaded_by').references(() => user.id),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_remote_evidence_account_idx').on(table.carrierAccountId),
+]);
+
 // Link table: which carrier account serves which market.
 export const marketCarrierLinks = pgTable('market_carrier_links', {
   id: uuid('id').defaultRandom().primaryKey(),
