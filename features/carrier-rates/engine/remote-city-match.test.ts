@@ -35,6 +35,20 @@ describe('matchRemoteCity', () => {
     expect(matchRemoteCity(['AFIFABAD'], sa)).toBeNull();
   });
 
+  it('contains: pattern nằm GIỮA/CUỐI candidate (≥6) → "ALRUWAISALSHAMAL" chứa "ALSHAMAL"', () => {
+    const qa = P([['ALSHAMAL', null], ['DOHAALRUWAIS', null]]);
+    expect(matchRemoteCity(['ALRUWAISALSHAMAL'], qa)).toEqual({ tier: null });
+  });
+
+  it('contains KHÔNG kích hoạt với pattern <6 (chặn nhiễu): AFIF (4) không khớp "XYZAFIFW"', () => {
+    expect(matchRemoteCity(['XYZAFIFW'], sa)).toBeNull();
+  });
+
+  it('candidate Latin từ city Arabic+Latin: "ALISABAHALSALEMUMMALHAYMAN" prefix ALISABAHALSALEM', () => {
+    const kw = P([['ALISABAHALSALEM', null]]);
+    expect(matchRemoteCity(['ALISABAHALSALEMUMMALHAYMAN'], kw)).toEqual({ tier: null });
+  });
+
   it('prefix lấy pattern DÀI nhất khi nhiều pattern khớp đầu', () => {
     const p = P([['BURA', 'Tier A'], ['BURAIDAH', 'Tier B']]);
     // 'BURA' < 5 nên bị loại; chỉ BURAIDAH (≥5) khớp prefix.

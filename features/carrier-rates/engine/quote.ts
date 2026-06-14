@@ -617,9 +617,12 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       // Arabic-script cities ("الرس") reduce to an empty key under the
       // A-Z0-9 normaliser — translate via the alias table first and try
       // every Latin spelling the carrier lists use.
+      // Luôn kèm bản Latin chuẩn hoá — city Arabic+Latin lẫn lộn ("علي… Ali Sabah
+      // Al Salem (Umm Al Hayman)") strip non-alnum còn phần Latin để khớp town list.
+      const latinNorm = input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '');
       const cityKeys = hasArabicScript(input.destinationCity)
-        ? arabicCityCandidates(input.destinationCity)
-        : [input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '')];
+        ? [...arabicCityCandidates(input.destinationCity), latinNorm]
+        : [latinNorm];
       // Khớp TOLERANT: exact + alias chính tả + bỏ tiền tố "AL" + prefix (city
       // dính tên vùng). Tránh trượt khi city đơn ghi lệch so với list ODA.
       const cityMatch = matchRemoteCity(cityKeys.filter((k) => k.length > 0), patterns);
