@@ -12,7 +12,7 @@ import {
   listBills, listPaymentsForAccount, toSummaryInputs, type UploadFile,
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp } from '@/features/carrier-rates/ap/ap-summary';
-import { systemTotalForPeriod } from '@/features/carrier-rates/ap/period-compare';
+import { systemTotalForPeriod, systemAllTimeTotal } from '@/features/carrier-rates/ap/period-compare';
 import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,9 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   if (!account) notFound();
   const canManage = hasPermission(role, 'manage_carrier_rates');
 
-  const [bills, payments] = await Promise.all([listBills(id), listPaymentsForAccount(id)]);
+  const [bills, payments, allTime] = await Promise.all([
+    listBills(id), listPaymentsForAccount(id), systemAllTimeTotal(id),
+  ]);
   const inputs = toSummaryInputs(bills, payments);
   const summary = summariseAp(inputs.bills, inputs.payments, todayIso());
 
@@ -131,6 +133,21 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         <StatTile label="Đã thanh toán" value={fmt(summary.totalPaid)} />
         <StatTile label="Còn nợ" value={fmt(summary.totalOutstanding)} accent={summary.totalOutstanding > 0} />
         <StatTile label="Quá hạn" value={fmt(summary.overdueAmount)} sub={`${summary.overdueCount} hoá đơn`} danger={summary.overdueCount > 0} />
+      </div>
+
+      {/* Reference: all-time system charge vs paid (NOT the official bill-based debt) */}
+      <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+          Tham chiếu nhanh — theo số hệ thống ghi nhận (chưa qua hoá đơn carrier)
+        </div>
+        <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          <span>Hệ thống đã charge (all-time): <b className="tabular-nums">{fmt(allTime.systemTotal)}</b> <span className="text-muted-foreground">· {allTime.shipmentCount.toLocaleString('vi-VN')} đơn</span></span>
+          <span>Đã thanh toán: <b className="tabular-nums">{fmt(summary.totalPaid)}</b></span>
+          <span>Công nợ ước tính: <b className={'tabular-nums ' + (allTime.systemTotal - summary.totalPaid > 0 ? 'text-amber-600 dark:text-amber-400' : '')}>{fmt(Math.max(0, allTime.systemTotal - summary.totalPaid))}</b></span>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1.5">
+          Con số ước tính từ chi phí hệ thống tính, chỉ để tham khảo. Công nợ chính thức (cards trên) tính từ hoá đơn carrier bạn upload.
+        </p>
       </div>
 
       {/* Upload bill */}

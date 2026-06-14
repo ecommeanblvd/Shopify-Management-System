@@ -33,3 +33,20 @@ export async function systemTotalForPeriod(
     ));
   return { systemTotal: Number(row?.systemTotal ?? 0), shipmentCount: Number(row?.shipmentCount ?? 0) };
 }
+
+/**
+ * All-time total the system recorded as carrier charges for an account, across
+ * every shipment. A reference figure for the AP page — NOT the official debt
+ * (which comes from uploaded carrier statements), shown so the operator has a
+ * quick "how much have we been charged vs paid" view before any bill is logged.
+ */
+export async function systemAllTimeTotal(carrierAccountId: string): Promise<PeriodSystemTotal> {
+  const [row] = await db
+    .select({
+      systemTotal: sql<number>`coalesce(sum(${schema.shipmentCharges.totalAmount}), 0)::float8`,
+      shipmentCount: sql<number>`count(*)::int`,
+    })
+    .from(schema.shipmentCharges)
+    .where(eq(schema.shipmentCharges.carrierAccountId, carrierAccountId));
+  return { systemTotal: Number(row?.systemTotal ?? 0), shipmentCount: Number(row?.shipmentCount ?? 0) };
+}
