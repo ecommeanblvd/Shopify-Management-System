@@ -332,6 +332,7 @@ export interface QuoteError {
 export type QuoteResult = QuoteOk | QuoteError;
 
 import { hasArabicScript, arabicCityCandidates } from './arabic-city-aliases';
+import { matchRemoteCity } from './remote-city-match';
 
 const ISO2_RE = /^[A-Z]{2}$/;
 
@@ -619,14 +620,12 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       const cityKeys = hasArabicScript(input.destinationCity)
         ? arabicCityCandidates(input.destinationCity)
         : [input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '')];
-      for (const cityKey of cityKeys) {
-        if (cityKey.length === 0) continue;
-        const t = patterns.get(cityKey);
-        if (t !== undefined) {
-          matchedTier = t;
-          matchedBy = 'city';
-          break;
-        }
+      // Khớp TOLERANT: exact + alias chính tả + bỏ tiền tố "AL" + prefix (city
+      // dính tên vùng). Tránh trượt khi city đơn ghi lệch so với list ODA.
+      const cityMatch = matchRemoteCity(cityKeys.filter((k) => k.length > 0), patterns);
+      if (cityMatch) {
+        matchedTier = cityMatch.tier;
+        matchedBy = 'city';
       }
     }
     if (matchedBy === null) {
