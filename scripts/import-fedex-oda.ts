@@ -48,6 +48,11 @@ interface Args {
   account: string;
   apply: boolean;
   source: string;
+  /** Period this list is in force. ODA lists are re-published each season;
+   *  the engine picks the list whose window covers the shipment's ship date
+   *  (effective_from ≤ ship < effective_to). Default keeps legacy behaviour. */
+  effectiveFrom: string;
+  effectiveTo: string | null;
 }
 
 function parseArgs(): Args {
@@ -56,20 +61,42 @@ function parseArgs(): Args {
   let account = 'FedEx Vietnam — International Priority (IP) 2026';
   let apply = false;
   let source = 'FedEx ODA Jan-2026';
+  let effectiveFrom = '2025-01-01';
+  let effectiveTo: string | null = null;
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--file') file = a[++i];
     else if (a[i] === '--account') account = a[++i];
     else if (a[i] === '--apply') apply = true;
     else if (a[i] === '--source') source = a[++i];
+    else if (a[i] === '--effective-from') effectiveFrom = a[++i];
+    else if (a[i] === '--effective-to') effectiveTo = a[++i];
   }
   if (!file) throw new Error('--file <xlsx> is required');
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRe.test(effectiveFrom)) throw new Error(`--effective-from must be YYYY-MM-DD, got "${effectiveFrom}"`);
+  if (effectiveTo !== null && !dateRe.test(effectiveTo)) throw new Error(`--effective-to must be YYYY-MM-DD, got "${effectiveTo}"`);
   // sanity: confirm file is readable
   readFileSync(file).length;
-  return { file, account, apply, source };
+  return { file, account, apply, source, effectiveFrom, effectiveTo };
 }
 
 const VALID_TIERS = new Set(['Tier A', 'Tier B', 'Tier C']);
-const HEADER_ROW_INDEX = 7; // 0-indexed: data starts at row 8
+
+/**
+ * Locate the header row ("Country | Country Code | City | Begin Postal | …").
+ * FedEx shifts the number of preamble rows between publications (the
+ * Jan-2026 file had it at index 7, the Jul-2025 file at index 9), so detect
+ * it by content instead of hardcoding. Returns the 0-based header index.
+ */
+function findHeaderRowIndex(all: (string | null)[][]): number {
+  for (let i = 0; i < Math.min(40, all.length); i++) {
+    const row = all[i] ?? [];
+    const c1 = (row[1] ?? '').toString().trim().toLowerCase();
+    const c3 = (row[3] ?? '').toString().trim().toLowerCase();
+    if (c1 === 'country code' && c3.includes('postal')) return i;
+  }
+  throw new Error('Could not locate header row (expected a row with "Country Code" + "…Postal…")');
+}
 
 interface ParsedRow {
   countryCode: string;
@@ -94,7 +121,8 @@ function parseSheet(filePath: string): ParsedRow[] {
     defval: null,
     raw: false,
   });
-  const data = all.slice(HEADER_ROW_INDEX + 1);
+  const headerIndex = findHeaderRowIndex(all);
+  const data = all.slice(headerIndex + 1);
 
   // Column indices in the sheet
   const C = { country: 0, cc: 1, city: 2, pcB: 3, pcE: 4, odaParcel: 7 };
@@ -196,12 +224,16 @@ async function main(): Promise<void> {
   const touchedCountries = [...byCC.keys()];
 
   if (args.apply) {
-    console.log(`[oda-import] deleting existing rows for ${touchedCountries.length} countries…`);
+    // Delete is scoped to THIS period (effective_from) so re-importing one
+    // season's list never wipes a different season's rows for the same
+    // countries. Idempotent per (account, country, effective_from).
+    console.log(`[oda-import] deleting existing rows for ${touchedCountries.length} countries in period from=${args.effectiveFrom}…`);
     await db.delete(schema.carrierRemotePostcodes).where(and(
       eq(schema.carrierRemotePostcodes.carrierAccountId, account.id),
       inArray(schema.carrierRemotePostcodes.countryCode, touchedCountries),
+      eq(schema.carrierRemotePostcodes.effectiveFrom, args.effectiveFrom),
     ));
-    console.log(`[oda-import] inserting ${rows.length} rows…`);
+    console.log(`[oda-import] inserting ${rows.length} rows (from=${args.effectiveFrom} to=${args.effectiveTo ?? '∞'})…`);
     const CHUNK = 1000;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const slice = rows.slice(i, i + CHUNK).map((r) => ({
@@ -210,6 +242,8 @@ async function main(): Promise<void> {
         postcodePattern: r.pattern,
         tier: r.tier,
         source: `${args.source} · ${r.tier}`,
+        effectiveFrom: args.effectiveFrom,
+        effectiveTo: args.effectiveTo,
       }));
       await db.insert(schema.carrierRemotePostcodes).values(slice);
     }
