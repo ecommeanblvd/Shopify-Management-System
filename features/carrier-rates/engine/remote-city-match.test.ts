@@ -30,6 +30,17 @@ describe('matchRemoteCity', () => {
     expect(matchRemoteCity(['RIYADH'], sa)).toBeNull();
   });
 
+  it('alias Nairiya↔Nairyah (đảo I/Y): "Al-Nairiya" → NAIRYAH', () => {
+    const p = P([['NAIRYAH', null]]);
+    expect(matchRemoteCity(['ALNAIRIYA'], p)).toEqual({ tier: null });
+    expect(matchRemoteCity(['NAIRIYA'], p)).toEqual({ tier: null });
+  });
+
+  it('alias Majma→Majmaah (city cắt cụt): "Majma" → MAJMAAH', () => {
+    const p = P([['MAJMAAH', null]]);
+    expect(matchRemoteCity(['MAJMA'], p)).toEqual({ tier: null });
+  });
+
   it('không prefix-match pattern ngắn (<5): "AFIFABAD" không khớp AFIF', () => {
     // AFIF dài 4 < MIN_PREFIX_LEN nên prefix không kích hoạt → tránh nhiễu.
     expect(matchRemoteCity(['AFIFABAD'], sa)).toBeNull();

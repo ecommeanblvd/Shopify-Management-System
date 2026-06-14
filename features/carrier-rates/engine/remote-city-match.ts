@@ -12,6 +12,13 @@
 /** Biến thể chính tả đã gặp trên đơn thật (chuẩn hoá → chuẩn hoá list). */
 const CITY_ALIASES: Record<string, string> = {
   BURYDAH: 'BURAYDAH', // "Burydah" thiếu chữ A so với "Buraydah"
+  // SA — An Nairyah (النعيرية): đơn ghi "Al-Nairiya" → ALNAIRIYA / NAIRIYA, list
+  // DHL ghi "NAIRYAH" (đảo I↔Y) nên prefix/suffix không bắt được. (#MBLVD28010)
+  NAIRIYA: 'NAIRYAH',
+  ALNAIRIYA: 'NAIRYAH',
+  // SA — Al Majma'ah (المجمعة): đơn ghi "Majma" (cắt cụt) → MAJMA, list "MAJMAAH".
+  // (#MBLVD28112)
+  MAJMA: 'MAJMAAH',
 };
 
 /** Bỏ tiền tố mạo từ "AL" ("Al Duwadimi" → "ALDUWADIMI" → "DUWADIMI"). */

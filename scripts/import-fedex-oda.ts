@@ -40,7 +40,7 @@
 import 'dotenv/config';
 import { readFileSync } from 'fs';
 import XLSX from 'xlsx';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notLike } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 interface Args {
@@ -232,6 +232,8 @@ async function main(): Promise<void> {
       eq(schema.carrierRemotePostcodes.carrierAccountId, account.id),
       inArray(schema.carrierRemotePostcodes.countryCode, touchedCountries),
       eq(schema.carrierRemotePostcodes.effectiveFrom, args.effectiveFrom),
+      // Never delete manual evidence-based corrections sharing this period.
+      notLike(schema.carrierRemotePostcodes.source, 'manual%'),
     ));
     console.log(`[oda-import] inserting ${rows.length} rows (from=${args.effectiveFrom} to=${args.effectiveTo ?? '∞'})…`);
     const CHUNK = 1000;
