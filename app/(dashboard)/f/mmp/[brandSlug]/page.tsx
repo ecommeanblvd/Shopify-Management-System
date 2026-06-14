@@ -21,6 +21,7 @@ const CURATION_TABS: Array<{ key: CurationFilter; label: string }> = [
   { key: 'approved', label: 'Approved' },
   { key: 'rejected', label: 'Rejected' },
   { key: 'pushed', label: 'Pushed' },
+  { key: 'archived', label: 'Archived' },
 ];
 
 // Filter-pill styles (text only, never over a photo).
@@ -30,6 +31,7 @@ const CURATION_PILL_STYLES: Record<CurationFilter, string> = {
   approved: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   rejected: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
   pushed:   'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  archived: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
 };
 
 // Badge styles for overlays on product photos. Soft fills disappear
@@ -40,6 +42,7 @@ const CURATION_BADGE_STYLES: Record<Exclude<CurationFilter, 'all'>, string> = {
   approved: 'bg-emerald-500 text-white border-transparent',
   rejected: 'bg-rose-500 text-white border-transparent',
   pushed:   'bg-sky-500 text-white border-transparent',
+  archived: 'bg-zinc-500 text-white border-transparent',
 };
 
 function fmtVnd(s: string): string {

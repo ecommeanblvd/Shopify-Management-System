@@ -1330,6 +1330,9 @@ export const mmpCurationStatusEnum = pgEnum('mmp_curation_status', [
   'rejected',
   // Sent to Shopify; mmp_products.shopify_product_id populated.
   'pushed',
+  // Đã archive trên Shopify (đối soát ngược về lịch sử). Phân biệt với
+  // 'approved' (đang ACTIVE/bán) — xem reconcile Denio ↔ Shopify.
+  'archived',
 ]);
 
 export const mmpBrands = pgTable('mmp_brands', {

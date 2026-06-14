@@ -191,7 +191,7 @@ export default async function MmpProductsLanding({ searchParams }: PageProps): P
   );
 }
 
-type Tone = 'amber' | 'emerald' | 'rose' | 'sky';
+type Tone = 'amber' | 'emerald' | 'rose' | 'sky' | 'zinc';
 
 /** Soft fill — used in dashboard cards on the standard surface. */
 const TONE_STYLES: Record<Tone, string> = {
@@ -199,6 +199,7 @@ const TONE_STYLES: Record<Tone, string> = {
   emerald: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   rose:    'bg-rose-500/10 text-rose-700 dark:text-rose-300',
   sky:     'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  zinc:    'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
 };
 
 /** Solid fill — used for badges overlaid on product photos. The soft
@@ -208,6 +209,7 @@ const TONE_STYLES_SOLID: Record<Tone, string> = {
   emerald: 'bg-emerald-500 text-white border-transparent',
   rose:    'bg-rose-500 text-white border-transparent',
   sky:     'bg-sky-500 text-white border-transparent',
+  zinc:    'bg-zinc-500 text-white border-transparent',
 };
 
 function Tally({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone?: Tone }): React.ReactNode {
@@ -249,11 +251,12 @@ function EmptyState(): React.ReactNode {
   );
 }
 
-const CURATION_TONE_MAP: Record<'received' | 'approved' | 'rejected' | 'pushed', Tone> = {
+const CURATION_TONE_MAP: Record<'received' | 'approved' | 'rejected' | 'pushed' | 'archived', Tone> = {
   received: 'amber',
   approved: 'emerald',
   rejected: 'rose',
   pushed:   'sky',
+  archived: 'zinc',
 };
 
 interface SearchResultsProps {

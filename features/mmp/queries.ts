@@ -21,6 +21,7 @@ export interface BrandSummary {
     approved: number;
     rejected: number;
     pushed: number;
+    archived: number;
   };
 }
 
@@ -37,6 +38,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
     approved: number;
     rejected: number;
     pushed: number;
+    archived: number;
   }>(sql`
     SELECT
       b.slug,
@@ -47,7 +49,8 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
       COUNT(p.id) FILTER (WHERE p.curation_status = 'received')::int AS received,
       COUNT(p.id) FILTER (WHERE p.curation_status = 'approved')::int AS approved,
       COUNT(p.id) FILTER (WHERE p.curation_status = 'rejected')::int AS rejected,
-      COUNT(p.id) FILTER (WHERE p.curation_status = 'pushed')::int   AS pushed
+      COUNT(p.id) FILTER (WHERE p.curation_status = 'pushed')::int   AS pushed,
+      COUNT(p.id) FILTER (WHERE p.curation_status = 'archived')::int AS archived
     FROM ${schema.mmpBrands} b
     LEFT JOIN ${schema.mmpProducts} p ON p.brand_slug = b.slug
     GROUP BY b.slug, b.display_name, b.first_seen_at, b.last_seen_at
@@ -67,6 +70,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
       approved: r.approved,
       rejected: r.rejected,
       pushed: r.pushed,
+      archived: r.archived,
     },
   }));
 }
@@ -91,7 +95,7 @@ export async function getBrand(slug: string): Promise<{
 }
 
 export type CurationFilter =
-  | 'all' | 'received' | 'approved' | 'rejected' | 'pushed';
+  | 'all' | 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
 
 /** Card-row product summary for the brand listing page. */
 export interface ProductListItem {
@@ -101,7 +105,7 @@ export interface ProductListItem {
   productType: string | null;
   collection: string | null;
   status: 'live' | 'draft' | 'archived';
-  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed';
+  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
   basePrice: string; // VND as string (drizzle numeric)
   variantCount: number;
   thumbnailUrl: string | null;
@@ -172,7 +176,7 @@ export async function listProductsForBrand(args: ListProductsArgs): Promise<{
     product_type: string | null;
     collection: string | null;
     status: 'live' | 'draft' | 'archived';
-    curation_status: 'received' | 'approved' | 'rejected' | 'pushed';
+    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
     base_price: string;
     variant_count: number;
     thumbnail_url: string | null;
@@ -265,7 +269,7 @@ export async function searchAllProducts(args: {
     product_type: string | null;
     collection: string | null;
     status: 'live' | 'draft' | 'archived';
-    curation_status: 'received' | 'approved' | 'rejected' | 'pushed';
+    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
     base_price: string;
     variant_count: number;
     thumbnail_url: string | null;
@@ -342,7 +346,7 @@ export interface ProductDetail {
   collection: string | null;
   productType: string | null;
   status: 'live' | 'draft' | 'archived';
-  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed';
+  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
   curationNote: string | null;
   basePrice: string;
   currency: string;
