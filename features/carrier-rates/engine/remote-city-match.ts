@@ -29,11 +29,12 @@ function expand(c: string): string[] {
   return [...out].filter((x) => x.length > 0);
 }
 
-/** Pattern phải đủ dài mới được dùng cho fuzzy (chặn nhiễu):
- *  - PREFIX (candidate bắt đầu bằng pattern): ≥5 ký tự.
- *  - CONTAINS (pattern nằm bất kỳ trong candidate): ≥6 ký tự (chặt hơn vì rủi ro cao hơn). */
+/** Fuzzy chỉ ở RÌA (prefix/suffix) — KHÔNG substring giữa (tránh khớp nhầm như
+ *  "ALQASSIM" chứa một pattern ngắn nằm giữa). Pattern phải đủ dài:
+ *  - PREFIX (city bắt đầu bằng pattern): ≥5 — bắt "BURAIDAHALQASSIM" (city+vùng).
+ *  - SUFFIX (city kết thúc bằng pattern): ≥6 — bắt "ALRUWAISALSHAMAL" (vùng+town). */
 const MIN_PREFIX_LEN = 5;
-const MIN_CONTAINS_LEN = 6;
+const MIN_SUFFIX_LEN = 6;
 
 export function matchRemoteCity(
   candidates: string[],
@@ -45,15 +46,14 @@ export function matchRemoteCity(
       if (patterns.has(c)) return { tier: patterns.get(c) ?? null };
     }
   }
-  // 2. FUZZY: prefix (≥5) hoặc contains (≥6). Lấy pattern KHỚP DÀI NHẤT (cụ thể nhất → an toàn nhất).
-  //    Bắt "BURAIDAHALQASSIM" (prefix BURAIDAH) và "ALRUWAISALSHAMAL" (chứa ALSHAMAL).
+  // 2. RÌA: prefix (≥5) hoặc suffix (≥6). Lấy pattern KHỚP DÀI NHẤT (cụ thể nhất → an toàn nhất).
   let best: { tier: string | null; len: number } | null = null;
   const cands = candidates.flatMap((c) => expand(c));
   for (const [key, tier] of patterns) {
     const klen = key.length;
     if (klen < MIN_PREFIX_LEN) continue;
     for (const c of cands) {
-      const hit = (klen >= MIN_PREFIX_LEN && c.startsWith(key)) || (klen >= MIN_CONTAINS_LEN && c.includes(key));
+      const hit = (klen >= MIN_PREFIX_LEN && c.startsWith(key)) || (klen >= MIN_SUFFIX_LEN && c.endsWith(key));
       if (hit && (!best || klen > best.len)) best = { tier: tier ?? null, len: klen };
     }
   }

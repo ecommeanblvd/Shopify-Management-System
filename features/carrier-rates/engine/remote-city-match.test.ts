@@ -35,13 +35,18 @@ describe('matchRemoteCity', () => {
     expect(matchRemoteCity(['AFIFABAD'], sa)).toBeNull();
   });
 
-  it('contains: pattern nằm GIỮA/CUỐI candidate (≥6) → "ALRUWAISALSHAMAL" chứa "ALSHAMAL"', () => {
+  it('suffix: city kết thúc bằng pattern (≥6) → "ALRUWAISALSHAMAL" hậu tố "ALSHAMAL"', () => {
     const qa = P([['ALSHAMAL', null], ['DOHAALRUWAIS', null]]);
     expect(matchRemoteCity(['ALRUWAISALSHAMAL'], qa)).toEqual({ tier: null });
   });
 
-  it('contains KHÔNG kích hoạt với pattern <6 (chặn nhiễu): AFIF (4) không khớp "XYZAFIFW"', () => {
-    expect(matchRemoteCity(['XYZAFIFW'], sa)).toBeNull();
+  it('KHÔNG khớp pattern nằm GIỮA (chỉ rìa) — chặn false-positive', () => {
+    const p = P([['SHAMAL2', null]]); // pattern 7 ký tự nằm giữa "XSHAMAL2Y"
+    expect(matchRemoteCity(['XSHAMAL2Y'], p)).toBeNull();
+  });
+
+  it('suffix KHÔNG kích hoạt với pattern <6: AFIF (4) không khớp "XYZAFIF"', () => {
+    expect(matchRemoteCity(['XYZAFIF'], sa)).toBeNull();
   });
 
   it('candidate Latin từ city Arabic+Latin: "ALISABAHALSALEMUMMALHAYMAN" prefix ALISABAHALSALEM', () => {
