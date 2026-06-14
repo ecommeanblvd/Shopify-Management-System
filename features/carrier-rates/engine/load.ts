@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
@@ -30,6 +30,9 @@ export async function loadAccountSnapshot(
   const card = pickRateCardForDate(cards, effectiveDate);
   if (!card) return null;
 
+  // date columns compare as 'YYYY-MM-DD' strings; normalise effectiveDate once.
+  const remoteAsOf = effectiveDate.toISOString().slice(0, 10);
+
   const [zones, zoneCountries, tiers, surcharges, postcodes] = await Promise.all([
     db.select().from(schema.carrierZones)
       .where(eq(schema.carrierZones.carrierAccountId, carrierAccountId))
@@ -44,8 +47,18 @@ export async function loadAccountSnapshot(
         eq(schema.carrierSurcharges.carrierAccountId, carrierAccountId),
         eq(schema.carrierSurcharges.active, true),
       )),
+    // Remote/ODA list is year-versioned (effective_from/to), applied by the
+    // shipment's effectiveDate — same windowing as rate cards. A row covers the
+    // date when effective_from ≤ date AND (effective_to IS NULL OR date < effective_to).
     db.select().from(schema.carrierRemotePostcodes)
-      .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId)),
+      .where(and(
+        eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
+        lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
+        or(
+          isNull(schema.carrierRemotePostcodes.effectiveTo),
+          gt(schema.carrierRemotePostcodes.effectiveTo, remoteAsOf),
+        ),
+      )),
   ]);
 
   // Cells scoped to the chosen rate card (NOT all cells for the account).

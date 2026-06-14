@@ -490,12 +490,18 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
   // FedEx ODA tiers are 'Tier A' / 'Tier B' / 'Tier C'. Carrier-agnostic free
   // text so future carriers (UPS, DPD) can use their own labels.
   tier: text('tier'),
+  // Remote/ODA lists đổi theo KỲ (FedEx ODA Jan-2025 ≠ Jan-2026…). Engine chọn
+  // list phủ NGÀY SHIP của đơn (effective_from ≤ ship < effective_to), giống rate
+  // card. effective_to NULL = kỳ hiện hành (mở). Data cũ backfill 2025-01-01 → ∞
+  // để không đổi hành vi; import theo năm sẽ cắt cửa sổ đúng kỳ.
+  effectiveFrom: date('effective_from').notNull().default('2025-01-01'),
+  effectiveTo: date('effective_to'),
   source: text('source'),
   uploadedBy: text('uploaded_by').references(() => user.id),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex('carrier_remote_postcodes_account_country_pattern_idx')
-    .on(table.carrierAccountId, table.countryCode, table.postcodePattern),
+  uniqueIndex('carrier_remote_postcodes_account_country_pattern_from_idx')
+    .on(table.carrierAccountId, table.countryCode, table.postcodePattern, table.effectiveFrom),
   index('carrier_remote_postcodes_lookup_idx').on(table.carrierAccountId, table.countryCode),
 ]);
 
