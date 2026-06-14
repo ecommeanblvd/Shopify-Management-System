@@ -1,12 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-import { Settings2, LayoutGrid, Layers, Wrench, MapPin, Calculator, Send, ArrowRight, AlertCircle } from 'lucide-react';
+import { Settings2, AlertCircle } from 'lucide-react';
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 
 interface Props {
-  accountId: string;
   canManage: boolean;
   enabled: boolean;
   fxFormatted: string;
@@ -23,24 +21,14 @@ interface Props {
 /** Nút (!) mở panel cấu hình + công cụ của carrier — gom toàn bộ setup khỏi
  *  trang chính (vốn ưu tiên công nợ). */
 export function CarrierSetupSheet(props: Props) {
-  const { accountId } = props;
-  const tools = [
-    { href: `/f/carrier-rates/${accountId}/workspace`, icon: LayoutGrid, title: 'Rate workspace', desc: 'Zones + ma trận giá, search country → zone.' },
-    { href: `/f/carrier-rates/${accountId}/weight-tiers`, icon: Layers, title: 'Weight tiers', desc: 'Breakpoints cho các dòng ma trận.' },
-    { href: `/f/carrier-rates/${accountId}/surcharges`, icon: Wrench, title: 'Surcharges', desc: 'Fuel %, peak, remote, residential, green, markup.' },
-    { href: `/f/carrier-rates/${accountId}/remote-postcodes`, icon: MapPin, title: 'Remote postcodes', desc: 'Danh sách vùng remote + file bằng chứng.' },
-    { href: `/f/carrier-rates/${accountId}/calculator`, icon: Calculator, title: 'Calculator', desc: 'Thử quote: country + postcode + weight.' },
-    { href: `/f/carrier-rates/${accountId}/push`, icon: Send, title: 'Recalculate & push', desc: 'Sinh lại override per-store cho mọi market.' },
-  ];
-
   return (
     <Sheet>
       <SheetTrigger className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted whitespace-nowrap">
-        <Settings2 className="size-4" /> Cấu hình &amp; công cụ
+        <Settings2 className="size-4" /> Cấu hình
       </SheetTrigger>
       <SheetContent side="right" className="w-[92vw] sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Cấu hình &amp; công cụ</SheetTitle>
+          <SheetTitle>Cấu hình</SheetTitle>
         </SheetHeader>
 
         <div className="px-4 pb-6 space-y-6">
@@ -62,21 +50,6 @@ export function CarrierSetupSheet(props: Props) {
               <p className="whitespace-pre-wrap text-sm text-muted-foreground">{props.notes}</p>
             </div>
           )}
-
-          {/* Tools */}
-          <div className="space-y-2">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Công cụ</div>
-            {tools.map((t) => (
-              <Link key={t.href} href={t.href} className="group flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 hover:border-foreground/30 transition-colors">
-                <span className="size-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0"><t.icon className="size-4" /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium truncate">{t.title}</span>
-                  <span className="block text-[11px] text-muted-foreground truncate">{t.desc}</span>
-                </span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
-              </Link>
-            ))}
-          </div>
 
           {/* Danger zone */}
           {props.canManage && (

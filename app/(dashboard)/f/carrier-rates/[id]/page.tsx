@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { ChevronLeft, Truck, Wallet } from 'lucide-react';
+import {
+  ChevronLeft, Truck, Wallet, ArrowRight,
+  LayoutGrid, Layers, Wrench, MapPin, Calculator, Send,
+} from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -16,11 +19,9 @@ import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-sum
 import { systemTotalForPeriod, systemAllTimeTotal } from '@/features/carrier-rates/ap/period-compare';
 import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
 import { CarrierSetupSheet } from '@/components/carrier-rates/CarrierSetupSheet';
+import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,7 +121,7 @@ export default async function CarrierAccountDetailPage({ params }: { params: Pro
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{account.name}</h1>
         </div>
         <CarrierSetupSheet
-          accountId={id} canManage={canManage} enabled={account.enabled}
+          canManage={canManage} enabled={account.enabled}
           fxFormatted={String(fxFormatted)} fxAge={fxAge} fxStale={fxStale}
           costCurrency={account.costCurrency} displayCurrency={account.displayCurrency}
           weightUnit={account.weightUnit} notes={account.notes ?? null}
@@ -145,33 +146,50 @@ export default async function CarrierAccountDetailPage({ params }: { params: Pro
         </div>
       </section>
 
-      {/* Add bill */}
-      {canManage && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Thêm hoá đơn</h2>
-          <Card><CardContent className="p-5">
-            <form action={createBillAction} className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-              <Field label="Mã hoá đơn"><Input name="billNumber" placeholder="INV-..." /></Field>
-              <Field label="Số tiền *"><Input name="amount" required inputMode="numeric" placeholder="0" /></Field>
-              <Field label="Kỳ từ *"><Input name="periodStart" type="date" required /></Field>
-              <Field label="Kỳ đến *"><Input name="periodEnd" type="date" required /></Field>
-              <Field label="Ngày xuất"><Input name="issueDate" type="date" /></Field>
-              <Field label="Hạn thanh toán"><Input name="dueDate" type="date" /></Field>
-              <Field label="File hoá đơn"><Input name="file" type="file" accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg" /></Field>
-              <Field label="Ghi chú"><Input name="note" placeholder="—" /></Field>
-              <div className="col-span-2 md:col-span-4"><Button type="submit" size="sm">Lưu hoá đơn</Button></div>
-            </form>
-          </CardContent></Card>
-        </section>
-      )}
+      {/* Billing / Invoices */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Billing / Invoices</h2>
+          {canManage && <AddBillDialog createBillAction={createBillAction} />}
+        </div>
+        <BillsBoard
+          accountId={id} currency={currency} canManage={canManage}
+          bills={bills} payments={payments} summaryBills={summary.bills} systemByBill={systemByBill}
+          listLines={listLinesAction}
+          addPaymentAction={addPaymentAction} deleteBillAction={deleteBillAction} deletePaymentAction={deletePaymentAction}
+        />
+      </section>
 
-      <BillsBoard
-        accountId={id} currency={currency} canManage={canManage}
-        bills={bills} payments={payments} summaryBills={summary.bills} systemByBill={systemByBill}
-        listLines={listLinesAction}
-        addPaymentAction={addPaymentAction} deleteBillAction={deleteBillAction} deletePaymentAction={deletePaymentAction}
-      />
+      {/* Rate config & tools */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Cấu hình giá &amp; công cụ</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ToolCard href={`/f/carrier-rates/${id}/workspace`} icon={<LayoutGrid className="size-4" />} title="Rate workspace" desc="Zones + ma trận giá; search country → zone." accent />
+          <ToolCard href={`/f/carrier-rates/${id}/weight-tiers`} icon={<Layers className="size-4" />} title="Weight tiers" desc="Breakpoints cho các dòng ma trận." />
+          <ToolCard href={`/f/carrier-rates/${id}/surcharges`} icon={<Wrench className="size-4" />} title="Surcharges" desc="Fuel %, peak, remote, residential, green, markup." />
+          <ToolCard href={`/f/carrier-rates/${id}/remote-postcodes`} icon={<MapPin className="size-4" />} title="Remote postcodes" desc="Vùng remote + file bằng chứng theo nước." />
+          <ToolCard href={`/f/carrier-rates/${id}/calculator`} icon={<Calculator className="size-4" />} title="Calculator" desc="Thử quote: country + postcode + weight → breakdown." />
+          <ToolCard href={`/f/carrier-rates/${id}/push`} icon={<Send className="size-4" />} title="Recalculate & push" desc="Sinh lại override per-store cho mọi market." />
+        </div>
+      </section>
     </div>
+  );
+}
+
+function ToolCard({ href, icon, title, desc, accent }: { href: string; icon: React.ReactNode; title: string; desc: string; accent?: boolean }) {
+  return (
+    <Link href={href} className="group block">
+      <Card className="hover:border-foreground/30 transition-colors">
+        <CardContent className={'p-5 flex items-start gap-4 ' + (accent ? 'bg-primary/[0.03]' : '')}>
+          <div className={'size-10 rounded-xl flex items-center justify-center shrink-0 ' + (accent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>{icon}</div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <h3 className="font-semibold tracking-tight">{title}</h3>
+            <p className="text-sm text-muted-foreground">{desc}</p>
+          </div>
+          <ArrowRight className="size-4 shrink-0 text-muted-foreground group-hover:translate-x-0.5 group-hover:text-foreground transition-transform" />
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -181,15 +199,6 @@ function StatTile({ label, value, sub, accent, danger }: { label: string; value:
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={'mt-1 text-lg md:text-xl font-semibold tabular-nums ' + (danger ? 'text-destructive' : accent ? 'text-amber-600 dark:text-amber-400' : '')}>{value}</div>
       {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</Label>
-      {children}
     </div>
   );
 }
