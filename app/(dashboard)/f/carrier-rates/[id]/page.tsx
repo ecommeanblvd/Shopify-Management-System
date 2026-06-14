@@ -2,21 +2,37 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import {
-  ChevronLeft, Truck, Layers, Wrench, MapPin, Calculator, Send, AlertCircle, Trash2, ArrowRight, LayoutGrid, Wallet,
-} from 'lucide-react';
+import { ChevronLeft, Truck, Wallet } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount, updateAccount, deleteAccount } from '@/features/carrier-rates/actions';
 import { daysSince } from '@/features/carrier-rates/lib';
+import {
+  createBill, addPayment, deleteBill, deletePayment,
+  listBills, listPaymentsForAccount, listBillLines, type UploadFile,
+} from '@/features/carrier-rates/ap/bills-actions';
+import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
+import { systemTotalForPeriod, systemAllTimeTotal } from '@/features/carrier-rates/ap/period-compare';
+import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
+import { CarrierSetupSheet } from '@/components/carrier-rates/CarrierSetupSheet';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export const dynamic = 'force-dynamic';
 
 const FX_STALE_DAYS = 30;
+
+function todayIso(): string { return new Date().toISOString().slice(0, 10); }
+
+async function fileFromForm(form: FormData, field: string): Promise<UploadFile | null> {
+  const f = form.get(field);
+  if (!(f instanceof File) || f.size === 0) return null;
+  return { bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type || 'application/octet-stream' };
+}
 
 async function toggleEnabledAction(id: string, next: boolean, userId: string) {
   'use server';
@@ -25,208 +41,155 @@ async function toggleEnabledAction(id: string, next: boolean, userId: string) {
   revalidatePath('/f/carrier-rates');
 }
 
-async function deleteAction(id: string) {
+async function deleteAccountAction(id: string) {
   'use server';
   await deleteAccount(id);
   redirect('/f/carrier-rates');
 }
 
-export default async function CarrierAccountDetailPage({
-  params,
-}: { params: Promise<{ id: string }> }) {
+export default async function CarrierAccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
   if (!role || !hasPermission(role, 'view_carrier_rates')) {
-    return (
-      <div className="max-w-3xl mx-auto px-6 md:px-10 py-16 text-center space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Forbidden</h1>
-      </div>
-    );
+    return <div className="max-w-3xl mx-auto px-6 md:px-10 py-16 text-center"><h1 className="text-3xl font-semibold">Forbidden</h1></div>;
   }
-
   const account = await getAccount(id);
   if (!account) notFound();
 
   const canManage = hasPermission(role, 'manage_carrier_rates');
+  const currency = account.costCurrency ?? 'VND';
   const fxNumber = Number(account.fxCostPerDisplay);
   const fxFormatted = Number.isFinite(fxNumber) ? fxNumber.toLocaleString() : account.fxCostPerDisplay;
   const fxAge = daysSince(account.fxUpdatedAt);
   const fxStale = fxAge >= FX_STALE_DAYS;
 
-  const toggleBound = toggleEnabledAction.bind(null, id, !account.enabled, session.user.id);
-  const deleteBound = deleteAction.bind(null, id);
+  const [bills, payments, allTime] = await Promise.all([
+    listBills(id), listPaymentsForAccount(id), systemAllTimeTotal(id),
+  ]);
+  const inputs = toSummaryInputs(bills, payments);
+  const summary = summariseAp(inputs.bills, inputs.payments, todayIso());
+  const periodTotals = await Promise.all(bills.map((b) => systemTotalForPeriod(id, b.periodStart, b.periodEnd)));
+  const systemByBill: Record<string, number> = {};
+  bills.forEach((b, i) => { systemByBill[b.id] = periodTotals[i].systemTotal; });
+
+  const fmt = (n: number) => `${Math.round(n).toLocaleString('vi-VN')} ${currency}`;
+
+  // ── Server actions ──
+  async function createBillAction(formData: FormData) {
+    'use server';
+    const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
+    const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
+    await createBill({
+      carrierAccountId: id, billNumber: s('billNumber'),
+      periodStart: String(formData.get('periodStart')), periodEnd: String(formData.get('periodEnd')),
+      issueDate: s('issueDate'), dueDate: s('dueDate'), amount: n('amount'), currency,
+      note: s('note'), userId: session!.user.id, file: await fileFromForm(formData, 'file'),
+    });
+    revalidatePath(`/f/carrier-rates/${id}`);
+  }
+  async function addPaymentAction(formData: FormData) {
+    'use server';
+    const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
+    const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
+    await addPayment({
+      billId: String(formData.get('billId')), paidAt: String(formData.get('paidAt')),
+      amount: n('amount'), method: s('method'), note: s('note'),
+      userId: session!.user.id, proof: await fileFromForm(formData, 'proof'),
+    });
+    revalidatePath(`/f/carrier-rates/${id}`);
+  }
+  async function deleteBillAction(billId: string) { 'use server'; await deleteBill(billId); revalidatePath(`/f/carrier-rates/${id}`); }
+  async function deletePaymentAction(paymentId: string) { 'use server'; await deletePayment(paymentId); revalidatePath(`/f/carrier-rates/${id}`); }
+  async function listLinesAction(billId: string) { 'use server'; return listBillLines(billId); }
 
   return (
-    <div className="px-6 md:px-10 py-6 space-y-6">
-      <Link
-        href="/f/carrier-rates"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ChevronLeft className="size-4" />
-        Carrier rates
+    <div className="px-6 md:px-10 py-6 space-y-8">
+      <Link href="/f/carrier-rates" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <ChevronLeft className="size-4" /> Carrier rates
       </Link>
 
-      <header className="space-y-3">
-        <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div className="space-y-2 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <Truck className="size-3.5" />
-                {account.carrierName ?? account.carrierKey ?? 'Unknown carrier'}
-              </span>
-              <Badge variant={account.enabled ? 'default' : 'outline'} className="h-5 text-[10px] uppercase tracking-wider">
-                {account.enabled ? 'Active' : 'Disabled'}
-              </Badge>
-              <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider font-mono">
-                {account.costCurrency} → {account.displayCurrency}
-              </Badge>
-              <Badge variant="secondary" className="h-5 text-[10px] uppercase tracking-wider">
-                {account.weightUnit}
-              </Badge>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{account.name}</h1>
-            {account.notes && (
-              <details className="max-w-xl">
-                <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-                  Ghi chú hợp đồng &amp; quy tắc fuel
-                </summary>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{account.notes}</p>
-              </details>
-            )}
+      {/* Header: name + status + (!) setup */}
+      <header className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="space-y-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5"><Truck className="size-3.5" />{account.carrierName ?? account.carrierKey ?? 'Carrier'}</span>
+            <Badge variant={account.enabled ? 'default' : 'outline'} className="h-5 text-[10px] uppercase tracking-wider">{account.enabled ? 'Active' : 'Disabled'}</Badge>
           </div>
-          {canManage && (
-            <div className="flex items-center gap-2">
-              <form action={toggleBound}>
-                <Button type="submit" variant="outline">
-                  {account.enabled ? 'Disable' : 'Enable'}
-                </Button>
-              </form>
-              <form action={deleteBound}>
-                <Button type="submit" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-2">
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
-              </form>
-            </div>
-          )}
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{account.name}</h1>
         </div>
+        <CarrierSetupSheet
+          accountId={id} canManage={canManage} enabled={account.enabled}
+          fxFormatted={String(fxFormatted)} fxAge={fxAge} fxStale={fxStale}
+          costCurrency={account.costCurrency} displayCurrency={account.displayCurrency}
+          weightUnit={account.weightUnit} notes={account.notes ?? null}
+          toggleAction={toggleEnabledAction.bind(null, id, !account.enabled, session.user.id)}
+          deleteAction={deleteAccountAction.bind(null, id)}
+        />
       </header>
 
-      {fxStale && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 px-5 py-3.5 flex items-start gap-3 text-sm">
-          <AlertCircle className="size-4 shrink-0 mt-0.5" />
-          <div>
-            <div className="font-medium">FX rate is {fxAge} days old</div>
-            <p className="opacity-80 mt-1">
-              The current rate ({fxFormatted} {account.costCurrency} per 1 {account.displayCurrency}) has not been refreshed in over {FX_STALE_DAYS} days. Update it before pushing rates to stores.
-            </p>
-          </div>
+      {/* AP summary */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground"><Wallet className="size-3.5" /> Công nợ</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
+          <StatTile label="Đã bill" value={fmt(summary.totalBilled)} sub={`${bills.length} hoá đơn`} />
+          <StatTile label="Đã thanh toán" value={fmt(summary.totalPaid)} />
+          <StatTile label="Còn nợ" value={fmt(summary.totalOutstanding)} accent={summary.totalOutstanding > 0} />
+          <StatTile label="Quá hạn" value={fmt(summary.overdueAmount)} sub={`${summary.overdueCount} hoá đơn`} danger={summary.overdueCount > 0} />
         </div>
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1">
+          <span className="uppercase tracking-wider">Tham chiếu hệ thống:</span>
+          <span>Đã charge all-time <b className="text-foreground tabular-nums">{fmt(allTime.systemTotal)}</b> ({allTime.shipmentCount.toLocaleString('vi-VN')} đơn)</span>
+          <span>Công nợ ước tính <b className={'tabular-nums ' + (allTime.systemTotal - summary.totalPaid > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>{fmt(Math.max(0, allTime.systemTotal - summary.totalPaid))}</b></span>
+        </div>
+      </section>
+
+      {/* Add bill */}
+      {canManage && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Thêm hoá đơn</h2>
+          <Card><CardContent className="p-5">
+            <form action={createBillAction} className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+              <Field label="Mã hoá đơn"><Input name="billNumber" placeholder="INV-..." /></Field>
+              <Field label="Số tiền *"><Input name="amount" required inputMode="numeric" placeholder="0" /></Field>
+              <Field label="Kỳ từ *"><Input name="periodStart" type="date" required /></Field>
+              <Field label="Kỳ đến *"><Input name="periodEnd" type="date" required /></Field>
+              <Field label="Ngày xuất"><Input name="issueDate" type="date" /></Field>
+              <Field label="Hạn thanh toán"><Input name="dueDate" type="date" /></Field>
+              <Field label="File hoá đơn"><Input name="file" type="file" accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg" /></Field>
+              <Field label="Ghi chú"><Input name="note" placeholder="—" /></Field>
+              <div className="col-span-2 md:col-span-4"><Button type="submit" size="sm">Lưu hoá đơn</Button></div>
+            </form>
+          </CardContent></Card>
+        </section>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
-        <StatTile label="FX rate" value={fxFormatted} sub={`${account.costCurrency} per 1 ${account.displayCurrency}`} tone={fxStale ? 'warning' : 'default'} />
-        <StatTile label="Updated" value={`${fxAge}d ago`} sub={new Date(account.fxUpdatedAt).toLocaleDateString()} />
-        <StatTile label="Weight unit" value={account.weightUnit} sub="Cost sheet basis" />
-        <StatTile label="Phase" value="2a" sub="Authoring live" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SubSection
-          href={`/f/carrier-rates/${id}/workspace`}
-          icon={<LayoutGrid className="size-4" />}
-          title="Rate workspace"
-          desc="Zones + rate matrix trong một trang read-only. Search country → zone."
-          status="Ready"
-          accent
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/weight-tiers`}
-          icon={<Layers className="size-4" />}
-          title="Weight tiers"
-          desc="Breakpoints for the rate matrix rows."
-          status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/surcharges`}
-          icon={<Wrench className="size-4" />}
-          title="Surcharges"
-          desc="Fuel %, peak fixed, remote fixed, residential fixed, per-kg green, markup %."
-          status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/remote-postcodes`}
-          icon={<MapPin className="size-4" />}
-          title="Remote postcodes"
-          desc="CSV upload of DHL/FedEx remote-area postal codes by country."
-          status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/bills`}
-          icon={<Wallet className="size-4" />}
-          title="Công nợ"
-          desc="Upload hoá đơn carrier + bằng chứng thanh toán; theo dõi còn nợ / quá hạn."
-          status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/calculator`}
-          icon={<Calculator className="size-4" />}
-          title="Calculator"
-          desc="Try a quote: country + postcode + weight → breakdown."
-          status="Ready"
-        />
-        <SubSection
-          href={`/f/carrier-rates/${id}/push`}
-          icon={<Send className="size-4" />}
-          title="Recalculate &amp; push"
-          desc="Regenerate per-store overrides for every linked market."
-          status="Ready"
-        />
-      </div>
+      <BillsBoard
+        accountId={id} currency={currency} canManage={canManage}
+        bills={bills} payments={payments} summaryBills={summary.bills} systemByBill={systemByBill}
+        listLines={listLinesAction}
+        addPaymentAction={addPaymentAction} deleteBillAction={deleteBillAction} deletePaymentAction={deletePaymentAction}
+      />
     </div>
   );
 }
 
-function StatTile({
-  label, value, sub, tone = 'default',
-}: { label: string; value: string; sub: string; tone?: 'default' | 'warning' }) {
-  const c = tone === 'warning' ? 'text-amber-600 dark:text-amber-500' : '';
+function StatTile({ label, value, sub, accent, danger }: { label: string; value: string; sub?: string; accent?: boolean; danger?: boolean }) {
   return (
-    <div className="bg-card p-5 space-y-1.5">
-      <div className="text-muted-foreground text-xs uppercase tracking-wider">{label}</div>
-      <div className={`text-lg font-semibold tabular-nums truncate ${c}`}>{value}</div>
-      <div className="text-xs text-muted-foreground truncate">{sub}</div>
+    <div className="bg-card p-4 md:p-5">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={'mt-1 text-lg md:text-xl font-semibold tabular-nums ' + (danger ? 'text-destructive' : accent ? 'text-amber-600 dark:text-amber-400' : '')}>{value}</div>
+      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-function SubSection({
-  href, icon, title, desc, status, accent = false,
-}: { href?: string; icon: React.ReactNode; title: string; desc: string; status: string; accent?: boolean }) {
-  const body = (
-    <CardContent className={'p-5 flex items-start gap-4 ' + (accent ? 'bg-primary/[0.03]' : '')}>
-      <div className={'size-10 rounded-xl flex items-center justify-center shrink-0 ' + (accent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="font-semibold tracking-tight">{title}</h3>
-          <Badge variant={status === 'Ready' ? 'secondary' : 'outline'} className="h-5 text-[10px] uppercase tracking-wider shrink-0">{status}</Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">{desc}</p>
-      </div>
-      <ArrowRight className={'size-4 shrink-0 transition-transform ' + (href ? 'text-muted-foreground group-hover:translate-x-0.5 group-hover:text-foreground' : 'text-muted-foreground/30')} />
-    </CardContent>
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</Label>
+      {children}
+    </div>
   );
-
-  if (href) {
-    return (
-      <Link href={href} className="group block">
-        <Card className="hover:border-foreground/30 transition-colors">{body}</Card>
-      </Link>
-    );
-  }
-  return <Card className="opacity-70">{body}</Card>;
 }

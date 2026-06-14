@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Trash2, Paperclip } from 'lucide-react';
-import { AddPaymentDialog } from './AddPaymentDialog';
-import type { BillRow, PaymentRow } from '@/features/carrier-rates/ap/bills-actions';
+import { FileText } from 'lucide-react';
+import { InvoiceDetailModal } from './InvoiceDetailModal';
+import type { BillRow, PaymentRow, BillLineRow } from '@/features/carrier-rates/ap/bills-actions';
 import type { BillSummary } from '@/features/carrier-rates/ap/ap-summary';
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
   payments: PaymentRow[];
   summaryBills: BillSummary[];
   systemByBill: Record<string, number>;
+  listLines: (billId: string) => Promise<BillLineRow[]>;
   addPaymentAction: (formData: FormData) => Promise<void>;
   deleteBillAction: (billId: string) => Promise<void>;
   deletePaymentAction: (paymentId: string) => Promise<void>;
@@ -27,11 +28,9 @@ const STATUS: Record<BillSummary['status'], { label: string; cls: string }> = {
 
 export function BillsBoard(props: Props) {
   const { accountId, currency, canManage, bills, payments, summaryBills, systemByBill } = props;
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [selected, setSelected] = useState<BillRow | null>(null);
   const fmt = (n: number) => Math.round(n).toLocaleString('vi-VN');
   const sumById = new Map(summaryBills.map((s) => [s.id, s]));
-  const paysByBill = new Map<string, PaymentRow[]>();
-  for (const p of payments) { const l = paysByBill.get(p.billId) ?? []; l.push(p); paysByBill.set(p.billId, l); }
 
   if (bills.length === 0) {
     return <p className="text-sm text-muted-foreground">Chưa có hoá đơn nào. Dùng form bên trên để thêm.</p>;
@@ -53,84 +52,58 @@ export function BillsBoard(props: Props) {
             const s = sumById.get(b.id);
             const sysTotal = systemByBill[b.id] ?? 0;
             const periodDelta = b.amount - sysTotal;
-            const pays = paysByBill.get(b.id) ?? [];
-            const isOpen = open[b.id];
             return (
-              <li key={b.id}>
-                <div className="grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-muted/20">
-                  <div className="col-span-3 min-w-0">
-                    <button onClick={() => setOpen((o) => ({ ...o, [b.id]: !o[b.id] }))} className="flex items-center gap-1.5 text-left">
-                      {isOpen ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium truncate">{b.billNumber ?? '(không mã)'}</span>
-                        <span className="block text-[11px] text-muted-foreground font-mono">{b.periodStart} → {b.periodEnd}{b.dueDate ? ` · hạn ${b.dueDate}` : ''}</span>
-                      </span>
-                    </button>
-                  </div>
-                  <div className="col-span-2 text-right text-sm tabular-nums">{fmt(b.amount)}</div>
-                  <div className={'col-span-2 text-right text-sm tabular-nums ' + ((s?.outstanding ?? 0) > 0 ? 'font-medium' : 'text-muted-foreground')}>{fmt(s?.outstanding ?? b.amount)}</div>
-                  <div className="col-span-2 text-right text-[12px] tabular-nums" title="Tổng hệ thống ghi nhận trong kỳ">
-                    <span className="text-muted-foreground">{fmt(sysTotal)}</span>
-                    {Math.abs(periodDelta) >= 1000 && (
-                      <span className={periodDelta > 0 ? ' text-amber-600 dark:text-amber-400' : ' text-emerald-600 dark:text-emerald-400'}> ({periodDelta > 0 ? '+' : ''}{fmt(periodDelta)})</span>
-                    )}
-                  </div>
-                  <div className="col-span-3 flex items-center justify-end gap-2">
-                    {s?.overdue && <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-destructive/15 text-destructive">Quá hạn</span>}
-                    {s && <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + STATUS[s.status].cls}>{STATUS[s.status].label}</span>}
-                    {b.hasFile && (
-                      <a href={`/f/carrier-rates/${accountId}/bills/${b.id}/file`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title="Xem hoá đơn gốc">
-                        <FileText className="size-4" />
-                      </a>
-                    )}
-                    {canManage && s?.status !== 'paid' && (
-                      <AddPaymentDialog billId={b.id} outstanding={s?.outstanding ?? b.amount} currency={currency} addPaymentAction={props.addPaymentAction} />
-                    )}
-                  </div>
+              <li
+                key={b.id}
+                onClick={() => setSelected(b)}
+                className="grid grid-cols-12 gap-2 px-4 py-3 items-center hover:bg-muted/20 cursor-pointer"
+                title="Bấm để xem chi tiết hoá đơn"
+              >
+                <div className="col-span-3 min-w-0">
+                  <div className="text-sm font-medium truncate">{b.billNumber ?? '(không mã)'}</div>
+                  <div className="text-[11px] text-muted-foreground font-mono">{b.periodStart} → {b.periodEnd}{b.dueDate ? ` · hạn ${b.dueDate}` : ''}</div>
                 </div>
-
-                {isOpen && (
-                  <div className="px-4 pb-3 pl-10">
-                    {pays.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic py-1">Chưa có thanh toán.</p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {pays.map((p) => (
-                          <li key={p.id} className="flex items-center justify-between gap-3 text-xs rounded bg-muted/30 px-3 py-1.5">
-                            <span className="flex items-center gap-2">
-                              <span className="font-mono tabular-nums">{fmt(p.amount)} {currency}</span>
-                              <span className="text-muted-foreground">· {p.paidAt}{p.method ? ` · ${p.method}` : ''}{p.note ? ` · ${p.note}` : ''}</span>
-                            </span>
-                            <span className="flex items-center gap-2 shrink-0">
-                              {p.hasProof && (
-                                <a href={`/f/carrier-rates/${accountId}/bills/payments/${p.id}/proof`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title="Xem bằng chứng">
-                                  <Paperclip className="size-3.5" />
-                                </a>
-                              )}
-                              {canManage && (
-                                <form action={async () => { await props.deletePaymentAction(p.id); }}>
-                                  <button type="submit" className="text-muted-foreground hover:text-destructive" title="Xoá thanh toán"><Trash2 className="size-3.5" /></button>
-                                </form>
-                              )}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {canManage && (
-                      <form action={async () => { await props.deleteBillAction(b.id); }} className="mt-2">
-                        <button type="submit" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive">
-                          <Trash2 className="size-3" /> Xoá hoá đơn này
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                )}
+                <div className="col-span-2 text-right text-sm tabular-nums">{fmt(b.amount)}</div>
+                <div className={'col-span-2 text-right text-sm tabular-nums ' + ((s?.outstanding ?? 0) > 0 ? 'font-medium' : 'text-muted-foreground')}>{fmt(s?.outstanding ?? b.amount)}</div>
+                <div className="col-span-2 text-right text-[12px] tabular-nums" title="Tổng hệ thống ghi nhận trong kỳ">
+                  <span className="text-muted-foreground">{fmt(sysTotal)}</span>
+                  {Math.abs(periodDelta) >= 1000 && (
+                    <span className={periodDelta > 0 ? ' text-amber-600 dark:text-amber-400' : ' text-emerald-600 dark:text-emerald-400'}> ({periodDelta > 0 ? '+' : ''}{fmt(periodDelta)})</span>
+                  )}
+                </div>
+                <div className="col-span-3 flex items-center justify-end gap-2">
+                  {s?.overdue && <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-destructive/15 text-destructive">Quá hạn</span>}
+                  {s && <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + STATUS[s.status].cls}>{STATUS[s.status].label}</span>}
+                  {b.hasFile && (
+                    <a
+                      href={`/f/carrier-rates/${accountId}/bills/${b.id}/file`}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-muted-foreground hover:text-foreground" title="Mở file hoá đơn gốc"
+                    >
+                      <FileText className="size-4" />
+                    </a>
+                  )}
+                </div>
               </li>
             );
           })}
         </ul>
       </div>
+
+      <InvoiceDetailModal
+        accountId={accountId}
+        currency={currency}
+        canManage={canManage}
+        bill={selected}
+        summary={selected ? sumById.get(selected.id) : undefined}
+        payments={payments}
+        listLines={props.listLines}
+        addPaymentAction={props.addPaymentAction}
+        deletePaymentAction={props.deletePaymentAction}
+        deleteBillAction={props.deleteBillAction}
+        onClose={() => setSelected(null)}
+      />
     </section>
   );
 }

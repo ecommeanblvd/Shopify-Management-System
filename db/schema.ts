@@ -583,6 +583,33 @@ export const carrierBillPayments = pgTable('carrier_bill_payments', {
   index('carrier_bill_payments_bill_idx').on(table.billId),
 ]);
 
+/**
+ * Per-shipment line items of a carrier bill, parsed from the uploaded invoice
+ * file (PDF/Excel). One row = one tracking number on the statement with its
+ * cost breakdown. Populated by the bill parser; the invoice-detail modal reads
+ * from here. Empty until a bill is parsed.
+ */
+export const carrierBillLines = pgTable('carrier_bill_lines', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  billId: uuid('bill_id').references(() => carrierBills.id, { onDelete: 'cascade' }).notNull(),
+  trackingNumber: text('tracking_number'),
+  orderNumber: text('order_number'),
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  base: numeric('base', { precision: 14, scale: 2 }),
+  discount: numeric('discount', { precision: 14, scale: 2 }),
+  fuel: numeric('fuel', { precision: 14, scale: 2 }),
+  remote: numeric('remote', { precision: 14, scale: 2 }),
+  demand: numeric('demand', { precision: 14, scale: 2 }),
+  signature: numeric('signature', { precision: 14, scale: 2 }),
+  vat: numeric('vat', { precision: 14, scale: 2 }),
+  other: numeric('other', { precision: 14, scale: 2 }),
+  total: numeric('total', { precision: 14, scale: 2 }),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_bill_lines_bill_idx').on(table.billId),
+]);
+
 // Link table: which carrier account serves which market.
 export const marketCarrierLinks = pgTable('market_carrier_links', {
   id: uuid('id').defaultRandom().primaryKey(),

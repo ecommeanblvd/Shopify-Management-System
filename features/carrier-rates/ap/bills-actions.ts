@@ -166,6 +166,51 @@ export async function addPayment(input: AddPaymentInput): Promise<void> {
   });
 }
 
+export interface BillLineRow {
+  id: string;
+  trackingNumber: string | null;
+  orderNumber: string | null;
+  weightKg: number | null;
+  base: number | null;
+  discount: number | null;
+  fuel: number | null;
+  remote: number | null;
+  demand: number | null;
+  signature: number | null;
+  vat: number | null;
+  other: number | null;
+  total: number | null;
+  note: string | null;
+}
+
+const num = (v: string | null) => (v === null ? null : Number(v));
+
+/** Per-shipment line items of a bill (parsed from the invoice file). Empty
+ *  until the bill parser runs. */
+export async function listBillLines(billId: string): Promise<BillLineRow[]> {
+  const rows = await db
+    .select()
+    .from(schema.carrierBillLines)
+    .where(eq(schema.carrierBillLines.billId, billId))
+    .orderBy(schema.carrierBillLines.trackingNumber);
+  return rows.map((r) => ({
+    id: r.id,
+    trackingNumber: r.trackingNumber,
+    orderNumber: r.orderNumber,
+    weightKg: num(r.weightKg),
+    base: num(r.base),
+    discount: num(r.discount),
+    fuel: num(r.fuel),
+    remote: num(r.remote),
+    demand: num(r.demand),
+    signature: num(r.signature),
+    vat: num(r.vat),
+    other: num(r.other),
+    total: num(r.total),
+    note: r.note,
+  }));
+}
+
 export async function deleteBill(id: string): Promise<void> {
   await db.delete(schema.carrierBills).where(eq(schema.carrierBills.id, id));
 }
