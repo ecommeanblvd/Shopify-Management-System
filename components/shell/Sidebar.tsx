@@ -2,18 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { NAV, canSeeSettings, canSeeNavItem } from '@/lib/nav';
+import { NAV } from '@/lib/nav';
 
-interface SidebarProps { role: string }
+interface SidebarProps {
+  /** Hrefs the current role may see — computed server-side (the permission
+   *  cache is empty in the browser, so the client must NOT re-derive it). */
+  visibleHrefs: string[];
+}
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ visibleHrefs }: SidebarProps) {
   // usePathname phản ứng theo client navigation — KHÔNG dùng prop server tĩnh,
   // nếu không highlight sẽ kẹt ở trang được render server lần đầu.
   const currentPath = usePathname() ?? '/';
-  const visible = NAV.filter((item) => {
-    if (item.href === '/settings') return canSeeSettings(role);
-    return canSeeNavItem(role, item.requires);
-  });
+  const allowed = new Set(visibleHrefs);
+  const visible = NAV.filter((item) => allowed.has(item.href));
   return (
     <aside className="w-60 shrink-0 border-r overflow-y-auto bg-[var(--color-surface)]">
       <nav className="p-3 space-y-1">
