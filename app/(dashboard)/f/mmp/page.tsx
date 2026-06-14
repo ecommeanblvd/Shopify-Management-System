@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { ArrowRight, Tag, Inbox, CheckCircle2, XCircle, Truck, Package, ShoppingBag, Search } from 'lucide-react';
+import { ArrowRight, Tag, Inbox, CheckCircle2, XCircle, Truck, Package, ShoppingBag, Search, Archive } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -57,8 +57,9 @@ export default async function MmpProductsLanding({ searchParams }: PageProps): P
       approved: acc.approved + b.byCuration.approved,
       rejected: acc.rejected + b.byCuration.rejected,
       pushed: acc.pushed + b.byCuration.pushed,
+      archived: acc.archived + b.byCuration.archived,
     }),
-    { products: 0, received: 0, approved: 0, rejected: 0, pushed: 0 },
+    { products: 0, received: 0, approved: 0, rejected: 0, pushed: 0, archived: 0 },
   );
 
   const searchResult = search
@@ -101,6 +102,7 @@ export default async function MmpProductsLanding({ searchParams }: PageProps): P
         <Tally icon={<CheckCircle2 className="size-3.5" />} label="Approved" value={totals.approved} tone="emerald" />
         <Tally icon={<XCircle className="size-3.5" />} label="Rejected" value={totals.rejected} tone="rose" />
         <Tally icon={<Truck className="size-3.5" />} label="Pushed" value={totals.pushed} tone="sky" />
+        <Tally icon={<Archive className="size-3.5" />} label="Archived" value={totals.archived} tone="zinc" />
       </div>
 
       {/* Global search — submits GET so the URL carries state and
@@ -171,6 +173,9 @@ export default async function MmpProductsLanding({ searchParams }: PageProps): P
                     )}
                     {b.byCuration.pushed > 0 && (
                       <CurationPill count={b.byCuration.pushed} label="pushed" tone="sky" />
+                    )}
+                    {b.byCuration.archived > 0 && (
+                      <CurationPill count={b.byCuration.archived} label="archived" tone="zinc" />
                     )}
                     {b.totalProducts === 0 && (
                       <span className="text-xs text-muted-foreground italic">No products yet</span>
