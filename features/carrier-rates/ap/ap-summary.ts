@@ -38,6 +38,17 @@ export interface ApSummary {
   overdueAmount: number;
 }
 
+/** Map DB rows → the summariser's input shapes (structural; no DB dependency). */
+export function toSummaryInputs(
+  bills: Array<{ id: string; amount: number; currency: string; dueDate: string | null }>,
+  payments: Array<{ billId: string; amount: number }>,
+): { bills: BillInput[]; payments: PaymentInput[] } {
+  return {
+    bills: bills.map((b) => ({ id: b.id, amount: b.amount, currency: b.currency, dueDate: b.dueDate })),
+    payments: payments.map((p) => ({ billId: p.billId, amount: p.amount })),
+  };
+}
+
 const EPS = 0.5;
 
 export function summariseBill(bill: BillInput, payments: PaymentInput[], today: string): BillSummary {

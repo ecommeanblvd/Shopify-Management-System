@@ -4,7 +4,6 @@ import { randomUUID } from 'crypto';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
-import type { BillInput, PaymentInput } from './ap-summary';
 
 export interface UploadFile {
   bytes: Uint8Array;
@@ -124,14 +123,6 @@ export async function listPaymentsForAccount(carrierAccountId: string): Promise<
     proofFilename: p.proofFilename,
     note: p.note,
   }));
-}
-
-/** Map BillRow/PaymentRow to the pure summariser's input shapes. */
-export function toSummaryInputs(bills: BillRow[], payments: PaymentRow[]): { bills: BillInput[]; payments: PaymentInput[] } {
-  return {
-    bills: bills.map((b) => ({ id: b.id, amount: b.amount, currency: b.currency, dueDate: b.dueDate })),
-    payments: payments.map((p) => ({ billId: p.billId, amount: p.amount })),
-  };
 }
 
 export interface AddPaymentInput {

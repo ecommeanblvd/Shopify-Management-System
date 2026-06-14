@@ -1,5 +1,5 @@
 import { OLD_TO_NEW } from './permission-map';
-import { permissionsForRoleKey } from './access';
+import { permissionsForRoleKey } from './role-cache';
 
 export type Role = 'admin' | 'operator' | 'viewer';
 export type Permission =

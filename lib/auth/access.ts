@@ -1,11 +1,14 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import type { PermissionKey } from './permissions';
+import { setRoleCache, isCacheWarm, roleCacheAgeMs, permissionsForRoleKey } from './role-cache';
 
-// Process-level cache of roleKey -> permission keys. Warmed by getRole (async)
-// so the sync shim `hasPermission` can read it. 30s TTL picks up role edits.
-let cache: Map<string, Set<PermissionKey>> | null = null;
-let cacheAt = 0;
+// Pure cache read helpers live in `./role-cache` (DB-free) so the client bundle
+// can reach them via lib/nav → rbac without importing the pg driver. This file
+// holds only the server-side (DB-backed) cache warming + per-user resolution.
+// Re-exported here for backward-compatible import paths.
+export { permissionsForRoleKey, primeRoleCache, can } from './role-cache';
+
 const TTL_MS = 30_000;
 
 export async function refreshRoleCache(): Promise<void> {
@@ -18,24 +21,11 @@ export async function refreshRoleCache(): Promise<void> {
     if (!next.has(r.key)) next.set(r.key, new Set());
     if (r.permissionKey) next.get(r.key)!.add(r.permissionKey);
   }
-  cache = next; cacheAt = Date.now();
+  setRoleCache(next);
 }
 
 export async function ensureRoleCache(): Promise<void> {
-  if (!cache || Date.now() - cacheAt > TTL_MS) await refreshRoleCache();
-}
-
-/** Permission key Set for a role key (cache must be warm — call ensureRoleCache first). */
-export function permissionsForRoleKey(roleKey: string): Set<PermissionKey> {
-  return cache?.get(roleKey) ?? new Set();
-}
-
-/** Prime the cache directly (no DB) — for tests / deterministic seeding. */
-export function primeRoleCache(entries: Record<string, Iterable<PermissionKey>>): void {
-  const next = new Map<string, Set<PermissionKey>>();
-  for (const [roleKey, keys] of Object.entries(entries)) next.set(roleKey, new Set(keys));
-  cache = next;
-  cacheAt = Date.now();
+  if (!isCacheWarm() || roleCacheAgeMs() > TTL_MS) await refreshRoleCache();
 }
 
 /** Resolve the permission Set for a user (warms cache). */
@@ -43,8 +33,4 @@ export async function getUserPermissions(userId: string): Promise<Set<Permission
   const { getRole } = await import('./role');
   const roleKey = await getRole(userId); // warms cache
   return permissionsForRoleKey(roleKey);
-}
-
-export function can(perms: Set<PermissionKey>, key: PermissionKey): boolean {
-  return perms.has(key);
 }
