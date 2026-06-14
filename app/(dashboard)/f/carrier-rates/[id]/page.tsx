@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
-  ChevronLeft, Truck, Layers, Wrench, MapPin, Calculator, Send, AlertCircle, Trash2, ArrowRight, LayoutGrid,
+  ChevronLeft, Truck, Layers, Wrench, MapPin, Calculator, Send, AlertCircle, Trash2, ArrowRight, LayoutGrid, Wallet,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -161,6 +161,13 @@ export default async function CarrierAccountDetailPage({
           icon={<MapPin className="size-4" />}
           title="Remote postcodes"
           desc="CSV upload of DHL/FedEx remote-area postal codes by country."
+          status="Ready"
+        />
+        <SubSection
+          href={`/f/carrier-rates/${id}/bills`}
+          icon={<Wallet className="size-4" />}
+          title="Công nợ"
+          desc="Upload hoá đơn carrier + bằng chứng thanh toán; theo dõi còn nợ / quá hạn."
           status="Ready"
         />
         <SubSection

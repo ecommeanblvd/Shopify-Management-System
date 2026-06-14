@@ -531,6 +531,58 @@ export const carrierRemoteEvidence = pgTable('carrier_remote_evidence', {
   index('carrier_remote_evidence_account_idx').on(table.carrierAccountId),
 ]);
 
+/**
+ * Carrier accounts-payable: a carrier's periodic invoice (statement) covering
+ * many shipments. The original invoice file is kept in object storage as
+ * evidence. Outstanding debt = amount − Σ payments. Independent of the
+ * per-shipment reconcile — the UI shows the system's recorded total for the
+ * same period alongside, for a statement-vs-lines sanity check.
+ */
+export const carrierBills = pgTable('carrier_bills', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  /** Carrier's invoice/statement number. */
+  billNumber: text('bill_number'),
+  periodStart: date('period_start').notNull(),
+  periodEnd: date('period_end').notNull(),
+  issueDate: date('issue_date'),
+  /** Payment due date — drives the overdue flag. */
+  dueDate: date('due_date'),
+  /** Total the carrier billed for the period, in `currency`. */
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  /** Original invoice file in object storage (R2). */
+  fileKey: text('file_key'),
+  filename: text('filename'),
+  contentType: text('content_type'),
+  byteSize: integer('byte_size'),
+  note: text('note'),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_bills_account_idx').on(table.carrierAccountId),
+]);
+
+/** A payment made against a carrier bill (partial payments allowed). The
+ *  payment proof file is kept in object storage. */
+export const carrierBillPayments = pgTable('carrier_bill_payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  billId: uuid('bill_id').references(() => carrierBills.id, { onDelete: 'cascade' }).notNull(),
+  paidAt: date('paid_at').notNull(),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  method: text('method'),
+  /** Payment proof (bank transfer receipt…) in object storage (R2). */
+  proofFileKey: text('proof_file_key'),
+  proofFilename: text('proof_filename'),
+  proofContentType: text('proof_content_type'),
+  proofByteSize: integer('proof_byte_size'),
+  note: text('note'),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('carrier_bill_payments_bill_idx').on(table.billId),
+]);
+
 // Link table: which carrier account serves which market.
 export const marketCarrierLinks = pgTable('market_carrier_links', {
   id: uuid('id').defaultRandom().primaryKey(),
