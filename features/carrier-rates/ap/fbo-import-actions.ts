@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
-import { parseFedexFbo, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
+import { parseFedexFbo, consolidateFboShipping, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
 
 export interface FboBillSummary {
@@ -163,7 +163,8 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
     }
 
     // Đối soát: upsert shipment_charges (billed, LOẠI duty) cho AWB khớp đơn.
-    for (const r of rows) {
+    // Hợp nhất theo AWB — chỉ dòng CƯỚC (bỏ dòng thuế/hải quan để không đè).
+    for (const r of consolidateFboShipping(rows)) {
       const sid = awbMap.get(r.awb);
       if (!sid) continue;
       const vals = {

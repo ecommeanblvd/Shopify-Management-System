@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFboCharge, parseFboAmount, parseFedexFbo } from './fedex-fbo-parse';
+import { classifyFboCharge, parseFboAmount, parseFedexFbo, consolidateFboShipping } from './fedex-fbo-parse';
+import type { FboBilledRow } from './fedex-fbo-parse';
+
+function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
+  return {
+    awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null,
+    shipDate: null, service: null, recipientCountry: null, recipientStreet1: null,
+    recipientStreet2: null, recipientCity: null, recipientState: null, recipientPostcode: null,
+    weightKg: null, base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
+    residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
+  };
+}
 
 describe('classifyFboCharge', () => {
   const cases: Array<[string, string]> = [
@@ -10,8 +21,9 @@ describe('classifyFboCharge', () => {
     ['Direct Signature Required', 'signature'], ['Adult Signature Required', 'signature'],
     ['Residential Delivery', 'residential'],
     ['US Inbound Processing Fee', 'importHandling'], ['Phí xử lí hàng nhập khẩu vào Hoa Kỳ', 'importHandling'],
-    ['Vietnam VAT', 'vat'], ['VAT/Consumption Tax', 'vat'], ['UAE Freight VAT', 'vat'],
-    ['Duty & Tax', 'duty'], ['Customs Duty', 'duty'], ['Disbursement Fee', 'duty'],
+    ['Vietnam VAT', 'vat'], ['UAE Freight VAT', 'vat'], ['Vietnam VAT Freight', 'vat'],
+    ['VAT/Consumption Tax', 'duty'], ['Consumption Tax', 'duty'],
+    ['Duty & Tax', 'duty'], ['Customs Duty', 'duty'], ['Disbursement Fee', 'duty'], ['Duty Disbursement Fee', 'duty'],
     ['Address Correction', 'other'], ['Other', 'other'],
   ];
   it.each(cases)('"%s" → %s', (label, bucket) => {
@@ -69,5 +81,24 @@ describe('parseFedexFbo (cấu trúc thật)', () => {
   it('bỏ dòng không có AWB', () => {
     const blank = new Array(header2.length).fill('');
     expect(parseFedexFbo([header2, blank])).toHaveLength(0);
+  });
+});
+
+describe('consolidateFboShipping (AWB nhiều dòng cước+thuế)', () => {
+  it('lấy dòng cước (duty=0), bỏ dòng thuế/hải quan', () => {
+    const ship = mkRow({ awb: 'A', base: 4_627_300, discount: -3_643_999, fuel: 309_865, demand: 85_200, vat: 110_269, total: 1_488_635 });
+    const customs = mkRow({ awb: 'A', duty: 14_586_455, other: 472_317, total: 15_058_772 });
+    const out = consolidateFboShipping([ship, customs]);
+    expect(out).toHaveLength(1);
+    expect(out[0].total).toBe(1_488_635);
+    expect(out[0].duty).toBe(0);
+  });
+
+  it('AWB chỉ có dòng thuế → bỏ (không lưu thuế thành cước)', () => {
+    expect(consolidateFboShipping([mkRow({ awb: 'B', duty: 5_000_000, total: 5_000_000 })])).toHaveLength(0);
+  });
+
+  it('AWB 1 dòng cước thường → giữ nguyên', () => {
+    expect(consolidateFboShipping([mkRow({ awb: 'C', base: 100, total: 100 })])).toHaveLength(1);
   });
 });

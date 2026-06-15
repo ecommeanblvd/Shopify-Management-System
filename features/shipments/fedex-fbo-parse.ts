@@ -12,10 +12,11 @@ export type FboBucket =
  *  thuộc vị trí cột nên không bị silent-drop như LOG-Export tay. */
 export function classifyFboCharge(label: string): FboBucket {
   const t = label.toLowerCase();
-  // VAT/Duty kiểm TRƯỚC: nhãn "Vietnam VAT Freight" / "UAE Freight VAT" có cả
-  // 'freight' nhưng là thuế, không phải cước gốc.
-  if (t.includes('vat') || t.includes('consumption')) return 'vat';
-  if (t.includes('duty') || t.includes('customs') || t.includes('disbursement')) return 'duty';
+  // DUTY/customs kiểm TRƯỚC vat: "VAT/Consumption Tax" = thuế tiêu thụ/NK
+  // (customs, pass-through người nhập trả) — KHÁC "Vietnam VAT" (VAT cước 8%).
+  if (t.includes('consumption') || t.includes('duty') || t.includes('customs') || t.includes('disbursement')) return 'duty';
+  // VAT cước (Vietnam VAT / UAE Freight VAT / Vietnam VAT Freight).
+  if (t.includes('vat')) return 'vat';
   if (t.includes('freight') || t.includes('transportation')) return 'base';
   if (t.includes('discount') || t.includes('automation bonus')) return 'discount';
   if (t.includes('fuel')) return 'fuel';
@@ -133,6 +134,28 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
   r.total = awbTotal || (r.base + r.discount + r.fuel + r.demand + r.remote
     + r.signature + r.residential + r.importHandling + r.vat + r.duty + r.other);
   return r;
+}
+
+const SUM_KEYS = ['base', 'discount', 'fuel', 'demand', 'remote', 'signature',
+  'residential', 'importHandling', 'vat', 'duty', 'other', 'total'] as const;
+
+/** Hợp nhất các dòng FBO cùng AWB cho ĐỐI SOÁT CƯỚC: 1 AWB có thể có 2 dòng —
+ *  dòng CƯỚC (duty=0) và dòng THUẾ/HẢI QUAN (duty>0, customs pass-through người
+ *  nhập trả). Chỉ lấy dòng cước (gộp nếu nhiều), BỎ dòng thuế thuần — để dòng
+ *  thuế không ghi đè dòng cước (gốc của delta khổng lồ trước đây). */
+export function consolidateFboShipping(rows: FboBilledRow[]): FboBilledRow[] {
+  const byAwb = new Map<string, FboBilledRow[]>();
+  for (const r of rows) { const a = byAwb.get(r.awb); if (a) a.push(r); else byAwb.set(r.awb, [r]); }
+  const out: FboBilledRow[] = [];
+  for (const group of byAwb.values()) {
+    const shipping = group.filter((r) => r.duty === 0); // dòng cước
+    if (shipping.length === 0) continue; // chỉ có dòng thuế/hải quan → bỏ
+    if (shipping.length === 1) { out.push(shipping[0]); continue; }
+    const merged: FboBilledRow = { ...shipping[0] };
+    for (const r of shipping.slice(1)) for (const k of SUM_KEYS) merged[k] += r[k];
+    out.push(merged);
+  }
+  return out;
 }
 
 /** Parse toàn bộ sheet (rows[0]=header). Bỏ dòng không có AWB. */

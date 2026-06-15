@@ -10,7 +10,7 @@
  */
 import * as XLSX from 'xlsx';
 import { db, schema } from '@/db/client';
-import { parseFedexFbo } from '@/features/shipments/fedex-fbo-parse';
+import { parseFedexFbo, consolidateFboShipping } from '@/features/shipments/fedex-fbo-parse';
 import { fboShippingTotal } from '@/features/shipments/fedex-fbo-bill';
 
 const FEDEX_ACCOUNT = '5683f3c0-9249-40c1-a3e7-d967f0d62c29';
@@ -22,8 +22,9 @@ async function main(): Promise<void> {
 
   const wb = XLSX.readFile(file);
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false }) as unknown[][];
-  const fbo = parseFedexFbo(rows);
-  console.log(`FBO: ${fbo.length} đơn (AWB).`);
+  // Hợp nhất theo AWB: chỉ giữ dòng CƯỚC (bỏ dòng thuế/hải quan để không đè).
+  const fbo = consolidateFboShipping(parseFedexFbo(rows));
+  console.log(`FBO: ${fbo.length} đơn cước (sau hợp nhất AWB).`);
 
   // map AWB → shipmentId
   const ships = await db.select({ id: schema.shipments.id, t: schema.shipments.trackingNumber })
