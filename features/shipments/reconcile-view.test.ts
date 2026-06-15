@@ -136,4 +136,24 @@ describe('mergeStatus', () => {
     const [r] = mergeStatus([row({ deltaVnd: 1 })], map);
     expect(r.staleDispute).toBe(false);
   });
+
+  it('flag demandUncovered: bill có demand nhưng engine=0 dù đã tính được (thiếu config nước)', () => {
+    const [r] = mergeStatus([row({ engineTotal: 500_000, billedDemand: 32_000, engineDemand: 0 })], new Map());
+    expect(r.demandUncovered).toBe(true);
+  });
+
+  it('không flag demandUncovered khi engine CÓ áp demand', () => {
+    const [r] = mergeStatus([row({ engineTotal: 500_000, billedDemand: 32_000, engineDemand: 32_000 })], new Map());
+    expect(r.demandUncovered).toBe(false);
+  });
+
+  it('không flag demandUncovered khi bill không có demand', () => {
+    const [r] = mergeStatus([row({ engineTotal: 500_000, billedDemand: 0, engineDemand: 0 })], new Map());
+    expect(r.demandUncovered).toBe(false);
+  });
+
+  it('không flag demandUncovered khi engine chưa tính được (no rate card / no ship date)', () => {
+    const [r] = mergeStatus([row({ engineTotal: null, billedDemand: 32_000, engineDemand: null })], new Map());
+    expect(r.demandUncovered).toBe(false);
+  });
 });

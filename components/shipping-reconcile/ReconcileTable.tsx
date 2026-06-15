@@ -271,26 +271,36 @@ function FragmentRow({
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{fmtVnd(r.deltaVnd)}</td>
         <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
         <td className="px-3 py-2 font-sans whitespace-nowrap">
-          {isAutoReconciled(r) ? (
-            <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Tự đối soát</span>
-          ) : r.status === 'pending' ? (
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
-          ) : (
-            <span className="inline-flex flex-col items-start gap-0.5">
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
-                {OPERATOR_STATUS[r.status].label}
-                {r.billedChangedSinceReview ? ' ⚠' : ''}
-              </span>
-              {r.staleDispute && (
-                <span
-                  className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-                  title="Δ hiện tại đã về ~0 (engine cập nhật sau lúc duyệt) — NCC tính đúng, nên rút khiếu nại"
-                >
-                  Δ về 0 · nên rút
+          <span className="inline-flex flex-col items-start gap-0.5">
+            {isAutoReconciled(r) ? (
+              <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Tự đối soát</span>
+            ) : r.status === 'pending' ? (
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
+            ) : (
+              <>
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
+                  {OPERATOR_STATUS[r.status].label}
+                  {r.billedChangedSinceReview ? ' ⚠' : ''}
                 </span>
-              )}
-            </span>
-          )}
+                {r.staleDispute && (
+                  <span
+                    className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    title="Δ hiện tại đã về ~0 (engine cập nhật sau lúc duyệt) — NCC tính đúng, nên rút khiếu nại"
+                  >
+                    Δ về 0 · nên rút
+                  </span>
+                )}
+              </>
+            )}
+            {r.demandUncovered && (
+              <span
+                className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-400"
+                title={`Bill có phí Demand (${fmtVnd(r.billedDemand)}) nhưng engine áp 0 — nước "${r.shipCountry}" chưa nằm trong country_codes của dòng demand nào. Bổ sung config.`}
+              >
+                Demand thiếu config ({r.shipCountry})
+              </span>
+            )}
+          </span>
         </td>
       </tr>
       {expanded && (

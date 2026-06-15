@@ -35,6 +35,10 @@ export interface ReconcileViewRow extends ReconcileRow {
    *  (thường do bổ sung/sửa engine sau lúc duyệt) → NCC thực ra tính đúng,
    *  nên rút khiếu nại thay vì đi đòi. */
   staleDispute: boolean;
+  /** Carrier có tính demand (billedDemand>0) nhưng engine áp 0 dù ĐÃ tính
+   *  được (engineTotal≠null) → thường do nước đích chưa nằm trong country_codes
+   *  của dòng demand nào. Cờ này để gap không âm thầm lọt như vụ DHL/EU. */
+  demandUncovered: boolean;
   /** billedBase + billedDiscount (discount stored negative). Avoids the
    *  list-base/discount display artifact — see spec §3.6. */
   billedBaseNet: number | null;
@@ -70,6 +74,11 @@ export function mergeStatus(
       rec.deltaVndAtReview !== null &&
       rec.deltaVndAtReview !== undefined &&
       Math.abs(rec.deltaVndAtReview) >= STALE_DISPUTE_TOLERANCE_VND;
+    const demandUncovered =
+      r.engineTotal !== null &&
+      r.billedDemand !== null &&
+      r.billedDemand > 0 &&
+      (r.engineDemand === null || r.engineDemand === 0);
     return {
       ...r,
       status: (rec?.status ?? 'pending') as ReconcileStatus,
@@ -78,6 +87,7 @@ export function mergeStatus(
       deltaVndAtReview: rec?.deltaVndAtReview ?? null,
       billedChangedSinceReview,
       staleDispute,
+      demandUncovered,
       billedBaseNet: netBase(r.billedBase, r.billedDiscount),
       engineBaseNet: r.engineBase,
     };
