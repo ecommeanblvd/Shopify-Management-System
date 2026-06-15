@@ -22,6 +22,8 @@ export interface RateQuoteInput {
   customsValue?: { amount: number; currency: string };
   /** Mô tả hàng để khai hải quan. */
   commodityDescription?: string;
+  /** Yêu cầu Direct Signature → quote kèm phụ phí SIGNATURE_OPTION (ký nhận). */
+  signatureOptIn?: boolean;
 }
 
 /** Dựng request body Rate API. Tách riêng để unit-test không cần mạng. */
@@ -36,6 +38,10 @@ export function buildRateRequest(input: RateQuoteInput, accountNumber: string): 
       height: input.dimsCm.height,
       units: 'CM',
     };
+  }
+  if (input.signatureOptIn) {
+    // Direct Signature là special service cấp gói → quote mới kèm SIGNATURE_OPTION.
+    pkg.packageSpecialServices = { specialServiceTypes: ['SIGNATURE_OPTION'], signatureOptionType: 'DIRECT' };
   }
   const isInternational = input.shipperCountryCode !== input.recipientCountryCode;
   const customs = input.customsValue ?? { amount: 100, currency: 'USD' };

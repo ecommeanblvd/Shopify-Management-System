@@ -66,6 +66,7 @@ interface RateBody {
     requestedPackageLineItems: Array<{
       weight: { units: string; value: number };
       dimensions?: { length: number; width: number; height: number; units: string };
+      packageSpecialServices?: { specialServiceTypes: string[]; signatureOptionType: string };
     }>;
     customsClearanceDetail?: {
       commodities: Array<{ countryOfManufacture: string; customsValue: { amount: number; currency: string } }>;
@@ -109,6 +110,18 @@ describe('buildRateRequest', () => {
   it('KHÔNG thêm customs cho hàng nội địa (VN→VN)', () => {
     const body = asBody(buildRateRequest({ shipperCountryCode: 'VN', recipientCountryCode: 'VN', weightKg: 1 }, 'A'));
     expect(body.requestedShipment.customsClearanceDetail).toBeUndefined();
+  });
+
+  it('signatureOptIn=true → packageSpecialServices SIGNATURE_OPTION/DIRECT', () => {
+    const body = asBody(buildRateRequest({ shipperCountryCode: 'VN', recipientCountryCode: 'US', weightKg: 2, signatureOptIn: true }, 'A'));
+    expect(body.requestedShipment.requestedPackageLineItems[0].packageSpecialServices).toEqual({
+      specialServiceTypes: ['SIGNATURE_OPTION'], signatureOptionType: 'DIRECT',
+    });
+  });
+
+  it('không signatureOptIn → KHÔNG có packageSpecialServices', () => {
+    const body = asBody(buildRateRequest({ shipperCountryCode: 'VN', recipientCountryCode: 'US', weightKg: 2 }, 'A'));
+    expect(body.requestedShipment.requestedPackageLineItems[0].packageSpecialServices).toBeUndefined();
   });
 
   it('truyền residential=true khi chỉ định', () => {

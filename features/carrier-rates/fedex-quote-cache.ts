@@ -21,6 +21,8 @@ export interface QuoteShipmentInput {
   weightKg: number;
   dims: { length: number; width: number; height: number };
   shipDate: Date;
+  /** Đơn có dùng ký nhận → quote kèm SIGNATURE_OPTION để cột API có giá ký nhận. */
+  signatureOptIn?: boolean;
 }
 
 /** Chọn quote ACCOUNT của dịch vụ mặc định; thiếu thì lấy ACCOUNT đầu tiên. Pure. */
@@ -42,6 +44,7 @@ export async function quoteShipmentToCache(
     weightKg: input.weightKg,
     dimsCm: input.dims,
     shipDate: input.shipDate.toISOString().slice(0, 10),
+    signatureOptIn: input.signatureOptIn,
   });
   const q = pickQuote(quotes, FEDEX_DEFAULT_SERVICE);
   if (!q) return { ok: false };
