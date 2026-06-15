@@ -20,19 +20,32 @@ export function AttachInvoicePdfDialog({ attachAction }: Props) {
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<AttachPdfResult | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function reset() { setFiles([]); setResult(null); setError(null); }
+  function reset() { setFiles([]); setResult(null); setProgress(null); setError(null); }
 
+  // Upload TỪNG file (mỗi request 1 PDF) → bền, không vượt body limit, có tiến độ.
   function doAttach() {
     if (files.length === 0) return;
     setError(null);
-    const fd = new FormData();
-    for (const f of files) fd.append('files', f);
     startTransition(async () => {
-      try { setResult(await attachAction(fd)); router.refresh(); }
-      catch (e) { setError((e as Error).message); }
+      const acc: AttachPdfResult = { attached: [], unmatched: [], totalBills: 0 };
+      try {
+        for (let i = 0; i < files.length; i++) {
+          setProgress({ done: i, total: files.length });
+          const fd = new FormData();
+          fd.append('files', files[i]);
+          const r = await attachAction(fd);
+          acc.attached.push(...r.attached);
+          acc.unmatched.push(...r.unmatched);
+          acc.totalBills = r.totalBills;
+          setResult({ ...acc });
+        }
+        setProgress({ done: files.length, total: files.length });
+        router.refresh();
+      } catch (e) { setError(`${(e as Error).message} (đã đính ${acc.attached.length} bill trước khi dừng)`); }
     });
   }
 
@@ -103,9 +116,11 @@ export function AttachInvoicePdfDialog({ attachAction }: Props) {
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Đóng</Button>
-            {!result && (
+            {(!result || pending) && (
               <Button type="button" size="sm" disabled={files.length === 0 || pending} onClick={doAttach}>
-                {pending ? 'Đang đính…' : `Đính ${files.length || ''} PDF`}
+                {pending
+                  ? `Đang đính… (${progress?.done ?? 0}/${progress?.total ?? files.length})`
+                  : `Đính ${files.length || ''} PDF`}
               </Button>
             )}
           </div>

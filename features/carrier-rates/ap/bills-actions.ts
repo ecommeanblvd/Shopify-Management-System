@@ -5,6 +5,7 @@ import { desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
 import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
+import { compressPdf } from '@/lib/pdf/compress';
 import { matchInvoiceNumbers } from './match-invoice-pdf';
 
 export interface UploadFile {
@@ -247,13 +248,14 @@ export async function attachInvoicePdfsToBills(input: {
       unmatched.push({ filename: f.filename, reason: 'Không thấy số hoá đơn khớp bill nào' });
       continue;
     }
-    // Lưu PDF 1 lần, các bill cùng PDF trỏ chung 1 fileKey.
+    // Nén PDF (giảm storage) rồi lưu 1 lần; các bill cùng PDF trỏ chung fileKey.
     const ct = f.contentType || 'application/pdf';
+    const stored = await compressPdf(f.bytes);
     const fileKey = `carrier-bills/${input.carrierAccountId}/pdf-${randomUUID()}.pdf`;
-    await putObject(fileKey, f.bytes, ct);
+    await putObject(fileKey, stored, ct);
     for (const inv of invoices) {
       await db.update(schema.carrierBills)
-        .set({ fileKey, filename: f.filename, contentType: ct, byteSize: f.bytes.length })
+        .set({ fileKey, filename: f.filename, contentType: ct, byteSize: stored.length })
         .where(eq(schema.carrierBills.id, byNumber.get(inv)!));
       attached.push({ invoice: inv, filename: f.filename });
     }

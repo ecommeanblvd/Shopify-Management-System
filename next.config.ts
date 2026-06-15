@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Server Actions nhận file upload (PDF hoá đơn ~2MB/file, Excel FBO…). Mặc
+  // định 1MB quá nhỏ → up PDF lỗi. Upload PDF chạy TỪNG file nên 15MB dư.
+  experimental: {
+    serverActions: { bodySizeLimit: '15mb' },
+  },
   // Whitelist remote image hosts used by Next/Image. MMP currently
   // ships products with their assets hosted on Shopify CDN; if MMP
   // later migrates to its own bucket we'll add that host here too.

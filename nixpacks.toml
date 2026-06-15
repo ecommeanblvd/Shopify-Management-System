@@ -4,11 +4,11 @@
 # in a way Railway's npm ci validator accepts (npm GitHub issue, nested deps).
 # `npm install` is more lenient and still respects pinned versions.
 
-# poppler-utils provides `pdftotext`, used server-side to parse uploaded
-# carrier rate-sheet PDFs. aptPkgs is additive — it does not replace the
-# nix defaults (nodejs etc.) the setup phase installs.
+# poppler-utils provides `pdftotext` (parse rate-sheet + invoice PDFs).
+# ghostscript provides `gs` để NÉN PDF hoá đơn trước khi lưu R2 (giảm storage).
+# aptPkgs là additive — không thay các nix default (nodejs…) phase setup cài.
 [phases.setup]
-aptPkgs = ["poppler-utils"]
+aptPkgs = ["poppler-utils", "ghostscript"]
 
 [phases.install]
 cmds = ["npm install --no-audit --no-fund --prefer-offline"]
