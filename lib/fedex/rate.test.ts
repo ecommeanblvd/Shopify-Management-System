@@ -73,6 +73,27 @@ describe('parseRateReply — named components', () => {
     expect(q.components.countryFixed).toBe(68_300); // ANCILLARY_FEE = phí cố định nước, KHÔNG phải ký nhận
     expect(q.components.signature).toBe(0);
   });
+
+  it('loại SATURDAY_DELIVERY (artifact) khỏi totalNetCharge', () => {
+    const reply = {
+      output: { rateReplyDetails: [{
+        serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
+        ratedShipmentDetails: [{
+          rateType: 'ACCOUNT', currency: 'VND', totalNetCharge: 1_500_000,
+          shipmentRateDetail: {
+            surCharges: [
+              { type: 'FUEL', amount: 300_000 },
+              { type: 'SATURDAY_DELIVERY', amount: 382_470 }, // artifact — loại khỏi total
+            ],
+            taxes: [],
+          },
+        }],
+      }] },
+    };
+    const [q] = parseRateReply(reply);
+    expect(q.totalNetCharge).toBe(1_500_000 - 382_470);
+    expect(q.components.fuel).toBe(300_000);
+  });
 });
 
 interface RateBody {

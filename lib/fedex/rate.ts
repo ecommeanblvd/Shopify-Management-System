@@ -158,13 +158,20 @@ export function parseRateReply(reply: unknown): RateQuoteResult[] {
       const vat = taxes
         .filter((t) => String(t.type ?? '').toUpperCase().includes('VAT'))
         .reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+      // SATURDAY_DELIVERY là ARTIFACT của quote: FedEx tự thêm khi ngày giao rơi
+      // vào thứ 7 cho dịch vụ mặc định, nhưng shop KHÔNG bao giờ bị bill Saturday
+      // (đã kiểm 0 trên mọi hoá đơn). Loại khỏi total để cột "API NCC" khớp billed
+      // (nếu không, phí này lọt vào implied base → "API thu cao" giả).
+      const saturdayArtifact = surcharges
+        .filter((s) => s.type.toUpperCase().includes('SATURDAY'))
+        .reduce((sum, s) => sum + s.amount, 0);
       const bw = srd.totalBillingWeight as { value?: unknown } | undefined;
       out.push({
         serviceType: String(d.serviceType ?? ''),
         serviceName: d.serviceName as string | undefined,
         rateType: r.rateType as string | undefined,
         currency: String(r.currency ?? srd.currency ?? ''),
-        totalNetCharge: Number(r.totalNetCharge ?? srd.totalNetCharge ?? 0),
+        totalNetCharge: Number(r.totalNetCharge ?? srd.totalNetCharge ?? 0) - saturdayArtifact,
         baseCharge: srd.totalBaseCharge != null ? Number(srd.totalBaseCharge) : null,
         totalSurcharges: srd.totalSurcharges != null ? Number(srd.totalSurcharges) : null,
         surcharges,
