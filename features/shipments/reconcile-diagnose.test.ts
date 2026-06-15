@@ -552,17 +552,18 @@ describe('diagnoseReconcileRow — addon_fixed (Dịch vụ bổ sung, spec 2026
 
   // (b2) FedEx billed the Direct Signature fee in a country the carrier
   // EXEMPTS (excluded_country_codes) — engine reference dropped to 0 and the
-  // addonExcludedForCountry flag is up. The pass-through gate must REJECT
-  // (KHONG_KHOP) and the verdict must name the exempt country for the claim.
-  it('FedEx thu signature ở nước miễn (SA): KHONG_KHOP + verdict nước được miễn', () => {
+  // Quy tắc mới (chủ shop xác nhận): bill ĐÃ CÓ signature = dịch vụ ĐƯỢC dùng
+  // → công nhận opt-in dù nước nằm trong danh sách "miễn" (miễn = không auto-thu).
+  // Engine giờ trả addonReference kể cả nước miễn để kiểm đúng giá.
+  it('FedEx thu signature ở nước miễn (SA), đúng giá ref → PHI_TUY_CHON (công nhận)', () => {
     const r = diagnoseReconcileRow(baseInput({
-      // fuel 519,033 = 47.5% × (1,000,000 + 92,700) — arithmetic closes,
-      // but the fee should not exist at all in SA.
+      // fuel 519,033 = 47.5% × (1,000,000 + 92,700) — số học khớp; bill có
+      // signature nên công nhận như opt-in pass-through.
       billed: { base: 1_000_000, discount: 0, fuel: 519_033, remote: 0,
                 demand: 0, signature: 92_700, vat: 128_939, gogreen: 0,
                 elevatedRisk: 0, total: 1_740_672 },
       engine: { base: 1_000_000, discount: 0, fuel: 475_000, remote: 0,
-                demand: 0, residential: 0, addons: 0, addonReference: 0,
+                demand: 0, residential: 0, addons: 0, addonReference: 92_700,
                 addonExcludedForCountry: true,
                 vat: 118_000, total: 1_593_000 },
       shipCountry: 'SA',
@@ -574,10 +575,8 @@ describe('diagnoseReconcileRow — addon_fixed (Dịch vụ bổ sung, spec 2026
       vatPercent: 8,
     }));
     const sig = r.components.find((c) => c.key === 'signature')!;
-    expect(sig.cause).toBe('KHONG_KHOP');
-    expect(sig.cause).not.toBe('PHI_TUY_CHON');
-    expect(r.verdict).toContain('nước được miễn (SA)');
-    expect(r.severity).toBe('config');
+    expect(sig.cause).toBe('PHI_TUY_CHON');
+    expect(r.verdict).not.toContain('nước được miễn');
   });
 
   // (b3) regression: flag explicitly false + reference matches -> the

@@ -310,8 +310,10 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   // (reference = 0) giữ hành vi cũ — không chặt hơn với carrier chưa cấu hình.
   const fuelComp = components.find((c) => c.key === 'fuel');
   const sigRef = n0(e.addonReference ?? null);
+  // Đã có trên bill = dịch vụ ĐƯỢC dùng → công nhận pass-through, KỂ CẢ nước
+  // "miễn" (miễn chỉ là không auto-thu, không phải không bao giờ thu). Vẫn kiểm
+  // đúng giá tham chiếu để bắt sai số tiền.
   if (sigDelta > 0 && sigEngine === 0 && fuelComp && fuelComp.cause !== 'LECH_FUEL'
-      && !e.addonExcludedForCountry
       && (sigRef === 0 || sigBilled === sigRef)) {
     sigCause = 'PHI_TUY_CHON';
   }
@@ -442,9 +444,6 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       verdict = dominant.delta < 0
         ? 'Hệ thống tính phụ phí rủi ro (ER) nhưng hóa đơn không thu — kiểm tra ngày hiệu lực / danh sách nước'
         : 'Hóa đơn thu phụ phí rủi ro (ER) nhưng hệ thống không tính — kiểm tra danh sách nước áp dụng';
-      severity = 'config';
-    } else if (dominant.key === 'signature' && e.addonExcludedForCountry && dominant.delta > 0) {
-      verdict = `FedEx thu Direct Signature ở nước được miễn (${input.shipCountry ?? '?'}) — khiếu nại với carrier`;
       severity = 'config';
     } else if (dominant.key === 'signature' && dominant.delta < 0
         && !e.addonExcludedForCountry) {

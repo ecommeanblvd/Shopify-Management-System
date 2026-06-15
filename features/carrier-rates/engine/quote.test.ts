@@ -1013,7 +1013,7 @@ describe('quote engine', () => {
       expect(after.breakdown.addons).toBe(150_000);
     });
 
-    it('when_billed bị miễn theo nước: addonReference=0 + addonExcludedForCountry=true', () => {
+    it('when_billed nước miễn: reference VẪN có (đã bill=hợp lệ), addons=0, flag=true', () => {
       const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
       const zonesByCountry = new Map([
         ['SA', { label: 'Zone 9', rateByTierUpper }],
@@ -1040,10 +1040,10 @@ describe('quote engine', () => {
       expect(baseline.ok).toBe(true);
       expect(r.ok).toBe(true);
       if (!baseline.ok || !r.ok) return;
-      expect(r.breakdown.addons).toBe(0);
-      expect(r.breakdown.addonReference).toBe(0);
+      expect(r.breakdown.addons).toBe(0); // không auto-thu ở nước miễn
+      expect(r.breakdown.addonReference).toBe(92_700); // reference vẫn có để đối soát
       expect(r.breakdown.addonExcludedForCountry).toBe(true);
-      // total/fuel KHÔNG đổi so với snapshot không có addon.
+      // reference KHÔNG vào total/fuel → total/fuel y hệt snapshot không addon.
       expect(r.breakdown.carrierCost).toBe(baseline.breakdown.carrierCost);
       expect(r.breakdown.fuel).toBe(baseline.breakdown.fuel);
     });

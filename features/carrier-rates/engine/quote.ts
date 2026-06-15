@@ -544,10 +544,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const addonRowsByDate = snap.surcharges
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'addon_fixed');
   const addonRows = addonRowsByDate.filter((s) => !isCountryExcluded(s, country));
+  // 'always' tôn trọng danh sách miễn (không auto-thu ở nước carrier không thu).
   const addons = addonRows
     .filter((s) => (s.applyMode ?? 'always') === 'always')
     .reduce((sum, s) => sum + s.value, 0);
-  const addonReference = addonRows
+  // 'when_billed' = GIÁ THAM CHIẾU: đã có trên bill nghĩa là dịch vụ ĐƯỢC dùng,
+  // nên reference có sẵn kể cả ở nước "miễn" (miễn chỉ = không auto-thu) — để
+  // đối soát công nhận khoản hợp lệ + kiểm đúng giá. KHÔNG lọc nước ở đây.
+  const addonReference = addonRowsByDate
     .filter((s) => s.applyMode === 'when_billed')
     .reduce((sum, s) => sum + s.value, 0);
   const addonExcludedForCountry = addonRowsByDate.some((s) => isCountryExcluded(s, country));
