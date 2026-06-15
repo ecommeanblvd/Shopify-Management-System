@@ -10,6 +10,11 @@ import {
   type ReconcileSummary,
 } from './reconcile';
 import { getReconcileCached } from './reconcile-cache';
+import {
+  compareBilledVsFedexQuote,
+  type FedexQuoteSnap,
+  type QuoteCompare,
+} from './fedex-quote-compare';
 
 export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
 
@@ -43,6 +48,10 @@ export interface ReconcileViewRow extends ReconcileRow {
    *  list-base/discount display artifact — see spec §3.6. */
   billedBaseNet: number | null;
   engineBaseNet: number | null;
+  /** Giá hợp đồng FedEx (Rate API, đã cache) + so per-dòng với billed.
+   *  null khi chưa quote (đơn DHL, hoặc FedEx chưa backfill). */
+  fedexQuote: FedexQuoteSnap | null;
+  fedexCompare: QuoteCompare | null;
 }
 
 export interface ReconcileView {
@@ -90,6 +99,8 @@ export function mergeStatus(
       demandUncovered,
       billedBaseNet: netBase(r.billedBase, r.billedDiscount),
       engineBaseNet: r.engineBase,
+      fedexQuote: null, // gắn ở loader (reconcileShipmentsWithStatus)
+      fedexCompare: null,
     };
   });
 }
@@ -136,5 +147,36 @@ export async function reconcileShipmentsWithStatus(
   if (opts.carrierKey) rows = rows.filter((r) => r.carrierKey === opts.carrierKey);
   if (opts.fromDate) rows = rows.filter((r) => !r.labelDate || r.labelDate >= opts.fromDate!);
   if (opts.toDate) rows = rows.filter((r) => !r.labelDate || r.labelDate <= opts.toDate!);
+
+  // Gắn FedEx-quote (giá hợp đồng, đã cache) + so per-dòng với billed.
+  const num = (v: string | null) => (v !== null ? Number(v) : null);
+  const quoteRows = await db
+    .select({
+      shipmentId: schema.fedexRateQuotes.shipmentId, service: schema.fedexRateQuotes.service,
+      totalNetCharge: schema.fedexRateQuotes.totalNetCharge, fuel: schema.fedexRateQuotes.fuel,
+      fuelPercent: schema.fedexRateQuotes.fuelPercent, remote: schema.fedexRateQuotes.remote,
+      demand: schema.fedexRateQuotes.demand, ancillary: schema.fedexRateQuotes.ancillary,
+      vat: schema.fedexRateQuotes.vat, discount: schema.fedexRateQuotes.discount,
+      rateZone: schema.fedexRateQuotes.rateZone,
+    })
+    .from(schema.fedexRateQuotes);
+  const quoteMap = new Map<string, FedexQuoteSnap>();
+  for (const q of quoteRows) {
+    quoteMap.set(q.shipmentId, {
+      service: q.service, totalNetCharge: num(q.totalNetCharge), fuel: num(q.fuel),
+      fuelPercent: num(q.fuelPercent), remote: num(q.remote), demand: num(q.demand),
+      ancillary: num(q.ancillary), vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
+    });
+  }
+  for (const r of rows) {
+    const fq = quoteMap.get(r.shipmentId);
+    if (!fq) continue;
+    r.fedexQuote = fq;
+    r.fedexCompare = compareBilledVsFedexQuote(
+      { total: r.billedTotal, fuel: r.billedFuel, remote: r.billedRemote, demand: r.billedDemand, signature: r.billedSignature, vat: r.billedVat },
+      fq,
+    );
+  }
+
   return { summary, rows, computedAt };
 }

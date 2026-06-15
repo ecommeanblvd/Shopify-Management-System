@@ -108,6 +108,41 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
           )}
         </div>
       )}
+      {row.fedexQuote && row.fedexCompare && (
+        <div className="mb-4 rounded-md border border-border p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Giá hợp đồng FedEx (Rate API) · {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
+              {row.fedexQuote.rateZone ? ` · zone ${row.fedexQuote.rateZone}` : ''}
+            </span>
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${row.fedexCompare.overcharged ? 'bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
+              {row.fedexCompare.verdict}
+            </span>
+          </div>
+          <table className="w-full text-xs font-mono tabular-nums">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="text-left py-0.5">Khoản</th>
+                <th className="text-right py-0.5">Billed</th>
+                <th className="text-right py-0.5">FedEx (đúng)</th>
+                <th className="text-right py-0.5">Lệch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.fedexCompare.lines.map((l) => (
+                <tr key={l.key} className={l.key === 'total' ? 'border-t border-border font-semibold' : ''}>
+                  <td className="text-left py-0.5 font-sans">{l.label}</td>
+                  <td className="text-right py-0.5">{fmtVnd(l.billed)}</td>
+                  <td className="text-right py-0.5">{fmtVnd(l.quote)}</td>
+                  <td className={`text-right py-0.5 ${l.delta > 0 ? 'text-red-600 dark:text-red-400' : l.delta < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                    {l.delta === 0 ? '—' : (l.delta > 0 ? '+' : '') + fmtVnd(l.delta)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wider text-muted-foreground">

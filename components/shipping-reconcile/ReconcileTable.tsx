@@ -300,6 +300,14 @@ function FragmentRow({
                 Demand thiếu config ({r.shipCountry})
               </span>
             )}
+            {r.fedexCompare?.overcharged && (
+              <span
+                className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400"
+                title={`So giá hợp đồng FedEx (Rate API): ${r.fedexCompare.verdict}`}
+              >
+                FedEx thu cao +{fmtVnd(r.fedexCompare.totalDelta)}
+              </span>
+            )}
           </span>
         </td>
       </tr>
