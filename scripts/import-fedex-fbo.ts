@@ -43,7 +43,7 @@ async function main(): Promise<void> {
       shipmentId: sid, carrierAccountId: FEDEX_ACCOUNT, trackingNumber: r.awb,
       totalAmount: num(fboShippingTotal(r)), currency: 'VND',
       base: num(r.base), fuel: num(r.fuel), remote: num(r.remote), demand: num(r.demand),
-      directSignature: num(r.signature + r.residential), vat: num(r.vat), gogreen: '0',
+      directSignature: num(r.signature), residential: num(r.residential), vat: num(r.vat), gogreen: '0',
       discount: num(r.discount), elevatedRisk: '0', importHandling: num(r.importHandling),
       source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
     };

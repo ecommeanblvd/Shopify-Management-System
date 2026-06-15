@@ -40,6 +40,7 @@ export interface ReconcileRow {
   billedRemote: number | null;
   billedDemand: number | null;
   billedSignature: number | null;
+  billedResidential: number | null;
   billedVat: number | null;
   billedGogreen: number | null;
   billedDiscount: number | null;
@@ -129,6 +130,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedRemote: schema.shipmentCharges.remote,
       billedDemand: schema.shipmentCharges.demand,
       billedSignature: schema.shipmentCharges.directSignature,
+      billedResidential: schema.shipmentCharges.residential,
       billedVat: schema.shipmentCharges.vat,
       billedGogreen: schema.shipmentCharges.gogreen,
       billedDiscount: schema.shipmentCharges.discount,
@@ -306,6 +308,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         remote: r.billedRemote != null ? Number(r.billedRemote) : null,
         demand: r.billedDemand != null ? Number(r.billedDemand) : null,
         signature: r.billedSignature != null ? Number(r.billedSignature) : null,
+        residential: r.billedResidential != null ? Number(r.billedResidential) : null,
         vat: r.billedVat != null ? Number(r.billedVat) : null,
         gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
         elevatedRisk: r.billedElevatedRisk != null ? Number(r.billedElevatedRisk) : null,
@@ -385,6 +388,7 @@ interface JoinedRow {
   billedRemote: string | null;
   billedDemand: string | null;
   billedSignature: string | null;
+  billedResidential: string | null;
   billedVat: string | null;
   billedGogreen: string | null;
   billedDiscount: string | null;
@@ -478,6 +482,7 @@ function buildRow(
     billedRemote: r.billedRemote !== null ? Number(r.billedRemote) : null,
     billedDemand: r.billedDemand !== null ? Number(r.billedDemand) : null,
     billedSignature: r.billedSignature !== null ? Number(r.billedSignature) : null,
+    billedResidential: r.billedResidential !== null ? Number(r.billedResidential) : null,
     billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
     billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,

@@ -144,6 +144,40 @@ describe('diagnoseReconcileRow — DHL signature↔addons & gogreen↔perStep (r
   });
 });
 
+describe('diagnoseReconcileRow — FedEx residential tách khỏi signature (real #MBLVD25115)', () => {
+  // FedEx bill có Direct Signature 88.000 + Residential Delivery 80.100 ở 2
+  // dòng RIÊNG. Engine: signature = addon_fixed when_billed (88.000), residential
+  // KHÔNG tự định giá (engine 0) → pass-through. Trước khi tách, cả 168.100 dồn
+  // vào dòng "signature" làm lệch giả 80.100.
+  const input = baseInput({
+    billed: { base: 824_341, discount: 0, fuel: 0, remote: 0, demand: 0,
+              signature: 88_000, residential: 80_100, vat: 0, gogreen: 0, elevatedRisk: 0, total: 992_441 },
+    engine: { base: 824_341, discount: 0, fuel: 0, remote: 0, demand: 0,
+              residential: 0, vat: 0, addons: 88_000, addonReference: 88_000, total: 912_341 },
+    billedFuelableBase: 824_341,
+    fuelPercent: 0, vatPercent: 0,
+  });
+
+  it('signature đối chiếu với engine addons (88.000=88.000, KHOP)', () => {
+    const sig = diagnoseReconcileRow(input).components.find((c) => c.key === 'signature')!;
+    expect(sig.billed).toBe(88_000);
+    expect(sig.engine).toBe(88_000);
+    expect(sig.cause).toBe('KHOP');
+  });
+
+  it('residential là dòng riêng, pass-through (80.100 vs engine 0)', () => {
+    const resi = diagnoseReconcileRow(input).components.find((c) => c.key === 'residential')!;
+    expect(resi.billed).toBe(80_100);
+    expect(resi.engine).toBe(0);
+    expect(resi.cause).toBe('PHI_TUY_CHON');
+  });
+
+  it('bất biến Σ: tổng delta thành phần = totalDelta', () => {
+    const d = diagnoseReconcileRow(input);
+    expect(d.components.reduce((a, c) => a + c.delta, 0)).toBe(d.totalDelta);
+  });
+});
+
 describe('diagnoseReconcileRow — rounding residual', () => {
   it('a few-dong gap lands in residual with LAM_TRON', () => {
     const d = diagnoseReconcileRow(baseInput({

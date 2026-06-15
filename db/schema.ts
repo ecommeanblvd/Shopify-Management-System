@@ -921,8 +921,13 @@ export const shipmentCharges = pgTable('shipment_charges', {
    *  combined output. */
   demand: numeric('demand', { precision: 14, scale: 2 }),
   /** Excel col AN — Phí kí nhận trực tiếp (Direct Signature, flat
-   *  150,000 VND for DHL). */
+   *  150,000 VND for DHL). KHÔNG gộp Residential — tách riêng để đối soát rõ. */
   directSignature: numeric('direct_signature', { precision: 14, scale: 2 }),
+  /** Phí giao địa chỉ nhà dân (FedEx "Residential Delivery") — dịch vụ RIÊNG
+   *  với ký nhận, phẳng theo biến thể rate (80.100/84.400). Tách khỏi
+   *  direct_signature để dòng đối soát không bị lẫn. Pass-through (engine
+   *  không tự định giá — 2 biến thể rate cùng kỳ). */
+  residential: numeric('residential', { precision: 14, scale: 2 }),
   /** Excel col AO — VAT/Thuế phí khác. 8 % for Vietnam (FedEx + DHL). */
   vat: numeric('vat', { precision: 14, scale: 2 }),
   /** Excel col AP — GoGreen Plus-Basic stepped fee. */

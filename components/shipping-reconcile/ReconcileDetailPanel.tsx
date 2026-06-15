@@ -33,7 +33,7 @@ function severityClass(s: string): string {
   }
 }
 
-type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'gogreen' | 'vat' | 'elevatedRisk';
+type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'gogreen' | 'vat' | 'elevatedRisk';
 
 interface ComponentLine {
   label: string;
@@ -58,6 +58,7 @@ function fedexLine(row: ReconcileViewRow, key: CompKey): number | null {
     case 'remote': return q.remote;
     case 'demand': return q.demand;
     case 'signature': return q.signature; // ký nhận thật (API thường 0 — special service)
+    case 'residential': return q.residential; // giao địa chỉ nhà dân
     case 'vat': return q.vat;
     case 'elevatedRisk': return q.countryFixed; // dòng "Phí cố định nước (nhập US…)" = ANCILLARY_FEE
     default: return null; // gogreen: FedEx không có dòng tương ứng
@@ -83,8 +84,11 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     },
     { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, fedex: fx('remote'), compKey: 'remote' },
     { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, fedex: fx('demand'), compKey: 'demand' },
-    // signature: engine books DHL's fee under addon_fixed (always), FedEx under residential_fixed.
-    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.engineAddons), fedex: fx('signature'), compKey: 'signature' },
+    // signature: engine books DHL/FedEx Direct Signature dưới addon_fixed.
+    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: row.engineAddons, fedex: fx('signature'), compKey: 'signature' },
+    // residential: phí giao địa chỉ nhà dân (FedEx) — dòng RIÊNG, pass-through
+    // (engine không tự định giá). Tách để không lẫn với ký nhận khi đối soát.
+    { label: 'Giao địa chỉ nhà (residential)', billed: row.billedResidential, engine: row.engineResidential, fedex: fx('residential'), compKey: 'residential' },
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },

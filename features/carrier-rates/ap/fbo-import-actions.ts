@@ -170,7 +170,7 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
         shipmentId: sid, carrierAccountId: input.carrierAccountId, trackingNumber: r.awb,
         totalAmount: numStr(fboShippingTotal(r)), currency: input.currency,
         base: numStr(r.base), fuel: numStr(r.fuel), remote: numStr(r.remote), demand: numStr(r.demand),
-        directSignature: numStr(r.signature + r.residential), vat: numStr(r.vat), gogreen: '0',
+        directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
         discount: numStr(r.discount), elevatedRisk: '0', importHandling: numStr(r.importHandling),
         source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
       };

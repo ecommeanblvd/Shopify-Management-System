@@ -34,7 +34,7 @@ export type DiagnosisSeverity =
 
 export type ComponentKey =
   | 'base' | 'discount' | 'fuel' | 'remote' | 'demand'
-  | 'signature' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
+  | 'signature' | 'residential' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
 
 export interface ComponentDelta {
   key: ComponentKey;
@@ -75,6 +75,8 @@ export interface DiagnoseInput {
   billed: {
     base: number | null; discount: number | null; fuel: number | null;
     remote: number | null; demand: number | null; signature: number | null;
+    /** Phí giao địa chỉ nhà dân (FedEx Residential) — dòng RIÊNG với signature. */
+    residential?: number | null;
     vat: number | null; gogreen: number | null; elevatedRisk: number | null;
     /** Billed import/clearance handling — counterpart of engine
      *  country_fixed alongside elevatedRisk (FedEx US import handling). */
@@ -130,7 +132,7 @@ export interface DiagnoseInput {
 }
 
 const r = (n: number): number => Math.round(n);
-const n0 = (v: number | null): number => (v == null ? 0 : v);
+const n0 = (v: number | null | undefined): number => (v == null ? 0 : v);
 
 /** Invert a billed gross base into a weight tier (exact list-rate match). */
 function invertWeight(
@@ -270,8 +272,11 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // Opt-in signature (engine side 0) widens the billed fuel base by
       // exactly the fee — that's derived from the pass-through, not a
       // fuel-base config problem.
-      const sigPass = n0(b.signature) > 0 && r(e.residential + n0(e.addons ?? null)) === 0
-        ? n0(b.signature) : 0;
+      // signature + residential cùng pass-through khi engine side = 0 (giữ
+      // nguyên hành vi fuel sau khi tách residential thành dòng riêng).
+      const sigResiBilled = n0(b.signature) + n0(b.residential);
+      const sigPass = sigResiBilled > 0 && r(e.residential + n0(e.addons ?? null)) === 0
+        ? sigResiBilled : 0;
       // FedEx có khi fuel cả Demand cùng signature (đo #MBLVD28665). Nhận CẢ
       // hai cơ sở: chỉ-signature, hoặc signature+demand (khi demand khớp).
       const demandMatched = r(n0(b.demand) - e.demand) === 0;
@@ -298,11 +303,10 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const demDelta = r(demBilled - e.demand);
   components.push({ key: 'demand', billed: demBilled, engine: e.demand, delta: demDelta, cause: demDelta === 0 ? 'KHOP' : 'KHONG_KHOP' });
 
-  // signature — engine = residential_fixed + addon_fixed(always).
-  // (Trước 2026-06-11 DHL book dưới peak_fixed và bị fold ở đây — nay
-  // addon_fixed là chỗ ở chính thức; peak chỉ còn Premium, không fold nữa.)
+  // signature — engine = addon_fixed (DHL always / FedEx when_billed). Residential
+  // KHÔNG còn fold ở đây (dòng riêng bên dưới) để đối soát không bị lẫn.
   const sigBilled = n0(b.signature);
-  const sigEngine = r(e.residential + n0(e.addons ?? null));
+  const sigEngine = r(n0(e.addons ?? null));
   const sigDelta = r(sigBilled - sigEngine);
   let sigCause: DiagnosisCause = sigDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
   // Opt-in theo đơn (FedEx): chấp nhận pass-through CHỈ KHI số học fuel khớp
@@ -318,6 +322,17 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     sigCause = 'PHI_TUY_CHON';
   }
   components.push({ key: 'signature', billed: sigBilled, engine: sigEngine, delta: sigDelta, cause: sigCause });
+
+  // residential — phí giao địa chỉ nhà dân (FedEx "Residential Delivery"), dịch
+  // vụ RIÊNG với ký nhận. Engine không tự định giá (2 biến thể rate 80.100/84.400
+  // cùng kỳ, không suy ra độc lập được) → bill có ⇒ pass-through hợp lệ. Tách
+  // dòng để 25115… không còn lệch giả ở "signature".
+  const resiBilled = n0(b.residential);
+  const resiEngine = r(e.residential);
+  const resiDelta = r(resiBilled - resiEngine);
+  let resiCause: DiagnosisCause = resiDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
+  if (resiBilled > 0 && resiEngine === 0) resiCause = 'PHI_TUY_CHON';
+  components.push({ key: 'residential', billed: resiBilled, engine: resiEngine, delta: resiDelta, cause: resiCause });
 
   // Phí nhập khẩu (FedEx US) bị gộp trong cột VAT của bill (VAT phẳng 8% —
   // spec 2026-06-11). Bóc ra khi engine CÓ phí nhập (countryFixed>0) NHƯNG
@@ -343,7 +358,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     vatCause = 'PHAI_SINH';
     if (impliedZone && input.vatPercent > 0) {
       const billedPreVat = billedNetBase + n0(b.remote) + n0(b.demand) + n0(b.signature)
-        + n0(b.gogreen) + n0(b.elevatedRisk) + fuelBilled;
+        + n0(b.residential) + n0(b.gogreen) + n0(b.elevatedRisk) + fuelBilled;
       if (Math.abs(vatBilled - billedPreVat * (input.vatPercent / 100)) <= 2) {
         vatCause = 'PHAI_SINH_ZONE';
       }
