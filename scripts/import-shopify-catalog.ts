@@ -56,17 +56,25 @@ query($cursor: String) {
   }
 }`;
 
-async function callWithRetry(args: Parameters<typeof graphqlCall>[0], tries = 5): Promise<{ data: unknown; errors?: unknown }> {
+/** Retry on ANY transient failure (429/throttle, fetch failed, stream/socket
+ *  timeout, connection reset) — a long catalog crawl WILL hit these. */
+async function withRetry<T>(label: string, fn: () => Promise<T>, tries = 8): Promise<T> {
+  let lastErr: unknown;
   for (let t = 0; t < tries; t++) {
-    try { return await graphqlCall(args); }
+    try { return await fn(); }
     catch (e) {
-      const msg = String(e);
-      if (msg.includes('429') || msg.toLowerCase().includes('throttle')) { await sleep(2000 * (t + 1)); continue; }
-      throw e;
+      lastErr = e;
+      const msg = String((e as Error)?.message ?? e) + String((e as { cause?: unknown })?.cause ?? '');
+      const transient = /429|throttle|fetch failed|timeout|ECONNRESET|ETIMEDOUT|terminated|socket|stream/i.test(msg);
+      if (!transient) throw e;
+      const wait = Math.min(15000, 1500 * (t + 1));
+      process.stdout.write(`\n[retry ${label} ${t + 1}/${tries} in ${wait}ms] ${msg.slice(0, 80)}\n`);
+      await sleep(wait);
     }
   }
-  throw new Error('graphql retries exhausted');
+  throw lastErr;
 }
+const callWithRetry = (args: Parameters<typeof graphqlCall>[0]) => withRetry('gql', () => graphqlCall(args));
 
 async function main() {
   const args = parseArgs();
@@ -109,22 +117,24 @@ async function main() {
 
       if (args.apply) {
         if (!knownBrands.has(brandSlug)) {
-          await db.insert(schema.mmpBrands).values({ slug: brandSlug, displayName: vendor || 'Không rõ', firstSeenAt: now, lastSeenAt: now }).onConflictDoNothing();
+          await withRetry('brand', () => db.insert(schema.mmpBrands).values({ slug: brandSlug, displayName: vendor || 'Không rõ', firstSeenAt: now, lastSeenAt: now }).onConflictDoNothing());
           knownBrands.add(brandSlug);
         }
-        const [prod] = await db.insert(schema.mmpProducts).values({
+        // Upsert so a retry after a dropped connection (where the insert may have
+        // committed) returns the existing id instead of failing on the unique key.
+        const [prod] = await withRetry('product', () => db.insert(schema.mmpProducts).values({
           portalProductId: `shopify-${gidNum}`,
           brandSlug, sku: masterSku, name: p.title || masterSku,
           collection: null, productType: p.productType || null,
           status: sm.status, source: 'shopify',
-          basePrice: '0', currency: store.shopDomain.includes('meanblvd') ? 'USD' : 'USD',
+          basePrice: '0', currency: 'USD',
           priceUsd: priceUsd != null ? String(priceUsd) : null,
           curationStatus: sm.curation, shopifyProductId: p.id,
           lastReceivedAt: now, sourceHash: createHash('sha256').update(p.id).digest('hex'),
-        }).returning({ id: schema.mmpProducts.id });
+        }).onConflictDoUpdate({ target: schema.mmpProducts.portalProductId, set: { lastReceivedAt: now } }).returning({ id: schema.mmpProducts.id }));
 
         if (variants.length) {
-          await db.insert(schema.mmpProductVariants).values(variants.map((v: any, idx: number) => {
+          await withRetry('variants', () => db.insert(schema.mmpProductVariants).values(variants.map((v: any, idx: number) => {
             const opts = Object.fromEntries((v.selectedOptions ?? []).map((o: any) => [o.name.toLowerCase(), o.value]));
             return {
               productId: prod.id, sku: v.sku || `${masterSku}-${idx}`,
@@ -132,13 +142,14 @@ async function main() {
               inventory: Number(v.inventoryQuantity ?? 0), price: v.price ? String(v.price) : '0',
               position: idx, shopifyVariantId: v.id,
             };
-          })).onConflictDoNothing();
+          })).onConflictDoNothing());
         }
         if (images.length) {
-          await db.insert(schema.mmpProductImages).values(images.map((im: any, idx: number) => ({
+          await withRetry('images', () => db.insert(schema.mmpProductImages).values(images.map((im: any, idx: number) => ({
             productId: prod.id, url: im.url, position: idx, isThumbnail: idx === 0, altText: im.altText ?? null,
-          }))).onConflictDoNothing();
+          }))).onConflictDoNothing());
         }
+        existing.add(p.id);
       }
       inserted++;
     }
