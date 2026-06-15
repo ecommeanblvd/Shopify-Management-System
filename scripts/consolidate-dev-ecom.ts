@@ -42,8 +42,9 @@ async function fetchVendor(token: string): Promise<ShopProduct[]> {
   const out: ShopProduct[] = [];
   let cursor: string | null = null;
   do {
-    const r: { data?: { products?: { pageInfo: { hasNextPage: boolean; endCursor: string }; edges: Array<{ node: { id: string; title: string; status: string } }> } } } =
-      await graphqlCall({ shopDomain: SHOP, apiVersion: '2024-10', token, query: Q, variables: { q: `vendor:'${VENDOR}'`, cursor } });
+    const r = (await graphqlCall({ shopDomain: SHOP, apiVersion: '2024-10', token, query: Q, variables: { q: `vendor:'${VENDOR}'`, cursor } })) as {
+      data?: { products?: { pageInfo: { hasNextPage: boolean; endCursor: string }; edges: Array<{ node: { id: string; title: string; status: string } }> } };
+    };
     const p = r?.data?.products;
     if (!p) throw new Error('Shopify trả về rỗng: ' + JSON.stringify(r));
     for (const e of p.edges) out.push({ gid: e.node.id, pid: e.node.id.split('/').pop()!, title: e.node.title, status: e.node.status });
