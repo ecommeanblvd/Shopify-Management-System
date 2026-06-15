@@ -97,20 +97,21 @@ export interface FboApplyResult extends FboPreview {
 
 const numStr = (v: number) => v.toString();
 
-export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult> {
-  const rows = parseWorkbook(input.bytes);
+export interface FboFileMeta {
+  fileKey: string; filename: string; contentType: string; byteSize: number;
+}
+
+/** Lõi import FBO (dùng chung action UI + script CLI): tạo/cập nhật carrier_bills
+ *  + carrier_bill_lines (theo invoice#) và upsert shipment_charges (đối soát).
+ *  fileMeta optional — đính chứng từ vào bill khi có. */
+export async function importFboToDatabase(
+  rows: FboBilledRow[],
+  opts: { carrierAccountId: string; currency: string; userId: string; fileMeta?: FboFileMeta | null },
+): Promise<FboApplyResult> {
   if (rows.length === 0) throw new Error('File FBO không có dòng vận đơn hợp lệ.');
   const bills = groupFboIntoBills(rows);
   const awbMap = await resolveAwbMap(rows.map((r) => r.awb));
-
-  // Lưu file Excel 1 lần, đính cho mọi bill trong lần upload này.
-  const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
-  const fileKey = `carrier-bills/${input.carrierAccountId}/fbo-${randomUUID()}${ext}`;
-  await putObject(fileKey, input.bytes, input.contentType);
-  const fileMeta = {
-    fileKey, filename: input.filename, contentType: input.contentType, byteSize: input.bytes.length,
-  };
-
+  const { carrierAccountId, currency, userId, fileMeta } = opts;
   const today = new Date().toISOString().slice(0, 10);
 
   const counts = await db.transaction(async (tx) => {
@@ -123,7 +124,7 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
           .select({ id: schema.carrierBills.id })
           .from(schema.carrierBills)
           .where(and(
-            eq(schema.carrierBills.carrierAccountId, input.carrierAccountId),
+            eq(schema.carrierBills.carrierAccountId, carrierAccountId),
             eq(schema.carrierBills.billNumber, b.billNumber),
           ))
           .limit(1);
@@ -132,15 +133,15 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
 
       const start = b.periodStart ?? b.issueDate ?? b.dueDate ?? today;
       const billValues = {
-        carrierAccountId: input.carrierAccountId,
+        carrierAccountId: carrierAccountId,
         billNumber: b.billNumber,
         periodStart: start,
         periodEnd: b.periodEnd ?? start,
         issueDate: b.issueDate, dueDate: b.dueDate,
-        amount: numStr(b.amount), currency: input.currency,
-        ...fileMeta,
+        amount: numStr(b.amount), currency: currency,
+        ...(fileMeta ?? {}),
         note: `FedEx FBO · ${b.lines.length} vận đơn`,
-        createdBy: input.userId,
+        createdBy: userId,
       };
 
       if (billId) {
@@ -168,8 +169,8 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
       const sid = awbMap.get(r.awb);
       if (!sid) continue;
       const vals = {
-        shipmentId: sid, carrierAccountId: input.carrierAccountId, trackingNumber: r.awb,
-        totalAmount: numStr(fboShippingTotal(r)), currency: input.currency,
+        shipmentId: sid, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
+        totalAmount: numStr(fboShippingTotal(r)), currency: currency,
         base: numStr(r.base), fuel: numStr(r.fuel), remote: numStr(r.remote), demand: numStr(r.demand),
         directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
         discount: numStr(r.discount), elevatedRisk: '0', importHandling: numStr(r.importHandling),
@@ -191,4 +192,16 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
     grandTotal: bills.reduce((s, x) => s + x.amount, 0), unmatchedSample: unmatched.slice(0, 8),
     billsCreated: counts.created, billsUpdated: counts.updated, chargesUpserted: counts.charges,
   };
+}
+
+/** Action UI: parse + lưu file Excel lên R2 (đính chứng từ) + import. */
+export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult> {
+  const rows = parseWorkbook(input.bytes);
+  const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
+  const fileKey = `carrier-bills/${input.carrierAccountId}/fbo-${randomUUID()}${ext}`;
+  await putObject(fileKey, input.bytes, input.contentType);
+  return importFboToDatabase(rows, {
+    carrierAccountId: input.carrierAccountId, currency: input.currency, userId: input.userId,
+    fileMeta: { fileKey, filename: input.filename, contentType: input.contentType, byteSize: input.bytes.length },
+  });
 }
