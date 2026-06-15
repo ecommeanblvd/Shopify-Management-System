@@ -13,6 +13,10 @@ import { getReconcileCached } from './reconcile-cache';
 
 export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
 
+/** Dưới ngưỡng này coi như billed ≈ engine (đã khớp). Tổng cước một đơn
+ *  thường 600k–900k ₫ nên 1.000 ₫ (~0.1%) là sai số làm tròn, không phải lệch thật. */
+export const STALE_DISPUTE_TOLERANCE_VND = 1000;
+
 export interface StatusRecord {
   status: 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
   note: string | null;
@@ -27,6 +31,10 @@ export interface ReconcileViewRow extends ReconcileRow {
   carrierErrorKind: string | null;
   deltaVndAtReview: number | null;
   billedChangedSinceReview: boolean;
+  /** Khiếu nại đã hết hiệu lực: đang `disputing` nhưng Δ hiện tại đã về ~0
+   *  (thường do bổ sung/sửa engine sau lúc duyệt) → NCC thực ra tính đúng,
+   *  nên rút khiếu nại thay vì đi đòi. */
+  staleDispute: boolean;
   /** billedBase + billedDiscount (discount stored negative). Avoids the
    *  list-base/discount display artifact — see spec §3.6. */
   billedBaseNet: number | null;
@@ -53,6 +61,15 @@ export function mergeStatus(
     const rec = statusByShipment.get(r.shipmentId);
     const billedChangedSinceReview =
       rec?.billedTotalAtReview != null && rec.billedTotalAtReview !== r.billedTotal;
+    // Stale = lúc duyệt từng lệch thật (≥ ngưỡng) nhưng Δ hiện tại đã về ~0.
+    // Loại trừ khiếu nại cố ý một khoản nhỏ (Δ lúc duyệt vốn đã < ngưỡng).
+    const staleDispute =
+      rec?.status === 'disputing' &&
+      r.deltaVnd !== null &&
+      Math.abs(r.deltaVnd) < STALE_DISPUTE_TOLERANCE_VND &&
+      rec.deltaVndAtReview !== null &&
+      rec.deltaVndAtReview !== undefined &&
+      Math.abs(rec.deltaVndAtReview) >= STALE_DISPUTE_TOLERANCE_VND;
     return {
       ...r,
       status: (rec?.status ?? 'pending') as ReconcileStatus,
@@ -60,6 +77,7 @@ export function mergeStatus(
       carrierErrorKind: rec?.carrierErrorKind ?? null,
       deltaVndAtReview: rec?.deltaVndAtReview ?? null,
       billedChangedSinceReview,
+      staleDispute,
       billedBaseNet: netBase(r.billedBase, r.billedDiscount),
       engineBaseNet: r.engineBase,
     };

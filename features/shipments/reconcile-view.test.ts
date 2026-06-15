@@ -88,4 +88,52 @@ describe('mergeStatus', () => {
     expect(rows[0].deltaVndAtReview).toBe(194306);
     expect(rows[1].deltaVndAtReview).toBeNull();
   });
+
+  it('flag staleDispute khi disputing nhưng Δ hiện tại đã về ~0 (engine đổi sau lúc duyệt)', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'disputing', note: 'đòi NCC', carrierErrorKind: 'demand', deltaVndAtReview: 4213, billedTotalAtReview: 681584 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: 1 })], map);
+    expect(r.staleDispute).toBe(true);
+  });
+
+  it('không flag staleDispute khi Δ hiện tại vẫn còn lớn', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'disputing', note: null, carrierErrorKind: 'zone', deltaVndAtReview: 194306, billedTotalAtReview: 1741581 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: 194306 })], map);
+    expect(r.staleDispute).toBe(false);
+  });
+
+  it('không flag staleDispute cho status khác disputing dù Δ nhỏ', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'carrier_error', note: null, carrierErrorKind: 'demand', billedTotalAtReview: 681584 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: 1 })], map);
+    expect(r.staleDispute).toBe(false);
+  });
+
+  it('không flag staleDispute khi Δ hiện tại null (chưa tính được engine)', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'disputing', note: null, carrierErrorKind: 'demand', deltaVndAtReview: 4213, billedTotalAtReview: 681584 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: null })], map);
+    expect(r.staleDispute).toBe(false);
+  });
+
+  it('không flag staleDispute với khiếu nại cố ý một khoản nhỏ (Δ lúc duyệt vốn < ngưỡng)', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'disputing', note: null, carrierErrorKind: 'ratecard', deltaVndAtReview: 600, billedTotalAtReview: 681584 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: 600 })], map);
+    expect(r.staleDispute).toBe(false);
+  });
+
+  it('không flag staleDispute khi thiếu Δ lúc duyệt (không đủ căn cứ gap từng tồn tại)', () => {
+    const map = new Map<string, StatusRecord>([
+      ['s1', { status: 'disputing', note: null, carrierErrorKind: 'demand', billedTotalAtReview: 681584 }],
+    ]);
+    const [r] = mergeStatus([row({ deltaVnd: 1 })], map);
+    expect(r.staleDispute).toBe(false);
+  });
 });

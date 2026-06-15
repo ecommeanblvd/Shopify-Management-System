@@ -276,9 +276,19 @@ function FragmentRow({
           ) : r.status === 'pending' ? (
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
           ) : (
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
-              {OPERATOR_STATUS[r.status].label}
-              {r.billedChangedSinceReview ? ' ⚠' : ''}
+            <span className="inline-flex flex-col items-start gap-0.5">
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
+                {OPERATOR_STATUS[r.status].label}
+                {r.billedChangedSinceReview ? ' ⚠' : ''}
+              </span>
+              {r.staleDispute && (
+                <span
+                  className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                  title="Δ hiện tại đã về ~0 (engine cập nhật sau lúc duyệt) — NCC tính đúng, nên rút khiếu nại"
+                >
+                  Δ về 0 · nên rút
+                </span>
+              )}
             </span>
           )}
         </td>
