@@ -90,12 +90,16 @@ interface Props {
   carrierErrorGroups: CarrierErrorGroup[];
 }
 
-function deltaClass(pct: number | null): string {
-  if (pct === null) return '';
-  const a = Math.abs(pct);
-  if (a > 25) return 'text-red-600 dark:text-red-400';
-  if (a > 10) return 'text-amber-600 dark:text-amber-400';
-  return 'text-muted-foreground';
+/** Màu số LỆCH theo HƯỚNG (để rà soát): hệ thống CAO hơn billed (deltaVnd<0,
+ *  vì delta=billed−engine) → XANH (an toàn). Hệ thống THẤP hơn (deltaVnd>0,
+ *  NCC thu cao hơn dự tính) → ĐỎ (cần rà). Đơn đã khớp / pass-through → xám. */
+function deltaDirClass(r: ReconcileViewRow): string {
+  if (isAutoReconciled(r) || r.deltaVnd === null || Math.abs(r.deltaVnd) < MATCH_TOLERANCE_VND) {
+    return 'text-muted-foreground';
+  }
+  return r.deltaVnd < 0
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : 'text-red-600 dark:text-red-400';
 }
 
 export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroups }: Props) {
@@ -330,8 +334,8 @@ function FragmentRow({
         </td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.billedTotal)}</td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.engineTotal)}</td>
-        <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{fmtVnd(r.deltaVnd)}</td>
-        <td className={`px-3 py-2 text-right ${deltaClass(r.deltaPct)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
+        <td className={`px-3 py-2 text-right font-medium ${deltaDirClass(r)}`}>{fmtVnd(r.deltaVnd)}</td>
+        <td className={`px-3 py-2 text-right ${deltaDirClass(r)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
         <td className="px-3 py-2 font-sans whitespace-nowrap">
           <span className="inline-flex flex-col items-start gap-0.5">
             {isAutoReconciled(r) ? (
