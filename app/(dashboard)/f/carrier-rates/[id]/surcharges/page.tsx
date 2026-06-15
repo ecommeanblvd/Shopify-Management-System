@@ -23,9 +23,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SurchargeEditDialog } from '@/components/carrier-rates/SurchargeEditDialog';
 import { FuelHistoryDialog } from '@/components/carrier-rates/FuelHistoryDialog';
+import { DemandHistoryDialog } from '@/components/carrier-rates/DemandHistoryDialog';
 
-/** Fuel surcharge has a long weekly history — show only the latest few inline. */
-const FUEL_INLINE_LIMIT = 5;
+/** Fuel & Demand have long histories — show only the latest few inline, the
+ *  rest live behind a "view full history" modal. */
+const RECENT_INLINE_LIMIT = 5;
 
 export const dynamic = 'force-dynamic';
 
@@ -481,7 +483,7 @@ function KindCard({
               No {meta.label.toLowerCase()} configured.
             </div>
           ) : (
-            (kind === 'fuel_percent' ? list.slice(0, FUEL_INLINE_LIMIT) : list).map((s) => (
+            (kind === 'fuel_percent' || kind === 'demand_per_kg' ? list.slice(0, RECENT_INLINE_LIMIT) : list).map((s) => (
               <SurchargeSummaryRow
                 key={s.id}
                 row={s}
@@ -502,7 +504,7 @@ function KindCard({
 
         {/* Full fuel history lives behind a modal so the long weekly list
             doesn't bury the rest of the surcharges. */}
-        {kind === 'fuel_percent' && list.length > FUEL_INLINE_LIMIT && (
+        {kind === 'fuel_percent' && list.length > RECENT_INLINE_LIMIT && (
           <div className="px-5 py-3 border-t border-border flex justify-center">
             <FuelHistoryDialog
               count={list.length}
@@ -510,6 +512,26 @@ function KindCard({
                 value: s.value,
                 from: s.startsAt ? s.startsAt.toISOString() : null,
                 to: s.endsAt ? s.endsAt.toISOString() : null,
+                note: s.note,
+              }))}
+            />
+          </div>
+        )}
+
+        {/* Demand surcharge: chỉ hiện 5 mức gần nhất inline; toàn bộ lịch sử
+            (mọi vùng/kỳ) nằm trong modal xem chi tiết. */}
+        {kind === 'demand_per_kg' && list.length > RECENT_INLINE_LIMIT && (
+          <div className="px-5 py-3 border-t border-border flex justify-center">
+            <DemandHistoryDialog
+              count={list.length}
+              rows={list.map((s) => ({
+                value: formatValue(s.kind, s.value, currency),
+                scope: s.countryCodes && s.countryCodes.length > 0
+                  ? s.countryCodes.join(' · ')
+                  : (s.tier ?? 'Toàn cầu'),
+                from: s.startsAt ? s.startsAt.toISOString() : null,
+                to: s.endsAt ? s.endsAt.toISOString() : null,
+                active: s.active,
                 note: s.note,
               }))}
             />
