@@ -1,0 +1,63 @@
+/**
+ * Quote FedEx Rate API cho 1 shipment rồi cache (bảng fedex_rate_quotes).
+ * "Giá đúng" (giá hợp đồng) để đối soát billed(thực) vs FedEx theo từng dòng.
+ *
+ * Dịch vụ mặc định: cố định 1 loại (shop đi 1 dịch vụ) — đổi qua env
+ * FEDEX_DEFAULT_SERVICE. Quote theo ĐÚNG ngày ship → giá lịch sử.
+ */
+import { db, schema } from '@/db/client';
+import { quoteRate, type RateQuoteResult } from '@/lib/fedex/rate';
+
+/** Dịch vụ FedEx mặc định để đối soát. Đổi 1 chỗ nếu shop dùng loại khác. */
+export const FEDEX_DEFAULT_SERVICE = process.env.FEDEX_DEFAULT_SERVICE || 'FEDEX_INTERNATIONAL_PRIORITY';
+
+const HUB_POSTAL: Record<string, string> = { HN: '100000', SG: '700000' };
+
+export interface QuoteShipmentInput {
+  shipmentId: string;
+  originHub: string | null;
+  country: string;
+  postcode: string;
+  weightKg: number;
+  dims: { length: number; width: number; height: number };
+  shipDate: Date;
+}
+
+/** Chọn quote ACCOUNT của dịch vụ mặc định; thiếu thì lấy ACCOUNT đầu tiên. Pure. */
+export function pickQuote(quotes: RateQuoteResult[], service: string): RateQuoteResult | null {
+  const acc = quotes.filter((q) => q.rateType === 'ACCOUNT');
+  return acc.find((q) => q.serviceType === service) ?? acc[0] ?? null;
+}
+
+const num = (n: number | null): string | null => (n === null ? null : n.toString());
+
+export async function quoteShipmentToCache(
+  input: QuoteShipmentInput,
+): Promise<{ ok: boolean; service?: string; total?: number }> {
+  const { raw, quotes } = await quoteRate({
+    shipperCountryCode: 'VN',
+    shipperPostalCode: HUB_POSTAL[input.originHub ?? ''] ?? '700000',
+    recipientCountryCode: input.country,
+    recipientPostalCode: input.postcode,
+    weightKg: input.weightKg,
+    dimsCm: input.dims,
+    shipDate: input.shipDate.toISOString().slice(0, 10),
+  });
+  const q = pickQuote(quotes, FEDEX_DEFAULT_SERVICE);
+  if (!q) return { ok: false };
+
+  const row = {
+    service: q.serviceType, rateType: q.rateType ?? 'ACCOUNT', currency: q.currency,
+    shipDate: input.shipDate,
+    totalNetCharge: num(q.totalNetCharge), baseCharge: num(q.baseCharge),
+    fuel: q.components.fuel.toString(), fuelPercent: num(q.fuelPercent),
+    residential: q.components.residential.toString(), remote: q.components.remote.toString(),
+    demand: q.components.demand.toString(), ancillary: q.components.ancillary.toString(),
+    vat: q.vat.toString(), discount: q.discount.toString(),
+    billingWeightKg: num(q.billingWeightKg), rateZone: q.rateZone, raw: raw as object,
+  };
+  await db.insert(schema.fedexRateQuotes)
+    .values({ shipmentId: input.shipmentId, ...row })
+    .onConflictDoUpdate({ target: schema.fedexRateQuotes.shipmentId, set: { ...row, quotedAt: new Date() } });
+  return { ok: true, service: q.serviceType, total: q.totalNetCharge };
+}

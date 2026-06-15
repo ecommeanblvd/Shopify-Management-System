@@ -1001,6 +1001,40 @@ export const reconcileIssueReports = pgTable('reconcile_issue_reports', {
   index('reconcile_issue_reports_key_idx').on(t.issueKey),
 ]);
 
+/**
+ * Cache báo giá FedEx Rate API per shipment — "giá đúng" (giá hợp đồng) để
+ * đối soát billed(thực) vs FedEx-quote theo từng dòng. Rate API tốn phí +
+ * rate-limit nên quote 1 lần/đơn rồi lưu; quote theo ĐÚNG ngày ship để ra giá
+ * lịch sử. Bóc sẵn từng phụ phí (fuel/remote/demand/...) + giữ raw.
+ */
+export const fedexRateQuotes = pgTable('fedex_rate_quotes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'cascade' }).notNull().unique(),
+  service: text('service').notNull(),
+  rateType: text('rate_type').notNull().default('ACCOUNT'),
+  currency: text('currency').notNull(),
+  /** Ngày ship dùng để quote (mốc giá lịch sử). */
+  shipDate: timestamp('ship_date'),
+  totalNetCharge: numeric('total_net_charge', { precision: 16, scale: 2 }), // gồm VAT
+  baseCharge: numeric('base_charge', { precision: 16, scale: 2 }),
+  fuel: numeric('fuel', { precision: 16, scale: 2 }),
+  fuelPercent: numeric('fuel_percent', { precision: 8, scale: 4 }),
+  residential: numeric('residential', { precision: 16, scale: 2 }),
+  remote: numeric('remote', { precision: 16, scale: 2 }),
+  demand: numeric('demand', { precision: 16, scale: 2 }),
+  ancillary: numeric('ancillary', { precision: 16, scale: 2 }),
+  vat: numeric('vat', { precision: 16, scale: 2 }),
+  discount: numeric('discount', { precision: 16, scale: 2 }),
+  billingWeightKg: numeric('billing_weight_kg', { precision: 10, scale: 3 }),
+  rateZone: text('rate_zone'),
+  raw: jsonb('raw'),
+  quotedAt: timestamp('quoted_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
+}, (t) => [
+  index('fedex_rate_quotes_shipment_idx').on(t.shipmentId),
+]);
+
 export const shopifySyncState = pgTable('shopify_sync_state', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),

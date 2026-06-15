@@ -83,15 +83,46 @@ export interface RateSurcharge {
   amount: number;
 }
 
+/** Phụ phí FedEx gom về đúng các "thùng" engine mình đang đối soát. */
+export interface RateComponents {
+  fuel: number;
+  residential: number;
+  remote: number;
+  demand: number;
+  ancillary: number; // ký nhận / dịch vụ bổ sung (ANCILLARY_FEE)
+  other: number;
+}
+
+/** Map type phụ phí FedEx → thùng. */
+export function categorizeSurcharges(surcharges: RateSurcharge[]): RateComponents {
+  const c: RateComponents = { fuel: 0, residential: 0, remote: 0, demand: 0, ancillary: 0, other: 0 };
+  for (const s of surcharges) {
+    const t = s.type.toUpperCase();
+    if (t === 'FUEL') c.fuel += s.amount;
+    else if (t.includes('RESIDENTIAL')) c.residential += s.amount;
+    else if (t.includes('DELIVERY_AREA') || t.includes('OUT_OF_DELIVERY') || t.includes('EXTENDED')) c.remote += s.amount;
+    else if (t.includes('PEAK') || t.includes('DEMAND')) c.demand += s.amount;
+    else if (t.includes('ANCILLARY') || t.includes('SIGNATURE')) c.ancillary += s.amount;
+    else c.other += s.amount;
+  }
+  return c;
+}
+
 export interface RateQuoteResult {
   serviceType: string;
   serviceName?: string;
   rateType?: string; // 'ACCOUNT' | 'LIST'
   currency: string;
-  totalNetCharge: number;
+  totalNetCharge: number; // gồm cả VAT
   baseCharge: number | null;
   totalSurcharges: number | null;
   surcharges: RateSurcharge[];
+  components: RateComponents;
+  fuelPercent: number | null;
+  vat: number; // taxes VAT (Vietnam value-added)
+  discount: number; // totalFreightDiscount (số dương = đã giảm)
+  billingWeightKg: number | null;
+  rateZone: string | null;
   transitDays?: string;
 }
 
@@ -105,6 +136,16 @@ export function parseRateReply(reply: unknown): RateQuoteResult[] {
     for (const r of rated) {
       const srd = (r.shipmentRateDetail as Record<string, unknown> | undefined) ?? {};
       const surList = (srd.surCharges as Array<Record<string, unknown>> | undefined) ?? [];
+      const surcharges = surList.map((s) => ({
+        type: String(s.type ?? ''),
+        description: s.description as string | undefined,
+        amount: Number(s.amount ?? 0),
+      }));
+      const taxes = (srd.taxes as Array<Record<string, unknown>> | undefined) ?? [];
+      const vat = taxes
+        .filter((t) => String(t.type ?? '').toUpperCase().includes('VAT'))
+        .reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+      const bw = srd.totalBillingWeight as { value?: unknown } | undefined;
       out.push({
         serviceType: String(d.serviceType ?? ''),
         serviceName: d.serviceName as string | undefined,
@@ -113,11 +154,13 @@ export function parseRateReply(reply: unknown): RateQuoteResult[] {
         totalNetCharge: Number(r.totalNetCharge ?? srd.totalNetCharge ?? 0),
         baseCharge: srd.totalBaseCharge != null ? Number(srd.totalBaseCharge) : null,
         totalSurcharges: srd.totalSurcharges != null ? Number(srd.totalSurcharges) : null,
-        surcharges: surList.map((s) => ({
-          type: String(s.type ?? ''),
-          description: s.description as string | undefined,
-          amount: Number(s.amount ?? 0),
-        })),
+        surcharges,
+        components: categorizeSurcharges(surcharges),
+        fuelPercent: srd.fuelSurchargePercent != null ? Number(srd.fuelSurchargePercent) : null,
+        vat,
+        discount: srd.totalFreightDiscount != null ? Number(srd.totalFreightDiscount) : 0,
+        billingWeightKg: bw?.value != null ? Number(bw.value) : null,
+        rateZone: srd.rateZone != null ? String(srd.rateZone) : null,
         transitDays: (d.commit as { transitDays?: { description?: string } } | undefined)?.transitDays?.description,
       });
     }

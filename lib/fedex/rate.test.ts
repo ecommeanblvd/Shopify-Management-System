@@ -1,5 +1,59 @@
 import { describe, expect, it } from 'vitest';
-import { buildRateRequest, parseRateReply } from './rate';
+import { buildRateRequest, parseRateReply, categorizeSurcharges } from './rate';
+
+describe('categorizeSurcharges', () => {
+  it('gom đúng từng loại phụ phí FedEx về thùng engine', () => {
+    const c = categorizeSurcharges([
+      { type: 'FUEL', amount: 100 },
+      { type: 'RESIDENTIAL_DELIVERY', amount: 84_400 },
+      { type: 'ANCILLARY_FEE', amount: 68_300 },
+      { type: 'DELIVERY_AREA_SURCHARGE', amount: 50_000 },
+      { type: 'PEAK_SURCHARGE', amount: 30_000 },
+      { type: 'SOMETHING_ELSE', amount: 9 },
+    ]);
+    expect(c).toEqual({ fuel: 100, residential: 84_400, ancillary: 68_300, remote: 50_000, demand: 30_000, other: 9 });
+  });
+  it('cộng dồn cùng thùng (vd 2 dòng remote)', () => {
+    const c = categorizeSurcharges([
+      { type: 'OUT_OF_DELIVERY_AREA', amount: 10 },
+      { type: 'EXTENDED_DELIVERY_AREA', amount: 5 },
+    ]);
+    expect(c.remote).toBe(15);
+  });
+});
+
+describe('parseRateReply — named components', () => {
+  it('bóc fuel%, VAT, discount, billing weight, zone, components', () => {
+    const reply = {
+      output: { rateReplyDetails: [{
+        serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
+        ratedShipmentDetails: [{
+          rateType: 'ACCOUNT', currency: 'VND', totalNetCharge: 1_807_458,
+          shipmentRateDetail: {
+            totalSurcharges: 635_404, rateZone: '5', fuelSurchargePercent: 42.5,
+            totalBillingWeight: { units: 'KG', value: 2 },
+            totalFreightDiscount: 2_404_032,
+            surCharges: [
+              { type: 'FUEL', amount: 482_704 },
+              { type: 'RESIDENTIAL_DELIVERY', amount: 84_400 },
+              { type: 'ANCILLARY_FEE', amount: 68_300 },
+            ],
+            taxes: [{ type: 'VAT', description: 'Vietnam value-added', amount: 133_886 }],
+          },
+        }],
+      }] },
+    };
+    const [q] = parseRateReply(reply);
+    expect(q.fuelPercent).toBe(42.5);
+    expect(q.vat).toBe(133_886);
+    expect(q.discount).toBe(2_404_032);
+    expect(q.billingWeightKg).toBe(2);
+    expect(q.rateZone).toBe('5');
+    expect(q.components.fuel).toBe(482_704);
+    expect(q.components.residential).toBe(84_400);
+    expect(q.components.ancillary).toBe(68_300);
+  });
+});
 
 interface RateBody {
   accountNumber: { value: string };
