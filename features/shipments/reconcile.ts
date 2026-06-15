@@ -41,6 +41,8 @@ export interface ReconcileRow {
   billedDemand: number | null;
   billedSignature: number | null;
   billedResidential: number | null;
+  /** Phân loại địa chỉ người nhận (RESIDENTIAL/BUSINESS/MIXED/UNKNOWN). */
+  residentialClass: string | null;
   billedVat: number | null;
   billedGogreen: number | null;
   billedDiscount: number | null;
@@ -131,6 +133,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedDemand: schema.shipmentCharges.demand,
       billedSignature: schema.shipmentCharges.directSignature,
       billedResidential: schema.shipmentCharges.residential,
+      residentialClass: schema.shipmentCharges.residentialClass,
       billedVat: schema.shipmentCharges.vat,
       billedGogreen: schema.shipmentCharges.gogreen,
       billedDiscount: schema.shipmentCharges.discount,
@@ -342,6 +345,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       discountPercent: q.breakdown.discountPercent,
       vatPercent: q.breakdown.vatPercent,
       shipCountry: r.shipCountry,
+      residentialClass: r.residentialClass,
     });
     rows.push(buildRow(r, q.breakdown, null, diagnosis));
   }
@@ -389,6 +393,7 @@ interface JoinedRow {
   billedDemand: string | null;
   billedSignature: string | null;
   billedResidential: string | null;
+  residentialClass: string | null;
   billedVat: string | null;
   billedGogreen: string | null;
   billedDiscount: string | null;
@@ -483,6 +488,7 @@ function buildRow(
     billedDemand: r.billedDemand !== null ? Number(r.billedDemand) : null,
     billedSignature: r.billedSignature !== null ? Number(r.billedSignature) : null,
     billedResidential: r.billedResidential !== null ? Number(r.billedResidential) : null,
+    residentialClass: r.residentialClass,
     billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
     billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,

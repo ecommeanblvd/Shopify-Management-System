@@ -65,6 +65,17 @@ function fedexLine(row: ReconcileViewRow, key: CompKey): number | null {
   }
 }
 
+/** Nhãn phân loại địa chỉ (FedEx Address Validation) cho dòng residential. */
+function residentialClassLabel(cls: string | null): string | undefined {
+  switch (cls) {
+    case 'RESIDENTIAL': return '🏠 nhà dân ✓';
+    case 'BUSINESS': return '⚠ doanh nghiệp — đòi NCC';
+    case 'MIXED': return 'hỗn hợp';
+    case 'UNKNOWN': return 'chưa xác minh';
+    default: return undefined;
+  }
+}
+
 /** Sum engine sub-charges that share a display line, preserving null when the
  *  engine produced no quote (every part null). */
 function sumEngine(...parts: Array<number | null>): number | null {
@@ -86,9 +97,13 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, fedex: fx('demand'), compKey: 'demand' },
     // signature: engine books DHL/FedEx Direct Signature dưới addon_fixed.
     { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: row.engineAddons, fedex: fx('signature'), compKey: 'signature' },
-    // residential: phí giao địa chỉ nhà dân (FedEx) — dòng RIÊNG, pass-through
-    // (engine không tự định giá). Tách để không lẫn với ký nhận khi đối soát.
-    { label: 'Giao địa chỉ nhà (residential)', billed: row.billedResidential, engine: row.engineResidential, fedex: fx('residential'), compKey: 'residential' },
+    // residential: phí giao địa chỉ nhà dân (FedEx) — dòng RIÊNG, pass-through.
+    // billedSuffix = phân loại địa chỉ (FedEx Address Validation): xác minh phí
+    // đúng/sai (BUSINESS ⇒ thu sai ⇒ đòi NCC).
+    {
+      label: 'Giao địa chỉ nhà (residential)', billed: row.billedResidential, engine: row.engineResidential,
+      fedex: fx('residential'), compKey: 'residential', billedSuffix: residentialClassLabel(row.residentialClass),
+    },
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },

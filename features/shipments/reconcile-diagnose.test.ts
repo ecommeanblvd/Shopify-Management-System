@@ -176,6 +176,19 @@ describe('diagnoseReconcileRow — FedEx residential tách khỏi signature (rea
     const d = diagnoseReconcileRow(input);
     expect(d.components.reduce((a, c) => a + c.delta, 0)).toBe(d.totalDelta);
   });
+
+  it('classify RESIDENTIAL → residential pass-through (hợp lệ)', () => {
+    const resi = diagnoseReconcileRow({ ...input, residentialClass: 'RESIDENTIAL' })
+      .components.find((c) => c.key === 'residential')!;
+    expect(resi.cause).toBe('PHI_TUY_CHON');
+  });
+
+  it('classify BUSINESS → residential SAI (KHONG_KHOP, đòi NCC)', () => {
+    const resi = diagnoseReconcileRow({ ...input, residentialClass: 'BUSINESS' })
+      .components.find((c) => c.key === 'residential')!;
+    expect(resi.cause).toBe('KHONG_KHOP');
+    expect(resi.delta).toBe(80_100);
+  });
 });
 
 describe('diagnoseReconcileRow — rounding residual', () => {

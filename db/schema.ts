@@ -928,6 +928,12 @@ export const shipmentCharges = pgTable('shipment_charges', {
    *  direct_signature để dòng đối soát không bị lẫn. Pass-through (engine
    *  không tự định giá — 2 biến thể rate cùng kỳ). */
   residential: numeric('residential', { precision: 14, scale: 2 }),
+  /** Phân loại địa chỉ người nhận theo FedEx Address Validation API
+   *  (RESIDENTIAL/BUSINESS/MIXED/UNKNOWN). Dùng để xác minh phí Residential
+   *  có ĐÚNG không: BUSINESS mà bị thu residential ⇒ FedEx thu sai ⇒ đòi NCC.
+   *  Chỉ lưu KẾT QUẢ (không lưu địa chỉ — tránh PII). */
+  residentialClass: text('residential_class'),
+  residentialClassAt: timestamp('residential_class_at'),
   /** Excel col AO — VAT/Thuế phí khác. 8 % for Vietnam (FedEx + DHL). */
   vat: numeric('vat', { precision: 14, scale: 2 }),
   /** Excel col AP — GoGreen Plus-Basic stepped fee. */

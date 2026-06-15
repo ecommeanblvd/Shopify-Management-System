@@ -44,6 +44,12 @@ export interface FboBilledRow {
   shipDate: string | null;
   service: string | null;
   recipientCountry: string | null;
+  /** Địa chỉ người nhận (để classify residential qua FedEx Address API). */
+  recipientStreet1: string | null;
+  recipientStreet2: string | null;
+  recipientCity: string | null;
+  recipientState: string | null;
+  recipientPostcode: string | null;
   weightKg: number | null;
   base: number; discount: number; fuel: number; demand: number; remote: number;
   signature: number; residential: number; importHandling: number; vat: number;
@@ -62,6 +68,11 @@ const META: Record<string, string> = {
   shipDate: 'ngày vận chuyển (đúng định dạng)',
   service: 'dịch vụ',
   recipientCountry: 'quốc gia/vùng lãnh thổ trong địa chỉ của người nhận',
+  recipientStreet1: 'dòng địa chỉ người nhận 1',
+  recipientStreet2: 'dòng địa chỉ người nhận 2',
+  recipientCity: 'thành phố trong địa chỉ của người nhận',
+  recipientState: 'tiểu bang trong địa chỉ của người nhận',
+  recipientPostcode: 'mã bưu chính trong địa chỉ của người nhận',
   weight: 'trọng lượng tính phí', // có thể vắng — fallback bên dưới
   awbTotal: 'tổng số tiền trong vận đơn hàng không',
 };
@@ -102,6 +113,11 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
     shipDate: str(row, cols.meta.shipDate),
     service: str(row, cols.meta.service),
     recipientCountry: str(row, cols.meta.recipientCountry),
+    recipientStreet1: str(row, cols.meta.recipientStreet1),
+    recipientStreet2: str(row, cols.meta.recipientStreet2),
+    recipientCity: str(row, cols.meta.recipientCity),
+    recipientState: str(row, cols.meta.recipientState),
+    recipientPostcode: str(row, cols.meta.recipientPostcode),
     weightKg: cols.meta.weight >= 0 && row[cols.meta.weight] != null ? parseFboAmount(row[cols.meta.weight]) : null,
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
     residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,

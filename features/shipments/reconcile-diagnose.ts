@@ -129,6 +129,9 @@ export interface DiagnoseInput {
   vatPercent: number;
   /** Nước đích (ISO-2) — chỉ dùng cho verdict (vd nước miễn addon). */
   shipCountry?: string;
+  /** Phân loại địa chỉ người nhận (FedEx Address Validation): BUSINESS mà bị
+   *  thu residential ⇒ FedEx thu sai ⇒ flag KHONG_KHOP (đòi NCC). */
+  residentialClass?: string | null;
 }
 
 const r = (n: number): number => Math.round(n);
@@ -331,7 +334,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
   const resiEngine = r(e.residential);
   const resiDelta = r(resiBilled - resiEngine);
   let resiCause: DiagnosisCause = resiDelta === 0 ? 'KHOP' : 'KHONG_KHOP';
-  if (resiBilled > 0 && resiEngine === 0) resiCause = 'PHI_TUY_CHON';
+  if (resiBilled > 0 && resiEngine === 0) {
+    // Xác minh bằng FedEx Address Validation: địa chỉ BUSINESS mà bị thu
+    // residential ⇒ thu SAI ⇒ đòi NCC (KHONG_KHOP). RESIDENTIAL / chưa
+    // classify ⇒ pass-through hợp lệ.
+    resiCause = input.residentialClass === 'BUSINESS' ? 'KHONG_KHOP' : 'PHI_TUY_CHON';
+  }
   components.push({ key: 'residential', billed: resiBilled, engine: resiEngine, delta: resiDelta, cause: resiCause });
 
   // Phí nhập khẩu (FedEx US) bị gộp trong cột VAT của bill (VAT phẳng 8% —

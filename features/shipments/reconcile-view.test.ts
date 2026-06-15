@@ -7,7 +7,7 @@ function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
     shipmentId: 's1', trackingNumber: 't1', orderNumber: '#1', storeName: 'S',
     carrierKey: 'fedex', shipCountry: 'SA', shipCity: null, shipPostcode: null, shopifyWeightKg: 1, weightKg: 1, chargeableKg: 1, labelDate: null,
     billedTotal: 2_388_966, billedBase: 5_079_100, billedFuel: 513_729,
-    billedRemote: 550_000, billedDemand: 71_000, billedSignature: 0, billedResidential: 0,
+    billedRemote: 550_000, billedDemand: 71_000, billedSignature: 0, billedResidential: 0, residentialClass: null,
     billedVat: 176_960, billedGogreen: null, billedDiscount: -4_001_823,
     billedElevatedRisk: null, billedImportHandling: null, engineCountryFixed: 0,
     engineTotal: 1_270_649, engineBase: 1_075_196, engineFuel: 310_312,
