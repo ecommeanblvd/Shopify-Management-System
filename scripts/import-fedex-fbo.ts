@@ -10,15 +10,10 @@
  */
 import * as XLSX from 'xlsx';
 import { db, schema } from '@/db/client';
-import { parseFedexFbo, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
+import { parseFedexFbo } from '@/features/shipments/fedex-fbo-parse';
+import { fboShippingTotal } from '@/features/shipments/fedex-fbo-bill';
 
 const FEDEX_ACCOUNT = '5683f3c0-9249-40c1-a3e7-d967f0d62c29';
-
-function shippingTotal(r: FboBilledRow): number {
-  // Tổng cước SHIPPING (loại duty hải quan pass-through).
-  return r.base + r.discount + r.fuel + r.demand + r.remote
-    + r.signature + r.residential + r.importHandling + r.vat + r.other;
-}
 
 async function main(): Promise<void> {
   const file = process.argv[2];
@@ -46,7 +41,7 @@ async function main(): Promise<void> {
     const num = (v: number) => v.toString();
     const vals = {
       shipmentId: sid, carrierAccountId: FEDEX_ACCOUNT, trackingNumber: r.awb,
-      totalAmount: num(shippingTotal(r)), currency: 'VND',
+      totalAmount: num(fboShippingTotal(r)), currency: 'VND',
       base: num(r.base), fuel: num(r.fuel), remote: num(r.remote), demand: num(r.demand),
       directSignature: num(r.signature + r.residential), vat: num(r.vat), gogreen: '0',
       discount: num(r.discount), elevatedRisk: '0', importHandling: num(r.importHandling),
