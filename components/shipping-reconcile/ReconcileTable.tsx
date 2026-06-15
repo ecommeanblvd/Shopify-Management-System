@@ -70,7 +70,13 @@ type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_erro
 const MATCH_TOLERANCE_VND = 1000;
 /** Đơn pending NHƯNG lệch < ngưỡng → coi như tự đối soát (không cần người xác nhận). */
 function isAutoReconciled(r: ReconcileViewRow): boolean {
-  return r.status === 'pending' && Math.abs(r.deltaVnd ?? 0) < MATCH_TOLERANCE_VND;
+  if (r.status !== 'pending') return false;
+  // Khớp khi: (a) lệch tuyệt đối nhỏ, HOẶC (b) diagnose đã giải thích toàn bộ
+  // lệch là PASS-THROUGH hợp lệ — phí opt-in (ký nhận when_billed) hóa đơn thu
+  // thêm, KHÔNG phải lỗi. Trước đây chỉ xét (a) nên khi signature chuyển sang
+  // when_billed, engine thấp hơn billed ~143k ⇒ mọi đơn có ký nhận bị tính lệch.
+  if (Math.abs(r.deltaVnd ?? 0) < MATCH_TOLERANCE_VND) return true;
+  return r.diagnosis?.severity === 'passthrough' || r.diagnosis?.severity === 'match';
 }
 /** Trạng thái HIỆU DỤNG cho view: đơn khớp-pending tính là 'reconciled' (auto). */
 function effStatus(r: ReconcileViewRow): ReconcileStatus {
@@ -133,8 +139,11 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
     for (const r of filtered) {
       billed += r.billedTotal;
       engine += r.engineTotal ?? 0;
-      if (r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
-      if (effStatus(r) === 'pending') pendingCount += 1;
+      const isPending = effStatus(r) === 'pending';
+      // "Đơn lệch >10%": chỉ đếm đơn CÒN pending (chưa khớp/duyệt), bỏ qua
+      // pass-through đã giải thích — tránh phình do opt-in ký nhận.
+      if (isPending && r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
+      if (isPending) pendingCount += 1;
       if (r.status === 'disputing') disputingCount += 1;
     }
     const delta = billed - engine;
