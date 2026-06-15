@@ -46,4 +46,32 @@ describe('resolveColumns', () => {
     expect(LEGACY_COLUMN_MAP.trackingNumber).toBe(4);
     expect(LEGACY_COLUMN_MAP.totalCost).toBe(34);
   });
+
+  it('signature header dùng "ký" (y) vẫn khớp — không silent drop', () => {
+    const h = header2425(); h[28] = 'Phí ký nhận trực tiếp'; // y thay vì i
+    const r = resolveColumns(h);
+    expect(r.columns.directSignature).toBe(28);
+    expect(r.missingKnown).not.toContain('directSignature');
+  });
+
+  it('signature header tiếng Anh "Direct Signature" vẫn khớp', () => {
+    const h = header2425(); h[28] = 'Direct Signature';
+    expect(resolveColumns(h).columns.directSignature).toBe(28);
+  });
+
+  it('header lệch dấu (bỏ/khác dấu) vẫn khớp nhờ chuẩn hoá', () => {
+    const h = header2425(); h[25] = 'Phu phi nhien lieu'; // không dấu
+    expect(resolveColumns(h).columns.fuel).toBe(25);
+  });
+
+  it('thiếu cột phí đã biết → missingKnown (cảnh báo, không chặn import)', () => {
+    const h = header2425(); h[28] = ''; // mất cột signature
+    const r = resolveColumns(h);
+    expect(r.ok).toBe(true);
+    expect(r.missingKnown).toContain('directSignature');
+  });
+
+  it('đủ cột phí → missingKnown rỗng', () => {
+    expect(resolveColumns(header2425()).missingKnown).toEqual([]);
+  });
 });

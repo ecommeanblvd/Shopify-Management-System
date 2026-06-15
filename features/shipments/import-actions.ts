@@ -25,7 +25,7 @@ import { db, schema } from '@/db/client';
 import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from './parse-xlsx-row';
 import { invalidateReconcileCache } from './reconcile-cache';
 import { classifyCharge } from './charge-classify';
-import { resolveColumns, LEGACY_COLUMN_MAP } from './xlsx-columns';
+import { resolveColumns, LEGACY_COLUMN_MAP, expectedHeaderLabel } from './xlsx-columns';
 
 export interface ImportSummary {
   totalRows: number;
@@ -213,6 +213,12 @@ export async function importLogExport(
       summary.warnings.errors.push({ rowIndex: -1, reason: `Thiếu cột bắt buộc: ${resolved.missingRequired.join(', ')}` });
       summary.durationMs = Date.now() - start;
       return summary;
+    }
+    // Cột phí đã biết nhưng vắng trong header → nhiều khả năng lệch nhãn (vd
+    // 'Phí kí nhận trực tiếp' ghi thành 'ký'). Cảnh báo để không âm thầm nạp =0.
+    if (resolved.missingKnown.length > 0) {
+      const labels = resolved.missingKnown.map((f) => `${f} ("${expectedHeaderLabel(f)}")`).join(', ');
+      summary.warnings.errors.push({ rowIndex: -1, reason: `⚠ Không tìm thấy cột phí trong header, sẽ nạp = 0: ${labels}` });
     }
     cols = resolved.columns;
   }
