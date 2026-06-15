@@ -138,7 +138,11 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
     let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
     for (const r of filtered) {
       billed += r.billedTotal;
-      engine += r.engineTotal ?? 0;
+      // Đơn đã khớp (gồm pass-through opt-in ký nhận): hệ thống "đồng ý" với
+      // billed (engine when_billed không cộng ký nhận, nhưng bill thu đúng giá
+      // hệ thống) → fold engine = billed để Σ Lệch không phình vì ký nhận.
+      // Đơn lệch thật: giữ engineTotal.
+      engine += isAutoReconciled(r) ? r.billedTotal : (r.engineTotal ?? 0);
       const isPending = effStatus(r) === 'pending';
       // "Đơn lệch >10%": chỉ đếm đơn CÒN pending (chưa khớp/duyệt), bỏ qua
       // pass-through đã giải thích — tránh phình do opt-in ký nhận.
