@@ -16,6 +16,9 @@ async function main(): Promise<void> {
   // --signature-only: chỉ (re)quote đơn có ký nhận (billedSignature>0) để cột
   // API có giá ký nhận — dùng sau khi thêm SIGNATURE_OPTION vào request.
   const sigOnly = process.argv.includes('--signature-only');
+  // --residential-only: chỉ (re)quote đơn có residential billed (>0) để cột API
+  // có phí giao nhà dân — dùng sau khi thêm RESIDENTIAL vào request.
+  const resiOnly = process.argv.includes('--residential-only');
 
   const conds = [
     eq(schema.shipments.carrierKey, 'fedex'),
@@ -24,6 +27,7 @@ async function main(): Promise<void> {
     isNotNull(schema.shipments.dimLengthCm),
     isNotNull(schema.shipments.labelCreatedAt),
     ...(sigOnly ? [gt(schema.shipmentCharges.directSignature, '0')] : []),
+    ...(resiOnly ? [gt(schema.shipmentCharges.residential, '0')] : []),
   ];
 
   const rows = await db.select({
@@ -33,7 +37,7 @@ async function main(): Promise<void> {
     wt: schema.shipments.actualWeightKg,
     l: schema.shipments.dimLengthCm, w: schema.shipments.dimWidthCm, h: schema.shipments.dimHeightCm,
     date: schema.shipments.labelCreatedAt, cachedAt: schema.fedexRateQuotes.quotedAt,
-    sig: schema.shipmentCharges.directSignature,
+    sig: schema.shipmentCharges.directSignature, resi: schema.shipmentCharges.residential,
   }).from(schema.shipmentCharges)
     .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
@@ -50,6 +54,7 @@ async function main(): Promise<void> {
         shipmentId: r.sid, originHub: r.hub, country: r.country!, postcode: r.postcode, city: r.city,
         weightKg: Number(r.wt), dims: { length: Number(r.l), width: Number(r.w), height: Number(r.h) },
         shipDate: r.date!, signatureOptIn: Number(r.sig ?? 0) > 0,
+        recipientResidential: Number(r.resi ?? 0) > 0,
       });
       if (res.ok) { ok += 1; if (ok % 10 === 0) console.log(`  …${ok} ok`); }
       else { fail += 1; console.log(`  ${r.ord}: không có quote ACCOUNT`); }

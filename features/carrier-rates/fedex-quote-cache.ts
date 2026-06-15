@@ -26,6 +26,9 @@ export interface QuoteShipmentInput {
   shipDate: Date;
   /** Đơn có dùng ký nhận → quote kèm SIGNATURE_OPTION để cột API có giá ký nhận. */
   signatureOptIn?: boolean;
+  /** Địa chỉ nhà dân (US/CA) → quote kèm RESIDENTIAL_DELIVERY để cột API có phí
+   *  residential. Suy từ billed có residential (hoặc classify = RESIDENTIAL). */
+  recipientResidential?: boolean;
 }
 
 /** Chọn quote ACCOUNT của dịch vụ mặc định; thiếu thì lấy ACCOUNT đầu tiên. Pure. */
@@ -51,6 +54,7 @@ export async function quoteShipmentToCache(
     dimsCm: input.dims,
     shipDate: input.shipDate.toISOString().slice(0, 10),
     signatureOptIn: input.signatureOptIn,
+    recipientResidential: input.recipientResidential,
   });
   const q = pickQuote(quotes, FEDEX_DEFAULT_SERVICE);
   if (!q) return { ok: false };
