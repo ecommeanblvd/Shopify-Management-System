@@ -132,7 +132,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
       {row.fedexQuote && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-            Đối soát 3 bên · FedEx {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
+            Đối soát 3 bên · API NCC · {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
             {row.fedexQuote.rateZone ? ` · zone ${row.fedexQuote.rateZone}` : ''}
           </span>
           {row.fedexCompare && (
@@ -147,19 +147,20 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
           <tr className="text-xs uppercase tracking-wider text-muted-foreground">
             <th className="text-left py-1">Khoản phí</th>
             <th className="text-right py-1">Hệ thống</th>
-            <th className="text-right py-1">FedEx (đúng)</th>
+            <th className="text-right py-1">API NCC (đúng)</th>
             <th className="text-right py-1">Billed</th>
-            <th className="text-right py-1">Lệch (FedEx−HT)</th>
+            <th className="text-right py-1">Lệch ({row.fedexQuote ? 'API' : 'Bill'}−HT)</th>
             <th className="text-right py-1">Chẩn đoán</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular-nums">
           {lines(row).map((l) => {
-            // Lệch QUAN TRỌNG = FedEx (giá đúng) − Hệ thống (engine). Billed cột
-            // tham chiếu (≈ FedEx sau khi sửa bill). '—' khi cả hai bên trống.
-            const delta = l.fedex === null && l.engine === null
+            // Lệch = Hệ thống vs DỮ LIỆU CÓ SẴN: có API NCC (FedEx) → API−HT;
+            // chưa có API (DHL…) → Billed−HT. Tránh lấy API=0 trừ ra ⇒ lệch giả.
+            const ref = row.fedexQuote ? l.fedex : l.billed;
+            const delta = ref === null && l.engine === null
               ? null
-              : (l.fedex ?? 0) - (l.engine ?? 0);
+              : (ref ?? 0) - (l.engine ?? 0);
             const comp = row.diagnosis?.components.find((x) => x.key === l.compKey);
             const causeLabel = comp && comp.cause !== 'KHOP' ? CAUSE_LABEL[comp.cause] : '';
             return (
@@ -190,7 +191,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
             <td className="py-1 text-right">{fmtVnd(row.fedexQuote?.totalNetCharge ?? null)}</td>
             <td className="py-1 text-right text-muted-foreground">{fmtVnd(row.billedTotal)}</td>
             <td className="py-1 text-right">
-              {fmtVnd(row.fedexQuote?.totalNetCharge != null ? row.fedexQuote.totalNetCharge - row.engineTotal : null)}
+              {fmtVnd((row.fedexQuote?.totalNetCharge ?? row.billedTotal) - row.engineTotal)}
             </td>
             <td className="py-1"></td>
           </tr>
