@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { ChevronLeft, Search, Package, Tag, Truck } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -10,6 +11,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { getBrand, listProductsForBrand, type CurationFilter } from '@/features/mmp/queries';
+import { setBrandStatus, type BrandStatus } from '@/features/mmp/brand-actions';
+import { BrandStatusControl } from '@/components/mmp/BrandStatusControl';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +25,7 @@ const CURATION_TABS: Array<{ key: CurationFilter; label: string }> = [
   { key: 'rejected', label: 'Rejected' },
   { key: 'pushed', label: 'Pushed' },
   { key: 'archived', label: 'Archived' },
+  { key: 'draft', label: 'Draft' },
 ];
 
 // Filter-pill styles (text only, never over a photo).
@@ -32,6 +36,7 @@ const CURATION_PILL_STYLES: Record<CurationFilter, string> = {
   rejected: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
   pushed:   'bg-sky-500/10 text-sky-700 dark:text-sky-300',
   archived: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400',
+  draft:    'bg-slate-500/10 text-slate-600 dark:text-slate-400',
 };
 
 // Badge styles for overlays on product photos. Soft fills disappear
@@ -43,6 +48,7 @@ const CURATION_BADGE_STYLES: Record<Exclude<CurationFilter, 'all'>, string> = {
   rejected: 'bg-rose-500 text-white border-transparent',
   pushed:   'bg-sky-500 text-white border-transparent',
   archived: 'bg-zinc-500 text-white border-transparent',
+  draft:    'bg-slate-500 text-white border-transparent',
 };
 
 function fmtVnd(s: string): string {
@@ -74,6 +80,14 @@ export default async function BrandProductsPage({ params, searchParams }: PagePr
 
   const brand = await getBrand(brandSlug);
   if (!brand) notFound();
+  const canManage = hasPermission(role, 'manage_mmp_products');
+
+  async function setStatusAction(status: BrandStatus) {
+    'use server';
+    await setBrandStatus(brandSlug, status);
+    revalidatePath(`/f/mmp/${brandSlug}`);
+    revalidatePath('/f/mmp');
+  }
 
   const { items, total } = await listProductsForBrand({
     brandSlug,
@@ -106,6 +120,7 @@ export default async function BrandProductsPage({ params, searchParams }: PagePr
           </div>
           <h1 className="text-4xl font-semibold tracking-tight">{brand.displayName}</h1>
           <span className="text-xs text-muted-foreground font-mono">{brand.slug}</span>
+          <div className="ml-auto"><BrandStatusControl status={brand.status} canManage={canManage} setStatusAction={setStatusAction} /></div>
         </div>
         <p className="text-sm text-muted-foreground">
           {total} {total === 1 ? 'product' : 'products'} in <span className="font-medium">{CURATION_TABS.find((t) => t.key === curation)?.label}</span>

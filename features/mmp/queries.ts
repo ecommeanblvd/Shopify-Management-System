@@ -9,10 +9,13 @@
 import { and, count, desc, eq, sql, ilike } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
+export type BrandStatus = 'active' | 'deactive' | 'archived';
+
 /** Brand card on the landing page. */
 export interface BrandSummary {
   slug: string;
   displayName: string;
+  status: BrandStatus;
   firstSeenAt: Date;
   lastSeenAt: Date;
   totalProducts: number;
@@ -31,6 +34,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
   const rows = await db.execute<{
     slug: string;
     display_name: string;
+    status: BrandStatus;
     first_seen_at: Date;
     last_seen_at: Date;
     total: number;
@@ -43,6 +47,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
     SELECT
       b.slug,
       b.display_name,
+      b.status,
       b.first_seen_at,
       b.last_seen_at,
       COUNT(p.id)::int AS total,
@@ -53,7 +58,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
       COUNT(p.id) FILTER (WHERE p.curation_status = 'archived')::int AS archived
     FROM ${schema.mmpBrands} b
     LEFT JOIN ${schema.mmpProducts} p ON p.brand_slug = b.slug
-    GROUP BY b.slug, b.display_name, b.first_seen_at, b.last_seen_at
+    GROUP BY b.slug, b.display_name, b.status, b.first_seen_at, b.last_seen_at
     ORDER BY b.last_seen_at DESC
   `);
   // pg's raw-query path returns timestamp columns as strings — Drizzle's
@@ -62,6 +67,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
   return rows.rows.map((r) => ({
     slug: r.slug,
     displayName: r.display_name,
+    status: r.status,
     firstSeenAt: new Date(r.first_seen_at),
     lastSeenAt: new Date(r.last_seen_at),
     totalProducts: r.total,
@@ -79,6 +85,7 @@ export async function listBrandsWithCounts(): Promise<BrandSummary[]> {
 export async function getBrand(slug: string): Promise<{
   slug: string;
   displayName: string;
+  status: BrandStatus;
   firstSeenAt: Date;
   lastSeenAt: Date;
 } | null> {
@@ -86,6 +93,7 @@ export async function getBrand(slug: string): Promise<{
     .select({
       slug: schema.mmpBrands.slug,
       displayName: schema.mmpBrands.displayName,
+      status: schema.mmpBrands.status,
       firstSeenAt: schema.mmpBrands.firstSeenAt,
       lastSeenAt: schema.mmpBrands.lastSeenAt,
     })
@@ -95,7 +103,7 @@ export async function getBrand(slug: string): Promise<{
 }
 
 export type CurationFilter =
-  | 'all' | 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
+  | 'all' | 'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft';
 
 /** Card-row product summary for the brand listing page. */
 export interface ProductListItem {
@@ -105,7 +113,7 @@ export interface ProductListItem {
   productType: string | null;
   collection: string | null;
   status: 'live' | 'draft' | 'archived';
-  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
+  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft';
   basePrice: string; // VND as string (drizzle numeric)
   variantCount: number;
   thumbnailUrl: string | null;
@@ -176,7 +184,7 @@ export async function listProductsForBrand(args: ListProductsArgs): Promise<{
     product_type: string | null;
     collection: string | null;
     status: 'live' | 'draft' | 'archived';
-    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
+    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft';
     base_price: string;
     variant_count: number;
     thumbnail_url: string | null;
@@ -269,7 +277,7 @@ export async function searchAllProducts(args: {
     product_type: string | null;
     collection: string | null;
     status: 'live' | 'draft' | 'archived';
-    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
+    curation_status: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft';
     base_price: string;
     variant_count: number;
     thumbnail_url: string | null;
@@ -346,7 +354,7 @@ export interface ProductDetail {
   collection: string | null;
   productType: string | null;
   status: 'live' | 'draft' | 'archived';
-  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived';
+  curationStatus: 'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft';
   curationNote: string | null;
   basePrice: string;
   currency: string;

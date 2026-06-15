@@ -9,7 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { listBrandsWithCounts, searchAllProducts } from '@/features/mmp/queries';
+import { listBrandsWithCounts, searchAllProducts, type BrandSummary } from '@/features/mmp/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,59 +138,21 @@ export default async function MmpProductsLanding({ searchParams }: PageProps): P
       ) : brands.length === 0 ? (
         <EmptyState />
       ) : (
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {brands.map((b) => (
-            <Link key={b.slug} href={`/f/mmp/${encodeURIComponent(b.slug)}`} className="group">
-              <Card className="hover:border-foreground/30 transition-colors h-full">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                        <Tag className="size-3" /> Brand
-                      </div>
-                      <h2 className="text-lg font-semibold truncate">{b.displayName}</h2>
-                      <p className="text-xs text-muted-foreground font-mono truncate">{b.slug}</p>
-                    </div>
-                    <ArrowRight className="size-4 opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                  </div>
-
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-semibold tabular-nums">{b.totalProducts}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {b.totalProducts === 1 ? 'product' : 'products'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {b.byCuration.received > 0 && (
-                      <CurationPill count={b.byCuration.received} label="received" tone="amber" />
-                    )}
-                    {b.byCuration.approved > 0 && (
-                      <CurationPill count={b.byCuration.approved} label="approved" tone="emerald" />
-                    )}
-                    {b.byCuration.rejected > 0 && (
-                      <CurationPill count={b.byCuration.rejected} label="rejected" tone="rose" />
-                    )}
-                    {b.byCuration.pushed > 0 && (
-                      <CurationPill count={b.byCuration.pushed} label="pushed" tone="sky" />
-                    )}
-                    {b.byCuration.archived > 0 && (
-                      <CurationPill count={b.byCuration.archived} label="archived" tone="zinc" />
-                    )}
-                    {b.totalProducts === 0 && (
-                      <span className="text-xs text-muted-foreground italic">No products yet</span>
-                    )}
-                  </div>
-
-                  <div className="text-[10px] text-muted-foreground pt-2 border-t border-border/60 flex items-center justify-between">
-                    <span>Last received</span>
-                    <span className="font-mono">{formatDate(b.lastSeenAt)}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </section>
+        <>
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {brands.filter((b) => b.status !== 'archived').map((b) => <BrandCard key={b.slug} b={b} fmt={formatDate} />)}
+          </section>
+          {brands.some((b) => b.status === 'archived') && (
+            <details className="mt-8">
+              <summary className="cursor-pointer select-none text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground inline-flex items-center gap-2">
+                <Archive className="size-4" /> Brand đã ngừng hợp tác ({brands.filter((b) => b.status === 'archived').length})
+              </summary>
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 opacity-60">
+                {brands.filter((b) => b.status === 'archived').map((b) => <BrandCard key={b.slug} b={b} fmt={formatDate} />)}
+              </section>
+            </details>
+          )}
+        </>
       )}
     </div>
   );
@@ -231,6 +193,57 @@ function Tally({ icon, label, value, tone }: { icon: React.ReactNode; label: str
   );
 }
 
+const BRAND_STATUS_BADGE: Record<BrandSummary['status'], { label: string; cls: string } | null> = {
+  active: null,
+  deactive: { label: 'Tạm dừng', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  archived: { label: 'Đã ngừng', cls: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400' },
+};
+
+function BrandCard({ b, fmt }: { b: BrandSummary; fmt: (d: Date) => string }): React.ReactNode {
+  const badge = BRAND_STATUS_BADGE[b.status];
+  return (
+    <Link href={`/f/mmp/${encodeURIComponent(b.slug)}`} className="group">
+      <Card className="hover:border-foreground/30 transition-colors h-full">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-0.5 min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <Tag className="size-3" /> Brand
+              </div>
+              <h2 className="text-lg font-semibold truncate">{b.displayName}</h2>
+              <p className="text-xs text-muted-foreground font-mono truncate">{b.slug}</p>
+            </div>
+            {badge ? (
+              <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium shrink-0 ' + badge.cls}>{badge.label}</span>
+            ) : (
+              <ArrowRight className="size-4 opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            )}
+          </div>
+
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums">{b.totalProducts}</span>
+            <span className="text-xs text-muted-foreground">{b.totalProducts === 1 ? 'product' : 'products'}</span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {b.byCuration.received > 0 && <CurationPill count={b.byCuration.received} label="received" tone="amber" />}
+            {b.byCuration.approved > 0 && <CurationPill count={b.byCuration.approved} label="approved" tone="emerald" />}
+            {b.byCuration.rejected > 0 && <CurationPill count={b.byCuration.rejected} label="rejected" tone="rose" />}
+            {b.byCuration.pushed > 0 && <CurationPill count={b.byCuration.pushed} label="pushed" tone="sky" />}
+            {b.byCuration.archived > 0 && <CurationPill count={b.byCuration.archived} label="archived" tone="zinc" />}
+            {b.totalProducts === 0 && <span className="text-xs text-muted-foreground italic">No products yet</span>}
+          </div>
+
+          <div className="text-[10px] text-muted-foreground pt-2 border-t border-border/60 flex items-center justify-between">
+            <span>Last received</span>
+            <span className="font-mono">{fmt(b.lastSeenAt)}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
 function CurationPill({ count, label, tone }: { count: number; label: string; tone: Tone }): React.ReactNode {
   return (
     <Badge variant="secondary" className={`text-[10px] gap-1 ${TONE_STYLES[tone]}`}>
@@ -256,12 +269,13 @@ function EmptyState(): React.ReactNode {
   );
 }
 
-const CURATION_TONE_MAP: Record<'received' | 'approved' | 'rejected' | 'pushed' | 'archived', Tone> = {
+const CURATION_TONE_MAP: Record<'received' | 'approved' | 'rejected' | 'pushed' | 'archived' | 'draft', Tone> = {
   received: 'amber',
   approved: 'emerald',
   rejected: 'rose',
   pushed:   'sky',
   archived: 'zinc',
+  draft:    'zinc',
 };
 
 interface SearchResultsProps {

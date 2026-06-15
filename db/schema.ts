@@ -1333,7 +1333,15 @@ export const mmpCurationStatusEnum = pgEnum('mmp_curation_status', [
   // Đã archive trên Shopify (đối soát ngược về lịch sử). Phân biệt với
   // 'approved' (đang ACTIVE/bán) — xem reconcile Denio ↔ Shopify.
   'archived',
+  // Tạm dừng (brand deactive) — sp active bị đưa về draft, chờ xử lý.
+  'draft',
 ]);
+
+/** Brand activation state.
+ *  - active:   đang hợp tác bình thường.
+ *  - deactive: tạm dừng — sản phẩm đang active được đưa về draft.
+ *  - archived: ngừng hợp tác hẳn — toàn bộ sản phẩm về archived. */
+export const mmpBrandStatusEnum = pgEnum('mmp_brand_status', ['active', 'deactive', 'archived']);
 
 export const mmpBrands = pgTable('mmp_brands', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -1343,6 +1351,7 @@ export const mmpBrands = pgTable('mmp_brands', {
   displayName: text('display_name').notNull(),
   /** Optional notes / contact. */
   note: text('note'),
+  status: mmpBrandStatusEnum('status').notNull().default('active'),
   firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
   lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
 });
