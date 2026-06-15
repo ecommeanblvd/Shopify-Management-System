@@ -1022,7 +1022,10 @@ export const fedexRateQuotes = pgTable('fedex_rate_quotes', {
   residential: numeric('residential', { precision: 16, scale: 2 }),
   remote: numeric('remote', { precision: 16, scale: 2 }),
   demand: numeric('demand', { precision: 16, scale: 2 }),
-  ancillary: numeric('ancillary', { precision: 16, scale: 2 }),
+  /** Ký nhận thật (SIGNATURE_OPTION). API quote thường = 0 vì là special service. */
+  signature: numeric('signature', { precision: 16, scale: 2 }),
+  /** Phí cố định nước (ANCILLARY_FEE = "US Inbound Processing Fee"…). */
+  countryFixed: numeric('country_fixed', { precision: 16, scale: 2 }),
   vat: numeric('vat', { precision: 16, scale: 2 }),
   discount: numeric('discount', { precision: 16, scale: 2 }),
   billingWeightKg: numeric('billing_weight_kg', { precision: 10, scale: 3 }),

@@ -2,16 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { buildRateRequest, parseRateReply, categorizeSurcharges } from './rate';
 
 describe('categorizeSurcharges', () => {
-  it('gom đúng từng loại phụ phí FedEx về thùng engine', () => {
+  it('gom đúng: ANCILLARY_FEE→countryFixed (import handling), SIGNATURE→signature', () => {
     const c = categorizeSurcharges([
       { type: 'FUEL', amount: 100 },
       { type: 'RESIDENTIAL_DELIVERY', amount: 84_400 },
-      { type: 'ANCILLARY_FEE', amount: 68_300 },
+      { type: 'ANCILLARY_FEE', amount: 68_300 }, // US Inbound Processing Fee = phí cố định nước
+      { type: 'SIGNATURE_OPTION', amount: 92_700 }, // ký nhận thật
       { type: 'DELIVERY_AREA_SURCHARGE', amount: 50_000 },
       { type: 'PEAK_SURCHARGE', amount: 30_000 },
       { type: 'SOMETHING_ELSE', amount: 9 },
     ]);
-    expect(c).toEqual({ fuel: 100, residential: 84_400, ancillary: 68_300, remote: 50_000, demand: 30_000, other: 9 });
+    expect(c).toEqual({ fuel: 100, residential: 84_400, signature: 92_700, countryFixed: 68_300, remote: 50_000, demand: 30_000, other: 9 });
   });
   it('cộng dồn cùng thùng (vd 2 dòng remote)', () => {
     const c = categorizeSurcharges([
@@ -36,7 +37,7 @@ describe('parseRateReply — named components', () => {
             surCharges: [
               { type: 'FUEL', amount: 482_704 },
               { type: 'RESIDENTIAL_DELIVERY', amount: 84_400 },
-              { type: 'ANCILLARY_FEE', amount: 68_300 },
+              { type: 'ANCILLARY_FEE', amount: 68_300 }, // → countryFixed
             ],
             taxes: [{ type: 'VAT', description: 'Vietnam value-added', amount: 133_886 }],
           },
@@ -51,7 +52,8 @@ describe('parseRateReply — named components', () => {
     expect(q.rateZone).toBe('5');
     expect(q.components.fuel).toBe(482_704);
     expect(q.components.residential).toBe(84_400);
-    expect(q.components.ancillary).toBe(68_300);
+    expect(q.components.countryFixed).toBe(68_300); // ANCILLARY_FEE = phí cố định nước, KHÔNG phải ký nhận
+    expect(q.components.signature).toBe(0);
   });
 });
 

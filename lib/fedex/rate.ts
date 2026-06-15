@@ -89,20 +89,23 @@ export interface RateComponents {
   residential: number;
   remote: number;
   demand: number;
-  ancillary: number; // ký nhận / dịch vụ bổ sung (ANCILLARY_FEE)
+  signature: number; // KÝ NHẬN thật (SIGNATURE_OPTION…) — special service
+  countryFixed: number; // phí cố định nước, vd ANCILLARY_FEE = "US Inbound Processing Fee"
   other: number;
 }
 
-/** Map type phụ phí FedEx → thùng. */
+/** Map type phụ phí FedEx → thùng. THỨ TỰ quan trọng: SIGNATURE trước ANCILLARY.
+ *  ANCILLARY_FEE = phí xử lý hàng nhập (country_fixed), KHÔNG phải ký nhận. */
 export function categorizeSurcharges(surcharges: RateSurcharge[]): RateComponents {
-  const c: RateComponents = { fuel: 0, residential: 0, remote: 0, demand: 0, ancillary: 0, other: 0 };
+  const c: RateComponents = { fuel: 0, residential: 0, remote: 0, demand: 0, signature: 0, countryFixed: 0, other: 0 };
   for (const s of surcharges) {
     const t = s.type.toUpperCase();
     if (t === 'FUEL') c.fuel += s.amount;
     else if (t.includes('RESIDENTIAL')) c.residential += s.amount;
+    else if (t.includes('SIGNATURE')) c.signature += s.amount; // ký nhận thật
+    else if (t.includes('ANCILLARY') || t.includes('INBOUND') || t.includes('CLEARANCE') || t.includes('IMPORT')) c.countryFixed += s.amount;
     else if (t.includes('DELIVERY_AREA') || t.includes('OUT_OF_DELIVERY') || t.includes('EXTENDED')) c.remote += s.amount;
     else if (t.includes('PEAK') || t.includes('DEMAND')) c.demand += s.amount;
-    else if (t.includes('ANCILLARY') || t.includes('SIGNATURE')) c.ancillary += s.amount;
     else c.other += s.amount;
   }
   return c;

@@ -57,9 +57,10 @@ function fedexLine(row: ReconcileViewRow, key: CompKey): number | null {
     case 'fuel': return q.fuel;
     case 'remote': return q.remote;
     case 'demand': return q.demand;
-    case 'signature': return q.ancillary;
+    case 'signature': return q.signature; // ký nhận thật (API thường 0 — special service)
     case 'vat': return q.vat;
-    default: return null; // gogreen / elevatedRisk: FedEx không có dòng tương ứng
+    case 'elevatedRisk': return q.countryFixed; // dòng "Phí cố định nước (nhập US…)" = ANCILLARY_FEE
+    default: return null; // gogreen: FedEx không có dòng tương ứng
   }
 }
 

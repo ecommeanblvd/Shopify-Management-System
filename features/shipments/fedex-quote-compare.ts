@@ -12,7 +12,8 @@ export interface FedexQuoteSnap {
   remote: number | null;
   demand: number | null;
   residential: number | null;
-  ancillary: number | null; // ký nhận / dịch vụ bổ sung
+  signature: number | null; // ký nhận thật (SIGNATURE_OPTION); API quote thường = 0
+  countryFixed: number | null; // phí cố định nước (ANCILLARY_FEE = US Inbound Processing Fee)
   vat: number | null;
   discount: number | null;
   rateZone: string | null;
@@ -22,7 +23,7 @@ export interface FedexQuoteSnap {
 export function fedexImpliedBase(q: FedexQuoteSnap): number | null {
   if (q.totalNetCharge === null) return null;
   return q.totalNetCharge - (q.fuel ?? 0) - (q.remote ?? 0) - (q.demand ?? 0)
-    - (q.residential ?? 0) - (q.ancillary ?? 0) - (q.vat ?? 0);
+    - (q.residential ?? 0) - (q.signature ?? 0) - (q.countryFixed ?? 0) - (q.vat ?? 0);
 }
 
 export interface BilledSnap {
@@ -67,7 +68,7 @@ export function compareBilledVsFedexQuote(b: BilledSnap, q: FedexQuoteSnap): Quo
     ['fuel', n0(b.fuel), n0(q.fuel)],
     ['remote', n0(b.remote), n0(q.remote)],
     ['demand', n0(b.demand), n0(q.demand)],
-    ['signature', n0(b.signature), n0(q.ancillary)],
+    ['signature', n0(b.signature), n0(q.signature)],
     ['vat', n0(b.vat), n0(q.vat)],
     ['total', b.total, n0(q.totalNetCharge)],
   ];

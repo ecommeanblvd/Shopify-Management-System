@@ -52,7 +52,8 @@ export async function quoteShipmentToCache(
     totalNetCharge: num(q.totalNetCharge), baseCharge: num(q.baseCharge),
     fuel: q.components.fuel.toString(), fuelPercent: num(q.fuelPercent),
     residential: q.components.residential.toString(), remote: q.components.remote.toString(),
-    demand: q.components.demand.toString(), ancillary: q.components.ancillary.toString(),
+    demand: q.components.demand.toString(),
+    signature: q.components.signature.toString(), countryFixed: q.components.countryFixed.toString(),
     vat: q.vat.toString(), discount: q.discount.toString(),
     billingWeightKg: num(q.billingWeightKg), rateZone: q.rateZone, raw: raw as object,
   };
