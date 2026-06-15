@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
-  ChevronLeft, Truck, Wallet, ArrowRight,
+  ChevronLeft, Truck, Wallet, ArrowRight, Receipt,
   LayoutGrid, Layers, Wrench, MapPin, Calculator, Send,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
@@ -11,15 +11,10 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount, updateAccount, deleteAccount } from '@/features/carrier-rates/actions';
 import { daysSince } from '@/features/carrier-rates/lib';
-import {
-  createBill, addPayment, deleteBill, deletePayment,
-  listBills, listPaymentsForAccount, listBillLines, type UploadFile,
-} from '@/features/carrier-rates/ap/bills-actions';
+import { listBills, listPaymentsForAccount } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
-import { systemTotalForPeriod, systemAllTimeTotal } from '@/features/carrier-rates/ap/period-compare';
-import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
+import { systemAllTimeTotal } from '@/features/carrier-rates/ap/period-compare';
 import { CarrierSetupSheet } from '@/components/carrier-rates/CarrierSetupSheet';
-import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -28,12 +23,6 @@ export const dynamic = 'force-dynamic';
 const FX_STALE_DAYS = 30;
 
 function todayIso(): string { return new Date().toISOString().slice(0, 10); }
-
-async function fileFromForm(form: FormData, field: string): Promise<UploadFile | null> {
-  const f = form.get(field);
-  if (!(f instanceof File) || f.size === 0) return null;
-  return { bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type || 'application/octet-stream' };
-}
 
 async function toggleEnabledAction(id: string, next: boolean, userId: string) {
   'use server';
@@ -71,39 +60,8 @@ export default async function CarrierAccountDetailPage({ params }: { params: Pro
   ]);
   const inputs = toSummaryInputs(bills, payments);
   const summary = summariseAp(inputs.bills, inputs.payments, todayIso());
-  const periodTotals = await Promise.all(bills.map((b) => systemTotalForPeriod(id, b.periodStart, b.periodEnd)));
-  const systemByBill: Record<string, number> = {};
-  bills.forEach((b, i) => { systemByBill[b.id] = periodTotals[i].systemTotal; });
 
   const fmt = (n: number) => `${Math.round(n).toLocaleString('vi-VN')} ${currency}`;
-
-  // ── Server actions ──
-  async function createBillAction(formData: FormData) {
-    'use server';
-    const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
-    const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
-    await createBill({
-      carrierAccountId: id, billNumber: s('billNumber'),
-      periodStart: String(formData.get('periodStart')), periodEnd: String(formData.get('periodEnd')),
-      issueDate: s('issueDate'), dueDate: s('dueDate'), amount: n('amount'), currency,
-      note: s('note'), userId: session!.user.id, file: await fileFromForm(formData, 'file'),
-    });
-    revalidatePath(`/f/carrier-rates/${id}`);
-  }
-  async function addPaymentAction(formData: FormData) {
-    'use server';
-    const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
-    const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
-    await addPayment({
-      billId: String(formData.get('billId')), paidAt: String(formData.get('paidAt')),
-      amount: n('amount'), method: s('method'), note: s('note'),
-      userId: session!.user.id, proof: await fileFromForm(formData, 'proof'),
-    });
-    revalidatePath(`/f/carrier-rates/${id}`);
-  }
-  async function deleteBillAction(billId: string) { 'use server'; await deleteBill(billId); revalidatePath(`/f/carrier-rates/${id}`); }
-  async function deletePaymentAction(paymentId: string) { 'use server'; await deletePayment(paymentId); revalidatePath(`/f/carrier-rates/${id}`); }
-  async function listLinesAction(billId: string) { 'use server'; return listBillLines(billId); }
 
   return (
     <div className="px-6 md:px-10 py-6 space-y-8">
@@ -146,19 +104,13 @@ export default async function CarrierAccountDetailPage({ params }: { params: Pro
         </div>
       </section>
 
-      {/* Billing / Invoices */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Billing / Invoices</h2>
-          {canManage && <AddBillDialog createBillAction={createBillAction} />}
-        </div>
-        <BillsBoard
-          accountId={id} currency={currency} canManage={canManage}
-          bills={bills} payments={payments} summaryBills={summary.bills} systemByBill={systemByBill}
-          listLines={listLinesAction}
-          addPaymentAction={addPaymentAction} deleteBillAction={deleteBillAction} deletePaymentAction={deletePaymentAction}
-        />
-      </section>
+      {/* Billing / Invoices: tách sang trang riêng — đây chỉ là card vào */}
+      <ToolCard
+        href={`/f/carrier-rates/${id}/bills`}
+        icon={<Receipt className="size-4" />}
+        title="Billing / Invoices"
+        desc={`${bills.length} hoá đơn · còn nợ ${fmt(summary.totalOutstanding)} — xem & quản lý hoá đơn, thanh toán, file đính kèm.`}
+      />
 
       {/* Rate config & tools */}
       <section className="space-y-3">
