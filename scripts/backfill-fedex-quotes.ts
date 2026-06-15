@@ -3,7 +3,7 @@
  * Rate-limited. Bỏ qua đơn đã cache trừ khi --refresh. Cần env FedEx prod
  * → chạy qua: railway run -- npx tsx scripts/backfill-fedex-quotes.ts [--limit N] [--refresh]
  */
-import { and, eq, isNotNull, isNull, desc, gt } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, desc, gt, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quoteShipmentToCache } from '@/features/carrier-rates/fedex-quote-cache';
 
@@ -19,7 +19,8 @@ async function main(): Promise<void> {
 
   const conds = [
     eq(schema.shipments.carrierKey, 'fedex'),
-    isNotNull(schema.shopifyOrders.shipPostcode),
+    // Có postcode THẬT, hoặc có city (nước Vùng Vịnh — dùng postcode đại diện).
+    or(isNotNull(schema.shopifyOrders.shipPostcode), isNotNull(schema.shopifyOrders.shipCity)),
     isNotNull(schema.shipments.dimLengthCm),
     isNotNull(schema.shipments.labelCreatedAt),
     ...(sigOnly ? [gt(schema.shipmentCharges.directSignature, '0')] : []),
@@ -28,7 +29,8 @@ async function main(): Promise<void> {
   const rows = await db.select({
     sid: schema.shipments.id, ord: schema.shopifyOrders.shopifyOrderNumber,
     hub: schema.shipments.originHub, country: schema.shopifyOrders.shipCountry,
-    postcode: schema.shopifyOrders.shipPostcode, wt: schema.shipments.actualWeightKg,
+    postcode: schema.shopifyOrders.shipPostcode, city: schema.shopifyOrders.shipCity,
+    wt: schema.shipments.actualWeightKg,
     l: schema.shipments.dimLengthCm, w: schema.shipments.dimWidthCm, h: schema.shipments.dimHeightCm,
     date: schema.shipments.labelCreatedAt, cachedAt: schema.fedexRateQuotes.quotedAt,
     sig: schema.shipmentCharges.directSignature,
@@ -45,7 +47,7 @@ async function main(): Promise<void> {
   for (const r of rows) {
     try {
       const res = await quoteShipmentToCache({
-        shipmentId: r.sid, originHub: r.hub, country: r.country!, postcode: r.postcode!,
+        shipmentId: r.sid, originHub: r.hub, country: r.country!, postcode: r.postcode, city: r.city,
         weightKg: Number(r.wt), dims: { length: Number(r.l), width: Number(r.w), height: Number(r.h) },
         shipDate: r.date!, signatureOptIn: Number(r.sig ?? 0) > 0,
       });

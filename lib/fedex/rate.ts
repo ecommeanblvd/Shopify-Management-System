@@ -11,6 +11,9 @@ export interface RateQuoteInput {
   shipperPostalCode?: string;
   shipperCountryCode: string; // ISO-2, ví dụ 'VN'
   recipientPostalCode?: string;
+  /** Thành phố người nhận — gửi kèm để FedEx phân giải vùng (nước Vùng Vịnh
+   *  dùng thành phố; vẫn cần postalCode đại diện vì API bắt buộc NotNull). */
+  recipientCity?: string;
   recipientCountryCode: string;
   recipientResidential?: boolean;
   weightKg: number;
@@ -67,7 +70,8 @@ export function buildRateRequest(input: RateQuoteInput, accountNumber: string): 
       shipper: { address: { postalCode: input.shipperPostalCode, countryCode: input.shipperCountryCode } },
       recipient: {
         address: {
-          postalCode: input.recipientPostalCode,
+          ...(input.recipientPostalCode ? { postalCode: input.recipientPostalCode } : {}),
+          ...(input.recipientCity ? { city: input.recipientCity } : {}),
           countryCode: input.recipientCountryCode,
           residential: input.recipientResidential ?? false,
         },

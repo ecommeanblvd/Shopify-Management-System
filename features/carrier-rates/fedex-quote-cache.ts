@@ -7,6 +7,7 @@
  */
 import { db, schema } from '@/db/client';
 import { quoteRate, type RateQuoteResult } from '@/lib/fedex/rate';
+import { effectivePostcode } from '@/lib/fedex/postal';
 
 /** Dịch vụ FedEx mặc định để đối soát. Đổi 1 chỗ nếu shop dùng loại khác. */
 export const FEDEX_DEFAULT_SERVICE = process.env.FEDEX_DEFAULT_SERVICE || 'FEDEX_INTERNATIONAL_PRIORITY';
@@ -17,7 +18,9 @@ export interface QuoteShipmentInput {
   shipmentId: string;
   originHub: string | null;
   country: string;
-  postcode: string;
+  postcode: string | null;
+  /** Thành phố — dùng cho nước không-postcode (Vùng Vịnh) + phân giải vùng xa. */
+  city?: string | null;
   weightKg: number;
   dims: { length: number; width: number; height: number };
   shipDate: Date;
@@ -36,11 +39,14 @@ const num = (n: number | null): string | null => (n === null ? null : n.toString
 export async function quoteShipmentToCache(
   input: QuoteShipmentInput,
 ): Promise<{ ok: boolean; service?: string; total?: number }> {
+  const postcode = effectivePostcode(input.country, input.postcode);
+  if (!postcode) return { ok: false }; // không có postcode thật lẫn fallback → bỏ
   const { raw, quotes } = await quoteRate({
     shipperCountryCode: 'VN',
     shipperPostalCode: HUB_POSTAL[input.originHub ?? ''] ?? '700000',
     recipientCountryCode: input.country,
-    recipientPostalCode: input.postcode,
+    recipientPostalCode: postcode,
+    recipientCity: input.city ?? undefined,
     weightKg: input.weightKg,
     dimsCm: input.dims,
     shipDate: input.shipDate.toISOString().slice(0, 10),

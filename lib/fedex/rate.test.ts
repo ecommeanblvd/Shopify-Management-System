@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { buildRateRequest, parseRateReply, categorizeSurcharges } from './rate';
 
+describe('buildRateRequest — city + postcode (nước Vùng Vịnh)', () => {
+  it('gửi city khi có; postcode khi có', () => {
+    const req = buildRateRequest({
+      shipperCountryCode: 'VN', recipientCountryCode: 'AE', recipientCity: 'Dubai',
+      recipientPostalCode: '00000', weightKg: 1,
+    }, 'ACC') as { requestedShipment: { recipient: { address: Record<string, unknown> } } };
+    const a = req.requestedShipment.recipient.address;
+    expect(a.city).toBe('Dubai');
+    expect(a.postalCode).toBe('00000');
+  });
+  it('không có postcode → bỏ trường postalCode khỏi address', () => {
+    const req = buildRateRequest({
+      shipperCountryCode: 'VN', recipientCountryCode: 'AE', recipientCity: 'Dubai', weightKg: 1,
+    }, 'ACC') as { requestedShipment: { recipient: { address: Record<string, unknown> } } };
+    expect('postalCode' in req.requestedShipment.recipient.address).toBe(false);
+  });
+});
+
 describe('categorizeSurcharges', () => {
   it('gom đúng: ANCILLARY_FEE→countryFixed (import handling), SIGNATURE→signature', () => {
     const c = categorizeSurcharges([
