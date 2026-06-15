@@ -17,6 +17,7 @@
  */
 import 'dotenv/config';
 import { createHash } from 'crypto';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { graphqlCall, getStoreToken } from '@/lib/shopify/client';
@@ -90,7 +91,12 @@ async function main() {
   );
   const knownBrands = new Set((await db.select({ slug: schema.mmpBrands.slug }).from(schema.mmpBrands)).map((b) => b.slug));
 
-  let cursor: string | null = null;
+  // Persist the page cursor so a kill/restart resumes exactly where it left off
+  // instead of re-skipping the tens of thousands already done. Only written
+  // after a page is fully processed, so it always points to a clean boundary.
+  const cursorFile = `/tmp/shopify-catalog-${slugify(store.shopDomain)}.cursor`;
+  let cursor: string | null = (args.apply && existsSync(cursorFile)) ? (readFileSync(cursorFile, 'utf8').trim() || null) : null;
+  if (cursor) console.log(`[catalog] resume từ cursor đã lưu (bỏ qua re-skip)`);
   let seen = 0, inserted = 0, skipped = 0;
   const brandTally = new Map<string, number>();
   const now = new Date();
@@ -154,8 +160,9 @@ async function main() {
       inserted++;
     }
     process.stdout.write(`\r[catalog] seen=${seen} insert=${inserted} skip=${skipped} brands=${brandTally.size}   `);
-    if (!conn.pageInfo.hasNextPage) break;
+    if (!conn.pageInfo.hasNextPage) { if (args.apply && existsSync(cursorFile)) unlinkSync(cursorFile); break; }
     cursor = conn.pageInfo.endCursor;
+    if (args.apply) writeFileSync(cursorFile, cursor ?? ''); // checkpoint after full page
     await sleep(550); // throttle
   }
 
