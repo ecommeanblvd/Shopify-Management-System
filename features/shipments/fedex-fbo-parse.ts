@@ -51,6 +51,9 @@ export interface FboBilledRow {
   recipientCity: string | null;
   recipientState: string | null;
   recipientPostcode: string | null;
+  /** CÂN TÍNH PHÍ (chargeable/billing weight) FedEx dùng, đã quy về KG. Cột FBO
+   *  "Số tiền theo trọng lượng tính cước" (giá trị là CÂN, không phải tiền) +
+   *  đơn vị (K=kg, P=lb). Dùng làm input quote chính xác nhất cho từng AWB. */
   weightKg: number | null;
   base: number; discount: number; fuel: number; demand: number; remote: number;
   signature: number; residential: number; importHandling: number; vat: number;
@@ -74,9 +77,18 @@ const META: Record<string, string> = {
   recipientCity: 'thành phố trong địa chỉ của người nhận',
   recipientState: 'tiểu bang trong địa chỉ của người nhận',
   recipientPostcode: 'mã bưu chính trong địa chỉ của người nhận',
-  weight: 'trọng lượng tính phí', // có thể vắng — fallback bên dưới
+  weight: 'số tiền theo trọng lượng tính cước', // GIÁ TRỊ = cân tính phí (không phải tiền)
+  weightUnit: 'đơn vị trọng lượng tính cước',  // K=kg, P=lb
   awbTotal: 'tổng số tiền trong vận đơn hàng không',
 };
+
+/** Quy cân FBO về KG theo đơn vị (P/LB → lb; K/KG → kg). */
+export function fboWeightToKg(value: number, unit: string | null): number {
+  if (!(value > 0)) return 0;
+  const u = String(unit ?? '').trim().toUpperCase();
+  if (u === 'P' || u === 'LB' || u === 'LBS') return Math.round(value * 0.453592 * 1000) / 1000;
+  return value; // K / KG / rỗng → coi là kg
+}
 
 const CHARGE_LABEL_HEADER = 'nhãn phí trên vận đơn hàng không';
 
@@ -119,7 +131,9 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
     recipientCity: str(row, cols.meta.recipientCity),
     recipientState: str(row, cols.meta.recipientState),
     recipientPostcode: str(row, cols.meta.recipientPostcode),
-    weightKg: cols.meta.weight >= 0 && row[cols.meta.weight] != null ? parseFboAmount(row[cols.meta.weight]) : null,
+    weightKg: cols.meta.weight >= 0 && row[cols.meta.weight] != null
+      ? fboWeightToKg(parseFboAmount(row[cols.meta.weight]), str(row, cols.meta.weightUnit)) || null
+      : null,
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
     residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,
   };

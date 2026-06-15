@@ -32,6 +32,32 @@ export interface QuoteShipmentInput {
   recipientResidential?: boolean;
 }
 
+export interface QuoteWeightInput {
+  /** Cân TÍNH PHÍ từ hoá đơn FBO (chính xác nhất — đúng số FedEx đã tính). */
+  billingWeightKg?: number | null;
+  /** Cân thực của shipment. */
+  actualWeightKg?: number | null;
+  /** Cân đơn Shopify (fallback cuối khi thiếu cả dim lẫn cân thực). */
+  shopifyWeightKg?: number | null;
+  dims?: { length: number; width: number; height: number };
+}
+
+/** Chọn cân + dims để quote theo ưu tiên (yêu cầu nghiệp vụ):
+ *  1. Billing weight hoá đơn → dùng thẳng (đã là cân tính phí cuối, KHÔNG dims).
+ *  2. Có dims → cân thực (hoặc Shopify) + dims → FedEx tự lấy max(thực, dim).
+ *  3. Không dims → cân thực; thiếu thì cân Shopify. Pure. */
+export function resolveQuoteWeight(input: QuoteWeightInput): {
+  weightKg: number; dims?: { length: number; width: number; height: number };
+} {
+  if (input.billingWeightKg && input.billingWeightKg > 0) {
+    return { weightKg: input.billingWeightKg };
+  }
+  const base = (input.actualWeightKg && input.actualWeightKg > 0)
+    ? input.actualWeightKg
+    : (input.shopifyWeightKg && input.shopifyWeightKg > 0 ? input.shopifyWeightKg : 0.5);
+  return { weightKg: base, dims: input.dims };
+}
+
 /** Chọn quote ACCOUNT của dịch vụ mặc định; thiếu thì lấy ACCOUNT đầu tiên. Pure. */
 export function pickQuote(quotes: RateQuoteResult[], service: string): RateQuoteResult | null {
   const acc = quotes.filter((q) => q.rateType === 'ACCOUNT');

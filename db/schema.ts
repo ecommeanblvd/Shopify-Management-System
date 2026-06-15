@@ -934,6 +934,9 @@ export const shipmentCharges = pgTable('shipment_charges', {
    *  Chỉ lưu KẾT QUẢ (không lưu địa chỉ — tránh PII). */
   residentialClass: text('residential_class'),
   residentialClassAt: timestamp('residential_class_at'),
+  /** Cân TÍNH PHÍ (chargeable/billing weight) FedEx dùng cho AWB này, từ hoá
+   *  đơn FBO (đã quy về KG). Dùng làm input quote chính xác nhất. */
+  billingWeightKg: numeric('billing_weight_kg', { precision: 10, scale: 3 }),
   /** Excel col AO — VAT/Thuế phí khác. 8 % for Vietnam (FedEx + DHL). */
   vat: numeric('vat', { precision: 14, scale: 2 }),
   /** Excel col AP — GoGreen Plus-Basic stepped fee. */

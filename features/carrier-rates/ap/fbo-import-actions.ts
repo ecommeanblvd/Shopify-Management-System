@@ -174,6 +174,7 @@ export async function importFboToDatabase(
         base: numStr(r.base), fuel: numStr(r.fuel), remote: numStr(r.remote), demand: numStr(r.demand),
         directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
         discount: numStr(r.discount), elevatedRisk: '0', importHandling: numStr(r.importHandling),
+        billingWeightKg: r.weightKg != null ? numStr(r.weightKg) : null,
         source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
       };
       await tx.insert(schema.shipmentCharges).values(vals)

@@ -5,7 +5,7 @@
  */
 import { and, eq, isNotNull, isNull, desc, gt, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { quoteShipmentToCache } from '@/features/carrier-rates/fedex-quote-cache';
+import { quoteShipmentToCache, resolveQuoteWeight } from '@/features/carrier-rates/fedex-quote-cache';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
@@ -38,6 +38,7 @@ async function main(): Promise<void> {
     l: schema.shipments.dimLengthCm, w: schema.shipments.dimWidthCm, h: schema.shipments.dimHeightCm,
     date: schema.shipments.labelCreatedAt, cachedAt: schema.fedexRateQuotes.quotedAt,
     sig: schema.shipmentCharges.directSignature, resi: schema.shipmentCharges.residential,
+    bw: schema.shipmentCharges.billingWeightKg, shopW: schema.shopifyOrders.shipWeightKg,
   }).from(schema.shipmentCharges)
     .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
@@ -50,10 +51,16 @@ async function main(): Promise<void> {
   let ok = 0, fail = 0;
   for (const r of rows) {
     try {
+      // Cân theo ưu tiên: billing weight hoá đơn → max(dim, thực) → cân Shopify.
+      const wq = resolveQuoteWeight({
+        billingWeightKg: r.bw != null ? Number(r.bw) : null,
+        actualWeightKg: r.wt != null ? Number(r.wt) : null,
+        shopifyWeightKg: r.shopW != null ? Number(r.shopW) : null,
+        dims: r.l != null ? { length: Number(r.l), width: Number(r.w), height: Number(r.h) } : undefined,
+      });
       const res = await quoteShipmentToCache({
         shipmentId: r.sid, originHub: r.hub, country: r.country!, postcode: r.postcode, city: r.city,
-        weightKg: Number(r.wt),
-        dims: r.l != null ? { length: Number(r.l), width: Number(r.w), height: Number(r.h) } : undefined,
+        weightKg: wq.weightKg, dims: wq.dims,
         shipDate: r.date!, signatureOptIn: Number(r.sig ?? 0) > 0,
         recipientResidential: Number(r.resi ?? 0) > 0,
       });
