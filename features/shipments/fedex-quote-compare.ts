@@ -11,10 +11,18 @@ export interface FedexQuoteSnap {
   fuelPercent: number | null;
   remote: number | null;
   demand: number | null;
+  residential: number | null;
   ancillary: number | null; // ký nhận / dịch vụ bổ sung
   vat: number | null;
   discount: number | null;
   rateZone: string | null;
+}
+
+/** Cước gốc FedEx suy ra = tổng − mọi phụ phí − VAT (Rate API không trả base riêng cho ACCOUNT). */
+export function fedexImpliedBase(q: FedexQuoteSnap): number | null {
+  if (q.totalNetCharge === null) return null;
+  return q.totalNetCharge - (q.fuel ?? 0) - (q.remote ?? 0) - (q.demand ?? 0)
+    - (q.residential ?? 0) - (q.ancillary ?? 0) - (q.vat ?? 0);
 }
 
 export interface BilledSnap {

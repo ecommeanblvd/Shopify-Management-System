@@ -6,7 +6,7 @@ const billed = (o: Partial<BilledSnap> = {}): BilledSnap => ({
 });
 const quote = (o: Partial<FedexQuoteSnap> = {}): FedexQuoteSnap => ({
   service: 'FEDEX_INTERNATIONAL_PRIORITY', totalNetCharge: 1_800_000, fuel: 480_000,
-  fuelPercent: 42.5, remote: 0, demand: 0, ancillary: 0, vat: 130_000, discount: 0, rateZone: 'H', ...o,
+  fuelPercent: 42.5, remote: 0, demand: 0, residential: 0, ancillary: 0, vat: 130_000, discount: 0, rateZone: 'H', ...o,
 });
 
 describe('compareBilledVsFedexQuote', () => {

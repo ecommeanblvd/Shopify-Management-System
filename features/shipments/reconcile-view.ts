@@ -155,7 +155,8 @@ export async function reconcileShipmentsWithStatus(
       shipmentId: schema.fedexRateQuotes.shipmentId, service: schema.fedexRateQuotes.service,
       totalNetCharge: schema.fedexRateQuotes.totalNetCharge, fuel: schema.fedexRateQuotes.fuel,
       fuelPercent: schema.fedexRateQuotes.fuelPercent, remote: schema.fedexRateQuotes.remote,
-      demand: schema.fedexRateQuotes.demand, ancillary: schema.fedexRateQuotes.ancillary,
+      demand: schema.fedexRateQuotes.demand, residential: schema.fedexRateQuotes.residential,
+      ancillary: schema.fedexRateQuotes.ancillary,
       vat: schema.fedexRateQuotes.vat, discount: schema.fedexRateQuotes.discount,
       rateZone: schema.fedexRateQuotes.rateZone,
     })
@@ -165,7 +166,8 @@ export async function reconcileShipmentsWithStatus(
     quoteMap.set(q.shipmentId, {
       service: q.service, totalNetCharge: num(q.totalNetCharge), fuel: num(q.fuel),
       fuelPercent: num(q.fuelPercent), remote: num(q.remote), demand: num(q.demand),
-      ancillary: num(q.ancillary), vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
+      residential: num(q.residential), ancillary: num(q.ancillary), vat: num(q.vat),
+      discount: num(q.discount), rateZone: q.rateZone,
     });
   }
   for (const r of rows) {

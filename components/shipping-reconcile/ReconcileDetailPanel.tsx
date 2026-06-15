@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ReconcileViewRow } from '@/features/shipments/reconcile-view';
+import { fedexImpliedBase } from '@/features/shipments/fedex-quote-compare';
 import { setReconcileStatus, clearReconcileStatus, approveCarrierError, disputeWithCarrier } from '@/features/shipments/reconcile-status-actions';
 import { CARRIER_ERROR_KINDS, carrierErrorKindLabel, carrierErrorKindRemediation } from '@/features/shipments/carrier-error-kinds';
 import { suggestCauseKind, needsCarrierClaim, isApprovableMatch } from '@/features/shipments/carrier-error-flow';
@@ -38,11 +39,28 @@ interface ComponentLine {
   label: string;
   billed: number | null;
   engine: number | null;
+  fedex: number | null;
   /** Diagnosis component key this display line maps to. */
   compKey: CompKey;
   /** Optional annotations rendered after the amounts (e.g. fuel %). */
   billedSuffix?: string;
   engineSuffix?: string;
+  fedexSuffix?: string;
+}
+
+/** Giá FedEx (Rate API) cho từng dòng phụ phí; null khi chưa quote / không áp dụng. */
+function fedexLine(row: ReconcileViewRow, key: CompKey): number | null {
+  const q = row.fedexQuote;
+  if (!q) return null;
+  switch (key) {
+    case 'base': return fedexImpliedBase(q);
+    case 'fuel': return q.fuel;
+    case 'remote': return q.remote;
+    case 'demand': return q.demand;
+    case 'signature': return q.ancillary;
+    case 'vat': return q.vat;
+    default: return null; // gogreen / elevatedRisk: FedEx không có dòng tương ứng
+  }
 }
 
 /** Sum engine sub-charges that share a display line, preserving null when the
@@ -53,25 +71,28 @@ function sumEngine(...parts: Array<number | null>): number | null {
 }
 
 function lines(row: ReconcileViewRow): ComponentLine[] {
+  const fx = (k: CompKey) => fedexLine(row, k);
   return [
-    { label: 'Cước gốc (sau giảm giá)', billed: row.billedBaseNet, engine: row.engineBaseNet, compKey: 'base' },
+    { label: 'Cước gốc (sau giảm giá)', billed: row.billedBaseNet, engine: row.engineBaseNet, fedex: fx('base'), compKey: 'base' },
     {
-      label: 'Phụ phí xăng dầu (fuel)', billed: row.billedFuel, engine: row.engineFuel, compKey: 'fuel',
+      label: 'Phụ phí xăng dầu (fuel)', billed: row.billedFuel, engine: row.engineFuel, fedex: fx('fuel'), compKey: 'fuel',
       billedSuffix: row.billedFuelPercent !== null ? `${row.billedFuelPercent}%` : undefined,
       engineSuffix: row.engineFuelPercent !== null ? `${row.engineFuelPercent}%` : undefined,
+      fedexSuffix: row.fedexQuote?.fuelPercent != null ? `${row.fedexQuote.fuelPercent}%` : undefined,
     },
-    { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, compKey: 'remote' },
-    { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, compKey: 'demand' },
+    { label: 'Vùng xa (remote)', billed: row.billedRemote, engine: row.engineRemote, fedex: fx('remote'), compKey: 'remote' },
+    { label: 'Phụ phí nhu cầu (demand)', billed: row.billedDemand, engine: row.engineDemand, fedex: fx('demand'), compKey: 'demand' },
     // signature: engine books DHL's fee under addon_fixed (always), FedEx under residential_fixed.
-    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.engineAddons), compKey: 'signature' },
+    { label: 'Ký nhận (signature)', billed: row.billedSignature, engine: sumEngine(row.engineResidential, row.engineAddons), fedex: fx('signature'), compKey: 'signature' },
     // gogreen: engine books DHL GoGreen under per_step_fixed.
-    { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, compKey: 'gogreen' },
-    { label: 'VAT', billed: row.billedVat, engine: row.engineVat, compKey: 'vat' },
+    { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
+    { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },
     // country_fixed counterpart: DHL Elevated Risk / FedEx US import handling.
     {
       label: row.carrierKey === 'fedex' ? 'Phí cố định nước (nhập US…)' : 'Phụ phí rủi ro (ER)',
       billed: sumEngine(row.billedElevatedRisk, row.billedImportHandling),
       engine: row.engineCountryFixed,
+      fedex: fx('elevatedRisk'),
       compKey: 'elevatedRisk',
     },
   ];
@@ -108,101 +129,69 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
           )}
         </div>
       )}
-      {row.fedexQuote && row.fedexCompare && (
-        <div className="mb-4 rounded-md border border-border p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Giá hợp đồng FedEx (Rate API) · {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
-              {row.fedexQuote.rateZone ? ` · zone ${row.fedexQuote.rateZone}` : ''}
-            </span>
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${row.fedexCompare.overcharged ? 'bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
+      {row.fedexQuote && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+            Đối soát 3 bên · FedEx {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
+            {row.fedexQuote.rateZone ? ` · zone ${row.fedexQuote.rateZone}` : ''}
+          </span>
+          {row.fedexCompare && (
+            <span className={`rounded px-2 py-0.5 font-medium ${row.fedexCompare.overcharged ? 'bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
               {row.fedexCompare.verdict}
             </span>
-          </div>
-          <table className="w-full text-xs font-mono tabular-nums">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="text-left py-0.5">Khoản</th>
-                <th className="text-right py-0.5">Billed</th>
-                <th className="text-right py-0.5">FedEx (đúng)</th>
-                <th className="text-right py-0.5">Lệch</th>
-              </tr>
-            </thead>
-            <tbody>
-              {row.fedexCompare.lines.map((l) => (
-                <tr key={l.key} className={l.key === 'total' ? 'border-t border-border font-semibold' : ''}>
-                  <td className="text-left py-0.5 font-sans">{l.label}</td>
-                  <td className="text-right py-0.5">{fmtVnd(l.billed)}</td>
-                  <td className="text-right py-0.5">{fmtVnd(l.quote)}</td>
-                  <td className={`text-right py-0.5 ${l.delta > 0 ? 'text-red-600 dark:text-red-400' : l.delta < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
-                    {l.delta === 0 ? '—' : (l.delta > 0 ? '+' : '') + fmtVnd(l.delta)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          )}
         </div>
       )}
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wider text-muted-foreground">
             <th className="text-left py-1">Khoản phí</th>
-            <th className="text-right py-1">Billed</th>
             <th className="text-right py-1">Hệ thống</th>
-            <th className="text-right py-1">Lệch</th>
+            <th className="text-right py-1">FedEx (đúng)</th>
+            <th className="text-right py-1">Billed</th>
+            <th className="text-right py-1">Lệch (FedEx−HT)</th>
             <th className="text-right py-1">Chẩn đoán</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular-nums">
           {lines(row).map((l) => {
-            // NULL one side = the bill/engine simply has no such line —
-            // numerically 0, so the gap must still surface (e.g. engine
-            // charges ER 918,000 the invoice never billed). Only show '—'
-            // when BOTH sides are empty.
-            const delta = l.billed === null && l.engine === null
+            // Lệch QUAN TRỌNG = FedEx (giá đúng) − Hệ thống (engine). Billed cột
+            // tham chiếu (≈ FedEx sau khi sửa bill). '—' khi cả hai bên trống.
+            const delta = l.fedex === null && l.engine === null
               ? null
-              : (l.billed ?? 0) - (l.engine ?? 0);
+              : (l.fedex ?? 0) - (l.engine ?? 0);
             const comp = row.diagnosis?.components.find((x) => x.key === l.compKey);
             const causeLabel = comp && comp.cause !== 'KHOP' ? CAUSE_LABEL[comp.cause] : '';
             return (
               <tr key={l.label} className="border-t border-border">
                 <td className="py-1 font-sans">{l.label}</td>
                 <td className="py-1 text-right">
-                  {fmtVnd(l.billed)}
-                  {l.billedSuffix && <span className="ml-1 text-[11px] text-muted-foreground">({l.billedSuffix})</span>}
-                </td>
-                <td className="py-1 text-right">
                   {fmtVnd(l.engine)}
                   {l.engineSuffix && <span className="ml-1 text-[11px] text-muted-foreground">({l.engineSuffix})</span>}
                 </td>
-                <td className={`py-1 text-right ${delta && Math.abs(delta) > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                <td className="py-1 text-right">
+                  {l.fedex === null ? <span className="text-muted-foreground">—</span> : fmtVnd(l.fedex)}
+                  {l.fedexSuffix && <span className="ml-1 text-[11px] text-muted-foreground">({l.fedexSuffix})</span>}
+                </td>
+                <td className="py-1 text-right text-muted-foreground">
+                  {fmtVnd(l.billed)}
+                  {l.billedSuffix && <span className="ml-1 text-[11px]">({l.billedSuffix})</span>}
+                </td>
+                <td className={`py-1 text-right ${delta && Math.abs(delta) > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                   {fmtVnd(delta)}
                 </td>
                 <td className="py-1 text-right font-sans text-[11px] text-muted-foreground">{causeLabel}</td>
               </tr>
             );
           })}
-          {(() => {
-            // Residual = whatever the engine total includes that no display line
-            // above accounts for (e.g. country_fixed). Surfaced so the rows
-            // always reconcile to the total instead of hiding money.
-            const res = row.diagnosis?.components.find((x) => x.key === 'residual');
-            if (!res || res.delta === 0) return null;
-            return (
-              <tr className="border-t border-border">
-                <td className="py-1 font-sans">Khác / làm tròn</td>
-                <td className="py-1 text-right text-muted-foreground">—</td>
-                <td className="py-1 text-right text-muted-foreground">—</td>
-                <td className="py-1 text-right">{fmtVnd(res.delta)}</td>
-                <td className="py-1 text-right font-sans text-[11px] text-muted-foreground">{CAUSE_LABEL[res.cause] ?? ''}</td>
-              </tr>
-            );
-          })()}
           <tr className="border-t-2 border-border font-semibold">
             <td className="py-1 font-sans">Tổng</td>
-            <td className="py-1 text-right">{fmtVnd(row.billedTotal)}</td>
             <td className="py-1 text-right">{fmtVnd(row.engineTotal)}</td>
-            <td className="py-1 text-right">{fmtVnd(row.deltaVnd)}</td>
+            <td className="py-1 text-right">{fmtVnd(row.fedexQuote?.totalNetCharge ?? null)}</td>
+            <td className="py-1 text-right text-muted-foreground">{fmtVnd(row.billedTotal)}</td>
+            <td className="py-1 text-right">
+              {fmtVnd(row.fedexQuote?.totalNetCharge != null ? row.fedexQuote.totalNetCharge - row.engineTotal : null)}
+            </td>
             <td className="py-1"></td>
           </tr>
         </tbody>
