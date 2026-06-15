@@ -4,6 +4,8 @@ import { randomUUID } from 'crypto';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
+import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
+import { matchInvoiceNumbers } from './match-invoice-pdf';
 
 export interface UploadFile {
   bytes: Uint8Array;
@@ -209,6 +211,54 @@ export async function listBillLines(billId: string): Promise<BillLineRow[]> {
     total: num(r.total),
     note: r.note,
   }));
+}
+
+export interface AttachPdfResult {
+  attached: Array<{ invoice: string; filename: string }>;
+  unmatched: Array<{ filename: string; reason: string }>;
+  totalBills: number;
+}
+
+/**
+ * Đính nhiều PDF hoá đơn FedEx vào đúng bill theo SỐ HOÁ ĐƠN (đọc trong nội
+ * dung PDF — tên file PART_N không mang số). Khớp invoice → set fileKey của bill.
+ * Idempotent: đính lại cập nhật file. Báo PDF không khớp để xử lý tay.
+ */
+export async function attachInvoicePdfsToBills(input: {
+  carrierAccountId: string; files: UploadFile[];
+}): Promise<AttachPdfResult> {
+  const bills = await db
+    .select({ id: schema.carrierBills.id, billNumber: schema.carrierBills.billNumber })
+    .from(schema.carrierBills)
+    .where(eq(schema.carrierBills.carrierAccountId, input.carrierAccountId));
+  const byNumber = new Map<string, string>();
+  for (const b of bills) if (b.billNumber) byNumber.set(b.billNumber, b.id);
+  const known = new Set(byNumber.keys());
+
+  const attached: AttachPdfResult['attached'] = [];
+  const unmatched: AttachPdfResult['unmatched'] = [];
+  for (const f of input.files) {
+    let text: string;
+    try { text = await extractPdfText(f.bytes); }
+    catch { unmatched.push({ filename: f.filename, reason: 'Không đọc được PDF' }); continue; }
+    // 1 PDF có thể gom nhiều hoá đơn → đính vào MỌI bill mà số invoice xuất hiện.
+    const invoices = matchInvoiceNumbers(text, known);
+    if (invoices.length === 0) {
+      unmatched.push({ filename: f.filename, reason: 'Không thấy số hoá đơn khớp bill nào' });
+      continue;
+    }
+    // Lưu PDF 1 lần, các bill cùng PDF trỏ chung 1 fileKey.
+    const ct = f.contentType || 'application/pdf';
+    const fileKey = `carrier-bills/${input.carrierAccountId}/pdf-${randomUUID()}.pdf`;
+    await putObject(fileKey, f.bytes, ct);
+    for (const inv of invoices) {
+      await db.update(schema.carrierBills)
+        .set({ fileKey, filename: f.filename, contentType: ct, byteSize: f.bytes.length })
+        .where(eq(schema.carrierBills.id, byNumber.get(inv)!));
+      attached.push({ invoice: inv, filename: f.filename });
+    }
+  }
+  return { attached, unmatched, totalBills: known.size };
 }
 
 export async function deleteBill(id: string): Promise<void> {

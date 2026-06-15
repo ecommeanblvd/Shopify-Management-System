@@ -9,7 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
   createBill, addPayment, deleteBill, deletePayment,
-  listBills, listPaymentsForAccount, listBillLines, type UploadFile,
+  listBills, listPaymentsForAccount, listBillLines, attachInvoicePdfsToBills, type UploadFile,
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
 import { systemTotalForPeriod } from '@/features/carrier-rates/ap/period-compare';
@@ -17,6 +17,7 @@ import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-im
 import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
 import { ImportFboDialog } from '@/components/carrier-rates/ImportFboDialog';
+import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,17 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     REV.forEach((p) => revalidatePath(p));
     return res;
   }
+  async function attachPdfsAction(formData: FormData) {
+    'use server';
+    const fs = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+    const files = await Promise.all(fs.map(async (f) => ({
+      bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type || 'application/pdf',
+    })));
+    if (files.length === 0) throw new Error('Chưa chọn PDF.');
+    const res = await attachInvoicePdfsToBills({ carrierAccountId: id, files });
+    REV.forEach((p) => revalidatePath(p));
+    return res;
+  }
   async function deleteBillAction(billId: string) { 'use server'; await deleteBill(billId); REV.forEach((p) => revalidatePath(p)); }
   async function deletePaymentAction(paymentId: string) { 'use server'; await deletePayment(paymentId); REV.forEach((p) => revalidatePath(p)); }
   async function listLinesAction(billId: string) { 'use server'; return listBillLines(billId); }
@@ -116,6 +128,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         {canManage && (
           <div className="flex items-center gap-2">
             {isFedex && <ImportFboDialog currency={currency} previewAction={previewFboAction} applyAction={applyFboAction} />}
+            {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
             <AddBillDialog createBillAction={createBillAction} />
           </div>
         )}
