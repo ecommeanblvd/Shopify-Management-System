@@ -131,3 +131,18 @@ export function countryNameToIso(input: string | null | undefined): string | nul
   // Case 3: full English name → ISO-2 via table.
   return NAME_TO_ISO[lookupKey] ?? null;
 }
+
+/** ISO-2 → tên nước (đảo NAME_TO_ISO; tên đầu tiên gặp thắng). */
+const ISO_TO_NAME: Record<string, string> = (() => {
+  const m: Record<string, string> = {};
+  for (const [name, iso] of Object.entries(NAME_TO_ISO)) {
+    if (!m[iso]) m[iso] = name.replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return m;
+})();
+
+/** Tên nước đầy đủ cho mã ISO-2; trả lại chính mã nếu chưa có trong bảng. */
+export function isoToCountryName(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return ISO_TO_NAME[iso.toUpperCase()] ?? iso.toUpperCase();
+}

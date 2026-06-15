@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
+import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
 import { ReconcileIssuesModal, type OpenIssue } from './ReconcileIssuesModal';
@@ -13,6 +14,30 @@ const fmtVnd = (n: number | null): string =>
     ? '—'
     : (n < 0 ? '-' : '') +
       new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.abs(Math.round(n)));
+
+/** Nội dung tooltip (!) cột Nước: tên nước đầy đủ + thành phố + zipcode +
+ *  nhận diện vùng xa (theo engine/FedEx/bill). */
+function countryTooltip(r: ReconcileViewRow): string {
+  const eRemote = r.engineRemote ?? 0;
+  const bRemote = r.billedRemote ?? 0;
+  const fRemote = r.fedexQuote?.remote ?? 0;
+  let remote: string;
+  if (eRemote > 0 || fRemote > 0) {
+    remote = `Vùng xa (ODA): CÓ — engine ${fmtVnd(eRemote)}đ`
+      + (fRemote ? `, FedEx ${fmtVnd(fRemote)}đ` : '')
+      + (bRemote ? `, bill ${fmtVnd(bRemote)}đ` : '');
+  } else if (bRemote > 0) {
+    remote = `Vùng xa (ODA): bill thu ${fmtVnd(bRemote)}đ nhưng hệ thống KHÔNG nhận diện — kiểm ODA list`;
+  } else {
+    remote = 'Vùng xa (ODA): không thuộc (theo cấu hình hiện tại)';
+  }
+  return [
+    `${isoToCountryName(r.shipCountry)} (${r.shipCountry || '—'})`,
+    `Thành phố: ${r.shipCity ?? '—'}`,
+    `Zipcode: ${r.shipPostcode ?? '—'}`,
+    remote,
+  ].join('\n');
+}
 
 type CarrierFilter = 'all' | 'fedex' | 'dhl';
 type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
@@ -252,7 +277,18 @@ function FragmentRow({
         <td className="px-3 py-2 font-sans">{r.orderNumber}</td>
         <td className="px-3 py-2">{r.trackingNumber}</td>
         <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
-        <td className="px-3 py-2">{r.shipCountry}</td>
+        <td className="px-3 py-2">
+          <span className="inline-flex items-center gap-1">
+            {r.shipCountry}
+            <span
+              className="cursor-help rounded-full border border-border px-1 text-[9px] font-semibold leading-none text-muted-foreground hover:text-foreground"
+              title={countryTooltip(r)}
+              onClick={(e) => e.stopPropagation()}
+            >
+              !
+            </span>
+          </span>
+        </td>
         <td className="px-3 py-2 whitespace-nowrap tabular-nums">{r.labelDate ? new Date(r.labelDate).toLocaleDateString('vi-VN') : '—'}</td>
         <td className="px-3 py-2 text-right text-muted-foreground">{r.shopifyWeightKg ?? '—'}</td>
         <td className="px-3 py-2 text-right">{r.weightKg ?? '—'}</td>

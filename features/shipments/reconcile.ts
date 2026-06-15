@@ -23,6 +23,8 @@ export interface ReconcileRow {
   storeName: string;
   carrierKey: string;
   shipCountry: string;
+  shipCity: string | null;
+  shipPostcode: string | null;
   /** Order weight synced from Shopify (sum of line variant weights). */
   shopifyWeightKg: number | null;
   /** Scale weight from the ops sheet (net weight). */
@@ -460,6 +462,8 @@ function buildRow(
     storeName: r.storeName,
     carrierKey: r.carrierKey ?? '',
     shipCountry: r.shipCountry ?? '',
+    shipCity: r.shipCity ?? null,
+    shipPostcode: r.shipPostcode ?? null,
     shopifyWeightKg: r.shopifyWeightKg != null ? Number(r.shopifyWeightKg) : null,
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,
     chargeableKg: engine?.chargeableWeightKg ?? null,
