@@ -15,28 +15,52 @@ const fmtVnd = (n: number | null): string =>
     : (n < 0 ? '-' : '') +
       new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.abs(Math.round(n)));
 
-/** Nội dung tooltip (!) cột Nước: tên nước đầy đủ + thành phố + zipcode +
- *  nhận diện vùng xa (theo engine/FedEx/bill). */
-function countryTooltip(r: ReconcileViewRow): string {
-  const eRemote = r.engineRemote ?? 0;
-  const bRemote = r.billedRemote ?? 0;
-  const fRemote = r.fedexQuote?.remote ?? 0;
-  let remote: string;
-  if (eRemote > 0 || fRemote > 0) {
-    remote = `Vùng xa (ODA): CÓ — engine ${fmtVnd(eRemote)}đ`
-      + (fRemote ? `, FedEx ${fmtVnd(fRemote)}đ` : '')
-      + (bRemote ? `, bill ${fmtVnd(bRemote)}đ` : '');
-  } else if (bRemote > 0) {
-    remote = `Vùng xa (ODA): bill thu ${fmtVnd(bRemote)}đ nhưng hệ thống KHÔNG nhận diện — kiểm ODA list`;
-  } else {
-    remote = 'Vùng xa (ODA): không thuộc (theo cấu hình hiện tại)';
+/** Nhận diện vùng xa (ODA) cho 1 đơn theo engine/FedEx/bill. */
+function remoteInfo(r: ReconcileViewRow): { text: string; tone: string } {
+  const e = r.engineRemote ?? 0, b = r.billedRemote ?? 0, f = r.fedexQuote?.remote ?? 0;
+  if (e > 0 || f > 0) {
+    return {
+      text: `Vùng xa (ODA): CÓ — engine ${fmtVnd(e)}đ` + (f ? `, FedEx ${fmtVnd(f)}đ` : '') + (b ? `, bill ${fmtVnd(b)}đ` : ''),
+      tone: 'text-amber-600 dark:text-amber-400',
+    };
   }
-  return [
+  if (b > 0) {
+    return { text: `Vùng xa (ODA): bill thu ${fmtVnd(b)}đ nhưng hệ thống KHÔNG nhận diện — kiểm ODA list`, tone: 'text-red-600 dark:text-red-400' };
+  }
+  return { text: 'Vùng xa (ODA): không thuộc', tone: 'text-muted-foreground' };
+}
+
+/** Cột Nước: mã nước + (!) hover ra popover địa chỉ (tên nước, TP, zip, vùng xa). */
+function CountryCell({ r }: { r: ReconcileViewRow }) {
+  const rm = remoteInfo(r);
+  const title = [
     `${isoToCountryName(r.shipCountry)} (${r.shipCountry || '—'})`,
-    `Thành phố: ${r.shipCity ?? '—'}`,
-    `Zipcode: ${r.shipPostcode ?? '—'}`,
-    remote,
+    `Thành phố: ${r.shipCity ?? '—'}`, `Zipcode: ${r.shipPostcode ?? '—'}`, rm.text,
   ].join('\n');
+  return (
+    <td className="px-3 py-2">
+      <span className="group/ci relative inline-flex items-center gap-1">
+        {r.shipCountry}
+        <span
+          className="cursor-help rounded-full border border-border px-1 text-[9px] font-semibold leading-none text-muted-foreground group-hover/ci:border-foreground group-hover/ci:text-foreground"
+          title={title}
+          onClick={(e) => e.stopPropagation()}
+        >
+          !
+        </span>
+        <div className="invisible absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-3 text-left text-xs opacity-0 shadow-xl transition-opacity group-hover/ci:visible group-hover/ci:opacity-100">
+          <div className="mb-1.5 text-sm font-semibold">
+            {isoToCountryName(r.shipCountry)} <span className="font-mono text-xs text-muted-foreground">({r.shipCountry || '—'})</span>
+          </div>
+          <div className="space-y-1 font-sans">
+            <div><span className="text-muted-foreground">Thành phố: </span>{r.shipCity ?? '—'}</div>
+            <div><span className="text-muted-foreground">Zipcode: </span>{r.shipPostcode ?? '—'}</div>
+            <div className={`pt-1 ${rm.tone}`}>{rm.text}</div>
+          </div>
+        </div>
+      </span>
+    </td>
+  );
 }
 
 type CarrierFilter = 'all' | 'fedex' | 'dhl';
@@ -277,18 +301,7 @@ function FragmentRow({
         <td className="px-3 py-2 font-sans">{r.orderNumber}</td>
         <td className="px-3 py-2">{r.trackingNumber}</td>
         <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
-        <td className="px-3 py-2">
-          <span className="inline-flex items-center gap-1">
-            {r.shipCountry}
-            <span
-              className="cursor-help rounded-full border border-border px-1 text-[9px] font-semibold leading-none text-muted-foreground hover:text-foreground"
-              title={countryTooltip(r)}
-              onClick={(e) => e.stopPropagation()}
-            >
-              !
-            </span>
-          </span>
-        </td>
+        <CountryCell r={r} />
         <td className="px-3 py-2 whitespace-nowrap tabular-nums">{r.labelDate ? new Date(r.labelDate).toLocaleDateString('vi-VN') : '—'}</td>
         <td className="px-3 py-2 text-right text-muted-foreground">{r.shopifyWeightKg ?? '—'}</td>
         <td className="px-3 py-2 text-right">{r.weightKg ?? '—'}</td>
