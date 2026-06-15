@@ -11,6 +11,9 @@ interface RateBody {
       weight: { units: string; value: number };
       dimensions?: { length: number; width: number; height: number; units: string };
     }>;
+    customsClearanceDetail?: {
+      commodities: Array<{ countryOfManufacture: string; customsValue: { amount: number; currency: string } }>;
+    };
   };
 }
 const asBody = (v: Record<string, unknown>): RateBody => v as unknown as RateBody;
@@ -37,6 +40,19 @@ describe('buildRateRequest', () => {
     expect(body.requestedShipment.requestedPackageLineItems[0].dimensions).toEqual({
       length: 30, width: 20, height: 10, units: 'CM',
     });
+  });
+
+  it('thêm customsClearanceDetail cho hàng quốc tế (VN→HK)', () => {
+    const body = asBody(buildRateRequest({ shipperCountryCode: 'VN', recipientCountryCode: 'HK', weightKg: 1.5 }, 'A'));
+    const ccd = body.requestedShipment.customsClearanceDetail;
+    expect(ccd).toBeDefined();
+    expect(ccd!.commodities[0].countryOfManufacture).toBe('VN');
+    expect(ccd!.commodities[0].customsValue).toEqual({ amount: 100, currency: 'USD' });
+  });
+
+  it('KHÔNG thêm customs cho hàng nội địa (VN→VN)', () => {
+    const body = asBody(buildRateRequest({ shipperCountryCode: 'VN', recipientCountryCode: 'VN', weightKg: 1 }, 'A'));
+    expect(body.requestedShipment.customsClearanceDetail).toBeUndefined();
   });
 
   it('truyền residential=true khi chỉ định', () => {

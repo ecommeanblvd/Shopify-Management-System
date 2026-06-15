@@ -18,6 +18,10 @@ export interface RateQuoteInput {
   /** Dịch vụ cụ thể (vd 'INTERNATIONAL_PRIORITY'); bỏ trống → FedEx trả mọi dịch vụ khả dụng. */
   serviceType?: string;
   shipDate?: string; // YYYY-MM-DD
+  /** Trị giá khai hải quan (bắt buộc với hàng quốc tế). Mặc định 100 USD nếu thiếu. */
+  customsValue?: { amount: number; currency: string };
+  /** Mô tả hàng để khai hải quan. */
+  commodityDescription?: string;
 }
 
 /** Dựng request body Rate API. Tách riêng để unit-test không cần mạng. */
@@ -33,6 +37,23 @@ export function buildRateRequest(input: RateQuoteInput, accountNumber: string): 
       units: 'CM',
     };
   }
+  const isInternational = input.shipperCountryCode !== input.recipientCountryCode;
+  const customs = input.customsValue ?? { amount: 100, currency: 'USD' };
+  const customsClearanceDetail = isInternational
+    ? {
+        commodities: [
+          {
+            description: input.commodityDescription ?? 'Apparel',
+            countryOfManufacture: input.shipperCountryCode,
+            quantity: 1,
+            quantityUnits: 'PCS',
+            weight: { units: 'KG', value: input.weightKg },
+            customsValue: { amount: customs.amount, currency: customs.currency },
+          },
+        ],
+      }
+    : undefined;
+
   return {
     accountNumber: { value: accountNumber },
     rateRequestControlParameters: { returnTransitTimes: true },
@@ -47,6 +68,7 @@ export function buildRateRequest(input: RateQuoteInput, accountNumber: string): 
       },
       ...(input.shipDate ? { shipDateStamp: input.shipDate } : {}),
       ...(input.serviceType ? { serviceType: input.serviceType } : {}),
+      ...(customsClearanceDetail ? { customsClearanceDetail } : {}),
       pickupType: 'USE_SCHEDULED_PICKUP',
       // ACCOUNT = giá hợp đồng; LIST = giá niêm yết → so được cả hai.
       rateRequestType: ['ACCOUNT', 'LIST'],
