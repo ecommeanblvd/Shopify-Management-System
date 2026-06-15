@@ -3,7 +3,7 @@
  * nay). Trước mốc = when_billed (engine fit theo billed, hết lệch giả); từ mốc
  * = always (mọi đơn trừ nước miễn). Idempotent. --apply mới ghi.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 const FEDEX='5683f3c0-9249-40c1-a3e7-d967f0d62c29';
 const OLD=new Date('2026-06-03'), NEW=new Date('2026-06-15');
