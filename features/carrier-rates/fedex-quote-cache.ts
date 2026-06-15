@@ -22,7 +22,8 @@ export interface QuoteShipmentInput {
   /** Thành phố — dùng cho nước không-postcode (Vùng Vịnh) + phân giải vùng xa. */
   city?: string | null;
   weightKg: number;
-  dims: { length: number; width: number; height: number };
+  /** Kích thước (cm) — THIẾU thì quote theo cân thực (nhiều đơn không nhập dim). */
+  dims?: { length: number; width: number; height: number };
   shipDate: Date;
   /** Đơn có dùng ký nhận → quote kèm SIGNATURE_OPTION để cột API có giá ký nhận. */
   signatureOptIn?: boolean;

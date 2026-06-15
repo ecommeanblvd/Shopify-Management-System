@@ -24,7 +24,7 @@ async function main(): Promise<void> {
     eq(schema.shipments.carrierKey, 'fedex'),
     // Có postcode THẬT, hoặc có city (nước Vùng Vịnh — dùng postcode đại diện).
     or(isNotNull(schema.shopifyOrders.shipPostcode), isNotNull(schema.shopifyOrders.shipCity)),
-    isNotNull(schema.shipments.dimLengthCm),
+    // KHÔNG bắt buộc dims — đơn thiếu kích thước vẫn quote theo cân thực.
     isNotNull(schema.shipments.labelCreatedAt),
     ...(sigOnly ? [gt(schema.shipmentCharges.directSignature, '0')] : []),
     ...(resiOnly ? [gt(schema.shipmentCharges.residential, '0')] : []),
@@ -52,7 +52,8 @@ async function main(): Promise<void> {
     try {
       const res = await quoteShipmentToCache({
         shipmentId: r.sid, originHub: r.hub, country: r.country!, postcode: r.postcode, city: r.city,
-        weightKg: Number(r.wt), dims: { length: Number(r.l), width: Number(r.w), height: Number(r.h) },
+        weightKg: Number(r.wt),
+        dims: r.l != null ? { length: Number(r.l), width: Number(r.w), height: Number(r.h) } : undefined,
         shipDate: r.date!, signatureOptIn: Number(r.sig ?? 0) > 0,
         recipientResidential: Number(r.resi ?? 0) > 0,
       });
