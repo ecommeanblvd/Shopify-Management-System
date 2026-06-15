@@ -152,7 +152,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
       {row.fedexQuote && (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-            Đối soát 3 bên · FedEx rate card (ước tính) · {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
+            Đối soát 3 bên · API NCC (ước tính) · {row.fedexQuote.service.replace('FEDEX_INTERNATIONAL_', 'Int’l ')}
             {row.fedexQuote.rateZone ? ` · zone ${row.fedexQuote.rateZone}` : ''}
           </span>
           {row.fedexCompare && (
@@ -167,8 +167,8 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
           <tr className="text-xs uppercase tracking-wider text-muted-foreground">
             <th className="text-left py-1">Khoản phí</th>
             <th className="text-right py-1">Hệ thống</th>
-            <th className="text-right py-1" title="FedEx tính lại theo bảng giá hợp đồng (ước tính đối chiếu) — KHÔNG phải giá thật đã chốt">FedEx rate card</th>
-            <th className="text-right py-1" title="Giá THẬT FedEx tính trên hoá đơn (FBO/PDF) cho tracking number này">Billed (thật)</th>
+            <th className="text-right py-1" title="API hãng vận chuyển (FedEx/DHL…) tính lại theo bảng giá hợp đồng — ước tính đối chiếu, KHÔNG phải giá thật đã chốt">API NCC (ước tính)</th>
+            <th className="text-right py-1" title="Giá THẬT hãng tính trên hoá đơn cho tracking number này">Billed (thật)</th>
             <th className="text-right py-1">Lệch ({row.fedexQuote ? 'API' : 'Bill'}−HT)</th>
             <th className="text-right py-1">Chẩn đoán</th>
           </tr>
