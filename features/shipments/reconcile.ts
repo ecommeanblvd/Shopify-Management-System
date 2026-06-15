@@ -260,6 +260,10 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       destinationPostcode: r.shipPostcode ?? undefined,
       destinationCity: r.shipCity ?? undefined,
       effectiveDate: r.labelCreatedAt ?? r.processedAtShopify ?? undefined,
+      // Đơn có ký nhận = bill đã thu (billedSignature>0) → engine tính phí ký
+      // nhận thật (when_billed → vào total + fuel + VAT) thay vì chỉ tham chiếu,
+      // để khớp đúng với hoá đơn quá khứ.
+      signatureOptIn: Number(r.billedSignature ?? 0) > 0,
     });
 
     if (!q.ok) {

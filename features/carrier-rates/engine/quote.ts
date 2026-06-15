@@ -213,6 +213,13 @@ export interface QuoteInput {
    * applying always.
    */
   effectiveDate?: Date;
+  /**
+   * Đơn này CÓ dùng dịch vụ ký nhận (Direct Signature) không. Với addon_fixed
+   * apply_mode='when_billed' (FedEx/DHL signature opt-in), khi true thì engine
+   * TÍNH phí ký nhận vào tổng (đúng công thức: +fuel +VAT) thay vì chỉ để tham
+   * chiếu. Reconcile suy ra từ bill (billedSignature>0) hoặc operator tick tay.
+   */
+  signatureOptIn?: boolean;
 }
 
 export interface QuoteBreakdown {
@@ -544,15 +551,19 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const addonRowsByDate = snap.surcharges
     .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'addon_fixed');
   const addonRows = addonRowsByDate.filter((s) => !isCountryExcluded(s, country));
-  // 'always' tôn trọng danh sách miễn (không auto-thu ở nước carrier không thu).
+  const optIn = input.signatureOptIn === true;
+  // 'always' luôn vào total (tôn trọng danh sách miễn). 'when_billed' vào total
+  // KHI đơn có dùng dịch vụ (opt-in) → engine tính phí thật (fuel+VAT theo công
+  // thức, qua rowContribution bên dưới) thay vì chỉ tham chiếu. Nước miễn vẫn
+  // không auto-thu (engine không cộng), nhưng bill có thì giữ ở reference.
   const addons = addonRows
-    .filter((s) => (s.applyMode ?? 'always') === 'always')
+    .filter((s) => (s.applyMode ?? 'always') === 'always' || (s.applyMode === 'when_billed' && optIn))
     .reduce((sum, s) => sum + s.value, 0);
-  // 'when_billed' = GIÁ THAM CHIẾU: đã có trên bill nghĩa là dịch vụ ĐƯỢC dùng,
-  // nên reference có sẵn kể cả ở nước "miễn" (miễn chỉ = không auto-thu) — để
-  // đối soát công nhận khoản hợp lệ + kiểm đúng giá. KHÔNG lọc nước ở đây.
+  // Reference = 'when_billed' CHƯA được áp vào total: khi không opt-in, hoặc đã
+  // opt-in nhưng nước miễn (engine không thu, vẫn để đối soát công nhận khoản
+  // hợp lệ trên bill + kiểm đúng giá).
   const addonReference = addonRowsByDate
-    .filter((s) => s.applyMode === 'when_billed')
+    .filter((s) => s.applyMode === 'when_billed' && (!optIn || isCountryExcluded(s, country)))
     .reduce((sum, s) => sum + s.value, 0);
   const addonExcludedForCountry = addonRowsByDate.some((s) => isCountryExcluded(s, country));
 
@@ -689,10 +700,11 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     switch (s.kind) {
       case 'peak_fixed':
         return s.value;
-      // Dịch vụ bổ sung: chỉ 'always' đóng góp vào bill; 'when_billed' là
-      // giá tham chiếu — KHÔNG lọt vào fuelable/vatable subtotal.
+      // Dịch vụ bổ sung: 'always' luôn đóng góp; 'when_billed' đóng góp khi đơn
+      // opt-in dùng dịch vụ → vào fuelable/vatable subtotal (tính fuel + VAT).
       case 'addon_fixed':
-        return (s.applyMode ?? 'always') === 'always' && !isCountryExcluded(s, country)
+        return ((s.applyMode ?? 'always') === 'always' || (s.applyMode === 'when_billed' && input.signatureOptIn === true))
+          && !isCountryExcluded(s, country)
           ? s.value : 0;
       case 'per_kg_fixed':
         return s.value * chargeableWeightKg;

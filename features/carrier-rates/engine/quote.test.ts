@@ -1089,6 +1089,45 @@ describe('quote engine', () => {
       expect(r.breakdown.addons).toBe(150_000);
       expect(r.breakdown.addonExcludedForCountry).toBe(false);
     });
+
+    it('signatureOptIn=true: when_billed VÀO total + fuel + VAT (không chỉ reference)', () => {
+      const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
+      const snap = makeSnap({
+        zonesByCountry: new Map([['US', { label: 'Zone X', rateByTierUpper }]]),
+        surcharges: [
+          { kind: 'addon_fixed', value: 92_700, active: true, fuelable: true, applyMode: 'when_billed' },
+          { kind: 'fuel_percent', value: 50, active: true },
+          { kind: 'vat_percent', value: 8, active: true },
+        ],
+      });
+      const off = quote(snap, { weightKg: 1, destinationCountry: 'US' });
+      const on = quote(snap, { weightKg: 1, destinationCountry: 'US', signatureOptIn: true });
+      expect(off.ok && on.ok).toBe(true);
+      if (!off.ok || !on.ok) return;
+      expect(off.breakdown.addons).toBe(0);
+      expect(off.breakdown.addonReference).toBe(92_700);
+      expect(on.breakdown.addons).toBe(92_700);
+      expect(on.breakdown.addonReference).toBe(0);
+      // Tổng tăng = signature + fuel(50%)×sig + VAT(8%)×(sig+fuel) — đúng công thức.
+      const sig = 92_700, fuelOnSig = sig * 0.5, vatOnSig = (sig + fuelOnSig) * 0.08;
+      expect(on.breakdown.carrierCost - off.breakdown.carrierCost).toBeCloseTo(sig + fuelOnSig + vatOnSig, 0);
+    });
+
+    it('signatureOptIn ở nước MIỄN: engine không thu (addons=0), vẫn để reference', () => {
+      const rateByTierUpper = new Map<number, number>([[1, 280_000]]);
+      const snap = makeSnap({
+        zonesByCountry: new Map([['SA', { label: 'Zone 9', rateByTierUpper }]]),
+        surcharges: [
+          { kind: 'addon_fixed', value: 92_700, active: true, fuelable: true, applyMode: 'when_billed', excludedCountryCodes: ['SA'] },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SA', signatureOptIn: true });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addons).toBe(0);
+      expect(r.breakdown.addonReference).toBe(92_700);
+    });
   });
 
   describe('contract_discount_pct (negotiated volume discount)', () => {
