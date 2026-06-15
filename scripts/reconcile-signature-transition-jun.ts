@@ -10,7 +10,7 @@
  * Idempotent. Dry-run mặc định; --apply mới ghi.
  *   pnpm exec dotenv -- tsx scripts/reconcile-signature-transition-jun.ts [--apply]
  */
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { reconcileShipments } from '@/features/shipments/reconcile';
 
