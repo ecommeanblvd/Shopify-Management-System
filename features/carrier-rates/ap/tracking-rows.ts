@@ -1,5 +1,8 @@
 import { summariseBill, type BillStatus, type PaymentInput } from './ap-summary';
 
+/** Một khoản phí chi tiết theo carrier (DHL: code/name/charge/tax/total). */
+export interface LineCharge { code: string; name: string; charge: number; tax: number; total: number }
+
 /** Dòng line (đã kèm billId) để dựng bảng theo tracking. */
 export interface TrackingLineInput {
   billId: string;
@@ -9,6 +12,8 @@ export interface TrackingLineInput {
   base: number; discount: number; fuel: number; remote: number;
   demand: number; signature: number; vat: number; other: number; total: number;
   note: string | null;
+  /** Breakdown chi tiết; có thì liệt kê đủ thay vì gộp cột. */
+  charges?: LineCharge[] | null;
 }
 
 export interface TrackingBillInput {
@@ -69,9 +74,11 @@ export function buildTrackingRows(
       continue;
     }
     bl.forEach((ln, i) => {
-      const fees = FEE_LABELS
-        .map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) }))
-        .filter((f) => f.value !== 0);
+      // Có breakdown chi tiết → liệt kê đủ từng khoản (value = total gồm thuế,
+      // cộng lại = Tổng). Không có → gộp về các cột cố định (data cũ).
+      const fees = ln.charges && ln.charges.length
+        ? ln.charges.map((c) => ({ label: c.name || c.code, value: c.total })).filter((f) => f.value !== 0)
+        : FEE_LABELS.map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) })).filter((f) => f.value !== 0);
       rows.push({
         ...base, key: `${b.id}:${i}`,
         trackingNumber: ln.trackingNumber, orderNumber: ln.orderNumber, weightKg: ln.weightKg,

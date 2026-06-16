@@ -55,6 +55,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
       billId: l.billId, trackingNumber: l.trackingNumber, orderNumber: l.orderNumber, weightKg: l.weightKg ?? null,
       base: l.base ?? 0, discount: l.discount ?? 0, fuel: l.fuel ?? 0, remote: l.remote ?? 0, demand: l.demand ?? 0,
       signature: l.signature ?? 0, vat: l.vat ?? 0, other: l.other ?? 0, total: l.total ?? 0, note: l.note,
+      charges: l.charges,
     })),
     inputs.payments, today,
   );

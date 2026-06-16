@@ -21,7 +21,7 @@ interface Props {
   deletePaymentAction: (paymentId: string) => Promise<void>;
 }
 
-// Thứ tự cột phí; chỉ hiện cột nào có ít nhất 1 dòng > 0.
+// Cột phí gộp (data cũ) ưu tiên thứ tự này; tên khoản chi tiết (DHL) xếp sau theo thứ tự gặp.
 const FEE_ORDER = ['Giá gốc', 'Chiết khấu', 'Fuel', 'Remote', 'Demand', 'Ký nhận', 'VAT', 'Khác'];
 
 export function BillingTrackingTable(props: Props) {
@@ -33,11 +33,15 @@ export function BillingTrackingTable(props: Props) {
   const billById = useMemo(() => new Map(bills.map((b) => [b.id, b])), [bills]);
   const sumById = useMemo(() => new Map(summaryBills.map((s) => [s.id, s])), [summaryBills]);
 
-  // Cột phí hiện = các khoản xuất hiện (>0) trong toàn bộ dữ liệu.
-  const feeCols = useMemo(
-    () => FEE_ORDER.filter((label) => rows.some((r) => r.fees.some((f) => f.label === label && f.value !== 0))),
-    [rows],
-  );
+  // Cột phí = HỢP mọi nhãn khoản xuất hiện (>0). Nhãn cột-gộp đứng trước theo
+  // FEE_ORDER; nhãn chi tiết (tên khoản DHL) xếp sau theo thứ tự gặp.
+  const feeCols = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of rows) for (const f of r.fees) if (f.value !== 0) seen.add(f.label);
+    const known = FEE_ORDER.filter((l) => seen.has(l));
+    const extra = [...seen].filter((l) => !FEE_ORDER.includes(l));
+    return [...known, ...extra];
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();

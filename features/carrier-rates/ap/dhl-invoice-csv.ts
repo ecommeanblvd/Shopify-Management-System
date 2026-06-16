@@ -51,6 +51,7 @@ export interface DhlBillLineInput {
   other: number;  // phí phụ khác (trừ fuel)
   total: number;  // gồm VAT
   note: string;   // liệt kê khoản
+  charges: DhlChargeLine[]; // breakdown chi tiết (lưu jsonb) để liệt kê đủ
 }
 
 function ymdToIso(raw: string): string {
@@ -151,5 +152,6 @@ export function dhlShipmentToBillLine(s: DhlShipment): DhlBillLineInput {
     vat: s.totalTax,
     total: s.totalInclVat,
     note,
+    charges: s.charges,
   };
 }

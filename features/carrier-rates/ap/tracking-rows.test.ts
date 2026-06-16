@@ -34,6 +34,22 @@ describe('buildTrackingRows', () => {
     expect(r.overdue).toBe(true);
   });
 
+  it('có charges chi tiết → fees liệt kê đủ từng khoản (value = total)', () => {
+    const withCharges: TrackingLineInput[] = [line({
+      billId: 'b1', trackingNumber: 'T', total: 1346595,
+      charges: [
+        { code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 290067, tax: 23205, total: 313272 },
+        { code: 'XX', name: 'IMPORT EXPORT DUTIES', charge: 956256, tax: 76500, total: 1032756 },
+      ],
+    })];
+    const rows = buildTrackingRows(bills, withCharges, [], '2026-06-16');
+    const r = rows.find((x) => x.trackingNumber === 'T')!;
+    expect(r.fees).toEqual([
+      { label: 'IMPORT EXPORT TAXES', value: 313272 },
+      { label: 'IMPORT EXPORT DUTIES', value: 1032756 },
+    ]);
+  });
+
   it('thanh toán đủ → status paid, hết overdue', () => {
     const rows = buildTrackingRows(bills, lines, [{ billId: 'b1', amount: 1346595 }], '2026-06-16');
     const r = rows.find((x) => x.billId === 'b1')!;

@@ -29,6 +29,8 @@ export interface BillLineInput {
   other?: number | null;
   total?: number | null;
   note?: string | null;
+  /** Breakdown chi tiết từng khoản (jsonb): [{code,name,charge,tax,total}]. */
+  charges?: unknown;
 }
 
 export interface CreateBillInput {
@@ -92,6 +94,7 @@ export async function createBill(input: CreateBillInput): Promise<void> {
       vat: numOrNull(l.vat),
       other: numOrNull(l.other),
       total: numOrNull(l.total),
+      charges: l.charges ?? null,
       note: l.note ?? null,
     })));
   }
@@ -254,9 +257,10 @@ export async function listBillLines(billId: string): Promise<BillLineRow[]> {
   }));
 }
 
-export interface AllBillLineRow extends BillLineRow { billId: string }
+export interface BillCharge { code: string; name: string; charge: number; tax: number; total: number }
+export interface AllBillLineRow extends BillLineRow { billId: string; charges: BillCharge[] | null }
 
-/** Mọi line của các bill thuộc 1 account (kèm billId) — để dựng bảng theo tracking. */
+/** Mọi line của các bill thuộc 1 account (kèm billId + breakdown) — dựng bảng theo tracking. */
 export async function listAllBillLines(carrierAccountId: string): Promise<AllBillLineRow[]> {
   const rows = await db
     .select({ l: schema.carrierBillLines })
@@ -270,6 +274,7 @@ export async function listAllBillLines(carrierAccountId: string): Promise<AllBil
     weightKg: num(r.weightKg), base: num(r.base), discount: num(r.discount), fuel: num(r.fuel),
     remote: num(r.remote), demand: num(r.demand), signature: num(r.signature),
     vat: num(r.vat), other: num(r.other), total: num(r.total), note: r.note,
+    charges: Array.isArray(r.charges) ? (r.charges as BillCharge[]) : null,
   }));
 }
 

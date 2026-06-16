@@ -604,6 +604,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   vat: numeric('vat', { precision: 14, scale: 2 }),
   other: numeric('other', { precision: 14, scale: 2 }),
   total: numeric('total', { precision: 14, scale: 2 }),
+  // Breakdown chi tiết từng khoản phí của carrier (DHL: [{code,name,charge,tax,total}]).
+  // Null cho dòng nhập tay/cũ → UI fallback về cột gộp base/fuel/other.
+  charges: jsonb('charges'),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
