@@ -52,7 +52,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const carriers: CheckoutRateCarrier[] = [];
     for (const a of accts) {
       const snapshot = await loadAccountSnapshot(a.id);
-      if (snapshot) carriers.push({ serviceCode: a.key ?? a.id, serviceName: a.name, snapshot });
+      // Tên hiển thị ở checkout — ngắn gọn theo carrier, không kèm năm/biến thể.
+      const displayName = a.key === 'fedex' ? 'FedEx International Priority' : a.key === 'dhl' ? 'DHL Express' : a.name;
+      if (snapshot) carriers.push({ serviceCode: a.key ?? a.id, serviceName: displayName, snapshot });
     }
 
     const rates = computeCheckoutRates({
