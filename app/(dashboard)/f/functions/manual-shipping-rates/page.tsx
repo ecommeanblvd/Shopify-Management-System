@@ -43,10 +43,10 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
   const coverage: Record<string, { covered: string[]; notCovered: string[] }> = {};
   for (const a of carrierAccts) {
     const surs = await db
-      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value })
+      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value, startsAt: schema.carrierSurcharges.startsAt, endsAt: schema.carrierSurcharges.endsAt })
       .from(schema.carrierSurcharges)
       .where(eq(schema.carrierSurcharges.carrierAccountId, a.id));
-    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value) })) as never, a.name);
+    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
   }
 
   async function preview(storeId: string) {

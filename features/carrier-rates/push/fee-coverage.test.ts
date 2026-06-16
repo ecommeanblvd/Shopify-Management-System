@@ -35,4 +35,15 @@ describe('classifyFeeCoverage', () => {
     const r = classifyFeeCoverage([inactive], 'DHL');
     expect(r.notCovered).toHaveLength(0);
   });
+
+  it('ký nhận: kỳ when_billed CŨ đã hết hạn KHÔNG hiện opt-in; chỉ còn always (cover)', () => {
+    const now = new Date('2026-06-16');
+    const oldOptIn = { kind: 'addon_fixed', value: 92700, active: true, applyMode: 'when_billed',
+      startsAt: new Date('2026-01-01'), endsAt: new Date('2026-06-15') } as unknown as S; // đã hết
+    const currentAlways = { kind: 'addon_fixed', value: 92700, active: true, applyMode: 'always',
+      startsAt: new Date('2026-06-15'), endsAt: null } as unknown as S; // hiệu lực
+    const r = classifyFeeCoverage([oldOptIn, currentAlways], 'FedEx', now);
+    expect(r.covered).toContain('Dịch vụ bổ sung tự áp (vd ký nhận DHL)');
+    expect(r.notCovered.some((x) => x.startsWith('Dịch vụ opt-in'))).toBe(false);
+  });
 });

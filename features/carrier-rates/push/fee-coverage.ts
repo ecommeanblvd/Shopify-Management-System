@@ -13,10 +13,15 @@ import type { CarrierAccountSnapshot } from '../engine/quote';
 export function classifyFeeCoverage(
   surcharges: CarrierAccountSnapshot['surcharges'],
   accountName: string,
+  now: Date = new Date(),
 ): { covered: string[]; notCovered: string[] } {
   const modes = new Map<string, Set<string>>();
   for (const s of surcharges) {
     if (!s.active) continue;
+    // CHỈ xét dòng đang hiệu lực hôm nay — bỏ qua kỳ cũ đã hết hạn (vd ký nhận
+    // when_billed trước khi đổi sang always) để không hiện nhãn gây hiểu lầm.
+    if (s.startsAt && s.startsAt.getTime() > now.getTime()) continue;
+    if (s.endsAt && s.endsAt.getTime() <= now.getTime()) continue;
     const set = modes.get(s.kind) ?? new Set<string>();
     set.add(s.applyMode ?? 'always');
     modes.set(s.kind, set);
