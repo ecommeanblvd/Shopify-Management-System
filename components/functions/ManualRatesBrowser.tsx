@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ZoneView } from '@/features/markets/domain/shipping-matrix-view';
 import { carriersInZones, buildZoneWeightMatrix, bracketMatchesWeight, parseRateSearch, zoneCarrierLabel } from '@/features/markets/domain/shipping-matrix-view';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 export interface MarketZones { marketHandle: string; zones: ZoneView[]; }
 
@@ -93,26 +94,35 @@ export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones
             {c}
           </button>
         ))}
+        {activeCoverage && (activeCoverage.covered.length > 0 || activeCoverage.notCovered.length > 0) && (
+          <Dialog>
+            <DialogTrigger className="ml-auto inline-flex items-center gap-1 rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted">
+              ⓘ Phí cover / không cover
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Khoản phí matrix cover / không cover — {active}</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-sm">
+                  <div className="mb-1.5 font-medium text-emerald-700 dark:text-emerald-400">✓ Giá ĐÃ cover</div>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {activeCoverage.covered.map((c, i) => <li key={i}>• {c}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+                  <div className="mb-1.5 font-medium text-amber-700 dark:text-amber-400">⚠ KHÔNG cover (shop có thể gánh)</div>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {activeCoverage.notCovered.length > 0
+                      ? activeCoverage.notCovered.map((c, i) => <li key={i}>• {c}</li>)
+                      : <li>— (không có khoản nào ngoài bảng)</li>}
+                  </ul>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
-
-      {activeCoverage && (activeCoverage.covered.length > 0 || activeCoverage.notCovered.length > 0) && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-xs">
-            <div className="mb-1 font-medium text-emerald-700 dark:text-emerald-400">✓ Giá ĐÃ cover các khoản ({active})</div>
-            <ul className="space-y-0.5 text-muted-foreground">
-              {activeCoverage.covered.map((c, i) => <li key={i}>• {c}</li>)}
-            </ul>
-          </div>
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-            <div className="mb-1 font-medium text-amber-700 dark:text-amber-400">⚠ KHÔNG cover (shop có thể gánh)</div>
-            <ul className="space-y-0.5 text-muted-foreground">
-              {activeCoverage.notCovered.length > 0
-                ? activeCoverage.notCovered.map((c, i) => <li key={i}>• {c}</li>)
-                : <li>— (không có khoản nào ngoài bảng)</li>}
-            </ul>
-          </div>
-        </div>
-      )}
 
       <div className="space-y-1">
         <input
