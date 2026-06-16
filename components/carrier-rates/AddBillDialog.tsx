@@ -80,15 +80,36 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
             {warn && <p className="text-[11px] text-amber-600 dark:text-amber-400">⚠ {warn}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Mã hoá đơn"><Input name="billNumber" placeholder="INV-..." value={v.billNumber} onChange={set('billNumber')} /></Field>
-            <Field label="Số tiền (gồm VAT) *"><Input name="amount" required inputMode="numeric" placeholder="0" value={v.amount} onChange={set('amount')} /></Field>
-            <Field label="Kỳ từ *"><Input name="periodStart" type="date" required value={v.periodStart} onChange={set('periodStart')} /></Field>
-            <Field label="Kỳ đến *"><Input name="periodEnd" type="date" required value={v.periodEnd} onChange={set('periodEnd')} /></Field>
-            <Field label="Ngày xuất"><Input name="issueDate" type="date" value={v.issueDate} onChange={set('issueDate')} /></Field>
-            <Field label="Hạn thanh toán"><Input name="dueDate" type="date" value={v.dueDate} onChange={set('dueDate')} /></Field>
-            <div className="col-span-2"><Field label="Ghi chú"><Input name="note" placeholder="—" value={v.note} onChange={set('note')} /></Field></div>
-          </div>
+          {filled ? (
+            /* Chế độ CSV: tự điền hết, chỉ cho sửa NGÀY. Mã/số tiền/ghi chú đọc-only (gửi ngầm). */
+            <div className="space-y-3">
+              <input type="hidden" name="billNumber" value={v.billNumber} />
+              <input type="hidden" name="amount" value={v.amount} />
+              <input type="hidden" name="note" value={v.note} />
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
+                <span><span className="text-muted-foreground">Mã:</span> <b>{v.billNumber || '—'}</b></span>
+                <span><span className="text-muted-foreground">Số tiền:</span> <b>{v.amount ? fmt(Number(v.amount)) : '—'}</b></span>
+                {v.note && <span className="text-muted-foreground">· {v.note}</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Kỳ từ *"><Input name="periodStart" type="date" required value={v.periodStart} onChange={set('periodStart')} /></Field>
+                <Field label="Kỳ đến *"><Input name="periodEnd" type="date" required value={v.periodEnd} onChange={set('periodEnd')} /></Field>
+                <Field label="Ngày xuất"><Input name="issueDate" type="date" value={v.issueDate} onChange={set('issueDate')} /></Field>
+                <Field label="Hạn thanh toán"><Input name="dueDate" type="date" value={v.dueDate} onChange={set('dueDate')} /></Field>
+              </div>
+            </div>
+          ) : (
+            /* Chế độ nhập tay (PDF/ảnh/không file): đủ ô. */
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Mã hoá đơn"><Input name="billNumber" placeholder="INV-..." value={v.billNumber} onChange={set('billNumber')} /></Field>
+              <Field label="Số tiền (gồm VAT) *"><Input name="amount" required inputMode="numeric" placeholder="0" value={v.amount} onChange={set('amount')} /></Field>
+              <Field label="Kỳ từ *"><Input name="periodStart" type="date" required value={v.periodStart} onChange={set('periodStart')} /></Field>
+              <Field label="Kỳ đến *"><Input name="periodEnd" type="date" required value={v.periodEnd} onChange={set('periodEnd')} /></Field>
+              <Field label="Ngày xuất"><Input name="issueDate" type="date" value={v.issueDate} onChange={set('issueDate')} /></Field>
+              <Field label="Hạn thanh toán"><Input name="dueDate" type="date" value={v.dueDate} onChange={set('dueDate')} /></Field>
+              <div className="col-span-2"><Field label="Ghi chú"><Input name="note" placeholder="—" value={v.note} onChange={set('note')} /></Field></div>
+            </div>
+          )}
 
           {shipments.length > 0 && (
             <div className="space-y-2">
