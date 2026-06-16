@@ -12,8 +12,10 @@ import { ManualRatesBrowser, type MarketZones } from '@/components/functions/Man
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { ShippingProfilePush } from '@/components/functions/ShippingProfilePush';
 import { CarrierServiceRegister } from '@/components/functions/CarrierServiceRegister';
+import { PushCarrierRates } from '@/components/carrier-rates/PushCarrierRates';
 import { listShippingProfiles, previewShippingToProfiles, applyShippingToProfiles } from '@/features/settings-sync/shipping-profiles-actions';
 import { registerCarrierService } from '@/features/carrier-rates/carrier-service-actions';
+import { pushCarrierRates } from '@/features/carrier-rates/push-engine/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +61,10 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
         </div>
         {canApply && stores.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
+            <PushCarrierRates
+              stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+              onPush={pushCarrierRates}
+            />
             <CarrierServiceRegister
               stores={stores.map((s) => ({ id: s.id, name: s.name }))}
               onRegister={registerCarrierService}
