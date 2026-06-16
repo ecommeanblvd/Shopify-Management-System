@@ -9,7 +9,8 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
   createBill, addPayment, deleteBill, deletePayment,
-  listBills, listPaymentsForAccount, listBillLines, attachInvoicePdfsToBills, type UploadFile,
+  listBills, listPaymentsForAccount, listBillLines, attachInvoicePdfsToBills,
+  type UploadFile, type BillLineInput,
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
 import { systemTotalForPeriod } from '@/features/carrier-rates/ap/period-compare';
@@ -60,11 +61,14 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     if (!canAddInvoice) throw new Error('forbidden');
     const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
     const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
+    let lines: BillLineInput[] | undefined;
+    const linesJson = String(formData.get('linesJson') ?? '').trim();
+    if (linesJson) { try { const arr = JSON.parse(linesJson); if (Array.isArray(arr) && arr.length) lines = arr as BillLineInput[]; } catch { /* bỏ qua nếu hỏng */ } }
     await createBill({
       carrierAccountId: id, billNumber: s('billNumber'),
       periodStart: String(formData.get('periodStart')), periodEnd: String(formData.get('periodEnd')),
       issueDate: s('issueDate'), dueDate: s('dueDate'), amount: n('amount'), currency,
-      note: s('note'), userId: session!.user.id, file: await fileFromForm(formData, 'file'),
+      note: s('note'), userId: session!.user.id, file: await fileFromForm(formData, 'file'), lines,
     });
     REV.forEach((p) => revalidatePath(p));
   }

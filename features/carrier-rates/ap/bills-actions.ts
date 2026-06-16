@@ -14,6 +14,23 @@ export interface UploadFile {
   contentType: string;
 }
 
+/** Dòng chi tiết billed theo shipment (khớp cột carrier_bill_lines). */
+export interface BillLineInput {
+  trackingNumber?: string | null;
+  orderNumber?: string | null;
+  weightKg?: number | null;
+  base?: number | null;
+  discount?: number | null;
+  fuel?: number | null;
+  remote?: number | null;
+  demand?: number | null;
+  signature?: number | null;
+  vat?: number | null;
+  other?: number | null;
+  total?: number | null;
+  note?: string | null;
+}
+
 export interface CreateBillInput {
   carrierAccountId: string;
   billNumber?: string | null;
@@ -26,7 +43,11 @@ export interface CreateBillInput {
   note?: string | null;
   userId: string;
   file?: UploadFile | null;
+  /** Khi nhập từ file hoá đơn: lưu kèm breakdown từng shipment. */
+  lines?: BillLineInput[];
 }
+
+const numOrNull = (v: number | null | undefined) => (v == null ? null : String(v));
 
 export async function createBill(input: CreateBillInput): Promise<void> {
   if (!(input.amount > 0)) throw new Error('Số tiền hoá đơn phải > 0.');
@@ -39,7 +60,7 @@ export async function createBill(input: CreateBillInput): Promise<void> {
     await putObject(fileKey, input.file.bytes, input.file.contentType);
   }
 
-  await db.insert(schema.carrierBills).values({
+  const [bill] = await db.insert(schema.carrierBills).values({
     carrierAccountId: input.carrierAccountId,
     billNumber: input.billNumber ?? null,
     periodStart: input.periodStart,
@@ -54,7 +75,26 @@ export async function createBill(input: CreateBillInput): Promise<void> {
     byteSize: input.file ? input.file.bytes.length : null,
     note: input.note ?? null,
     createdBy: input.userId,
-  });
+  }).returning({ id: schema.carrierBills.id });
+
+  if (input.lines?.length) {
+    await db.insert(schema.carrierBillLines).values(input.lines.map((l) => ({
+      billId: bill.id,
+      trackingNumber: l.trackingNumber ?? null,
+      orderNumber: l.orderNumber ?? null,
+      weightKg: numOrNull(l.weightKg),
+      base: numOrNull(l.base),
+      discount: numOrNull(l.discount),
+      fuel: numOrNull(l.fuel),
+      remote: numOrNull(l.remote),
+      demand: numOrNull(l.demand),
+      signature: numOrNull(l.signature),
+      vat: numOrNull(l.vat),
+      other: numOrNull(l.other),
+      total: numOrNull(l.total),
+      note: l.note ?? null,
+    })));
+  }
 }
 
 export interface BillRow {
