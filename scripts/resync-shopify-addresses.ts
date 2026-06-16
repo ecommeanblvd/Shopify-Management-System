@@ -9,8 +9,11 @@ import { db, schema } from '@/db/client';
 import { runBackfillForStore } from '@/features/shopify-orders/backfill/run-backfill';
 
 async function main(): Promise<void> {
-  const stores = await db.select({ id: schema.stores.id, name: schema.stores.name, status: schema.stores.status })
+  // Tùy chọn: truyền storeId để chỉ re-sync 1 store (vd store lớn chạy riêng).
+  const onlyStore = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
+  const all = await db.select({ id: schema.stores.id, name: schema.stores.name, status: schema.stores.status })
     .from(schema.stores).where(eq(schema.stores.status, 'active'));
+  const stores = onlyStore ? all.filter((s) => s.id === onlyStore) : all;
   console.log(`Re-sync ${stores.length} store active...\n`);
   let total = 0;
   for (const s of stores) {
