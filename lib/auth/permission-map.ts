@@ -67,7 +67,7 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
       'fulfillment.operations:view',
       'fulfillment.logistics:view', 'fulfillment.logistics:create', 'fulfillment.logistics:edit', 'fulfillment.logistics:delete',
       'carrier_rates:view', 'carrier_rates:create',
-      'carrier_rates.invoices:view', 'carrier_rates.invoices:create',
+      'carrier_rates.invoices:view', 'carrier_rates.invoices:create', 'carrier_rates.invoices:edit',
     ],
   },
 };

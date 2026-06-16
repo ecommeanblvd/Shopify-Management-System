@@ -152,5 +152,10 @@ describe('hasPermission shim (DB-backed)', () => {
     expect(hasPermission('logistics', 'view_fulfillment')).toBe(true);
     expect(hasPermission('logistics', 'manage_fulfillment')).toBe(false);
   });
+  it('logistics can manage carrier shipping invoices but NOT full carrier rates', () => {
+    expect(hasPermission('logistics', 'manage_shipping_invoices')).toBe(true);
+    expect(hasPermission('logistics', 'view_carrier_rates')).toBe(true);
+    expect(hasPermission('logistics', 'manage_carrier_rates')).toBe(false);
+  });
   it('everyone has base view', () => expect(hasPermission('viewer', 'view')).toBe(true));
 });

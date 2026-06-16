@@ -39,6 +39,9 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   if (!account) notFound();
 
   const canManage = hasPermission(role, 'manage_carrier_rates');
+  // Thêm/nhập hoá đơn carrier chỉ cần quyền hoá đơn (logistics có), tách khỏi
+  // quyền quản trị bảng giá đầy đủ (manage_carrier_rates — gác payments/xoá).
+  const canAddInvoice = canManage || hasPermission(role, 'manage_shipping_invoices');
   const currency = account.costCurrency ?? 'VND';
 
   const [bills, payments] = await Promise.all([listBills(id), listPaymentsForAccount(id)]);
@@ -54,6 +57,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
 
   async function createBillAction(formData: FormData) {
     'use server';
+    if (!canAddInvoice) throw new Error('forbidden');
     const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
     const s = (k: string) => { const v = String(formData.get(k) ?? '').trim(); return v || null; };
     await createBill({
@@ -78,12 +82,14 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   const isFedex = account.carrierKey === 'fedex';
   async function previewFboAction(formData: FormData) {
     'use server';
+    if (!canAddInvoice) throw new Error('forbidden');
     const file = await fileFromForm(formData, 'file');
     if (!file) throw new Error('Chưa chọn file FBO.');
     return previewFboBill(file.bytes);
   }
   async function applyFboAction(formData: FormData) {
     'use server';
+    if (!canAddInvoice) throw new Error('forbidden');
     const file = await fileFromForm(formData, 'file');
     if (!file) throw new Error('Chưa chọn file FBO.');
     const res = await applyFboBill({
@@ -95,6 +101,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   }
   async function attachPdfsAction(formData: FormData) {
     'use server';
+    if (!canAddInvoice) throw new Error('forbidden');
     const fs = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
     const files = await Promise.all(fs.map(async (f) => ({
       bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type || 'application/pdf',
@@ -125,7 +132,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
             {bills.length} hoá đơn · đã bill {fmt(summary.totalBilled)} · còn nợ <b className={summary.totalOutstanding > 0 ? 'text-amber-600 dark:text-amber-400' : ''}>{fmt(summary.totalOutstanding)}</b>
           </p>
         </div>
-        {canManage && (
+        {canAddInvoice && (
           <div className="flex items-center gap-2">
             {isFedex && <ImportFboDialog currency={currency} previewAction={previewFboAction} applyAction={applyFboAction} />}
             {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
