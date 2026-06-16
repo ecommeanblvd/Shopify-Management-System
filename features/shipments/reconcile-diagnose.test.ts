@@ -191,6 +191,25 @@ describe('diagnoseReconcileRow — FedEx residential tách khỏi signature (rea
   });
 });
 
+describe('diagnoseReconcileRow — fuel TRÊN residential (FedEx fuel cả residential)', () => {
+  // FedEx tính fuel trên base + signature + RESIDENTIAL. Engine có signature
+  // (addons) nhưng residential pass-through (engine=0) → engine fuel base thiếu
+  // residential. Fuel chênh đúng %×residential ⇒ PHÁI SINH, KHÔNG phải LECH_FUEL.
+  const input = baseInput({
+    billed: { base: 2_244_600, discount: -1_541_142, fuel: 339_015, remote: 0,
+      demand: 0, signature: 92_700, residential: 84_400, vat: 103_030, gogreen: 0, elevatedRisk: 0, total: 1_390_903 },
+    engine: { base: 2_244_600, discount: -1_541_142, fuel: 306_521, remote: 0,
+      demand: 0, residential: 0, addons: 92_700, addonReference: 92_700, vat: 93_678, total: 1_264_657 },
+    billedFuelableBase: 703_458, // net base (list − discount)
+    fuelPercent: 38.5, vatPercent: 8,
+  });
+
+  it('fuel = PHÁI SINH (chênh = %×residential), không LECH_FUEL', () => {
+    const fuel = diagnoseReconcileRow(input).components.find((c) => c.key === 'fuel')!;
+    expect(fuel.cause).toBe('PHAI_SINH');
+  });
+});
+
 describe('diagnoseReconcileRow — rounding residual', () => {
   it('a few-dong gap lands in residual with LAM_TRON', () => {
     const d = diagnoseReconcileRow(baseInput({

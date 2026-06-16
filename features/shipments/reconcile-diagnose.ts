@@ -256,10 +256,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     // base + ER only. Try every combination so a correct carrier %
     // is always recognised.
     const c0 = input.billedFuelableBase;
-    // DHL also fuels the Elevated Risk line; FedEx fuels demand+signature.
-    const adds = [n0(b.demand), n0(b.signature), n0(b.elevatedRisk) + n0(b.importHandling ?? null)];
+    // DHL fuels Elevated Risk; FedEx fuels demand + signature + RESIDENTIAL
+    // (đo: billed fuel base = net+signature+residential). Thử mọi tổ hợp 4 add
+    // (2^4=16) để % carrier đúng luôn được nhận.
+    const adds = [n0(b.demand), n0(b.signature), n0(b.residential), n0(b.elevatedRisk) + n0(b.importHandling ?? null)];
     const candidates = [...new Set(
-      Array.from({ length: 8 }, (_, mask) =>
+      Array.from({ length: 16 }, (_, mask) =>
         c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
     )];
     const pctMatches = candidates.some((base) =>
@@ -272,20 +274,20 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // COMPOSITION (e.g. carrier fuels the demand surcharge, we don't)?
       const upstreamFlagged = components.some(
         (c) => (c.key === 'base' || c.key === 'remote') && c.cause !== 'KHOP');
-      // Opt-in signature (engine side 0) widens the billed fuel base by
-      // exactly the fee — that's derived from the pass-through, not a
-      // fuel-base config problem.
-      // signature + residential cùng pass-through khi engine side = 0 (giữ
-      // nguyên hành vi fuel sau khi tách residential thành dòng riêng).
-      const sigResiBilled = n0(b.signature) + n0(b.residential);
-      const sigPass = sigResiBilled > 0 && r(e.residential + n0(e.addons ?? null)) === 0
-        ? sigResiBilled : 0;
-      // FedEx có khi fuel cả Demand cùng signature (đo #MBLVD28665). Nhận CẢ
-      // hai cơ sở: chỉ-signature, hoặc signature+demand (khi demand khớp).
+      // Phí opt-in mà ENGINE chưa cộng (engine side = 0) làm billed fuel base
+      // RỘNG hơn đúng bằng phí đó → fuel chênh là PHÁI SINH, không phải lỗi %.
+      // Tách RIÊNG signature vs residential: signature có thể đã ở engine
+      // (addons>0) trong khi residential vẫn pass-through (engine=0) — như đơn
+      // có ký nhận + giao nhà dân. Mỗi phần xét theo engine của CHÍNH nó.
+      const resiPass = n0(b.residential) > 0 && r(e.residential) === 0 ? n0(b.residential) : 0;
+      const sigPass = n0(b.signature) > 0 && r(n0(e.addons ?? null)) === 0 ? n0(b.signature) : 0;
+      const passFee = resiPass + sigPass;
+      // FedEx có khi fuel cả Demand (đo #MBLVD28665). Nhận cả: chỉ pass-through,
+      // hoặc pass-through + demand (khi demand khớp).
       const demandMatched = r(n0(b.demand) - e.demand) === 0;
-      const extraFueled = sigPass + (demandMatched ? n0(b.demand) : 0);
-      const explainedBySig = sigPass > 0 && (
-        Math.abs(fuelDelta - (input.fuelPercent / 100) * sigPass) <= 2
+      const extraFueled = passFee + (demandMatched ? n0(b.demand) : 0);
+      const explainedBySig = passFee > 0 && (
+        Math.abs(fuelDelta - (input.fuelPercent / 100) * passFee) <= 2
         || Math.abs(fuelDelta - (input.fuelPercent / 100) * extraFueled) <= 2);
       // Supplementary-bill ER: the line itself matches (billed flat = engine)
       // but the bill did NOT fuel it while the standard formula does —
