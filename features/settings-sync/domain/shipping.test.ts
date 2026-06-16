@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput } from './shipping';
+import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles } from './shipping';
 
 const shopifyResponse = {
   deliveryProfiles: {
@@ -58,6 +58,29 @@ describe('normalizeShopifyDeliveryProfile', () => {
     expect(result.shopifyIds.profileId).toBe('gid://shopify/DeliveryProfile/1');
     expect(result.shopifyIds.zoneIdByName.Domestic).toBe('gid://shopify/DeliveryZone/10');
     expect(result.shopifyIds.rateIdByZoneAndName['Domestic.Standard']).toBe('gid://shopify/DeliveryMethodDefinition/100');
+  });
+});
+
+describe('normalizeAllDeliveryProfiles', () => {
+  it('trả MỌI profile (không chỉ default) kèm tên + tree riêng', () => {
+    const data = {
+      deliveryProfiles: { edges: [
+        { node: { id: 'gid://shopify/DeliveryProfile/1', name: 'General profile', default: true,
+          profileLocationGroups: [{ locationGroupZones: { edges: [
+            { node: { zone: { id: 'z10', name: 'Domestic', countries: [{ code: { countryCode: 'VN' } }] }, methodDefinitions: { edges: [] } } },
+          ] } }] } },
+        { node: { id: 'gid://shopify/DeliveryProfile/2', name: 'Made to order', default: false,
+          profileLocationGroups: [{ locationGroupZones: { edges: [
+            { node: { zone: { id: 'z20', name: 'America', countries: [{ code: { countryCode: 'US' } }] }, methodDefinitions: { edges: [] } } },
+          ] } }] } },
+      ] },
+    };
+    const all = normalizeAllDeliveryProfiles(data);
+    expect(all).toHaveLength(2);
+    expect(all.map((p) => p.name)).toEqual(['General profile', 'Made to order']);
+    expect(all[0].isDefault).toBe(true);
+    expect(all[1].normalized.shopifyIds.profileId).toBe('gid://shopify/DeliveryProfile/2');
+    expect(Object.keys(all[1].normalized.tree.zones)).toEqual(['America']);
   });
 });
 

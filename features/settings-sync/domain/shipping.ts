@@ -29,6 +29,7 @@ export const SHIPPING_QUERY = `
       edges {
         node {
           id
+          name
           default
           profileLocationGroups {
             locationGroupZones(first: 50) {
@@ -73,6 +74,7 @@ export const SHIPPING_QUERY = `
 // after an explicit null-check chain.
 interface ShopifyProfileNode {
   id: string;
+  name?: string;
   default: boolean;
   profileLocationGroups: Array<{
     locationGroupZones: {
@@ -103,27 +105,12 @@ interface ShopifyDeliveryProfilesResponse {
   };
 }
 
-export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShipping {
-  const typed = data as ShopifyDeliveryProfilesResponse;
-  const edges = typed?.deliveryProfiles?.edges ?? [];
-  const defaultProfileNode =
-    edges.find((p) => p.node.default)?.node ?? edges[0]?.node;
-
-  if (!defaultProfileNode) {
-    return {
-      tree: { zones: {} },
-      shopifyIds: { profileId: '', zoneIdByName: {}, rateIdByZoneAndName: {} },
-    };
-  }
-
+/** Chuẩn hoá 1 profile node → tree + shopifyIds. */
+function normalizeProfileNode(node: ShopifyProfileNode): NormalizedShipping {
   const tree: ShippingTree = { zones: {} };
-  const shopifyIds: ShopifyIds = {
-    profileId: defaultProfileNode.id,
-    zoneIdByName: {},
-    rateIdByZoneAndName: {},
-  };
+  const shopifyIds: ShopifyIds = { profileId: node.id, zoneIdByName: {}, rateIdByZoneAndName: {} };
 
-  for (const lg of defaultProfileNode.profileLocationGroups ?? []) {
+  for (const lg of node.profileLocationGroups ?? []) {
     for (const zoneEdge of lg.locationGroupZones?.edges ?? []) {
       const z = zoneEdge.node;
       const zoneName = z.zone.name;
@@ -134,25 +121,48 @@ export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShippi
         const m = re.node;
         const rp = m.rateProvider;
         if (rp?.__typename === 'DeliveryRateDefinition' && rp.price) {
-          rates[m.name] = {
-            type: 'flat',
-            price: Number(rp.price.amount),
-            currency: rp.price.currencyCode,
-          };
+          rates[m.name] = { type: 'flat', price: Number(rp.price.amount), currency: rp.price.currencyCode };
           shopifyIds.rateIdByZoneAndName[`${zoneName}.${m.name}`] = m.id;
         }
       }
 
       tree.zones[zoneName] = {
-        countries: (z.zone.countries ?? [])
-          .filter((c) => !c.code.restOfWorld)
-          .map((c) => c.code.countryCode),
+        countries: (z.zone.countries ?? []).filter((c) => !c.code.restOfWorld).map((c) => c.code.countryCode),
         rates,
       };
     }
   }
-
   return { tree, shopifyIds };
+}
+
+export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShipping {
+  const typed = data as ShopifyDeliveryProfilesResponse;
+  const edges = typed?.deliveryProfiles?.edges ?? [];
+  const defaultProfileNode = edges.find((p) => p.node.default)?.node ?? edges[0]?.node;
+  if (!defaultProfileNode) {
+    return { tree: { zones: {} }, shopifyIds: { profileId: '', zoneIdByName: {}, rateIdByZoneAndName: {} } };
+  }
+  return normalizeProfileNode(defaultProfileNode);
+}
+
+export interface ProfileSummary {
+  profileId: string;
+  name: string;
+  isDefault: boolean;
+  normalized: NormalizedShipping;
+}
+
+/** Chuẩn hoá TẤT CẢ delivery profile (không chỉ default) — để đẩy giá lên các
+ *  profile được chọn (vd MEAN tách General + Made-to-order). */
+export function normalizeAllDeliveryProfiles(data: unknown): ProfileSummary[] {
+  const typed = data as ShopifyDeliveryProfilesResponse;
+  const edges = typed?.deliveryProfiles?.edges ?? [];
+  return edges.map((e) => ({
+    profileId: e.node.id,
+    name: e.node.name ?? (e.node.default ? 'General profile' : e.node.id),
+    isDefault: e.node.default,
+    normalized: normalizeProfileNode(e.node),
+  }));
 }
 
 export interface MutationInput {

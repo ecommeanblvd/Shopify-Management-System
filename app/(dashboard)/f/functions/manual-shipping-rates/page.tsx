@@ -6,11 +6,12 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listOverridesForStore, previewMarketsApply, executeMarketsApply, executeMarketsApplyAll } from '@/features/markets/actions';
+import { listOverridesForStore } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
-import { ApplyBackupButton } from '@/components/functions/ApplyBackupButton';
+import { ShippingProfilePush } from '@/components/functions/ShippingProfilePush';
+import { listShippingProfiles, previewShippingToProfiles, applyShippingToProfiles } from '@/features/settings-sync/shipping-profiles-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +26,6 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
 
   const stores = (await db.select().from(schema.stores))
     .map((s) => ({ id: s.id, name: s.name, shopDomain: s.shopDomain }));
-  const activeStores = await db.select({ id: schema.stores.id }).from(schema.stores)
-    .where(and(eq(schema.stores.status, 'active'), eq(schema.stores.maintenanceMode, false)));
-  const activeStoreCount = activeStores.length;
   const sp = await searchParams;
   const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
   const overrides = activeId ? await listOverridesForStore(activeId) : [];
@@ -48,26 +46,6 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
     if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
   }
 
-  async function preview(storeId: string) {
-    'use server';
-    const s = await auth.api.getSession({ headers: await headers() });
-    if (!s) throw new Error('unauthenticated');
-    const r = await previewMarketsApply(storeId);
-    return { ops: r.ops };
-  }
-  async function apply(storeId: string) {
-    'use server';
-    const s = await auth.api.getSession({ headers: await headers() });
-    if (!s) throw new Error('unauthenticated');
-    const r = await executeMarketsApply(storeId, s.user.id);
-    return { errors: r.kind === 'applied' ? r.errors : [] };
-  }
-  async function applyAll() {
-    'use server';
-    const s = await auth.api.getSession({ headers: await headers() });
-    if (!s) throw new Error('unauthenticated');
-    return executeMarketsApplyAll(s.user.id);
-  }
 
   return (
     <div className="px-6 md:px-10 py-5 space-y-4">
@@ -77,8 +55,14 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           <h1 className="text-xl font-semibold tracking-tight">Manual Shipping rates</h1>
           <span className="text-xs text-muted-foreground">Bảng giá current (flat, zone × bậc cân) với fuel đang áp — backup khi carrier API gãy.</span>
         </div>
-        {canApply && stores.length > 0 && (
-          <ApplyBackupButton stores={stores} storeCount={activeStoreCount} onPreview={preview} onApply={apply} onApplyAll={applyAll} />
+        {canApply && activeId && (
+          <ShippingProfilePush
+            storeId={activeId}
+            storeName={stores.find((s) => s.id === activeId)?.name ?? ''}
+            onList={listShippingProfiles}
+            onPreview={previewShippingToProfiles}
+            onApply={applyShippingToProfiles}
+          />
         )}
       </div>
 
