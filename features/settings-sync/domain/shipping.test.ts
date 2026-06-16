@@ -80,4 +80,25 @@ describe('denormalizeToMutationInput', () => {
       name: 'International',
     }));
   });
+
+  it('xoá zone cũ bị PHỦ TRÙNG nước, GIỮ zone không trùng nước nào (free zone VN/HK)', () => {
+    // Current: Domestic(VN) free + OldAmerica(US,CA). Effective thay bằng zone
+    // hệ thống phủ US,CA — KHÔNG có VN. → xoá OldAmerica (trùng US/CA), giữ Domestic.
+    const current = normalizeShopifyDeliveryProfile({
+      deliveryProfiles: { edges: [{ node: {
+        id: 'gid://shopify/DeliveryProfile/1', default: true,
+        profileLocationGroups: [{ locationGroupZones: { edges: [
+          { node: { zone: { id: 'gid://shopify/DeliveryZone/10', name: 'Domestic', countries: [{ code: { countryCode: 'VN' } }] }, methodDefinitions: { edges: [] } } },
+          { node: { zone: { id: 'gid://shopify/DeliveryZone/20', name: 'OldAmerica', countries: [{ code: { countryCode: 'US' } }, { code: { countryCode: 'CA' } }] }, methodDefinitions: { edges: [] } } },
+        ] } }],
+      } }] },
+    });
+    const effective = {
+      zones: { 'America — FedEx D': { countries: ['US', 'CA'], rates: { 'FedEx IP (0–1 kg)': { type: 'flat' as const, price: 50, currency: 'USD' } } } },
+    };
+    const input = denormalizeToMutationInput(current, effective);
+    const deletedIds = input.zonesToDelete;
+    expect(deletedIds).toContain('gid://shopify/DeliveryZone/20'); // OldAmerica bị phủ trùng → xoá
+    expect(deletedIds).not.toContain('gid://shopify/DeliveryZone/10'); // Domestic(VN) free → GIỮ
+  });
 });

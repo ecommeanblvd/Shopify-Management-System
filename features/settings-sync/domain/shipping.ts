@@ -233,8 +233,17 @@ export function denormalizeToMutationInput(
     }
   }
 
-  for (const name of Object.keys(currentZones)) {
-    if (!effectiveZones[name]) {
+  // Tập nước mà "effective" phủ. Một zone Shopify cũ chỉ bị XOÁ khi nó bị PHỦ
+  // TRÙNG (có ≥1 nước nằm trong effective) — tức đang được zone mới thay thế.
+  // Zone không trùng nước nào (free zone nội địa VN/HK, hoặc zone thủ công hệ
+  // thống không quản) được GIỮ NGUYÊN — tránh xoá nhầm cấu hình ngoài phạm vi.
+  const effectiveCountries = new Set<string>();
+  for (const z of Object.values(effectiveZones)) for (const c of z.countries) effectiveCountries.add(c);
+
+  for (const [name, zone] of Object.entries(currentZones)) {
+    if (effectiveZones[name]) continue; // còn trong effective → giữ (đã xử lý rate ở trên)
+    const supersededByCountry = zone.countries.some((c) => effectiveCountries.has(c));
+    if (supersededByCountry) {
       out.zonesToDelete.push(current.shopifyIds.zoneIdByName[name]);
     }
   }
