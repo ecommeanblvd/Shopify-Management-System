@@ -31,6 +31,26 @@ function svc(carrierKey: string, label: string, s: CarrierAccountSnapshot): Carr
   return { carrierAccountId: `acc-${carrierKey}`, carrierKey, serviceLabel: label, snapshot: s };
 }
 
+describe('recalcMarket — luôn dùng giá Package làm base (không lấy Pak)', () => {
+  it('bậc nhẹ (<2kg) vẫn lấy Package dù zone có giá Pak rẻ hơn', () => {
+    const fedex: CarrierAccountSnapshot = {
+      id: 'fedex', name: 'FedEx', costCurrency: 'VND', displayCurrency: 'VND', fxCostPerDisplay: 1,
+      weightTiers: [{ upperKg: 1 }],
+      zonesByCountry: new Map([
+        // Pak 200k rẻ hơn Package 280k ở bậc 1kg — quy tắc cũ <2kg sẽ lấy Pak.
+        ['US', { label: 'Zone US', rateByTierUpper: new Map([[1, 280_000]]), pakRateByTierUpper: new Map([[1, 200_000]]) }],
+      ]),
+      surcharges: [], remotePostcodes: new Map(),
+    };
+    const r = recalcMarket({
+      marketHandle: 'us', marketName: 'US', countries: ['US'],
+      primaryCurrency: 'VND', services: [svc('fedex', 'FedEx IP', fedex)],
+    });
+    const row = r.breakdown.find((b) => b.warning === null);
+    expect(row?.finalCost).toBe(280_000); // Package, KHÔNG phải Pak 200k
+  });
+});
+
 describe('recalcMarket — residential baked into US/CA customer price', () => {
   // Snapshot FedEx: cùng base cho US & SG; residential_fixed chỉ ['US','CA'].
   // Không fuel/markup/VAT để finalCost = base (+ residential nếu áp dụng).

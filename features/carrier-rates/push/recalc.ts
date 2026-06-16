@@ -143,10 +143,14 @@ export function recalcMarket(input: RecalcMarketInput): RecalcResult {
         // chỉ thực sự cộng cho nước nằm trong residential_fixed.country_codes
         // (FedEx = US/CA). Đa số đơn US/CA là nhà dân (67–85%) nên nung sẵn vào
         // giá thu khách; nước khác không có row → không đổi.
+        // packagingType: 'box' → LUÔN lấy giá Package làm base (không tự rơi sang
+        // Pak ở bậc <2kg). Matrix thu khách cần một base nhất quán; Package là
+        // mức an toàn (Pak có bậc thấp hơn ở một số tier).
         const q: QuoteResult = quote(svc.snapshot, {
           weightKg: upper,
           destinationCountry: representative,
           isResidential: true,
+          packagingType: 'box',
         });
         if (q.ok) {
           rates[rateName] = {
