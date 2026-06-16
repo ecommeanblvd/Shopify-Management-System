@@ -17,7 +17,7 @@ export const MARKETS_QUERY = `
           localCurrencies
         }
         webPresence {
-          defaultLocale
+          defaultLocale { locale }
           alternateLocales { locale }
         }
         priceList {
@@ -42,7 +42,8 @@ interface ShopifyMarketEdge {
       localCurrencies?: boolean;
     };
     webPresence?: {
-      defaultLocale?: string;
+      // API 2025-01: defaultLocale trả ShopLocale (object), không còn scalar.
+      defaultLocale?: { locale: string } | string;
       alternateLocales?: Array<{ locale: string }>;
     };
     priceList?: {
@@ -91,7 +92,9 @@ export function normalizeMarkets(data: unknown): NormalizedMarket[] {
       countries,
       primaryCurrency: n.currencySettings?.baseCurrency?.currencyCode ?? 'USD',
       alternativeCurrencies: [],
-      primaryLanguage: n.webPresence?.defaultLocale ?? 'en',
+      primaryLanguage: (typeof n.webPresence?.defaultLocale === 'object'
+        ? n.webPresence.defaultLocale.locale
+        : n.webPresence?.defaultLocale) ?? 'en',
       alternativeLanguages: (n.webPresence?.alternateLocales ?? []).map((l) => l.locale),
       enabled: n.enabled,
       primary: n.primary,
