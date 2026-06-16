@@ -23,10 +23,10 @@ const CREATE_MUTATION = `
     }
   }`;
 
-const UPDATE_MUTATION = `
-  mutation carrierServiceUpdate($input: DeliveryCarrierServiceUpdateInput!) {
-    carrierServiceUpdate(input: $input) {
-      carrierService { id name callbackUrl active }
+const DELETE_MUTATION = `
+  mutation carrierServiceDelete($id: ID!) {
+    carrierServiceDelete(id: $id) {
+      deletedId
       userErrors { field message }
     }
   }`;
@@ -34,7 +34,7 @@ const UPDATE_MUTATION = `
 export interface RegisterCarrierServiceResult {
   carrierServiceId: string;
   callbackUrl: string;
-  created: boolean; // true = mới tạo, false = cập nhật cái sẵn có
+  created: boolean; // true = tạo mới, false = đã thay cái cũ (xoá + tạo lại)
 }
 
 async function requireApplyPermission(): Promise<string> {
@@ -59,9 +59,11 @@ function pickUserErrors(payload: unknown, key: string): string {
 }
 
 /**
- * Đăng ký (hoặc cập nhật) Shopify CarrierService cho store → bật rate
- * carrier-calculated ở checkout, trỏ callback về engine của ta. Idempotent:
- * tìm theo tên, có rồi thì update callbackUrl + active, chưa có thì create.
+ * Đăng ký Shopify CarrierService cho store → bật rate carrier-calculated ở
+ * checkout, trỏ callback về engine của ta. `supportsServiceDiscovery: false` để
+ * carrier hiện như 1 service chọn được trực tiếp (bật discovery thì Shopify dò
+ * "service con", chưa dò được → bị xám không chọn được). Idempotent: có cái cùng
+ * tên thì XOÁ rồi tạo lại (flag discovery không sửa được bằng update).
  * Yêu cầu store Shopify Plus (CarrierService API).
  */
 export async function registerCarrierService(storeId: string): Promise<RegisterCarrierServiceResult> {
@@ -73,40 +75,35 @@ export async function registerCarrierService(storeId: string): Promise<RegisterC
   const call = (query: string, variables?: Record<string, unknown>) =>
     graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query, variables });
 
-  // 1) Có carrier service cùng tên chưa?
+  // 1) Có carrier service cùng tên chưa → xoá để tạo lại sạch (đảm bảo flag đúng).
   const listed = await call(LIST_QUERY);
   if ((listed as { errors?: unknown }).errors) {
     throw new Error(`Shopify: ${JSON.stringify((listed as { errors?: unknown }).errors).slice(0, 300)}`);
   }
   const edges = (listed.data as { carrierServices?: { edges?: Array<{ node: CarrierServiceNode }> } })?.carrierServices?.edges ?? [];
   const existing = edges.map((e) => e.node).find((n) => n.name === CARRIER_SERVICE_NAME);
-
-  let carrierServiceId: string;
-  let created: boolean;
+  const replaced = Boolean(existing);
   if (existing) {
-    const res = await call(UPDATE_MUTATION, { input: { id: existing.id, name: CARRIER_SERVICE_NAME, callbackUrl, active: true } });
-    const err = pickUserErrors((res.data as Record<string, unknown>), 'carrierServiceUpdate');
-    if (err) throw new Error(`carrierServiceUpdate: ${err}`);
-    carrierServiceId = existing.id;
-    created = false;
-  } else {
-    const res = await call(CREATE_MUTATION, { input: { name: CARRIER_SERVICE_NAME, callbackUrl, active: true, supportsServiceDiscovery: true } });
-    const err = pickUserErrors((res.data as Record<string, unknown>), 'carrierServiceCreate');
-    if (err) throw new Error(`carrierServiceCreate: ${err}`);
-    const node = (res.data as { carrierServiceCreate?: { carrierService?: CarrierServiceNode } })?.carrierServiceCreate?.carrierService;
-    if (!node) throw new Error('carrierServiceCreate: không trả về carrierService (store có phải Shopify Plus?)');
-    carrierServiceId = node.id;
-    created = true;
+    const res = await call(DELETE_MUTATION, { id: existing.id });
+    const err = pickUserErrors((res.data as Record<string, unknown>), 'carrierServiceDelete');
+    if (err) throw new Error(`carrierServiceDelete: ${err}`);
   }
+
+  // 2) Tạo mới với discovery TẮT.
+  const res = await call(CREATE_MUTATION, { input: { name: CARRIER_SERVICE_NAME, callbackUrl, active: true, supportsServiceDiscovery: false } });
+  const err = pickUserErrors((res.data as Record<string, unknown>), 'carrierServiceCreate');
+  if (err) throw new Error(`carrierServiceCreate: ${err}`);
+  const node = (res.data as { carrierServiceCreate?: { carrierService?: CarrierServiceNode } })?.carrierServiceCreate?.carrierService;
+  if (!node) throw new Error('carrierServiceCreate: không trả về carrierService (store có phải Shopify Plus?)');
 
   await recordAudit({
     userId,
     storeId: store.id,
-    action: created ? 'carrier_service.create' : 'carrier_service.update',
-    target: carrierServiceId,
+    action: 'carrier_service.register',
+    target: node.id,
     requestSummary: callbackUrl,
     result: 'success',
   });
 
-  return { carrierServiceId, callbackUrl, created };
+  return { carrierServiceId: node.id, callbackUrl, created: !replaced };
 }
