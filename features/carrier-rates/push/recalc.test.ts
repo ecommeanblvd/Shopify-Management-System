@@ -31,6 +31,42 @@ function svc(carrierKey: string, label: string, s: CarrierAccountSnapshot): Carr
   return { carrierAccountId: `acc-${carrierKey}`, carrierKey, serviceLabel: label, snapshot: s };
 }
 
+describe('recalcMarket — residential baked into US/CA customer price', () => {
+  // Snapshot FedEx: cùng base cho US & SG; residential_fixed chỉ ['US','CA'].
+  // Không fuel/markup/VAT để finalCost = base (+ residential nếu áp dụng).
+  function fedexWithResidential(): CarrierAccountSnapshot {
+    return {
+      id: 'fedex', name: 'FedEx', costCurrency: 'VND', displayCurrency: 'VND',
+      fxCostPerDisplay: 1,
+      weightTiers: [{ upperKg: 1 }],
+      zonesByCountry: new Map([
+        ['US', zoneSnap('Zone US', { 1: 280_000 })],
+        ['SG', zoneSnap('Zone SG', { 1: 280_000 })],
+      ]),
+      surcharges: [{ kind: 'residential_fixed', value: 84_400, active: true, countryCodes: ['US', 'CA'] }],
+      remotePostcodes: new Map(),
+    };
+  }
+
+  it('US rate includes residential (matrix giả định nhà dân cho US/CA)', () => {
+    const r = recalcMarket({
+      marketHandle: 'us', marketName: 'United States', countries: ['US'],
+      primaryCurrency: 'VND', services: [svc('fedex', 'FedEx IP', fedexWithResidential())],
+    });
+    const row = r.breakdown.find((b) => b.warning === null);
+    expect(row?.finalCost).toBe(364_400); // 280,000 base + 84,400 residential
+  });
+
+  it('non-US country (SG) does NOT include residential even though matrix assumes residential', () => {
+    const r = recalcMarket({
+      marketHandle: 'sea', marketName: 'SEA', countries: ['SG'],
+      primaryCurrency: 'VND', services: [svc('fedex', 'FedEx IP', fedexWithResidential())],
+    });
+    const row = r.breakdown.find((b) => b.warning === null);
+    expect(row?.finalCost).toBe(280_000); // base only — SG ngoài country_codes
+  });
+});
+
 describe('recalcMarket — zone splitting by carrier signature', () => {
   it('emits a single zone when all countries share the same carrier zones', () => {
     const dhl = snap({

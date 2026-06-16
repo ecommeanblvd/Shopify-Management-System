@@ -139,9 +139,14 @@ export function recalcMarket(input: RecalcMarketInput): RecalcResult {
         const upper = tiers[i].upperKg;
         const rateName = `${svc.serviceLabel} (${fmtKg(prevUpper)}–${fmtKg(upper)} kg)`;
 
+        // isResidential: true → matrix GIẢ ĐỊNH địa chỉ nhà dân. Phí residential
+        // chỉ thực sự cộng cho nước nằm trong residential_fixed.country_codes
+        // (FedEx = US/CA). Đa số đơn US/CA là nhà dân (67–85%) nên nung sẵn vào
+        // giá thu khách; nước khác không có row → không đổi.
         const q: QuoteResult = quote(svc.snapshot, {
           weightKg: upper,
           destinationCountry: representative,
+          isResidential: true,
         });
         if (q.ok) {
           rates[rateName] = {

@@ -671,8 +671,14 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     notes.push(`remote_match:${matchedBy}${suffix}`);
   }
 
+  // Residential country-scoped như demand: FedEx CHỈ thu phí giao nhà dân cho
+  // US & Canada (residential_fixed.country_codes = ['US','CA']). NULL = catch-all
+  // (tương thích ngược cấu hình cũ). Nước ngoài danh sách → 0 dù isResidential.
   const residential = input.isResidential
-    ? sumApplicableOfKind(snap.surcharges, 'residential_fixed', effectiveDate)
+    ? snap.surcharges
+        .filter((s) => isApplicable(s, effectiveDate) && s.kind === 'residential_fixed')
+        .filter((s) => !s.countryCodes || s.countryCodes.includes(country))
+        .reduce((sum, s) => sum + s.value, 0)
     : 0;
 
   // Stepped per-weight surcharge — DHL GoGreen Plus and equivalents.

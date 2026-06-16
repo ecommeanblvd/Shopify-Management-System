@@ -400,6 +400,31 @@ describe('quote engine', () => {
       expect(withRes.ok && withRes.breakdown.residential).toBe(50_000);
     });
 
+    it('residential is country-scoped: only countries in country_codes are charged (FedEx US/CA only)', () => {
+      const snap = makeSnap({
+        zonesByCountry: new Map([
+          ['US', { label: 'Zone US', rateByTierUpper: new Map([[1, 280_000]]) }],
+          ['SG', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }],
+        ]),
+        weightTiers: [{ upperKg: 1 }],
+        surcharges: [{ kind: 'residential_fixed', value: 84_400, active: true, countryCodes: ['US', 'CA'] }],
+      });
+      // US is in the list → charged.
+      const us = quote(snap, { weightKg: 1, destinationCountry: 'US', isResidential: true });
+      expect(us.ok && us.breakdown.residential).toBe(84_400);
+      // SG NOT in the list → 0 even though isResidential is true.
+      const sg = quote(snap, { weightKg: 1, destinationCountry: 'SG', isResidential: true });
+      expect(sg.ok && sg.breakdown.residential).toBe(0);
+    });
+
+    it('residential with NULL country_codes stays catch-all (backwards compatible)', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'residential_fixed', value: 50_000, active: true, countryCodes: null }],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', isResidential: true });
+      expect(r.ok && r.breakdown.residential).toBe(50_000);
+    });
+
     it('per-kg fixed surcharge scales with weight (DHL SAF model)', () => {
       const snap = makeSnap({
         surcharges: [{ kind: 'per_kg_fixed', value: 3_800, active: true }],
