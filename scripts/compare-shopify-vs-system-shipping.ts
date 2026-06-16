@@ -69,8 +69,9 @@ async function main() {
   const marketOf = new Map<string, { handle: string; name: string }>();
   for (const t of templates) for (const c of (t.countries as string[])) marketOf.set(c, { handle: t.handle, name: t.name });
 
-  // === CSV A: price compare ===
-  const priceRows: string[] = ['shopify_zone,country,weight_kg,shopify_usd,system_dhl_usd,system_fedex_usd,system_cheapest_usd,shopify_minus_cheapest,pct_vs_cheapest,carrier_serves'];
+  // === CSV A: price compare — CHUẨN = FedEx (carrier chính, rẻ nhất ở đa số
+  // zone). DHL giữ làm tham chiếu. diff/pct so Shopify với FedEx. ===
+  const priceRows: string[] = ['shopify_zone,country,weight_kg,shopify_usd,system_fedex_usd,system_dhl_usd,shopify_minus_fedex,pct_vs_fedex,fedex_cheaper_than_dhl,carrier_serves'];
   // === CSV B: zone audit ===
   const auditRows: string[] = ['shopify_zone,country,system_market,market_carriers,dhl_serves,fedex_serves,note'];
 
@@ -97,16 +98,16 @@ async function main() {
         const shop = shopifyPriceAt(schedule, w);
         const d = sysQuote(dhl, country, w);
         const f = sysQuote(fedex, country, w);
-        const cands = [d, f].filter((x): x is number => x !== null);
-        const cheapest = cands.length ? Math.min(...cands) : null;
-        const diff = shop !== null && cheapest !== null ? shop - cheapest : null;
-        const pct = diff !== null && cheapest ? Math.round((diff / cheapest) * 1000) / 10 : null;
+        // CHUẨN = FedEx. diff/pct so Shopify với FedEx (âm = Shopify thu thấp hơn
+        // giá FedEx = lỗ). DHL chỉ tham chiếu + cờ FedEx có rẻ hơn DHL không.
+        const diff = shop !== null && f !== null ? shop - f : null;
+        const pct = diff !== null && f ? Math.round((diff / f) * 1000) / 10 : null;
+        const fedexCheaper = f !== null ? (d === null || f <= d) : '';
         const serves = [dServes ? 'DHL' : '', fServes ? 'FedEx' : ''].filter(Boolean).join('|');
         priceRows.push([
           zname, country, w,
-          shop ?? '', d !== null ? Math.round(d) : '', f !== null ? Math.round(f) : '',
-          cheapest !== null ? Math.round(cheapest) : '', diff !== null ? Math.round(diff) : '',
-          pct ?? '', serves,
+          shop ?? '', f !== null ? Math.round(f) : '', d !== null ? Math.round(d) : '',
+          diff !== null ? Math.round(diff) : '', pct ?? '', fedexCheaper, serves,
         ].join(','));
       }
     }
