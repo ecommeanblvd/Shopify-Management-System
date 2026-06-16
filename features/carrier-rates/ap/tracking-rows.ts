@@ -1,0 +1,83 @@
+import { summariseBill, type BillStatus, type PaymentInput } from './ap-summary';
+
+/** Dòng line (đã kèm billId) để dựng bảng theo tracking. */
+export interface TrackingLineInput {
+  billId: string;
+  trackingNumber: string | null;
+  orderNumber: string | null;
+  weightKg: number | null;
+  base: number; discount: number; fuel: number; remote: number;
+  demand: number; signature: number; vat: number; other: number; total: number;
+  note: string | null;
+}
+
+export interface TrackingBillInput {
+  id: string;
+  billNumber: string | null;
+  dueDate: string | null;
+  amount: number;
+}
+
+export interface TrackingFee { label: string; value: number }
+
+export interface TrackingRow {
+  key: string;
+  billId: string;
+  billNumber: string | null;
+  dueDate: string | null;
+  trackingNumber: string | null;
+  orderNumber: string | null;
+  weightKg: number | null;
+  total: number;
+  fees: TrackingFee[];   // các khoản phí > 0 (để mở rộng)
+  note: string | null;
+  status: BillStatus;
+  overdue: boolean;
+  hasDetail: boolean;    // có gì để mở rộng không
+}
+
+const FEE_LABELS: Array<[keyof TrackingLineInput, string]> = [
+  ['base', 'Giá gốc'], ['discount', 'Chiết khấu'], ['fuel', 'Fuel'], ['remote', 'Remote'],
+  ['demand', 'Demand'], ['signature', 'Ký nhận'], ['vat', 'VAT'], ['other', 'Khác'],
+];
+
+/**
+ * Dựng bảng "theo tracking": mỗi dòng = 1 bill line (tracking). Hoá đơn không có
+ * line nào → 1 dòng tổng (tracking trống). Status/overdue lấy theo HOÁ ĐƠN cha.
+ * Thuần, không I/O.
+ */
+export function buildTrackingRows(
+  bills: TrackingBillInput[],
+  lines: TrackingLineInput[],
+  payments: PaymentInput[],
+  today: string,
+): TrackingRow[] {
+  const paysByBill = new Map<string, PaymentInput[]>();
+  for (const p of payments) { const l = paysByBill.get(p.billId) ?? []; l.push(p); paysByBill.set(p.billId, l); }
+  const sumByBill = new Map(bills.map((b) =>
+    [b.id, summariseBill({ id: b.id, amount: b.amount, currency: '', dueDate: b.dueDate }, paysByBill.get(b.id) ?? [], today)]));
+  const linesByBill = new Map<string, TrackingLineInput[]>();
+  for (const ln of lines) { const l = linesByBill.get(ln.billId) ?? []; l.push(ln); linesByBill.set(ln.billId, l); }
+
+  const rows: TrackingRow[] = [];
+  for (const b of bills) {
+    const s = sumByBill.get(b.id)!;
+    const bl = linesByBill.get(b.id) ?? [];
+    const base = { billId: b.id, billNumber: b.billNumber, dueDate: b.dueDate, status: s.status, overdue: s.overdue };
+    if (bl.length === 0) {
+      rows.push({ ...base, key: b.id, trackingNumber: null, orderNumber: null, weightKg: null, total: b.amount, fees: [], note: null, hasDetail: false });
+      continue;
+    }
+    bl.forEach((ln, i) => {
+      const fees = FEE_LABELS
+        .map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) }))
+        .filter((f) => f.value !== 0);
+      rows.push({
+        ...base, key: `${b.id}:${i}`,
+        trackingNumber: ln.trackingNumber, orderNumber: ln.orderNumber, weightKg: ln.weightKg,
+        total: ln.total, fees, note: ln.note, hasDetail: fees.length > 0 || !!ln.note,
+      });
+    });
+  }
+  return rows;
+}

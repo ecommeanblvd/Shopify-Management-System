@@ -254,6 +254,25 @@ export async function listBillLines(billId: string): Promise<BillLineRow[]> {
   }));
 }
 
+export interface AllBillLineRow extends BillLineRow { billId: string }
+
+/** Mọi line của các bill thuộc 1 account (kèm billId) — để dựng bảng theo tracking. */
+export async function listAllBillLines(carrierAccountId: string): Promise<AllBillLineRow[]> {
+  const rows = await db
+    .select({ l: schema.carrierBillLines })
+    .from(schema.carrierBillLines)
+    .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))
+    .where(eq(schema.carrierBills.carrierAccountId, carrierAccountId))
+    .orderBy(schema.carrierBillLines.trackingNumber);
+  return rows.map(({ l: r }) => ({
+    id: r.id, billId: r.billId,
+    trackingNumber: r.trackingNumber, orderNumber: r.orderNumber,
+    weightKg: num(r.weightKg), base: num(r.base), discount: num(r.discount), fuel: num(r.fuel),
+    remote: num(r.remote), demand: num(r.demand), signature: num(r.signature),
+    vat: num(r.vat), other: num(r.other), total: num(r.total), note: r.note,
+  }));
+}
+
 export interface AttachPdfResult {
   attached: Array<{ invoice: string; filename: string }>;
   unmatched: Array<{ filename: string; reason: string }>;

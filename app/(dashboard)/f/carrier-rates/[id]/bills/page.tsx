@@ -9,13 +9,13 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
   createBill, addPayment, deleteBill, deletePayment,
-  listBills, listPaymentsForAccount, listBillLines, attachInvoicePdfsToBills,
+  listBills, listPaymentsForAccount, listBillLines, listAllBillLines, attachInvoicePdfsToBills,
   type UploadFile, type BillLineInput,
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
-import { systemTotalForPeriod } from '@/features/carrier-rates/ap/period-compare';
+import { buildTrackingRows } from '@/features/carrier-rates/ap/tracking-rows';
 import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-import-actions';
-import { BillsBoard } from '@/components/carrier-rates/BillsBoard';
+import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
 import { ImportFboDialog } from '@/components/carrier-rates/ImportFboDialog';
 import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
@@ -45,12 +45,19 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   const canAddInvoice = canManage || hasPermission(role, 'manage_shipping_invoices');
   const currency = account.costCurrency ?? 'VND';
 
-  const [bills, payments] = await Promise.all([listBills(id), listPaymentsForAccount(id)]);
+  const [bills, payments, allLines] = await Promise.all([listBills(id), listPaymentsForAccount(id), listAllBillLines(id)]);
   const inputs = toSummaryInputs(bills, payments);
-  const summary = summariseAp(inputs.bills, inputs.payments, new Date().toISOString().slice(0, 10));
-  const periodTotals = await Promise.all(bills.map((b) => systemTotalForPeriod(id, b.periodStart, b.periodEnd)));
-  const systemByBill: Record<string, number> = {};
-  bills.forEach((b, i) => { systemByBill[b.id] = periodTotals[i].systemTotal; });
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = summariseAp(inputs.bills, inputs.payments, today);
+  const trackingRows = buildTrackingRows(
+    bills.map((b) => ({ id: b.id, billNumber: b.billNumber, dueDate: b.dueDate, amount: b.amount })),
+    allLines.map((l) => ({
+      billId: l.billId, trackingNumber: l.trackingNumber, orderNumber: l.orderNumber, weightKg: l.weightKg ?? null,
+      base: l.base ?? 0, discount: l.discount ?? 0, fuel: l.fuel ?? 0, remote: l.remote ?? 0, demand: l.demand ?? 0,
+      signature: l.signature ?? 0, vat: l.vat ?? 0, other: l.other ?? 0, total: l.total ?? 0, note: l.note,
+    })),
+    inputs.payments, today,
+  );
 
   // Mọi thay đổi bill/payment phải revalidate cả trang này lẫn trang account
   // (khối Công nợ ở account đọc cùng dữ liệu).
@@ -145,9 +152,9 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         )}
       </header>
 
-      <BillsBoard
+      <BillingTrackingTable
         accountId={id} currency={currency} canManage={canManage}
-        bills={bills} payments={payments} summaryBills={summary.bills} systemByBill={systemByBill}
+        rows={trackingRows} bills={bills} payments={payments} summaryBills={summary.bills}
         listLines={listLinesAction}
         addPaymentAction={addPaymentAction} deleteBillAction={deleteBillAction} deletePaymentAction={deletePaymentAction}
       />
