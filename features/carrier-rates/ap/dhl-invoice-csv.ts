@@ -86,14 +86,33 @@ function chargesFromRow(col: (n: string) => string): DhlChargeLine[] {
   return out;
 }
 
+/** Tách 1 dòng CSV theo delimiter, có xử lý ngoặc kép (RFC4180). */
+function splitCsvLine(line: string, delim: string): string[] {
+  const out: string[] = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === delim) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 export function parseDhlInvoiceCsv(text: string): DhlInvoicePrefill | null {
   const lines = (text ?? '').split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return null;
-  const header = lines[0].split(';').map((h) => h.trim());
+  // DHL xuất khi thì ';' không ngoặc, khi thì ',' có ngoặc kép — tự nhận delimiter.
+  const delim = splitCsvLine(lines[0], ';').length >= splitCsvLine(lines[0], ',').length ? ';' : ',';
+  const header = splitCsvLine(lines[0], delim).map((h) => h.trim());
   const idx = (name: string) => header.indexOf(name);
   const colOf = (row: string[]) => (name: string) => { const i = idx(name); return i >= 0 ? (row[i] ?? '').trim() : ''; };
 
-  const rows = lines.slice(1).map((l) => l.split(';'));
+  const rows = lines.slice(1).map((l) => splitCsvLine(l, delim));
   const iLine = rows.find((r) => (r[0] ?? '').trim() === 'I');
   if (!iLine) return null;
   const iCol = colOf(iLine);

@@ -70,6 +70,20 @@ describe('parseDhlInvoiceCsv', () => {
     expect(line.note).toContain('IMPORT EXPORT TAXES');
   });
 
+  it('đọc được định dạng phẩy + ngoặc kép (DHL xuất kiểu khác)', () => {
+    const csv = [
+      '"Line Type","Invoice Number","Invoice Date","Currency","Total amount (excl. VAT)","Total amount (incl. VAT)","Total Tax","Shipment Number","Shipment Date","Shipment Reference 1","Product Name","Weight (kg)","Weight Charge","Weight Tax (VAT)","XC1 Code","XC1 Name","XC1 Charge","XC1 Tax Code","XC1 Tax","XC1 Discount","XC1 Total"',
+      '"I","HANR000268253","20260506","VND","1048348.00","1132216.00","83868.00","","","","","","","","","","","","","",""',
+      '"S","HANR000268253","20260506","VND","1048348.00","1132216.00","83868.00","2519158353","20260420","#MBLVD28495","EXPRESS WORLDWIDE nondoc","1.00","605447.00","48436.00","FF","FUEL SURCHARGE","289101.00","VT","23128.00","0","312229.00"',
+    ].join('\n');
+    const p = parseDhlInvoiceCsv(csv)!;
+    expect(p.billNumber).toBe('HANR000268253');
+    expect(p.shipments).toHaveLength(1);
+    expect(p.shipments[0].shipmentNumber).toBe('2519158353');
+    expect(p.shipments[0].product).toBe('EXPRESS WORLDWIDE nondoc');
+    expect(p.shipments[0].charges.find((c) => c.code === 'FF')?.charge).toBe(289101);
+  });
+
   it('không có dòng I hoặc rỗng → null', () => {
     expect(parseDhlInvoiceCsv('')).toBeNull();
     expect(parseDhlInvoiceCsv(HEADER)).toBeNull();

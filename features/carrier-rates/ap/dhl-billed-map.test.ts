@@ -50,16 +50,18 @@ describe('mapDhlFreightToBilled', () => {
     expect(m.unknown.map((c) => c.code)).toEqual(['ZZ']);
   });
 
-  it('nhận diện remote / signature / elevated risk theo tên', () => {
+  it('nhận diện remote / signature / elevated / address correction theo mã+tên', () => {
     const s = ship({ charges: [
       { code: 'OO', name: 'REMOTE AREA DELIVERY', charge: 30, tax: 0, total: 30 },
-      { code: 'YY', name: 'DIRECT SIGNATURE', charge: 20, tax: 0, total: 20 },
-      { code: 'XE', name: 'ELEVATED RISK SURCHARGE', charge: 10, tax: 0, total: 10 },
+      { code: 'SF', name: 'DIRECT SIGNATURE', charge: 20, tax: 0, total: 20 },
+      { code: 'CA', name: 'ELEVATED RISK', charge: 10, tax: 0, total: 10 },
+      { code: 'MA', name: 'ADDRESS CORRECTION', charge: 40, tax: 0, total: 40 },
     ] });
     const m = mapDhlFreightToBilled(s);
     expect(m.remote).toBe(30);
     expect(m.directSignature).toBe(20);
     expect(m.elevatedRisk).toBe(10);
+    expect(m.addressCorrection).toBe(40);
     expect(m.unknown).toEqual([]);
   });
 });

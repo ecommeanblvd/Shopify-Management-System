@@ -21,6 +21,7 @@ export interface DhlBilledMap {
   demand: number;
   directSignature: number;
   elevatedRisk: number;
+  addressCorrection: number;
   gogreen: number;
   discount: number;
   vat: number;
@@ -37,9 +38,10 @@ function bucketOf(c: DhlChargeLine): keyof DhlBilledMap | null {
   const code = c.code.toUpperCase();
   if (code === 'FF' || /fuel/.test(n)) return 'fuel';
   if (code === 'FD' || /gogreen|carbon/.test(n)) return 'gogreen';
-  if (/elevated risk/.test(n)) return 'elevatedRisk';
+  if (code === 'CA' || /elevated risk/.test(n)) return 'elevatedRisk';
+  if (code === 'MA' || /address correction/.test(n)) return 'addressCorrection';
   if (/remote|out of delivery|delivery area|\boda\b/.test(n)) return 'remote';
-  if (/signature/.test(n)) return 'directSignature';
+  if (code === 'SF' || /signature/.test(n)) return 'directSignature';
   if (/emergency|demand|peak/.test(n)) return 'demand';
   return null;
 }
@@ -52,7 +54,7 @@ export function mapChargesToBilled(
 ): DhlBilledMap {
   const out: DhlBilledMap = {
     base: 0, fuel: 0, remote: 0, demand: 0, directSignature: 0, elevatedRisk: 0,
-    gogreen: 0, discount: 0, vat: opts.totalTax, totalAmount: opts.totalInclVat,
+    addressCorrection: 0, gogreen: 0, discount: 0, vat: opts.totalTax, totalAmount: opts.totalInclVat,
     billingWeightKg: opts.weightKg && opts.weightKg > 0 ? opts.weightKg : null, unknown: [],
   };
   for (const c of charges ?? []) {
