@@ -60,8 +60,19 @@ export async function getFulfillmentDetail(orderId: string) {
     for (const r of staged) if (r.lineId) stagedByLine.set(r.lineId, r.count);
   }
 
+  // Địa chỉ giao + verify FedEx — để ops bắt địa chỉ sai/không giao được trước khi ship.
+  const [ord] = await db.select({
+    country: schema.shopifyOrders.shipCountry, city: schema.shopifyOrders.shipCity,
+    line1: schema.shopifyOrders.shipAddress1, line2: schema.shopifyOrders.shipAddress2,
+    province: schema.shopifyOrders.shipProvinceCode, name: schema.shopifyOrders.shipName,
+    addrClass: schema.shopifyOrders.addrClass, addrDeliverable: schema.shopifyOrders.addrDeliverable,
+    addrIssue: schema.shopifyOrders.addrIssue, addrStandardized: schema.shopifyOrders.addrStandardized,
+    addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
+  }).from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, ful.orderId)).limit(1);
+
   return {
     fulfillment: ful,
+    address: ord ?? null,
     lines: lines.map((l) => ({ ...l, stagedCount: stagedByLine.get(l.id) ?? 0 })),
   };
 }

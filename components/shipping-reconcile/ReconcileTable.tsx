@@ -31,11 +31,25 @@ function remoteInfo(r: ReconcileViewRow): { text: string; tone: string } {
 }
 
 /** Cột Nước: mã nước + (!) hover ra popover địa chỉ (tên nước, TP, zip, vùng xa). */
+const ADDR_CLASS_LABEL: Record<string, string> = {
+  RESIDENTIAL: '🏠 Nhà dân', BUSINESS: '🏢 Doanh nghiệp', MIXED: 'Hỗn hợp', UNKNOWN: 'Chưa rõ',
+};
+/** Dòng verify địa chỉ FedEx cho tooltip. */
+function addrVerifyLine(r: ReconcileViewRow): string {
+  if (!r.addrClass) return 'Verify địa chỉ: chưa verify';
+  const parts = [ADDR_CLASS_LABEL[r.addrClass] ?? r.addrClass];
+  if (r.addrDeliverable === false) parts.push('⚠ không giao được');
+  else if (r.addrDeliverable) parts.push('✓ giao được');
+  if (r.addrIssue) parts.push(r.addrIssue);
+  return `Verify: ${parts.join(' · ')}`;
+}
+
 function CountryCell({ r }: { r: ReconcileViewRow }) {
   const rm = remoteInfo(r);
+  const addr = addrVerifyLine(r);
   const title = [
     `${isoToCountryName(r.shipCountry)} (${r.shipCountry || '—'})`,
-    `Thành phố: ${r.shipCity ?? '—'}`, `Zipcode: ${r.shipPostcode ?? '—'}`, rm.text,
+    `Thành phố: ${r.shipCity ?? '—'}`, `Zipcode: ${r.shipPostcode ?? '—'}`, rm.text, addr,
   ].join('\n');
   return (
     <td className="px-3 py-2">
@@ -56,6 +70,7 @@ function CountryCell({ r }: { r: ReconcileViewRow }) {
             <div><span className="text-muted-foreground">Thành phố: </span>{r.shipCity ?? '—'}</div>
             <div><span className="text-muted-foreground">Zipcode: </span>{r.shipPostcode ?? '—'}</div>
             <div className={`pt-1 ${rm.tone}`}>{rm.text}</div>
+            <div className={`pt-1 ${r.addrDeliverable === false ? 'text-red-600 dark:text-red-400' : r.addrClass ? 'text-foreground' : 'text-muted-foreground'}`}>{addr}</div>
           </div>
         </div>
       </span>

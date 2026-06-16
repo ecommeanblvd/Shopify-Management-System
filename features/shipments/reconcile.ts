@@ -25,6 +25,10 @@ export interface ReconcileRow {
   shipCountry: string;
   shipCity: string | null;
   shipPostcode: string | null;
+  /** Verify địa chỉ FedEx (từ order Shopify): phân loại + giao được + vấn đề. */
+  addrClass: string | null;
+  addrDeliverable: boolean | null;
+  addrIssue: string | null;
   /** Order weight synced from Shopify (sum of line variant weights). */
   shopifyWeightKg: number | null;
   /** Scale weight from the ops sheet (net weight). */
@@ -143,6 +147,9 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
       shipCity: schema.shopifyOrders.shipCity,
+      addrClass: schema.shopifyOrders.addrClass,
+      addrDeliverable: schema.shopifyOrders.addrDeliverable,
+      addrIssue: schema.shopifyOrders.addrIssue,
       shipPostcode: schema.shopifyOrders.shipPostcode,
       shipWeightKgOverride: schema.shopifyOrders.shipWeightKgOverride,
       shopifyWeightKg: schema.shopifyOrders.shipWeightKg,
@@ -382,6 +389,9 @@ interface JoinedRow {
   carrierKey: string | null;
   shipCountry: string | null;
   shipCity?: string | null;
+  addrClass?: string | null;
+  addrDeliverable?: boolean | null;
+  addrIssue?: string | null;
   shipPostcode?: string | null;
   actualWeightKg: string | null;
   shopifyWeightKg?: string | null;
@@ -476,6 +486,9 @@ function buildRow(
     carrierKey: r.carrierKey ?? '',
     shipCountry: r.shipCountry ?? '',
     shipCity: r.shipCity ?? null,
+    addrClass: r.addrClass ?? null,
+    addrDeliverable: r.addrDeliverable ?? null,
+    addrIssue: r.addrIssue ?? null,
     shipPostcode: r.shipPostcode ?? null,
     shopifyWeightKg: r.shopifyWeightKg != null ? Number(r.shopifyWeightKg) : null,
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,

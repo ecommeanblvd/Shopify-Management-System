@@ -6,6 +6,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getFulfillmentDetail } from '@/features/fulfillment/queries';
 import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/queries';
 import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
+import { AddressVerifyCard } from '@/components/fulfillment/AddressVerifyCard';
 import { PackPanel } from '@/components/fulfillment/PackPanel';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,7 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
   return (
     <div className="space-y-6 p-6">
       <OrderDetailPanel orderId={orderId} status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
+      <AddressVerifyCard address={detail.address} />
       <PackPanel
         orderId={orderId}
         picked={picked}
