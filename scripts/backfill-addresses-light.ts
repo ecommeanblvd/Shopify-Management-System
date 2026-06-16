@@ -2,7 +2,8 @@
  * Backfill CHỈ ĐỊA CHỈ (street/bang/tên) cho đơn 1 store — nhanh hơn full
  * backfill nhiều lần (UPDATE 1 dòng/đơn, KHÔNG upsert line/refund). Dùng cho
  * store lớn mà full backfill bị cắt vì giới hạn thời gian.
- *   railway run -- npx tsx scripts/backfill-addresses-light.ts <storeId>
+ *   railway run -- npx tsx scripts/backfill-addresses-light.ts <storeId> [sinceDays]
+ * sinceDays mặc định 365; tăng lên (vd 1700) để kéo cả đơn cũ thiếu street.
  */
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -13,7 +14,9 @@ import { streamBulkResult } from '@/features/shopify-orders/backfill/stream-json
 async function main(): Promise<void> {
   const storeId = process.argv[2];
   if (!storeId) { console.error('usage: backfill-addresses-light <storeId>'); process.exit(1); }
-  const since = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+  const sinceDays = Number(process.argv[3] ?? '365');
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
+  console.log(`Cửa sổ: ${sinceDays} ngày (từ ${since.slice(0, 10)})`);
 
   console.log('Submit bulk query...');
   await submitBackfillBulkQuery(storeId, since);
