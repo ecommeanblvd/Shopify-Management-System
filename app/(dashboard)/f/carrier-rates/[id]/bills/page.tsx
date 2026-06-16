@@ -14,6 +14,7 @@ import {
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
 import { buildTrackingRows } from '@/features/carrier-rates/ap/tracking-rows';
+import { reconcileDhlBill, type DhlReconcileResult } from '@/features/carrier-rates/ap/dhl-reconcile-actions';
 import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-import-actions';
 import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
@@ -64,7 +65,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   // (khối Công nợ ở account đọc cùng dữ liệu).
   const REV = [`/f/carrier-rates/${id}/bills`, `/f/carrier-rates/${id}`];
 
-  async function createBillAction(formData: FormData) {
+  async function createBillAction(formData: FormData): Promise<DhlReconcileResult | null> {
     'use server';
     if (!canAddInvoice) throw new Error('forbidden');
     const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
@@ -72,13 +73,19 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     let lines: BillLineInput[] | undefined;
     const linesJson = String(formData.get('linesJson') ?? '').trim();
     if (linesJson) { try { const arr = JSON.parse(linesJson); if (Array.isArray(arr) && arr.length) lines = arr as BillLineInput[]; } catch { /* bỏ qua nếu hỏng */ } }
-    await createBill({
+    const { id: billId } = await createBill({
       carrierAccountId: id, billNumber: s('billNumber'),
       periodStart: String(formData.get('periodStart')), periodEnd: String(formData.get('periodEnd')),
       issueDate: s('issueDate'), dueDate: s('dueDate'), amount: n('amount'), currency,
       note: s('note'), userId: session!.user.id, file: await fileFromForm(formData, 'file'), lines,
     });
+    // Hoá đơn DHL có dòng cước → tự đẩy vào đối soát.
+    let reconcile: DhlReconcileResult | null = null;
+    if (account.carrierKey === 'dhl' && lines?.length) {
+      reconcile = await reconcileDhlBill(billId);
+    }
     REV.forEach((p) => revalidatePath(p));
+    return reconcile;
   }
   async function addPaymentAction(formData: FormData) {
     'use server';

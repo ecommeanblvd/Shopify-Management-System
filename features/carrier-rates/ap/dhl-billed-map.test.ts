@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyDhlProduct, mapDhlFreightToBilled } from './dhl-billed-map';
+import { classifyDhlProduct, mapDhlFreightToBilled, isFreightCharges } from './dhl-billed-map';
 import type { DhlShipment } from './dhl-invoice-csv';
 
 const ship = (o: Partial<DhlShipment>): DhlShipment => ({
@@ -12,6 +12,15 @@ describe('classifyDhlProduct', () => {
   it('DUTIES & TAXES → duties; EXPRESS → freight', () => {
     expect(classifyDhlProduct('DUTIES & TAXES')).toBe('duties');
     expect(classifyDhlProduct('EXPRESS WORLDWIDE nondoc')).toBe('freight');
+  });
+});
+
+describe('isFreightCharges', () => {
+  it('có Weight/FF → freight; chỉ duties (XB/DD) → không', () => {
+    expect(isFreightCharges([{ code: 'WEIGHT', name: 'Weight charge', charge: 1, tax: 0, total: 1 }])).toBe(true);
+    expect(isFreightCharges([{ code: 'FF', name: 'FUEL SURCHARGE', charge: 1, tax: 0, total: 1 }])).toBe(true);
+    expect(isFreightCharges([{ code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 1, tax: 0, total: 1 }, { code: 'DD', name: 'DUTY TAX PAID', charge: 1, tax: 0, total: 1 }])).toBe(false);
+    expect(isFreightCharges(null)).toBe(false);
   });
 });
 

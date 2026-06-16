@@ -51,7 +51,7 @@ export interface CreateBillInput {
 
 const numOrNull = (v: number | null | undefined) => (v == null ? null : String(v));
 
-export async function createBill(input: CreateBillInput): Promise<void> {
+export async function createBill(input: CreateBillInput): Promise<{ id: string }> {
   if (!(input.amount > 0)) throw new Error('Số tiền hoá đơn phải > 0.');
   if (input.periodEnd < input.periodStart) throw new Error('Kỳ kết thúc phải ≥ kỳ bắt đầu.');
 
@@ -98,6 +98,7 @@ export async function createBill(input: CreateBillInput): Promise<void> {
       note: l.note ?? null,
     })));
   }
+  return { id: bill.id };
 }
 
 export interface BillRow {

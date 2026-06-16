@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { parseDhlInvoiceCsv, dhlShipmentToBillLine, type DhlShipment } from '@/features/carrier-rates/ap/dhl-invoice-csv';
+import type { DhlReconcileResult } from '@/features/carrier-rates/ap/dhl-reconcile-actions';
 
 interface Props {
-  createBillAction: (formData: FormData) => Promise<void>;
+  createBillAction: (formData: FormData) => Promise<DhlReconcileResult | null>;
   /** Tiền tệ của tài khoản — để cảnh báo nếu file lệch tiền tệ. */
   accountCurrency?: string;
 }
@@ -27,9 +28,10 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
   const [filled, setFilled] = useState(false);
   const [manual, setManual] = useState(false); // hiện ô nhập tay (PDF/ảnh/tự gõ)
   const [warn, setWarn] = useState<string | null>(null);
+  const [reconcile, setReconcile] = useState<DhlReconcileResult | null>(null);
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => setV((s) => ({ ...s, [k]: e.target.value }));
 
-  function reset() { setV({ ...EMPTY }); setShipments([]); setFilled(false); setManual(false); setWarn(null); }
+  function reset() { setV({ ...EMPTY }); setShipments([]); setFilled(false); setManual(false); setWarn(null); setReconcile(null); }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -64,7 +66,7 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
         <DialogHeader>
           <DialogTitle className="text-sm">Thêm hoá đơn carrier</DialogTitle>
         </DialogHeader>
-        <form action={async (fd) => { await createBillAction(fd); setOpen(false); reset(); }} className="space-y-4">
+        <form action={async (fd) => { const r = await createBillAction(fd); if (r && r.freightLines > 0) setReconcile(r); else { setOpen(false); reset(); } }} className="space-y-4">
           <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
             <Label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
               <Upload className="size-3.5" /> File hoá đơn (CSV DHL / PDF / Excel)
@@ -166,9 +168,28 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
             </div>
           )}
 
+          {reconcile && (
+            <div className="space-y-1 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
+              <div className="font-medium text-emerald-700 dark:text-emerald-400">
+                ✓ Đã lưu + đẩy đối soát: khớp {reconcile.matched}/{reconcile.freightLines} dòng cước
+              </div>
+              {reconcile.unmatched.length > 0 && (
+                <div className="text-xs text-amber-600 dark:text-amber-400">
+                  Chưa khớp {reconcile.unmatched.length}: {reconcile.unmatched.map((u) => u.tracking).join(', ')} ({reconcile.unmatched[0]?.reason})
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Huỷ</Button>
-            {(filled || manual) && <Button type="submit" size="sm">Lưu hoá đơn</Button>}
+            {reconcile ? (
+              <Button type="button" size="sm" onClick={() => { setOpen(false); reset(); }}>Đóng</Button>
+            ) : (
+              <>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Huỷ</Button>
+                {(filled || manual) && <Button type="submit" size="sm">Lưu hoá đơn</Button>}
+              </>
+            )}
           </div>
         </form>
       </DialogContent>

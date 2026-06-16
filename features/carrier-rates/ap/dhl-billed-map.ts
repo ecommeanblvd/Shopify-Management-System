@@ -44,17 +44,30 @@ function bucketOf(c: DhlChargeLine): keyof DhlBilledMap | null {
   return null;
 }
 
-/** Gộp các khoản cước của 1 shipment DHL thành billed map (giá trị = charge trước thuế). */
-export function mapDhlFreightToBilled(s: DhlShipment): DhlBilledMap {
+/** Gộp khoản cước → billed map (giá trị = charge trước thuế). Dùng được cả từ
+ *  parser (DhlShipment) lẫn từ bill line đã lưu (charges + tổng). */
+export function mapChargesToBilled(
+  charges: DhlChargeLine[],
+  opts: { totalTax: number; totalInclVat: number; weightKg: number | null },
+): DhlBilledMap {
   const out: DhlBilledMap = {
     base: 0, fuel: 0, remote: 0, demand: 0, directSignature: 0, elevatedRisk: 0,
-    gogreen: 0, discount: 0, vat: s.totalTax, totalAmount: s.totalInclVat,
-    billingWeightKg: s.weightKg > 0 ? s.weightKg : null, unknown: [],
+    gogreen: 0, discount: 0, vat: opts.totalTax, totalAmount: opts.totalInclVat,
+    billingWeightKg: opts.weightKg && opts.weightKg > 0 ? opts.weightKg : null, unknown: [],
   };
-  for (const c of s.charges) {
+  for (const c of charges ?? []) {
     const b = bucketOf(c);
     if (b) (out[b] as number) += c.charge;
     else out.unknown.push(c);
   }
   return out;
+}
+
+export function mapDhlFreightToBilled(s: DhlShipment): DhlBilledMap {
+  return mapChargesToBilled(s.charges, { totalTax: s.totalTax, totalInclVat: s.totalInclVat, weightKg: s.weightKg });
+}
+
+/** Freight nếu có cước cân hoặc fuel (duties chỉ có XB/XX/DD/XI). */
+export function isFreightCharges(charges: DhlChargeLine[] | null | undefined): boolean {
+  return !!charges?.some((c) => c.code === 'WEIGHT' || c.code.toUpperCase() === 'FF' || /fuel/i.test(c.name));
 }
