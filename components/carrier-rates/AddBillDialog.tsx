@@ -25,15 +25,17 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
   const [v, setV] = useState({ ...EMPTY });
   const [shipments, setShipments] = useState<DhlShipment[]>([]);
   const [filled, setFilled] = useState(false);
+  const [manual, setManual] = useState(false); // hiện ô nhập tay (PDF/ảnh/tự gõ)
   const [warn, setWarn] = useState<string | null>(null);
   const set = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement>) => setV((s) => ({ ...s, [k]: e.target.value }));
 
-  function reset() { setV({ ...EMPTY }); setShipments([]); setFilled(false); setWarn(null); }
+  function reset() { setV({ ...EMPTY }); setShipments([]); setFilled(false); setManual(false); setWarn(null); }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     setFilled(false); setWarn(null); setShipments([]);
-    if (!f || !/\.csv$/i.test(f.name)) return; // chỉ tự điền từ CSV DHL
+    if (!f) return;
+    if (!/\.csv$/i.test(f.name)) { setManual(true); return; } // PDF/ảnh → nhập tay
     try {
       const p = parseDhlInvoiceCsv(await f.text());
       if (!p) { setWarn('Không đọc được file CSV này (không đúng định dạng hoá đơn DHL).'); return; }
@@ -44,7 +46,7 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
         issueDate: p.issueDate, dueDate: p.dueDate, note: p.note,
       });
       setShipments(p.shipments);
-      setFilled(true);
+      setFilled(true); setManual(false);
       if (accountCurrency && p.currency && p.currency !== accountCurrency) {
         setWarn(`File là ${p.currency} nhưng tài khoản là ${accountCurrency} — kiểm tra lại số tiền.`);
       }
@@ -74,10 +76,16 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
               </p>
             ) : (
               <p className="text-[11px] text-muted-foreground">
-                Chọn file CSV hoá đơn DHL để tự điền + hiện bảng billed chi tiết (PDF/ảnh thì đính kèm, nhập tay).
+                Chọn file CSV hoá đơn DHL — tự điền hết, chỉ cần kiểm tra ngày rồi lưu.
               </p>
             )}
             {warn && <p className="text-[11px] text-amber-600 dark:text-amber-400">⚠ {warn}</p>}
+            {!filled && !manual && (
+              <button type="button" onClick={() => setManual(true)}
+                className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                hoặc nhập tay (không có file CSV)
+              </button>
+            )}
           </div>
 
           {filled ? (
@@ -98,7 +106,7 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
                 <Field label="Hạn thanh toán"><Input name="dueDate" type="date" value={v.dueDate} onChange={set('dueDate')} /></Field>
               </div>
             </div>
-          ) : (
+          ) : manual ? (
             /* Chế độ nhập tay (PDF/ảnh/không file): đủ ô. */
             <div className="grid grid-cols-2 gap-4">
               <Field label="Mã hoá đơn"><Input name="billNumber" placeholder="INV-..." value={v.billNumber} onChange={set('billNumber')} /></Field>
@@ -109,7 +117,7 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
               <Field label="Hạn thanh toán"><Input name="dueDate" type="date" value={v.dueDate} onChange={set('dueDate')} /></Field>
               <div className="col-span-2"><Field label="Ghi chú"><Input name="note" placeholder="—" value={v.note} onChange={set('note')} /></Field></div>
             </div>
-          )}
+          ) : null}
 
           {shipments.length > 0 && (
             <div className="space-y-2">
@@ -160,7 +168,7 @@ export function AddBillDialog({ createBillAction, accountCurrency }: Props) {
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="submit" size="sm">Lưu hoá đơn</Button>
+            {(filled || manual) && <Button type="submit" size="sm">Lưu hoá đơn</Button>}
           </div>
         </form>
       </DialogContent>
