@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles } from './shipping';
+import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables } from './shipping';
 
 const shopifyResponse = {
   deliveryProfiles: {
@@ -58,6 +58,35 @@ describe('normalizeShopifyDeliveryProfile', () => {
     expect(result.shopifyIds.profileId).toBe('gid://shopify/DeliveryProfile/1');
     expect(result.shopifyIds.zoneIdByName.Domestic).toBe('gid://shopify/DeliveryZone/10');
     expect(result.shopifyIds.rateIdByZoneAndName['Domestic.Standard']).toBe('gid://shopify/DeliveryMethodDefinition/100');
+  });
+});
+
+describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', () => {
+  it('zone mới → locationGroupsToUpdate.zonesToCreate (countries + rateDefinition); xoá zone → top-level zonesToDelete', () => {
+    const current = {
+      tree: { zones: { OldAmerica: { countries: ['US'], rates: {} } } },
+      shopifyIds: { profileId: 'gid://P/1', locationGroupId: 'gid://LG/9', zoneIdByName: { OldAmerica: 'gid://Z/20' }, rateIdByZoneAndName: {} },
+    };
+    const effective = { zones: { 'America — FedEx D': { countries: ['US', 'CA'], rates: { 'Standard': { type: 'flat' as const, price: 50, currency: 'USD' } } } } };
+    const out = buildProfileUpdateVariables(current as never, effective, 'gid://LG/9');
+    expect(out.id).toBe('gid://P/1');
+    const profile = out.profile as { locationGroupsToUpdate: Array<{ id: string; zonesToCreate?: unknown[] }>; zonesToDelete?: string[] };
+    expect(profile.locationGroupsToUpdate[0].id).toBe('gid://LG/9');
+    const zc = profile.locationGroupsToUpdate[0].zonesToCreate as Array<{ name: string; countries: Array<{ code: string }>; methodDefinitionsToCreate: Array<{ name: string; rateDefinition: { price: { amount: string; currencyCode: string } } }> }>;
+    expect(zc[0].name).toBe('America — FedEx D');
+    expect(zc[0].countries).toEqual([{ code: 'US', includeAllProvinces: true }, { code: 'CA', includeAllProvinces: true }]);
+    expect(zc[0].methodDefinitionsToCreate[0].rateDefinition.price).toEqual({ amount: '50', currencyCode: 'USD' });
+    expect(profile.zonesToDelete).toEqual(['gid://Z/20']); // OldAmerica bị phủ trùng US
+  });
+
+  it('free zone không trùng nước → KHÔNG xoá', () => {
+    const current = {
+      tree: { zones: { Domestic: { countries: ['VN'], rates: {} } } },
+      shopifyIds: { profileId: 'gid://P/1', locationGroupId: 'gid://LG/9', zoneIdByName: { Domestic: 'gid://Z/10' }, rateIdByZoneAndName: {} },
+    };
+    const effective = { zones: { 'America — FedEx D': { countries: ['US'], rates: {} } } };
+    const out = buildProfileUpdateVariables(current as never, effective, 'gid://LG/9');
+    expect((out.profile as { zonesToDelete?: string[] }).zonesToDelete).toBeUndefined();
   });
 });
 

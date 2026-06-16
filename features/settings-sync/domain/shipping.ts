@@ -13,6 +13,8 @@ export interface ShippingRate {
 
 export interface ShopifyIds {
   profileId: string;
+  /** DeliveryLocationGroup id của profile (cần cho deliveryProfileUpdate). */
+  locationGroupId: string;
   zoneIdByName: Record<string, string>;
   rateIdByZoneAndName: Record<string, string>; // key: "<zoneName>.<rateName>"
 }
@@ -32,6 +34,7 @@ export const SHIPPING_QUERY = `
           name
           default
           profileLocationGroups {
+            locationGroup { id }
             locationGroupZones(first: 50) {
               edges {
                 node {
@@ -77,6 +80,7 @@ interface ShopifyProfileNode {
   name?: string;
   default: boolean;
   profileLocationGroups: Array<{
+    locationGroup?: { id: string };
     locationGroupZones: {
       edges: Array<{
         node: {
@@ -108,7 +112,12 @@ interface ShopifyDeliveryProfilesResponse {
 /** Chuẩn hoá 1 profile node → tree + shopifyIds. */
 function normalizeProfileNode(node: ShopifyProfileNode): NormalizedShipping {
   const tree: ShippingTree = { zones: {} };
-  const shopifyIds: ShopifyIds = { profileId: node.id, zoneIdByName: {}, rateIdByZoneAndName: {} };
+  const shopifyIds: ShopifyIds = {
+    profileId: node.id,
+    locationGroupId: node.profileLocationGroups?.[0]?.locationGroup?.id ?? '',
+    zoneIdByName: {},
+    rateIdByZoneAndName: {},
+  };
 
   for (const lg of node.profileLocationGroups ?? []) {
     for (const zoneEdge of lg.locationGroupZones?.edges ?? []) {
@@ -140,7 +149,7 @@ export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShippi
   const edges = typed?.deliveryProfiles?.edges ?? [];
   const defaultProfileNode = edges.find((p) => p.node.default)?.node ?? edges[0]?.node;
   if (!defaultProfileNode) {
-    return { tree: { zones: {} }, shopifyIds: { profileId: '', zoneIdByName: {}, rateIdByZoneAndName: {} } };
+    return { tree: { zones: {} }, shopifyIds: { profileId: '', locationGroupId: '', zoneIdByName: {}, rateIdByZoneAndName: {} } };
   }
   return normalizeProfileNode(defaultProfileNode);
 }
@@ -270,3 +279,76 @@ export const SHIPPING_MUTATION = `
     }
   }
 `;
+
+/**
+ * Dựng biến cho `deliveryProfileUpdate` ĐÚNG schema Shopify: zones nằm trong
+ * `locationGroupsToUpdate[].zonesToCreate/zonesToUpdate`; xoá zone + xoá rate ở
+ * TOP-LEVEL (`zonesToDelete`, `methodDefinitionsToDelete`); giá qua
+ * `rateDefinition.price`. Giữ rule free-zone: chỉ xoá zone cũ bị PHỦ TRÙNG nước.
+ */
+export function buildProfileUpdateVariables(
+  current: NormalizedShipping,
+  effective: ShippingTree,
+  locationGroupId: string,
+): { id: string; profile: Record<string, unknown> } {
+  const currentZones = current.tree.zones;
+  const effectiveZones = effective.zones ?? {};
+  const effCountries = new Set<string>();
+  for (const z of Object.values(effectiveZones)) for (const c of z.countries) effCountries.add(c);
+
+  const md = (name: string, r: ShippingRate) => ({ name, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
+
+  const zonesToCreate: unknown[] = [];
+  const zonesToUpdate: unknown[] = [];
+  for (const [name, zone] of Object.entries(effectiveZones)) {
+    const existing = currentZones[name];
+    if (!existing) {
+      zonesToCreate.push({
+        name,
+        // includeAllProvinces: nước có bang/tỉnh (US, CA…) Shopify bắt buộc gồm
+        // toàn bộ province; bỏ cờ này → lỗi "must have at least one province".
+        countries: zone.countries.map((c) => ({ code: c, includeAllProvinces: true })),
+        methodDefinitionsToCreate: Object.entries(zone.rates).map(([rn, r]) => md(rn, r)),
+      });
+      continue;
+    }
+    const zoneId = current.shopifyIds.zoneIdByName[name];
+    const mdCreate: unknown[] = [];
+    const mdUpdate: unknown[] = [];
+    for (const [rn, r] of Object.entries(zone.rates)) {
+      const er = existing.rates[rn];
+      const erId = current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`];
+      if (!er) mdCreate.push(md(rn, r));
+      else if (er.price !== r.price || er.currency !== r.currency) mdUpdate.push({ id: erId, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
+    }
+    if (mdCreate.length || mdUpdate.length) {
+      const zu: Record<string, unknown> = { id: zoneId };
+      if (mdCreate.length) zu.methodDefinitionsToCreate = mdCreate;
+      if (mdUpdate.length) zu.methodDefinitionsToUpdate = mdUpdate;
+      zonesToUpdate.push(zu);
+    }
+  }
+
+  const zonesToDelete: string[] = [];
+  const methodDefinitionsToDelete: string[] = [];
+  for (const [name, zone] of Object.entries(currentZones)) {
+    const eff = effectiveZones[name];
+    if (eff) {
+      for (const rn of Object.keys(zone.rates)) {
+        if (!eff.rates[rn]) methodDefinitionsToDelete.push(current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`]);
+      }
+      continue;
+    }
+    if (zone.countries.some((c) => effCountries.has(c))) zonesToDelete.push(current.shopifyIds.zoneIdByName[name]);
+  }
+
+  const lg: Record<string, unknown> = { id: locationGroupId };
+  if (zonesToCreate.length) lg.zonesToCreate = zonesToCreate;
+  if (zonesToUpdate.length) lg.zonesToUpdate = zonesToUpdate;
+
+  const profile: Record<string, unknown> = { locationGroupsToUpdate: [lg] };
+  if (zonesToDelete.length) profile.zonesToDelete = zonesToDelete;
+  if (methodDefinitionsToDelete.length) profile.methodDefinitionsToDelete = methodDefinitionsToDelete;
+
+  return { id: current.shopifyIds.profileId, profile };
+}

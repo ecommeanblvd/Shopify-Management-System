@@ -12,7 +12,7 @@ import { listOverridesForStore } from '@/features/markets/actions';
 import type { MarketShipping } from '@/features/markets/types';
 import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
-  normalizeAllDeliveryProfiles, denormalizeToMutationInput,
+  normalizeAllDeliveryProfiles, denormalizeToMutationInput, buildProfileUpdateVariables,
   type ShippingTree, type ProfileSummary,
 } from './domain/shipping';
 
@@ -112,13 +112,32 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
       error: null,
     };
     try {
-      const res = await graphqlCall({
-        shopDomain: store.shopDomain, apiVersion: store.apiVersion, token,
-        query: SHIPPING_MUTATION, variables: { id: p.profileId, profile: diff },
-      });
-      const errs = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
-      if ((res as { errors?: unknown }).errors) base.error = JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
-      else if (errs && errs.length) base.error = errs.map((e) => e.message).join('; ');
+      const { id, profile } = buildProfileUpdateVariables(p.normalized, effective, p.normalized.shopifyIds.locationGroupId);
+      const send = async (prof: Record<string, unknown>) => {
+        const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
+        if ((res as { errors?: unknown }).errors) return JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
+        const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
+        return ue && ue.length ? ue.map((e) => e.message).join('; ') : null;
+      };
+      const lgIn = (profile.locationGroupsToUpdate as Array<Record<string, unknown>> | undefined)?.[0];
+      const lgId = lgIn?.id;
+      const zonesToCreate = (lgIn?.zonesToCreate as unknown[]) ?? [];
+      const zonesToUpdate = (lgIn?.zonesToUpdate as unknown[]) ?? [];
+
+      // PHASE 1 — xoá zone/rate bị thay TRƯỚC (giải phóng nước), tránh va chạm
+      // "Region already exists in another zone" khi tạo zone mới cùng nước.
+      const delProfile: Record<string, unknown> = {};
+      if (profile.zonesToDelete) delProfile.zonesToDelete = profile.zonesToDelete;
+      if (profile.methodDefinitionsToDelete) delProfile.methodDefinitionsToDelete = profile.methodDefinitionsToDelete;
+      if (Object.keys(delProfile).length) base.error = await send(delProfile);
+
+      // PHASE 2 — cập nhật rate zone giữ lại (gói nhỏ, 1 lần).
+      if (!base.error && zonesToUpdate.length) base.error = await send({ locationGroupsToUpdate: [{ id: lgId, zonesToUpdate }] });
+
+      // PHASE 3 — tạo zone mới THEO LÔ 3 (gửi cả 24 zone/1 mutation → Shopify 500).
+      for (let i = 0; !base.error && i < zonesToCreate.length; i += 3) {
+        base.error = await send({ locationGroupsToUpdate: [{ id: lgId, zonesToCreate: zonesToCreate.slice(i, i + 3) }] });
+      }
     } catch (e) {
       base.error = (e as Error).message;
     }
