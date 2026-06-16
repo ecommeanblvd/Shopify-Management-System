@@ -10,14 +10,16 @@ import { getAccount } from '@/features/carrier-rates/actions';
 import {
   createBill, addPayment, deleteBill, deletePayment,
   listBills, listPaymentsForAccount, listBillLines, listAllBillLines, attachInvoicePdfsToBills,
-  type UploadFile, type BillLineInput,
+  type UploadFile, type BillLineInput, type BatchImportResult,
 } from '@/features/carrier-rates/ap/bills-actions';
+import { parseDhlInvoiceCsv, dhlShipmentToBillLine } from '@/features/carrier-rates/ap/dhl-invoice-csv';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
 import { buildTrackingRows } from '@/features/carrier-rates/ap/tracking-rows';
 import { reconcileDhlBill, type DhlReconcileResult } from '@/features/carrier-rates/ap/dhl-reconcile-actions';
 import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-import-actions';
 import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
+import { BatchBillUpload } from '@/components/carrier-rates/BatchBillUpload';
 import { ImportFboDialog } from '@/components/carrier-rates/ImportFboDialog';
 import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
 
@@ -87,6 +89,35 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     REV.forEach((p) => revalidatePath(p));
     return reconcile;
   }
+  // Upload NHIỀU file CSV DHL 1 lượt → mỗi file 1 hoá đơn + đối soát cước. Bỏ
+  // qua file trùng mã / không đọc được; trả kết quả từng file.
+  async function importBatchAction(formData: FormData): Promise<BatchImportResult[]> {
+    'use server';
+    if (!canAddInvoice) throw new Error('forbidden');
+    const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+    const existing = new Set((await listBills(id)).map((b) => b.billNumber).filter(Boolean) as string[]);
+    const out: BatchImportResult[] = [];
+    for (const f of files) {
+      const base: BatchImportResult = { filename: f.name, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: null };
+      if (!/\.csv$/i.test(f.name)) { out.push({ ...base, message: 'Chỉ nhận file CSV' }); continue; }
+      let p; try { p = parseDhlInvoiceCsv(await f.text()); } catch { out.push({ ...base, message: 'Lỗi đọc file' }); continue; }
+      if (!p) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn DHL' }); continue; }
+      if (p.billNumber && existing.has(p.billNumber)) { out.push({ ...base, billNumber: p.billNumber, message: 'Đã tồn tại — bỏ qua' }); continue; }
+      const lines = p.shipments.map(dhlShipmentToBillLine);
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const { id: billId } = await createBill({
+        carrierAccountId: id, billNumber: p.billNumber, periodStart: p.periodStart, periodEnd: p.periodEnd,
+        issueDate: p.issueDate, dueDate: p.dueDate, amount: p.amountInclVat, currency,
+        note: p.note, userId: session!.user.id, file: { bytes, filename: f.name, contentType: 'text/csv' }, lines,
+      });
+      if (p.billNumber) existing.add(p.billNumber);
+      let matched: number | null = null, freight: number | null = null;
+      if (account.carrierKey === 'dhl' && lines.length) { const r = await reconcileDhlBill(billId); matched = r.matched; freight = r.freightLines; }
+      out.push({ filename: f.name, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched, freight, message: null });
+    }
+    REV.forEach((pp) => revalidatePath(pp));
+    return out;
+  }
   async function addPaymentAction(formData: FormData) {
     'use server';
     const n = (k: string) => { const v = String(formData.get(k) ?? '').replace(/[^\d.-]/g, ''); return v ? Number(v) : 0; };
@@ -155,6 +186,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
           <div className="flex items-center gap-2">
             {isFedex && <ImportFboDialog currency={currency} previewAction={previewFboAction} applyAction={applyFboAction} />}
             {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
+            <BatchBillUpload importAction={importBatchAction} currency={currency} />
             <AddBillDialog createBillAction={createBillAction} accountCurrency={currency} />
           </div>
         )}

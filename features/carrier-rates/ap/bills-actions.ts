@@ -101,6 +101,17 @@ export async function createBill(input: CreateBillInput): Promise<{ id: string }
   return { id: bill.id };
 }
 
+/** Kết quả 1 file trong batch upload nhiều hoá đơn CSV. */
+export interface BatchImportResult {
+  filename: string;
+  ok: boolean;
+  billNumber: string | null;
+  amount: number | null;
+  matched: number | null;   // dòng cước khớp đối soát (DHL)
+  freight: number | null;
+  message: string | null;   // lý do bỏ qua / lỗi
+}
+
 export interface BillRow {
   id: string;
   billNumber: string | null;
