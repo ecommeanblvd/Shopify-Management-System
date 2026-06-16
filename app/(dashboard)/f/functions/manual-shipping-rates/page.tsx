@@ -9,6 +9,7 @@ import { db, schema } from '@/db/client';
 import { listOverridesForStore, previewMarketsApply, executeMarketsApply, executeMarketsApplyAll } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
+import { classifyFeeCoverage } from '@/features/carrier-rates/push/fee-coverage';
 import { ApplyModal } from '@/components/markets/ApplyModal';
 import { ApplyAllBackupButton } from '@/components/functions/ApplyAllBackupButton';
 
@@ -32,6 +33,21 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
   const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
   const overrides = activeId ? await listOverridesForStore(activeId) : [];
   const markets: MarketZones[] = overrides.map((o) => ({ marketHandle: o.marketHandle, zones: flattenShippingMatrix(o.shipping) }));
+
+  // Khoản phí CÓ/KHÔNG cover của từng carrier (suy từ cấu hình surcharge active).
+  // Key theo carrier brand ('fedex'/'dhl') để client khớp với tab đang chọn.
+  const carrierAccts = await db
+    .select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, key: schema.carriers.key })
+    .from(schema.carrierAccounts)
+    .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId));
+  const coverage: Record<string, { covered: string[]; notCovered: string[] }> = {};
+  for (const a of carrierAccts) {
+    const surs = await db
+      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value })
+      .from(schema.carrierSurcharges)
+      .where(eq(schema.carrierSurcharges.carrierAccountId, a.id));
+    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value) })) as never, a.name);
+  }
 
   async function preview(storeId: string) {
     'use server';
@@ -96,7 +112,7 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           {markets.length === 0 ? (
             <p className="text-sm text-muted-foreground">Store này chưa có cấu hình market/giá ship.</p>
           ) : (
-            <ManualRatesBrowser markets={markets} />
+            <ManualRatesBrowser markets={markets} coverage={coverage} />
           )}
         </>
       )}

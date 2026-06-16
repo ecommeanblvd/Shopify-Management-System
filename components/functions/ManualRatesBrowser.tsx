@@ -35,7 +35,9 @@ function countrySearchText(code: string): string {
  *  dòng = bậc cân (hợp nhất, sắp theo cận trên kg). Tab carrier chung; header zone
  *  dính trên, cột bậc cân dính trái; vạch ngăn giữa các market. Search lọc cột
  *  zone (mã/nhãn/nước/market) hoặc gõ mốc cân để tô sáng + nhảy tới dòng. */
-export function ManualRatesBrowser({ markets }: { markets: MarketZones[] }) {
+export interface FeeCoverage { covered: string[]; notCovered: string[] }
+
+export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones[]; coverage?: Record<string, FeeCoverage> }) {
   const [q, setQ] = useState('');
   const { needle, weight } = parseRateSearch(q);
 
@@ -64,6 +66,15 @@ export function ManualRatesBrowser({ markets }: { markets: MarketZones[] }) {
   const matrix = useMemo(() => buildZoneWeightMatrix(cols, active), [cols, active]);
   const meta = useMemo(() => new Map(cols.map((z) => [z.zoneName, z])), [cols]);
 
+  // Khớp tab carrier đang chọn ("FedEx IP" / "DHL Express") với coverage theo
+  // brand ('fedex'/'dhl') bằng substring — không phụ thuộc nhãn chính xác.
+  const activeCoverage = useMemo<FeeCoverage | undefined>(() => {
+    if (!coverage) return undefined;
+    const a = active.toLowerCase();
+    const key = Object.keys(coverage).find((k) => a.includes(k.toLowerCase()));
+    return key ? coverage[key] : undefined;
+  }, [coverage, active]);
+
   const rowRef = useRef<HTMLTableRowElement | null>(null);
   useEffect(() => {
     if (weight != null && rowRef.current) rowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -83,6 +94,25 @@ export function ManualRatesBrowser({ markets }: { markets: MarketZones[] }) {
           </button>
         ))}
       </div>
+
+      {activeCoverage && (activeCoverage.covered.length > 0 || activeCoverage.notCovered.length > 0) && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-xs">
+            <div className="mb-1 font-medium text-emerald-700 dark:text-emerald-400">✓ Giá ĐÃ cover các khoản ({active})</div>
+            <ul className="space-y-0.5 text-muted-foreground">
+              {activeCoverage.covered.map((c, i) => <li key={i}>• {c}</li>)}
+            </ul>
+          </div>
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+            <div className="mb-1 font-medium text-amber-700 dark:text-amber-400">⚠ KHÔNG cover (shop có thể gánh)</div>
+            <ul className="space-y-0.5 text-muted-foreground">
+              {activeCoverage.notCovered.length > 0
+                ? activeCoverage.notCovered.map((c, i) => <li key={i}>• {c}</li>)
+                : <li>— (không có khoản nào ngoài bảng)</li>}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1">
         <input
