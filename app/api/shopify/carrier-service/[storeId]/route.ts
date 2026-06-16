@@ -26,20 +26,31 @@ interface ShopifyRateRequest {
  * GET trả 405 → Shopify đánh dấu hỏng → carrier bị xám không chọn được ở picker.
  * Trả 200 JSON hợp lệ là đủ.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  console.log('CARRIER-CB GET', request.nextUrl.pathname, 'hdrs=', JSON.stringify(shopifyHeaders(request)));
   return NextResponse.json({ rates: [] });
 }
 
+function shopifyHeaders(request: NextRequest): Record<string, string> {
+  const out: Record<string, string> = {};
+  request.headers.forEach((v, k) => { if (k.startsWith('x-shopify') || k === 'user-agent' || k === 'content-type') out[k] = v; });
+  return out;
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ storeId: string }> }) {
+  let raw = '';
   try {
     const { storeId } = await params;
-    const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
-    if (!store || store.status !== 'active') return NextResponse.json({ rates: [] });
+    raw = await request.text();
+    console.log('CARRIER-CB POST', storeId, 'hdrs=', JSON.stringify(shopifyHeaders(request)), 'body=', raw.slice(0, 2000));
 
-    const body = (await request.json()) as ShopifyRateRequest;
+    const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
+    if (!store || store.status !== 'active') { console.log('CARRIER-CB → no store'); return NextResponse.json({ rates: [] }); }
+
+    const body = JSON.parse(raw || '{}') as ShopifyRateRequest;
     const dest = body.rate?.destination;
     const country = (dest?.country ?? '').trim().toUpperCase();
-    if (!country) return NextResponse.json({ rates: [] });
+    if (!country) { console.log('CARRIER-CB → no country'); return NextResponse.json({ rates: [] }); }
 
     const grams = (body.rate?.items ?? []).reduce((s, it) => s + (Number(it.grams) || 0) * (Number(it.quantity) || 1), 0);
     const weightKg = Math.round((grams / 1000) * 1000) / 1000;
@@ -58,8 +69,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const rates = computeCheckoutRates({
       country, postalCode: dest?.postal_code, city: dest?.city, weightKg, carriers,
     });
+    console.log('CARRIER-CB → country=', country, 'kg=', weightKg, 'rates=', JSON.stringify(rates));
     return NextResponse.json({ rates });
-  } catch {
+  } catch (e) {
+    console.log('CARRIER-CB ERROR', String((e as Error)?.message ?? e), 'raw=', raw.slice(0, 500));
     return NextResponse.json({ rates: [] }); // không bao giờ chặn checkout
   }
 }
