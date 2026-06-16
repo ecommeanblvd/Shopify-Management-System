@@ -286,6 +286,28 @@ export const SHIPPING_MUTATION = `
  * TOP-LEVEL (`zonesToDelete`, `methodDefinitionsToDelete`); giá qua
  * `rateDefinition.price`. Giữ rule free-zone: chỉ xoá zone cũ bị PHỦ TRÙNG nước.
  */
+/** Bóc bậc cân (kg) từ tên rate "DHL Express (0.5–1 kg)" → {lower, upper}. */
+export function parseWeightBand(rateName: string): { lower: number; upper: number } | null {
+  const m = rateName.match(/\(\s*([\d.]+)\s*[–\-]\s*([\d.]+)\s*kg\s*\)/i);
+  if (!m) return null;
+  const lower = Number(m[1]);
+  const upper = Number(m[2]);
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) return null;
+  return { lower, upper };
+}
+
+/** Điều kiện cân cho Shopify: rate chỉ hiện khi cân giỏ ∈ [lower, upper]. Bậc đầu
+ *  (lower=0) bỏ điều kiện cận dưới (luôn đúng). Nhờ vậy checkout TỰ chọn đúng bậc
+ *  theo cân thay vì hiện hết các bậc cho khách chọn bậc rẻ. */
+function weightConditionsFromName(rateName: string): unknown[] {
+  const b = parseWeightBand(rateName);
+  if (!b) return [];
+  const conds: unknown[] = [];
+  if (b.lower > 0) conds.push({ criteria: { value: b.lower, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' });
+  conds.push({ criteria: { value: b.upper, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' });
+  return conds;
+}
+
 export function buildProfileUpdateVariables(
   current: NormalizedShipping,
   effective: ShippingTree,
@@ -296,7 +318,14 @@ export function buildProfileUpdateVariables(
   const effCountries = new Set<string>();
   for (const z of Object.values(effectiveZones)) for (const c of z.countries) effCountries.add(c);
 
-  const md = (name: string, r: ShippingRate) => ({ name, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
+  const md = (name: string, r: ShippingRate) => {
+    const wc = weightConditionsFromName(name);
+    return {
+      name,
+      rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } },
+      ...(wc.length ? { weightConditionsToCreate: wc } : {}),
+    };
+  };
 
   const zonesToCreate: unknown[] = [];
   const zonesToUpdate: unknown[] = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables } from './shipping';
+import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables, parseWeightBand } from './shipping';
 
 const shopifyResponse = {
   deliveryProfiles: {
@@ -77,6 +77,31 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     expect(zc[0].countries).toEqual([{ code: 'US', includeAllProvinces: true }, { code: 'CA', includeAllProvinces: true }]);
     expect(zc[0].methodDefinitionsToCreate[0].rateDefinition.price).toEqual({ amount: '50', currencyCode: 'USD' });
     expect(profile.zonesToDelete).toEqual(['gid://Z/20']); // OldAmerica bị phủ trùng US
+  });
+
+  it('rate có tên bậc cân → gắn weightConditionsToCreate (gate theo cân)', () => {
+    const current = { tree: { zones: {} }, shopifyIds: { profileId: 'gid://P/1', locationGroupId: 'gid://LG/9', zoneIdByName: {}, rateIdByZoneAndName: {} } };
+    const effective = { zones: { 'America — FedEx D': { countries: ['US'], rates: {
+      'FedEx IP (0–1 kg)': { type: 'flat' as const, price: 50, currency: 'USD' },
+      'FedEx IP (1–1.5 kg)': { type: 'flat' as const, price: 60, currency: 'USD' },
+    } } } };
+    const out = buildProfileUpdateVariables(current as never, effective, 'gid://LG/9');
+    const zc = (out.profile as any).locationGroupsToUpdate[0].zonesToCreate[0].methodDefinitionsToCreate;
+    const r0 = zc.find((m: any) => m.name === 'FedEx IP (0–1 kg)');
+    const r1 = zc.find((m: any) => m.name === 'FedEx IP (1–1.5 kg)');
+    // bậc 0–1: chỉ có cận trên ≤1 (bỏ ≥0)
+    expect(r0.weightConditionsToCreate).toEqual([{ criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' }]);
+    // bậc 1–1.5: ≥1 và ≤1.5
+    expect(r1.weightConditionsToCreate).toEqual([
+      { criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
+      { criteria: { value: 1.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
+    ]);
+  });
+
+  it('parseWeightBand', () => {
+    expect(parseWeightBand('DHL Express (0.5–1 kg)')).toEqual({ lower: 0.5, upper: 1 });
+    expect(parseWeightBand('FedEx IP (0-1 kg)')).toEqual({ lower: 0, upper: 1 });
+    expect(parseWeightBand('Standard rate')).toBeNull();
   });
 
   it('free zone không trùng nước → KHÔNG xoá', () => {
