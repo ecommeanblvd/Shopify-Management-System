@@ -1,0 +1,237 @@
+shopify_zone,country,system_market,market_carriers,dhl_serves,fedex_serves,note
+America,US,united-states,fedex,true,true,
+America,CA,canada,NONE,true,true,market-chưa-link-carrier
+America,MX,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,AU,oceania,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,AZ,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,BD,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,BT,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,IO,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,CN,greater-china,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,CX,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,CC,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,CK,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,FJ,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,PF,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,IN,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,JP,japan,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,JO,middle-east,dhl|fedex,true,true,
+Asia and Oceania,KZ,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,KI,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,KG,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,LB,middle-east,dhl|fedex,true,true,
+Asia and Oceania,MO,greater-china,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,MV,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,MN,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,NR,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,NP,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,NC,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,NZ,oceania,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,NU,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,NF,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,OM,middle-east,dhl|fedex,true,true,
+Asia and Oceania,PK,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,PS,,,false,true,không-có-market-hệ-thống
+Asia and Oceania,PG,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,PN,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,RU,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,WS,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,SB,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,KR,korea,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,LK,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,TW,greater-china,NONE,true,true,market-chưa-link-carrier
+Asia and Oceania,TJ,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,TL,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,TK,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Asia and Oceania,TO,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,TM,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,TV,,,true,false,không-có-market-hệ-thống
+Asia and Oceania,UZ,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,VU,,,true,true,không-có-market-hệ-thống
+Asia and Oceania,WF,,,false,true,không-có-market-hệ-thống
+Asia and Oceania,PE,,,true,true,không-có-market-hệ-thống
+Domestic Shipping,VN,vietnam-domestic,NONE,false,false,market-chưa-link-carrier;không-carrier-nào-phục-vụ
+Europe,AX,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Europe,AL,,,true,true,không-có-market-hệ-thống
+Europe,AD,,,true,true,không-có-market-hệ-thống
+Europe,AM,,,true,true,không-có-market-hệ-thống
+Europe,AT,europe,NONE,true,true,market-chưa-link-carrier
+Europe,BE,europe,NONE,true,true,market-chưa-link-carrier
+Europe,BA,,,true,true,không-có-market-hệ-thống
+Europe,BG,europe,NONE,true,true,market-chưa-link-carrier
+Europe,HR,europe,NONE,true,true,market-chưa-link-carrier
+Europe,CY,europe,NONE,true,true,market-chưa-link-carrier
+Europe,CZ,europe,NONE,true,true,market-chưa-link-carrier
+Europe,DK,europe,NONE,true,true,market-chưa-link-carrier
+Europe,EE,europe,NONE,true,true,market-chưa-link-carrier
+Europe,FO,,,true,true,không-có-market-hệ-thống
+Europe,FI,europe,NONE,true,true,market-chưa-link-carrier
+Europe,FR,europe,NONE,true,true,market-chưa-link-carrier
+Europe,GE,,,true,true,không-có-market-hệ-thống
+Europe,DE,europe,NONE,true,true,market-chưa-link-carrier
+Europe,GI,,,true,true,không-có-market-hệ-thống
+Europe,GR,europe,NONE,true,true,market-chưa-link-carrier
+Europe,GL,,,true,true,không-có-market-hệ-thống
+Europe,GP,,,true,true,không-có-market-hệ-thống
+Europe,GG,,,true,false,không-có-market-hệ-thống
+Europe,VA,,,true,false,không-có-market-hệ-thống
+Europe,HU,europe,NONE,true,true,market-chưa-link-carrier
+Europe,IS,,,true,true,không-có-market-hệ-thống
+Europe,IE,europe,NONE,true,true,market-chưa-link-carrier
+Europe,IM,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Europe,IT,europe,NONE,true,true,market-chưa-link-carrier
+Europe,JE,,,true,false,không-có-market-hệ-thống
+Europe,XK,,,true,false,không-có-market-hệ-thống
+Europe,LV,europe,NONE,true,true,market-chưa-link-carrier
+Europe,LI,,,true,true,không-có-market-hệ-thống
+Europe,LT,europe,NONE,true,true,market-chưa-link-carrier
+Europe,LU,europe,NONE,true,true,market-chưa-link-carrier
+Europe,MT,europe,NONE,true,true,market-chưa-link-carrier
+Europe,YT,,,true,false,không-có-market-hệ-thống
+Europe,MD,,,true,true,không-có-market-hệ-thống
+Europe,MC,,,true,true,không-có-market-hệ-thống
+Europe,ME,,,true,true,không-có-market-hệ-thống
+Europe,NL,europe,NONE,true,true,market-chưa-link-carrier
+Europe,MK,,,true,true,không-có-market-hệ-thống
+Europe,NO,europe,NONE,true,true,market-chưa-link-carrier
+Europe,PL,europe,NONE,true,true,market-chưa-link-carrier
+Europe,PT,europe,NONE,true,true,market-chưa-link-carrier
+Europe,RE,,,true,true,không-có-market-hệ-thống
+Europe,RO,europe,NONE,true,true,market-chưa-link-carrier
+Europe,SM,,,true,false,không-có-market-hệ-thống
+Europe,RS,,,true,true,không-có-market-hệ-thống
+Europe,SK,europe,NONE,true,true,market-chưa-link-carrier
+Europe,SI,europe,NONE,true,true,market-chưa-link-carrier
+Europe,ES,europe,NONE,true,true,market-chưa-link-carrier
+Europe,SJ,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Europe,SE,europe,NONE,true,true,market-chưa-link-carrier
+Europe,CH,europe,NONE,true,true,market-chưa-link-carrier
+Europe,GB,europe,NONE,true,true,market-chưa-link-carrier
+Hong Kong,HK,greater-china,NONE,true,true,market-chưa-link-carrier
+Middle East,BH,middle-east,dhl|fedex,true,true,
+Middle East,KW,middle-east,dhl|fedex,true,true,
+Middle East,QA,middle-east,dhl|fedex,true,true,
+Middle East,SA,middle-east,dhl|fedex,true,true,
+Middle East,AE,middle-east,dhl|fedex,true,true,
+Rest of the World,DZ,,,true,true,không-có-market-hệ-thống
+Rest of the World,AO,,,true,true,không-có-market-hệ-thống
+Rest of the World,AI,,,true,true,không-có-market-hệ-thống
+Rest of the World,AG,,,true,true,không-có-market-hệ-thống
+Rest of the World,AR,,,true,true,không-có-market-hệ-thống
+Rest of the World,AW,,,true,true,không-có-market-hệ-thống
+Rest of the World,AC,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,BS,,,true,true,không-có-market-hệ-thống
+Rest of the World,BB,,,true,true,không-có-market-hệ-thống
+Rest of the World,BY,,,true,true,không-có-market-hệ-thống
+Rest of the World,BZ,,,true,true,không-có-market-hệ-thống
+Rest of the World,BJ,,,true,true,không-có-market-hệ-thống
+Rest of the World,BM,,,true,true,không-có-market-hệ-thống
+Rest of the World,BO,,,true,true,không-có-market-hệ-thống
+Rest of the World,BW,,,true,true,không-có-market-hệ-thống
+Rest of the World,BR,,,true,true,không-có-market-hệ-thống
+Rest of the World,BI,,,true,true,không-có-market-hệ-thống
+Rest of the World,CV,,,true,true,không-có-market-hệ-thống
+Rest of the World,BQ,,,false,true,không-có-market-hệ-thống
+Rest of the World,KY,,,true,false,không-có-market-hệ-thống
+Rest of the World,TD,,,true,true,không-có-market-hệ-thống
+Rest of the World,CL,,,true,true,không-có-market-hệ-thống
+Rest of the World,CO,,,true,true,không-có-market-hệ-thống
+Rest of the World,KM,,,true,false,không-có-market-hệ-thống
+Rest of the World,CR,,,true,true,không-có-market-hệ-thống
+Rest of the World,CI,,,true,true,không-có-market-hệ-thống
+Rest of the World,CW,,,true,true,không-có-market-hệ-thống
+Rest of the World,DJ,,,true,true,không-có-market-hệ-thống
+Rest of the World,DM,,,true,true,không-có-market-hệ-thống
+Rest of the World,DO,,,true,true,không-có-market-hệ-thống
+Rest of the World,EC,,,true,true,không-có-market-hệ-thống
+Rest of the World,EG,middle-east,dhl|fedex,true,true,
+Rest of the World,SV,,,false,true,không-có-market-hệ-thống
+Rest of the World,GQ,,,true,false,không-có-market-hệ-thống
+Rest of the World,ER,,,true,true,không-có-market-hệ-thống
+Rest of the World,SZ,,,true,true,không-có-market-hệ-thống
+Rest of the World,ET,,,true,true,không-có-market-hệ-thống
+Rest of the World,FK,,,true,false,không-có-market-hệ-thống
+Rest of the World,GF,,,true,true,không-có-market-hệ-thống
+Rest of the World,TF,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,GA,,,true,true,không-có-market-hệ-thống
+Rest of the World,GM,,,true,true,không-có-market-hệ-thống
+Rest of the World,GH,,,true,true,không-có-market-hệ-thống
+Rest of the World,GD,,,true,true,không-có-market-hệ-thống
+Rest of the World,GT,,,true,true,không-có-market-hệ-thống
+Rest of the World,GN,,,true,true,không-có-market-hệ-thống
+Rest of the World,GW,,,true,false,không-có-market-hệ-thống
+Rest of the World,GY,,,true,true,không-có-market-hệ-thống
+Rest of the World,HT,,,true,true,không-có-market-hệ-thống
+Rest of the World,HN,,,true,true,không-có-market-hệ-thống
+Rest of the World,JM,,,true,true,không-có-market-hệ-thống
+Rest of the World,KE,,,true,true,không-có-market-hệ-thống
+Rest of the World,LS,,,true,true,không-có-market-hệ-thống
+Rest of the World,LR,,,true,true,không-có-market-hệ-thống
+Rest of the World,MG,,,true,true,không-có-market-hệ-thống
+Rest of the World,MW,,,true,true,không-có-market-hệ-thống
+Rest of the World,MQ,,,true,true,không-có-market-hệ-thống
+Rest of the World,MR,,,true,true,không-có-market-hệ-thống
+Rest of the World,MU,,,true,true,không-có-market-hệ-thống
+Rest of the World,MS,,,true,true,không-có-market-hệ-thống
+Rest of the World,MA,,,true,true,không-có-market-hệ-thống
+Rest of the World,MZ,,,true,true,không-có-market-hệ-thống
+Rest of the World,NA,,,true,true,không-có-market-hệ-thống
+Rest of the World,NI,,,true,true,không-có-market-hệ-thống
+Rest of the World,NE,,,true,true,không-có-market-hệ-thống
+Rest of the World,NG,,,true,true,không-có-market-hệ-thống
+Rest of the World,PA,,,true,true,không-có-market-hệ-thống
+Rest of the World,PY,,,true,true,không-có-market-hệ-thống
+Rest of the World,CM,,,true,true,không-có-market-hệ-thống
+Rest of the World,RW,,,true,true,không-có-market-hệ-thống
+Rest of the World,BL,,,true,false,không-có-market-hệ-thống
+Rest of the World,SH,,,true,false,không-có-market-hệ-thống
+Rest of the World,KN,,,true,true,không-có-market-hệ-thống
+Rest of the World,LC,,,true,true,không-có-market-hệ-thống
+Rest of the World,MF,,,false,true,không-có-market-hệ-thống
+Rest of the World,PM,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,ST,,,true,false,không-có-market-hệ-thống
+Rest of the World,SN,,,true,true,không-có-market-hệ-thống
+Rest of the World,SC,,,true,true,không-có-market-hệ-thống
+Rest of the World,SL,,,true,false,không-có-market-hệ-thống
+Rest of the World,SX,,,true,true,không-có-market-hệ-thống
+Rest of the World,ZA,,,true,true,không-có-market-hệ-thống
+Rest of the World,GS,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,VC,,,true,true,không-có-market-hệ-thống
+Rest of the World,SR,,,true,true,không-có-market-hệ-thống
+Rest of the World,TZ,,,true,true,không-có-market-hệ-thống
+Rest of the World,TG,,,true,true,không-có-market-hệ-thống
+Rest of the World,TT,,,true,true,không-có-market-hệ-thống
+Rest of the World,TA,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,TN,,,true,true,không-có-market-hệ-thống
+Rest of the World,TC,,,true,true,không-có-market-hệ-thống
+Rest of the World,UG,,,true,true,không-có-market-hệ-thống
+Rest of the World,UM,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,UY,,,true,true,không-có-market-hệ-thống
+Rest of the World,VG,,,true,true,không-có-market-hệ-thống
+Rest of the World,EH,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Rest of the World,ZM,,,true,true,không-có-market-hệ-thống
+Rest of the World,ZW,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,AF,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,BF,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,CF,,,true,false,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,CG,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,CD,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,IQ,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,LY,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,ML,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,SO,,,true,false,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,SS,,,false,false,không-có-market-hệ-thống;không-carrier-nào-phục-vụ
+Restricted Destination & Elevated Risk,SD,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,UA,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,VE,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,YE,,,true,true,không-có-market-hệ-thống
+Restricted Destination & Elevated Risk,IL,middle-east,dhl|fedex,true,true,
+South East Asia,BN,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,KH,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,ID,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,LA,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,MY,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,MM,south-east-asia,NONE,true,false,market-chưa-link-carrier
+South East Asia,PH,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,SG,south-east-asia,NONE,true,true,market-chưa-link-carrier
+South East Asia,TH,south-east-asia,NONE,true,true,market-chưa-link-carrier

@@ -1,0 +1,1171 @@
+shopify_zone,country,weight_kg,shopify_usd,system_fedex_usd,system_dhl_usd,shopify_minus_fedex,pct_vs_fedex,fedex_cheaper_than_dhl,carrier_serves
+America,US,0.5,41,56,50,-15,-26.3,false,DHL|FedEx
+America,US,1,48,62,50,-14,-23,false,DHL|FedEx
+America,US,2,64,78,50,-14,-18.1,false,DHL|FedEx
+America,US,3,76,90,102,-14,-15.4,true,DHL|FedEx
+America,US,5,109,122,137,-13,-10.8,true,DHL|FedEx
+America,CA,0.5,41,52,50,-11,-21.7,false,DHL|FedEx
+America,CA,1,48,59,50,-11,-18.8,false,DHL|FedEx
+America,CA,2,64,75,50,-11,-14.5,false,DHL|FedEx
+America,CA,3,76,87,102,-11,-12.2,true,DHL|FedEx
+America,CA,5,109,119,137,-10,-8.4,true,DHL|FedEx
+America,MX,0.5,41,47,50,-6,-12.1,true,DHL|FedEx
+America,MX,1,48,53,50,-5,-10,false,DHL|FedEx
+America,MX,2,64,69,50,-5,-7.4,false,DHL|FedEx
+America,MX,3,76,81,102,-5,-6,true,DHL|FedEx
+America,MX,5,109,113,137,-4,-3.7,true,DHL|FedEx
+Asia and Oceania,AU,0.5,40,44,48,-4,-8.8,true,DHL|FedEx
+Asia and Oceania,AU,1,48,46,48,2,5.3,true,DHL|FedEx
+Asia and Oceania,AU,2,58,57,48,1,1.2,false,DHL|FedEx
+Asia and Oceania,AU,3,72,68,96,4,5.8,true,DHL|FedEx
+Asia and Oceania,AU,5,90,90,127,0,-0.4,true,DHL|FedEx
+Asia and Oceania,AZ,0.5,40,48,64,-8,-16.3,true,DHL|FedEx
+Asia and Oceania,AZ,1,48,51,64,-3,-5.5,true,DHL|FedEx
+Asia and Oceania,AZ,2,58,69,64,-11,-15.9,false,DHL|FedEx
+Asia and Oceania,AZ,3,72,79,130,-7,-8.9,true,DHL|FedEx
+Asia and Oceania,AZ,5,90,111,180,-21,-18.9,true,DHL|FedEx
+Asia and Oceania,BD,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,BD,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,BD,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,BD,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,BD,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,BT,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,BT,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,BT,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,BT,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,BT,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,IO,0.5,40,,,,,,
+Asia and Oceania,IO,1,48,,,,,,
+Asia and Oceania,IO,2,58,,,,,,
+Asia and Oceania,IO,3,72,,,,,,
+Asia and Oceania,IO,5,90,,,,,,
+Asia and Oceania,CN,0.5,40,46,45,-6,-13.1,false,DHL|FedEx
+Asia and Oceania,CN,1,48,47,45,1,1.2,false,DHL|FedEx
+Asia and Oceania,CN,2,58,59,45,-1,-2.2,false,DHL|FedEx
+Asia and Oceania,CN,3,72,59,92,13,22.4,true,DHL|FedEx
+Asia and Oceania,CN,5,90,78,123,12,15.9,true,DHL|FedEx
+Asia and Oceania,CX,0.5,40,,,,,,
+Asia and Oceania,CX,1,48,,,,,,
+Asia and Oceania,CX,2,58,,,,,,
+Asia and Oceania,CX,3,72,,,,,,
+Asia and Oceania,CX,5,90,,,,,,
+Asia and Oceania,CC,0.5,40,,,,,,
+Asia and Oceania,CC,1,48,,,,,,
+Asia and Oceania,CC,2,58,,,,,,
+Asia and Oceania,CC,3,72,,,,,,
+Asia and Oceania,CC,5,90,,,,,,
+Asia and Oceania,CK,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,CK,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,CK,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,CK,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,CK,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,FJ,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,FJ,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,FJ,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,FJ,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,FJ,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,PF,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,PF,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,PF,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,PF,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,PF,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,IN,0.5,40,49,48,-9,-18.6,false,DHL|FedEx
+Asia and Oceania,IN,1,48,54,48,-6,-10.9,false,DHL|FedEx
+Asia and Oceania,IN,2,58,68,48,-10,-14.8,false,DHL|FedEx
+Asia and Oceania,IN,3,72,76,96,-4,-5.2,true,DHL|FedEx
+Asia and Oceania,IN,5,90,101,127,-11,-11,true,DHL|FedEx
+Asia and Oceania,JP,0.5,40,49,40,-9,-18.7,false,DHL|FedEx
+Asia and Oceania,JP,1,48,41,40,7,17.6,false,DHL|FedEx
+Asia and Oceania,JP,2,58,51,41,7,14.2,false,DHL|FedEx
+Asia and Oceania,JP,3,72,52,83,20,38.7,true,DHL|FedEx
+Asia and Oceania,JP,5,90,68,109,22,31.9,true,DHL|FedEx
+Asia and Oceania,JO,0.5,40,45,128,-5,-11.6,true,DHL|FedEx
+Asia and Oceania,JO,1,48,50,128,-2,-3.3,true,DHL|FedEx
+Asia and Oceania,JO,2,58,70,128,-12,-17.1,true,DHL|FedEx
+Asia and Oceania,JO,3,72,84,195,-12,-14.4,true,DHL|FedEx
+Asia and Oceania,JO,5,90,118,245,-28,-23.6,true,DHL|FedEx
+Asia and Oceania,KZ,0.5,40,42,79,-2,-4.4,true,DHL|FedEx
+Asia and Oceania,KZ,1,48,45,79,3,6.1,true,DHL|FedEx
+Asia and Oceania,KZ,2,58,64,80,-6,-9.6,true,DHL|FedEx
+Asia and Oceania,KZ,3,72,75,163,-3,-4.1,true,DHL|FedEx
+Asia and Oceania,KZ,5,90,109,220,-18,-17.1,true,DHL|FedEx
+Asia and Oceania,KI,0.5,40,,79,,,,DHL
+Asia and Oceania,KI,1,48,,79,,,,DHL
+Asia and Oceania,KI,2,58,,80,,,,DHL
+Asia and Oceania,KI,3,72,,163,,,,DHL
+Asia and Oceania,KI,5,90,,220,,,,DHL
+Asia and Oceania,KG,0.5,40,48,79,-8,-16.9,true,DHL|FedEx
+Asia and Oceania,KG,1,48,52,79,-4,-6.9,true,DHL|FedEx
+Asia and Oceania,KG,2,58,70,80,-12,-17.7,true,DHL|FedEx
+Asia and Oceania,KG,3,72,81,163,-9,-11.5,true,DHL|FedEx
+Asia and Oceania,KG,5,90,115,220,-25,-21.6,true,DHL|FedEx
+Asia and Oceania,LB,0.5,40,52,144,-12,-22.4,true,DHL|FedEx
+Asia and Oceania,LB,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Asia and Oceania,LB,2,58,76,144,-18,-23.9,true,DHL|FedEx
+Asia and Oceania,LB,3,72,90,227,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,LB,5,90,124,285,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,MO,0.5,40,49,37,-9,-19.1,false,DHL|FedEx
+Asia and Oceania,MO,1,48,58,37,-10,-16.9,false,DHL|FedEx
+Asia and Oceania,MO,2,58,69,38,-11,-15.4,false,DHL|FedEx
+Asia and Oceania,MO,3,72,85,75,-13,-14.8,false,DHL|FedEx
+Asia and Oceania,MO,5,90,104,93,-14,-13.7,false,DHL|FedEx
+Asia and Oceania,MV,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,MV,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,MV,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,MV,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,MV,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,MN,0.5,40,49,79,-9,-17.6,true,DHL|FedEx
+Asia and Oceania,MN,1,48,50,79,-2,-3.2,true,DHL|FedEx
+Asia and Oceania,MN,2,58,63,80,-5,-7.3,true,DHL|FedEx
+Asia and Oceania,MN,3,72,70,163,2,3.4,true,DHL|FedEx
+Asia and Oceania,MN,5,90,93,220,-3,-2.8,true,DHL|FedEx
+Asia and Oceania,NR,0.5,40,,79,,,,DHL
+Asia and Oceania,NR,1,48,,79,,,,DHL
+Asia and Oceania,NR,2,58,,80,,,,DHL
+Asia and Oceania,NR,3,72,,163,,,,DHL
+Asia and Oceania,NR,5,90,,220,,,,DHL
+Asia and Oceania,NP,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,NP,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,NP,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,NP,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,NP,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,NC,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,NC,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,NC,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,NC,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,NC,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,NZ,0.5,40,44,48,-4,-8.8,true,DHL|FedEx
+Asia and Oceania,NZ,1,48,46,48,2,5.3,true,DHL|FedEx
+Asia and Oceania,NZ,2,58,57,48,1,1.2,false,DHL|FedEx
+Asia and Oceania,NZ,3,72,68,96,4,5.8,true,DHL|FedEx
+Asia and Oceania,NZ,5,90,90,127,0,-0.4,true,DHL|FedEx
+Asia and Oceania,NU,0.5,40,,79,,,,DHL
+Asia and Oceania,NU,1,48,,79,,,,DHL
+Asia and Oceania,NU,2,58,,80,,,,DHL
+Asia and Oceania,NU,3,72,,163,,,,DHL
+Asia and Oceania,NU,5,90,,220,,,,DHL
+Asia and Oceania,NF,0.5,40,,,,,,
+Asia and Oceania,NF,1,48,,,,,,
+Asia and Oceania,NF,2,58,,,,,,
+Asia and Oceania,NF,3,72,,,,,,
+Asia and Oceania,NF,5,90,,,,,,
+Asia and Oceania,OM,0.5,40,45,128,-5,-11.6,true,DHL|FedEx
+Asia and Oceania,OM,1,48,50,128,-2,-3.3,true,DHL|FedEx
+Asia and Oceania,OM,2,58,70,128,-12,-17.1,true,DHL|FedEx
+Asia and Oceania,OM,3,72,84,195,-12,-14.4,true,DHL|FedEx
+Asia and Oceania,OM,5,90,118,245,-28,-23.6,true,DHL|FedEx
+Asia and Oceania,PK,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,PK,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,PK,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,PK,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,PK,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,PS,0.5,40,52,,-12,-22.4,true,FedEx
+Asia and Oceania,PS,1,48,56,,-8,-14.2,true,FedEx
+Asia and Oceania,PS,2,58,76,,-18,-23.9,true,FedEx
+Asia and Oceania,PS,3,72,90,,-18,-20.4,true,FedEx
+Asia and Oceania,PS,5,90,124,,-34,-27.5,true,FedEx
+Asia and Oceania,PG,0.5,40,61,48,-21,-34.3,false,DHL|FedEx
+Asia and Oceania,PG,1,48,61,48,-13,-21.1,false,DHL|FedEx
+Asia and Oceania,PG,2,58,82,48,-24,-29,false,DHL|FedEx
+Asia and Oceania,PG,3,72,92,96,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,PG,5,90,130,127,-40,-30.5,false,DHL|FedEx
+Asia and Oceania,PN,0.5,40,,,,,,
+Asia and Oceania,PN,1,48,,,,,,
+Asia and Oceania,PN,2,58,,,,,,
+Asia and Oceania,PN,3,72,,,,,,
+Asia and Oceania,PN,5,90,,,,,,
+Asia and Oceania,RU,0.5,40,48,79,-8,-16.3,true,DHL|FedEx
+Asia and Oceania,RU,1,48,51,79,-3,-5.5,true,DHL|FedEx
+Asia and Oceania,RU,2,58,69,80,-11,-15.9,true,DHL|FedEx
+Asia and Oceania,RU,3,72,79,163,-7,-8.9,true,DHL|FedEx
+Asia and Oceania,RU,5,90,111,220,-21,-18.9,true,DHL|FedEx
+Asia and Oceania,WS,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,WS,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,WS,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,WS,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,WS,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,SB,0.5,40,,79,,,,DHL
+Asia and Oceania,SB,1,48,,79,,,,DHL
+Asia and Oceania,SB,2,58,,80,,,,DHL
+Asia and Oceania,SB,3,72,,163,,,,DHL
+Asia and Oceania,SB,5,90,,220,,,,DHL
+Asia and Oceania,KR,0.5,40,39,45,1,2.7,true,DHL|FedEx
+Asia and Oceania,KR,1,48,39,45,9,22.8,true,DHL|FedEx
+Asia and Oceania,KR,2,58,49,45,9,19.5,false,DHL|FedEx
+Asia and Oceania,KR,3,72,53,92,19,34.8,true,DHL|FedEx
+Asia and Oceania,KR,5,90,70,123,20,28.1,true,DHL|FedEx
+Asia and Oceania,LK,0.5,40,52,48,-12,-22.4,false,DHL|FedEx
+Asia and Oceania,LK,1,48,56,48,-8,-14.2,false,DHL|FedEx
+Asia and Oceania,LK,2,58,76,48,-18,-23.9,false,DHL|FedEx
+Asia and Oceania,LK,3,72,90,96,-18,-20.4,true,DHL|FedEx
+Asia and Oceania,LK,5,90,124,127,-34,-27.5,true,DHL|FedEx
+Asia and Oceania,TW,0.5,40,34,37,6,18.3,true,DHL|FedEx
+Asia and Oceania,TW,1,48,34,37,14,40.4,true,DHL|FedEx
+Asia and Oceania,TW,2,58,42,38,16,37.3,false,DHL|FedEx
+Asia and Oceania,TW,3,72,46,75,26,56.2,true,DHL|FedEx
+Asia and Oceania,TW,5,90,60,93,30,49.1,true,DHL|FedEx
+Asia and Oceania,TJ,0.5,40,,79,,,,DHL
+Asia and Oceania,TJ,1,48,,79,,,,DHL
+Asia and Oceania,TJ,2,58,,80,,,,DHL
+Asia and Oceania,TJ,3,72,,163,,,,DHL
+Asia and Oceania,TJ,5,90,,220,,,,DHL
+Asia and Oceania,TL,0.5,40,61,48,-21,-34.3,false,DHL|FedEx
+Asia and Oceania,TL,1,48,61,48,-13,-21.1,false,DHL|FedEx
+Asia and Oceania,TL,2,58,82,48,-24,-29,false,DHL|FedEx
+Asia and Oceania,TL,3,72,92,96,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,TL,5,90,130,127,-40,-30.5,false,DHL|FedEx
+Asia and Oceania,TK,0.5,40,,,,,,
+Asia and Oceania,TK,1,48,,,,,,
+Asia and Oceania,TK,2,58,,,,,,
+Asia and Oceania,TK,3,72,,,,,,
+Asia and Oceania,TK,5,90,,,,,,
+Asia and Oceania,TO,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,TO,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,TO,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,TO,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,TO,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,TM,0.5,40,,79,,,,DHL
+Asia and Oceania,TM,1,48,,79,,,,DHL
+Asia and Oceania,TM,2,58,,80,,,,DHL
+Asia and Oceania,TM,3,72,,163,,,,DHL
+Asia and Oceania,TM,5,90,,220,,,,DHL
+Asia and Oceania,TV,0.5,40,,79,,,,DHL
+Asia and Oceania,TV,1,48,,79,,,,DHL
+Asia and Oceania,TV,2,58,,80,,,,DHL
+Asia and Oceania,TV,3,72,,163,,,,DHL
+Asia and Oceania,TV,5,90,,220,,,,DHL
+Asia and Oceania,UZ,0.5,40,48,79,-8,-16.9,true,DHL|FedEx
+Asia and Oceania,UZ,1,48,52,79,-4,-6.9,true,DHL|FedEx
+Asia and Oceania,UZ,2,58,70,80,-12,-17.7,true,DHL|FedEx
+Asia and Oceania,UZ,3,72,81,163,-9,-11.5,true,DHL|FedEx
+Asia and Oceania,UZ,5,90,115,220,-25,-21.6,true,DHL|FedEx
+Asia and Oceania,VU,0.5,40,61,79,-21,-34.3,true,DHL|FedEx
+Asia and Oceania,VU,1,48,61,79,-13,-21.1,true,DHL|FedEx
+Asia and Oceania,VU,2,58,82,80,-24,-29,false,DHL|FedEx
+Asia and Oceania,VU,3,72,92,163,-20,-21.9,true,DHL|FedEx
+Asia and Oceania,VU,5,90,130,220,-40,-30.5,true,DHL|FedEx
+Asia and Oceania,WF,0.5,40,61,,-21,-34.3,true,FedEx
+Asia and Oceania,WF,1,48,61,,-13,-21.1,true,FedEx
+Asia and Oceania,WF,2,58,82,,-24,-29,true,FedEx
+Asia and Oceania,WF,3,72,92,,-20,-21.9,true,FedEx
+Asia and Oceania,WF,5,90,130,,-40,-30.5,true,FedEx
+Asia and Oceania,PE,0.5,40,55,79,-15,-26.7,true,DHL|FedEx
+Asia and Oceania,PE,1,48,55,79,-7,-12,true,DHL|FedEx
+Asia and Oceania,PE,2,58,75,80,-17,-23.1,true,DHL|FedEx
+Asia and Oceania,PE,3,72,86,163,-14,-16.2,true,DHL|FedEx
+Asia and Oceania,PE,5,90,123,220,-33,-27,true,DHL|FedEx
+Europe,AX,0.5,57,,,,,,
+Europe,AX,1,68,,,,,,
+Europe,AX,2,92,,,,,,
+Europe,AX,3,103,,,,,,
+Europe,AX,5,144,,,,,,
+Europe,AL,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,AL,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,AL,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,AL,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,AL,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,AD,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,AD,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,AD,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,AD,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,AD,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,AM,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,AM,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,AM,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,AM,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,AM,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,AT,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,AT,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,AT,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,AT,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,AT,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,BE,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,BE,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,BE,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,BE,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,BE,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,BA,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,BA,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,BA,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,BA,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,BA,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,BG,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,BG,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,BG,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,BG,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,BG,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,HR,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,HR,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,HR,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,HR,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,HR,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,CY,0.5,57,41,64,16,37.5,true,DHL|FedEx
+Europe,CY,1,68,44,64,24,52.9,true,DHL|FedEx
+Europe,CY,2,92,63,64,29,46.9,true,DHL|FedEx
+Europe,CY,3,103,73,130,30,41.6,true,DHL|FedEx
+Europe,CY,5,144,105,180,39,37.6,true,DHL|FedEx
+Europe,CZ,0.5,57,41,51,16,37.5,true,DHL|FedEx
+Europe,CZ,1,68,44,51,24,52.9,true,DHL|FedEx
+Europe,CZ,2,92,63,51,29,46.9,false,DHL|FedEx
+Europe,CZ,3,103,73,105,30,41.6,true,DHL|FedEx
+Europe,CZ,5,144,105,143,39,37.6,true,DHL|FedEx
+Europe,DK,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,DK,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,DK,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,DK,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,DK,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,EE,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,EE,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,EE,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,EE,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,EE,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,FO,0.5,57,48,79,9,19.3,true,DHL|FedEx
+Europe,FO,1,68,51,79,17,33.9,true,DHL|FedEx
+Europe,FO,2,92,69,80,23,33.4,true,DHL|FedEx
+Europe,FO,3,103,79,163,24,30.3,true,DHL|FedEx
+Europe,FO,5,144,111,220,33,29.8,true,DHL|FedEx
+Europe,FI,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,FI,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,FI,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,FI,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,FI,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,FR,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,FR,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,FR,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,FR,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,FR,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,GE,0.5,57,48,79,9,19.3,true,DHL|FedEx
+Europe,GE,1,68,51,79,17,33.9,true,DHL|FedEx
+Europe,GE,2,92,69,80,23,33.4,true,DHL|FedEx
+Europe,GE,3,103,79,163,24,30.3,true,DHL|FedEx
+Europe,GE,5,144,111,220,33,29.8,true,DHL|FedEx
+Europe,DE,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,DE,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,DE,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,DE,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,DE,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,GI,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,GI,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,GI,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,GI,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,GI,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,GR,0.5,57,69,64,-12,-17,false,DHL|FedEx
+Europe,GR,1,68,82,64,-14,-17.1,false,DHL|FedEx
+Europe,GR,2,92,110,64,-18,-16.1,false,DHL|FedEx
+Europe,GR,3,103,124,130,-21,-17.2,true,DHL|FedEx
+Europe,GR,5,144,172,180,-28,-16.4,true,DHL|FedEx
+Europe,GL,0.5,57,48,79,9,19.3,true,DHL|FedEx
+Europe,GL,1,68,51,79,17,33.9,true,DHL|FedEx
+Europe,GL,2,92,69,80,23,33.4,true,DHL|FedEx
+Europe,GL,3,103,79,163,24,30.3,true,DHL|FedEx
+Europe,GL,5,144,111,220,33,29.8,true,DHL|FedEx
+Europe,GP,0.5,57,61,79,-4,-6.3,true,DHL|FedEx
+Europe,GP,1,68,61,79,7,11.7,true,DHL|FedEx
+Europe,GP,2,92,82,80,10,12.6,false,DHL|FedEx
+Europe,GP,3,103,92,163,11,11.7,true,DHL|FedEx
+Europe,GP,5,144,130,220,14,11.1,true,DHL|FedEx
+Europe,GG,0.5,57,,64,,,,DHL
+Europe,GG,1,68,,64,,,,DHL
+Europe,GG,2,92,,64,,,,DHL
+Europe,GG,3,103,,130,,,,DHL
+Europe,GG,5,144,,180,,,,DHL
+Europe,VA,0.5,57,,51,,,,DHL
+Europe,VA,1,68,,51,,,,DHL
+Europe,VA,2,92,,51,,,,DHL
+Europe,VA,3,103,,105,,,,DHL
+Europe,VA,5,144,,143,,,,DHL
+Europe,HU,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,HU,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,HU,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,HU,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,HU,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,IS,0.5,57,48,79,9,19.3,true,DHL|FedEx
+Europe,IS,1,68,51,79,17,33.9,true,DHL|FedEx
+Europe,IS,2,92,69,80,23,33.4,true,DHL|FedEx
+Europe,IS,3,103,79,163,24,30.3,true,DHL|FedEx
+Europe,IS,5,144,111,220,33,29.8,true,DHL|FedEx
+Europe,IE,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,IE,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,IE,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,IE,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,IE,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,IM,0.5,57,,,,,,
+Europe,IM,1,68,,,,,,
+Europe,IM,2,92,,,,,,
+Europe,IM,3,103,,,,,,
+Europe,IM,5,144,,,,,,
+Europe,IT,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,IT,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,IT,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,IT,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,IT,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,JE,0.5,57,,64,,,,DHL
+Europe,JE,1,68,,64,,,,DHL
+Europe,JE,2,92,,64,,,,DHL
+Europe,JE,3,103,,130,,,,DHL
+Europe,JE,5,144,,180,,,,DHL
+Europe,XK,0.5,57,,79,,,,DHL
+Europe,XK,1,68,,79,,,,DHL
+Europe,XK,2,92,,80,,,,DHL
+Europe,XK,3,103,,163,,,,DHL
+Europe,XK,5,144,,220,,,,DHL
+Europe,LV,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,LV,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,LV,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,LV,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,LV,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,LI,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,LI,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,LI,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,LI,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,LI,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,LT,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,LT,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,LT,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,LT,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,LT,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,LU,0.5,57,62,51,-5,-8.7,false,DHL|FedEx
+Europe,LU,1,68,76,51,-8,-10.2,false,DHL|FedEx
+Europe,LU,2,92,103,51,-11,-10.9,false,DHL|FedEx
+Europe,LU,3,103,118,105,-15,-12.8,false,DHL|FedEx
+Europe,LU,5,144,166,143,-22,-13.3,false,DHL|FedEx
+Europe,MT,0.5,57,48,51,9,19.3,true,DHL|FedEx
+Europe,MT,1,68,51,51,17,33.9,true,DHL|FedEx
+Europe,MT,2,92,69,51,23,33.4,false,DHL|FedEx
+Europe,MT,3,103,79,105,24,30.3,true,DHL|FedEx
+Europe,MT,5,144,111,143,33,29.8,true,DHL|FedEx
+Europe,YT,0.5,57,,79,,,,DHL
+Europe,YT,1,68,,79,,,,DHL
+Europe,YT,2,92,,80,,,,DHL
+Europe,YT,3,103,,163,,,,DHL
+Europe,YT,5,144,,220,,,,DHL
+Europe,MD,0.5,57,48,79,9,19.3,true,DHL|FedEx
+Europe,MD,1,68,51,79,17,33.9,true,DHL|FedEx
+Europe,MD,2,92,69,80,23,33.4,true,DHL|FedEx
+Europe,MD,3,103,79,163,24,30.3,true,DHL|FedEx
+Europe,MD,5,144,111,220,33,29.8,true,DHL|FedEx
+Europe,MC,0.5,57,62,51,-5,-8.7,false,DHL|FedEx
+Europe,MC,1,68,76,51,-8,-10.2,false,DHL|FedEx
+Europe,MC,2,92,103,51,-11,-10.9,false,DHL|FedEx
+Europe,MC,3,103,118,105,-15,-12.8,false,DHL|FedEx
+Europe,MC,5,144,166,143,-22,-13.3,false,DHL|FedEx
+Europe,ME,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,ME,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,ME,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,ME,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,ME,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,NL,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,NL,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,NL,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,NL,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,NL,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,MK,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,MK,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,MK,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,MK,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,MK,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,NO,0.5,57,69,64,-12,-17,false,DHL|FedEx
+Europe,NO,1,68,82,64,-14,-17.1,false,DHL|FedEx
+Europe,NO,2,92,110,64,-18,-16.1,false,DHL|FedEx
+Europe,NO,3,103,124,130,-21,-17.2,true,DHL|FedEx
+Europe,NO,5,144,172,180,-28,-16.4,true,DHL|FedEx
+Europe,PL,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,PL,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,PL,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,PL,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,PL,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,PT,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,PT,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,PT,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,PT,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,PT,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,RE,0.5,57,52,79,5,10.6,true,DHL|FedEx
+Europe,RE,1,68,56,79,12,21.5,true,DHL|FedEx
+Europe,RE,2,92,76,80,16,20.6,true,DHL|FedEx
+Europe,RE,3,103,90,163,13,13.9,true,DHL|FedEx
+Europe,RE,5,144,124,220,20,16,true,DHL|FedEx
+Europe,RO,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,RO,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,RO,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,RO,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,RO,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,SM,0.5,57,,64,,,,DHL
+Europe,SM,1,68,,64,,,,DHL
+Europe,SM,2,92,,64,,,,DHL
+Europe,SM,3,103,,130,,,,DHL
+Europe,SM,5,144,,180,,,,DHL
+Europe,RS,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,RS,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,RS,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,RS,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,RS,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,SK,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,SK,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,SK,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,SK,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,SK,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,SI,0.5,57,48,64,9,19.3,true,DHL|FedEx
+Europe,SI,1,68,51,64,17,33.9,true,DHL|FedEx
+Europe,SI,2,92,69,64,23,33.4,false,DHL|FedEx
+Europe,SI,3,103,79,130,24,30.3,true,DHL|FedEx
+Europe,SI,5,144,111,180,33,29.8,true,DHL|FedEx
+Europe,ES,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,ES,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,ES,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,ES,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,ES,5,144,101,143,43,42.8,true,DHL|FedEx
+Europe,SJ,0.5,57,,,,,,
+Europe,SJ,1,68,,,,,,
+Europe,SJ,2,92,,,,,,
+Europe,SJ,3,103,,,,,,
+Europe,SJ,5,144,,,,,,
+Europe,SE,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,SE,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,SE,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,SE,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,SE,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,CH,0.5,57,69,51,-12,-17,false,DHL|FedEx
+Europe,CH,1,68,82,51,-14,-17.1,false,DHL|FedEx
+Europe,CH,2,92,110,51,-18,-16.1,false,DHL|FedEx
+Europe,CH,3,103,124,105,-21,-17.2,false,DHL|FedEx
+Europe,CH,5,144,172,143,-28,-16.4,false,DHL|FedEx
+Europe,GB,0.5,57,47,51,10,20.4,true,DHL|FedEx
+Europe,GB,1,68,48,51,20,40.7,true,DHL|FedEx
+Europe,GB,2,92,64,51,28,43.4,false,DHL|FedEx
+Europe,GB,3,103,73,105,30,40.9,true,DHL|FedEx
+Europe,GB,5,144,101,143,43,42.8,true,DHL|FedEx
+Middle East,BH,0.5,45,52,128,-7,-12.7,true,DHL|FedEx
+Middle East,BH,1,48,56,128,-8,-14.2,true,DHL|FedEx
+Middle East,BH,2,66,76,128,-10,-13.5,true,DHL|FedEx
+Middle East,BH,3,78,90,195,-12,-13.8,true,DHL|FedEx
+Middle East,BH,5,107,124,245,-17,-13.8,true,DHL|FedEx
+Middle East,KW,0.5,45,52,128,-7,-12.7,true,DHL|FedEx
+Middle East,KW,1,48,56,128,-8,-14.2,true,DHL|FedEx
+Middle East,KW,2,66,76,128,-10,-13.5,true,DHL|FedEx
+Middle East,KW,3,78,90,195,-12,-13.8,true,DHL|FedEx
+Middle East,KW,5,107,124,245,-17,-13.8,true,DHL|FedEx
+Middle East,QA,0.5,45,45,128,0,-0.5,true,DHL|FedEx
+Middle East,QA,1,48,50,128,-2,-3.3,true,DHL|FedEx
+Middle East,QA,2,66,70,128,-4,-5.6,true,DHL|FedEx
+Middle East,QA,3,78,84,195,-6,-7.3,true,DHL|FedEx
+Middle East,QA,5,107,118,245,-11,-9.2,true,DHL|FedEx
+Middle East,SA,0.5,45,45,128,0,-0.5,true,DHL|FedEx
+Middle East,SA,1,48,50,128,-2,-3.3,true,DHL|FedEx
+Middle East,SA,2,66,70,128,-4,-5.6,true,DHL|FedEx
+Middle East,SA,3,78,84,195,-6,-7.3,true,DHL|FedEx
+Middle East,SA,5,107,118,245,-11,-9.2,true,DHL|FedEx
+Middle East,AE,0.5,45,52,128,-7,-12.7,true,DHL|FedEx
+Middle East,AE,1,48,56,128,-8,-14.2,true,DHL|FedEx
+Middle East,AE,2,66,76,128,-10,-13.5,true,DHL|FedEx
+Middle East,AE,3,78,90,195,-12,-13.8,true,DHL|FedEx
+Middle East,AE,5,107,124,245,-17,-13.8,true,DHL|FedEx
+Rest of the World,DZ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,DZ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,DZ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,DZ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,DZ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,AO,0.5,50,45,79,5,10.5,true,DHL|FedEx
+Rest of the World,AO,1,50,50,79,0,0.7,true,DHL|FedEx
+Rest of the World,AO,2,70,70,80,0,0.1,true,DHL|FedEx
+Rest of the World,AO,3,79,84,163,-5,-6.1,true,DHL|FedEx
+Rest of the World,AO,5,113,118,220,-5,-4.1,true,DHL|FedEx
+Rest of the World,AI,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AI,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AI,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,AI,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,AI,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,AG,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AG,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AG,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,AG,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,AG,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,AR,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AR,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AR,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,AR,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,AR,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,AW,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AW,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,AW,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,AW,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,AW,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,AC,0.5,50,,,,,,
+Rest of the World,AC,1,50,,,,,,
+Rest of the World,AC,2,70,,,,,,
+Rest of the World,AC,3,79,,,,,,
+Rest of the World,AC,5,113,,,,,,
+Rest of the World,BS,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BS,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BS,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BS,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BS,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BB,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BB,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BB,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BB,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BB,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BY,0.5,50,48,64,2,4.7,true,DHL|FedEx
+Rest of the World,BY,1,50,51,64,-1,-1.5,true,DHL|FedEx
+Rest of the World,BY,2,70,69,64,1,1.5,false,DHL|FedEx
+Rest of the World,BY,3,79,79,130,0,-0.1,true,DHL|FedEx
+Rest of the World,BY,5,113,111,180,2,1.8,true,DHL|FedEx
+Rest of the World,BZ,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BZ,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BZ,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BZ,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BZ,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BJ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,BJ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,BJ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,BJ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,BJ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,BM,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BM,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BM,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BM,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BM,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BO,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BO,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BO,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BO,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BO,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BW,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,BW,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,BW,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,BW,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,BW,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,BR,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BR,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,BR,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,BR,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,BR,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,BI,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,BI,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,BI,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,BI,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,BI,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,CV,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,CV,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,CV,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,CV,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,CV,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,BQ,0.5,50,61,,-11,-17.8,true,FedEx
+Rest of the World,BQ,1,50,61,,-11,-17.8,true,FedEx
+Rest of the World,BQ,2,70,82,,-12,-14.4,true,FedEx
+Rest of the World,BQ,3,79,92,,-13,-14.3,true,FedEx
+Rest of the World,BQ,5,113,130,,-17,-12.8,true,FedEx
+Rest of the World,KY,0.5,50,,79,,,,DHL
+Rest of the World,KY,1,50,,79,,,,DHL
+Rest of the World,KY,2,70,,80,,,,DHL
+Rest of the World,KY,3,79,,163,,,,DHL
+Rest of the World,KY,5,113,,220,,,,DHL
+Rest of the World,TD,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,TD,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,TD,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,TD,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,TD,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,CL,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CL,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CL,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,CL,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,CL,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,CO,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CO,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CO,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,CO,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,CO,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,KM,0.5,50,,79,,,,DHL
+Rest of the World,KM,1,50,,79,,,,DHL
+Rest of the World,KM,2,70,,80,,,,DHL
+Rest of the World,KM,3,79,,163,,,,DHL
+Rest of the World,KM,5,113,,220,,,,DHL
+Rest of the World,CR,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CR,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CR,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,CR,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,CR,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,CI,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,CI,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,CI,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,CI,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,CI,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,CW,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CW,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,CW,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,CW,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,CW,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,DJ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,DJ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,DJ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,DJ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,DJ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,DM,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,DM,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,DM,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,DM,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,DM,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,DO,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,DO,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,DO,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,DO,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,DO,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,EC,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,EC,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,EC,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,EC,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,EC,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,EG,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,EG,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,EG,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,EG,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,EG,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,SV,0.5,50,61,,-11,-17.8,true,FedEx
+Rest of the World,SV,1,50,61,,-11,-17.8,true,FedEx
+Rest of the World,SV,2,70,82,,-12,-14.4,true,FedEx
+Rest of the World,SV,3,79,92,,-13,-14.3,true,FedEx
+Rest of the World,SV,5,113,130,,-17,-12.8,true,FedEx
+Rest of the World,GQ,0.5,50,,79,,,,DHL
+Rest of the World,GQ,1,50,,79,,,,DHL
+Rest of the World,GQ,2,70,,80,,,,DHL
+Rest of the World,GQ,3,79,,163,,,,DHL
+Rest of the World,GQ,5,113,,220,,,,DHL
+Rest of the World,ER,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,ER,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,ER,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,ER,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,ER,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,SZ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,SZ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,SZ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,SZ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,SZ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,ET,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,ET,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,ET,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,ET,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,ET,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,FK,0.5,50,,79,,,,DHL
+Rest of the World,FK,1,50,,79,,,,DHL
+Rest of the World,FK,2,70,,80,,,,DHL
+Rest of the World,FK,3,79,,163,,,,DHL
+Rest of the World,FK,5,113,,220,,,,DHL
+Rest of the World,GF,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GF,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GF,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,GF,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,GF,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,TF,0.5,50,,,,,,
+Rest of the World,TF,1,50,,,,,,
+Rest of the World,TF,2,70,,,,,,
+Rest of the World,TF,3,79,,,,,,
+Rest of the World,TF,5,113,,,,,,
+Rest of the World,GA,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,GA,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,GA,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,GA,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,GA,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,GM,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,GM,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,GM,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,GM,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,GM,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,GH,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,GH,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,GH,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,GH,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,GH,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,GD,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GD,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GD,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,GD,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,GD,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,GT,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GT,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GT,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,GT,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,GT,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,GN,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,GN,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,GN,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,GN,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,GN,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,GW,0.5,50,,79,,,,DHL
+Rest of the World,GW,1,50,,79,,,,DHL
+Rest of the World,GW,2,70,,80,,,,DHL
+Rest of the World,GW,3,79,,163,,,,DHL
+Rest of the World,GW,5,113,,220,,,,DHL
+Rest of the World,GY,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GY,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,GY,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,GY,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,GY,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,HT,0.5,50,61,144,-11,-17.8,true,DHL|FedEx
+Rest of the World,HT,1,50,61,144,-11,-17.8,true,DHL|FedEx
+Rest of the World,HT,2,70,82,144,-12,-14.4,true,DHL|FedEx
+Rest of the World,HT,3,79,92,227,-13,-14.3,true,DHL|FedEx
+Rest of the World,HT,5,113,130,285,-17,-12.8,true,DHL|FedEx
+Rest of the World,HN,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,HN,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,HN,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,HN,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,HN,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,JM,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,JM,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,JM,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,JM,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,JM,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,KE,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,KE,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,KE,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,KE,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,KE,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,LS,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,LS,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,LS,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,LS,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,LS,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,LR,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,LR,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,LR,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,LR,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,LR,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MG,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MG,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MG,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MG,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MG,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MW,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MW,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MW,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MW,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MW,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MQ,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,MQ,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,MQ,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,MQ,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,MQ,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,MR,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MR,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MR,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MR,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MR,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MU,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MU,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MU,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MU,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MU,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MS,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,MS,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,MS,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,MS,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,MS,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,MA,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MA,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MA,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MA,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MA,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,MZ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,MZ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,MZ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,MZ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,MZ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,NA,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,NA,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,NA,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,NA,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,NA,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,NI,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,NI,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,NI,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,NI,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,NI,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,NE,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,NE,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,NE,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,NE,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,NE,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,NG,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,NG,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,NG,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,NG,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,NG,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,PA,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,PA,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,PA,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,PA,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,PA,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,PY,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,PY,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,PY,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,PY,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,PY,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,CM,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,CM,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,CM,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,CM,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,CM,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,RW,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,RW,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,RW,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,RW,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,RW,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,BL,0.5,50,,79,,,,DHL
+Rest of the World,BL,1,50,,79,,,,DHL
+Rest of the World,BL,2,70,,80,,,,DHL
+Rest of the World,BL,3,79,,163,,,,DHL
+Rest of the World,BL,5,113,,220,,,,DHL
+Rest of the World,SH,0.5,50,,79,,,,DHL
+Rest of the World,SH,1,50,,79,,,,DHL
+Rest of the World,SH,2,70,,80,,,,DHL
+Rest of the World,SH,3,79,,163,,,,DHL
+Rest of the World,SH,5,113,,220,,,,DHL
+Rest of the World,KN,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,KN,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,KN,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,KN,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,KN,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,LC,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,LC,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,LC,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,LC,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,LC,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,MF,0.5,50,61,,-11,-17.8,true,FedEx
+Rest of the World,MF,1,50,61,,-11,-17.8,true,FedEx
+Rest of the World,MF,2,70,82,,-12,-14.4,true,FedEx
+Rest of the World,MF,3,79,92,,-13,-14.3,true,FedEx
+Rest of the World,MF,5,113,130,,-17,-12.8,true,FedEx
+Rest of the World,PM,0.5,50,,,,,,
+Rest of the World,PM,1,50,,,,,,
+Rest of the World,PM,2,70,,,,,,
+Rest of the World,PM,3,79,,,,,,
+Rest of the World,PM,5,113,,,,,,
+Rest of the World,ST,0.5,50,,79,,,,DHL
+Rest of the World,ST,1,50,,79,,,,DHL
+Rest of the World,ST,2,70,,80,,,,DHL
+Rest of the World,ST,3,79,,163,,,,DHL
+Rest of the World,ST,5,113,,220,,,,DHL
+Rest of the World,SN,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,SN,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,SN,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,SN,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,SN,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,SC,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,SC,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,SC,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,SC,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,SC,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,SL,0.5,50,,79,,,,DHL
+Rest of the World,SL,1,50,,79,,,,DHL
+Rest of the World,SL,2,70,,80,,,,DHL
+Rest of the World,SL,3,79,,163,,,,DHL
+Rest of the World,SL,5,113,,220,,,,DHL
+Rest of the World,SX,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,SX,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,SX,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,SX,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,SX,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,ZA,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,ZA,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,ZA,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,ZA,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,ZA,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,GS,0.5,50,,,,,,
+Rest of the World,GS,1,50,,,,,,
+Rest of the World,GS,2,70,,,,,,
+Rest of the World,GS,3,79,,,,,,
+Rest of the World,GS,5,113,,,,,,
+Rest of the World,VC,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,VC,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,VC,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,VC,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,VC,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,SR,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,SR,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,SR,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,SR,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,SR,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,TZ,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,TZ,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,TZ,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,TZ,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,TZ,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,TG,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,TG,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,TG,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,TG,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,TG,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,TT,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,TT,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,TT,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,TT,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,TT,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,TA,0.5,50,,,,,,
+Rest of the World,TA,1,50,,,,,,
+Rest of the World,TA,2,70,,,,,,
+Rest of the World,TA,3,79,,,,,,
+Rest of the World,TA,5,113,,,,,,
+Rest of the World,TN,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,TN,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,TN,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,TN,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,TN,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,TC,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,TC,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,TC,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,TC,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,TC,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,UG,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,UG,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,UG,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,UG,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,UG,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,UM,0.5,50,,,,,,
+Rest of the World,UM,1,50,,,,,,
+Rest of the World,UM,2,70,,,,,,
+Rest of the World,UM,3,79,,,,,,
+Rest of the World,UM,5,113,,,,,,
+Rest of the World,UY,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,UY,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,UY,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,UY,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,UY,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,VG,0.5,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,VG,1,50,61,79,-11,-17.8,true,DHL|FedEx
+Rest of the World,VG,2,70,82,80,-12,-14.4,false,DHL|FedEx
+Rest of the World,VG,3,79,92,163,-13,-14.3,true,DHL|FedEx
+Rest of the World,VG,5,113,130,220,-17,-12.8,true,DHL|FedEx
+Rest of the World,EH,0.5,50,,,,,,
+Rest of the World,EH,1,50,,,,,,
+Rest of the World,EH,2,70,,,,,,
+Rest of the World,EH,3,79,,,,,,
+Rest of the World,EH,5,113,,,,,,
+Rest of the World,ZM,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,ZM,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,ZM,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,ZM,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,ZM,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Rest of the World,ZW,0.5,50,52,79,-2,-3,true,DHL|FedEx
+Rest of the World,ZW,1,50,56,79,-6,-10.7,true,DHL|FedEx
+Rest of the World,ZW,2,70,76,80,-6,-8.2,true,DHL|FedEx
+Rest of the World,ZW,3,79,90,163,-11,-12.7,true,DHL|FedEx
+Rest of the World,ZW,5,113,124,220,-11,-8.9,true,DHL|FedEx
+Restricted Destination & Elevated Risk,AF,0.5,45,52,144,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,AF,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,AF,2,66,76,144,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,AF,3,78,90,227,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,AF,5,107,124,285,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,BF,0.5,45,52,144,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,BF,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,BF,2,66,76,144,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,BF,3,78,90,227,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,BF,5,107,124,285,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CF,0.5,45,,144,,,,DHL
+Restricted Destination & Elevated Risk,CF,1,48,,144,,,,DHL
+Restricted Destination & Elevated Risk,CF,2,66,,144,,,,DHL
+Restricted Destination & Elevated Risk,CF,3,78,,227,,,,DHL
+Restricted Destination & Elevated Risk,CF,5,107,,285,,,,DHL
+Restricted Destination & Elevated Risk,CG,0.5,45,52,79,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CG,1,48,56,79,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CG,2,66,76,80,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CG,3,78,90,163,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CG,5,107,124,220,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CD,0.5,45,52,144,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CD,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CD,2,66,76,144,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CD,3,78,90,227,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,CD,5,107,124,285,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IQ,0.5,45,45,144,0,-0.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IQ,1,48,50,144,-2,-3.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IQ,2,66,70,144,-4,-5.6,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IQ,3,78,84,227,-6,-7.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IQ,5,107,118,285,-11,-9.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,LY,0.5,45,52,144,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,LY,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,LY,2,66,76,144,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,LY,3,78,90,227,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,LY,5,107,124,285,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,ML,0.5,45,52,144,-7,-12.7,true,DHL|FedEx
+Restricted Destination & Elevated Risk,ML,1,48,56,144,-8,-14.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,ML,2,66,76,144,-10,-13.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,ML,3,78,90,227,-12,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,ML,5,107,124,285,-17,-13.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,SO,0.5,45,,144,,,,DHL
+Restricted Destination & Elevated Risk,SO,1,48,,144,,,,DHL
+Restricted Destination & Elevated Risk,SO,2,66,,144,,,,DHL
+Restricted Destination & Elevated Risk,SO,3,78,,227,,,,DHL
+Restricted Destination & Elevated Risk,SO,5,107,,285,,,,DHL
+Restricted Destination & Elevated Risk,SS,0.5,45,,,,,,
+Restricted Destination & Elevated Risk,SS,1,48,,,,,,
+Restricted Destination & Elevated Risk,SS,2,66,,,,,,
+Restricted Destination & Elevated Risk,SS,3,78,,,,,,
+Restricted Destination & Elevated Risk,SS,5,107,,,,,,
+Restricted Destination & Elevated Risk,SD,0.5,45,50,144,-5,-10.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,SD,1,48,53,144,-5,-9.9,true,DHL|FedEx
+Restricted Destination & Elevated Risk,SD,2,66,71,144,-5,-6.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,SD,3,78,82,227,-4,-5.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,SD,5,107,111,285,-4,-3.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,UA,0.5,45,48,144,-3,-5.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,UA,1,48,51,144,-3,-5.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,UA,2,66,69,144,-3,-4.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,UA,3,78,79,227,-1,-1.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,UA,5,107,111,285,-4,-3.6,true,DHL|FedEx
+Restricted Destination & Elevated Risk,VE,0.5,45,61,144,-16,-26,true,DHL|FedEx
+Restricted Destination & Elevated Risk,VE,1,48,61,144,-13,-21.1,true,DHL|FedEx
+Restricted Destination & Elevated Risk,VE,2,66,82,144,-16,-19.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,VE,3,78,92,227,-14,-15.4,true,DHL|FedEx
+Restricted Destination & Elevated Risk,VE,5,107,130,285,-23,-17.4,true,DHL|FedEx
+Restricted Destination & Elevated Risk,YE,0.5,45,50,144,-5,-10.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,YE,1,48,53,144,-5,-9.9,true,DHL|FedEx
+Restricted Destination & Elevated Risk,YE,2,66,71,144,-5,-6.8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,YE,3,78,82,227,-4,-5.3,true,DHL|FedEx
+Restricted Destination & Elevated Risk,YE,5,107,111,285,-4,-3.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IL,0.5,45,41,144,4,8.5,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IL,1,48,44,144,4,8,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IL,2,66,63,144,3,5.4,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IL,3,78,73,227,5,7.2,true,DHL|FedEx
+Restricted Destination & Elevated Risk,IL,5,107,105,285,2,2.2,true,DHL|FedEx
+South East Asia,BN,0.5,53,64,37,-11,-17.4,false,DHL|FedEx
+South East Asia,BN,1,63,75,37,-12,-15.5,false,DHL|FedEx
+South East Asia,BN,2,81,94,38,-13,-14.1,false,DHL|FedEx
+South East Asia,BN,3,101,116,75,-15,-12.9,false,DHL|FedEx
+South East Asia,BN,5,137,155,93,-18,-11.8,false,DHL|FedEx
+South East Asia,KH,0.5,53,49,48,4,9.1,false,DHL|FedEx
+South East Asia,KH,1,63,50,48,13,27,false,DHL|FedEx
+South East Asia,KH,2,81,63,48,18,29.5,false,DHL|FedEx
+South East Asia,KH,3,101,70,96,31,45.1,true,DHL|FedEx
+South East Asia,KH,5,137,93,127,44,48,true,DHL|FedEx
+South East Asia,ID,0.5,53,35,37,18,53.3,true,DHL|FedEx
+South East Asia,ID,1,63,39,37,24,61.6,false,DHL|FedEx
+South East Asia,ID,2,81,46,38,35,76.6,false,DHL|FedEx
+South East Asia,ID,3,101,52,75,49,93.5,true,DHL|FedEx
+South East Asia,ID,5,137,64,93,73,114.9,true,DHL|FedEx
+South East Asia,LA,0.5,53,49,48,4,9.1,false,DHL|FedEx
+South East Asia,LA,1,63,50,48,13,27,false,DHL|FedEx
+South East Asia,LA,2,81,63,48,18,29.5,false,DHL|FedEx
+South East Asia,LA,3,101,70,96,31,45.1,true,DHL|FedEx
+South East Asia,LA,5,137,93,127,44,48,true,DHL|FedEx
+South East Asia,MY,0.5,53,38,35,15,41.3,false,DHL|FedEx
+South East Asia,MY,1,63,40,36,23,59.4,false,DHL|FedEx
+South East Asia,MY,2,81,47,36,34,74.1,false,DHL|FedEx
+South East Asia,MY,3,101,50,64,51,101.2,true,DHL|FedEx
+South East Asia,MY,5,137,61,80,76,123.7,true,DHL|FedEx
+South East Asia,MM,0.5,53,,48,,,,DHL
+South East Asia,MM,1,63,,48,,,,DHL
+South East Asia,MM,2,81,,48,,,,DHL
+South East Asia,MM,3,101,,96,,,,DHL
+South East Asia,MM,5,137,,127,,,,DHL
+South East Asia,PH,0.5,53,40,37,13,31.2,false,DHL|FedEx
+South East Asia,PH,1,63,43,37,20,46.7,false,DHL|FedEx
+South East Asia,PH,2,81,51,38,30,59.9,false,DHL|FedEx
+South East Asia,PH,3,101,55,75,46,84.4,true,DHL|FedEx
+South East Asia,PH,5,137,67,93,70,104.6,true,DHL|FedEx
+South East Asia,SG,0.5,53,36,35,17,45.5,false,DHL|FedEx
+South East Asia,SG,1,63,37,36,26,72.5,false,DHL|FedEx
+South East Asia,SG,2,81,43,36,38,88.9,false,DHL|FedEx
+South East Asia,SG,3,101,46,64,55,118.7,true,DHL|FedEx
+South East Asia,SG,5,137,56,80,81,143.7,true,DHL|FedEx
+South East Asia,TH,0.5,53,45,35,8,17.5,false,DHL|FedEx
+South East Asia,TH,1,63,45,36,18,38.7,false,DHL|FedEx
+South East Asia,TH,2,81,54,36,27,51,false,DHL|FedEx
+South East Asia,TH,3,101,58,64,43,74.8,true,DHL|FedEx
+South East Asia,TH,5,137,71,80,66,93.7,true,DHL|FedEx
