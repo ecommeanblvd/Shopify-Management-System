@@ -78,9 +78,14 @@ function isAutoReconciled(r: ReconcileViewRow): boolean {
   if (Math.abs(r.deltaVnd ?? 0) < MATCH_TOLERANCE_VND) return true;
   return r.diagnosis?.severity === 'passthrough' || r.diagnosis?.severity === 'match';
 }
-/** Trạng thái HIỆU DỤNG cho view: đơn khớp-pending tính là 'reconciled' (auto). */
+/** Trạng thái HIỆU DỤNG cho view:
+ *  - đơn khớp-pending → 'reconciled' (auto).
+ *  - đơn 'disputing' nhưng Δ đã về ~0 (staleDispute) → 'reconciled': đã khớp lại,
+ *    KHÔNG còn là "đòi NCC" (badge cũ gây hiểu lầm). Hàng vẫn hiện gợi ý "nên rút"
+ *    + nút Hoàn tác để chốt rút khiếu nại chính thức. */
 function effStatus(r: ReconcileViewRow): ReconcileStatus {
-  return isAutoReconciled(r) ? 'reconciled' : r.status;
+  if (isAutoReconciled(r) || r.staleDispute) return 'reconciled';
+  return r.status;
 }
 
 interface Props {
@@ -152,7 +157,8 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       // pass-through đã giải thích — tránh phình do opt-in ký nhận.
       if (isPending && r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
       if (isPending) pendingCount += 1;
-      if (r.status === 'disputing') disputingCount += 1;
+      // Đếm đòi NCC: chỉ đơn CÒN đòi thật (loại staleDispute đã khớp lại).
+      if (r.status === 'disputing' && !r.staleDispute) disputingCount += 1;
     }
     const delta = billed - engine;
     const pct = billed > 0 ? (delta / billed) * 100 : 0;
@@ -342,21 +348,25 @@ function FragmentRow({
               <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Tự đối soát</span>
             ) : r.status === 'pending' ? (
               <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>
-            ) : (
+            ) : r.staleDispute ? (
+              // Đã từng đòi NCC nhưng Δ nay về ~0 → KHÔNG hiện "đòi NCC" (gây hiểu
+              // lầm). Hiện "Đã khớp lại" + gợi ý rút khiếu nại chính thức.
               <>
-                <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
-                  {OPERATOR_STATUS[r.status].label}
-                  {r.billedChangedSinceReview ? ' ⚠' : ''}
+                <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  Đã khớp lại
                 </span>
-                {r.staleDispute && (
-                  <span
-                    className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-                    title="Δ hiện tại đã về ~0 (engine cập nhật sau lúc duyệt) — NCC tính đúng, nên rút khiếu nại"
-                  >
-                    Δ về 0 · nên rút
-                  </span>
-                )}
+                <span
+                  className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                  title="Δ hiện tại đã về ~0 (engine cập nhật sau lúc đòi) — NCC tính đúng. Bấm Hoàn tác để rút khiếu nại chính thức."
+                >
+                  Δ về 0 · nên rút đòi
+                </span>
               </>
+            ) : (
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[r.status].className}`}>
+                {OPERATOR_STATUS[r.status].label}
+                {r.billedChangedSinceReview ? ' ⚠' : ''}
+              </span>
             )}
             {r.demandUncovered && (
               <span
