@@ -40,6 +40,24 @@ describe('buildResolveRequest', () => {
     expect(a.postalCode).toBe('11228');
     expect(a.countryCode).toBe('US');
   });
+
+  const prov = (input: Parameters<typeof buildResolveRequest>[0]) =>
+    (buildResolveRequest(input) as { addressesToValidate: Array<{ address: Record<string, unknown> }> })
+      .addressesToValidate[0].address.stateOrProvinceCode;
+
+  it('US/CA: bỏ tiền tố nước ISO 3166-2 ("US-CA" → "CA")', () => {
+    expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'US-CA', countryCode: 'US' })).toBe('CA');
+    expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'CA-ON', countryCode: 'CA' })).toBe('ON');
+  });
+
+  it('US: mã 2 ký tự sẵn giữ nguyên', () => {
+    expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'NY', countryCode: 'US' })).toBe('NY');
+  });
+
+  it('nước khác (KW): BỎ mã tỉnh để tránh FedEx 400 STATEORPROVINCECODE.TOO.LONG', () => {
+    expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'KW-KU', countryCode: 'KW' })).toBeUndefined();
+    expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'GB-ENG', countryCode: 'GB' })).toBeUndefined();
+  });
 });
 
 describe('parseClassification', () => {

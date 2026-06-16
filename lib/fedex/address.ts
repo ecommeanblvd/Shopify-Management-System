@@ -19,6 +19,20 @@ export interface AddressInput {
 }
 
 /** Body request resolve cho 1 địa chỉ. */
+/**
+ * Chuẩn hoá mã bang/tỉnh cho FedEx Address Validation. FedEx chỉ chấp nhận mã
+ * NGẮN (US/CA, kiểu USPS 2 ký tự). Shopify lưu ISO 3166-2 có tiền tố nước
+ * ("US-CA", "KW-KU") → gửi nguyên sẽ bị 400 STATEORPROVINCECODE.TOO.LONG.
+ *   - US/CA: bỏ tiền tố nước ("US-CA" → "CA"); giữ nếu ≤ 3 ký tự.
+ *   - Nước khác: BỎ HẲN (FedEx không cần tỉnh cho phần lớn nước; tránh 400).
+ */
+export function normalizeStateCode(code: string | null | undefined, country: string): string | undefined {
+  if (!code) return undefined;
+  if (country !== 'US' && country !== 'CA') return undefined;
+  const sub = code.includes('-') ? (code.split('-').pop() ?? '') : code;
+  return sub.length > 0 && sub.length <= 3 ? sub : undefined;
+}
+
 export function buildResolveRequest(addr: AddressInput): Record<string, unknown> {
   return {
     addressesToValidate: [
@@ -26,7 +40,7 @@ export function buildResolveRequest(addr: AddressInput): Record<string, unknown>
         address: {
           streetLines: addr.streetLines.filter((l) => l && l.trim()),
           city: addr.city ?? undefined,
-          stateOrProvinceCode: addr.stateOrProvinceCode ?? undefined,
+          stateOrProvinceCode: normalizeStateCode(addr.stateOrProvinceCode, addr.countryCode),
           postalCode: addr.postalCode ?? undefined,
           countryCode: addr.countryCode,
         },
