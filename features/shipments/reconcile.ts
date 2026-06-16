@@ -446,10 +446,13 @@ function impliedBilledFuelPercent(r: JoinedRow, enginePct: number | null): numbe
   // DHL fuels the Elevated Risk (country_fixed) too — include it in the
   // combinations (verified #MBLVD27457-cohort: 30.5% × (base + ER)).
   const er = Number(r.billedElevatedRisk ?? 0) + Number(r.billedImportHandling ?? 0);
+  // FedEx fuel cả RESIDENTIAL (đo: billed fuel base = net+signature+residential)
+  // → đưa vào tổ hợp để % billed nhận đúng rate HĐ thay vì lệch giả.
+  const residential = Number(r.billedResidential ?? 0);
   const c0 = netBase + remote;
-  const adds = [demand, signature, er];
+  const adds = [demand, signature, residential, er];
   const candidates = [...new Set(
-    Array.from({ length: 8 }, (_, mask) =>
+    Array.from({ length: 16 }, (_, mask) =>
       c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
   )].filter((b) => b > 0);
   let best: number | null = null;

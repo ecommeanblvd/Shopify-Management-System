@@ -169,15 +169,15 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
             <th className="text-right py-1">Hệ thống</th>
             <th className="text-right py-1" title="API hãng vận chuyển (FedEx/DHL…) tính lại theo bảng giá hợp đồng — ước tính đối chiếu, KHÔNG phải giá thật đã chốt">API NCC (ước tính)</th>
             <th className="text-right py-1" title="Giá THẬT hãng tính trên hoá đơn cho tracking number này">Billed (thật)</th>
-            <th className="text-right py-1">Lệch ({row.fedexQuote ? 'API' : 'Bill'}−HT)</th>
+            <th className="text-right py-1">Lệch ({(row.billedTotal ?? 0) > 0 ? 'Bill' : 'API'}−HT)</th>
             <th className="text-right py-1">Chẩn đoán</th>
           </tr>
         </thead>
         <tbody className="font-mono tabular-nums">
           {lines(row).map((l) => {
-            // Lệch = Hệ thống vs DỮ LIỆU CÓ SẴN: có API NCC (FedEx) → API−HT;
-            // chưa có API (DHL…) → Billed−HT. Tránh lấy API=0 trừ ra ⇒ lệch giả.
-            const ref = row.fedexQuote ? l.fedex : l.billed;
+            // Lệch = Hệ thống vs BILLED (giá thật) khi đã có hoá đơn — API chỉ là
+            // ước tính tham khảo. Chưa có billed (đơn mới) → so với API.
+            const ref = (row.billedTotal ?? 0) > 0 ? l.billed : l.fedex;
             const delta = ref === null && l.engine === null
               ? null
               : (ref ?? 0) - (l.engine ?? 0);
