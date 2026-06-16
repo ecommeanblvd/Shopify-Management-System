@@ -607,6 +607,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   // Breakdown chi tiết từng khoản phí của carrier (DHL: [{code,name,charge,tax,total}]).
   // Null cho dòng nhập tay/cũ → UI fallback về cột gộp base/fuel/other.
   charges: jsonb('charges'),
+  // FK ổn định tới shipment đã khớp (theo tracking + mã đơn). Dùng để đẩy billed
+  // cước vào đối soát; đổi text tracking/đơn vẫn giữ liên kết. NULL = chưa khớp.
+  shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'set null' }),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
