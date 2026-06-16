@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildResolveRequest, capStreetLines, parseClassification, parseAddressVerification } from './address';
+import { buildResolveRequest, capStreetLines, capPostcode, parseClassification, parseAddressVerification } from './address';
 
 describe('parseAddressVerification', () => {
   const wrap = (o: object) => ({ output: { resolvedAddresses: [o] } });
@@ -76,6 +76,19 @@ describe('capStreetLines', () => {
 
   it('giữ nguyên dòng ngắn + bỏ dòng rỗng', () => {
     expect(capStreetLines(['10A Street', '', '  '])).toEqual(['10A Street']);
+  });
+});
+
+describe('capPostcode', () => {
+  it('postcode dính tên khu → lấy cụm số đầu ("14299ALFIHA" → "14299")', () => {
+    expect(capPostcode('14299ALFIHA')).toBe('14299');
+  });
+  it('postcode ngắn giữ nguyên', () => {
+    expect(capPostcode('11228')).toBe('11228');
+    expect(capPostcode('SW1A 1AA')).toBe('SW1A 1AA');
+  });
+  it('rỗng → undefined', () => {
+    expect(capPostcode(null)).toBeUndefined();
   });
 });
 

@@ -62,6 +62,19 @@ function capCity(city: string | null | undefined): string | undefined {
   return s ? s.slice(0, FEDEX_FIELD_MAX) : undefined;
 }
 
+/**
+ * Chuẩn hoá postcode (tránh 400 POSTALCODE.TOO.LONG). Khách hay dính mã với tên
+ * khu ("14299ALFIHA"). Quá 10 ký tự → ưu tiên cụm SỐ đầu (postcode thường là số,
+ * "14299ALFIHA" → "14299"); không có thì cắt 10 ký tự đầu.
+ */
+export function capPostcode(pc: string | null | undefined): string | undefined {
+  const s = pc?.trim();
+  if (!s) return undefined;
+  if (s.length <= 10) return s;
+  const digits = s.match(/^\d+/)?.[0];
+  return (digits && digits.length >= 3 ? digits : s).slice(0, 10);
+}
+
 export function buildResolveRequest(addr: AddressInput): Record<string, unknown> {
   return {
     addressesToValidate: [
@@ -70,7 +83,7 @@ export function buildResolveRequest(addr: AddressInput): Record<string, unknown>
           streetLines: capStreetLines(addr.streetLines),
           city: capCity(addr.city),
           stateOrProvinceCode: normalizeStateCode(addr.stateOrProvinceCode, addr.countryCode),
-          postalCode: addr.postalCode ?? undefined,
+          postalCode: capPostcode(addr.postalCode),
           countryCode: addr.countryCode,
         },
       },
