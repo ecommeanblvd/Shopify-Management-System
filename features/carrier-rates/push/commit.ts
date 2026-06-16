@@ -41,6 +41,10 @@ export interface PushPlan {
   rows: PushPlanRow[];
   /** Detailed breakdown per (market, store, rate) for debugging / audit. */
   breakdown: (RecalcRateBreakdown & { marketHandle: string; storeId: string })[];
+  /** % phụ phí xăng dầu (fuel_percent) đang hiệu lực HÔM NAY mà ma trận này
+   *  bake vào giá. Giá tĩnh nên khoá theo ngày push — hiển thị để operator biết
+   *  khi nào nên push lại. NULL khi account không có fuel_percent. */
+  fuelPercent: number | null;
   /** Top-level warnings — e.g. no linked stores. */
   warnings: string[];
 }
@@ -60,8 +64,19 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
   const warnings: string[] = [];
   const snap = await loadAccountSnapshot(carrierAccountId);
   if (!snap) {
-    return { carrierAccountId, rows: [], breakdown: [], warnings: ['Carrier account not found.'] };
+    return { carrierAccountId, rows: [], breakdown: [], fuelPercent: null, warnings: ['Carrier account not found.'] };
   }
+
+  // % fuel đang hiệu lực HÔM NAY (tổng các dòng fuel_percent active + đúng cửa
+  // sổ ngày) — chính là mức ma trận bake vào giá. NULL nếu account không có.
+  const now = new Date();
+  const fuelRows = snap.surcharges.filter((s) =>
+    s.kind === 'fuel_percent' && s.active
+    && (!s.startsAt || s.startsAt.getTime() <= now.getTime())
+    && (!s.endsAt || s.endsAt.getTime() > now.getTime()));
+  const fuelPercent = fuelRows.length > 0
+    ? Math.round(fuelRows.reduce((sum, s) => sum + s.value, 0) * 100) / 100
+    : null;
 
   const links = await db
     .select({
@@ -81,6 +96,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
       carrierAccountId,
       rows: [],
       breakdown: [],
+      fuelPercent,
       warnings: ['No enabled market links. Open a market and link this account first.'],
     };
   }
@@ -214,7 +230,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
     }
   }
 
-  return { carrierAccountId, rows, breakdown: allBreakdown, warnings };
+  return { carrierAccountId, rows, breakdown: allBreakdown, fuelPercent, warnings };
 }
 
 export interface CommitPlanResult {

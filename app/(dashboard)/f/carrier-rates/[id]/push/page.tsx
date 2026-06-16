@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { ChevronLeft, Send, AlertCircle, CheckCircle2, ArrowRight, Store } from 'lucide-react';
+import { ChevronLeft, Send, AlertCircle, CheckCircle2, ArrowRight, Store, Fuel } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -101,6 +101,21 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
         <StatTile label="Rates" value={String(totalRates)} sub="To stage" />
         <StatTile label="Warnings" value={String(totalWarnings)} sub={totalWarnings === 0 ? 'Clean' : 'Skipped quotes'} tone={totalWarnings > 0 ? 'warning' : 'default'} />
       </div>
+
+      {/* Fuel đang bake vào bảng giá — giá tĩnh nên khoá theo ngày push. */}
+      {plan.fuelPercent !== null && (
+        <div className="rounded-xl border border-sky-200 dark:border-sky-900/60 bg-sky-50 dark:bg-sky-950/30 text-sky-900 dark:text-sky-100 px-5 py-4 flex items-start gap-3 text-sm">
+          <Fuel className="size-4 shrink-0 mt-0.5" />
+          <div>
+            Bảng giá bên dưới đang bake phụ phí xăng dầu{' '}
+            <span className="font-semibold">{plan.fuelPercent}%</span> (mức FedEx hiệu lực hôm nay).
+            <span className="text-sky-700 dark:text-sky-300">
+              {' '}FedEx đổi fuel theo tuần — nếu lệch nhiều so với lần push trước, hãy push lại để
+              giá khách bám fuel thật.
+            </span>
+          </div>
+        </div>
+      )}
 
       {plan.warnings.length > 0 && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 px-5 py-4 flex items-start gap-3 text-sm">
