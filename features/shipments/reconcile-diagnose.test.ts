@@ -144,6 +144,26 @@ describe('diagnoseReconcileRow — DHL signature↔addons & gogreen↔perStep (r
   });
 });
 
+describe('diagnoseReconcileRow — FedEx fuel TRÊN Address Correction (real #MBLVD27584)', () => {
+  // FedEx tính fuel 41.75% × (netBase 4.261.232 + demand 555.800 + addrCorrection
+  // 289.200) = 2.131.852. Nếu addrCorrection KHÔNG vào tổ hợp fuel base → % billed
+  // ra cao giả (44.26%) → fuel bị gắn LECH_FUEL sai.
+  const input = baseInput({
+    billed: { base: 4_261_232, discount: 0, fuel: 2_131_852, remote: 0, demand: 555_800,
+              signature: 0, residential: 0, addressCorrection: 289_200, vat: 0,
+              gogreen: 0, elevatedRisk: 0, total: 7_237_084 },
+    engine: { base: 4_261_232, discount: 0, fuel: 2_011_111, remote: 0, demand: 555_800,
+              residential: 0, vat: 0, total: 6_828_143 },
+    billedFuelableBase: 4_261_232,
+    fuelPercent: 41.75, vatPercent: 0,
+  });
+
+  it('fuel KHÔNG bị gắn LECH_FUEL (nhận đúng 41.75% nhờ addrCorrection trong fuel base)', () => {
+    const fuel = diagnoseReconcileRow(input).components.find((c) => c.key === 'fuel')!;
+    expect(fuel.cause).not.toBe('LECH_FUEL');
+  });
+});
+
 describe('diagnoseReconcileRow — Address Correction là pass-through, không vào residual', () => {
   // FedEx thu phí sửa địa chỉ 289.200 (khách nhập sai). Engine không định giá.
   // Trước khi bóc: 289.200 rơi vào residual → báo KHONG_KHOP giả.

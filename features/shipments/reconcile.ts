@@ -454,10 +454,13 @@ function impliedBilledFuelPercent(r: JoinedRow, enginePct: number | null): numbe
   // FedEx fuel cả RESIDENTIAL (đo: billed fuel base = net+signature+residential)
   // → đưa vào tổ hợp để % billed nhận đúng rate HĐ thay vì lệch giả.
   const residential = Number(r.billedResidential ?? 0);
+  // FedEx fuel CẢ Address Correction (đo #MBLVD27584: 41.75% × (net+demand+
+  // addrCorrection)) → thêm vào tổ hợp, nếu không % billed ra cao giả.
+  const addrCorrection = Number(r.billedAddressCorrection ?? 0);
   const c0 = netBase + remote;
-  const adds = [demand, signature, residential, er];
+  const adds = [demand, signature, residential, er, addrCorrection];
   const candidates = [...new Set(
-    Array.from({ length: 16 }, (_, mask) =>
+    Array.from({ length: 32 }, (_, mask) =>
       c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
   )].filter((b) => b > 0);
   let best: number | null = null;

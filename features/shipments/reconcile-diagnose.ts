@@ -258,12 +258,12 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     // base + ER only. Try every combination so a correct carrier %
     // is always recognised.
     const c0 = input.billedFuelableBase;
-    // DHL fuels Elevated Risk; FedEx fuels demand + signature + RESIDENTIAL
-    // (đo: billed fuel base = net+signature+residential). Thử mọi tổ hợp 4 add
-    // (2^4=16) để % carrier đúng luôn được nhận.
-    const adds = [n0(b.demand), n0(b.signature), n0(b.residential), n0(b.elevatedRisk) + n0(b.importHandling ?? null)];
+    // DHL fuels Elevated Risk; FedEx fuels demand + signature + RESIDENTIAL +
+    // ADDRESS CORRECTION (đo #MBLVD27584: 41.75% × (net+demand+addrCorrection)).
+    // Thử mọi tổ hợp 5 add (2^5=32) để % carrier đúng luôn được nhận.
+    const adds = [n0(b.demand), n0(b.signature), n0(b.residential), n0(b.elevatedRisk) + n0(b.importHandling ?? null), n0(b.addressCorrection ?? null)];
     const candidates = [...new Set(
-      Array.from({ length: 16 }, (_, mask) =>
+      Array.from({ length: 32 }, (_, mask) =>
         c0 + adds.reduce((sum, a, i) => sum + ((mask >> i) & 1 ? a : 0), 0)),
     )];
     const pctMatches = candidates.some((base) =>
@@ -283,7 +283,10 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
       // có ký nhận + giao nhà dân. Mỗi phần xét theo engine của CHÍNH nó.
       const resiPass = n0(b.residential) > 0 && r(e.residential) === 0 ? n0(b.residential) : 0;
       const sigPass = n0(b.signature) > 0 && r(n0(e.addons ?? null)) === 0 ? n0(b.signature) : 0;
-      const passFee = resiPass + sigPass;
+      // Address Correction luôn pass-through (engine không định giá) nhưng FedEx
+      // CÓ fuel nó → đưa vào passFee để fuel chênh được giải thích là phái sinh.
+      const acPass = n0(b.addressCorrection ?? null);
+      const passFee = resiPass + sigPass + acPass;
       // FedEx có khi fuel cả Demand (đo #MBLVD28665). Nhận cả: chỉ pass-through,
       // hoặc pass-through + demand (khi demand khớp).
       const demandMatched = r(n0(b.demand) - e.demand) === 0;
