@@ -53,7 +53,15 @@ export function InvoiceDetailModal(props: Props) {
                 <span>{bill.billNumber ?? '(không mã)'}</span>
                 <span className="font-mono text-xs text-muted-foreground">{bill.periodStart} → {bill.periodEnd}</span>
                 <span className="tabular-nums">{fmt(bill.amount)} {currency}</span>
-                {summary && <span className="tabular-nums text-amber-600 dark:text-amber-400">còn nợ {fmt(summary.outstanding)}</span>}
+                {summary && summary.outstanding > 0 && <span className="tabular-nums text-amber-600 dark:text-amber-400">còn nợ {fmt(summary.outstanding)}</span>}
+                {bill.dueDate && <span className="text-xs font-normal text-muted-foreground">Hạn TT: {bill.dueDate}</span>}
+                {summary && (() => {
+                  const st = summary.status === 'paid' ? { l: 'Đã trả', c: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' }
+                    : summary.overdue ? { l: 'Quá hạn', c: 'bg-red-500/15 text-red-700 dark:text-red-400' }
+                    : summary.status === 'partial' ? { l: 'Một phần', c: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' }
+                    : { l: 'Chưa trả', c: 'bg-muted text-muted-foreground' };
+                  return <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${st.c}`}>{st.l}</span>;
+                })()}
                 {bill.hasFile && (
                   <a href={`/f/carrier-rates/${accountId}/bills/${bill.id}/file`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-muted">
                     <FileText className="size-3.5" /> File gốc

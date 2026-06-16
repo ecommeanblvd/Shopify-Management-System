@@ -21,12 +21,8 @@ interface Props {
   deletePaymentAction: (paymentId: string) => Promise<void>;
 }
 
-function statusBadge(r: TrackingRow): { label: string; cls: string } {
-  if (r.status === 'paid') return { label: 'Đã trả', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' };
-  if (r.overdue) return { label: 'Quá hạn', cls: 'bg-red-500/15 text-red-700 dark:text-red-400' };
-  if (r.status === 'partial') return { label: 'Một phần', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' };
-  return { label: 'Chưa trả', cls: 'bg-muted text-muted-foreground' };
-}
+// Thứ tự cột phí; chỉ hiện cột nào có ít nhất 1 dòng > 0.
+const FEE_ORDER = ['Giá gốc', 'Chiết khấu', 'Fuel', 'Remote', 'Demand', 'Ký nhận', 'VAT', 'Khác'];
 
 export function BillingTrackingTable(props: Props) {
   const { accountId, currency, canManage, rows, bills, payments, summaryBills } = props;
@@ -36,6 +32,12 @@ export function BillingTrackingTable(props: Props) {
   const fmt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('vi-VN'));
   const billById = useMemo(() => new Map(bills.map((b) => [b.id, b])), [bills]);
   const sumById = useMemo(() => new Map(summaryBills.map((s) => [s.id, s])), [summaryBills]);
+
+  // Cột phí hiện = các khoản xuất hiện (>0) trong toàn bộ dữ liệu.
+  const feeCols = useMemo(
+    () => FEE_ORDER.filter((label) => rows.some((r) => r.fees.some((f) => f.label === label && f.value !== 0))),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -47,6 +49,7 @@ export function BillingTrackingTable(props: Props) {
   }, [rows, q]);
 
   const toggle = (k: string) => setExpanded((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const feeVal = (r: TrackingRow, label: string) => r.fees.find((f) => f.label === label)?.value ?? null;
 
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">Chưa có hoá đơn nào. Dùng nút “Thêm hoá đơn” bên trên.</p>;
@@ -71,14 +74,12 @@ export function BillingTrackingTable(props: Props) {
               <th className="px-3 py-2 text-left font-medium">Tracking</th>
               <th className="px-3 py-2 text-left font-medium">Đơn</th>
               <th className="px-3 py-2 text-left font-medium">Hoá đơn</th>
-              <th className="px-3 py-2 text-left font-medium">Hạn TT</th>
-              <th className="px-3 py-2 text-right font-medium">Phí (tổng)</th>
-              <th className="px-3 py-2 text-center font-medium">Trạng thái</th>
+              {feeCols.map((c) => <th key={c} className="px-3 py-2 text-right font-medium whitespace-nowrap">{c}</th>)}
+              <th className="px-3 py-2 text-right font-medium">Tổng</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.map((r) => {
-              const b = statusBadge(r);
               const open = expanded.has(r.key);
               const bill = billById.get(r.billId) ?? null;
               return (
@@ -91,31 +92,23 @@ export function BillingTrackingTable(props: Props) {
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-medium tabular-nums">{r.trackingNumber ?? <span className="text-muted-foreground">(không chi tiết)</span>}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.orderNumber ?? '—'}</td>
+                    <td className="px-3 py-2 font-medium tabular-nums whitespace-nowrap">{r.trackingNumber ?? <span className="text-muted-foreground">(không chi tiết)</span>}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.orderNumber ?? '—'}</td>
                     <td className="px-3 py-2">
                       <button type="button" onClick={() => setSelected(bill)} disabled={!bill}
-                        className="inline-flex items-center gap-1 text-primary hover:underline disabled:text-muted-foreground disabled:no-underline">
+                        className="inline-flex items-center gap-1 text-primary hover:underline disabled:text-muted-foreground disabled:no-underline whitespace-nowrap">
                         <FileText className="size-3.5" /> {r.billNumber ?? '—'}
                       </button>
                     </td>
-                    <td className="px-3 py-2 tabular-nums">{r.dueDate ?? '—'}</td>
+                    {feeCols.map((c) => <td key={c} className="px-3 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(r.total)}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`inline-block rounded px-2 py-0.5 text-[11px] font-medium ${b.cls}`}>{b.label}</span>
-                    </td>
                   </tr>
                   {open && r.hasDetail && (
                     <tr className="bg-muted/10">
                       <td />
-                      <td colSpan={6} className="px-3 py-2">
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                          {r.fees.map((f, i) => (
-                            <span key={i}><span className="text-muted-foreground">{f.label}:</span> <span className="tabular-nums">{fmt(f.value)}</span></span>
-                          ))}
-                          {r.weightKg != null && r.weightKg > 0 && <span><span className="text-muted-foreground">Cân:</span> {r.weightKg} kg</span>}
-                        </div>
-                        {r.note && <p className="mt-1 text-[11px] text-muted-foreground">{r.note}</p>}
+                      <td colSpan={3 + feeCols.length + 1} className="px-3 py-2">
+                        {r.note && <p className="text-[11px] text-muted-foreground">{r.note}</p>}
+                        {r.weightKg != null && r.weightKg > 0 && <p className="text-[11px] text-muted-foreground">Cân: {r.weightKg} kg</p>}
                       </td>
                     </tr>
                   )}
