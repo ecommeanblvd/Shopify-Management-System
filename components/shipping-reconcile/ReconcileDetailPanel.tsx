@@ -33,7 +33,7 @@ function severityClass(s: string): string {
   }
 }
 
-type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'gogreen' | 'vat' | 'elevatedRisk';
+type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'addressCorrection' | 'gogreen' | 'vat' | 'elevatedRisk';
 
 interface ComponentLine {
   label: string;
@@ -104,6 +104,12 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
       label: 'Giao địa chỉ nhà (residential)', billed: row.billedResidential, engine: row.engineResidential,
       fedex: fx('residential'), compKey: 'residential', billedSuffix: residentialClassLabel(row.residentialClass),
     },
+    // addressCorrection: phí FedEx sửa địa chỉ sai — pass-through (engine 0).
+    // Chỉ hiện dòng khi có bill (đa số đơn = 0). Gắn với địa chỉ không giao được.
+    ...(Number(row.billedAddressCorrection ?? 0) > 0 ? [{
+      label: 'Sửa địa chỉ (address correction)', billed: row.billedAddressCorrection, engine: null,
+      fedex: null, compKey: 'addressCorrection' as const,
+    }] : []),
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },
