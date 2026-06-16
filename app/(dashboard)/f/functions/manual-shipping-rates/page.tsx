@@ -55,10 +55,9 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           <h1 className="text-xl font-semibold tracking-tight">Manual Shipping rates</h1>
           <span className="text-xs text-muted-foreground">Bảng giá current (flat, zone × bậc cân) với fuel đang áp — backup khi carrier API gãy.</span>
         </div>
-        {canApply && activeId && (
+        {canApply && stores.length > 0 && (
           <ShippingProfilePush
-            storeId={activeId}
-            storeName={stores.find((s) => s.id === activeId)?.name ?? ''}
+            stores={stores.map((s) => ({ id: s.id, name: s.name }))}
             onList={listShippingProfiles}
             onPreview={previewShippingToProfiles}
             onApply={applyShippingToProfiles}

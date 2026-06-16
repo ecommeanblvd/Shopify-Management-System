@@ -5,16 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import type { ProfileInfo, ProfilePushResult } from '@/features/settings-sync/shipping-profiles-actions';
 
 interface Props {
-  storeId: string;
-  storeName: string;
+  stores: { id: string; name: string }[];
   onList: (storeId: string) => Promise<ProfileInfo[]>;
   onPreview: (storeId: string, profileIds: string[]) => Promise<ProfilePushResult[]>;
   onApply: (storeId: string, profileIds: string[]) => Promise<ProfilePushResult[]>;
 }
 
-/** Đẩy bảng giá ship lên các delivery profile được CHỌN (giá giống nhau).
- *  Profile không chọn không bị đụng. Có dry-run trước khi ghi thật. */
-export function ShippingProfilePush({ storeId, storeName, onList, onPreview, onApply }: Props) {
+/** Đẩy bảng giá ship lên các delivery profile được CHỌN của 1 store (giá giống
+ *  nhau). Chọn store → chọn profile → dry-run → apply. Profile không chọn giữ nguyên. */
+export function ShippingProfilePush({ stores, onList, onPreview, onApply }: Props) {
+  const [storeId, setStoreId] = useState<string>('');
   const [profiles, setProfiles] = useState<ProfileInfo[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<ProfilePushResult[] | null>(null);
@@ -23,59 +23,72 @@ export function ShippingProfilePush({ storeId, storeName, onList, onPreview, onA
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function loadProfiles() {
-    setBusy(true); setErr(null);
+  function resetResults() { setPreview(null); setApplied(null); setConfirm(false); }
+
+  async function pickStore(id: string) {
+    setStoreId(id); setProfiles(null); setSelected(new Set()); resetResults(); setErr(null);
+    if (!id) return;
+    setBusy(true);
     try {
-      const p = await onList(storeId);
+      const p = await onList(id);
       setProfiles(p);
       setSelected(new Set(p.map((x) => x.profileId))); // mặc định chọn tất cả
     } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setBusy(false); }
   }
 
-  const toggle = (id: string) => setSelected((s) => {
-    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
-  });
+  const toggle = (id: string) => { resetResults(); setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
 
   return (
-    <Dialog onOpenChange={(o) => { if (o && !profiles) loadProfiles(); else if (!o) { setPreview(null); setApplied(null); setConfirm(false); } }}>
+    <Dialog onOpenChange={(o) => { if (!o) { setStoreId(''); setProfiles(null); setSelected(new Set()); resetResults(); setErr(null); } }}>
       <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/60 bg-amber-500/5 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-500/10">
         ⚡ Đẩy giá ship lên Shopify
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Đẩy bảng giá ship lên profile — {storeName}</DialogTitle>
+          <DialogTitle>Đẩy bảng giá ship lên delivery profile</DialogTitle>
         </DialogHeader>
 
         {err && <div className="rounded border border-red-500/40 bg-red-500/5 px-3 py-2 text-sm text-red-600 dark:text-red-400">{err}</div>}
 
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Chọn delivery profile để đẩy cùng một bảng giá. Profile không chọn giữ nguyên.</p>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground">1. Chọn store</label>
+            <select value={storeId} onChange={(e) => pickStore(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+              <option value="">— chọn store —</option>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
 
-          {busy && !profiles ? <p className="text-sm text-muted-foreground">Đang tải profile…</p> : (
-            <div className="space-y-1.5">
-              {(profiles ?? []).map((p) => (
-                <label key={p.profileId} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
-                  <input type="checkbox" checked={selected.has(p.profileId)} onChange={() => toggle(p.profileId)} />
-                  <span className="font-medium">{p.name}</span>
-                  {p.isDefault && <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">DEFAULT</span>}
-                  <span className="ml-auto text-xs text-muted-foreground">{p.zoneCount} zone hiện tại</span>
-                </label>
-              ))}
+          {storeId && (
+            <div className="space-y-2">
+              <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground">2. Chọn profile (giá giống nhau, profile không chọn giữ nguyên)</label>
+              {busy && !profiles ? <p className="text-sm text-muted-foreground">Đang tải profile…</p> : (
+                <div className="space-y-1.5">
+                  {(profiles ?? []).map((p) => (
+                    <label key={p.profileId} className="flex items-center gap-2 rounded border border-border px-3 py-2 text-sm">
+                      <input type="checkbox" checked={selected.has(p.profileId)} onChange={() => toggle(p.profileId)} />
+                      <span className="font-medium">{p.name}</span>
+                      {p.isDefault && <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">DEFAULT</span>}
+                      <span className="ml-auto text-xs text-muted-foreground">{p.zoneCount} zone hiện tại</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {profiles && profiles.length > 0 && (
+                <button type="button" disabled={busy || selected.size === 0}
+                  onClick={async () => { setBusy(true); setErr(null); setApplied(null); try { setPreview(await onPreview(storeId, [...selected])); } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); } }}
+                  className="rounded border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50">
+                  {busy ? 'Đang chạy…' : 'Dry-run (xem trước)'}
+                </button>
+              )}
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={busy || selected.size === 0}
-              onClick={async () => { setBusy(true); setErr(null); setApplied(null); try { setPreview(await onPreview(storeId, [...selected])); } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); } }}
-              className="rounded border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50">
-              {busy ? 'Đang chạy…' : 'Dry-run (xem trước)'}
-            </button>
-          </div>
-
           {preview && (
             <div className="space-y-1 rounded border border-border p-3 text-sm">
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sẽ thay đổi:</div>
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">3. Sẽ thay đổi:</div>
               {preview.map((r) => (
                 <div key={r.profileId}>• <strong>{r.name}</strong>: tạo {r.zonesToCreate} zone, xoá {r.zonesToDelete}{r.rateOps ? `, ${r.rateOps} rate` : ''}</div>
               ))}
