@@ -9,9 +9,8 @@ import { db, schema } from '@/db/client';
 import { listOverridesForStore, previewMarketsApply, executeMarketsApply, executeMarketsApplyAll } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
-import { classifyFeeCoverage } from '@/features/carrier-rates/push/fee-coverage';
-import { ApplyModal } from '@/components/markets/ApplyModal';
-import { ApplyAllBackupButton } from '@/components/functions/ApplyAllBackupButton';
+import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
+import { ApplyBackupButton } from '@/components/functions/ApplyBackupButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,13 +39,13 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
     .select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, key: schema.carriers.key })
     .from(schema.carrierAccounts)
     .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId));
-  const coverage: Record<string, { covered: string[]; notCovered: string[] }> = {};
+  const coverage: Record<string, FeeCoverageResult> = {};
   for (const a of carrierAccts) {
     const surs = await db
-      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value, startsAt: schema.carrierSurcharges.startsAt, endsAt: schema.carrierSurcharges.endsAt })
+      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value, stepKg: schema.carrierSurcharges.stepKg, startsAt: schema.carrierSurcharges.startsAt, endsAt: schema.carrierSurcharges.endsAt })
       .from(schema.carrierSurcharges)
       .where(eq(schema.carrierSurcharges.carrierAccountId, a.id));
-    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
+    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
   }
 
   async function preview(storeId: string) {
@@ -72,43 +71,21 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
 
   return (
     <div className="px-6 md:px-10 py-5 space-y-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <Link href="/f/functions" className="text-sm text-muted-foreground hover:text-foreground">← Functions</Link>
-        <h1 className="text-xl font-semibold tracking-tight">Manual Shipping rates</h1>
-        <span className="text-xs text-muted-foreground">Giá ship flat (zone × bậc cân) — backup Shopify khi carrier API gãy.</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <Link href="/f/functions" className="text-sm text-muted-foreground hover:text-foreground">← Functions</Link>
+          <h1 className="text-xl font-semibold tracking-tight">Manual Shipping rates</h1>
+          <span className="text-xs text-muted-foreground">Bảng giá current (flat, zone × bậc cân) với fuel đang áp — backup khi carrier API gãy.</span>
+        </div>
+        {canApply && stores.length > 0 && (
+          <ApplyBackupButton stores={stores} storeCount={activeStoreCount} onPreview={preview} onApply={apply} onApplyAll={applyAll} />
+        )}
       </div>
 
       {stores.length === 0 ? (
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">Chưa có store nào kết nối.</div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            {stores.map((s) => (
-              <Link key={s.id} href={`/f/functions/manual-shipping-rates?store=${s.id}`}
-                className={`rounded border px-3 py-1 text-sm ${s.id === activeId ? 'border-foreground font-medium' : 'border-border text-muted-foreground hover:bg-muted'}`}>
-                {s.name}
-              </Link>
-            ))}
-          </div>
-
-          {canApply && (
-            <details className="rounded-md border border-amber-500/40 bg-amber-500/5 text-sm">
-              <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wider text-amber-700/90 dark:text-amber-400/90">
-                ⚡ Apply backup lên Shopify (khẩn cấp khi carrier API gãy)
-              </summary>
-              <div className="space-y-3 px-3 pb-3">
-                <div className="border-b border-amber-500/30 pb-3">
-                  <p className="mb-2 text-xs text-muted-foreground">Apply hàng loạt — đẩy toàn bộ cấu hình market (gồm flat rates) lên tất cả store:</p>
-                  <ApplyAllBackupButton storeCount={activeStoreCount} onApplyAll={applyAll} />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs text-muted-foreground">Hoặc apply từng store:</p>
-                  <ApplyModal stores={stores} onPreview={preview} onApply={apply} />
-                </div>
-              </div>
-            </details>
-          )}
-
           {markets.length === 0 ? (
             <p className="text-sm text-muted-foreground">Store này chưa có cấu hình market/giá ship.</p>
           ) : (

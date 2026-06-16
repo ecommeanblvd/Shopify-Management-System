@@ -124,7 +124,7 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
               <CheckCircle2 className="size-4" /> Bảng giá ĐÃ cover các khoản
             </div>
             <ul className="space-y-1 text-sm text-emerald-800 dark:text-emerald-200">
-              {plan.feeCoverage.covered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c}</span></li>)}
+              {plan.feeCoverage.covered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c.label}{c.detail && <span className="text-emerald-600/80 dark:text-emerald-400/80"> — {c.detail}</span>}</span></li>)}
             </ul>
           </div>
           <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/20 px-5 py-4">
@@ -132,7 +132,7 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
               <AlertCircle className="size-4" /> KHÔNG cover (shop có thể gánh)
             </div>
             <ul className="space-y-1 text-sm text-amber-800 dark:text-amber-200">
-              {plan.feeCoverage.notCovered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c}</span></li>)}
+              {plan.feeCoverage.notCovered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c.label}{c.detail && <span className="text-amber-600/80 dark:text-amber-400/80"> — {c.detail}</span>}</span></li>)}
             </ul>
           </div>
         </div>

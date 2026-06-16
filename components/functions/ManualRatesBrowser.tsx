@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ZoneView } from '@/features/markets/domain/shipping-matrix-view';
 import { carriersInZones, buildZoneWeightMatrix, bracketMatchesWeight, parseRateSearch, zoneCarrierLabel } from '@/features/markets/domain/shipping-matrix-view';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import type { FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 
 export interface MarketZones { marketHandle: string; zones: ZoneView[]; }
 
@@ -36,9 +37,7 @@ function countrySearchText(code: string): string {
  *  dòng = bậc cân (hợp nhất, sắp theo cận trên kg). Tab carrier chung; header zone
  *  dính trên, cột bậc cân dính trái; vạch ngăn giữa các market. Search lọc cột
  *  zone (mã/nhãn/nước/market) hoặc gõ mốc cân để tô sáng + nhảy tới dòng. */
-export interface FeeCoverage { covered: string[]; notCovered: string[] }
-
-export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones[]; coverage?: Record<string, FeeCoverage> }) {
+export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones[]; coverage?: Record<string, FeeCoverageResult> }) {
   const [q, setQ] = useState('');
   const { needle, weight } = parseRateSearch(q);
 
@@ -69,7 +68,7 @@ export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones
 
   // Khớp tab carrier đang chọn ("FedEx IP" / "DHL Express") với coverage theo
   // brand ('fedex'/'dhl') bằng substring — không phụ thuộc nhãn chính xác.
-  const activeCoverage = useMemo<FeeCoverage | undefined>(() => {
+  const activeCoverage = useMemo<FeeCoverageResult | undefined>(() => {
     if (!coverage) return undefined;
     const a = active.toLowerCase();
     const key = Object.keys(coverage).find((k) => a.includes(k.toLowerCase()));
@@ -94,27 +93,37 @@ export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones
             {c}
           </button>
         ))}
+        {activeCoverage?.fuelPercent != null && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/5 px-2.5 py-1 text-xs font-medium text-sky-700 dark:text-sky-400">
+            🛢️ Fuel đang áp: {activeCoverage.fuelPercent}%
+          </span>
+        )}
         {activeCoverage && (activeCoverage.covered.length > 0 || activeCoverage.notCovered.length > 0) && (
           <Dialog>
-            <DialogTrigger className="ml-auto inline-flex items-center gap-1 rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted">
+            <DialogTrigger className={`inline-flex items-center gap-1 rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted ${activeCoverage?.fuelPercent == null ? 'ml-auto' : ''}`}>
               ⓘ Phí cover / không cover
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Khoản phí matrix cover / không cover — {active}</DialogTitle>
               </DialogHeader>
+              <p className="-mt-1 mb-1 text-xs text-muted-foreground">Số tiền/% theo công thức hệ thống đang áp hôm nay (fuel {activeCoverage.fuelPercent ?? '—'}%).</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-sm">
                   <div className="mb-1.5 font-medium text-emerald-700 dark:text-emerald-400">✓ Giá ĐÃ cover</div>
                   <ul className="space-y-1 text-muted-foreground">
-                    {activeCoverage.covered.map((c, i) => <li key={i}>• {c}</li>)}
+                    {activeCoverage.covered.map((c, i) => (
+                      <li key={i}>• {c.label}{c.detail && <span className="text-emerald-600/80 dark:text-emerald-400/80"> — {c.detail}</span>}</li>
+                    ))}
                   </ul>
                 </div>
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
                   <div className="mb-1.5 font-medium text-amber-700 dark:text-amber-400">⚠ KHÔNG cover (shop có thể gánh)</div>
                   <ul className="space-y-1 text-muted-foreground">
                     {activeCoverage.notCovered.length > 0
-                      ? activeCoverage.notCovered.map((c, i) => <li key={i}>• {c}</li>)
+                      ? activeCoverage.notCovered.map((c, i) => (
+                        <li key={i}>• {c.label}{c.detail && <span className="text-amber-600/80 dark:text-amber-400/80"> — {c.detail}</span>}</li>
+                      ))
                       : <li>— (không có khoản nào ngoài bảng)</li>}
                   </ul>
                 </div>

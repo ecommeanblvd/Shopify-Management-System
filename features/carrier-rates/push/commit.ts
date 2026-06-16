@@ -4,7 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { loadAccountSnapshot } from '../engine/load';
-import { classifyFeeCoverage } from './fee-coverage';
+import { classifyFeeCoverage, type FeeItem } from './fee-coverage';
 import { recalcMarket, type CarrierServiceForRecalc, type RecalcRateBreakdown } from './recalc';
 import { carrierRatesManifest } from '../manifest';
 import type { MarketShipping } from '@/features/markets/types';
@@ -48,7 +48,7 @@ export interface PushPlan {
   fuelPercent: number | null;
   /** Khoản phí carrier matrix CÓ / KHÔNG cover (suy ra từ cấu hình surcharge +
    *  cách matrix quote không có địa chỉ). Hiển thị để vận hành nắm rõ. */
-  feeCoverage: { covered: string[]; notCovered: string[] };
+  feeCoverage: { covered: FeeItem[]; notCovered: FeeItem[] };
   /** Top-level warnings — e.g. no linked stores. */
   warnings: string[];
 }
