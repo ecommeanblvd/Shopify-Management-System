@@ -21,6 +21,15 @@ interface ShopifyRateRequest {
   };
 }
 
+/**
+ * Health-check. Shopify gửi GET tới callbackUrl để xác minh service còn sống;
+ * GET trả 405 → Shopify đánh dấu hỏng → carrier bị xám không chọn được ở picker.
+ * Trả 200 JSON hợp lệ là đủ.
+ */
+export async function GET() {
+  return NextResponse.json({ rates: [] });
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ storeId: string }> }) {
   try {
     const { storeId } = await params;
