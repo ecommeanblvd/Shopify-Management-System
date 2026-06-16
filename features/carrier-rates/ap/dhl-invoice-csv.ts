@@ -76,11 +76,12 @@ function chargesFromRow(col: (n: string) => string): DhlChargeLine[] {
   const wc = num(col('Weight Charge'));
   if (wc !== 0) out.push({ code: 'WEIGHT', name: 'Weight charge', charge: wc, tax: num(col('Weight Tax (VAT)')), total: wc + num(col('Weight Tax (VAT)')) });
   for (let i = 1; i <= 9; i++) {
+    const charge = num(col(`XC${i} Charge`));
+    const total = num(col(`XC${i} Total`)) || charge + num(col(`XC${i} Tax`));
+    if (charge === 0 && total === 0) continue; // bỏ slot trống (DHL điền '0' hoặc rỗng)
     const code = col(`XC${i} Code`);
     const name = col(`XC${i} Name`);
-    const charge = num(col(`XC${i} Charge`));
-    if (!code && !name && charge === 0) continue;
-    out.push({ code, name, charge, tax: num(col(`XC${i} Tax`)), total: num(col(`XC${i} Total`)) || charge + num(col(`XC${i} Tax`)) });
+    out.push({ code: code === '0' ? '' : code, name: name === '0' ? '' : name, charge, tax: num(col(`XC${i} Tax`)), total });
   }
   return out;
 }
