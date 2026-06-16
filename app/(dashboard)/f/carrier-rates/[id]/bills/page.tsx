@@ -19,7 +19,6 @@ import { reconcileDhlBill, type DhlReconcileResult } from '@/features/carrier-ra
 import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-import-actions';
 import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
-import { BatchBillUpload } from '@/components/carrier-rates/BatchBillUpload';
 import { ImportFboDialog } from '@/components/carrier-rates/ImportFboDialog';
 import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
 
@@ -186,8 +185,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
           <div className="flex items-center gap-2">
             {isFedex && <ImportFboDialog currency={currency} previewAction={previewFboAction} applyAction={applyFboAction} />}
             {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
-            <BatchBillUpload importAction={importBatchAction} currency={currency} />
-            <AddBillDialog createBillAction={createBillAction} accountCurrency={currency} />
+            <AddBillDialog createBillAction={createBillAction} importAction={importBatchAction} accountCurrency={currency} />
           </div>
         )}
       </header>
