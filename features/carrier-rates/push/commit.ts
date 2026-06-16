@@ -4,6 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { loadAccountSnapshot } from '../engine/load';
+import { classifyFeeCoverage } from './fee-coverage';
 import { recalcMarket, type CarrierServiceForRecalc, type RecalcRateBreakdown } from './recalc';
 import { carrierRatesManifest } from '../manifest';
 import type { MarketShipping } from '@/features/markets/types';
@@ -45,6 +46,9 @@ export interface PushPlan {
    *  bake vào giá. Giá tĩnh nên khoá theo ngày push — hiển thị để operator biết
    *  khi nào nên push lại. NULL khi account không có fuel_percent. */
   fuelPercent: number | null;
+  /** Khoản phí carrier matrix CÓ / KHÔNG cover (suy ra từ cấu hình surcharge +
+   *  cách matrix quote không có địa chỉ). Hiển thị để vận hành nắm rõ. */
+  feeCoverage: { covered: string[]; notCovered: string[] };
   /** Top-level warnings — e.g. no linked stores. */
   warnings: string[];
 }
@@ -64,7 +68,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
   const warnings: string[] = [];
   const snap = await loadAccountSnapshot(carrierAccountId);
   if (!snap) {
-    return { carrierAccountId, rows: [], breakdown: [], fuelPercent: null, warnings: ['Carrier account not found.'] };
+    return { carrierAccountId, rows: [], breakdown: [], fuelPercent: null, feeCoverage: { covered: [], notCovered: [] }, warnings: ['Carrier account not found.'] };
   }
 
   // % fuel đang hiệu lực HÔM NAY (tổng các dòng fuel_percent active + đúng cửa
@@ -77,6 +81,8 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
   const fuelPercent = fuelRows.length > 0
     ? Math.round(fuelRows.reduce((sum, s) => sum + s.value, 0) * 100) / 100
     : null;
+
+  const feeCoverage = classifyFeeCoverage(snap.surcharges, snap.name);
 
   const links = await db
     .select({
@@ -97,6 +103,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
       rows: [],
       breakdown: [],
       fuelPercent,
+      feeCoverage,
       warnings: ['No enabled market links. Open a market and link this account first.'],
     };
   }
@@ -230,7 +237,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
     }
   }
 
-  return { carrierAccountId, rows, breakdown: allBreakdown, fuelPercent, warnings };
+  return { carrierAccountId, rows, breakdown: allBreakdown, fuelPercent, feeCoverage, warnings };
 }
 
 export interface CommitPlanResult {

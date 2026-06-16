@@ -117,6 +117,27 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
+      {(plan.feeCoverage.covered.length > 0 || plan.feeCoverage.notCovered.length > 0) && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/20 px-5 py-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-100 mb-2">
+              <CheckCircle2 className="size-4" /> Bảng giá ĐÃ cover các khoản
+            </div>
+            <ul className="space-y-1 text-sm text-emerald-800 dark:text-emerald-200">
+              {plan.feeCoverage.covered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c}</span></li>)}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/20 px-5 py-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-100 mb-2">
+              <AlertCircle className="size-4" /> KHÔNG cover (shop có thể gánh)
+            </div>
+            <ul className="space-y-1 text-sm text-amber-800 dark:text-amber-200">
+              {plan.feeCoverage.notCovered.map((c, i) => <li key={i} className="flex gap-1.5"><span>•</span><span>{c}</span></li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {plan.warnings.length > 0 && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 px-5 py-4 flex items-start gap-3 text-sm">
           <AlertCircle className="size-4 shrink-0 mt-0.5" />
