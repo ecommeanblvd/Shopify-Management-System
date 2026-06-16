@@ -136,7 +136,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
           <div className="flex items-center gap-2">
             {isFedex && <ImportFboDialog currency={currency} previewAction={previewFboAction} applyAction={applyFboAction} />}
             {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
-            <AddBillDialog createBillAction={createBillAction} />
+            <AddBillDialog createBillAction={createBillAction} accountCurrency={currency} />
           </div>
         )}
       </header>
