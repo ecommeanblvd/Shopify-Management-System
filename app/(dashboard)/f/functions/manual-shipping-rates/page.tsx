@@ -11,7 +11,9 @@ import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { ShippingProfilePush } from '@/components/functions/ShippingProfilePush';
+import { CarrierServiceRegister } from '@/components/functions/CarrierServiceRegister';
 import { listShippingProfiles, previewShippingToProfiles, applyShippingToProfiles } from '@/features/settings-sync/shipping-profiles-actions';
+import { registerCarrierService } from '@/features/carrier-rates/carrier-service-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,12 +58,18 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           <span className="text-xs text-muted-foreground">Bảng giá current (flat, zone × bậc cân) với fuel đang áp — backup khi carrier API gãy.</span>
         </div>
         {canApply && stores.length > 0 && (
-          <ShippingProfilePush
-            stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-            onList={listShippingProfiles}
-            onPreview={previewShippingToProfiles}
-            onApply={applyShippingToProfiles}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <CarrierServiceRegister
+              stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+              onRegister={registerCarrierService}
+            />
+            <ShippingProfilePush
+              stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+              onList={listShippingProfiles}
+              onPreview={previewShippingToProfiles}
+              onApply={applyShippingToProfiles}
+            />
+          </div>
         )}
       </div>
 
