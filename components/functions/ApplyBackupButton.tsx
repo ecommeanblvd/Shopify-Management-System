@@ -22,7 +22,7 @@ export function ApplyBackupButton({ stores, storeCount, onPreview, onApply, onAp
       <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/60 bg-amber-500/5 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-500/10">
         ⚡ Apply backup lên Shopify
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] max-w-3xl overflow-auto">
+      <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Apply backup lên Shopify (khẩn cấp khi carrier API gãy)</DialogTitle>
         </DialogHeader>

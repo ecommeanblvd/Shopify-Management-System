@@ -103,7 +103,7 @@ export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones
             <DialogTrigger className={`inline-flex items-center gap-1 rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:bg-muted ${activeCoverage?.fuelPercent == null ? 'ml-auto' : ''}`}>
               ⓘ Phí cover / không cover
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
                 <DialogTitle>Khoản phí matrix cover / không cover — {active}</DialogTitle>
               </DialogHeader>
