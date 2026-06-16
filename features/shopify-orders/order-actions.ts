@@ -129,6 +129,13 @@ export interface OrderDetail {
    *  `shipWeightKg`. Lets operators correct legacy orders without
    *  re-syncing from Shopify. */
   shipWeightKgOverride: number | null;
+  /** Địa chỉ giao + kết quả verify FedEx Address Validation. */
+  address: {
+    line1: string | null; line2: string | null; city: string | null;
+    province: string | null; postcode: string | null; name: string | null; company: string | null;
+    class: string | null; deliverable: boolean | null; issue: string | null;
+    standardized: string | null; verifiedAt: Date | null;
+  };
   lines: OrderLineDetail[];
   shipping: OrderShippingDetail;
 }
@@ -291,6 +298,13 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     shipCountry: order.shipCountry,
     shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
     shipWeightKgOverride: order.shipWeightKgOverride !== null ? Number(order.shipWeightKgOverride) : null,
+    address: {
+      line1: order.shipAddress1, line2: order.shipAddress2, city: order.shipCity,
+      province: order.shipProvinceCode, postcode: order.shipPostcode,
+      name: order.shipName, company: order.shipCompany,
+      class: order.addrClass, deliverable: order.addrDeliverable, issue: order.addrIssue,
+      standardized: order.addrStandardized, verifiedAt: order.addrVerifiedAt,
+    },
     lines: lines.map((l) => {
       const c = l.sku ? costMap.get(l.sku) : undefined;
       return {

@@ -424,6 +424,7 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
 
   return (
     <div className="space-y-5">
+      <AddressVerifyCard address={detail.address} country={detail.shipCountry} />
       {/* Lines */}
       <section>
         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Line items</div>
@@ -1033,4 +1034,55 @@ function fmt(amount: number, currency: string): string {
   } catch {
     return amount.toFixed(2);
   }
+}
+
+/** Địa chỉ giao + kết quả verify FedEx Address Validation. */
+function AddressVerifyCard({
+  address,
+  country,
+}: {
+  address: import('@/features/shopify-orders/order-actions').OrderDetail['address'];
+  country: string | null;
+}) {
+  const a = address;
+  const hasStreet = !!a.line1;
+  const classMap: Record<string, { label: string; cls: string }> = {
+    RESIDENTIAL: { label: '🏠 Nhà dân', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+    BUSINESS: { label: '🏢 Doanh nghiệp', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
+    MIXED: { label: 'Hỗn hợp', cls: 'bg-muted text-muted-foreground' },
+    UNKNOWN: { label: 'Chưa rõ', cls: 'bg-muted text-muted-foreground' },
+  };
+  const cls = a.class ? classMap[a.class] ?? classMap.UNKNOWN : null;
+  const fullAddr = [a.name, a.company, a.line1, a.line2, a.city, a.province, a.postcode, country]
+    .filter(Boolean).join(', ');
+
+  return (
+    <section>
+      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Địa chỉ giao</div>
+      <Card>
+        <CardContent className="p-3 space-y-2 text-sm">
+          {hasStreet ? (
+            <div className="text-foreground">{fullAddr || '—'}</div>
+          ) : (
+            <div className="text-muted-foreground italic">Chưa có địa chỉ đầy đủ (đơn cũ — cần re-sync để verify).</div>
+          )}
+          {a.verifiedAt ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {cls && <span className={`rounded px-2 py-0.5 font-medium ${cls.cls}`}>{cls.label}</span>}
+              <span className={`rounded px-2 py-0.5 font-medium ${a.deliverable ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-500/15 text-red-700 dark:text-red-400'}`}>
+                {a.deliverable ? '✓ Giao được' : '⚠ Không giao được'}
+              </span>
+              {a.issue && <span className="rounded px-2 py-0.5 font-medium bg-red-500/10 text-red-600 dark:text-red-400" title="Vấn đề FedEx báo">{a.issue}</span>}
+              <span className="text-muted-foreground">· verify {new Date(a.verifiedAt).toLocaleDateString('vi-VN')}</span>
+            </div>
+          ) : hasStreet ? (
+            <div className="text-xs text-muted-foreground">Chưa verify (chờ chạy Address Validation).</div>
+          ) : null}
+          {a.standardized && a.verifiedAt && a.standardized.toUpperCase() !== fullAddr.toUpperCase() && (
+            <div className="text-[11px] text-muted-foreground">FedEx chuẩn hoá: <span className="font-mono">{a.standardized}</span></div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
 }
