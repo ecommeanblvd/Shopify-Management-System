@@ -144,6 +144,33 @@ describe('diagnoseReconcileRow — DHL signature↔addons & gogreen↔perStep (r
   });
 });
 
+describe('diagnoseReconcileRow — Address Correction là pass-through, không vào residual', () => {
+  // FedEx thu phí sửa địa chỉ 289.200 (khách nhập sai). Engine không định giá.
+  // Trước khi bóc: 289.200 rơi vào residual → báo KHONG_KHOP giả.
+  const input = baseInput({
+    billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0,
+              signature: 0, residential: 0, addressCorrection: 289_200, vat: 0,
+              gogreen: 0, elevatedRisk: 0, total: 1_406_181 },
+  });
+
+  it('có dòng addressCorrection pass-through (289.200 vs engine 0)', () => {
+    const ac = diagnoseReconcileRow(input).components.find((c) => c.key === 'addressCorrection')!;
+    expect(ac.billed).toBe(289_200);
+    expect(ac.engine).toBe(0);
+    expect(ac.cause).toBe('PHI_TUY_CHON');
+  });
+
+  it('residual = 0 (khoản 289.200 đã được giải thích, không lệch giả)', () => {
+    const resid = diagnoseReconcileRow(input).components.find((c) => c.key === 'residual')!;
+    expect(resid.delta).toBe(0);
+  });
+
+  it('bất biến Σ: tổng delta thành phần = totalDelta', () => {
+    const d = diagnoseReconcileRow(input);
+    expect(d.components.reduce((a, c) => a + c.delta, 0)).toBe(d.totalDelta);
+  });
+});
+
 describe('diagnoseReconcileRow — FedEx residential tách khỏi signature (real #MBLVD25115)', () => {
   // FedEx bill có Direct Signature 88.000 + Residential Delivery 80.100 ở 2
   // dòng RIÊNG. Engine: signature = addon_fixed when_billed (88.000), residential

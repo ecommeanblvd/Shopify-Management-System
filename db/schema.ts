@@ -941,6 +941,10 @@ export const shipmentCharges = pgTable('shipment_charges', {
    *  direct_signature để dòng đối soát không bị lẫn. Pass-through (engine
    *  không tự định giá — 2 biến thể rate cùng kỳ). */
   residential: numeric('residential', { precision: 14, scale: 2 }),
+  /** Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ khi
+   *  khách nhập địa chỉ thiếu/sai (≈289.200/274.700 VND theo kỳ). Tách riêng
+   *  để đối soát không coi là "thu sai"; gắn với đơn addrDeliverable=false. */
+  addressCorrection: numeric('address_correction', { precision: 14, scale: 2 }),
   /** Phân loại địa chỉ người nhận theo FedEx Address Validation API
    *  (RESIDENTIAL/BUSINESS/MIXED/UNKNOWN). Dùng để xác minh phí Residential
    *  có ĐÚNG không: BUSINESS mà bị thu residential ⇒ FedEx thu sai ⇒ đòi NCC.

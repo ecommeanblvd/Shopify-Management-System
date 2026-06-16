@@ -8,7 +8,7 @@ function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
     shipDate: null, service: null, recipientCountry: null, recipientStreet1: null,
     recipientStreet2: null, recipientCity: null, recipientState: null, recipientPostcode: null,
     weightKg: null, base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-    residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
+    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
   };
 }
 
@@ -24,7 +24,7 @@ describe('classifyFboCharge', () => {
     ['Vietnam VAT', 'vat'], ['UAE Freight VAT', 'vat'], ['Vietnam VAT Freight', 'vat'],
     ['VAT/Consumption Tax', 'duty'], ['Consumption Tax', 'duty'],
     ['Duty & Tax', 'duty'], ['Customs Duty', 'duty'], ['Disbursement Fee', 'duty'], ['Duty Disbursement Fee', 'duty'],
-    ['Address Correction', 'other'], ['Other', 'other'],
+    ['Address Correction', 'addressCorrection'], ['Address Correction Charge', 'addressCorrection'], ['Other', 'other'],
   ];
   it.each(cases)('"%s" → %s', (label, bucket) => {
     expect(classifyFboCharge(label)).toBe(bucket);

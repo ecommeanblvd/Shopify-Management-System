@@ -173,6 +173,7 @@ export async function importFboToDatabase(
         totalAmount: numStr(fboShippingTotal(r)), currency: currency,
         base: numStr(r.base), fuel: numStr(r.fuel), remote: numStr(r.remote), demand: numStr(r.demand),
         directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
+        addressCorrection: numStr(r.addressCorrection),
         discount: numStr(r.discount), elevatedRisk: '0', importHandling: numStr(r.importHandling),
         billingWeightKg: r.weightKg != null ? numStr(r.weightKg) : null,
         source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,

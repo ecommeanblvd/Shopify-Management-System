@@ -6,7 +6,7 @@
 
 export type FboBucket =
   | 'base' | 'discount' | 'fuel' | 'demand' | 'remote'
-  | 'signature' | 'residential' | 'importHandling' | 'vat' | 'duty' | 'other';
+  | 'signature' | 'residential' | 'addressCorrection' | 'importHandling' | 'vat' | 'duty' | 'other';
 
 /** Map nhãn phí FedEx (FBO) → mục của hệ thống. Khớp theo từ khoá, không phụ
  *  thuộc vị trí cột nên không bị silent-drop như LOG-Export tay. */
@@ -24,6 +24,9 @@ export function classifyFboCharge(label: string): FboBucket {
   if (t.includes('delivery area')) return 'remote'; // Out of Delivery Area Tier A/B/C
   if (t.includes('signature')) return 'signature';
   if (t.includes('residential')) return 'residential';
+  // Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ khi
+  // khách nhập địa chỉ thiếu/sai. Bóc riêng để đối soát không coi là "thu sai".
+  if (t.includes('correction')) return 'addressCorrection';
   if (t.includes('inbound') || t.includes('hàng nhập')) return 'importHandling';
   return 'other';
 }
@@ -56,7 +59,7 @@ export interface FboBilledRow {
    *  đơn vị (K=kg, P=lb). Dùng làm input quote chính xác nhất cho từng AWB. */
   weightKg: number | null;
   base: number; discount: number; fuel: number; demand: number; remote: number;
-  signature: number; residential: number; importHandling: number; vat: number;
+  signature: number; residential: number; addressCorrection: number; importHandling: number; vat: number;
   duty: number; other: number;
   total: number;
 }
@@ -135,7 +138,7 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
       ? fboWeightToKg(parseFboAmount(row[cols.meta.weight]), str(row, cols.meta.weightUnit)) || null
       : null,
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-    residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,
+    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,
   };
   for (const c of cols.chargeLabelCols) {
     const label = String(row[c] ?? '').trim();
@@ -146,12 +149,12 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
   const awbTotal = cols.meta.awbTotal >= 0 ? parseFboAmount(row[cols.meta.awbTotal]) : 0;
   // Tổng: ưu tiên cột "Tổng số tiền trong vận đơn"; rỗng → cộng các mục.
   r.total = awbTotal || (r.base + r.discount + r.fuel + r.demand + r.remote
-    + r.signature + r.residential + r.importHandling + r.vat + r.duty + r.other);
+    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.duty + r.other);
   return r;
 }
 
 const SUM_KEYS = ['base', 'discount', 'fuel', 'demand', 'remote', 'signature',
-  'residential', 'importHandling', 'vat', 'duty', 'other', 'total'] as const;
+  'residential', 'addressCorrection', 'importHandling', 'vat', 'duty', 'other', 'total'] as const;
 
 /** Hợp nhất các dòng FBO cùng AWB cho ĐỐI SOÁT CƯỚC: 1 AWB có thể có 2 dòng —
  *  dòng CƯỚC (duty=0) và dòng THUẾ/HẢI QUAN (duty>0, customs pass-through người

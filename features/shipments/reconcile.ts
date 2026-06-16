@@ -45,6 +45,8 @@ export interface ReconcileRow {
   billedDemand: number | null;
   billedSignature: number | null;
   billedResidential: number | null;
+  /** Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ. */
+  billedAddressCorrection: number | null;
   /** Phân loại địa chỉ người nhận (RESIDENTIAL/BUSINESS/MIXED/UNKNOWN). */
   residentialClass: string | null;
   billedVat: number | null;
@@ -137,6 +139,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedDemand: schema.shipmentCharges.demand,
       billedSignature: schema.shipmentCharges.directSignature,
       billedResidential: schema.shipmentCharges.residential,
+      billedAddressCorrection: schema.shipmentCharges.addressCorrection,
       residentialClass: schema.shipmentCharges.residentialClass,
       billedVat: schema.shipmentCharges.vat,
       billedGogreen: schema.shipmentCharges.gogreen,
@@ -319,6 +322,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         demand: r.billedDemand != null ? Number(r.billedDemand) : null,
         signature: r.billedSignature != null ? Number(r.billedSignature) : null,
         residential: r.billedResidential != null ? Number(r.billedResidential) : null,
+        addressCorrection: r.billedAddressCorrection != null ? Number(r.billedAddressCorrection) : null,
         vat: r.billedVat != null ? Number(r.billedVat) : null,
         gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
         elevatedRisk: r.billedElevatedRisk != null ? Number(r.billedElevatedRisk) : null,
@@ -403,6 +407,7 @@ interface JoinedRow {
   billedDemand: string | null;
   billedSignature: string | null;
   billedResidential: string | null;
+  billedAddressCorrection: string | null;
   residentialClass: string | null;
   billedVat: string | null;
   billedGogreen: string | null;
@@ -504,6 +509,7 @@ function buildRow(
     billedDemand: r.billedDemand !== null ? Number(r.billedDemand) : null,
     billedSignature: r.billedSignature !== null ? Number(r.billedSignature) : null,
     billedResidential: r.billedResidential !== null ? Number(r.billedResidential) : null,
+    billedAddressCorrection: r.billedAddressCorrection !== null ? Number(r.billedAddressCorrection) : null,
     residentialClass: r.residentialClass,
     billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,

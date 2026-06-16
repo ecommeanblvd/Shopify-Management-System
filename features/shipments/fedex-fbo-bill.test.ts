@@ -5,9 +5,11 @@ import type { FboBilledRow } from './fedex-fbo-parse';
 function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
   return {
     awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null,
-    shipDate: null, service: null, recipientCountry: null, weightKg: null,
+    shipDate: null, service: null, recipientCountry: null,
+    recipientStreet1: null, recipientStreet2: null, recipientCity: null,
+    recipientState: null, recipientPostcode: null, weightKg: null,
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-    residential: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
+    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
   };
 }
 

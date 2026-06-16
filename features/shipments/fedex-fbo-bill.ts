@@ -52,7 +52,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
  *  billed (shipment_charges). AP thì gồm duty; đối soát thì không. */
 export function fboShippingTotal(r: FboBilledRow): number {
   return r.base + r.discount + r.fuel + r.demand + r.remote
-    + r.signature + r.residential + r.importHandling + r.vat + r.other;
+    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.other;
 }
 
 export interface FboBill {

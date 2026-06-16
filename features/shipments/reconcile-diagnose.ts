@@ -34,7 +34,7 @@ export type DiagnosisSeverity =
 
 export type ComponentKey =
   | 'base' | 'discount' | 'fuel' | 'remote' | 'demand'
-  | 'signature' | 'residential' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
+  | 'signature' | 'residential' | 'addressCorrection' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
 
 export interface ComponentDelta {
   key: ComponentKey;
@@ -77,6 +77,8 @@ export interface DiagnoseInput {
     remote: number | null; demand: number | null; signature: number | null;
     /** Phí giao địa chỉ nhà dân (FedEx Residential) — dòng RIÊNG với signature. */
     residential?: number | null;
+    /** Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ. */
+    addressCorrection?: number | null;
     vat: number | null; gogreen: number | null; elevatedRisk: number | null;
     /** Billed import/clearance handling — counterpart of engine
      *  country_fixed alongside elevatedRisk (FedEx US import handling). */
@@ -343,6 +345,14 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     resiCause = input.residentialClass === 'BUSINESS' ? 'KHONG_KHOP' : 'PHI_TUY_CHON';
   }
   components.push({ key: 'residential', billed: resiBilled, engine: resiEngine, delta: resiDelta, cause: resiCause });
+
+  // addressCorrection — phí FedEx sửa địa chỉ sai (khách nhập thiếu/sai). Engine
+  // KHÔNG định giá (pass-through). Có bill → khoản hợp lệ (PHI_TUY_CHON), không
+  // phải FedEx thu sai; tách khỏi residual để đối soát không báo lệch giả.
+  const acBilled = n0(b.addressCorrection ?? null);
+  if (acBilled > 0) {
+    components.push({ key: 'addressCorrection', billed: acBilled, engine: 0, delta: acBilled, cause: 'PHI_TUY_CHON' });
+  }
 
   // Phí nhập khẩu (FedEx US) bị gộp trong cột VAT của bill (VAT phẳng 8% —
   // spec 2026-06-11). Bóc ra khi engine CÓ phí nhập (countryFixed>0) NHƯNG
