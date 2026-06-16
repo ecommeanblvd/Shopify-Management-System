@@ -27,6 +27,11 @@ export interface MappedOrder {
     shipCountry: string | null;
     shipCity: string | null;
     shipPostcode: string | null;
+    shipAddress1: string | null;
+    shipAddress2: string | null;
+    shipProvinceCode: string | null;
+    shipName: string | null;
+    shipCompany: string | null;
     shipWeightKg: string | null;
     /** Carrier the customer paid Shopify shipping for, derived from
      *  `shippingLines`. NULL when no line is matchable — the engine
@@ -79,6 +84,11 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       shipCountry: payload.shippingAddress?.countryCodeV2 ?? null,
       shipCity: payload.shippingAddress?.city ?? null,
       shipPostcode: payload.shippingAddress?.zip ?? null,
+      shipAddress1: payload.shippingAddress?.address1 ?? null,
+      shipAddress2: payload.shippingAddress?.address2 ?? null,
+      shipProvinceCode: payload.shippingAddress?.provinceCode ?? null,
+      shipName: payload.shippingAddress?.name ?? null,
+      shipCompany: payload.shippingAddress?.company ?? null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
       shippingCarrierKey: detectCarrierKey(payload.shippingLines),
     },

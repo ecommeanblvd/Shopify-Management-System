@@ -677,6 +677,19 @@ export const shopifyOrders = pgTable('shopify_orders', {
   // between the two keys against the same normalised lookup map.
   shipCity: text('ship_city'),
   shipPostcode: text('ship_postcode'),
+  // Địa chỉ đầy đủ người nhận (street/bang/tên) — để verify qua FedEx Address
+  // Validation. Trước đây sync tối giản chỉ city/zip; nay kéo đủ để xác minh.
+  shipAddress1: text('ship_address1'),
+  shipAddress2: text('ship_address2'),
+  shipProvinceCode: text('ship_province_code'),
+  shipName: text('ship_name'),
+  shipCompany: text('ship_company'),
+  // Kết quả verify FedEx Address Validation: phân loại + giao được + vấn đề.
+  addrClass: text('addr_class'),               // RESIDENTIAL/BUSINESS/MIXED/UNKNOWN
+  addrDeliverable: boolean('addr_deliverable'), // FedEx chuẩn hoá/khớp được (giao được)
+  addrIssue: text('addr_issue'),               // vd SuiteRequiredButMissing / NOTFOUND
+  addrStandardized: text('addr_standardized'), // địa chỉ chuẩn hoá FedEx gợi ý
+  addrVerifiedAt: timestamp('addr_verified_at'),
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),

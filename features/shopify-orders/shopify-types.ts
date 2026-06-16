@@ -79,6 +79,13 @@ export interface ShopifyOrderPayload {
     // postcode → city.
     city: string | null;
     zip: string | null;
+    // Địa chỉ đầy đủ — để verify qua FedEx Address Validation. Optional vì
+    // Shopify/fixtures cũ có thể không trả các field này.
+    address1?: string | null;
+    address2?: string | null;
+    provinceCode?: string | null;
+    name?: string | null;
+    company?: string | null;
   } | null;
   totalWeight: number | null;                   // in grams
   lineItems: { nodes: ShopifyLineItem[] };
