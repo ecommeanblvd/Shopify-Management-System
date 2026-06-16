@@ -77,9 +77,9 @@ export function BillingTrackingTable(props: Props) {
               <th className="w-6" />
               <th className="px-3 py-2 text-left font-medium">Tracking</th>
               <th className="px-3 py-2 text-left font-medium">Đơn</th>
-              <th className="px-3 py-2 text-left font-medium">Hoá đơn</th>
               {feeCols.map((c) => <th key={c} className="px-3 py-2 text-right font-medium whitespace-nowrap">{c}</th>)}
               <th className="px-3 py-2 text-right font-medium">Tổng</th>
+              <th className="px-3 py-2 text-center font-medium w-12">HĐ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -98,19 +98,20 @@ export function BillingTrackingTable(props: Props) {
                     </td>
                     <td className="px-3 py-2 font-medium tabular-nums whitespace-nowrap">{r.trackingNumber ?? <span className="text-muted-foreground">(không chi tiết)</span>}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.orderNumber ?? '—'}</td>
-                    <td className="px-3 py-2">
-                      <button type="button" onClick={() => setSelected(bill)} disabled={!bill}
-                        className="inline-flex items-center gap-1 text-primary hover:underline disabled:text-muted-foreground disabled:no-underline whitespace-nowrap">
-                        <FileText className="size-3.5" /> {r.billNumber ?? '—'}
-                      </button>
-                    </td>
                     {feeCols.map((c) => <td key={c} className="px-3 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(r.total)}</td>
+                    <td className="px-3 py-2 text-center">
+                      <button type="button" onClick={() => setSelected(bill)} disabled={!bill}
+                        title={r.billNumber ? `Hoá đơn ${r.billNumber}` : 'Không có hoá đơn'}
+                        className="text-primary hover:text-primary/80 disabled:text-muted-foreground/40">
+                        <FileText className="size-4" />
+                      </button>
+                    </td>
                   </tr>
                   {open && r.hasDetail && (
                     <tr className="bg-muted/10">
                       <td />
-                      <td colSpan={3 + feeCols.length + 1} className="px-3 py-2">
+                      <td colSpan={feeCols.length + 4} className="px-3 py-2">
                         {r.note && <p className="text-[11px] text-muted-foreground">{r.note}</p>}
                         {r.weightKg != null && r.weightKg > 0 && <p className="text-[11px] text-muted-foreground">Cân: {r.weightKg} kg</p>}
                       </td>
