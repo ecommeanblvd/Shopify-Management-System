@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildResolveRequest, parseClassification, parseAddressVerification } from './address';
+import { buildResolveRequest, capStreetLines, parseClassification, parseAddressVerification } from './address';
 
 describe('parseAddressVerification', () => {
   const wrap = (o: object) => ({ output: { resolvedAddresses: [o] } });
@@ -57,6 +57,25 @@ describe('buildResolveRequest', () => {
   it('nước khác (KW): BỎ mã tỉnh để tránh FedEx 400 STATEORPROVINCECODE.TOO.LONG', () => {
     expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'KW-KU', countryCode: 'KW' })).toBeUndefined();
     expect(prov({ streetLines: ['x'], stateOrProvinceCode: 'GB-ENG', countryCode: 'GB' })).toBeUndefined();
+  });
+
+  it('cắt city > 35 ký tự (tránh 400 CITY.TOO.LONG)', () => {
+    const req = buildResolveRequest({ streetLines: ['x'], city: 'Miyakojima Minamidori, Miyakojima-ku', countryCode: 'JP' }) as { addressesToValidate: Array<{ address: Record<string, unknown> }> };
+    expect((req.addressesToValidate[0].address.city as string).length).toBeLessThanOrEqual(35);
+  });
+});
+
+describe('capStreetLines', () => {
+  it('chia dòng phố quá dài thành các đoạn ≤ 35 ký tự, tối đa 3 dòng', () => {
+    const long = 'House Number: House number 69   Street Name:Prince Jalawi bin Abdulaziz Street  District: Al-Aqrabiyah';
+    const out = capStreetLines([long]);
+    expect(out.length).toBeLessThanOrEqual(3);
+    expect(out.every((l) => l.length <= 35)).toBe(true);
+    expect(out[0]).toContain('House Number');
+  });
+
+  it('giữ nguyên dòng ngắn + bỏ dòng rỗng', () => {
+    expect(capStreetLines(['10A Street', '', '  '])).toEqual(['10A Street']);
   });
 });
 

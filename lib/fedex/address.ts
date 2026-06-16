@@ -33,13 +33,42 @@ export function normalizeStateCode(code: string | null | undefined, country: str
   return sub.length > 0 && sub.length <= 3 ? sub : undefined;
 }
 
+/** Giới hạn độ dài 1 trường địa chỉ FedEx (street line / city). */
+const FEDEX_FIELD_MAX = 35;
+
+/**
+ * Cắt streetLines cho vừa FedEx (tránh 400 STREETLINES.TOO.LONG). Khách hay nhồi
+ * cả địa chỉ dài vào 1 dòng ("House Number:... Street Name:... District:...").
+ * Mỗi dòng > 35 ký tự được CHIA thành các đoạn ≤ 35 (giữ tối đa thông tin),
+ * tổng tối đa 3 dòng theo giới hạn FedEx.
+ */
+export function capStreetLines(lines: string[]): string[] {
+  const chunks: string[] = [];
+  for (const raw of lines) {
+    let s = (raw ?? '').trim();
+    if (!s) continue;
+    while (s.length > FEDEX_FIELD_MAX) {
+      chunks.push(s.slice(0, FEDEX_FIELD_MAX).trim());
+      s = s.slice(FEDEX_FIELD_MAX).trim();
+    }
+    if (s) chunks.push(s);
+  }
+  return chunks.slice(0, 3);
+}
+
+/** Cắt city ≤ 35 ký tự (tránh 400 CITY.TOO.LONG). */
+function capCity(city: string | null | undefined): string | undefined {
+  const s = city?.trim();
+  return s ? s.slice(0, FEDEX_FIELD_MAX) : undefined;
+}
+
 export function buildResolveRequest(addr: AddressInput): Record<string, unknown> {
   return {
     addressesToValidate: [
       {
         address: {
-          streetLines: addr.streetLines.filter((l) => l && l.trim()),
-          city: addr.city ?? undefined,
+          streetLines: capStreetLines(addr.streetLines),
+          city: capCity(addr.city),
           stateOrProvinceCode: normalizeStateCode(addr.stateOrProvinceCode, addr.countryCode),
           postalCode: addr.postalCode ?? undefined,
           countryCode: addr.countryCode,
