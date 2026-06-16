@@ -47,17 +47,14 @@ function addrVerifyLine(r: ReconcileViewRow): string {
 function CountryCell({ r }: { r: ReconcileViewRow }) {
   const rm = remoteInfo(r);
   const addr = addrVerifyLine(r);
-  const title = [
-    `${isoToCountryName(r.shipCountry)} (${r.shipCountry || '—'})`,
-    `Thành phố: ${r.shipCity ?? '—'}`, `Zipcode: ${r.shipPostcode ?? '—'}`, rm.text, addr,
-  ].join('\n');
+  // CHỈ dùng popup tùy biến bên dưới — KHÔNG đặt thuộc tính `title` native ở đây,
+  // nếu không trình duyệt vẽ thêm tooltip mặc định chồng lên popup (2 hộp đè nhau).
   return (
     <td className="px-3 py-2">
       <span className="group/ci relative inline-flex items-center gap-1">
         {r.shipCountry}
         <span
           className="cursor-help rounded-full border border-border px-1 text-[9px] font-semibold leading-none text-muted-foreground group-hover/ci:border-foreground group-hover/ci:text-foreground"
-          title={title}
           onClick={(e) => e.stopPropagation()}
         >
           !
