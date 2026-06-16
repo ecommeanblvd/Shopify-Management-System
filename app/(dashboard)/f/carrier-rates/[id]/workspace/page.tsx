@@ -129,6 +129,7 @@ export default async function WorkspacePage({
       </header>
 
       <RateWorkspace
+        key={selectedCardId}
         matrixZones={matrixZones}
         tiers={tiers.map((t) => ({ id: t.id, upperKg: t.upperKg }))}
         cells={cells
