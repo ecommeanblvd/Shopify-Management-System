@@ -34,7 +34,8 @@ function parseHi(rateName: string): number | null {
 
 function sysQuote(snap: CarrierAccountSnapshot | null, country: string, w: number): number | null {
   if (!snap || !snap.zonesByCountry.get(country)) return null;
-  const q = quote(snap, { weightKg: w, destinationCountry: country, isResidential: true });
+  // Khớp recalc thật: luôn base Package + giả định nhà dân (residential US/CA).
+  const q = quote(snap, { weightKg: w, destinationCountry: country, isResidential: true, packagingType: 'box' });
   return q.ok ? q.breakdown.finalDisplay : null;
 }
 
