@@ -44,6 +44,24 @@ describe('diagnoseReconcileRow — identity invariant', () => {
   });
 });
 
+describe('diagnoseReconcileRow — non-conveyable pass-through', () => {
+  it('billed non-conveyable → component PHI_TUY_CHON, rời khỏi residual, Σ giữ nguyên', () => {
+    const d = diagnoseReconcileRow(baseInput({
+      billed: { base: 1_116_981, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0,
+                nonConveyable: 615_000, vat: 0, gogreen: 0, elevatedRisk: 0, total: 1_731_981 },
+      // engine không định giá non-conveyable
+    }));
+    const nc = d.components.find((c) => c.key === 'nonConveyable')!;
+    expect(nc.billed).toBe(615_000);
+    expect(nc.engine).toBe(0);
+    expect(nc.cause).toBe('PHI_TUY_CHON');
+    const residual = d.components.find((c) => c.key === 'residual')!;
+    expect(residual.delta).toBe(0); // không còn nằm trong residual
+    const sum = d.components.reduce((a, c) => a + c.delta, 0);
+    expect(sum).toBe(d.totalDelta);
+  });
+});
+
 describe('diagnoseReconcileRow — exact match', () => {
   it('totalDelta 0 -> verdict KHỚP TUYỆT ĐỐI, severity match', () => {
     const d = diagnoseReconcileRow(baseInput());

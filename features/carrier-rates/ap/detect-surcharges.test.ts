@@ -57,13 +57,22 @@ describe('detectUnknownCharges', () => {
     expect(detectUnknownCharges([line({ charges: null }), line({ charges: [] })])).toEqual([]);
   });
 
-  it('"NON-CONVEYABLE PIECE - WEIGHT" KHÔNG bị nhận nhầm là cước weight → là khoản lạ', () => {
-    // charge-classify xếp non-conveyable thành 'other' (không hide), bucketOf trả null
-    // (code lạ) → đây là khoản chưa set up, phải hiện.
+  it('non-conveyable/restricted/residential ĐÃ được nhận diện (bucketOf) → KHÔNG còn là khoản lạ', () => {
     const rows = detectUnknownCharges([
-      line({ charges: [ch('NC', 'NON-CONVEYABLE PIECE - WEIGHT', 120000, 9600)] }),
+      line({ charges: [
+        ch('YL', 'NON-CONVEYABLE PIECE - WEIGHT', 120000, 9600),
+        ch('CB', 'RESTRICTED DESTINATION', 750000, 60000),
+        ch('TK', 'RESIDENTIAL ADDRESS', 128000, 10240),
+      ] }),
+    ]);
+    expect(rows).toEqual([]);
+  });
+
+  it('phụ phí hiếm thật sự lạ (oversize) vẫn bị gắn cờ', () => {
+    const rows = detectUnknownCharges([
+      line({ charges: [ch('OS', 'OVERSIZE PIECE', 90000, 7200)] }),
     ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].name).toBe('NON-CONVEYABLE PIECE - WEIGHT');
+    expect(rows[0].name).toBe('OVERSIZE PIECE');
   });
 });

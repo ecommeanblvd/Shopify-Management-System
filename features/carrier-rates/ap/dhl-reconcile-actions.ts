@@ -76,7 +76,8 @@ export async function reconcileDhlBill(billId: string): Promise<DhlReconcileResu
       base: String(m.base), fuel: String(m.fuel), remote: String(m.remote), demand: String(m.demand),
       directSignature: String(m.directSignature), elevatedRisk: String(m.elevatedRisk),
       addressCorrection: String(m.addressCorrection),
-      gogreen: String(m.gogreen), discount: String(m.discount), vat: String(m.vat),
+      gogreen: String(m.gogreen), nonConveyable: String(m.nonConveyable), residential: String(m.residential),
+      discount: String(m.discount), vat: String(m.vat),
       billingWeightKg: m.billingWeightKg != null ? String(m.billingWeightKg) : null,
       source: 'dhl_invoice', sourceHash: `dhl_inv:${l.trackingNumber}`,
     };
@@ -87,7 +88,8 @@ export async function reconcileDhlBill(billId: string): Promise<DhlReconcileResu
         totalAmount: sval.totalAmount, currency: sval.currency, base: sval.base, fuel: sval.fuel,
         remote: sval.remote, demand: sval.demand, directSignature: sval.directSignature,
         elevatedRisk: sval.elevatedRisk, addressCorrection: sval.addressCorrection,
-        gogreen: sval.gogreen, discount: sval.discount, vat: sval.vat,
+        gogreen: sval.gogreen, nonConveyable: sval.nonConveyable, residential: sval.residential,
+        discount: sval.discount, vat: sval.vat,
         billingWeightKg: sval.billingWeightKg, source: sval.source, sourceHash: sval.sourceHash,
       },
     });

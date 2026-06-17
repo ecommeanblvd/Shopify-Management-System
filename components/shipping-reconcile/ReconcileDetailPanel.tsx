@@ -33,7 +33,7 @@ function severityClass(s: string): string {
   }
 }
 
-type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'addressCorrection' | 'gogreen' | 'vat' | 'elevatedRisk';
+type CompKey = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'addressCorrection' | 'nonConveyable' | 'gogreen' | 'vat' | 'elevatedRisk';
 
 interface ComponentLine {
   label: string;
@@ -110,12 +110,18 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
       label: 'Sửa địa chỉ (address correction)', billed: row.billedAddressCorrection, engine: null,
       fedex: null, compKey: 'addressCorrection' as const,
     }] : []),
+    // nonConveyable: DHL kiện không qua băng chuyền — pass-through (engine 0).
+    // Chỉ hiện khi có bill. Gắn với đóng gói bất thường / cân 25–70kg.
+    ...(Number(row.billedNonConveyable ?? 0) > 0 ? [{
+      label: 'Kiện đặc biệt (non-conveyable)', billed: row.billedNonConveyable, engine: null,
+      fedex: null, compKey: 'nonConveyable' as const,
+    }] : []),
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },
     // country_fixed counterpart: DHL Elevated Risk / FedEx US import handling.
     {
-      label: row.carrierKey === 'fedex' ? 'Phí cố định nước (nhập US…)' : 'Phụ phí rủi ro (ER)',
+      label: row.carrierKey === 'fedex' ? 'Phí cố định nước (nhập US…)' : 'Phụ phí rủi ro / điểm đến hạn chế (ER/RD)',
       billed: sumEngine(row.billedElevatedRisk, row.billedImportHandling),
       engine: row.engineCountryFixed,
       fedex: fx('elevatedRisk'),

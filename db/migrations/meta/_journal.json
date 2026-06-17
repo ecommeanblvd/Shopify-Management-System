@@ -442,6 +442,13 @@
       "when": 1781786400000,
       "tag": "0062_dhl-ship-date",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781872800000,
+      "tag": "0063_shipment-non-conveyable",
+      "breakpoints": true
     }
   ]
 }

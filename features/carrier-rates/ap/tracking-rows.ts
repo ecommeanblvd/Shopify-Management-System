@@ -1,5 +1,5 @@
 import { summariseBill, type BillStatus, type PaymentInput } from './ap-summary';
-import { classifyCharge, OTHER_LABEL, VAT_LABEL } from './charge-classify';
+import { classifyCharge, chargeColumnLabel, OTHER_LABEL, VAT_LABEL } from './charge-classify';
 
 /** Một khoản phí chi tiết theo carrier (DHL: code/name/charge/tax/total). */
 export interface LineCharge { code: string; name: string; charge: number; tax: number; total: number }
@@ -69,7 +69,8 @@ function foldCharges(charges: LineCharge[]): TrackingFee[] {
     if (cat === 'hide') continue;       // ẩn cả phí lẫn VAT của duty/thuế
     vat += c.tax;                        // gom VAT các khoản hiển thị
     if (cat === 'other') { other += c.charge; continue; }  // net
-    keep.set(label, (keep.get(label) ?? 0) + c.charge);    // net
+    const col = chargeColumnLabel(label);                   // gom biến thể về 1 cột
+    keep.set(col, (keep.get(col) ?? 0) + c.charge);         // net
   }
   const out: TrackingFee[] = [...keep].map(([label, value]) => ({ label, value }));
   if (other !== 0) out.push({ label: OTHER_LABEL, value: other });

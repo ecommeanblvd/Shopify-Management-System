@@ -50,6 +50,30 @@ describe('mapDhlFreightToBilled', () => {
     expect(m.unknown.map((c) => c.code)).toEqual(['ZZ']);
   });
 
+  it('non-conveyable → nonConveyable; restricted → elevatedRisk; residential → residential', () => {
+    const s = ship({ charges: [
+      { code: 'WEIGHT', name: 'Weight charge', charge: 100, tax: 0, total: 100 },
+      { code: 'YL', name: 'NON-CONVEYABLE PIECE - IRREGULAR', charge: 615000, tax: 49200, total: 664200 },
+      { code: 'CB', name: 'RESTRICTED DESTINATION', charge: 750000, tax: 60000, total: 810000 },
+      { code: 'TK', name: 'RESIDENTIAL ADDRESS', charge: 128000, tax: 10240, total: 138240 },
+    ] });
+    const m = mapDhlFreightToBilled(s);
+    expect(m.nonConveyable).toBe(615000);
+    expect(m.elevatedRisk).toBe(750000); // restricted dồn chung họ country_fixed
+    expect(m.residential).toBe(128000);
+    expect(m.unknown).toEqual([]); // không còn rơi vào unknown
+  });
+
+  it('"NON-CONVEYABLE PIECE - WEIGHT" → nonConveyable, KHÔNG nhầm thành base', () => {
+    const s = ship({ charges: [
+      { code: 'WEIGHT', name: 'Weight charge', charge: 100, tax: 0, total: 100 },
+      { code: 'YO', name: 'NON-CONVEYABLE PIECE - WEIGHT', charge: 615000, tax: 49200, total: 664200 },
+    ] });
+    const m = mapDhlFreightToBilled(s);
+    expect(m.base).toBe(100);
+    expect(m.nonConveyable).toBe(615000);
+  });
+
   it('nhận diện remote / signature / elevated / address correction theo mã+tên', () => {
     const s = ship({ charges: [
       { code: 'OO', name: 'REMOTE AREA DELIVERY', charge: 30, tax: 0, total: 30 },

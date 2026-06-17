@@ -967,6 +967,9 @@ export const shipmentCharges = pgTable('shipment_charges', {
   vat: numeric('vat', { precision: 14, scale: 2 }),
   /** Excel col AP — GoGreen Plus-Basic stepped fee. */
   gogreen: numeric('gogreen', { precision: 14, scale: 2 }),
+  /** DHL Non-Conveyable Piece (code YL/YO) — phụ phí kiện không qua băng chuyền.
+   *  Pass-through: engine không tự định giá → đối soát kiểm theo dòng. */
+  nonConveyable: numeric('non_conveyable', { precision: 14, scale: 2 }),
   /** Excel col AX — Volume contract discount. Stored as NEGATIVE VND
    *  per the invoice convention (e.g. −3,820,388). */
   discount: numeric('discount', { precision: 14, scale: 2 }),
