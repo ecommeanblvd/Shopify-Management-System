@@ -9,6 +9,9 @@ import { db, schema } from '@/db/client';
 import { listOverridesForStore } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
+import { ZoneReferenceTable } from '@/components/functions/ZoneReferenceTable';
+import { listZonesWithCountries } from '@/features/carrier-rates/zones-actions';
+import { buildZoneMatrix } from '@/features/carrier-rates/zone-matrix';
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { ShippingProfilePush } from '@/components/functions/ShippingProfilePush';
 import { CarrierServiceRegister } from '@/components/functions/CarrierServiceRegister';
@@ -50,6 +53,15 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
     if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
   }
 
+  // Bảng tham chiếu zone FedEx ↔ DHL (theo phân chia zone đã set up) — tra nước
+  // thuộc zone nào lúc set up giá. Carrier-level, không phụ thuộc store đang chọn.
+  const fedexAcct = carrierAccts.find((a) => a.key === 'fedex');
+  const dhlAcct = carrierAccts.find((a) => a.key === 'dhl');
+  const [fedexZones, dhlZones] = await Promise.all([
+    fedexAcct ? listZonesWithCountries(fedexAcct.id) : Promise.resolve([]),
+    dhlAcct ? listZonesWithCountries(dhlAcct.id) : Promise.resolve([]),
+  ]);
+  const zoneRows = buildZoneMatrix(fedexZones, dhlZones);
 
   return (
     <div className="px-6 md:px-10 py-5 space-y-4">
@@ -90,6 +102,8 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           )}
         </>
       )}
+
+      <ZoneReferenceTable rows={zoneRows} />
     </div>
   );
 }
