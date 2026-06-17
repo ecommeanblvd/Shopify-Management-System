@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { ReconcileViewRow } from '@/features/shipments/reconcile-view';
 import { fedexImpliedBase } from '@/features/shipments/fedex-quote-compare';
-import { setReconcileStatus, clearReconcileStatus, approveCarrierError, disputeWithCarrier } from '@/features/shipments/reconcile-status-actions';
+import { setReconcileStatus, clearReconcileStatus, approveCarrierError, disputeWithCarrier, markInternalError } from '@/features/shipments/reconcile-status-actions';
 import { CARRIER_ERROR_KINDS, carrierErrorKindLabel, carrierErrorKindRemediation } from '@/features/shipments/carrier-error-kinds';
 import { suggestCauseKind, needsCarrierClaim, isApprovableMatch } from '@/features/shipments/carrier-error-flow';
 
@@ -279,6 +279,13 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
       await disputeWithCarrier({ shipmentId: row.shipmentId, kind, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
     } finally { setBusy(false); }
   }
+  async function markInternal() {
+    if (!note.trim()) return;
+    setBusy(true);
+    try {
+      await markInternalError({ shipmentId: row.shipmentId, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
+    } finally { setBusy(false); }
+  }
   async function approveDispute() {
     setBusy(true);
     try {
@@ -305,6 +312,21 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
           <button type="button" disabled={busy} onClick={undo}
             className="ml-auto rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">Hoàn tác</button>
         </div>
+      </div>
+    );
+  }
+
+  if (row.status === 'internal_error') {
+    return (
+      <div className="mt-4 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+        <div className="font-medium text-amber-600 dark:text-amber-400">
+          ⚠ Lỗi nội bộ (sai cân/dim) · lệch {fmtVnd(row.deltaVndAtReview)}đ
+        </div>
+        {row.note && <div className="text-muted-foreground">Ghi chú: {row.note}</div>}
+        <button type="button" disabled={busy} onClick={undo}
+          className="rounded border border-border px-3 py-1 hover:bg-muted/50 disabled:opacity-40">
+          ↩ Bỏ đánh dấu
+        </button>
       </div>
     );
   }
@@ -383,6 +405,11 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
             ✓ Duyệt chênh lệch
           </button>
         )}
+        <button type="button" disabled={busy || noteEmpty} onClick={markInternal}
+          title="Lệch do mình nhập sai dim/kg → sửa data nội bộ, không đòi carrier"
+          className="rounded border border-amber-500/50 px-3 py-1 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40">
+          ⚠ Lỗi nội bộ
+        </button>
         <button type="button" disabled={busy} onClick={() => act('ignored')}
           className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50">Bỏ qua</button>
         {needsCarrierClaim(row.deltaVnd) && (

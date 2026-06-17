@@ -98,6 +98,44 @@ export async function approveCarrierError(input: ApproveCarrierErrorInput): Prom
   revalidatePath(ROUTE);
 }
 
+export interface MarkInternalErrorInput {
+  shipmentId: string;
+  note: string;
+  billedTotal: number;
+  deltaVnd: number;
+}
+
+/** Lỗi nội bộ: lệch do MÌNH nhập sai dim/kg (carrier cân lại). KHÔNG đòi carrier;
+ *  để sửa data nội bộ. Lý do bắt buộc; snapshot delta để tổng kết. */
+export async function markInternalError(input: MarkInternalErrorInput): Promise<void> {
+  const userId = await requireUser();
+  const note = input.note.trim();
+  if (!note) throw new Error('Cần ghi rõ lý do lỗi nội bộ');
+  await db
+    .insert(schema.shipmentReconcileStatus)
+    .values({
+      shipmentId: input.shipmentId,
+      status: 'internal_error',
+      note,
+      billedTotalAtReview: input.billedTotal.toString(),
+      deltaVndAtReview: input.deltaVnd.toString(),
+      reconciledBy: userId,
+    })
+    .onConflictDoUpdate({
+      target: schema.shipmentReconcileStatus.shipmentId,
+      set: {
+        status: 'internal_error',
+        note,
+        carrierErrorKind: null,
+        billedTotalAtReview: input.billedTotal.toString(),
+        deltaVndAtReview: input.deltaVnd.toString(),
+        reconciledBy: userId,
+        reconciledAt: sql`now()`,
+      },
+    });
+  revalidatePath(ROUTE);
+}
+
 export interface DisputeCarrierInput {
   shipmentId: string;
   kind: string;

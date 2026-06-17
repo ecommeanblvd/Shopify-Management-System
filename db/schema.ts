@@ -1001,7 +1001,7 @@ export const shipmentCharges = pgTable('shipment_charges', {
   index('shipment_charges_tracking_idx').on(t.trackingNumber),
 ]);
 
-export const reconcileStatusEnum = pgEnum('reconcile_status', ['reconciled', 'ignored', 'carrier_error', 'disputing']);
+export const reconcileStatusEnum = pgEnum('reconcile_status', ['reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error']);
 
 /** Operator-set reconciliation state for a shipment's billed-vs-engine
  *  comparison. ABSENCE of a row = "chưa đối soát" (pending). */
