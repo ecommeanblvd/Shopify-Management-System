@@ -243,12 +243,36 @@ export async function applySystemShippingToProfiles(
       const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
       return ue && ue.length ? ue.map((e) => e.message).join('; ') : null;
     };
+    // Zone có thể chứa >100 method-def (mỗi bậc cân/​carrier 1 def) + nhiều nước
+    // (AF1 52, LATAM3 55). Gửi nhiều zone/nhiều def cùng lúc → Shopify 5xx ("An
+    // unexpected response…"). Nên: tạo TỪNG zone với 1 lô def nhỏ, rồi thêm def
+    // còn lại theo lô vào zone đó (re-fetch lấy id). Mỗi mutation ≤ CHUNK def.
+    const CHUNK = 40;
     try {
       // PHASE 1 — xoá zone bị thay TRƯỚC (giải phóng nước, tránh "Region already exists").
       if (profile.zonesToDelete) base.error = await send({ zonesToDelete: profile.zonesToDelete });
-      // PHASE 2 — tạo lại zone hệ thống theo lô 3 (gửi cả ~25 zone/1 mutation → Shopify 500).
-      for (let i = 0; !base.error && i < zonesToCreate.length; i += 3) {
-        base.error = await send({ locationGroupsToUpdate: [{ id: lg.id, zonesToCreate: zonesToCreate.slice(i, i + 3) }] });
+      // PHASE 2 — tạo từng zone với lô def đầu (1 zone/mutation).
+      for (const z of zonesToCreate) {
+        if (base.error) break;
+        const defs = (z.methodDefinitionsToCreate as unknown[]) ?? [];
+        base.error = await send({
+          locationGroupsToUpdate: [{ id: lg.id, zonesToCreate: [{ ...z, methodDefinitionsToCreate: defs.slice(0, CHUNK) }] }],
+        });
+      }
+      // PHASE 3 — thêm def còn lại theo lô vào zone vừa tạo (lấy id theo tên qua re-fetch).
+      if (!base.error && zonesToCreate.some((z) => ((z.methodDefinitionsToCreate as unknown[]) ?? []).length > CHUNK)) {
+        const refreshed = (await readProfiles(store)).find((pp) => pp.profileId === p.profileId);
+        const idByName = refreshed?.normalized.shopifyIds.zoneIdByName ?? {};
+        for (const z of zonesToCreate) {
+          if (base.error) break;
+          const defs = (z.methodDefinitionsToCreate as unknown[]) ?? [];
+          if (defs.length <= CHUNK) continue;
+          const zid = idByName[z.name as string];
+          if (!zid) { base.error = `Không tìm thấy zone "${z.name as string}" sau khi tạo`; break; }
+          for (let i = CHUNK; !base.error && i < defs.length; i += CHUNK) {
+            base.error = await send({ locationGroupsToUpdate: [{ id: lg.id, zonesToUpdate: [{ id: zid, methodDefinitionsToCreate: defs.slice(i, i + CHUNK) }] }] });
+          }
+        }
       }
     } catch (e) {
       base.error = (e as Error).message;
