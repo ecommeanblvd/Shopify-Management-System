@@ -16,14 +16,14 @@ import {
   type QuoteCompare,
 } from './fedex-quote-compare';
 
-export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
+export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error';
 
 /** Dưới ngưỡng này coi như billed ≈ engine (đã khớp). Tổng cước một đơn
  *  thường 600k–900k ₫ nên 1.000 ₫ (~0.1%) là sai số làm tròn, không phải lệch thật. */
 export const STALE_DISPUTE_TOLERANCE_VND = 1000;
 
 export interface StatusRecord {
-  status: 'reconciled' | 'ignored' | 'carrier_error' | 'disputing';
+  status: 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error';
   note: string | null;
   billedTotalAtReview: number | null;
   carrierErrorKind?: string | null;
