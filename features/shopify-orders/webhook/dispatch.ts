@@ -1,7 +1,8 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { upsertOrder } from '../sync/upsert-order';
-import type { ShopifyOrderPayload, ShopifyRefund } from '../shopify-types';
+import { fetchOrderByGid } from '../sync/fetch-order';
+import { webhookOrderGid, webhookRefundOrderGid } from './webhook-ids';
 
 export type ShopifyWebhookTopic =
   | 'orders/create'
@@ -30,28 +31,38 @@ export function slugFromTopic(topic: ShopifyWebhookTopic): string {
   return topic.replace('/', '-');
 }
 
+/**
+ * Webhook gửi payload REST (snake_case, id số) — KHÁC shape GraphQL của mapper.
+ * Nên với mọi topic đụng dữ liệu đơn, ta chuẩn hoá id về gid rồi FETCH bản đầy đủ
+ * qua GraphQL và upsert bằng đúng mapper đã chạy tốt của cron/backfill.
+ */
 export async function dispatchWebhook(
   storeId: string,
   topic: ShopifyWebhookTopic,
   payload: unknown,
 ): Promise<void> {
   if (topic === 'orders/create' || topic === 'orders/updated') {
-    await upsertOrder(storeId, payload as ShopifyOrderPayload, 'webhook');
+    const gid = webhookOrderGid(payload as Record<string, unknown>);
+    if (!gid) return;
+    const order = await fetchOrderByGid(storeId, gid);
+    if (!order) return; // đơn đã bị xoá khỏi Shopify
+    await upsertOrder(storeId, order, 'webhook');
     return;
   }
   if (topic === 'orders/cancelled') {
-    const p = payload as ShopifyOrderPayload;
-    // The isNull guard makes the null→cancelled transition detection atomic:
-    // only the FIRST delivery flips the row (and gets it back via RETURNING),
-    // so re-delivered webhooks can't double-release reservations.
+    const p = payload as { cancelled_at?: string | null };
+    const gid = webhookOrderGid(payload as Record<string, unknown>);
+    if (!gid) return;
+    // isNull guard giữ phát hiện chuyển null→cancelled là atomic: chỉ lần gửi ĐẦU
+    // tiên mới flip (và nhận lại qua RETURNING) → webhook gửi lại không double-release.
     const flipped = await db
       .update(schema.shopifyOrders)
-      .set({ cancelledAtShopify: new Date(p.cancelledAt ?? new Date().toISOString()) })
-      .where(and(eq(schema.shopifyOrders.shopifyOrderId, p.id),
+      .set({ cancelledAtShopify: new Date(p.cancelled_at ?? new Date().toISOString()) })
+      .where(and(eq(schema.shopifyOrders.shopifyOrderId, gid),
                  isNull(schema.shopifyOrders.cancelledAtShopify)))
       .returning({ id: schema.shopifyOrders.id });
     if (flipped.length > 0) {
-      // Best-effort (spec §4e): release must never fail the webhook 2xx.
+      // Best-effort: release không bao giờ làm fail webhook 2xx.
       try {
         const { releaseOrderAllocations } = await import('@/features/warehouse/release');
         await releaseOrderAllocations(flipped[0].id);
@@ -62,21 +73,12 @@ export async function dispatchWebhook(
     return;
   }
   if (topic === 'refunds/create') {
-    const r = payload as ShopifyRefund & { order_id: string };
-    const [parent] = await db
-      .select({ id: schema.shopifyOrders.id })
-      .from(schema.shopifyOrders)
-      .where(eq(schema.shopifyOrders.shopifyOrderId, r.order_id));
-    if (!parent) return;
-    await db
-      .insert(schema.shopifyOrderRefunds)
-      .values({
-        orderId: parent.id,
-        shopifyRefundId: r.id,
-        refundedAt: new Date(r.createdAt),
-        amount: r.totalRefundedSet.shopMoney.amount,
-        reason: r.note,
-      })
-      .onConflictDoNothing({ target: schema.shopifyOrderRefunds.shopifyRefundId });
+    // Refund webhook (REST) khác shape GraphQL hẳn → fetch lại ĐƠN CHA (đã gồm
+    // mảng refunds) và upsert: mapper ghi refund qua đường đã kiểm chứng.
+    const gid = webhookRefundOrderGid(payload as { order_id?: number | string });
+    if (!gid) return;
+    const order = await fetchOrderByGid(storeId, gid);
+    if (!order) return;
+    await upsertOrder(storeId, order, 'webhook');
   }
 }

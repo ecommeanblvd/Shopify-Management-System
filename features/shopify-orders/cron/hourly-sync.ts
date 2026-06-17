@@ -3,6 +3,7 @@ import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { upsertOrder } from '../sync/upsert-order';
 import type { ShopifyOrderPayload } from '../shopify-types';
+import { ORDER_NODE_FIELDS } from '../sync/order-fields';
 
 const PAGE_SIZE = 50;
 
@@ -11,27 +12,7 @@ const PAGED_QUERY = `
     orders(first: ${PAGE_SIZE}, query: $q, after: $cursor, sortKey: UPDATED_AT) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        id name createdAt processedAt cancelledAt
-        displayFinancialStatus displayFulfillmentStatus currencyCode
-        subtotalLineItemsQuantity
-        totalDiscountsSet { shopMoney { amount currencyCode } }
-        totalShippingPriceSet { shopMoney { amount currencyCode } }
-        totalTaxSet { shopMoney { amount currencyCode } }
-        totalPriceSet { shopMoney { amount currencyCode } }
-        shippingAddress { countryCodeV2 city zip address1 address2 provinceCode name company }
-        totalWeight
-        lineItems(first: 250) {
-          nodes {
-            id sku vendor title variantTitle quantity
-            originalUnitPriceSet { shopMoney { amount currencyCode } }
-            discountAllocations { allocatedAmountSet { shopMoney { amount currencyCode } } }
-          }
-        }
-        refunds {
-          id createdAt note
-          totalRefundedSet { shopMoney { amount currencyCode } }
-        }
-        fulfillments { trackingInfo { number company } }
+        ${ORDER_NODE_FIELDS}
       }
     }
   }
