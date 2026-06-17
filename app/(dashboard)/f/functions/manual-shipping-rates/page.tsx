@@ -12,6 +12,7 @@ import { mergeSystemShippingRows } from '@/features/markets/system-shipping-doma
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
 import { ZoneReferenceTable } from '@/components/functions/ZoneReferenceTable';
 import { buildSystemZoneView } from '@/features/carrier-rates/zone-matrix';
+import { listZonesWithCountries, type ZoneWithCountries } from '@/features/carrier-rates/zones-actions';
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { PushToShopify } from '@/components/functions/PushToShopify';
 import { pushShippingToStores } from '@/features/carrier-rates/push-orchestrator';
@@ -47,9 +48,22 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
     if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
   }
 
-  // Bảng zone HỆ THỐNG — mỗi zone kết hợp (FedEx×DHL) + nước trong zone; tra 1
-  // nước thuộc zone hệ thống nào. Nguồn = bảng giá hệ thống (manual_shipping_config).
-  const zoneRows = buildSystemZoneView(mergeSystemShippingRows(systemRows).zones);
+  // Bảng zone HỆ THỐNG (dạng thẻ) — mỗi zone (mã vùng ME1/EU1/…) + nước trong
+  // zone. Map nước→zone FedEx/DHL gốc (carrier_zones) để hiện "(FedEx Zone X /
+  // DHL Zone Y)". Nguồn zone = bảng giá hệ thống (manual_shipping_config).
+  const fedexAcct = carrierAccts.find((a) => a.key === 'fedex');
+  const dhlAcct = carrierAccts.find((a) => a.key === 'dhl');
+  const [fedexZones, dhlZones] = await Promise.all([
+    fedexAcct ? listZonesWithCountries(fedexAcct.id) : Promise.resolve([]),
+    dhlAcct ? listZonesWithCountries(dhlAcct.id) : Promise.resolve([]),
+  ]);
+  const isoToZoneLabel = (zs: ZoneWithCountries[]): Record<string, string> =>
+    Object.fromEntries(zs.flatMap((z) => z.countries.map((c) => [c.toUpperCase(), z.label] as const)));
+  const zoneRows = buildSystemZoneView(
+    mergeSystemShippingRows(systemRows).zones,
+    isoToZoneLabel(fedexZones),
+    isoToZoneLabel(dhlZones),
+  );
 
   return (
     <div className="px-6 md:px-10 py-5 space-y-4">
