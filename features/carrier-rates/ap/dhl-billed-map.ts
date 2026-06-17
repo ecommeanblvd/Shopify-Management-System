@@ -1,4 +1,5 @@
 import type { DhlShipment, DhlChargeLine } from './dhl-invoice-csv';
+import { classifyCharge } from './charge-classify';
 
 /**
  * Map hoá đơn DHL → dữ liệu billed cho đối soát (shipment_charges).
@@ -67,6 +68,16 @@ export function mapChargesToBilled(
 
 export function mapDhlFreightToBilled(s: DhlShipment): DhlBilledMap {
   return mapChargesToBilled(s.charges, { totalTax: s.totalTax, totalInclVat: s.totalInclVat, weightKg: s.weightKg });
+}
+
+/**
+ * Khoản cước đã được hệ thống NHẬN DIỆN chưa? Nhận diện =
+ *  - map được vào 1 bucket cước (bucketOf ≠ null: weight/fuel/gogreen/remote/…), HOẶC
+ *  - là thuế/duty pass-through (classifyCharge = 'hide': duty/tax/regulatory/penalty).
+ * Khoản KHÔNG nhận diện = phí lạ chưa cấu hình surcharge → cần operator xem & set up.
+ */
+export function isRecognizedCharge(c: DhlChargeLine): boolean {
+  return bucketOf(c) !== null || classifyCharge(c.name || c.code) === 'hide';
 }
 
 /** Freight nếu có cước cân hoặc fuel (duties chỉ có XB/XX/DD/XI). */

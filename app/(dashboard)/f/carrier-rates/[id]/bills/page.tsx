@@ -17,7 +17,9 @@ import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-sum
 import { buildTrackingRows } from '@/features/carrier-rates/ap/tracking-rows';
 import { reconcileDhlBill, type DhlReconcileResult } from '@/features/carrier-rates/ap/dhl-reconcile-actions';
 import { previewFboBill, applyFboBill } from '@/features/carrier-rates/ap/fbo-import-actions';
+import { detectUnknownCharges } from '@/features/carrier-rates/ap/detect-surcharges';
 import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
+import { NewSurchargesReport } from '@/components/carrier-rates/NewSurchargesReport';
 import { AddBillDialog } from '@/components/carrier-rates/AddBillDialog';
 import { ImportFboDialog } from '@/components/carrier-rates/ImportFboDialog';
 import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
@@ -60,6 +62,18 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
       charges: l.charges,
     })),
     inputs.payments, today,
+  );
+
+  // Phí lạ (chưa map cước, không phải thuế/duty) → gợi ý set up surcharge mới.
+  const billMetaById = new Map(bills.map((b) => [b.id, { billNumber: b.billNumber, periodStart: b.periodStart }]));
+  const unknownCharges = detectUnknownCharges(
+    allLines.map((l) => ({
+      billId: l.billId,
+      billNumber: billMetaById.get(l.billId)?.billNumber ?? null,
+      periodStart: billMetaById.get(l.billId)?.periodStart ?? '',
+      trackingNumber: l.trackingNumber,
+      charges: l.charges,
+    })),
   );
 
   // Mọi thay đổi bill/payment phải revalidate cả trang này lẫn trang account
@@ -189,6 +203,8 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
           </div>
         )}
       </header>
+
+      <NewSurchargesReport accountId={id} currency={currency} rows={unknownCharges} />
 
       <BillingTrackingTable
         accountId={id} currency={currency} canManage={canManage}
