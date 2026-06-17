@@ -41,6 +41,53 @@ function zoneShort(label: string): string {
   return label.replace(/^Zone\s+/i, '').trim();
 }
 
+// ── Region classifier ──────────────────────────────────────────────────────
+// Bước 1: từ market_templates (specific markets ưu tiên hơn broad). Map handle→code.
+// Áp các market CỤ THỂ (ME, SEA, GC, JP, KR, OC, NA) TRƯỚC broad (EU). Bỏ qua
+// các catch-all quá rộng/chồng lấn cho phân loại.
+const MARKET_REGION_CODE: Record<string, string> = {
+  'middle-east': 'ME',
+  'south-east-asia': 'SEA',
+  'greater-china': 'GC',
+  japan: 'JP',
+  korea: 'KR',
+  canada: 'NA',
+  america: 'NA',
+  'united-states': 'NA',
+  oceania: 'OC',
+  europe: 'EU',
+};
+// Thứ tự ưu tiên: specific trước, broad (EU) sau.
+const MARKET_PRIORITY = [
+  'middle-east', 'south-east-asia', 'greater-china', 'japan', 'korea',
+  'oceania', 'canada', 'america', 'united-states', 'europe',
+];
+const MARKET_IGNORE = new Set([
+  'asia-and-oceania', 'rest-of-the-world',
+  'restricted-destination-and-elevated-risk', 'international', 'vietnam-domestic',
+]);
+
+// Bước 2: static continent maps (chỉ dùng khi không match market ở bước 1).
+const AF = new Set(['DZ','AO','BJ','BW','BF','BI','CM','CV','CF','TD','KM','CG','CD','CI','DJ','EG','GQ','ER','SZ','ET','GA','GM','GH','GN','GW','KE','LS','LR','LY','MG','MW','ML','MR','MU','MA','MZ','NA','NE','NG','RW','ST','SN','SC','SL','SO','ZA','SS','SD','TZ','TG','TN','UG','ZM','ZW','RE','YT','SH']);
+const LATAM = new Set(['AR','BO','BR','CL','CO','CR','CU','DO','EC','SV','GT','HN','NI','PA','PY','PE','UY','VE','BZ','AG','AI','AW','BS','BB','BQ','VG','KY','CW','DM','GD','GP','JM','MQ','MS','PR','BL','KN','LC','MF','VC','SX','TT','TC','HT','GF','SR','GY','FK']);
+const SAS = new Set(['IN','PK','BD','LK','NP','BT','MV','AF']);
+const OC_EXTRA = new Set(['FJ','PG','NC','PF','WS','TO','VU','SB','KI','NR','TV','NU','CK','WF','AS','GU','FM','MH','PW','TL']);
+
+/**
+ * Trả region code cho 1 country code (UPPER), dùng:
+ *  1) market_templates (specific trước broad), 2) static continent map, 3) RW.
+ * `marketCountryRegion` = Map cc→code dựng sẵn từ market_templates.
+ */
+function regionOf(cc: string, marketCountryRegion: Map<string, string>): string {
+  const m = marketCountryRegion.get(cc);
+  if (m) return m;
+  if (AF.has(cc)) return 'AF';
+  if (LATAM.has(cc)) return 'LATAM';
+  if (SAS.has(cc)) return 'SAS';
+  if (OC_EXTRA.has(cc)) return 'OC';
+  return 'RW';
+}
+
 /** Map countryCode → zone label cho 1 carrier account (join zones cho label). */
 async function loadZoneOf(carrierAccountId: string): Promise<Map<string, string>> {
   const [zones, zoneCountries] = await Promise.all([
@@ -74,6 +121,30 @@ async function main(): Promise<void> {
   const fedexZoneOf = await loadZoneOf(FEDEX);
   const dhlZoneOf = await loadZoneOf(dhlAccount.id);
   console.log(`Zone map: FedEx ${fedexZoneOf.size} nước, DHL ${dhlZoneOf.size} nước (${dhlAccount.name}).`);
+
+  // ── 1b) Region classifier từ market_templates ────────────────────────────
+  // Dựng map cc(UPPER) → region code. Áp specific markets TRƯỚC broad (europe),
+  // bỏ qua các catch-all. Country đứng sau (broad) KHÔNG đè country đã gán bởi
+  // market cụ thể hơn (vì specific được duyệt trước trong MARKET_PRIORITY).
+  const marketRows = await db.select({
+    handle: schema.marketTemplates.handle,
+    countries: schema.marketTemplates.countries,
+  }).from(schema.marketTemplates);
+  const marketCountries = new Map<string, string[]>();
+  for (const r of marketRows) {
+    const ccs = Array.isArray(r.countries) ? (r.countries as string[]) : [];
+    marketCountries.set(r.handle, ccs.map((c) => c.toUpperCase()));
+  }
+  const marketCountryRegion = new Map<string, string>();
+  for (const handle of MARKET_PRIORITY) {
+    if (MARKET_IGNORE.has(handle)) continue;
+    const code = MARKET_REGION_CODE[handle];
+    if (!code) continue;
+    for (const cc of marketCountries.get(handle) ?? []) {
+      if (!marketCountryRegion.has(cc)) marketCountryRegion.set(cc, code);
+    }
+  }
+  console.log(`Region classifier: ${marketCountryRegion.size} nước gán từ market_templates (specific>broad).`);
 
   // ── 2) Bộ bậc cân chuẩn (giống 2 script gốc) ─────────────────────────────
   // FedEx keys: từ seed cici 'middle-east'.
@@ -147,10 +218,54 @@ async function main(): Promise<void> {
     if (g.fz === null && g.dz === null) countriesNeither.push(...g.ccs);
   }
 
+  // ── 4b) Đặt tên zone theo MÃ VÙNG (region code) + số thứ tự ──────────────
+  // Region của zone = region chiếm ĐA SỐ nước trong zone. Nếu region top < 50%
+  // số nước (thực sự lẫn) → RW. Đánh số trong mỗi region theo (fz,dz) label tăng
+  // dần → tên = `${region}${seq}` (ME1, EU2, RW3…). Tên PHẢI duy nhất.
+  const fzdzLabel = (g: { fz: string | null; dz: string | null }): string =>
+    `${g.fz ?? 'no-FedEx'} · ${g.dz ?? 'no-DHL'}`;
+  const groupList = [...groups.values()];
+  // region top của mỗi group.
+  const groupRegion = new Map<typeof groupList[number], string>();
+  for (const g of groupList) {
+    const counts = new Map<string, number>();
+    for (const cc of g.ccs) {
+      const r = regionOf(cc, marketCountryRegion);
+      counts.set(r, (counts.get(r) ?? 0) + 1);
+    }
+    let topRegion = 'RW', topN = 0;
+    for (const [r, n] of [...counts.entries()].sort((a, b) =>
+      b[1] - a[1] || a[0].localeCompare(b[0]))) {
+      if (n > topN) { topN = n; topRegion = r; }
+    }
+    const region = topN / g.ccs.length >= 0.5 ? topRegion : 'RW';
+    groupRegion.set(g, region);
+  }
+  // Đánh số trong mỗi region theo (fz,dz) label.
+  const seqByRegion = new Map<string, number>();
+  const zoneNameOf = new Map<typeof groupList[number], string>();
+  const byRegion = new Map<string, typeof groupList>();
+  for (const g of groupList) {
+    const r = groupRegion.get(g)!;
+    (byRegion.get(r) ?? byRegion.set(r, []).get(r)!).push(g);
+  }
+  const seenNames = new Set<string>();
+  for (const [region, gs] of [...byRegion.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    gs.sort((a, b) => fzdzLabel(a).localeCompare(fzdzLabel(b)));
+    for (const g of gs) {
+      const seq = (seqByRegion.get(region) ?? 0) + 1;
+      seqByRegion.set(region, seq);
+      const name = `${region}${seq}`;
+      if (seenNames.has(name)) throw new Error(`Tên zone trùng: ${name}`);
+      seenNames.add(name);
+      zoneNameOf.set(g, name);
+    }
+  }
+
   // ── 5) Định giá mỗi zone kết hợp ─────────────────────────────────────────
   const zones: Record<string, ShippingZone> = {};
   for (const g of groups.values()) {
-    const zoneName = `${g.fz ?? 'no-FedEx'} · ${g.dz ?? 'no-DHL'}`;
+    const zoneName = zoneNameOf.get(g)!;
     const rates: Record<string, ShippingRate> = {};
 
     // FedEx IP — chỉ khi zone CÓ FedEx zone; quote mọi nước có FedEx zone trong
@@ -189,9 +304,42 @@ async function main(): Promise<void> {
     zones[zoneName] = { countries: g.ccs, rates };
   }
 
+  // cc → zoneName (mã vùng) + group, để tra cứu trong các phần kiểm tra dưới.
+  const zoneNameByCc = new Map<string, string>();
+  const groupByCc = new Map<string, typeof groupList[number]>();
+  for (const g of groupList) {
+    const name = zoneNameOf.get(g)!;
+    for (const cc of g.ccs) { zoneNameByCc.set(cc, name); groupByCc.set(cc, g); }
+  }
+
   // ── 6) Dry-run output ────────────────────────────────────────────────────
   const totalCountries = universe.size;
   const zoneNames = Object.keys(zones);
+
+  // FULL list các zone: <regionCode> (FedEx <fz> / DHL <dz>) — <N> nước: <5 ISO>
+  console.log(`\n--- FULL zone list (${groupList.length} zone) ---`);
+  const fullSorted = groupList
+    .map((g) => ({ name: zoneNameOf.get(g)!, g }))
+    .sort((a, b) => {
+      const ra = a.name.replace(/\d+$/, ''), rb = b.name.replace(/\d+$/, '');
+      const na = Number(a.name.slice(ra.length)), nb = Number(b.name.slice(rb.length));
+      return ra.localeCompare(rb) || na - nb;
+    });
+  for (const { name, g } of fullSorted) {
+    const ccs = g.ccs.slice().sort();
+    console.log(
+      `  ${name.padEnd(7)} (FedEx ${g.fz ?? '—'} / DHL ${g.dz ?? '—'})  — ${g.ccs.length} nước: ${ccs.slice(0, 5).join(',')}`,
+    );
+  }
+  // Uniqueness + RW report.
+  const allNames = groupList.map((g) => zoneNameOf.get(g)!);
+  const uniqueNames = new Set(allNames);
+  const rwZones = fullSorted.filter(({ name }) => /^RW\d+$/.test(name));
+  console.log(`\nUniqueness: ${allNames.length} tên / ${uniqueNames.size} duy nhất → ${allNames.length === uniqueNames.size ? 'OK (tất cả duy nhất)' : 'TRÙNG!'}`);
+  console.log(`Zone rơi vào RW (mixed/<50% region top): ${rwZones.length}${rwZones.length ? ` [${rwZones.map((z) => z.name).join(',')}]` : ''}`);
+  // Mỗi nước phải thuộc đúng 1 zone.
+  const assignedCount = groupList.reduce((s, g) => s + g.ccs.length, 0);
+  console.log(`Mỗi nước thuộc đúng 1 zone: ${assignedCount} gán / ${totalCountries} universe → ${assignedCount === totalCountries ? 'OK' : 'LỆCH!'}`);
   console.log(`\n=== KẾT QUẢ ===`);
   console.log(`Tổng nước phủ (UNION FedEx ∪ DHL): ${totalCountries}`);
   console.log(`  (FedEx zone: ${fedexZoneOf.size}, DHL zone: ${dhlZoneOf.size})`);
@@ -201,13 +349,11 @@ async function main(): Promise<void> {
   console.log(`Nước KHÔNG có FedEx lẫn DHL (phải = 0): ${countriesNeither.length}${countriesNeither.length ? ` [${countriesNeither.sort().join(',')}]` : ''}`);
   // KY/NR sanity: phải xuất hiện trong universe + thuộc 1 zone có DHL Express rate.
   for (const cc of ['KY', 'NR']) {
-    const fz = fedexZoneOf.get(cc) ?? null;
-    const dz = dhlZoneOf.get(cc) ?? null;
-    const zn = `${fz ?? 'no-FedEx'} · ${dz ?? 'no-DHL'}`;
-    const z = zones[zn];
+    const zn = zoneNameByCc.get(cc);
+    const z = zn ? zones[zn] : undefined;
     const hasExpress = z ? Object.keys(z.rates).some((k) => /^DHL Express/.test(k)) : false;
     const hasStandard = z ? Object.keys(z.rates).some((k) => /^FedEx IP/.test(k)) : false;
-    console.log(`  ${cc}: zone "${zn}" — covered=${!!z} Express=${hasExpress} Standard=${hasStandard}`);
+    console.log(`  ${cc}: zone "${zn ?? '—'}" — covered=${!!z} Express=${hasExpress} Standard=${hasStandard}`);
   }
 
   console.log(`\n--- Mẫu ${Math.min(10, zoneNames.length)} zone đầu (bậc giữa 1.5–2 kg) ---`);
@@ -259,7 +405,8 @@ async function main(): Promise<void> {
     const fz = fedexZoneOf.get(cc);
     if (!fz) continue;
     const dz = dhlZoneOf.get(cc) ?? null;
-    const sysZone = zones[`${fz} · ${dz ?? 'no-DHL'}`];
+    const sysZoneName = zoneNameByCc.get(cc);
+    const sysZone = sysZoneName ? zones[sysZoneName] : undefined;
     if (!sysZone) continue;
     const sysFedex = fedexMidKey ? sysZone.rates[fedexMidKey]?.price : undefined;
     const sysDhl = dhlMidKey ? sysZone.rates[dhlMidKey]?.price : undefined;
@@ -280,7 +427,7 @@ async function main(): Promise<void> {
     if (sameSet) { if (fEng && dEng) engineMatch++; else engineDiff++; }
 
     console.log(
-      `  ${cc} → sys "${fz} · ${dz ?? 'no-DHL'}" (${sysZone.countries.length} nước) vs cici ${ciciE.zone} (${ciciE.ccs.length} nước)\n` +
+      `  ${cc} → sys "${sysZoneName}" (FedEx ${fz} / DHL ${dz ?? '—'}, ${sysZone.countries.length} nước) vs cici ${ciciE.zone} (${ciciE.ccs.length} nước)\n` +
       `      STORE : FedEx sys=${fmt(sysFedex)} ciciStored=${fmt(ciciE.fedex)} [${fStore ? 'MATCH' : 'DIFF'}]  DHL sys=${fmt(sysDhl)} ciciStored=${fmt(ciciE.dhl)} [${dStore ? 'MATCH' : 'DIFF'}]\n` +
       `      ENGINE: recompute cici-set live → FedEx=${fmt(reF ?? undefined)} DHL=${fmt(reD ?? undefined)}  sameCountrySet=${sameSet}${sameSet ? `  [${fEng && dEng ? 'MATCH' : 'DIFF'}]` : ' (set khác → gộp zone, không kỳ vọng bằng store)'}`,
     );
