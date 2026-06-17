@@ -19,9 +19,15 @@ describe('classifyCharge', () => {
 
   it('gộp các khoản hiếm gặp vào "Khác"', () => {
     for (const l of ['NON-CONVEYABLE PIECE - IRREGULAR', 'NON CONVEYABLE PIECE',
+      'NON-CONVEYABLE PIECE - WEIGHT', 'OVERSIZE PIECE',
       'RESIDENTIAL ADDRESS', 'RESTRICTED DESTINATION', 'ADULT SIGNATURE']) {
       expect(classifyCharge(l)).toBe('other');
     }
+  });
+
+  it('"...- WEIGHT" của non-conveyable KHÔNG bị nhầm thành cước cân lõi', () => {
+    expect(classifyCharge('NON-CONVEYABLE PIECE - WEIGHT')).toBe('other');
+    expect(classifyCharge('Weight charge')).toBe('keep'); // cước cân thật vẫn keep
   });
 
   it('ADULT SIGNATURE không bị nhầm thành DIRECT SIGNATURE', () => {

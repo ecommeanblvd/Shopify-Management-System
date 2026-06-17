@@ -17,6 +17,9 @@ export const VAT_LABEL = 'VAT';
 export function classifyCharge(label: string): ChargeCategory {
   const l = (label || '').toLowerCase();
   if (/dut(y|ies)|tax|regulator|penalt|customs/.test(l)) return 'hide';
+  // Phụ phí hiếm chứa từ khoá trùng với cước lõi (vd "NON-CONVEYABLE PIECE - WEIGHT"
+  // chứa "weight") → chặn thành 'other' TRƯỚC, kẻo bị nhầm thành cột riêng.
+  if (/non.?conveyable|oversize|irregular|restricted|residential|adult/.test(l)) return 'other';
   if (/weight|fuel|go\s*green|direct signature|demand|remote|address correction|elevated risk/.test(l)) return 'keep';
   return 'other';
 }

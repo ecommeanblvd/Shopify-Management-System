@@ -84,7 +84,7 @@ export function BillingTrackingTable(props: Props) {
               <th className="w-6" />
               <th className="px-3 py-2 text-left font-medium">Tracking</th>
               <th className="px-3 py-2 text-left font-medium">Đơn</th>
-              {feeCols.map((c) => <th key={c} className="px-3 py-2 text-right font-medium whitespace-nowrap">{c}</th>)}
+              {feeCols.map((c) => <th key={c} className="px-2 py-2 text-right font-medium align-bottom max-w-[5.5rem]">{c}</th>)}
               <th className="px-3 py-2 text-right font-medium">Tổng</th>
               <th className="px-3 py-2 text-center font-medium w-12">HĐ</th>
             </tr>
@@ -105,7 +105,7 @@ export function BillingTrackingTable(props: Props) {
                     </td>
                     <td className="px-3 py-2 font-medium tabular-nums whitespace-nowrap">{r.trackingNumber ?? <span className="text-muted-foreground">(không chi tiết)</span>}</td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.orderNumber ?? '—'}</td>
-                    {feeCols.map((c) => <td key={c} className="px-3 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
+                    {feeCols.map((c) => <td key={c} className="px-2 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(r.total)}</td>
                     <td className="px-3 py-2 text-center">
                       <button type="button" onClick={() => setSelected(bill)} disabled={!bill}
