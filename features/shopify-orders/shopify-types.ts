@@ -53,6 +53,20 @@ export interface ShopifyShippingLine {
   code: string | null;
 }
 
+export interface ShopifyTxnFee {
+  amount: ShopifyMoney;
+  rate: string | null;
+  type: string;
+  flatFee?: { amount: string } | null;
+}
+
+export interface ShopifyTxn {
+  kind: string;
+  status: string;
+  amountSet: { shopMoney: ShopifyMoney };
+  fees: ShopifyTxnFee[];
+}
+
 export interface ShopifyOrderPayload {
   id: string;                                   // gid://shopify/Order/...
   name: string;                                 // e.g. "#1234"
@@ -91,6 +105,7 @@ export interface ShopifyOrderPayload {
   lineItems: { nodes: ShopifyLineItem[] };
   refunds: ShopifyRefund[];
   fulfillments: ShopifyFulfillment[];
+  transactions?: ShopifyTxn[];
   // Always present on a paid order; empty on pickup-only or free
   // fulfilment. Used to derive the carrier the quote engine should
   // price against (per operator spec: never auto-pick cheapest).

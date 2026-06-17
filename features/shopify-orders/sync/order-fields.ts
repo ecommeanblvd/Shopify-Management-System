@@ -14,6 +14,12 @@ export const ORDER_NODE_FIELDS = `
   totalShippingPriceSet { shopMoney { amount currencyCode } }
   totalTaxSet { shopMoney { amount currencyCode } }
   totalPriceSet { shopMoney { amount currencyCode } }
+  transactions(first: 20) {
+    kind
+    status
+    amountSet { shopMoney { amount currencyCode } }
+    fees { amount { amount currencyCode } rate type flatFee { amount } }
+  }
   shippingAddress { countryCodeV2 city zip address1 address2 provinceCode name company }
   totalWeight
   lineItems(first: 250) {
