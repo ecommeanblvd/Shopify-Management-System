@@ -244,8 +244,9 @@ export async function applySystemShippingToProfiles(
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     const send = async (prof: Record<string, unknown>) => {
       let lastErr: string | null = null;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        if (attempt > 0) await sleep(800 * attempt);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // backoff NGẮN (250ms, 500ms) — retry lâu sẽ kéo server action quá giờ → timeout.
+        if (attempt > 0) await sleep(250 * attempt);
         try {
           const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
           if ((res as { errors?: unknown }).errors) {
@@ -263,35 +264,34 @@ export async function applySystemShippingToProfiles(
       }
       return lastErr;
     };
-    // Zone có thể chứa >100 method-def + nhiều nước (AF1 52, LATAM3 55). Tạo zone
-    // KÈM nhiều def/nhiều nước cùng lúc → Shopify "An unexpected response…" (mutation
-    // quá nặng, retry không cứu). Nên TÁCH: PHASE 2 tạo zone CHỈ countries + 1 def
-    // (nhẹ nhất Shopify cho phép); PHASE 3 thêm def còn lại theo lô NHỎ vào zone đó.
-    const CREATE_DEFS = 1;   // def tối thiểu khi tạo zone (Shopify bắt buộc ≥1)
-    const ADD_CHUNK = 20;    // số def mỗi mutation khi bồi thêm
+    // Cân bằng: mutation đủ NHỎ để Shopify không 5xx, nhưng đủ ÍT lần để server
+    // action không quá giờ (timeout → "An unexpected response"). CHUNK=40/zone đã
+    // chứng minh chạy trọn (push trước tạo đủ 30 zone + 1770 rate). Tạo zone với lô
+    // def đầu (≤CHUNK), bồi phần còn lại theo lô CHUNK vào zone đó.
+    const CHUNK = 40;
     try {
       // PHASE 1 — xoá zone bị thay TRƯỚC (giải phóng nước, tránh "Region already exists").
       if (profile.zonesToDelete) base.error = await send({ zonesToDelete: profile.zonesToDelete });
-      // PHASE 2 — tạo từng zone (countries + 1 def). 1 zone/mutation, payload tối thiểu.
+      // PHASE 2 — tạo từng zone với lô def đầu (1 zone/mutation).
       for (const z of zonesToCreate) {
         if (base.error) break;
         const defs = (z.methodDefinitionsToCreate as unknown[]) ?? [];
         base.error = await send({
-          locationGroupsToUpdate: [{ id: lg.id, zonesToCreate: [{ ...z, methodDefinitionsToCreate: defs.slice(0, CREATE_DEFS) }] }],
+          locationGroupsToUpdate: [{ id: lg.id, zonesToCreate: [{ ...z, methodDefinitionsToCreate: defs.slice(0, CHUNK) }] }],
         });
       }
-      // PHASE 3 — bồi def còn lại theo lô nhỏ vào zone vừa tạo (re-fetch lấy id theo tên).
-      if (!base.error && zonesToCreate.some((z) => ((z.methodDefinitionsToCreate as unknown[]) ?? []).length > CREATE_DEFS)) {
+      // PHASE 3 — bồi def còn lại theo lô vào zone vừa tạo (re-fetch lấy id theo tên).
+      if (!base.error && zonesToCreate.some((z) => ((z.methodDefinitionsToCreate as unknown[]) ?? []).length > CHUNK)) {
         const refreshed = (await readProfiles(store)).find((pp) => pp.profileId === p.profileId);
         const idByName = refreshed?.normalized.shopifyIds.zoneIdByName ?? {};
         for (const z of zonesToCreate) {
           if (base.error) break;
           const defs = (z.methodDefinitionsToCreate as unknown[]) ?? [];
-          if (defs.length <= CREATE_DEFS) continue;
+          if (defs.length <= CHUNK) continue;
           const zid = idByName[z.name as string];
           if (!zid) { base.error = `Không tìm thấy zone "${z.name as string}" sau khi tạo`; break; }
-          for (let i = CREATE_DEFS; !base.error && i < defs.length; i += ADD_CHUNK) {
-            base.error = await send({ locationGroupsToUpdate: [{ id: lg.id, zonesToUpdate: [{ id: zid, methodDefinitionsToCreate: defs.slice(i, i + ADD_CHUNK) }] }] });
+          for (let i = CHUNK; !base.error && i < defs.length; i += CHUNK) {
+            base.error = await send({ locationGroupsToUpdate: [{ id: lg.id, zonesToUpdate: [{ id: zid, methodDefinitionsToCreate: defs.slice(i, i + CHUNK) }] }] });
           }
         }
       }
