@@ -1,7 +1,7 @@
 'use server';
 
 import { planPush, type PushSource } from './push-plan';
-import { previewShippingToProfiles, applyShippingToProfiles, listShippingProfiles } from '@/features/settings-sync/shipping-profiles-actions';
+import { previewSystemShippingToProfiles, applySystemShippingToProfiles, listShippingProfiles } from '@/features/settings-sync/shipping-profiles-actions';
 import { pushCarrierRates } from './push-engine/actions';
 
 export interface PushStoreResult {
@@ -20,16 +20,13 @@ export async function pushShippingToStores(
   for (const storeId of input.storeIds) {
     const res: PushStoreResult = { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] };
     try {
-      // 1) Zone + manual: replace-mode lọc theo TÊN rate (rateNames) — delete+recreate
-      //    đúng rate carrier đã chọn (cập nhật điều kiện cân), KHÔNG đụng carrier kia,
-      //    KHÔNG xoá zone. rateNames=[] (chỉ engine) → đồng bộ zone-only.
-      if (plan.needsZoneSync) {
+      // 1) Clean-rebuild bảng giá HỆ THỐNG — LUÔN dựng đủ CẢ 2 carrier (Standard+Express) cho mỗi zone (zone dùng chung; lọc 1 carrier sẽ xoá mất rate carrier kia). Chỉ cần CÓ chọn manual là rebuild full.
+      if (plan.manualSourcePrefixes.length > 0) {
         const profiles = await listShippingProfiles(storeId);
         const ids = profiles.map((p) => p.profileId);
-        const opts = { rateNames: plan.manualRateNames };
         const rows = input.dryRun
-          ? await previewShippingToProfiles(storeId, ids, opts)
-          : await applyShippingToProfiles(storeId, ids, opts);
+          ? await previewSystemShippingToProfiles(storeId, ids, [])
+          : await applySystemShippingToProfiles(storeId, ids, []);
         for (const r of rows) {
           res.zoneCreated += r.zonesToCreate;
           res.rateOps += r.rateOps;

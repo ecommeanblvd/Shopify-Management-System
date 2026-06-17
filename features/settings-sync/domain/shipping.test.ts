@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables, parseWeightBand } from './shipping';
+import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables, parseWeightBand, normalizeRateForShopify, buildCleanRebuildVariables } from './shipping';
+import type { NormalizedShipping, ShippingTree } from './shipping';
 
 const shopifyResponse = {
   deliveryProfiles: {
@@ -215,4 +216,62 @@ describe('denormalizeToMutationInput', () => {
     expect(deletedIds).toContain('gid://shopify/DeliveryZone/20'); // OldAmerica bị phủ trùng → xoá
     expect(deletedIds).not.toContain('gid://shopify/DeliveryZone/10'); // Domestic(VN) free → GIỮ
   });
+});
+
+describe('normalizeRateForShopify', () => {
+  it('FedEx IP → Standard shipping + điều kiện cân (offset 0.01)', () => {
+    expect(normalizeRateForShopify('FedEx IP (1.5–2 kg)')).toEqual({
+      name: 'Standard shipping',
+      conditions: [
+        { criteria: { value: 1.51, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
+        { criteria: { value: 2, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
+      ],
+    });
+  });
+  it('DHL Express → Express shipping', () => {
+    expect(normalizeRateForShopify('DHL Express (0–0.5 kg)').name).toBe('Express shipping');
+  });
+  it('bậc đầu lower=0 → chỉ có điều kiện trên', () => {
+    expect(normalizeRateForShopify('FedEx IP (0–0.5 kg)').conditions).toEqual([
+      { criteria: { value: 0.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
+    ]);
+  });
+  it('prefix lạ → giữ nguyên tên', () => {
+    expect(normalizeRateForShopify('Standard (2-2.5kg)').name).toBe('Standard (2-2.5kg)');
+  });
+});
+
+describe('buildCleanRebuildVariables', () => {
+  const current: NormalizedShipping = {
+    tree: { zones: {
+      'Zone G': { countries: ['HK', 'TH'], rates: {} },
+      'VN nội địa': { countries: ['VN'], rates: {} },
+    } },
+    shopifyIds: {
+      profileId: 'gid://profile/1', locationGroupId: 'gid://lg/1',
+      zoneIdByName: { 'Zone G': 'gid://zone/G', 'VN nội địa': 'gid://zone/VN' },
+      rateIdByZoneAndName: {},
+    },
+  };
+  const systemTree: ShippingTree = { zones: {
+    GC1: { countries: ['HK'], rates: { 'FedEx IP (1.5–2 kg)': { type: 'flat', price: 30, currency: 'USD' } } },
+    SE2: { countries: ['TH'], rates: { 'DHL Express (0–0.5 kg)': { type: 'flat', price: 20, currency: 'USD' } } },
+  } };
+
+  const out = buildCleanRebuildVariables(current, systemTree, 'gid://lg/1');
+
+  it('xoá zone giao country (Zone G), GIỮ zone VN', () => {
+    expect(out.profile.zonesToDelete).toEqual(['gid://zone/G']);
+  });
+  it('tạo lại zone hệ thống với tên rate đã gộp + điều kiện cân', () => {
+    const lg = (out.profile.locationGroupsToUpdate as Array<{ zonesToCreate: Array<Record<string, unknown>> }>)[0];
+    const gc1 = lg.zonesToCreate.find((z) => z.name === 'GC1') as Record<string, unknown> & {
+      countries: unknown; methodDefinitionsToCreate: Array<Record<string, unknown>>;
+    };
+    expect(gc1.countries).toEqual([{ code: 'HK', includeAllProvinces: true }]);
+    expect(gc1.methodDefinitionsToCreate[0].name).toBe('Standard shipping');
+    expect(gc1.methodDefinitionsToCreate[0].weightConditionsToCreate).toHaveLength(2);
+    expect(gc1.methodDefinitionsToCreate[0].rateDefinition).toEqual({ price: { amount: '30', currencyCode: 'USD' } });
+  });
+  it('id = profileId', () => { expect(out.id).toBe('gid://profile/1'); });
 });

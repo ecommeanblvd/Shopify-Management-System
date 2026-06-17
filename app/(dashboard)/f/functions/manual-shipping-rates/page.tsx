@@ -6,8 +6,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listOverridesForStore } from '@/features/markets/actions';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
+import { listSystemShipping } from '@/features/markets/system-shipping';
 import { ManualRatesBrowser, type MarketZones } from '@/components/functions/ManualRatesBrowser';
 import { ZoneReferenceTable } from '@/components/functions/ZoneReferenceTable';
 import { listZonesWithCountries } from '@/features/carrier-rates/zones-actions';
@@ -29,10 +29,8 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
 
   const stores = (await db.select().from(schema.stores))
     .map((s) => ({ id: s.id, name: s.name, shopDomain: s.shopDomain }));
-  const sp = await searchParams;
-  const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
-  const overrides = activeId ? await listOverridesForStore(activeId) : [];
-  const markets: MarketZones[] = overrides.map((o) => ({ marketHandle: o.marketHandle, zones: flattenShippingMatrix(o.shipping) }));
+  const systemRows = await listSystemShipping();
+  const markets: MarketZones[] = systemRows.map((r) => ({ marketHandle: r.marketHandle, zones: flattenShippingMatrix(r.shipping) }));
 
   // Khoản phí CÓ/KHÔNG cover của từng carrier (suy từ cấu hình surcharge active).
   // Key theo carrier brand ('fedex'/'dhl') để client khớp với tab đang chọn.

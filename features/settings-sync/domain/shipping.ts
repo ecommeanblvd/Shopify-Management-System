@@ -332,6 +332,18 @@ function weightConditionsFromName(rateName: string): unknown[] {
   return conds;
 }
 
+const RATE_NAME_MAP: Array<{ prefix: string; name: string }> = [
+  { prefix: 'FedEx IP', name: 'Standard shipping' },
+  { prefix: 'DHL Express', name: 'Express shipping' },
+];
+
+/** Đổi tên rate nguồn (FedEx IP / DHL Express theo bậc cân) → tên gộp + điều kiện
+ *  cân (cân vào điều kiện, không vào tên). Prefix lạ → giữ nguyên tên. */
+export function normalizeRateForShopify(rateName: string): { name: string; conditions: unknown[] } {
+  const mapped = RATE_NAME_MAP.find((m) => rateName.startsWith(m.prefix));
+  return { name: mapped ? mapped.name : rateName, conditions: weightConditionsFromName(rateName) };
+}
+
 export function buildProfileUpdateVariables(
   current: NormalizedShipping,
   effective: ShippingTree,
@@ -414,5 +426,44 @@ export function buildProfileUpdateVariables(
   if (zonesToDelete.length) profile.zonesToDelete = zonesToDelete;
   if (methodDefinitionsToDelete.length) profile.methodDefinitionsToDelete = methodDefinitionsToDelete;
 
+  return { id: current.shopifyIds.profileId, profile };
+}
+
+/** Clean-rebuild: xoá mọi zone Shopify hiện có mà country GIAO với systemTree
+ *  (zone bị thay thế), rồi TẠO LẠI toàn bộ zone hệ thống với method-def đã gộp
+ *  tên + điều kiện cân. Zone không giao country nào (VN nội địa) được GIỮ. */
+export function buildCleanRebuildVariables(
+  current: NormalizedShipping,
+  systemTree: ShippingTree,
+  locationGroupId: string,
+): { id: string; profile: Record<string, unknown> } {
+  const md = (name: string, r: ShippingRate) => {
+    const norm = normalizeRateForShopify(name);
+    return {
+      name: norm.name,
+      rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } },
+      ...(norm.conditions.length ? { weightConditionsToCreate: norm.conditions } : {}),
+    };
+  };
+
+  const systemCountries = new Set<string>();
+  for (const z of Object.values(systemTree.zones)) for (const c of z.countries) systemCountries.add(c);
+
+  const zonesToDelete: string[] = [];
+  for (const [name, zone] of Object.entries(current.tree.zones)) {
+    if (zone.countries.some((c) => systemCountries.has(c))) zonesToDelete.push(current.shopifyIds.zoneIdByName[name]);
+  }
+
+  const zonesToCreate = Object.entries(systemTree.zones)
+    .filter(([, z]) => Object.keys(z.rates).length > 0)
+    .map(([name, z]) => ({
+      name,
+      countries: z.countries.map((c) => ({ code: c, includeAllProvinces: true })),
+      methodDefinitionsToCreate: Object.entries(z.rates).map(([rn, r]) => md(rn, r)),
+    }));
+
+  const profile: Record<string, unknown> = {};
+  if (zonesToDelete.length) profile.zonesToDelete = zonesToDelete;
+  profile.locationGroupsToUpdate = [{ id: locationGroupId, zonesToCreate }];
   return { id: current.shopifyIds.profileId, profile };
 }

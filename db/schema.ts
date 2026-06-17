@@ -220,6 +220,16 @@ export const marketStoreOverrides = pgTable('market_store_overrides', {
   primaryKey({ columns: [table.storeId, table.marketHandle] }),
 ]);
 
+export const manualShippingConfig = pgTable('manual_shipping_config', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  marketHandle: text('market_handle').notNull().unique(),
+  shipping: jsonb('shipping').notNull(),
+  version: integer('version').notNull().default(1),
+  updatedBy: text('updated_by').references(() => user.id),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const marketApplyHistory = pgTable('market_apply_history', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id).notNull(),
