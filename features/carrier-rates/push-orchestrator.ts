@@ -20,12 +20,13 @@ export async function pushShippingToStores(
   for (const storeId of input.storeIds) {
     const res: PushStoreResult = { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] };
     try {
-      // 1) Zone + manual (additive, lọc theo nguồn). Cần khi có manual HOẶC engine
-      //    (engine cần zone tồn tại → đẩy zone-only rateNames=[]).
+      // 1) Zone + manual: replace-mode lọc theo TÊN rate (rateNames) — delete+recreate
+      //    đúng rate carrier đã chọn (cập nhật điều kiện cân), KHÔNG đụng carrier kia,
+      //    KHÔNG xoá zone. rateNames=[] (chỉ engine) → đồng bộ zone-only.
       if (plan.needsZoneSync) {
         const profiles = await listShippingProfiles(storeId);
         const ids = profiles.map((p) => p.profileId);
-        const opts = { rateNames: plan.manualRateNames, additive: true };
+        const opts = { rateNames: plan.manualRateNames };
         const rows = input.dryRun
           ? await previewShippingToProfiles(storeId, ids, opts)
           : await applyShippingToProfiles(storeId, ids, opts);

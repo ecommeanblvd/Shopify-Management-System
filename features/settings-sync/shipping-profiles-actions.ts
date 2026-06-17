@@ -60,7 +60,7 @@ async function buildStoreShippingTree(storeId: string): Promise<ShippingTree> {
   return { zones };
 }
 
-type PushOpts = { rateNames?: string[]; additive?: boolean };
+type PushOpts = { rateNames?: string[] };
 function effectiveFor(tree: ShippingTree, opts?: PushOpts): ShippingTree {
   return opts?.rateNames !== undefined ? filterTreeByRateNames(tree, opts.rateNames) : tree;
 }
@@ -85,9 +85,11 @@ export async function previewShippingToProfiles(storeId: string, profileIds: str
   }
   const profiles = await readProfiles(store);
   const selected = new Set(profileIds);
+  // Replace-mode: khi đẩy theo tên rate, xoá+tạo lại CHÍNH các rate đó (để điều
+  // kiện cân mới áp dụng), KHÔNG đụng rate carrier khác.
+  const replaceRateNames = opts?.rateNames !== undefined ? new Set(opts.rateNames) : undefined;
   return profiles.filter((p) => selected.has(p.profileId)).map((p) => {
-    const diff = denormalizeToMutationInput(p.normalized, effective);
-    if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
+    const diff = denormalizeToMutationInput(p.normalized, effective, replaceRateNames);
     return {
       profileId: p.profileId, name: p.name,
       // Bỏ zone rỗng rate (engine-only → rateNames:[] sinh zone không rate;
@@ -111,10 +113,11 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
   const token = await getStoreToken(store.id);
   const profiles = await readProfiles(store);
   const selected = new Set(profileIds);
+  // Replace-mode (xem ghi chú ở preview): xoá+tạo lại các rate được chọn theo tên.
+  const replaceRateNames = opts?.rateNames !== undefined ? new Set(opts.rateNames) : undefined;
   const results: ProfilePushResult[] = [];
   for (const p of profiles.filter((pp) => selected.has(pp.profileId))) {
-    const diff = denormalizeToMutationInput(p.normalized, effective);
-    if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
+    const diff = denormalizeToMutationInput(p.normalized, effective, replaceRateNames);
     const base: ProfilePushResult = {
       profileId: p.profileId, name: p.name,
       // Chỉ đếm zone-create có ≥1 rate (xem ghi chú ở preview).
@@ -123,15 +126,10 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
       error: null,
     };
     try {
-      const { id, profile } = buildProfileUpdateVariables(p.normalized, effective, p.normalized.shopifyIds.locationGroupId);
-      // ADDITIVE: tuyệt đối không gửi mutation xoá — strip mọi delete top-level.
-      // buildProfileUpdateVariables chỉ đặt delete ở profile.zonesToDelete /
-      // profile.methodDefinitionsToDelete (không có per-locationGroup), nên xoá 2
-      // key này là đủ để PHASE 1 không gửi gì phá hoại.
-      if (opts?.additive) {
-        delete (profile as Record<string, unknown>).zonesToDelete;
-        delete (profile as Record<string, unknown>).methodDefinitionsToDelete;
-      }
+      const { id, profile } = buildProfileUpdateVariables(p.normalized, effective, p.normalized.shopifyIds.locationGroupId, replaceRateNames);
+      // Replace-mode: profile.methodDefinitionsToDelete CHỈ chứa id rate được chọn
+      // (recreate-delete) — đây là delete an toàn, PHẢI gửi (PHASE 1 xoá cũ →
+      // PHASE 2/3 tạo lại mới với điều kiện cân mới). Không strip nữa.
       const send = async (prof: Record<string, unknown>) => {
         const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
         if ((res as { errors?: unknown }).errors) return JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
