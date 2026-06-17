@@ -9,6 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { recordAudit } from '@/lib/logging/audit';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { listOverridesForStore } from '@/features/markets/actions';
+import { filterTreeByRateNames } from '@/features/carrier-rates/push-plan';
 import type { MarketShipping } from '@/features/markets/types';
 import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
@@ -59,6 +60,11 @@ async function buildStoreShippingTree(storeId: string): Promise<ShippingTree> {
   return { zones };
 }
 
+type PushOpts = { rateNames?: string[]; additive?: boolean };
+function effectiveFor(tree: ShippingTree, opts?: PushOpts): ShippingTree {
+  return opts?.rateNames !== undefined ? filterTreeByRateNames(tree, opts.rateNames) : tree;
+}
+
 /** Liệt kê delivery profile của store (cho UI chọn). */
 export async function listShippingProfiles(storeId: string): Promise<ProfileInfo[]> {
   const store = await loadStore(storeId);
@@ -70,20 +76,23 @@ export async function listShippingProfiles(storeId: string): Promise<ProfileInfo
 }
 
 /** Tính diff đẩy bảng giá lên các profile được chọn — KHÔNG ghi (dry-run). */
-export async function previewShippingToProfiles(storeId: string, profileIds: string[]): Promise<ProfilePushResult[]> {
+export async function previewShippingToProfiles(storeId: string, profileIds: string[], opts?: PushOpts): Promise<ProfilePushResult[]> {
   await requireApplyPermission();
   const store = await loadStore(storeId);
-  const effective = await buildStoreShippingTree(storeId);
-  if (Object.keys(effective.zones).length === 0) {
+  const effective = effectiveFor(await buildStoreShippingTree(storeId), opts);
+  if (!opts && Object.keys(effective.zones).length === 0) {
     throw new Error('Chưa có bảng giá ship cho store này — chạy Push (Carrier-rates) trước khi đẩy lên profile.');
   }
   const profiles = await readProfiles(store);
   const selected = new Set(profileIds);
   return profiles.filter((p) => selected.has(p.profileId)).map((p) => {
     const diff = denormalizeToMutationInput(p.normalized, effective);
+    if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
     return {
       profileId: p.profileId, name: p.name,
-      zonesToCreate: diff.zonesToCreate.length, zonesToDelete: diff.zonesToDelete.length,
+      // Bỏ zone rỗng rate (engine-only → rateNames:[] sinh zone không rate;
+      // Shopify từ chối tạo zone không có rate). Chỉ đếm zone có ≥1 rate.
+      zonesToCreate: diff.zonesToCreate.filter((z) => z.rates.length > 0).length, zonesToDelete: diff.zonesToDelete.length,
       rateOps: diff.methodDefinitionsToCreate.length + diff.methodDefinitionsToUpdate.length + diff.methodDefinitionsToDelete.length,
       error: null,
     };
@@ -92,11 +101,11 @@ export async function previewShippingToProfiles(storeId: string, profileIds: str
 
 /** Đẩy CÙNG bảng giá lên các profile được chọn (ghi thật). Profile không chọn
  *  KHÔNG bị đụng. */
-export async function applyShippingToProfiles(storeId: string, profileIds: string[]): Promise<ProfilePushResult[]> {
+export async function applyShippingToProfiles(storeId: string, profileIds: string[], opts?: PushOpts): Promise<ProfilePushResult[]> {
   const userId = await requireApplyPermission();
   const store = await loadStore(storeId);
-  const effective = await buildStoreShippingTree(storeId);
-  if (Object.keys(effective.zones).length === 0) {
+  const effective = effectiveFor(await buildStoreShippingTree(storeId), opts);
+  if (!opts && Object.keys(effective.zones).length === 0) {
     throw new Error('Chưa có bảng giá ship cho store này — chạy Push (Carrier-rates) trước khi đẩy lên profile.');
   }
   const token = await getStoreToken(store.id);
@@ -105,14 +114,24 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
   const results: ProfilePushResult[] = [];
   for (const p of profiles.filter((pp) => selected.has(pp.profileId))) {
     const diff = denormalizeToMutationInput(p.normalized, effective);
+    if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
     const base: ProfilePushResult = {
       profileId: p.profileId, name: p.name,
-      zonesToCreate: diff.zonesToCreate.length, zonesToDelete: diff.zonesToDelete.length,
+      // Chỉ đếm zone-create có ≥1 rate (xem ghi chú ở preview).
+      zonesToCreate: diff.zonesToCreate.filter((z) => z.rates.length > 0).length, zonesToDelete: diff.zonesToDelete.length,
       rateOps: diff.methodDefinitionsToCreate.length + diff.methodDefinitionsToUpdate.length + diff.methodDefinitionsToDelete.length,
       error: null,
     };
     try {
       const { id, profile } = buildProfileUpdateVariables(p.normalized, effective, p.normalized.shopifyIds.locationGroupId);
+      // ADDITIVE: tuyệt đối không gửi mutation xoá — strip mọi delete top-level.
+      // buildProfileUpdateVariables chỉ đặt delete ở profile.zonesToDelete /
+      // profile.methodDefinitionsToDelete (không có per-locationGroup), nên xoá 2
+      // key này là đủ để PHASE 1 không gửi gì phá hoại.
+      if (opts?.additive) {
+        delete (profile as Record<string, unknown>).zonesToDelete;
+        delete (profile as Record<string, unknown>).methodDefinitionsToDelete;
+      }
       const send = async (prof: Record<string, unknown>) => {
         const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
         if ((res as { errors?: unknown }).errors) return JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
@@ -121,7 +140,13 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
       };
       const lgIn = (profile.locationGroupsToUpdate as Array<Record<string, unknown>> | undefined)?.[0];
       const lgId = lgIn?.id;
-      const zonesToCreate = (lgIn?.zonesToCreate as unknown[]) ?? [];
+      // Bỏ zone-create không có rate. buildProfileUpdateVariables sinh mỗi entry
+      // dạng { name, countries, methodDefinitionsToCreate }; engine-only push
+      // (rateNames:[]) tạo zone với methodDefinitionsToCreate rỗng → Shopify từ
+      // chối tạo zone không rate. Engine chỉ attach vào zone CÓ SẴN nên tạo zone
+      // rỗng là vô nghĩa.
+      const zonesToCreate = ((lgIn?.zonesToCreate as Array<Record<string, unknown>> | undefined) ?? [])
+        .filter((z) => ((z.methodDefinitionsToCreate as unknown[] | undefined)?.length ?? 0) > 0);
       const zonesToUpdate = (lgIn?.zonesToUpdate as unknown[]) ?? [];
 
       // PHASE 1 — xoá zone/rate bị thay TRƯỚC (giải phóng nước), tránh va chạm
