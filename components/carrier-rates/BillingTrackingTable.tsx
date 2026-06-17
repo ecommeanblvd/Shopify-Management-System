@@ -31,6 +31,7 @@ export function BillingTrackingTable(props: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<BillRow | null>(null);
   const fmt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('vi-VN'));
+  const fmtKg = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('vi-VN', { maximumFractionDigits: 3 }));
   const billById = useMemo(() => new Map(bills.map((b) => [b.id, b])), [bills]);
   const sumById = useMemo(() => new Map(summaryBills.map((s) => [s.id, s])), [summaryBills]);
 
@@ -84,6 +85,7 @@ export function BillingTrackingTable(props: Props) {
               <th className="w-6" />
               <th className="px-3 py-2 text-left font-medium">Tracking</th>
               <th className="px-3 py-2 text-left font-medium">Đơn</th>
+              <th className="px-3 py-2 text-right font-medium whitespace-nowrap" title="Cân tính phí trên hoá đơn (billing weight)">Cân (kg)</th>
               {feeCols.map((c) => <th key={c} className="px-2 py-2 text-right font-medium align-bottom max-w-[5.5rem]">{c}</th>)}
               <th className="px-3 py-2 text-right font-medium">Tổng</th>
               <th className="px-3 py-2 text-center font-medium w-12">HĐ</th>
@@ -115,6 +117,7 @@ export function BillingTrackingTable(props: Props) {
                         )}
                       </span>
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">{fmtKg(r.weightKg)}</td>
                     {feeCols.map((c) => <td key={c} className="px-2 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(r.total)}</td>
                     <td className="px-3 py-2 text-center">
@@ -128,7 +131,7 @@ export function BillingTrackingTable(props: Props) {
                   {open && r.hasDetail && (
                     <tr className="bg-muted/10">
                       <td />
-                      <td colSpan={feeCols.length + 4} className="px-3 py-2 space-y-1.5">
+                      <td colSpan={feeCols.length + 5} className="px-3 py-2 space-y-1.5">
                         {r.breakdown.length > 0 && (
                           <div className="space-y-0.5">
                             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Đầy đủ các khoản (gồm thuế/duty)</p>
@@ -143,7 +146,6 @@ export function BillingTrackingTable(props: Props) {
                           </div>
                         )}
                         {r.note && <p className="text-[11px] text-muted-foreground">{r.note}</p>}
-                        {r.weightKg != null && r.weightKg > 0 && <p className="text-[11px] text-muted-foreground">Cân: {r.weightKg} kg</p>}
                       </td>
                     </tr>
                   )}
