@@ -345,10 +345,10 @@ export function OrdersTable({
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {detail ? `Edit order ${detail.shopifyOrderNumber}` : 'Loading…'}
+              {detail ? `Order ${detail.shopifyOrderNumber}` : 'Loading…'}
             </DialogTitle>
             <DialogDescription>
-              Override the cost-of-goods per line and / or the shipping cost for this order. Leave a field blank to fall back to the system default (sku_costs lookup, shipping invoice, or carrier-engine estimate).
+              Chi tiết đơn + so sánh phí ship (khách trả vs hệ thống vs billed thực tế). Bấm “Sửa” để chỉnh giá vốn từng dòng / cân nặng. Chi phí ship billed tự lấy từ hoá đơn carrier — không sửa tay.
             </DialogDescription>
           </DialogHeader>
           {loading || !detail ? (
@@ -386,13 +386,12 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
       detail.lines.map((l) => [l.lineId, l.costOverride !== null ? String(l.costOverride) : '']),
     ),
   );
-  const [shippingOverride, setShippingOverride] = useState<string>(
-    detail.shipping.shippingCostOverride !== null ? String(detail.shipping.shippingCostOverride) : '',
-  );
   const [shippingNote, setShippingNote] = useState<string>(detail.shipping.shippingCostOverrideNote ?? '');
   const [weightOverride, setWeightOverride] = useState<string>(
     detail.shipWeightKgOverride !== null ? String(detail.shipWeightKgOverride) : '',
   );
+  // Mở ra là XEM (read-only); bấm "Sửa" mới cho chỉnh. Billing không sửa tay.
+  const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const onSave = (): void => {
@@ -401,23 +400,24 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
       const trimmed = raw.trim();
       lineCostsPayload[id] = trimmed === '' ? null : Number(trimmed);
     }
-    const ship = shippingOverride.trim() === '' ? null : Number(shippingOverride);
     const weight = weightOverride.trim() === '' ? null : Number(weightOverride);
     startTransition(async () => {
       await saveAction({
         orderId: detail.orderId,
         lineCosts: lineCostsPayload,
-        shippingCostOverride: ship,
+        // Chi phí ship billed tự lấy từ hoá đơn carrier → KHÔNG sửa tay. Giữ
+        // nguyên giá trị override cũ (nếu có) để không xoá dữ liệu lịch sử.
+        shippingCostOverride: detail.shipping.shippingCostOverride,
         shippingCostOverrideNote: shippingNote.trim() === '' ? null : shippingNote.trim(),
         shipWeightKgOverride: weight,
       });
+      setEditing(false);
       onSaved();
     });
   };
 
   const onReset = (): void => {
     setLineCosts(Object.fromEntries(detail.lines.map((l) => [l.lineId, ''])));
-    setShippingOverride('');
     setShippingNote('');
     setWeightOverride('');
   };
@@ -475,21 +475,29 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                         : <span className="italic text-amber-600 dark:text-amber-400">no cost</span>}
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <MoneyInput
-                          value={lineCosts[l.lineId] ?? ''}
-                          onValueChange={(raw) =>
-                            setLineCosts((s) => ({ ...s, [l.lineId]: raw }))
-                          }
-                          decimals={currencyDecimals(cogsCcy)}
-                          placeholder={l.defaultCostPerUnit !== null
-                            ? `default: ${l.defaultCostPerUnit.toLocaleString()}`
-                            : 'blank = no cost'}
-                          inputClassName="h-8 text-xs text-right px-2"
-                          className="flex-1"
-                        />
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
-                      </div>
+                      {editing ? (
+                        <div className="flex items-center gap-1.5">
+                          <MoneyInput
+                            value={lineCosts[l.lineId] ?? ''}
+                            onValueChange={(raw) =>
+                              setLineCosts((s) => ({ ...s, [l.lineId]: raw }))
+                            }
+                            decimals={currencyDecimals(cogsCcy)}
+                            placeholder={l.defaultCostPerUnit !== null
+                              ? `default: ${l.defaultCostPerUnit.toLocaleString()}`
+                              : 'blank = no cost'}
+                            inputClassName="h-8 text-xs text-right px-2"
+                            className="flex-1"
+                          />
+                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
+                        </div>
+                      ) : (
+                        <div className="text-right font-mono tabular-nums text-xs">
+                          {l.costOverride !== null
+                            ? <>{fmt(l.costOverride, cogsCcy)} <span className="text-[9px] text-muted-foreground">{cogsCcy}</span></>
+                            : <span className="text-muted-foreground/60">—</span>}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -658,78 +666,89 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
               </div>
             )}
 
-            <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-                Weight override
-                <span className="text-[10px] font-mono normal-case tracking-normal text-muted-foreground/80">
-                  snapshot: {detail.shipWeightKg !== null ? `${detail.shipWeightKg.toFixed(3)} kg` : '—'}
-                </span>
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.001"
-                  min="0"
-                  placeholder="blank = use Shopify snapshot weight"
-                  value={weightOverride}
-                  onChange={(e) => setWeightOverride(e.target.value)}
-                  className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                />
-                <span className="text-xs font-mono text-muted-foreground shrink-0">kg</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Use this when the variant weight was wrong at sync time
-                and got snapshotted. Fixing the Shopify variant doesn&rsquo;t
-                retroactively update past orders — this points the
-                carrier-engine at the correct weight for the rate lookup.
-              </p>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
-                Shipping cost override
-                {!sameCcy && (
-                  <span className="px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal">
-                    {cogsCcy}
+            {/* Cân nặng + ghi chú — chỉ sửa ở Edit mode. Chi phí ship billed
+                KHÔNG có ô override (tự lấy từ hoá đơn carrier). */}
+            {editing ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
+                    Weight override
+                    <span className="text-[10px] font-mono normal-case tracking-normal text-muted-foreground/80">
+                      snapshot: {detail.shipWeightKg !== null ? `${detail.shipWeightKg.toFixed(3)} kg` : '—'}
+                    </span>
                   </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.001"
+                      min="0"
+                      placeholder="blank = use Shopify snapshot weight"
+                      value={weightOverride}
+                      onChange={(e) => setWeightOverride(e.target.value)}
+                      className="flex-1 h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground shrink-0">kg</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Dùng khi cân variant sai lúc sync và đã bị snapshot. Sửa variant
+                    trên Shopify không cập nhật ngược đơn cũ — ô này trỏ engine về
+                    đúng cân để tra cước.
+                  </p>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">Note (optional)</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. comp shipment / GoBear courier"
+                    value={shippingNote}
+                    onChange={(e) => setShippingNote(e.target.value)}
+                    className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm"
+                  />
+                </label>
+              </>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  Cân:{' '}
+                  <span className="text-foreground font-mono">
+                    {detail.shipWeightKgOverride !== null
+                      ? `${detail.shipWeightKgOverride} kg (override)`
+                      : detail.shipWeightKg !== null ? `${detail.shipWeightKg} kg` : '—'}
+                  </span>
+                </span>
+                {detail.shipping.shippingCostOverrideNote && (
+                  <span>Note: <span className="text-foreground">{detail.shipping.shippingCostOverrideNote}</span></span>
                 )}
-              </span>
-              <div className="flex items-center gap-2">
-                <MoneyInput
-                  value={shippingOverride}
-                  onValueChange={setShippingOverride}
-                  decimals={currencyDecimals(cogsCcy)}
-                  placeholder="blank = use default"
-                  className="flex-1"
-                />
-                <span className="text-xs font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
               </div>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                Note (optional)
-              </span>
-              <input
-                type="text"
-                placeholder="e.g. comp shipment / GoBear courier"
-                value={shippingNote}
-                onChange={(e) => setShippingNote(e.target.value)}
-                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm"
-              />
-            </label>
+            )}
           </CardContent>
         </Card>
       </section>
 
       <DialogFooter className="flex-row sm:justify-between gap-2 pt-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onReset} className="gap-1.5">
-          <RotateCcw className="size-3.5" />
-          Clear all overrides
-        </Button>
-        <Button type="button" size="sm" onClick={onSave} disabled={pending} className="gap-1.5">
-          {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-          Save overrides
-        </Button>
+        {editing ? (
+          <>
+            <Button type="button" variant="ghost" size="sm" onClick={onReset} className="gap-1.5">
+              <RotateCcw className="size-3.5" />
+              Clear overrides
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={pending}>
+                Huỷ
+              </Button>
+              <Button type="button" size="sm" onClick={onSave} disabled={pending} className="gap-1.5">
+                {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                Lưu
+              </Button>
+            </div>
+          </>
+        ) : (
+          <Button type="button" size="sm" onClick={() => setEditing(true)} className="gap-1.5 ml-auto">
+            <Pencil className="size-3.5" />
+            Sửa
+          </Button>
+        )}
       </DialogFooter>
     </div>
   );
