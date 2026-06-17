@@ -296,14 +296,20 @@ export function parseWeightBand(rateName: string): { lower: number; upper: numbe
   return { lower, upper };
 }
 
-/** Điều kiện cân cho Shopify: rate chỉ hiện khi cân giỏ ∈ [lower, upper]. Bậc đầu
- *  (lower=0) bỏ điều kiện cận dưới (luôn đúng). Nhờ vậy checkout TỰ chọn đúng bậc
- *  theo cân thay vì hiện hết các bậc cho khách chọn bậc rẻ. */
+/** Lệch cận dưới (kg) để hai bậc liền kề KHÔNG chồng tại biên. Shopify chỉ có
+ *  ≥/≤ (không có ">" thuần), nên cận dưới của bậc sau = +offset so với cận trên
+ *  bậc trước → bậc trên bao gồm biên, bậc sau loại biên. Tên rate GIỮ NGUYÊN
+ *  (vd "1.5-2 kg"); chỉ ĐIỀU KIỆN đẩy lên Shopify lệch (≥1.51). */
+const BAND_LOWER_OFFSET_KG = 0.01;
+
+/** Điều kiện cân cho Shopify: rate chỉ hiện khi cân giỏ ∈ (lower, upper]. Bậc đầu
+ *  (lower=0) bỏ điều kiện cận dưới (luôn đúng). Cận dưới +offset để không chồng
+ *  với bậc trước tại biên (vd cân 2.0kg chỉ khớp "1.5-2", không khớp "2-2.5"). */
 function weightConditionsFromName(rateName: string): unknown[] {
   const b = parseWeightBand(rateName);
   if (!b) return [];
   const conds: unknown[] = [];
-  if (b.lower > 0) conds.push({ criteria: { value: b.lower, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' });
+  if (b.lower > 0) conds.push({ criteria: { value: b.lower + BAND_LOWER_OFFSET_KG, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' });
   conds.push({ criteria: { value: b.upper, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' });
   return conds;
 }
