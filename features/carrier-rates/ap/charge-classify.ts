@@ -11,6 +11,8 @@
 export type ChargeCategory = 'keep' | 'hide' | 'other';
 
 export const OTHER_LABEL = 'Khác';
+/** Nhãn cột gom toàn bộ VAT của các khoản → 1 tổng, để dễ đối soát phí net. */
+export const VAT_LABEL = 'VAT';
 
 export function classifyCharge(label: string): ChargeCategory {
   const l = (label || '').toLowerCase();

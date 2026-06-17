@@ -231,9 +231,7 @@ export function AddBillDialog({ createBillAction, importAction, accountCurrency 
                       <thead className="text-muted-foreground">
                         <tr className="text-left">
                           <th className="font-normal py-0.5">Khoản</th>
-                          <th className="font-normal text-right">Charge</th>
-                          <th className="font-normal text-right">VAT</th>
-                          <th className="font-normal text-right">Tổng</th>
+                          <th className="font-normal text-right">Phí (net)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -241,12 +239,22 @@ export function AddBillDialog({ createBillAction, importAction, accountCurrency 
                           <tr key={j} className="border-t border-border/50">
                             <td className="py-0.5">{c.name || c.code}{c.code && c.name ? ` (${c.code})` : ''}</td>
                             <td className="text-right tabular-nums">{fmt(c.charge)}</td>
-                            <td className="text-right tabular-nums text-muted-foreground">{fmt(c.tax)}</td>
-                            <td className="text-right tabular-nums">{fmt(c.total)}</td>
                           </tr>
                         ))}
                         {s.charges.length === 0 && (
-                          <tr><td colSpan={4} className="py-0.5 text-muted-foreground">(không có breakdown trong file)</td></tr>
+                          <tr><td colSpan={2} className="py-0.5 text-muted-foreground">(không có breakdown trong file)</td></tr>
+                        )}
+                        {s.charges.length > 0 && (
+                          <>
+                            <tr className="border-t border-border text-muted-foreground">
+                              <td className="py-0.5">VAT (tổng)</td>
+                              <td className="text-right tabular-nums">{fmt(s.charges.reduce((a, c) => a + c.tax, 0))}</td>
+                            </tr>
+                            <tr className="border-t border-border font-semibold">
+                              <td className="py-0.5">Tổng (gồm VAT)</td>
+                              <td className="text-right tabular-nums">{fmt(s.totalInclVat)}</td>
+                            </tr>
+                          </>
                         )}
                       </tbody>
                     </table>

@@ -1,5 +1,5 @@
 import { summariseBill, type BillStatus, type PaymentInput } from './ap-summary';
-import { classifyCharge, OTHER_LABEL } from './charge-classify';
+import { classifyCharge, OTHER_LABEL, VAT_LABEL } from './charge-classify';
 
 /** Một khoản phí chi tiết theo carrier (DHL: code/name/charge/tax/total). */
 export interface LineCharge { code: string; name: string; charge: number; tax: number; total: number }
@@ -49,23 +49,28 @@ const FEE_LABELS: Array<[keyof TrackingLineInput, string]> = [
 ];
 
 /**
- * Gộp breakdown chi tiết thành các cột cho bảng theo-tracking:
- *  - ẩn thuế/duty ('hide'), gộp khoản hiếm vào "Khác" ('other'),
+ * Gộp breakdown chi tiết thành các cột cho bảng theo-tracking, để DỄ ĐỐI SOÁT:
+ *  - mỗi khoản hiển thị PHÍ NET (đã tách VAT),
+ *  - toàn bộ VAT gom vào 1 cột "VAT",
+ *  - ẩn thuế/duty ('hide', cả VAT của nó), gộp khoản hiếm vào "Khác" ('other'),
  *    giữ cột riêng cho cước lõi + phụ phí có nghĩa ('keep').
  * Tổng dòng (ln.total) KHÔNG đổi — cột ẩn vẫn nằm trong Tổng.
  */
 function foldCharges(charges: LineCharge[]): TrackingFee[] {
   const keep = new Map<string, number>();
   let other = 0;
+  let vat = 0;
   for (const c of charges) {
     const label = c.name || c.code;
     const cat = classifyCharge(label);
-    if (cat === 'hide') continue;
-    if (cat === 'other') { other += c.total; continue; }
-    keep.set(label, (keep.get(label) ?? 0) + c.total);
+    if (cat === 'hide') continue;       // ẩn cả phí lẫn VAT của duty/thuế
+    vat += c.tax;                        // gom VAT các khoản hiển thị
+    if (cat === 'other') { other += c.charge; continue; }  // net
+    keep.set(label, (keep.get(label) ?? 0) + c.charge);    // net
   }
   const out: TrackingFee[] = [...keep].map(([label, value]) => ({ label, value }));
   if (other !== 0) out.push({ label: OTHER_LABEL, value: other });
+  if (vat !== 0) out.push({ label: VAT_LABEL, value: vat });
   return out.filter((f) => f.value !== 0);
 }
 
@@ -103,7 +108,13 @@ export function buildTrackingRows(
         ? foldCharges(ln.charges!)
         : FEE_LABELS.map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) })).filter((f) => f.value !== 0);
       const breakdown = hasCharges
-        ? ln.charges!.map((c) => ({ label: c.name || c.code, value: c.total })).filter((f) => f.value !== 0)
+        ? (() => {
+            // Đầy đủ MỌI khoản (gồm duty) ở dạng PHÍ NET, + 1 dòng VAT tổng.
+            const items = ln.charges!.map((c) => ({ label: c.name || c.code, value: c.charge })).filter((f) => f.value !== 0);
+            const vatAll = ln.charges!.reduce((a, c) => a + c.tax, 0);
+            if (vatAll !== 0) items.push({ label: VAT_LABEL, value: vatAll });
+            return items;
+          })()
         : fees;
       rows.push({
         ...base, key: `${b.id}:${i}`,

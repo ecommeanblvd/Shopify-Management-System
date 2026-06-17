@@ -6,7 +6,7 @@ import { InvoiceDetailModal } from './InvoiceDetailModal';
 import type { BillRow, PaymentRow, BillLineRow } from '@/features/carrier-rates/ap/bills-actions';
 import type { BillSummary } from '@/features/carrier-rates/ap/ap-summary';
 import type { TrackingRow } from '@/features/carrier-rates/ap/tracking-rows';
-import { feeColumnRank, OTHER_LABEL } from '@/features/carrier-rates/ap/charge-classify';
+import { feeColumnRank, OTHER_LABEL, VAT_LABEL } from '@/features/carrier-rates/ap/charge-classify';
 
 interface Props {
   accountId: string;
@@ -39,12 +39,14 @@ export function BillingTrackingTable(props: Props) {
   const feeCols = useMemo(() => {
     const seen = new Set<string>();
     for (const r of rows) for (const f of r.fees) if (f.value !== 0) seen.add(f.label);
-    // Cột-gộp cũ (legacy) trước; khoản DHL chi tiết xếp theo rank; "Khác" luôn cuối.
-    const legacy = FEE_ORDER.filter((l) => l !== OTHER_LABEL && seen.has(l));
+    // Cột phí NET trước; "Khác" rồi "VAT" tổng ở cuối (sát cột Tổng) để dễ đối soát.
+    const legacy = FEE_ORDER.filter((l) => l !== OTHER_LABEL && l !== VAT_LABEL && seen.has(l));
     const dhl = [...seen]
       .filter((l) => !FEE_ORDER.includes(l))
       .sort((a, b) => feeColumnRank(a) - feeColumnRank(b) || a.localeCompare(b));
-    const tail = seen.has(OTHER_LABEL) ? [OTHER_LABEL] : [];
+    const tail: string[] = [];
+    if (seen.has(OTHER_LABEL)) tail.push(OTHER_LABEL);
+    if (seen.has(VAT_LABEL)) tail.push(VAT_LABEL);
     return [...legacy, ...dhl, ...tail];
   }, [rows]);
 
