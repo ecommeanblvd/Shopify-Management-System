@@ -264,8 +264,10 @@ describe('buildCleanRebuildVariables', () => {
     expect(out.profile.zonesToDelete).toEqual(['gid://zone/G']);
   });
   it('tạo lại zone hệ thống với tên rate đã gộp + điều kiện cân', () => {
-    const lg = (out.profile.locationGroupsToUpdate as any[])[0];
-    const gc1 = lg.zonesToCreate.find((z: any) => z.name === 'GC1');
+    const lg = (out.profile.locationGroupsToUpdate as Array<{ zonesToCreate: Array<Record<string, unknown>> }>)[0];
+    const gc1 = lg.zonesToCreate.find((z) => z.name === 'GC1') as Record<string, unknown> & {
+      countries: unknown; methodDefinitionsToCreate: Array<Record<string, unknown>>;
+    };
     expect(gc1.countries).toEqual([{ code: 'HK', includeAllProvinces: true }]);
     expect(gc1.methodDefinitionsToCreate[0].name).toBe('Standard shipping');
     expect(gc1.methodDefinitionsToCreate[0].weightConditionsToCreate).toHaveLength(2);
