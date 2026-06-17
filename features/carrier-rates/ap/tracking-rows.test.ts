@@ -34,19 +34,24 @@ describe('buildTrackingRows', () => {
     expect(r.overdue).toBe(true);
   });
 
-  it('có charges chi tiết → fees liệt kê đủ từng khoản (value = total)', () => {
+  it('có charges chi tiết → giữ cước lõi, ẩn thuế/duty, gộp khoản hiếm vào "Khác"', () => {
     const withCharges: TrackingLineInput[] = [line({
-      billId: 'b1', trackingNumber: 'T', total: 1346595,
+      billId: 'b1', trackingNumber: 'T', total: 1500000,
       charges: [
-        { code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 290067, tax: 23205, total: 313272 },
-        { code: 'XX', name: 'IMPORT EXPORT DUTIES', charge: 956256, tax: 76500, total: 1032756 },
+        { code: 'WT', name: 'Weight charge', charge: 900000, tax: 72000, total: 972000 },
+        { code: 'FF', name: 'FUEL SURCHARGE', charge: 200000, tax: 16000, total: 216000 },
+        { code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 290067, tax: 23205, total: 313272 }, // ẩn
+        { code: 'XX', name: 'IMPORT EXPORT DUTIES', charge: 956256, tax: 76500, total: 1032756 }, // ẩn
+        { code: 'NC', name: 'NON-CONVEYABLE PIECE - IRREGULAR', charge: 50000, tax: 4000, total: 54000 }, // → Khác
+        { code: 'RA', name: 'RESIDENTIAL ADDRESS', charge: 20000, tax: 1600, total: 21600 }, // → Khác
       ],
     })];
     const rows = buildTrackingRows(bills, withCharges, [], '2026-06-16');
     const r = rows.find((x) => x.trackingNumber === 'T')!;
     expect(r.fees).toEqual([
-      { label: 'IMPORT EXPORT TAXES', value: 313272 },
-      { label: 'IMPORT EXPORT DUTIES', value: 1032756 },
+      { label: 'Weight charge', value: 972000 },
+      { label: 'FUEL SURCHARGE', value: 216000 },
+      { label: 'Khác', value: 75600 }, // 54000 + 21600, duty đã bị ẩn
     ]);
   });
 

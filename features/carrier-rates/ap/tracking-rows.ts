@@ -1,4 +1,5 @@
 import { summariseBill, type BillStatus, type PaymentInput } from './ap-summary';
+import { classifyCharge, OTHER_LABEL } from './charge-classify';
 
 /** Một khoản phí chi tiết theo carrier (DHL: code/name/charge/tax/total). */
 export interface LineCharge { code: string; name: string; charge: number; tax: number; total: number }
@@ -34,7 +35,8 @@ export interface TrackingRow {
   orderNumber: string | null;
   weightKg: number | null;
   total: number;
-  fees: TrackingFee[];   // các khoản phí > 0 (để mở rộng)
+  fees: TrackingFee[];      // khoản phí hiện cột (đã ẩn duty, gộp Khác)
+  breakdown: TrackingFee[]; // ĐẦY ĐỦ mọi khoản >0 (gồm duty/thuế) cho dòng mở rộng
   note: string | null;
   status: BillStatus;
   overdue: boolean;
@@ -45,6 +47,27 @@ const FEE_LABELS: Array<[keyof TrackingLineInput, string]> = [
   ['base', 'Giá gốc'], ['discount', 'Chiết khấu'], ['fuel', 'Fuel'], ['remote', 'Remote'],
   ['demand', 'Demand'], ['signature', 'Ký nhận'], ['vat', 'VAT'], ['other', 'Khác'],
 ];
+
+/**
+ * Gộp breakdown chi tiết thành các cột cho bảng theo-tracking:
+ *  - ẩn thuế/duty ('hide'), gộp khoản hiếm vào "Khác" ('other'),
+ *    giữ cột riêng cho cước lõi + phụ phí có nghĩa ('keep').
+ * Tổng dòng (ln.total) KHÔNG đổi — cột ẩn vẫn nằm trong Tổng.
+ */
+function foldCharges(charges: LineCharge[]): TrackingFee[] {
+  const keep = new Map<string, number>();
+  let other = 0;
+  for (const c of charges) {
+    const label = c.name || c.code;
+    const cat = classifyCharge(label);
+    if (cat === 'hide') continue;
+    if (cat === 'other') { other += c.total; continue; }
+    keep.set(label, (keep.get(label) ?? 0) + c.total);
+  }
+  const out: TrackingFee[] = [...keep].map(([label, value]) => ({ label, value }));
+  if (other !== 0) out.push({ label: OTHER_LABEL, value: other });
+  return out.filter((f) => f.value !== 0);
+}
 
 /**
  * Dựng bảng "theo tracking": mỗi dòng = 1 bill line (tracking). Hoá đơn không có
@@ -70,19 +93,22 @@ export function buildTrackingRows(
     const bl = linesByBill.get(b.id) ?? [];
     const base = { billId: b.id, billNumber: b.billNumber, dueDate: b.dueDate, status: s.status, overdue: s.overdue };
     if (bl.length === 0) {
-      rows.push({ ...base, key: b.id, trackingNumber: null, orderNumber: null, weightKg: null, total: b.amount, fees: [], note: null, hasDetail: false });
+      rows.push({ ...base, key: b.id, trackingNumber: null, orderNumber: null, weightKg: null, total: b.amount, fees: [], breakdown: [], note: null, hasDetail: false });
       continue;
     }
     bl.forEach((ln, i) => {
-      // Có breakdown chi tiết → liệt kê đủ từng khoản (value = total gồm thuế,
-      // cộng lại = Tổng). Không có → gộp về các cột cố định (data cũ).
-      const fees = ln.charges && ln.charges.length
-        ? ln.charges.map((c) => ({ label: c.name || c.code, value: c.total })).filter((f) => f.value !== 0)
+      // Cột bảng (fees): ẩn duty + gộp Khác. Dòng mở rộng (breakdown): ĐẦY ĐỦ.
+      const hasCharges = ln.charges && ln.charges.length;
+      const fees = hasCharges
+        ? foldCharges(ln.charges!)
         : FEE_LABELS.map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) })).filter((f) => f.value !== 0);
+      const breakdown = hasCharges
+        ? ln.charges!.map((c) => ({ label: c.name || c.code, value: c.total })).filter((f) => f.value !== 0)
+        : fees;
       rows.push({
         ...base, key: `${b.id}:${i}`,
         trackingNumber: ln.trackingNumber, orderNumber: ln.orderNumber, weightKg: ln.weightKg,
-        total: ln.total, fees, note: ln.note, hasDetail: fees.length > 0 || !!ln.note,
+        total: ln.total, fees, breakdown, note: ln.note, hasDetail: breakdown.length > 0 || !!ln.note,
       });
     });
   }

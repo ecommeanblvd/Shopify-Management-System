@@ -6,6 +6,7 @@ import { InvoiceDetailModal } from './InvoiceDetailModal';
 import type { BillRow, PaymentRow, BillLineRow } from '@/features/carrier-rates/ap/bills-actions';
 import type { BillSummary } from '@/features/carrier-rates/ap/ap-summary';
 import type { TrackingRow } from '@/features/carrier-rates/ap/tracking-rows';
+import { feeColumnRank, OTHER_LABEL } from '@/features/carrier-rates/ap/charge-classify';
 
 interface Props {
   accountId: string;
@@ -38,9 +39,13 @@ export function BillingTrackingTable(props: Props) {
   const feeCols = useMemo(() => {
     const seen = new Set<string>();
     for (const r of rows) for (const f of r.fees) if (f.value !== 0) seen.add(f.label);
-    const known = FEE_ORDER.filter((l) => seen.has(l));
-    const extra = [...seen].filter((l) => !FEE_ORDER.includes(l));
-    return [...known, ...extra];
+    // Cột-gộp cũ (legacy) trước; khoản DHL chi tiết xếp theo rank; "Khác" luôn cuối.
+    const legacy = FEE_ORDER.filter((l) => l !== OTHER_LABEL && seen.has(l));
+    const dhl = [...seen]
+      .filter((l) => !FEE_ORDER.includes(l))
+      .sort((a, b) => feeColumnRank(a) - feeColumnRank(b) || a.localeCompare(b));
+    const tail = seen.has(OTHER_LABEL) ? [OTHER_LABEL] : [];
+    return [...legacy, ...dhl, ...tail];
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -111,7 +116,20 @@ export function BillingTrackingTable(props: Props) {
                   {open && r.hasDetail && (
                     <tr className="bg-muted/10">
                       <td />
-                      <td colSpan={feeCols.length + 4} className="px-3 py-2">
+                      <td colSpan={feeCols.length + 4} className="px-3 py-2 space-y-1.5">
+                        {r.breakdown.length > 0 && (
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Đầy đủ các khoản (gồm thuế/duty)</p>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 sm:grid-cols-3 max-w-3xl">
+                              {r.breakdown.map((f, j) => (
+                                <div key={j} className="flex items-baseline justify-between gap-2 text-[11px]">
+                                  <span className="text-muted-foreground truncate">{f.label}</span>
+                                  <span className="tabular-nums">{fmt(f.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {r.note && <p className="text-[11px] text-muted-foreground">{r.note}</p>}
                         {r.weightKg != null && r.weightKg > 0 && <p className="text-[11px] text-muted-foreground">Cân: {r.weightKg} kg</p>}
                       </td>
