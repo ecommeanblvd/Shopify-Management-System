@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
+import { computeOrderPnl, type ShipCostSource } from './pnl';
 
 // ─────────────────────────────────────────────────────────────────────
 // Order detail for the edit modal
@@ -141,6 +142,10 @@ export interface OrderDetail {
   };
   lines: OrderLineDetail[];
   shipping: OrderShippingDetail;
+  /** P&L tính sẵn (VND). null khi thiếu FX để quy đổi. Xem features/shopify-orders/pnl.ts */
+  pnl: import('./pnl').PnlResult | null;
+  /** true khi store chưa set FX nên không quy được order-ccy→VND. */
+  needsFx: boolean;
 }
 
 export async function getOrderDetail(orderId: string): Promise<OrderDetail | null> {
@@ -158,6 +163,12 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     .from(schema.stores)
     .where(eq(schema.stores.id, order.storeId));
   const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
+
+  const refundRows = await db
+    .select({ amt: schema.shopifyOrderRefunds.amount })
+    .from(schema.shopifyOrderRefunds)
+    .where(eq(schema.shopifyOrderRefunds.orderId, orderId));
+  const refundOrderCcy = refundRows.reduce((s, r) => s + Number(r.amt), 0);
 
   // Ngày đi hàng: pack sớm nhất có label_created_at (Excel LOG hoặc đối soát carrier).
   const shipRows = await db
@@ -312,6 +323,49 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     engineCostVnd = est.source !== 'unknown' ? est.costAmount : null;
   }
 
+  // P&L: quy mọi khoản order-currency → VND (cost currency) qua FX của store.
+  const fx = order.currency === (store?.costCurrency ?? order.currency)
+    ? 1
+    : (store?.fxCostPerOrderCurrency != null ? Number(store.fxCostPerOrderCurrency) : null);
+
+  const subtotalOrderCcy = lines.reduce((s, l) => s + Number(l.unitPrice) * l.quantity, 0);
+  const discountOrderCcy = order.totalDiscount != null ? Number(order.totalDiscount) : 0;
+
+  // Giá vốn (đã ở cost currency = VND): costOverride ?? defaultCostPerUnit, ×qty.
+  // defaultCostPerUnit không nằm trên row thô — tra từ costMap (như khối .map()
+  // ở dưới). costOverride là numeric → string|null từ drizzle.
+  let skuCostVnd = 0;
+  let skuComplete = true;
+  for (const l of lines) {
+    const c = l.sku ? costMap.get(l.sku) : undefined;
+    const defaultCostPerUnit = c ? Number(c.costPerUnit) : null;
+    const unit = l.costOverride !== null ? Number(l.costOverride)
+      : (defaultCostPerUnit !== null ? defaultCostPerUnit : null);
+    if (unit === null) { skuComplete = false; continue; }
+    skuCostVnd += unit * l.quantity;
+  }
+
+  const shipCostVnd = billedCostVnd ?? engineCostVnd ?? null;
+  const shipCostSource: ShipCostSource =
+    billedCostVnd != null ? 'billed' : engineCostVnd != null ? 'engine' : 'unknown';
+
+  const toVnd = (v: number) => (fx === null ? null : Math.round(v * fx));
+  const subtotalVnd = toVnd(subtotalOrderCcy);
+  const shippingRevenueVnd = toVnd(Number(order.totalShipping));
+  const discountVnd = toVnd(discountOrderCcy);
+  const refundVnd = toVnd(refundOrderCcy);
+
+  const pnl = (subtotalVnd === null || shippingRevenueVnd === null)
+    ? null
+    : computeOrderPnl({
+        subtotalVnd, shippingRevenueVnd,
+        discountVnd: discountVnd ?? 0, refundVnd: refundVnd ?? 0,
+        skuCostVnd: skuComplete ? skuCostVnd : null,
+        skuCostComplete: skuComplete,
+        shipCostVnd, shipCostSource,
+        transactionFeeVnd: null,
+      });
+
   return {
     orderId: order.id,
     storeId: order.storeId,
@@ -368,6 +422,8 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
           ? Number(store.fxCostPerOrderCurrency)
           : null,
     },
+    pnl,
+    needsFx: pnl === null,
   };
 }
 
