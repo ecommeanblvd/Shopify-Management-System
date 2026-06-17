@@ -5,6 +5,7 @@ import type {
   ShopifyFulfillment,
 } from '../shopify-types';
 import { detectCarrierKey, type CarrierKey } from './detect-carrier';
+import { deriveTxnFee } from '../derive-txn-fee';
 
 /** Internal shape ready for the upsert function. Numbers are strings to match
  *  Drizzle's numeric column representation; no float precision loss. */
@@ -37,6 +38,9 @@ export interface MappedOrder {
      *  `shippingLines`. NULL when no line is matchable — the engine
      *  defaults to FedEx per operator spec. */
     shippingCarrierKey: CarrierKey | null;
+    transactionFee: string | null;
+    transactionFeeNative: string | null;
+    transactionFeeNativeCurrency: string | null;
   };
   lines: Array<{
     shopifyLineId: string;
@@ -65,6 +69,8 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
     .reduce((sum, l) => sum + Number(l.unitPrice) * l.quantity, 0)
     .toFixed(2);
 
+  const txnFee = deriveTxnFee(payload.transactions ?? [], payload.currencyCode);
+
   return {
     order: {
       storeId,
@@ -91,6 +97,9 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       shipCompany: payload.shippingAddress?.company ?? null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
       shippingCarrierKey: detectCarrierKey(payload.shippingLines),
+      transactionFee: txnFee.feeOrderCcy !== null ? String(txnFee.feeOrderCcy) : null,
+      transactionFeeNative: txnFee.feeNative !== null ? String(txnFee.feeNative) : null,
+      transactionFeeNativeCurrency: txnFee.feeNativeCurrency,
     },
     lines,
     refunds: payload.refunds.map((r) => mapRefund(r)),
