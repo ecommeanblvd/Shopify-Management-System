@@ -56,6 +56,26 @@ describe('buildTrackingRows', () => {
     ]);
   });
 
+  it('dòng chỉ thuế/duty (mọi khoản bị ẩn) → fees rỗng + dutyOnly=true', () => {
+    const dutyLine: TrackingLineInput[] = [line({
+      billId: 'b1', trackingNumber: '1628499014', orderNumber: '#MBLVD28140', total: 1007466, vat: 74627,
+      charges: [
+        { code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 272323, tax: 21786, total: 294109 },
+        { code: 'XX', name: 'IMPORT EXPORT DUTIES', charge: 60516, tax: 4841, total: 65357 },
+        { code: 'DD', name: 'DUTY TAX PAID', charge: 600000, tax: 48000, total: 648000 },
+      ],
+    })];
+    const r = buildTrackingRows(bills, dutyLine, [], '2026-06-16').find((x) => x.trackingNumber === '1628499014')!;
+    expect(r.fees).toEqual([]);          // không cột phí nào
+    expect(r.dutyOnly).toBe(true);
+    expect(r.total).toBe(1007466);
+  });
+
+  it('dòng có cước thật → dutyOnly=false', () => {
+    const r = buildTrackingRows(bills, lines, [], '2026-06-16').find((x) => x.trackingNumber === '3661655384')!;
+    expect(r.dutyOnly).toBe(false);
+  });
+
   it('thanh toán đủ → status paid, hết overdue', () => {
     const rows = buildTrackingRows(bills, lines, [{ billId: 'b1', amount: 1346595 }], '2026-06-16');
     const r = rows.find((x) => x.billId === 'b1')!;

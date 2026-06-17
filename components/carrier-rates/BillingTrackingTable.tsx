@@ -104,7 +104,17 @@ export function BillingTrackingTable(props: Props) {
                       )}
                     </td>
                     <td className="px-3 py-2 font-medium tabular-nums whitespace-nowrap">{r.trackingNumber ?? <span className="text-muted-foreground">(không chi tiết)</span>}</td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.orderNumber ?? '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        {r.orderNumber ?? '—'}
+                        {r.dutyOnly && (
+                          <span title="Hoá đơn chỉ gồm thuế/duty nhập khẩu (thu hộ) — không có cước, nên các cột phí để trống"
+                            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                            Thuế/Duty NK
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     {feeCols.map((c) => <td key={c} className="px-2 py-2 text-right tabular-nums">{fmt(feeVal(r, c))}</td>)}
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(r.total)}</td>
                     <td className="px-3 py-2 text-center">

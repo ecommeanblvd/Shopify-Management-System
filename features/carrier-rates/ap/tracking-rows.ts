@@ -41,6 +41,9 @@ export interface TrackingRow {
   status: BillStatus;
   overdue: boolean;
   hasDetail: boolean;    // có gì để mở rộng không
+  /** Dòng chỉ gồm thuế/duty nhập khẩu (mọi khoản bị ẩn) → cột phí trống là ĐÚNG,
+   *  không phải thiếu dữ liệu. UI gắn nhãn để khỏi nhầm. */
+  dutyOnly: boolean;
 }
 
 const FEE_LABELS: Array<[keyof TrackingLineInput, string]> = [
@@ -98,7 +101,7 @@ export function buildTrackingRows(
     const bl = linesByBill.get(b.id) ?? [];
     const base = { billId: b.id, billNumber: b.billNumber, dueDate: b.dueDate, status: s.status, overdue: s.overdue };
     if (bl.length === 0) {
-      rows.push({ ...base, key: b.id, trackingNumber: null, orderNumber: null, weightKg: null, total: b.amount, fees: [], breakdown: [], note: null, hasDetail: false });
+      rows.push({ ...base, key: b.id, trackingNumber: null, orderNumber: null, weightKg: null, total: b.amount, fees: [], breakdown: [], note: null, hasDetail: false, dutyOnly: false });
       continue;
     }
     bl.forEach((ln, i) => {
@@ -116,10 +119,13 @@ export function buildTrackingRows(
             return items;
           })()
         : fees;
+      // Chỉ-thuế: có breakdown charges nhưng MỌI khoản bị ẩn (duty/tax) → fees rỗng.
+      const dutyOnly = !!hasCharges && fees.length === 0 && ln.charges!.every((c) => classifyCharge(c.name || c.code) === 'hide');
       rows.push({
         ...base, key: `${b.id}:${i}`,
         trackingNumber: ln.trackingNumber, orderNumber: ln.orderNumber, weightKg: ln.weightKg,
         total: ln.total, fees, breakdown, note: ln.note, hasDetail: breakdown.length > 0 || !!ln.note,
+        dutyOnly,
       });
     });
   }
