@@ -34,7 +34,7 @@ export type DiagnosisSeverity =
 
 export type ComponentKey =
   | 'base' | 'discount' | 'fuel' | 'remote' | 'demand'
-  | 'signature' | 'residential' | 'addressCorrection' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
+  | 'signature' | 'residential' | 'addressCorrection' | 'nonConveyable' | 'vat' | 'gogreen' | 'elevatedRisk' | 'residual';
 
 export interface ComponentDelta {
   key: ComponentKey;
@@ -79,6 +79,8 @@ export interface DiagnoseInput {
     residential?: number | null;
     /** Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ. */
     addressCorrection?: number | null;
+    /** DHL Non-Conveyable Piece (YL/YO) — pass-through, engine không định giá. */
+    nonConveyable?: number | null;
     vat: number | null; gogreen: number | null; elevatedRisk: number | null;
     /** Billed import/clearance handling — counterpart of engine
      *  country_fixed alongside elevatedRisk (FedEx US import handling). */
@@ -357,6 +359,13 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     components.push({ key: 'addressCorrection', billed: acBilled, engine: 0, delta: acBilled, cause: 'PHI_TUY_CHON' });
   }
 
+  // nonConveyable — DHL Non-Conveyable Piece (kiện không qua băng chuyền). Engine
+  // KHÔNG tự định giá (pass-through hợp lệ) → tách khỏi residual, không báo lệch giả.
+  const ncBilled = n0(b.nonConveyable ?? null);
+  if (ncBilled > 0) {
+    components.push({ key: 'nonConveyable', billed: ncBilled, engine: 0, delta: ncBilled, cause: 'PHI_TUY_CHON' });
+  }
+
   // Phí nhập khẩu (FedEx US) bị gộp trong cột VAT của bill (VAT phẳng 8% —
   // spec 2026-06-11). Bóc ra khi engine CÓ phí nhập (countryFixed>0) NHƯNG
   // bill không để ở cột riêng (importHandling/elevatedRisk = 0) → phần dư
@@ -381,7 +390,7 @@ export function diagnoseReconcileRow(input: DiagnoseInput): ReconcileDiagnosis {
     vatCause = 'PHAI_SINH';
     if (impliedZone && input.vatPercent > 0) {
       const billedPreVat = billedNetBase + n0(b.remote) + n0(b.demand) + n0(b.signature)
-        + n0(b.residential) + n0(b.gogreen) + n0(b.elevatedRisk) + fuelBilled;
+        + n0(b.residential) + n0(b.gogreen) + n0(b.elevatedRisk) + n0(b.nonConveyable ?? null) + fuelBilled;
       if (Math.abs(vatBilled - billedPreVat * (input.vatPercent / 100)) <= 2) {
         vatCause = 'PHAI_SINH_ZONE';
       }

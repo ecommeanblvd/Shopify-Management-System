@@ -1,4 +1,5 @@
 import type { DhlShipment, DhlChargeLine } from './dhl-invoice-csv';
+import { classifyCharge } from './charge-classify';
 
 /**
  * Map hoá đơn DHL → dữ liệu billed cho đối soát (shipment_charges).
@@ -23,6 +24,10 @@ export interface DhlBilledMap {
   elevatedRisk: number;
   addressCorrection: number;
   gogreen: number;
+  /** Phụ phí kiện không qua băng chuyền (DHL Non-Conveyable Piece, code YL/YO). */
+  nonConveyable: number;
+  /** Phụ phí giao địa chỉ nhà dân (DHL Residential Address, code TK). */
+  residential: number;
   discount: number;
   vat: number;
   totalAmount: number;
@@ -36,6 +41,12 @@ function bucketOf(c: DhlChargeLine): keyof DhlBilledMap | null {
   if (c.code === 'WEIGHT') return 'base';
   const n = c.name.toLowerCase();
   const code = c.code.toUpperCase();
+  // Non-Conveyable trước nhánh cước vì tên "... - WEIGHT" chứa "weight".
+  if (/non.?conveyable/.test(n)) return 'nonConveyable';
+  // Restricted Destination thuộc họ country_fixed → dồn vào elevatedRisk để
+  // đối soát chung kênh (engine country_fixed). Residential → cột riêng.
+  if (/restricted/.test(n)) return 'elevatedRisk';
+  if (/residential/.test(n)) return 'residential';
   if (code === 'FF' || /fuel/.test(n)) return 'fuel';
   if (code === 'FD' || /gogreen|carbon/.test(n)) return 'gogreen';
   if (code === 'CA' || /elevated risk/.test(n)) return 'elevatedRisk';
@@ -54,7 +65,8 @@ export function mapChargesToBilled(
 ): DhlBilledMap {
   const out: DhlBilledMap = {
     base: 0, fuel: 0, remote: 0, demand: 0, directSignature: 0, elevatedRisk: 0,
-    addressCorrection: 0, gogreen: 0, discount: 0, vat: opts.totalTax, totalAmount: opts.totalInclVat,
+    addressCorrection: 0, gogreen: 0, nonConveyable: 0, residential: 0,
+    discount: 0, vat: opts.totalTax, totalAmount: opts.totalInclVat,
     billingWeightKg: opts.weightKg && opts.weightKg > 0 ? opts.weightKg : null, unknown: [],
   };
   for (const c of charges ?? []) {
@@ -67,6 +79,16 @@ export function mapChargesToBilled(
 
 export function mapDhlFreightToBilled(s: DhlShipment): DhlBilledMap {
   return mapChargesToBilled(s.charges, { totalTax: s.totalTax, totalInclVat: s.totalInclVat, weightKg: s.weightKg });
+}
+
+/**
+ * Khoản cước đã được hệ thống NHẬN DIỆN chưa? Nhận diện =
+ *  - map được vào 1 bucket cước (bucketOf ≠ null: weight/fuel/gogreen/remote/…), HOẶC
+ *  - là thuế/duty pass-through (classifyCharge = 'hide': duty/tax/regulatory/penalty).
+ * Khoản KHÔNG nhận diện = phí lạ chưa cấu hình surcharge → cần operator xem & set up.
+ */
+export function isRecognizedCharge(c: DhlChargeLine): boolean {
+  return bucketOf(c) !== null || classifyCharge(c.name || c.code) === 'hide';
 }
 
 /** Freight nếu có cước cân hoặc fuel (duties chỉ có XB/XX/DD/XI). */

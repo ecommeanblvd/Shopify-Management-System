@@ -51,6 +51,8 @@ export interface ReconcileRow {
   residentialClass: string | null;
   billedVat: number | null;
   billedGogreen: number | null;
+  /** DHL Non-Conveyable Piece (YL/YO) — pass-through. */
+  billedNonConveyable: number | null;
   billedDiscount: number | null;
   billedElevatedRisk: number | null;
   /** Billed import/clearance handling (ops col CK khi nằm trong tổng). */
@@ -143,6 +145,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       residentialClass: schema.shipmentCharges.residentialClass,
       billedVat: schema.shipmentCharges.vat,
       billedGogreen: schema.shipmentCharges.gogreen,
+      billedNonConveyable: schema.shipmentCharges.nonConveyable,
       billedDiscount: schema.shipmentCharges.discount,
       billedElevatedRisk: schema.shipmentCharges.elevatedRisk,
       billedImportHandling: schema.shipmentCharges.importHandling,
@@ -326,6 +329,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         vat: r.billedVat != null ? Number(r.billedVat) : null,
         gogreen: r.billedGogreen != null ? Number(r.billedGogreen) : null,
         elevatedRisk: r.billedElevatedRisk != null ? Number(r.billedElevatedRisk) : null,
+        nonConveyable: r.billedNonConveyable != null ? Number(r.billedNonConveyable) : null,
         importHandling: r.billedImportHandling != null ? Number(r.billedImportHandling) : null,
         total: Number(r.billedTotal),
       },
@@ -411,6 +415,7 @@ interface JoinedRow {
   residentialClass: string | null;
   billedVat: string | null;
   billedGogreen: string | null;
+  billedNonConveyable?: string | null;
   billedDiscount: string | null;
   billedElevatedRisk: string | null;
   billedImportHandling?: string | null;
@@ -516,6 +521,7 @@ function buildRow(
     residentialClass: r.residentialClass,
     billedVat: r.billedVat !== null ? Number(r.billedVat) : null,
     billedGogreen: r.billedGogreen !== null ? Number(r.billedGogreen) : null,
+    billedNonConveyable: r.billedNonConveyable != null ? Number(r.billedNonConveyable) : null,
     billedDiscount: r.billedDiscount !== null ? Number(r.billedDiscount) : null,
     billedElevatedRisk: r.billedElevatedRisk !== null ? Number(r.billedElevatedRisk) : null,
     billedImportHandling: r.billedImportHandling != null ? Number(r.billedImportHandling) : null,

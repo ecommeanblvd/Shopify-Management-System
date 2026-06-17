@@ -1,440 +1,454 @@
 {
-	"version": "7",
-	"dialect": "postgresql",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "7",
-			"when": 1779207372885,
-			"tag": "0000_premium_prima",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "7",
-			"when": 1779259919917,
-			"tag": "0001_true_butterfly",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "7",
-			"when": 1779262527084,
-			"tag": "0002_amazing_sauron",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "7",
-			"when": 1779347638837,
-			"tag": "0003_grey_gabe_jones",
-			"breakpoints": true
-		},
-		{
-			"idx": 4,
-			"version": "7",
-			"when": 1779347907045,
-			"tag": "0004_soft_next_avengers",
-			"breakpoints": true
-		},
-		{
-			"idx": 5,
-			"version": "7",
-			"when": 1779707938666,
-			"tag": "0005_adorable_wolfsbane",
-			"breakpoints": true
-		},
-		{
-			"idx": 6,
-			"version": "7",
-			"when": 1779714885881,
-			"tag": "0006_jittery_paladin",
-			"breakpoints": true
-		},
-		{
-			"idx": 7,
-			"version": "7",
-			"when": 1779718677305,
-			"tag": "0007_military_the_call",
-			"breakpoints": true
-		},
-		{
-			"idx": 8,
-			"version": "7",
-			"when": 1779719168207,
-			"tag": "0008_huge_power_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 9,
-			"version": "7",
-			"when": 1779792190103,
-			"tag": "0009_high_talkback",
-			"breakpoints": true
-		},
-		{
-			"idx": 10,
-			"version": "7",
-			"when": 1780128701136,
-			"tag": "0010_keen_ultimates",
-			"breakpoints": true
-		},
-		{
-			"idx": 11,
-			"version": "7",
-			"when": 1780193981416,
-			"tag": "0011_furry_mole_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 12,
-			"version": "7",
-			"when": 1780215549502,
-			"tag": "0012_cooing_polaris",
-			"breakpoints": true
-		},
-		{
-			"idx": 13,
-			"version": "7",
-			"when": 1780218758429,
-			"tag": "0013_cynical_hercules",
-			"breakpoints": true
-		},
-		{
-			"idx": 14,
-			"version": "7",
-			"when": 1780305608567,
-			"tag": "0014_demand_surcharge",
-			"breakpoints": true
-		},
-		{
-			"idx": 15,
-			"version": "7",
-			"when": 1780308870298,
-			"tag": "0015_add_vat_percent",
-			"breakpoints": true
-		},
-		{
-			"idx": 16,
-			"version": "7",
-			"when": 1780312404711,
-			"tag": "0016_add_country_fixed_surcharge",
-			"breakpoints": true
-		},
-		{
-			"idx": 17,
-			"version": "7",
-			"when": 1780315720840,
-			"tag": "0017_add_package_type_to_rate_cells",
-			"breakpoints": true
-		},
-		{
-			"idx": 18,
-			"version": "7",
-			"when": 1780324438108,
-			"tag": "0018_add_ship_weight_kg_override",
-			"breakpoints": true
-		},
-		{
-			"idx": 19,
-			"version": "7",
-			"when": 1780326217880,
-			"tag": "0019_add_functions_wishlist",
-			"breakpoints": true
-		},
-		{
-			"idx": 20,
-			"version": "7",
-			"when": 1780328972498,
-			"tag": "0020_wishlist_share_token",
-			"breakpoints": true
-		},
-		{
-			"idx": 21,
-			"version": "7",
-			"when": 1780360270185,
-			"tag": "0021_wishlist_item_availability",
-			"breakpoints": true
-		},
-		{
-			"idx": 22,
-			"version": "7",
-			"when": 1780361386136,
-			"tag": "0022_recently_viewed",
-			"breakpoints": true
-		},
-		{
-			"idx": 23,
-			"version": "7",
-			"when": 1780362315900,
-			"tag": "0023_gift_registry",
-			"breakpoints": true
-		},
-		{
-			"idx": 24,
-			"version": "7",
-			"when": 1780371019320,
-			"tag": "0024_save_for_later",
-			"breakpoints": true
-		},
-		{
-			"idx": 25,
-			"version": "7",
-			"when": 1780402211506,
-			"tag": "0025_function_audit_log",
-			"breakpoints": true
-		},
-		{
-			"idx": 26,
-			"version": "7",
-			"when": 1780417315963,
-			"tag": "0026_surcharge_fuelable_step",
-			"breakpoints": true
-		},
-		{
-			"idx": 27,
-			"version": "7",
-			"when": 1780452381016,
-			"tag": "0027_order_shipping_carrier_key",
-			"breakpoints": true
-		},
-		{
-			"idx": 28,
-			"version": "7",
-			"when": 1780457013374,
-			"tag": "0028_keen_miek",
-			"breakpoints": true
-		},
-		{
-			"idx": 29,
-			"version": "7",
-			"when": 1780457739035,
-			"tag": "0029_groovy_leader",
-			"breakpoints": true
-		},
-		{
-			"idx": 30,
-			"version": "7",
-			"when": 1780468977210,
-			"tag": "0030_icy_multiple_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 31,
-			"version": "7",
-			"when": 1780481844191,
-			"tag": "0031_sudden_callisto",
-			"breakpoints": true
-		},
-		{
-			"idx": 32,
-			"version": "7",
-			"when": 1780506819107,
-			"tag": "0032_handy_mother_askani",
-			"breakpoints": true
-		},
-		{
-			"idx": 33,
-			"version": "7",
-			"when": 1780545746839,
-			"tag": "0033_lumpy_bishop",
-			"breakpoints": true
-		},
-		{
-			"idx": 34,
-			"version": "7",
-			"when": 1780548739746,
-			"tag": "0034_flawless_vampiro",
-			"breakpoints": true
-		},
-		{
-			"idx": 35,
-			"version": "7",
-			"when": 1780892965572,
-			"tag": "0035_misty_forge",
-			"breakpoints": true
-		},
-		{
-			"idx": 36,
-			"version": "7",
-			"when": 1780901062007,
-			"tag": "0036_lively_raza",
-			"breakpoints": true
-		},
-		{
-			"idx": 37,
-			"version": "7",
-			"when": 1780925685823,
-			"tag": "0037_parallel_nicolaos",
-			"breakpoints": true
-		},
-		{
-			"idx": 38,
-			"version": "7",
-			"when": 1780934560080,
-			"tag": "0038_lying_molten_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 39,
-			"version": "7",
-			"when": 1780935254465,
-			"tag": "0039_stable_fulfillment_line_key",
-			"breakpoints": true
-		},
-		{
-			"idx": 40,
-			"version": "7",
-			"when": 1780936477027,
-			"tag": "0040_add_warehouse_check_constraints",
-			"breakpoints": true
-		},
-		{
-			"idx": 41,
-			"version": "7",
-			"when": 1780965801119,
-			"tag": "0041_glamorous_katie_power",
-			"breakpoints": true
-		},
-		{
-			"idx": 42,
-			"version": "7",
-			"when": 1780998831880,
-			"tag": "0042_slim_wither",
-			"breakpoints": true
-		},
-		{
-			"idx": 43,
-			"version": "7",
-			"when": 1781002182814,
-			"tag": "0043_violet_molten_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 44,
-			"version": "7",
-			"when": 1781018210456,
-			"tag": "0044_sudden_hairball",
-			"breakpoints": true
-		},
-		{
-			"idx": 45,
-			"version": "7",
-			"when": 1781022602350,
-			"tag": "0045_productive_golden_guardian",
-			"breakpoints": true
-		},
-		{
-			"idx": 46,
-			"version": "7",
-			"when": 1781054136158,
-			"tag": "0046_smiling_brood",
-			"breakpoints": true
-		},
-		{
-			"idx": 47,
-			"version": "7",
-			"when": 1781084519483,
-			"tag": "0047_complete_power_man",
-			"breakpoints": true
-		},
-		{
-			"idx": 48,
-			"version": "7",
-			"when": 1781085895991,
-			"tag": "0048_medical_maddog",
-			"breakpoints": true
-		},
-		{
-			"idx": 49,
-			"version": "7",
-			"when": 1781089266550,
-			"tag": "0049_workable_morph",
-			"breakpoints": true
-		},
-		{
-			"idx": 50,
-			"version": "7",
-			"when": 1781098209265,
-			"tag": "0050_glorious_starhawk",
-			"breakpoints": true
-		},
-		{
-			"idx": 51,
-			"version": "7",
-			"when": 1781103444563,
-			"tag": "0051_youthful_whiplash",
-			"breakpoints": true
-		},
-		{
-			"idx": 52,
-			"version": "7",
-			"when": 1781106804522,
-			"tag": "0052_shiny_microbe",
-			"breakpoints": true
-		},
-		{
-			"idx": 53,
-			"version": "7",
-			"when": 1781107285944,
-			"tag": "0053_breezy_sue_storm",
-			"breakpoints": true
-		},
-		{
-			"idx": 54,
-			"version": "7",
-			"when": 1781139717299,
-			"tag": "0054_overjoyed_shaman",
-			"breakpoints": true
-		},
-		{
-			"idx": 55,
-			"version": "7",
-			"when": 1781140990385,
-			"tag": "0055_overrated_mysterio",
-			"breakpoints": true
-		},
-		{
-			"idx": 56,
-			"version": "7",
-			"when": 1781163152076,
-			"tag": "0056_addon-fixed-apply-mode",
-			"breakpoints": true
-		},
-		{
-			"idx": 57,
-			"version": "7",
-			"when": 1781166741662,
-			"tag": "0057_surcharge-excluded-countries",
-			"breakpoints": true
-		},
-		{
-			"idx": 58,
-			"version": "7",
-			"when": 1781191968964,
-			"tag": "0058_warehouse-item-status",
-			"breakpoints": true
-		},
-		{
-			"idx": 59,
-			"version": "7",
-			"when": 1781194684031,
-			"tag": "0059_warehouse-default-gvm",
-			"breakpoints": true
-		},
-		{
-			"idx": 60,
-			"version": "7",
-			"when": 1781614296603,
-			"tag": "0060_curly_karen_page",
-			"breakpoints": true
-		},
-		{
-			"idx": 61,
-			"version": "7",
-			"when": 1781700000000,
-			"tag": "0061_dhl-billed-link",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779207372885,
+      "tag": "0000_premium_prima",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779259919917,
+      "tag": "0001_true_butterfly",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779262527084,
+      "tag": "0002_amazing_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779347638837,
+      "tag": "0003_grey_gabe_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779347907045,
+      "tag": "0004_soft_next_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779707938666,
+      "tag": "0005_adorable_wolfsbane",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779714885881,
+      "tag": "0006_jittery_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779718677305,
+      "tag": "0007_military_the_call",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779719168207,
+      "tag": "0008_huge_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779792190103,
+      "tag": "0009_high_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780128701136,
+      "tag": "0010_keen_ultimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780193981416,
+      "tag": "0011_furry_mole_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780215549502,
+      "tag": "0012_cooing_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780218758429,
+      "tag": "0013_cynical_hercules",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780305608567,
+      "tag": "0014_demand_surcharge",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1780308870298,
+      "tag": "0015_add_vat_percent",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780312404711,
+      "tag": "0016_add_country_fixed_surcharge",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780315720840,
+      "tag": "0017_add_package_type_to_rate_cells",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780324438108,
+      "tag": "0018_add_ship_weight_kg_override",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780326217880,
+      "tag": "0019_add_functions_wishlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780328972498,
+      "tag": "0020_wishlist_share_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1780360270185,
+      "tag": "0021_wishlist_item_availability",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780361386136,
+      "tag": "0022_recently_viewed",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1780362315900,
+      "tag": "0023_gift_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780371019320,
+      "tag": "0024_save_for_later",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1780402211506,
+      "tag": "0025_function_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780417315963,
+      "tag": "0026_surcharge_fuelable_step",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780452381016,
+      "tag": "0027_order_shipping_carrier_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780457013374,
+      "tag": "0028_keen_miek",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780457739035,
+      "tag": "0029_groovy_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780468977210,
+      "tag": "0030_icy_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780481844191,
+      "tag": "0031_sudden_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780506819107,
+      "tag": "0032_handy_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780545746839,
+      "tag": "0033_lumpy_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780548739746,
+      "tag": "0034_flawless_vampiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780892965572,
+      "tag": "0035_misty_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780901062007,
+      "tag": "0036_lively_raza",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780925685823,
+      "tag": "0037_parallel_nicolaos",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780934560080,
+      "tag": "0038_lying_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780935254465,
+      "tag": "0039_stable_fulfillment_line_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780936477027,
+      "tag": "0040_add_warehouse_check_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780965801119,
+      "tag": "0041_glamorous_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780998831880,
+      "tag": "0042_slim_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1781002182814,
+      "tag": "0043_violet_molten_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781018210456,
+      "tag": "0044_sudden_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1781022602350,
+      "tag": "0045_productive_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1781054136158,
+      "tag": "0046_smiling_brood",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781084519483,
+      "tag": "0047_complete_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1781085895991,
+      "tag": "0048_medical_maddog",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781089266550,
+      "tag": "0049_workable_morph",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781098209265,
+      "tag": "0050_glorious_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781103444563,
+      "tag": "0051_youthful_whiplash",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781106804522,
+      "tag": "0052_shiny_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781107285944,
+      "tag": "0053_breezy_sue_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781139717299,
+      "tag": "0054_overjoyed_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781140990385,
+      "tag": "0055_overrated_mysterio",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1781163152076,
+      "tag": "0056_addon-fixed-apply-mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1781166741662,
+      "tag": "0057_surcharge-excluded-countries",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781191968964,
+      "tag": "0058_warehouse-item-status",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1781194684031,
+      "tag": "0059_warehouse-default-gvm",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1781614296603,
+      "tag": "0060_curly_karen_page",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781700000000,
+      "tag": "0061_dhl-billed-link",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1781786400000,
+      "tag": "0062_dhl-ship-date",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1781872800000,
+      "tag": "0063_shipment-non-conveyable",
+      "breakpoints": true
+    }
+  ]
 }

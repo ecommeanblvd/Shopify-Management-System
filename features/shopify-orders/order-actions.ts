@@ -123,6 +123,9 @@ export interface OrderDetail {
   processedAt: Date;
   currency: string;
   shipCountry: string | null;
+  /** Ngày đi hàng — sớm nhất trong các pack (shipments.label_created_at). Điền từ
+   *  Excel LOG hoặc hoá đơn carrier (đối soát). null khi chưa đi hàng / chưa có dữ liệu. */
+  shipDate: Date | null;
   /** Weight pulled from the Shopify order snapshot. Frozen at sync time. */
   shipWeightKg: number | null;
   /** Operator-set override. When non-null, the engine uses this instead of
@@ -155,6 +158,16 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     .from(schema.stores)
     .where(eq(schema.stores.id, order.storeId));
   const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
+
+  // Ngày đi hàng: pack sớm nhất có label_created_at (Excel LOG hoặc đối soát carrier).
+  const shipRows = await db
+    .select({ labelCreatedAt: schema.shipments.labelCreatedAt })
+    .from(schema.shipments)
+    .where(eq(schema.shipments.orderId, orderId));
+  const shipDate = shipRows
+    .map((s) => s.labelCreatedAt)
+    .filter((d): d is Date => d != null)
+    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
   // Cost lookup for the order's processed_at date.
   const skus = lines.map((l) => l.sku).filter((s): s is string => !!s);
@@ -271,9 +284,19 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     }
   }
 
-  // billed: lấy từ invoice nếu khối default đã khớp invoice (cùng query), hoặc
-  // truy thẳng — defaultShipping.source==='invoice' nghĩa là rawAmount là billed.
-  const billedCostVnd = defaultShipping.source === 'invoice' ? defaultShipping.rawAmount : null;
+  // Billed thực tế: ƯU TIÊN dữ liệu hoá đơn carrier đã đối soát (shipment_charges
+  // — nguồn trực tiếp từ Bill/Invoice carrier, phủ mọi đơn đã đối soát, gồm cả đơn
+  // cũ). shipping_invoices (CSV upload) chỉ là fallback. Đơn nhiều pack → cộng dồn.
+  const chargeRows = await db
+    .select({ total: schema.shipmentCharges.totalAmount })
+    .from(schema.shipmentCharges)
+    .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
+    .where(eq(schema.shipments.orderId, orderId));
+  const billedFromCharges = chargeRows.length
+    ? chargeRows.reduce((s, r) => s + Number(r.total), 0)
+    : null;
+  const billedCostVnd = billedFromCharges
+    ?? (defaultShipping.source === 'invoice' ? defaultShipping.rawAmount : null);
   // engine: tính LUÔN (kể cả khi đã có billed) để bảng so sánh có cả hai.
   // Nếu khối default đã là engine_estimate thì tái dùng rawAmount, khỏi gọi lại.
   let engineCostVnd: number | null =
@@ -296,6 +319,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     processedAt: order.processedAtShopify,
     currency: order.currency,
     shipCountry: order.shipCountry,
+    shipDate,
     shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
     shipWeightKgOverride: order.shipWeightKgOverride !== null ? Number(order.shipWeightKgOverride) : null,
     address: {

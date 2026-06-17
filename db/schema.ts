@@ -607,6 +607,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   // Breakdown chi tiết từng khoản phí của carrier (DHL: [{code,name,charge,tax,total}]).
   // Null cho dòng nhập tay/cũ → UI fallback về cột gộp base/fuel/other.
   charges: jsonb('charges'),
+  // Ngày đi hàng (Shipment Date của hoá đơn). Khi đối soát, dùng để điền
+  // shipments.label_created_at nếu shipment chưa có → Order hiển thị ngày đi hàng.
+  shipDate: date('ship_date'),
   // FK ổn định tới shipment đã khớp (theo tracking + mã đơn). Dùng để đẩy billed
   // cước vào đối soát; đổi text tracking/đơn vẫn giữ liên kết. NULL = chưa khớp.
   shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'set null' }),
@@ -964,6 +967,9 @@ export const shipmentCharges = pgTable('shipment_charges', {
   vat: numeric('vat', { precision: 14, scale: 2 }),
   /** Excel col AP — GoGreen Plus-Basic stepped fee. */
   gogreen: numeric('gogreen', { precision: 14, scale: 2 }),
+  /** DHL Non-Conveyable Piece (code YL/YO) — phụ phí kiện không qua băng chuyền.
+   *  Pass-through: engine không tự định giá → đối soát kiểm theo dòng. */
+  nonConveyable: numeric('non_conveyable', { precision: 14, scale: 2 }),
   /** Excel col AX — Volume contract discount. Stored as NEGATIVE VND
    *  per the invoice convention (e.g. −3,820,388). */
   discount: numeric('discount', { precision: 14, scale: 2 }),
