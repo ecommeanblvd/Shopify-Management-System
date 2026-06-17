@@ -271,7 +271,12 @@ export async function applySystemShippingToProfiles(
     const CHUNK = 40;
     try {
       // PHASE 1 — xoá zone bị thay TRƯỚC (giải phóng nước, tránh "Region already exists").
-      if (profile.zonesToDelete) base.error = await send({ zonesToDelete: profile.zonesToDelete });
+      // Xoá theo LÔ NHỎ (5 zone/mutation): xoá 1 zone kéo theo cascade tới ~131 def,
+      // gửi cả 35 zone/1 mutation → Shopify 5xx (xoá hỏng → zone cũ còn nguyên cả 2 carrier).
+      const delIds = (profile.zonesToDelete as string[] | undefined) ?? [];
+      for (let i = 0; !base.error && i < delIds.length; i += 5) {
+        base.error = await send({ zonesToDelete: delIds.slice(i, i + 5) });
+      }
       // PHASE 2 — tạo từng zone với lô def đầu (1 zone/mutation).
       for (const z of zonesToCreate) {
         if (base.error) break;
