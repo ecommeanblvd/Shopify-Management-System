@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { flattenShippingMatrix, carriersInZones, buildZoneWeightMatrix, parseRateSearch, bracketMatchesWeight, buildMarketCodes, zoneCarrierLabel, applyZoneCodes } from './shipping-matrix-view';
+import { flattenShippingMatrix, carriersInZones, buildZoneWeightMatrix, parseRateSearch, bracketMatchesWeight, buildMarketCodes, zoneCarrierLabel, applyZoneCodes, summarizeZoneCountries } from './shipping-matrix-view';
 import type { MarketShipping } from '../types';
 
 const ship = (zones: MarketShipping['zones']): MarketShipping => ({ zones });
@@ -179,5 +179,20 @@ describe('zoneCarrierLabel', () => {
   });
   it('không có dấu gạch → trả nguyên tên', () => {
     expect(zoneCarrierLabel('Zone A')).toBe('Zone A');
+  });
+});
+
+describe('summarizeZoneCountries', () => {
+  it('≤ max → hiện hết, extra 0', () => {
+    expect(summarizeZoneCountries(['AE', 'SA', 'QA'], 6)).toEqual({ shown: ['AE', 'SA', 'QA'], extra: 0 });
+  });
+
+  it('> max → ưu tiên nước lớn lên đầu, cắt còn max, extra = phần dư', () => {
+    // AF,AO,BF… (không lớn) + ZA,NG,EG (lớn) → 3 lớn lên trước
+    const codes = ['AF', 'AO', 'BF', 'ZA', 'BI', 'NG', 'BJ', 'EG', 'BW'];
+    const r = summarizeZoneCountries(codes, 4);
+    expect(r.shown.slice(0, 3)).toEqual(['ZA', 'NG', 'EG']); // nước lớn trước (giữ thứ tự gốc giữa chúng)
+    expect(r.shown).toHaveLength(4);
+    expect(r.extra).toBe(5);
   });
 });
