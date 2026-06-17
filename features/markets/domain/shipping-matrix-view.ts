@@ -79,6 +79,26 @@ export function zoneCarrierLabel(zoneName: string): string {
   return (parts.length > 1 ? parts[parts.length - 1] : zoneName).trim();
 }
 
+// Nước lớn / ship nhiều — ưu tiên hiển thị trước ở header cột zone (bảng giá),
+// phần còn lại rút gọn thành "… +N" để bảng không quá dài.
+const MAJOR_COUNTRIES = new Set([
+  'US', 'GB', 'DE', 'FR', 'CA', 'AU', 'JP', 'KR', 'SG', 'HK', 'CN', 'IT', 'ES',
+  'NL', 'AE', 'SA', 'TW', 'TH', 'MY', 'PH', 'ID', 'IN', 'NZ', 'MX', 'BR', 'ZA',
+  'NG', 'EG', 'SE', 'CH', 'NO', 'DK', 'BE', 'AT', 'IE', 'PL', 'TR', 'IL', 'VN',
+]);
+
+/** Rút gọn danh sách nước của 1 zone để hiển thị: ưu tiên nước lớn, tối đa `max`
+ *  mã, phần dư trả `extra` (>0). ≤ max → hiện hết. THUẦN. */
+export function summarizeZoneCountries(
+  codes: string[],
+  max = 6,
+): { shown: string[]; extra: number } {
+  if (codes.length <= max) return { shown: codes, extra: 0 };
+  const rank = (c: string) => (MAJOR_COUNTRIES.has(c.toUpperCase()) ? 0 : 1);
+  const prioritized = codes.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i);
+  return { shown: prioritized.slice(0, max).map((x) => x.c), extra: codes.length - max };
+}
+
 export interface ParsedSearch { needle: string; weight: number | null; }
 
 /** Tách query search: "2kg"/"0.5"/"3 KG" → tìm theo cân (highlight dòng);

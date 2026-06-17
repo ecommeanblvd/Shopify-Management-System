@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ZoneView } from '@/features/markets/domain/shipping-matrix-view';
-import { carriersInZones, buildZoneWeightMatrix, bracketMatchesWeight, parseRateSearch, zoneCarrierLabel } from '@/features/markets/domain/shipping-matrix-view';
+import { carriersInZones, buildZoneWeightMatrix, bracketMatchesWeight, parseRateSearch, zoneCarrierLabel, summarizeZoneCountries } from '@/features/markets/domain/shipping-matrix-view';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import type { FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 
@@ -169,9 +169,17 @@ export function ManualRatesBrowser({ markets, coverage }: { markets: MarketZones
                       <div className="text-[10px] font-normal normal-case text-muted-foreground/70">{firstOfMarket ? z?.market : ' '}</div>
                       <div className="text-sm font-semibold text-foreground">{zn}</div>
                       <div className="text-[10px] font-normal normal-case text-muted-foreground">{zoneCarrierLabel(z?.label ?? zn)}</div>
-                      {z && z.countries.length > 0 && (
-                        <div className="text-[10px] font-mono font-normal text-muted-foreground/80">{z.countries.join(' ')}</div>
-                      )}
+                      {z && z.countries.length > 0 && (() => {
+                        const { shown, extra } = summarizeZoneCountries(z.countries, 6);
+                        return (
+                          <div
+                            className="text-[10px] font-mono font-normal text-muted-foreground/80"
+                            title={z.countries.join(' ')}
+                          >
+                            {shown.join(' ')}{extra > 0 ? ` … +${extra}` : ''}
+                          </div>
+                        );
+                      })()}
                     </th>
                   );
                 })}
