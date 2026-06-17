@@ -284,9 +284,19 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     }
   }
 
-  // billed: lấy từ invoice nếu khối default đã khớp invoice (cùng query), hoặc
-  // truy thẳng — defaultShipping.source==='invoice' nghĩa là rawAmount là billed.
-  const billedCostVnd = defaultShipping.source === 'invoice' ? defaultShipping.rawAmount : null;
+  // Billed thực tế: ƯU TIÊN dữ liệu hoá đơn carrier đã đối soát (shipment_charges
+  // — nguồn trực tiếp từ Bill/Invoice carrier, phủ mọi đơn đã đối soát, gồm cả đơn
+  // cũ). shipping_invoices (CSV upload) chỉ là fallback. Đơn nhiều pack → cộng dồn.
+  const chargeRows = await db
+    .select({ total: schema.shipmentCharges.totalAmount })
+    .from(schema.shipmentCharges)
+    .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
+    .where(eq(schema.shipments.orderId, orderId));
+  const billedFromCharges = chargeRows.length
+    ? chargeRows.reduce((s, r) => s + Number(r.total), 0)
+    : null;
+  const billedCostVnd = billedFromCharges
+    ?? (defaultShipping.source === 'invoice' ? defaultShipping.rawAmount : null);
   // engine: tính LUÔN (kể cả khi đã có billed) để bảng so sánh có cả hai.
   // Nếu khối default đã là engine_estimate thì tái dùng rawAmount, khỏi gọi lại.
   let engineCostVnd: number | null =
