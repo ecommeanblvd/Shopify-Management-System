@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Globe } from 'lucide-react';
 import type { SystemZoneRow } from '@/features/carrier-rates/zone-matrix';
 
 /**
- * Bảng zone HỆ THỐNG: mỗi zone kết hợp (FedEx×DHL) + danh sách quốc gia trong
- * zone. Tra 1 nước thuộc zone hệ thống nào (search theo nước / ISO / tên zone).
+ * Bảng zone HỆ THỐNG (dạng thẻ): mỗi zone = 1 card — mã vùng (ME1/EU1/…),
+ * zone FedEx/DHL gốc, danh sách quốc gia (cờ + tên). Search theo nước / ISO /
+ * mã zone / zone FedEx/DHL.
  */
 export function ZoneReferenceTable({ rows }: { rows: SystemZoneRow[] }) {
   const [q, setQ] = useState('');
@@ -17,6 +18,8 @@ export function ZoneReferenceTable({ rows }: { rows: SystemZoneRow[] }) {
     return rows.filter(
       (r) =>
         r.zone.toLowerCase().includes(s) ||
+        (r.fedexZone ?? '').toLowerCase().includes(s) ||
+        (r.dhlZone ?? '').toLowerCase().includes(s) ||
         r.countries.some((c) => c.name.toLowerCase().includes(s) || c.iso.toLowerCase().includes(s)),
     );
   }, [rows, s]);
@@ -27,12 +30,12 @@ export function ZoneReferenceTable({ rows }: { rows: SystemZoneRow[] }) {
     !!s && (c.name.toLowerCase().includes(s) || c.iso.toLowerCase().includes(s));
 
   return (
-    <section className="space-y-2">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold tracking-tight">
-          Bảng Zone hệ thống{' '}
-          <span className="font-normal text-muted-foreground">
-            — {filtered.length}/{rows.length} zone · {totalCountries} nước
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Globe className="size-4" /> Zones · Country → Zone
+          <span className="font-normal normal-case">
+            ({filtered.length}/{rows.length} zone · {totalCountries} nước)
           </span>
         </h2>
         <div className="relative">
@@ -40,55 +43,54 @@ export function ZoneReferenceTable({ rows }: { rows: SystemZoneRow[] }) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Tìm theo nước / mã ISO / zone (vd: United States, US, Zone H)"
+            placeholder="Tìm theo nước / ISO / zone (vd: United States, US, ME1, Zone H)"
             className="w-80 rounded-md border border-border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </div>
       </div>
 
-      <div className="rounded-xl border border-border overflow-x-auto max-h-[28rem] overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-card">
-            <tr className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 text-left font-medium w-44">Zone hệ thống</th>
-              <th className="px-3 py-2 text-left font-medium w-16">Số nước</th>
-              <th className="px-3 py-2 text-left font-medium">Quốc gia</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
-                  Không thấy khớp “{q}”.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r) => (
-                <tr key={r.zone} className="hover:bg-muted/20 align-top">
-                  <td className="px-3 py-2 whitespace-nowrap font-medium">{r.zone}</td>
-                  <td className="px-3 py-2 text-muted-foreground tabular-nums">{r.countries.length}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {r.countries.map((c) => (
-                        <span
-                          key={c.iso}
-                          title={c.name}
-                          className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${
-                            isMatch(c) ? 'border-ring bg-ring/15' : 'border-border bg-muted/30'
-                          }`}
-                        >
-                          <span className="font-mono text-muted-foreground">{c.iso}</span>
-                          {c.name !== c.iso && <span>{c.name}</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">
+          Không thấy khớp “{q}”.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {filtered.map((r) => (
+            <div key={r.zone} className="rounded-xl border border-border bg-card/40 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-base font-semibold tracking-tight">{r.zone}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({r.fedexZone ? `FedEx ${r.fedexZone}` : 'FedEx —'} / {r.dhlZone ? `DHL ${r.dhlZone}` : 'DHL —'})
+                  </span>
+                </div>
+                <span className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {r.countries.length} {r.countries.length === 1 ? 'country' : 'countries'}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {r.countries.length === 0 ? (
+                  <span className="text-xs italic text-muted-foreground">Chưa có country.</span>
+                ) : (
+                  r.countries.map((c) => (
+                    <span
+                      key={c.iso}
+                      title={`${c.name} (${c.iso})`}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-sm ${
+                        isMatch(c) ? 'border-ring bg-ring/15' : 'border-border bg-muted/30'
+                      }`}
+                    >
+                      <span className="text-base leading-none">{c.flag || '🏳️'}</span>
+                      <span className="whitespace-nowrap">{c.name}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
