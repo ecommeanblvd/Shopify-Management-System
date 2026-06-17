@@ -1,0 +1,322 @@
+/**
+ * Sinh CONFIG zone kết hợp FedEx×DHL cho TOÀN BỘ nước có FedEx zone trong
+ * `carrier_zone_countries` (bộ ~192 nước), gom theo cặp (fedexZone, dhlZone)
+ * thành các zone kết hợp, định giá MỖI zone theo CHÍNH engine + offer-pricing
+ * mà 2 script per-market đang dùng (gen-fedex-offer-matrix.ts /
+ * gen-dhl-offer-matrix.ts), rồi ghi 1 dòng hợp nhất vào bảng hệ thống
+ * `manual_shipping_config` (marketHandle = 'system').
+ *
+ *   npx dotenv -- tsx scripts/gen-system-shipping-matrix.ts          # DRY-RUN (mặc định, KHÔNG ghi)
+ *   npx dotenv -- tsx scripts/gen-system-shipping-matrix.ts --apply  # DELETE all + INSERT 1 dòng 'system'
+ *
+ * Logic giá GIỮ NGUYÊN với 2 script gốc:
+ *   - FedEx IP (a–b kg): quote mỗi nước trong zone ở bậc b qua snapshot FedEx,
+ *     rồi fedexOfferPrice(quotes) = ((cost+$5)×markup) max-theo-nước, ceil $0.5.
+ *   - DHL Express (a–b kg): tương tự nhưng dùng snapshot DHL, chỉ trên các nước
+ *     trong zone CÓ DHL zone. (DHL dùng chung hàm fedexOfferPrice — như script gốc.)
+ *   - Bộ bậc cân FedEx lấy từ seed cici 'middle-east'; bộ bậc DHL lấy từ zone cici
+ *     có nhiều key "DHL Express" nhất (giống y 2 script gốc).
+ *
+ * buildSystemShippingTree() merge mọi dòng → nên 1 dòng 'system' = cả cây.
+ */
+import 'dotenv/config';
+import { eq, ilike, sql } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
+import { quote } from '@/features/carrier-rates/engine/quote';
+import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
+import { fedexOfferPrice } from '@/features/markets/domain/fedex-offer-pricing';
+import type { ShippingRate, ShippingZone, MarketShipping } from '@/features/markets/types';
+
+const FEDEX = '5683f3c0-9249-40c1-a3e7-d967f0d62c29';
+const CICI_STORE = '04b6d06f-2747-4a86-9084-2cef7c2f88fa'; // cici-mean
+
+/** Upper-bound parse từ key "... (a–b kg)" → b. EN-DASH '–' (U+2013). */
+function upperOf(key: string): number | null {
+  const m = key.match(/–\s*([\d.]+)\s*kg/);
+  return m ? Number(m[1]) : null;
+}
+
+/** Trích nhãn ngắn: "Zone H"→"H". (không dùng cho zone name nhưng tiện debug) */
+function zoneShort(label: string): string {
+  return label.replace(/^Zone\s+/i, '').trim();
+}
+
+/** Map countryCode → zone label cho 1 carrier account (join zones cho label). */
+async function loadZoneOf(carrierAccountId: string): Promise<Map<string, string>> {
+  const [zones, zoneCountries] = await Promise.all([
+    db.select().from(schema.carrierZones)
+      .where(eq(schema.carrierZones.carrierAccountId, carrierAccountId)),
+    db.select().from(schema.carrierZoneCountries)
+      .where(eq(schema.carrierZoneCountries.carrierAccountId, carrierAccountId)),
+  ]);
+  const labelById = new Map(zones.map((z) => [z.id, z.label]));
+  const out = new Map<string, string>();
+  for (const zc of zoneCountries) {
+    const label = labelById.get(zc.carrierZoneId);
+    if (label) out.set(zc.countryCode.toUpperCase(), label);
+  }
+  return out;
+}
+
+async function main(): Promise<void> {
+  const apply = process.argv.includes('--apply');
+  console.log(apply
+    ? '*** --apply: SẼ DELETE ALL + INSERT 1 dòng vào manual_shipping_config ***'
+    : 'DRY-RUN — chỉ in, KHÔNG ghi.');
+
+  // ── 1) Carrier accounts + zone maps ──────────────────────────────────────
+  const [dhlAccount] = await db.select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name })
+    .from(schema.carrierAccounts)
+    .where(ilike(schema.carrierAccounts.name, '%DHL%'))
+    .limit(1);
+  if (!dhlAccount) throw new Error('Không tìm thấy carrier account DHL (name ILIKE %DHL%).');
+
+  const fedexZoneOf = await loadZoneOf(FEDEX);
+  const dhlZoneOf = await loadZoneOf(dhlAccount.id);
+  console.log(`Zone map: FedEx ${fedexZoneOf.size} nước, DHL ${dhlZoneOf.size} nước (${dhlAccount.name}).`);
+
+  // ── 2) Bộ bậc cân chuẩn (giống 2 script gốc) ─────────────────────────────
+  // FedEx keys: từ seed cici 'middle-east'.
+  const [seed] = await db.select({ shipping: schema.marketStoreOverrides.shipping })
+    .from(schema.marketStoreOverrides)
+    .where(sql`${schema.marketStoreOverrides.storeId} = ${CICI_STORE} AND ${schema.marketStoreOverrides.marketHandle} = 'middle-east'`)
+    .limit(1);
+  if (!seed?.shipping) throw new Error('Không tìm thấy shipping config cici middle-east (seed FedEx keys).');
+  const seedZones = (seed.shipping as MarketShipping).zones;
+  const sampleZone = Object.values(seedZones)[0];
+  const fedexKeys = Object.keys(sampleZone.rates).filter((k) => /^FedEx IP/.test(k));
+  if (fedexKeys.length === 0) throw new Error('Seed cici middle-east không có key FedEx IP.');
+
+  // DHL keys: từ override cici có nhiều key "DHL Express" nhất.
+  const ciciOverrides = await db.select().from(schema.marketStoreOverrides)
+    .where(eq(schema.marketStoreOverrides.storeId, CICI_STORE));
+  let dhlKeys: string[] = [];
+  for (const o of ciciOverrides) {
+    for (const z of Object.values((o.shipping as MarketShipping | null)?.zones ?? {})) {
+      const ks = Object.keys(z.rates).filter((k) => /^DHL Express/.test(k));
+      if (ks.length > dhlKeys.length) dhlKeys = ks;
+    }
+  }
+  if (dhlKeys.length === 0) throw new Error('Không tìm thấy bộ key DHL Express nào ở cici.');
+
+  const fedexKeyUpper = new Map<string, number>();
+  for (const k of fedexKeys) {
+    const b = upperOf(k);
+    if (b === null) throw new Error(`Không parse được upper-bound từ FedEx key: ${JSON.stringify(k)}`);
+    fedexKeyUpper.set(k, b);
+  }
+  const dhlKeyUpper = new Map<string, number>();
+  for (const k of dhlKeys) {
+    const b = upperOf(k);
+    if (b === null) throw new Error(`Không parse được upper-bound từ DHL key: ${JSON.stringify(k)}`);
+    dhlKeyUpper.set(k, b);
+  }
+  console.log(`Bộ bậc: FedEx ${fedexKeys.length} bậc, DHL ${dhlKeys.length} bậc.`);
+
+  // Key bậc giữa 1.5–2 kg để in mẫu + sanity check.
+  const fedexMidKey = fedexKeys.find((k) => fedexKeyUpper.get(k) === 2);
+  const dhlMidKey = dhlKeys.find((k) => dhlKeyUpper.get(k) === 2);
+
+  // ── 3) Snapshots (FedEx + DHL), date = now (giống script gốc) ────────────
+  const now = new Date();
+  const [fedexSnap, dhlSnap] = await Promise.all([
+    loadAccountSnapshot(FEDEX, now),
+    loadAccountSnapshot(dhlAccount.id, now),
+  ]);
+  if (!fedexSnap) throw new Error('Không load được FedEx snapshot.');
+  if (!dhlSnap) throw new Error('Không load được DHL snapshot.');
+
+  // ── 4) Vũ trụ nước = MỌI key của fedexZoneOf. Gom theo (fz, dz) ──────────
+  // Vu tru nuoc = UNION(FedEx zone, DHL zone).
+  const universe = new Set<string>([...fedexZoneOf.keys(), ...dhlZoneOf.keys()]);
+  const groups = new Map<string, { fz: string | null; dz: string | null; ccs: string[] }>();
+  for (const cc of universe) {
+    const fz = fedexZoneOf.get(cc) ?? null;
+    const dz = dhlZoneOf.get(cc) ?? null;
+    const k = `${fz ?? 'none'}||${dz ?? 'none'}`;
+    const g = groups.get(k) ?? { fz, dz, ccs: [] };
+    g.ccs.push(cc);
+    groups.set(k, g);
+  }
+  const countriesNoDhl: string[] = [];   // FedEx-only (dz=null) -> Standard-only
+  const countriesNoFedex: string[] = []; // DHL-only   (fz=null) -> Express-only
+  const countriesNeither: string[] = []; // rong theo dinh nghia universe
+  for (const g of groups.values()) {
+    if (g.fz !== null && g.dz === null) countriesNoDhl.push(...g.ccs);
+    if (g.fz === null && g.dz !== null) countriesNoFedex.push(...g.ccs);
+    if (g.fz === null && g.dz === null) countriesNeither.push(...g.ccs);
+  }
+
+  // ── 5) Định giá mỗi zone kết hợp ─────────────────────────────────────────
+  const zones: Record<string, ShippingZone> = {};
+  for (const g of groups.values()) {
+    const zoneName = `${g.fz ?? 'no-FedEx'} · ${g.dz ?? 'no-DHL'}`;
+    const rates: Record<string, ShippingRate> = {};
+
+    // FedEx IP — chỉ khi zone CÓ FedEx zone; quote mọi nước có FedEx zone trong
+    // zone qua snapshot FedEx, max-theo-nước.
+    if (g.fz !== null) {
+      const fedexCcs = g.ccs.filter((cc) => fedexZoneOf.has(cc));
+      for (const key of fedexKeys) {
+        const b = fedexKeyUpper.get(key)!;
+        const cq = fedexCcs.map((cc) => {
+          const q = quote(fedexSnap, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          return q.ok
+            ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
+            : { carrierCostDisplay: 0, finalDisplay: 0 };
+        });
+        const price = fedexOfferPrice(cq);
+        if (price !== null) rates[key] = { type: 'flat', price, currency: 'USD' };
+      }
+    }
+
+    // DHL Express — chỉ trên các nước trong zone CÓ DHL zone.
+    if (g.dz !== null) {
+      const dhlCcs = g.ccs.filter((cc) => dhlZoneOf.has(cc));
+      for (const key of dhlKeys) {
+        const b = dhlKeyUpper.get(key)!;
+        const cq = dhlCcs.map((cc) => {
+          const q = quote(dhlSnap, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          return q.ok
+            ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
+            : { carrierCostDisplay: 0, finalDisplay: 0 };
+        });
+        const price = fedexOfferPrice(cq);
+        if (price !== null) rates[key] = { type: 'flat', price, currency: 'USD' };
+      }
+    }
+
+    zones[zoneName] = { countries: g.ccs, rates };
+  }
+
+  // ── 6) Dry-run output ────────────────────────────────────────────────────
+  const totalCountries = universe.size;
+  const zoneNames = Object.keys(zones);
+  console.log(`\n=== KẾT QUẢ ===`);
+  console.log(`Tổng nước phủ (UNION FedEx ∪ DHL): ${totalCountries}`);
+  console.log(`  (FedEx zone: ${fedexZoneOf.size}, DHL zone: ${dhlZoneOf.size})`);
+  console.log(`Tổng zone kết hợp (cặp fz×dz duy nhất): ${zoneNames.length}`);
+  console.log(`Nước FedEx-only (không DHL → Standard-only): ${countriesNoDhl.length}${countriesNoDhl.length ? ` [${countriesNoDhl.sort().join(',')}]` : ''}`);
+  console.log(`Nước DHL-only (không FedEx → Express-only): ${countriesNoFedex.length}${countriesNoFedex.length ? ` [${countriesNoFedex.sort().join(',')}]` : ''}`);
+  console.log(`Nước KHÔNG có FedEx lẫn DHL (phải = 0): ${countriesNeither.length}${countriesNeither.length ? ` [${countriesNeither.sort().join(',')}]` : ''}`);
+  // KY/NR sanity: phải xuất hiện trong universe + thuộc 1 zone có DHL Express rate.
+  for (const cc of ['KY', 'NR']) {
+    const fz = fedexZoneOf.get(cc) ?? null;
+    const dz = dhlZoneOf.get(cc) ?? null;
+    const zn = `${fz ?? 'no-FedEx'} · ${dz ?? 'no-DHL'}`;
+    const z = zones[zn];
+    const hasExpress = z ? Object.keys(z.rates).some((k) => /^DHL Express/.test(k)) : false;
+    const hasStandard = z ? Object.keys(z.rates).some((k) => /^FedEx IP/.test(k)) : false;
+    console.log(`  ${cc}: zone "${zn}" — covered=${!!z} Express=${hasExpress} Standard=${hasStandard}`);
+  }
+
+  console.log(`\n--- Mẫu ${Math.min(10, zoneNames.length)} zone đầu (bậc giữa 1.5–2 kg) ---`);
+  const sorted = [...Object.entries(zones)].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [name, z] of sorted.slice(0, 10)) {
+    const fp = fedexMidKey ? z.rates[fedexMidKey]?.price : undefined;
+    const dp = dhlMidKey ? z.rates[dhlMidKey]?.price : undefined;
+    console.log(`  ${name} — ${z.countries.length} nước — FedEx IP 1.5–2kg=${fp !== undefined ? '$' + fp.toFixed(2) : '—'}  DHL Express 1.5–2kg=${dp !== undefined ? '$' + dp.toFixed(2) : '—'}`);
+  }
+  if (zoneNames.length > 10) console.log(`  … và ${zoneNames.length - 10} zone nữa.`);
+
+  // ── SANITY CHECK vs cici ─────────────────────────────────────────────────
+  // Xây map cici: country → { zoneName, countries[], fedexMid, dhlMid } từ
+  // market_store_overrides. Lưu CẢ country set của zone cici để (a) so giá đã
+  // STORE, và (b) RECOMPUTE bằng engine live trên ĐÚNG country set cici → tách
+  // "khác do engine/path" với "khác do GỘP zone hoặc do snapshot/ngày trôi".
+  console.log(`\n--- SANITY CHECK vs cici (1.5–2 kg) ---`);
+  const ciciCountryRates = new Map<string, { zone: string; ccs: string[]; fedex?: number; dhl?: number }>();
+  for (const o of ciciOverrides) {
+    for (const [zname, z] of Object.entries((o.shipping as MarketShipping | null)?.zones ?? {})) {
+      const fk = Object.keys(z.rates).find((k) => /^FedEx IP/.test(k) && upperOf(k) === 2);
+      const dk = Object.keys(z.rates).find((k) => /^DHL Express/.test(k) && upperOf(k) === 2);
+      const entry = {
+        zone: `${o.marketHandle}/${zname}`,
+        ccs: z.countries.map((c) => c.toUpperCase()),
+        fedex: fk ? z.rates[fk]?.price : undefined,
+        dhl: dk ? z.rates[dk]?.price : undefined,
+      };
+      for (const cc of z.countries) ciciCountryRates.set(cc.toUpperCase(), entry);
+    }
+  }
+
+  // Helper: tính FedEx/DHL offer 2kg cho 1 country set bằng engine LIVE (now).
+  const reFedex = (ccs: string[]): number | null => fedexOfferPrice(ccs.map((cc) => {
+    const q = quote(fedexSnap, { destinationCountry: cc, weightKg: 2, effectiveDate: now });
+    return q.ok ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay } : { carrierCostDisplay: 0, finalDisplay: 0 };
+  }));
+  const reDhl = (ccs: string[]): number | null => fedexOfferPrice(ccs.filter((cc) => dhlZoneOf.has(cc)).map((cc) => {
+    const q = quote(dhlSnap, { destinationCountry: cc, weightKg: 2, effectiveDate: now });
+    return q.ok ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay } : { carrierCostDisplay: 0, finalDisplay: 0 };
+  }));
+
+  // Chọn vài nước cici phủ, map sang zone hệ thống tương ứng (qua country), so sánh.
+  const checkCountries = ['AE', 'SA', 'US', 'GB', 'DE', 'AU', 'JP', 'SG', 'CA', 'FR'];
+  let storeMatch = 0, storeDiff = 0, engineMatch = 0, engineDiff = 0, checked = 0;
+  for (const cc of checkCountries) {
+    const ciciE = ciciCountryRates.get(cc);
+    if (!ciciE) continue;
+    const fz = fedexZoneOf.get(cc);
+    if (!fz) continue;
+    const dz = dhlZoneOf.get(cc) ?? null;
+    const sysZone = zones[`${fz} · ${dz ?? 'no-DHL'}`];
+    if (!sysZone) continue;
+    const sysFedex = fedexMidKey ? sysZone.rates[fedexMidKey]?.price : undefined;
+    const sysDhl = dhlMidKey ? sysZone.rates[dhlMidKey]?.price : undefined;
+    checked++;
+
+    // (A) So vs giá cici ĐÃ STORE (có thể khác do gộp zone / ngày trôi).
+    const fStore = ciciE.fedex === undefined || sysFedex === ciciE.fedex;
+    const dStore = ciciE.dhl === undefined || sysDhl === ciciE.dhl;
+    if (fStore && dStore) storeMatch++; else storeDiff++;
+
+    // (B) RECOMPUTE cici country set bằng engine LIVE → so vs sys. Nếu country set
+    //     trùng nhau thì PHẢI bằng nhau (chứng minh engine+pricing path đồng nhất).
+    const reF = reFedex(ciciE.ccs);
+    const reD = reDhl(ciciE.ccs);
+    const sameSet = ciciE.ccs.slice().sort().join(',') === sysZone.countries.slice().sort().join(',');
+    const fEng = reF === (sysFedex ?? null);
+    const dEng = (reD ?? null) === (sysDhl ?? null);
+    if (sameSet) { if (fEng && dEng) engineMatch++; else engineDiff++; }
+
+    console.log(
+      `  ${cc} → sys "${fz} · ${dz ?? 'no-DHL'}" (${sysZone.countries.length} nước) vs cici ${ciciE.zone} (${ciciE.ccs.length} nước)\n` +
+      `      STORE : FedEx sys=${fmt(sysFedex)} ciciStored=${fmt(ciciE.fedex)} [${fStore ? 'MATCH' : 'DIFF'}]  DHL sys=${fmt(sysDhl)} ciciStored=${fmt(ciciE.dhl)} [${dStore ? 'MATCH' : 'DIFF'}]\n` +
+      `      ENGINE: recompute cici-set live → FedEx=${fmt(reF ?? undefined)} DHL=${fmt(reD ?? undefined)}  sameCountrySet=${sameSet}${sameSet ? `  [${fEng && dEng ? 'MATCH' : 'DIFF'}]` : ' (set khác → gộp zone, không kỳ vọng bằng store)'}`,
+    );
+  }
+  console.log(`  → checked ${checked}.`);
+  console.log(`    vs giá cici ĐÃ STORE: MATCH ${storeMatch}, DIFF ${storeDiff}  (DIFF = do gộp zone toàn-nước và/hoặc snapshot/ngày trôi kể từ lần sinh cici).`);
+  console.log(`    engine LIVE recompute trên cùng country set: MATCH ${engineMatch}, DIFF ${engineDiff}  (MATCH chứng minh engine+offer-pricing path ĐỒNG NHẤT với script gốc).`);
+
+  // Coverage delta.
+  console.log(`\n--- Coverage ---`);
+  console.log(`Universe (FedEx ∪ DHL): ${totalCountries}. FedEx zone: ${fedexZoneOf.size}. DHL zone: ${dhlZoneOf.size}.`);
+  const dhlOnly = [...dhlZoneOf.keys()].filter((cc) => !fedexZoneOf.has(cc));
+  console.log(`Nước DHL-only (giờ phủ Express-only): ${dhlOnly.length}${dhlOnly.length ? ` [${dhlOnly.sort().join(',')}]` : ''}`);
+
+  // ── 7) Apply ─────────────────────────────────────────────────────────────
+  if (apply) {
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.manualShippingConfig);
+      await tx.insert(schema.manualShippingConfig).values({
+        marketHandle: 'system',
+        shipping: { zones },
+        version: 1,
+      });
+    });
+    console.log(`\n*** ĐÃ GHI: xoá toàn bộ manual_shipping_config + INSERT 1 dòng 'system' (${zoneNames.length} zone). ***`);
+  } else {
+    console.log(`\nDRY-RUN — chưa ghi. Chạy với --apply để DELETE ALL + INSERT 1 dòng 'system'.`);
+  }
+  process.exit(0);
+}
+
+function fmt(n: number | undefined): string {
+  return n === undefined ? '—' : '$' + n.toFixed(2);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
