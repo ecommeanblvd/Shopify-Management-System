@@ -93,9 +93,9 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     const r1 = zc.find((m) => m.name === 'FedEx IP (1–1.5 kg)')!;
     // bậc 0–1: chỉ có cận trên ≤1 (bỏ ≥0)
     expect(r0.weightConditionsToCreate).toEqual([{ criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' }]);
-    // bậc 1–1.5: ≥1 và ≤1.5
+    // bậc 1–1.5: cận dưới +offset (≥1.01) để không chồng bậc trước tại biên; ≤1.5
     expect(r1.weightConditionsToCreate).toEqual([
-      { criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
+      { criteria: { value: 1.01, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
       { criteria: { value: 1.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
     ]);
   });
