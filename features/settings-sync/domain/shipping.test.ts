@@ -106,6 +106,41 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     expect(parseWeightBand('Standard rate')).toBeNull();
   });
 
+  it('replace-mode: chỉ xoá+tạo lại rate được chọn theo tên, GIỮ rate carrier kia, KHÔNG xoá zone', () => {
+    const current = {
+      tree: { zones: { 'America — FedEx D': { countries: ['US'], rates: {
+        'Standard shipping': { type: 'flat' as const, price: 50, currency: 'USD' },
+        'Express shipping': { type: 'flat' as const, price: 60, currency: 'USD' },
+      } } } },
+      shopifyIds: {
+        profileId: 'gid://P/1', locationGroupId: 'gid://LG/9',
+        zoneIdByName: { 'America — FedEx D': 'gid://Z/20' },
+        rateIdByZoneAndName: {
+          'America — FedEx D.Standard shipping': 'gid://rate/std',
+          'America — FedEx D.Express shipping': 'gid://rate/exp',
+        },
+      },
+    };
+    const effective = { zones: { 'America — FedEx D': { countries: ['US'], rates: {
+      'Standard shipping': { type: 'flat' as const, price: 50, currency: 'USD' },
+      'Express shipping': { type: 'flat' as const, price: 60, currency: 'USD' },
+    } } } };
+    const out = buildProfileUpdateVariables(current as never, effective, 'gid://LG/9', new Set(['Standard shipping']));
+    const profile = out.profile as {
+      locationGroupsToUpdate: Array<{ zonesToUpdate?: Array<{ methodDefinitionsToCreate?: Array<{ name: string }> }> }>;
+      methodDefinitionsToDelete?: string[];
+      zonesToDelete?: string[];
+    };
+    // Xoá đúng id "Standard shipping", KHÔNG xoá "Express shipping".
+    expect(profile.methodDefinitionsToDelete).toEqual(['gid://rate/std']);
+    expect(profile.methodDefinitionsToDelete).not.toContain('gid://rate/exp');
+    // Tạo lại "Standard shipping" trong zonesToUpdate, KHÔNG có "Express shipping".
+    const created = profile.locationGroupsToUpdate[0].zonesToUpdate?.[0].methodDefinitionsToCreate ?? [];
+    expect(created.map((m) => m.name)).toEqual(['Standard shipping']);
+    // KHÔNG xoá zone.
+    expect(profile.zonesToDelete).toBeUndefined();
+  });
+
   it('free zone không trùng nước → KHÔNG xoá', () => {
     const current = {
       tree: { zones: { Domestic: { countries: ['VN'], rates: {} } } },

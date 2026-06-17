@@ -195,6 +195,7 @@ export interface MutationInput {
 export function denormalizeToMutationInput(
   current: NormalizedShipping,
   effective: ShippingTree,
+  replaceRateNames?: Set<string>,
 ): MutationInput {
   const out: MutationInput = {
     profileId: current.shopifyIds.profileId,
@@ -234,6 +235,16 @@ export function denormalizeToMutationInput(
           price: r.price,
           currency: r.currency,
         });
+      } else if (replaceRateNames?.has(rateName)) {
+        // REPLACE-by-name: xoá rate cũ + tạo lại mới (để điều kiện cân mới áp
+        // dụng). Chỉ áp cho rate có tên ∈ replaceRateNames (carrier được chọn).
+        out.methodDefinitionsToDelete.push(existingRateId);
+        out.methodDefinitionsToCreate.push({
+          zoneId: existingZoneId,
+          name: rateName,
+          price: r.price,
+          currency: r.currency,
+        });
       } else if (existingRate.price !== r.price || existingRate.currency !== r.currency) {
         out.methodDefinitionsToUpdate.push({
           id: existingRateId,
@@ -243,6 +254,9 @@ export function denormalizeToMutationInput(
       }
     }
 
+    // Replace-mode: KHÔNG xoá rate vắng mặt (bảo vệ rate carrier khác); chỉ phát
+    // sinh recreate-delete ở trên. Bỏ hẳn loop xoá rate vắng mặt.
+    if (replaceRateNames) continue;
     for (const rateName of Object.keys(existing.rates)) {
       if (!zone.rates[rateName]) {
         out.methodDefinitionsToDelete.push(
@@ -251,6 +265,10 @@ export function denormalizeToMutationInput(
       }
     }
   }
+
+  // Replace-mode: KHÔNG xoá zone nào (chỉ recreate-delete các rate được chọn) —
+  // bảo vệ carrier kia. Bỏ hẳn loop xoá zone.
+  if (replaceRateNames) return out;
 
   // Tập nước mà "effective" phủ. Một zone Shopify cũ chỉ bị XOÁ khi nó bị PHỦ
   // TRÙNG (có ≥1 nước nằm trong effective) — tức đang được zone mới thay thế.
@@ -318,6 +336,7 @@ export function buildProfileUpdateVariables(
   current: NormalizedShipping,
   effective: ShippingTree,
   locationGroupId: string,
+  replaceRateNames?: Set<string>,
 ): { id: string; profile: Record<string, unknown> } {
   const currentZones = current.tree.zones;
   const effectiveZones = effective.zones ?? {};
@@ -332,6 +351,11 @@ export function buildProfileUpdateVariables(
       ...(wc.length ? { weightConditionsToCreate: wc } : {}),
     };
   };
+
+  // Replace-mode: id rate được chọn (∈ replaceRateNames) đã tồn tại → xoá rồi
+  // tạo lại mới (md() gắn weightConditionsToCreate). Gom ở đây để đẩy lên
+  // top-level methodDefinitionsToDelete (xoá trước, tạo sau).
+  const recreateDeleteIds: string[] = [];
 
   const zonesToCreate: unknown[] = [];
   const zonesToUpdate: unknown[] = [];
@@ -354,6 +378,7 @@ export function buildProfileUpdateVariables(
       const er = existing.rates[rn];
       const erId = current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`];
       if (!er) mdCreate.push(md(rn, r));
+      else if (replaceRateNames?.has(rn)) { recreateDeleteIds.push(erId); mdCreate.push(md(rn, r)); }
       else if (er.price !== r.price || er.currency !== r.currency) mdUpdate.push({ id: erId, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
     }
     if (mdCreate.length || mdUpdate.length) {
@@ -365,16 +390,20 @@ export function buildProfileUpdateVariables(
   }
 
   const zonesToDelete: string[] = [];
-  const methodDefinitionsToDelete: string[] = [];
-  for (const [name, zone] of Object.entries(currentZones)) {
-    const eff = effectiveZones[name];
-    if (eff) {
-      for (const rn of Object.keys(zone.rates)) {
-        if (!eff.rates[rn]) methodDefinitionsToDelete.push(current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`]);
+  const methodDefinitionsToDelete: string[] = [...recreateDeleteIds];
+  // Replace-mode: deletes DUY NHẤT là recreate-delete (id rate được chọn). KHÔNG
+  // xoá rate vắng mặt, KHÔNG xoá zone — bảo vệ rate carrier kia.
+  if (!replaceRateNames) {
+    for (const [name, zone] of Object.entries(currentZones)) {
+      const eff = effectiveZones[name];
+      if (eff) {
+        for (const rn of Object.keys(zone.rates)) {
+          if (!eff.rates[rn]) methodDefinitionsToDelete.push(current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`]);
+        }
+        continue;
       }
-      continue;
+      if (zone.countries.some((c) => effCountries.has(c))) zonesToDelete.push(current.shopifyIds.zoneIdByName[name]);
     }
-    if (zone.countries.some((c) => effCountries.has(c))) zonesToDelete.push(current.shopifyIds.zoneIdByName[name]);
   }
 
   const lg: Record<string, unknown> = { id: locationGroupId };
