@@ -29,6 +29,8 @@ export interface BillLineInput {
   other?: number | null;
   total?: number | null;
   note?: string | null;
+  /** Ngày đi hàng (YYYY-MM-DD) — điền shipments.label_created_at khi đối soát. */
+  shipDate?: string | null;
   /** Breakdown chi tiết từng khoản (jsonb): [{code,name,charge,tax,total}]. */
   charges?: unknown;
 }
@@ -94,6 +96,7 @@ export async function createBill(input: CreateBillInput): Promise<{ id: string }
       vat: numOrNull(l.vat),
       other: numOrNull(l.other),
       total: numOrNull(l.total),
+      shipDate: l.shipDate ?? null,
       charges: l.charges ?? null,
       note: l.note ?? null,
     })));

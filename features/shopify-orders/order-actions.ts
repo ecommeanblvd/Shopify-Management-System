@@ -123,6 +123,9 @@ export interface OrderDetail {
   processedAt: Date;
   currency: string;
   shipCountry: string | null;
+  /** Ngày đi hàng — sớm nhất trong các pack (shipments.label_created_at). Điền từ
+   *  Excel LOG hoặc hoá đơn carrier (đối soát). null khi chưa đi hàng / chưa có dữ liệu. */
+  shipDate: Date | null;
   /** Weight pulled from the Shopify order snapshot. Frozen at sync time. */
   shipWeightKg: number | null;
   /** Operator-set override. When non-null, the engine uses this instead of
@@ -155,6 +158,16 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     .from(schema.stores)
     .where(eq(schema.stores.id, order.storeId));
   const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
+
+  // Ngày đi hàng: pack sớm nhất có label_created_at (Excel LOG hoặc đối soát carrier).
+  const shipRows = await db
+    .select({ labelCreatedAt: schema.shipments.labelCreatedAt })
+    .from(schema.shipments)
+    .where(eq(schema.shipments.orderId, orderId));
+  const shipDate = shipRows
+    .map((s) => s.labelCreatedAt)
+    .filter((d): d is Date => d != null)
+    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
   // Cost lookup for the order's processed_at date.
   const skus = lines.map((l) => l.sku).filter((s): s is string => !!s);
@@ -296,6 +309,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     processedAt: order.processedAtShopify,
     currency: order.currency,
     shipCountry: order.shipCountry,
+    shipDate,
     shipWeightKg: order.shipWeightKg !== null ? Number(order.shipWeightKg) : null,
     shipWeightKgOverride: order.shipWeightKgOverride !== null ? Number(order.shipWeightKgOverride) : null,
     address: {

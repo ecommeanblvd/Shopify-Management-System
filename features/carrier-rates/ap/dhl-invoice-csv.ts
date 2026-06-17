@@ -51,6 +51,7 @@ export interface DhlBillLineInput {
   other: number;  // phí phụ khác (trừ fuel)
   total: number;  // gồm VAT
   note: string;   // liệt kê khoản
+  shipDate: string | null;  // ngày đi hàng (Shipment Date) — điền label_created_at
   charges: DhlChargeLine[]; // breakdown chi tiết (lưu jsonb) để liệt kê đủ
 }
 
@@ -172,6 +173,7 @@ export function dhlShipmentToBillLine(s: DhlShipment): DhlBillLineInput {
     vat: s.totalTax,
     total: s.totalInclVat,
     note,
+    shipDate: s.date || null,
     charges: s.charges,
   };
 }

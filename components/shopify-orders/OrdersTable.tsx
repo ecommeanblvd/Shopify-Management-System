@@ -424,6 +424,15 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+        <span>Ngày xử lý: <span className="text-foreground">{new Date(detail.processedAt).toLocaleDateString()}</span></span>
+        <span>
+          Ngày đi hàng:{' '}
+          {detail.shipDate
+            ? <span className="text-foreground">{new Date(detail.shipDate).toLocaleDateString()}</span>
+            : <span className="italic">chưa có</span>}
+        </span>
+      </div>
       <AddressVerifyCard address={detail.address} country={detail.shipCountry} />
       {/* Lines */}
       <section>
