@@ -1,34 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { buildZoneMatrix } from './zone-matrix';
-import type { ZoneWithCountries } from './zones-actions';
+import { buildSystemZoneView } from './zone-matrix';
 
-const z = (label: string, countries: string[]): ZoneWithCountries => ({ id: label, label, position: 0, countries });
-
-describe('buildZoneMatrix', () => {
-  it('gộp country của FedEx + DHL → mỗi nước 1 dòng, kèm zone 2 bên', () => {
-    const fedex = [z('Zone H', ['US', 'CA']), z('Zone A', ['SG'])];
-    const dhl = [z('Zone 9', ['US']), z('Zone 4', ['SG', 'CA'])];
-    const rows = buildZoneMatrix(fedex, dhl);
-    const us = rows.find((r) => r.iso === 'US')!;
-    expect(us).toMatchObject({ iso: 'US', fedexZone: 'Zone H', dhlZone: 'Zone 9' });
-    const ca = rows.find((r) => r.iso === 'CA')!;
-    expect(ca).toMatchObject({ fedexZone: 'Zone H', dhlZone: 'Zone 4' });
+describe('buildSystemZoneView', () => {
+  it('mỗi zone hệ thống + nước (kèm tên), zone sắp theo tên, nước sắp theo tên', () => {
+    const rows = buildSystemZoneView({
+      'Zone U · Zone 6': { countries: ['NZ', 'AU'] },
+      'Zone V · Zone 1': { countries: ['HK'] },
+    });
+    // zone sắp xếp theo tên zone
+    expect(rows.map((r) => r.zone)).toEqual(['Zone U · Zone 6', 'Zone V · Zone 1']);
+    // nước trong zone sắp theo TÊN: Australia (AU) trước New Zealand (NZ)
+    expect(rows[0].countries.map((c) => c.iso)).toEqual(['AU', 'NZ']);
+    expect(rows[0].countries.every((c) => c.name.length > 0)).toBe(true);
   });
 
-  it('nước chỉ có ở 1 carrier → bên kia null', () => {
-    const rows = buildZoneMatrix([z('Zone A', ['JP'])], [z('Zone 3', ['KR'])]);
-    expect(rows.find((r) => r.iso === 'JP')!.dhlZone).toBeNull();
-    expect(rows.find((r) => r.iso === 'KR')!.fedexZone).toBeNull();
-  });
-
-  it('có tên nước (isoToCountryName) + sắp xếp theo tên', () => {
-    const rows = buildZoneMatrix([z('Z', ['US', 'JP'])], []);
-    expect(rows.every((r) => r.name.length > 0)).toBe(true);
-    // sorted by name ascending
-    expect([...rows].sort((a, b) => a.name.localeCompare(b.name))).toEqual(rows);
+  it('iso viết hoa + fallback tên = iso nếu không tra được', () => {
+    const rows = buildSystemZoneView({ Z: { countries: ['zz'] } });
+    expect(rows[0].countries[0]).toMatchObject({ iso: 'ZZ', name: 'ZZ' });
   });
 
   it('rỗng → []', () => {
-    expect(buildZoneMatrix([], [])).toEqual([]);
+    expect(buildSystemZoneView({})).toEqual([]);
   });
 });
