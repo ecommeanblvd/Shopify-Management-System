@@ -56,6 +56,27 @@ async function resolveAwbMap(awbs: string[]): Promise<Map<string, string>> {
   return map;
 }
 
+/** Như resolveAwbMap nhưng kèm storeId (write-through shipping_invoices) + labelCreatedAt (điền ship date). */
+async function resolveAwbStoreMap(
+  awbs: string[],
+): Promise<Map<string, { shipmentId: string; storeId: string; labelCreatedAt: Date | null }>> {
+  const map = new Map<string, { shipmentId: string; storeId: string; labelCreatedAt: Date | null }>();
+  if (awbs.length === 0) return map;
+  for (let i = 0; i < awbs.length; i += 500) {
+    const chunk = awbs.slice(i, i + 500);
+    const rows = await db
+      .select({
+        id: schema.shipments.id, t: schema.shipments.trackingNumber,
+        storeId: schema.shopifyOrders.storeId, labelCreatedAt: schema.shipments.labelCreatedAt,
+      })
+      .from(schema.shipments)
+      .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
+      .where(inArray(schema.shipments.trackingNumber, chunk));
+    for (const s of rows) if (s.t) map.set(s.t, { shipmentId: s.id, storeId: s.storeId, labelCreatedAt: s.labelCreatedAt });
+  }
+  return map;
+}
+
 function toSummary(bills: FboBill[]): FboBillSummary[] {
   return bills.map((b) => ({
     billNumber: b.billNumber, periodStart: b.periodStart, periodEnd: b.periodEnd,
@@ -110,7 +131,7 @@ export async function importFboToDatabase(
 ): Promise<FboApplyResult> {
   if (rows.length === 0) throw new Error('File FBO không có dòng vận đơn hợp lệ.');
   const bills = groupFboIntoBills(rows);
-  const awbMap = await resolveAwbMap(rows.map((r) => r.awb));
+  const awbMap = await resolveAwbStoreMap(rows.map((r) => r.awb));
   const { carrierAccountId, currency, userId, fileMeta } = opts;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -163,14 +184,19 @@ export async function importFboToDatabase(
       })));
     }
 
+    // Kỳ chung của cả file (write-through shipping_invoices chỉ cần metadata kỳ).
+    const fileStart = bills.map((b) => b.periodStart ?? b.issueDate ?? today).sort()[0] ?? today;
+    const fileEnd = bills.map((b) => b.periodEnd ?? b.periodStart ?? today).sort().at(-1) ?? fileStart;
+
     // Đối soát: upsert shipment_charges (billed, LOẠI duty) cho AWB khớp đơn.
     // Hợp nhất theo AWB — chỉ dòng CƯỚC (bỏ dòng thuế/hải quan để không đè).
     for (const r of consolidateFboShipping(rows)) {
-      const sid = awbMap.get(r.awb);
-      if (!sid) continue;
+      const hit = awbMap.get(r.awb);
+      if (!hit) continue;
+      const shipTotal = fboShippingTotal(r);
       const vals = {
-        shipmentId: sid, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
-        totalAmount: numStr(fboShippingTotal(r)), currency: currency,
+        shipmentId: hit.shipmentId, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
+        totalAmount: numStr(shipTotal), currency: currency,
         base: numStr(r.base), fuel: numStr(r.fuel), remote: numStr(r.remote), demand: numStr(r.demand),
         directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
         addressCorrection: numStr(r.addressCorrection),
@@ -181,6 +207,28 @@ export async function importFboToDatabase(
       await tx.insert(schema.shipmentCharges).values(vals)
         .onConflictDoUpdate({ target: schema.shipmentCharges.shipmentId, set: vals });
       charges += 1;
+
+      // Ngày đi hàng từ FBO → điền label_created_at nếu shipment chưa có.
+      if (!hit.labelCreatedAt && r.shipDate) {
+        await tx.update(schema.shipments)
+          .set({ labelCreatedAt: new Date(r.shipDate) })
+          .where(eq(schema.shipments.id, hit.shipmentId));
+      }
+
+      // Write-through: cước thực (đã gồm VAT, loại duty) → shipping_invoices để
+      // Orders override "chi phí thật" theo tracking. (storeId qua order của shipment.)
+      const inv = {
+        storeId: hit.storeId, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
+        invoicePeriodStart: fileStart, invoicePeriodEnd: fileEnd,
+        actualCost: numStr(shipTotal), currency: currency, source: 'carrier_bill:fbo',
+      };
+      await tx.insert(schema.shippingInvoices).values(inv).onConflictDoUpdate({
+        target: [schema.shippingInvoices.storeId, schema.shippingInvoices.trackingNumber],
+        set: {
+          carrierAccountId: carrierAccountId, actualCost: numStr(shipTotal), currency: currency,
+          invoicePeriodStart: fileStart, invoicePeriodEnd: fileEnd, source: 'carrier_bill:fbo', uploadedAt: new Date(),
+        },
+      });
     }
     return { created, updated, charges };
   });
