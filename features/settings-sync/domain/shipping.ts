@@ -332,6 +332,18 @@ function weightConditionsFromName(rateName: string): unknown[] {
   return conds;
 }
 
+const RATE_NAME_MAP: Array<{ prefix: string; name: string }> = [
+  { prefix: 'FedEx IP', name: 'Standard shipping' },
+  { prefix: 'DHL Express', name: 'Express shipping' },
+];
+
+/** Đổi tên rate nguồn (FedEx IP / DHL Express theo bậc cân) → tên gộp + điều kiện
+ *  cân (cân vào điều kiện, không vào tên). Prefix lạ → giữ nguyên tên. */
+export function normalizeRateForShopify(rateName: string): { name: string; conditions: unknown[] } {
+  const mapped = RATE_NAME_MAP.find((m) => rateName.startsWith(m.prefix));
+  return { name: mapped ? mapped.name : rateName, conditions: weightConditionsFromName(rateName) };
+}
+
 export function buildProfileUpdateVariables(
   current: NormalizedShipping,
   effective: ShippingTree,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables, parseWeightBand } from './shipping';
+import { normalizeShopifyDeliveryProfile, denormalizeToMutationInput, normalizeAllDeliveryProfiles, buildProfileUpdateVariables, parseWeightBand, normalizeRateForShopify } from './shipping';
 
 const shopifyResponse = {
   deliveryProfiles: {
@@ -214,5 +214,28 @@ describe('denormalizeToMutationInput', () => {
     const deletedIds = input.zonesToDelete;
     expect(deletedIds).toContain('gid://shopify/DeliveryZone/20'); // OldAmerica bị phủ trùng → xoá
     expect(deletedIds).not.toContain('gid://shopify/DeliveryZone/10'); // Domestic(VN) free → GIỮ
+  });
+});
+
+describe('normalizeRateForShopify', () => {
+  it('FedEx IP → Standard shipping + điều kiện cân (offset 0.01)', () => {
+    expect(normalizeRateForShopify('FedEx IP (1.5–2 kg)')).toEqual({
+      name: 'Standard shipping',
+      conditions: [
+        { criteria: { value: 1.51, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
+        { criteria: { value: 2, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
+      ],
+    });
+  });
+  it('DHL Express → Express shipping', () => {
+    expect(normalizeRateForShopify('DHL Express (0–0.5 kg)').name).toBe('Express shipping');
+  });
+  it('bậc đầu lower=0 → chỉ có điều kiện trên', () => {
+    expect(normalizeRateForShopify('FedEx IP (0–0.5 kg)').conditions).toEqual([
+      { criteria: { value: 0.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
+    ]);
+  });
+  it('prefix lạ → giữ nguyên tên', () => {
+    expect(normalizeRateForShopify('Standard (2-2.5kg)').name).toBe('Standard (2-2.5kg)');
   });
 });
