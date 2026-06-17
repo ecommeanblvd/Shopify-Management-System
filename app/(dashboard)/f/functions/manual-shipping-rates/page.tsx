@@ -29,8 +29,6 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
 
   const stores = (await db.select().from(schema.stores))
     .map((s) => ({ id: s.id, name: s.name, shopDomain: s.shopDomain }));
-  const sp = await searchParams;
-  const activeId = stores.find((s) => s.id === sp.store)?.id ?? stores[0]?.id ?? null;
   const systemRows = await listSystemShipping();
   const markets: MarketZones[] = systemRows.map((r) => ({ marketHandle: r.marketHandle, zones: flattenShippingMatrix(r.shipping) }));
 

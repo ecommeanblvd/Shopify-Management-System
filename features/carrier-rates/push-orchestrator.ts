@@ -20,14 +20,13 @@ export async function pushShippingToStores(
   for (const storeId of input.storeIds) {
     const res: PushStoreResult = { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] };
     try {
-      // 1) Clean-rebuild bảng giá HỆ THỐNG (zone kết hợp + tên rate gộp). Lọc carrier
-      //    nguồn theo prefix (FedEx IP / DHL Express).
+      // 1) Clean-rebuild bảng giá HỆ THỐNG — LUÔN dựng đủ CẢ 2 carrier (Standard+Express) cho mỗi zone (zone dùng chung; lọc 1 carrier sẽ xoá mất rate carrier kia). Chỉ cần CÓ chọn manual là rebuild full.
       if (plan.manualSourcePrefixes.length > 0) {
         const profiles = await listShippingProfiles(storeId);
         const ids = profiles.map((p) => p.profileId);
         const rows = input.dryRun
-          ? await previewSystemShippingToProfiles(storeId, ids, plan.manualSourcePrefixes)
-          : await applySystemShippingToProfiles(storeId, ids, plan.manualSourcePrefixes);
+          ? await previewSystemShippingToProfiles(storeId, ids, [])
+          : await applySystemShippingToProfiles(storeId, ids, []);
         for (const r of rows) {
           res.zoneCreated += r.zonesToCreate;
           res.rateOps += r.rateOps;

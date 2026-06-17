@@ -11,6 +11,7 @@ import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { listOverridesForStore } from '@/features/markets/actions';
 import { filterTreeByRateNames, filterTreeByRatePrefixes } from '@/features/carrier-rates/push-plan';
 import { buildSystemShippingTree } from '@/features/markets/system-shipping';
+import { hashPayload } from '@/lib/snapshots/snapshots';
 import type { MarketShipping } from '@/features/markets/types';
 import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
@@ -214,6 +215,15 @@ export async function applySystemShippingToProfiles(
   const token = await getStoreToken(store.id);
   const profiles = await readProfiles(store);
   const selected = new Set(profileIds);
+  // Backup state hiện tại của các profile được chọn TRƯỚC khi clean-rebuild xoá zone
+  // (khôi phục được nếu push hỏng giữa chừng). Tái dùng cơ chế settings_snapshots.
+  const snapshotPayload = profiles
+    .filter((pp) => selected.has(pp.profileId))
+    .map((pp) => ({ profileId: pp.profileId, name: pp.name, normalized: pp.normalized }));
+  await db.insert(schema.settingsSnapshots).values({
+    storeId, domain: 'shipping_system', payload: snapshotPayload as object,
+    payloadHash: hashPayload(snapshotPayload), capturedBy: userId,
+  });
   const results: ProfilePushResult[] = [];
   for (const p of profiles.filter((pp) => selected.has(pp.profileId))) {
     const { id, profile } = buildCleanRebuildVariables(p.normalized, systemTree, p.normalized.shopifyIds.locationGroupId);
