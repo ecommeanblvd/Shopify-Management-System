@@ -9,11 +9,13 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { recordAudit } from '@/lib/logging/audit';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { listOverridesForStore } from '@/features/markets/actions';
-import { filterTreeByRateNames } from '@/features/carrier-rates/push-plan';
+import { filterTreeByRateNames, filterTreeByRatePrefixes } from '@/features/carrier-rates/push-plan';
+import { buildSystemShippingTree } from '@/features/markets/system-shipping';
 import type { MarketShipping } from '@/features/markets/types';
 import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
   normalizeAllDeliveryProfiles, denormalizeToMutationInput, buildProfileUpdateVariables,
+  buildCleanRebuildVariables,
   type ShippingTree, type ProfileSummary,
 } from './domain/shipping';
 
@@ -170,6 +172,83 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
     action: 'shipping.push_profiles', userId, storeId, featureKey: 'markets',
     target: results.map((r) => r.name).join(', '),
     requestSummary: `Push shipping → ${results.length} profile`,
+    result: results.some((r) => r.error) ? 'error' : 'success',
+    errorDetail: results.filter((r) => r.error).map((r) => `${r.name}: ${r.error}`).join('; ') || null,
+  });
+  return results;
+}
+
+/** Dry-run clean-rebuild bảng hệ thống lên các profile. `sourcePrefixes` lọc
+ *  carrier nguồn (FedEx IP / DHL Express) TRƯỚC khi gộp tên. */
+export async function previewSystemShippingToProfiles(
+  storeId: string, profileIds: string[], sourcePrefixes: string[],
+): Promise<ProfilePushResult[]> {
+  await requireApplyPermission();
+  const store = await loadStore(storeId);
+  const systemTree = filterTreeByRatePrefixes(await buildSystemShippingTree(), sourcePrefixes);
+  if (Object.keys(systemTree.zones).length === 0) throw new Error('Bảng giá hệ thống trống — chạy seed trước.');
+  const profiles = await readProfiles(store);
+  const selected = new Set(profileIds);
+  return profiles.filter((p) => selected.has(p.profileId)).map((p) => {
+    const { profile } = buildCleanRebuildVariables(p.normalized, systemTree, p.normalized.shopifyIds.locationGroupId);
+    const lg = (profile.locationGroupsToUpdate as Array<Record<string, unknown>>)[0];
+    const creates = ((lg.zonesToCreate as Array<Record<string, unknown>>) ?? []).filter((z) => ((z.methodDefinitionsToCreate as unknown[])?.length ?? 0) > 0);
+    return {
+      profileId: p.profileId, name: p.name,
+      zonesToCreate: creates.length,
+      zonesToDelete: ((profile.zonesToDelete as string[]) ?? []).length,
+      rateOps: creates.reduce((n, z) => n + ((z.methodDefinitionsToCreate as unknown[])?.length ?? 0), 0),
+      error: null,
+    };
+  });
+}
+
+/** Đẩy clean-rebuild bảng hệ thống lên profile (ghi thật). */
+export async function applySystemShippingToProfiles(
+  storeId: string, profileIds: string[], sourcePrefixes: string[],
+): Promise<ProfilePushResult[]> {
+  const userId = await requireApplyPermission();
+  const store = await loadStore(storeId);
+  const systemTree = filterTreeByRatePrefixes(await buildSystemShippingTree(), sourcePrefixes);
+  if (Object.keys(systemTree.zones).length === 0) throw new Error('Bảng giá hệ thống trống — chạy seed trước.');
+  const token = await getStoreToken(store.id);
+  const profiles = await readProfiles(store);
+  const selected = new Set(profileIds);
+  const results: ProfilePushResult[] = [];
+  for (const p of profiles.filter((pp) => selected.has(pp.profileId))) {
+    const { id, profile } = buildCleanRebuildVariables(p.normalized, systemTree, p.normalized.shopifyIds.locationGroupId);
+    const lg = (profile.locationGroupsToUpdate as Array<Record<string, unknown>>)[0];
+    const zonesToCreate = ((lg.zonesToCreate as Array<Record<string, unknown>>) ?? [])
+      .filter((z) => ((z.methodDefinitionsToCreate as unknown[])?.length ?? 0) > 0);
+    const base: ProfilePushResult = {
+      profileId: p.profileId, name: p.name,
+      zonesToCreate: zonesToCreate.length,
+      zonesToDelete: ((profile.zonesToDelete as string[]) ?? []).length,
+      rateOps: zonesToCreate.reduce((n, z) => n + ((z.methodDefinitionsToCreate as unknown[])?.length ?? 0), 0),
+      error: null,
+    };
+    const send = async (prof: Record<string, unknown>) => {
+      const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
+      if ((res as { errors?: unknown }).errors) return JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
+      const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
+      return ue && ue.length ? ue.map((e) => e.message).join('; ') : null;
+    };
+    try {
+      // PHASE 1 — xoá zone bị thay TRƯỚC (giải phóng nước, tránh "Region already exists").
+      if (profile.zonesToDelete) base.error = await send({ zonesToDelete: profile.zonesToDelete });
+      // PHASE 2 — tạo lại zone hệ thống theo lô 3 (gửi cả ~25 zone/1 mutation → Shopify 500).
+      for (let i = 0; !base.error && i < zonesToCreate.length; i += 3) {
+        base.error = await send({ locationGroupsToUpdate: [{ id: lg.id, zonesToCreate: zonesToCreate.slice(i, i + 3) }] });
+      }
+    } catch (e) {
+      base.error = (e as Error).message;
+    }
+    results.push(base);
+  }
+  await recordAudit({
+    action: 'shipping.push_system', userId, storeId, featureKey: 'markets',
+    target: results.map((r) => r.name).join(', '),
+    requestSummary: `Push system shipping → ${results.length} profile`,
     result: results.some((r) => r.error) ? 'error' : 'success',
     errorDetail: results.filter((r) => r.error).map((r) => `${r.name}: ${r.error}`).join('; ') || null,
   });
