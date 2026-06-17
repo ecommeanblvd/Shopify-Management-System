@@ -90,7 +90,9 @@ export async function previewShippingToProfiles(storeId: string, profileIds: str
     if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
     return {
       profileId: p.profileId, name: p.name,
-      zonesToCreate: diff.zonesToCreate.length, zonesToDelete: diff.zonesToDelete.length,
+      // Bỏ zone rỗng rate (engine-only → rateNames:[] sinh zone không rate;
+      // Shopify từ chối tạo zone không có rate). Chỉ đếm zone có ≥1 rate.
+      zonesToCreate: diff.zonesToCreate.filter((z) => z.rates.length > 0).length, zonesToDelete: diff.zonesToDelete.length,
       rateOps: diff.methodDefinitionsToCreate.length + diff.methodDefinitionsToUpdate.length + diff.methodDefinitionsToDelete.length,
       error: null,
     };
@@ -115,7 +117,8 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
     if (opts?.additive) { diff.zonesToDelete = []; diff.methodDefinitionsToDelete = []; }
     const base: ProfilePushResult = {
       profileId: p.profileId, name: p.name,
-      zonesToCreate: diff.zonesToCreate.length, zonesToDelete: diff.zonesToDelete.length,
+      // Chỉ đếm zone-create có ≥1 rate (xem ghi chú ở preview).
+      zonesToCreate: diff.zonesToCreate.filter((z) => z.rates.length > 0).length, zonesToDelete: diff.zonesToDelete.length,
       rateOps: diff.methodDefinitionsToCreate.length + diff.methodDefinitionsToUpdate.length + diff.methodDefinitionsToDelete.length,
       error: null,
     };
@@ -137,7 +140,13 @@ export async function applyShippingToProfiles(storeId: string, profileIds: strin
       };
       const lgIn = (profile.locationGroupsToUpdate as Array<Record<string, unknown>> | undefined)?.[0];
       const lgId = lgIn?.id;
-      const zonesToCreate = (lgIn?.zonesToCreate as unknown[]) ?? [];
+      // Bỏ zone-create không có rate. buildProfileUpdateVariables sinh mỗi entry
+      // dạng { name, countries, methodDefinitionsToCreate }; engine-only push
+      // (rateNames:[]) tạo zone với methodDefinitionsToCreate rỗng → Shopify từ
+      // chối tạo zone không rate. Engine chỉ attach vào zone CÓ SẴN nên tạo zone
+      // rỗng là vô nghĩa.
+      const zonesToCreate = ((lgIn?.zonesToCreate as Array<Record<string, unknown>> | undefined) ?? [])
+        .filter((z) => ((z.methodDefinitionsToCreate as unknown[] | undefined)?.length ?? 0) > 0);
       const zonesToUpdate = (lgIn?.zonesToUpdate as unknown[]) ?? [];
 
       // PHASE 1 — xoá zone/rate bị thay TRƯỚC (giải phóng nước), tránh va chạm

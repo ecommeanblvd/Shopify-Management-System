@@ -10,6 +10,7 @@ import { recordAudit } from '@/lib/logging/audit';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { registerCarrierService } from '@/features/carrier-rates/carrier-service-actions';
 import { buildParticipant, isVnZone, standardBackupDefs, type RateInput } from './plan';
+import { engineParticipantIdsToReplace } from './participant-ids';
 
 export interface PushCarrierInput {
   storeId: string;
@@ -88,8 +89,11 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
         if (backup.length) backupZones++;
         if (input.dryRun || !lgId) continue;
 
-        // Xoá mọi method def cũ (participant + flat) → tạo lại sạch.
-        const oldIds = z.methodDefinitions.edges.map((m) => m.node.id);
+        // Chỉ xoá participant carrier-calculated cũ (engine) → giữ NGUYÊN flat
+        // manual rate ("Standard shipping"/"Express shipping"). rateProvider là
+        // union: __typename === 'DeliveryParticipant' = carrier-calc, còn
+        // 'DeliveryRateDefinition' = flat manual (không đụng).
+        const oldIds = engineParticipantIdsToReplace(z.methodDefinitions.edges);
         const participant = buildParticipant(carrierServiceId, input.carriers);
         // Lượt 1: xoá cũ + tạo participant.
         const e1 = await call(MUT, { id: profileId, p: { methodDefinitionsToDelete: oldIds, locationGroupsToUpdate: [{ id: lgId, zonesToUpdate: [{ id: z.zone.id, methodDefinitionsToCreate: [{ name: 'Engine Carrier Rates', active: true, participant }] }] }] } });
