@@ -432,6 +432,15 @@ export function buildProfileUpdateVariables(
 /** Clean-rebuild: xoá mọi zone Shopify hiện có mà country GIAO với systemTree
  *  (zone bị thay thế), rồi TẠO LẠI toàn bộ zone hệ thống với method-def đã gộp
  *  tên + điều kiện cân. Zone không giao country nào (VN nội địa) được GIỮ. */
+// Nước Shopify TỪ CHỐI ở delivery profile → phải loại khi push (vẫn giữ trong
+// config). Gồm: (1) lãnh thổ không phải country-code riêng trên Shopify — US
+// territories (PR,GU,VI,AS,MP) + đảo TBD (FM,MH,PW) [PR/GU/VI/AS/MP ship qua zone
+// US]; (2) nước cấm vận Shopify chặn shipping (SY,CU,IR,KP) dù có trong enum.
+const SHOPIFY_UNSUPPORTED_COUNTRIES = new Set([
+  'AS', 'FM', 'GU', 'MH', 'MP', 'PR', 'PW', 'VI',
+  'SY', 'CU', 'IR', 'KP',
+]);
+
 export function buildCleanRebuildVariables(
   current: NormalizedShipping,
   systemTree: ShippingTree,
@@ -455,9 +464,16 @@ export function buildCleanRebuildVariables(
   }
 
   const zonesToCreate = Object.entries(systemTree.zones)
-    .filter(([, z]) => Object.keys(z.rates).length > 0)
     .map(([name, z]) => ({
       name,
+      // Loại nước Shopify không nhận (cấm vận / lãnh thổ) — tránh "X is not a
+      // supported country or region code" làm hỏng cả profile.
+      countries: z.countries.filter((c) => !SHOPIFY_UNSUPPORTED_COUNTRIES.has(c.toUpperCase())),
+      rates: z.rates,
+    }))
+    .filter((z) => z.countries.length > 0 && Object.keys(z.rates).length > 0)
+    .map((z) => ({
+      name: z.name,
       countries: z.countries.map((c) => ({ code: c, includeAllProvinces: true })),
       methodDefinitionsToCreate: Object.entries(z.rates).map(([rn, r]) => md(rn, r)),
     }));

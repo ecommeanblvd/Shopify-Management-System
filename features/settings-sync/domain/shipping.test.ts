@@ -274,4 +274,20 @@ describe('buildCleanRebuildVariables', () => {
     expect(gc1.methodDefinitionsToCreate[0].rateDefinition).toEqual({ price: { amount: '30', currencyCode: 'USD' } });
   });
   it('id = profileId', () => { expect(out.id).toBe('gid://profile/1'); });
+
+  it('loại nước Shopify không hỗ trợ (cấm vận/lãnh thổ); zone chỉ toàn nước đó → bỏ', () => {
+    const cur: NormalizedShipping = {
+      tree: { zones: {} },
+      shopifyIds: { profileId: 'gid://p', locationGroupId: 'gid://lg', zoneIdByName: {}, rateIdByZoneAndName: {} },
+    };
+    const tree: ShippingTree = { zones: {
+      ME1: { countries: ['AE', 'SY'], rates: { 'FedEx IP (0–0.5 kg)': { type: 'flat', price: 50, currency: 'USD' } } },
+      EMB: { countries: ['CU', 'IR', 'KP'], rates: { 'DHL Express (0–0.5 kg)': { type: 'flat', price: 60, currency: 'USD' } } },
+    } };
+    const r = buildCleanRebuildVariables(cur, tree, 'gid://lg');
+    const lg = (r.profile.locationGroupsToUpdate as Array<{ zonesToCreate: Array<{ name: string; countries: Array<{ code: string }> }> }>)[0];
+    const me1 = lg.zonesToCreate.find((z) => z.name === 'ME1')!;
+    expect(me1.countries.map((c) => c.code)).toEqual(['AE']); // SY bị loại
+    expect(lg.zonesToCreate.find((z) => z.name === 'EMB')).toBeUndefined(); // toàn nước cấm → bỏ zone
+  });
 });
