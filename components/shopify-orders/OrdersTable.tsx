@@ -217,12 +217,12 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2">Discount</th>
                 <th className="text-right px-3 py-2">Ship rev</th>
                 <th className="text-right px-3 py-2" title="GMV = Subtotal + Ship rev">GMV</th>
-                <th className="text-right px-3 py-2">
-                  Ship cost
+                <th className="text-right px-3 py-2" title="Margin ship = Ship rev − Ship cost (billed thật khi có, engine khi chưa). Âm = charge thiếu. Chi tiết cost: bấm vào đơn.">
+                  Margin ship
                   {showShipInCostCurrency && (
                     <span
                       className="ml-1 px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal"
-                      title={`Displayed in ${costCurrency} at FX ${fxRate!.toLocaleString()}. Revenue still subtracts in ${orders[0]?.currency ?? 'order currency'}.`}
+                      title={`Displayed in ${costCurrency} at FX ${fxRate!.toLocaleString()}.`}
                     >
                       {costCurrency}
                     </span>
@@ -262,25 +262,23 @@ export function OrdersTable({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.shippingRevenue, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums font-medium">{fmt(o.gmv, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {o.shippingCostSource === 'unknown' ? (
+                    {o.shipMarginRaw === null ? (
                       <span
                         className="text-amber-600 dark:text-amber-400 cursor-help underline decoration-dotted underline-offset-2"
-                        title={reasonLabel(o.shippingCostReason)}
+                        title={o.shippingCostSource === 'unknown' ? reasonLabel(o.shippingCostReason) : 'Chưa biết ship cost'}
                       >
                         —
                       </span>
-                    ) : showShipInCostCurrency ? (
-                      // Use the raw cost-currency value computed directly
-                      // from the rate sheet / invoice / override — no
-                      // USD→VND round-trip, so the number matches what the
-                      // carrier will actually invoice down to the integer.
-                      <span
-                        title={`${o.shippingCostSource} · ${fmt(o.shippingCost, o.currency)} in order currency`}
-                      >
-                        {fmt(o.shippingCostRaw, o.shippingCostRawCurrency || costCurrency!)}
-                      </span>
                     ) : (
-                      <span title={o.shippingCostSource}>{fmt(o.shippingCost, o.currency)}</span>
+                      <span
+                        className={o.shipMarginRaw < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}
+                        title={`Ship rev − ship cost · ${o.shippingCostSource === 'engine_estimate' ? 'tạm tính (chưa có hoá đơn carrier)' : 'billed thật'}`}
+                      >
+                        {fmt(o.shipMarginRaw, o.shipMarginRawCurrency || costCurrency || o.currency)}
+                        {o.shippingCostSource === 'engine_estimate' && (
+                          <span className="ml-1 text-[9px] text-muted-foreground normal-case">tạm</span>
+                        )}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">

@@ -19,6 +19,10 @@ export interface OrderRow extends OrderMetrics {
   processedAt: Date;
   lineCount: number;
   hasOverrides: boolean;
+  /** Margin ship = ship rev − ship cost, ở đồng cost (VND). null khi cost unknown.
+   *  Âm = charge thiếu (lỗ ship). Nguồn cost xem `shippingCostSource`. */
+  shipMarginRaw: number | null;
+  shipMarginRawCurrency: string;
 }
 
 export interface GetStoreMetricsResult {
@@ -121,6 +125,16 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         ));
   const invoiceIndex = new Map(invoices.map((i) => [i.trackingNumber, i]));
 
+  // Billed THẬT từ đối soát carrier (shipment_charges, đồng cost = VND) — cộng
+  // dồn theo đơn (đơn nhiều pack). Ưu tiên hơn shipping_invoices & engine.
+  const billedRows = await db
+    .select({ orderId: schema.shipments.orderId, total: schema.shipmentCharges.totalAmount })
+    .from(schema.shipmentCharges)
+    .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
+    .where(inArray(schema.shipments.orderId, orders.map((o) => o.id)));
+  const billedByOrder = new Map<string, number>();
+  for (const r of billedRows) billedByOrder.set(r.orderId, (billedByOrder.get(r.orderId) ?? 0) + Number(r.total));
+
   // Pre-warm a shipping estimator. The old per-order
   // `resolveShippingEstimate(...)` call ran ~2 SQL queries plus a full
   // carrier snapshot load (5 more queries) for each order without an
@@ -197,6 +211,17 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         rawAmount: raw * share,
         rawCurrency,
         source: 'override',
+      };
+    } else if (billedByOrder.has(o.id)) {
+      // Billed THẬT từ đối soát carrier (shipment_charges, đồng cost = VND).
+      // Ưu tiên hơn shipping_invoices/engine — đây là số carrier charge thực.
+      const raw = billedByOrder.get(o.id)!;
+      const converted = convertCost(raw, storeFx.costCurrency ?? o.currency, o.currency);
+      shippingCost = {
+        amount: converted * share,
+        rawAmount: raw * share,
+        rawCurrency,
+        source: 'invoice',
       };
     } else {
       const tracking = trackingByOrder.get(o.id) ?? [];
@@ -324,6 +349,14 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     const hasOverrides = hasLineOverride
       || o.shippingCostOverride !== null
       || o.shipWeightKgOverride !== null;
+    // Margin ship (đồng raw = cost currency, VND): ship rev (quy về raw ccy)
+    // − ship cost raw. null khi chưa biết cost (unknown) hoặc không quy được.
+    const shipRevRaw = rawCurrency === o.currency
+      ? Number(o.totalShipping) * share
+      : (storeFx.fxRate ? Number(o.totalShipping) * share * storeFx.fxRate : null);
+    const shipMarginRaw = (shippingCost.source !== 'unknown' && shipRevRaw !== null)
+      ? shipRevRaw - shippingCost.rawAmount
+      : null;
     allMetrics.push(m);
     rows.push({
       ...m,
@@ -331,6 +364,8 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
       processedAt: o.processedAtShopify,
       lineCount: filteredLines.length,
       hasOverrides,
+      shipMarginRaw,
+      shipMarginRawCurrency: rawCurrency,
     });
   }
 
