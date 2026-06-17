@@ -237,11 +237,31 @@ export async function applySystemShippingToProfiles(
       rateOps: zonesToCreate.reduce((n, z) => n + ((z.methodDefinitionsToCreate as unknown[])?.length ?? 0), 0),
       error: null,
     };
+    // Shopify thỉnh thoảng trả 5xx tạm thời ("Internal Server Error" / "An
+    // unexpected response…" / 429) giữa loạt mutation → retry tới 4 lần (backoff)
+    // trước khi báo lỗi. userErrors (validation) KHÔNG retry — lỗi thật.
+    const TRANSIENT = /internal server error|unexpected response|timeout|rate limit|429|502|503|504|bad gateway|gateway timeout/i;
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     const send = async (prof: Record<string, unknown>) => {
-      const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
-      if ((res as { errors?: unknown }).errors) return JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
-      const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
-      return ue && ue.length ? ue.map((e) => e.message).join('; ') : null;
+      let lastErr: string | null = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) await sleep(800 * attempt);
+        try {
+          const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_MUTATION, variables: { id, profile: prof } });
+          if ((res as { errors?: unknown }).errors) {
+            lastErr = JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
+            if (TRANSIENT.test(lastErr)) continue;
+            return lastErr;
+          }
+          const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
+          return ue && ue.length ? ue.map((e) => e.message).join('; ') : null;
+        } catch (e) {
+          lastErr = (e as Error).message;
+          if (TRANSIENT.test(lastErr)) continue;
+          return lastErr;
+        }
+      }
+      return lastErr;
     };
     // Zone có thể chứa >100 method-def (mỗi bậc cân/​carrier 1 def) + nhiều nước
     // (AF1 52, LATAM3 55). Gửi nhiều zone/nhiều def cùng lúc → Shopify 5xx ("An
