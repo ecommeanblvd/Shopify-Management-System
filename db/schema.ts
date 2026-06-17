@@ -678,6 +678,11 @@ export const shopifyOrders = pgTable('shopify_orders', {
   totalShipping: numeric('total_shipping', { precision: 14, scale: 2 }).notNull(),
   totalTax: numeric('total_tax', { precision: 14, scale: 2 }).notNull(),
   totalPrice: numeric('total_price', { precision: 14, scale: 2 }).notNull(),
+  /** Phí transaction (payment processing + FX) quy về đồng ĐƠN. null khi chưa sync / Shopify không trả fee. */
+  transactionFee: numeric('transaction_fee', { precision: 14, scale: 2 }),
+  /** Phí ở đồng gốc payout (SGD/SAR/EUR…) để đối chiếu. */
+  transactionFeeNative: numeric('transaction_fee_native', { precision: 14, scale: 2 }),
+  transactionFeeNativeCurrency: text('transaction_fee_native_currency'),
   shipCountry: text('ship_country'),
   // City + postcode from Shopify shippingAddress, used by the carrier
   // engine to look up remote-area surcharges. Either can be null —
