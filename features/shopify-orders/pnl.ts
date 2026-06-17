@@ -36,6 +36,8 @@ export interface PnlResult {
   marginSp: MarginPair;
   marginShip: MarginPair;
   feeMissing: boolean;
+  /** Phí transaction đã resolve (0 khi feeMissing). */
+  costFeeVnd: number;
   /** Đủ giá vốn + ship để chốt revenueVnd. KHÔNG xét feeMissing (fee thiếu chỉ cảnh báo, vẫn ra revenue). */
   complete: boolean;
 }
@@ -68,6 +70,6 @@ export function computeOrderPnl(i: PnlInput): PnlResult {
 
   return {
     gmvVnd, thuThuanVnd, tongChiVnd, revenueVnd, revenuePct,
-    marginSp, marginShip, feeMissing, complete: canTotal,
+    marginSp, marginShip, feeMissing, costFeeVnd: i.transactionFeeVnd ?? 0, complete: canTotal,
   };
 }

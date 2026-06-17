@@ -21,6 +21,7 @@ describe('computeOrderPnl', () => {
     expect(r.tongChiVnd).toBe(22_800_855);
     expect(r.revenueVnd).toBe(15_999_145);
     expect(r.revenuePct).toBeCloseTo(41.24, 1);
+    expect(r.costFeeVnd).toBe(1_126_000);
     expect(r.complete).toBe(true);
   });
 
@@ -62,6 +63,7 @@ describe('computeOrderPnl', () => {
     const r = computeOrderPnl({ ...base, transactionFeeVnd: null });
     expect(r.tongChiVnd).toBe(18_000_000 + 3_674_855);
     expect(r.feeMissing).toBe(true);
+    expect(r.costFeeVnd).toBe(0);
     expect(r.revenueVnd).toBe(38_800_000 - (18_000_000 + 3_674_855));
   });
 
