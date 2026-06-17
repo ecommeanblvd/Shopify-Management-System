@@ -354,6 +354,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
   const shippingRevenueVnd = toVnd(Number(order.totalShipping));
   const discountVnd = toVnd(discountOrderCcy);
   const refundVnd = toVnd(refundOrderCcy);
+  const transactionFeeVnd = order.transactionFee != null ? toVnd(Number(order.transactionFee)) : null;
 
   const pnl = (subtotalVnd === null || shippingRevenueVnd === null)
     ? null
@@ -363,7 +364,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         skuCostVnd: skuComplete ? skuCostVnd : null,
         skuCostComplete: skuComplete,
         shipCostVnd, shipCostSource,
-        transactionFeeVnd: null,
+        transactionFeeVnd,
       });
 
   return {
