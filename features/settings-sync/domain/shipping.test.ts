@@ -86,9 +86,11 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
       'FedEx IP (1–1.5 kg)': { type: 'flat' as const, price: 60, currency: 'USD' },
     } } } };
     const out = buildProfileUpdateVariables(current as never, effective, 'gid://LG/9');
-    const zc = (out.profile as any).locationGroupsToUpdate[0].zonesToCreate[0].methodDefinitionsToCreate;
-    const r0 = zc.find((m: any) => m.name === 'FedEx IP (0–1 kg)');
-    const r1 = zc.find((m: any) => m.name === 'FedEx IP (1–1.5 kg)');
+    type MethodDef = { name: string; weightConditionsToCreate?: unknown };
+    const profile = out.profile as { locationGroupsToUpdate: Array<{ zonesToCreate: Array<{ methodDefinitionsToCreate: MethodDef[] }> }> };
+    const zc = profile.locationGroupsToUpdate[0].zonesToCreate[0].methodDefinitionsToCreate;
+    const r0 = zc.find((m) => m.name === 'FedEx IP (0–1 kg)')!;
+    const r1 = zc.find((m) => m.name === 'FedEx IP (1–1.5 kg)')!;
     // bậc 0–1: chỉ có cận trên ≤1 (bỏ ≥0)
     expect(r0.weightConditionsToCreate).toEqual([{ criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' }]);
     // bậc 1–1.5: ≥1 và ≤1.5
