@@ -97,6 +97,18 @@ async function main() {
   const cursorFile = `/tmp/shopify-catalog-${slugify(store.shopDomain)}.cursor`;
   let cursor: string | null = (args.apply && existsSync(cursorFile)) ? (readFileSync(cursorFile, 'utf8').trim() || null) : null;
   if (cursor) console.log(`[catalog] resume từ cursor đã lưu (bỏ qua re-skip)`);
+  // Minimal shapes of the Shopify products GraphQL response we read.
+  type GqlEdge<T> = { node: T };
+  interface GqlVariant { id: string; sku?: string | null; price?: string | null; inventoryQuantity?: number | null; selectedOptions?: Array<{ name: string; value: string }> }
+  interface GqlImage { url: string; altText?: string | null }
+  interface GqlProduct {
+    id: string; vendor?: string | null; title?: string | null; handle?: string | null;
+    status: string; productType?: string | null;
+    variants?: { edges: GqlEdge<GqlVariant>[] };
+    images?: { edges: GqlEdge<GqlImage>[] };
+  }
+  interface ProductsConn { edges: GqlEdge<GqlProduct>[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } }
+
   let seen = 0, inserted = 0, skipped = 0;
   const brandTally = new Map<string, number>();
   const now = new Date();
@@ -104,8 +116,8 @@ async function main() {
   while (seen < args.limit) {
     const res = await callWithRetry({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: PRODUCTS_Q, variables: { cursor } });
     if (res.errors) { console.error('GQL errors:', JSON.stringify(res.errors).slice(0, 300)); break; }
-    const conn = (res.data as any).products;
-    for (const edge of conn.edges as any[]) {
+    const conn = (res.data as { products: ProductsConn }).products;
+    for (const edge of conn.edges) {
       if (seen >= args.limit) break;
       seen++;
       const p = edge.node;
@@ -114,9 +126,9 @@ async function main() {
       const vendor = (p.vendor || '').trim();
       const brandSlug = slugify(vendor);
       brandTally.set(brandSlug, (brandTally.get(brandSlug) ?? 0) + 1);
-      const variants = (p.variants?.edges ?? []).map((e: any) => e.node);
-      const images = (p.images?.edges ?? []).map((e: any) => e.node);
-      const masterSku = variants[0]?.sku || p.handle || p.id.split('/').pop();
+      const variants = (p.variants?.edges ?? []).map((e) => e.node);
+      const images = (p.images?.edges ?? []).map((e) => e.node);
+      const masterSku = variants[0]?.sku || p.handle || p.id.split('/').pop() || p.id;
       const priceUsd = variants[0]?.price ? Number(variants[0].price) : null;
       const sm = STATUS_MAP[p.status] ?? STATUS_MAP.DRAFT;
       const gidNum = p.id.split('/').pop();
@@ -140,8 +152,8 @@ async function main() {
         }).onConflictDoUpdate({ target: schema.mmpProducts.portalProductId, set: { lastReceivedAt: now } }).returning({ id: schema.mmpProducts.id }));
 
         if (variants.length) {
-          await withRetry('variants', () => db.insert(schema.mmpProductVariants).values(variants.map((v: any, idx: number) => {
-            const opts = Object.fromEntries((v.selectedOptions ?? []).map((o: any) => [o.name.toLowerCase(), o.value]));
+          await withRetry('variants', () => db.insert(schema.mmpProductVariants).values(variants.map((v, idx: number) => {
+            const opts = Object.fromEntries((v.selectedOptions ?? []).map((o) => [o.name.toLowerCase(), o.value]));
             return {
               productId: prod.id, sku: v.sku || `${masterSku}-${idx}`,
               color: opts.color ?? opts['màu'] ?? null, size: opts.size ?? opts['kích thước'] ?? null,
@@ -151,7 +163,7 @@ async function main() {
           })).onConflictDoNothing());
         }
         if (images.length) {
-          await withRetry('images', () => db.insert(schema.mmpProductImages).values(images.map((im: any, idx: number) => ({
+          await withRetry('images', () => db.insert(schema.mmpProductImages).values(images.map((im, idx: number) => ({
             productId: prod.id, url: im.url, position: idx, isThumbnail: idx === 0, altText: im.altText ?? null,
           }))).onConflictDoNothing());
         }
