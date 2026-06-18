@@ -808,7 +808,20 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   const vat = rl(vatable * (vatPct / 100));
 
   const subtotalBeforeMarkup = vatable + vat + nonVatableSurcharges;
-  const markupPct = sumApplicableOfKind(snap.surcharges, 'markup_percent', effectiveDate);
+  // Markup theo NƯỚC (override): nước đích có dòng markup riêng (countryCodes chứa
+  // nước, không bị loại) → dùng tổng các dòng đó; nếu không → markup MẶC ĐỊNH
+  // (countryCodes rỗng/null = áp mọi nước). Matrix-theo-nước + mặc định.
+  const markupRows = snap.surcharges.filter(
+    (s) => isApplicable(s, effectiveDate) && s.kind === 'markup_percent',
+  );
+  const markupSpecific = markupRows.filter(
+    (s) => s.countryCodes && s.countryCodes.includes(country) && !isCountryExcluded(s, country),
+  );
+  const markupPct = markupSpecific.length > 0
+    ? markupSpecific.reduce((sum, s) => sum + s.value, 0)
+    : markupRows
+        .filter((s) => !s.countryCodes || s.countryCodes.length === 0)
+        .reduce((sum, s) => sum + s.value, 0);
   // Phí đóng gói (packaging_fixed) lưu ở ĐƠN VỊ HIỂN THỊ (USD). Cộng TRƯỚC markup
   // (markup nhân lên cả packaging). Áp cho CẢ engine (finalDisplay) lẫn manual.
   // KHÔNG tính vào carrierCost (đây là phí của shop, không phải cước carrier).
