@@ -1,0 +1,29 @@
+# Cập nhật fuel surcharge (FedEx + DHL) hằng ngày, độc lập với Railway cron
+# service (vốn hay chết khiến fuel kẹt). Ping endpoint HTTP có sẵn
+# /api/cron/refresh-fuel (Bearer CRON_SECRET). Idempotent: chỉ đổi khi giá đổi.
+#
+# Cần thêm 1 GitHub repo secret: CRON_SECRET (đúng giá trị env trên production).
+# (APP_URL để mặc định production; override bằng repo variable APP_URL nếu cần.)
+name: refresh-fuel
+
+on:
+  schedule:
+    - cron: '20 1 * * *'   # 01:20 UTC mỗi ngày (~08:20 giờ VN)
+  workflow_dispatch: {}     # cho phép chạy tay từ tab Actions
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping refresh-fuel
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://shopify-management-system-production.up.railway.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::Thiếu secret CRON_SECRET"; exit 1; fi
+          echo "→ $APP_URL/api/cron/refresh-fuel"
+          curl -fsS --retry 3 --retry-delay 10 -X GET \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/refresh-fuel" | tee /tmp/out.json
+          echo
+          grep -q '"ok":true' /tmp/out.json || { echo "::error::refresh-fuel không trả ok:true"; exit 1; }
