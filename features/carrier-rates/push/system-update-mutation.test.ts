@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildUpdateMutationProfile } from '../push-step';
+import { buildUpdateMutationProfile } from './system-update-diff';
 
 describe('buildUpdateMutationProfile', () => {
   it('builds zonesToUpdate with methodDefinitionsToUpdate (price) + create (with weight condition)', () => {

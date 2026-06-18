@@ -6,9 +6,8 @@ import { hashPayload } from '@/lib/snapshots/snapshots';
 import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
   normalizeAllDeliveryProfiles, buildCleanRebuildVariables,
-  weightConditionsFromName,
 } from '@/features/settings-sync/domain/shipping';
-import { buildSystemUpdatePlan, isUpdateOnly, type SystemUpdatePlan, type ZoneUpdate } from './push/system-update-diff';
+import { buildSystemUpdatePlan, isUpdateOnly, buildUpdateMutationProfile, type SystemUpdatePlan } from './push/system-update-diff';
 import {
   requireApplyPermission, loadStore, readProfiles,
   previewSystemShippingToProfiles,
@@ -37,44 +36,6 @@ export interface PushStepResult {
 
 const CHUNK = 40;
 const BATCH = 5;
-
-/** Dựng `profile` cho deliveryProfileUpdate cho MỘT chunk update: zonesToUpdate
- *  (methodDefinitionsToUpdate giá + methodDefinitionsToCreate band thiếu) +
- *  methodDefinitionsToDelete (band dư). Cận trên band → weightConditionsToCreate
- *  qua tên gộp "<upper> kg" (tái dùng weightConditionsFromName). */
-export function buildUpdateMutationProfile(
-  locationGroupId: string,
-  zoneChunk: ZoneUpdate[],
-  rateDeletes: string[],
-): Record<string, unknown> {
-  const zonesToUpdate = zoneChunk.map((z) => {
-    const zu: Record<string, unknown> = { id: z.zoneId };
-    if (z.updates.length) {
-      zu.methodDefinitionsToUpdate = z.updates.map((u) => ({
-        id: u.id, rateDefinition: { price: { amount: String(u.price), currencyCode: u.currency } },
-      }));
-    }
-    if (z.creates.length) {
-      zu.methodDefinitionsToCreate = z.creates.map((c) => {
-        const wc = c.upperKg == null ? [] : weightConditionsFromName(`x (0–${c.upperKg} kg)`);
-        return {
-          name: c.name,
-          rateDefinition: { price: { amount: String(c.price), currencyCode: c.currency } },
-          ...(wc.length ? { weightConditionsToCreate: wc } : {}),
-        };
-      });
-    }
-    return zu;
-  });
-  if (zoneChunk.length === 0) {
-    const profile: Record<string, unknown> = {};
-    if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
-    return profile;
-  }
-  const profile: Record<string, unknown> = { locationGroupsToUpdate: [{ id: locationGroupId, zonesToUpdate }] };
-  if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
-  return profile;
-}
 
 interface ZoneCreate {
   name: string;

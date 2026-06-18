@@ -1,5 +1,5 @@
 import type { NormalizedShipping, ShippingTree } from '@/features/settings-sync/domain/shipping';
-import { bandKeyOf, normalizeRateForShopify, parseWeightBand } from '@/features/settings-sync/domain/shipping';
+import { bandKeyOf, normalizeRateForShopify, parseWeightBand, weightConditionsFromName } from '@/features/settings-sync/domain/shipping';
 
 export interface RateUpdate { id: string; price: number; currency: string }
 export interface RateCreate { name: string; price: number; currency: string; upperKg: number | null }
@@ -110,4 +110,42 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
     rateDeletes: plan.rateDeletes.length,
   };
   return plan;
+}
+
+/** Dựng `profile` cho deliveryProfileUpdate cho MỘT chunk update: zonesToUpdate
+ *  (methodDefinitionsToUpdate giá + methodDefinitionsToCreate band thiếu) +
+ *  methodDefinitionsToDelete (band dư). Cận trên band → weightConditionsToCreate
+ *  qua tên gộp "<upper> kg" (tái dùng weightConditionsFromName). */
+export function buildUpdateMutationProfile(
+  locationGroupId: string,
+  zoneChunk: ZoneUpdate[],
+  rateDeletes: string[],
+): Record<string, unknown> {
+  const zonesToUpdate = zoneChunk.map((z) => {
+    const zu: Record<string, unknown> = { id: z.zoneId };
+    if (z.updates.length) {
+      zu.methodDefinitionsToUpdate = z.updates.map((u) => ({
+        id: u.id, rateDefinition: { price: { amount: String(u.price), currencyCode: u.currency } },
+      }));
+    }
+    if (z.creates.length) {
+      zu.methodDefinitionsToCreate = z.creates.map((c) => {
+        const wc = c.upperKg == null ? [] : weightConditionsFromName(`x (0–${c.upperKg} kg)`);
+        return {
+          name: c.name,
+          rateDefinition: { price: { amount: String(c.price), currencyCode: c.currency } },
+          ...(wc.length ? { weightConditionsToCreate: wc } : {}),
+        };
+      });
+    }
+    return zu;
+  });
+  if (zoneChunk.length === 0) {
+    const profile: Record<string, unknown> = {};
+    if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
+    return profile;
+  }
+  const profile: Record<string, unknown> = { locationGroupsToUpdate: [{ id: locationGroupId, zonesToUpdate }] };
+  if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
+  return profile;
 }
