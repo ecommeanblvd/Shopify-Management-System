@@ -251,9 +251,9 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-auto max-h-[calc(100vh-180px)] rounded-lg border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-20 bg-muted text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left">Order</th>
               <th className="px-3 py-2 text-left">Tracking</th>
