@@ -54,7 +54,7 @@ describe('buildSystemUpdatePlan', () => {
       'FedEx IP (1–2 kg)': { type: 'flat' as const, price: 80, currency: 'USD' },
     } } } };
     const plan = buildSystemUpdatePlan(storeNA2(), sys);
-    expect(plan.zoneUpdates[0].creates).toEqual([{ name: 'Standard shipping', price: 80, currency: 'USD', upperKg: 2 }]);
+    expect(plan.zoneUpdates[0].creates).toEqual([{ name: 'Standard shipping', price: 80, currency: 'USD', upperKg: 2, lowerKg: 1 }]);
     expect(isUpdateOnly(plan)).toBe(true); // create within existing zone stays on fast path
   });
 
@@ -99,6 +99,26 @@ describe('buildSystemUpdatePlan', () => {
     const plan = buildSystemUpdatePlan(store, sysNA2(60, 70));
     expect(plan.zonesToDelete).toContain('gid://z/OLD_US');
     expect(isUpdateOnly(plan)).toBe(false);
+  });
+
+  it('system zone with unsupported country (SY) matches store zone without it → fast path (isUpdateOnly)', () => {
+    // Store: zone ME1 with ['AE'] — Shopify stripped SY on previous push.
+    const store: NormalizedShipping = {
+      tree: { zones: { ME1: { countries: ['AE'], rates: { 'Standard shipping': { type: 'flat', price: 50, currency: 'USD' } } } } },
+      shopifyIds: {
+        profileId: 'gid://p/1', locationGroupId: 'gid://lg/1',
+        zoneIdByName: { ME1: 'gid://z/ME1' }, rateIdByZoneAndName: {},
+      },
+      bandRates: {
+        [bandKeyOf('ME1', 'Standard shipping', 'flat')]: { id: 'gid://md/ME1', price: 50, currency: 'USD' },
+      },
+    };
+    // System: zone ME1 includes SY (unsupported) + AE, same price.
+    const sys = { zones: { ME1: { countries: ['AE', 'SY'], rates: { 'FedEx IP': { type: 'flat' as const, price: 50, currency: 'USD' } } } } };
+    const plan = buildSystemUpdatePlan(store, sys);
+    expect(plan.zonesToCreate.map((z) => z.name)).not.toContain('ME1');
+    expect(plan.zonesToDelete).not.toContain('gid://z/ME1');
+    expect(isUpdateOnly(plan)).toBe(true);
   });
 
   it('orphan store zone NOT overlapping any system country is preserved', () => {

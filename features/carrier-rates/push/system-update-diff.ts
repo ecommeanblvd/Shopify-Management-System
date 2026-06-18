@@ -1,8 +1,8 @@
 import type { NormalizedShipping, ShippingTree } from '@/features/settings-sync/domain/shipping';
-import { bandKeyOf, normalizeRateForShopify, parseWeightBand, weightConditionsFromName } from '@/features/settings-sync/domain/shipping';
+import { bandKeyOf, normalizeRateForShopify, parseWeightBand, weightConditionsFromName, SHOPIFY_UNSUPPORTED_COUNTRIES } from '@/features/settings-sync/domain/shipping';
 
 export interface RateUpdate { id: string; price: number; currency: string }
-export interface RateCreate { name: string; price: number; currency: string; upperKg: number | null }
+export interface RateCreate { name: string; price: number; currency: string; upperKg: number | null; lowerKg: number | null }
 export interface ZoneUpdate { zoneId: string; updates: RateUpdate[]; creates: RateCreate[] }
 export interface ZoneCreateFull {
   name: string; countries: string[];
@@ -28,13 +28,14 @@ const sameCountries = (a: string[], b: string[]): boolean => {
   return a.every((c) => sb.has(c));
 };
 
-/** Đặc tả 1 rate hệ thống → (tên-gộp Shopify, cận-trên-band). */
-function mappedRate(rateName: string): { mappedName: string; upper: string; upperKg: number | null } {
+/** Đặc tả 1 rate hệ thống → (tên-gộp Shopify, cận-trên-band, cận-dưới-band). */
+function mappedRate(rateName: string): { mappedName: string; upper: string; upperKg: number | null; lowerKg: number | null } {
   const mappedName = normalizeRateForShopify(rateName).name;
   const band = parseWeightBand(rateName);
   const upperKg = band ? band.upper : null;
+  const lowerKg = band ? band.lower : null;
   const upper = upperKg == null ? 'flat' : String(Math.round(upperKg * 1000) / 1000);
-  return { mappedName, upper, upperKg };
+  return { mappedName, upper, upperKg, lowerKg };
 }
 
 export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: ShippingTree): SystemUpdatePlan {
@@ -47,8 +48,10 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
 
   for (const [zoneName, sysZone] of Object.entries(sysZones)) {
     const storeZone = storeZones[zoneName];
+    // FIX 2: filter unsupported countries before any comparison or zone creation.
+    const sysCountries = sysZone.countries.filter((c) => !SHOPIFY_UNSUPPORTED_COUNTRIES.has(c));
     const fullCreate: ZoneCreateFull = {
-      name: zoneName, countries: sysZone.countries,
+      name: zoneName, countries: sysCountries,
       rates: Object.entries(sysZone.rates).map(([rn, r]) => {
         const m = mappedRate(rn);
         return { name: m.mappedName, price: r.price, currency: r.currency, upperKg: m.upperKg };
@@ -57,7 +60,7 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
 
     // Zone mới HOẶC lệch nước → tạo full (+ xoá zone cũ nếu lệch nước).
     if (!storeZone) { plan.zonesToCreate.push(fullCreate); continue; }
-    if (!sameCountries(storeZone.countries, sysZone.countries)) {
+    if (!sameCountries(storeZone.countries, sysCountries)) {
       plan.zonesToDelete.push(current.shopifyIds.zoneIdByName[zoneName]);
       plan.zonesToCreate.push(fullCreate);
       continue;
@@ -73,7 +76,8 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
       seenKeys.add(key);
       const existing = current.bandRates[key];
       if (!existing) {
-        creates.push({ name: m.mappedName, price: r.price, currency: r.currency, upperKg: m.upperKg });
+        // FIX 1: include lowerKg so buildUpdateMutationProfile can emit the correct GTE condition.
+        creates.push({ name: m.mappedName, price: r.price, currency: r.currency, upperKg: m.upperKg, lowerKg: m.lowerKg });
       } else if (existing.price !== r.price || existing.currency !== r.currency) {
         updates.push({ id: existing.id, price: r.price, currency: r.currency });
       }
@@ -86,17 +90,19 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
     if (updates.length || creates.length) plan.zoneUpdates.push({ zoneId: current.shopifyIds.zoneIdByName[zoneName], updates, creates });
   }
 
-  // Union of all countries covered by the system tree.
-  const sysCountries = new Set<string>();
+  // Union of all countries covered by the system tree (unsupported filtered out).
+  const sysCountriesUnion = new Set<string>();
   for (const sysZone of Object.values(sysZones)) {
-    for (const c of sysZone.countries) sysCountries.add(c);
+    for (const c of sysZone.countries) {
+      if (!SHOPIFY_UNSUPPORTED_COUNTRIES.has(c)) sysCountriesUnion.add(c);
+    }
   }
 
   // Orphan-zone pass: store zones absent from systemTree whose countries
   // OVERLAP any system country → must delete to avoid double-coverage.
   for (const [zoneName, storeZone] of Object.entries(storeZones)) {
     if (zoneName in sysZones) continue; // already handled above
-    const overlaps = storeZone.countries.some((c) => sysCountries.has(c));
+    const overlaps = storeZone.countries.some((c) => sysCountriesUnion.has(c));
     if (overlaps) {
       plan.zonesToDelete.push(current.shopifyIds.zoneIdByName[zoneName]);
     }
@@ -130,7 +136,7 @@ export function buildUpdateMutationProfile(
     }
     if (z.creates.length) {
       zu.methodDefinitionsToCreate = z.creates.map((c) => {
-        const wc = c.upperKg == null ? [] : weightConditionsFromName(`x (0–${c.upperKg} kg)`);
+        const wc = c.upperKg == null ? [] : weightConditionsFromName(`x (${c.lowerKg ?? 0}–${c.upperKg} kg)`);
         return {
           name: c.name,
           rateDefinition: { price: { amount: String(c.price), currencyCode: c.currency } },

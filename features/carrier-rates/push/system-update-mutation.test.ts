@@ -4,7 +4,7 @@ import { buildUpdateMutationProfile } from './system-update-diff';
 describe('buildUpdateMutationProfile', () => {
   it('builds zonesToUpdate with methodDefinitionsToUpdate (price) + create (with weight condition)', () => {
     const profile = buildUpdateMutationProfile('gid://lg/1',
-      [{ zoneId: 'gid://z/NA2', updates: [{ id: 'gid://md/A', price: 60, currency: 'USD' }], creates: [{ name: 'Standard shipping', price: 80, currency: 'USD', upperKg: 2 }] }],
+      [{ zoneId: 'gid://z/NA2', updates: [{ id: 'gid://md/A', price: 60, currency: 'USD' }], creates: [{ name: 'Standard shipping', price: 80, currency: 'USD', upperKg: 2, lowerKg: 1 }] }],
       ['gid://md/X']);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lg = (profile.locationGroupsToUpdate as any[])[0];
@@ -14,8 +14,24 @@ describe('buildUpdateMutationProfile', () => {
     const created = lg.zonesToUpdate[0].methodDefinitionsToCreate[0];
     expect(created.name).toBe('Standard shipping');
     expect(created.rateDefinition).toEqual({ price: { amount: '80', currencyCode: 'USD' } });
-    expect(created.weightConditionsToCreate).toBeTruthy(); // upper 2kg → has a condition
+    // lowerKg=1 → BOTH a GTE 1.01 condition AND a LTE 2 condition.
+    const wc = created.weightConditionsToCreate as Array<{ criteria: { value: number; unit: string }; operator: string }>;
+    expect(wc).toHaveLength(2);
+    expect(wc).toContainEqual({ criteria: { value: 1.01, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' });
+    expect(wc).toContainEqual({ criteria: { value: 2, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' });
     expect(profile.methodDefinitionsToDelete).toEqual(['gid://md/X']);
+  });
+
+  it('first band (lowerKg=0) creates ONLY the LTE condition, no GTE', () => {
+    const profile = buildUpdateMutationProfile('gid://lg/1',
+      [{ zoneId: 'gid://z/NA2', updates: [], creates: [{ name: 'Standard shipping', price: 50, currency: 'USD', upperKg: 0.5, lowerKg: 0 }] }],
+      []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lg = (profile.locationGroupsToUpdate as any[])[0];
+    const created = lg.zonesToUpdate[0].methodDefinitionsToCreate[0];
+    const wc = created.weightConditionsToCreate as Array<{ criteria: { value: number; unit: string }; operator: string }>;
+    expect(wc).toHaveLength(1);
+    expect(wc[0]).toEqual({ criteria: { value: 0.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' });
   });
 
   it('omits methodDefinitionsToDelete when no rate deletes', () => {

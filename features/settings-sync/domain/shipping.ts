@@ -473,7 +473,7 @@ export function buildProfileUpdateVariables(
 // config). Gồm: (1) lãnh thổ không phải country-code riêng trên Shopify — US
 // territories (PR,GU,VI,AS,MP) + đảo TBD (FM,MH,PW) [PR/GU/VI/AS/MP ship qua zone
 // US]; (2) nước cấm vận Shopify chặn shipping (SY,CU,IR,KP) dù có trong enum.
-const SHOPIFY_UNSUPPORTED_COUNTRIES = new Set([
+export const SHOPIFY_UNSUPPORTED_COUNTRIES = new Set([
   'AS', 'FM', 'GU', 'MH', 'MP', 'PR', 'PW', 'VI',
   'SY', 'CU', 'IR', 'KP',
 ]);
