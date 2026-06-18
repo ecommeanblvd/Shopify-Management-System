@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getEnv } from '@/lib/env';
 import { decrypt, encrypt, needsReEncryption, type KeyConfig } from '@/lib/crypto';
+import { parseShopifyGraphql } from './parse-graphql';
 
 // Lazily constructed and memoized so `next build` does not require Shopify
 // env vars at module import time.
@@ -73,7 +74,10 @@ export async function graphqlCall(args: {
     },
   );
   if (res.status === 429) throw new Error('Shopify rate limit (429)');
-  return res.json() as Promise<{ data: unknown; errors?: unknown }>;
+  // KHÔNG gọi res.json() trần: body rỗng/non-JSON (5xx HTML, gateway timeout) sẽ
+  // ném "Unexpected end of JSON input" cụt ngủn → bubble lên thành lỗi digest khó
+  // hiểu. parseShopifyGraphql ném lỗi rõ ràng (kèm status) + khớp retry TRANSIENT.
+  return parseShopifyGraphql(res, args.shopDomain);
 }
 
 export function encryptToken(plaintext: string): string {
