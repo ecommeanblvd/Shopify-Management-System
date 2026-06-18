@@ -9,6 +9,7 @@ import { issueInfo } from './issue-label';
 import { ReconcileIssuesModal, type OpenIssue } from './ReconcileIssuesModal';
 import type { IssueReportRecord } from '@/features/shipments/issue-report-actions';
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
+import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -106,6 +107,7 @@ interface Props {
   reports: IssueReportRecord[];
   carrierErrors: CarrierErrorRow[];
   carrierErrorGroups: CarrierErrorGroup[];
+  internalErrorGroups: InternalErrorGroup[];
 }
 
 /** Màu số LỆCH theo HƯỚNG (để rà soát): hệ thống CAO hơn billed (deltaVnd<0,
@@ -120,7 +122,7 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroups }: Props) {
+export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroups, internalErrorGroups }: Props) {
   const [carrier, setCarrier] = useState<CarrierFilter>('all');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [country, setCountry] = useState('');
@@ -245,7 +247,8 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
         <div className="ml-auto flex items-center gap-2">
           <ReconcileIssuesModal openIssues={openIssues} reports={reports}
-            carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} />
+            carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups}
+            internalErrorGroups={internalErrorGroups} />
           <a href={exportHref} className="rounded border border-border px-3 py-1 hover:bg-muted">Export CSV</a>
         </div>
       </div>

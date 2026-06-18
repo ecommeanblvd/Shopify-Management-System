@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { confirmIssueReport, type IssueReportRecord } from '@/features/shipments/issue-report-actions';
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
+import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
 import { carrierErrorKindLabel } from '@/features/shipments/carrier-error-kinds';
 
 const fmtVnd = (n: number | null): string =>
@@ -27,6 +28,7 @@ interface Props {
   // Wired by ReconcileTable now; the carrier-error tab is built in Task 5.
   carrierErrors?: CarrierErrorRow[];
   carrierErrorGroups?: CarrierErrorGroup[];
+  internalErrorGroups?: InternalErrorGroup[];
 }
 
 /**
@@ -34,9 +36,10 @@ interface Props {
  * issues (live-computed from pending mismatches) become persistent
  * REPORTS only after a Logistics staffer confirms what was fixed.
  */
-export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], carrierErrorGroups = [] }: Props) {
+export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], carrierErrorGroups = [], internalErrorGroups = [] }: Props) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<'issues' | 'reports' | 'carrier'>('issues');
+  const [tab, setTab] = useState<'issues' | 'reports' | 'carrier' | 'internal'>('issues');
+  const internalCount = internalErrorGroups.reduce((s, g) => s + g.count, 0);
   const reportedKeys = new Set(reports.map((r) => r.issueKey));
 
   const disputingCount = carrierErrors.filter((r) => r.state === 'disputing').length;
@@ -84,6 +87,9 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
                 </TabButton>
                 <TabButton active={tab === 'carrier'} onClick={() => setTab('carrier')}>
                   Lỗi carrier ({carrierErrors.length})
+                </TabButton>
+                <TabButton active={tab === 'internal'} onClick={() => setTab('internal')}>
+                  Lỗi nội bộ ({internalCount})
                 </TabButton>
               </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded px-2 py-1 text-muted-foreground hover:bg-muted">✕</button>
@@ -148,6 +154,31 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
                   </div>
                 );
               })()
+            ) : tab === 'internal' ? (
+              <div>
+                <div className="border-b border-border px-5 py-2 text-xs text-muted-foreground">
+                  Lỗi nội bộ — sai cân/dim, sửa data của ta, không đòi carrier.
+                </div>
+                {internalErrorGroups.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-muted-foreground">Không có lỗi nội bộ nào 🎉</p>
+                )}
+                {internalErrorGroups.map((g) => (
+                  <div key={g.carrierKey ?? '—'} className="flex flex-wrap items-baseline gap-x-2 px-5 py-2 text-sm">
+                    <span className="font-medium uppercase">{g.carrierKey ?? '—'}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {g.count} đơn · Σ lệch{' '}
+                      <span className={g.sumDeltaVnd > 0 ? 'text-red-600 dark:text-red-400' : g.sumDeltaVnd < 0 ? 'text-emerald-600 dark:text-emerald-400' : undefined}>
+                        {fmtVnd(g.sumDeltaVnd)}đ
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                {internalErrorGroups.length > 0 && (
+                  <div className="border-t border-border px-5 py-2 text-sm font-medium">
+                    Tổng: {internalCount} đơn · {fmtVnd(internalErrorGroups.reduce((s, g) => s + g.sumDeltaVnd, 0))}đ
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-border">
                 {reports.length === 0 && (

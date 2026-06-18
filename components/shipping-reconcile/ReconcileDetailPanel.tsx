@@ -113,7 +113,7 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     // nonConveyable: DHL kiện không qua băng chuyền — pass-through (engine 0).
     // Chỉ hiện khi có bill. Gắn với đóng gói bất thường / cân 25–70kg.
     ...(Number(row.billedNonConveyable ?? 0) > 0 ? [{
-      label: 'Kiện đặc biệt (non-conveyable)', billed: row.billedNonConveyable, engine: null,
+      label: 'Kiện quá khổ (non-conveyable)', billed: row.billedNonConveyable, engine: null,
       fedex: null, compKey: 'nonConveyable' as const,
     }] : []),
     // gogreen: engine books DHL GoGreen under per_step_fixed.
