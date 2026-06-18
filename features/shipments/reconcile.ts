@@ -152,6 +152,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedDiscount: schema.shipmentCharges.discount,
       billedElevatedRisk: schema.shipmentCharges.elevatedRisk,
       billedImportHandling: schema.shipmentCharges.importHandling,
+      billedWeightKg: schema.shipmentCharges.billingWeightKg,
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
@@ -422,6 +423,7 @@ interface JoinedRow {
   billedDiscount: string | null;
   billedElevatedRisk: string | null;
   billedImportHandling?: string | null;
+  billedWeightKg?: string | null;
 }
 
 interface EngineBreakdown {
@@ -512,7 +514,7 @@ function buildRow(
     shopifyWeightKg: r.shopifyWeightKg != null ? Number(r.shopifyWeightKg) : null,
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,
     chargeableKg: engine?.chargeableWeightKg ?? null,
-    billedWeightKg: null,
+    billedWeightKg: r.billedWeightKg != null ? Number(r.billedWeightKg) : null,
     labelDate: r.labelCreatedAt,
     billedTotal,
     billedBase: r.billedBase !== null ? Number(r.billedBase) : null,

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
+import { carrierWeightCell } from '@/features/shipments/reconcile-cells';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
@@ -261,7 +262,8 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
               <th className="px-3 py-2 text-left whitespace-nowrap" title="Ngày tạo label/ship — quyết định kỳ giá xăng dầu & phụ phí áp dụng">Ngày ship</th>
               <th className="px-3 py-2 text-right" title="Cân đơn hàng sync từ Shopify (tổng cân variant)">KG Shopify</th>
               <th className="px-3 py-2 text-right" title="Cân thực tế trên cân (file ops)">KG cân</th>
-              <th className="px-3 py-2 text-right" title="Cân carrier tính phí: max(cân thực, dim) + làm tròn bậc">KG bill</th>
+              <th className="px-3 py-2 text-right" title="Cân dự kiến: engine max(cân thực, dim) + làm tròn bậc carrier — văn phòng kỳ vọng">KG dự kiến</th>
+              <th className="px-3 py-2 text-right" title="Cân carrier THẬT tính phí trên hoá đơn (FBO/DHL); '—' nếu chưa import hoá đơn">KG carrier</th>
               <th className="px-3 py-2 text-right">Billed</th>
               <th className="px-3 py-2 text-right">Hệ thống</th>
               <th className="px-3 py-2 text-right">Lệch</th>
@@ -279,7 +281,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
               />
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={13} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
+              <tr><td colSpan={14} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
             )}
           </tbody>
         </table>
@@ -352,6 +354,20 @@ function FragmentRow({
             </span>
           )}
         </td>
+        <td className="px-3 py-2 text-right">
+          {(() => {
+            const c = carrierWeightCell(r.billedWeightKg, r.chargeableKg);
+            if (c.text === '—') return '—';
+            return (
+              <span
+                className={c.mismatch ? 'text-amber-600 dark:text-amber-400' : undefined}
+                title={c.mismatch ? `Carrier tính khác văn phòng (dự kiến ${r.chargeableKg})` : undefined}
+              >
+                {c.text}
+              </span>
+            );
+          })()}
+        </td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.billedTotal)}</td>
         <td className="px-3 py-2 text-right">{fmtVnd(r.engineTotal)}</td>
         <td className={`px-3 py-2 text-right font-medium ${deltaDirClass(r)}`}>{fmtVnd(r.deltaVnd)}</td>
@@ -403,7 +419,7 @@ function FragmentRow({
       </tr>
       {expanded && (
         <tr className="border-t border-border bg-muted/10">
-          <td colSpan={13}><ReconcileDetailPanel row={r} /></td>
+          <td colSpan={14}><ReconcileDetailPanel row={r} /></td>
         </tr>
       )}
     </>

@@ -65,18 +65,8 @@ export function netBase(base: number | null, discount: number | null): number | 
   return base + (discount ?? 0);
 }
 
-export interface CarrierWeightCell { text: string; mismatch: boolean }
-
-/** Ô "KG carrier": cân carrier thật từ hoá đơn. NULL → "—". Tô lệch khi khác
- *  cân dự kiến (engine max(cân,dim)+làm tròn) và cả hai đều có số. */
-export function carrierWeightCell(
-  billedWeightKg: number | null,
-  chargeableKg: number | null,
-): CarrierWeightCell {
-  if (billedWeightKg === null) return { text: '—', mismatch: false };
-  const mismatch = chargeableKg !== null && billedWeightKg !== chargeableKg;
-  return { text: String(billedWeightKg), mismatch };
-}
+export type { CarrierWeightCell } from './reconcile-cells';
+export { carrierWeightCell } from './reconcile-cells';
 
 /** Merge a status map (keyed by shipmentId) onto reconcile rows. */
 export function mergeStatus(
