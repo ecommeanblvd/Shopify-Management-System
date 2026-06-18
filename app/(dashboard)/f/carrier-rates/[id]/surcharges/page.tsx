@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { eq } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
+import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
   RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine, Box,
@@ -214,6 +217,34 @@ function formatValue(kind: SurchargeKind, raw: string, currency: string): string
   return `${VND_FMT.format(Math.round(n))} ${cur}`;
 }
 
+/** Friendly country name for an ISO-2 code: Intl first, then our table, then raw. */
+function countryDisplayName(iso: string): string {
+  const code = iso.toUpperCase();
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(code);
+    if (name && name !== code) return name;
+  } catch {
+    // Intl region lookup unavailable for this code — fall through.
+  }
+  const fallback = isoToCountryName(code);
+  return fallback && fallback !== '—' ? fallback : code;
+}
+
+/**
+ * Distinct served ISO codes for this carrier account, mapped to
+ * `{ iso, name }` options for the country-scope multi-select, sorted by name.
+ * Returns [] when the carrier has no zones yet (dialog falls back to free text).
+ */
+async function loadCountryOptions(accountId: string): Promise<{ iso: string; name: string }[]> {
+  const codes = await db
+    .selectDistinct({ code: schema.carrierZoneCountries.countryCode })
+    .from(schema.carrierZoneCountries)
+    .where(eq(schema.carrierZoneCountries.carrierAccountId, accountId));
+  return codes
+    .map((c) => ({ iso: c.code.toUpperCase(), name: countryDisplayName(c.code) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function createAction(accountId: string, kind: SurchargeKind, userId: string, formData: FormData) {
   'use server';
   const value = String(formData.get('value') ?? '');
@@ -224,6 +255,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
   const applyMode: 'always' | 'when_billed' | undefined =
     applyModeRaw === 'when_billed' ? 'when_billed' : applyModeRaw !== undefined ? 'always' : undefined;
   const excludedCountryCodes = kind === 'addon_fixed' ? formData.get('excludedCountryCodes') : null;
+  const startsAt = formData.get('startsAt');
   await createSurcharge(
     {
       carrierAccountId: accountId,
@@ -234,6 +266,7 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
       excludedCountryCodes: excludedCountryCodes !== null ? String(excludedCountryCodes) : undefined,
       note,
       applyMode,
+      startsAt: startsAt ? String(startsAt) : undefined,
     },
     userId,
   );
@@ -249,10 +282,12 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   const note = formData.get('note');
   const activeRaw = formData.get('active');
   const applyModeRaw = formData.get('applyMode');
+  const startsAt = formData.get('startsAt');
   const patch: {
     value?: string; valuePerKg?: string; countryCodes?: string; excludedCountryCodes?: string;
     note?: string; active?: boolean;
     applyMode?: 'always' | 'when_billed';
+    startsAt?: string;
   } = {};
   if (value !== null) patch.value = String(value);
   if (valuePerKg !== null) patch.valuePerKg = String(valuePerKg);
@@ -264,6 +299,7 @@ async function updateAction(accountId: string, id: string, userId: string, formD
   if (applyModeRaw !== null) {
     patch.applyMode = applyModeRaw === 'when_billed' ? 'when_billed' : 'always';
   }
+  if (startsAt !== null) patch.startsAt = String(startsAt);
   await updateSurcharge({ id, ...patch }, userId);
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
@@ -328,6 +364,8 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
 
   const canManage = hasPermission(role, 'manage_carrier_rates');
   const surcharges = await listSurcharges(id);
+  // Served-country options for the country-scope multi-select (per account).
+  const countryOptions = await loadCountryOptions(id);
 
   // Group by kind
   const byKind = new Map<SurchargeKind, SurchargeRow[]>();
@@ -381,6 +419,7 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
               currency={account.costCurrency}
               carrierKey={account.carrierKey}
               canManage={canManage}
+              countryOptions={countryOptions}
             />
           );
         })}
@@ -399,10 +438,12 @@ interface KindCardProps {
   /** Carrier brand (`'fedex'`, `'dhl'`, ...) — gates the auto-refresh button. */
   carrierKey: string | null | undefined;
   canManage: boolean;
+  /** Served-country options for the country-scope multi-select. */
+  countryOptions: { iso: string; name: string }[];
 }
 
 function KindCard({
-  kind, meta, list, accountId, userId, currency, carrierKey, canManage,
+  kind, meta, list, accountId, userId, currency, carrierKey, canManage, countryOptions,
 }: KindCardProps) {
   // packaging_fixed nhập theo USD ($); các phí khác theo cost currency.
   const kindCurrency = currencyFor(kind, currency);
@@ -525,6 +566,7 @@ function KindCard({
                 canManage={canManage}
                 accountId={accountId}
                 userId={userId}
+                countryOptions={countryOptions}
               />
             ))
           )}
@@ -600,6 +642,7 @@ function KindCard({
               valueDecimals={valueDecimals}
               perKgDecimals={perKgDecimals}
               countriesVisible={countriesVisible}
+              countryOptions={countryOptions}
               defaultValue=""
               defaultPerKgValue=""
               defaultNote=""
@@ -628,11 +671,12 @@ interface SurchargeSummaryRowProps {
   canManage: boolean;
   accountId: string;
   userId: string;
+  countryOptions: { iso: string; name: string }[];
 }
 
 function SurchargeSummaryRow({
   row, meta, unitSuffix, perKgUnitSuffix, valueDecimals, perKgDecimals, countriesVisible,
-  currency, canManage, accountId, userId,
+  currency, canManage, accountId, userId, countryOptions,
 }: SurchargeSummaryRowProps) {
   const perKgNumber = row.valuePerKg !== null ? Number(row.valuePerKg) : null;
   const hasPerKg = perKgNumber !== null && Number.isFinite(perKgNumber) && perKgNumber > 0;
@@ -719,8 +763,10 @@ function SurchargeSummaryRow({
           valueDecimals={valueDecimals}
           perKgDecimals={perKgDecimals}
           countriesVisible={countriesVisible}
+          countryOptions={countryOptions}
           defaultCountryCodes={row.countryCodes}
           defaultExcludedCountryCodes={row.excludedCountryCodes}
+          defaultStartsAt={row.startsAt ? row.startsAt.toISOString().slice(0, 10) : undefined}
           defaultValue={row.value}
           defaultPerKgValue={row.valuePerKg}
           defaultNote={row.note ?? ''}

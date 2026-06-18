@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Save, Trash2, Power } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Save, Trash2, Power, Check, X } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -40,6 +40,13 @@ export interface SurchargeEditDialogProps {
    *  whitespace-separated list of ISO-2 codes (e.g. "VN, TH, MY"). */
   countriesVisible?: boolean;
   defaultCountryCodes?: string[] | null;
+  /** Served-country options for the country-scope multi-select. When non-empty
+   *  (and `countriesVisible`), the free-text ISO box is replaced by a
+   *  searchable multi-select. When undefined/empty, falls back to free text. */
+  countryOptions?: { iso: string; name: string }[];
+  /** Effective-from date (ISO `YYYY-MM-DD`) to pre-fill on edit. Add mode
+   *  defaults to today. */
+  defaultStartsAt?: string;
   /** Server action: applied on Save. Form data carries value/note/active. */
   saveAction: (formData: FormData) => void | Promise<void>;
   /** Server action: applied on Remove. When undefined, the Remove button is hidden (add mode). */
@@ -60,12 +67,50 @@ export interface SurchargeEditDialogProps {
 export function SurchargeEditDialog({
   triggerLabel, title, description, unitSuffix, perKgUnitSuffix, defaultValue, defaultPerKgValue,
   defaultNote, defaultActive, tier, perKgVisible, valueDecimals, perKgDecimals,
-  countriesVisible, defaultCountryCodes,
+  countriesVisible, defaultCountryCodes, countryOptions, defaultStartsAt,
   saveAction, deleteAction,
   triggerVariant = 'outline-sm',
   kind, defaultApplyMode = 'always', defaultExcludedCountryCodes,
 }: SurchargeEditDialogProps) {
   const [open, setOpen] = useState(false);
+
+  // Country-scope multi-select state. Only used when `countriesVisible` AND
+  // `countryOptions` is non-empty; otherwise we fall back to the free-text box.
+  const hasCountryPicker = !!countriesVisible && !!countryOptions && countryOptions.length > 0;
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(
+    () => (defaultCountryCodes ?? []).map((c) => c.toUpperCase()),
+  );
+  const [countryQuery, setCountryQuery] = useState('');
+
+  // Today as YYYY-MM-DD for the effective-from default on Add.
+  const todayISO = useMemo(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, []);
+
+  const optionByIso = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of countryOptions ?? []) m.set(o.iso.toUpperCase(), o.name);
+    return m;
+  }, [countryOptions]);
+
+  const filteredOptions = useMemo(() => {
+    const q = countryQuery.trim().toLowerCase();
+    const opts = countryOptions ?? [];
+    if (!q) return opts;
+    return opts.filter(
+      (o) => o.name.toLowerCase().includes(q) || o.iso.toLowerCase().includes(q),
+    );
+  }, [countryOptions, countryQuery]);
+
+  function toggleCountry(iso: string) {
+    const up = iso.toUpperCase();
+    setSelectedCountries((prev) =>
+      prev.includes(up) ? prev.filter((c) => c !== up) : [...prev, up],
+    );
+  }
+
   return (
     <>
       {triggerVariant === 'ghost-add-row' ? (
@@ -118,6 +163,10 @@ export function SurchargeEditDialog({
               ) : (
                 <Input
                   name="value"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
                   defaultValue={defaultValue}
                   className="font-mono tabular-nums"
                   required
@@ -158,7 +207,85 @@ export function SurchargeEditDialog({
             </div>
           )}
 
-          {countriesVisible && (
+          {countriesVisible && hasCountryPicker && (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Country scope
+              </Label>
+              {/* Submitted value — comma-joined ISO codes. Empty = all destinations. */}
+              <input type="hidden" name="countryCodes" value={selectedCountries.join(',')} />
+
+              {/* Selected chips */}
+              {selectedCountries.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedCountries.map((iso) => (
+                    <span
+                      key={iso}
+                      className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
+                    >
+                      <span>{optionByIso.get(iso) ?? iso}</span>
+                      <span className="font-mono text-[10px] text-muted-foreground">{iso}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleCountry(iso)}
+                        className="rounded-full p-0.5 hover:bg-muted-foreground/20"
+                        aria-label={`Remove ${iso}`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Search box */}
+              <Input
+                value={countryQuery}
+                onChange={(e) => setCountryQuery(e.target.value)}
+                placeholder="Search country or ISO code…"
+                className="text-xs"
+              />
+
+              {/* Scrollable option list */}
+              <div className="max-h-40 overflow-auto rounded-md border border-border">
+                {filteredOptions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground italic">
+                    No matching country.
+                  </div>
+                ) : (
+                  filteredOptions.map((o) => {
+                    const iso = o.iso.toUpperCase();
+                    const checked = selectedCountries.includes(iso);
+                    return (
+                      <button
+                        key={iso}
+                        type="button"
+                        onClick={() => toggleCountry(iso)}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                      >
+                        <span
+                          className={
+                            'flex size-4 shrink-0 items-center justify-center rounded border ' +
+                            (checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
+                          }
+                        >
+                          {checked && <Check className="size-3" />}
+                        </span>
+                        <span className="flex-1 truncate">{o.name}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{iso}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Engine applies this surcharge only when the order&rsquo;s ship-to
+                country is selected. Leave empty to apply to every destination.
+              </p>
+            </div>
+          )}
+
+          {countriesVisible && !hasCountryPicker && (
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Country scope (ISO-2 codes)
@@ -221,6 +348,18 @@ export function SurchargeEditDialog({
               </p>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Ngày hiệu lực (effective from)
+            </Label>
+            <Input
+              name="startsAt"
+              type="date"
+              defaultValue={defaultStartsAt ?? todayISO}
+              className="font-mono tabular-nums"
+            />
+          </div>
 
           <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
             <div className="text-sm">

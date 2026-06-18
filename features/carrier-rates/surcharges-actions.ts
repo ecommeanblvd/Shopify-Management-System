@@ -96,6 +96,8 @@ export interface CreateSurchargeInput {
    * 'always' (default) → cộng vào mọi quote; 'when_billed' → tham chiếu đối soát.
    */
   applyMode?: 'always' | 'when_billed';
+  /** Effective-from date (ISO string). Parsed to a Date; null/omitted → no start. */
+  startsAt?: string | null;
 }
 
 function parseValue(raw: string, kind: SurchargeKind): number {
@@ -160,6 +162,7 @@ export async function createSurcharge(input: CreateSurchargeInput, userId: strin
       countryCodes: countries,
       excludedCountryCodes: excludedCountries,
       note: input.note?.trim() || null,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
       updatedBy: userId,
       applyMode: (input.kind === 'addon_fixed' || input.kind === 'country_fixed')
         ? (input.applyMode === 'when_billed' ? 'when_billed' : 'always')
@@ -182,6 +185,8 @@ export interface UpdateSurchargeInput {
   active?: boolean;
   /** Chế độ áp dụng — chỉ có nghĩa với kind='addon_fixed' hoặc 'country_fixed'. */
   applyMode?: 'always' | 'when_billed';
+  /** Pass an ISO date string to set effective-from; '' / null to clear; omit to leave unchanged. */
+  startsAt?: string | null;
 }
 
 export async function updateSurcharge(input: UpdateSurchargeInput, userId: string): Promise<void> {
@@ -211,6 +216,9 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
   }
   if (input.note !== undefined) patch.note = input.note.trim() || null;
   if (input.active !== undefined) patch.active = input.active;
+  if (input.startsAt !== undefined) {
+    patch.startsAt = input.startsAt ? new Date(input.startsAt) : null;
+  }
   if (input.applyMode !== undefined && (existing.kind === 'addon_fixed' || existing.kind === 'country_fixed')) {
     patch.applyMode = input.applyMode === 'when_billed' ? 'when_billed' : 'always';
   }
