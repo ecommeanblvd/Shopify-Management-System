@@ -52,6 +52,10 @@ export interface ImportSummary {
     /** Parse threw a hard error (shouldn't happen — surfaces here for
      *  the operator to inspect). */
     errors: Array<{ rowIndex: number; reason: string }>;
+    /** Tracking trong file đã thuộc 1 ĐƠN KHÁC trong DB (đụng tracking chéo
+     *  đơn/store — thường do nhập nhầm tracking). Giữ liên kết cũ, KHÔNG gộp;
+     *  flag để operator kiểm tra & sửa nguồn. */
+    tracking_conflicts: string[];
   };
   durationMs: number;
 }
@@ -83,7 +87,7 @@ function emptySummary(): ImportSummary {
       no_store_match: 0,
       no_country: 0,
     },
-    warnings: { orphan_orders: [], errors: [] },
+    warnings: { orphan_orders: [], errors: [], tracking_conflicts: [] },
     durationMs: 0,
   };
 }
@@ -175,6 +179,46 @@ async function resolveOrderIds(orderNumbers: readonly string[]): Promise<Map<str
 }
 
 /**
+ * Map tracking_number → (orderId, orderNumber) của shipment ĐÃ TỒN TẠI trong DB.
+ * Dùng để phát hiện đụng tracking chéo đơn khi import: nếu file gán tracking này
+ * cho 1 đơn khác → cảnh báo (không gộp âm thầm). `shipments.tracking_number`
+ * unique nên mỗi tracking có tối đa 1 shipment.
+ */
+async function resolveExistingShipmentOrders(
+  trackings: readonly string[],
+): Promise<Map<string, { orderId: string; orderNumber: string }>> {
+  if (trackings.length === 0) return new Map();
+  const rows = await db
+    .select({
+      tracking: schema.shipments.trackingNumber,
+      orderId: schema.shipments.orderId,
+      orderNumber: schema.shopifyOrders.shopifyOrderNumber,
+    })
+    .from(schema.shipments)
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
+    .where(inArray(schema.shipments.trackingNumber, [...trackings]));
+  const map = new Map<string, { orderId: string; orderNumber: string }>();
+  for (const r of rows) {
+    if (r.tracking) map.set(r.tracking, { orderId: r.orderId, orderNumber: r.orderNumber });
+  }
+  return map;
+}
+
+/**
+ * Cảnh báo đụng tracking chéo đơn (thuần, test được). Trả message nếu tracking
+ * đã thuộc 1 shipment của ĐƠN KHÁC trong DB; null nếu không có shipment cũ hoặc
+ * cùng đơn (re-import bình thường).
+ */
+export function trackingConflict(
+  tracking: string,
+  incoming: { orderId: string; orderNumber: string },
+  existing: { orderId: string; orderNumber: string } | undefined,
+): string | null {
+  if (!existing || existing.orderId === incoming.orderId) return null;
+  return `Tracking ${tracking}: file gán đơn ${incoming.orderNumber} nhưng tracking đã thuộc đơn ${existing.orderNumber} — GIỮ liên kết cũ, không gộp. Kiểm tra & sửa nguồn.`;
+}
+
+/**
  * Look up carrier_account_id for each carrier key, using the
  * single-account-per-key convention (FedEx + DHL = 1 contract each).
  */
@@ -250,11 +294,12 @@ export async function importLogExport(
   const uniqueStoreHandles = [...new Set(valid.map((v) => v.parsed.storeHandle))];
   const uniqueOrderNumbers = [...new Set(valid.map((v) => v.parsed.orderNumber))];
   const uniqueTrackings = [...new Set(valid.map((v) => v.parsed.trackingNumber))];
-  const [storeIds, orderIds, carrierIds, existingHashes] = await Promise.all([
+  const [storeIds, orderIds, carrierIds, existingHashes, existingShipOrders] = await Promise.all([
     resolveStoreIds(uniqueStoreHandles),
     resolveOrderIds(uniqueOrderNumbers),
     resolveCarrierAccountIds(),
     resolveExistingChargeHashes(uniqueTrackings),
+    resolveExistingShipmentOrders(uniqueTrackings),
   ]);
 
   // PHASE 3 — per-row upsert into shipments + shipment_charges.
@@ -274,6 +319,15 @@ export async function importLogExport(
       continue;
     }
     const carrierAccountId = carrierIds.get(parsed.carrier) ?? null;
+
+    // Đụng tracking chéo đơn: tracking đã thuộc shipment của ĐƠN KHÁC → flag.
+    // Không chặn import (upsert giữ liên kết cũ), chỉ cảnh báo để operator sửa nguồn.
+    const conflict = trackingConflict(
+      parsed.trackingNumber,
+      { orderId, orderNumber: parsed.orderNumber },
+      existingShipOrders.get(parsed.trackingNumber),
+    );
+    if (conflict) summary.warnings.tracking_conflicts.push(conflict);
 
     const newHash = hashCharge(parsed);
     const decision = classifyCharge(existingHashes.get(parsed.trackingNumber), newHash);

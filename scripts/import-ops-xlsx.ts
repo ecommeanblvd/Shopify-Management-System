@@ -55,6 +55,15 @@ async function main(): Promise<void> {
       process.stdout.write(`  row ${e.rowIndex + 2}: ${e.reason}\n`);
     }
   }
+  if (summary.warnings.tracking_conflicts.length > 0) {
+    process.stdout.write(`\n  --- ⚠ Đụng tracking chéo đơn (${summary.warnings.tracking_conflicts.length}) ---\n`);
+    for (const c of summary.warnings.tracking_conflicts.slice(0, 20)) {
+      process.stdout.write(`  ${c}\n`);
+    }
+    if (summary.warnings.tracking_conflicts.length > 20) {
+      process.stdout.write(`  … and ${summary.warnings.tracking_conflicts.length - 20} more\n`);
+    }
+  }
 }
 
 main()
