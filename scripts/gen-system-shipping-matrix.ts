@@ -300,7 +300,9 @@ async function main(): Promise<void> {
       for (const key of fedexKeys) {
         const b = fedexKeyUpper.get(key)!;
         const cq = fedexCcs.map((cc) => {
-          const q = quote(fedexSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          // Bake residential cho US/CA (giống engine: isResidential = US||CA) → giá
+          // manual phẳng đã gồm phí giao nhà dân, shop không bị gánh khi khách dùng Standard.
+          const q = quote(fedexSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now, isResidential: cc === 'US' || cc === 'CA' });
           return q.ok
             ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
             : { carrierCostDisplay: 0, finalDisplay: 0 };
@@ -316,7 +318,7 @@ async function main(): Promise<void> {
       for (const key of dhlKeys) {
         const b = dhlKeyUpper.get(key)!;
         const cq = dhlCcs.map((cc) => {
-          const q = quote(dhlSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          const q = quote(dhlSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now, isResidential: cc === 'US' || cc === 'CA' });
           return q.ok
             ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
             : { carrierCostDisplay: 0, finalDisplay: 0 };
