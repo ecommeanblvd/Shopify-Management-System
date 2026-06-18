@@ -31,7 +31,7 @@ export interface ProfilePushResult {
   error: string | null;
 }
 
-async function requireApplyPermission(): Promise<string> {
+export async function requireApplyPermission(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('unauthenticated');
   const role = await getRole(session.user.id);
@@ -39,13 +39,13 @@ async function requireApplyPermission(): Promise<string> {
   return session.user.id;
 }
 
-async function loadStore(storeId: string) {
+export async function loadStore(storeId: string) {
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
   if (!store) throw new Error(`Store ${storeId} not found`);
   return store;
 }
 
-async function readProfiles(store: { id: string; shopDomain: string; apiVersion: string }): Promise<ProfileSummary[]> {
+export async function readProfiles(store: { id: string; shopDomain: string; apiVersion: string }): Promise<ProfileSummary[]> {
   const token = await getStoreToken(store.id);
   const raw = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_QUERY });
   if ((raw as { errors?: unknown }).errors) throw new Error(`Shopify: ${JSON.stringify((raw as { errors?: unknown }).errors).slice(0, 200)}`);

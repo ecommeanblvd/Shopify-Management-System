@@ -15,7 +15,7 @@ import { buildSystemZoneView } from '@/features/carrier-rates/zone-matrix';
 import { listZonesWithCountries, type ZoneWithCountries } from '@/features/carrier-rates/zones-actions';
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { PushToShopify } from '@/components/functions/PushToShopify';
-import { pushShippingToStores } from '@/features/carrier-rates/push-orchestrator';
+import { pushShippingStep } from '@/features/carrier-rates/push-step';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,7 +75,7 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
         </div>
         {canApply && stores.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <PushToShopify stores={stores.map((s) => ({ id: s.id, name: s.name }))} onPush={pushShippingToStores} />
+            <PushToShopify stores={stores.map((s) => ({ id: s.id, name: s.name }))} onPushStep={pushShippingStep} />
           </div>
         )}
       </div>
