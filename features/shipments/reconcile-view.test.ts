@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { mergeStatus, netBase, type StatusRecord } from './reconcile-view';
+import { mergeStatus, netBase, carrierWeightCell, type StatusRecord } from './reconcile-view';
 import type { ReconcileRow } from './reconcile';
 
 function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
   return {
     shipmentId: 's1', trackingNumber: 't1', orderNumber: '#1', storeName: 'S',
-    carrierKey: 'fedex', shipCountry: 'SA', shipCity: null, shipPostcode: null, addrClass: null, addrDeliverable: null, addrIssue: null, shopifyWeightKg: 1, weightKg: 1, chargeableKg: 1, labelDate: null,
+    carrierKey: 'fedex', shipCountry: 'SA', shipCity: null, shipPostcode: null, addrClass: null, addrDeliverable: null, addrIssue: null, shopifyWeightKg: 1, weightKg: 1, chargeableKg: 1, billedWeightKg: null, labelDate: null,
     billedTotal: 2_388_966, billedBase: 5_079_100, billedFuel: 513_729,
     billedRemote: 550_000, billedDemand: 71_000, billedSignature: 0, billedResidential: 0, billedAddressCorrection: 0, residentialClass: null,
     billedVat: 176_960, billedGogreen: null, billedNonConveyable: null, billedDiscount: -4_001_823,
@@ -155,5 +155,23 @@ describe('mergeStatus', () => {
   it('không flag demandUncovered khi engine chưa tính được (no rate card / no ship date)', () => {
     const [r] = mergeStatus([row({ engineTotal: null, billedDemand: 32_000, engineDemand: null })], new Map());
     expect(r.demandUncovered).toBe(false);
+  });
+});
+
+describe('carrierWeightCell', () => {
+  it('null billed weight → "—", không lệch', () => {
+    expect(carrierWeightCell(null, 2)).toEqual({ text: '—', mismatch: false });
+  });
+  it('bằng chargeable → hiện số, không lệch', () => {
+    expect(carrierWeightCell(2.5, 2.5)).toEqual({ text: '2.5', mismatch: false });
+  });
+  it('khác chargeable → hiện số, có lệch', () => {
+    expect(carrierWeightCell(2.5, 2)).toEqual({ text: '2.5', mismatch: true });
+  });
+  it('chargeable null → hiện số, không lệch (không có gì để so)', () => {
+    expect(carrierWeightCell(2.5, null)).toEqual({ text: '2.5', mismatch: false });
+  });
+  it('0 là hợp lệ, không phải "—"', () => {
+    expect(carrierWeightCell(0, 0)).toEqual({ text: '0', mismatch: false });
   });
 });
