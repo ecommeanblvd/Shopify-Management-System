@@ -43,10 +43,10 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
   const coverage: Record<string, FeeCoverageResult> = {};
   for (const a of carrierAccts) {
     const surs = await db
-      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value, stepKg: schema.carrierSurcharges.stepKg, startsAt: schema.carrierSurcharges.startsAt, endsAt: schema.carrierSurcharges.endsAt })
+      .select({ kind: schema.carrierSurcharges.kind, active: schema.carrierSurcharges.active, applyMode: schema.carrierSurcharges.applyMode, value: schema.carrierSurcharges.value, stepKg: schema.carrierSurcharges.stepKg, startsAt: schema.carrierSurcharges.startsAt, endsAt: schema.carrierSurcharges.endsAt, countryCodes: schema.carrierSurcharges.countryCodes })
       .from(schema.carrierSurcharges)
       .where(eq(schema.carrierSurcharges.carrierAccountId, a.id));
-    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
+    if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt, countryCodes: s.countryCodes as string[] | null })) as never, a.name);
   }
 
   // Cảnh báo "fuel nhảy khung": engine dùng fuel LIVE nhưng giá manual ghim theo

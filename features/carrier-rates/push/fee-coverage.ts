@@ -54,6 +54,15 @@ export function classifyFeeCoverage(
     const total = live.filter((s) => s.kind === kind).reduce((sum, s) => sum + s.value, 0);
     return total > 0 ? `${Math.round(total * 100) / 100}%` : '';
   };
+  // Markup là OVERRIDE theo nước (không cộng dồn): hiện mức MẶC ĐỊNH (countryCodes
+  // rỗng) + ghi chú nếu có mức riêng theo nước. Tránh hiện sai kiểu "15%+10%=25%".
+  const markupDetail = (): string => {
+    const rows = live.filter((s) => s.kind === 'markup_percent');
+    const def = rows.filter((s) => !s.countryCodes || s.countryCodes.length === 0).reduce((sum, s) => sum + s.value, 0);
+    const perCountry = rows.some((s) => s.countryCodes && s.countryCodes.length > 0);
+    const base = def > 0 ? `${Math.round(def * 100) / 100}% (mặc định)` : '';
+    return perCountry ? `${base} · có mức riêng theo nước` : base;
+  };
 
   const fuelPercent = fuelPercentToday(surcharges, now);
 
@@ -69,7 +78,7 @@ export function classifyFeeCoverage(
   if (has('residential_fixed')) covered.push({ label: 'Giao địa chỉ nhà — residential', detail: `${moneyRange('residential_fixed')} (US/CA)` });
   if (has('addon_fixed', 'always')) covered.push({ label: 'Dịch vụ bổ sung tự áp (ký nhận)', detail: moneyRange('addon_fixed', 'always') });
   if (has('peak_fixed')) covered.push({ label: 'Phụ phí cao điểm (peak)', detail: moneyRange('peak_fixed') });
-  if (has('markup_percent')) covered.push({ label: 'Markup (lợi nhuận)', detail: pctOf('markup_percent') });
+  if (has('markup_percent')) covered.push({ label: 'Markup (lợi nhuận)', detail: markupDetail() });
   if (has('vat_percent')) covered.push({ label: 'VAT', detail: pctOf('vat_percent') });
 
   const notCovered: FeeItem[] = [];
