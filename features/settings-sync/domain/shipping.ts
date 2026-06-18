@@ -360,7 +360,7 @@ const BAND_LOWER_OFFSET_KG = 0.01;
 /** Điều kiện cân cho Shopify: rate chỉ hiện khi cân giỏ ∈ (lower, upper]. Bậc đầu
  *  (lower=0) bỏ điều kiện cận dưới (luôn đúng). Cận dưới +offset để không chồng
  *  với bậc trước tại biên (vd cân 2.0kg chỉ khớp "1.5-2", không khớp "2-2.5"). */
-function weightConditionsFromName(rateName: string): unknown[] {
+export function weightConditionsFromName(rateName: string): unknown[] {
   const b = parseWeightBand(rateName);
   if (!b) return [];
   const conds: unknown[] = [];
