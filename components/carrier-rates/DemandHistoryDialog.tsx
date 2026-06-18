@@ -23,7 +23,16 @@ export interface DemandHistoryEntry {
  * "Xem toàn bộ lịch sử" cho mục Demand surcharge. Trang chỉ hiện 5 mức gần nhất
  * inline; modal này liệt kê MỌI mức (mọi vùng/kỳ) từ mới → cũ, cuộn được.
  */
-export function DemandHistoryDialog({ count, rows }: { count: number; rows: DemandHistoryEntry[] }) {
+export function DemandHistoryDialog({
+  count,
+  rows,
+  title = 'Lịch sử phụ phí Demand',
+}: {
+  count: number;
+  rows: DemandHistoryEntry[];
+  /** Tiêu đề modal — mặc định giữ nguyên cho Demand; truyền khác để tái dùng (vd Markup). */
+  title?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -38,7 +47,7 @@ export function DemandHistoryDialog({ count, rows }: { count: number; rows: Dema
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Lịch sử phụ phí Demand</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{count} mức phí theo vùng/kỳ, mới nhất ở trên.</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1">
