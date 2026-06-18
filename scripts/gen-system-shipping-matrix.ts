@@ -24,6 +24,7 @@ import { eq, ilike, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
+import { fuelBandMidpoint } from '@/features/carrier-rates/fuel-band';
 import { fedexOfferPrice } from '@/features/markets/domain/fedex-offer-pricing';
 import type { ShippingRate, ShippingZone, MarketShipping } from '@/features/markets/types';
 
@@ -197,6 +198,21 @@ async function main(): Promise<void> {
   if (!fedexSnap) throw new Error('Không load được FedEx snapshot.');
   if (!dhlSnap) throw new Error('Không load được DHL snapshot.');
 
+  // Pin fuel về MỐC GIỮA khung 5% → giá manual ổn định trong khung (chỉ sinh lại
+  // khi fuel nhảy khung). Engine vẫn dùng fuel LIVE (không qua đây).
+  const pinFuel = (snap: NonNullable<typeof fedexSnap>, when: Date) => {
+    const eff = snap.surcharges.find((s) => s.kind === 'fuel_percent' && s.active
+      && (s.startsAt == null || s.startsAt <= when) && (s.endsAt == null || s.endsAt > when));
+    const mid = eff ? fuelBandMidpoint(eff.value) : null;
+    if (mid == null) return { snap, mid: null as number | null };
+    return { snap: { ...snap, surcharges: snap.surcharges.map((s) => s.kind === 'fuel_percent' ? { ...s, value: mid } : s) }, mid };
+  };
+  const fedexPin = pinFuel(fedexSnap, now);
+  const dhlPin = pinFuel(dhlSnap, now);
+  const fedexSnapPinned = fedexPin.snap;
+  const dhlSnapPinned = dhlPin.snap;
+  console.log(`Fuel pin (mốc-giữa khung): FedEx ${fedexPin.mid}% · DHL ${dhlPin.mid}%`);
+
   // ── 4) Vũ trụ nước = MỌI key của fedexZoneOf. Gom theo (fz, dz) ──────────
   // Vu tru nuoc = UNION(FedEx zone, DHL zone).
   const universe = new Set<string>([...fedexZoneOf.keys(), ...dhlZoneOf.keys()]);
@@ -275,7 +291,7 @@ async function main(): Promise<void> {
       for (const key of fedexKeys) {
         const b = fedexKeyUpper.get(key)!;
         const cq = fedexCcs.map((cc) => {
-          const q = quote(fedexSnap, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          const q = quote(fedexSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now });
           return q.ok
             ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
             : { carrierCostDisplay: 0, finalDisplay: 0 };
@@ -291,7 +307,7 @@ async function main(): Promise<void> {
       for (const key of dhlKeys) {
         const b = dhlKeyUpper.get(key)!;
         const cq = dhlCcs.map((cc) => {
-          const q = quote(dhlSnap, { destinationCountry: cc, weightKg: b, effectiveDate: now });
+          const q = quote(dhlSnapPinned, { destinationCountry: cc, weightKg: b, effectiveDate: now });
           return q.ok
             ? { carrierCostDisplay: q.breakdown.carrierCostDisplay, finalDisplay: q.breakdown.finalDisplay }
             : { carrierCostDisplay: 0, finalDisplay: 0 };
@@ -451,6 +467,13 @@ async function main(): Promise<void> {
         shipping: { zones },
         version: 1,
       });
+      // Ghi khung fuel đã dùng (mốc-giữa) → banner cảnh báo khi fuel nhảy khung.
+      for (const [acctId, mid] of [[FEDEX, fedexPin.mid], [dhlAccount.id, dhlPin.mid]] as const) {
+        if (mid == null) continue;
+        await tx.insert(schema.manualPricingState)
+          .values({ carrierAccountId: acctId, fuelBandMid: String(mid), generatedAt: new Date() })
+          .onConflictDoUpdate({ target: schema.manualPricingState.carrierAccountId, set: { fuelBandMid: String(mid), generatedAt: new Date() } });
+      }
     });
     console.log(`\n*** ĐÃ GHI: xoá toàn bộ manual_shipping_config + INSERT 1 dòng 'system' (${zoneNames.length} zone). ***`);
   } else {
