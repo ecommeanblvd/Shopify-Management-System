@@ -29,7 +29,7 @@ const SHIPPING_ADAPTER: DomainAdapter = {
   },
   buildMutation: (current, effective) => {
     const input = denormalizeToMutationInput(
-      { tree: current.tree as never, shopifyIds: current.shopifyIds as never },
+      { tree: current.tree as never, shopifyIds: current.shopifyIds as never, bandRates: {} },
       effective as never,
     );
     return { mutation: SHIPPING_MUTATION, variables: { id: input.profileId, profile: input } };

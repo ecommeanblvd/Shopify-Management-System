@@ -252,6 +252,7 @@ describe('buildCleanRebuildVariables', () => {
       zoneIdByName: { 'Zone G': 'gid://zone/G', 'VN nội địa': 'gid://zone/VN' },
       rateIdByZoneAndName: {},
     },
+    bandRates: {},
   };
   const systemTree: ShippingTree = { zones: {
     GC1: { countries: ['HK'], rates: { 'FedEx IP (1.5–2 kg)': { type: 'flat', price: 30, currency: 'USD' } } },
@@ -279,6 +280,7 @@ describe('buildCleanRebuildVariables', () => {
     const cur: NormalizedShipping = {
       tree: { zones: {} },
       shopifyIds: { profileId: 'gid://p', locationGroupId: 'gid://lg', zoneIdByName: {}, rateIdByZoneAndName: {} },
+      bandRates: {},
     };
     const tree: ShippingTree = { zones: {
       ME1: { countries: ['AE', 'SY'], rates: { 'FedEx IP (0–0.5 kg)': { type: 'flat', price: 50, currency: 'USD' } } },
