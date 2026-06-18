@@ -36,6 +36,9 @@ export interface ReconcileRow {
   /** Weight the engine actually priced: max(actual, dim) after carrier
    *  rounding. NULL when the engine produced no quote. */
   chargeableKg: number | null;
+  /** Cân carrier THẬT tính phí trên hoá đơn (shipment_charges.billing_weight_kg,
+   *  nguồn FBO/DHL). NULL khi chưa import hoá đơn carrier cho shipment này. */
+  billedWeightKg: number | null;
   labelDate: Date | null;
   // Billed
   billedTotal: number;
@@ -149,6 +152,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       billedDiscount: schema.shipmentCharges.discount,
       billedElevatedRisk: schema.shipmentCharges.elevatedRisk,
       billedImportHandling: schema.shipmentCharges.importHandling,
+      billedWeightKg: schema.shipmentCharges.billingWeightKg,
       // order
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipCountry: schema.shopifyOrders.shipCountry,
@@ -419,6 +423,7 @@ interface JoinedRow {
   billedDiscount: string | null;
   billedElevatedRisk: string | null;
   billedImportHandling?: string | null;
+  billedWeightKg?: string | null;
 }
 
 interface EngineBreakdown {
@@ -509,6 +514,7 @@ function buildRow(
     shopifyWeightKg: r.shopifyWeightKg != null ? Number(r.shopifyWeightKg) : null,
     weightKg: r.actualWeightKg !== null ? Number(r.actualWeightKg) : null,
     chargeableKg: engine?.chargeableWeightKg ?? null,
+    billedWeightKg: r.billedWeightKg != null ? Number(r.billedWeightKg) : null,
     labelDate: r.labelCreatedAt,
     billedTotal,
     billedBase: r.billedBase !== null ? Number(r.billedBase) : null,

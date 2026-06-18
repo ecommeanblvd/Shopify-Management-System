@@ -65,6 +65,9 @@ export function netBase(base: number | null, discount: number | null): number | 
   return base + (discount ?? 0);
 }
 
+export type { CarrierWeightCell } from './reconcile-cells';
+export { carrierWeightCell } from './reconcile-cells';
+
 /** Merge a status map (keyed by shipmentId) onto reconcile rows. */
 export function mergeStatus(
   rows: ReconcileRow[],
