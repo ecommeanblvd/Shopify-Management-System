@@ -17,9 +17,8 @@ import { buildParticipant, isVnZone } from './push-engine/plan';
 import { engineParticipantIdsToReplace } from './push-engine/participant-ids';
 import { registerCarrierService } from './carrier-service-actions';
 
-// Engine paginated read + update (copy verbatim — must match existing engine push).
+// Engine paginated read (zone list). Update dùng chung SHIPPING_MUTATION qua send().
 const ZONE_Q = `query($id:ID!,$after:String){deliveryProfile(id:$id){profileLocationGroups{locationGroup{id} locationGroupZones(first:5,after:$after){pageInfo{hasNextPage endCursor} edges{node{zone{id name countries{code{countryCode restOfWorld}}} methodDefinitions(first:250){edges{node{id rateProvider{__typename}}}}}}}}}}`;
-const MUT = `mutation($id:ID!,$p:DeliveryProfileInput!){deliveryProfileUpdate(id:$id,profile:$p){userErrors{field message}}}`;
 
 export type PushCursor =
   | { phase: 'manual-delete' }
@@ -243,20 +242,12 @@ export async function pushShippingStep(
       const countries = z.zone.countries.map((c) => c.code);
       if (isVnZone(countries)) continue;
       const oldIds = engineParticipantIdsToReplace(z.methodDefinitions.edges);
-      const res = await graphqlCall({
-        shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: MUT,
-        variables: {
-          id: p.profileId,
-          p: { methodDefinitionsToDelete: oldIds, locationGroupsToUpdate: [{ id: lgId2, zonesToUpdate: [{ id: z.zone.id, methodDefinitionsToCreate: [{ name: 'Engine Carrier Rates', active: true, participant }] }] }] },
-        },
+      // Dùng send() (có retry 5xx) — SHIPPING_MUTATION nhận methodDefinitionsToDelete
+      // + locationGroupsToUpdate; `id` trong send = profileId (cùng default profile).
+      const err = await send({
+        methodDefinitionsToDelete: oldIds,
+        locationGroupsToUpdate: [{ id: lgId2, zonesToUpdate: [{ id: z.zone.id, methodDefinitionsToCreate: [{ name: 'Engine Carrier Rates', active: true, participant }] }] }],
       });
-      let err: string | null = null;
-      if ((res as { errors?: unknown }).errors) {
-        err = JSON.stringify((res as { errors?: unknown }).errors).slice(0, 200);
-      } else {
-        const ue = (res.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
-        err = ue && ue.length ? ue.map((u) => u.message).join('; ') : null;
-      }
       if (err) {
         return {
           done: true, cursor: null,
