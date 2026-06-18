@@ -7,6 +7,7 @@ import {
   SHIPPING_QUERY, SHIPPING_MUTATION,
   normalizeAllDeliveryProfiles, buildCleanRebuildVariables,
 } from '@/features/settings-sync/domain/shipping';
+import { buildSystemUpdatePlan, isUpdateOnly, buildUpdateMutationProfile, type SystemUpdatePlan } from './push/system-update-diff';
 import {
   requireApplyPermission, loadStore, readProfiles,
   previewSystemShippingToProfiles,
@@ -22,6 +23,7 @@ const ZONE_Q = `query($id:ID!,$after:String){deliveryProfile(id:$id){profileLoca
 
 export type PushCursor =
   | { phase: 'manual-delete' }
+  | { phase: 'manual-update'; updateStart: number }
   | { phase: 'manual-create'; zoneStart: number }
   | { phase: 'engine'; shopCursor: string | null; csId: string };
 
@@ -133,7 +135,10 @@ export async function pushShippingStep(
   // ── Initial cursor — decide first phase.
   if (cursor === null) {
     if (plan.manualSourcePrefixes.length > 0) {
-      cursor = { phase: 'manual-delete' };
+      const updatePlan = buildSystemUpdatePlan(p.normalized, manualTree);
+      cursor = isUpdateOnly(updatePlan)
+        ? { phase: 'manual-update', updateStart: 0 }
+        : { phase: 'manual-delete' };
     } else if (plan.engineCarriers.length) {
       const { carrierServiceId } = await registerCarrierService(store.id);
       cursor = { phase: 'engine', shopCursor: null, csId: carrierServiceId };
@@ -144,6 +149,48 @@ export async function pushShippingStep(
         result: { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] },
       };
     }
+  }
+
+  // ── phase 'manual-update' — store khớp cấu trúc: update giá tại chỗ, KHÔNG xoá zone.
+  if (cursor.phase === 'manual-update') {
+    const updatePlan: SystemUpdatePlan = buildSystemUpdatePlan(p.normalized, manualTree);
+    // Snapshot backup trước khi ghi (giống manual-delete).
+    if (cursor.updateStart === 0) {
+      const snapshotPayload = [{ profileId: p.profileId, name: p.name, normalized: p.normalized }];
+      await db.insert(schema.settingsSnapshots).values({
+        storeId, domain: 'shipping_system', payload: snapshotPayload as object,
+        payloadHash: hashPayload(snapshotPayload), capturedBy: userId,
+      });
+    }
+    const zoneChunk = updatePlan.zoneUpdates.slice(cursor.updateStart, cursor.updateStart + BATCH);
+    const dels = cursor.updateStart === 0 ? updatePlan.rateDeletes : [];
+    if (zoneChunk.length || dels.length) {
+      // rateDeletes chỉ gửi 1 lần (ở chunk đầu) để tránh xoá lặp.
+      const profile = buildUpdateMutationProfile(lgId, zoneChunk, dels);
+      const err = await send(profile);
+      if (err) {
+        return {
+          done: true, cursor: null,
+          progress: { phase: 'Cập nhật giá', current: cursor.updateStart, total: updatePlan.zoneUpdates.length },
+          result: { storeId, zoneCreated: 0, rateOps: updatePlan.counts.updates, engineZones: 0, errors: [`${p.name}: ${err}`] },
+        };
+      }
+    }
+    const nextStart = cursor.updateStart + BATCH;
+    let nextCursor: PushCursor | null;
+    if (nextStart < updatePlan.zoneUpdates.length) {
+      nextCursor = { phase: 'manual-update', updateStart: nextStart };
+    } else if (plan.engineCarriers.length) {
+      const { carrierServiceId } = await registerCarrierService(store.id);
+      nextCursor = { phase: 'engine', shopCursor: null, csId: carrierServiceId };
+    } else {
+      nextCursor = null;
+    }
+    return {
+      done: nextCursor === null, cursor: nextCursor,
+      progress: { phase: 'Cập nhật giá', current: Math.min(nextStart, updatePlan.zoneUpdates.length), total: updatePlan.zoneUpdates.length },
+      result: { storeId, zoneCreated: 0, rateOps: updatePlan.counts.updates, engineZones: 0, errors: [] },
+    };
   }
 
   // ── phase 'manual-delete' — snapshot then delete all system zones in batches of 5.

@@ -19,9 +19,32 @@ export interface ShopifyIds {
   rateIdByZoneAndName: Record<string, string>; // key: "<zoneName>.<rateName>"
 }
 
+export interface WeightCondition {
+  field: string;
+  operator: string;
+  conditionCriteria?: { __typename?: string; value?: number; unit?: string };
+}
+
+export interface BandRate { id: string; price: number; currency: string }
+export type BandRateMap = Record<string, BandRate>;
+
+/** Upper band (kg) = value của điều kiện LESS_THAN_OR_EQUAL_TO; không có → 'flat'.
+ *  Làm tròn 3 chữ số để khớp ổn định (tránh lệch dấu phẩy động). */
+export function upperBandFromConditions(conds: WeightCondition[] | undefined): string {
+  const upper = (conds ?? []).find(
+    (c) => c.field === 'TOTAL_WEIGHT' && c.operator === 'LESS_THAN_OR_EQUAL_TO',
+  )?.conditionCriteria?.value;
+  return typeof upper === 'number' ? String(Math.round(upper * 1000) / 1000) : 'flat';
+}
+
+export function bandKeyOf(zoneName: string, mappedName: string, upper: string): string {
+  return `${zoneName}.${mappedName}.${upper}`;
+}
+
 export interface NormalizedShipping {
   tree: ShippingTree;
   shopifyIds: ShopifyIds;
+  bandRates: BandRateMap;
 }
 
 /** Fetch query — caller passes this to the read connector. */
@@ -59,6 +82,14 @@ export const SHIPPING_QUERY = `
                             price { amount currencyCode }
                           }
                         }
+                        methodConditions {
+                          field
+                          operator
+                          conditionCriteria {
+                            __typename
+                            ... on Weight { value unit }
+                          }
+                        }
                       }
                     }
                   }
@@ -94,6 +125,7 @@ interface ShopifyProfileNode {
                   __typename: string;
                   price?: { amount: string; currencyCode: string };
                 };
+                methodConditions?: WeightCondition[];
               };
             }>;
           };
@@ -118,6 +150,7 @@ function normalizeProfileNode(node: ShopifyProfileNode): NormalizedShipping {
     zoneIdByName: {},
     rateIdByZoneAndName: {},
   };
+  const bandRates: BandRateMap = {};
 
   for (const lg of node.profileLocationGroups ?? []) {
     for (const zoneEdge of lg.locationGroupZones?.edges ?? []) {
@@ -132,6 +165,10 @@ function normalizeProfileNode(node: ShopifyProfileNode): NormalizedShipping {
         if (rp?.__typename === 'DeliveryRateDefinition' && rp.price) {
           rates[m.name] = { type: 'flat', price: Number(rp.price.amount), currency: rp.price.currencyCode };
           shopifyIds.rateIdByZoneAndName[`${zoneName}.${m.name}`] = m.id;
+          const upper = upperBandFromConditions(m.methodConditions);
+          bandRates[bandKeyOf(zoneName, m.name, upper)] = {
+            id: m.id, price: Number(rp.price.amount), currency: rp.price.currencyCode,
+          };
         }
       }
 
@@ -141,7 +178,7 @@ function normalizeProfileNode(node: ShopifyProfileNode): NormalizedShipping {
       };
     }
   }
-  return { tree, shopifyIds };
+  return { tree, shopifyIds, bandRates };
 }
 
 export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShipping {
@@ -149,7 +186,7 @@ export function normalizeShopifyDeliveryProfile(data: unknown): NormalizedShippi
   const edges = typed?.deliveryProfiles?.edges ?? [];
   const defaultProfileNode = edges.find((p) => p.node.default)?.node ?? edges[0]?.node;
   if (!defaultProfileNode) {
-    return { tree: { zones: {} }, shopifyIds: { profileId: '', locationGroupId: '', zoneIdByName: {}, rateIdByZoneAndName: {} } };
+    return { tree: { zones: {} }, shopifyIds: { profileId: '', locationGroupId: '', zoneIdByName: {}, rateIdByZoneAndName: {} }, bandRates: {} };
   }
   return normalizeProfileNode(defaultProfileNode);
 }
@@ -323,7 +360,7 @@ const BAND_LOWER_OFFSET_KG = 0.01;
 /** Điều kiện cân cho Shopify: rate chỉ hiện khi cân giỏ ∈ (lower, upper]. Bậc đầu
  *  (lower=0) bỏ điều kiện cận dưới (luôn đúng). Cận dưới +offset để không chồng
  *  với bậc trước tại biên (vd cân 2.0kg chỉ khớp "1.5-2", không khớp "2-2.5"). */
-function weightConditionsFromName(rateName: string): unknown[] {
+export function weightConditionsFromName(rateName: string): unknown[] {
   const b = parseWeightBand(rateName);
   if (!b) return [];
   const conds: unknown[] = [];
@@ -436,7 +473,7 @@ export function buildProfileUpdateVariables(
 // config). Gồm: (1) lãnh thổ không phải country-code riêng trên Shopify — US
 // territories (PR,GU,VI,AS,MP) + đảo TBD (FM,MH,PW) [PR/GU/VI/AS/MP ship qua zone
 // US]; (2) nước cấm vận Shopify chặn shipping (SY,CU,IR,KP) dù có trong enum.
-const SHOPIFY_UNSUPPORTED_COUNTRIES = new Set([
+export const SHOPIFY_UNSUPPORTED_COUNTRIES = new Set([
   'AS', 'FM', 'GU', 'MH', 'MP', 'PR', 'PW', 'VI',
   'SY', 'CU', 'IR', 'KP',
 ]);
