@@ -111,6 +111,25 @@ export async function pushShippingStep(
     return lastErr;
   };
 
+  // READ có retry transient — như send() nhưng cho query đọc. graphqlCall giờ ném
+  // lỗi rõ ràng (kèm 502/gateway) khi Shopify trả non-JSON, nên các read nặng
+  // (re-fetch profile, list zone engine) không còn crash cả action: retry 5xx,
+  // hết lượt thì ném lỗi sạch để call-site gói thành error result.
+  const read = async (query: string, variables?: Record<string, unknown>): Promise<{ data: unknown; errors?: unknown }> => {
+    let lastErr = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await sleep(250 * attempt);
+      try {
+        return await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query, variables });
+      } catch (e) {
+        lastErr = (e as Error).message;
+        if (TRANSIENT.test(lastErr)) continue;
+        throw e;
+      }
+    }
+    throw new Error(lastErr || 'Shopify read failed');
+  };
+
   // ── Initial cursor — decide first phase.
   if (cursor === null) {
     if (plan.manualSourcePrefixes.length > 0) {
@@ -176,7 +195,16 @@ export async function pushShippingStep(
 
     // Top up zones with >CHUNK defs — re-fetch to get zone ids by name.
     if (batch.some((z) => ((z.methodDefinitionsToCreate ?? []) as unknown[]).length > CHUNK)) {
-      const raw = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: SHIPPING_QUERY });
+      let raw: { data: unknown; errors?: unknown };
+      try {
+        raw = await read(SHIPPING_QUERY);
+      } catch (e) {
+        return {
+          done: true, cursor: null,
+          progress: { phase: 'Tạo zone', current: zoneStart + zoneCreated, total: creates.length },
+          result: { storeId, zoneCreated, rateOps, engineZones: 0, errors: [`${p.name}: ${(e as Error).message}`] },
+        };
+      }
       const refreshed = normalizeAllDeliveryProfiles(raw.data).find((x) => x.profileId === p.profileId);
       const idByName = refreshed?.normalized.shopifyIds.zoneIdByName ?? {};
       for (const z of batch) {
@@ -223,7 +251,16 @@ export async function pushShippingStep(
   // ── phase 'engine' — fetch ONE page of zones and attach engine participant.
   {
     const { shopCursor, csId } = cursor;
-    const q = await graphqlCall({ shopDomain: store.shopDomain, apiVersion: store.apiVersion, token, query: ZONE_Q, variables: { id: p.profileId, after: shopCursor } });
+    let q: { data: unknown; errors?: unknown };
+    try {
+      q = await read(ZONE_Q, { id: p.profileId, after: shopCursor });
+    } catch (e) {
+      return {
+        done: true, cursor: null,
+        progress: { phase: 'Gắn engine', current: 0, total: 0 },
+        result: { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [`${p.name}: ${(e as Error).message}`] },
+      };
+    }
     const lg = (q.data as { deliveryProfile?: { profileLocationGroups?: Array<{ locationGroup: { id: string }; locationGroupZones: EngineConn }> } })?.deliveryProfile?.profileLocationGroups?.[0];
     if (!lg) {
       return {
