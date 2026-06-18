@@ -215,12 +215,18 @@ async function main(): Promise<void> {
 
   // ── 4) Vũ trụ nước = MỌI key của fedexZoneOf. Gom theo (fz, dz) ──────────
   // Vu tru nuoc = UNION(FedEx zone, DHL zone).
+  // Nước TÁCH RIÊNG zone (nhiều phí phát sinh riêng → không gộp chung với nước
+  // cùng (fz,dz)). vd US nhiều phí hơn MX/CA dù cùng FedEx Zone D / DHL Zone 7.
+  const SOLO_COUNTRIES = new Set(['US']);
   const universe = new Set<string>([...fedexZoneOf.keys(), ...dhlZoneOf.keys()]);
   const groups = new Map<string, { fz: string | null; dz: string | null; ccs: string[] }>();
   for (const cc of universe) {
     const fz = fedexZoneOf.get(cc) ?? null;
     const dz = dhlZoneOf.get(cc) ?? null;
-    const k = `${fz ?? 'none'}||${dz ?? 'none'}`;
+    // SOLO → key kèm mã nước → zone riêng cho nước đó; còn lại gộp theo (fz,dz).
+    const k = SOLO_COUNTRIES.has(cc)
+      ? `${fz ?? 'none'}||${dz ?? 'none'}||SOLO:${cc}`
+      : `${fz ?? 'none'}||${dz ?? 'none'}`;
     const g = groups.get(k) ?? { fz, dz, ccs: [] };
     g.ccs.push(cc);
     groups.set(k, g);
@@ -267,7 +273,10 @@ async function main(): Promise<void> {
   }
   const seenNames = new Set<string>();
   for (const [region, gs] of [...byRegion.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    gs.sort((a, b) => fzdzLabel(a).localeCompare(fzdzLabel(b)));
+    gs.sort((a, b) => fzdzLabel(a).localeCompare(fzdzLabel(b))
+      // Tiebreak khi cùng (fz,dz) (vd zone SOLO US vs MX/CA): theo danh sách nước
+      // → tên duy nhất & xác định.
+      || a.ccs.slice().sort().join(',').localeCompare(b.ccs.slice().sort().join(',')));
     for (const g of gs) {
       const seq = (seqByRegion.get(region) ?? 0) + 1;
       seqByRegion.set(region, seq);
