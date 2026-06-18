@@ -66,6 +66,11 @@ export function buildUpdateMutationProfile(
     }
     return zu;
   });
+  if (zoneChunk.length === 0) {
+    const profile: Record<string, unknown> = {};
+    if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
+    return profile;
+  }
   const profile: Record<string, unknown> = { locationGroupsToUpdate: [{ id: locationGroupId, zonesToUpdate }] };
   if (rateDeletes.length) profile.methodDefinitionsToDelete = rateDeletes;
   return profile;
@@ -197,9 +202,9 @@ export async function pushShippingStep(
       });
     }
     const zoneChunk = updatePlan.zoneUpdates.slice(cursor.updateStart, cursor.updateStart + BATCH);
-    if (zoneChunk.length) {
+    const dels = cursor.updateStart === 0 ? updatePlan.rateDeletes : [];
+    if (zoneChunk.length || dels.length) {
       // rateDeletes chỉ gửi 1 lần (ở chunk đầu) để tránh xoá lặp.
-      const dels = cursor.updateStart === 0 ? updatePlan.rateDeletes : [];
       const profile = buildUpdateMutationProfile(lgId, zoneChunk, dels);
       const err = await send(profile);
       if (err) {

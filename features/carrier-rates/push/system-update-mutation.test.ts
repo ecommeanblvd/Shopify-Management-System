@@ -23,4 +23,16 @@ describe('buildUpdateMutationProfile', () => {
       [{ zoneId: 'gid://z/NA2', updates: [{ id: 'gid://md/A', price: 60, currency: 'USD' }], creates: [] }], []);
     expect(profile.methodDefinitionsToDelete).toBeUndefined();
   });
+
+  it('empty zoneChunk with rateDeletes → top-level methodDefinitionsToDelete, no locationGroupsToUpdate', () => {
+    const profile = buildUpdateMutationProfile('gid://lg/1', [], ['gid://md/X', 'gid://md/Y']);
+    expect(profile.methodDefinitionsToDelete).toEqual(['gid://md/X', 'gid://md/Y']);
+    expect(profile.locationGroupsToUpdate).toBeUndefined();
+  });
+
+  it('empty zoneChunk and empty rateDeletes → empty profile', () => {
+    const profile = buildUpdateMutationProfile('gid://lg/1', [], []);
+    expect(profile.locationGroupsToUpdate).toBeUndefined();
+    expect(profile.methodDefinitionsToDelete).toBeUndefined();
+  });
 });
