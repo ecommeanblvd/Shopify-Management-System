@@ -87,7 +87,7 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
   },
   markup_percent: {
     label: 'Markup',
-    desc: 'Your profit margin percentage applied to (base + surcharges).',
+    desc: 'Markup (biên lợi nhuận) %. Có thể đặt RIÊNG theo nước (matrix) — nước có mức riêng dùng mức đó (override), nước không khai dùng mức MẶC ĐỊNH (để trống countryCodes). Áp cho cả giá engine (live) lẫn manual. Có lịch sử theo ngày hiệu lực.',
     formula: 'subtotal × (value ÷ 100)',
     unit: 'percent',
     icon: <TrendingUp className="size-4" />,
@@ -414,9 +414,10 @@ function KindCard({
   const moneyDecimals = currencyDecimals(kindCurrency);
   const valueDecimals = meta.unit === 'percent' ? undefined : moneyDecimals;
   const perKgDecimals = meta.supportsPerKg ? moneyDecimals : undefined;
-  // Country scope is only meaningful for `demand_per_kg` — every other kind
-  // applies globally so we hide the input to keep the dialog minimal.
-  const countriesVisible = kind === 'demand_per_kg' || kind === 'country_fixed';
+  // Country scope is meaningful for per-country kinds (`demand_per_kg`,
+  // `country_fixed`, and now `markup_percent` — per-country override matrix);
+  // every other kind applies globally so we hide the input to keep the dialog minimal.
+  const countriesVisible = kind === 'demand_per_kg' || kind === 'country_fixed' || kind === 'markup_percent';
   const activeCount = list.filter((s) => s.active).length;
   // FedEx publishes a weekly fuel % we can scrape directly off their
   // surcharges page. DHL would need a separate scraper — surface only when
@@ -510,7 +511,7 @@ function KindCard({
               No {meta.label.toLowerCase()} configured.
             </div>
           ) : (
-            (kind === 'fuel_percent' || kind === 'demand_per_kg' ? list.slice(0, RECENT_INLINE_LIMIT) : list).map((s) => (
+            (kind === 'fuel_percent' || kind === 'demand_per_kg' || kind === 'markup_percent' ? list.slice(0, RECENT_INLINE_LIMIT) : list).map((s) => (
               <SurchargeSummaryRow
                 key={s.id}
                 row={s}
@@ -550,6 +551,27 @@ function KindCard({
         {kind === 'demand_per_kg' && list.length > RECENT_INLINE_LIMIT && (
           <div className="px-5 py-3 border-t border-border flex justify-center">
             <DemandHistoryDialog
+              count={list.length}
+              rows={list.map((s) => ({
+                value: formatValue(s.kind, s.value, currency),
+                scope: s.countryCodes && s.countryCodes.length > 0
+                  ? s.countryCodes.join(' · ')
+                  : (s.tier ?? 'Toàn cầu'),
+                from: s.startsAt ? s.startsAt.toISOString() : null,
+                to: s.endsAt ? s.endsAt.toISOString() : null,
+                active: s.active,
+                note: s.note,
+              }))}
+            />
+          </div>
+        )}
+
+        {/* Markup theo nước (matrix): giống Demand — chỉ hiện 5 mức gần nhất
+            inline; toàn bộ lịch sử (mọi nước/kỳ) nằm trong modal xem chi tiết. */}
+        {kind === 'markup_percent' && list.length > RECENT_INLINE_LIMIT && (
+          <div className="px-5 py-3 border-t border-border flex justify-center">
+            <DemandHistoryDialog
+              title="Lịch sử Markup theo nước"
               count={list.length}
               rows={list.map((s) => ({
                 value: formatValue(s.kind, s.value, currency),
