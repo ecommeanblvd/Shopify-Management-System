@@ -470,6 +470,13 @@
       "when": 1782132000000,
       "tag": "0066_manual-shipping-config",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1782218400000,
+      "tag": "0067_packaging-fixed-enum",
+      "breakpoints": true
     }
   ]
 }

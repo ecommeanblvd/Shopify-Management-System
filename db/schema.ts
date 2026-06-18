@@ -418,6 +418,12 @@ export const carrierSurchargeKindEnum = pgEnum('carrier_surcharge_kind', [
   // apply_mode quyết định: 'always' cộng vào quote; 'when_billed' chỉ là
   // giá tham chiếu cho đối soát.
   'addon_fixed',
+  // Phí đóng gói cố định mỗi lô — LƯU Ở ĐƠN VỊ HIỂN THỊ (USD), KHÁC các phí cố
+  // định khác (lưu VND chi phí). Engine quy đổi sang VND rồi cộng TRƯỚC markup
+  // (markup nhân lên cả packaging). KHÔNG phải cước carrier → KHÔNG vào
+  // carrierCost. Thay cho khoản $5 trước đây hardcode ở giá MANUAL; nay áp cho
+  // cả engine (live) lẫn manual.
+  'packaging_fixed',
 ]);
 
 export const carrierSurcharges = pgTable('carrier_surcharges', {
