@@ -86,6 +86,22 @@ export function buildSystemUpdatePlan(current: NormalizedShipping, systemTree: S
     if (updates.length || creates.length) plan.zoneUpdates.push({ zoneId: current.shopifyIds.zoneIdByName[zoneName], updates, creates });
   }
 
+  // Union of all countries covered by the system tree.
+  const sysCountries = new Set<string>();
+  for (const sysZone of Object.values(sysZones)) {
+    for (const c of sysZone.countries) sysCountries.add(c);
+  }
+
+  // Orphan-zone pass: store zones absent from systemTree whose countries
+  // OVERLAP any system country → must delete to avoid double-coverage.
+  for (const [zoneName, storeZone] of Object.entries(storeZones)) {
+    if (zoneName in sysZones) continue; // already handled above
+    const overlaps = storeZone.countries.some((c) => sysCountries.has(c));
+    if (overlaps) {
+      plan.zonesToDelete.push(current.shopifyIds.zoneIdByName[zoneName]);
+    }
+  }
+
   plan.counts = {
     updates: plan.zoneUpdates.reduce((s, z) => s + z.updates.length, 0),
     creates: plan.zoneUpdates.reduce((s, z) => s + z.creates.length, 0),

@@ -74,4 +74,56 @@ describe('buildSystemUpdatePlan', () => {
     expect(plan.zonesToCreate.map((z) => z.name)).toEqual(['NA2']);
     expect(isUpdateOnly(plan)).toBe(false);
   });
+
+  it('orphan store zone overlapping a system country forces clean-rebuild', () => {
+    // Store has NA2 (US) + leftover OLD_US (US) not in system tree.
+    const store: NormalizedShipping = {
+      tree: {
+        zones: {
+          NA2: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 66, currency: 'USD' } } },
+          OLD_US: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 50, currency: 'USD' } } },
+        },
+      },
+      shopifyIds: {
+        profileId: 'gid://p/1',
+        locationGroupId: 'gid://lg/1',
+        zoneIdByName: { NA2: 'gid://z/NA2', OLD_US: 'gid://z/OLD_US' },
+        rateIdByZoneAndName: {},
+      },
+      bandRates: {
+        [bandKeyOf('NA2', 'Standard shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
+        [bandKeyOf('NA2', 'Standard shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
+      },
+    };
+    // System tree has only NA2 (US) with changed prices — no OLD_US.
+    const plan = buildSystemUpdatePlan(store, sysNA2(60, 70));
+    expect(plan.zonesToDelete).toContain('gid://z/OLD_US');
+    expect(isUpdateOnly(plan)).toBe(false);
+  });
+
+  it('orphan store zone NOT overlapping any system country is preserved', () => {
+    // Store has NA2 (US) + VN_DOMESTIC (VN) — VN is not in any system zone.
+    const store: NormalizedShipping = {
+      tree: {
+        zones: {
+          NA2: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 66, currency: 'USD' } } },
+          VN_DOMESTIC: { countries: ['VN'], rates: { 'Free shipping': { type: 'flat', price: 0, currency: 'USD' } } },
+        },
+      },
+      shopifyIds: {
+        profileId: 'gid://p/1',
+        locationGroupId: 'gid://lg/1',
+        zoneIdByName: { NA2: 'gid://z/NA2', VN_DOMESTIC: 'gid://z/VN' },
+        rateIdByZoneAndName: {},
+      },
+      bandRates: {
+        [bandKeyOf('NA2', 'Standard shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
+        [bandKeyOf('NA2', 'Standard shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
+      },
+    };
+    // System tree has only NA2 (US) with identical prices — no VN zone.
+    const plan = buildSystemUpdatePlan(store, sysNA2(54.5, 66));
+    expect(plan.zonesToDelete).not.toContain('gid://z/VN');
+    expect(isUpdateOnly(plan)).toBe(true);
+  });
 });
