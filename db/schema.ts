@@ -498,6 +498,15 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   index('carrier_surcharges_account_kind_idx').on(table.carrierAccountId, table.kind),
 ]);
 
+// Khung fuel mà bảng giá MANUAL đã được sinh ra (1 dòng / carrier account).
+// Engine vẫn dùng fuel LIVE; manual ghim theo mốc-giữa khung 5% để giá ổn định
+// — chỉ sinh lại khi fuel live nhảy sang khung khác (storedMid !== liveMid).
+export const manualPricingState = pgTable('manual_pricing_state', {
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).primaryKey(),
+  fuelBandMid: numeric('fuel_band_mid', { precision: 6, scale: 2 }).notNull(),
+  generatedAt: timestamp('generated_at').defaultNow().notNull(),
+});
+
 export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
   id: uuid('id').defaultRandom().primaryKey(),
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),

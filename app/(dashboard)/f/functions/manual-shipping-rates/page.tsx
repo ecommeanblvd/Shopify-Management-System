@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lte, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { flattenShippingMatrix } from '@/features/markets/domain/shipping-matrix-view';
 import { listSystemShipping } from '@/features/markets/system-shipping';
@@ -16,6 +16,7 @@ import { listZonesWithCountries, type ZoneWithCountries } from '@/features/carri
 import { classifyFeeCoverage, type FeeCoverageResult } from '@/features/carrier-rates/push/fee-coverage';
 import { PushToShopify } from '@/components/functions/PushToShopify';
 import { pushShippingStep } from '@/features/carrier-rates/push-step';
+import { fuelBandMidpoint, fuelBandLabel } from '@/features/carrier-rates/fuel-band';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,41 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
       .from(schema.carrierSurcharges)
       .where(eq(schema.carrierSurcharges.carrierAccountId, a.id));
     if (a.key) coverage[a.key] = classifyFeeCoverage(surs.map((s) => ({ kind: s.kind, active: s.active, applyMode: s.applyMode as 'always' | 'when_billed', value: Number(s.value), stepKg: s.stepKg != null ? Number(s.stepKg) : null, startsAt: s.startsAt, endsAt: s.endsAt })) as never, a.name);
+  }
+
+  // Cảnh báo "fuel nhảy khung": engine dùng fuel LIVE nhưng giá manual ghim theo
+  // MỐC-GIỮA khung 5% (ổn định trong khung). Khi fuel live đã sang khung khác so
+  // với khung lúc sinh giá manual → cần sinh lại + push. Chỉ xét fedex/dhl.
+  const now = new Date();
+  const fuelWarnings: { carrier: string; live: number; liveLabel: string; liveMid: number; storedMid: number }[] = [];
+  for (const a of carrierAccts) {
+    if (a.key !== 'fedex' && a.key !== 'dhl') continue;
+    const [liveRow] = await db
+      .select({ value: schema.carrierSurcharges.value })
+      .from(schema.carrierSurcharges)
+      .where(and(
+        eq(schema.carrierSurcharges.carrierAccountId, a.id),
+        eq(schema.carrierSurcharges.kind, 'fuel_percent'),
+        eq(schema.carrierSurcharges.active, true),
+        lte(schema.carrierSurcharges.startsAt, now),
+        or(isNull(schema.carrierSurcharges.endsAt), gt(schema.carrierSurcharges.endsAt, now)),
+      ))
+      .orderBy(desc(schema.carrierSurcharges.startsAt))
+      .limit(1);
+    if (!liveRow) continue;
+    const liveFuel = Number(liveRow.value);
+    const liveMid = fuelBandMidpoint(liveFuel);
+    const liveLabel = fuelBandLabel(liveFuel);
+    const [stateRow] = await db
+      .select({ fuelBandMid: schema.manualPricingState.fuelBandMid })
+      .from(schema.manualPricingState)
+      .where(eq(schema.manualPricingState.carrierAccountId, a.id))
+      .limit(1);
+    if (!stateRow) continue;
+    const storedMid = Number(stateRow.fuelBandMid);
+    if (storedMid !== liveMid) {
+      fuelWarnings.push({ carrier: a.name, live: liveFuel, liveLabel, liveMid, storedMid });
+    }
   }
 
   // Bảng zone HỆ THỐNG (dạng thẻ) — mỗi zone (mã vùng ME1/EU1/…) + nước trong
@@ -79,6 +115,17 @@ export default async function ManualShippingRatesPage({ searchParams }: { search
           </div>
         )}
       </div>
+
+      {fuelWarnings.length > 0 && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm">
+          <div className="font-medium text-amber-700 dark:text-amber-400">⚠ Fuel đã nhảy khung — nên sinh lại + push giá manual</div>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground">
+            {fuelWarnings.map((w) => (
+              <li key={w.carrier}>• <strong>{w.carrier}</strong>: fuel hiện <strong>{w.live}%</strong> (khung {w.liveLabel}, mốc {w.liveMid}%) — giá manual đang ở mốc <strong>{w.storedMid}%</strong>.</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {stores.length === 0 ? (
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">Chưa có store nào kết nối.</div>

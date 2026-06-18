@@ -477,6 +477,13 @@
       "when": 1782218400000,
       "tag": "0067_packaging-fixed-enum",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1782304800000,
+      "tag": "0068_manual-pricing-state",
+      "breakpoints": true
     }
   ]
 }
