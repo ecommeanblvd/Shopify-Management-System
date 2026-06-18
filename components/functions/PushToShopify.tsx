@@ -4,11 +4,17 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import type { PushSource } from '@/features/carrier-rates/push-plan';
 import type { PushStoreResult } from '@/features/carrier-rates/push-orchestrator';
+import type { PushCursor, PushStepResult } from '@/features/carrier-rates/push-step';
 
 interface Props {
   stores: { id: string; name: string }[];
-  onPush: (input: { storeIds: string[]; sources: PushSource[]; dryRun: boolean }) => Promise<PushStoreResult[]>;
+  onPushStep: (
+    input: { storeId: string; sources: PushSource[]; dryRun: boolean },
+    cursor: PushCursor | null,
+  ) => Promise<PushStepResult>;
 }
+
+interface ProgressState { storeId: string; phase: string; current: number; total: number }
 
 const SOURCES: { key: PushSource; label: string }[] = [
   { key: 'fedex_engine', label: 'FedEx engine' },
@@ -19,12 +25,13 @@ const SOURCES: { key: PushSource; label: string }[] = [
 
 /** 1 nút đẩy giá ship lên Shopify: chọn NHIỀU store + tick 4 nguồn rate →
  *  Dry-run / Apply → kết quả từng store. Engine → tự đăng ký CarrierService. */
-export function PushToShopify({ stores, onPush }: Props) {
+export function PushToShopify({ stores, onPushStep }: Props) {
   const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
   const [sources, setSources] = useState<Set<PushSource>>(new Set());
   const [preview, setPreview] = useState<PushStoreResult[] | null>(null);
   const [applied, setApplied] = useState<PushStoreResult[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ProgressState | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   function reset() {
@@ -33,6 +40,7 @@ export function PushToShopify({ stores, onPush }: Props) {
     setPreview(null);
     setApplied(null);
     setBusy(false);
+    setProgress(null);
     setErr(null);
   }
 
@@ -51,14 +59,31 @@ export function PushToShopify({ stores, onPush }: Props) {
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
 
   async function run(dryRun: boolean) {
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setProgress(null);
     try {
-      const res = await onPush({ storeIds: [...selectedStores], sources: [...sources], dryRun });
-      if (dryRun) { setPreview(res); setApplied(null); } else { setApplied(res); setPreview(null); }
+      const sourceList = [...sources];
+      const out: PushStoreResult[] = [];
+      for (const storeId of [...selectedStores]) {
+        const acc: PushStoreResult = { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] };
+        let cursor: PushCursor | null = null;
+        do {
+          const r: PushStepResult = await onPushStep({ storeId, sources: sourceList, dryRun }, cursor);
+          acc.zoneCreated += r.result.zoneCreated;
+          acc.rateOps += r.result.rateOps;
+          acc.engineZones += r.result.engineZones;
+          acc.errors.push(...r.result.errors);
+          cursor = r.cursor;
+          setProgress({ storeId, phase: r.progress.phase, current: r.progress.current, total: r.progress.total });
+          if (r.result.errors.length > 0) break; // stop this store's loop on error
+        } while (cursor);
+        out.push(acc);
+      }
+      if (dryRun) { setPreview(out); setApplied(null); } else { setApplied(out); setPreview(null); }
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -113,7 +138,21 @@ export function PushToShopify({ stores, onPush }: Props) {
             </button>
           </div>
 
-          {results && (
+          {busy && progress && (
+            <div className="space-y-1.5 rounded border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-amber-700 dark:text-amber-400">{storeName(progress.storeId)} — {progress.phase}</span>
+                <span className="text-muted-foreground">{progress.current}{progress.total > 0 ? `/${progress.total}` : ''}</span>
+              </div>
+              {progress.total > 0 && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${Math.min(100, Math.round((progress.current / progress.total) * 100))}%` }} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {results && !busy && (
             <div className={`space-y-1 rounded border p-3 text-sm ${resultsApplied ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-border'}`}>
               <div className={`font-medium ${resultsApplied ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`}>
                 {resultsApplied ? '✓ Đã đẩy' : 'Xem trước'}
