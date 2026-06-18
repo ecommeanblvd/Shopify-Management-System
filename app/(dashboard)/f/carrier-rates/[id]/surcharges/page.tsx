@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine,
+  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine, Box,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -165,28 +165,53 @@ const KIND_META: Record<SurchargeKind, KindMeta> = {
     accentBg: 'bg-violet-500/10',
     supportsPerKg: false,
   },
+  packaging_fixed: {
+    label: 'Phí đóng gói ($)',
+    // LƯU Ý: nhập theo ĐÔ LA MỸ (USD) — khác mọi phí cố định khác (lưu theo VND
+    // chi phí). Engine quy đổi sang VND rồi cộng TRƯỚC markup.
+    desc: 'Phí đóng gói cố định mỗi lô, nhập theo USD ($). Cộng vào cost TRƯỚC markup (markup nhân lên cả phí này), áp cho CẢ giá engine (live) lẫn manual.',
+    formula: '(carrierCost + packaging) × (1 + markup%)',
+    unit: 'amount',
+    icon: <Box className="size-4" />,
+    accent: 'text-indigo-600 dark:text-indigo-400',
+    accentBg: 'bg-indigo-500/10',
+    supportsPerKg: false,
+  },
 };
 
 const KIND_ORDER: SurchargeKind[] = [
-  'fuel_percent', 'peak_fixed', 'addon_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'contract_discount_pct', 'vat_percent', 'markup_percent',
+  'fuel_percent', 'peak_fixed', 'addon_fixed', 'remote_fixed', 'residential_fixed', 'per_kg_fixed', 'per_step_fixed', 'demand_per_kg', 'country_fixed', 'contract_discount_pct', 'vat_percent', 'packaging_fixed', 'markup_percent',
 ];
+
+// packaging_fixed lưu/nhập theo USD ($), KHÁC các phí cố định khác (theo cost
+// currency VND). Hiển thị ký hiệu $ thay vì cost currency của tài khoản.
+const PACKAGING_CURRENCY = 'USD';
 
 const VND_FMT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
+/** packaging_fixed nhập/lưu theo USD; mọi phí cố định khác theo cost currency. */
+function currencyFor(kind: SurchargeKind, accountCurrency: string): string {
+  return kind === 'packaging_fixed' ? PACKAGING_CURRENCY : accountCurrency;
+}
+
 function unitSuffixFor(kind: SurchargeKind, currency: string): string {
   const u = KIND_META[kind].unit;
+  const cur = currencyFor(kind, currency);
   if (u === 'percent') return '%';
-  if (u === 'amount_per_kg') return `${currency}/kg`;
-  return currency;
+  if (u === 'amount_per_kg') return `${cur}/kg`;
+  return cur;
 }
 
 function formatValue(kind: SurchargeKind, raw: string, currency: string): string {
   const n = Number(raw);
   if (!Number.isFinite(n)) return raw;
   const meta = KIND_META[kind];
+  const cur = currencyFor(kind, currency);
   if (meta.unit === 'percent') return `${n}%`;
-  if (meta.unit === 'amount_per_kg') return `${VND_FMT.format(Math.round(n))} ${currency}/kg`;
-  return `${VND_FMT.format(Math.round(n))} ${currency}`;
+  // packaging_fixed (USD) có thể có phần lẻ ($5, $5.50) — không ép nguyên như VND.
+  if (kind === 'packaging_fixed') return `${n} ${cur}`;
+  if (meta.unit === 'amount_per_kg') return `${VND_FMT.format(Math.round(n))} ${cur}/kg`;
+  return `${VND_FMT.format(Math.round(n))} ${cur}`;
 }
 
 async function createAction(accountId: string, kind: SurchargeKind, userId: string, formData: FormData) {
@@ -379,12 +404,14 @@ interface KindCardProps {
 function KindCard({
   kind, meta, list, accountId, userId, currency, carrierKey, canManage,
 }: KindCardProps) {
+  // packaging_fixed nhập theo USD ($); các phí khác theo cost currency.
+  const kindCurrency = currencyFor(kind, currency);
   const unitSuffix = unitSuffixFor(kind, currency);
   const perKgUnitSuffix = kind === 'remote_fixed' ? `${currency}/kg` : undefined;
   // Pass through MoneyInput formatting hints — `undefined` means "render as
   // plain Input" (percent / dimensionless), a number means "render with
   // thousand separators and this many decimal places".
-  const moneyDecimals = currencyDecimals(currency);
+  const moneyDecimals = currencyDecimals(kindCurrency);
   const valueDecimals = meta.unit === 'percent' ? undefined : moneyDecimals;
   const perKgDecimals = meta.supportsPerKg ? moneyDecimals : undefined;
   // Country scope is only meaningful for `demand_per_kg` — every other kind

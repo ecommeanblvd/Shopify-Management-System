@@ -14,7 +14,11 @@ export type SurchargeKind =
   | 'vat_percent'
   | 'per_step_fixed'
   | 'contract_discount_pct'
-  | 'addon_fixed';
+  | 'addon_fixed'
+  // Phí đóng gói cố định mỗi lô (LƯU Ở ĐƠN VỊ HIỂN THỊ — USD). Cộng TRƯỚC markup
+  // (markup nhân lên cả packaging). KHÔNG phải cước carrier nên KHÔNG vào
+  // carrierCost. Áp cho cả engine (finalDisplay) lẫn manual.
+  | 'packaging_fixed';
 
 export interface SurchargeSnap {
   kind: SurchargeKind;
@@ -302,6 +306,13 @@ export interface QuoteBreakdown {
    * "−" sign.
    */
   discount: number;
+  /**
+   * Phí đóng gói (packaging_fixed), Ở ĐƠN VỊ CHI PHÍ (VND), quy đổi từ giá trị
+   * USD lưu trong surcharge. Cộng TRƯỚC markup (markup nhân lên cả packaging).
+   * KHÔNG nằm trong carrierCost (đây là phí của shop, không phải cước carrier).
+   * Zero khi không có row packaging_fixed nào áp dụng.
+   */
+  packaging: number;
   markup: number;
   subtotalBeforeMarkup: number;
   /** What we pay the carrier (subtotalBeforeMarkup), in cost currency. */
@@ -411,6 +422,8 @@ function isFuelable(s: SurchargeSnap): boolean {
     case 'fuel_percent':
     case 'markup_percent':
     case 'vat_percent':
+    // Phí đóng gói áp ở bước cuối (sau markup-section), KHÔNG vào fuel base.
+    case 'packaging_fixed':
     // Discount is NEVER fuelable — fuel% is published by the carrier on
     // the PUBLISHED base, not the discounted base (verified via Excel
     // row 22: fuel/published_base ≈ 17 %; fuel/effective_base ≈ 55 %
@@ -739,6 +752,9 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       case 'vat_percent':
       case 'markup_percent':
       case 'contract_discount_pct':
+      // Phí đóng gói áp ở bước cuối (dedicated). KHÔNG cộng ở loop chung để
+      // tránh double-apply (không vào fuelable/nonFuelable/vatable subtotal).
+      case 'packaging_fixed':
         return 0;
     }
   }
@@ -793,8 +809,13 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
 
   const subtotalBeforeMarkup = vatable + vat + nonVatableSurcharges;
   const markupPct = sumApplicableOfKind(snap.surcharges, 'markup_percent', effectiveDate);
-  const markup = subtotalBeforeMarkup * (markupPct / 100);
-  const finalCost = Math.round(subtotalBeforeMarkup + markup);
+  // Phí đóng gói (packaging_fixed) lưu ở ĐƠN VỊ HIỂN THỊ (USD). Cộng TRƯỚC markup
+  // (markup nhân lên cả packaging). Áp cho CẢ engine (finalDisplay) lẫn manual.
+  // KHÔNG tính vào carrierCost (đây là phí của shop, không phải cước carrier).
+  const packagingDisplay = sumApplicableOfKind(snap.surcharges, 'packaging_fixed', effectiveDate);
+  const packagingCost = Math.round(packagingDisplay * snap.fxCostPerDisplay);
+  const markup = (subtotalBeforeMarkup + packagingCost) * (markupPct / 100);
+  const finalCost = Math.round(subtotalBeforeMarkup + packagingCost + markup);
   const finalDisplay = Math.round((finalCost / snap.fxCostPerDisplay) * 100) / 100;
 
   // What we PAY the carrier — pre-markup, in the carrier's cost currency
@@ -829,6 +850,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
       vat: Math.round(vat),
       discountPercent: discountPct,
       discount: Math.round(discount),
+      packaging: packagingCost,
       markup: Math.round(markup),
       subtotalBeforeMarkup: Math.round(subtotalBeforeMarkup),
       carrierCost,

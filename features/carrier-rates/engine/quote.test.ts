@@ -1855,4 +1855,73 @@ describe("totals rounding mode — 'per_line' (FedEx invoice convention)", () =>
     // raw chain: 999,999 + 474,999.525 + 117,999.882 = 1,592,998.407 -> 1,592,998
     expect(r.breakdown.carrierCost).toBe(1_592_998);
   });
+
+  // Phí đóng gói (packaging_fixed): lưu USD, cộng TRƯỚC markup, KHÔNG vào
+  // carrierCost. Áp cho cả engine (finalDisplay) lẫn manual.
+  describe('packaging_fixed (phí đóng gói, ĐƠN VỊ USD)', () => {
+    // base 280,000 VND, fx 26,000 VND/USD → carrierCostDisplay ≈ 10.769.
+    function snapPkg(surcharges: { kind: string; value: number; active: boolean }[]) {
+      return makeSnap({
+        zonesByCountry: new Map([['SG', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) }]]),
+        weightTiers: [{ upperKg: 1 }],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surcharges: surcharges as any,
+      });
+    }
+
+    it('packaging $5 + markup 15%: cộng TRƯỚC markup, finalDisplay ≈ (cost+5)×1.15', () => {
+      const snap = snapPkg([
+        { kind: 'markup_percent', value: 15, active: true },
+        { kind: 'packaging_fixed', value: 5, active: true },
+      ]);
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // packaging stored in USD; converted to VND for the cost breakdown.
+      expect(r.breakdown.packaging).toBe(5 * 26_000); // 130,000 VND
+      // carrierCost (cước carrier) KHÔNG đổi — packaging không phải cước.
+      expect(r.breakdown.carrierCost).toBe(280_000);
+      const carrierCostDisplay = r.breakdown.carrierCostDisplay; // ≈ 10.769
+      // markup nhân lên cả packaging: (subtotal + packaging) × 15%.
+      // finalCost = round((280,000 + 130,000) × 1.15) = round(471,500) = 471,500
+      expect(r.breakdown.finalCost).toBe(471_500);
+      expect(r.breakdown.finalDisplay).toBeCloseTo((carrierCostDisplay + 5) * 1.15, 1);
+    });
+
+    it('KHÔNG có packaging_fixed: packaging === 0 và finalDisplay = cost×1.15 (không đổi so với trước)', () => {
+      const snap = snapPkg([
+        { kind: 'markup_percent', value: 15, active: true },
+      ]);
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.packaging).toBe(0);
+      expect(r.breakdown.carrierCost).toBe(280_000);
+      // finalCost = round(280,000 × 1.15) = 322,000 — đúng hành vi cũ.
+      expect(r.breakdown.finalCost).toBe(322_000);
+      expect(r.breakdown.finalDisplay).toBeCloseTo(r.breakdown.carrierCostDisplay * 1.15, 1);
+    });
+
+    it('packaging KHÔNG bị double-apply: không lọt vào fuel/VAT base', () => {
+      // Nếu packaging lọt vào fuelable/vatable subtotal, fuel & VAT sẽ phình lên.
+      const snap = snapPkg([
+        { kind: 'fuel_percent', value: 30, active: true },
+        { kind: 'vat_percent', value: 8, active: true },
+        { kind: 'markup_percent', value: 0, active: true },
+        { kind: 'packaging_fixed', value: 5, active: true },
+      ]);
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // fuel chỉ trên base: 280,000 × 30% = 84,000 (KHÔNG gồm packaging).
+      expect(r.breakdown.fuel).toBe(84_000);
+      // VAT trên (base + fuel) = 364,000 × 8% = 29,120 (KHÔNG gồm packaging).
+      expect(r.breakdown.vat).toBe(29_120);
+      // carrierCost = 280k + 84k + 29.12k = 393,120 (packaging KHÔNG nằm trong).
+      expect(r.breakdown.carrierCost).toBe(393_120);
+      expect(r.breakdown.packaging).toBe(130_000);
+      // markup 0% → finalCost = carrierCost + packaging = 393,120 + 130,000.
+      expect(r.breakdown.finalCost).toBe(523_120);
+    });
+  });
 });
