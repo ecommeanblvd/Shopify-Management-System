@@ -10,6 +10,7 @@ import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { canTransitionLine, type LineStatus } from './logic';
 import { recomputeRollup } from './rollup';
 import { sendBrandRequest } from '@/features/mmp/outbound';
+import { sendOrderToMmp } from '@/features/mmp/order-outbound';
 import { applyMovement } from '@/features/warehouse/ledger';
 import { pickItem } from '@/features/warehouse/allocation-logic';
 
@@ -254,6 +255,7 @@ export async function checkStockForOrder(orderId: string): Promise<void> {
     await recomputeRollup(tx, ful.id);
   });
   await sendPendingBrandRequests(orderId);
+  try { await sendOrderToMmp(orderId); } catch (e) { console.error(`sendOrderToMmp failed for ${orderId}:`, e); }
   revalidatePath('/f/fulfillment');
   revalidatePath(`/f/fulfillment/${orderId}`);
 }

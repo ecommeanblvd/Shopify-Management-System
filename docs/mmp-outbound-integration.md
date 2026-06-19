@@ -94,7 +94,43 @@ header        = `x-mean-signature: sha256=<hex>`
 
 ---
 
-## 5. Vòng phản hồi đã có sẵn (MMP → SMS)
+## 5. Orders push (SMS → MMP)
+
+Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng lẻ), SMS tự động
+đẩy **một bản ghi đơn tổng hợp** sang MMP — chỉ khi đơn có ít nhất một dòng brand
+(`out_of_stock | brand_requested | brand_confirmed | brand_rejected`).
+
+- **Endpoint MMP:** `POST /api/integration/orders`
+- **Header:** `x-mean-signature: sha256=<hex>` — body-only HMAC
+  (`HMAC_SHA256(MMP_OUTBOUND_SECRET, rawBody)`, **không** có timestamp trong payload ký)
+- **Body (`MmpOrderPayload`):**
+  ```json
+  {
+    "orderNumber": "#MBLVD28899",
+    "store": "Mirer",
+    "recipientName": "Nguyen Van A",
+    "shipCountry": "VN",
+    "lines": [
+      { "sku": "ABC-123", "title": "Product name", "qty": 1 }
+    ]
+  }
+  ```
+  - `recipientName` / `shipCountry`: PII tối giản — tên + quốc gia, không địa chỉ/SĐT/email.
+  - `lines`: chỉ dòng brand (sku, title, qty). Không giá.
+- **Response:** `2xx { "externalRef": "<mã tham chiếu MMP>" }` — SMS lưu `externalRef`
+  nếu có. Non-2xx → SMS log lỗi nhưng **không chặn** luồng kiểm kho.
+- **Idempotency:** theo `orderNumber + store` (MMP nên dedupe theo cặp này).
+- **Scope:** chỉ đơn có dòng brand; đơn thuần in-stock/out_of_stock chưa brand không gửi.
+- **Gate:** `MMP_ORDERS_URL` hoặc `MMP_OUTBOUND_SECRET` chưa set → trả
+  `{ ok: false, error: 'not configured' }` và **không gửi gì**.
+
+> **HMAC khác brand-request:** orders push ký **body-only** (không timestamp trong
+> signed payload), dùng `signMmpBody`. Brand-request ký `${timestamp}.${body}` dùng
+> `signMmpPayload`. MMP phải dùng scheme tương ứng cho từng endpoint.
+
+---
+
+## 6. Vòng phản hồi đã có sẵn (MMP → SMS)
 
 Sau khi brand xử lý, MMP gọi NGƯỢC về SMS endpoint **đã chạy**:
 `POST /api/mmp/order-confirmations` (cùng scheme HMAC, secret `MMP_WEBHOOK_SECRET`)
