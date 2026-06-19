@@ -111,12 +111,17 @@ Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng l
     "recipientName": "Nguyen Van A",
     "shipCountry": "VN",
     "lines": [
-      { "sku": "ABC-123", "title": "Product name", "qty": 1 }
+      { "sku": "ABC-123", "title": "Product name", "qty": 1, "vendor": "denio" }
     ]
   }
   ```
   - `recipientName` / `shipCountry`: PII tối giản — tên + quốc gia, không địa chỉ/SĐT/email.
-  - `lines`: chỉ dòng brand (sku, title, qty). Không giá.
+  - `lines`: chỉ dòng brand `{ sku, title, qty, vendor }`. Không giá.
+  - **`vendor`** = giá trị cột vendor Shopify (= `brandSlug` trong brand-request, **cùng
+    nguồn** nên nhất quán 2 chiều). MMP **route đơn về đúng brand** theo field này:
+    đơn nhiều brand → MMP tách thành 1 Order/brand `(orderNumber, brandId)`, mỗi Order
+    chỉ chứa line của brand đó. `vendor` có thể `null` nếu line Shopify thiếu vendor →
+    MMP báo line không map được.
 - **Response:** `2xx { "externalRef": "<mã tham chiếu MMP>" }` — SMS lưu `externalRef`
   nếu có. Non-2xx → SMS log lỗi nhưng **không chặn** luồng kiểm kho.
 - **Idempotency:** theo `orderNumber + store` (MMP nên dedupe theo cặp này).
