@@ -72,6 +72,13 @@ function num(raw: string): number {
   return Number.isFinite(n) ? Math.round(n) : 0;
 }
 
+/** Như num() nhưng GIỮ thập phân (2 số) — dùng cho CÂN (kg). num() làm tròn nguyên
+ *  hợp cho tiền VND, nhưng kg cần giữ 0.5/1.2/2.04… Không round nguyên. */
+function numKg(raw: string): number {
+  const n = Number((raw ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
 function chargesFromRow(col: (n: string) => string): DhlChargeLine[] {
   const out: DhlChargeLine[] = [];
   const wc = num(col('Weight Charge'));
@@ -129,7 +136,7 @@ export function parseDhlInvoiceCsv(text: string): DhlInvoicePrefill | null {
         orderRef: c('Shipment Reference 1'),
         date: ymdToIso(c('Shipment Date')) || issueDate,
         product: c('Product Name'),
-        weightKg: num(c('Weight (kg)')),
+        weightKg: numKg(c('Weight (kg)')),
         charges: chargesFromRow(c),
         totalExclVat: num(c('Total amount (excl. VAT)')),
         totalTax: num(c('Total Tax')),

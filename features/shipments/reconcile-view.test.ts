@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { mergeStatus, netBase, carrierWeightCell, type StatusRecord } from './reconcile-view';
+import { fmtKg } from './reconcile-cells';
 import type { ReconcileRow } from './reconcile';
+
+describe('fmtKg', () => {
+  it('tối đa 2 số thập phân, bỏ trailing zero', () => {
+    expect(fmtKg(2)).toBe('2');        // không .00
+    expect(fmtKg(2.5)).toBe('2.5');    // không .50
+    expect(fmtKg(2.04)).toBe('2.04');  // giữ 2 dec
+    expect(fmtKg(2.4)).toBe('2.4');    // float noise → vẫn 2.4
+    expect(fmtKg(0)).toBe('0');
+  });
+});
 
 function row(over: Partial<ReconcileRow> = {}): ReconcileRow {
   return {
