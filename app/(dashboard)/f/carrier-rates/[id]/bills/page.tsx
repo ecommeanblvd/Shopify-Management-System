@@ -9,7 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getAccount } from '@/features/carrier-rates/actions';
 import {
   addPayment, deleteBill, deletePayment,
-  listBills, listPaymentsForAccount, listBillLines, listAllBillLines, attachInvoicePdfsToBills,
+  listBills, listPaymentsForAccount, listBillLines, listAllBillLines,
   type UploadFile,
 } from '@/features/carrier-rates/ap/bills-actions';
 import { summariseAp, toSummaryInputs } from '@/features/carrier-rates/ap/ap-summary';
@@ -19,7 +19,6 @@ import { previewOneInvoice, importCarrierInvoices } from '@/features/carrier-rat
 import { BillingTrackingTable } from '@/components/carrier-rates/BillingTrackingTable';
 import { NewSurchargesReport } from '@/components/carrier-rates/NewSurchargesReport';
 import { CarrierInvoiceDialog } from '@/components/carrier-rates/CarrierInvoiceDialog';
-import { AttachInvoicePdfDialog } from '@/components/carrier-rates/AttachInvoicePdfDialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,7 +87,6 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     });
     REV.forEach((p) => revalidatePath(p));
   }
-  const isFedex = account.carrierKey === 'fedex';
   async function previewInvoiceAction(formData: FormData) {
     'use server';
     if (!canAddInvoice) throw new Error('forbidden');
@@ -111,18 +109,6 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
       { carrierKey: account.carrierKey, carrierAccountId: id, currency, userId: session!.user.id },
       ups, existing,
     );
-    REV.forEach((p) => revalidatePath(p));
-    return res;
-  }
-  async function attachPdfsAction(formData: FormData) {
-    'use server';
-    if (!canAddInvoice) throw new Error('forbidden');
-    const fs = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
-    const files = await Promise.all(fs.map(async (f) => ({
-      bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type || 'application/pdf',
-    })));
-    if (files.length === 0) throw new Error('Chưa chọn PDF.');
-    const res = await attachInvoicePdfsToBills({ carrierAccountId: id, files });
     REV.forEach((p) => revalidatePath(p));
     return res;
   }
@@ -149,7 +135,6 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         </div>
         {canAddInvoice && (
           <div className="flex items-center gap-2">
-            {isFedex && <AttachInvoicePdfDialog attachAction={attachPdfsAction} />}
             <CarrierInvoiceDialog carrierKey={account.carrierKey as 'fedex' | 'dhl'} currency={currency} previewAction={previewInvoiceAction} importAction={importInvoicesAction} />
           </div>
         )}
