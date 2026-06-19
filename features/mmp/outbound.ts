@@ -16,6 +16,10 @@ export async function sendBrandRequest(
   orderNumber: string,
 ): Promise<SendResult> {
   const url = process.env.MMP_OUTBOUND_URL;
+  // Ký SMS→MMP bằng MMP_OUTBOUND_SECRET. GIÁ TRỊ của nó phải = secret mà MMP dùng
+  // để VERIFY request đến từ SMS (phía MMP đặt tên MEAN_WEBHOOK_SECRET). KHÁC với
+  // MMP_WEBHOOK_SECRET (secret chiều MMP→SMS, SMS verify product webhook). Secret
+  // theo CHIỀU, khớp theo GIÁ TRỊ — KHÔNG fallback sang secret chiều kia (sẽ 401).
   const secret = process.env.MMP_OUTBOUND_SECRET;
   if (!url || !secret) return { ok: false, error: 'not configured' };
   if (!req.brandSlug) return { ok: false, error: 'no brand' };
