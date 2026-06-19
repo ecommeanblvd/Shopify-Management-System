@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { verifyMmpSignature, signMmpPayload, SKEW_TOLERANCE_SECONDS } from './hmac';
+import { verifyMmpSignature, signMmpPayload, signMmpBody, SKEW_TOLERANCE_SECONDS } from './hmac';
+import crypto from 'node:crypto';
 
 const SECRET = 'test-secret-key-just-for-unit-tests';
 const NOW = 1_780_000_000;
@@ -120,5 +121,16 @@ describe('verifyMmpSignature', () => {
       signatureHeader: sig, timestampHeader: String(NOW), nowSeconds: NOW,
     });
     expect(r).toEqual({ ok: false, reason: 'signature_mismatch' });
+  });
+});
+
+describe('signMmpBody', () => {
+  it('ký body-only sha256=<hex>, không timestamp', () => {
+    const secret = 'sek'; const body = '{"a":1}';
+    const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
+    expect(signMmpBody(secret, body)).toBe(expected);
+  });
+  it('khác signMmpPayload (timestamped) cho cùng body', () => {
+    expect(signMmpBody('s', '{}')).not.toBe(signMmpPayload('s', 100, '{}'));
   });
 });

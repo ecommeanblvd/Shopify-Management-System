@@ -109,3 +109,10 @@ export function signMmpPayload(
     .digest('hex');
   return `sha256=${sig}`;
 }
+
+/** Body-only HMAC cho SMS→MMP orders: sha256=<hex> của HMAC_SHA256(secret, rawBody).
+ *  KHÁC signMmpPayload (timestamped) — MMP /api/integration/orders verify scheme này. */
+export function signMmpBody(secret: string, rawBody: string): string {
+  const sig = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+  return `sha256=${sig}`;
+}
