@@ -139,7 +139,7 @@ với `{ requestId, status: 'confirmed'|'rejected', expectedDeliveryDate?, note?
 
 ---
 
-## 6. Các bước bật (sau khi MMP có receiver)
+## 7. Các bước bật (sau khi MMP có receiver)
 
 1. Lấy từ MMP: (a) URL receiver, (b) **giá trị** `MEAN_WEBHOOK_SECRET` (secret MMP
    verify request đến từ SMS).
