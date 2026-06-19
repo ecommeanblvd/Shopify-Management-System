@@ -64,7 +64,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
     startTransition(async () => {
       const res = await importAction(fd);
       setResults(res);
-      router.refresh();
+      if (res.some((r) => r.ok)) router.refresh();
     });
   }
 
@@ -75,7 +75,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
     startTransition(async () => {
       const res = await importAction(fd);
       setResults(res);
-      router.refresh();
+      if (res.some((r) => r.ok)) router.refresh();
     });
   }
 
