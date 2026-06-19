@@ -18,8 +18,14 @@ export async function sendOrderToMmp(orderId: string): Promise<SendResult> {
     .from(schema.orderFulfillment).where(eq(schema.orderFulfillment.orderId, orderId)).limit(1);
   if (!ful) return { ok: false, error: 'no fulfillment' };
 
-  const fLines = await db.select({ sku: schema.orderFulfillmentLines.sku, qty: schema.orderFulfillmentLines.qty, status: schema.orderFulfillmentLines.status })
+  // Join order line theo shopifyLineId (chính xác, như brand-request) → lấy
+  // title + vendor cho từng dòng. vendor = cột vendor Shopify (= brandSlug).
+  const fLines = await db.select({
+      sku: schema.orderFulfillmentLines.sku, qty: schema.orderFulfillmentLines.qty, status: schema.orderFulfillmentLines.status,
+      title: schema.shopifyOrderLines.productTitle, vendor: schema.shopifyOrderLines.vendor,
+    })
     .from(schema.orderFulfillmentLines)
+    .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
   const brand = fLines.filter((l) => BRAND_STATUSES.includes(l.status as string));
   if (brand.length === 0) return { ok: false, error: 'no brand lines' };
@@ -34,12 +40,9 @@ export async function sendOrderToMmp(orderId: string): Promise<SendResult> {
     .where(eq(schema.shopifyOrders.id, orderId)).limit(1);
   if (!ord) return { ok: false, error: 'no order' };
 
-  // title theo sku (map từ shopify_order_lines của đơn).
-  const oLines = await db.select({ sku: schema.shopifyOrderLines.sku, title: schema.shopifyOrderLines.productTitle })
-    .from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
-  const titleBySku = new Map<string, string>();
-  for (const l of oLines) if (l.sku) titleBySku.set(l.sku, l.title);
-  const brandLines: MmpOrderLine[] = brand.map((l) => ({ sku: l.sku, title: (l.sku && titleBySku.get(l.sku)) || l.sku || '', qty: l.qty }));
+  const brandLines: MmpOrderLine[] = brand.map((l) => ({
+    sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null,
+  }));
 
   const rawBody = JSON.stringify(buildMmpOrderPayload({
     orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry, brandLines,
