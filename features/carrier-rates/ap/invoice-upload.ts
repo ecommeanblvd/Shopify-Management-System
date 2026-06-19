@@ -124,9 +124,8 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
   // Phase 1: spreadsheets (dhl_csv / fbo_xlsx) — create bills first
   for (const f of spreadsheets) {
     const base: InvoiceImportResult = { filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: null };
-    const fmt = detectInvoiceFormat(ctx.carrierKey, f.filename);
     try {
-      if (fmt === 'dhl_csv') {
+      if (ctx.carrierKey === 'dhl') {
         const p = parseDhlInvoiceCsv(td(f.bytes));
         if (!p || !p.billNumber) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn DHL' }); continue; }
         if (seen.has(p.billNumber)) { out.push({ ...base, billNumber: p.billNumber, message: 'Đã tồn tại — bỏ qua' }); continue; }
@@ -135,7 +134,7 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         seen.add(p.billNumber);
         const r = lines.length ? await reconcileDhlBill(billId) : null;
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
-      } else if (fmt === 'fbo_xlsx') {
+      } else if (ctx.carrierKey === 'fedex') {
         const pre = await previewFboBill(f.bytes);
         if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO)' }); continue; }
         const nums = pre.bills.map((b) => b.billNumber).filter((n): n is string => !!n);
