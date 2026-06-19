@@ -484,6 +484,13 @@
       "when": 1782304800000,
       "tag": "0068_manual-pricing-state",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1782391200000,
+      "tag": "0069_carrier-bill-pdf",
+      "breakpoints": true
     }
   ]
 }

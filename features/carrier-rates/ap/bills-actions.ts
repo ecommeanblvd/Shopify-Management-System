@@ -114,6 +114,7 @@ export interface BillRow {
   amount: number;
   currency: string;
   hasFile: boolean;
+  hasPdf: boolean;
   filename: string | null;
   note: string | null;
 }
@@ -134,6 +135,7 @@ export async function listBills(carrierAccountId: string): Promise<BillRow[]> {
     amount: Number(b.amount),
     currency: b.currency,
     hasFile: !!b.fileKey,
+    hasPdf: !!b.pdfFileKey,
     filename: b.filename,
     note: b.note,
   }));
@@ -323,7 +325,7 @@ export async function attachInvoicePdfsToBills(input: {
     await putObject(fileKey, stored, ct);
     for (const inv of invoices) {
       await db.update(schema.carrierBills)
-        .set({ fileKey, filename: f.filename, contentType: ct, byteSize: stored.length })
+        .set({ pdfFileKey: fileKey, pdfFilename: f.filename, pdfContentType: ct, pdfByteSize: stored.length })
         .where(eq(schema.carrierBills.id, byNumber.get(inv)!));
       attached.push({ invoice: inv, filename: f.filename });
     }

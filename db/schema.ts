@@ -581,6 +581,11 @@ export const carrierBills = pgTable('carrier_bills', {
   filename: text('filename'),
   contentType: text('content_type'),
   byteSize: integer('byte_size'),
+  /** PDF hoá đơn carrier — cột RIÊNG, không ghi đè fileKey (file nguồn CSV/XLSX). */
+  pdfFileKey: text('pdf_file_key'),
+  pdfFilename: text('pdf_filename'),
+  pdfContentType: text('pdf_content_type'),
+  pdfByteSize: integer('pdf_byte_size'),
   note: text('note'),
   createdBy: text('created_by').references(() => user.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
