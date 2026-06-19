@@ -19,6 +19,24 @@ export interface InvoicePreview {
   lineCount: number; warnings: string[];
 }
 
+/** Gộp các hoá đơn FBO (1 file FedEx có thể chứa nhiều invoice) thành 1 InvoicePreview. */
+export function fboPreviewFrom(
+  bills: { billNumber: string | null; periodStart: string | null; periodEnd: string | null; amount: number; lineCount: number }[],
+  accountCurrency: string,
+): InvoicePreview {
+  if (bills.length === 1) return toInvoicePreview({ kind: 'fbo', b: bills[0], accountCurrency });
+  const amount = bills.reduce((s, b) => s + (b.amount || 0), 0);
+  const starts = bills.map((b) => b.periodStart).filter((d): d is string => !!d).sort();
+  const ends = bills.map((b) => b.periodEnd).filter((d): d is string => !!d).sort();
+  const lineCount = bills.reduce((s, b) => s + b.lineCount, 0);
+  return {
+    carrier: 'fedex', billNumber: null, amount: amount || null, currency: accountCurrency,
+    periodStart: starts[0] ?? null, periodEnd: ends[ends.length - 1] ?? null,
+    issueDate: null, dueDate: null, lineCount,
+    warnings: [`File chứa ${bills.length} hoá đơn — sẽ import tất cả.`],
+  };
+}
+
 export function toInvoicePreview(src:
   | { kind: 'dhl'; p: { billNumber: string; amountInclVat: number; periodStart: string; periodEnd: string; issueDate: string; dueDate: string; currency: string; shipments: unknown[] }; accountCurrency: string }
   | { kind: 'fbo'; b: { billNumber: string | null; periodStart: string | null; periodEnd: string | null; amount: number; lineCount: number }; accountCurrency: string },
@@ -55,9 +73,8 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
   }
   if (fmt === 'fbo_xlsx') {
     const fbo = await previewFboBill(file.bytes);
-    const b = fbo.bills[0];
-    if (!b) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO).' };
-    return { ok: true as const, preview: toInvoicePreview({ kind: 'fbo', b, accountCurrency: ctx.currency }) };
+    if (fbo.bills.length === 0) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO).' };
+    return { ok: true as const, preview: fboPreviewFrom(fbo.bills, ctx.currency) };
   }
   return { ok: false as const, message: `File không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX)' : 'DHL (CSV)'}.` };
 }
@@ -79,10 +96,18 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const r = lines.length ? await reconcileDhlBill(billId) : null;
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
       } else if (fmt === 'fbo_xlsx') {
+        const pre = await previewFboBill(f.bytes);
+        if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO)' }); continue; }
+        const nums = pre.bills.map((b) => b.billNumber).filter((n): n is string => !!n);
+        if (nums.length && nums.every((n) => seen.has(n))) {
+          out.push({ ...base, billNumber: nums.length === 1 ? nums[0] : `${nums.length} hoá đơn`, message: 'Đã tồn tại — bỏ qua' });
+          continue;
+        }
         const res = await applyFboBill({ carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId, bytes: f.bytes, filename: f.filename, contentType: f.contentType });
-        const b = res.bills[0];
-        if (b?.billNumber) seen.add(b.billNumber);
-        out.push({ filename: f.filename, ok: true, billNumber: b?.billNumber ?? null, amount: b?.amount ?? null, matched: res.matchedAwb, freight: res.totalAwb, message: null });
+        const amount = res.bills.reduce((s, b) => s + (b.amount || 0), 0);
+        const billNumber = res.bills.length === 1 ? (res.bills[0]?.billNumber ?? null) : `${res.bills.length} hoá đơn`;
+        res.bills.forEach((b) => { if (b.billNumber) seen.add(b.billNumber); });
+        out.push({ filename: f.filename, ok: true, billNumber, amount: amount || null, matched: res.matchedAwb, freight: res.totalAwb, message: `Tạo ${res.billsCreated}, cập nhật ${res.billsUpdated} hoá đơn` });
       } else {
         out.push({ ...base, message: `Không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX)' : 'DHL (CSV)'}` });
       }
