@@ -194,7 +194,11 @@ export async function pdfBillByShipment(shipmentIds: string[]): Promise<Record<s
     .select({ shipmentId: schema.carrierBillLines.shipmentId, billId: schema.carrierBills.id, accountId: schema.carrierBills.carrierAccountId })
     .from(schema.carrierBillLines)
     .innerJoin(schema.carrierBills, eq(schema.carrierBillLines.billId, schema.carrierBills.id))
-    .where(and(inArray(schema.carrierBillLines.shipmentId, shipmentIds), isNotNull(schema.carrierBills.pdfFileKey)));
+    .where(and(
+      inArray(schema.carrierBillLines.shipmentId, shipmentIds),
+      isNotNull(schema.carrierBillLines.shipmentId),
+      isNotNull(schema.carrierBills.pdfFileKey),
+    ));
   const out: Record<string, { accountId: string; billId: string }> = {};
   for (const r of rows) if (r.shipmentId) out[r.shipmentId] = { accountId: r.accountId, billId: r.billId };
   return out;
