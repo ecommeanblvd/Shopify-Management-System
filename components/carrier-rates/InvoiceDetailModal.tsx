@@ -67,6 +67,13 @@ export function InvoiceDetailModal(props: Props) {
                     <FileText className="size-3.5" /> File gốc
                   </a>
                 )}
+                {bill.hasPdf ? (
+                  <a href={`/f/carrier-rates/${accountId}/bills/${bill.id}/pdf`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-muted" title="Mở PDF hoá đơn">
+                    <FileText className="size-3.5" /> PDF
+                  </a>
+                ) : (
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Chưa đính PDF hoá đơn">⚠ chưa có PDF</span>
+                )}
               </DialogTitle>
             </DialogHeader>
 
