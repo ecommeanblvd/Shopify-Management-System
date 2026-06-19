@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useRef, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
+import { isAutoReconciled, MATCH_TOLERANCE_VND, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
 import { carrierWeightCell } from '@/features/shipments/reconcile-cells';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
@@ -77,33 +79,17 @@ function CountryCell({ r }: { r: ReconcileViewRow }) {
   );
 }
 
-type CarrierFilter = 'all' | 'fedex' | 'dhl';
-type StatusFilter = 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error';
-
-/** Ngưỡng "khớp hoàn toàn" — trùng ngưỡng KHỚP của engine (lệch nhỏ do làm tròn). */
-const MATCH_TOLERANCE_VND = 1000;
-/** Đơn pending NHƯNG lệch < ngưỡng → coi như tự đối soát (không cần người xác nhận). */
-function isAutoReconciled(r: ReconcileViewRow): boolean {
-  if (r.status !== 'pending') return false;
-  // Khớp khi: (a) lệch tuyệt đối nhỏ, HOẶC (b) diagnose đã giải thích toàn bộ
-  // lệch là PASS-THROUGH hợp lệ — phí opt-in (ký nhận when_billed) hóa đơn thu
-  // thêm, KHÔNG phải lỗi. Trước đây chỉ xét (a) nên khi signature chuyển sang
-  // when_billed, engine thấp hơn billed ~143k ⇒ mọi đơn có ký nhận bị tính lệch.
-  if (Math.abs(r.deltaVnd ?? 0) < MATCH_TOLERANCE_VND) return true;
-  return r.diagnosis?.severity === 'passthrough' || r.diagnosis?.severity === 'match';
-}
-/** Trạng thái HIỆU DỤNG cho view:
- *  - đơn khớp-pending → 'reconciled' (auto).
- *  - đơn 'disputing' nhưng Δ đã về ~0 (staleDispute) → 'reconciled': đã khớp lại,
- *    KHÔNG còn là "đòi NCC" (badge cũ gây hiểu lầm). Hàng vẫn hiện gợi ý "nên rút"
- *    + nút Hoàn tác để chốt rút khiếu nại chính thức. */
-function effStatus(r: ReconcileViewRow): ReconcileStatus {
-  if (isAutoReconciled(r) || r.staleDispute) return 'reconciled';
-  return r.status;
-}
+const PAGE_SIZE = 100;
 
 interface Props {
+  /** Dòng của TRANG đang xem (đã lọc + slice phía server). */
   rows: ReconcileViewRow[];
+  summary: ReconcileSummaryStat;
+  totalPages: number;
+  safePage: number;
+  totalFiltered: number;
+  filters: ReconcileFilters;
+  openIssues: OpenIssue[];
   reports: IssueReportRecord[];
   carrierErrors: CarrierErrorRow[];
   carrierErrorGroups: CarrierErrorGroup[];
@@ -122,98 +108,36 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroups, internalErrorGroups }: Props) {
-  const [carrier, setCarrier] = useState<CarrierFilter>('all');
-  const [status, setStatus] = useState<StatusFilter>('all');
-  const [country, setCountry] = useState('');
-  const [minPct, setMinPct] = useState('');
-  const [q, setQ] = useState('');
+export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups }: Props) {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 100;
+  // Ô text: state cục bộ để gõ mượt; đẩy lên URL sau debounce 300ms (tránh
+  // round-trip server mỗi ký tự). Dropdown/pager đẩy URL ngay.
+  const [country, setCountry] = useState(filters.country);
+  const [minPct, setMinPct] = useState(filters.minPct);
+  const [q, setQ] = useState(filters.q);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Đổi filter -> về trang 0, reset NGAY TRONG render (pattern "adjusting
-  // state during render" của React) thay vì effect để khỏi render thừa.
-  const filterKey = `${carrier}|${status}|${country}|${minPct}|${q}`;
-  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
-  if (prevFilterKey !== filterKey) {
-    setPrevFilterKey(filterKey);
-    setPage(0);
+  function pushParams(patch: Record<string, string>, resetPage = true): void {
+    const p = new URLSearchParams(sp?.toString() ?? '');
+    for (const [k, v] of Object.entries(patch)) { if (v) p.set(k, v); else p.delete(k); }
+    if (resetPage) p.delete('page');
+    p.delete('refresh');
+    startTransition(() => router.replace(`?${p.toString()}`, { scroll: false }));
+  }
+  function debouncedPush(patch: Record<string, string>): void {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => pushParams(patch), 300);
   }
 
-  const filtered = useMemo(() => {
-    const minAbs = minPct ? Number(minPct) : null;
-    const needle = q.trim().toLowerCase();
-    return rows
-      .filter((r) => carrier === 'all' || r.carrierKey === carrier)
-      .filter((r) => status === 'all' || effStatus(r) === status)
-      .filter((r) => !country || r.shipCountry.toLowerCase() === country.toLowerCase())
-      .filter((r) => minAbs === null || (r.deltaPct !== null && Math.abs(r.deltaPct) >= minAbs))
-      .filter(
-        (r) =>
-          !needle ||
-          r.orderNumber.toLowerCase().includes(needle) ||
-          r.trackingNumber.toLowerCase().includes(needle),
-      )
-      .sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
-  }, [rows, carrier, status, country, minPct, q]);
-
-  const summary = useMemo(() => {
-    let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
-    for (const r of filtered) {
-      billed += r.billedTotal;
-      // Đơn đã khớp (gồm pass-through opt-in ký nhận): hệ thống "đồng ý" với
-      // billed (engine when_billed không cộng ký nhận, nhưng bill thu đúng giá
-      // hệ thống) → fold engine = billed để Σ Lệch không phình vì ký nhận.
-      // Đơn lệch thật: giữ engineTotal.
-      engine += isAutoReconciled(r) ? r.billedTotal : (r.engineTotal ?? 0);
-      const isPending = effStatus(r) === 'pending';
-      // "Đơn lệch >10%": chỉ đếm đơn CÒN pending (chưa khớp/duyệt), bỏ qua
-      // pass-through đã giải thích — tránh phình do opt-in ký nhận.
-      if (isPending && r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
-      if (isPending) pendingCount += 1;
-      // Đếm đòi NCC: chỉ đơn CÒN đòi thật (loại staleDispute đã khớp lại).
-      if (r.status === 'disputing' && !r.staleDispute) disputingCount += 1;
-    }
-    const delta = billed - engine;
-    const pct = billed > 0 ? (delta / billed) * 100 : 0;
-    return { billed, engine, delta, pct, over10, pendingCount, disputingCount, n: filtered.length };
-  }, [filtered]);
-
-  // Logistics to-check list: PENDING rows with an actionable issue, grouped
-  // by issue signature. Lives behind the "Vấn đề & Report" modal — an issue
-  // becomes a persistent report only after Logistics confirms the fix.
-  const openIssues = useMemo<OpenIssue[]>(() => {
-    const groups = new Map<string, OpenIssue>();
-    for (const r of rows) {
-      if (r.status !== 'pending') continue;
-      const info = issueInfo(r);
-      if (!info.groupKey || !info.action) continue;
-      const g = groups.get(info.groupKey) ?? {
-        groupKey: info.groupKey, carrierKey: r.carrierKey || null,
-        label: info.label, action: info.action, count: 0, sumDelta: 0, samples: [],
-      };
-      g.count += 1;
-      g.sumDelta += r.deltaVnd ?? 0;
-      if (g.samples.length < 4) g.samples.push(r.orderNumber);
-      groups.set(info.groupKey, g);
-    }
-    return [...groups.values()].sort((a, b) => Math.abs(b.sumDelta) - Math.abs(a.sumDelta));
-  }, [rows]);
-
-  // Render only the current page — 2,500+ rows at once costs ~30k DOM
-  // nodes and seconds of mount time. Filters/summary still cover the
-  // FULL set; only painting is windowed.
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const visible = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-
-  const exportHref = useMemo(() => {
+  const exportHref = (() => {
     const p = new URLSearchParams();
-    if (carrier !== 'all') p.set('carrier', carrier);
-    if (country) p.set('country', country);
+    if (filters.carrier !== 'all') p.set('carrier', filters.carrier);
+    if (filters.country) p.set('country', filters.country);
     return `/f/shipping-reconcile/export.csv${p.toString() ? `?${p}` : ''}`;
-  }, [carrier, country]);
+  })();
 
   return (
     <div className="space-y-4">
@@ -227,13 +151,13 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <select value={carrier} onChange={(e) => setCarrier(e.target.value as CarrierFilter)} className="rounded border border-border bg-background px-2 py-1">
+      <div className={`flex flex-wrap items-center gap-2 text-sm ${isPending ? 'opacity-60' : ''}`}>
+        <select value={filters.carrier} onChange={(e) => pushParams({ carrier: e.target.value === 'all' ? '' : e.target.value })} className="rounded border border-border bg-background px-2 py-1">
           <option value="all">Tất cả carrier</option>
           <option value="fedex">FedEx</option>
           <option value="dhl">DHL</option>
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className="rounded border border-border bg-background px-2 py-1">
+        <select value={filters.status} onChange={(e) => pushParams({ status: e.target.value === 'all' ? '' : e.target.value })} className="rounded border border-border bg-background px-2 py-1">
           <option value="all">Mọi trạng thái</option>
           <option value="pending">Chưa đối soát</option>
           <option value="reconciled">Đã đối soát</option>
@@ -242,9 +166,9 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
           <option value="disputing">Đang đòi NCC</option>
           <option value="internal_error">Lỗi nội bộ</option>
         </select>
-        <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
-        <input value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
+        <input value={country} onChange={(e) => { setCountry(e.target.value); debouncedPush({ country: e.target.value }); }} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
+        <input value={minPct} onChange={(e) => { setMinPct(e.target.value); debouncedPush({ minPct: e.target.value }); }} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
+        <input value={q} onChange={(e) => { setQ(e.target.value); debouncedPush({ q: e.target.value }); }} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
         <div className="ml-auto flex items-center gap-2">
           <ReconcileIssuesModal openIssues={openIssues} reports={reports}
             carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups}
@@ -275,7 +199,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
             </tr>
           </thead>
           <tbody className="font-mono tabular-nums">
-            {visible.map((r) => (
+            {rows.map((r) => (
               <FragmentRow
                 key={r.shipmentId}
                 r={r}
@@ -283,7 +207,7 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
                 onToggle={() => setExpanded(expanded === r.shipmentId ? null : r.shipmentId)}
               />
             ))}
-            {filtered.length === 0 && (
+            {totalFiltered === 0 && (
               <tr><td colSpan={14} className="px-3 py-6 text-center text-muted-foreground font-sans">Không có đơn nào khớp bộ lọc.</td></tr>
             )}
           </tbody>
@@ -291,16 +215,16 @@ export function ReconcileTable({ rows, reports, carrierErrors, carrierErrorGroup
       </div>
 
       {/* Pager */}
-      {filtered.length > PAGE_SIZE && (
+      {totalFiltered > PAGE_SIZE && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            Hiển thị {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} / {filtered.length} đơn
+            Hiển thị {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, totalFiltered)} / {totalFiltered} đơn
           </span>
           <span className="flex items-center gap-1">
-            <button type="button" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}
+            <button type="button" disabled={safePage === 0 || isPending} onClick={() => pushParams({ page: String(safePage - 1) }, false)}
               className="rounded border border-border px-2.5 py-1 hover:bg-muted disabled:opacity-40">‹ Trước</button>
             <span className="px-2 font-mono tabular-nums">{safePage + 1}/{totalPages}</span>
-            <button type="button" disabled={safePage >= totalPages - 1} onClick={() => setPage(safePage + 1)}
+            <button type="button" disabled={safePage >= totalPages - 1 || isPending} onClick={() => pushParams({ page: String(safePage + 1) }, false)}
               className="rounded border border-border px-2.5 py-1 hover:bg-muted disabled:opacity-40">Sau ›</button>
           </span>
         </div>

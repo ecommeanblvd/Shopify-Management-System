@@ -1,0 +1,66 @@
+import { describe, it, expect } from 'vitest';
+import { isAutoReconciled, effStatus, filterReconcileRows, reconcileSummary, paginate } from './reconcile-filter';
+import type { ReconcileViewRow } from './reconcile-view';
+
+const row = (o: Partial<ReconcileViewRow> = {}): ReconcileViewRow => ({
+  shipmentId: 's', trackingNumber: 't', orderNumber: '#1', storeName: 'S', carrierKey: 'dhl',
+  shipCountry: 'SA', shipCity: null, shipPostcode: null, addrClass: null, addrDeliverable: null, addrIssue: null,
+  shopifyWeightKg: 1, weightKg: 1, chargeableKg: 1, billedWeightKg: 2, labelDate: null,
+  billedTotal: 1_000_000, engineTotal: 900_000, deltaVnd: 100_000, deltaPct: 10, diagnosis: null,
+  status: 'pending', staleDispute: false,
+  ...o,
+} as ReconcileViewRow);
+
+describe('isAutoReconciled / effStatus', () => {
+  it('pending + lệch nhỏ < tolerance → auto reconciled', () => {
+    expect(isAutoReconciled(row({ deltaVnd: 500 }))).toBe(true);
+    expect(effStatus(row({ deltaVnd: 500 }))).toBe('reconciled');
+  });
+  it('pending + diagnosis passthrough → auto', () => {
+    expect(isAutoReconciled(row({ deltaVnd: 500_000, diagnosis: { severity: 'passthrough' } as never }))).toBe(true);
+  });
+  it('pending + lệch to, không passthrough → vẫn pending', () => {
+    expect(effStatus(row({ deltaVnd: 500_000 }))).toBe('pending');
+  });
+  it('staleDispute → reconciled', () => {
+    expect(effStatus(row({ status: 'disputing', staleDispute: true, deltaVnd: 500_000 }))).toBe('reconciled');
+  });
+});
+
+describe('filterReconcileRows', () => {
+  const rows = [
+    row({ carrierKey: 'dhl', shipCountry: 'SA', deltaPct: 12, orderNumber: '#AAA' }),
+    row({ carrierKey: 'fedex', shipCountry: 'US', deltaPct: 3, orderNumber: '#BBB' }),
+  ];
+  const base = { carrier: 'all', status: 'all', country: '', minPct: '', q: '' } as const;
+  it('lọc carrier', () => { expect(filterReconcileRows(rows, { ...base, carrier: 'fedex' }).length).toBe(1); });
+  it('lọc country (không phân biệt hoa thường)', () => { expect(filterReconcileRows(rows, { ...base, country: 'sa' }).length).toBe(1); });
+  it('lọc minPct (|deltaPct| ≥)', () => { expect(filterReconcileRows(rows, { ...base, minPct: '10' }).length).toBe(1); });
+  it('lọc q theo order/tracking', () => { expect(filterReconcileRows(rows, { ...base, q: 'bbb' }).map((r) => r.orderNumber)).toEqual(['#BBB']); });
+  it('sort theo |deltaVnd| giảm dần', () => {
+    const r = filterReconcileRows([row({ orderNumber: '#lo', deltaVnd: 10 }), row({ orderNumber: '#hi', deltaVnd: 999 })], base);
+    expect(r.map((x) => x.orderNumber)).toEqual(['#hi', '#lo']);
+  });
+});
+
+describe('reconcileSummary', () => {
+  it('auto-reconciled fold engine=billed; pending/over10 chỉ đếm pending', () => {
+    const s = reconcileSummary([
+      row({ deltaVnd: 500, billedTotal: 100, engineTotal: 80 }),               // auto → engine fold 100
+      row({ deltaVnd: 500_000, deltaPct: 20, billedTotal: 200, engineTotal: 150 }), // pending, >10%
+    ]);
+    expect(s.billed).toBe(300); expect(s.engine).toBe(250); expect(s.delta).toBe(50);
+    expect(s.pendingCount).toBe(1); expect(s.over10).toBe(1); expect(s.n).toBe(2);
+  });
+});
+
+describe('paginate', () => {
+  it('slice + totalPages + kẹp safePage', () => {
+    const r = Array.from({ length: 250 }, (_, i) => i);
+    expect(paginate(r, 0, 100).pageRows.length).toBe(100);
+    expect(paginate(r, 2, 100).pageRows[0]).toBe(200);
+    expect(paginate(r, 2, 100).pageRows.length).toBe(50);
+    expect(paginate(r, 9, 100).safePage).toBe(2);
+    expect(paginate(r, 0, 100).totalPages).toBe(3);
+  });
+});

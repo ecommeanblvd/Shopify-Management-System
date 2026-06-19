@@ -4,18 +4,21 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
+import { filterReconcileRows, reconcileSummary, paginate, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
 import { listInternalErrors, summariseInternalErrors } from '@/features/shipments/internal-error-report';
+import { issueInfo } from '@/components/shipping-reconcile/issue-label';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
+import type { OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ShippingReconcilePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ refresh?: string }>;
-}) {
+const PAGE_SIZE = 100;
+
+type SP = { refresh?: string; carrier?: string; status?: string; country?: string; minPct?: string; q?: string; page?: string };
+
+export default async function ShippingReconcilePage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
@@ -33,6 +36,31 @@ export default async function ShippingReconcilePage({
   const internalErrors = await listInternalErrors();
   const internalErrorGroups = summariseInternalErrors(internalErrors);
 
+  // Lọc + summary + phân trang PHÍA SERVER (chỉ gửi trang đang xem xuống client).
+  const filters: ReconcileFilters = {
+    carrier: (sp.carrier === 'fedex' || sp.carrier === 'dhl') ? sp.carrier : 'all',
+    status: (['pending', 'reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error'] as const).includes(sp.status as never)
+      ? (sp.status as ReconcileFilters['status']) : 'all',
+    country: sp.country ?? '', minPct: sp.minPct ?? '', q: sp.q ?? '',
+  };
+  const filteredRows = filterReconcileRows(rows, filters);
+  const summary = reconcileSummary(filteredRows);
+  const { pageRows, totalPages, safePage } = paginate(filteredRows, Number(sp.page ?? 0) || 0, PAGE_SIZE);
+
+  // "Vấn đề & Report" mở: gom đơn PENDING có vấn đề trên TOÀN BỘ rows (không phải trang).
+  const groups = new Map<string, OpenIssue>();
+  for (const r of rows) {
+    if (r.status !== 'pending') continue;
+    const info = issueInfo(r);
+    if (!info.groupKey || !info.action) continue;
+    const g = groups.get(info.groupKey) ?? { groupKey: info.groupKey, carrierKey: r.carrierKey || null, label: info.label, action: info.action, count: 0, sumDelta: 0, samples: [] };
+    g.count += 1;
+    g.sumDelta += r.deltaVnd ?? 0;
+    if (g.samples.length < 4) g.samples.push(r.orderNumber);
+    groups.set(info.groupKey, g);
+  }
+  const openIssues = [...groups.values()].sort((a, b) => Math.abs(b.sumDelta) - Math.abs(a.sumDelta));
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -44,7 +72,11 @@ export default async function ShippingReconcilePage({
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
-      <ReconcileTable rows={rows} reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups} />
+      <ReconcileTable
+        rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
+        filters={filters} openIssues={openIssues}
+        reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups}
+      />
     </div>
   );
 }
