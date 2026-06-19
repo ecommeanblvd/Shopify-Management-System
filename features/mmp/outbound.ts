@@ -16,7 +16,10 @@ export async function sendBrandRequest(
   orderNumber: string,
 ): Promise<SendResult> {
   const url = process.env.MMP_OUTBOUND_URL;
-  const secret = process.env.MMP_OUTBOUND_SECRET;
+  // Mặc định DÙNG CHUNG secret HMAC với inbound (MMP_WEBHOOK_SECRET) — cùng cặp
+  // SMS↔MMP, đã set sẵn ở Railway vì inbound đang chạy. Chỉ set MMP_OUTBOUND_SECRET
+  // riêng khi muốn TÁCH secret theo chiều/loại message.
+  const secret = process.env.MMP_OUTBOUND_SECRET || process.env.MMP_WEBHOOK_SECRET;
   if (!url || !secret) return { ok: false, error: 'not configured' };
   if (!req.brandSlug) return { ok: false, error: 'no brand' };
 
