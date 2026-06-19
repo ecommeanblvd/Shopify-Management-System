@@ -12,21 +12,29 @@ MMP tái dùng được logic verify sẵn có.
 
 ## 1. Những gì cần để bật outbound
 
+**Trạng thái:** MMP đã dựng receiver `POST /api/integration/brand-requests` (verify
+HMAC bằng `MEAN_WEBHOOK_SECRET` phía MMP, idempotency theo `requestId`, trả
+`200 {externalRef,duplicate}` / `422` brand không tồn tại / `401` sai chữ ký). Còn lại
+là cấu hình phía SMS.
+
 | Việc | Ai làm | Ghi chú |
 | --- | --- | --- |
-| Dựng endpoint receiver (verify HMAC + nhận payload) | **MMP** | Theo §2–§5 dưới |
-| Chốt URL receiver | MMP | → set vào `MMP_OUTBOUND_URL` (SMS, Railway) |
-| Secret HMAC | — | **Dùng chung secret inbound `MMP_WEBHOOK_SECRET`** (đã set sẵn ở Railway vì inbound đang chạy). MMP verify bằng đúng secret đó. KHÔNG cần secret mới. |
-| Set env trên SMS production | **Ops SMS (bạn)** | Chỉ cần set `MMP_OUTBOUND_URL`. Railway env, KHÔNG commit vào repo |
+| Receiver `POST /api/integration/brand-requests` | **MMP** | ĐÃ XONG |
+| `MMP_OUTBOUND_URL` = URL receiver | **Ops SMS** | vd `https://<mmp-host>/api/integration/brand-requests` |
+| `MMP_OUTBOUND_SECRET` = **giá trị** `MEAN_WEBHOOK_SECRET` phía MMP | **Ops SMS** | Lấy giá trị từ MMP; set trên Railway (KHÔNG commit) |
 
-> **Secret:** outbound mặc định **fallback về `MMP_WEBHOOK_SECRET`** (một secret
-> chung cho cặp SMS↔MMP). Chỉ set `MMP_OUTBOUND_SECRET` riêng nếu muốn **tách secret
-> theo chiều** — khi đó nó được ưu tiên.
-> Lưu ý tên: biến là `MMP_WEBHOOK_SECRET` (KHÔNG phải `MEAN_WEBHOOK_SECRET`; chữ
-> "MEAN" chỉ nằm ở header `x-mean-signature`).
+> ⚠️ **Secret theo CHIỀU — khớp theo GIÁ TRỊ, không theo tên biến:**
+> - **MMP→SMS** (product webhook): SMS verify bằng `MMP_WEBHOOK_SECRET`.
+> - **SMS→MMP** (brand-request): SMS **ký** bằng `MMP_OUTBOUND_SECRET`; MMP verify
+>   bằng `MEAN_WEBHOOK_SECRET`. ⇒ `MMP_OUTBOUND_SECRET` (SMS) phải **bằng đúng GIÁ
+>   TRỊ** `MEAN_WEBHOOK_SECRET` (MMP).
+> - Hai secret này **KHÁC nhau** (`MMP_WEBHOOK_SECRET` ≠ `MEAN_WEBHOOK_SECRET`).
+>   KHÔNG dùng `MMP_WEBHOOK_SECRET` để ký outbound (sẽ 401).
+> - SMS hiện **chưa** có luồng "orders push" sang MMP, nên không thể copy secret từ
+>   đó — Ops lấy thẳng giá trị `MEAN_WEBHOOK_SECRET` từ MMP.
 >
-> Nếu `MMP_OUTBOUND_URL` chưa set (hoặc không có secret nào) → SMS trả `"not
-> configured"` và **không gửi gì** (an toàn, không lỗi).
+> Nếu `MMP_OUTBOUND_URL`/`MMP_OUTBOUND_SECRET` chưa set → SMS trả `"not configured"`
+> và **không gửi gì** (an toàn).
 
 ---
 
@@ -97,12 +105,12 @@ với `{ requestId, status: 'confirmed'|'rejected', expectedDeliveryDate?, note?
 
 ## 6. Các bước bật (sau khi MMP có receiver)
 
-1. MMP cung cấp URL receiver. Secret: dùng lại `MMP_WEBHOOK_SECRET` đang có (MMP
-   verify bằng đúng giá trị này) — không cần sinh secret mới.
+1. Lấy từ MMP: (a) URL receiver, (b) **giá trị** `MEAN_WEBHOOK_SECRET` (secret MMP
+   verify request đến từ SMS).
 2. Trên **Railway (SMS production)** đặt:
-   - `MMP_OUTBOUND_URL = <URL receiver của MMP>`
-   - (Tùy chọn) `MMP_OUTBOUND_SECRET` — chỉ khi muốn tách secret riêng cho chiều này.
-3. Redeploy SMS. Thử 1 đơn out_of_stock → kiểm MMP nhận + SMS lưu `externalRef`.
+   - `MMP_OUTBOUND_URL = https://<mmp-host>/api/integration/brand-requests`
+   - `MMP_OUTBOUND_SECRET = <giá trị MEAN_WEBHOOK_SECRET của MMP>`
+3. Redeploy SMS. Thử 1 đơn out_of_stock → kiểm MMP nhận (`200`) + SMS lưu `externalRef`.
 4. Khi ổn, chạy kiểm kho cho các đơn `received` tồn — dòng hết kho tự bắn sang MMP.
 
 > **Chưa làm được gì cho tới khi MMP có receiver.** Trước đó, đẩy MMP luôn trả
