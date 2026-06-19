@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { ReconcileViewRow } from '@/features/shipments/reconcile-view';
 import { fedexImpliedBase } from '@/features/shipments/fedex-quote-compare';
 import { setReconcileStatus, clearReconcileStatus, approveCarrierError, disputeWithCarrier, markInternalError } from '@/features/shipments/reconcile-status-actions';
@@ -244,6 +245,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
  * (vd: "FedEx confirm MC thuộc Zone M, đã sửa zone map").
  */
 function ReconcileActions({ row }: { row: ReconcileViewRow }) {
+  const router = useRouter();
   const [note, setNote] = useState(row.note ?? '');
   const [kind, setKind] = useState(() => suggestCauseKind(row.diagnosis));
   const [busy, setBusy] = useState(false);
@@ -254,13 +256,14 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     setBusy(true);
     try {
       await setReconcileStatus({ shipmentId: row.shipmentId, status, note: note.trim() || null, billedTotal: row.billedTotal });
+      router.refresh();
     } finally {
       setBusy(false);
     }
   }
   async function undo() {
     setBusy(true);
-    try { await clearReconcileStatus(row.shipmentId); } finally { setBusy(false); }
+    try { await clearReconcileStatus(row.shipmentId); router.refresh(); } finally { setBusy(false); }
   }
   async function approve() {
     if (!note.trim() || !kind) return;
@@ -270,6 +273,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
         shipmentId: row.shipmentId, kind, note: note.trim(),
         billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0,
       });
+      router.refresh();
     } finally { setBusy(false); }
   }
   async function dispute() {
@@ -277,6 +281,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     setBusy(true);
     try {
       await disputeWithCarrier({ shipmentId: row.shipmentId, kind, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
+      router.refresh();
     } finally { setBusy(false); }
   }
   async function markInternal() {
@@ -284,12 +289,14 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     setBusy(true);
     try {
       await markInternalError({ shipmentId: row.shipmentId, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
+      router.refresh();
     } finally { setBusy(false); }
   }
   async function approveDispute() {
     setBusy(true);
     try {
       await approveCarrierError({ shipmentId: row.shipmentId, kind: row.carrierErrorKind ?? kind, note: row.note ?? note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVndAtReview ?? row.deltaVnd ?? 0 });
+      router.refresh();
     } finally { setBusy(false); }
   }
 
