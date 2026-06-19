@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
+import { reconcileShipmentsWithStatus, pdfBillByShipment } from '@/features/shipments/reconcile-view';
 import { filterReconcileRows, reconcileSummary, paginate, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
@@ -46,6 +46,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
   const filteredRows = filterReconcileRows(rows, filters);
   const summary = reconcileSummary(filteredRows);
   const { pageRows, totalPages, safePage } = paginate(filteredRows, Number(sp.page ?? 0) || 0, PAGE_SIZE);
+  const pdfMap = await pdfBillByShipment(pageRows.map((r) => r.shipmentId));
 
   // "Vấn đề & Report" mở: gom đơn PENDING có vấn đề trên TOÀN BỘ rows (không phải trang).
   const groups = new Map<string, OpenIssue>();
@@ -76,6 +77,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
         filters={filters} openIssues={openIssues}
         reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups}
+        pdfMap={pdfMap}
       />
     </div>
   );
