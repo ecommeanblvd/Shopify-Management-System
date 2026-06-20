@@ -166,6 +166,8 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
           <option value="carrier_error">Lỗi carrier</option>
           <option value="disputing">Đang đòi NCC</option>
           <option value="internal_error">Lỗi nội bộ</option>
+          <option value="credited">Đã thu hồi</option>
+          <option value="accepted">Chấp nhận chênh lệch</option>
         </select>
         <input value={country} onChange={(e) => { setCountry(e.target.value); debouncedPush({ country: e.target.value }); }} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => { setMinPct(e.target.value); debouncedPush({ minPct: e.target.value }); }} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
@@ -253,6 +255,8 @@ const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: stri
   carrier_error: { label: 'Lỗi carrier', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
   disputing: { label: 'Đang đòi NCC', className: 'border border-sky-500/40 text-sky-600 dark:text-sky-400' },
   internal_error: { label: 'Lỗi nội bộ', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
+  credited: { label: 'Đã thu hồi', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
+  accepted: { label: 'Chấp nhận chênh lệch', className: 'border border-border text-muted-foreground' },
 };
 
 function FragmentRow({

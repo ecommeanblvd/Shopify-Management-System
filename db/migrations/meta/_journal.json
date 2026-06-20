@@ -505,6 +505,13 @@
       "when": 1782564000000,
       "tag": "0071_mmp-order-pushes",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1782650400000,
+      "tag": "0072_carrier-claim-resolution",
+      "breakpoints": true
     }
   ]
 }
