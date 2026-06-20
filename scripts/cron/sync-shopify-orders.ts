@@ -1,4 +1,5 @@
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
+import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -12,6 +13,12 @@ async function main(): Promise<void> {
     }
   }
   if (failures > 0) process.exitCode = 1;
+  try {
+    const mmp = await retryFailedMmpPushes();
+    process.stdout.write(`retry-mmp: retried ${mmp.retried}, recovered ${mmp.recovered}, stillFailing ${mmp.stillFailing}\n`);
+  } catch (e) {
+    process.stderr.write(`retry-mmp: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
 }
 
 main()
