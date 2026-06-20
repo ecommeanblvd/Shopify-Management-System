@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -8,7 +8,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getSignedDownloadUrl } from '@/lib/storage/s3';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; cardId: string }> }) {
-  const { cardId } = await params;
+  const { id, cardId } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return new NextResponse('Unauthorized', { status: 401 });
   const role = await getRole(session.user.id);
@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const [card] = await db
     .select({ key: schema.carrierRateCards.sourcePdfKey })
     .from(schema.carrierRateCards)
-    .where(eq(schema.carrierRateCards.id, cardId))
+    .where(and(eq(schema.carrierRateCards.id, cardId), eq(schema.carrierRateCards.carrierAccountId, id)))
     .limit(1);
   if (!card?.key) return new NextResponse('No PDF for this card', { status: 404 });
 
