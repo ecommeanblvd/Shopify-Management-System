@@ -6,7 +6,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { sendOrderToMmp } from '@/features/mmp/order-outbound';
+import { pushOrderToMmp } from '@/features/mmp/order-outbound';
 import { pickBackfillOrderIds } from '@/features/mmp/backfill-select';
 
 const BRAND_STATUSES = [
@@ -16,7 +16,8 @@ const BRAND_STATUSES = [
   'brand_rejected',
 ] as const;
 
-/** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). Idempotent (MMP dedupe).
+/** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). pushOrderToMmp tự bỏ qua
+ *  đơn đã sent-không-đổi (dedup phía mình) → chạy lại không flood; MMP dedupe là backstop.
  *  `limit` → chỉ đẩy N đơn đầu (để test trước khi chạy full); để trống = tất cả.
  *  `total` = tổng đơn eligible (trước khi giới hạn) để biết còn bao nhiêu. */
 export async function backfillMmpOrders(opts?: { limit?: number }): Promise<{
@@ -50,9 +51,9 @@ export async function backfillMmpOrders(opts?: { limit?: number }): Promise<{
     skipped = 0,
     failed = 0;
   for (const oid of orderIds) {
-    const r = await sendOrderToMmp(oid);
-    if (r.ok) pushed++;
-    else if (r.error === 'no brand lines' || r.error === 'not configured') skipped++;
+    const r = await pushOrderToMmp(oid);
+    if (r.ok && !r.skipped) pushed++;
+    else if (r.skipped || r.error === 'no brand lines' || r.error === 'not configured') skipped++;
     else failed++;
   }
   return { pushed, skipped, failed, total };
