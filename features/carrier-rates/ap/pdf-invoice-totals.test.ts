@@ -29,6 +29,25 @@ describe('parsePdfInvoiceTotals — FedEx', () => {
     expect(r['00006666']).toBeUndefined();
     expect(r['1']).toBeUndefined();
   });
+
+  it('PDF nhiều hoá đơn FedEx → mỗi invoice lấy đúng total/ngày của block mình', () => {
+    const TWO = `
+FREIGHT INVOICE SUMMARY
+                              Invoice No.:                 734005869
+                              Invoice Date:                28 Jul 2025
+Grand Total (VAT included)    132,509,041
+Your payment is due by 17 Aug 2025
+
+FREIGHT INVOICE SUMMARY
+                              Invoice No.:                 800111222
+                              Invoice Date:                03 Aug 2025
+Grand Total (VAT included)    45,000,000
+Your payment is due by 02 Sep 2025
+`;
+    const r = parsePdfInvoiceTotals(TWO, 'fedex');
+    expect(r['734005869']).toEqual({ total: 132509041, issueDate: '2025-07-28', dueDate: '2025-08-17' });
+    expect(r['800111222']).toEqual({ total: 45000000, issueDate: '2025-08-03', dueDate: '2025-09-02' });
+  });
 });
 
 describe('parsePdfInvoiceTotals — DHL', () => {
