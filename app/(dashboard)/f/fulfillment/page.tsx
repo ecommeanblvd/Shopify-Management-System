@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { listFulfillmentWorklist } from '@/features/fulfillment/queries';
 import { WorklistTable } from '@/components/fulfillment/WorklistTable';
 import { BackfillButton } from '@/components/fulfillment/BackfillButton';
+import { MmpBackfillButton } from '@/components/fulfillment/MmpBackfillButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export default async function FulfillmentWorklistPage() {
         </div>
         <div className="flex items-center gap-2">
           {hasPermission(role, 'manage_fulfillment') && <BackfillButton />}
+          {hasPermission(role, 'manage_fulfillment') && <MmpBackfillButton />}
           <Link
             href="/f/fulfillment/brand-requests"
             className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted"

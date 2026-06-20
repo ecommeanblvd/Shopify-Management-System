@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { sendOrderToMmp } from '@/features/mmp/order-outbound';
+import { pickBackfillOrderIds } from '@/features/mmp/backfill-select';
 
 const BRAND_STATUSES = [
   'out_of_stock',
@@ -15,11 +16,14 @@ const BRAND_STATUSES = [
   'brand_rejected',
 ] as const;
 
-/** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). Idempotent (MMP dedupe). */
-export async function backfillMmpOrders(): Promise<{
+/** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). Idempotent (MMP dedupe).
+ *  `limit` → chỉ đẩy N đơn đầu (để test trước khi chạy full); để trống = tất cả.
+ *  `total` = tổng đơn eligible (trước khi giới hạn) để biết còn bao nhiêu. */
+export async function backfillMmpOrders(opts?: { limit?: number }): Promise<{
   pushed: number;
   skipped: number;
   failed: number;
+  total: number;
 }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Unauthenticated');
@@ -38,8 +42,9 @@ export async function backfillMmpOrders(): Promise<{
       inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]),
     );
 
-  // Dedupe: multiple brand lines in one fulfillment → same orderId.
-  const orderIds = [...new Set(rows.map((r) => r.orderId))];
+  // Dedupe (nhiều dòng brand cùng đơn → 1 orderId); total = toàn bộ eligible.
+  const total = new Set(rows.map((r) => r.orderId)).size;
+  const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
 
   let pushed = 0,
     skipped = 0,
@@ -50,5 +55,5 @@ export async function backfillMmpOrders(): Promise<{
     else if (r.error === 'no brand lines' || r.error === 'not configured') skipped++;
     else failed++;
   }
-  return { pushed, skipped, failed };
+  return { pushed, skipped, failed, total };
 }
