@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom } from './invoice-upload';
+import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase } from './invoice-upload';
 
 describe('detectInvoiceFormat', () => {
   it('dhl + .csv → dhl_csv', () => { expect(detectInvoiceFormat('dhl', 'HANR1.csv')).toBe('dhl_csv'); });
@@ -10,7 +10,6 @@ describe('detectInvoiceFormat', () => {
   it('sai đuôi theo carrier → unsupported', () => {
     expect(detectInvoiceFormat('dhl', 'a.xlsx')).toBe('unsupported');   // DHL chỉ CSV
     expect(detectInvoiceFormat('fedex', 'a.csv')).toBe('unsupported');  // FedEx chỉ XLSX
-    expect(detectInvoiceFormat('dhl', 'a.pdf')).toBe('unsupported');
     expect(detectInvoiceFormat(null, 'a.csv')).toBe('unsupported');
   });
 });
@@ -53,5 +52,42 @@ describe('fboPreviewFrom', () => {
     expect(pv.lineCount).toBe(10);
     expect(pv.warnings).toHaveLength(1);
     expect(pv.warnings[0]).toMatch(/2 hoá đơn/);
+  });
+});
+
+describe('detectInvoiceFormat — PDF', () => {
+  it('.pdf (mọi carrier) → invoice_pdf', () => {
+    expect(detectInvoiceFormat('fedex', 'PART_1.PDF')).toBe('invoice_pdf');
+    expect(detectInvoiceFormat('dhl', 'hoadon.pdf')).toBe('invoice_pdf');
+    expect(detectInvoiceFormat(null, 'x.pdf')).toBe('invoice_pdf');
+  });
+});
+
+describe('InvoicePreview.format', () => {
+  it('DHL preview gắn format dhl_csv', () => {
+    const pv = toInvoicePreview({ kind: 'dhl', accountCurrency: 'VND', p: {
+      billNumber: 'HANR1', amountInclVat: 1000, periodStart: '2026-01-01', periodEnd: '2026-01-05',
+      issueDate: '2026-01-06', dueDate: '2026-02-05', currency: 'VND', shipments: [{}] } });
+    expect(pv.format).toBe('dhl_csv');
+  });
+  it('FBO preview gắn format fbo_xlsx', () => {
+    const pv = fboPreviewFrom([{ billNumber: 'FB9', periodStart: null, periodEnd: null, amount: 1, lineCount: 1 }], 'VND');
+    expect(pv.format).toBe('fbo_xlsx');
+  });
+});
+
+describe('splitByPhase', () => {
+  const f = (filename: string) => ({ filename });
+  it('tách spreadsheet / pdf / unsupported theo carrier', () => {
+    const r = splitByPhase([f('a.csv'), f('b.pdf'), f('c.xlsx'), f('d.txt')], 'dhl');
+    expect(r.spreadsheets.map((x) => x.filename)).toEqual(['a.csv']);   // dhl: chỉ .csv là spreadsheet
+    expect(r.pdfs.map((x) => x.filename)).toEqual(['b.pdf']);
+    expect(r.unsupported.map((x) => x.filename)).toEqual(['c.xlsx', 'd.txt']); // .xlsx không hợp lệ cho dhl
+  });
+  it('fedex: .xlsx là spreadsheet, .csv unsupported', () => {
+    const r = splitByPhase([f('a.csv'), f('b.xlsx'), f('c.pdf')], 'fedex');
+    expect(r.spreadsheets.map((x) => x.filename)).toEqual(['b.xlsx']);
+    expect(r.pdfs.map((x) => x.filename)).toEqual(['c.pdf']);
+    expect(r.unsupported.map((x) => x.filename)).toEqual(['a.csv']);
   });
 });

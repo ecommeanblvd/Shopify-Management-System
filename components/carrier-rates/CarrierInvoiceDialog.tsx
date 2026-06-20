@@ -106,12 +106,12 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
             <input
               type="file"
               multiple
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx,.xls,.pdf"
               className="block w-full text-sm file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-1 file:text-xs"
               onChange={handleFileChange}
             />
             <p className="text-[11px] text-muted-foreground">
-              Kéo file hoá đơn (DHL CSV / FedEx XLSX) — 1 hoặc nhiều
+              Kéo file hoá đơn (DHL CSV / FedEx XLSX / PDF hoá đơn) — 1 hoặc nhiều
             </p>
           </div>
 
@@ -181,6 +181,19 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
 }
 
 function PreviewBlock({ preview, fmt }: { preview: InvoicePreview; fmt: (v: number | null) => string }) {
+  if (preview.format === 'invoice_pdf') {
+    return (
+      <div className="space-y-2">
+        <div className="space-y-1 text-sm">
+          <div className="font-medium">PDF hoá đơn</div>
+          {preview.warnings.map((w, i) => (
+            <p key={i} className="text-muted-foreground text-xs">{w}</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const rows: { label: string; value: string }[] = [
     { label: 'Carrier', value: preview.carrier === 'fedex' ? 'FedEx' : 'DHL' },
     { label: 'Số hoá đơn', value: preview.billNumber ?? '—' },

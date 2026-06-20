@@ -38,7 +38,12 @@ export function BillsBoard(props: Props) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Hoá đơn ({bills.length})</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        Hoá đơn ({bills.length})
+        {(() => { const miss = bills.filter((b) => !b.hasPdf).length; return miss > 0 ? (
+          <span className="text-amber-600 dark:text-amber-400"> · {miss} bill chưa có PDF</span>
+        ) : null; })()}
+      </h2>
       <div className="rounded-xl border border-border overflow-hidden">
         <div className="grid grid-cols-12 gap-2 bg-muted/30 px-4 py-2 text-[11px] uppercase tracking-wider text-muted-foreground">
           <div className="col-span-3">Hoá đơn / kỳ</div>
@@ -83,6 +88,18 @@ export function BillsBoard(props: Props) {
                     >
                       <FileText className="size-4" />
                     </a>
+                  )}
+                  {b.hasPdf ? (
+                    <a
+                      href={`/f/carrier-rates/${accountId}/bills/${b.id}/pdf`}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-muted-foreground hover:text-foreground" title="Mở PDF hoá đơn"
+                    >
+                      <FileText className="size-4" />
+                    </a>
+                  ) : (
+                    <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Chưa đính PDF hoá đơn">⚠ chưa có PDF</span>
                   )}
                 </div>
               </li>

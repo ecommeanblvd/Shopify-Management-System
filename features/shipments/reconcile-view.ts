@@ -5,6 +5,7 @@
  * stays status-agnostic and unit-testable.
  */
 import { db, schema } from '@/db/client';
+import { eq, inArray, isNotNull, and } from 'drizzle-orm';
 import {
   type ReconcileRow,
   type ReconcileSummary,
@@ -184,4 +185,21 @@ export async function reconcileShipmentsWithStatus(
   }
 
   return { summary, rows, computedAt };
+}
+
+/** shipmentId -> bill có PDF (để hiện link PDF theo tracking ở đối soát). Trả {accountId,billId}. */
+export async function pdfBillByShipment(shipmentIds: string[]): Promise<Record<string, { accountId: string; billId: string }>> {
+  if (shipmentIds.length === 0) return {};
+  const rows = await db
+    .select({ shipmentId: schema.carrierBillLines.shipmentId, billId: schema.carrierBills.id, accountId: schema.carrierBills.carrierAccountId })
+    .from(schema.carrierBillLines)
+    .innerJoin(schema.carrierBills, eq(schema.carrierBillLines.billId, schema.carrierBills.id))
+    .where(and(
+      inArray(schema.carrierBillLines.shipmentId, shipmentIds),
+      isNotNull(schema.carrierBillLines.shipmentId),
+      isNotNull(schema.carrierBills.pdfFileKey),
+    ));
+  const out: Record<string, { accountId: string; billId: string }> = {};
+  for (const r of rows) if (r.shipmentId) out[r.shipmentId] = { accountId: r.accountId, billId: r.billId };
+  return out;
 }

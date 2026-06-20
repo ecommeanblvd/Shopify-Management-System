@@ -94,6 +94,7 @@ interface Props {
   carrierErrors: CarrierErrorRow[];
   carrierErrorGroups: CarrierErrorGroup[];
   internalErrorGroups: InternalErrorGroup[];
+  pdfMap: Record<string, { accountId: string; billId: string }>;
 }
 
 /** Màu số LỆCH theo HƯỚNG (để rà soát): hệ thống CAO hơn billed (deltaVnd<0,
@@ -108,7 +109,7 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups }: Props) {
+export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -205,6 +206,7 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
                 r={r}
                 expanded={expanded === r.shipmentId}
                 onToggle={() => setExpanded(expanded === r.shipmentId ? null : r.shipmentId)}
+                pdfMap={pdfMap}
               />
             ))}
             {totalFiltered === 0 && (
@@ -254,11 +256,12 @@ const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: stri
 };
 
 function FragmentRow({
-  r, expanded, onToggle,
+  r, expanded, onToggle, pdfMap,
 }: {
   r: ReconcileViewRow;
   expanded: boolean;
   onToggle: () => void;
+  pdfMap: Record<string, { accountId: string; billId: string }>;
 }) {
   const issue = issueInfo(r);
   return (
@@ -346,7 +349,20 @@ function FragmentRow({
       </tr>
       {expanded && (
         <tr className="border-t border-border bg-muted/10">
-          <td colSpan={14}><ReconcileDetailPanel row={r} /></td>
+          <td colSpan={14}>
+            {pdfMap[r.shipmentId] && (
+              <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+                <a
+                  href={`/f/carrier-rates/${pdfMap[r.shipmentId].accountId}/bills/${pdfMap[r.shipmentId].billId}/pdf`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+                >
+                  Hoá đơn PDF
+                </a>
+              </div>
+            )}
+            <ReconcileDetailPanel row={r} />
+          </td>
         </tr>
       )}
     </>
