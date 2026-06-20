@@ -18,9 +18,11 @@ export interface CarrierErrorRow {
   note: string;
   billedVnd: number | null;
   deltaVnd: number | null;
+  recoveredVnd: number | null;
+  creditNoteNumber: string | null;
   approvedByName: string | null;
   approvedAt: Date;
-  state: 'disputing' | 'approved';
+  state: 'disputing' | 'approved' | 'credited' | 'accepted';
 }
 
 export interface CarrierErrorGroup {
@@ -77,6 +79,8 @@ export async function listCarrierErrors(): Promise<CarrierErrorRow[]> {
       note: schema.shipmentReconcileStatus.note,
       billedVnd: schema.shipmentReconcileStatus.billedTotalAtReview,
       deltaVnd: schema.shipmentReconcileStatus.deltaVndAtReview,
+      recovered: schema.shipmentReconcileStatus.recoveredVnd,
+      creditNoteNumber: schema.shipmentReconcileStatus.creditNoteNumber,
       approvedByName: schema.user.name,
       approvedAt: schema.shipmentReconcileStatus.reconciledAt,
       status: schema.shipmentReconcileStatus.status,
@@ -85,7 +89,7 @@ export async function listCarrierErrors(): Promise<CarrierErrorRow[]> {
     .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentReconcileStatus.shipmentId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .leftJoin(schema.user, eq(schema.user.id, schema.shipmentReconcileStatus.reconciledBy))
-    .where(inArray(schema.shipmentReconcileStatus.status, ['carrier_error', 'disputing']))
+    .where(inArray(schema.shipmentReconcileStatus.status, ['carrier_error', 'disputing', 'credited', 'accepted']))
     .orderBy(desc(schema.shipmentReconcileStatus.reconciledAt));
   return rows.map((r) => ({
     shipmentId: r.shipmentId,
@@ -98,8 +102,13 @@ export async function listCarrierErrors(): Promise<CarrierErrorRow[]> {
     note: r.note ?? '',
     billedVnd: r.billedVnd !== null ? Number(r.billedVnd) : null,
     deltaVnd: r.deltaVnd !== null ? Number(r.deltaVnd) : null,
+    recoveredVnd: r.recovered !== null ? Number(r.recovered) : null,
+    creditNoteNumber: r.creditNoteNumber ?? null,
     approvedByName: r.approvedByName ?? null,
     approvedAt: r.approvedAt,
-    state: r.status === 'disputing' ? 'disputing' : 'approved',
+    state: r.status === 'disputing' ? 'disputing'
+      : r.status === 'credited' ? 'credited'
+      : r.status === 'accepted' ? 'accepted'
+      : 'approved',
   }));
 }
