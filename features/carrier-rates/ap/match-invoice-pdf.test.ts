@@ -29,4 +29,16 @@ describe('matchInvoiceNumbers', () => {
   it('cùng số lặp nhiều lần → dedup', () => {
     expect(matchInvoiceNumbers('734001324 734001324 734001324', known)).toEqual(['734001324']);
   });
+
+  it('khớp billNumber DHL có tiền tố HANR', () => {
+    const dhlKnown = new Set(['HANR000269158', 'HANR000268253']);
+    const text = `Invoice no.   HANR000269158
+      Số tham chiếu (Reference DHL Invoice no): 527888723 - HANR000269158
+      21/04/2026  SGN  2154097234  FYV  605,447`;
+    expect(matchInvoiceNumbers(text, dhlKnown)).toEqual(['HANR000269158']);
+  });
+
+  it('DHL: token số thuần (account no) KHÔNG nhầm thành billNumber HANR', () => {
+    expect(matchInvoiceNumbers('527888723 000269158', new Set(['HANR000269158']))).toEqual([]);
+  });
 });
