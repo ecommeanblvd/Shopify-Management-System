@@ -1693,6 +1693,8 @@ export const orderFulfillmentLines = pgTable('order_fulfillment_lines', {
   index('order_fulfillment_lines_sku_status_idx').on(t.sku, t.status),
 ]);
 
+export const mmpPushStatusEnum = pgEnum('mmp_push_status', ['pending', 'sent', 'failed']);
+
 export const brandRequestSendStatusEnum = pgEnum('brand_request_send_status', ['pending', 'sent', 'failed']);
 export const brandRequestConfirmStatusEnum = pgEnum('brand_request_confirm_status', ['awaiting', 'confirmed', 'rejected']);
 
@@ -1720,6 +1722,22 @@ export const brandOrderRequests = pgTable('brand_order_requests', {
 }, (t) => [
   index('brand_order_requests_confirm_idx').on(t.confirmStatus),
   index('brand_order_requests_order_idx').on(t.orderId),
+]);
+
+/** Trạng thái đẩy MỖI đơn sang MMP (kênh orders) — cờ đã-đẩy + retry. 1 dòng/đơn. */
+export const mmpOrderPushes = pgTable('mmp_order_pushes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull().unique(),
+  status: mmpPushStatusEnum('status').notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  sentAt: timestamp('sent_at'),
+  externalRef: text('external_ref'),
+  payloadHash: text('payload_hash'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('mmp_order_pushes_status_idx').on(t.status),
 ]);
 
 /** Audit log of status transitions. */

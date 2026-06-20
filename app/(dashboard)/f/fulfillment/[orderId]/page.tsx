@@ -8,6 +8,8 @@ import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/que
 import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
 import { AddressVerifyCard } from '@/components/fulfillment/AddressVerifyCard';
 import { PackPanel } from '@/components/fulfillment/PackPanel';
+import { getMmpPushInfo } from '@/features/mmp/order-push-query';
+import { MmpPushBadge } from '@/components/fulfillment/MmpPushBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +25,11 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
   const [picked, packs] = await Promise.all([pickedUnassignedLines(orderId), listPacksForOrder(orderId)]);
 
   const canManage = hasPermission(role, 'manage_fulfillment');
+  const mmpPush = await getMmpPushInfo(orderId);
   return (
     <div className="space-y-6 p-6">
       <OrderDetailPanel orderId={orderId} status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
+      <MmpPushBadge info={mmpPush} orderId={orderId} canManage={canManage} />
       <AddressVerifyCard address={detail.address} />
       <PackPanel
         orderId={orderId}
