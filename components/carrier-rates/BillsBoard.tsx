@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { FileText } from 'lucide-react';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
+import { pdfCmpBadge } from './pdf-cmp-badge';
+import { comparePdfToBill } from '@/features/carrier-rates/ap/compare-pdf-bill';
 import type { BillRow, PaymentRow, BillLineRow } from '@/features/carrier-rates/ap/bills-actions';
 import type { BillSummary } from '@/features/carrier-rates/ap/ap-summary';
 
@@ -42,6 +44,9 @@ export function BillsBoard(props: Props) {
         Hoá đơn ({bills.length})
         {(() => { const miss = bills.filter((b) => !b.hasPdf).length; return miss > 0 ? (
           <span className="text-amber-600 dark:text-amber-400"> · {miss} bill chưa có PDF</span>
+        ) : null; })()}
+        {(() => { const bad = bills.filter((b) => b.hasPdf && comparePdfToBill(b, b).overall === 'mismatch').length; return bad > 0 ? (
+          <span className="text-amber-600 dark:text-amber-400"> · {bad} bill PDF lệch</span>
         ) : null; })()}
       </h2>
       <div className="rounded-xl border border-border overflow-hidden">
@@ -90,14 +95,19 @@ export function BillsBoard(props: Props) {
                     </a>
                   )}
                   {b.hasPdf ? (
-                    <a
-                      href={`/f/carrier-rates/${accountId}/bills/${b.id}/pdf`}
-                      target="_blank" rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-muted-foreground hover:text-foreground" title="Mở PDF hoá đơn"
-                    >
-                      <FileText className="size-4" />
-                    </a>
+                    <>
+                      <a
+                        href={`/f/carrier-rates/${accountId}/bills/${b.id}/pdf`}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-muted-foreground hover:text-foreground" title="Mở PDF hoá đơn"
+                      >
+                        <FileText className="size-4" />
+                      </a>
+                      {b.hasPdf && (() => { const bd = pdfCmpBadge(b, fmt); return (
+                        <span className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + bd.cls} title={bd.title}>{bd.label}</span>
+                      ); })()}
+                    </>
                   ) : (
                     <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Chưa đính PDF hoá đơn">⚠ chưa có PDF</span>
                   )}
