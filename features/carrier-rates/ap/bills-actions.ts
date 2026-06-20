@@ -112,6 +112,9 @@ export interface BillRow {
   currency: string;
   hasFile: boolean;
   hasPdf: boolean;
+  pdfAmount: number | null;
+  pdfIssueDate: string | null;
+  pdfDueDate: string | null;
   filename: string | null;
   note: string | null;
 }
@@ -133,6 +136,9 @@ export async function listBills(carrierAccountId: string): Promise<BillRow[]> {
     currency: b.currency,
     hasFile: !!b.fileKey,
     hasPdf: !!b.pdfFileKey,
+    pdfAmount: b.pdfAmount !== null ? Number(b.pdfAmount) : null,
+    pdfIssueDate: b.pdfIssueDate,
+    pdfDueDate: b.pdfDueDate,
     filename: b.filename,
     note: b.note,
   }));

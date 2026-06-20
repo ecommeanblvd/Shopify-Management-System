@@ -1,4 +1,5 @@
 import { parseDhlInvoiceCsv, dhlShipmentToBillLine } from './dhl-invoice-csv';
+import { parsePdfInvoiceTotals } from './pdf-invoice-totals';
 import { createBill } from './bills-actions';
 import { reconcileDhlBill } from './dhl-reconcile-actions';
 import { previewFboBill, applyFboBill } from './fbo-import-actions';
@@ -171,13 +172,21 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         catch { out.push({ ...base, message: 'Không đọc được PDF' }); continue; }
         const invoices = matchInvoiceNumbers(text, known);
         if (invoices.length === 0) { out.push({ ...base, message: 'Không khớp bill nào — import CSV/XLSX trước' }); continue; }
+        const carrier = ctx.carrierKey === 'fedex' ? 'fedex' : 'dhl';
+        const totals = parsePdfInvoiceTotals(text, carrier);
         const ct = f.contentType || 'application/pdf';
         const stored = await compressPdf(f.bytes);
         const fileKey = `carrier-bills/${ctx.carrierAccountId}/pdf-${randomUUID()}.pdf`;
         await putObject(fileKey, stored, ct);
         for (const inv of invoices) {
+          const t = totals[inv];
           await db.update(schema.carrierBills)
-            .set({ pdfFileKey: fileKey, pdfFilename: f.filename, pdfContentType: ct, pdfByteSize: stored.length })
+            .set({
+              pdfFileKey: fileKey, pdfFilename: f.filename, pdfContentType: ct, pdfByteSize: stored.length,
+              pdfAmount: t ? String(t.total) : null,
+              pdfIssueDate: t?.issueDate ?? null,
+              pdfDueDate: t?.dueDate ?? null,
+            })
             .where(eq(schema.carrierBills.id, byNumber.get(inv)!));
         }
         out.push({ filename: f.filename, ok: true, billNumber: invoices.length === 1 ? invoices[0] : `${invoices.length} bill`, amount: null, matched: null, freight: null, message: `Đính PDF vào ${invoices.length} bill` });
