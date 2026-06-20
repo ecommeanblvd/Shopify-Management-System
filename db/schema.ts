@@ -586,6 +586,10 @@ export const carrierBills = pgTable('carrier_bills', {
   pdfFilename: text('pdf_filename'),
   pdfContentType: text('pdf_content_type'),
   pdfByteSize: integer('pdf_byte_size'),
+  /** Tổng tiền + ngày đọc từ PDF hoá đơn (mảng C) — để đối soát với amount/issueDate/dueDate (từ XLSX). */
+  pdfAmount: numeric('pdf_amount', { precision: 14, scale: 2 }),
+  pdfIssueDate: date('pdf_issue_date'),
+  pdfDueDate: date('pdf_due_date'),
   note: text('note'),
   createdBy: text('created_by').references(() => user.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
