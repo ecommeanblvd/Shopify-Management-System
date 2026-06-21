@@ -74,8 +74,8 @@ export interface ReconcileSummaryStat {
 
 /** Σ billed/engine/delta + đếm (đơn auto-reconciled fold engine=billed để Σ Lệch
  *  không phình vì pass-through; over10/pendingCount chỉ đếm đơn CÒN pending).
- *  Dòng chưa có hoá đơn carrier (billedTotal === null) bị loại khỏi Σ tiền nhưng
- *  vẫn được đếm vào pendingCount/disputingCount/n. */
+ *  Dòng chưa có hoá đơn carrier (billedTotal === null) bị loại khỏi Σ tiền VÀ
+ *  khỏi pendingCount/disputingCount — chỉ tính vào n (đếm riêng qua countByEffStatus). */
 export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat {
   let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
   for (const r of rows) {

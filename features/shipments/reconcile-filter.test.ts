@@ -86,6 +86,16 @@ describe('reconcileSummary', () => {
     expect(s.billed).toBe(300); expect(s.engine).toBe(250); expect(s.delta).toBe(50);
     expect(s.pendingCount).toBe(1); expect(s.over10).toBe(1); expect(s.n).toBe(2);
   });
+  it('dòng tiền-billed (billedTotal null) bị loại khỏi Σ tiền + pendingCount, vẫn vào n', () => {
+    const s = reconcileSummary([
+      row({ billedTotal: 200, engineTotal: 150, deltaVnd: 500_000, deltaPct: 20 }), // pending billed
+      row({ billedTotal: null, engineTotal: 900_000, deltaVnd: null, engineReason: null } as never), // awaiting_billed
+      row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never), // awaiting_measurement
+    ]);
+    expect(s.billed).toBe(200); expect(s.engine).toBe(150); // engine ước tính 900k KHÔNG vào Σ
+    expect(s.pendingCount).toBe(1); // chỉ dòng billed pending
+    expect(s.n).toBe(3); // n vẫn đếm cả 3
+  });
 });
 
 describe('order-driven sort + count', () => {
