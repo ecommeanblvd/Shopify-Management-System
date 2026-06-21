@@ -28,6 +28,14 @@ describe('parseCreditNoteXml', () => {
       `</DSHHDVu></NDHDon></DLHDon></HDon>`;
     expect(parseCreditNoteXml(x).lines).toEqual([{ tracking: '123456789012', creditVnd: 108000 }]);
   });
+  it('chịu thuộc tính trên tag (vd <HHDVu Id="..."> ở hoá đơn ký số) → vẫn parse', () => {
+    const x = `<HDon><DLHDon Id="DuLieuKy"><TTChung><KHHDon foo="1">Z</KHHDon><SHDon>3</SHDon></TTChung><NDHDon><DSHHDVu>` +
+      `<HHDVu Id="line-1"><THHDVu>555000111222 VN US</THHDVu><ThTien>-50000</ThTien><TTKhac><TTin><TTruong>Amount</TTruong><KDLieu>numeric</KDLieu><DLieu>-54000</DLieu></TTin></TTKhac></HHDVu>` +
+      `</DSHHDVu></NDHDon></DLHDon></HDon>`;
+    const r = parseCreditNoteXml(x);
+    expect(r.creditNoteNumber).toBe('Z-3');
+    expect(r.lines).toEqual([{ tracking: '555000111222', creditVnd: 54000 }]);
+  });
   it('rác / không phải XML → rỗng', () => {
     expect(parseCreditNoteXml('blah')).toEqual({ creditNoteNumber: null, lines: [] });
   });
