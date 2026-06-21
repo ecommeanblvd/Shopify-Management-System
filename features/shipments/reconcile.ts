@@ -293,7 +293,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     });
 
     if (!q.ok) {
-      unmatched += 1;
+      if (hasBilled) unmatched += 1;
       rows.push(buildRow(r, null, q.code));
       continue;
     }
