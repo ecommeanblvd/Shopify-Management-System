@@ -179,7 +179,8 @@ export async function reconcileShipmentsWithStatus(
     if (!fq) continue;
     r.fedexQuote = fq;
     r.fedexCompare = compareBilledVsFedexQuote(
-      { total: r.billedTotal, fuel: r.billedFuel, remote: r.billedRemote, demand: r.billedDemand, signature: r.billedSignature, vat: r.billedVat },
+      // billed luôn có ở nhánh này (status billed)
+      { total: r.billedTotal ?? 0, fuel: r.billedFuel, remote: r.billedRemote, demand: r.billedDemand, signature: r.billedSignature, vat: r.billedVat },
       fq,
     );
   }

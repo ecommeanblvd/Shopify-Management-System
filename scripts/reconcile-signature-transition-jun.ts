@@ -41,12 +41,12 @@ async function main(): Promise<void> {
     await db.insert(schema.shipmentReconcileStatus)
       .values({
         shipmentId: r.shipmentId, status: 'reconciled', note: NOTE,
-        billedTotalAtReview: r.billedTotal.toString(),
+        billedTotalAtReview: (r.billedTotal ?? 0).toString(), // billed luôn có ở nhánh này (status billed)
         carrierErrorKind: null, deltaVndAtReview: null, reconciledBy: 'system:sig-transition',
       })
       .onConflictDoUpdate({
         target: schema.shipmentReconcileStatus.shipmentId,
-        set: { status: 'reconciled', note: NOTE, billedTotalAtReview: r.billedTotal.toString(),
+        set: { status: 'reconciled', note: NOTE, billedTotalAtReview: (r.billedTotal ?? 0).toString(), // billed luôn có ở nhánh này (status billed)
           carrierErrorKind: null, deltaVndAtReview: null, reconciledBy: 'system:sig-transition', reconciledAt: sql`now()` },
       });
     n += 1;

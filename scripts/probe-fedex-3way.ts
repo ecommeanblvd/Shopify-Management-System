@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   for (const o of orders) {
     const r = eng.get(o.sid);
     if (!r || r.engineTotal === null) continue;
-    const billedPreVat = r.billedTotal - (r.billedVat ?? 0);
+    const billedPreVat = (r.billedTotal ?? 0) - (r.billedVat ?? 0); // billed luôn có ở nhánh này (status billed)
     const shipperPostal = HUB_POSTAL[o.hub ?? ''] ?? '700000';
     let quotes: RateQuoteResult[] = [];
     try {

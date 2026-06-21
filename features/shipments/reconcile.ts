@@ -41,7 +41,7 @@ export interface ReconcileRow {
   billedWeightKg: number | null;
   labelDate: Date | null;
   // Billed
-  billedTotal: number;
+  billedTotal: number | null;
   billedBase: number | null;
   billedFuel: number | null;
   billedRemote: number | null;
@@ -408,7 +408,7 @@ interface JoinedRow {
   actualWeightKg: string | null;
   shopifyWeightKg?: string | null;
   labelCreatedAt: Date | null;
-  billedTotal: string;
+  billedTotal: string | null;
   billedBase: string | null;
   billedFuel: string | null;
   billedRemote: string | null;
@@ -493,10 +493,12 @@ function buildRow(
   unmatchedReason: string | null,
   diagnosis: ReconcileDiagnosis | null = null,
 ): ReconcileRow {
-  const billedTotal = Number(r.billedTotal);
+  const billedTotal = r.billedTotal != null ? Number(r.billedTotal) : null;
   const engineTotal = engine?.carrierCost ?? null;
-  const deltaVnd = engineTotal !== null ? billedTotal - engineTotal : null;
-  const deltaPct = (deltaVnd !== null && billedTotal > 0)
+  const deltaVnd = (billedTotal !== null && engineTotal !== null)
+    ? billedTotal - engineTotal
+    : null;
+  const deltaPct = (deltaVnd !== null && billedTotal !== null && billedTotal > 0)
     ? (deltaVnd / billedTotal) * 100
     : null;
   return {

@@ -69,8 +69,8 @@ export interface ReconcileSummaryStat {
 export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat {
   let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
   for (const r of rows) {
-    billed += r.billedTotal;
-    engine += isAutoReconciled(r) ? r.billedTotal : (r.engineTotal ?? 0);
+    billed += r.billedTotal ?? 0; // billed luôn có ở nhánh này (status billed)
+    engine += isAutoReconciled(r) ? (r.billedTotal ?? 0) : (r.engineTotal ?? 0);
     const isPending = effStatus(r) === 'pending';
     if (isPending && r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
     if (isPending) pendingCount += 1;
