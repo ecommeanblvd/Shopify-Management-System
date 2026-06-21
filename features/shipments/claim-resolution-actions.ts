@@ -33,6 +33,9 @@ export async function applyCreditNote(input: { xml: UploadFile; pdf?: UploadFile
   const xmlText = new TextDecoder('utf-8').decode(input.xml.bytes);
   const parsed = parseCreditNoteXml(xmlText);
   if (parsed.lines.length === 0) return { creditNoteNumber: parsed.creditNoteNumber, matched: [], unmatched: [] };
+  if (!parsed.creditNoteNumber) {
+    return { creditNoteNumber: null, matched: [], unmatched: parsed.lines.map((l) => ({ tracking: l.tracking, creditVnd: l.creditVnd, reason: 'Credit note thiếu số (không áp được)' })) };
+  }
 
   // 2) đơn đang đòi (join tracking + claimed/recovered hiện tại)
   const rows = await db
@@ -47,13 +50,13 @@ export async function applyCreditNote(input: { xml: UploadFile; pdf?: UploadFile
     .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentReconcileStatus.shipmentId))
     .where(eq(schema.shipmentReconcileStatus.status, 'disputing'));
 
-  // idempotent: bỏ đơn đã áp đúng credit note này (tránh cộng đôi)
+  // idempotent: bỏ đơn đã áp đúng credit note này (tránh cộng đôi); bỏ đơn delta null (claimedVnd=0 → sai)
   const disputing: DisputingRow[] = rows
-    .filter((r) => r.tracking && !(parsed.creditNoteNumber && r.cn === parsed.creditNoteNumber))
+    .filter((r) => r.tracking && r.delta !== null && !(r.cn === parsed.creditNoteNumber))
     .map((r) => ({
       shipmentId: r.shipmentId,
       tracking: r.tracking as string,
-      claimedVnd: Math.abs(r.delta !== null ? Number(r.delta) : 0),
+      claimedVnd: Math.abs(Number(r.delta)),
       recoveredVnd: r.recovered !== null ? Number(r.recovered) : 0,
     }));
 
@@ -70,19 +73,21 @@ export async function applyCreditNote(input: { xml: UploadFile; pdf?: UploadFile
   await putObject(fileKey, proof.bytes, ct);
 
   const matchedOut: CreditApplyResult['matched'] = [];
-  for (const m of res.matched) {
-    await db.update(schema.shipmentReconcileStatus)
-      .set({
-        recoveredVnd: String(m.newRecovered),
-        creditNoteNumber: parsed.creditNoteNumber,
-        creditNoteFileKey: fileKey,
-        status: m.fullyRecovered ? 'credited' : 'disputing',
-        reconciledBy: userId,
-        reconciledAt: sql`now()`,
-      })
-      .where(and(eq(schema.shipmentReconcileStatus.shipmentId, m.shipmentId), eq(schema.shipmentReconcileStatus.status, 'disputing')));
-    matchedOut.push({ tracking: m.tracking, creditVnd: m.creditVnd, credited: m.fullyRecovered });
-  }
+  await db.transaction(async (tx) => {
+    for (const m of res.matched) {
+      await tx.update(schema.shipmentReconcileStatus)
+        .set({
+          recoveredVnd: String(m.newRecovered),
+          creditNoteNumber: parsed.creditNoteNumber,
+          creditNoteFileKey: fileKey,
+          status: m.fullyRecovered ? 'credited' : 'disputing',
+          reconciledBy: userId,
+          reconciledAt: sql`now()`,
+        })
+        .where(and(eq(schema.shipmentReconcileStatus.shipmentId, m.shipmentId), eq(schema.shipmentReconcileStatus.status, 'disputing')));
+      matchedOut.push({ tracking: m.tracking, creditVnd: m.creditVnd, credited: m.fullyRecovered });
+    }
+  });
   revalidatePath(ROUTE);
   return { creditNoteNumber: parsed.creditNoteNumber, matched: matchedOut, unmatched: res.unmatched };
 }
