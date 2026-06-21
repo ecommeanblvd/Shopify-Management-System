@@ -65,12 +65,21 @@ export interface ReconcileSummaryStat {
 }
 
 /** Σ billed/engine/delta + đếm (đơn auto-reconciled fold engine=billed để Σ Lệch
- *  không phình vì pass-through; over10/pendingCount chỉ đếm đơn CÒN pending). */
+ *  không phình vì pass-through; over10/pendingCount chỉ đếm đơn CÒN pending).
+ *  Dòng chưa có hoá đơn carrier (billedTotal === null) bị loại khỏi Σ tiền nhưng
+ *  vẫn được đếm vào pendingCount/disputingCount/n. */
 export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat {
   let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
   for (const r of rows) {
-    billed += r.billedTotal ?? 0; // billed luôn có ở nhánh này (status billed)
-    engine += isAutoReconciled(r) ? (r.billedTotal ?? 0) : (r.engineTotal ?? 0);
+    if (r.billedTotal == null) {
+      // pre-billed (chưa có hoá đơn carrier) — không vào số liệu tiền
+      const isPendingPre = effStatus(r) === 'pending';
+      if (isPendingPre) pendingCount += 1;
+      if (r.status === 'disputing' && !r.staleDispute) disputingCount += 1;
+      continue;
+    }
+    billed += r.billedTotal;
+    engine += isAutoReconciled(r) ? r.billedTotal : (r.engineTotal ?? 0);
     const isPending = effStatus(r) === 'pending';
     if (isPending && r.deltaPct !== null && Math.abs(r.deltaPct) > 10) over10 += 1;
     if (isPending) pendingCount += 1;

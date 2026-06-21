@@ -224,7 +224,10 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
             <td className="py-1 text-right">{fmtVnd(row.fedexQuote?.totalNetCharge ?? null)}</td>
             <td className="py-1 text-right text-muted-foreground">{fmtVnd(row.billedTotal)}</td>
             <td className="py-1 text-right">
-              {fmtVnd((row.fedexQuote?.totalNetCharge ?? row.billedTotal ?? 0) - row.engineTotal)}
+              {(() => {
+                const billedish = row.fedexQuote?.totalNetCharge ?? row.billedTotal;
+                return fmtVnd(billedish == null || row.engineTotal == null ? null : billedish - row.engineTotal);
+              })()}
             </td>
             <td className="py-1"></td>
           </tr>
