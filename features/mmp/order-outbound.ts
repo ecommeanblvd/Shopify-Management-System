@@ -22,6 +22,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   const [ord] = await db.select({
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipName: schema.shopifyOrders.shipName, shipCountry: schema.shopifyOrders.shipCountry,
+      processedAt: schema.shopifyOrders.processedAtShopify,
       store: schema.stores.name,
     })
     .from(schema.shopifyOrders)
@@ -30,7 +31,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   if (!ord) return { error: 'no order' };
   const brandLines: MmpOrderLine[] = brand.map((l) => ({ sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null }));
   const rawBody = JSON.stringify(buildMmpOrderPayload({
-    orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry, brandLines,
+    orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry,
+    placedAt: ord.processedAt ? ord.processedAt.toISOString() : null,
+    brandLines,
   }));
   return { rawBody };
 }
