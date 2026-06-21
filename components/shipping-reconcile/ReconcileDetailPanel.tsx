@@ -138,7 +138,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
         <div className="text-sm text-amber-600 dark:text-amber-400">
           Hệ thống chưa tính được giá cho đơn này (lý do: {row.engineReason ?? 'không rõ'}). Không có số liệu để đối soát từng khoản.
         </div>
-        <ReconcileActions row={row} />
+        {row.billedTotal != null && <ReconcileActions row={row} />}
       </div>
     );
   }
@@ -236,7 +236,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
       <p className="mt-2 text-[11px] text-muted-foreground">
         Giảm giá hợp đồng đã được gộp vào &quot;Cước gốc (sau giảm giá)&quot;. Billed gốc trên hóa đơn: {fmtVnd(row.billedBase)} − giảm {fmtVnd(row.billedDiscount)}.
       </p>
-      <ReconcileActions row={row} />
+      {row.billedTotal != null && <ReconcileActions row={row} />}
     </div>
   );
 }
