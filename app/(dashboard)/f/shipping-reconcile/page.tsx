@@ -8,8 +8,10 @@ import { filterReconcileRows, reconcileSummary, paginate, type ReconcileFilters 
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
 import { listInternalErrors, summariseInternalErrors } from '@/features/shipments/internal-error-report';
+import { listUnmatchedBilledTracking, summariseUnmatched } from '@/features/shipments/unmatched-billed';
 import { issueInfo } from '@/components/shipping-reconcile/issue-label';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
+import { UnmatchedBilledBanner } from '@/components/shipping-reconcile/UnmatchedBilledBanner';
 import type { OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
 
 export const dynamic = 'force-dynamic';
@@ -27,10 +29,11 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
     redirect('/');
   }
 
-  const [{ rows, computedAt }, reports, carrierErrors] = await Promise.all([
+  const [{ rows, computedAt }, reports, carrierErrors, unmatchedBilled] = await Promise.all([
     reconcileShipmentsWithStatus({ forceRecompute: sp.refresh === '1' }),
     listIssueReports(),
     listCarrierErrors(),
+    listUnmatchedBilledTracking(),
   ]);
   const carrierErrorGroups = summariseCarrierErrors(carrierErrors.filter((r) => r.state === 'approved'));
   const internalErrors = await listInternalErrors();
@@ -73,6 +76,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
+      <UnmatchedBilledBanner rows={unmatchedBilled} summary={summariseUnmatched(unmatchedBilled)} />
       <ReconcileTable
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
         filters={filters} openIssues={openIssues}
