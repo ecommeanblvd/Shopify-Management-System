@@ -6,11 +6,12 @@
 
 **Architecture:** 2 trạng thái terminal mới (`credited`/`accepted`) + 3 cột trên `shipment_reconcile_status`; parser thuần đọc credit note + matcher thuần khớp tracking với đơn đang đòi; 2 server action; UI trong tab "Đang đòi NCC" của `ReconcileIssuesModal`; report/CSV mở rộng.
 
-**Tech Stack:** Next.js (server actions, RSC), Drizzle (migration tay + journal), Vitest, R2 (`putObject`), `extractPdfText` (sẵn có).
+**Tech Stack:** Next.js (server actions, RSC), Drizzle (migration tay + journal), Vitest, R2 (`putObject`), parse XML TT78 (regex, dependency-free).
 
 ## Global Constraints
 
-- **Stacked trên mảng C** (`feat/carrier-pdf-xlsx-reconcile`): migration tiếp theo là **`0071`**, journal idx **71**.
+- **Off `main`** (mảng A–C + #193–#198 đã merge): migration là **`0072_carrier-claim-resolution`**, journal idx **72** (0071 = mmp-order-pushes đã có trên main). Task 1 đã rebase + đổi số sang 0072.
+- **Credit note = XML hoá đơn điện tử TT78** (FedEx/DHL gửi kèm PDF). Parse XML (1 parser dùng chung), KHÔNG parse PDF; PDF chỉ đính làm bằng chứng.
 - Migration **tay** (`.sql` + journal), **KHÔNG** chạy `db:migrate` cục bộ (DATABASE_URL=PRODUCTION; apply khi deploy). `ALTER TYPE … ADD VALUE` chỉ thêm value (không ghi data cùng câu) → an toàn PG12+.
 - Parser/matcher **thuần** (no I/O); parse/khớp fail → bỏ entry/đưa unmatched, **không** tạo recovered sai.
 - **Task 3 (parser) cần MẪU THẬT** credit note DHL/FedEx — controller phải cung cấp mẫu (chạy `pdftotext -layout` / đọc CSV-XLSX) TRƯỚC khi dispatch; fixture test trích từ mẫu.
@@ -181,59 +182,96 @@ git commit -m "feat(reconcile): matcher thuần khớp credit note với đơn �
 
 ---
 
-## Task 3: Parser thuần `parseCreditNote` (CẦN MẪU THẬT)
+## Task 3: Parser thuần `parseCreditNoteXml` (XML TT78 — dùng chung DHL+FedEx)
 
 **Files:**
 - Create: `features/shipments/credit-note-parse.ts`
 - Test: `features/shipments/credit-note-parse.test.ts`
 
-> **BẮT BUỘC trước khi code:** controller cung cấp mẫu credit note thật DHL + FedEx. Chạy `pdftotext -layout <file>.pdf -` (PDF) hoặc đọc CSV/XLSX để biết layout chính xác: vị trí **số credit note**, **tracking/AWB**, **số tiền giảm**. Fixture test trích từ mẫu thật (như parser PDF mảng C). KHÔNG đoán layout.
+> **Mẫu thật ĐÃ CÓ**: FedEx gửi credit note dạng **XML hoá đơn điện tử chuẩn TT78** (kèm PDF cho người xem). Parse **XML** (chính xác, ổn định, 1 parser cho mọi NCC vì TT78 dùng tag chuẩn) — KHÔNG parse PDF. Dependency-free: regex trên schema cố định (XML máy sinh, không namespace ở field dữ liệu cần lấy). Fixture = trích từ file thật `VN-Credit Note .../734093212-260600140-VAT.xml`.
+
+**Cấu trúc XML (đã phân tích từ mẫu thật):**
+- Số CN chuẩn: `<KHHDon>K26TFA</KHHDon>` + `<SHDon>27612</SHDon>` → `K26TFA-27612`.
+- Mỗi dòng hàng = block `<HHDVu>…</HHDVu>`: `<THHDVu>871785641570 VN CA</THHDVu>` (token đầu = AWB/tracking) + số tiền GỒM VAT (âm) ở extra `<TTruong>Amount</TTruong><KDLieu>numeric</KDLieu><DLieu>-2566197</DLieu>`. Fallback `<ThTien>` (pre-tax) nếu NCC khác không có extra Amount.
+- Dòng mô tả ("Điều chỉnh cho hoá đơn…") nằm ở `<GChu>`/Extra — KHÔNG phải `<HHDVu>` → không lẫn.
 
 **Interfaces — Produces:**
 ```ts
 export interface CreditNoteLine { tracking: string; creditVnd: number }  // cùng shape Task 2
 export interface CreditNoteParsed { creditNoteNumber: string | null; lines: CreditNoteLine[] }
-export function parseCreditNote(text: string, carrier: 'fedex' | 'dhl'): CreditNoteParsed
+export function parseCreditNoteXml(xml: string): CreditNoteParsed
 ```
 
-- [ ] **Step 1: Lấy mẫu + viết fixture** — controller cung cấp text mẫu; tạo 2 hằng fixture `FEDEX_CN`, `DHL_CN` trong test từ vùng thật (số CN + ≥2 dòng tracking/số giảm). Che PII.
-
-- [ ] **Step 2: Failing test** — `features/shipments/credit-note-parse.test.ts` (giá trị theo mẫu thật):
+- [ ] **Step 1: Failing test** — `features/shipments/credit-note-parse.test.ts` (fixture trích mẫu thật, che PII người mua):
 ```ts
 import { describe, it, expect } from 'vitest';
-import { parseCreditNote } from './credit-note-parse';
+import { parseCreditNoteXml } from './credit-note-parse';
 
-const FEDEX_CN = `<<dán vùng credit note FedEx thật: số CN + các dòng AWB + số giảm>>`;
-const DHL_CN = `<<dán vùng credit note DHL thật: số CN + các dòng tracking + số giảm>>`;
+// Trích từ credit note FedEx thật (TT78). 2 dòng AWB, số tiền GỒM VAT (âm).
+const FEDEX_CN = `<HDon><DLHDon Id="DuLieuKy"><TTChung><THDon>Hóa đơn GTGT</THDon><KHHDon>K26TFA</KHHDon><SHDon>27612</SHDon><NLap>2026-06-05</NLap></TTChung><NDHDon><DSHHDVu>` +
+  `<HHDVu><STT>1</STT><THHDVu>871785641570 VN CA</THHDVu><SLuong>-1</SLuong><ThTien>-2376108</ThTien><TTKhac><TTin><TTruong>Amount</TTruong><KDLieu>numeric</KDLieu><DLieu>-2566197</DLieu></TTin><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>-190089</DLieu></TTin></TTKhac></HHDVu>` +
+  `<HHDVu><STT>2</STT><THHDVu>871510877160 VN GB</THHDVu><SLuong>-1</SLuong><ThTien>-2481149</ThTien><TTKhac><TTin><TTruong>Amount</TTruong><KDLieu>numeric</KDLieu><DLieu>-2679641</DLieu></TTin><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>-198492</DLieu></TTin></TTKhac></HHDVu>` +
+  `</DSHHDVu><TToan><TgTTTBSo>-5245838</TgTTTBSo></TToan></NDHDon></DLHDon></HDon>`;
 
-describe('parseCreditNote', () => {
-  it('FedEx → creditNoteNumber + lines {tracking, creditVnd}', () => {
-    const r = parseCreditNote(FEDEX_CN, 'fedex');
-    expect(r.creditNoteNumber).toBe(/* số CN thật */ '');
-    expect(r.lines.length).toBeGreaterThanOrEqual(2);
-    expect(r.lines[0]).toMatchObject({ tracking: /* AWB thật */ '', creditVnd: /* số thật */ 0 });
+describe('parseCreditNoteXml', () => {
+  it('FedEx TT78 → số CN (KHHDon-SHDon) + 2 dòng {tracking, creditVnd gồm VAT, dương}', () => {
+    const r = parseCreditNoteXml(FEDEX_CN);
+    expect(r.creditNoteNumber).toBe('K26TFA-27612');
+    expect(r.lines).toEqual([
+      { tracking: '871785641570', creditVnd: 2566197 },
+      { tracking: '871510877160', creditVnd: 2679641 },
+    ]);
   });
-  it('DHL → tương tự', () => {
-    const r = parseCreditNote(DHL_CN, 'dhl');
-    expect(r.lines.length).toBeGreaterThanOrEqual(1);
+  it('fallback ThTien khi không có extra Amount', () => {
+    const x = `<HDon><DLHDon><TTChung><KHHDon>X</KHHDon><SHDon>9</SHDon></TTChung><NDHDon><DSHHDVu>` +
+      `<HHDVu><THHDVu>999000111222 VN US</THHDVu><ThTien>-100000</ThTien></HHDVu>` +
+      `</DSHHDVu></NDHDon></DLHDon></HDon>`;
+    expect(parseCreditNoteXml(x).lines).toEqual([{ tracking: '999000111222', creditVnd: 100000 }]);
   });
-  it('rác → lines rỗng, creditNoteNumber null', () => {
-    expect(parseCreditNote('blah', 'fedex')).toEqual({ creditNoteNumber: null, lines: [] });
-    expect(parseCreditNote('blah', 'dhl')).toEqual({ creditNoteNumber: null, lines: [] });
+  it('rác / không phải XML → rỗng', () => {
+    expect(parseCreditNoteXml('blah')).toEqual({ creditNoteNumber: null, lines: [] });
   });
 });
 ```
 
-- [ ] **Step 3: Run → FAIL**.
+- [ ] **Step 2: Run → FAIL** `npx vitest run features/shipments/credit-note-parse.test.ts`.
 
-- [ ] **Step 4: Implement** — `features/shipments/credit-note-parse.ts`. Cấu trúc theo parser PDF mảng C (`features/carrier-rates/ap/pdf-invoice-totals.ts`): `numFrom(s)=Number(s.replace(/,/g,''))`; tách dòng bằng regex anchor theo layout mẫu; mỗi dòng đọc `tracking` (AWB FedEx 12 số / tracking DHL) + `creditVnd` (số tiền giảm). `creditNoteNumber` đọc theo nhãn trong mẫu. Dòng thiếu tracking/số → bỏ. **Regex/anchors khớp đúng mẫu thật ở Step 1.**
+- [ ] **Step 3: Implement** — `features/shipments/credit-note-parse.ts` (THUẦN, regex trên TT78, không dep):
+```ts
+export interface CreditNoteLine { tracking: string; creditVnd: number }
+export interface CreditNoteParsed { creditNoteNumber: string | null; lines: CreditNoteLine[] }
 
-- [ ] **Step 5: Run → PASS** + `npx tsc --noEmit` + `npx eslint features/shipments/credit-note-parse.ts features/shipments/credit-note-parse.test.ts`.
+/** Đọc credit note hoá đơn điện tử TT78 (FedEx/DHL gửi XML). Số tiền trong file là
+ *  ÂM (giảm trừ) → creditVnd = trị tuyệt đối. THUẦN. */
+export function parseCreditNoteXml(xml: string): CreditNoteParsed {
+  const kh = xml.match(/<KHHDon>([^<]+)<\/KHHDon>/)?.[1]?.trim();
+  const sh = xml.match(/<SHDon>([^<]+)<\/SHDon>/)?.[1]?.trim();
+  const creditNoteNumber = sh ? (kh ? `${kh}-${sh}` : sh) : null;
 
-- [ ] **Step 6: Commit**
+  const lines: CreditNoteLine[] = [];
+  for (const block of xml.match(/<HHDVu>[\s\S]*?<\/HHDVu>/g) ?? []) {
+    const desc = block.match(/<THHDVu>([^<]*)<\/THHDVu>/)?.[1]?.trim();
+    if (!desc) continue;
+    const tracking = desc.split(/\s+/)[0];
+    if (!/^\d{6,}$/.test(tracking)) continue;          // AWB/tracking = token số ≥6
+    // Số tiền GỒM VAT: extra "Amount"; fallback ThTien (pre-tax) nếu thiếu.
+    const raw = block.match(/<TTruong>Amount<\/TTruong>\s*<KDLieu>[^<]*<\/KDLieu>\s*<DLieu>(-?\d+)<\/DLieu>/)?.[1]
+      ?? block.match(/<ThTien>(-?\d+)<\/ThTien>/)?.[1];
+    if (raw == null) continue;
+    const creditVnd = Math.abs(Number(raw));
+    if (!Number.isFinite(creditVnd) || creditVnd === 0) continue;
+    lines.push({ tracking, creditVnd });
+  }
+  return { creditNoteNumber, lines };
+}
+```
+
+- [ ] **Step 4: Run → PASS** + `npx tsc --noEmit` + `npx eslint features/shipments/credit-note-parse.ts features/shipments/credit-note-parse.test.ts`.
+
+- [ ] **Step 5: Commit**
 ```bash
 git add features/shipments/credit-note-parse.ts features/shipments/credit-note-parse.test.ts
-git commit -m "feat(reconcile): parser credit note DHL/FedEx (thuần, layout mẫu thật)"
+git commit -m "feat(reconcile): parser credit note XML TT78 (dùng chung DHL/FedEx)"
 ```
 
 ---
@@ -243,11 +281,12 @@ git commit -m "feat(reconcile): parser credit note DHL/FedEx (thuần, layout m�
 **Files:**
 - Create: `features/shipments/claim-resolution-actions.ts`
 
-**Interfaces — Consumes:** `parseCreditNote` (T3), `matchCreditToDisputing`/`DisputingRow` (T2), `UploadFile` (`@/features/carrier-rates/ap/bills-actions`), `extractPdfText` (`@/features/carrier-rates/import/pdf-text`), `putObject` (`@/lib/storage/s3`), `db`/`schema`.
+**Interfaces — Consumes:** `parseCreditNoteXml` (T3), `matchCreditToDisputing`/`DisputingRow` (T2), `UploadFile` (`@/features/carrier-rates/ap/bills-actions`), `putObject` (`@/lib/storage/s3`), `db`/`schema`.
 - Produces:
 ```ts
 export interface CreditApplyResult { creditNoteNumber: string | null; matched: { tracking: string; creditVnd: number; credited: boolean }[]; unmatched: { tracking: string; creditVnd: number; reason: string }[] }
-export async function applyCreditNote(input: { file: UploadFile; carrier: 'fedex' | 'dhl' }): Promise<CreditApplyResult>
+// xml = file XML TT78 (để KHỚP); pdf = optional, đính làm bằng chứng cho người xem.
+export async function applyCreditNote(input: { xml: UploadFile; pdf?: UploadFile }): Promise<CreditApplyResult>
 export async function acceptDifference(input: { shipmentId: string }): Promise<void>
 ```
 
@@ -263,8 +302,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { putObject } from '@/lib/storage/s3';
-import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
-import { parseCreditNote } from './credit-note-parse';
+import { parseCreditNoteXml } from './credit-note-parse';
 import { matchCreditToDisputing, type DisputingRow } from './credit-note-match';
 import type { UploadFile } from '@/features/carrier-rates/ap/bills-actions';
 
@@ -283,16 +321,11 @@ export interface CreditApplyResult {
   unmatched: { tracking: string; creditVnd: number; reason: string }[];
 }
 
-function isTextFile(name: string): boolean { return /\.(csv|txt)$/i.test(name); }
-
-export async function applyCreditNote(input: { file: UploadFile; carrier: 'fedex' | 'dhl' }): Promise<CreditApplyResult> {
+export async function applyCreditNote(input: { xml: UploadFile; pdf?: UploadFile }): Promise<CreditApplyResult> {
   const userId = await requireUser();
-  // 1) text từ file (PDF → extractPdfText; csv/txt → utf-8). XLSX: ngoài phạm vi MVP — báo unmatched rỗng.
-  let text: string;
-  if (isTextFile(input.file.filename)) text = new TextDecoder('utf-8').decode(input.file.bytes);
-  else { try { text = await extractPdfText(input.file.bytes); } catch { return { creditNoteNumber: null, matched: [], unmatched: [] }; } }
-
-  const parsed = parseCreditNote(text, input.carrier);
+  // 1) XML TT78 là text — decode UTF-8 rồi parse (không pdftotext, không carrier param).
+  const xmlText = new TextDecoder('utf-8').decode(input.xml.bytes);
+  const parsed = parseCreditNoteXml(xmlText);
   if (parsed.lines.length === 0) return { creditNoteNumber: parsed.creditNoteNumber, matched: [], unmatched: [] };
 
   // 2) đơn đang đòi (join tracking + claimed/recovered hiện tại)
@@ -323,11 +356,12 @@ export async function applyCreditNote(input: { file: UploadFile; carrier: 'fedex
     return { creditNoteNumber: parsed.creditNoteNumber, matched: [], unmatched: res.unmatched };
   }
 
-  // 3) lưu file 1 lần, set cho từng đơn khớp
-  const ct = input.file.contentType || 'application/octet-stream';
-  const ext = input.file.filename.includes('.') ? input.file.filename.slice(input.file.filename.lastIndexOf('.')) : '';
+  // 3) lưu file BẰNG CHỨNG 1 lần: ưu tiên PDF (người xem), fallback XML. Set cho từng đơn khớp.
+  const proof = input.pdf ?? input.xml;
+  const ct = proof.contentType || (input.pdf ? 'application/pdf' : 'application/xml');
+  const ext = proof.filename.includes('.') ? proof.filename.slice(proof.filename.lastIndexOf('.')) : '';
   const fileKey = `carrier-credit-notes/${randomUUID()}${ext}`;
-  await putObject(fileKey, input.file.bytes, ct);
+  await putObject(fileKey, proof.bytes, ct);
 
   const matchedOut: CreditApplyResult['matched'] = [];
   for (const m of res.matched) {
@@ -404,7 +438,15 @@ git commit -m "feat(reconcile): report/CSV thêm đã thu hồi + credit note + 
 
 **Interfaces — Consumes:** `applyCreditNote`/`acceptDifference` (T4), `CarrierErrorRow` (T5).
 
-- [ ] **Step 1: CreditNoteDialog** — `components/shipping-reconcile/CreditNoteDialog.tsx` (`'use client'`): nút "Upload credit note" → input file `accept=".pdf,.csv"` + chọn carrier (fedex/dhl) → `useTransition` gọi `applyCreditNote({ file: { bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type }, carrier })` → hiện bảng kết quả `matched` (tracking · số giảm · credited?) + `unmatched` (tracking · lý do) → `router.refresh()` nếu `matched.length>0`. Theo style các dialog hiện có (vd `ImportFboDialog` cũ đã xoá — mirror `CarrierInvoiceDialog` pattern: Dialog/Button/useTransition/useRouter). Import action trực tiếp từ `@/features/shipments/claim-resolution-actions` (pattern import 'use server' như `ReconcileDetailPanel`).
+- [ ] **Step 1: CreditNoteDialog** — `components/shipping-reconcile/CreditNoteDialog.tsx` (`'use client'`): nút "Upload credit note" → input file `accept=".xml,.pdf" multiple` (kéo cả cặp XML+PDF FedEx gửi). Tách theo đuôi: file `.xml` = để KHỚP (bắt buộc), file `.pdf` = đính proof (optional). Helper:
+  ```ts
+  const toUp = async (f: File) => ({ bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name, contentType: f.type });
+  const xmlF = files.find((f) => /\.xml$/i.test(f.name));
+  const pdfF = files.find((f) => /\.pdf$/i.test(f.name));
+  if (!xmlF) { setError('Cần file XML credit note (để khớp). PDF chỉ là bằng chứng.'); return; }
+  const res = await applyCreditNote({ xml: await toUp(xmlF), pdf: pdfF ? await toUp(pdfF) : undefined });
+  ```
+  → hiện bảng kết quả `matched` (tracking · số giảm · credited?) + `unmatched` (tracking · lý do) → `router.refresh()` nếu `matched.length>0`. Theo style `CarrierInvoiceDialog` (Dialog/Button/useTransition/useRouter). **KHÔNG còn chọn carrier** (XML TT78 carrier-agnostic). Import action trực tiếp từ `@/features/shipments/claim-resolution-actions` (pattern import 'use server' như `ReconcileDetailPanel`).
 
 - [ ] **Step 2: ReconcileIssuesModal — nút + cột + tổng** — trong mục "Đang đòi NCC" (`tab === 'carrier'`):
   - Render `<CreditNoteDialog />` ở đầu mục.
