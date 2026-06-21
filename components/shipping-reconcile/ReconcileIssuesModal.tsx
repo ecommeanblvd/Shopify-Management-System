@@ -166,37 +166,9 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
   );
 }
 
-/** Carrier tab — extracted to avoid hooks-in-IIFE issue */
-function CarrierTab({ carrierErrors, carrierErrorGroups }: { carrierErrors: CarrierErrorRow[]; carrierErrorGroups: CarrierErrorGroup[] }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [acceptErrors, setAcceptErrors] = useState<Record<string, string>>({});
-
-  const disputing = carrierErrors.filter((r) => r.state === 'disputing');
-  const approved = carrierErrors.filter((r) => r.state === 'approved');
-  const credited = carrierErrors.filter((r) => r.state === 'credited');
-  const accepted = carrierErrors.filter((r) => r.state === 'accepted');
-
-  const sumDisputing = disputing.reduce((a, r) => a + Math.abs(r.deltaVnd ?? 0), 0);
-  const sumRecovered = [...disputing, ...credited].reduce((a, r) => a + (r.recoveredVnd ?? 0), 0);
-  const sumAccepted = accepted.reduce((a, r) => a + (Math.abs(r.deltaVnd ?? 0) - (r.recoveredVnd ?? 0)), 0);
-
-  function handleAccept(shipmentId: string) {
-    startTransition(async () => {
-      try {
-        await acceptDifference({ shipmentId });
-        setAcceptErrors((prev) => { const next = { ...prev }; delete next[shipmentId]; return next; });
-        router.refresh();
-      } catch (err) {
-        setAcceptErrors((prev) => ({
-          ...prev,
-          [shipmentId]: err instanceof Error ? err.message : 'Lỗi chấp nhận chênh lệch',
-        }));
-      }
-    });
-  }
-
-  const BaseRowInfo = ({ r }: { r: CarrierErrorRow }) => (
+/** Module-level: hoisted out of CarrierTab to prevent remount on every render. */
+function BaseRowInfo({ r }: { r: CarrierErrorRow }) {
+  return (
     <>
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
@@ -209,6 +181,41 @@ function CarrierTab({ carrierErrors, carrierErrorGroups }: { carrierErrors: Carr
       <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
     </>
   );
+}
+
+/** Carrier tab — extracted to avoid hooks-in-IIFE issue */
+function CarrierTab({ carrierErrors, carrierErrorGroups }: { carrierErrors: CarrierErrorRow[]; carrierErrorGroups: CarrierErrorGroup[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [acceptErrors, setAcceptErrors] = useState<Record<string, string>>({});
+
+  const disputing = carrierErrors.filter((r) => r.state === 'disputing');
+  const approved = carrierErrors.filter((r) => r.state === 'approved');
+  const credited = carrierErrors.filter((r) => r.state === 'credited');
+  const accepted = carrierErrors.filter((r) => r.state === 'accepted');
+
+  const sumDisputing = disputing.reduce((a, r) => a + Math.abs(r.deltaVnd ?? 0), 0);
+  const sumRecovered = [...disputing, ...credited].reduce((a, r) => a + (r.recoveredVnd ?? 0), 0);
+  const sumAccepted = accepted.reduce((a, r) => a + (Math.abs(r.deltaVnd ?? 0) - (r.recoveredVnd ?? 0)), 0);
+
+  function handleAccept(shipmentId: string) {
+    setPendingId(shipmentId);
+    startTransition(async () => {
+      try {
+        await acceptDifference({ shipmentId });
+        setAcceptErrors((prev) => { const next = { ...prev }; delete next[shipmentId]; return next; });
+        router.refresh();
+      } catch (err) {
+        setAcceptErrors((prev) => ({
+          ...prev,
+          [shipmentId]: err instanceof Error ? err.message : 'Lỗi chấp nhận chênh lệch',
+        }));
+      } finally {
+        setPendingId(null);
+      }
+    });
+  }
 
   return (
     <div>
@@ -247,11 +254,11 @@ function CarrierTab({ carrierErrors, carrierErrorGroups }: { carrierErrors: Carr
               </span>
               <button
                 type="button"
-                disabled={pending}
+                disabled={pendingId === r.shipmentId}
                 onClick={() => handleAccept(r.shipmentId)}
                 className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Chấp nhận chênh lệch
+                {pendingId === r.shipmentId ? 'Đang...' : 'Chấp nhận chênh lệch'}
               </button>
               {acceptErrors[r.shipmentId] && (
                 <span className="text-destructive">{acceptErrors[r.shipmentId]}</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FilePlus2, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -18,11 +18,13 @@ export function CreditNoteDialog() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreditApplyResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setFiles([]);
     setError(null);
     setResult(null);
+    if (inputRef.current) inputRef.current.value = '';
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -83,6 +85,7 @@ export function CreditNoteDialog() {
               <span>Chọn hoặc kéo file XML + PDF</span>
             </label>
             <input
+              ref={inputRef}
               type="file"
               multiple
               accept=".xml,.pdf"
