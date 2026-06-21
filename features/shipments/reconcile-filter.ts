@@ -25,7 +25,7 @@ export function effStatus(r: ReconcileViewRow): ReconcileStatus {
 
 export interface ReconcileFilters {
   carrier: 'all' | 'fedex' | 'dhl';
-  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error';
+  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted';
   country: string;
   minPct: string;
   q: string;

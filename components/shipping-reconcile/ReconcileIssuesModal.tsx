@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { confirmIssueReport, type IssueReportRecord } from '@/features/shipments/issue-report-actions';
+import { acceptDifference } from '@/features/shipments/claim-resolution-actions';
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
 import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
 import { carrierErrorKindLabel } from '@/features/shipments/carrier-error-kinds';
+import { CreditNoteDialog } from './CreditNoteDialog';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -105,55 +108,10 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
                 ))}
               </div>
             ) : tab === 'carrier' ? (
-              (() => {
-                const disputing = carrierErrors.filter((r) => r.state === 'disputing');
-                const approved = carrierErrors.filter((r) => r.state === 'approved');
-                const sumDisputing = disputing.reduce((a, r) => a + (r.deltaVnd ?? 0), 0);
-                const RowItem = ({ r }: { r: CarrierErrorRow }) => (
-                  <div key={r.shipmentId} className="px-5 py-2 text-sm">
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-xs ${r.state === 'disputing' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
-                        {carrierErrorKindLabel(r.kind)}
-                      </span>
-                      <span className="font-mono text-xs text-muted-foreground">{(r.carrierKey ?? '—').toUpperCase()} · {r.shipCountry ?? '—'} · lệch gốc {fmtVnd(r.deltaVnd)}đ</span>
-                    </div>
-                    {r.note && <p className="mt-0.5 text-xs text-muted-foreground">{r.note}</p>}
-                    <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
-                  </div>
-                );
-                return (
-                  <div>
-                    <div className="flex items-center justify-between border-b border-border px-5 py-2">
-                      <span className="text-xs text-muted-foreground">Lỗi carrier — đang đòi NCC &amp; đã duyệt.</span>
-                      <a href="/f/shipping-reconcile/carrier-errors.csv" download className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted">Xuất CSV</a>
-                    </div>
-
-                    <div className="border-b border-border px-5 py-2 text-sm font-medium text-sky-600 dark:text-sky-400">
-                      ⏳ Đang đòi NCC ({disputing.length} · Σ lệch gốc {fmtVnd(sumDisputing)}đ)
-                    </div>
-                    {disputing.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Không có đơn nào đang đòi.</p>}
-                    <div className="divide-y divide-border">{disputing.map((r) => <RowItem key={r.shipmentId} r={r} />)}</div>
-
-                    <div className="border-y border-border px-5 py-2 text-sm font-medium text-amber-600 dark:text-amber-400">
-                      ✓ Đã duyệt ({approved.length})
-                    </div>
-                    {carrierErrorGroups.map((g) => (
-                      <div key={g.carrierKey ?? '—'} className="px-5 py-2">
-                        <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
-                          <span className="uppercase">{g.carrierKey ?? '—'}</span>
-                          <span className="font-mono text-xs text-muted-foreground">{g.count} đơn · Σ lệch {fmtVnd(g.sumDeltaVnd)}đ</span>
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                          {g.byKind.map((k) => (<span key={k.kind}>{carrierErrorKindLabel(k.kind)}: {k.count} ({fmtVnd(k.sumDeltaVnd)}đ)</span>))}
-                        </div>
-                      </div>
-                    ))}
-                    {approved.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Chưa có đơn nào được duyệt.</p>}
-                    <div className="divide-y divide-border border-t border-border">{approved.map((r) => <RowItem key={r.shipmentId} r={r} />)}</div>
-                  </div>
-                );
-              })()
+              <CarrierTab
+                carrierErrors={carrierErrors}
+                carrierErrorGroups={carrierErrorGroups}
+              />
             ) : tab === 'internal' ? (
               <div>
                 <div className="border-b border-border px-5 py-2 text-xs text-muted-foreground">
@@ -205,6 +163,176 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
         </div>
       )}
     </>
+  );
+}
+
+/** Module-level: hoisted out of CarrierTab to prevent remount on every render. */
+function BaseRowInfo({ r }: { r: CarrierErrorRow }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="font-medium">{r.orderName ?? r.tracking ?? r.shipmentId.slice(0, 8)}</span>
+        <span className={`rounded px-1.5 py-0.5 text-xs ${r.state === 'disputing' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400' : r.state === 'credited' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : r.state === 'accepted' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+          {carrierErrorKindLabel(r.kind)}
+        </span>
+        <span className="font-mono text-xs text-muted-foreground">{(r.carrierKey ?? '—').toUpperCase()} · {r.shipCountry ?? '—'} · lệch gốc {fmtVnd(r.deltaVnd)}đ</span>
+      </div>
+      {r.note && <p className="mt-0.5 text-xs text-muted-foreground">{r.note}</p>}
+      <p className="mt-0.5 text-xs text-muted-foreground">{r.approvedByName ?? 'Logistics'} · {new Date(r.approvedAt).toLocaleString('vi-VN')}</p>
+    </>
+  );
+}
+
+/** Carrier tab — extracted to avoid hooks-in-IIFE issue */
+function CarrierTab({ carrierErrors, carrierErrorGroups }: { carrierErrors: CarrierErrorRow[]; carrierErrorGroups: CarrierErrorGroup[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [acceptErrors, setAcceptErrors] = useState<Record<string, string>>({});
+
+  const disputing = carrierErrors.filter((r) => r.state === 'disputing');
+  const approved = carrierErrors.filter((r) => r.state === 'approved');
+  const credited = carrierErrors.filter((r) => r.state === 'credited');
+  const accepted = carrierErrors.filter((r) => r.state === 'accepted');
+
+  const sumDisputing = disputing.reduce((a, r) => a + Math.abs(r.deltaVnd ?? 0), 0);
+  const sumRecovered = [...disputing, ...credited].reduce((a, r) => a + (r.recoveredVnd ?? 0), 0);
+  const sumAccepted = accepted.reduce((a, r) => a + (Math.abs(r.deltaVnd ?? 0) - (r.recoveredVnd ?? 0)), 0);
+
+  function handleAccept(shipmentId: string) {
+    setPendingId(shipmentId);
+    startTransition(async () => {
+      try {
+        await acceptDifference({ shipmentId });
+        setAcceptErrors((prev) => { const next = { ...prev }; delete next[shipmentId]; return next; });
+        router.refresh();
+      } catch (err) {
+        setAcceptErrors((prev) => ({
+          ...prev,
+          [shipmentId]: err instanceof Error ? err.message : 'Lỗi chấp nhận chênh lệch',
+        }));
+      } finally {
+        setPendingId(null);
+      }
+    });
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-5 py-2">
+        <span className="text-xs text-muted-foreground">Lỗi carrier — đang đòi NCC, đã duyệt, đã đóng.</span>
+        <a href="/f/shipping-reconcile/carrier-errors.csv" download className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted">Xuất CSV</a>
+      </div>
+
+      {/* Upload credit note */}
+      <div className="border-b border-border px-5 py-3">
+        <CreditNoteDialog />
+      </div>
+
+      {/* Totals summary */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 border-b border-border bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
+        <span>Σ đang đòi: <span className="font-mono font-medium text-foreground">{fmtVnd(sumDisputing)}đ</span></span>
+        <span>Σ đã thu hồi: <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">{fmtVnd(sumRecovered)}đ</span></span>
+        <span>Σ chấp nhận: <span className="font-mono font-medium text-purple-600 dark:text-purple-400">{fmtVnd(sumAccepted)}đ</span></span>
+      </div>
+
+      {/* Disputing group */}
+      <div className="border-b border-border px-5 py-2 text-sm font-medium text-sky-600 dark:text-sky-400">
+        ⏳ Đang đòi NCC ({disputing.length})
+      </div>
+      {disputing.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Không có đơn nào đang đòi.</p>}
+      <div className="divide-y divide-border">
+        {disputing.map((r) => (
+          <div key={r.shipmentId} className="px-5 py-2 text-sm">
+            <BaseRowInfo r={r} />
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              <span className="text-muted-foreground">
+                Đã thu hồi: <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">{fmtVnd(r.recoveredVnd ?? 0)}đ</span>
+                {' · '}
+                Còn lại: <span className="font-mono font-medium text-red-600 dark:text-red-400">{fmtVnd(Math.abs(r.deltaVnd ?? 0) - (r.recoveredVnd ?? 0))}đ</span>
+              </span>
+              <button
+                type="button"
+                disabled={pendingId === r.shipmentId}
+                onClick={() => handleAccept(r.shipmentId)}
+                className="rounded border border-border px-2.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pendingId === r.shipmentId ? 'Đang...' : 'Chấp nhận chênh lệch'}
+              </button>
+              {acceptErrors[r.shipmentId] && (
+                <span className="text-destructive">{acceptErrors[r.shipmentId]}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Approved group */}
+      <div className="border-y border-border px-5 py-2 text-sm font-medium text-amber-600 dark:text-amber-400">
+        ✓ Đã duyệt ({approved.length})
+      </div>
+      {carrierErrorGroups.map((g) => (
+        <div key={g.carrierKey ?? '—'} className="px-5 py-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
+            <span className="uppercase">{g.carrierKey ?? '—'}</span>
+            <span className="font-mono text-xs text-muted-foreground">{g.count} đơn · Σ lệch {fmtVnd(g.sumDeltaVnd)}đ</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+            {g.byKind.map((k) => (<span key={k.kind}>{carrierErrorKindLabel(k.kind)}: {k.count} ({fmtVnd(k.sumDeltaVnd)}đ)</span>))}
+          </div>
+        </div>
+      ))}
+      {approved.length === 0 && <p className="px-5 py-3 text-xs text-muted-foreground">Chưa có đơn nào được duyệt.</p>}
+      <div className="divide-y divide-border border-t border-border">
+        {approved.map((r) => (
+          <div key={r.shipmentId} className="px-5 py-2 text-sm">
+            <BaseRowInfo r={r} />
+          </div>
+        ))}
+      </div>
+
+      {/* Closed claims group (credited + accepted) */}
+      {(credited.length > 0 || accepted.length > 0) && (
+        <>
+          <div className="border-y border-border px-5 py-2 text-sm font-medium text-muted-foreground">
+            ✓ Đã đóng ({credited.length + accepted.length})
+          </div>
+          {credited.length > 0 && (
+            <>
+              <div className="px-5 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">Đã thu hồi ({credited.length})</div>
+              <div className="divide-y divide-border">
+                {credited.map((r) => (
+                  <div key={r.shipmentId} className="px-5 py-2 text-sm">
+                    <BaseRowInfo r={r} />
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Credit note: <span className="font-mono">{r.creditNoteNumber ?? '—'}</span>
+                      {' · '}Thu hồi: <span className="font-mono text-emerald-600 dark:text-emerald-400">{fmtVnd(r.recoveredVnd ?? 0)}đ</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {accepted.length > 0 && (
+            <>
+              <div className="px-5 py-1.5 text-xs font-medium text-purple-600 dark:text-purple-400">Chấp nhận chênh lệch ({accepted.length})</div>
+              <div className="divide-y divide-border">
+                {accepted.map((r) => (
+                  <div key={r.shipmentId} className="px-5 py-2 text-sm">
+                    <BaseRowInfo r={r} />
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Thu hồi: <span className="font-mono">{fmtVnd(r.recoveredVnd ?? 0)}đ</span>
+                      {' · '}Còn chấp nhận: <span className="font-mono text-purple-600 dark:text-purple-400">{fmtVnd(Math.abs(r.deltaVnd ?? 0) - (r.recoveredVnd ?? 0))}đ</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

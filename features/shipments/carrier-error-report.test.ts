@@ -4,7 +4,8 @@ import { summariseCarrierErrors, type CarrierErrorRow } from './carrier-error-re
 const row = (over: Partial<CarrierErrorRow>): CarrierErrorRow => ({
   shipmentId: 's', carrierKey: 'fedex', orderName: null, tracking: null,
   shipCountry: null, labelDate: null, kind: 'weight', note: 'x',
-  billedVnd: null, deltaVnd: 100, approvedByName: null, approvedAt: new Date(0),
+  billedVnd: null, deltaVnd: 100, recoveredVnd: null, creditNoteNumber: null,
+  approvedByName: null, approvedAt: new Date(0),
   state: 'approved', ...over,
 });
 
