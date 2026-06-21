@@ -1,5 +1,6 @@
 /** Pure logic cho Khu chờ đi đơn — no DB. Spec §2.3 + §5.2 + §5.3:
  *  docs/superpowers/specs/2026-06-10-warehouse-core-auto-allocation-design.md */
+import { isBrandStatus } from '@/features/fulfillment/brand-statuses';
 
 /** Nguồn hàng của một dòng đơn (chip "Nguồn" trên staging board + trang đơn). */
 export type LineSource =
@@ -20,8 +21,6 @@ export interface LineSourceInput {
   warehouseCode: string | null;
 }
 
-const BRAND_STATUSES = new Set(['out_of_stock', 'brand_requested', 'brand_confirmed', 'brand_rejected']);
-
 export function lineSource(l: LineSourceInput): LineSource {
   if (l.status === 'shipped') return { kind: 'shipped' };
   if (l.status === 'picked' || l.status === 'packed') return { kind: 'progress' };
@@ -29,7 +28,7 @@ export function lineSource(l: LineSourceInput): LineSource {
   if (l.status === 'in_stock' && l.warehouseInventoryId) {
     return { kind: 'warehouse', code: l.warehouseCode ?? '?' };
   }
-  if (BRAND_STATUSES.has(l.status)) return { kind: 'brand' };
+  if (isBrandStatus(l.status)) return { kind: 'brand' };
   if (l.status === 'pending_check') return { kind: 'pending' };
   return { kind: 'none' };
 }

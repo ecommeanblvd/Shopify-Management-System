@@ -3,8 +3,7 @@ import { db, schema } from '@/db/client';
 import { signMmpBody } from '@/features/mmp/hmac';
 import { buildMmpOrderPayload, type MmpOrderLine } from '@/features/mmp/order-push-logic';
 import { hashOrderPayload, shouldPushOrder } from '@/features/mmp/order-push-state';
-
-const BRAND_STATUSES = ['out_of_stock', 'brand_requested', 'brand_confirmed', 'brand_rejected'];
+import { isBrandStatus } from '@/features/fulfillment/brand-statuses';
 
 /** Dựng rawBody MMP cho 1 đơn (đọc fulfillment + brand lines + order). Không POST. */
 async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } | { error: string }> {
@@ -18,7 +17,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
-  const brand = fLines.filter((l) => BRAND_STATUSES.includes(l.status as string));
+  const brand = fLines.filter((l) => isBrandStatus(l.status));
   if (brand.length === 0) return { error: 'no brand lines' };
   const [ord] = await db.select({
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
