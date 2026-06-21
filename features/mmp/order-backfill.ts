@@ -8,13 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { pushOrderToMmp } from '@/features/mmp/order-outbound';
 import { pickBackfillOrderIds } from '@/features/mmp/backfill-select';
-
-const BRAND_STATUSES = [
-  'out_of_stock',
-  'brand_requested',
-  'brand_confirmed',
-  'brand_rejected',
-] as const;
+import { BRAND_STATUSES } from '@/features/fulfillment/brand-statuses';
 
 /** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). pushOrderToMmp tự bỏ qua
  *  đơn đã sent-không-đổi (dedup phía mình) → chạy lại không flood; MMP dedupe là backstop.

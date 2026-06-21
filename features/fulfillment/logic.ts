@@ -2,6 +2,8 @@
  * Pure fulfillment logic — no DB. Stock check, order-status rollup, and
  * line transition validation. Unit-testable in isolation.
  */
+import { isBrandStatus } from './brand-statuses';
+
 export type LineStatus = 'pending_check' | 'in_stock' | 'out_of_stock' | 'picked' | 'packed' | 'shipped'
   | 'brand_requested' | 'brand_confirmed' | 'brand_rejected';
 export type OrderStatus = 'received' | 'checking' | 'awaiting_brand' | 'ready_to_pick' | 'picking' | 'packed' | 'shipped';
@@ -31,7 +33,7 @@ export function checkStock(line: { sku: string | null; qty: number }, stock: Map
 export function rollupOrderStatus(lines: LineStatus[]): OrderStatus {
   if (lines.length === 0) return 'received';
   if (lines.every((s) => s === 'shipped')) return 'shipped';
-  if (lines.some((s) => s === 'out_of_stock' || s === 'brand_requested' || s === 'brand_confirmed' || s === 'brand_rejected')) return 'awaiting_brand';
+  if (lines.some(isBrandStatus)) return 'awaiting_brand';
   if (lines.some((s) => s === 'pending_check')) return 'checking';
   // No out_of_stock / pending_check left: all in {in_stock, picked, packed, shipped}
   if (lines.some((s) => s === 'packed' || s === 'shipped')) return 'packed';
