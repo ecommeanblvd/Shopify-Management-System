@@ -167,8 +167,8 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       // store
       storeName: schema.stores.name,
     })
-    .from(schema.shipmentCharges)
-    .innerJoin(schema.shipments, eq(schema.shipments.id, schema.shipmentCharges.shipmentId))
+    .from(schema.shipments)
+    .leftJoin(schema.shipmentCharges, eq(schema.shipmentCharges.shipmentId, schema.shipments.id))
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId));
 
@@ -238,16 +238,19 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     const entry = r.carrierKey ? byKey.get(r.carrierKey) : undefined;
     const card = entry && shipDate ? pickRateCardForDate(entry.cards, shipDate) : null;
     const snap = card ? entry!.snapByCard.get(card.id) ?? null : null;
-    const billedTotal = Number(r.billedTotal);
-    sumBilled += billedTotal;
+    // Order-driven: shipment có thể CHƯA có hoá đơn carrier (LEFT JOIN → billed null).
+    // Dòng tiền-billed không vào số liệu tiền (sumBilled/sumEngine) và không tính
+    // matched/unmatched — chỉ đếm ở các nhánh khi thực sự có billed.
+    const hasBilled = r.billedTotal != null;
+    if (hasBilled) sumBilled += Number(r.billedTotal);
 
     if (!entry || !shipDate || !card) {
-      unmatched += 1;
+      if (hasBilled) unmatched += 1;
       rows.push(buildRow(r, null, !shipDate ? 'no_ship_date' : 'no_rate_card'));
       continue;
     }
     if (!snap || !r.shipCountry) {
-      unmatched += 1;
+      if (hasBilled) unmatched += 1;
       rows.push(buildRow(r, null, 'no_snapshot_or_country'));
       continue;
     }
@@ -258,7 +261,8 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       ? Number(r.shipWeightKgOverride)
       : r.actualWeightKg !== null ? Number(r.actualWeightKg) : null;
     if (!weightKg || weightKg <= 0) {
-      unmatched += 1;
+      if (hasBilled) unmatched += 1;
+      // Chưa cân → engineReason 'no_weight' → effStatus = awaiting_measurement.
       rows.push(buildRow(r, null, 'no_weight'));
       continue;
     }
@@ -291,6 +295,13 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     if (!q.ok) {
       unmatched += 1;
       rows.push(buildRow(r, null, q.code));
+      continue;
+    }
+
+    // Dòng tiền-billed: đã cân + quote OK → có ước tính engine, nhưng chưa có
+    // billed để so. Đẩy row (effStatus = awaiting_billed), bỏ qua diagnosis/tiền.
+    if (!hasBilled) {
+      rows.push(buildRow(r, q.breakdown, null));
       continue;
     }
 

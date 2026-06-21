@@ -257,6 +257,8 @@ const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: stri
   internal_error: { label: 'Lỗi nội bộ', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
   credited: { label: 'Đã thu hồi', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
   accepted: { label: 'Chấp nhận chênh lệch', className: 'border border-border text-muted-foreground' },
+  awaiting_measurement: { label: 'Chờ cân', className: 'border border-border text-muted-foreground' },
+  awaiting_billed: { label: 'Chờ hoá đơn', className: 'border border-border text-muted-foreground' },
 };
 
 function FragmentRow({
