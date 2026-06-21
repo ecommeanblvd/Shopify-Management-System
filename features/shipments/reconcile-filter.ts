@@ -19,13 +19,18 @@ export function isAutoReconciled(r: ReconcileViewRow): boolean {
 /** Trạng thái HIỆU DỤNG cho view: đơn khớp-pending hoặc disputing-đã-khớp-lại →
  *  'reconciled'; còn lại giữ status gốc. */
 export function effStatus(r: ReconcileViewRow): ReconcileStatus {
+  // Tiền-billed: chưa có hoá đơn carrier. Phải xử TRƯỚC isAutoReconciled —
+  // deltaVnd null khiến Math.abs(0) < tolerance, sẽ bị nuốt thành 'reconciled'.
+  if (r.billedTotal === null) {
+    return r.engineReason === 'no_weight' ? 'awaiting_measurement' : 'awaiting_billed';
+  }
   if (isAutoReconciled(r) || r.staleDispute) return 'reconciled';
   return r.status;
 }
 
 export interface ReconcileFilters {
   carrier: 'all' | 'fedex' | 'dhl';
-  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted';
+  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted' | 'awaiting_measurement' | 'awaiting_billed';
   country: string;
   minPct: string;
   q: string;

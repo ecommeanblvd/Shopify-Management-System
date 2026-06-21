@@ -25,6 +25,23 @@ describe('isAutoReconciled / effStatus', () => {
   it('staleDispute → reconciled', () => {
     expect(effStatus(row({ status: 'disputing', staleDispute: true, deltaVnd: 500_000 }))).toBe('reconciled');
   });
+  it('billed null + chưa cân (engineReason no_weight) → awaiting_measurement', () => {
+    expect(effStatus(row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never)))
+      .toBe('awaiting_measurement');
+  });
+  it('billed null + đã cân (có engineTotal) → awaiting_billed', () => {
+    expect(effStatus(row({ billedTotal: null, engineTotal: 850_000, deltaVnd: null, engineReason: null } as never)))
+      .toBe('awaiting_billed');
+  });
+  it('billed null + đã cân nhưng thiếu bảng giá (no_rate_card) → awaiting_billed (không phải awaiting_measurement)', () => {
+    expect(effStatus(row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_rate_card' } as never)))
+      .toBe('awaiting_billed');
+  });
+  it('billed null KHÔNG bị isAutoReconciled nuốt thành reconciled', () => {
+    // deltaVnd null → Math.abs(0) < tolerance từng khiến nó thành "reconciled" — phải tránh.
+    expect(effStatus(row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never)))
+      .not.toBe('reconciled');
+  });
 });
 
 describe('filterReconcileRows', () => {
