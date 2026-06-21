@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
-import { isAutoReconciled, MATCH_TOLERANCE_VND, countByEffStatus, effStatus, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
+import { isAutoReconciled, MATCH_TOLERANCE_VND, effStatus, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
 import { carrierWeightCell } from '@/features/shipments/reconcile-cells';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
@@ -325,7 +325,7 @@ function FragmentRow({
         <td className="px-3 py-2 font-sans whitespace-nowrap">
           <span className="inline-flex flex-col items-start gap-0.5">
             {r.billedTotal === null ? (() => {
-              const st = effStatus(r) as Exclude<ReconcileStatus, 'pending'>;
+              const st = effStatus(r) as 'awaiting_measurement' | 'awaiting_billed';
               return (
                 <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[st].className}`}>
                   {OPERATOR_STATUS[st].label}

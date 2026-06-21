@@ -42,6 +42,10 @@ describe('isAutoReconciled / effStatus', () => {
     expect(effStatus(row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never)))
       .not.toBe('reconciled');
   });
+  it('billed null nhưng có quyết định đã lưu (disputing) → giữ status, KHÔNG về awaiting_*', () => {
+    expect(effStatus(row({ billedTotal: null, status: 'disputing', engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never)))
+      .toBe('disputing');
+  });
 });
 
 describe('filterReconcileRows', () => {

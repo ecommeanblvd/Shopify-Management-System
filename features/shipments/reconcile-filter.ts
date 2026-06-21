@@ -21,7 +21,7 @@ export function isAutoReconciled(r: ReconcileViewRow): boolean {
 export function effStatus(r: ReconcileViewRow): ReconcileStatus {
   // Tiền-billed: chưa có hoá đơn carrier. Phải xử TRƯỚC isAutoReconciled —
   // deltaVnd null khiến Math.abs(0) < tolerance, sẽ bị nuốt thành 'reconciled'.
-  if (r.billedTotal === null) {
+  if (r.billedTotal === null && r.status === 'pending') {
     return r.engineReason === 'no_weight' ? 'awaiting_measurement' : 'awaiting_billed';
   }
   if (isAutoReconciled(r) || r.staleDispute) return 'reconciled';
@@ -80,10 +80,8 @@ export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat
   let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
   for (const r of rows) {
     if (r.billedTotal == null) {
-      // pre-billed (chưa có hoá đơn carrier) — không vào số liệu tiền
-      const isPendingPre = effStatus(r) === 'pending';
-      if (isPendingPre) pendingCount += 1;
-      if (r.status === 'disputing' && !r.staleDispute) disputingCount += 1;
+      // Pre-billed (chưa có hoá đơn carrier): không vào số liệu tiền, cũng không
+      // vào pendingCount/disputingCount — đếm riêng qua countByEffStatus (dòng summary).
       continue;
     }
     billed += r.billedTotal;
