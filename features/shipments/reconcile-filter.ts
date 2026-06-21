@@ -41,6 +41,9 @@ function rowTime(r: ReconcileViewRow): number {
   return r.labelDate ? r.labelDate.getTime() : -Infinity;
 }
 
+/** Trạng thái "chưa đối soát" — xếp lên đầu. Gồm pending billed + 2 trạng thái tiền-billed. */
+const PENDING_GROUP = new Set<ReconcileStatus>(['pending', 'awaiting_measurement', 'awaiting_billed']);
+
 /** Lọc + sort: (1) CHƯA đối soát (pending) lên đầu, (2) đơn MỚI NHẤT (ngày ship)
  *  → cũ nhất. Mức lệch (|delta|) KHÔNG còn là sort mặc định — chỉ là filter "Lệch ≥ %". */
 export function filterReconcileRows(rows: ReconcileViewRow[], f: ReconcileFilters): ReconcileViewRow[] {
@@ -57,8 +60,8 @@ export function filterReconcileRows(rows: ReconcileViewRow[], f: ReconcileFilter
       r.trackingNumber.toLowerCase().includes(needle),
     )
     .sort((a, b) => {
-      const pa = effStatus(a) === 'pending' ? 0 : 1;
-      const pb = effStatus(b) === 'pending' ? 0 : 1;
+      const pa = PENDING_GROUP.has(effStatus(a)) ? 0 : 1;
+      const pb = PENDING_GROUP.has(effStatus(b)) ? 0 : 1;
       if (pa !== pb) return pa - pb;          // chưa đối soát lên đầu
       return rowTime(b) - rowTime(a);         // rồi mới nhất → cũ nhất
     });
@@ -93,6 +96,16 @@ export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat
   const delta = billed - engine;
   const pct = billed > 0 ? (delta / billed) * 100 : 0;
   return { billed, engine, delta, pct, over10, pendingCount, disputingCount, n: rows.length };
+}
+
+/** Đếm số dòng theo trạng thái hiệu lực (effStatus). Dùng cho dòng summary. */
+export function countByEffStatus(rows: ReconcileViewRow[]): Record<ReconcileStatus, number> {
+  const c: Record<ReconcileStatus, number> = {
+    pending: 0, reconciled: 0, ignored: 0, carrier_error: 0, disputing: 0,
+    internal_error: 0, credited: 0, accepted: 0, awaiting_measurement: 0, awaiting_billed: 0,
+  };
+  for (const r of rows) c[effStatus(r)] += 1;
+  return c;
 }
 
 /** Slice trang hiện tại; safePage kẹp [0, totalPages-1]. */

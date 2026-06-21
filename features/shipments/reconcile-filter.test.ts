@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAutoReconciled, effStatus, filterReconcileRows, reconcileSummary, paginate } from './reconcile-filter';
+import { isAutoReconciled, effStatus, filterReconcileRows, reconcileSummary, paginate, countByEffStatus } from './reconcile-filter';
 import type { ReconcileViewRow } from './reconcile-view';
 
 const row = (o: Partial<ReconcileViewRow> = {}): ReconcileViewRow => ({
@@ -81,6 +81,27 @@ describe('reconcileSummary', () => {
     ]);
     expect(s.billed).toBe(300); expect(s.engine).toBe(250); expect(s.delta).toBe(50);
     expect(s.pendingCount).toBe(1); expect(s.over10).toBe(1); expect(s.n).toBe(2);
+  });
+});
+
+describe('order-driven sort + count', () => {
+  const base = { carrier: 'all', status: 'all', country: '', minPct: '', q: '' } as const;
+  it('awaiting_billed + awaiting_measurement nằm nhóm "chưa xong" (trên reconciled)', () => {
+    const r = filterReconcileRows([
+      row({ orderNumber: '#done', status: 'reconciled', billedTotal: 1_000_000, engineTotal: 1_000_000, deltaVnd: 0, labelDate: new Date('2026-06-20') }),
+      row({ orderNumber: '#await', status: 'pending', billedTotal: null, engineTotal: 800_000, deltaVnd: null, engineReason: null, labelDate: new Date('2026-06-01') } as never),
+    ], base);
+    expect(r[0].orderNumber).toBe('#await'); // chưa xong lên đầu dù ngày cũ hơn
+  });
+  it('countByEffStatus đếm theo trạng thái hiệu lực', () => {
+    const c = countByEffStatus([
+      row({ billedTotal: null, engineTotal: null, deltaVnd: null, engineReason: 'no_weight' } as never),
+      row({ billedTotal: null, engineTotal: 900_000, deltaVnd: null, engineReason: null } as never),
+      row({ billedTotal: 1_000_000, engineTotal: 900_000, deltaVnd: 100_000 }),
+    ]);
+    expect(c.awaiting_measurement).toBe(1);
+    expect(c.awaiting_billed).toBe(1);
+    expect(c.pending).toBe(1);
   });
 });
 
