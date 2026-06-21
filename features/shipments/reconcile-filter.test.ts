@@ -37,9 +37,22 @@ describe('filterReconcileRows', () => {
   it('lọc country (không phân biệt hoa thường)', () => { expect(filterReconcileRows(rows, { ...base, country: 'sa' }).length).toBe(1); });
   it('lọc minPct (|deltaPct| ≥)', () => { expect(filterReconcileRows(rows, { ...base, minPct: '10' }).length).toBe(1); });
   it('lọc q theo order/tracking', () => { expect(filterReconcileRows(rows, { ...base, q: 'bbb' }).map((r) => r.orderNumber)).toEqual(['#BBB']); });
-  it('sort theo |deltaVnd| giảm dần', () => {
-    const r = filterReconcileRows([row({ orderNumber: '#lo', deltaVnd: 10 }), row({ orderNumber: '#hi', deltaVnd: 999 })], base);
-    expect(r.map((x) => x.orderNumber)).toEqual(['#hi', '#lo']);
+  it('sort: chưa đối soát (pending) lên đầu, KHÔNG theo |delta|/ngày', () => {
+    // resolved + ngày MỚI HƠN vs pending + ngày cũ hơn → pending vẫn lên trước.
+    // pending deltaVnd phải > tolerance (1000) để không bị auto-reconciled.
+    const r = filterReconcileRows([
+      row({ orderNumber: '#resolvedNew', status: 'reconciled', deltaVnd: 999999, labelDate: new Date('2026-06-10') }),
+      row({ orderNumber: '#pendingOld', status: 'pending', deltaVnd: 5000, labelDate: new Date('2026-06-01') }),
+    ], base);
+    expect(r.map((x) => x.orderNumber)).toEqual(['#pendingOld', '#resolvedNew']);
+  });
+  it('sort: trong cùng nhóm, đơn mới nhất (ngày ship) lên trước', () => {
+    const r = filterReconcileRows([
+      row({ orderNumber: '#cu', status: 'pending', labelDate: new Date('2026-05-01') }),
+      row({ orderNumber: '#moi', status: 'pending', labelDate: new Date('2026-06-20') }),
+      row({ orderNumber: '#khongngay', status: 'pending', labelDate: null }),
+    ], base);
+    expect(r.map((x) => x.orderNumber)).toEqual(['#moi', '#cu', '#khongngay']);
   });
 });
 

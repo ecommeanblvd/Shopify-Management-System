@@ -31,7 +31,13 @@ export interface ReconcileFilters {
   q: string;
 }
 
-/** Lọc + sort theo |deltaVnd| giảm dần (giữ nguyên chuỗi filter của bảng cũ). */
+/** Thời điểm để sort "mới nhất" — ngày ship/label. null → cũ nhất (−∞). */
+function rowTime(r: ReconcileViewRow): number {
+  return r.labelDate ? r.labelDate.getTime() : -Infinity;
+}
+
+/** Lọc + sort: (1) CHƯA đối soát (pending) lên đầu, (2) đơn MỚI NHẤT (ngày ship)
+ *  → cũ nhất. Mức lệch (|delta|) KHÔNG còn là sort mặc định — chỉ là filter "Lệch ≥ %". */
 export function filterReconcileRows(rows: ReconcileViewRow[], f: ReconcileFilters): ReconcileViewRow[] {
   const minAbs = f.minPct ? Number(f.minPct) : null;
   const needle = f.q.trim().toLowerCase();
@@ -45,7 +51,12 @@ export function filterReconcileRows(rows: ReconcileViewRow[], f: ReconcileFilter
       r.orderNumber.toLowerCase().includes(needle) ||
       r.trackingNumber.toLowerCase().includes(needle),
     )
-    .sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
+    .sort((a, b) => {
+      const pa = effStatus(a) === 'pending' ? 0 : 1;
+      const pb = effStatus(b) === 'pending' ? 0 : 1;
+      if (pa !== pb) return pa - pb;          // chưa đối soát lên đầu
+      return rowTime(b) - rowTime(a);         // rồi mới nhất → cũ nhất
+    });
 }
 
 export interface ReconcileSummaryStat {
