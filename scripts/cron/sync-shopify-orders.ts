@@ -1,5 +1,6 @@
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
+import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -18,6 +19,14 @@ async function main(): Promise<void> {
     process.stdout.write(`retry-mmp: retried ${mmp.retried}, recovered ${mmp.recovered}, stillFailing ${mmp.stillFailing}\n`);
   } catch (e) {
     process.stderr.write(`retry-mmp: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Đẩy đơn brand CHƯA từng push (kẽ hở: auto-push chỉ bắn lúc thao tác phân bổ,
+  // retry-cron chỉ lo dòng pending/failed đã có). Đã lọc 'sent' nên nhẹ + idempotent.
+  try {
+    const bf = await pushUnsentBrandOrders();
+    process.stdout.write(`push-unsent-brand: pushed ${bf.pushed}, skipped ${bf.skipped}, failed ${bf.failed}, total ${bf.total}\n`);
+  } catch (e) {
+    process.stderr.write(`push-unsent-brand: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

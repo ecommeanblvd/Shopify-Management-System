@@ -14,17 +14,21 @@ import { BRAND_STATUSES } from '@/features/fulfillment/brand-statuses';
  *  đơn đã sent-không-đổi (dedup phía mình) → chạy lại không flood; MMP dedupe là backstop.
  *  `limit` → chỉ đẩy N đơn đầu (để test trước khi chạy full); để trống = tất cả.
  *  `total` = tổng đơn eligible (trước khi giới hạn) để biết còn bao nhiêu. */
-export async function backfillMmpOrders(opts?: { limit?: number }): Promise<{
-  pushed: number;
-  skipped: number;
-  failed: number;
-  total: number;
-}> {
+export interface BackfillResult { pushed: number; skipped: number; failed: number; total: number }
+
+/** Nút operator (có auth) → đẩy đơn brand chưa gửi sang MMP. */
+export async function backfillMmpOrders(opts?: { limit?: number }): Promise<BackfillResult> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Unauthenticated');
   const role = await getRole(session.user.id);
   if (!role || !hasPermission(role, 'manage_fulfillment')) throw new Error('Forbidden');
+  return pushUnsentBrandOrders(opts);
+}
 
+/** LÕI không-auth: đẩy đơn brand CHƯA gửi sang MMP. Dùng bởi nút operator + cron
+ *  (đơn brand chưa từng push không được retry-cron đụng tới — retry chỉ lo dòng
+ *  pending/failed đã có; auto-push lại chỉ bắn lúc thao tác phân bổ). */
+export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<BackfillResult> {
   // Đơn có ≥1 dòng brand VÀ CHƯA gửi thành công sang MMP (chưa có dòng push,
   // hoặc đang pending/failed). LOẠI đơn đã 'sent': trước đây query lấy hết rồi
   // pushOrderToMmp tự bỏ qua đơn sent → khi bấm với limit N, N đơn đầu toàn
