@@ -7,7 +7,8 @@ describe('parsePackRow', () => {
       'Order Number': '#MBLVD29149', 'Log Unique code': 'PK-20507',
       'Weights': '0.80', 'Dimension ( điền tay)': '40x31x2',
       'Tracking Number': '25G8E12S', 'Couriers': 'FedEx',
-      'Label Created Date': 1781827200000,
+      // epoch = nửa đêm 08/06/2026 giờ VN (= 07/06 17:00 UTC)
+      'Label Created Date': Date.UTC(2026, 5, 7, 17, 0, 0),
     });
     expect(r.orderNumber).toBe('#MBLVD29149');
     expect(r.logUniqueCode).toBe('PK-20507');
@@ -15,8 +16,14 @@ describe('parsePackRow', () => {
     expect(r.dims).toEqual({ l: 40, w: 31, h: 2 });
     expect(r.trackingNumber).toBe('25G8E12S');
     expect(r.carrierKey).toBe('fedex');
-    expect(r.labelDate?.getTime()).toBe(1781827200000);
+    // chuẩn hoá về nửa-đêm-ngày-lịch-VN (lưu thành 2026-06-08 00:00:00) → khớp mốc fuel
+    expect(r.labelDate?.toISOString()).toBe('2026-06-08T00:00:00.000Z');
     expect(r.warnings).toEqual([]);
+  });
+  it('ngày Lark (epoch nửa đêm VN) → lưu nửa-đêm-ngày-VN, KHÔNG lệch về hôm trước', () => {
+    // bug cũ: new Date(epoch) = 2026-06-07T17:00Z → đơn biên tuần fuel bị lệch.
+    const r = parsePackRow({ 'Label Created Date': Date.UTC(2026, 5, 7, 17, 0, 0) });
+    expect(r.labelDate?.toISOString()).toBe('2026-06-08T00:00:00.000Z');
   });
   it('field dạng rich [{text}] → đọc được', () => {
     const r = parsePackRow({ 'Order Number': [{ text: 'TA2017', type: 'text' }], 'Couriers': [{ text: 'DHL' }] });
