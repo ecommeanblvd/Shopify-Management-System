@@ -47,6 +47,15 @@ function normalizeCourier(raw: string | null): 'fedex' | 'dhl' | null {
   return null;
 }
 
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+/** Epoch (nửa đêm giờ VN) → Date có UTC = nửa đêm NGÀY-LỊCH VN, để khi lưu vào
+ *  cột timestamp không-tz ra "giờ-treo VN" (vd 2026-06-08 00:00:00), khớp mốc
+ *  fuel/rate-card. Floor về ngày nên chịu được epoch có cả giờ. */
+function larkEpochToVnMidnight(ms: number): Date {
+  const vn = new Date(ms + VN_OFFSET_MS);
+  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+}
+
 export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const warnings: string[] = [];
   const orderNumber = larkText(fields['Order Number']) ?? '';
@@ -72,13 +81,17 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const carrierKey = normalizeCourier(cRaw);
   if (cRaw != null && carrierKey === null) warnings.push(`carrier lạ: "${cRaw}"`);
 
-  // date (Lark date = ms epoch number, hoặc string)
+  // Ngày Lark = epoch (ms, UTC) của NỬA ĐÊM GIỜ VN. Phần còn lại của hệ thống
+  // (mốc fuel, rate-card, import cũ) lưu ngày dạng "giờ-treo VN" vào cột timestamp
+  // không-tz (vd 2026-06-08 00:00:00). Nếu lưu thẳng epoch thì thành 2026-06-07
+  // 17:00:00 (UTC) → lệch 7h, đơn ship đúng ngày đầu tuần fuel bị tính sang tuần
+  // trước. → đổi epoch sang nửa-đêm-ngày-lịch-VN trước khi lưu.
   let labelDate: Date | null = null;
   const dRaw = fields['Label Created Date'];
-  if (typeof dRaw === 'number' && Number.isFinite(dRaw)) labelDate = new Date(dRaw);
+  if (typeof dRaw === 'number' && Number.isFinite(dRaw)) labelDate = larkEpochToVnMidnight(dRaw);
   else {
     const ds = larkText(dRaw);
-    if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = new Date(t); }
+    if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
   return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, warnings };
