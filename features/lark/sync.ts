@@ -37,6 +37,16 @@ export interface LarkSyncSummary {
   skipped: number; warnings: string[];
 }
 
+/** Số dòng tối đa mỗi transaction khi áp update/create (tránh transaction dài
+ *  bị pooler timeout). */
+const APPLY_CHUNK = 200;
+
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
 /** Patch shipment từ PackRow — chỉ field Lark có giá trị (ghi đè có điều kiện). */
 function patchFrom(row: PackRow): Record<string, unknown> {
   const p: Record<string, unknown> = { updatedAt: new Date() };
@@ -71,26 +81,35 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     const maps: ClassifyMaps = { shipmentByLogCode, shipmentByTracking, orderIdByNumber };
     const cls = classifyPackRows(rows, maps);
 
-    // Áp trong transaction
-    await db.transaction(async (tx) => {
-      for (const u of cls.update) {
-        const patch = patchFrom(u.row);
-        if (Object.keys(patch).length > 1) await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, u.shipmentId));
-      }
-      for (const c of cls.create) {
-        await tx.insert(schema.shipments).values({
-          orderId: c.orderId,
-          logUniqueCode: c.row.logUniqueCode,
-          trackingNumber: c.row.trackingNumber,
-          carrierKey: c.row.carrierKey,
-          actualWeightKg: c.row.weightKg != null ? String(c.row.weightKg) : null,
-          dimLengthCm: c.row.dims ? String(c.row.dims.l) : null,
-          dimWidthCm: c.row.dims ? String(c.row.dims.w) : null,
-          dimHeightCm: c.row.dims?.h != null ? String(c.row.dims.h) : null,
-          labelCreatedAt: c.row.labelDate,
-        }).onConflictDoNothing();
-      }
-    });
+    // Áp theo LÔ NHỎ, mỗi lô 1 transaction ngắn. KHÔNG gộp ~2800 update vào 1
+    // transaction khổng lồ: transaction dài bị Supabase pooler timeout/rớt
+    // connection giữa chừng ("Failed query"). Sync idempotent nên fail giữa lô
+    // không sao — chạy lại tiếp tục.
+    for (const batch of chunk(cls.update, APPLY_CHUNK)) {
+      await db.transaction(async (tx) => {
+        for (const u of batch) {
+          const patch = patchFrom(u.row);
+          if (Object.keys(patch).length > 1) await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, u.shipmentId));
+        }
+      });
+    }
+    for (const batch of chunk(cls.create, APPLY_CHUNK)) {
+      await db.transaction(async (tx) => {
+        for (const c of batch) {
+          await tx.insert(schema.shipments).values({
+            orderId: c.orderId,
+            logUniqueCode: c.row.logUniqueCode,
+            trackingNumber: c.row.trackingNumber,
+            carrierKey: c.row.carrierKey,
+            actualWeightKg: c.row.weightKg != null ? String(c.row.weightKg) : null,
+            dimLengthCm: c.row.dims ? String(c.row.dims.l) : null,
+            dimWidthCm: c.row.dims ? String(c.row.dims.w) : null,
+            dimHeightCm: c.row.dims?.h != null ? String(c.row.dims.h) : null,
+            labelCreatedAt: c.row.labelDate,
+          }).onConflictDoNothing();
+        }
+      });
+    }
 
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
     const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings };
