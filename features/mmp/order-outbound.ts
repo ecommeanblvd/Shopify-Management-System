@@ -44,7 +44,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
  *  đơn (đọc state trước khi ghi pending) hoặc DB lỗi ngay SAU khi POST thành công
  *  (row kẹt 'pending' → lần sau POST lại) vẫn có thể gửi trùng → dedupe phía MMP là
  *  backstop cho các ca hiếm này. */
-export async function pushOrderToMmp(orderId: string): Promise<{ ok: boolean; skipped?: boolean; externalRef?: string; error?: string }> {
+export async function pushOrderToMmp(orderId: string, opts?: { force?: boolean }): Promise<{ ok: boolean; skipped?: boolean; externalRef?: string; error?: string }> {
   const url = process.env.MMP_ORDERS_URL;
   const secret = process.env.MMP_OUTBOUND_SECRET;
   if (!url || !secret) return { ok: false, error: 'not configured' };
@@ -55,7 +55,9 @@ export async function pushOrderToMmp(orderId: string): Promise<{ ok: boolean; sk
 
   const [state] = await db.select({ status: schema.mmpOrderPushes.status, attempts: schema.mmpOrderPushes.attempts, payloadHash: schema.mmpOrderPushes.payloadHash })
     .from(schema.mmpOrderPushes).where(eq(schema.mmpOrderPushes.orderId, orderId)).limit(1);
-  if (!shouldPushOrder(state ?? null, payloadHash)) return { ok: true, skipped: true };
+  // force = gửi lại kể cả đơn đã 'sent' không đổi (vd đồng bộ lại toàn bộ để MMP
+  // dựng đủ brand). MMP có dedupe backstop nên không tạo trùng.
+  if (!opts?.force && !shouldPushOrder(state ?? null, payloadHash)) return { ok: true, skipped: true };
 
   // Ghi pending TRƯỚC khi POST (để cron retry được kể cả khi POST ném).
   await db.insert(schema.mmpOrderPushes)

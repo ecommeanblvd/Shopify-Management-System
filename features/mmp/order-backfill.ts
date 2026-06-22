@@ -69,3 +69,30 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<
   }
   return { pushed, skipped, failed, total };
 }
+
+/** FORCE đẩy lại TẤT CẢ đơn brand (kể cả đã 'sent') sang MMP — đồng bộ lại toàn bộ
+ *  để MMP dựng đủ brand. KHÔNG auth (chạy qua script/cron có chủ đích). `onProgress`
+ *  để script in tiến độ. */
+export async function forcePushAllBrandOrders(opts?: {
+  limit?: number;
+  onProgress?: (done: number, total: number, pushed: number, failed: number) => void;
+}): Promise<BackfillResult> {
+  const rows = await db
+    .selectDistinct({ orderId: schema.orderFulfillment.orderId })
+    .from(schema.orderFulfillmentLines)
+    .innerJoin(schema.orderFulfillment, eq(schema.orderFulfillmentLines.fulfillmentId, schema.orderFulfillment.id))
+    .where(inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]));
+
+  const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
+  const total = orderIds.length;
+  let pushed = 0, skipped = 0, failed = 0, done = 0;
+  for (const oid of orderIds) {
+    const r = await pushOrderToMmp(oid, { force: true });
+    if (r.ok && !r.skipped) pushed++;
+    else if (r.skipped || r.error === 'no brand lines' || r.error === 'not configured') skipped++;
+    else failed++;
+    done++;
+    if (opts?.onProgress && done % 100 === 0) opts.onProgress(done, total, pushed, failed);
+  }
+  return { pushed, skipped, failed, total };
+}
