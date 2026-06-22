@@ -1,7 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, or, isNull, ne } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -25,19 +25,32 @@ export async function backfillMmpOrders(opts?: { limit?: number }): Promise<{
   const role = await getRole(session.user.id);
   if (!role || !hasPermission(role, 'manage_fulfillment')) throw new Error('Forbidden');
 
-  // Select orderId from fulfillments that have ≥1 brand line.
+  // Đơn có ≥1 dòng brand VÀ CHƯA gửi thành công sang MMP (chưa có dòng push,
+  // hoặc đang pending/failed). LOẠI đơn đã 'sent': trước đây query lấy hết rồi
+  // pushOrderToMmp tự bỏ qua đơn sent → khi bấm với limit N, N đơn đầu toàn
+  // 'sent' → bỏ qua hết → "đẩy 0" dù vẫn còn đơn chưa gửi; chạy full thì lặp
+  // hàng nghìn đơn 'sent' → dễ timeout. Lọc 'sent' ở SQL → limit trúng đúng đơn
+  // cần gửi + không lặp thừa.
+  // (Re-push đơn ĐÃ sent nhưng đổi nội dung: dùng badge resend từng đơn / cron.)
   const rows = await db
-    .select({ orderId: schema.orderFulfillment.orderId })
+    .selectDistinct({ orderId: schema.orderFulfillment.orderId })
     .from(schema.orderFulfillmentLines)
     .innerJoin(
       schema.orderFulfillment,
       eq(schema.orderFulfillmentLines.fulfillmentId, schema.orderFulfillment.id),
     )
+    .leftJoin(
+      schema.mmpOrderPushes,
+      eq(schema.mmpOrderPushes.orderId, schema.orderFulfillment.orderId),
+    )
     .where(
-      inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]),
+      and(
+        inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]),
+        or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+      ),
     );
 
-  // Dedupe (nhiều dòng brand cùng đơn → 1 orderId); total = toàn bộ eligible.
+  // Dedupe (nhiều dòng brand cùng đơn → 1 orderId); total = đơn CẦN gửi.
   const total = new Set(rows.map((r) => r.orderId)).size;
   const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
 
