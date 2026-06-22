@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords } from './client';
 import { parsePackRow, type PackRow } from './parse-pack-row';
@@ -37,8 +37,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     // Maps đối chiếu
     const existing = await db
       .select({ id: schema.shipments.id, logUniqueCode: schema.shipments.logUniqueCode, trackingNumber: schema.shipments.trackingNumber })
-      .from(schema.shipments)
-      .where(isNotNull(schema.shipments.id));
+      .from(schema.shipments);
     const shipmentByLogCode = new Map<string, string>();
     const shipmentByTracking = new Map<string, string>();
     for (const s of existing) {
@@ -74,11 +73,17 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
     const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings };
 
-    await db.insert(schema.larkSyncRuns).values({
-      created: summary.created, updated: summary.updated,
-      unmatchedCount: summary.unmatched.length, skippedCount: summary.skipped,
-      unmatched: summary.unmatched,
-    });
+    // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
+    // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.
+    try {
+      await db.insert(schema.larkSyncRuns).values({
+        created: summary.created, updated: summary.updated,
+        unmatchedCount: summary.unmatched.length, skippedCount: summary.skipped,
+        unmatched: summary.unmatched,
+      });
+    } catch (logErr) {
+      console.error('[lark] ghi lark_sync_runs thất bại sau khi sync xong:', logErr);
+    }
     return summary;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
