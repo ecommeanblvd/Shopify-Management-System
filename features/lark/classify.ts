@@ -24,6 +24,10 @@ const bare = (n: string) => n.trim().replace(/^#/, '');
 
 export function classifyPackRows(rows: PackRow[], maps: ClassifyMaps): ClassifyResult {
   const out: ClassifyResult = { update: [], create: [], unmatched: [], skipped: [] };
+  // logUniqueCode đã được route sang CREATE trong batch này — chặn 2 dòng Lark
+  // trùng logUniqueCode (không tracking) cùng tạo 2 shipment (onConflictDoNothing
+  // không phủ vì log_unique_code không phải unique index).
+  const createdLogCodes = new Set<string>();
   for (const row of rows) {
     // 1. shipment đã tồn tại?
     const existingId =
@@ -39,8 +43,13 @@ export function classifyPackRows(rows: PackRow[], maps: ClassifyMaps): ClassifyR
     if (!look.info.connected) { out.skipped.push({ orderNumber: row.orderNumber, reason: `store chưa kết nối (${look.info.displayName})` }); continue; }
 
     const orderId = maps.orderIdByNumber.get(bare(row.orderNumber));
-    if (orderId) out.create.push({ row, orderId });
-    else out.unmatched.push({ orderNumber: row.orderNumber, reason: 'order chưa có trong hệ thống' });
+    if (!orderId) { out.unmatched.push({ orderNumber: row.orderNumber, reason: 'order chưa có trong hệ thống' }); continue; }
+    if (row.logUniqueCode && createdLogCodes.has(row.logUniqueCode)) {
+      out.skipped.push({ orderNumber: row.orderNumber, reason: `trùng logUniqueCode trong batch (${row.logUniqueCode})` });
+      continue;
+    }
+    if (row.logUniqueCode) createdLogCodes.add(row.logUniqueCode);
+    out.create.push({ row, orderId });
   }
   return out;
 }

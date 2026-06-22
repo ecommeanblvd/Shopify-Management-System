@@ -38,6 +38,16 @@ describe('classifyPackRows', () => {
     const r = classifyPackRows([mk({ orderNumber: 'DISCN5' }), mk({ orderNumber: 'ZZZ9' })], emptyMaps());
     expect(r.skipped).toHaveLength(2);
   });
+  it('2 row trùng logUniqueCode (cùng batch, chưa có shipment) → chỉ tạo 1, dòng sau skip', () => {
+    const maps = emptyMaps(); maps.orderIdByNumber.set('MBLVD1', 'order-1');
+    const r = classifyPackRows([
+      mk({ orderNumber: '#MBLVD1', logUniqueCode: 'PK-dup', trackingNumber: null }),
+      mk({ orderNumber: '#MBLVD1', logUniqueCode: 'PK-dup', trackingNumber: null }),
+    ], maps);
+    expect(r.create).toHaveLength(1);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0].reason).toContain('trùng logUniqueCode');
+  });
   it('idempotent: row đã update không tạo lại', () => {
     const maps = emptyMaps(); maps.shipmentByLogCode.set('PK-1', 'ship-1'); maps.orderIdByNumber.set('MBLVD1', 'order-1');
     const r = classifyPackRows([mk({ logUniqueCode: 'PK-1', orderNumber: '#MBLVD1' })], maps);
