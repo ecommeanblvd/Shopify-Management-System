@@ -1814,3 +1814,17 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   index('goods_receipt_items_disposition_idx').on(t.disposition),
   index('gri_stock_pick_idx').on(t.sku, t.stockStatus, t.currentWarehouseCode),
 ]);
+
+/** Nhật ký mỗi lần sync Lark → shipments. Bản ghi mới nhất cấp dữ liệu cho
+ *  banner cảnh báo "đơn Lark không khớp order". */
+export const larkSyncRuns = pgTable('lark_sync_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ranAt: timestamp('ran_at').notNull().defaultNow(),
+  created: integer('created').notNull().default(0),
+  updated: integer('updated').notNull().default(0),
+  unmatchedCount: integer('unmatched_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  /** [{ orderNumber, reason }] — đơn Lark không tạo được shipment. */
+  unmatched: jsonb('unmatched').notNull().default(sql`'[]'::jsonb`),
+  error: text('error'),
+});
