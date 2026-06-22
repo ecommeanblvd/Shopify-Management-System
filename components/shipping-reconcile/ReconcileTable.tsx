@@ -13,7 +13,6 @@ import type { IssueReportRecord } from '@/features/shipments/issue-report-action
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
 import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
 import { syncLarkPacksAction } from '@/features/lark/actions';
-import type { LarkSyncSummary } from '@/features/lark/sync';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -118,7 +117,7 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [larkResult, setLarkResult] = useState<LarkSyncSummary | string | null>(null);
+  const [larkResult, setLarkResult] = useState<string | null>(null);
   // Ô text: state cục bộ để gõ mượt; đẩy lên URL sau debounce 300ms (tránh
   // round-trip server mỗi ký tự). Dropdown/pager đẩy URL ngay.
   const [country, setCountry] = useState(filters.country);
@@ -201,9 +200,12 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
               setLarkResult(null);
               startTransition(async () => {
                 try {
-                  const s = await syncLarkPacksAction();
-                  setLarkResult(s);
-                  router.refresh();
+                  const r = await syncLarkPacksAction();
+                  setLarkResult(
+                    r.alreadyRunning
+                      ? 'Đang chạy rồi — chờ chút.'
+                      : 'Đã bắt đầu đồng bộ ở nền — bấm "Tính lại" sau ít phút để xem kết quả ở banner Lark.',
+                  );
                 } catch (err) {
                   setLarkResult(err instanceof Error ? err.message : 'Lỗi đồng bộ');
                 }
@@ -211,14 +213,10 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
             }}
             className="rounded border border-border px-3 py-1 hover:bg-muted disabled:opacity-40"
           >
-            {isPending ? 'Đang đồng bộ…' : 'Đồng bộ Lark'}
+            {isPending ? 'Đang kích hoạt…' : 'Đồng bộ Lark'}
           </button>
           {larkResult !== null && (
-            <span className="text-xs text-muted-foreground">
-              {typeof larkResult === 'string'
-                ? <span className="text-red-600 dark:text-red-400">{larkResult}</span>
-                : `tạo ${larkResult.created} · cập nhật ${larkResult.updated} · không khớp ${larkResult.unmatched.length}`}
-            </span>
+            <span className="text-xs text-muted-foreground">{larkResult}</span>
           )}
         </div>
       </div>

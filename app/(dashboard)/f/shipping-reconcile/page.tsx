@@ -12,6 +12,8 @@ import { listUnmatchedBilledTracking, summariseUnmatched } from '@/features/ship
 import { issueInfo } from '@/components/shipping-reconcile/issue-label';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
 import { UnmatchedBilledBanner } from '@/components/shipping-reconcile/UnmatchedBilledBanner';
+import { LarkSyncBanner } from '@/components/shipping-reconcile/LarkSyncBanner';
+import { getLatestLarkRun } from '@/features/lark/sync';
 import type { OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
 
 export const dynamic = 'force-dynamic';
@@ -29,11 +31,12 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
     redirect('/');
   }
 
-  const [{ rows, computedAt }, reports, carrierErrors, unmatchedBilled] = await Promise.all([
+  const [{ rows, computedAt }, reports, carrierErrors, unmatchedBilled, latestLarkRun] = await Promise.all([
     reconcileShipmentsWithStatus({ forceRecompute: sp.refresh === '1' }),
     listIssueReports(),
     listCarrierErrors(),
     listUnmatchedBilledTracking(),
+    getLatestLarkRun(),
   ]);
   const carrierErrorGroups = summariseCarrierErrors(carrierErrors.filter((r) => r.state === 'approved'));
   const internalErrors = await listInternalErrors();
@@ -78,6 +81,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
+      <LarkSyncBanner latest={latestLarkRun} />
       <UnmatchedBilledBanner rows={unmatchedBilled} summary={summariseUnmatched(unmatchedBilled)} />
       <ReconcileTable
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
