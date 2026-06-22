@@ -2,12 +2,34 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords } from './client';
 import { parsePackRow, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
+
+/** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
+export interface LarkRunRow {
+  ranAt: string;
+  created: number; updated: number;
+  unmatchedCount: number; skippedCount: number;
+  unmatched: Array<{ orderNumber: string; reason: string }>;
+  error: string | null;
+}
+
+/** Đọc lần sync gần nhất cho banner (RSC gọi, trả plain serializable). */
+export async function getLatestLarkRun(): Promise<LarkRunRow | null> {
+  const [r] = await db.select().from(schema.larkSyncRuns).orderBy(desc(schema.larkSyncRuns.ranAt)).limit(1);
+  if (!r) return null;
+  return {
+    ranAt: r.ranAt.toISOString(),
+    created: r.created, updated: r.updated,
+    unmatchedCount: r.unmatchedCount, skippedCount: r.skippedCount,
+    unmatched: (r.unmatched as Array<{ orderNumber: string; reason: string }>) ?? [],
+    error: r.error,
+  };
+}
 
 export interface LarkSyncSummary {
   created: number; updated: number;
