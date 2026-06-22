@@ -24,7 +24,8 @@
     "cron:refresh-demand": "dotenv -- tsx scripts/cron/refresh-fedex-demand.ts",
     "cron:backfill-orders": "dotenv -- tsx scripts/cron/backfill-shopify-orders.ts",
     "cron:sync-orders": "dotenv -- tsx scripts/cron/sync-shopify-orders.ts",
-    "cron:sync-lark": "dotenv -- tsx scripts/cron/sync-lark.ts"
+    "cron:sync-lark": "dotenv -- tsx scripts/cron/sync-lark.ts",
+    "cron:refresh-surcharges": "dotenv -- tsx scripts/cron/refresh-surcharges.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
