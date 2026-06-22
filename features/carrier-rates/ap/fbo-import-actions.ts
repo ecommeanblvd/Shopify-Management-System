@@ -14,6 +14,7 @@ import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
 import { parseFedexFbo, consolidateFboShipping, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
+import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
 
 export interface FboBillSummary {
   billNumber: string | null;
@@ -232,6 +233,10 @@ export async function importFboToDatabase(
     }
     return { created, updated, charges };
   });
+
+  // Bill FBO mới ghi shipment_charges → bust cache đối soát để màn Đối soát ship
+  // tự nạp billed mới (khỏi chờ TTL 15' / bấm "Tính lại").
+  if (counts.charges > 0) invalidateReconcileCache();
 
   const awbs = rows.map((r) => r.awb);
   const matched = awbs.filter((a) => awbMap.has(a));

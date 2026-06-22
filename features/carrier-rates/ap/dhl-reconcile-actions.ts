@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
 import { mapChargesToBilled, isFreightCharges } from './dhl-billed-map';
 import type { BillCharge } from './bills-actions';
 
@@ -111,5 +112,8 @@ export async function reconcileDhlBill(billId: string): Promise<DhlReconcileResu
     });
     res.matched++;
   }
+  // Bill mới ghi vào shipment_charges → bust cache đối soát (in-process) để màn
+  // Đối soát ship tự nạp billed mới, khỏi chờ TTL 15' / bấm "Tính lại".
+  if (res.matched > 0) invalidateReconcileCache();
   return res;
 }
