@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { reconcileShipmentsWithStatus, pdfBillByShipment } from '@/features/shipments/reconcile-view';
-import { filterReconcileRows, reconcileSummary, paginate, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
+import { filterReconcileRows, reconcileSummary, paginate, countByEffStatus, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
 import { listInternalErrors, summariseInternalErrors } from '@/features/shipments/internal-error-report';
@@ -42,12 +42,14 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
   // Lọc + summary + phân trang PHÍA SERVER (chỉ gửi trang đang xem xuống client).
   const filters: ReconcileFilters = {
     carrier: (sp.carrier === 'fedex' || sp.carrier === 'dhl') ? sp.carrier : 'all',
-    status: (['pending', 'reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error', 'credited', 'accepted'] as const).includes(sp.status as never)
+    status: (['pending', 'reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error', 'credited', 'accepted', 'awaiting_measurement', 'awaiting_billed'] as const).includes(sp.status as never)
       ? (sp.status as ReconcileFilters['status']) : 'all',
     country: sp.country ?? '', minPct: sp.minPct ?? '', q: sp.q ?? '',
   };
   const filteredRows = filterReconcileRows(rows, filters);
   const summary = reconcileSummary(filteredRows);
+  const effCounts = countByEffStatus(filteredRows);
+  const preBilledCounts = { awaiting_measurement: effCounts.awaiting_measurement, awaiting_billed: effCounts.awaiting_billed };
   const { pageRows, totalPages, safePage } = paginate(filteredRows, Number(sp.page ?? 0) || 0, PAGE_SIZE);
   const pdfMap = await pdfBillByShipment(pageRows.map((r) => r.shipmentId));
 
@@ -81,7 +83,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
         filters={filters} openIssues={openIssues}
         reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups}
-        pdfMap={pdfMap}
+        pdfMap={pdfMap} preBilledCounts={preBilledCounts}
       />
     </div>
   );

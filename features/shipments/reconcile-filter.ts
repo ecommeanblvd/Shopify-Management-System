@@ -19,13 +19,18 @@ export function isAutoReconciled(r: ReconcileViewRow): boolean {
 /** Trạng thái HIỆU DỤNG cho view: đơn khớp-pending hoặc disputing-đã-khớp-lại →
  *  'reconciled'; còn lại giữ status gốc. */
 export function effStatus(r: ReconcileViewRow): ReconcileStatus {
+  // Tiền-billed: chưa có hoá đơn carrier. Phải xử TRƯỚC isAutoReconciled —
+  // deltaVnd null khiến Math.abs(0) < tolerance, sẽ bị nuốt thành 'reconciled'.
+  if (r.billedTotal === null && r.status === 'pending') {
+    return r.engineReason === 'no_weight' ? 'awaiting_measurement' : 'awaiting_billed';
+  }
   if (isAutoReconciled(r) || r.staleDispute) return 'reconciled';
   return r.status;
 }
 
 export interface ReconcileFilters {
   carrier: 'all' | 'fedex' | 'dhl';
-  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted';
+  status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted' | 'awaiting_measurement' | 'awaiting_billed';
   country: string;
   minPct: string;
   q: string;
@@ -35,6 +40,9 @@ export interface ReconcileFilters {
 function rowTime(r: ReconcileViewRow): number {
   return r.labelDate ? r.labelDate.getTime() : -Infinity;
 }
+
+/** Trạng thái "chưa đối soát" — xếp lên đầu. Gồm pending billed + 2 trạng thái tiền-billed. */
+const PENDING_GROUP = new Set<ReconcileStatus>(['pending', 'awaiting_measurement', 'awaiting_billed']);
 
 /** Lọc + sort: (1) CHƯA đối soát (pending) lên đầu, (2) đơn MỚI NHẤT (ngày ship)
  *  → cũ nhất. Mức lệch (|delta|) KHÔNG còn là sort mặc định — chỉ là filter "Lệch ≥ %". */
@@ -52,8 +60,8 @@ export function filterReconcileRows(rows: ReconcileViewRow[], f: ReconcileFilter
       r.trackingNumber.toLowerCase().includes(needle),
     )
     .sort((a, b) => {
-      const pa = effStatus(a) === 'pending' ? 0 : 1;
-      const pb = effStatus(b) === 'pending' ? 0 : 1;
+      const pa = PENDING_GROUP.has(effStatus(a)) ? 0 : 1;
+      const pb = PENDING_GROUP.has(effStatus(b)) ? 0 : 1;
       if (pa !== pb) return pa - pb;          // chưa đối soát lên đầu
       return rowTime(b) - rowTime(a);         // rồi mới nhất → cũ nhất
     });
@@ -65,10 +73,17 @@ export interface ReconcileSummaryStat {
 }
 
 /** Σ billed/engine/delta + đếm (đơn auto-reconciled fold engine=billed để Σ Lệch
- *  không phình vì pass-through; over10/pendingCount chỉ đếm đơn CÒN pending). */
+ *  không phình vì pass-through; over10/pendingCount chỉ đếm đơn CÒN pending).
+ *  Dòng chưa có hoá đơn carrier (billedTotal === null) bị loại khỏi Σ tiền VÀ
+ *  khỏi pendingCount/disputingCount — chỉ tính vào n (đếm riêng qua countByEffStatus). */
 export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat {
   let billed = 0, engine = 0, over10 = 0, pendingCount = 0, disputingCount = 0;
   for (const r of rows) {
+    if (r.billedTotal == null) {
+      // Pre-billed (chưa có hoá đơn carrier): không vào số liệu tiền, cũng không
+      // vào pendingCount/disputingCount — đếm riêng qua countByEffStatus (dòng summary).
+      continue;
+    }
     billed += r.billedTotal;
     engine += isAutoReconciled(r) ? r.billedTotal : (r.engineTotal ?? 0);
     const isPending = effStatus(r) === 'pending';
@@ -79,6 +94,16 @@ export function reconcileSummary(rows: ReconcileViewRow[]): ReconcileSummaryStat
   const delta = billed - engine;
   const pct = billed > 0 ? (delta / billed) * 100 : 0;
   return { billed, engine, delta, pct, over10, pendingCount, disputingCount, n: rows.length };
+}
+
+/** Đếm số dòng theo trạng thái hiệu lực (effStatus). Dùng cho dòng summary. */
+export function countByEffStatus(rows: ReconcileViewRow[]): Record<ReconcileStatus, number> {
+  const c: Record<ReconcileStatus, number> = {
+    pending: 0, reconciled: 0, ignored: 0, carrier_error: 0, disputing: 0,
+    internal_error: 0, credited: 0, accepted: 0, awaiting_measurement: 0, awaiting_billed: 0,
+  };
+  for (const r of rows) c[effStatus(r)] += 1;
+  return c;
 }
 
 /** Slice trang hiện tại; safePage kẹp [0, totalPages-1]. */

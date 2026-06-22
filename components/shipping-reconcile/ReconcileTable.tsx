@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
-import { isAutoReconciled, MATCH_TOLERANCE_VND, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
+import { isAutoReconciled, MATCH_TOLERANCE_VND, effStatus, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
 import { carrierWeightCell } from '@/features/shipments/reconcile-cells';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
@@ -95,6 +95,8 @@ interface Props {
   carrierErrorGroups: CarrierErrorGroup[];
   internalErrorGroups: InternalErrorGroup[];
   pdfMap: Record<string, { accountId: string; billId: string }>;
+  /** Số dòng tiền-billed (tính trên toàn bộ filteredRows phía server). */
+  preBilledCounts: { awaiting_measurement: number; awaiting_billed: number };
 }
 
 /** Màu số LỆCH theo HƯỚNG (để rà soát): hệ thống CAO hơn billed (deltaVnd<0,
@@ -109,7 +111,7 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap }: Props) {
+export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap, preBilledCounts }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -150,6 +152,16 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
         <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
         <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
       </div>
+      {(preBilledCounts.awaiting_measurement > 0 || preBilledCounts.awaiting_billed > 0) && (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {preBilledCounts.awaiting_measurement > 0 && (
+            <span>{preBilledCounts.awaiting_measurement} chờ cân đo</span>
+          )}
+          {preBilledCounts.awaiting_billed > 0 && (
+            <span>{preBilledCounts.awaiting_billed} chờ billed</span>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className={`flex flex-wrap items-center gap-2 text-sm ${isPending ? 'opacity-60' : ''}`}>
@@ -168,6 +180,8 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
           <option value="internal_error">Lỗi nội bộ</option>
           <option value="credited">Đã thu hồi</option>
           <option value="accepted">Chấp nhận chênh lệch</option>
+          <option value="awaiting_measurement">Chờ cân đo</option>
+          <option value="awaiting_billed">Chờ billed</option>
         </select>
         <input value={country} onChange={(e) => { setCountry(e.target.value); debouncedPush({ country: e.target.value }); }} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => { setMinPct(e.target.value); debouncedPush({ minPct: e.target.value }); }} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
@@ -257,6 +271,8 @@ const OPERATOR_STATUS: Record<Exclude<ReconcileStatus, 'pending'>, { label: stri
   internal_error: { label: 'Lỗi nội bộ', className: 'border border-amber-500/40 text-amber-600 dark:text-amber-400' },
   credited: { label: 'Đã thu hồi', className: 'border border-emerald-500/40 text-emerald-600 dark:text-emerald-400' },
   accepted: { label: 'Chấp nhận chênh lệch', className: 'border border-border text-muted-foreground' },
+  awaiting_measurement: { label: 'Chờ cân đo', className: 'border border-border text-muted-foreground' },
+  awaiting_billed: { label: 'Chờ billed', className: 'border border-sky-500/40 text-sky-600 dark:text-sky-400' },
 };
 
 function FragmentRow({
@@ -308,7 +324,14 @@ function FragmentRow({
         <td className={`px-3 py-2 text-right ${deltaDirClass(r)}`}>{r.deltaPct !== null ? `${r.deltaPct.toFixed(1)}` : '—'}</td>
         <td className="px-3 py-2 font-sans whitespace-nowrap">
           <span className="inline-flex flex-col items-start gap-0.5">
-            {isAutoReconciled(r) ? (
+            {r.billedTotal === null ? (() => {
+              const st = effStatus(r) as 'awaiting_measurement' | 'awaiting_billed';
+              return (
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${OPERATOR_STATUS[st].className}`}>
+                  {OPERATOR_STATUS[st].label}
+                </span>
+              );
+            })() : isAutoReconciled(r) ? (
               <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Tự đối soát</span>
             ) : r.status === 'pending' ? (
               <span className={`rounded px-2 py-0.5 text-xs font-medium ${issue.className}`}>{issue.label}</span>

@@ -9,6 +9,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
+import { effStatus } from '@/features/shipments/reconcile-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,7 @@ export async function GET(req: Request): Promise<Response> {
   const out: CsvValue[][] = filtered.map((r) => [
     r.orderNumber, r.trackingNumber, r.carrierKey, r.shipCountry, r.shopifyWeightKg, r.weightKg, r.chargeableKg,
     r.labelDate ? r.labelDate.toISOString().slice(0, 10) : null,
-    r.billedTotal, r.engineTotal, r.deltaVnd, r.deltaPct, r.status,
+    r.billedTotal, r.engineTotal, r.deltaVnd, r.deltaPct, effStatus(r),
     r.billedBaseNet, r.engineBaseNet,
     r.billedFuel, r.engineFuel, r.billedRemote, r.engineRemote,
     r.billedDemand, r.engineDemand, r.billedSignature, engineSignature(r.engineResidential, r.engineAddons),

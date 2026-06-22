@@ -17,7 +17,7 @@ import {
   type QuoteCompare,
 } from './fedex-quote-compare';
 
-export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted';
+export type ReconcileStatus = 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted' | 'awaiting_measurement' | 'awaiting_billed';
 
 /** Dưới ngưỡng này coi như billed ≈ engine (đã khớp). Tổng cước một đơn
  *  thường 600k–900k ₫ nên 1.000 ₫ (~0.1%) là sai số làm tròn, không phải lệch thật. */
@@ -179,7 +179,8 @@ export async function reconcileShipmentsWithStatus(
     if (!fq) continue;
     r.fedexQuote = fq;
     r.fedexCompare = compareBilledVsFedexQuote(
-      { total: r.billedTotal, fuel: r.billedFuel, remote: r.billedRemote, demand: r.billedDemand, signature: r.billedSignature, vat: r.billedVat },
+      // billed luôn có ở nhánh này (status billed)
+      { total: r.billedTotal ?? 0, fuel: r.billedFuel, remote: r.billedRemote, demand: r.billedDemand, signature: r.billedSignature, vat: r.billedVat },
       fq,
     );
   }

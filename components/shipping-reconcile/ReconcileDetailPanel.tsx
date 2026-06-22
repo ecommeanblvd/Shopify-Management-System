@@ -138,7 +138,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
         <div className="text-sm text-amber-600 dark:text-amber-400">
           Hệ thống chưa tính được giá cho đơn này (lý do: {row.engineReason ?? 'không rõ'}). Không có số liệu để đối soát từng khoản.
         </div>
-        <ReconcileActions row={row} />
+        {row.billedTotal != null && <ReconcileActions row={row} />}
       </div>
     );
   }
@@ -224,7 +224,10 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
             <td className="py-1 text-right">{fmtVnd(row.fedexQuote?.totalNetCharge ?? null)}</td>
             <td className="py-1 text-right text-muted-foreground">{fmtVnd(row.billedTotal)}</td>
             <td className="py-1 text-right">
-              {fmtVnd((row.fedexQuote?.totalNetCharge ?? row.billedTotal) - row.engineTotal)}
+              {(() => {
+                const billedish = row.fedexQuote?.totalNetCharge ?? row.billedTotal;
+                return fmtVnd(billedish == null || row.engineTotal == null ? null : billedish - row.engineTotal);
+              })()}
             </td>
             <td className="py-1"></td>
           </tr>
@@ -233,7 +236,7 @@ export function ReconcileDetailPanel({ row }: { row: ReconcileViewRow }) {
       <p className="mt-2 text-[11px] text-muted-foreground">
         Giảm giá hợp đồng đã được gộp vào &quot;Cước gốc (sau giảm giá)&quot;. Billed gốc trên hóa đơn: {fmtVnd(row.billedBase)} − giảm {fmtVnd(row.billedDiscount)}.
       </p>
-      <ReconcileActions row={row} />
+      {row.billedTotal != null && <ReconcileActions row={row} />}
     </div>
   );
 }
@@ -255,7 +258,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
   async function act(status: 'reconciled' | 'ignored') {
     setBusy(true);
     try {
-      await setReconcileStatus({ shipmentId: row.shipmentId, status, note: note.trim() || null, billedTotal: row.billedTotal });
+      await setReconcileStatus({ shipmentId: row.shipmentId, status, note: note.trim() || null, billedTotal: row.billedTotal ?? 0 }); // billed luôn có ở nhánh này (status billed)
       router.refresh();
     } finally {
       setBusy(false);
@@ -271,7 +274,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     try {
       await approveCarrierError({
         shipmentId: row.shipmentId, kind, note: note.trim(),
-        billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0,
+        billedTotal: row.billedTotal ?? 0, deltaVnd: row.deltaVnd ?? 0, // billed luôn có ở nhánh này (status billed)
       });
       router.refresh();
     } finally { setBusy(false); }
@@ -280,7 +283,7 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     if (!note.trim() || !kind) return;
     setBusy(true);
     try {
-      await disputeWithCarrier({ shipmentId: row.shipmentId, kind, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
+      await disputeWithCarrier({ shipmentId: row.shipmentId, kind, note: note.trim(), billedTotal: row.billedTotal ?? 0, deltaVnd: row.deltaVnd ?? 0 }); // billed luôn có ở nhánh này (status billed)
       router.refresh();
     } finally { setBusy(false); }
   }
@@ -288,14 +291,14 @@ function ReconcileActions({ row }: { row: ReconcileViewRow }) {
     if (!note.trim()) return;
     setBusy(true);
     try {
-      await markInternalError({ shipmentId: row.shipmentId, note: note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVnd ?? 0 });
+      await markInternalError({ shipmentId: row.shipmentId, note: note.trim(), billedTotal: row.billedTotal ?? 0, deltaVnd: row.deltaVnd ?? 0 }); // billed luôn có ở nhánh này (status billed)
       router.refresh();
     } finally { setBusy(false); }
   }
   async function approveDispute() {
     setBusy(true);
     try {
-      await approveCarrierError({ shipmentId: row.shipmentId, kind: row.carrierErrorKind ?? kind, note: row.note ?? note.trim(), billedTotal: row.billedTotal, deltaVnd: row.deltaVndAtReview ?? row.deltaVnd ?? 0 });
+      await approveCarrierError({ shipmentId: row.shipmentId, kind: row.carrierErrorKind ?? kind, note: row.note ?? note.trim(), billedTotal: row.billedTotal ?? 0, deltaVnd: row.deltaVndAtReview ?? row.deltaVnd ?? 0 }); // billed luôn có ở nhánh này (status billed)
       router.refresh();
     } finally { setBusy(false); }
   }
