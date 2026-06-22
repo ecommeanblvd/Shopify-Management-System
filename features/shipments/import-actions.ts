@@ -139,7 +139,7 @@ async function resolveExistingChargeHashes(trackings: readonly string[]): Promis
  * `stores` table (no handle column yet — first-rev pragmatism). We
  * map the StorePrefixInfo.displayName to stores.name.
  */
-async function resolveStoreIds(handles: readonly string[]): Promise<Map<string, string>> {
+export async function resolveStoreIds(handles: readonly string[]): Promise<Map<string, string>> {
   if (handles.length === 0) return new Map();
   // Convention: store-prefix `handle` == `stores.name` on prod (set
   // when each store was connected). Direct equality join, no slug
@@ -157,7 +157,7 @@ async function resolveStoreIds(handles: readonly string[]): Promise<Map<string, 
  * keyed by order number (the cleaned form — no '#'). Used to wire
  * shipments.order_id.
  */
-async function resolveOrderIds(orderNumbers: readonly string[]): Promise<Map<string, string>> {
+export async function resolveOrderIds(orderNumbers: readonly string[]): Promise<Map<string, string>> {
   if (orderNumbers.length === 0) return new Map();
   // Shopify's order `name` may or may not carry a '#' prefix depending on
   // the store's order-number format (cici-mean stores '#1234', tinhatelier

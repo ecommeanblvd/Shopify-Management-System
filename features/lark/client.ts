@@ -1,0 +1,52 @@
+/**
+ * Lark Suite Bitable API client (read-only). Token cache trong RAM.
+ * Endpoint + auth: open.larksuite.com (Bitable v1). Throw khi code !== 0.
+ */
+const DOMAIN = process.env.LARK_DOMAIN || 'https://open.larksuite.com';
+
+function env(k: string): string {
+  const v = process.env[k];
+  if (!v) throw new Error(`[lark] thiếu env ${k}`);
+  return v;
+}
+
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getTenantToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.token;
+  const res = await fetch(`${DOMAIN}/open-apis/auth/v3/tenant_access_token/internal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app_id: env('LARK_APP_ID'), app_secret: env('LARK_APP_SECRET') }),
+  });
+  const j = (await res.json()) as { code: number; msg: string; tenant_access_token?: string; expire?: number };
+  if (j.code !== 0 || !j.tenant_access_token) throw new Error(`[lark] token fail: code=${j.code} msg=${j.msg}`);
+  cachedToken = { token: j.tenant_access_token, expiresAt: now + (j.expire ?? 7200) * 1000 };
+  return cachedToken.token;
+}
+
+export interface LarkRecord { record_id: string; fields: Record<string, unknown>; }
+
+/** Đọc TẤT CẢ record của bảng (phân trang page_token, 500/lần). */
+export async function listAllRecords(): Promise<LarkRecord[]> {
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const tableId = env('LARK_TABLE_ID');
+  const out: LarkRecord[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`);
+    url.searchParams.set('page_size', '500');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const j = (await res.json()) as {
+      code: number; msg: string;
+      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
+    };
+    if (j.code !== 0) throw new Error(`[lark] list fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
