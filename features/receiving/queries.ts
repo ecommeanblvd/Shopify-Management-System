@@ -61,3 +61,32 @@ export async function getReceiptDetail(receiptId: string) {
   const handoverUrl = await signed(receipt.handoverDocKey);
   return { receipt: { ...receipt, handoverUrl }, items: itemsWithUrls };
 }
+
+/** Mọi đơn vị hàng đang CHỜ KCS (qcResult='pending') across mọi phiếu — FIFO. */
+export async function listPendingQcItems() {
+  const rows = await db
+    .select({
+      id: schema.goodsReceiptItems.id,
+      unitCode: schema.goodsReceiptItems.unitCode,
+      sku: schema.goodsReceiptItems.sku,
+      productTitle: schema.goodsReceiptItems.productTitle,
+      variantTitle: schema.goodsReceiptItems.variantTitle,
+      photoKey: schema.goodsReceiptItems.photoKey,
+      receiptCode: schema.goodsReceipts.code,
+      sourceType: schema.goodsReceipts.sourceType,
+      orderNumber: schema.shopifyOrders.shopifyOrderNumber,
+      brandSlug: schema.brandOrderRequests.brandSlug,
+      createdAt: schema.goodsReceiptItems.createdAt,
+    })
+    .from(schema.goodsReceiptItems)
+    .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
+    .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
+    .leftJoin(schema.brandOrderRequests, eq(schema.brandOrderRequests.id, schema.goodsReceiptItems.brandRequestId))
+    .where(eq(schema.goodsReceiptItems.qcResult, 'pending'))
+    .orderBy(schema.goodsReceiptItems.createdAt);
+
+  return Promise.all(rows.map(async ({ photoKey, ...r }) => ({
+    ...r,
+    photoUrl: await signed(photoKey),
+  })));
+}
