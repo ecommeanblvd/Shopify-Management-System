@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { upsertOrder } from '../sync/upsert-order';
+import { verifyAndStoreOrderAddress } from '../address-verify';
 import { fetchOrderByGid } from '../sync/fetch-order';
 import { webhookOrderGid, webhookRefundOrderGid } from './webhook-ids';
 
@@ -46,7 +47,14 @@ export async function dispatchWebhook(
     if (!gid) return;
     const order = await fetchOrderByGid(storeId, gid);
     if (!order) return; // đơn đã bị xoá khỏi Shopify
-    await upsertOrder(storeId, order, 'webhook');
+    const orderId = await upsertOrder(storeId, order, 'webhook');
+    // Verify địa chỉ NGAY khi đơn mới về (fire-and-forget, không chặn 2xx webhook).
+    // Cron hằng giờ vẫn là backstop cho đơn lỡ. Chỉ bắn ở orders/create.
+    if (orderId && topic === 'orders/create') {
+      void verifyAndStoreOrderAddress(orderId).catch((e) =>
+        console.error(`[webhook] verify address failed for ${orderId}:`, e),
+      );
+    }
     return;
   }
   if (topic === 'orders/cancelled') {

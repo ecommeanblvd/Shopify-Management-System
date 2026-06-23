@@ -13,13 +13,21 @@ describe('parseAddressVerification', () => {
     expect(v.standardized).toBe('1522 82ND ST, BROOKLYN, NY, 11228');
     expect(v.issue).toBeNull();
   });
-  it('địa chỉ thiếu/sai: không giao được + nêu vấn đề', () => {
+  it('US thiếu/sai (không DPV): không giao được + nêu vấn đề', () => {
     const v = parseAddressVerification(wrap({
       classification: 'UNKNOWN', attributes: { DPV: 'false', Matched: 'false' },
       customerMessages: [{ code: 'STANDARDIZED.ADDRESS.NOTFOUND' }],
-    }));
+    }), 'US');
     expect(v.deliverable).toBe(false);
     expect(v.issue).toBe('STANDARDIZED.ADDRESS.NOTFOUND');
+  });
+  it('QUỐC TẾ + NOTFOUND (FedEx không chuẩn hoá được): VẪN giao được, bỏ issue', () => {
+    const v = parseAddressVerification(wrap({
+      classification: 'UNKNOWN', attributes: { DPV: 'false', Matched: 'false' },
+      customerMessages: [{ code: 'STANDARDIZED.ADDRESS.NOTFOUND' }],
+    }), 'SA');
+    expect(v.deliverable).toBe(true);
+    expect(v.issue).toBeNull();
   });
   it('thiếu số phòng → issue SuiteRequiredButMissing', () => {
     const v = parseAddressVerification(wrap({ classification: 'BUSINESS', attributes: { Resolved: 'true', SuiteRequiredButMissing: 'true' } }));

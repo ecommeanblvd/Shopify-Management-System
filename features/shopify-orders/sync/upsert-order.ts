@@ -16,7 +16,7 @@ export async function upsertOrder(
   storeId: string,
   payload: ShopifyOrderPayload,
   source: UpsertSource,
-): Promise<void> {
+): Promise<string | null> {
   const mapped = mapShopifyOrder(payload, storeId);
 
   // Cancel detection (spec §4e): the upsert below is last-write-wins, so the
@@ -92,4 +92,5 @@ export async function upsertOrder(
       }
     }
   }
+  return internalOrderId ?? null;
 }
