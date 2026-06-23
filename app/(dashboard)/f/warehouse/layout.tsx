@@ -20,7 +20,8 @@ export default async function WarehouseLayout({ children }: { children: React.Re
          { href: '/f/warehouse/staging', label: 'Khu chờ' }]
       : []),
     ...(hasPermission(role, 'view_receiving')
-      ? [{ href: '/f/warehouse/receiving', label: 'Nhập kho & QC' }]
+      ? [{ href: '/f/warehouse/receiving', label: 'Nhập kho & QC' },
+         { href: '/f/warehouse/qc', label: 'Chờ KCS' }]
       : []),
   ];
   return (
