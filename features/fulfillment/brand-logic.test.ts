@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBrandRequestPayload, applyConfirmation, isFollowUpDue } from './brand-logic';
+import { buildBrandRequestPayload, applyConfirmation, isFollowUpDue, countOverdueFollowUps } from './brand-logic';
 
 describe('buildBrandRequestPayload', () => {
   it('builds the MMP payload from a request + order number', () => {
@@ -24,12 +24,27 @@ describe('applyConfirmation', () => {
 
 describe('isFollowUpDue', () => {
   it('confirmed + delivery date <= today is due', () => {
-    expect(isFollowUpDue({ confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-09' }, '2026-06-09')).toBe(true);
+    expect(isFollowUpDue({ confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-09', deliveredAt: null }, '2026-06-09')).toBe(true);
   });
   it('confirmed + future date is not due', () => {
-    expect(isFollowUpDue({ confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-20' }, '2026-06-09')).toBe(false);
+    expect(isFollowUpDue({ confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-20', deliveredAt: null }, '2026-06-09')).toBe(false);
   });
   it('not confirmed is never due', () => {
-    expect(isFollowUpDue({ confirmStatus: 'awaiting', expectedDeliveryDate: null }, '2026-06-09')).toBe(false);
+    expect(isFollowUpDue({ confirmStatus: 'awaiting', expectedDeliveryDate: null, deliveredAt: null }, '2026-06-09')).toBe(false);
+  });
+  it('đã giao (deliveredAt) → không due dù quá ngày', () => {
+    expect(isFollowUpDue({ confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-01', deliveredAt: new Date('2026-06-02') }, '2026-06-09')).toBe(false);
+  });
+});
+
+describe('countOverdueFollowUps', () => {
+  it('đếm đúng số due (loại đã giao + chưa tới hạn)', () => {
+    const rows = [
+      { confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-01', deliveredAt: null },   // due
+      { confirmStatus: 'confirmed', expectedDeliveryDate: '2026-06-01', deliveredAt: new Date() }, // đã giao → loại
+      { confirmStatus: 'confirmed', expectedDeliveryDate: '2026-12-01', deliveredAt: null },   // chưa tới → loại
+      { confirmStatus: 'awaiting', expectedDeliveryDate: null, deliveredAt: null },             // loại
+    ];
+    expect(countOverdueFollowUps(rows, '2026-06-09')).toBe(1);
   });
 });

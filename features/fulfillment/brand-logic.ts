@@ -33,12 +33,20 @@ export function applyConfirmation(input: ConfirmationInput): ConfirmationResult 
   };
 }
 
-/** A request needs follow-up when confirmed and its delivery date has arrived. */
-export function isFollowUpDue(
-  req: { confirmStatus: string; expectedDeliveryDate: string | null },
-  todayIso: string,
-): boolean {
+export interface FollowUpRow {
+  confirmStatus: string;
+  expectedDeliveryDate: string | null;
+  deliveredAt: Date | string | null;
+}
+
+/** A request needs follow-up when confirmed, delivery date has arrived, and not yet delivered. */
+export function isFollowUpDue(req: FollowUpRow, todayIso: string): boolean {
   return req.confirmStatus === 'confirmed'
     && req.expectedDeliveryDate !== null
-    && req.expectedDeliveryDate <= todayIso;
+    && req.expectedDeliveryDate <= todayIso
+    && req.deliveredAt == null;
+}
+
+export function countOverdueFollowUps(rows: FollowUpRow[], todayIso: string): number {
+  return rows.reduce((n, r) => n + (isFollowUpDue(r, todayIso) ? 1 : 0), 0);
 }
