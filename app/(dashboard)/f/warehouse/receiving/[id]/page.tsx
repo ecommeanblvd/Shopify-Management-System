@@ -4,10 +4,11 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getReceiptDetail } from '@/features/receiving/queries';
-import { addReceiptItem, recordQc, uploadReceiptImage } from '@/features/receiving/actions';
+import { addReceiptItem } from '@/features/receiving/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { QcActions } from '@/components/receiving/QcActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,27 +18,6 @@ async function addItemAction(receiptId: string, formData: FormData) {
     receiptId,
     sku: String(formData.get('sku') ?? '') || null,
     productTitle: String(formData.get('productTitle') ?? '') || null,
-  });
-}
-
-async function passAction(formData: FormData) {
-  'use server';
-  await recordQc({ itemId: String(formData.get('itemId')), qcResult: 'pass' });
-}
-
-async function failAction(formData: FormData) {
-  'use server';
-  let key: string | null = null;
-  const file = formData.get('failPhoto');
-  if (file instanceof File && file.size > 0) {
-    const fd = new FormData(); fd.set('file', file); fd.set('scope', String(formData.get('itemId')));
-    key = await uploadReceiptImage(fd);
-  }
-  await recordQc({
-    itemId: String(formData.get('itemId')),
-    qcResult: 'fail',
-    qcFailReason: String(formData.get('reason') ?? ''),
-    qcFailPhotoKey: key,
   });
 }
 
@@ -99,20 +79,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 {it.qcResult === 'fail' && it.qcFailReason && (
                   <div className="text-xs text-amber-600">Lý do: {it.qcFailReason}</div>
                 )}
-                {canQc && it.qcResult === 'pending' && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <form action={passAction}>
-                      <input type="hidden" name="itemId" value={it.id} />
-                      <Button type="submit" size="sm" className="h-7 px-3 text-xs">QC Pass</Button>
-                    </form>
-                    <form action={failAction} className="flex items-center gap-2" encType="multipart/form-data">
-                      <input type="hidden" name="itemId" value={it.id} />
-                      <input name="reason" placeholder="Lý do fail" required className="border border-input bg-input/30 rounded-md px-2 py-1 text-xs" />
-                      <input type="file" name="failPhoto" accept="image/*" required className="text-xs" />
-                      <Button type="submit" size="sm" variant="outline" className="h-7 px-3 text-xs">QC Fail</Button>
-                    </form>
-                  </div>
-                )}
+                {canQc && it.qcResult === 'pending' && <QcActions itemId={it.id} />}
               </li>
             ))}
             {items.length === 0 && <li className="px-5 py-6 text-sm text-muted-foreground">Chưa có đơn vị hàng.</li>}
