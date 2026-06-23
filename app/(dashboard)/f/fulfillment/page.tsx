@@ -5,9 +5,12 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listFulfillmentWorklist } from '@/features/fulfillment/queries';
+import { listBrandRequests } from '@/features/fulfillment/brand-queries';
+import { countOverdueFollowUps } from '@/features/fulfillment/brand-logic';
 import { WorklistTable } from '@/components/fulfillment/WorklistTable';
 import { BackfillButton } from '@/components/fulfillment/BackfillButton';
 import { MmpBackfillButton } from '@/components/fulfillment/MmpBackfillButton';
+import { BrandOverdueBanner } from '@/components/fulfillment/BrandOverdueBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +22,19 @@ export default async function FulfillmentWorklistPage() {
     redirect('/');
   }
 
-  const rows = await listFulfillmentWorklist();
+  const [rows, brandRows] = await Promise.all([
+    listFulfillmentWorklist(),
+    listBrandRequests(),
+  ]);
+
+  const overdue = countOverdueFollowUps(
+    brandRows.map((r) => ({
+      confirmStatus: r.confirmStatus,
+      expectedDeliveryDate: r.expectedDeliveryDate,
+      deliveredAt: r.deliveredAt,
+    })),
+    new Date().toISOString().slice(0, 10),
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -41,6 +56,7 @@ export default async function FulfillmentWorklistPage() {
           </Link>
         </div>
       </div>
+      <BrandOverdueBanner count={overdue} />
       <WorklistTable
         rows={rows}
         canManage={hasPermission(role, 'manage_fulfillment')}
