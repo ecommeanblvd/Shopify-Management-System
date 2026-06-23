@@ -2,6 +2,7 @@ import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
+import { trackPendingShipments } from '@/features/shipments/track';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -36,6 +37,13 @@ async function main(): Promise<void> {
     process.stdout.write(`addr-verify: verified ${av.verified}, undeliverable ${av.undeliverable}, failed ${av.failed}\n`);
   } catch (e) {
     process.stderr.write(`addr-verify: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Cập nhật trạng thái giao FedEx cho shipment chưa giao (cap 100 + rate-limit trong hàm).
+  try {
+    const tk = await trackPendingShipments({ limit: 100 });
+    process.stdout.write(`track-fedex: tracked ${tk.tracked}, delivered ${tk.delivered}, failed ${tk.failed}\n`);
+  } catch (e) {
+    process.stderr.write(`track-fedex: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

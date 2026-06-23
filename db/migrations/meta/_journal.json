@@ -526,6 +526,13 @@
       "when": 1782823200000,
       "tag": "0074_brand-request-delivered-at",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1782909600000,
+      "tag": "0075_shipment-delivery-tracking",
+      "breakpoints": true
     }
   ]
 }

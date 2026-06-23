@@ -14,6 +14,7 @@ import { pushOrderToMmp } from '@/features/mmp/order-outbound';
 import { applyMovement } from '@/features/warehouse/ledger';
 import { pickItem } from '@/features/warehouse/allocation-logic';
 import { verifyAndStoreOrderAddress } from '@/features/shopify-orders/address-verify';
+import { trackAndStoreShipment } from '@/features/shipments/track';
 
 /** A drizzle transaction handle (same query surface as `db`). */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -310,5 +311,14 @@ export async function verifyOrderAddressAction(
   await requirePerm('manage_fulfillment');
   const r = await verifyAndStoreOrderAddress(orderId);
   revalidatePath(`/f/fulfillment/${orderId}`);
+  return r;
+}
+
+export async function trackShipmentAction(
+  shipmentId: string,
+): Promise<{ ok: boolean; status?: string; error?: string }> {
+  await requirePerm('manage_fulfillment');
+  const r = await trackAndStoreShipment(shipmentId);
+  revalidatePath('/f/fulfillment', 'layout');
   return r;
 }
