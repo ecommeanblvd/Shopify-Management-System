@@ -148,15 +148,23 @@ export interface AddressVerification {
 }
 
 /** Bóc kết quả verify đầy đủ từ response Address Validation. Pure. */
-export function parseAddressVerification(raw: unknown): AddressVerification {
+export function parseAddressVerification(raw: unknown, countryCode?: string | null): AddressVerification {
   const a = (raw as ResolveResponse)?.output?.resolvedAddresses?.[0];
   const attr = a?.attributes ?? {};
-  const deliverable = attrTrue(attr.DPV) || attrTrue(attr.Resolved) || attrTrue(attr.Matched);
+  const positive = attrTrue(attr.DPV) || attrTrue(attr.Resolved) || attrTrue(attr.Matched);
   let issue: string | null = a?.customerMessages?.[0]?.code ?? a?.customerMessages?.[0]?.message ?? null;
   if (!issue) {
     if (attrTrue(attr.SuiteRequiredButMissing)) issue = 'SuiteRequiredButMissing';
     else if (attrTrue(attr.InvalidSuiteNumber)) issue = 'InvalidSuiteNumber';
   }
+  // FedEx Address Validation chỉ chuẩn hoá đáng tin với địa chỉ US (DPV). Ngoài
+  // US nó trả STANDARDIZED.ADDRESS.NOTFOUND cho gần như MỌI địa chỉ (kể cả hợp lệ)
+  // → KHÔNG coi là "không giao được". Chỉ flag undeliverable khi có xác nhận âm
+  // thật: US mà không DPV/Resolved/Matched. Quốc tế không xác nhận = coi giao được.
+  const isUs = (countryCode ?? '').trim().toUpperCase() === 'US';
+  const deliverable = positive || !isUs;
+  // NOTFOUND ở quốc tế chỉ là "FedEx không chuẩn hoá được" → không phải vấn đề thật.
+  if (!isUs && !positive && issue === 'STANDARDIZED.ADDRESS.NOTFOUND') issue = null;
   const std = a
     ? [...(a.streetLines ?? []), a.city, a.stateOrProvinceCode, a.postalCode].filter(Boolean).join(', ')
     : '';
@@ -169,5 +177,5 @@ export async function verifyAddress(addr: AddressInput): Promise<AddressVerifica
     method: 'POST',
     json: buildResolveRequest(addr),
   });
-  return parseAddressVerification(raw);
+  return parseAddressVerification(raw, addr.countryCode);
 }
