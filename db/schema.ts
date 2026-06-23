@@ -918,6 +918,10 @@ export const shipments = pgTable('shipments', {
   packagingType: packagingTypeEnum('packaging_type'),
   /** Label creation timestamp ≈ ship date. Anchor for fuel-week lookup. */
   labelCreatedAt: timestamp('label_created_at'),
+  deliveryStatus: text('delivery_status'),
+  deliveredAt: timestamp('delivered_at'),
+  lastTrackedAt: timestamp('last_tracked_at'),
+  trackDetail: text('track_detail'),
   /** Operator-side internal pack code (Excel col AS `Log Unique code`,
    *  e.g. PK-19379). Useful for cross-referencing the ops sheet. */
   logUniqueCode: text('log_unique_code'),
