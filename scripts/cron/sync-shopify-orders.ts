@@ -1,6 +1,7 @@
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
+import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -27,6 +28,14 @@ async function main(): Promise<void> {
     process.stdout.write(`push-unsent-brand: pushed ${bf.pushed}, skipped ${bf.skipped}, failed ${bf.failed}, total ${bf.total}\n`);
   } catch (e) {
     process.stderr.write(`push-unsent-brand: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Auto-verify địa chỉ đơn mới (chưa verify) qua FedEx. Cap 100/giờ + rate-limit
+  // trong hàm để không đụng giới hạn API.
+  try {
+    const av = await verifyUnverifiedAddresses({ limit: 100 });
+    process.stdout.write(`addr-verify: verified ${av.verified}, undeliverable ${av.undeliverable}, failed ${av.failed}\n`);
+  } catch (e) {
+    process.stderr.write(`addr-verify: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 
