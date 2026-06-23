@@ -1,4 +1,4 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getSignedDownloadUrl, isStorageConfigured } from '@/lib/storage/s3';
 
@@ -35,6 +35,7 @@ export async function listAwaitingGoods() {
     .where(and(
       eq(schema.orderFulfillmentLines.status, 'brand_confirmed'),
       eq(schema.brandOrderRequests.confirmStatus, 'confirmed'),
+      isNull(schema.brandOrderRequests.deliveredAt),
     ))
     .orderBy(schema.brandOrderRequests.expectedDeliveryDate);
 }

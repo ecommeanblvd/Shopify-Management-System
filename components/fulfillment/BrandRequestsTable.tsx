@@ -13,6 +13,7 @@ type BrandRequestRow = {
   sendStatus: string;
   confirmStatus: string;
   expectedDeliveryDate: string | null;
+  deliveredAt: Date | string | null;
   lastError: string | null;
   createdAt: Date | string | null;
 };
@@ -20,6 +21,7 @@ type BrandRequestRow = {
 interface Props {
   rows: BrandRequestRow[];
   canManage: boolean;
+  defaultFollowUp?: boolean;
 }
 
 function fmtDate(d: Date | string | null | undefined): string {
@@ -55,15 +57,15 @@ function ResendButton({ id, disabled }: { id: string; disabled: boolean }) {
   );
 }
 
-export function BrandRequestsTable({ rows, canManage }: Props) {
+export function BrandRequestsTable({ rows, canManage, defaultFollowUp }: Props) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [confirmFilter, setConfirmFilter] = useState<string>('all');
-  const [followUpOnly, setFollowUpOnly] = useState(false);
+  const [followUpOnly, setFollowUpOnly] = useState(defaultFollowUp ?? false);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (confirmFilter !== 'all' && r.confirmStatus !== confirmFilter) return false;
-      if (followUpOnly && !isFollowUpDue({ confirmStatus: r.confirmStatus, expectedDeliveryDate: r.expectedDeliveryDate }, todayIso)) return false;
+      if (followUpOnly && !isFollowUpDue({ confirmStatus: r.confirmStatus, expectedDeliveryDate: r.expectedDeliveryDate, deliveredAt: r.deliveredAt }, todayIso)) return false;
       return true;
     });
   }, [rows, confirmFilter, followUpOnly, todayIso]);
@@ -125,12 +127,18 @@ export function BrandRequestsTable({ rows, canManage }: Props) {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${confirm.cls}`}>
-                      {confirm.label}
-                    </span>
+                    {r.deliveredAt ? (
+                      <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        ✓ Đã giao
+                      </span>
+                    ) : (
+                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${confirm.cls}`}>
+                        {confirm.label}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono tabular-nums">
-                    {r.expectedDeliveryDate ? fmtDate(r.expectedDeliveryDate) : '—'}
+                    {r.deliveredAt ? fmtDate(r.deliveredAt) : r.expectedDeliveryDate ? fmtDate(r.expectedDeliveryDate) : '—'}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate">
                     {r.lastError ?? ''}

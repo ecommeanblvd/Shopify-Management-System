@@ -11,6 +11,7 @@ export async function listBrandRequests() {
     sendStatus: schema.brandOrderRequests.sendStatus,
     confirmStatus: schema.brandOrderRequests.confirmStatus,
     expectedDeliveryDate: schema.brandOrderRequests.expectedDeliveryDate,
+    deliveredAt: schema.brandOrderRequests.deliveredAt,
     lastError: schema.brandOrderRequests.lastError,
     createdAt: schema.brandOrderRequests.createdAt,
   })

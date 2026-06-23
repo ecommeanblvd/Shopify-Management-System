@@ -1721,6 +1721,7 @@ export const brandOrderRequests = pgTable('brand_order_requests', {
   expectedDeliveryDate: date('expected_delivery_date'),
   note: text('note'),
   confirmedAt: timestamp('confirmed_at'),
+  deliveredAt: timestamp('delivered_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [

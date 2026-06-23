@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { eq, sql, desc } from 'drizzle-orm';
+import { and, eq, isNull, sql, desc } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -106,6 +106,12 @@ export async function addReceiptItem(input: AddReceiptItemInput): Promise<string
       domPrice: input.domPrice ?? null, domPriceCurrency: input.domPriceCurrency ?? null,
       globalPrice: input.globalPrice ?? null, globalPriceCurrency: input.globalPriceCurrency ?? null, weightKg: input.weightKg ?? null,
     }).returning({ id: schema.goodsReceiptItems.id });
+    // Hàng brand đã về → đóng follow-up (idempotent, chỉ set lần đầu).
+    if (input.brandRequestId) {
+      await tx.update(schema.brandOrderRequests)
+        .set({ deliveredAt: sql`now()`, updatedAt: sql`now()` })
+        .where(and(eq(schema.brandOrderRequests.id, input.brandRequestId), isNull(schema.brandOrderRequests.deliveredAt)));
+    }
     return row.id;
   }));
   try { await recordAudit({ userId, action: 'receiving_add_item', target: id, result: 'success' }); } catch (e) { console.error('audit failed', e); }
