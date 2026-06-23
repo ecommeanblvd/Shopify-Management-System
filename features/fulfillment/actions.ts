@@ -13,6 +13,7 @@ import { sendBrandRequest } from '@/features/mmp/outbound';
 import { pushOrderToMmp } from '@/features/mmp/order-outbound';
 import { applyMovement } from '@/features/warehouse/ledger';
 import { pickItem } from '@/features/warehouse/allocation-logic';
+import { verifyAndStoreOrderAddress } from '@/features/shopify-orders/address-verify';
 
 /** A drizzle transaction handle (same query surface as `db`). */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -301,4 +302,13 @@ export async function runBackfillFulfillment(): Promise<number> {
   await requirePerm('manage_fulfillment');
   const { backfillFulfillmentRecords } = await import('./ensure-fulfillment');
   return backfillFulfillmentRecords();
+}
+
+export async function verifyOrderAddressAction(
+  orderId: string,
+): Promise<{ ok: boolean; deliverable?: boolean; issue?: string | null; error?: string }> {
+  await requirePerm('manage_fulfillment');
+  const r = await verifyAndStoreOrderAddress(orderId);
+  revalidatePath(`/f/fulfillment/${orderId}`);
+  return r;
 }
