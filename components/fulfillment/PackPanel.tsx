@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { createPack, markCheckPacked, shipPack } from '@/features/packing/actions';
 import { pushPackFulfillment } from '@/features/packing/shopify-actions';
+import { trackShipmentAction } from '@/features/fulfillment/actions';
 
 type PickedLine = { id: string; sku: string | null; qty: number; productTitle: string | null };
 type PackLine = { id: string; sku: string | null; qty: number; status: string; productTitle: string | null };
@@ -12,6 +14,10 @@ type Pack = {
   actualWeightKg: string | null; lines: PackLine[];
   shopifyPushStatus: 'pending' | 'pushed' | 'failed' | null;
   shopifyPushError: string | null;
+  deliveryStatus: string | null;
+  deliveredAt: Date | string | null;
+  trackDetail: string | null;
+  lastTrackedAt: Date | string | null;
 };
 
 interface Props {
@@ -22,7 +28,15 @@ interface Props {
   canCheckPacked: boolean;
 }
 
+const DELIVERY_BADGE: Record<string, { label: string; cls: string }> = {
+  delivered:         { label: '✓ Đã giao',       cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  in_transit:        { label: '🚚 Đang chuyển',   cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  out_for_delivery:  { label: 'Đang giao',         cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  exception:         { label: '⚠ Sự cố',          cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+};
+
 export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }: Props) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [carrier, setCarrier] = useState('');
   const [weight, setWeight] = useState('');
@@ -97,7 +111,24 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
                   {p.shopifyPushStatus === 'failed' && (
                     <span className="rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5" title={p.shopifyPushError ?? ''}>Lỗi đẩy Shopify</span>
                   )}
+                  {p.trackingNumber && (() => {
+                    const badge = p.deliveryStatus ? DELIVERY_BADGE[p.deliveryStatus] : undefined;
+                    return (
+                      <span className={`rounded px-2 py-0.5 ${badge ? badge.cls : 'bg-muted text-muted-foreground'}`}>
+                        {badge ? badge.label : 'Chưa rõ'}
+                      </span>
+                    );
+                  })()}
                 </div>
+                {canManage && p.trackingNumber && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => startTransition(async () => { await trackShipmentAction(p.id); router.refresh(); })}
+                    className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted disabled:opacity-50"
+                  >
+                    Cập nhật vận chuyển
+                  </button>
+                )}
               </div>
               <ul className="text-sm text-muted-foreground">
                 {p.lines.map((l) => (
