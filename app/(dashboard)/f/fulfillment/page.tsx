@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { listFulfillmentWorklist } from '@/features/fulfillment/queries';
+import { listWorklistStatus } from '@/features/fulfillment/worklist-status-queries';
+import { summarizeAddr, summarizeBrand, summarizeKcs, summarizeDelivery } from '@/features/fulfillment/worklist-status';
 import { listBrandRequests } from '@/features/fulfillment/brand-queries';
 import { countOverdueFollowUps } from '@/features/fulfillment/brand-logic';
 import { WorklistTable } from '@/components/fulfillment/WorklistTable';
@@ -22,10 +23,23 @@ export default async function FulfillmentWorklistPage() {
     redirect('/');
   }
 
-  const [rows, brandRows] = await Promise.all([
-    listFulfillmentWorklist(),
+  const [worklistStatusRows, brandRows] = await Promise.all([
+    listWorklistStatus(),
     listBrandRequests(),
   ]);
+
+  const worklistRows = worklistStatusRows.map((r) => ({
+    orderId: r.orderId,
+    orderNumber: r.orderNumber,
+    storeName: r.storeName,
+    status: r.status,
+    createdAtShopify: r.createdAtShopify,
+    addr: summarizeAddr(r),
+    brand: summarizeBrand(r.brand),
+    kcs: summarizeKcs(r.kcs),
+    delivery: summarizeDelivery(r.ship),
+    packs: r.ship.packs,
+  }));
 
   const overdue = countOverdueFollowUps(
     brandRows.map((r) => ({
@@ -58,7 +72,7 @@ export default async function FulfillmentWorklistPage() {
       </div>
       <BrandOverdueBanner count={overdue} />
       <WorklistTable
-        rows={rows}
+        rows={worklistRows}
         canManage={hasPermission(role, 'manage_fulfillment')}
       />
     </div>
