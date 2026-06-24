@@ -28,10 +28,18 @@ export function summarizeBrand(o: { total: number; awaiting: number; confirmed: 
   return { label: '—', tone: 'muted' };
 }
 
-export function summarizeKcs(o: { pending: number; pass: number; fail: number }): Badge {
+export function summarizeKcs(o: { pending: number; pass: number; fail: number }, larkQc?: string | null): Badge {
+  // Ưu tiên QC hệ thống (goods_receipt_items) nếu có dữ liệu.
   if (o.fail > 0) return { label: 'Lỗi', tone: 'bad' };
   if (o.pending > 0) return { label: 'Chờ', tone: 'warn' };
   if (o.pass > 0) return { label: 'Đạt', tone: 'ok' };
+  // Fallback Lark QC.
+  switch (larkQc) {
+    case 'fail': return { label: 'Lỗi', tone: 'bad' };
+    case 'pending': return { label: 'Chờ', tone: 'warn' };
+    case 'pass': return { label: 'Đạt', tone: 'ok' };
+    case 'extra': return { label: 'Gửi dư', tone: 'info' };
+  }
   return { label: '—', tone: 'muted' };
 }
 
@@ -42,4 +50,23 @@ export function summarizeDelivery(o: { packs: number; withTracking: number; deli
   if (o.inTransit > 0) return { label: 'Đang chuyển', tone: 'info' };
   if (o.withTracking > 0) return { label: 'Có tracking', tone: 'info' };
   return { label: 'Chưa ship', tone: 'muted' };
+}
+
+/** Trạng thái giao theo API track → badge. THUẦN. */
+export function formatTrackingStatus(s: string | null): Badge {
+  switch (s) {
+    case 'delivered': return { label: 'Đã giao', tone: 'ok' };
+    case 'in_transit':
+    case 'out_for_delivery': return { label: 'Đang chuyển', tone: 'info' };
+    case 'exception': return { label: 'Sự cố', tone: 'bad' };
+    default: return { label: 'Chưa cập nhật', tone: 'muted' };
+  }
+}
+
+/** URL trang tracking của hãng theo carrierKey. Carrier lạ → '#'. THUẦN. */
+export function carrierTrackingUrl(carrierKey: string | null, tracking: string): string {
+  const t = encodeURIComponent(tracking);
+  if (carrierKey === 'fedex') return `https://www.fedex.com/fedextrack/?trknbr=${t}`;
+  if (carrierKey === 'dhl') return `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${t}`;
+  return '#';
 }
