@@ -66,7 +66,6 @@ type WorklistRow = {
   status: string;
   createdAtShopify: Date | string | null;
   addr: Badge;
-  brand: Badge;
   kcs: Badge;
   delivery: Badge;
   packs: number;
@@ -112,7 +111,6 @@ export function WorklistTable({ rows }: Props) {
               <th className="px-3 py-2 text-left">Ngày</th>
               <th className="px-3 py-2 text-left">Đơn</th>
               <th className="px-3 py-2 text-left">Địa chỉ</th>
-              <th className="px-3 py-2 text-left">Brand</th>
               <th className="px-3 py-2 text-left">KCS</th>
               <th className="px-3 py-2 text-left">Đóng gói</th>
               <th className="px-3 py-2 text-left">Vận chuyển</th>
@@ -153,9 +151,6 @@ export function WorklistTable({ rows }: Props) {
                 </td>
                 <td className="px-3 py-2">
                   <BadgeCell b={row.addr} />
-                </td>
-                <td className="px-3 py-2">
-                  {row.brand.tone === 'muted' ? null : <BadgeCell b={row.brand} />}
                 </td>
                 <td className="px-3 py-2">
                   {row.kcs.tone === 'muted' ? null : <BadgeCell b={row.kcs} />}
@@ -219,7 +214,7 @@ export function WorklistTable({ rows }: Props) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
                   Không có đơn nào.
                 </td>
               </tr>

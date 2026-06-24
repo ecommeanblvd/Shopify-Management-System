@@ -6,7 +6,6 @@ export interface WorklistStatusRow {
   status: string; createdAtShopify: Date | null;
   addrDeliverable: boolean | null; addrVerifiedAt: Date | null;
   addrConfidence: string | null;
-  brand: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null };
   kcs: { pending: number; pass: number; fail: number };
   ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number; tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }> };
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
@@ -37,15 +36,6 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     .leftJoin(schema.larkOrderStatus, eq(schema.larkOrderStatus.orderId, schema.orderFulfillment.orderId))
     .orderBy(desc(schema.shopifyOrders.createdAtShopify));
 
-  const brandAgg = await db.select({
-    orderId: schema.brandOrderRequests.orderId,
-    total: sql<number>`count(*)`,
-    awaiting: sql<number>`count(*) filter (where ${schema.brandOrderRequests.confirmStatus} = 'awaiting')`,
-    confirmed: sql<number>`count(*) filter (where ${schema.brandOrderRequests.confirmStatus} = 'confirmed')`,
-    delivered: sql<number>`count(*) filter (where ${schema.brandOrderRequests.deliveredAt} is not null)`,
-    minExpected: sql<string | null>`min(${schema.brandOrderRequests.expectedDeliveryDate})`,
-  }).from(schema.brandOrderRequests).groupBy(schema.brandOrderRequests.orderId);
-
   const kcsAgg = await db.select({
     orderId: schema.goodsReceiptItems.orderId,
     pending: sql<number>`count(*) filter (where ${schema.goodsReceiptItems.qcResult} = 'pending')`,
@@ -63,19 +53,17 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     tracks: sql<Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }>>`coalesce(json_agg(json_build_object('trackingNumber', ${schema.shipments.trackingNumber}, 'carrierKey', ${schema.shipments.carrierKey}, 'deliveryStatus', ${schema.shipments.deliveryStatus}, 'deliveredAt', ${schema.shipments.deliveredAt})) filter (where ${schema.shipments.trackingNumber} is not null), '[]')`,
   }).from(schema.shipments).groupBy(schema.shipments.orderId);
 
-  const bMap = new Map(brandAgg.map((r) => [r.orderId, r]));
   const kMap = new Map(kcsAgg.map((r) => [r.orderId as string, r]));
   const sMap = new Map(shipAgg.map((r) => [r.orderId, r]));
 
   return base.map((r) => {
-    const b = bMap.get(r.orderId); const k = kMap.get(r.orderId); const s = sMap.get(r.orderId);
+    const k = kMap.get(r.orderId); const s = sMap.get(r.orderId);
     const lark = (r.larkDispatch || r.larkCxFf || r.larkDelivery || r.larkExpected)
       ? { dispatchStatus: r.larkDispatch, cxFfStatus: r.larkCxFf, deliveryStatus: r.larkDelivery, expectedDeliveryDate: r.larkExpected }
       : null;
     return {
       orderId: r.orderId, status: r.status, orderNumber: r.orderNumber, storeName: r.storeName,
       createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
-      brand: { total: n(b?.total), awaiting: n(b?.awaiting), confirmed: n(b?.confirmed), delivered: n(b?.delivered), minExpected: b?.minExpected ?? null },
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
       ship: { packs: n(s?.packs), withTracking: n(s?.withTracking), delivered: n(s?.delivered), exception: n(s?.exception), inTransit: n(s?.inTransit), tracks: s?.tracks ?? [] },
       lark,

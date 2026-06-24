@@ -5,7 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listWorklistStatus } from '@/features/fulfillment/worklist-status-queries';
-import { summarizeAddr, summarizeBrand, summarizeKcs, summarizeDelivery } from '@/features/fulfillment/worklist-status';
+import { summarizeAddr, summarizeKcs, summarizeDelivery } from '@/features/fulfillment/worklist-status';
 import { listBrandRequests } from '@/features/fulfillment/brand-queries';
 import { countOverdueFollowUps } from '@/features/fulfillment/brand-logic';
 import { WorklistTable } from '@/components/fulfillment/WorklistTable';
@@ -35,7 +35,6 @@ export default async function FulfillmentWorklistPage() {
     status: r.status,
     createdAtShopify: r.createdAtShopify,
     addr: summarizeAddr(r),
-    brand: summarizeBrand(r.brand),
     kcs: summarizeKcs(r.kcs, r.larkQc),
     delivery: summarizeDelivery(r.ship),
     packs: r.ship.packs,
