@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Badge, BadgeTone } from '@/features/fulfillment/worklist-status';
+import { formatTrackingStatus, carrierTrackingUrl } from '@/features/fulfillment/worklist-status';
 
 type OrderStatus =
   | 'received'
@@ -69,6 +70,7 @@ type WorklistRow = {
   kcs: Badge;
   delivery: Badge;
   packs: number;
+  tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }>;
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
 };
 
@@ -153,10 +155,10 @@ export function WorklistTable({ rows }: Props) {
                   <BadgeCell b={row.addr} />
                 </td>
                 <td className="px-3 py-2">
-                  <BadgeCell b={row.brand} />
+                  {row.brand.tone === 'muted' ? null : <BadgeCell b={row.brand} />}
                 </td>
                 <td className="px-3 py-2">
-                  <BadgeCell b={row.kcs} />
+                  {row.kcs.tone === 'muted' ? null : <BadgeCell b={row.kcs} />}
                 </td>
                 <td className="px-3 py-2">
                   {row.packs === 0 ? (
@@ -165,8 +167,31 @@ export function WorklistTable({ rows }: Props) {
                     <span className="text-xs">{row.packs} kiện</span>
                   )}
                 </td>
-                <td className="px-3 py-2">
-                  <BadgeCell b={row.delivery} />
+                <td className="px-3 py-2 align-top">
+                  {row.tracks.length === 0 ? (
+                    <BadgeCell b={row.delivery} />
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {row.tracks.map((t) => {
+                        const st = formatTrackingStatus(t.deliveryStatus);
+                        const url = carrierTrackingUrl(t.carrierKey, t.trackingNumber);
+                        return (
+                          <div key={t.trackingNumber} className="flex items-center gap-2">
+                            {url === '#' ? (
+                              <span className="font-mono text-xs">{t.trackingNumber}</span>
+                            ) : (
+                              <a href={url} target="_blank" rel="noopener noreferrer"
+                                 className="font-mono text-xs text-primary underline-offset-2 hover:underline"
+                                 onClick={(e) => e.stopPropagation()}>
+                                {t.trackingNumber}
+                              </a>
+                            )}
+                            <BadgeCell b={st} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2 align-top">
                   {row.lark ? (
