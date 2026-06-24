@@ -1,5 +1,6 @@
 /**
- * THUẦN: 1 record Lark (object `fields`) → 4 field status snapshot cho list.
+ * THUẦN: 1 record Lark (object `fields`) → status snapshot cho list (dispatch/cxFf/
+ * delivery status + ngày dự kiến + delivery state đã map + ngày giao thực tế).
  * Dùng lại helper đọc field + epoch→VN-date của parse-pack-row (DRY).
  */
 import type { DeliveryStatus } from '@/lib/fedex/track';
