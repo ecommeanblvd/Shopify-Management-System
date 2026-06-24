@@ -68,6 +68,7 @@ export async function getFulfillmentDetail(orderId: string) {
     addrClass: schema.shopifyOrders.addrClass, addrDeliverable: schema.shopifyOrders.addrDeliverable,
     addrIssue: schema.shopifyOrders.addrIssue, addrStandardized: schema.shopifyOrders.addrStandardized,
     addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
+    addrConfidence: schema.shopifyOrders.addrConfidence,
   }).from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, ful.orderId)).limit(1);
 
   return {

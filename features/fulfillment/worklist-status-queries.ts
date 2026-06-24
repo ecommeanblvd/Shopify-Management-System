@@ -5,6 +5,7 @@ export interface WorklistStatusRow {
   orderId: string; orderNumber: string | null; storeName: string | null;
   status: string; createdAtShopify: Date | null;
   addrDeliverable: boolean | null; addrVerifiedAt: Date | null;
+  addrConfidence: string | null;
   brand: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null };
   kcs: { pending: number; pass: number; fail: number };
   ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number };
@@ -22,6 +23,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     createdAtShopify: schema.shopifyOrders.createdAtShopify,
     addrDeliverable: schema.shopifyOrders.addrDeliverable,
     addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
+    addrConfidence: schema.shopifyOrders.addrConfidence,
     larkDispatch: schema.larkOrderStatus.dispatchStatus,
     larkCxFf: schema.larkOrderStatus.cxFfStatus,
     larkDelivery: schema.larkOrderStatus.deliveryStatus,
@@ -69,7 +71,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
       : null;
     return {
       orderId: r.orderId, status: r.status, orderNumber: r.orderNumber, storeName: r.storeName,
-      createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt,
+      createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
       brand: { total: n(b?.total), awaiting: n(b?.awaiting), confirmed: n(b?.confirmed), delivered: n(b?.delivered), minExpected: b?.minExpected ?? null },
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
       ship: { packs: n(s?.packs), withTracking: n(s?.withTracking), delivered: n(s?.delivered), exception: n(s?.exception), inTransit: n(s?.inTransit) },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildAddressInput } from './address-verify';
+import { buildAddressInput, buildOneLine } from './address-verify';
 
 describe('buildAddressInput', () => {
   const base = { shipAddress1: '12 Main St', shipAddress2: 'Apt 4', shipCity: 'LA', shipProvinceCode: 'CA', shipPostcode: '90001', shipCountry: 'US' };
@@ -19,5 +19,20 @@ describe('buildAddressInput', () => {
   });
   it('thiếu shipCountry → null', () => {
     expect(buildAddressInput({ ...base, shipCountry: null })).toBeNull();
+  });
+});
+
+describe('buildOneLine', () => {
+  it('ghép street + city + state(strip prefix) + zip', () => {
+    expect(buildOneLine({
+      shipAddress1: '28014 Harper Meadow Lane', shipAddress2: null,
+      shipCity: 'Fulshear', shipProvinceCode: 'US-TX', shipPostcode: '77441', shipCountry: 'US',
+    })).toBe('28014 Harper Meadow Lane, Fulshear, TX 77441');
+  });
+  it('gộp address2, bỏ phần rỗng', () => {
+    expect(buildOneLine({
+      shipAddress1: '1 Main St', shipAddress2: 'Apt 5',
+      shipCity: 'Brooklyn', shipProvinceCode: 'NY', shipPostcode: '11228', shipCountry: 'US',
+    })).toBe('1 Main St Apt 5, Brooklyn, NY 11228');
   });
 });
