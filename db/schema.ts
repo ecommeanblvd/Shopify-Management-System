@@ -738,6 +738,7 @@ export const shopifyOrders = pgTable('shopify_orders', {
   addrIssue: text('addr_issue'),               // vd SuiteRequiredButMissing / NOTFOUND
   addrStandardized: text('addr_standardized'), // địa chỉ chuẩn hoá FedEx gợi ý
   addrVerifiedAt: timestamp('addr_verified_at'),
+  addrConfidence: text('addr_confidence'), // verified|census_verified|zip_only|undeliverable (4 mức UI)
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
