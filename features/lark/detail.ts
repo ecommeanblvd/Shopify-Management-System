@@ -18,6 +18,52 @@ export function flattenLarkRecord(fields: Record<string, unknown>): Array<{ labe
   return out;
 }
 
+/** Field Lark "cần thiết" hiển thị trong modal chi tiết (thứ tự = thứ tự hiện). */
+export const LARK_DETAIL_FIELDS: string[] = [
+  'LOG-EP-Dispatch Status',
+  'Sub-Status',
+  'CX-FF Status (look up)',
+  'Final | Delivery Status',
+  'Ngày giao dự kiến',
+  'Ngày giao thực tế',
+  'Couriers',
+  'Tracking Number',
+  'Weights',
+  'Dimension ( điền tay)',
+  'LOG-Order Remark (Full)',
+  'CX/Khách note on order (look up)',
+];
+
+/** Lấy các field theo `names` (giữ thứ tự), bỏ field rỗng/thiếu. THUẦN. */
+export function pickLarkFields(
+  fields: Record<string, unknown>,
+  names: string[],
+): Array<{ label: string; value: string }> {
+  const out: Array<{ label: string; value: string }> = [];
+  for (const name of names) {
+    const value = larkText(fields[name]);
+    if (value) out.push({ label: name, value });
+  }
+  return out;
+}
+
+/** Raw fields của record Lark ĐẦU TIÊN khớp đơn. Best-effort → {}. */
+export async function getLarkRawFieldsForOrder(orderId: string): Promise<Record<string, unknown>> {
+  try {
+    const [ord] = await db
+      .select({ orderNumber: schema.shopifyOrders.shopifyOrderNumber })
+      .from(schema.shopifyOrders)
+      .where(eq(schema.shopifyOrders.id, orderId))
+      .limit(1);
+    if (!ord?.orderNumber) return {};
+    const records = await searchRecordsByOrderNumber(ord.orderNumber);
+    return records[0]?.fields ?? {};
+  } catch (e) {
+    console.error(`[lark] getLarkRawFieldsForOrder ${orderId} lỗi:`, e);
+    return {};
+  }
+}
+
 export interface LarkDetailRecord {
   recordId: string;
   fields: Array<{ label: string; value: string }>;
