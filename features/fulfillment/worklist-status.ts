@@ -1,12 +1,6 @@
 export type BadgeTone = 'ok' | 'warn' | 'bad' | 'muted' | 'info';
 export interface Badge { label: string; tone: BadgeTone }
 
-/** 'YYYY-MM-DD' → 'dd/MM' (thuần, không Date/timezone). */
-function ddmm(iso: string | null): string {
-  if (!iso || iso.length < 10) return '?';
-  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-}
-
 export function summarizeAddr(o: { addrDeliverable: boolean | null; addrVerifiedAt: Date | string | null; addrConfidence?: string | null }): Badge {
   switch (o.addrConfidence) {
     case 'verified':
@@ -18,14 +12,6 @@ export function summarizeAddr(o: { addrDeliverable: boolean | null; addrVerified
   if (!o.addrVerifiedAt) return { label: 'Chưa verify', tone: 'muted' };
   if (o.addrDeliverable === false) return { label: '⚠ Không giao được', tone: 'bad' };
   return { label: '✓ Giao được', tone: 'ok' };
-}
-
-export function summarizeBrand(o: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null }): Badge {
-  if (o.total === 0) return { label: 'Không cần', tone: 'muted' };
-  if (o.delivered === o.total) return { label: '✓ Đã giao', tone: 'ok' };
-  if (o.awaiting > 0) return { label: 'Chờ confirm', tone: 'warn' };
-  if (o.confirmed > 0) return { label: `Confirm · ${ddmm(o.minExpected)}`, tone: 'info' };
-  return { label: '—', tone: 'muted' };
 }
 
 export function summarizeKcs(o: { pending: number; pass: number; fail: number }, larkQc?: string | null): Badge {

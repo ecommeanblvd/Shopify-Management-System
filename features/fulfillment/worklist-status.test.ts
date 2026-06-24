@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeAddr, summarizeBrand, summarizeKcs, summarizeDelivery, formatTrackingStatus, carrierTrackingUrl } from './worklist-status';
+import { summarizeAddr, summarizeKcs, summarizeDelivery, formatTrackingStatus, carrierTrackingUrl } from './worklist-status';
 
 describe('summarizeAddr', () => {
   it('chưa verify', () => expect(summarizeAddr({ addrDeliverable: null, addrVerifiedAt: null }).tone).toBe('muted'));
@@ -9,12 +9,6 @@ describe('summarizeAddr', () => {
   it('zip_only → warn', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date(), addrConfidence: 'zip_only' }).tone).toBe('warn'));
   it('undeliverable → bad', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date(), addrConfidence: 'undeliverable' }).tone).toBe('bad'));
   it('confidence null → fallback boolean (ok)', () => expect(summarizeAddr({ addrDeliverable: true, addrVerifiedAt: new Date(), addrConfidence: null }).tone).toBe('ok'));
-});
-describe('summarizeBrand', () => {
-  it('total 0 → không cần', () => expect(summarizeBrand({ total: 0, awaiting: 0, confirmed: 0, delivered: 0, minExpected: null })).toEqual({ label: 'Không cần', tone: 'muted' }));
-  it('all delivered → đã giao', () => expect(summarizeBrand({ total: 2, awaiting: 0, confirmed: 0, delivered: 2, minExpected: null }).tone).toBe('ok'));
-  it('awaiting → chờ confirm', () => expect(summarizeBrand({ total: 2, awaiting: 1, confirmed: 1, delivered: 0, minExpected: '2026-06-25' }).tone).toBe('warn'));
-  it('confirmed → Confirm + ngày dd/MM', () => expect(summarizeBrand({ total: 1, awaiting: 0, confirmed: 1, delivered: 0, minExpected: '2026-06-25' })).toEqual({ label: 'Confirm · 25/06', tone: 'info' }));
 });
 describe('summarizeKcs', () => {
   it('fail', () => expect(summarizeKcs({ pending: 0, pass: 1, fail: 1 }).tone).toBe('bad'));
