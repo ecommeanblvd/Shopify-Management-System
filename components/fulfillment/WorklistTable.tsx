@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { Badge, BadgeTone } from '@/features/fulfillment/worklist-status';
+import { OrderDetailDialog } from './OrderDetailDialog';
 import { formatTrackingStatus, carrierTrackingUrl } from '@/features/fulfillment/worklist-status';
 
 type OrderStatus =
@@ -80,8 +80,8 @@ interface Props {
 }
 
 export function WorklistTable({ rows }: Props) {
-  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return rows;
@@ -107,7 +107,7 @@ export function WorklistTable({ rows }: Props) {
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-background text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left">Ngày</th>
               <th className="px-3 py-2 text-left">Đơn</th>
@@ -128,11 +128,11 @@ export function WorklistTable({ rows }: Props) {
                 tabIndex={0}
                 role="link"
                 aria-label={`Mở đơn ${row.orderNumber ?? row.orderId}`}
-                onClick={() => router.push(`/f/fulfillment/${row.orderId}`)}
+                onClick={() => setOpenOrderId(row.orderId)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     if (e.key === ' ') e.preventDefault();
-                    router.push(`/f/fulfillment/${row.orderId}`);
+                    setOpenOrderId(row.orderId);
                   }
                 }}
               >
@@ -227,6 +227,7 @@ export function WorklistTable({ rows }: Props) {
           </tbody>
         </table>
       </div>
+      <OrderDetailDialog orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
     </div>
   );
 }
