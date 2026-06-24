@@ -6,7 +6,8 @@
  * Chạy (credential lấy từ Railway, không lưu local):
  *   railway run npx tsx scripts/lark-smoke.ts
  *
- * Cần env: LARK_APP_ID, LARK_APP_SECRET, LARK_BASE_APP_TOKEN, LARK_TABLE_ID
+ * Cần env: LARK_APP_ID, LARK_APP_SECRET, LARK_BASE_APP_TOKEN, LARK_LOG_TABLE_ID
+ * (fallback LARK_TABLE_ID cũ)
  * (LARK_DOMAIN optional — mặc định open.larksuite.com)
  */
 const DOMAIN = process.env.LARK_DOMAIN || 'https://open.larksuite.com';
@@ -21,7 +22,7 @@ async function main() {
   const appId = need('LARK_APP_ID');
   const appSecret = need('LARK_APP_SECRET');
   const appToken = need('LARK_BASE_APP_TOKEN');
-  const tableId = need('LARK_TABLE_ID');
+  const tableId = process.env.LARK_LOG_TABLE_ID ?? need('LARK_TABLE_ID');
   console.log(`domain=${DOMAIN}\nappId=${appId.slice(0, 6)}…  base=${appToken.slice(0, 8)}…  table=${tableId.slice(0, 8)}…\n`);
 
   // 1) tenant_access_token

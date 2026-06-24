@@ -10,6 +10,14 @@ function env(k: string): string {
   return v;
 }
 
+/** Table ID bảng logistics. Tên biến mới LARK_LOG_TABLE_ID (phân biệt với
+ *  LARK_QC_TABLE_ID); fallback LARK_TABLE_ID cũ để không downtime khi đổi env. */
+function logTableId(): string {
+  const v = process.env.LARK_LOG_TABLE_ID ?? process.env.LARK_TABLE_ID;
+  if (!v) throw new Error('[lark] thiếu env LARK_LOG_TABLE_ID');
+  return v;
+}
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getTenantToken(): Promise<string> {
@@ -32,7 +40,7 @@ export interface LarkRecord { record_id: string; fields: Record<string, unknown>
 export async function listAllRecords(): Promise<LarkRecord[]> {
   const token = await getTenantToken();
   const appToken = env('LARK_BASE_APP_TOKEN');
-  const tableId = env('LARK_TABLE_ID');
+  const tableId = logTableId();
   const out: LarkRecord[] = [];
   let pageToken: string | undefined;
   do {
@@ -72,7 +80,7 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
   if (!orderNumber.trim()) return [];
   const token = await getTenantToken();
   const appToken = env('LARK_BASE_APP_TOKEN');
-  const tableId = env('LARK_TABLE_ID');
+  const tableId = logTableId();
   const out: LarkRecord[] = [];
   let pageToken: string | undefined;
   do {
