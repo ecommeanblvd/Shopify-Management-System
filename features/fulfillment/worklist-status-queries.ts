@@ -8,8 +8,9 @@ export interface WorklistStatusRow {
   addrConfidence: string | null;
   brand: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null };
   kcs: { pending: number; pass: number; fail: number };
-  ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number };
+  ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number; tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }> };
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
+  larkQc: string | null;
 }
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -28,6 +29,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     larkCxFf: schema.larkOrderStatus.cxFfStatus,
     larkDelivery: schema.larkOrderStatus.deliveryStatus,
     larkExpected: schema.larkOrderStatus.expectedDeliveryDate,
+    larkQc: schema.larkOrderStatus.qcStatus,
   })
     .from(schema.orderFulfillment)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
@@ -58,6 +60,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     delivered: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} = 'delivered')`,
     exception: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} = 'exception')`,
     inTransit: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} in ('in_transit','out_for_delivery'))`,
+    tracks: sql<Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }>>`coalesce(json_agg(json_build_object('trackingNumber', ${schema.shipments.trackingNumber}, 'carrierKey', ${schema.shipments.carrierKey}, 'deliveryStatus', ${schema.shipments.deliveryStatus})) filter (where ${schema.shipments.trackingNumber} is not null), '[]')`,
   }).from(schema.shipments).groupBy(schema.shipments.orderId);
 
   const bMap = new Map(brandAgg.map((r) => [r.orderId, r]));
@@ -74,8 +77,9 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
       createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
       brand: { total: n(b?.total), awaiting: n(b?.awaiting), confirmed: n(b?.confirmed), delivered: n(b?.delivered), minExpected: b?.minExpected ?? null },
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
-      ship: { packs: n(s?.packs), withTracking: n(s?.withTracking), delivered: n(s?.delivered), exception: n(s?.exception), inTransit: n(s?.inTransit) },
+      ship: { packs: n(s?.packs), withTracking: n(s?.withTracking), delivered: n(s?.delivered), exception: n(s?.exception), inTransit: n(s?.inTransit), tracks: s?.tracks ?? [] },
       lark,
+      larkQc: r.larkQc,
     };
   });
 }

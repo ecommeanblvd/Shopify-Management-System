@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeAddr, summarizeBrand, summarizeKcs, summarizeDelivery } from './worklist-status';
+import { summarizeAddr, summarizeBrand, summarizeKcs, summarizeDelivery, formatTrackingStatus, carrierTrackingUrl } from './worklist-status';
 
 describe('summarizeAddr', () => {
   it('chưa verify', () => expect(summarizeAddr({ addrDeliverable: null, addrVerifiedAt: null }).tone).toBe('muted'));
@@ -21,6 +21,40 @@ describe('summarizeKcs', () => {
   it('pending', () => expect(summarizeKcs({ pending: 1, pass: 0, fail: 0 }).tone).toBe('warn'));
   it('pass', () => expect(summarizeKcs({ pending: 0, pass: 2, fail: 0 }).tone).toBe('ok'));
   it('none → —', () => expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 })).toEqual({ label: '—', tone: 'muted' }));
+});
+
+describe('summarizeKcs + larkQc', () => {
+  it('hệ thống có data → ưu tiên hệ thống (bỏ qua larkQc)', () => {
+    expect(summarizeKcs({ pending: 0, pass: 2, fail: 0 }, 'fail').tone).toBe('ok');
+  });
+  it('hệ thống rỗng → fallback larkQc', () => {
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }, 'fail').tone).toBe('bad');
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }, 'pending').tone).toBe('warn');
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }, 'pass').tone).toBe('ok');
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }, 'extra')).toEqual({ label: 'Gửi dư', tone: 'info' });
+  });
+  it('cả hai rỗng → muted', () => {
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }, null).tone).toBe('muted');
+    expect(summarizeKcs({ pending: 0, pass: 0, fail: 0 }).tone).toBe('muted');
+  });
+});
+
+describe('formatTrackingStatus', () => {
+  it('map trạng thái API', () => {
+    expect(formatTrackingStatus('delivered')).toEqual({ label: 'Đã giao', tone: 'ok' });
+    expect(formatTrackingStatus('in_transit').tone).toBe('info');
+    expect(formatTrackingStatus('out_for_delivery').tone).toBe('info');
+    expect(formatTrackingStatus('exception')).toEqual({ label: 'Sự cố', tone: 'bad' });
+    expect(formatTrackingStatus(null)).toEqual({ label: 'Chưa cập nhật', tone: 'muted' });
+  });
+});
+
+describe('carrierTrackingUrl', () => {
+  it('fedex/dhl/khác', () => {
+    expect(carrierTrackingUrl('fedex', '7795')).toContain('fedex.com/fedextrack/?trknbr=7795');
+    expect(carrierTrackingUrl('dhl', '12345')).toContain('tracking-id=12345');
+    expect(carrierTrackingUrl(null, 'x')).toBe('#');
+  });
 });
 describe('summarizeDelivery', () => {
   it('chưa pack', () => expect(summarizeDelivery({ packs: 0, withTracking: 0, delivered: 0, exception: 0, inTransit: 0 }).label).toBe('Chưa'));

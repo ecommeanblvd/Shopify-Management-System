@@ -36,9 +36,10 @@ export default async function FulfillmentWorklistPage() {
     createdAtShopify: r.createdAtShopify,
     addr: summarizeAddr(r),
     brand: summarizeBrand(r.brand),
-    kcs: summarizeKcs(r.kcs),
+    kcs: summarizeKcs(r.kcs, r.larkQc),
     delivery: summarizeDelivery(r.ship),
     packs: r.ship.packs,
+    tracks: r.ship.tracks,
     lark: r.lark,
   }));
 

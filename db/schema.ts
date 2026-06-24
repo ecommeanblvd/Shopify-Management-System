@@ -1845,5 +1845,6 @@ export const larkOrderStatus = pgTable('lark_order_status', {
   cxFfStatus: text('cx_ff_status'),
   deliveryStatus: text('delivery_status'),
   expectedDeliveryDate: date('expected_delivery_date'),
+  qcStatus: text('qc_status'), // fail|pending|pass|extra (gom từ Lark QC Check)
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
