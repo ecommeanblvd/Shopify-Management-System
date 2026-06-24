@@ -101,3 +101,28 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
   } while (pageToken);
   return out;
 }
+
+/** Đọc TẤT CẢ record của QC table (env LARK_QC_TABLE_ID). Trả [] nếu chưa cấu
+ *  hình env (QC là tuỳ chọn — không vỡ sync logistics). Phân trang 500/lần. */
+export async function listAllQcRecords(): Promise<LarkRecord[]> {
+  const qcTableId = process.env.LARK_QC_TABLE_ID;
+  if (!qcTableId) return [];
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const out: LarkRecord[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${qcTableId}/records`);
+    url.searchParams.set('page_size', '500');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const j = (await res.json()) as {
+      code: number; msg: string;
+      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
+    };
+    if (j.code !== 0) throw new Error(`[lark] QC list fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
