@@ -8,6 +8,7 @@ export interface WorklistStatusRow {
   brand: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null };
   kcs: { pending: number; pass: number; fail: number };
   ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number };
+  lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
 }
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -21,10 +22,15 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     createdAtShopify: schema.shopifyOrders.createdAtShopify,
     addrDeliverable: schema.shopifyOrders.addrDeliverable,
     addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
+    larkDispatch: schema.larkOrderStatus.dispatchStatus,
+    larkCxFf: schema.larkOrderStatus.cxFfStatus,
+    larkDelivery: schema.larkOrderStatus.deliveryStatus,
+    larkExpected: schema.larkOrderStatus.expectedDeliveryDate,
   })
     .from(schema.orderFulfillment)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
+    .leftJoin(schema.larkOrderStatus, eq(schema.larkOrderStatus.orderId, schema.orderFulfillment.orderId))
     .orderBy(desc(schema.shopifyOrders.createdAtShopify));
 
   const brandAgg = await db.select({
@@ -58,11 +64,16 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
 
   return base.map((r) => {
     const b = bMap.get(r.orderId); const k = kMap.get(r.orderId); const s = sMap.get(r.orderId);
+    const lark = (r.larkDispatch || r.larkCxFf || r.larkDelivery || r.larkExpected)
+      ? { dispatchStatus: r.larkDispatch, cxFfStatus: r.larkCxFf, deliveryStatus: r.larkDelivery, expectedDeliveryDate: r.larkExpected }
+      : null;
     return {
-      ...r,
+      orderId: r.orderId, status: r.status, orderNumber: r.orderNumber, storeName: r.storeName,
+      createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt,
       brand: { total: n(b?.total), awaiting: n(b?.awaiting), confirmed: n(b?.confirmed), delivered: n(b?.delivered), minExpected: b?.minExpected ?? null },
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
       ship: { packs: n(s?.packs), withTracking: n(s?.withTracking), delivered: n(s?.delivered), exception: n(s?.exception), inTransit: n(s?.inTransit) },
+      lark,
     };
   });
 }

@@ -39,6 +39,7 @@ export default async function FulfillmentWorklistPage() {
     kcs: summarizeKcs(r.kcs),
     delivery: summarizeDelivery(r.ship),
     packs: r.ship.packs,
+    lark: r.lark,
   }));
 
   const overdue = countOverdueFollowUps(

@@ -8,6 +8,7 @@ import { listAllRecords } from './client';
 import { parsePackRow, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
+import { parseLarkStatus } from './parse-status-row';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -35,6 +36,7 @@ export interface LarkSyncSummary {
   created: number; updated: number;
   unmatched: Array<{ orderNumber: string; reason: string }>;
   skipped: number; warnings: string[];
+  larkStatusUpserted: number;
 }
 
 /** Số dòng tối đa mỗi transaction khi áp update/create (tránh transaction dài
@@ -111,8 +113,58 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       });
     }
 
+    // Phần B: snapshot status Lark theo orderId (ghi đè CÓ ĐIỀU KIỆN — record sau
+    // bù field record trước thiếu; đơn nhiều kiện vẫn ra 1 dòng/đơn).
+    const statusByOrderId = new Map<string, {
+      dispatchStatus: string | null; cxFfStatus: string | null;
+      deliveryStatus: string | null; expectedDeliveryDate: Date | null;
+    }>();
+    for (const rec of records) {
+      const orderNumber = (rec.fields['Order Number'] as unknown);
+      const num = typeof orderNumber === 'string' ? orderNumber.replace(/^#/, '') : null;
+      if (!num) continue;
+      const orderId = orderIdByNumber.get(num);
+      if (!orderId) continue;
+      const s = parseLarkStatus(rec.fields);
+      const prev = statusByOrderId.get(orderId) ?? { dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null };
+      statusByOrderId.set(orderId, {
+        dispatchStatus: s.dispatchStatus ?? prev.dispatchStatus,
+        cxFfStatus: s.cxFfStatus ?? prev.cxFfStatus,
+        deliveryStatus: s.deliveryStatus ?? prev.deliveryStatus,
+        expectedDeliveryDate: s.expectedDeliveryDate ?? prev.expectedDeliveryDate,
+      });
+    }
+    const statusRows = [...statusByOrderId.entries()];
+    let larkStatusUpserted = 0;
+    for (const batch of chunk(statusRows, APPLY_CHUNK)) {
+      await db.transaction(async (tx) => {
+        for (const [orderId, s] of batch) {
+          await tx.insert(schema.larkOrderStatus).values({
+            orderId,
+            dispatchStatus: s.dispatchStatus,
+            cxFfStatus: s.cxFfStatus,
+            deliveryStatus: s.deliveryStatus,
+            expectedDeliveryDate: s.expectedDeliveryDate
+              ? s.expectedDeliveryDate.toISOString().slice(0, 10) : null,
+            syncedAt: new Date(),
+          }).onConflictDoUpdate({
+            target: schema.larkOrderStatus.orderId,
+            set: {
+              dispatchStatus: s.dispatchStatus,
+              cxFfStatus: s.cxFfStatus,
+              deliveryStatus: s.deliveryStatus,
+              expectedDeliveryDate: s.expectedDeliveryDate
+                ? s.expectedDeliveryDate.toISOString().slice(0, 10) : null,
+              syncedAt: new Date(),
+            },
+          });
+          larkStatusUpserted += 1;
+        }
+      });
+    }
+
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings };
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.

@@ -1833,3 +1833,16 @@ export const larkSyncRuns = pgTable('lark_sync_runs', {
   unmatched: jsonb('unmatched').notNull().default(sql`'[]'::jsonb`),
   error: text('error'),
 });
+
+/** Snapshot status Lark/đơn (Phần B). Cron sync upsert; worklist LEFT JOIN để
+ *  hiện cột "Lark (vận hành)". 1 dòng / đơn. */
+export const larkOrderStatus = pgTable('lark_order_status', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orderId: uuid('order_id').notNull().unique()
+    .references(() => shopifyOrders.id, { onDelete: 'cascade' }),
+  dispatchStatus: text('dispatch_status'),
+  cxFfStatus: text('cx_ff_status'),
+  deliveryStatus: text('delivery_status'),
+  expectedDeliveryDate: date('expected_delivery_date'),
+  syncedAt: timestamp('synced_at').notNull().defaultNow(),
+});

@@ -52,6 +52,12 @@ function BadgeCell({ b }: { b: Badge }) {
   );
 }
 
+function ddmmyyyy(iso: string): string {
+  // 'YYYY-MM-DD' → 'dd/MM/yyyy' bằng cắt chuỗi (không Date/timezone)
+  if (!iso || iso.length < 10) return iso || '—';
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+}
+
 type WorklistRow = {
   orderId: string;
   orderNumber: string | null;
@@ -63,6 +69,7 @@ type WorklistRow = {
   kcs: Badge;
   delivery: Badge;
   packs: number;
+  lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
 };
 
 interface Props {
@@ -107,6 +114,7 @@ export function WorklistTable({ rows }: Props) {
               <th className="px-3 py-2 text-left">KCS</th>
               <th className="px-3 py-2 text-left">Đóng gói</th>
               <th className="px-3 py-2 text-left">Vận chuyển</th>
+              <th className="px-3 py-2 text-left">Lark (vận hành)</th>
               <th className="px-3 py-2 text-left">Tình trạng</th>
             </tr>
           </thead>
@@ -160,6 +168,18 @@ export function WorklistTable({ rows }: Props) {
                 <td className="px-3 py-2">
                   <BadgeCell b={row.delivery} />
                 </td>
+                <td className="px-3 py-2 align-top">
+                  {row.lark ? (
+                    <div className="flex flex-col gap-0.5 text-xs text-gray-500">
+                      {row.lark.dispatchStatus && <span>{row.lark.dispatchStatus}</span>}
+                      {row.lark.cxFfStatus && <span>{row.lark.cxFfStatus}</span>}
+                      {row.lark.deliveryStatus && <span>{row.lark.deliveryStatus}</span>}
+                      {row.lark.expectedDeliveryDate && <span>Dự kiến: {ddmmyyyy(row.lark.expectedDeliveryDate)}</span>}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <span
                     className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
@@ -171,7 +191,7 @@ export function WorklistTable({ rows }: Props) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                   Không có đơn nào.
                 </td>
               </tr>

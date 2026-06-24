@@ -50,3 +50,46 @@ export async function listAllRecords(): Promise<LarkRecord[]> {
   } while (pageToken);
   return out;
 }
+
+/** Body cho records/search filter theo "Order Number". Khớp CẢ dạng có '#' và
+ *  không '#' (Shopify lưu '#MBLVD..' hoặc 'TA..'; Lark có thể khác) → conjunction
+ *  'or' hai điều kiện. THUẦN để unit-test. */
+export function buildOrderNumberSearchBody(orderNumber: string): Record<string, unknown> {
+  const bare = orderNumber.replace(/^#/, '');
+  const forms = [bare, `#${bare}`];
+  return {
+    filter: {
+      conjunction: 'or',
+      conditions: forms.map((v) => ({ field_name: 'Order Number', operator: 'is', value: [v] })),
+    },
+    automatic_fields: false,
+    page_size: 500,
+  };
+}
+
+/** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
+export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
+  if (!orderNumber.trim()) return [];
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const tableId = env('LARK_TABLE_ID');
+  const out: LarkRecord[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`);
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildOrderNumberSearchBody(orderNumber)),
+    });
+    const j = (await res.json()) as {
+      code: number; msg: string;
+      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
+    };
+    if (j.code !== 0) throw new Error(`[lark] search fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
