@@ -7,12 +7,7 @@ const BASE = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress
 
 /** URL geocode 1 dòng. THUẦN. */
 export function buildCensusUrl(oneLine: string): string {
-  const u = new URL(BASE);
-  u.searchParams.set('address', oneLine);
-  u.searchParams.set('benchmark', 'Public_AR_Current');
-  u.searchParams.set('format', 'json');
-  // Replace + with %20 for compatibility with Census API expectations
-  return u.toString().replace(/\+/g, '%20');
+  return `${BASE}?address=${encodeURIComponent(oneLine)}&benchmark=Public_AR_Current&format=json`;
 }
 
 interface CensusResponse {
