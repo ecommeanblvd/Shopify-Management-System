@@ -16,7 +16,7 @@ export interface PackRow {
 }
 
 /** Lark text field: string | number | [{text}] | {text} → string|null. */
-function larkText(v: unknown): string | null {
+export function larkText(v: unknown): string | null {
   if (v == null) return null;
   if (typeof v === 'string') return v.trim() || null;
   if (typeof v === 'number') return String(v);
@@ -51,7 +51,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 /** Epoch (nửa đêm giờ VN) → Date có UTC = nửa đêm NGÀY-LỊCH VN, để khi lưu vào
  *  cột timestamp không-tz ra "giờ-treo VN" (vd 2026-06-08 00:00:00), khớp mốc
  *  fuel/rate-card. Floor về ngày nên chịu được epoch có cả giờ. */
-function larkEpochToVnMidnight(ms: number): Date {
+export function larkEpochToVnMidnight(ms: number): Date {
   const vn = new Date(ms + VN_OFFSET_MS);
   return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
 }
