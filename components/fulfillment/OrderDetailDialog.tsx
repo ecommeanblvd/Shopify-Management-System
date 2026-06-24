@@ -10,13 +10,15 @@ function fmtDate(iso: string | null): string {
 }
 
 export function OrderDetailDialog({ orderId, onClose }: { orderId: string | null; onClose: () => void }) {
+  // Mount fresh per order (parent đặt key={orderId}) → data/loading khởi tạo đúng,
+  // không cần setState đồng bộ trong effect (lint: cascading renders) và không flash
+  // dữ liệu đơn cũ khi mở đơn mới.
   const [data, setData] = useState<OrderModalData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderId) { setData(null); return; }
+    if (!orderId) return;
     let active = true;
-    setLoading(true);
     getOrderDetailModal(orderId)
       .then((d) => { if (active) setData(d); })
       .finally(() => { if (active) setLoading(false); });

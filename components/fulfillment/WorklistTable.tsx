@@ -227,7 +227,7 @@ export function WorklistTable({ rows }: Props) {
           </tbody>
         </table>
       </div>
-      <OrderDetailDialog orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
+      <OrderDetailDialog key={openOrderId ?? 'none'} orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
     </div>
   );
 }
