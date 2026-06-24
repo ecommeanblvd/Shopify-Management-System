@@ -11,6 +11,8 @@ import { AddressVerifyButton } from '@/components/fulfillment/AddressVerifyButto
 import { PackPanel } from '@/components/fulfillment/PackPanel';
 import { getMmpPushInfo } from '@/features/mmp/order-push-query';
 import { MmpPushBadge } from '@/components/fulfillment/MmpPushBadge';
+import { getLarkRecordsForOrder } from '@/features/lark/detail';
+import { LarkDetailCard } from '@/components/fulfillment/LarkDetailCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +25,9 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
 
   const detail = await getFulfillmentDetail(orderId);
   if (!detail) notFound();
-  const [picked, packs] = await Promise.all([pickedUnassignedLines(orderId), listPacksForOrder(orderId)]);
+  const [picked, packs, larkRecords] = await Promise.all([
+    pickedUnassignedLines(orderId), listPacksForOrder(orderId), getLarkRecordsForOrder(orderId),
+  ]);
 
   const canManage = hasPermission(role, 'manage_fulfillment');
   const mmpPush = await getMmpPushInfo(orderId);
@@ -46,6 +50,7 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
         canManage={canManage}
         canCheckPacked={hasPermission(role, 'check_packed')}
       />
+      <LarkDetailCard records={larkRecords} />
     </div>
   );
 }

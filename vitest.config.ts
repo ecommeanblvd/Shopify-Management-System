@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // server-only is a Next.js RSC guard that throws in non-server contexts.
+      // Map it to a no-op so pure functions in server-only modules can be
+      // unit-tested without a real Next.js runtime.
+      'server-only': path.resolve(__dirname, '__mocks__/server-only.ts'),
     },
   },
   test: {
