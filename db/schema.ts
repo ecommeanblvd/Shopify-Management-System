@@ -920,6 +920,7 @@ export const shipments = pgTable('shipments', {
   /** Label creation timestamp ≈ ship date. Anchor for fuel-week lookup. */
   labelCreatedAt: timestamp('label_created_at'),
   deliveryStatus: text('delivery_status'),
+  deliverySource: text('delivery_source'), // 'lark' | 'fedex' | null — nguồn delivery_status
   deliveredAt: timestamp('delivered_at'),
   lastTrackedAt: timestamp('last_tracked_at'),
   trackDetail: text('track_detail'),

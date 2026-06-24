@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords } from './client';
 import { parseQcRow, reduceQcStatus } from './parse-qc-row';
@@ -39,6 +39,7 @@ export interface LarkSyncSummary {
   skipped: number; warnings: string[];
   larkStatusUpserted: number;
   qcUpserted: number;
+  deliveryFrozen: number;
 }
 
 /** Số dòng tối đa mỗi transaction khi áp update/create (tránh transaction dài
@@ -120,6 +121,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     const statusByOrderId = new Map<string, {
       dispatchStatus: string | null; cxFfStatus: string | null;
       deliveryStatus: string | null; expectedDeliveryDate: Date | null;
+      deliveryState: import('@/lib/fedex/track').DeliveryStatus | null; actualDeliveredAt: Date | null;
     }>();
     for (const rec of records) {
       const orderNumber = (rec.fields['Order Number'] as unknown);
@@ -128,12 +130,15 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       const orderId = orderIdByNumber.get(num);
       if (!orderId) continue;
       const s = parseLarkStatus(rec.fields);
-      const prev = statusByOrderId.get(orderId) ?? { dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null };
+      const prev = statusByOrderId.get(orderId) ?? { dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null, deliveryState: null, actualDeliveredAt: null };
       statusByOrderId.set(orderId, {
         dispatchStatus: s.dispatchStatus ?? prev.dispatchStatus,
         cxFfStatus: s.cxFfStatus ?? prev.cxFfStatus,
         deliveryStatus: s.deliveryStatus ?? prev.deliveryStatus,
         expectedDeliveryDate: s.expectedDeliveryDate ?? prev.expectedDeliveryDate,
+        deliveryState: s.deliveryState === 'delivered' || prev.deliveryState === 'delivered'
+          ? 'delivered' : (s.deliveryState ?? prev.deliveryState),
+        actualDeliveredAt: s.actualDeliveredAt ?? prev.actualDeliveredAt,
       });
     }
     const statusRows = [...statusByOrderId.entries()];
@@ -204,8 +209,31 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       console.error('[lark] QC sync lỗi (bỏ qua, không chặn logistics):', e instanceof Error ? e.message : e);
     }
 
+    // Freeze trạng thái giao từ Lark vào shipments (delivered sticky). Best-effort.
+    let deliveryFrozen = 0;
+    try {
+      const delRows = [...statusByOrderId.entries()].filter(([, s]) => s.deliveryState != null);
+      for (const batch of chunk(delRows, APPLY_CHUNK)) {
+        await db.transaction(async (tx) => {
+          for (const [orderId, s] of batch) {
+            const patch: Record<string, unknown> = {
+              deliveryStatus: s.deliveryState, deliverySource: 'lark', updatedAt: sql`now()`,
+            };
+            if (s.deliveryState === 'delivered' && s.actualDeliveredAt) patch.deliveredAt = s.actualDeliveredAt;
+            const res = await tx.update(schema.shipments).set(patch).where(and(
+              eq(schema.shipments.orderId, orderId),
+              or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
+            ));
+            deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
+          }
+        });
+      }
+    } catch (e) {
+      console.error('[lark] freeze delivery lỗi (bỏ qua, không chặn logistics):', e instanceof Error ? e.message : e);
+    }
+
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted };
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.

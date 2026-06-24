@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLarkStatus } from './parse-status-row';
+import { mapLarkDelivery, parseLarkStatus } from './parse-status-row';
 
 describe('parseLarkStatus', () => {
   it('đọc field text + lookup-array + formula', () => {
@@ -22,11 +22,42 @@ describe('parseLarkStatus', () => {
 
   it('field thiếu/rỗng → null', () => {
     const r = parseLarkStatus({});
-    expect(r).toEqual({ dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null });
+    expect(r).toEqual({ dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null, deliveryState: null, actualDeliveredAt: null });
   });
 
   it('Ngày giao dự kiến không phải số → null', () => {
     const r = parseLarkStatus({ 'Ngày giao dự kiến': 'n/a' });
     expect(r.expectedDeliveryDate).toBeNull();
+  });
+});
+
+describe('mapLarkDelivery', () => {
+  it('các trạng thái hoàn tất → delivered', () => {
+    expect(mapLarkDelivery('Chậm hơn dự kiến')).toBe('delivered');
+    expect(mapLarkDelivery('Đúng dự kiến')).toBe('delivered');
+    expect(mapLarkDelivery('Nhanh hơn dự kiến')).toBe('delivered');
+  });
+  it('đang giao / xử lý / sự cố', () => {
+    expect(mapLarkDelivery('Đang giao hàng')).toBe('out_for_delivery');
+    expect(mapLarkDelivery('Đang xử lý')).toBe('in_transit');
+    expect(mapLarkDelivery('Giao hàng thất bại')).toBe('exception');
+    expect(mapLarkDelivery('Gặp vấn đề')).toBe('exception');
+    expect(mapLarkDelivery('Mất hàng khi giao')).toBe('exception');
+  });
+  it('rỗng/lạ → null', () => {
+    expect(mapLarkDelivery(null)).toBeNull();
+    expect(mapLarkDelivery('gì đó')).toBeNull();
+  });
+});
+
+describe('parseLarkStatus delivery', () => {
+  it('deliveryState + actualDeliveredAt', () => {
+    const ms = Date.UTC(2026, 5, 3, 17, 0, 0); // 04/06 giờ VN
+    const r = parseLarkStatus({ 'Final | Delivery Status': 'Nhanh hơn dự kiến', 'Ngày giao thực tế': ms });
+    expect(r.deliveryState).toBe('delivered');
+    expect(r.actualDeliveredAt?.toISOString()).toBe('2026-06-04T00:00:00.000Z');
+  });
+  it('không có ngày giao thực tế → null', () => {
+    expect(parseLarkStatus({ 'Final | Delivery Status': 'Đang giao hàng' }).actualDeliveredAt).toBeNull();
   });
 });
