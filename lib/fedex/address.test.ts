@@ -34,6 +34,29 @@ describe('parseAddressVerification', () => {
     expect(v.deliverable).toBe(true);
     expect(v.issue).toBe('SuiteRequiredButMissing');
   });
+  it('confidence: US positive → verified', () => {
+    const v = parseAddressVerification(wrap({ attributes: { DPV: 'true' }, postalCode: '11228' }), 'US');
+    expect(v.confidence).toBe('verified');
+  });
+  it('confidence: US notfound nhưng có ZIP → zip_only', () => {
+    const v = parseAddressVerification(wrap({
+      attributes: { DPV: 'false', Matched: 'false' },
+      city: 'FULSHEAR', stateOrProvinceCode: 'TX', postalCode: '77441',
+      customerMessages: [{ code: 'STANDARDIZED.ADDRESS.NOTFOUND' }],
+    }), 'US');
+    expect(v.confidence).toBe('zip_only');
+  });
+  it('confidence: US không có ZIP → undeliverable', () => {
+    const v = parseAddressVerification(wrap({
+      attributes: { DPV: 'false', Matched: 'false' },
+      customerMessages: [{ code: 'STANDARDIZED.ADDRESS.NOTFOUND' }],
+    }), 'US');
+    expect(v.confidence).toBe('undeliverable');
+  });
+  it('confidence: ngoài US → verified', () => {
+    const v = parseAddressVerification(wrap({ attributes: { DPV: 'false' } }), 'SA');
+    expect(v.confidence).toBe('verified');
+  });
 });
 
 describe('buildResolveRequest', () => {

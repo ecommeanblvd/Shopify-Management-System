@@ -144,6 +144,8 @@ export interface AddressVerification {
   issue: string | null;
   /** Địa chỉ chuẩn hoá FedEx gợi ý (1 dòng). */
   standardized: string | null;
+  /** Mức tin cậy FedEx: verified (DPV/non-US) | zip_only (khớp ZIP, chưa rõ số nhà) | undeliverable (không khớp). */
+  confidence: 'verified' | 'zip_only' | 'undeliverable';
   raw: unknown;
 }
 
@@ -168,7 +170,12 @@ export function parseAddressVerification(raw: unknown, countryCode?: string | nu
   const std = a
     ? [...(a.streetLines ?? []), a.city, a.stateOrProvinceCode, a.postalCode].filter(Boolean).join(', ')
     : '';
-  return { classification: parseClassification(raw), deliverable, issue, standardized: std || null, raw };
+  // confidence: verified nếu FedEx positive hoặc ngoài US; còn lại (US không positive)
+  // phân theo có ZIP chuẩn hoá hay không — zip_only (nhà mới xây hay gặp) vs undeliverable.
+  const hasZip = !!(a?.postalCode && String(a.postalCode).trim());
+  const confidence: AddressVerification['confidence'] =
+    positive || !isUs ? 'verified' : hasZip ? 'zip_only' : 'undeliverable';
+  return { classification: parseClassification(raw), deliverable, issue, standardized: std || null, confidence, raw };
 }
 
 /** Gọi FedEx Address Validation → kết quả verify đầy đủ. */
