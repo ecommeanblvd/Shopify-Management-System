@@ -105,7 +105,7 @@ export function WorklistTable({ rows }: Props) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-auto max-h-[calc(100vh-16rem)] min-h-[280px] rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-background text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
