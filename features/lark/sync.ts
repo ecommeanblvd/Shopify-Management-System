@@ -166,38 +166,42 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     }
 
     // QC từ Lark QC table (best-effort): gom QC Check theo đơn → qc_status.
-    const qcRecords = await listAllQcRecords();
     let qcUpserted = 0;
-    if (qcRecords.length > 0) {
-      const byNum = new Map<string, Array<string | null>>();
-      for (const rec of qcRecords) {
-        const { orderNumber, qcCheck } = parseQcRow(rec.fields);
-        if (!orderNumber) continue;
-        const bare = orderNumber.replace(/^#/, '');
-        const arr = byNum.get(bare) ?? [];
-        arr.push(qcCheck);
-        byNum.set(bare, arr);
+    try {
+      const qcRecords = await listAllQcRecords();
+      if (qcRecords.length > 0) {
+        const byNum = new Map<string, Array<string | null>>();
+        for (const rec of qcRecords) {
+          const { orderNumber, qcCheck } = parseQcRow(rec.fields);
+          if (!orderNumber) continue;
+          const bare = orderNumber.replace(/^#/, '');
+          const arr = byNum.get(bare) ?? [];
+          arr.push(qcCheck);
+          byNum.set(bare, arr);
+        }
+        const qcOrderIds = await resolveOrderIds([...byNum.keys()]);
+        const qcRows: Array<{ orderId: string; qcStatus: string }> = [];
+        for (const [bare, vals] of byNum) {
+          const orderId = qcOrderIds.get(bare);
+          const status = reduceQcStatus(vals);
+          if (orderId && status) qcRows.push({ orderId, qcStatus: status });
+        }
+        for (const batch of chunk(qcRows, APPLY_CHUNK)) {
+          await db.transaction(async (tx) => {
+            for (const q of batch) {
+              await tx.insert(schema.larkOrderStatus).values({
+                orderId: q.orderId, qcStatus: q.qcStatus, syncedAt: new Date(),
+              }).onConflictDoUpdate({
+                target: schema.larkOrderStatus.orderId,
+                set: { qcStatus: q.qcStatus, syncedAt: new Date() },
+              });
+              qcUpserted += 1;
+            }
+          });
+        }
       }
-      const qcOrderIds = await resolveOrderIds([...byNum.keys()]);
-      const qcRows: Array<{ orderId: string; qcStatus: string }> = [];
-      for (const [bare, vals] of byNum) {
-        const orderId = qcOrderIds.get(bare);
-        const status = reduceQcStatus(vals);
-        if (orderId && status) qcRows.push({ orderId, qcStatus: status });
-      }
-      for (const batch of chunk(qcRows, APPLY_CHUNK)) {
-        await db.transaction(async (tx) => {
-          for (const q of batch) {
-            await tx.insert(schema.larkOrderStatus).values({
-              orderId: q.orderId, qcStatus: q.qcStatus, syncedAt: new Date(),
-            }).onConflictDoUpdate({
-              target: schema.larkOrderStatus.orderId,
-              set: { qcStatus: q.qcStatus, syncedAt: new Date() },
-            });
-            qcUpserted += 1;
-          }
-        });
-      }
+    } catch (e) {
+      console.error('[lark] QC sync lỗi (bỏ qua, không chặn logistics):', e instanceof Error ? e.message : e);
     }
 
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
