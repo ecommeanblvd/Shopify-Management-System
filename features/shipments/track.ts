@@ -17,6 +17,7 @@ export async function trackAndStoreShipment(
     const r = await trackFedex(s.tracking);
     await db.update(schema.shipments).set({
       deliveryStatus: r.status,
+      deliverySource: 'fedex',
       trackDetail: r.description,
       deliveredAt: r.deliveredAt ?? undefined, // chỉ set khi có
       lastTrackedAt: new Date(),
