@@ -70,7 +70,7 @@ type WorklistRow = {
   kcs: Badge;
   delivery: Badge;
   packs: number;
-  tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }>;
+  tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }>;
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
 };
 
@@ -175,6 +175,9 @@ export function WorklistTable({ rows }: Props) {
                       {row.tracks.map((t) => {
                         const st = formatTrackingStatus(t.deliveryStatus);
                         const url = carrierTrackingUrl(t.carrierKey, t.trackingNumber);
+                        const label = (t.deliveryStatus === 'delivered' && t.deliveredAt && t.deliveredAt.length >= 10)
+                          ? `${st.label} · ${t.deliveredAt.slice(8, 10)}/${t.deliveredAt.slice(5, 7)}`
+                          : st.label;
                         return (
                           <div key={t.trackingNumber} className="flex items-center gap-2">
                             {url === '#' ? (
@@ -186,7 +189,7 @@ export function WorklistTable({ rows }: Props) {
                                 {t.trackingNumber}
                               </a>
                             )}
-                            <BadgeCell b={st} />
+                            <BadgeCell b={{ label, tone: st.tone }} />
                           </div>
                         );
                       })}

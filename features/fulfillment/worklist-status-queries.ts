@@ -8,7 +8,7 @@ export interface WorklistStatusRow {
   addrConfidence: string | null;
   brand: { total: number; awaiting: number; confirmed: number; delivered: number; minExpected: string | null };
   kcs: { pending: number; pass: number; fail: number };
-  ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number; tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }> };
+  ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number; tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }> };
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
   larkQc: string | null;
 }
@@ -60,7 +60,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     delivered: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} = 'delivered')`,
     exception: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} = 'exception')`,
     inTransit: sql<number>`count(*) filter (where ${schema.shipments.deliveryStatus} in ('in_transit','out_for_delivery'))`,
-    tracks: sql<Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null }>>`coalesce(json_agg(json_build_object('trackingNumber', ${schema.shipments.trackingNumber}, 'carrierKey', ${schema.shipments.carrierKey}, 'deliveryStatus', ${schema.shipments.deliveryStatus})) filter (where ${schema.shipments.trackingNumber} is not null), '[]')`,
+    tracks: sql<Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }>>`coalesce(json_agg(json_build_object('trackingNumber', ${schema.shipments.trackingNumber}, 'carrierKey', ${schema.shipments.carrierKey}, 'deliveryStatus', ${schema.shipments.deliveryStatus}, 'deliveredAt', ${schema.shipments.deliveredAt})) filter (where ${schema.shipments.trackingNumber} is not null), '[]')`,
   }).from(schema.shipments).groupBy(schema.shipments.orderId);
 
   const bMap = new Map(brandAgg.map((r) => [r.orderId, r]));
