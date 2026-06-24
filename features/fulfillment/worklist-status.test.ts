@@ -5,6 +5,10 @@ describe('summarizeAddr', () => {
   it('chưa verify', () => expect(summarizeAddr({ addrDeliverable: null, addrVerifiedAt: null }).tone).toBe('muted'));
   it('không giao được', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date() }).tone).toBe('bad'));
   it('giao được', () => expect(summarizeAddr({ addrDeliverable: true, addrVerifiedAt: new Date() }).tone).toBe('ok'));
+  it('census_verified → ok', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date(), addrConfidence: 'census_verified' }).tone).toBe('ok'));
+  it('zip_only → warn', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date(), addrConfidence: 'zip_only' }).tone).toBe('warn'));
+  it('undeliverable → bad', () => expect(summarizeAddr({ addrDeliverable: false, addrVerifiedAt: new Date(), addrConfidence: 'undeliverable' }).tone).toBe('bad'));
+  it('confidence null → fallback boolean (ok)', () => expect(summarizeAddr({ addrDeliverable: true, addrVerifiedAt: new Date(), addrConfidence: null }).tone).toBe('ok'));
 });
 describe('summarizeBrand', () => {
   it('total 0 → không cần', () => expect(summarizeBrand({ total: 0, awaiting: 0, confirmed: 0, delivered: 0, minExpected: null })).toEqual({ label: 'Không cần', tone: 'muted' }));

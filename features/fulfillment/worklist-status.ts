@@ -7,7 +7,15 @@ function ddmm(iso: string | null): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 }
 
-export function summarizeAddr(o: { addrDeliverable: boolean | null; addrVerifiedAt: Date | string | null }): Badge {
+export function summarizeAddr(o: { addrDeliverable: boolean | null; addrVerifiedAt: Date | string | null; addrConfidence?: string | null }): Badge {
+  if (o.addrConfidence) {
+    switch (o.addrConfidence) {
+      case 'verified':
+      case 'census_verified': return { label: '✓ Giao được', tone: 'ok' };
+      case 'zip_only': return { label: '⚠ ZIP hợp lệ, chưa rõ số nhà', tone: 'warn' };
+      case 'undeliverable': return { label: '⚠ Không giao được', tone: 'bad' };
+    }
+  }
   if (!o.addrVerifiedAt) return { label: 'Chưa verify', tone: 'muted' };
   if (o.addrDeliverable === false) return { label: '⚠ Không giao được', tone: 'bad' };
   return { label: '✓ Giao được', tone: 'ok' };
