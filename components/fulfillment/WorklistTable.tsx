@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Badge } from '@/features/fulfillment/worklist-status';
+import type { Badge, BadgeTone } from '@/features/fulfillment/worklist-status';
 
 type OrderStatus =
   | 'received'
@@ -36,7 +36,7 @@ function fmtDate(d: Date | string | null | undefined): string {
   return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-const TONE: Record<string, string> = {
+const TONE: Record<BadgeTone, string> = {
   ok: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   warn: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   bad: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -115,7 +115,16 @@ export function WorklistTable({ rows }: Props) {
               <tr
                 key={row.orderId}
                 className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                tabIndex={0}
+                role="link"
+                aria-label={`Mở đơn ${row.orderNumber ?? row.orderId}`}
                 onClick={() => router.push(`/f/fulfillment/${row.orderId}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.key === ' ') e.preventDefault();
+                    router.push(`/f/fulfillment/${row.orderId}`);
+                  }
+                }}
               >
                 <td className="px-3 py-2 font-mono tabular-nums whitespace-nowrap">
                   {fmtDate(row.createdAtShopify)}
