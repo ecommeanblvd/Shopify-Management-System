@@ -4,7 +4,8 @@
  */
 import { eq, desc } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listAllRecords } from './client';
+import { listAllRecords, listAllQcRecords } from './client';
+import { parseQcRow, reduceQcStatus } from './parse-qc-row';
 import { parsePackRow, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
@@ -37,6 +38,7 @@ export interface LarkSyncSummary {
   unmatched: Array<{ orderNumber: string; reason: string }>;
   skipped: number; warnings: string[];
   larkStatusUpserted: number;
+  qcUpserted: number;
 }
 
 /** Số dòng tối đa mỗi transaction khi áp update/create (tránh transaction dài
@@ -163,8 +165,43 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       });
     }
 
+    // QC từ Lark QC table (best-effort): gom QC Check theo đơn → qc_status.
+    const qcRecords = await listAllQcRecords();
+    let qcUpserted = 0;
+    if (qcRecords.length > 0) {
+      const byNum = new Map<string, Array<string | null>>();
+      for (const rec of qcRecords) {
+        const { orderNumber, qcCheck } = parseQcRow(rec.fields);
+        if (!orderNumber) continue;
+        const bare = orderNumber.replace(/^#/, '');
+        const arr = byNum.get(bare) ?? [];
+        arr.push(qcCheck);
+        byNum.set(bare, arr);
+      }
+      const qcOrderIds = await resolveOrderIds([...byNum.keys()]);
+      const qcRows: Array<{ orderId: string; qcStatus: string }> = [];
+      for (const [bare, vals] of byNum) {
+        const orderId = qcOrderIds.get(bare);
+        const status = reduceQcStatus(vals);
+        if (orderId && status) qcRows.push({ orderId, qcStatus: status });
+      }
+      for (const batch of chunk(qcRows, APPLY_CHUNK)) {
+        await db.transaction(async (tx) => {
+          for (const q of batch) {
+            await tx.insert(schema.larkOrderStatus).values({
+              orderId: q.orderId, qcStatus: q.qcStatus, syncedAt: new Date(),
+            }).onConflictDoUpdate({
+              target: schema.larkOrderStatus.orderId,
+              set: { qcStatus: q.qcStatus, syncedAt: new Date() },
+            });
+            qcUpserted += 1;
+          }
+        });
+      }
+    }
+
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted };
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.
