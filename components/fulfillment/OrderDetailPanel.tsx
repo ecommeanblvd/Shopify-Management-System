@@ -68,7 +68,6 @@ type Line = {
 };
 
 interface Props {
-  orderId: string;
   status: string;
   lines: Line[];
   canManage: boolean;

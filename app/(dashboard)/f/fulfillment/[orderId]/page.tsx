@@ -32,7 +32,7 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
   const mmpPush = await getMmpPushInfo(orderId);
   return (
     <div className="space-y-6 p-6">
-      <OrderDetailPanel orderId={orderId} status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
+      <OrderDetailPanel status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
       <MmpPushBadge info={mmpPush} orderId={orderId} canManage={canManage} />
       <AddressVerifyCard address={detail.address} orderId={orderId} />
       <PackPanel
