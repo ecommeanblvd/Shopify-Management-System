@@ -68,6 +68,9 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
       'fulfillment.logistics:view', 'fulfillment.logistics:create', 'fulfillment.logistics:edit', 'fulfillment.logistics:delete',
       'carrier_rates:view', 'carrier_rates:create',
       'carrier_rates.invoices:view', 'carrier_rates.invoices:create', 'carrier_rates.invoices:edit',
+      // Xem view tổng module Orders (landing + bảng đơn per-store). Chi tiết đơn
+      // (modal) vẫn cần manage_sku_costs nên logistics chỉ xem, không mở chi tiết.
+      'orders:view',
     ],
   },
 };
