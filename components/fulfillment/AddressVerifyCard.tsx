@@ -1,4 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
+import { AddressVerifyButton } from './AddressVerifyButton';
 
 export interface FulfillmentAddress {
   country: string | null; city: string | null; line1: string | null; line2: string | null;
@@ -24,7 +25,7 @@ const CLASS_MAP: Record<string, { label: string; cls: string }> = {
 
 /** Địa chỉ giao + verify FedEx — hiển thị ở trang vận hành đơn để ops bắt địa
  *  chỉ sai/không giao được TRƯỚC khi ship. */
-export function AddressVerifyCard({ address: a }: { address: FulfillmentAddress | null }) {
+export function AddressVerifyCard({ address: a, orderId }: { address: FulfillmentAddress | null; orderId?: string }) {
   if (!a) return null;
   const hasStreet = !!a.line1;
   const full = [a.name, a.line1, a.line2, a.city, a.province, a.country].filter(Boolean).join(', ');
@@ -33,7 +34,10 @@ export function AddressVerifyCard({ address: a }: { address: FulfillmentAddress 
   return (
     <Card className={(a.addrConfidence ? a.addrConfidence === 'undeliverable' : a.addrDeliverable === false) ? 'border-red-500/40' : undefined}>
       <CardContent className="p-3 space-y-2 text-sm">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Địa chỉ giao</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Địa chỉ giao</div>
+          {orderId && <AddressVerifyButton orderId={orderId} />}
+        </div>
         {hasStreet
           ? <div className="text-foreground">{full || '—'}</div>
           : <div className="text-muted-foreground italic">Chưa có địa chỉ đầy đủ (đơn cũ — cần re-sync).</div>}

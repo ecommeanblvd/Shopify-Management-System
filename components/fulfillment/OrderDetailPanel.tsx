@@ -1,7 +1,6 @@
 'use client';
 
 import { useTransition } from 'react';
-import { checkStockForOrder, markLine, markOrder } from '@/features/fulfillment/actions';
 import { resendBrandRequest } from '@/features/fulfillment/brand-actions';
 import { lineSource } from '@/features/warehouse/staging-logic';
 import { SourceChip } from '@/components/fulfillment/SourceChip';
@@ -69,7 +68,6 @@ type Line = {
 };
 
 interface Props {
-  orderId: string;
   status: string;
   lines: Line[];
   canManage: boolean;
@@ -135,56 +133,7 @@ function LocationCell({ line, canManage }: { line: Line; canManage: boolean }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-function LineActionButton({
-  line,
-  orderId,
-  disabled,
-}: {
-  line: Line;
-  orderId: string;
-  disabled: boolean;
-}) {
-  const [isPending, startTransition] = useTransition();
-
-  const handleMark = (next: LineStatus) => {
-    startTransition(async () => {
-      await markLine(line.id, next);
-    });
-  };
-
-  const busy = isPending || disabled;
-
-  if (line.status === 'in_stock') {
-    return (
-      <button
-        disabled={busy}
-        onClick={() => handleMark('picked')}
-        className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
-      >
-        Đã lấy
-      </button>
-    );
-  }
-  // orderId is used by parent scope, suppress unused warning
-  void orderId;
-  return null;
-}
-
-export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
-  const [isPending, startTransition] = useTransition();
-
-  const handleCheckStock = () => {
-    startTransition(async () => {
-      await checkStockForOrder(orderId);
-    });
-  };
-
-  const handleMarkOrder = (next: 'picked') => {
-    startTransition(async () => {
-      await markOrder(orderId, next);
-    });
-  };
-
+export function OrderDetailPanel({ status, lines, canManage }: Props) {
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -194,25 +143,6 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
         >
           {ORDER_STATUS_LABELS[status as OrderStatus] ?? status}
         </span>
-
-        {canManage && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              disabled={isPending}
-              onClick={handleCheckStock}
-              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
-            >
-              Check lại tồn
-            </button>
-            <button
-              disabled={isPending}
-              onClick={() => handleMarkOrder('picked')}
-              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
-            >
-              Lấy cả đơn
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Lines table */}
@@ -226,7 +156,6 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
               <th className="px-3 py-2 text-left">Trạng thái</th>
               <th className="px-3 py-2 text-left">Nguồn</th>
               <th className="px-3 py-2 text-left">Vị trí</th>
-              {canManage && <th className="px-3 py-2 text-left">Hành động</th>}
             </tr>
           </thead>
           <tbody>
@@ -259,16 +188,11 @@ export function OrderDetailPanel({ orderId, status, lines, canManage }: Props) {
                 <td className="px-3 py-2">
                   <LocationCell line={line} canManage={canManage} />
                 </td>
-                {canManage && (
-                  <td className="px-3 py-2">
-                    <LineActionButton line={line} orderId={orderId} disabled={isPending} />
-                  </td>
-                )}
               </tr>
             ))}
             {lines.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 7 : 6} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
                   Không có dòng nào.
                 </td>
               </tr>

@@ -7,7 +7,6 @@ import { getFulfillmentDetail } from '@/features/fulfillment/queries';
 import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/queries';
 import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
 import { AddressVerifyCard } from '@/components/fulfillment/AddressVerifyCard';
-import { AddressVerifyButton } from '@/components/fulfillment/AddressVerifyButton';
 import { PackPanel } from '@/components/fulfillment/PackPanel';
 import { getMmpPushInfo } from '@/features/mmp/order-push-query';
 import { MmpPushBadge } from '@/components/fulfillment/MmpPushBadge';
@@ -33,10 +32,9 @@ export default async function FulfillmentDetailPage({ params }: { params: Promis
   const mmpPush = await getMmpPushInfo(orderId);
   return (
     <div className="space-y-6 p-6">
-      <OrderDetailPanel orderId={orderId} status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
+      <OrderDetailPanel status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
       <MmpPushBadge info={mmpPush} orderId={orderId} canManage={canManage} />
-      <AddressVerifyCard address={detail.address} />
-      <AddressVerifyButton orderId={orderId} />
+      <AddressVerifyCard address={detail.address} orderId={orderId} />
       <PackPanel
         orderId={orderId}
         picked={picked}
