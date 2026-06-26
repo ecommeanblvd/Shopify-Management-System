@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyDhlProduct, mapDhlFreightToBilled, isFreightCharges } from './dhl-billed-map';
+import { classifyDhlProduct, mapDhlFreightToBilled, mapChargesToBilled, isFreightCharges } from './dhl-billed-map';
 import type { DhlShipment } from './dhl-invoice-csv';
 
 const ship = (o: Partial<DhlShipment>): DhlShipment => ({
@@ -21,6 +21,25 @@ describe('isFreightCharges', () => {
     expect(isFreightCharges([{ code: 'FF', name: 'FUEL SURCHARGE', charge: 1, tax: 0, total: 1 }])).toBe(true);
     expect(isFreightCharges([{ code: 'XB', name: 'IMPORT EXPORT TAXES', charge: 1, tax: 0, total: 1 }, { code: 'DD', name: 'DUTY TAX PAID', charge: 1, tax: 0, total: 1 }])).toBe(false);
     expect(isFreightCharges(null)).toBe(false);
+  });
+});
+
+describe('bucketOf — mã phí XML', () => {
+  const mk = (code: string, charge: number) => ({ code, name: '', charge, tax: 0, total: charge });
+  it('P → base (freight XML)', () => {
+    const m = mapChargesToBilled([mk('P', 800000)], { totalTax: 0, totalInclVat: 800000, weightKg: 1 });
+    expect(m.base).toBe(800000);
+    expect(m.unknown).toHaveLength(0);
+  });
+  it('YL/YO → nonConveyable', () => {
+    const m = mapChargesToBilled([mk('YL', 50000), mk('YO', 60000)], { totalTax: 0, totalInclVat: 110000, weightKg: null });
+    expect(m.nonConveyable).toBe(110000);
+    expect(m.unknown).toHaveLength(0);
+  });
+  it('mã lạ (OO) → unknown (không nhét bừa)', () => {
+    const m = mapChargesToBilled([mk('OO', 9000)], { totalTax: 0, totalInclVat: 9000, weightKg: null });
+    expect(m.unknown).toHaveLength(1);
+    expect(m.base).toBe(0);
   });
 });
 

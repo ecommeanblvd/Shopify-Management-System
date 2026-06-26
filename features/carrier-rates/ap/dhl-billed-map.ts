@@ -39,10 +39,12 @@ export interface DhlBilledMap {
 /** Phân loại 1 khoản cước DHL về bucket billed. null = không nhận diện. */
 function bucketOf(c: DhlChargeLine): keyof DhlBilledMap | null {
   if (c.code === 'WEIGHT') return 'base';
+  if (c.code === 'P') return 'base'; // XML DHL: freight = code 'P' (CSV dùng 'WEIGHT')
   const n = c.name.toLowerCase();
   const code = c.code.toUpperCase();
   // Non-Conveyable trước nhánh cước vì tên "... - WEIGHT" chứa "weight".
   if (/non.?conveyable/.test(n)) return 'nonConveyable';
+  if (code === 'YL' || code === 'YO') return 'nonConveyable'; // XML: name rỗng, nhận theo code
   // Restricted Destination thuộc họ country_fixed → dồn vào elevatedRisk để
   // đối soát chung kênh (engine country_fixed). Residential → cột riêng.
   if (/restricted/.test(n)) return 'elevatedRisk';
