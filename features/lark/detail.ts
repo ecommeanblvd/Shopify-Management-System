@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { larkText, larkEpochToVnMidnight } from './parse-pack-row';
 import { searchRecordsByOrderNumber } from './client';
+import { pickLatestRecord, sortRecordsLatestFirst } from './record-select';
 
 /** Field Lark lưu NGÀY dạng epoch ms — phải format khi hiển thị (không hiện số raw). */
 export const LARK_DATE_FIELDS = new Set<string>([
@@ -82,7 +83,7 @@ export async function getLarkRawFieldsForOrder(orderId: string): Promise<Record<
       .limit(1);
     if (!ord?.orderNumber) return {};
     const records = await searchRecordsByOrderNumber(ord.orderNumber);
-    return records[0]?.fields ?? {};
+    return pickLatestRecord(records)?.fields ?? {};
   } catch (e) {
     console.error(`[lark] getLarkRawFieldsForOrder ${orderId} lỗi:`, e);
     return {};
@@ -104,7 +105,7 @@ export async function getLarkRecordsForOrder(orderId: string): Promise<LarkDetai
       .limit(1);
     if (!ord?.orderNumber) return [];
     const records = await searchRecordsByOrderNumber(ord.orderNumber);
-    return records.map((r) => ({ recordId: r.record_id, fields: flattenLarkRecord(r.fields) }));
+    return sortRecordsLatestFirst(records).map((r) => ({ recordId: r.record_id, fields: flattenLarkRecord(r.fields) }));
   } catch (e) {
     console.error(`[lark] getLarkRecordsForOrder ${orderId} lỗi:`, e);
     return [];
