@@ -827,14 +827,18 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // KHÔNG tính vào carrierCost (đây là phí của shop, không phải cước carrier).
   const packagingDisplay = sumApplicableOfKind(snap.surcharges, 'packaging_fixed', effectiveDate);
   const packagingCost = Math.round(packagingDisplay * snap.fxCostPerDisplay);
+  // Làm tròn theo số thập phân của ĐƠN VỊ COST: VND không có thập phân (→ nguyên,
+  // như cũ cho DHL/FedEx); USD có cents (→ 2 số, cho Aramex — rate card USD).
+  const costDp = snap.costCurrency === 'VND' ? 0 : 2;
+  const roundCost = (x: number): number => { const f = 10 ** costDp; return Math.round(x * f) / f; };
   const markup = (subtotalBeforeMarkup + packagingCost) * (markupPct / 100);
-  const finalCost = Math.round(subtotalBeforeMarkup + packagingCost + markup);
+  const finalCost = roundCost(subtotalBeforeMarkup + packagingCost + markup);
   const finalDisplay = Math.round((finalCost / snap.fxCostPerDisplay) * 100) / 100;
 
   // What we PAY the carrier — pre-markup, in the carrier's cost currency
   // and its display equivalent. Distinct from `finalCost` (which includes
   // our markup, i.e. the customer-facing offer).
-  const carrierCost = Math.round(subtotalBeforeMarkup);
+  const carrierCost = roundCost(subtotalBeforeMarkup);
   const carrierCostDisplay = Math.round((carrierCost / snap.fxCostPerDisplay) * 100) / 100;
 
   return {
