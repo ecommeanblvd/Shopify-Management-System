@@ -34,30 +34,7 @@ async function getTenantToken(): Promise<string> {
   return cachedToken.token;
 }
 
-export interface LarkRecord { record_id: string; fields: Record<string, unknown>; }
-
-/** Đọc TẤT CẢ record của bảng (phân trang page_token, 500/lần). */
-export async function listAllRecords(): Promise<LarkRecord[]> {
-  const token = await getTenantToken();
-  const appToken = env('LARK_BASE_APP_TOKEN');
-  const tableId = logTableId();
-  const out: LarkRecord[] = [];
-  let pageToken: string | undefined;
-  do {
-    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`);
-    url.searchParams.set('page_size', '500');
-    if (pageToken) url.searchParams.set('page_token', pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const j = (await res.json()) as {
-      code: number; msg: string;
-      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
-    };
-    if (j.code !== 0) throw new Error(`[lark] list fail: code=${j.code} msg=${j.msg}`);
-    out.push(...(j.data?.items ?? []));
-    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
-  } while (pageToken);
-  return out;
-}
+export interface LarkRecord { record_id: string; fields: Record<string, unknown>; created_time?: number; }
 
 /** Body cho records/search filter theo "Order Number". Khớp CẢ dạng có '#' và
  *  không '#' (Shopify lưu '#MBLVD..' hoặc 'TA..'; Lark có thể khác) → conjunction
@@ -70,17 +47,16 @@ export function buildOrderNumberSearchBody(orderNumber: string): Record<string, 
       conjunction: 'or',
       conditions: forms.map((v) => ({ field_name: 'Order Number', operator: 'is', value: [v] })),
     },
-    automatic_fields: false,
+    automatic_fields: true,
     page_size: 500,
   };
 }
 
-/** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
-export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
-  if (!orderNumber.trim()) return [];
+/** POST records/search 1 table, phân trang hết, trả mọi item (kèm created_time
+ *  nhờ automatic_fields). body: filter (optional) + automatic_fields + page_size. */
+async function searchAllRecords(tableId: string, body: Record<string, unknown>): Promise<LarkRecord[]> {
   const token = await getTenantToken();
   const appToken = env('LARK_BASE_APP_TOKEN');
-  const tableId = logTableId();
   const out: LarkRecord[] = [];
   let pageToken: string | undefined;
   do {
@@ -89,12 +65,9 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
     const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildOrderNumberSearchBody(orderNumber)),
+      body: JSON.stringify(body),
     });
-    const j = (await res.json()) as {
-      code: number; msg: string;
-      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
-    };
+    const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean } };
     if (j.code !== 0) throw new Error(`[lark] search fail: code=${j.code} msg=${j.msg}`);
     out.push(...(j.data?.items ?? []));
     pageToken = j.data?.has_more ? j.data?.page_token : undefined;
@@ -102,27 +75,21 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
   return out;
 }
 
+/** Đọc TẤT CẢ record của bảng (phân trang page_token, 500/lần). */
+export async function listAllRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(logTableId(), { automatic_fields: true, page_size: 500 });
+}
+
+/** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
+export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
+  if (!orderNumber.trim()) return [];
+  return searchAllRecords(logTableId(), buildOrderNumberSearchBody(orderNumber));
+}
+
 /** Đọc TẤT CẢ record của QC table (env LARK_QC_TABLE_ID). Trả [] nếu chưa cấu
  *  hình env (QC là tuỳ chọn — không vỡ sync logistics). Phân trang 500/lần. */
 export async function listAllQcRecords(): Promise<LarkRecord[]> {
   const qcTableId = process.env.LARK_QC_TABLE_ID;
   if (!qcTableId) return [];
-  const token = await getTenantToken();
-  const appToken = env('LARK_BASE_APP_TOKEN');
-  const out: LarkRecord[] = [];
-  let pageToken: string | undefined;
-  do {
-    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${qcTableId}/records`);
-    url.searchParams.set('page_size', '500');
-    if (pageToken) url.searchParams.set('page_token', pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const j = (await res.json()) as {
-      code: number; msg: string;
-      data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean };
-    };
-    if (j.code !== 0) throw new Error(`[lark] QC list fail: code=${j.code} msg=${j.msg}`);
-    out.push(...(j.data?.items ?? []));
-    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
-  } while (pageToken);
-  return out;
+  return searchAllRecords(qcTableId, { automatic_fields: true, page_size: 500 });
 }
