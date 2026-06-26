@@ -133,6 +133,7 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
 
   // Captured inside the tx, read after commit for best-effort reallocation.
   let storedSku: string | null = null;
+  let repushOrderId: string | null = null;
 
   await db.transaction(async (tx) => {
     // FOR UPDATE: hai người cùng bấm QC một kiện → người sau chờ lock rồi
@@ -210,6 +211,7 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
         currentWarehouseCode: receiptWarehouseCode,
         updatedAt: sql`now()`,
       }).where(eq(schema.goodsReceiptItems.id, item.id));
+      if (item.orderId) repushOrderId = item.orderId;
     } else if (disposition === 'return_to_brand') {
       // QC fail → trả brand: món chuyển sang returned_to_vendor.
       await tx.update(schema.goodsReceiptItems).set({
@@ -271,6 +273,14 @@ export async function recordQc(input: RecordQcInput): Promise<void> {
       const { reallocateSku } = await import('@/features/warehouse/allocate');
       await reallocateSku(storedSku);
     } catch (err) { console.error('reallocateSku failed:', err); }
+  }
+
+  // Re-push đơn sang MMP để cập nhật ngày nhận hàng per-line (best-effort, không chặn).
+  if (repushOrderId) {
+    const oid = repushOrderId;
+    void import('@/features/mmp/order-outbound')
+      .then(({ pushOrderToMmp }) => pushOrderToMmp(oid))
+      .catch((e) => console.error('[mmp] re-push sau nhận hàng lỗi:', e instanceof Error ? e.message : e));
   }
 
   try { await recordAudit({ userId, action: 'receiving_qc', target: input.itemId, requestSummary: `result=${input.qcResult}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
