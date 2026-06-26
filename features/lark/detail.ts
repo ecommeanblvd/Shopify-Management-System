@@ -5,14 +5,39 @@
 import 'server-only';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { larkText } from './parse-pack-row';
+import { larkText, larkEpochToVnMidnight } from './parse-pack-row';
 import { searchRecordsByOrderNumber } from './client';
+
+/** Field Lark lưu NGÀY dạng epoch ms — phải format khi hiển thị (không hiện số raw). */
+export const LARK_DATE_FIELDS = new Set<string>([
+  'Label Created Date',
+  'Ngày giao dự kiến',
+  'Ngày giao thực tế',
+]);
+
+/** Value 1 field Lark → chuỗi hiển thị. Field ngày (epoch ms) → 'dd/MM/yyyy' theo
+ *  ngày-lịch VN; field khác → larkText. Null nếu rỗng/không đọc được. THUẦN. */
+export function formatLarkValue(label: string, raw: unknown): string | null {
+  if (LARK_DATE_FIELDS.has(label)) {
+    let ms: number | null = null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) ms = raw;
+    else if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw))) ms = Number(raw);
+    if (ms != null) {
+      const d = larkEpochToVnMidnight(ms);
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      return `${dd}/${mm}/${d.getUTCFullYear()}`;
+    }
+    return larkText(raw); // không phải epoch số → fallback (có thể đã là chuỗi ngày)
+  }
+  return larkText(raw);
+}
 
 /** 1 record Lark → list {label,value}; bỏ field rỗng/không stringify được. THUẦN. */
 export function flattenLarkRecord(fields: Record<string, unknown>): Array<{ label: string; value: string }> {
   const out: Array<{ label: string; value: string }> = [];
   for (const [label, raw] of Object.entries(fields)) {
-    const value = larkText(raw);
+    const value = formatLarkValue(label, raw);
     if (value) out.push({ label, value });
   }
   return out;
@@ -41,7 +66,7 @@ export function pickLarkFields(
 ): Array<{ label: string; value: string }> {
   const out: Array<{ label: string; value: string }> = [];
   for (const name of names) {
-    const value = larkText(fields[name]);
+    const value = formatLarkValue(name, fields[name]);
     if (value) out.push({ label: name, value });
   }
   return out;
