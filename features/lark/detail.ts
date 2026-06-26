@@ -73,7 +73,7 @@ export function pickLarkFields(
   return out;
 }
 
-/** Raw fields của record Lark ĐẦU TIÊN khớp đơn. Best-effort → {}. */
+/** Raw fields của record Lark MỚI NHẤT (created_time) khớp đơn. Best-effort → {}. */
 export async function getLarkRawFieldsForOrder(orderId: string): Promise<Record<string, unknown>> {
   try {
     const [ord] = await db
