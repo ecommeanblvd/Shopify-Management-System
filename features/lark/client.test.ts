@@ -23,4 +23,15 @@ describe('buildOrderNumberSearchBody', () => {
     expect(vals).toContain('TA2209');
     expect(vals).toContain('#TA2209');
   });
+
+  it('bật automatic_fields để lấy created_time', () => {
+    const body = buildOrderNumberSearchBody('#MBLVD1');
+    expect(body.automatic_fields).toBe(true);
+  });
+
+  it('khớp cả dạng có # và không #', () => {
+    const body = buildOrderNumberSearchBody('#MBLVD1') as { filter: { conditions: Array<{ value: string[] }> } };
+    const vals = body.filter.conditions.flatMap((c) => c.value);
+    expect(vals).toEqual(expect.arrayContaining(['MBLVD1', '#MBLVD1']));
+  });
 });
