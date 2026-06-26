@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpBody } from '@/features/mmp/hmac';
 import { buildMmpOrderPayload, type MmpOrderLine } from '@/features/mmp/order-push-logic';
@@ -11,6 +11,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .from(schema.orderFulfillment).where(eq(schema.orderFulfillment.orderId, orderId)).limit(1);
   if (!ful) return { error: 'no fulfillment' };
   const fLines = await db.select({
+      id: schema.orderFulfillmentLines.id,
       sku: schema.orderFulfillmentLines.sku, qty: schema.orderFulfillmentLines.qty, status: schema.orderFulfillmentLines.status,
       title: schema.shopifyOrderLines.productTitle, vendor: schema.shopifyOrderLines.vendor,
     })
@@ -19,6 +20,23 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
   const brand = fLines.filter((l) => isBrandStatus(l.status));
   if (brand.length === 0) return { error: 'no brand lines' };
+  // Ngày nhận hàng MỚI NHẤT per line (chỉ item allocate_to_order = giữ cho đơn) — để MMP đối soát công nợ.
+  const lineIds = brand.map((l) => l.id);
+  const recvRows = lineIds.length
+    ? await db.select({
+        lineId: schema.goodsReceiptItems.fulfillmentLineId,
+        receivedAt: sql<Date | null>`max(${schema.goodsReceipts.receivedAt})`,
+      })
+      .from(schema.goodsReceiptItems)
+      .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
+      .where(and(
+        inArray(schema.goodsReceiptItems.fulfillmentLineId, lineIds),
+        eq(schema.goodsReceiptItems.disposition, 'allocate_to_order'),
+      ))
+      .groupBy(schema.goodsReceiptItems.fulfillmentLineId)
+    : [];
+  const recvByLine = new Map<string, Date>();
+  for (const r of recvRows) { if (r.lineId && r.receivedAt) recvByLine.set(r.lineId, r.receivedAt as Date); }
   const [ord] = await db.select({
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipName: schema.shopifyOrders.shipName, shipCountry: schema.shopifyOrders.shipCountry,
@@ -29,7 +47,10 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
     .where(eq(schema.shopifyOrders.id, orderId)).limit(1);
   if (!ord) return { error: 'no order' };
-  const brandLines: MmpOrderLine[] = brand.map((l) => ({ sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: null }));
+  const brandLines: MmpOrderLine[] = brand.map((l) => {
+    const ra = recvByLine.get(l.id);
+    return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
+  });
   const rawBody = JSON.stringify(buildMmpOrderPayload({
     orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry,
     placedAt: ord.processedAt ? ord.processedAt.toISOString() : null,
