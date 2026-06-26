@@ -5,11 +5,12 @@
 import { eq, desc, and, or, isNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords } from './client';
-import { parseQcRow, reduceQcStatus } from './parse-qc-row';
+import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
 import { parsePackRow, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus } from './parse-status-row';
+import { larkCreatedTime } from './record-select';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -123,23 +124,34 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       deliveryStatus: string | null; expectedDeliveryDate: Date | null;
       deliveryState: import('@/lib/fedex/track').DeliveryStatus | null; actualDeliveredAt: Date | null;
     }>();
+    // Gom record theo orderId, sort created_time TĂNG DẦN → fold (bản mới hơn ghi
+    // đè field non-null). Xác định theo thời gian, không theo thứ tự Lark trả về.
+    const recsByOrderId = new Map<string, typeof records>();
     for (const rec of records) {
-      const orderNumber = (rec.fields['Order Number'] as unknown);
+      const orderNumber = rec.fields['Order Number'] as unknown;
       const num = typeof orderNumber === 'string' ? orderNumber.replace(/^#/, '') : null;
       if (!num) continue;
       const orderId = orderIdByNumber.get(num);
       if (!orderId) continue;
-      const s = parseLarkStatus(rec.fields);
-      const prev = statusByOrderId.get(orderId) ?? { dispatchStatus: null, cxFfStatus: null, deliveryStatus: null, expectedDeliveryDate: null, deliveryState: null, actualDeliveredAt: null };
-      statusByOrderId.set(orderId, {
-        dispatchStatus: s.dispatchStatus ?? prev.dispatchStatus,
-        cxFfStatus: s.cxFfStatus ?? prev.cxFfStatus,
-        deliveryStatus: s.deliveryStatus ?? prev.deliveryStatus,
-        expectedDeliveryDate: s.expectedDeliveryDate ?? prev.expectedDeliveryDate,
-        deliveryState: s.deliveryState === 'delivered' || prev.deliveryState === 'delivered'
-          ? 'delivered' : (s.deliveryState ?? prev.deliveryState),
-        actualDeliveredAt: s.actualDeliveredAt ?? prev.actualDeliveredAt,
-      });
+      const arr = recsByOrderId.get(orderId) ?? [];
+      arr.push(rec);
+      recsByOrderId.set(orderId, arr);
+    }
+    for (const [orderId, recs] of recsByOrderId) {
+      const ordered = [...recs].sort((a, b) => larkCreatedTime(a) - larkCreatedTime(b));
+      let acc = { dispatchStatus: null as string | null, cxFfStatus: null as string | null, deliveryStatus: null as string | null, expectedDeliveryDate: null as Date | null, deliveryState: null as import('@/lib/fedex/track').DeliveryStatus | null, actualDeliveredAt: null as Date | null };
+      for (const rec of ordered) {
+        const s = parseLarkStatus(rec.fields);
+        acc = {
+          dispatchStatus: s.dispatchStatus ?? acc.dispatchStatus,
+          cxFfStatus: s.cxFfStatus ?? acc.cxFfStatus,
+          deliveryStatus: s.deliveryStatus ?? acc.deliveryStatus,
+          expectedDeliveryDate: s.expectedDeliveryDate ?? acc.expectedDeliveryDate,
+          deliveryState: s.deliveryState === 'delivered' || acc.deliveryState === 'delivered' ? 'delivered' : (s.deliveryState ?? acc.deliveryState),
+          actualDeliveredAt: s.actualDeliveredAt ?? acc.actualDeliveredAt,
+        };
+      }
+      statusByOrderId.set(orderId, acc);
     }
     const statusRows = [...statusByOrderId.entries()];
     let larkStatusUpserted = 0;
@@ -175,20 +187,20 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     try {
       const qcRecords = await listAllQcRecords();
       if (qcRecords.length > 0) {
-        const byNum = new Map<string, Array<string | null>>();
+        const byNum = new Map<string, Array<{ qcCheck: string | null; createdTime: number }>>();
         for (const rec of qcRecords) {
           const { orderNumber, qcCheck } = parseQcRow(rec.fields);
           if (!orderNumber) continue;
           const bare = orderNumber.replace(/^#/, '');
           const arr = byNum.get(bare) ?? [];
-          arr.push(qcCheck);
+          arr.push({ qcCheck, createdTime: larkCreatedTime(rec) });
           byNum.set(bare, arr);
         }
         const qcOrderIds = await resolveOrderIds([...byNum.keys()]);
         const qcRows: Array<{ orderId: string; qcStatus: string }> = [];
-        for (const [bare, vals] of byNum) {
+        for (const [bare, items] of byNum) {
           const orderId = qcOrderIds.get(bare);
-          const status = reduceQcStatus(vals);
+          const status = mapQcCheck(latestQcCheck(items));
           if (orderId && status) qcRows.push({ orderId, qcStatus: status });
         }
         for (const batch of chunk(qcRows, APPLY_CHUNK)) {
