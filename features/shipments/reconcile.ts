@@ -106,8 +106,8 @@ export interface ReconcileSummary {
 }
 
 interface ReconcileOptions {
-  /** Filter by carrier key — undefined = both. */
-  carrierKey?: 'fedex' | 'dhl';
+  /** Filter by carrier key — undefined = all. */
+  carrierKey?: 'fedex' | 'dhl' | 'aramex';
   /** Restrict to a date range on `shipments.label_created_at`. */
   fromDate?: Date;
   toDate?: Date;
@@ -194,7 +194,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
   }
   const byKey = new Map<string, CarrierCards>();
   for (const a of accounts) {
-    if (a.key !== 'fedex' && a.key !== 'dhl') continue;
+    if (a.key !== 'fedex' && a.key !== 'dhl' && a.key !== 'aramex') continue;
     const cards = await listRateCards(a.id);
     const snapByCard = new Map<string, Awaited<ReturnType<typeof loadAccountSnapshot>>>();
     for (const c of cards) {

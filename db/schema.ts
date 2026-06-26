@@ -268,7 +268,9 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   displayCurrency: text('display_currency').notNull(),
   // fx_cost_per_display: how many cost-currency units equal one display-currency unit.
   // For VND cost / USD display, value is e.g. 26000 (1 USD = 26 000 VND).
-  fxCostPerDisplay: numeric('fx_cost_per_display', { precision: 14, scale: 4 }).notNull(),
+  // Precision (20,10) so the inverse direction also fits: USD cost / VND display
+  // needs fx = 1/26000 ≈ 0.0000384615 (Aramex — rate sheet in USD, displayed VND).
+  fxCostPerDisplay: numeric('fx_cost_per_display', { precision: 20, scale: 10 }).notNull(),
   fxUpdatedAt: timestamp('fx_updated_at').defaultNow().notNull(),
   // Volumetric divisor in cm³/kg for chargeable-weight calc:
   //   dimWeightKg = L_cm × W_cm × H_cm / dimDivisorCm3PerKg

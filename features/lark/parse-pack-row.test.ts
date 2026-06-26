@@ -30,6 +30,10 @@ describe('parsePackRow', () => {
     expect(r.orderNumber).toBe('TA2017');
     expect(r.carrierKey).toBe('dhl');
   });
+  it('Couriers = Aramex → carrierKey aramex', () => {
+    expect(parsePackRow({ 'Order Number': '#X', 'Couriers': 'Aramex' }).carrierKey).toBe('aramex');
+    expect(parsePackRow({ 'Order Number': '#Y', 'Couriers': [{ text: 'ARAMEX' }] }).carrierKey).toBe('aramex');
+  });
   it('dims 2 chiều → h null', () => {
     expect(parsePackRow({ 'Dimension ( điền tay)': '28x42' }).dims).toEqual({ l: 28, w: 42, h: null });
   });
