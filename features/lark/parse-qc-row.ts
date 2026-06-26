@@ -22,3 +22,24 @@ export function reduceQcStatus(values: Array<string | null>): QcStatus | null {
   if (set.has('Gửi dư')) return 'extra';
   return null;
 }
+
+/** 1 giá trị "QC Check" (single-select) → status. Không khớp/null → null. THUẦN. */
+export function mapQcCheck(value: string | null): QcStatus | null {
+  switch (value) {
+    case 'QC Failed': return 'fail';
+    case 'Tiếp nhận - chưa QC': return 'pending';
+    case 'QC Pass': return 'pass';
+    case 'Gửi dư': return 'extra';
+    default: return null;
+  }
+}
+
+/** Giá trị QC Check của record createdTime LỚN NHẤT có qcCheck non-null. THUẦN. */
+export function latestQcCheck(items: Array<{ qcCheck: string | null; createdTime: number }>): string | null {
+  let best: { qcCheck: string; createdTime: number } | null = null;
+  for (const it of items) {
+    if (!it.qcCheck) continue;
+    if (!best || it.createdTime >= best.createdTime) best = { qcCheck: it.qcCheck, createdTime: it.createdTime };
+  }
+  return best?.qcCheck ?? null;
+}

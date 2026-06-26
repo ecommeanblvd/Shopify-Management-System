@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseQcRow, reduceQcStatus } from './parse-qc-row';
+import { parseQcRow, reduceQcStatus, mapQcCheck, latestQcCheck } from './parse-qc-row';
 
 describe('parseQcRow', () => {
   it('đọc Order Number final + QC Check', () => {
@@ -21,5 +21,35 @@ describe('reduceQcStatus', () => {
   it('rỗng / không khớp → null', () => {
     expect(reduceQcStatus([])).toBeNull();
     expect(reduceQcStatus([null, 'gì đó lạ'])).toBeNull();
+  });
+});
+
+describe('mapQcCheck', () => {
+  it('map từng giá trị QC Check → status', () => {
+    expect(mapQcCheck('QC Failed')).toBe('fail');
+    expect(mapQcCheck('Tiếp nhận - chưa QC')).toBe('pending');
+    expect(mapQcCheck('QC Pass')).toBe('pass');
+    expect(mapQcCheck('Gửi dư')).toBe('extra');
+    expect(mapQcCheck('lạ')).toBeNull();
+    expect(mapQcCheck(null)).toBeNull();
+  });
+});
+
+describe('latestQcCheck', () => {
+  it('QC fail (cũ) + QC pass (mới) → lấy pass theo createdTime', () => {
+    expect(latestQcCheck([
+      { qcCheck: 'QC Failed', createdTime: 100 },
+      { qcCheck: 'QC Pass', createdTime: 200 },
+    ])).toBe('QC Pass');
+  });
+  it('bỏ qua record qcCheck null, lấy non-null mới nhất', () => {
+    expect(latestQcCheck([
+      { qcCheck: 'QC Pass', createdTime: 300 },
+      { qcCheck: null, createdTime: 400 },
+    ])).toBe('QC Pass');
+  });
+  it('rỗng / toàn null → null', () => {
+    expect(latestQcCheck([])).toBeNull();
+    expect(latestQcCheck([{ qcCheck: null, createdTime: 1 }])).toBeNull();
   });
 });
