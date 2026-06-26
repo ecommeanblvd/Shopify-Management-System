@@ -168,9 +168,11 @@ export function parseDhlInvoiceCsv(text: string): DhlInvoicePrefill | null {
 
 /** Map shipment DHL → dòng bill-line lưu DB (cột cố định + note liệt kê khoản). */
 export function dhlShipmentToBillLine(s: DhlShipment): DhlBillLineInput {
-  const base = s.charges.filter((x) => x.code === 'WEIGHT').reduce((a, x) => a + x.charge, 0);
-  const fuel = s.charges.filter((x) => x.code !== 'WEIGHT' && /fuel/i.test(x.name)).reduce((a, x) => a + x.charge, 0);
-  const other = s.charges.filter((x) => x.code !== 'WEIGHT' && !/fuel/i.test(x.name)).reduce((a, x) => a + x.charge, 0);
+  // Cước gốc: CSV dùng code 'WEIGHT', XML dùng 'P' (cùng nghĩa freight base).
+  const isBase = (x: DhlChargeLine) => x.code === 'WEIGHT' || x.code === 'P';
+  const base = s.charges.filter(isBase).reduce((a, x) => a + x.charge, 0);
+  const fuel = s.charges.filter((x) => !isBase(x) && /fuel/i.test(x.name)).reduce((a, x) => a + x.charge, 0);
+  const other = s.charges.filter((x) => !isBase(x) && !/fuel/i.test(x.name)).reduce((a, x) => a + x.charge, 0);
   const note = s.charges.map((x) => `${x.name || x.code} ${x.charge.toLocaleString('vi-VN')}`).join(' · ');
   return {
     trackingNumber: s.shipmentNumber,
