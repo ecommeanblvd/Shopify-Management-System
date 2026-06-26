@@ -10,7 +10,7 @@ export interface PackRow {
   weightKg: number | null;
   dims: { l: number; w: number; h: number | null } | null;
   trackingNumber: string | null;
-  carrierKey: 'fedex' | 'dhl' | null;
+  carrierKey: 'fedex' | 'dhl' | 'aramex' | null;
   labelDate: Date | null;
   warnings: string[];
 }
@@ -39,11 +39,12 @@ function parseDims(raw: string | null): PackRow['dims'] {
   return { l, w, h: Number.isFinite(h) && h > 0 ? h : null };
 }
 
-function normalizeCourier(raw: string | null): 'fedex' | 'dhl' | null {
+function normalizeCourier(raw: string | null): 'fedex' | 'dhl' | 'aramex' | null {
   if (!raw) return null;
   const s = raw.toLowerCase();
   if (s.includes('fedex')) return 'fedex';
   if (s.includes('dhl')) return 'dhl';
+  if (s.includes('aramex')) return 'aramex';
   return null;
 }
 

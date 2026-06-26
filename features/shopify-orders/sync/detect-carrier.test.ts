@@ -54,4 +54,10 @@ describe('detectCarrierKey', () => {
     expect(detectCarrierKey([line('dhl express')])).toBe('dhl');
     expect(detectCarrierKey([line('FEDEX')])).toBe('fedex');
   });
+
+  it('detects Aramex', () => {
+    expect(detectCarrierKey([line('Aramex')])).toBe('aramex');
+    expect(detectCarrierKey([line('ARAMEX_EXPRESS', null)])).toBe('aramex');
+    expect(detectCarrierKey([line('aramex delivery')])).toBe('aramex');
+  });
 });

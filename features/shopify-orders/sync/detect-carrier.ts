@@ -13,7 +13,7 @@
 
 import type { ShopifyShippingLine } from '../shopify-types';
 
-export type CarrierKey = 'fedex' | 'dhl';
+export type CarrierKey = 'fedex' | 'dhl' | 'aramex';
 
 /** Returns the carrier key the order ships under, or NULL when none of
  *  the shipping lines obviously belong to a known carrier. */
@@ -36,6 +36,7 @@ export function detectCarrierKey(
     // carrier when a Premier shipping line names both.
     if (/\bdhl\b/.test(haystack)) return 'dhl';
     if (/\bfedex\b/.test(haystack)) return 'fedex';
+    if (/\baramex\b/.test(haystack)) return 'aramex';
   }
   return null;
 }
