@@ -32,7 +32,13 @@ không bật cờ "billed đổi" làm mất đối soát).
 
 - **Nhận cả XML và CSV** cho DHL. XML parser xuất cùng type `DhlInvoicePrefill` → downstream (bills-actions, reconcileDhlBill) KHÔNG đổi.
 - Parser **hand-rolled** (không thêm lib, đồng bộ style CSV parser). Group InvoiceLine theo SellersLineId.
-- Map mã phí XML → charge cho classifier: **P → {code:'WEIGHT', name:'Weight charge'}** (để base nhận đúng), **FF → {code:'FF', name:'Fuel Surcharge'}** (fuel), còn lại giữ `{code: itemID, name: DHL_CODE_NAME[itemID] ?? itemID}`. (total luôn đúng = totalInclVat; breakdown bucket là phụ.)
+- **MỤC TIÊU CỐT LÕI: đọc ĐÚNG + ĐỦ MỌI loại phí để đối soát** (không chỉ total). XML là nguồn đối soát; PDF/CSV chỉ là bằng chứng đính kèm cho người đọc.
+- Mỗi InvoiceLine → 1 `DhlChargeLine { code: itemID, name: DHL_CHARGE_CODE_NAME[itemID] ?? itemID, charge: amt, tax, total: amt+tax }`. `bucketOf` (dùng chung) đã map sẵn theo code: `FF→fuel, FD→gogreen, CA→elevatedRisk, MA→addressCorrection, SF→directSignature`.
+- **Mở rộng `bucketOf`** (dhl-billed-map.ts) cho mã chỉ có ở XML, theo CODE (name XML rỗng):
+  - `code === 'P'` → `base` (XML dùng 'P' cho cước/freight thay vì 'WEIGHT' của CSV; 'P' chỉ phát sinh từ XML nên an toàn).
+  - `code === 'YL' || code === 'YO'` → `nonConveyable` (hiện chỉ nhận theo name).
+- Mã KHÔNG nhận diện (vd `OO`) → vào `unknown` (cảnh báo cho operator), **KHÔNG bỏ, KHÔNG nhét bừa**.
+- `classifyDhlProduct`: dòng duties/taxes vẫn tách (công nợ, không vào engine freight) như CSV.
 - Không migration.
 
 ## 4. Components
@@ -46,6 +52,11 @@ không bật cờ "billed đổi" làm mất đối soát).
   - period từ min/max shipment date; note = refs/shipNos như CSV parser.
 - Helper thuần `dhlXmlFieldsFromLine` / `parseInvoiceLines` để test từng phần.
 - Hằng `DHL_CHARGE_CODE_NAME: Record<string,string>` (P/FF/SF/FD/CA/OO/YL/MA → tên đọc được; map tối thiểu, code lạ → chính nó).
+
+### 4.1b `features/carrier-rates/ap/dhl-billed-map.ts` (mở rộng `bucketOf`)
+- Thêm vào `bucketOf`: `if (code === 'P') return 'base';` (sau nhánh `WEIGHT`); `if (code === 'YL' || code === 'YO') return 'nonConveyable';` (cạnh nhánh nonConveyable theo name).
+- Không đổi các nhánh hiện có (CSV vẫn dùng 'WEIGHT'/name như cũ).
+- Test bổ sung trong `dhl-billed-map.test.ts`: charge code 'P' → base; 'YL' → nonConveyable; 'OO' → unknown.
 
 ### 4.2 `features/carrier-rates/ap/invoice-upload.ts` (sửa)
 - `detectInvoiceFormat`: thêm `if (carrierKey === 'dhl' && ext === '.xml') return 'dhl_xml';` (thêm `'dhl_xml'` vào `InvoiceFormat`).
@@ -73,4 +84,4 @@ không bật cờ "billed đổi" làm mất đối soát).
 - Bỏ CSV (giữ song song).
 - Đổi cờ "billedChangedSinceReview"/dung sai (fix gốc bằng parse đúng; nếu sau vẫn cần dung sai → spec riêng).
 - Sửa số đã sai trong DB cho 2 bill cũ (sẽ tự đúng khi re-upload XML; xử lý vận hành riêng).
-- Bucket breakdown hoàn hảo mọi mã phí (total đúng là đủ cho đối soát; tinh chỉnh bucket sau nếu cần).
+- Parse PDF để đối soát (PDF/CSV chỉ là bằng chứng đính kèm; nguồn đối soát là XML).
