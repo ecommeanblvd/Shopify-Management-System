@@ -70,6 +70,23 @@ describe('parseDhlInvoiceCsv', () => {
     expect(line.note).toContain('IMPORT EXPORT TAXES');
   });
 
+  it('dhlShipmentToBillLine: code XML "P" tính vào base (freight), không rơi vào other', () => {
+    const s = {
+      shipmentNumber: '3483557033', orderRef: '#MBLVD27669', date: '2026-03-10',
+      product: 'EXPRESS WORLDWIDE nondoc', weightKg: 1.45,
+      charges: [
+        { code: 'P', name: 'Weight charge', charge: 803632, tax: 64291, total: 867923 },
+        { code: 'FF', name: 'Fuel Surcharge', charge: 525098, tax: 42008, total: 567106 },
+        { code: 'CA', name: 'Elevated Risk', charge: 918000, tax: 73440, total: 991440 },
+      ],
+      totalExclVat: 2246730, totalTax: 179739, totalInclVat: 2426469,
+    };
+    const line = dhlShipmentToBillLine(s);
+    expect(line.base).toBe(803632);   // 'P' = freight base, KHÔNG phải 0
+    expect(line.fuel).toBe(525098);   // FF nhận theo tên 'Fuel'
+    expect(line.other).toBe(918000);  // CA — không gồm freight 'P'
+  });
+
   it('đọc được định dạng phẩy + ngoặc kép (DHL xuất kiểu khác)', () => {
     const csv = [
       '"Line Type","Invoice Number","Invoice Date","Currency","Total amount (excl. VAT)","Total amount (incl. VAT)","Total Tax","Shipment Number","Shipment Date","Shipment Reference 1","Product Name","Weight (kg)","Weight Charge","Weight Tax (VAT)","XC1 Code","XC1 Name","XC1 Charge","XC1 Tax Code","XC1 Tax","XC1 Discount","XC1 Total"',
