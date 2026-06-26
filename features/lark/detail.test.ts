@@ -19,6 +19,24 @@ describe('flattenLarkRecord', () => {
     const out = flattenLarkRecord({ 'Weights': 1.5 });
     expect(out).toContainEqual({ label: 'Weights', value: '1.5' });
   });
+
+  it('field ngày (epoch ms) → dd/MM/yyyy, KHÔNG hiện số raw', () => {
+    const ms = Date.UTC(2026, 5, 7, 17, 0, 0); // → nửa đêm VN 2026-06-08
+    const out = flattenLarkRecord({
+      'Label Created Date': ms,
+      'Ngày giao dự kiến': ms,
+      'Ngày giao thực tế': ms,
+    });
+    expect(out).toContainEqual({ label: 'Label Created Date', value: '08/06/2026' });
+    expect(out).toContainEqual({ label: 'Ngày giao dự kiến', value: '08/06/2026' });
+    expect(out).toContainEqual({ label: 'Ngày giao thực tế', value: '08/06/2026' });
+  });
+
+  it('field số TIỀN (không phải ngày) giữ nguyên số raw', () => {
+    const out = flattenLarkRecord({ 'Mức giá cơ sở': 3442200, 'INS | Chi phí Tổng (đ)': 1801956 });
+    expect(out).toContainEqual({ label: 'Mức giá cơ sở', value: '3442200' });
+    expect(out).toContainEqual({ label: 'INS | Chi phí Tổng (đ)', value: '1801956' });
+  });
 });
 
 describe('pickLarkFields', () => {
@@ -39,5 +57,10 @@ describe('pickLarkFields', () => {
   it('danh sách curated có 12 field', () => {
     expect(LARK_DETAIL_FIELDS.length).toBe(12);
     expect(LARK_DETAIL_FIELDS).toContain('Final | Delivery Status');
+  });
+  it('field ngày trong danh sách curated → dd/MM/yyyy', () => {
+    const ms = Date.UTC(2026, 5, 7, 17, 0, 0);
+    expect(pickLarkFields({ 'Ngày giao dự kiến': ms }, ['Ngày giao dự kiến']))
+      .toEqual([{ label: 'Ngày giao dự kiến', value: '08/06/2026' }]);
   });
 });
