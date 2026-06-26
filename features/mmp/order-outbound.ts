@@ -29,7 +29,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
     .where(eq(schema.shopifyOrders.id, orderId)).limit(1);
   if (!ord) return { error: 'no order' };
-  const brandLines: MmpOrderLine[] = brand.map((l) => ({ sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null }));
+  const brandLines: MmpOrderLine[] = brand.map((l) => ({ sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: null }));
   const rawBody = JSON.stringify(buildMmpOrderPayload({
     orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry,
     placedAt: ord.processedAt ? ord.processedAt.toISOString() : null,
