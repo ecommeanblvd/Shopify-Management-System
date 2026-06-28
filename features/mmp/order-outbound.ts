@@ -18,14 +18,12 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
-  const brand = fLines.filter((l) => isBrandStatus(l.status));
-  if (brand.length === 0) return { error: 'no brand lines' };
-  // Ngày nhận hàng MỚI NHẤT per line — hàng brand đã VỀ KHO và được GIỮ LẠI
-  // ('store' = nhập kho, 'allocate_to_order' = giữ riêng cho đơn). Loại
-  // 'return_to_brand' (trả lại, không công nợ) + 'pending' (chưa chốt QC).
-  // MMP dùng ngày này + vendor của line để đối soát công nợ theo brand.
-  const lineIds = brand.map((l) => l.id);
-  const recvRows = lineIds.length
+  // Ngày nhận hàng MỚI NHẤT per line — hàng brand đã VỀ KHO ('store' = nhập kho,
+  // 'allocate_to_order' = giữ riêng cho đơn). Loại 'return_to_brand'/'pending'.
+  // Tính cho MỌI line của đơn: khi brand giao hàng, line chuyển khỏi status brand
+  // (vd 'in_stock') nên phải tra theo toàn bộ line, không chỉ line đang chờ brand.
+  const allLineIds = fLines.map((l) => l.id);
+  const recvRows = allLineIds.length
     ? await db.select({
         lineId: schema.goodsReceiptItems.fulfillmentLineId,
         receivedAt: sql<Date | null>`max(${schema.goodsReceipts.receivedAt})`,
@@ -33,13 +31,22 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       .from(schema.goodsReceiptItems)
       .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
       .where(and(
-        inArray(schema.goodsReceiptItems.fulfillmentLineId, lineIds),
+        inArray(schema.goodsReceiptItems.fulfillmentLineId, allLineIds),
         inArray(schema.goodsReceiptItems.disposition, ['store', 'allocate_to_order']),
       ))
       .groupBy(schema.goodsReceiptItems.fulfillmentLineId)
     : [];
+  // max() qua sql template có thể trả string (timestamp) — chuẩn hoá về Date để
+  // .toISOString() không ném. (Trước đây recvByLine luôn rỗng nên lỗi này bị che.)
   const recvByLine = new Map<string, Date>();
-  for (const r of recvRows) { if (r.lineId && r.receivedAt) recvByLine.set(r.lineId, r.receivedAt as Date); }
+  for (const r of recvRows) {
+    if (r.lineId && r.receivedAt) recvByLine.set(r.lineId, r.receivedAt instanceof Date ? r.receivedAt : new Date(r.receivedAt as unknown as string));
+  }
+  // Gửi MMP: line ĐANG CHỜ brand sản xuất (status brand) + line ĐÃ NHẬN từ brand
+  // (có phiếu nhập → brand đã giao, kể cả đã chuyển 'in_stock'). MMP cần cả hai để
+  // đối soát công nợ theo brand + ngày nhận.
+  const brand = fLines.filter((l) => isBrandStatus(l.status) || recvByLine.has(l.id));
+  if (brand.length === 0) return { error: 'no brand lines' };
   const [ord] = await db.select({
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipName: schema.shopifyOrders.shipName, shipCountry: schema.shopifyOrders.shipCountry,
