@@ -20,7 +20,10 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
   const brand = fLines.filter((l) => isBrandStatus(l.status));
   if (brand.length === 0) return { error: 'no brand lines' };
-  // Ngày nhận hàng MỚI NHẤT per line (chỉ item allocate_to_order = giữ cho đơn) — để MMP đối soát công nợ.
+  // Ngày nhận hàng MỚI NHẤT per line — hàng brand đã VỀ KHO và được GIỮ LẠI
+  // ('store' = nhập kho, 'allocate_to_order' = giữ riêng cho đơn). Loại
+  // 'return_to_brand' (trả lại, không công nợ) + 'pending' (chưa chốt QC).
+  // MMP dùng ngày này + vendor của line để đối soát công nợ theo brand.
   const lineIds = brand.map((l) => l.id);
   const recvRows = lineIds.length
     ? await db.select({
@@ -31,7 +34,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
       .where(and(
         inArray(schema.goodsReceiptItems.fulfillmentLineId, lineIds),
-        eq(schema.goodsReceiptItems.disposition, 'allocate_to_order'),
+        inArray(schema.goodsReceiptItems.disposition, ['store', 'allocate_to_order']),
       ))
       .groupBy(schema.goodsReceiptItems.fulfillmentLineId)
     : [];
