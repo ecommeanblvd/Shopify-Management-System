@@ -54,9 +54,14 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     const ra = recvByLine.get(l.id);
     return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
   });
+  // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line brand đã về kho (ISO 8601
+  // sort được theo thứ tự chữ = thời gian). null nếu chưa line nào nhận.
+  const lineReceived = brandLines.map((l) => l.receivedAt).filter((d): d is string => !!d).sort();
+  const orderReceivedAt = lineReceived.length ? lineReceived[lineReceived.length - 1] : null;
   const rawBody = JSON.stringify(buildMmpOrderPayload({
     orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry,
     placedAt: ord.processedAt ? ord.processedAt.toISOString() : null,
+    receivedAt: orderReceivedAt,
     brandLines,
   }));
   return { rawBody };

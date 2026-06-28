@@ -11,11 +11,16 @@ export interface MmpOrderPayload {
   /** Ngày phát sinh đơn (Shopify processed_at, ISO) — để MMP gán đúng tháng cho
    *  công nợ/doanh thu, KHÔNG dùng thời điểm MMP nhận (ingest). null nếu thiếu. */
   placedAt: string | null;
+  /** Ngày MEAN nhận hàng của ĐƠN (ISO 8601) = ngày nhận MỚI NHẤT trong các line
+   *  brand đã về kho. MMP đọc field cấp-order này (tên CHÍNH XÁC 'receivedAt') để
+   *  đối soát công nợ. null nếu chưa nhận. (Per-line receivedAt vẫn gửi ở lines.) */
+  receivedAt: string | null;
   lines: MmpOrderLine[];
 }
 export function buildMmpOrderPayload(input: {
   orderNumber: string; store: string; recipientName: string | null; shipCountry: string | null;
   placedAt: string | null;
+  receivedAt: string | null;
   brandLines: MmpOrderLine[];
 }): MmpOrderPayload {
   return {
@@ -24,6 +29,7 @@ export function buildMmpOrderPayload(input: {
     recipientName: input.recipientName,
     shipCountry: input.shipCountry,
     placedAt: input.placedAt,
+    receivedAt: input.receivedAt,
     lines: input.brandLines.map((l) => ({ sku: l.sku, title: l.title, qty: l.qty, vendor: l.vendor, receivedAt: l.receivedAt })),
   };
 }
