@@ -54,9 +54,9 @@ export function buildOrderNumberSearchBody(orderNumber: string): Record<string, 
 
 /** POST records/search 1 table, phân trang hết, trả mọi item (kèm created_time
  *  nhờ automatic_fields). body: filter (optional) + automatic_fields + page_size. */
-async function searchAllRecords(tableId: string, body: Record<string, unknown>): Promise<LarkRecord[]> {
+async function searchAllRecords(tableId: string, body: Record<string, unknown>, appTokenOverride?: string): Promise<LarkRecord[]> {
   const token = await getTenantToken();
-  const appToken = env('LARK_BASE_APP_TOKEN');
+  const appToken = appTokenOverride ?? env('LARK_BASE_APP_TOKEN');
   const out: LarkRecord[] = [];
   let pageToken: string | undefined;
   do {
@@ -84,6 +84,17 @@ export async function listAllRecords(): Promise<LarkRecord[]> {
 export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
   if (!orderNumber.trim()) return [];
   return searchAllRecords(logTableId(), buildOrderNumberSearchBody(orderNumber));
+}
+
+// Bảng Lark "WH ngày MEAN nhận hàng" (base RIÊNG — app_token = wiki node, dùng
+// trực tiếp được). Cột 'Visible - WH-Ngày MEAN nhận hàng gần nhất' = ngày nhận.
+// app_token/table_id không phải secret nên để hằng số (env override nếu có).
+const BRAND_RECV_APP_TOKEN = process.env.LARK_BRAND_RECV_APP_TOKEN ?? 'HxfAw0iRViHiNgkSlbBltpVkg3f';
+const BRAND_RECV_TABLE_ID = process.env.LARK_BRAND_RECV_TABLE_ID ?? 'tblFtdIn8H7ftfBL';
+
+/** Đọc TẤT CẢ record bảng brand-received (đơn × SKU × ngày MEAN nhận). Phân trang. */
+export async function listBrandReceivedRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(BRAND_RECV_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);
 }
 
 /** Đọc TẤT CẢ record của QC table (env LARK_QC_TABLE_ID). Trả [] nếu chưa cấu
