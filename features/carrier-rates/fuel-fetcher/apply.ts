@@ -59,6 +59,7 @@ export async function applyFuelFetch(input: ApplyFuelInput): Promise<ApplyFuelRe
     sourceTag: describeSource(input.fetched.sourceUrl, input.fetched.current.weekRaw),
     weekLabel: input.fetched.current.weekRaw,
     fetchedAt: input.fetched.fetchedAt,
+    weekFrom: input.fetched.current.effectiveFrom,
     triggeredBy: input.triggeredBy,
     carrierTag: 'FedEx',
   });
@@ -70,6 +71,10 @@ interface UpsertOpenFuelRowArgs {
   sourceTag: string;
   weekLabel: string;
   fetchedAt: Date;
+  /** Ngày BẮT ĐẦU tuần FedEx (effectiveFrom đã parse). Khi có → dùng làm mốc
+   *  window (startsAt/endsAt) thay vì ngày cron chạy, để window khớp ĐÚNG tuần
+   *  carrier (vd 08-06→15-06), không bị kéo dài/lệch khi cron chạy trễ. */
+  weekFrom?: Date;
   triggeredBy: string | null;
   /** Human label for the auto-note column ("FedEx" / "DHL" / ...). */
   carrierTag: string;
@@ -93,11 +98,13 @@ interface UpsertOpenFuelRowArgs {
  */
 async function upsertOpenFuelRow(args: UpsertOpenFuelRowArgs): Promise<ApplyFuelResult> {
   const valueStr = args.percent.toString();
-  // Week boundaries must sit at UTC MIDNIGHT: shipment labels are stored
-  // at 00:00 UTC, so a boundary carrying the cron's run time (Mon 04:03)
-  // would push Monday-labeled shipments into the PREVIOUS week's rate.
-  const boundary = new Date(Date.UTC(
-    args.fetchedAt.getUTCFullYear(), args.fetchedAt.getUTCMonth(), args.fetchedAt.getUTCDate()));
+  // Mốc window = NGÀY BẮT ĐẦU TUẦN của carrier (weekFrom), KHÔNG phải ngày cron
+  // chạy: cron chạy trễ vẫn cho window khớp đúng tuần (vd 08-06→15-06), tránh
+  // kéo dài sai (08-06→17-06). Fallback fetchedAt nếu fetcher chưa cấp weekFrom.
+  // Boundaries phải ở UTC MIDNIGHT: shipment label lưu 00:00 UTC, mốc mang giờ
+  // sẽ đẩy đơn dán-nhãn-đầu-tuần sang tuần trước.
+  const src = args.weekFrom ?? args.fetchedAt;
+  const boundary = new Date(Date.UTC(src.getUTCFullYear(), src.getUTCMonth(), src.getUTCDate()));
 
   // The currently-open row is the one with endsAt IS NULL. Older closed
   // rows (endsAt set) stay as-is so historical quotes keep resolving.
