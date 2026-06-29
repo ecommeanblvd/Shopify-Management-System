@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpBody } from '@/features/mmp/hmac';
 import { buildMmpOrderPayload, type MmpOrderLine } from '@/features/mmp/order-push-logic';
@@ -18,35 +18,6 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
     .where(eq(schema.orderFulfillmentLines.fulfillmentId, ful.id));
-  // Ngày nhận hàng MỚI NHẤT per line — hàng brand đã VỀ KHO ('store' = nhập kho,
-  // 'allocate_to_order' = giữ riêng cho đơn). Loại 'return_to_brand'/'pending'.
-  // Tính cho MỌI line của đơn: khi brand giao hàng, line chuyển khỏi status brand
-  // (vd 'in_stock') nên phải tra theo toàn bộ line, không chỉ line đang chờ brand.
-  const allLineIds = fLines.map((l) => l.id);
-  const recvRows = allLineIds.length
-    ? await db.select({
-        lineId: schema.goodsReceiptItems.fulfillmentLineId,
-        receivedAt: sql<Date | null>`max(${schema.goodsReceipts.receivedAt})`,
-      })
-      .from(schema.goodsReceiptItems)
-      .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
-      .where(and(
-        inArray(schema.goodsReceiptItems.fulfillmentLineId, allLineIds),
-        inArray(schema.goodsReceiptItems.disposition, ['store', 'allocate_to_order']),
-      ))
-      .groupBy(schema.goodsReceiptItems.fulfillmentLineId)
-    : [];
-  // max() qua sql template có thể trả string (timestamp) — chuẩn hoá về Date để
-  // .toISOString() không ném. (Trước đây recvByLine luôn rỗng nên lỗi này bị che.)
-  const recvByLine = new Map<string, Date>();
-  for (const r of recvRows) {
-    if (r.lineId && r.receivedAt) recvByLine.set(r.lineId, r.receivedAt instanceof Date ? r.receivedAt : new Date(r.receivedAt as unknown as string));
-  }
-  // Gửi MMP: line ĐANG CHỜ brand sản xuất (status brand) + line ĐÃ NHẬN từ brand
-  // (có phiếu nhập → brand đã giao, kể cả đã chuyển 'in_stock'). MMP cần cả hai để
-  // đối soát công nợ theo brand + ngày nhận.
-  const brand = fLines.filter((l) => isBrandStatus(l.status) || recvByLine.has(l.id));
-  if (brand.length === 0) return { error: 'no brand lines' };
   const [ord] = await db.select({
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipName: schema.shopifyOrders.shipName, shipCountry: schema.shopifyOrders.shipCountry,
@@ -57,12 +28,28 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
     .where(eq(schema.shopifyOrders.id, orderId)).limit(1);
   if (!ord) return { error: 'no order' };
+  // Ngày MEAN nhận hàng từ brand theo SKU — từ mmp_line_received (sync từ bảng Lark
+  // "WH ngày MEAN nhận hàng", cột 'Visible - WH-Ngày MEAN nhận hàng gần nhất').
+  // Khoá order_number BARE (bỏ '#').
+  const bareOrder = (ord.orderNumber ?? '').replace(/^#/, '');
+  const recvRows = bareOrder
+    ? await db.select({ sku: schema.mmpLineReceived.sku, receivedAt: schema.mmpLineReceived.receivedAt })
+        .from(schema.mmpLineReceived)
+        .where(eq(schema.mmpLineReceived.orderNumber, bareOrder))
+    : [];
+  const recvBySku = new Map<string, Date>();
+  for (const r of recvRows) {
+    if (r.sku && r.receivedAt) recvBySku.set(r.sku, r.receivedAt instanceof Date ? r.receivedAt : new Date(r.receivedAt as unknown as string));
+  }
+  // Gửi MMP: line ĐANG CHỜ brand sản xuất (status brand) + line ĐÃ NHẬN từ brand
+  // (SKU có ngày nhận). MMP cần cả hai để đối soát công nợ theo brand + ngày nhận.
+  const brand = fLines.filter((l) => isBrandStatus(l.status) || (l.sku != null && recvBySku.has(l.sku)));
+  if (brand.length === 0) return { error: 'no brand lines' };
   const brandLines: MmpOrderLine[] = brand.map((l) => {
-    const ra = recvByLine.get(l.id);
+    const ra = l.sku != null ? recvBySku.get(l.sku) : undefined;
     return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
   });
-  // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line brand đã về kho (ISO 8601
-  // sort được theo thứ tự chữ = thời gian). null nếu chưa line nào nhận.
+  // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.
   const lineReceived = brandLines.map((l) => l.receivedAt).filter((d): d is string => !!d).sort();
   const orderReceivedAt = lineReceived.length ? lineReceived[lineReceived.length - 1] : null;
   const rawBody = JSON.stringify(buildMmpOrderPayload({
