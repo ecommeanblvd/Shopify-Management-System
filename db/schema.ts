@@ -1753,6 +1753,22 @@ export const mmpOrderPushes = pgTable('mmp_order_pushes', {
   index('mmp_order_pushes_status_idx').on(t.status),
 ]);
 
+// Ngày MEAN nhận hàng từ brand, theo (đơn, SKU) — sync từ bảng Lark riêng
+// (base HxfAw0iRViHiNgkSlbBltpVkg3f / table tblFtdIn8H7ftfBL, cột
+// "Visible - WH-Ngày MEAN nhận hàng gần nhất"). Nguồn receivedAt đẩy MMP.
+// order_number lưu dạng bare (bỏ '#').
+export const mmpLineReceived = pgTable('mmp_line_received', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderNumber: text('order_number').notNull(),
+  sku: text('sku').notNull(),
+  receivedAt: timestamp('received_at').notNull(),
+  vendor: text('vendor'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('mmp_line_received_order_sku_idx').on(t.orderNumber, t.sku),
+  index('mmp_line_received_order_idx').on(t.orderNumber),
+]);
+
 /** Audit log of status transitions. */
 export const orderFulfillmentEvents = pgTable('order_fulfillment_events', {
   id: uuid('id').defaultRandom().primaryKey(),
