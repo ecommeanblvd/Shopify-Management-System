@@ -89,7 +89,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
         <FilePlus2 className="size-4" /> Thêm hoá đơn carrier
       </DialogTrigger>
 
-      <DialogContent className="w-[95vw] max-w-3xl">
+      <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-sm">
             Thêm hoá đơn {carrierLabel}
