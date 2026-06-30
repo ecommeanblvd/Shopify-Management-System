@@ -31,6 +31,27 @@ export function classifyFboCharge(label: string): FboBucket {
   return 'other';
 }
 
+/** Các cột billed của shipment_charges dùng để so khi RE-IMPORT (diff). */
+const CHARGE_CMP_KEYS = [
+  'totalAmount', 'base', 'fuel', 'remote', 'demand', 'directSignature',
+  'residential', 'vat', 'gogreen', 'addressCorrection', 'discount', 'elevatedRisk',
+  'importHandling', 'billingWeightKg',
+] as const;
+
+/** True khi billed mới GIỐNG hệt dòng shipment_charges cũ (so theo SỐ, vì DB trả
+ *  "1890091.00" còn ta ghi "1890091"). Dùng để bỏ qua AWB không đổi khi re-import
+ *  → không đụng dữ liệu đã đối soát. THUẦN. */
+export function fboChargeUnchanged(
+  prev: Record<string, unknown>, next: Record<string, unknown>,
+): boolean {
+  for (const k of CHARGE_CMP_KEYS) {
+    const a = prev[k] == null ? null : Number(prev[k]);
+    const b = next[k] == null ? null : Number(next[k]);
+    if (a !== b) return false;
+  }
+  return true;
+}
+
 /** "1,371,600.00" / "-672,084.00" → number. Rỗng/không hợp lệ → 0. */
 export function parseFboAmount(v: unknown): number {
   if (v === null || v === undefined) return 0;
