@@ -31,3 +31,30 @@ export function parsePackagingType(
   if (/\bBAG\b/.test(haystack)) return 'bag';
   return null;
 }
+
+/** Bao dẹp (Pak) tối đa dày ~ngần này (cm). Dữ liệu vận hành: chiều mỏng nhất
+ *  cụm ở 2 (bao dẹp) rồi nhảy lên 9-10+ (hộp), không có 3-8 → ngưỡng 4 tách sạch. */
+export const PAK_MAX_THICKNESS_CM = 4;
+
+/**
+ * Suy packaging type từ DIMENSION khi không có mã đóng gói (XLSX). Vận hành nhập
+ * Lark "Dimension (điền tay)":
+ *   - 2 chiều (LxW, không có cao) → 'bag' (Pak).
+ *   - 3 chiều nhưng chiều MỎNG NHẤT ≤ {PAK_MAX_THICKNESS_CM}cm (vd 43x20x2) →
+ *     vẫn là bao dẹp → 'bag'.
+ *   - 3 chiều có độ dày đáng kể (vd 40x30x10) → 'box'.
+ * Dùng MIN cả 3 chiều nên không phụ thuộc thứ tự nhập (cao có thể ở vị trí 1/2/3).
+ * Fallback CHÍNH XÁC hơn quy tắc theo-cân khi packaging_type trống. THUẦN.
+ *
+ * Trả null khi thiếu L hoặc W (không đủ tín hiệu) → engine lại fallback theo cân.
+ */
+export function inferPackagingFromDims(
+  lengthCm: number | null | undefined,
+  widthCm: number | null | undefined,
+  heightCm: number | null | undefined,
+): PackagingType | null {
+  const l = Number(lengthCm), w = Number(widthCm), h = Number(heightCm);
+  if (!(l > 0) || !(w > 0)) return null; // thiếu 2 chiều cơ bản → không suy
+  if (!(h > 0)) return 'bag';            // 2 chiều = bao dẹp
+  return Math.min(l, w, h) <= PAK_MAX_THICKNESS_CM ? 'bag' : 'box';
+}

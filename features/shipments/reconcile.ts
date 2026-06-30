@@ -15,6 +15,7 @@ import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
 import { diagnoseReconcileRow, type ReconcileDiagnosis } from './reconcile-diagnose';
+import { inferPackagingFromDims } from './parse-packaging';
 
 export interface ReconcileRow {
   shipmentId: string;
@@ -278,7 +279,13 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     const q = quote(snap, {
       weightKg,
       dimensions: dims,
-      packagingType: r.packagingType,
+      // Mã đóng gói (XLSX) ưu tiên; thiếu → suy từ dimension (2 chiều=Pak/bag,
+      // 3 chiều=Box) — chính xác hơn fallback theo-cân của engine.
+      packagingType: r.packagingType ?? inferPackagingFromDims(
+        r.dimLengthCm ? Number(r.dimLengthCm) : null,
+        r.dimWidthCm ? Number(r.dimWidthCm) : null,
+        r.dimHeightCm ? Number(r.dimHeightCm) : null,
+      ),
       destinationCountry: r.shipCountry,
       // ODA/remote lookup needs the postcode (DE/NL/US…) or city
       // (SA/KW/AE…) — without them every remote-billed shipment
