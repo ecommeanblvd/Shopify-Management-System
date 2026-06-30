@@ -31,23 +31,23 @@ export function classifyFboCharge(label: string): FboBucket {
   return 'other';
 }
 
-/** Các cột billed của shipment_charges dùng để so khi RE-IMPORT (diff). */
+/** Các cột billed của shipment_charges dùng để so khi RE-IMPORT (diff). Gồm cột
+ *  của CẢ FedEx (importHandling) lẫn DHL (nonConveyable); cột vắng ở payload coi
+ *  như 0 nên dùng chung được cho 2 hãng. */
 const CHARGE_CMP_KEYS = [
   'totalAmount', 'base', 'fuel', 'remote', 'demand', 'directSignature',
   'residential', 'vat', 'gogreen', 'addressCorrection', 'discount', 'elevatedRisk',
-  'importHandling', 'billingWeightKg',
+  'importHandling', 'nonConveyable', 'billingWeightKg',
 ] as const;
 
 /** True khi billed mới GIỐNG hệt dòng shipment_charges cũ (so theo SỐ, vì DB trả
- *  "1890091.00" còn ta ghi "1890091"). Dùng để bỏ qua AWB không đổi khi re-import
- *  → không đụng dữ liệu đã đối soát. THUẦN. */
+ *  "1890091.00" còn ta ghi "1890091"; cột vắng/null = 0). Dùng để bỏ qua AWB không
+ *  đổi khi re-import → không đụng dữ liệu đã đối soát. THUẦN. */
 export function fboChargeUnchanged(
   prev: Record<string, unknown>, next: Record<string, unknown>,
 ): boolean {
   for (const k of CHARGE_CMP_KEYS) {
-    const a = prev[k] == null ? null : Number(prev[k]);
-    const b = next[k] == null ? null : Number(next[k]);
-    if (a !== b) return false;
+    if (Number(prev[k] ?? 0) !== Number(next[k] ?? 0)) return false;
   }
   return true;
 }

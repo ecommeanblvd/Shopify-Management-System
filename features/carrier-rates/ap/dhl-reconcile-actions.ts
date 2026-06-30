@@ -8,6 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
 import { mapChargesToBilled, isFreightCharges } from './dhl-billed-map';
+import { fboChargeUnchanged } from '@/features/shipments/fedex-fbo-parse';
 import type { BillCharge } from './bills-actions';
 
 export interface DhlReconcileResult {
@@ -82,6 +83,10 @@ export async function reconcileDhlBill(billId: string): Promise<DhlReconcileResu
       billingWeightKg: m.billingWeightKg != null ? String(m.billingWeightKg) : null,
       source: 'dhl_invoice', sourceHash: `dhl_inv:${l.trackingNumber}`,
     };
+    // RE-IMPORT DIFF: billed không đổi → bỏ qua (giữ nguyên đơn đã đối soát).
+    const [prevCh] = await db.select().from(schema.shipmentCharges)
+      .where(eq(schema.shipmentCharges.shipmentId, sh.id)).limit(1);
+    if (prevCh && fboChargeUnchanged(prevCh as Record<string, unknown>, sval)) { res.matched++; continue; }
     await db.insert(schema.shipmentCharges).values(sval).onConflictDoUpdate({
       target: schema.shipmentCharges.shipmentId,
       set: {
