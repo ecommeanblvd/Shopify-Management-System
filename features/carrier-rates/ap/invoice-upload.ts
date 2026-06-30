@@ -3,7 +3,8 @@ import { parseDhlInvoiceXml } from './dhl-invoice-xml';
 import { parsePdfInvoiceTotals } from './pdf-invoice-totals';
 import { createBill } from './bills-actions';
 import { reconcileDhlBill } from './dhl-reconcile-actions';
-import { previewFboBill, applyFboBill } from './fbo-import-actions';
+import { previewFboBill, previewFboRows, applyFboBill } from './fbo-import-actions';
+import { parseFedexInvoiceXml } from '@/features/shipments/fedex-invoice-xml';
 import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
 import { matchInvoiceNumbers } from './match-invoice-pdf';
 import { compressPdf } from '@/lib/pdf/compress';
@@ -12,7 +13,7 @@ import { db, schema } from '@/db/client';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
-export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'invoice_pdf' | 'unsupported';
+export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'fedex_xml' | 'invoice_pdf' | 'unsupported';
 
 /** Nhận dạng định dạng theo carrier + đuôi file. DHL=CSV, FedEx=XLSX/XLS. PDF mọi carrier. */
 export function detectInvoiceFormat(carrierKey: string | null, filename: string): InvoiceFormat {
@@ -20,6 +21,7 @@ export function detectInvoiceFormat(carrierKey: string | null, filename: string)
   if (carrierKey === 'dhl' && ext === '.csv') return 'dhl_csv';
   if (carrierKey === 'dhl' && ext === '.xml') return 'dhl_xml';
   if (carrierKey === 'fedex' && (ext === '.xlsx' || ext === '.xls')) return 'fbo_xlsx';
+  if (carrierKey === 'fedex' && ext === '.xml') return 'fedex_xml';
   if (ext === '.pdf') return 'invoice_pdf';
   return 'unsupported';
 }
@@ -77,7 +79,7 @@ export function splitByPhase<T extends { filename: string }>(files: T[], carrier
   const spreadsheets: T[] = [], pdfs: T[] = [], unsupported: T[] = [];
   for (const f of files) {
     const fmt = detectInvoiceFormat(carrierKey, f.filename);
-    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx') spreadsheets.push(f);
+    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx' || fmt === 'fedex_xml') spreadsheets.push(f);
     else if (fmt === 'invoice_pdf') pdfs.push(f);
     else unsupported.push(f);
   }
@@ -96,9 +98,11 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
     if (!p || !p.billNumber) return { ok: false as const, message: 'Không đúng định dạng hoá đơn DHL.' };
     return { ok: true as const, preview: toInvoicePreview({ kind: 'dhl', p, accountCurrency: ctx.currency }) };
   }
-  if (fmt === 'fbo_xlsx') {
-    const fbo = await previewFboBill(file.bytes);
-    if (fbo.bills.length === 0) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO).' };
+  if (fmt === 'fbo_xlsx' || fmt === 'fedex_xml') {
+    const fbo = fmt === 'fedex_xml'
+      ? await previewFboRows(parseFedexInvoiceXml(td(file.bytes)))
+      : await previewFboBill(file.bytes);
+    if (fbo.bills.length === 0) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML).' };
     return { ok: true as const, preview: fboPreviewFrom(fbo.bills, ctx.currency) };
   }
   if (fmt === 'invoice_pdf') {
@@ -116,7 +120,7 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
       warnings: invoices.length ? [`PDF sẽ đính vào ${invoices.length} bill: ${invoices.join(', ')}`] : ['Không khớp bill nào — import CSV/XLSX trước'],
     } };
   }
-  return { ok: false as const, message: `File không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX)' : 'DHL (CSV/XML)'}.` };
+  return { ok: false as const, message: `File không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX/XML)' : 'DHL (CSV/XML)'}.` };
 }
 
 export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uint8Array; filename: string; contentType: string }[], existingBillNumbers: Set<string>): Promise<InvoiceImportResult[]> {
@@ -139,14 +143,16 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const r = lines.length ? await reconcileDhlBill(billId) : null;
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
       } else if (ctx.carrierKey === 'fedex') {
-        const pre = await previewFboBill(f.bytes);
-        if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO)' }); continue; }
+        // XML (FedEx Billing Online "Download") hay XLSX (FBO) — cùng pipeline FboBilledRow.
+        const xmlRows = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml' ? parseFedexInvoiceXml(td(f.bytes)) : null;
+        const pre = xmlRows ? await previewFboRows(xmlRows) : await previewFboBill(f.bytes);
+        if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML)' }); continue; }
         const nums = pre.bills.map((b) => b.billNumber).filter((n): n is string => !!n);
         if (nums.length && nums.every((n) => seen.has(n))) {
           out.push({ ...base, billNumber: nums.length === 1 ? nums[0] : `${nums.length} hoá đơn`, message: 'Đã tồn tại — bỏ qua' });
           continue;
         }
-        const res = await applyFboBill({ carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId, bytes: f.bytes, filename: f.filename, contentType: f.contentType });
+        const res = await applyFboBill({ carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId, bytes: f.bytes, filename: f.filename, contentType: f.contentType, ...(xmlRows ? { rows: xmlRows } : {}) });
         const amount = res.bills.reduce((s, b) => s + (b.amount || 0), 0);
         const billNumber = res.bills.length === 1 ? (res.bills[0]?.billNumber ?? null) : `${res.bills.length} hoá đơn`;
         res.bills.forEach((b) => { if (b.billNumber) seen.add(b.billNumber); });
@@ -157,7 +163,7 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
 
   // Push unsupported results
   for (const f of unsupported) {
-    out.push({ filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: `Không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX)' : 'DHL (CSV/XML)'}` });
+    out.push({ filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: `Không đúng định dạng hoá đơn ${ctx.carrierKey === 'fedex' ? 'FedEx (XLSX/XML)' : 'DHL (CSV/XML)'}` });
   }
 
   // Phase 2: PDFs — query bills fresh from DB (includes bills just created above)
