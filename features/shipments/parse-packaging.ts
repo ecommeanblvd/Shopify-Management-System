@@ -31,3 +31,21 @@ export function parsePackagingType(
   if (/\bBAG\b/.test(haystack)) return 'bag';
   return null;
 }
+
+/**
+ * Suy packaging type từ DIMENSION khi không có mã đóng gói (XLSX). Vận hành nhập
+ * Lark "Dimension (điền tay)" 2 chiều (LxW, bao dẹp) → 'bag' (Pak); 3 chiều
+ * (LxWxH, có chiều cao = hộp) → 'box'. Dùng làm fallback CHÍNH XÁC hơn quy tắc
+ * theo-cân khi cột packaging_type trống. THUẦN.
+ *
+ * Trả null khi thiếu L hoặc W (không đủ tín hiệu) → engine lại fallback theo cân.
+ */
+export function inferPackagingFromDims(
+  lengthCm: number | null | undefined,
+  widthCm: number | null | undefined,
+  heightCm: number | null | undefined,
+): PackagingType | null {
+  const l = Number(lengthCm), w = Number(widthCm), h = Number(heightCm);
+  if (!(l > 0) || !(w > 0)) return null; // thiếu 2 chiều cơ bản → không suy
+  return h > 0 ? 'box' : 'bag';
+}
