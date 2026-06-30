@@ -106,12 +106,12 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
             <input
               type="file"
               multiple
-              accept=".csv,.xlsx,.xls,.pdf"
+              accept=".csv,.xml,.xlsx,.xls,.pdf"
               className="block w-full text-sm file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-1 file:text-xs"
               onChange={handleFileChange}
             />
             <p className="text-[11px] text-muted-foreground">
-              Kéo file hoá đơn (DHL CSV / FedEx XLSX / PDF hoá đơn) — 1 hoặc nhiều
+              Kéo file hoá đơn (DHL XML/CSV · FedEx XLSX · PDF hoá đơn) — 1 hoặc nhiều
             </p>
           </div>
 
