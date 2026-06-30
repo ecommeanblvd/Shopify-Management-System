@@ -136,7 +136,8 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const isXml = detectInvoiceFormat('dhl', f.filename) === 'dhl_xml';
         const p = isXml ? parseDhlInvoiceXml(td(f.bytes)) : parseDhlInvoiceCsv(td(f.bytes));
         if (!p || !p.billNumber) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn DHL' }); continue; }
-        if (seen.has(p.billNumber)) { out.push({ ...base, billNumber: p.billNumber, message: 'Đã tồn tại — bỏ qua' }); continue; }
+        // KHÔNG bỏ qua khi trùng: createBill upsert bill cũ + reconcileDhlBill CHỈ
+        // ghi shipment_charges có thay đổi → giữ nguyên đơn đã đối soát.
         const lines = p.shipments.map(dhlShipmentToBillLine);
         const { id: billId } = await createBill({ carrierAccountId: ctx.carrierAccountId, billNumber: p.billNumber, periodStart: p.periodStart, periodEnd: p.periodEnd, issueDate: p.issueDate, dueDate: p.dueDate, amount: p.amountInclVat, currency: ctx.currency, note: p.note, userId: ctx.userId, file: { bytes: f.bytes, filename: f.filename, contentType: isXml ? 'application/xml' : 'text/csv' }, lines });
         seen.add(p.billNumber);

@@ -1,7 +1,7 @@
 'use server';
 
 import { randomUUID } from 'crypto';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
 
@@ -61,7 +61,7 @@ export async function createBill(input: CreateBillInput): Promise<{ id: string }
     await putObject(fileKey, input.file.bytes, input.file.contentType);
   }
 
-  const [bill] = await db.insert(schema.carrierBills).values({
+  const billValues = {
     carrierAccountId: input.carrierAccountId,
     billNumber: input.billNumber ?? null,
     periodStart: input.periodStart,
@@ -76,7 +76,27 @@ export async function createBill(input: CreateBillInput): Promise<{ id: string }
     byteSize: input.file ? input.file.bytes.length : null,
     note: input.note ?? null,
     createdBy: input.userId,
-  }).returning({ id: schema.carrierBills.id });
+  };
+
+  // UPSERT theo (account, billNumber): re-upload cùng hoá đơn → CẬP NHẬT bill cũ
+  // + thay lines, KHÔNG tạo bill trùng. (reconcileDhlBill sau đó chỉ ghi
+  // shipment_charges có thay đổi → giữ nguyên đơn đã đối soát.)
+  let billId: string | null = null;
+  if (input.billNumber) {
+    const [existing] = await db.select({ id: schema.carrierBills.id })
+      .from(schema.carrierBills)
+      .where(and(eq(schema.carrierBills.carrierAccountId, input.carrierAccountId), eq(schema.carrierBills.billNumber, input.billNumber)))
+      .limit(1);
+    billId = existing?.id ?? null;
+  }
+  if (billId) {
+    await db.update(schema.carrierBills).set(billValues).where(eq(schema.carrierBills.id, billId));
+    await db.delete(schema.carrierBillLines).where(eq(schema.carrierBillLines.billId, billId));
+  } else {
+    const [ins] = await db.insert(schema.carrierBills).values(billValues).returning({ id: schema.carrierBills.id });
+    billId = ins.id;
+  }
+  const bill = { id: billId };
 
   if (input.lines?.length) {
     await db.insert(schema.carrierBillLines).values(input.lines.map((l) => ({
