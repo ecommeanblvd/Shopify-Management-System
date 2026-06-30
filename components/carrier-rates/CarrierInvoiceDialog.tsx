@@ -111,7 +111,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
               onChange={handleFileChange}
             />
             <p className="text-[11px] text-muted-foreground">
-              Kéo file hoá đơn (DHL XML/CSV · FedEx XLSX · PDF hoá đơn) — 1 hoặc nhiều
+              Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều
             </p>
           </div>
 
