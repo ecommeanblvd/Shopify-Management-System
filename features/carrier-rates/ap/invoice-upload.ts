@@ -147,11 +147,8 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const xmlRows = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml' ? parseFedexInvoiceXml(td(f.bytes)) : null;
         const pre = xmlRows ? await previewFboRows(xmlRows) : await previewFboBill(f.bytes);
         if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML)' }); continue; }
-        const nums = pre.bills.map((b) => b.billNumber).filter((n): n is string => !!n);
-        if (nums.length && nums.every((n) => seen.has(n))) {
-          out.push({ ...base, billNumber: nums.length === 1 ? nums[0] : `${nums.length} hoá đơn`, message: 'Đã tồn tại — bỏ qua' });
-          continue;
-        }
+        // KHÔNG bỏ qua khi bill trùng: re-import = applyFboBill CHỈ ghi shipment_charges
+        // có thay đổi (giữ nguyên đơn đã đối soát). Bill mới thì tạo, trùng thì cập nhật.
         const res = await applyFboBill({ carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId, bytes: f.bytes, filename: f.filename, contentType: f.contentType, ...(xmlRows ? { rows: xmlRows } : {}) });
         const amount = res.bills.reduce((s, b) => s + (b.amount || 0), 0);
         const billNumber = res.bills.length === 1 ? (res.bills[0]?.billNumber ?? null) : `${res.bills.length} hoá đơn`;

@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
-import { parseFedexFbo, consolidateFboShipping, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
+import { parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
 import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
 
@@ -197,9 +197,19 @@ export async function importFboToDatabase(
 
     // Đối soát: upsert shipment_charges (billed, LOẠI duty) cho AWB khớp đơn.
     // Hợp nhất theo AWB — chỉ dòng CƯỚC (bỏ dòng thuế/hải quan để không đè).
-    for (const r of consolidateFboShipping(rows)) {
-      const hit = awbMap.get(r.awb);
-      if (!hit) continue;
+    const shipped = consolidateFboShipping(rows).filter((r) => awbMap.has(r.awb));
+    // RE-IMPORT DIFF: đọc shipment_charges hiện có để CHỈ ghi AWB CÓ THAY ĐỔI →
+    // không đụng đơn đã đối soát (giữ nguyên billed → không bật cờ "billed đổi").
+    const existingByShipment = new Map<string, Record<string, unknown>>();
+    const shipIds = shipped.map((r) => awbMap.get(r.awb)!.shipmentId);
+    for (let i = 0; i < shipIds.length; i += 500) {
+      const ch = shipIds.slice(i, i + 500);
+      const ex = await tx.select().from(schema.shipmentCharges)
+        .where(inArray(schema.shipmentCharges.shipmentId, ch));
+      for (const e of ex) existingByShipment.set(e.shipmentId, e as Record<string, unknown>);
+    }
+    for (const r of shipped) {
+      const hit = awbMap.get(r.awb)!;
       const shipTotal = fboShippingTotal(r);
       const vals = {
         shipmentId: hit.shipmentId, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
@@ -211,6 +221,14 @@ export async function importFboToDatabase(
         billingWeightKg: r.weightKg != null ? numStr(r.weightKg) : null,
         source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
       };
+      const prev = existingByShipment.get(hit.shipmentId);
+      // KHÔNG đổi → bỏ qua (giữ nguyên đối soát). Vẫn điền label nếu thiếu.
+      if (prev && fboChargeUnchanged(prev, vals)) {
+        if (!hit.labelCreatedAt && r.shipDate) {
+          await tx.update(schema.shipments).set({ labelCreatedAt: new Date(r.shipDate) }).where(eq(schema.shipments.id, hit.shipmentId));
+        }
+        continue;
+      }
       await tx.insert(schema.shipmentCharges).values(vals)
         .onConflictDoUpdate({ target: schema.shipmentCharges.shipmentId, set: vals });
       charges += 1;

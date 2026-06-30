@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFboCharge, parseFboAmount, parseFedexFbo, consolidateFboShipping } from './fedex-fbo-parse';
+import { classifyFboCharge, parseFboAmount, parseFedexFbo, consolidateFboShipping, fboChargeUnchanged } from './fedex-fbo-parse';
 import type { FboBilledRow } from './fedex-fbo-parse';
+
+describe('fboChargeUnchanged (re-import diff)', () => {
+  it('DB "1890091.00" vs ghi mới "1890091" → coi như KHÔNG đổi (so theo số)', () => {
+    expect(fboChargeUnchanged(
+      { totalAmount: '1890091.00', base: '5079100.00', fuel: '573557.00', vat: '140007.00', billingWeightKg: '2.50' },
+      { totalAmount: '1890091', base: '5079100', fuel: '573557', vat: '140007', billingWeightKg: '2.5' },
+    )).toBe(true);
+  });
+  it('khác total → ĐỔI', () => {
+    expect(fboChargeUnchanged({ totalAmount: '1890091.00' }, { totalAmount: '1900000' })).toBe(false);
+  });
+  it('khác 1 khoản breakdown (fuel) → ĐỔI', () => {
+    expect(fboChargeUnchanged(
+      { totalAmount: '100', fuel: '10' }, { totalAmount: '100', fuel: '12' },
+    )).toBe(false);
+  });
+  it('billingWeightKg null cả hai → không đổi; lệch null/số → đổi', () => {
+    expect(fboChargeUnchanged({ totalAmount: '100', billingWeightKg: null }, { totalAmount: '100', billingWeightKg: null })).toBe(true);
+    expect(fboChargeUnchanged({ totalAmount: '100', billingWeightKg: null }, { totalAmount: '100', billingWeightKg: '1' })).toBe(false);
+  });
+});
 
 function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
   return {
