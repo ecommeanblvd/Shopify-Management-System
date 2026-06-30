@@ -48,9 +48,17 @@ describe('inferPackagingFromDims', () => {
     expect(inferPackagingFromDims(38, 52, null)).toBe('bag');
     expect(inferPackagingFromDims(28, 42, 0)).toBe('bag');
   });
-  it('3 chiều (có cao) → box', () => {
+  it('3 chiều có độ dày đáng kể → box', () => {
     expect(inferPackagingFromDims(42, 30, 10)).toBe('box');
     expect(inferPackagingFromDims(40, 25, 25)).toBe('box');
+    expect(inferPackagingFromDims(30, 25, 9)).toBe('box');
+  });
+  it('3 chiều nhưng MỎNG (≤4cm) → bag (bao dẹp, vd 43x20x2)', () => {
+    expect(inferPackagingFromDims(43, 20, 2)).toBe('bag');
+    expect(inferPackagingFromDims(40, 30, 2)).toBe('bag');
+    // chiều mỏng ở vị trí khác (thứ tự nhập tuỳ ý) vẫn ra bag
+    expect(inferPackagingFromDims(2, 43, 20)).toBe('bag');
+    expect(inferPackagingFromDims(43, 2, 20)).toBe('bag');
   });
   it('thiếu L hoặc W → null (để engine fallback theo cân)', () => {
     expect(inferPackagingFromDims(null, 52, null)).toBeNull();
