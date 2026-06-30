@@ -87,7 +87,11 @@ function toSummary(bills: FboBill[]): FboBillSummary[] {
 
 /** Parse + thống kê, KHÔNG ghi gì. */
 export async function previewFboBill(bytes: Uint8Array): Promise<FboPreview> {
-  const rows = parseWorkbook(bytes);
+  return previewFboRows(parseWorkbook(bytes));
+}
+
+/** Preview từ rows đã parse (dùng chung XLSX + XML). */
+export async function previewFboRows(rows: FboBilledRow[]): Promise<FboPreview> {
   const bills = groupFboIntoBills(rows);
   const awbs = rows.map((r) => r.awb);
   const awbMap = await resolveAwbMap(awbs);
@@ -110,6 +114,8 @@ export interface ApplyFboInput {
   bytes: Uint8Array;
   filename: string;
   contentType: string;
+  /** Rows đã parse sẵn (vd từ XML). Nếu có → bỏ qua parseWorkbook(bytes). */
+  rows?: FboBilledRow[];
 }
 export interface FboApplyResult extends FboPreview {
   billsCreated: number;
@@ -251,7 +257,7 @@ export async function importFboToDatabase(
 
 /** Action UI: parse + lưu file Excel lên R2 (đính chứng từ) + import. */
 export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult> {
-  const rows = parseWorkbook(input.bytes);
+  const rows = input.rows ?? parseWorkbook(input.bytes);
   const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
   const fileKey = `carrier-bills/${input.carrierAccountId}/fbo-${randomUUID()}${ext}`;
   await putObject(fileKey, input.bytes, input.contentType);
