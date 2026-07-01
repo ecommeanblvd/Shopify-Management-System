@@ -7,7 +7,7 @@
  * chấp nhận undefined → carrier=null, đặt sau hoặc do bulk backfill set.
  */
 export const ORDER_NODE_FIELDS = `
-  id name createdAt processedAt cancelledAt
+  id name createdAt processedAt updatedAt cancelledAt
   displayFinancialStatus displayFulfillmentStatus currencyCode
   subtotalLineItemsQuantity
   totalDiscountsSet { shopMoney { amount currencyCode } }

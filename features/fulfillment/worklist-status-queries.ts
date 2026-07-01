@@ -7,6 +7,8 @@ export interface WorklistStatusRow {
   status: string; createdAtShopify: Date | null;
   /** Stage vòng đời suy ra từ tín hiệu thật (cột Tình trạng). */
   stage: OrderStage;
+  /** Phát hiện sửa (sub-project C): last-updated + cờ sửa / sửa-sau-ship. */
+  updatedAtShopify: Date | null; editedAt: Date | null; editedAfterFulfilledAt: Date | null;
   addrDeliverable: boolean | null; addrVerifiedAt: Date | null;
   addrConfidence: string | null;
   kcs: { pending: number; pass: number; fail: number };
@@ -24,6 +26,9 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     orderNumber: schema.shopifyOrders.shopifyOrderNumber,
     storeName: schema.stores.name,
     createdAtShopify: schema.shopifyOrders.createdAtShopify,
+    updatedAtShopify: schema.shopifyOrders.updatedAtShopify,
+    editedAt: schema.shopifyOrders.editedAt,
+    editedAfterFulfilledAt: schema.shopifyOrders.editedAfterFulfilledAt,
     addrDeliverable: schema.shopifyOrders.addrDeliverable,
     addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
     addrConfidence: schema.shopifyOrders.addrConfidence,
@@ -93,7 +98,9 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     });
     return {
       orderId: r.orderId, status: r.status, stage, orderNumber: r.orderNumber, storeName: r.storeName,
-      createdAtShopify: r.createdAtShopify, addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
+      createdAtShopify: r.createdAtShopify,
+      updatedAtShopify: r.updatedAtShopify, editedAt: r.editedAt, editedAfterFulfilledAt: r.editedAfterFulfilledAt,
+      addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
       ship: { packs: ship.packs, withTracking: ship.withTracking, delivered: ship.delivered, exception: ship.exception, inTransit: ship.inTransit, tracks: s?.tracks ?? [] },
       lark,

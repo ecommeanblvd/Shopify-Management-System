@@ -16,6 +16,7 @@ export interface MappedOrder {
     shopifyOrderNumber: string;
     createdAtShopify: Date;
     processedAtShopify: Date;
+    updatedAtShopify: Date;
     cancelledAtShopify: Date | null;
     financialStatus: string;
     fulfillmentStatus: string | null;
@@ -78,6 +79,7 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       shopifyOrderNumber: payload.name,
       createdAtShopify: new Date(payload.createdAt),
       processedAtShopify: new Date(payload.processedAt),
+      updatedAtShopify: new Date(payload.updatedAt),
       cancelledAtShopify: payload.cancelledAt ? new Date(payload.cancelledAt) : null,
       financialStatus: payload.displayFinancialStatus,
       fulfillmentStatus: payload.displayFulfillmentStatus,
