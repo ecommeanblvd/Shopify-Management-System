@@ -33,6 +33,7 @@ export default async function FulfillmentWorklistPage() {
     orderNumber: r.orderNumber,
     storeName: r.storeName,
     status: r.status,
+    stage: r.stage,
     createdAtShopify: r.createdAtShopify,
     addr: summarizeAddr(r),
     kcs: summarizeKcs(r.kcs, r.larkQc),
