@@ -14,7 +14,7 @@ import { trackPendingShipments } from '@/features/shipments/track';
 async function main(): Promise<void> {
   const s = await trackPendingShipments({ limit: 200 });
   process.stdout.write(
-    `track-shipments: tracked ${s.tracked}, delivered ${s.delivered}, failed ${s.failed}, skipDHL(no-key) ${s.skippedDhlNoKey}\n`,
+    `track-shipments: tracked ${s.tracked}, delivered ${s.delivered}, failed ${s.failed}, skipDHL ${s.skippedDhl}\n`,
   );
 }
 
