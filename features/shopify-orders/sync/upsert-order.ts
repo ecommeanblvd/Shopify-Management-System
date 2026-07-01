@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { mapShopifyOrder } from './shopify-mapper';
+import { orderContentFingerprint, detectEdit } from './order-fingerprint';
 import type { ShopifyOrderPayload } from '../shopify-types';
 import { ensureFulfillmentForOrder } from '@/features/fulfillment/ensure-fulfillment';
 
@@ -24,12 +25,44 @@ export async function upsertOrder(
   // (unique shopify_order_id) of the old timestamp before the upsert tells us
   // whether this payload flips the order null → cancelled.
   const [prev] = await db
-    .select({ cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify })
+    .select({
+      id: schema.shopifyOrders.id,
+      cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify,
+      contentFingerprint: schema.shopifyOrders.contentFingerprint,
+      editedAt: schema.shopifyOrders.editedAt,
+      editedAfterFulfilledAt: schema.shopifyOrders.editedAfterFulfilledAt,
+    })
     .from(schema.shopifyOrders)
     .where(eq(schema.shopifyOrders.shopifyOrderId, payload.id))
     .limit(1);
   const becameCancelled =
     mapped.order.cancelledAtShopify !== null && prev !== undefined && prev.cancelledAtShopify === null;
+
+  // Phát hiện sửa nội dung (sub-project C): hash địa chỉ+line; đơn đã "lên vận đơn"
+  // (có shipment với tracking/label) mà nội dung đổi → cảnh báo.
+  const nextFingerprint = orderContentFingerprint({
+    shipName: mapped.order.shipName, shipAddress1: mapped.order.shipAddress1,
+    shipAddress2: mapped.order.shipAddress2, shipCity: mapped.order.shipCity,
+    shipPostcode: mapped.order.shipPostcode, shipCountry: mapped.order.shipCountry,
+    lines: mapped.lines.map((l) => ({ sku: l.sku, quantity: l.quantity })),
+  });
+  let isFulfilled = false;
+  if (prev?.id) {
+    const [ship] = await db.select({ id: schema.shipments.id })
+      .from(schema.shipments)
+      .where(and(
+        eq(schema.shipments.orderId, prev.id),
+        or(isNotNull(schema.shipments.trackingNumber), isNotNull(schema.shipments.labelCreatedAt)),
+      ))
+      .limit(1);
+    isFulfilled = !!ship;
+  }
+  const editFlags = detectEdit({
+    prevFingerprint: prev?.contentFingerprint ?? null,
+    nextFingerprint, isFulfilled, now: new Date(),
+    prevEditedAt: prev?.editedAt ?? null,
+    prevEditedAfterFulfilledAt: prev?.editedAfterFulfilledAt ?? null,
+  });
 
   let internalOrderId: string | undefined;
 
@@ -40,6 +73,9 @@ export async function upsertOrder(
         ...mapped.order,
         rawPayload: payload,
         source,
+        contentFingerprint: nextFingerprint,
+        editedAt: editFlags.editedAt,
+        editedAfterFulfilledAt: editFlags.editedAfterFulfilledAt,
       })
       .onConflictDoUpdate({
         target: schema.shopifyOrders.shopifyOrderId,
@@ -48,6 +84,9 @@ export async function upsertOrder(
           rawPayload: payload,
           source,
           syncedAt: new Date(),
+          contentFingerprint: nextFingerprint,
+          editedAt: editFlags.editedAt,
+          editedAfterFulfilledAt: editFlags.editedAfterFulfilledAt,
         },
       })
       .returning({ id: schema.shopifyOrders.id });

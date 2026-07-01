@@ -29,6 +29,28 @@ function BadgeCell({ b }: { b: Badge }) {
   );
 }
 
+function EditFlag({ row }: { row: WorklistRow }) {
+  if (row.editedAfterFulfilledAt) {
+    return (
+      <div className="mt-0.5" title={`Đơn bị sửa sau khi đã lên vận đơn — ${fmtDate(row.editedAfterFulfilledAt)}`}>
+        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+          ⚠️ Sửa sau khi ship · {fmtDate(row.editedAfterFulfilledAt)}
+        </span>
+      </div>
+    );
+  }
+  if (row.editedAt) {
+    return (
+      <div className="mt-0.5" title={`Đơn đã được chỉnh sửa — ${fmtDate(row.editedAt)}`}>
+        <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+          ✏️ Đã sửa · {fmtDate(row.editedAt)}
+        </span>
+      </div>
+    );
+  }
+  return null;
+}
+
 function ddmmyyyy(iso: string): string {
   // 'YYYY-MM-DD' → 'dd/MM/yyyy' bằng cắt chuỗi (không Date/timezone)
   if (!iso || iso.length < 10) return iso || '—';
@@ -42,6 +64,9 @@ type WorklistRow = {
   status: string;
   stage: OrderStage;
   createdAtShopify: Date | string | null;
+  editedAt: Date | string | null;
+  editedAfterFulfilledAt: Date | string | null;
+  updatedAtShopify: Date | string | null;
   addr: Badge;
   kcs: Badge;
   delivery: Badge;
@@ -125,6 +150,7 @@ export function WorklistTable({ rows }: Props) {
                   {row.storeName && (
                     <div className="text-xs text-muted-foreground">{row.storeName}</div>
                   )}
+                  <EditFlag row={row} />
                 </td>
                 <td className="px-3 py-2">
                   <BadgeCell b={row.addr} />

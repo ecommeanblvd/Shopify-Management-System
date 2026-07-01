@@ -744,6 +744,13 @@ export const shopifyOrders = pgTable('shopify_orders', {
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  // Shopify updated_at (last-updated thật) + phát hiện sửa nội dung (sub-project C).
+  updatedAtShopify: timestamp('updated_at_shopify'),
+  // Hash địa chỉ+line hiện tại; so lần sync để bắt sửa. NULL = chưa có baseline.
+  contentFingerprint: text('content_fingerprint'),
+  // Lần cuối phát hiện sửa nội dung; sửa khi đã lên vận đơn → cảnh báo.
+  editedAt: timestamp('edited_at'),
+  editedAfterFulfilledAt: timestamp('edited_after_fulfilled_at'),
   source: text('source').notNull(),
   // Optional per-order shipping cost override. When set, takes precedence
   // over both `shipping_invoices` actuals AND the carrier-engine estimate

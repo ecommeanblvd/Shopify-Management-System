@@ -72,6 +72,7 @@ export interface ShopifyOrderPayload {
   name: string;                                 // e.g. "#1234"
   createdAt: string;
   processedAt: string;
+  updatedAt: string;
   cancelledAt: string | null;
   displayFinancialStatus: string;               // 'PAID' | 'PARTIALLY_REFUNDED' | ...
   displayFulfillmentStatus: string | null;
