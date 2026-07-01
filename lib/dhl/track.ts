@@ -2,8 +2,10 @@
  * DHL Express — Shipment Tracking (Unified) API client + parser thuần.
  *
  * Cấu hình qua env (đặt trên Railway, KHÔNG commit):
- *   DHL_TRACK_API_KEY — API key của DHL developer portal (header DHL-API-Key).
- *   DHL_TRACK_API_BASE — mặc định https://api-eu.dhl.com
+ *   DHL_API_KEY — API key của app DHL developer portal (header DHL-API-Key).
+ *                 (fallback: DHL_TRACK_API_KEY). SECRET của app KHÔNG cần cho
+ *                 Unified Tracking.
+ *   DHL_API_BASE — mặc định https://api-eu.dhl.com (fallback DHL_TRACK_API_BASE).
  *
  * Trả cùng shape với FedEx (`FedexTrackResult`) để `trackAndStoreShipment`
  * xử lý đồng nhất. Phần map/parse là THUẦN (test được); chỉ `trackDhl` chạm mạng.
@@ -54,9 +56,10 @@ export function parseDhlTrack(raw: unknown): DhlTrackResult {
 
 /** Gọi DHL Unified Tracking cho 1 tracking number. Chạm mạng. */
 export async function trackDhl(trackingNumber: string): Promise<DhlTrackResult> {
-  const key = process.env.DHL_TRACK_API_KEY;
+  // Chấp nhận cả DHL_API_KEY (tên đặt trên Railway) lẫn DHL_TRACK_API_KEY (tên cũ).
+  const key = process.env.DHL_API_KEY || process.env.DHL_TRACK_API_KEY;
   if (!key) throw new Error('no_dhl_key');
-  const base = process.env.DHL_TRACK_API_BASE || DEFAULT_BASE;
+  const base = process.env.DHL_API_BASE || process.env.DHL_TRACK_API_BASE || DEFAULT_BASE;
   const url = `${base}/track/shipments?trackingNumber=${encodeURIComponent(trackingNumber)}&service=express`;
   const res = await fetch(url, { headers: { 'DHL-API-Key': key, Accept: 'application/json' } });
   if (res.status === 404) return { statusCode: null, status: 'unknown', description: null, deliveredAt: null };

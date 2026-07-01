@@ -39,14 +39,22 @@ export interface TrackPendingSummary {
   tracked: number;
   delivered: number;
   failed: number;
-  /** Đơn DHL bị bỏ vì thiếu DHL_TRACK_API_KEY (quan sát cho tới khi có key). */
-  skippedDhlNoKey: number;
+  /** Đơn DHL bị bỏ trong lượt này (thiếu key / đã đạt cap / 429). */
+  skippedDhl: number;
 }
+
+// DHL Unified Tracking tier khởi tạo: 250 lượt/ngày, 1 lượt/5s. Giãn nhịp riêng
+// cho DHL (mặc định 5s) + cap mỗi lượt để không vượt quota (chỉnh qua env khi
+// nâng tier production). FedEx giữ 300ms.
+const FEDEX_DELAY_MS = 300;
+const DHL_DELAY_MS = Number(process.env.DHL_TRACK_DELAY_MS ?? 5000);
+const DHL_MAX_PER_RUN = Number(process.env.DHL_MAX_PER_RUN ?? 30);
 
 /**
  * Poll các shipment CHƯA giao của hãng track được (FedEx + DHL), label/tạo ≤45
- * ngày, ưu tiên đơn lâu chưa track nhất. Rate-limit 300ms. Thiếu DHL key → bỏ
- * qua đơn DHL (không lỗi); FedEx vẫn chạy. 429 DHL → ngừng nhánh DHL lượt này.
+ * ngày, ưu tiên đơn lâu chưa track nhất. FedEx 300ms; DHL giãn 5s + cap/lượt cho
+ * hợp tier free. Thiếu DHL key → bỏ qua đơn DHL (không lỗi); FedEx vẫn chạy.
+ * 429 DHL → ngừng nhánh DHL lượt này.
  */
 export async function trackPendingShipments(
   opts?: { limit?: number },
@@ -60,28 +68,32 @@ export async function trackPendingShipments(
       inArray(schema.shipments.carrierKey, ['fedex', 'dhl']),
       sql`${schema.shipments.trackingNumber} is not null`,
       or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
-      // DHL nhiều đơn thiếu label_created_at → coalesce sang created_at để không bỏ sót.
-      gte(sql`coalesce(${schema.shipments.labelCreatedAt}, ${schema.shipments.createdAt})`, cutoff),
+      // Recency theo created_at (thời điểm tạo row — luôn set & đáng tin). KHÔNG
+      // dùng label_created_at: DHL để giá trị rác (2025..2026-12-31) → coalesce sai.
+      gte(schema.shipments.createdAt, cutoff),
     ))
     .orderBy(sql`${schema.shipments.lastTrackedAt} asc nulls first`)
     .limit(limit);
 
-  const summary: TrackPendingSummary = { tracked: 0, delivered: 0, failed: 0, skippedDhlNoKey: 0 };
+  const summary: TrackPendingSummary = { tracked: 0, delivered: 0, failed: 0, skippedDhl: 0 };
   let skipDhl = false; // bật khi thiếu key hoặc 429 → khỏi thử DHL nữa lượt này
+  let dhlDone = 0;
   for (const r of rows) {
-    if (r.carrier === 'dhl' && skipDhl) { summary.skippedDhlNoKey++; continue; }
+    const isDhl = r.carrier === 'dhl';
+    if (isDhl && (skipDhl || dhlDone >= DHL_MAX_PER_RUN)) { summary.skippedDhl++; continue; }
     const res = await trackAndStoreShipment(r.id);
+    if (isDhl) dhlDone++;
     if (res.ok) {
       summary.tracked++;
       if (res.status === 'delivered') summary.delivered++;
     } else if (res.error === 'no_dhl_key') {
-      skipDhl = true; summary.skippedDhlNoKey++;
+      skipDhl = true; summary.skippedDhl++;
     } else if (res.error === 'dhl_rate_limited') {
       skipDhl = true; // tránh ban, dừng DHL; FedEx tiếp
     } else if (res.error !== 'no tracking' && res.error !== 'unsupported carrier') {
       summary.failed++;
     }
-    await sleep(300);
+    await sleep(isDhl ? DHL_DELAY_MS : FEDEX_DELAY_MS);
   }
   return summary;
 }
