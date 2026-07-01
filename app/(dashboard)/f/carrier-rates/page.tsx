@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { Plus, Truck, Globe2, Coins, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Plus, Truck, Globe2, Coins, ArrowRight, AlertCircle, Sparkles, Scale } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -46,12 +46,18 @@ export default async function CarrierRatesPage() {
               Author DHL and FedEx rate sheets once. Quote calculator surfaces the final customer-facing price; the push step writes per-store overrides for the Markets apply flow.
             </p>
           </div>
-          {canManage && (
-            <Link href="/f/carrier-rates/new" className={buttonVariants() + ' gap-1.5 px-4 h-9'}>
-              <Plus className="size-4" />
-              New account
+          <div className="flex items-center gap-2">
+            <Link href="/f/carrier-rates/compare" className={buttonVariants({ variant: 'outline' }) + ' gap-1.5 px-4 h-9'}>
+              <Scale className="size-4" />
+              So sánh cước
             </Link>
-          )}
+            {canManage && (
+              <Link href="/f/carrier-rates/new" className={buttonVariants() + ' gap-1.5 px-4 h-9'}>
+                <Plus className="size-4" />
+                New account
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
