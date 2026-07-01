@@ -68,8 +68,9 @@ export async function trackPendingShipments(
       inArray(schema.shipments.carrierKey, ['fedex', 'dhl']),
       sql`${schema.shipments.trackingNumber} is not null`,
       or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
-      // DHL nhiều đơn thiếu label_created_at → coalesce sang created_at để không bỏ sót.
-      gte(sql`coalesce(${schema.shipments.labelCreatedAt}, ${schema.shipments.createdAt})`, cutoff),
+      // Recency theo created_at (thời điểm tạo row — luôn set & đáng tin). KHÔNG
+      // dùng label_created_at: DHL để giá trị rác (2025..2026-12-31) → coalesce sai.
+      gte(schema.shipments.createdAt, cutoff),
     ))
     .orderBy(sql`${schema.shipments.lastTrackedAt} asc nulls first`)
     .limit(limit);
