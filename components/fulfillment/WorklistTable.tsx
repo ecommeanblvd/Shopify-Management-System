@@ -4,31 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Badge, BadgeTone } from '@/features/fulfillment/worklist-status';
 import { OrderDetailDialog } from './OrderDetailDialog';
 import { formatTrackingStatus, carrierTrackingUrl } from '@/features/fulfillment/worklist-status';
-
-type OrderStatus =
-  | 'received'
-  | 'checking'
-  | 'awaiting_brand'
-  | 'ready_to_pick'
-  | 'picking'
-  | 'packed'
-  | 'shipped';
-
-const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  received: 'Mới nhận',
-  checking: 'Đang kiểm',
-  awaiting_brand: 'Cần đặt brand',
-  ready_to_pick: 'Chờ lấy',
-  picking: 'Đang lấy',
-  packed: 'Đã đóng gói',
-  shipped: 'Đã giao carrier',
-};
-
-function statusBadgeClass(status: string): string {
-  if (status === 'awaiting_brand') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-  if (status === 'shipped') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-  return 'bg-muted text-muted-foreground';
-}
+import { STAGE_ORDER, stageLabel, type OrderStage } from '@/features/fulfillment/order-stage';
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return '—';
@@ -64,6 +40,7 @@ type WorklistRow = {
   orderNumber: string | null;
   storeName: string | null;
   status: string;
+  stage: OrderStage;
   createdAtShopify: Date | string | null;
   addr: Badge;
   kcs: Badge;
@@ -84,7 +61,7 @@ export function WorklistTable({ rows }: Props) {
 
   const filtered = useMemo(() => {
     if (statusFilter === 'all') return rows;
-    return rows.filter((r) => r.status === statusFilter);
+    return rows.filter((r) => r.stage.key === statusFilter);
   }, [rows, statusFilter]);
 
   return (
@@ -97,8 +74,8 @@ export function WorklistTable({ rows }: Props) {
           className="rounded border border-border bg-background px-2 py-1"
         >
           <option value="all">Tất cả trạng thái</option>
-          {(Object.entries(ORDER_STATUS_LABELS) as [OrderStatus, string][]).map(([val, label]) => (
-            <option key={val} value={val}>{label}</option>
+          {STAGE_ORDER.map((key) => (
+            <option key={key} value={key}>{stageLabel(key)}</option>
           ))}
         </select>
       </div>
@@ -204,10 +181,8 @@ export function WorklistTable({ rows }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <span
-                    className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.status)}`}
-                  >
-                    {ORDER_STATUS_LABELS[row.status as OrderStatus] ?? row.status}
+                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${TONE[row.stage.tone]}`}>
+                    {row.stage.label}
                   </span>
                 </td>
               </tr>
