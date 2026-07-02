@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normSku,
   planMeanblvdSync,
+  isCustomizeSku,
   type MeanProduct,
 } from './meanblvd-sync-logic';
 
@@ -216,5 +217,48 @@ describe('planMeanblvdSync — status transitions', () => {
     expect(plan.archive).toEqual([]);
     // untracked variant B produces no inventory set
     expect(plan.inventorySets).toEqual([]);
+  });
+});
+
+describe('customize không tái bán (rule)', () => {
+  it('isCustomizeSku bắt "Customize" (mọi vị trí, không phân biệt hoa/thường)', () => {
+    expect(isCustomizeSku('X-Customize-WHI')).toBe(true);
+    expect(isCustomizeSku('x-customize')).toBe(true);
+    expect(isCustomizeSku('X-M-WHI')).toBe(false);
+  });
+
+  it('variant customize → ép tồn Shopify về 0 dù kho còn hàng', () => {
+    const p = product({ variants: [variant({ sku: 'X-Customize-WHI', inventoryQuantity: 5 })] });
+    const plan = planMeanblvdSync([p], new Map([[normSku('X-Customize-WHI'), 3]]));
+    expect(plan.inventorySets).toEqual([{ inventoryItemId: 'gid://shopify/InventoryItem/1', quantity: 0 }]);
+  });
+
+  it('ACTIVE chỉ còn tồn ở customize → archive (không tính customize là bán được)', () => {
+    const p = product({ status: 'ACTIVE', variants: [
+      variant({ sku: 'X-Customize-WHI', inventoryItemId: 'ii1', inventoryQuantity: 1 }),
+      variant({ sku: 'X-M-WHI', inventoryItemId: 'ii2', inventoryQuantity: 0 }),
+    ]});
+    const plan = planMeanblvdSync([p], new Map([[normSku('X-Customize-WHI'), 1]]));
+    expect(plan.archive).toContain('gid://shopify/Product/1');
+    expect(plan.unarchive).toEqual([]);
+  });
+
+  it('ACTIVE còn size non-customize có tồn → KHÔNG archive', () => {
+    const p = product({ status: 'ACTIVE', variants: [
+      variant({ sku: 'X-Customize-WHI', inventoryItemId: 'ii1' }),
+      variant({ sku: 'X-M-WHI', inventoryItemId: 'ii2' }),
+    ]});
+    const plan = planMeanblvdSync([p], new Map([[normSku('X-M-WHI'), 2]]));
+    expect(plan.archive).toEqual([]);
+  });
+
+  it('ARCHIVED chỉ có tồn customize → KHÔNG unarchive; có tồn non-customize → unarchive', () => {
+    const onlyCust = product({ status: 'ARCHIVED', variants: [variant({ sku: 'X-Customize-WHI' })] });
+    expect(planMeanblvdSync([onlyCust], new Map([[normSku('X-Customize-WHI'), 4]])).unarchive).toEqual([]);
+    const hasSize = product({ status: 'ARCHIVED', variants: [
+      variant({ sku: 'X-Customize-WHI', inventoryItemId: 'ii1' }),
+      variant({ sku: 'X-M-WHI', inventoryItemId: 'ii2' }),
+    ]});
+    expect(planMeanblvdSync([hasSize], new Map([[normSku('X-M-WHI'), 1]])).unarchive).toContain('gid://shopify/Product/1');
   });
 });
