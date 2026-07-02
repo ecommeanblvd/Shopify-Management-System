@@ -1,11 +1,10 @@
 'use server';
 
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { parseShipHoImportRow, statusForImportedOrder, type ParsedShipHoImport } from './import-parse';
+import { parseShipHoImportRow, statusForImportedOrder, statusOnReimport, type ParsedShipHoImport } from './import-parse';
 
 export interface ShipHoImportSummary {
   total: number;
@@ -40,6 +39,32 @@ function toValues(p: ParsedShipHoImport, partnerBrandSlug: string) {
   };
 }
 
+/** Các field được cập nhật khi RE-IMPORT: không hạ status, không xoá tracking đã có. */
+function updateSetFor(p: ParsedShipHoImport, partnerBrandSlug: string, currentStatus: string) {
+  const set: Record<string, unknown> = {
+    partnerBrandSlug,
+    recipientName: p.recipientName,
+    recipientCompany: p.recipientCompany,
+    recipientPhone: p.recipientPhone,
+    country: p.country,
+    city: p.city,
+    province: p.province,
+    postcode: p.postcode,
+    address1: p.address1,
+    address2: p.address2,
+    weightKg: String(p.weightKg),
+    dimLengthCm: p.dimLengthCm == null ? null : String(p.dimLengthCm),
+    dimWidthCm: p.dimWidthCm == null ? null : String(p.dimWidthCm),
+    dimHeightCm: p.dimHeightCm == null ? null : String(p.dimHeightCm),
+    packagingType: p.packagingType,
+    status: statusOnReimport(currentStatus, p.trackingNumber),
+  };
+  // Chỉ ghi tracking/carrier khi file có giá trị — không xoá dữ liệu ops-entered.
+  if (p.trackingNumber != null) set.trackingNumber = p.trackingNumber;
+  if (p.carrierKey != null) set.carrierKey = p.carrierKey;
+  return set;
+}
+
 /**
  * Import lô đơn ship hộ cho 1 partner từ các dòng file (đã bỏ header ở caller).
  * Upsert theo `code`: đã có → cập nhật field vận hành + tracking; chưa có → insert.
@@ -68,29 +93,34 @@ export async function importShipHoOrders(
     // Với dryRun vẫn phân loại inserted/updated để xem trước.
     if (dryRun && parsed.length) {
       const codes = parsed.map((p) => p.code);
-      const existing = new Set(
-        (await db.select({ code: schema.shipHoOrders.code }).from(schema.shipHoOrders)
-          .where(inArray(schema.shipHoOrders.code, codes))).map((r) => r.code),
-      );
-      for (const p of parsed) (existing.has(p.code) ? summary.updated++ : summary.inserted++);
+      const existingRows = await db
+        .select({ code: schema.shipHoOrders.code, status: schema.shipHoOrders.status })
+        .from(schema.shipHoOrders)
+        .where(inArray(schema.shipHoOrders.code, codes));
+      const existing = new Map(existingRows.map((r) => [r.code, r.status]));
+      for (const p of parsed) {
+        if (existing.has(p.code)) summary.updated++;
+        else summary.inserted++;
+      }
     }
     return summary;
   }
 
   const codes = parsed.map((p) => p.code);
-  const existing = new Set(
-    (await db.select({ code: schema.shipHoOrders.code }).from(schema.shipHoOrders)
-      .where(inArray(schema.shipHoOrders.code, codes))).map((r) => r.code),
-  );
+  const existingRows = await db
+    .select({ code: schema.shipHoOrders.code, status: schema.shipHoOrders.status })
+    .from(schema.shipHoOrders)
+    .where(inArray(schema.shipHoOrders.code, codes));
+  const existing = new Map(existingRows.map((r) => [r.code, r.status]));
 
   for (const p of parsed) {
-    const values = toValues(p, partnerBrandSlug);
     if (existing.has(p.code)) {
-      const { code, ...set } = values;
-      await db.update(schema.shipHoOrders).set(set).where(eq(schema.shipHoOrders.code, code));
+      const currentStatus = existing.get(p.code)!;
+      const set = updateSetFor(p, partnerBrandSlug, currentStatus);
+      await db.update(schema.shipHoOrders).set(set).where(eq(schema.shipHoOrders.code, p.code));
       summary.updated += 1;
     } else {
-      await db.insert(schema.shipHoOrders).values(values);
+      await db.insert(schema.shipHoOrders).values(toValues(p, partnerBrandSlug));
       summary.inserted += 1;
     }
   }

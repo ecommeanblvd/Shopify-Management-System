@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseShipHoImportRow, statusForImportedOrder } from './import-parse';
+import { parseShipHoImportRow, statusForImportedOrder, statusOnReimport } from './import-parse';
 
 const base = [
   'DISCN100', 'Nguyen A', 'ACME', '0900000000', 'us', 'Houston', 'TX', '77441',
@@ -65,5 +65,36 @@ describe('statusForImportedOrder', () => {
     expect(statusForImportedOrder('X1')).toBe('shipped');
     expect(statusForImportedOrder(null)).toBe('draft');
     expect(statusForImportedOrder('')).toBe('draft');
+  });
+});
+
+describe('statusOnReimport', () => {
+  it('delivered không bị hạ khi file có tracking', () => {
+    expect(statusOnReimport('delivered', 'X')).toBe('delivered');
+  });
+
+  it('billed/settled giữ nguyên bất kể tracking', () => {
+    expect(statusOnReimport('billed', 'X')).toBe('billed');
+    expect(statusOnReimport('settled', null)).toBe('settled');
+  });
+
+  it('shipped giữ nguyên khi không có tracking file', () => {
+    expect(statusOnReimport('shipped', null)).toBe('shipped');
+  });
+
+  it('draft → shipped khi file có tracking hợp lệ', () => {
+    expect(statusOnReimport('draft', 'X1')).toBe('shipped');
+  });
+
+  it('draft giữ nguyên khi file không có tracking', () => {
+    expect(statusOnReimport('draft', null)).toBe('draft');
+  });
+
+  it('quoted → quoted khi tracking rỗng (chuỗi trống)', () => {
+    expect(statusOnReimport('quoted', '')).toBe('quoted');
+  });
+
+  it('quoted → shipped khi file có tracking hợp lệ', () => {
+    expect(statusOnReimport('quoted', 'T')).toBe('shipped');
   });
 });

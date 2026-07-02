@@ -96,3 +96,12 @@ export function parseShipHoImportRow(row: readonly unknown[]): ParseShipHoResult
 export function statusForImportedOrder(trackingNumber: string | null): 'shipped' | 'draft' {
   return trackingNumber && trackingNumber.trim() !== '' ? 'shipped' : 'draft';
 }
+
+/** Status khi RE-IMPORT 1 đơn đã tồn tại: KHÔNG bao giờ hạ cấp. Chỉ nâng
+ *  draft/quoted → 'shipped' khi file có tracking; các trạng thái khác giữ nguyên. */
+export function statusOnReimport(current: string, incomingTracking: string | null): string {
+  if (current === 'draft' || current === 'quoted') {
+    return incomingTracking && incomingTracking.trim() !== '' ? 'shipped' : current;
+  }
+  return current;
+}

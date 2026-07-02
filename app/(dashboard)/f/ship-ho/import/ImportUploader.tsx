@@ -21,11 +21,17 @@ export function ImportUploader({ partners }: { partners: PartnerOpt[] }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    const buf = await file.arrayBuffer();
-    const wb = read(buf, { type: 'array', cellDates: true });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const all = utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null, raw: true });
-    setRows(all.slice(1)); // bỏ header
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = read(buf, { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const all = utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null, raw: true });
+      setRows(all.slice(1)); // bỏ header
+    } catch {
+      setErr('File không đọc được — kiểm tra định dạng .xlsx');
+      setRows([]);
+      setSummary(null);
+    }
   };
 
   const run = (dryRun: boolean) =>
