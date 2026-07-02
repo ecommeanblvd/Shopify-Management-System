@@ -56,8 +56,16 @@ function isConsidered(v: MeanVariant): boolean {
   return v.tracked === true && v.sku.trim() !== '';
 }
 
-/** Sellable target for a considered variant, clamped ≥ 0. */
+/** Variant may-đo theo khách (customize) — KHÔNG tái bán được (số đo khách cũ).
+ *  Nhận diện qua SKU chứa "customize". */
+export function isCustomizeSku(sku: string): boolean {
+  return /customize/i.test(sku);
+}
+
+/** Tồn đích cho variant: customize LUÔN 0 (không bán lại); còn lại = tồn kho
+ *  sellable (clamp ≥ 0). */
 function targetFor(v: MeanVariant, sellableByNormSku: Map<string, number>): number {
+  if (isCustomizeSku(v.sku)) return 0;
   const raw = sellableByNormSku.get(normSku(v.sku)) ?? 0;
   return Math.max(0, raw);
 }
@@ -83,12 +91,14 @@ export function planMeanblvdSync(
     // Status transitions only when there is at least one considered variant.
     if (considered.length === 0) continue;
 
-    const allZero = considered.every((v) => targetFor(v, sellableByNormSku) === 0);
-    const anyPos = considered.some((v) => targetFor(v, sellableByNormSku) > 0);
+    // "Còn bán được" CHỈ tính variant KHÔNG-customize (customize không tái bán).
+    // → product chỉ còn tồn ở customize (vd size khác hết) vẫn coi là hết hàng.
+    const sellable = considered.filter((v) => !isCustomizeSku(v.sku));
+    const sellableExists = sellable.some((v) => targetFor(v, sellableByNormSku) > 0);
 
-    if (product.status === 'ACTIVE' && allZero) {
+    if (product.status === 'ACTIVE' && !sellableExists) {
       archive.push(product.id);
-    } else if (product.status === 'ARCHIVED' && anyPos) {
+    } else if (product.status === 'ARCHIVED' && sellableExists) {
       unarchive.push(product.id);
     }
     // DRAFT: leave status alone.
