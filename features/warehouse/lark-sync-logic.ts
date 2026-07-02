@@ -5,6 +5,25 @@
  *  (không hạ tồn xuống dưới phần allocator đang giữ). */
 import { mapWarehouseCode } from '@/features/warehouse/item-import-logic';
 
+/**
+ * Bóc SỐ từ ô Lark. Field 'Final stock' là CÔNG THỨC → shape `{type:2, value:[1]}`
+ * (value là mảng), không phải text — `larkText` trả null. Xử lý: number thẳng;
+ * mảng → phần tử đầu; object có `value`/`text`; chuỗi số. Không parse được → 0.
+ */
+export function larkNumber(f: unknown): number {
+  if (f == null) return 0;
+  if (typeof f === 'number') return Number.isFinite(f) ? f : 0;
+  if (Array.isArray(f)) return larkNumber(f[0]);
+  if (typeof f === 'object') {
+    const o = f as { value?: unknown; text?: unknown };
+    if (o.value !== undefined) return larkNumber(o.value);
+    if (o.text !== undefined) return larkNumber(o.text);
+    return 0;
+  }
+  const n = Number(String(f).replace(/[,\s]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export interface LarkStockRow {
   sku: string | null;
   warehouseRaw: string;

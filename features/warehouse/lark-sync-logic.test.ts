@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  larkNumber,
   larkStockCounts,
   reconcilePlan,
   type CurrentInv,
   type LarkStockRow,
 } from './lark-sync-logic';
+
+describe('larkNumber (field công thức Lark)', () => {
+  it('shape công thức {type,value:[n]} → số', () => {
+    expect(larkNumber({ type: 2, value: [1] })).toBe(1);
+    expect(larkNumber({ type: 2, value: [3] })).toBe(3);
+  });
+  it('number / mảng / text / trống', () => {
+    expect(larkNumber(2)).toBe(2);
+    expect(larkNumber([2])).toBe(2);
+    expect(larkNumber('4')).toBe(4);
+    expect(larkNumber(null)).toBe(0);
+    expect(larkNumber('')).toBe(0);
+    expect(larkNumber({})).toBe(0);
+  });
+});
 
 describe('larkStockCounts', () => {
   it('2 dòng cùng sku+kho → TỔNG finalStock (1+2 = 3)', () => {

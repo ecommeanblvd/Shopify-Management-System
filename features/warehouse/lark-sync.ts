@@ -6,6 +6,7 @@ import { listWarehouseStockRecords } from '@/features/lark/client';
 import { larkText } from '@/features/lark/parse-pack-row';
 import { applyMovement } from './ledger';
 import {
+  larkNumber,
   larkStockCounts,
   reconcilePlan,
   type CurrentInv,
@@ -31,16 +32,13 @@ export async function syncWarehouseFromLark(
 
   // 1) Nạp tồn từ Lark → LarkStockRow[] (mỗi dòng = 1 đơn vị).
   const records = await listWarehouseStockRecords();
-  const rows: LarkStockRow[] = records.map((r) => {
-    const fsRaw = larkText(r.fields['Final stock']);
-    const finalStock = fsRaw == null ? 0 : Number(fsRaw);
-    return {
-      sku: larkText(r.fields['Lineitem SKU final']),
-      warehouseRaw: larkText(r.fields['Warehouse']) ?? '',
-      finalStock: Number.isFinite(finalStock) ? finalStock : 0,
-      productTitle: larkText(r.fields['Lineitem Name']),
-    };
-  });
+  const rows: LarkStockRow[] = records.map((r) => ({
+    sku: larkText(r.fields['Lineitem SKU final']),
+    warehouseRaw: larkText(r.fields['Warehouse']) ?? '',
+    // 'Final stock' là field CÔNG THỨC ({type,value:[n]}) → dùng larkNumber, KHÔNG larkText.
+    finalStock: larkNumber(r.fields['Final stock']),
+    productTitle: larkText(r.fields['Lineitem Name']),
+  }));
 
   // 2) Nạp tồn hiện tại SMS.
   const invRows = await db
