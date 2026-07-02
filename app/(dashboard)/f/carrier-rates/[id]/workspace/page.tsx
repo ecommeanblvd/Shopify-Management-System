@@ -141,6 +141,11 @@ export default async function WorkspacePage({
           .map((c) => ({ zoneId: c.zoneId, tierId: c.tierId, costAmount: c.costAmount }))}
         zonesWithCountries={zonesWithCountries.map((z) => ({ id: z.id, label: z.label, countries: z.countries }))}
         costCurrency={account.costCurrency}
+        vndPerUnit={
+          account.costCurrency !== 'VND' && account.displayCurrency === 'VND' && Number(account.fxCostPerDisplay) > 0
+            ? 1 / Number(account.fxCostPerDisplay)
+            : null
+        }
         toolbarStart={toolbarStart}
       />
     </div>

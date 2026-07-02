@@ -31,6 +31,8 @@ interface Props {
   tiers: MatrixTier[];
   initialCells: MatrixInitialCell[];
   costCurrency: string;
+  /** VND per 1 cost-unit (USD) — hiện VND dưới mỗi ô cho card giá USD. null = ẩn. */
+  vndPerUnit?: number | null;
   canEdit: boolean;
   setCellAction?: (input: { zoneId: string; tierId: string; costAmount: string }) => Promise<void>;
   clearCellAction?: (input: { zoneId: string; tierId: string }) => Promise<void>;
@@ -55,12 +57,14 @@ function parseVnd(input: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
-export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, setCellAction, clearCellAction, highlightZoneId = null, toolbarStart }: Props) {
+export function RateMatrix({ zones, tiers, initialCells, costCurrency, vndPerUnit = null, canEdit, setCellAction, clearCellAction, highlightZoneId = null, toolbarStart }: Props) {
+  // VND dùng số nguyên; các tiền tệ khác (USD) giữ 2 số thập phân.
+  const decimals = costCurrency === 'VND' ? 0 : 2;
   // Map raw DB values to CANONICAL raw values (no separators). The Cell
   // component renders them through `formatMoneyForDisplay` so commas appear
   // live as the operator types.
   const initialMap = new Map<string, string>(
-    initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, sanitizeMoneyRaw(c.costAmount, 0)]),
+    initialCells.map((c) => [`${c.zoneId}|${c.tierId}`, sanitizeMoneyRaw(c.costAmount, decimals)]),
   );
   const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(initialMap.entries()));
   const [state, setState] = useState<Record<string, CellState>>({});
@@ -196,6 +200,8 @@ export function RateMatrix({ zones, tiers, initialCells, costCurrency, canEdit, 
                       value={values[key] ?? ''}
                       state={state[key] ?? 'idle'}
                       currency={costCurrency}
+                      decimals={decimals}
+                      vndPerUnit={vndPerUnit}
                       canEdit={canEdit}
                       zoneHighlighted={z.id === highlightZoneId}
                       matchTier={
@@ -454,6 +460,8 @@ interface CellProps {
   value: string;
   state: CellState;
   currency: string;
+  decimals: number;
+  vndPerUnit?: number | null;
   canEdit: boolean;
   /** Match tier for the search box highlight. 'exact' = identical to
    *  the target amount, 'near' = within NEAR_MATCH_PCT but not exact,
@@ -464,10 +472,17 @@ interface CellProps {
   onCommit: (v: string) => Promise<void>;
 }
 
-function Cell({ value, state, currency, canEdit, matchTier, zoneHighlighted = false, onChange, onCommit }: CellProps) {
+function Cell({ value, state, currency, decimals, vndPerUnit = null, canEdit, matchTier, zoneHighlighted = false, onChange, onCommit }: CellProps) {
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLInputElement>(null);
   const [focused, setFocused] = useState(false);
+
+  // Dòng phụ VND (khi card lưu giá USD): round(giá × tỉ giá VCB).
+  const vnd = vndPerUnit && value && Number.isFinite(Number(value))
+    ? Math.round(Number(value) * vndPerUnit) : null;
+  const vndLine = vnd !== null
+    ? <div className="text-[10px] text-muted-foreground/70 tabular-nums">{vnd.toLocaleString('en-US')} ₫</div>
+    : null;
 
   // Clear error styling once user begins typing again
   useEffect(() => {
@@ -493,6 +508,7 @@ function Cell({ value, state, currency, canEdit, matchTier, zoneHighlighted = fa
       }>
         {display ? display : <span className="text-muted-foreground/40">—</span>}
         {display && <span className="text-muted-foreground/60 text-[10px] ml-1">{currency}</span>}
+        {display && vndLine}
       </td>
     );
   }
@@ -526,7 +542,7 @@ function Cell({ value, state, currency, canEdit, matchTier, zoneHighlighted = fa
               ref.current?.blur();
             }
           }}
-          onChange={(e) => onChange(sanitizeMoneyRaw(e.target.value, 0))}
+          onChange={(e) => onChange(sanitizeMoneyRaw(e.target.value, decimals))}
           placeholder="—"
           className={
             'w-full bg-transparent text-right tabular-nums px-5 py-3 outline-none transition-colors ' +
@@ -549,6 +565,7 @@ function Cell({ value, state, currency, canEdit, matchTier, zoneHighlighted = fa
             <X className="size-3" />
           </span>
         )}
+        {vndLine && <div className="px-5 pb-1 -mt-2 text-right">{vndLine}</div>}
       </div>
     </td>
   );
