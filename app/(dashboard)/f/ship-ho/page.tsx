@@ -35,6 +35,7 @@ export default async function ShipHoListPage() {
           <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' })}>Đối tác</Link>
           <Link href="/f/ship-ho/import" className={buttonVariants({ variant: 'outline' })}>Import</Link>
           <Link href="/f/ship-ho/reconcile" className={buttonVariants({ variant: 'outline' })}>Đối soát</Link>
+          <Link href="/f/ship-ho/statements" className={buttonVariants({ variant: 'outline' })}>Bảng kê</Link>
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
         </div>
       </div>
