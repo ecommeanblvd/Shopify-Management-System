@@ -139,6 +139,8 @@ export interface OrderDetail {
     province: string | null; postcode: string | null; name: string | null; company: string | null;
     class: string | null; deliverable: boolean | null; issue: string | null;
     standardized: string | null; verifiedAt: Date | null;
+    /** 4 mức: verified|census_verified|zip_only|undeliverable. null = đơn cũ chưa re-verify. */
+    confidence: string | null;
   };
   lines: OrderLineDetail[];
   shipping: OrderShippingDetail;
@@ -383,6 +385,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
       name: order.shipName, company: order.shipCompany,
       class: order.addrClass, deliverable: order.addrDeliverable, issue: order.addrIssue,
       standardized: order.addrStandardized, verifiedAt: order.addrVerifiedAt,
+      confidence: order.addrConfidence,
     },
     lines: lines.map((l) => {
       const c = l.sku ? costMap.get(l.sku) : undefined;
