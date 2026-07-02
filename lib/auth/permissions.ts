@@ -34,6 +34,7 @@ export const CATALOG: ScopeDef[] = [
   // perms exactly: view=xem lịch sử (view_settings_history), create=quản lý
   // template (manage_settings_template), edit=chạy/dùng sync (run_feature).
   { key: 'settings_sync', label: 'Settings Sync', actions: ['view', 'create', 'edit', 'apply'] },
+  { key: 'ship_ho', label: 'Ship hộ', actions: ['view', 'create', 'edit'] },
   { key: 'stores', label: 'Stores', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'users_roles', label: 'Users & Roles', actions: ['view', 'create', 'edit', 'delete'] },
 ];
