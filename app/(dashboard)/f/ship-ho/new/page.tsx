@@ -18,7 +18,7 @@ export default async function NewShipHoOrderPage() {
   }
   const [partners, accounts] = await Promise.all([listShipHoPartners(), listAccounts()]);
   return (
-    <div className="max-w-2xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Tạo đơn ship hộ</h1>
       <NewOrderForm
         partners={partners.filter((p) => p.status === 'active').map((p) => ({ slug: p.brandSlug, name: p.displayName ?? p.brandSlug }))}

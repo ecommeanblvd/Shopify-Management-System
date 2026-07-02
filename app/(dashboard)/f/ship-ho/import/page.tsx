@@ -17,7 +17,7 @@ export default async function ShipHoImportPage() {
   }
   const partners = await listShipHoPartners();
   return (
-    <div className="max-w-2xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Import đơn ship hộ</h1>
       <p className="text-sm text-muted-foreground">
         File .xlsx theo thứ tự cột: mã · người nhận · công ty · SĐT · nước(ISO2) · thành phố · tỉnh ·

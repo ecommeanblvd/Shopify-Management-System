@@ -18,7 +18,7 @@ export default async function ShipHoPartnersPage() {
   const canManage = hasPermission(role, 'manage_ship_ho');
   const [partners, brands] = await Promise.all([listShipHoPartners(), listBrandsForShipHo()]);
   return (
-    <div className="max-w-4xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Đối tác ship hộ</h1>
       <PartnersManager partners={partners} brands={brands} canManage={canManage} />
     </div>

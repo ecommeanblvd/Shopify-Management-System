@@ -21,7 +21,7 @@ export default async function ShipHoStatementsPage() {
     listShipHoStatements(), arByPartner(), marginByPartner(), listShipHoPartners(),
   ]);
   return (
-    <div className="max-w-5xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Bảng kê & công nợ ship hộ</h1>
       <StatementsManager
         statements={statements}
