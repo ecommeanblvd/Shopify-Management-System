@@ -16,10 +16,12 @@ interface Props {
   pakCells?: MatrixInitialCell[];
   zonesWithCountries: SearchableZone[];
   costCurrency: string;
+  /** VND per 1 cost-unit (USD) — hiện VND dưới mỗi ô cho card giá USD. */
+  vndPerUnit?: number | null;
   toolbarStart?: React.ReactNode;
 }
 
-export function RateWorkspace({ matrixZones, tiers, cells, pakTiers = [], pakCells = [], zonesWithCountries, costCurrency, toolbarStart }: Props) {
+export function RateWorkspace({ matrixZones, tiers, cells, pakTiers = [], pakCells = [], zonesWithCountries, costCurrency, vndPerUnit = null, toolbarStart }: Props) {
   const [match, setMatch] = useState<CountryMatch | null>(null);
   const hasPak = pakTiers.length > 0 && pakCells.length > 0;
 
@@ -51,6 +53,7 @@ export function RateWorkspace({ matrixZones, tiers, cells, pakTiers = [], pakCel
           tiers={mergedTiers}
           initialCells={mergedCells}
           costCurrency={costCurrency}
+          vndPerUnit={vndPerUnit}
           canEdit={false}
           highlightZoneId={match?.zoneId ?? null}
           toolbarStart={toolbarStart}
