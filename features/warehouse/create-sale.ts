@@ -300,12 +300,15 @@ async function evaluateSku(
   await sleep(RATE_LIMIT_SLEEP_MS);
   const saleNodes = await queryVariantsBySku(ctx, `${base}-Sale`);
 
+  // So SKU KHÔNG phân biệt hoa/thường: `base` đã normSku (UPPERCASE) còn SKU
+  // Shopify giữ nguyên case → phải upper cả hai khi so.
+  const U = (s: string | null | undefined) => (s ?? '').trim().toUpperCase();
   const hasMeanBlvdProduct = baseNodes.some((n) => n.product?.vendor === VENDOR);
-  const hasSaleProduct = saleNodes.some((n) => (n.sku ?? '') === `${base}-Sale`);
+  const hasSaleProduct = saleNodes.some((n) => U(n.sku) === `${base}-SALE`);
 
   // Bản gốc = variant có sku==base thuộc product KHÔNG phải MEAN BLVD.
   const originalNode = baseNodes.find(
-    (n) => (n.sku ?? '') === base && n.product != null && n.product.vendor !== VENDOR,
+    (n) => U(n.sku) === base && n.product != null && n.product.vendor !== VENDOR,
   );
   const originalStatus =
     (originalNode?.product?.status as 'ACTIVE' | 'ARCHIVED' | 'DRAFT' | undefined) ?? null;
@@ -409,7 +412,7 @@ export async function createSaleProducts(
       // Final re-check dedup: query lại base+'-Sale' và MEAN BLVD.
       const base = normSku(first.variant.sku);
       const recheck = await queryVariantsBySku(ctx, `${base}-Sale`);
-      if (recheck.some((n) => (n.sku ?? '') === `${base}-Sale` || n.product?.vendor === VENDOR)) {
+      if (recheck.some((n) => (n.sku ?? '').trim().toUpperCase() === `${base}-SALE` || n.product?.vendor === VENDOR)) {
         skippedByReason['sale-product-exists-recheck'] =
           (skippedByReason['sale-product-exists-recheck'] ?? 0) + 1;
         await sleep(RATE_LIMIT_SLEEP_MS);
