@@ -33,6 +33,7 @@ export default async function ShipHoListPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' })}>Đối tác</Link>
+          <Link href="/f/ship-ho/import" className={buttonVariants({ variant: 'outline' })}>Import</Link>
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
         </div>
       </div>

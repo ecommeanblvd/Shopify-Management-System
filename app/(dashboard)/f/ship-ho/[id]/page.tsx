@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getShipHoOrder } from '@/features/ship-ho/queries';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
+import { TrackingCard } from './TrackingCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,14 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         <div className="flex justify-between font-semibold border-t pt-2"><span>Giá thu partner</span><span>{vnd(o.chargedVnd)}</span></div>
         {!o.quotedAt && <p className="text-amber-600 text-xs">Chưa tính được giá — kiểm tra carrier account / rate card.</p>}
       </CardContent></Card>
+
+      <TrackingCard
+        orderId={o.id}
+        trackingNumber={o.trackingNumber}
+        carrierKey={o.carrierKey}
+        deliveryStatus={o.deliveryStatus}
+        deliveredAt={o.deliveredAt}
+      />
     </div>
   );
 }
