@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { applyMarkup } from './markup';
 import { quoteShipHoOrder } from './quote-adapter';
+import { requireManageShipHo } from './require-manage';
 
 export interface CreateShipHoOrderInput {
   code: string;
@@ -31,6 +32,7 @@ export interface CreateShipHoOrderInput {
 export async function createShipHoOrder(
   input: CreateShipHoOrderInput,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!input.code?.trim()) return { ok: false, error: 'Thiếu mã đơn' };
   if (!input.partnerBrandSlug) return { ok: false, error: 'Thiếu partner' };
   if (!input.country?.trim()) return { ok: false, error: 'Thiếu quốc gia' };
@@ -70,7 +72,10 @@ export async function createShipHoOrder(
   }
 
   // Auto-quote nếu đã đủ dữ liệu carrier — lỗi quote KHÔNG chặn tạo đơn.
-  if (input.carrierAccountId) await requoteShipHoOrder(id);
+  if (input.carrierAccountId) {
+    const q = await requoteShipHoOrder(id);
+    if (!q.ok) console.warn('[ship-ho] auto-quote failed', id, q.error);
+  }
 
   revalidatePath('/f/ship-ho');
   return { ok: true, id };
@@ -78,6 +83,7 @@ export async function createShipHoOrder(
 
 /** Tính lại cước + markup, ghi snapshot giá. Đơn giữ 'draft' nếu quote fail. */
 export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   const [order] = await db.select().from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
   if (!order) return { ok: false, error: 'Không tìm thấy đơn' };
   if (!order.carrierAccountId) return { ok: false, error: 'Chưa chọn carrier account' };
