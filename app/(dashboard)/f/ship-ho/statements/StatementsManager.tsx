@@ -36,7 +36,11 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
     });
 
   const mark = (id: string, status: 'issued' | 'paid') =>
-    start(async () => { await setStatementStatus(id, status); });
+    start(async () => {
+      setMsg(null);
+      const r = await setStatementStatus(id, status);
+      if (!r.ok) setMsg(r.error ?? 'Lỗi cập nhật trạng thái');
+    });
 
   const exportXlsx = (id: string, label: string) =>
     start(async () => {
