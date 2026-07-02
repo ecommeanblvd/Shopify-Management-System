@@ -104,3 +104,14 @@ export async function listAllQcRecords(): Promise<LarkRecord[]> {
   if (!qcTableId) return [];
   return searchAllRecords(qcTableId, { automatic_fields: true, page_size: 500 });
 }
+
+// Bảng "WH - Inventory (Nhập, QC, Pack)" — mỗi dòng = 1 đơn vị hàng vật lý.
+// Cùng base LARK_BASE_APP_TOKEN với logistics. View "Qly tồn kho tổng hợp" đã lọc
+// sẵn tồn tổng hợp. table_id/view_id không phải secret → hằng số (env override).
+const WH_TABLE_ID = process.env.LARK_WH_TABLE_ID ?? 'tblfnOiEwzcXmemM';
+const WH_VIEW_ID = process.env.LARK_WH_VIEW_ID ?? 'vewFAl8NQG';
+
+/** Đọc TẤT CẢ record view tồn kho tổng hợp (mỗi dòng = 1 đơn vị). Phân trang 500/lần. */
+export async function listWarehouseStockRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(WH_TABLE_ID, { view_id: WH_VIEW_ID, page_size: 500 });
+}

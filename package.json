@@ -26,6 +26,7 @@
     "cron:sync-orders": "dotenv -- tsx scripts/cron/sync-shopify-orders.ts",
     "cron:sync-lark": "dotenv -- tsx scripts/cron/sync-lark.ts",
     "cron:track-shipments": "dotenv -- tsx scripts/cron/track-shipments.ts",
+    "cron:sync-warehouse": "dotenv -- tsx scripts/cron/sync-warehouse.ts",
     "cron:refresh-vcb": "dotenv -- tsx scripts/cron/refresh-vcb-fx.ts",
     "cron:refresh-surcharges": "dotenv -- tsx scripts/cron/refresh-surcharges.ts"
   },
