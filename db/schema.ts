@@ -1913,7 +1913,7 @@ export const shipHoStatements = pgTable('ship_ho_statements', {
 /** Đơn ship hộ (nhập tay P1; import lô P2). */
 export const shipHoOrders = pgTable('ship_ho_orders', {
   id: uuid('id').defaultRandom().primaryKey(),
-  code: text('code').notNull(),
+  code: text('code').notNull().unique(),
   partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
   // Người nhận
   recipientName: text('recipient_name'),
