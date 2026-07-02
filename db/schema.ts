@@ -1874,3 +1874,85 @@ export const larkOrderStatus = pgTable('lark_order_status', {
   qcStatus: text('qc_status'), // fail|pending|pass|extra (gom từ Lark QC Check)
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
+
+// ---- Ship Hộ (partner proxy shipping) -------------------------------------
+export const shipHoBillingCycleEnum = pgEnum('ship_ho_billing_cycle', ['weekly', 'monthly']);
+export const shipHoPartnerStatusEnum = pgEnum('ship_ho_partner_status', ['active', 'inactive']);
+export const shipHoOrderStatusEnum = pgEnum('ship_ho_order_status', [
+  'draft', 'quoted', 'shipped', 'delivered', 'billed', 'settled',
+]);
+export const shipHoStatementStatusEnum = pgEnum('ship_ho_statement_status', ['draft', 'issued', 'paid']);
+
+/** Bật dịch vụ ship hộ cho 1 brand (mmp_brands). 1 config / brand. */
+export const shipHoPartners = pgTable('ship_ho_partners', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  brandSlug: text('brand_slug').references(() => mmpBrands.slug).notNull().unique(),
+  markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }).notNull().default('0'),
+  billingCycle: shipHoBillingCycleEnum('billing_cycle').notNull().default('monthly'),
+  billingCurrency: text('billing_currency').notNull().default('VND'),
+  status: shipHoPartnerStatusEnum('status').notNull().default('active'),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/** Bảng kê kỳ (P3 dùng; tạo sẵn để ship_ho_orders.statement_id FK được). */
+export const shipHoStatements = pgTable('ship_ho_statements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
+  periodStart: date('period_start').notNull(),
+  periodEnd: date('period_end').notNull(),
+  orderCount: integer('order_count').notNull().default(0),
+  totalChargedVnd: numeric('total_charged_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
+  status: shipHoStatementStatusEnum('status').notNull().default('draft'),
+  issuedAt: timestamp('issued_at'),
+  paidAt: timestamp('paid_at'),
+  fileKey: text('file_key'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/** Đơn ship hộ (nhập tay P1; import lô P2). */
+export const shipHoOrders = pgTable('ship_ho_orders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
+  // Người nhận
+  recipientName: text('recipient_name'),
+  recipientCompany: text('recipient_company'),
+  recipientPhone: text('recipient_phone'),
+  country: text('country').notNull(),
+  city: text('city'),
+  province: text('province'),
+  postcode: text('postcode'),
+  address1: text('address1'),
+  address2: text('address2'),
+  // Kiện
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }).notNull(),
+  dimLengthCm: numeric('dim_length_cm', { precision: 10, scale: 2 }),
+  dimWidthCm: numeric('dim_width_cm', { precision: 10, scale: 2 }),
+  dimHeightCm: numeric('dim_height_cm', { precision: 10, scale: 2 }),
+  packagingType: text('packaging_type'), // 'bag' | 'box' | null
+  // Carrier
+  carrierKey: text('carrier_key'),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id),
+  // Giá (snapshot bất biến)
+  carrierCostVnd: numeric('carrier_cost_vnd', { precision: 16, scale: 2 }),
+  markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }),
+  chargedVnd: numeric('charged_vnd', { precision: 16, scale: 2 }),
+  quoteBreakdown: jsonb('quote_breakdown'),
+  quotedAt: timestamp('quoted_at'),
+  // Tracking (P2)
+  trackingNumber: text('tracking_number'),
+  deliveryStatus: text('delivery_status'),
+  deliveredAt: timestamp('delivered_at'),
+  lastTrackedAt: timestamp('last_tracked_at'),
+  // Đối soát (P3)
+  actualCarrierCostVnd: numeric('actual_carrier_cost_vnd', { precision: 16, scale: 2 }),
+  reconcileStatus: text('reconcile_status'),
+  deltaVnd: numeric('delta_vnd', { precision: 16, scale: 2 }),
+  marginVnd: numeric('margin_vnd', { precision: 16, scale: 2 }),
+  // Bill (P3)
+  statementId: uuid('statement_id').references(() => shipHoStatements.id),
+  status: shipHoOrderStatusEnum('status').notNull().default('draft'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdBy: text('created_by'),
+});
