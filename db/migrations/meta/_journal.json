@@ -582,6 +582,12 @@
       "when": 1783514400000,
       "tag": "0082_order-edit-detection",
       "breakpoints": true
+    },{
+      "idx": 83,
+      "version": "7",
+      "when": 1783600800000,
+      "tag": "0083_ship-ho",
+      "breakpoints": true
     }
   ]
 }
