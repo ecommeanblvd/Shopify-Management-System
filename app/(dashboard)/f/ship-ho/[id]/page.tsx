@@ -25,7 +25,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
   if (!o) notFound();
 
   return (
-    <div className="max-w-3xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">{o.code}</h1>
         <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>

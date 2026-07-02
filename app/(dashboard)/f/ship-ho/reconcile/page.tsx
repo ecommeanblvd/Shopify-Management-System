@@ -15,7 +15,7 @@ export default async function ShipHoReconcilePage() {
     return <div className="max-w-3xl mx-auto px-6 py-16 text-center"><h1 className="text-2xl font-semibold">Forbidden</h1></div>;
   }
   return (
-    <div className="max-w-2xl mx-auto px-6 md:px-10 py-8 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Đối soát cước carrier</h1>
       <p className="text-sm text-muted-foreground">
         File .xlsx/.csv theo thứ tự cột: <b>tracking · cước thực (VND)</b>. Dòng đầu header (bỏ qua).
