@@ -17,6 +17,8 @@ import { larkText } from '@/features/lark/parse-pack-row';
 import { isCustomizeSku, normSku } from './meanblvd-sync-logic';
 import {
   buildProductSetInput,
+  bucketBySku,
+  chunk,
   larkRowEligible,
   shouldCreateSale,
   type OrigProduct,
@@ -26,6 +28,8 @@ import {
 const SHOP_DOMAIN = 'meanblvd.myshopify.com';
 const VENDOR = 'MEAN BLVD';
 const RATE_LIMIT_SLEEP_MS = 500;
+/** Số SKU term gộp trong 1 query `sku:'a' OR sku:'b' ...` khi prefetch. */
+const PREFETCH_BATCH = 25;
 
 // Lark WH-Inventory (cùng base LARK_BASE_APP_TOKEN với logistics).
 const LARK_WH_TABLE_ID = process.env.LARK_WH_TABLE_ID ?? 'tblfnOiEwzcXmemM';
@@ -98,26 +102,38 @@ const PUBLICATIONS_QUERY = /* GraphQL */ `
   { publications(first: 10) { nodes { id name } } }
 `;
 
-const VARIANTS_QUERY = /* GraphQL */ `
-  query VariantsBySku($q: String!) {
-    productVariants(first: 30, query: $q) {
-      nodes {
-        sku
-        price
-        selectedOptions { name value }
-        product {
-          id
-          title
-          vendor
-          status
-          productType
-          tags
-          descriptionHtml
-          options { name }
-          media(first: 20) { nodes { ... on MediaImage { image { url } } } }
-        }
-      }
+const VARIANT_FIELDS = /* GraphQL */ `
+  fragment VariantFields on ProductVariant {
+    sku
+    price
+    selectedOptions { name value }
+    product {
+      id
+      title
+      vendor
+      status
+      productType
+      tags
+      descriptionHtml
+      options { name }
+      media(first: 20) { nodes { ... on MediaImage { image { url } } } }
     }
+  }
+`;
+
+const VARIANTS_QUERY = /* GraphQL */ `
+  ${VARIANT_FIELDS}
+  query VariantsBySku($q: String!) {
+    productVariants(first: 30, query: $q) { nodes { ...VariantFields } }
+  }
+`;
+
+// Prefetch theo lô: 1 query gộp nhiều SKU (`sku:'a' OR sku:'b' ...`). first cao
+// vì 1 lô ~PREFETCH_BATCH term, mỗi term có thể khớp vài variant.
+const VARIANTS_BATCH_QUERY = /* GraphQL */ `
+  ${VARIANT_FIELDS}
+  query VariantsBatch($q: String!) {
+    productVariants(first: 250, query: $q) { nodes { ...VariantFields } }
   }
 `;
 
@@ -225,6 +241,29 @@ async function queryVariantsBySku(ctx: Ctx, sku: string): Promise<VariantNode[]>
   return (res.data as ProductVariantsResponse | undefined)?.productVariants?.nodes ?? [];
 }
 
+/**
+ * Prefetch mọi variant cho `terms` (SKU) bằng các query gộp lô, trả về map
+ * `uSku -> node[]` (khoá đã trim + UPPERCASE). Thay cho query từng-SKU trong
+ * vòng đánh giá: giảm ~2·N round-trip xuống ~N/PREFETCH_BATCH.
+ */
+async function prefetchVariantsBySku(ctx: Ctx, terms: string[]): Promise<Map<string, VariantNode[]>> {
+  const all: VariantNode[] = [];
+  for (const group of chunk(terms, PREFETCH_BATCH)) {
+    const q = group.map((t) => `sku:'${t}'`).join(' OR ');
+    const res = await graphqlCall({
+      shopDomain: SHOP_DOMAIN,
+      apiVersion: ctx.apiVersion,
+      token: ctx.token,
+      query: VARIANTS_BATCH_QUERY,
+      variables: { q },
+    });
+    assertNoGraphqlErrors(res, `productVariants batch (${group.length} skus)`);
+    all.push(...((res.data as ProductVariantsResponse | undefined)?.productVariants?.nodes ?? []));
+    await sleep(RATE_LIMIT_SLEEP_MS);
+  }
+  return bucketBySku(all);
+}
+
 function toOrigProduct(p: NonNullable<VariantNode['product']>): OrigProduct {
   return {
     title: p.title,
@@ -286,19 +325,18 @@ interface EligibleVariant {
   sellable: number;
 }
 
-/** Đánh giá 1 SKU warehouse: query Shopify, tính shouldCreateSale. */
-async function evaluateSku(
-  ctx: Ctx,
+/** Đánh giá 1 SKU warehouse THUẦN từ map đã prefetch: tính shouldCreateSale. */
+function evaluateSku(
   wh: { sku: string; sellable: number },
   larkEligibleSkus: Set<string>,
-): Promise<{ ok: true; item: EligibleVariant } | { ok: false; reason: string }> {
+  variantMap: Map<string, VariantNode[]>,
+): { ok: true; item: EligibleVariant } | { ok: false; reason: string } {
   const base = normSku(wh.sku);
   const isCustomize = isCustomizeSku(wh.sku);
 
-  // Query bản gốc (base) + bất kỳ product nào có SKU = base+'-Sale'.
-  const baseNodes = await queryVariantsBySku(ctx, base);
-  await sleep(RATE_LIMIT_SLEEP_MS);
-  const saleNodes = await queryVariantsBySku(ctx, `${base}-Sale`);
+  // Tra bản gốc (base) + product có SKU = base+'-Sale' từ map (key UPPERCASE).
+  const baseNodes = variantMap.get(base) ?? [];
+  const saleNodes = variantMap.get(`${base}-SALE`) ?? [];
 
   // So SKU KHÔNG phân biệt hoa/thường: `base` đã normSku (UPPERCASE) còn SKU
   // Shopify giữ nguyên case → phải upper cả hai khi so.
@@ -370,19 +408,27 @@ export async function createSaleProducts(
   const errors: string[] = [];
   const eligibleItems: EligibleVariant[] = [];
 
-  // 5) Đánh giá từng SKU.
+  // 5) Prefetch Shopify variant cho mọi (base, base-Sale) theo lô → map in-memory.
+  const termSet = new Set<string>();
+  for (const wh of warehouse) {
+    const base = normSku(wh.sku);
+    termSet.add(base);
+    termSet.add(`${base}-Sale`);
+  }
+  const variantMap = await prefetchVariantsBySku(ctx, [...termSet]);
+
+  // 6) Đánh giá từng SKU (thuần, tra từ map — không I/O trong vòng lặp).
   for (const wh of warehouse) {
     try {
-      const r = await evaluateSku(ctx, wh, larkEligibleSkus);
+      const r = evaluateSku(wh, larkEligibleSkus, variantMap);
       if (r.ok) eligibleItems.push(r.item);
       else skippedByReason[r.reason] = (skippedByReason[r.reason] ?? 0) + 1;
     } catch (e) {
       errors.push(`evaluate ${wh.sku}: ${e instanceof Error ? e.message : String(e)}`);
     }
-    await sleep(RATE_LIMIT_SLEEP_MS);
   }
 
-  // 6) Gom theo bản gốc (1 product có thể có nhiều size còn tồn).
+  // 7) Gom theo bản gốc (1 product có thể có nhiều size còn tồn).
   const groups = new Map<string, EligibleVariant[]>();
   for (const item of eligibleItems) {
     const list = groups.get(item.origProductId);
@@ -401,7 +447,7 @@ export async function createSaleProducts(
 
   if (dryRun) return summary;
 
-  // 7) Publication (chỉ cần khi thật sự ghi).
+  // 8) Publication (chỉ cần khi thật sự ghi).
   const publicationId = await resolveOnlineStorePublication(ctx);
 
   let created = 0;

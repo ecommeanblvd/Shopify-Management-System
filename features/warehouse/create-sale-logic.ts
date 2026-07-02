@@ -63,6 +63,32 @@ export function larkRowEligible(row: {
   );
 }
 
+/** THUẦN: chia mảng thành các lô ≤ size (size ≤ 0 → 1 lô chứa toàn bộ). */
+export function chunk<T>(items: T[], size: number): T[][] {
+  if (items.length === 0) return [];
+  if (size <= 0) return [items.slice()];
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * THUẦN: gom các node Shopify variant theo SKU chuẩn hoá (trim + UPPERCASE) →
+ * `Map<uSku, node[]>`. Node có sku null/rỗng bị bỏ. Dùng để tra cứu in-memory
+ * sau khi prefetch theo lô, thay cho query từng-SKU.
+ */
+export function bucketBySku<T extends { sku: string | null }>(nodes: T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const n of nodes) {
+    const k = (n.sku ?? '').trim().toUpperCase();
+    if (k === '') continue;
+    const list = out.get(k);
+    if (list) list.push(n);
+    else out.set(k, [n]);
+  }
+  return out;
+}
+
 export interface OrigVariant {
   sku: string;
   price: string;

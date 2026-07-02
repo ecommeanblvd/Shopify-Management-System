@@ -3,6 +3,8 @@ import {
   shouldCreateSale,
   larkRowEligible,
   buildProductSetInput,
+  chunk,
+  bucketBySku,
   type EligibilityInput,
   type OrigProduct,
   type OrigVariant,
@@ -189,5 +191,47 @@ describe('buildProductSetInput', () => {
     const color = input.productOptions.find((o) => o.name === 'Color');
     expect(size?.values).toEqual([{ name: 'S' }, { name: 'M' }]);
     expect(color?.values).toEqual([{ name: 'Đen' }]);
+  });
+});
+
+describe('chunk', () => {
+  it('chia mảng thành các lô đúng kích thước', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+  });
+
+  it('lô cuối lấy phần dư', () => {
+    expect(chunk([1, 2, 3], 5)).toEqual([[1, 2, 3]]);
+  });
+
+  it('mảng rỗng → []', () => {
+    expect(chunk([], 3)).toEqual([]);
+  });
+
+  it('size <= 0 → 1 lô chứa toàn bộ (không chia vô hạn)', () => {
+    expect(chunk([1, 2], 0)).toEqual([[1, 2]]);
+  });
+});
+
+describe('bucketBySku', () => {
+  it('gom node theo SKU chuẩn hoá (trim + UPPERCASE)', () => {
+    const nodes = [
+      { sku: 'abc', v: 1 },
+      { sku: ' ABC ', v: 2 },
+      { sku: 'X-Sale', v: 3 },
+    ];
+    const m = bucketBySku(nodes);
+    expect(m.get('ABC')).toEqual([{ sku: 'abc', v: 1 }, { sku: ' ABC ', v: 2 }]);
+    expect(m.get('X-SALE')).toEqual([{ sku: 'X-Sale', v: 3 }]);
+  });
+
+  it('bỏ qua node sku null / rỗng', () => {
+    const m = bucketBySku([{ sku: null }, { sku: '   ' }, { sku: 'A' }]);
+    expect(m.has('')).toBe(false);
+    expect([...m.keys()]).toEqual(['A']);
+  });
+
+  it('SKU vắng mặt → get trả undefined', () => {
+    const m = bucketBySku([{ sku: 'A' }]);
+    expect(m.get('B')).toBeUndefined();
   });
 });
