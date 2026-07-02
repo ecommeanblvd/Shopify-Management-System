@@ -14,7 +14,11 @@ export async function generateStatement(
   periodEnd: string,
   opts?: { dryRun?: boolean },
 ): Promise<{ ok: boolean; error?: string; statementId?: string; orderCount: number; totalChargedVnd: number; dryRun: boolean }> {
-  await requireManageShipHo();
+  try {
+    await requireManageShipHo();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e), orderCount: 0, totalChargedVnd: 0, dryRun: opts?.dryRun ?? false };
+  }
   const dryRun = opts?.dryRun ?? false;
   if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', orderCount: 0, totalChargedVnd: 0, dryRun };
   if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', orderCount: 0, totalChargedVnd: 0, dryRun };
