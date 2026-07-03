@@ -1925,6 +1925,10 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   postcode: text('postcode'),
   address1: text('address1'),
   address2: text('address2'),
+  // Trường địa chỉ custom theo quốc gia (Trung Đông)
+  houseNumber: text('house_number'),
+  shortAddress: text('short_address'),
+  mapsUrl: text('maps_url'),
   // Kiện
   weightKg: numeric('weight_kg', { precision: 10, scale: 3 }).notNull(),
   dimLengthCm: numeric('dim_length_cm', { precision: 10, scale: 2 }),
