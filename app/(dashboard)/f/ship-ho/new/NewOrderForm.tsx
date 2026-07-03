@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createShipHoOrder } from '@/features/ship-ho/orders-actions';
+import { quoteShipHoLines, type LineQuote } from '@/features/ship-ho/quote-lines-actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SearchSelect } from '@/components/ui/search-select';
@@ -12,23 +13,34 @@ import { citiesFor } from '@/lib/geo/cities';
 const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.iso2, label: `${c.name} (${c.iso2})` }));
 
 interface PartnerOpt { slug: string; name: string }
-interface AccountOpt { id: string; name: string; carrierKey: string }
 
-export function NewOrderForm({ partners, accounts, userEmail }: { partners: PartnerOpt[]; accounts: AccountOpt[]; userEmail: string }) {
+export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; userEmail: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState({
     code: '', partnerBrandSlug: '', recipientName: '', country: '', city: '', postcode: '',
     address1: '', weightKg: '', dimLengthCm: '', dimWidthCm: '', dimHeightCm: '',
-    packagingType: '' as '' | 'bag' | 'box', carrierAccountId: '', phone: '',
+    packagingType: '' as '' | 'bag' | 'box', phone: '',
   });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+
+  const [lines, setLines] = useState<LineQuote[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [comparing, setComparing] = useState(false);
+  const [compareErr, setCompareErr] = useState<string | null>(null);
+
+  // cập nhật field + huỷ bảng so sánh cũ (giá phụ thuộc input)
+  const patch = (partial: Partial<typeof f>) => {
+    setF((prev) => ({ ...prev, ...partial }));
+    setLines([]); setSelectedAccountId(''); setCompareErr(null);
+  };
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => patch({ [k]: e.target.value } as Partial<typeof f>);
 
   const submit = () =>
     start(async () => {
       setErr(null);
-      const acc = accounts.find((a) => a.id === f.carrierAccountId);
+      const line = lines.find((l) => l.accountId === selectedAccountId);
+      if (!line) { setErr('Chọn 1 line ship trước'); return; }
       const dial = f.country ? dialCodeFor(f.country) : null;
       const recipientPhone = f.phone.trim()
         ? (dial ? `+${dial} ${f.phone.trim()}` : f.phone.trim())
@@ -39,7 +51,7 @@ export function NewOrderForm({ partners, accounts, userEmail }: { partners: Part
         country: f.country, city: f.city, postcode: f.postcode, address1: f.address1,
         weightKg: f.weightKg, dimLengthCm: f.dimLengthCm || undefined, dimWidthCm: f.dimWidthCm || undefined,
         dimHeightCm: f.dimHeightCm || undefined, packagingType: f.packagingType || null,
-        carrierKey: acc?.carrierKey, carrierAccountId: f.carrierAccountId || undefined, createdBy: userEmail,
+        carrierKey: line.carrierKey ?? undefined, carrierAccountId: line.accountId, createdBy: userEmail,
       });
       if (!r.ok) setErr(r.error ?? 'Lỗi');
       else router.push(`/f/ship-ho/${r.id}`);
@@ -65,7 +77,7 @@ export function NewOrderForm({ partners, accounts, userEmail }: { partners: Part
             <input
               className="block w-full border rounded px-2 py-1"
               value={f.phone}
-              onChange={(e) => setF({ ...f, phone: e.target.value })}
+              onChange={(e) => patch({ phone: e.target.value })}
               placeholder="Số điện thoại người nhận"
             />
           </div>
@@ -74,7 +86,7 @@ export function NewOrderForm({ partners, accounts, userEmail }: { partners: Part
           <label className="text-sm">Quốc gia (ISO2) *
             <SearchSelect
               value={f.country}
-              onChange={(v) => setF({ ...f, country: v, city: '' })}
+              onChange={(v) => patch({ country: v, city: '' })}
               options={COUNTRY_OPTIONS}
               placeholder="Tìm quốc gia…"
             />
@@ -82,7 +94,7 @@ export function NewOrderForm({ partners, accounts, userEmail }: { partners: Part
           <label className="text-sm">Thành phố
             <SearchSelect
               value={f.city}
-              onChange={(v) => setF({ ...f, city: v })}
+              onChange={(v) => patch({ city: v })}
               options={citiesFor(f.country).map((c) => ({ value: c, label: c }))}
               placeholder={f.country ? 'Chọn/nhập thành phố…' : 'Chọn quốc gia trước'}
               allowFreeEntry
@@ -98,21 +110,69 @@ export function NewOrderForm({ partners, accounts, userEmail }: { partners: Part
           <label className="text-sm">R (cm)<input className={inputCls} value={f.dimWidthCm} onChange={set('dimWidthCm')} /></label>
           <label className="text-sm">C (cm)<input className={inputCls} value={f.dimHeightCm} onChange={set('dimHeightCm')} /></label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-sm">Kiểu đóng gói
-            <select className={inputCls} value={f.packagingType} onChange={set('packagingType')}>
-              <option value="">—</option><option value="bag">Bag (Pak)</option><option value="box">Box</option>
-            </select>
-          </label>
-          <label className="text-sm">Carrier account
-            <select className={inputCls} value={f.carrierAccountId} onChange={set('carrierAccountId')}>
-              <option value="">— chọn để tính giá —</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </label>
+        <label className="text-sm">Kiểu đóng gói
+          <select className={inputCls} value={f.packagingType} onChange={set('packagingType')}>
+            <option value="">—</option><option value="bag">Bag (Pak)</option><option value="box">Box</option>
+          </select>
+        </label>
+        <div className="pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={comparing || !f.partnerBrandSlug || !f.country || !f.weightKg}
+            onClick={() =>
+              start(async () => {
+                setComparing(true); setCompareErr(null); setLines([]); setSelectedAccountId('');
+                const r = await quoteShipHoLines({
+                  partnerBrandSlug: f.partnerBrandSlug, weightKg: f.weightKg, country: f.country,
+                  city: f.city || undefined, postcode: f.postcode || undefined,
+                  dimLengthCm: f.dimLengthCm || undefined, dimWidthCm: f.dimWidthCm || undefined,
+                  dimHeightCm: f.dimHeightCm || undefined, packagingType: f.packagingType || null,
+                });
+                setComparing(false);
+                if (r.error) { setCompareErr(r.error); return; }
+                setLines(r.lines);
+              })
+            }
+          >
+            {comparing ? 'Đang tính…' : 'So sánh giá line'}
+          </Button>
+          {compareErr && <p className="text-sm text-red-600 mt-1">{compareErr}</p>}
         </div>
+        {lines.length > 0 && (
+          <div className="border rounded overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="border-b text-muted-foreground">
+                <tr className="[&>th]:text-left [&>th]:p-2">
+                  <th></th><th>Line</th><th>Cước carrier</th><th>Giá thu</th><th>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l.accountId}
+                      className={`border-b cursor-pointer [&>td]:p-2 ${selectedAccountId === l.accountId ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
+                      onClick={() => setSelectedAccountId(l.accountId)}>
+                    <td><input type="radio" name="ship-line" checked={selectedAccountId === l.accountId} onChange={() => setSelectedAccountId(l.accountId)} /></td>
+                    <td>{l.name}{l.carrierKey ? ` · ${l.carrierKey}` : ''}</td>
+                    <td>{l.carrierCostVnd.toLocaleString('vi-VN')} ₫</td>
+                    <td className="font-medium">{l.chargedVnd.toLocaleString('vi-VN')} ₫</td>
+                    <td>{l.marginVnd.toLocaleString('vi-VN')} ₫</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!comparing && lines.length === 0 && f.partnerBrandSlug && f.country && f.weightKg && !compareErr && (
+          <p className="text-sm text-muted-foreground">Bấm &quot;So sánh giá line&quot;. Nếu không có line nào áp dụng cho tuyến này, kiểm tra cân/địa chỉ.</p>
+        )}
         {err && <p className="text-sm text-red-600">{err}</p>}
-        <Button onClick={submit} disabled={pending}>{pending ? 'Đang tạo…' : 'Tạo đơn & tính giá'}</Button>
+        <Button
+          onClick={submit}
+          disabled={pending || !selectedAccountId}
+        >
+          {pending ? 'Đang tạo…' : 'Confirm & tạo đơn'}
+        </Button>
       </CardContent>
     </Card>
   );
