@@ -1,6 +1,9 @@
 /** THUẦN: dựng rate card offer (base×(1+markup)) theo zone × mức cân từ snapshot carrier. */
 import { pickBaseVnd } from './quote-adapter';
 
+/** Link tra phụ phí xăng dầu FedEx (hiển thị trên rate card). */
+export const FEDEX_FUEL_URL = 'https://www.fedex.com/en-vn/shipping/fuel-surcharge.html';
+
 export interface RateCardCell { tierUpperKg: number; baseVnd: number; offerVnd: number }
 export interface RateCardZone { label: string; countries: string[]; cells: RateCardCell[] }
 export interface RateCard { markupPercent: number; tiers: number[]; zones: RateCardZone[]; surchargeNotes: string[] }
