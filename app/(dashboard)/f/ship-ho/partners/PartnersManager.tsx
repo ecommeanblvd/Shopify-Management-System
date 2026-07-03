@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createShipHoPartner, updateShipHoPartner } from '@/features/ship-ho/partners-actions';
+import { MIN_MARKUP_PERCENT } from '@/features/ship-ho/offer-pricing';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -65,7 +66,9 @@ export function PartnersManager({ partners, brands, canManage }: { partners: Par
               {partners.map((p) => (
                 <tr key={p.id} className="border-b [&>td]:p-3">
                   <td>{p.displayName ?? p.brandSlug}</td>
-                  <td>{p.markupPercent}%</td>
+                  <td>{p.markupPercent}%{Number(p.markupPercent) < MIN_MARKUP_PERCENT && (
+                    <span className="ml-2 inline-block rounded bg-red-100 text-red-700 text-xs px-1.5 py-0.5">⚠ &lt; {MIN_MARKUP_PERCENT}%</span>
+                  )}</td>
                   <td>{p.billingCycle === 'weekly' ? 'Tuần' : 'Tháng'}</td>
                   <td>{p.status === 'active' ? 'Bật' : 'Tắt'}</td>
                   <td className="text-right">{canManage && <Button variant="outline" size="sm" onClick={() => toggle(p)} disabled={pending}>{p.status === 'active' ? 'Tắt' : 'Bật'}</Button>}</td>
