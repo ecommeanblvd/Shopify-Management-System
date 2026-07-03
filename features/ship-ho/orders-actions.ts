@@ -3,6 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
+import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { applyMarkup } from './markup';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
@@ -19,6 +20,9 @@ export interface CreateShipHoOrderInput {
   postcode?: string;
   address1?: string;
   address2?: string;
+  houseNumber?: string;
+  shortAddress?: string;
+  mapsUrl?: string;
   weightKg: string; // numeric string
   dimLengthCm?: string;
   dimWidthCm?: string;
@@ -39,6 +43,12 @@ export async function createShipHoOrder(
   if (!Number.isFinite(Number(input.weightKg)) || Number(input.weightKg) <= 0) {
     return { ok: false, error: 'Cân nặng không hợp lệ' };
   }
+  const extra = validateAddressExtra(input.country, {
+    houseNumber: input.houseNumber,
+    shortAddress: input.shortAddress,
+    mapsUrl: input.mapsUrl,
+  });
+  if (!extra.ok) return { ok: false, error: extra.error };
   let id: string;
   try {
     const [row] = await db
@@ -55,6 +65,9 @@ export async function createShipHoOrder(
         postcode: input.postcode || null,
         address1: input.address1 || null,
         address2: input.address2 || null,
+        houseNumber: extra.normalized.houseNumber ?? null,
+        shortAddress: extra.normalized.shortAddress ?? null,
+        mapsUrl: extra.normalized.mapsUrl ?? null,
         weightKg: input.weightKg,
         dimLengthCm: input.dimLengthCm || null,
         dimWidthCm: input.dimWidthCm || null,
