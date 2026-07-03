@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
-import { applyMarkup } from './markup';
+import { computeOffer } from './offer-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
 
@@ -132,7 +132,7 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     return { ok: false, error: `Quote lỗi: ${q.reason}` };
   }
 
-  const charged = applyMarkup(q.carrierCostVnd, Number(markupPercent));
+  const { chargedVnd: charged } = computeOffer(q.carrierCostVnd, q.baseVnd, Number(markupPercent));
   await db
     .update(schema.shipHoOrders)
     .set({
