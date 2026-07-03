@@ -149,3 +149,20 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
   revalidatePath(`/f/ship-ho/${orderId}`);
   return { ok: true };
 }
+
+/** Xoá snapshot giá của 1 đơn về draft rồi requote bằng công thức hiện hành. */
+export async function clearAndRequoteOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  await db
+    .update(schema.shipHoOrders)
+    .set({
+      status: 'draft',
+      carrierCostVnd: null,
+      markupPercent: null,
+      chargedVnd: null,
+      quoteBreakdown: null,
+      quotedAt: null,
+    })
+    .where(eq(schema.shipHoOrders.id, orderId));
+  return await requoteShipHoOrder(orderId);
+}
