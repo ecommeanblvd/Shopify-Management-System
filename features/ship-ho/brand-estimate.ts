@@ -46,8 +46,9 @@ function toVndFactor(snap: { costCurrency: string; displayCurrency: string; fxCo
 export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel): Promise<EstimateResult> {
   const service: ShipHoService = parcel.service ?? 'express';
   if (service === 'standard') return { ok: false, code: 'service_unavailable', error: 'Standard Delivery chưa khả dụng' };
-  if (!parcel.country?.trim() || !Number.isFinite(parcel.weightKg) || parcel.weightKg <= 0) {
-    return { ok: false, code: 'bad_input', error: 'Thiếu quốc gia hoặc cân nặng không hợp lệ' };
+  const country = (parcel.country ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country) || !Number.isFinite(parcel.weightKg) || parcel.weightKg <= 0) {
+    return { ok: false, code: 'bad_input', error: 'Quốc gia phải là mã ISO-2 và cân nặng phải > 0' };
   }
 
   const [partner] = await db.select().from(schema.shipHoPartners)
@@ -62,12 +63,12 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   const snap = await loadAccountSnapshot(account.id);
   if (!snap) return { ok: false, code: 'no_carrier', error: 'Chưa nạp được bảng giá' };
 
-  const dims = parcel.dimLengthCm && parcel.dimWidthCm && parcel.dimHeightCm
+  const dims = typeof parcel.dimLengthCm === 'number' && typeof parcel.dimWidthCm === 'number' && typeof parcel.dimHeightCm === 'number'
     ? { lengthCm: parcel.dimLengthCm, widthCm: parcel.dimWidthCm, heightCm: parcel.dimHeightCm } : null;
 
   const res = quote(snap, {
     weightKg: parcel.weightKg, dimensions: dims, packagingType: parcel.packagingType ?? null,
-    destinationCountry: parcel.country.trim().toUpperCase(),
+    destinationCountry: country,
     destinationPostcode: parcel.postcode, destinationCity: parcel.city,
   });
   if (!res.ok) return { ok: false, code: 'quote_failed', error: 'Không tính được cước cho tuyến này' };
