@@ -76,14 +76,15 @@ export interface EstimateLine { label: string; amountVnd: number }
 export interface BrandEstimate {
   chargedVnd: number;
   currency: 'VND';
-  lines: EstimateLine[];   // base offer, fuel, từng phụ phí, VAT — cộng lại = chargedVnd
-  notes: string[];         // "Phụ phí/fuel/VAT theo FedEx khi xuất bill" + surcharge kinds
+  lines: EstimateLine[];   // markedBase, phụ phí, fuel, VAT — cộng lại = chargedVnd (Option A, mục 2b)
+  provisional: true;       // giá dự kiến theo dim/cân khai báo; bill cuối theo số thực (mục 2c)
+  notes: string[];         // nhãn trung tính, không tên hãng
 }
 export type EstimateResult =
   | { ok: true; estimate: BrandEstimate }
   | { ok: false; error: string; code: 'brand_not_approved' | 'no_fedex' | 'quote_failed' | 'service_unavailable' | 'bad_input' };
 
-/** I/O: nạp partner (approve+markup), quote FedEx theo service line, computeOffer, dựng breakdown minh bạch cho brand. */
+/** I/O: nạp partner (approve+markup), quote FedEx theo service line, tính giá brand (Option A, mục 2b), dựng breakdown minh bạch. */
 export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel): Promise<EstimateResult>;
 ```
 
@@ -92,11 +93,41 @@ Logic:
 - Service: mặc định `express`. `standard` → `service_unavailable` (chưa build). Chỉ 1 quote duy nhất, không so sánh nhiều line.
 - Chọn account FedEx **Express** đang bật (định danh qua carrierKey/serviceKey — chốt map khi build); không có → `no_fedex`.
 - `quoteShipHoOrder(...)` cho parcel → nếu fail → `quote_failed`.
-- `computeOffer(carrierCostVnd, baseVnd, markup)` → `chargedVnd`.
-- `lines`: từ `breakdown` (đã quy VND): `base offer = round(baseVnd×(1+markup/100))`, `fuel`, `phụ phí` (remote/residential/demand/countryFixed/perStep/peak gộp hoặc tách), `VAT`. Tổng `lines` = `chargedVnd` (kiểm bất biến trong test).
+- Tính giá brand theo **Công thức giá brand (mục 2b)** — KHÔNG dùng `computeOffer`.
+- `lines`: `Cước cơ bản (Express Delivery) = markedBase`, `Phụ phí vùng/địa chỉ`, `Phụ phí xăng dầu`, `VAT`. Tổng `lines` = `chargedVnd` (bất biến, test).
 - `notes`: nhãn surcharge **trung tính** (không dùng `SURCHARGE_LABELS` cũ vì có chữ "FedEx" — cần map brand-facing riêng, vd "Phụ phí xăng dầu (theo hãng vận chuyển)") + câu "phụ phí/fuel/VAT tính theo hãng khi xuất bill".
 - Nhãn service trong response: `label: 'Express Delivery' | 'Standard Delivery'`.
 - **Tuyệt đối không** trả `carrierCostVnd`, `marginVnd`, `markupPercent`, hay tên hãng.
+
+### 2b. Công thức giá brand (Option A — fuel/VAT trên base đã markup)
+
+Khác giá **nội bộ** (`computeOffer`: markup CHỈ trên base, fuel/VAT pass-through trên base gốc), giá **brand-facing** áp
+fuel & VAT lên **base đã markup**:
+
+```
+markedBase  = round(baseVnd × (1 + markup/100))              // markup ≥ 30%; baseVnd = base FedEx quy VND
+subtotal    = markedBase + surcharges                        // phụ phí địa chỉ (remote/residential/demand/countryFixed/perStep/peak…)
+fuel        = fuelPercent × (markedBase + fuelableSurcharges) // fuel% theo TUẦN SHIP
+vat         = vatPercent × (subtotal + fuel)                 // VAT ở cuối
+chargedVnd  = subtotal + fuel + vat
+```
+
+- Tương đương chạy engine FedEx với dòng **base thay bằng `base×(1+markup)`** rồi giữ nguyên luật fuel/VAT/surcharge của engine.
+  Impl gọn nhất: thêm tuỳ chọn `baseMarkupPct` vào engine `quote()` (inflate base sau lookup, trước fuel/VAT), hoặc dựng buildup
+  thuần từ `breakdown`. **Chốt cách impl khi build** (lưu ý discount: brand KHÔNG hưởng volume discount FedEx).
+- **Đơn brand (`source='mmp'`) lưu `chargedVnd` theo công thức này**, KHÔNG dùng `computeOffer`. Đơn nội bộ giữ nguyên `computeOffer`.
+  *(Có thể hợp nhất 2 mô hình sau — ngoài phạm vi draft.)*
+- Hàm thuần đề xuất: `computeBrandCharge(breakdownVnd, markupPercent) → { chargedVnd, lines }` (test kỹ; tổng `lines` == `chargedVnd`).
+
+### 2c. Rate card brand đẩy sang MMP + luồng estimate → rebill
+
+- **Rate card mỗi brand** (base × (1+markup), markup ≥ 30%) sinh bằng `buildRateCard` → **push sang MMP** để hiển thị bảng giá cơ bản.
+  Cập nhật khi đổi markup/rate (webhook `ratecard.updated` SMS→MMP, hoặc MMP pull `GET /api/mmp/ship-ho/ratecard?brandSlug=`).
+- **Estimate lúc tạo đơn (dự kiến):** MMP gọi API estimate → SMS check địa chỉ + phụ phí, ghép rate card quote + fuel (tuần ship) + VAT
+  theo **dim & cân brand tự đo** → giá dự kiến. Đây là giá **tạm tính**.
+- **Rebill sau khi có bill carrier (chốt):** khi carrier xuất bill, SMS cập nhật **cân thực + phụ phí thực (nếu bị charge thêm)** →
+  **tính lại `chargedVnd`** bằng đúng công thức 2b trên số thực + rate card brand → **tạo bill** cho brand thanh toán (event `order.reconciled`
+  + `statement.issued`). Chênh estimate↔bill được nêu rõ cho brand.
 
 ### 3. API estimate — `app/api/mmp/ship-ho/estimate/route.ts`
 
@@ -128,7 +159,7 @@ Logic:
 - Tạo đơn:
   - **SMS sinh mã order mới** (`code`) — canonical, unique. **Tạm thời**: dãy số tuần tự (vd sequence/counter zero-pad, hoặc cột `order_seq` bigserial → format `SH{n}`), đảm bảo unique như ràng buộc hiện có. **Backfill lại** theo format chính thức khi khách gửi (thêm cột lưu seq gốc để re-map an toàn). MMP KHÔNG quyết mã; `mmpRef` chỉ để map + idempotency.
   - `source='mmp'`, `mmp_ref=mmpRef`, `service` (express), `partner_brand_slug=brandSlug`, các field địa chỉ + country-specific, parcel.
-  - Snapshot giá qua `estimateForBrand` (hoặc quote+computeOffer) → `carrierCostVnd/markupPercent/chargedVnd/quoteBreakdown/quotedAt` như requote, status `draft`. *(Đơn brand tạo vẫn để MEAN chốt carrier cuối; giá là estimate tại thời điểm tạo.)*
+  - Snapshot giá **dự kiến** qua `estimateForBrand` (Option A) → lưu `chargedVnd` + breakdown + `quotedAt`, status `draft`. *(Giá tạm tính theo dim/cân khai báo; MEAN chốt carrier + rebill theo số thực khi có bill carrier — mục 2c.)*
 - Trả `{ ok:true, orderId, code, estimate }` — `code` là mã SMS mới sinh để MMP lưu map.
 
 ### 4b. Đồng bộ sự kiện MMP ⇄ SMS (thông tin xuyên suốt)
@@ -193,9 +224,9 @@ Envelope chung: `{ event, mmpRef, code, occurredAt, data }`.
 
 ## Đơn vị & ranh giới
 
-- `estimate.ts` (I/O mỏng, gọi core thuần `computeOffer` + adapter) — nguồn sự thật giá brand-facing; test bằng account/partner giả hoặc integration nhẹ.
+- `estimate.ts` (I/O mỏng, gọi core thuần `computeBrandCharge` + adapter) — nguồn sự thật giá brand-facing; test bằng account/partner giả hoặc integration nhẹ.
 - 2 route API mỏng: chỉ HMAC + validate + gọi `estimateForBrand`/intake. Không nhét logic giá vào route.
-- Tái dùng: `computeOffer`, `pickBaseVnd`, `quoteShipHoOrder`, `validateAddressExtra`, `SURCHARGE_LABELS`.
+- Tái dùng: `pickBaseVnd`, `quoteShipHoOrder`/engine, `validateAddressExtra`, `buildRateCard`. Giá brand dùng `computeBrandCharge` (Option A) — KHÔNG `computeOffer` (đó là giá nội bộ). Nhãn phụ phí brand-facing map trung tính riêng (không tái dùng `SURCHARGE_LABELS` vì có chữ "FedEx").
 
 ## Bảo mật
 
