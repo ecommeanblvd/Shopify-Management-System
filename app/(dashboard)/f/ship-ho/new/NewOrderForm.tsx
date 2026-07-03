@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { SearchSelect } from '@/components/ui/search-select';
 import { COUNTRIES, dialCodeFor } from '@/lib/geo/countries';
 import { citiesFor } from '@/lib/geo/cities';
+import { requirementFor, validateAddressExtra } from '@/lib/geo/address-requirements';
 
 const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.iso2, label: `${c.name} (${c.iso2})` }));
 
@@ -22,6 +23,7 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
     code: '', partnerBrandSlug: '', recipientName: '', country: '', city: '', postcode: '',
     address1: '', weightKg: '', dimLengthCm: '', dimWidthCm: '', dimHeightCm: '',
     packagingType: '' as '' | 'bag' | 'box', phone: '',
+    houseNumber: '', shortAddress: '', mapsUrl: '',
   });
 
   const [lines, setLines] = useState<LineQuote[]>([]);
@@ -39,6 +41,10 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
   const submit = () =>
     start(async () => {
       setErr(null);
+      const extra = validateAddressExtra(f.country, {
+        houseNumber: f.houseNumber, shortAddress: f.shortAddress, mapsUrl: f.mapsUrl,
+      });
+      if (!extra.ok) { setErr(extra.error ?? 'Thiếu thông tin địa chỉ'); return; }
       const line = lines.find((l) => l.accountId === selectedAccountId);
       if (!line) { setErr('Chọn 1 line ship trước'); return; }
       const dial = f.country ? dialCodeFor(f.country) : null;
@@ -49,6 +55,7 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
         code: f.code, partnerBrandSlug: f.partnerBrandSlug, recipientName: f.recipientName,
         recipientPhone,
         country: f.country, city: f.city, postcode: f.postcode, address1: f.address1,
+        houseNumber: extra.normalized.houseNumber, shortAddress: extra.normalized.shortAddress, mapsUrl: extra.normalized.mapsUrl,
         weightKg: f.weightKg, dimLengthCm: f.dimLengthCm || undefined, dimWidthCm: f.dimWidthCm || undefined,
         dimHeightCm: f.dimHeightCm || undefined, packagingType: f.packagingType || null,
         carrierKey: line.carrierKey ?? undefined, carrierAccountId: line.accountId, createdBy: userEmail,
@@ -74,7 +81,7 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
           <label className="text-sm">Quốc gia (ISO2) *
             <SearchSelect
               value={f.country}
-              onChange={(v) => patch({ country: v, city: '' })}
+              onChange={(v) => patch({ country: v, city: '', houseNumber: '', shortAddress: '', mapsUrl: '' })}
               options={COUNTRY_OPTIONS}
               placeholder="Tìm quốc gia…"
             />
@@ -108,6 +115,24 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
           </label>
         </div>
         <label className="text-sm block">Địa chỉ<input className={inputCls} value={f.address1} onChange={set('address1')} /></label>
+        {requirementFor(f.country)?.houseNumber && (
+          <label className="text-sm block">House Number *
+            <input className={inputCls} value={f.houseNumber} onChange={set('houseNumber')} placeholder="Số nhà / building" />
+          </label>
+        )}
+        {requirementFor(f.country)?.shortAddressOrMaps && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Saudi Arabia: nhập ít nhất 1 trong 2 — Short Address hoặc Google Maps link.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="text-sm">Short Address
+                <input className={inputCls} value={f.shortAddress} onChange={set('shortAddress')} placeholder="VD RBMA4176" />
+              </label>
+              <label className="text-sm">Google Maps link
+                <input className={inputCls} value={f.mapsUrl} onChange={set('mapsUrl')} placeholder="https://maps.app.goo.gl/…" />
+              </label>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-4 gap-4">
           <label className="text-sm">Cân (kg) *<input className={inputCls} value={f.weightKg} onChange={set('weightKg')} /></label>
           <label className="text-sm">D (cm)<input className={inputCls} value={f.dimLengthCm} onChange={set('dimLengthCm')} /></label>
