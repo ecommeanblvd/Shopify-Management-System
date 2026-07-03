@@ -11,6 +11,7 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl }: {
   card: RateCard; partnerSlug: string; accountName: string; fuelUrl: string;
 }) {
   const below = card.markupPercent < MIN_MARKUP_PERCENT;
+  const isEmpty = card.zones.length === 0 || card.zones.every((z) => z.cells.length === 0);
 
   const exportXlsx = () => {
     const header = ['Zone', 'Nước', ...card.tiers.map((t) => `≤${t}kg`)];
@@ -41,35 +42,45 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl }: {
         </div>
       </div>
 
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/40">
-            <tr className="[&>th]:text-left [&>th]:p-2 [&>th]:whitespace-nowrap">
-              <th>Zone</th><th>Nước</th>
-              {card.tiers.map((t) => <th key={t} className="text-right">≤{t}kg</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {card.zones.map((z) => {
-              const byTier = new Map(z.cells.map((c) => [c.tierUpperKg, c.offerVnd]));
-              return (
-                <tr key={z.label} className="border-b [&>td]:p-2 align-top">
-                  <td className="font-medium whitespace-nowrap">{z.label}</td>
-                  <td className="text-muted-foreground max-w-xs">{z.countries.join(', ')}</td>
-                  {card.tiers.map((t) => (
-                    <td key={t} className="text-right whitespace-nowrap">{byTier.has(t) ? vnd(byTier.get(t)!) : '—'}</td>
-                  ))}
+      {isEmpty ? (
+        <div className="rounded border border-amber-400 bg-amber-50 text-amber-900 text-sm p-3">
+          ⚠ Không tạo được giá — bảng giá FedEx không ở VND hoặc thiếu rate.
+        </div>
+      ) : (
+        <>
+          <div className="text-sm font-medium">Bảng giá Package (box)</div>
+          <div className="border rounded overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40">
+                <tr className="[&>th]:text-left [&>th]:p-2 [&>th]:whitespace-nowrap">
+                  <th>Zone</th><th>Nước</th>
+                  {card.tiers.map((t) => <th key={t} className="text-right">≤{t}kg</th>)}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {card.zones.map((z) => {
+                  const byTier = new Map(z.cells.map((c) => [c.tierUpperKg, c.offerVnd]));
+                  return (
+                    <tr key={z.label} className="border-b [&>td]:p-2 align-top">
+                      <td className="font-medium whitespace-nowrap">{z.label}</td>
+                      <td className="text-muted-foreground max-w-xs">{z.countries.join(', ')}</td>
+                      {card.tiers.map((t) => (
+                        <td key={t} className="text-right whitespace-nowrap">{byTier.has(t) ? vnd(byTier.get(t)!) : '—'}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <div className="text-sm space-y-1">
         <div className="font-medium">Phụ phí (FedEx tính theo công thức của hãng khi xuất bill):</div>
         <ul className="list-disc pl-5 text-muted-foreground">
           {card.surchargeNotes.map((n) => <li key={n}>{n}</li>)}
+          <li>Hàng Pak/túi hoặc &lt;2kg: FedEx áp bảng giá Pak riêng — giá thực có thể khác bảng Package này.</li>
         </ul>
         <p>Phụ phí xăng dầu FedEx: <a className="text-blue-600 underline" href={fuelUrl} target="_blank" rel="noopener noreferrer">{fuelUrl}</a></p>
       </div>

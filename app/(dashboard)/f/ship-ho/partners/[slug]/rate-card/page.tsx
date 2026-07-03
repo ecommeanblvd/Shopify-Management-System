@@ -16,7 +16,7 @@ export default async function RateCardPage({ params }: { params: Promise<{ slug:
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
-  if (!role || !hasPermission(role, 'view_ship_ho')) {
+  if (!role || !hasPermission(role, 'manage_ship_ho')) {
     return <div className="max-w-3xl mx-auto px-6 py-16 text-center"><h1 className="text-2xl font-semibold">Forbidden</h1></div>;
   }
   const r = await getPartnerRateCard(slug);
@@ -25,7 +25,7 @@ export default async function RateCardPage({ params }: { params: Promise<{ slug:
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">Rate card · {slug}</h1>
-        <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' })}>← Đối tác</Link>
+        <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' }) + ' print:hidden'}>← Đối tác</Link>
       </div>
       {!r.ok ? (
         <p className="text-red-600">{r.error}</p>
