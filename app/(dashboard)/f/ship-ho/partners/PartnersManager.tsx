@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { createShipHoPartner, updateShipHoPartner } from '@/features/ship-ho/partners-actions';
 import { MIN_MARKUP_PERCENT } from '@/features/ship-ho/offer-pricing';
 import { Card, CardContent } from '@/components/ui/card';
@@ -71,7 +72,10 @@ export function PartnersManager({ partners, brands, canManage }: { partners: Par
                   )}</td>
                   <td>{p.billingCycle === 'weekly' ? 'Tuần' : 'Tháng'}</td>
                   <td>{p.status === 'active' ? 'Bật' : 'Tắt'}</td>
-                  <td className="text-right">{canManage && <Button variant="outline" size="sm" onClick={() => toggle(p)} disabled={pending}>{p.status === 'active' ? 'Tắt' : 'Bật'}</Button>}</td>
+                  <td className="text-right space-x-2 flex justify-end">
+                    <Link href={`/f/ship-ho/partners/${p.brandSlug}/rate-card`} className="text-blue-600 underline text-sm">Rate card</Link>
+                    {canManage && <Button variant="outline" size="sm" onClick={() => toggle(p)} disabled={pending}>{p.status === 'active' ? 'Tắt' : 'Bật'}</Button>}
+                  </td>
                 </tr>
               ))}
               {partners.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Chưa có đối tác ship hộ.</td></tr>}
