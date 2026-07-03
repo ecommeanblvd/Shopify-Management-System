@@ -37,9 +37,10 @@ Vì UI ở MMP còn dữ liệu/logic ở SMS, function này về bản chất l
 | Auth | HMAC như `order-confirmations` (secret dùng chung `MMP_WEBHOOK_SECRET`), replay-protection sẵn có. |
 | Định danh brand | `brandSlug` trong body — validate + approve-check server-side (không tin client). |
 | Cổng approve | Cột `self_service_enabled boolean default false` trên `ship_ho_partners`. Kalisa = true. |
-| Cơ sở giá estimate | **1 quote duy nhất, FedEx làm chuẩn**. Service line **Express** (build ngay), **Standard** (build sau). Không quote được tuyến → lỗi rõ. |
-| Giá hiển thị brand | Giá thu (chargedVnd) + **tách phụ phí** (base offer, fuel, phụ phí, VAT). Ẩn carrierCost/margin/markup. |
-| Mã đơn | **SMS sinh mã order mới** (canonical, unique) khi nhận đơn; lưu `mmp_ref` (id đơn phía MMP) để map + idempotency; trả mã SMS về MMP. |
+| Cơ sở giá estimate | **1 quote duy nhất, FedEx làm chuẩn (nội bộ)**. Service line brand-facing: **Express Delivery** (build ngay), **Standard Delivery** (build sau). Không quote được tuyến → lỗi rõ. |
+| Định danh trung tính | Brand CHỈ thấy **"Express Delivery" / "Standard Delivery"** + nhãn phụ phí trung tính ("phụ phí xăng dầu theo hãng vận chuyển"…). **Tuyệt đối không lộ tên hãng (FedEx)** trong bất kỳ response/webhook nào gửi brand. |
+| Giá hiển thị brand | Giá thu (chargedVnd) + **tách phụ phí** (base offer, fuel, phụ phí, VAT) — nhãn trung tính. Ẩn carrierCost/margin/markup/tên hãng. |
+| Mã đơn | **SMS sinh mã order mới** (canonical, unique) khi nhận đơn. Hiện dùng **dãy số tuần tự tạm** (backfill lại khi có format chính thức); lưu `mmp_ref` để map + idempotency; trả mã SMS về MMP. |
 | Luồng đơn brand | Vào `ship_ho_orders` với `source='mmp'`, status `draft` → MEAN chọn carrier/confirm/ship (luồng hiện có). Không thêm status enum mới. |
 | Cập nhật cho brand | **Webhook SMS→MMP** (ký HMAC) đẩy trạng thái/tracking/đối soát khi đơn đổi trạng thái. |
 | Idempotency | `mmp_ref` unique — resubmit trả đơn cũ (kèm mã SMS đã sinh). |
@@ -93,8 +94,9 @@ Logic:
 - `quoteShipHoOrder(...)` cho parcel → nếu fail → `quote_failed`.
 - `computeOffer(carrierCostVnd, baseVnd, markup)` → `chargedVnd`.
 - `lines`: từ `breakdown` (đã quy VND): `base offer = round(baseVnd×(1+markup/100))`, `fuel`, `phụ phí` (remote/residential/demand/countryFixed/perStep/peak gộp hoặc tách), `VAT`. Tổng `lines` = `chargedVnd` (kiểm bất biến trong test).
-- `notes`: tái dùng nhãn surcharge (từ `offer-ratecard-logic` `SURCHARGE_LABELS`) + câu "phụ phí/fuel/VAT do FedEx tính khi xuất bill".
-- **Tuyệt đối không** trả `carrierCostVnd`, `marginVnd`, `markupPercent`.
+- `notes`: nhãn surcharge **trung tính** (không dùng `SURCHARGE_LABELS` cũ vì có chữ "FedEx" — cần map brand-facing riêng, vd "Phụ phí xăng dầu (theo hãng vận chuyển)") + câu "phụ phí/fuel/VAT tính theo hãng khi xuất bill".
+- Nhãn service trong response: `label: 'Express Delivery' | 'Standard Delivery'`.
+- **Tuyệt đối không** trả `carrierCostVnd`, `marginVnd`, `markupPercent`, hay tên hãng.
 
 ### 3. API estimate — `app/api/mmp/ship-ho/estimate/route.ts`
 
@@ -124,20 +126,66 @@ Logic:
 - Validate: brand approve (như core); `mmpRef` bắt buộc; địa chỉ theo nước qua `validateAddressExtra(address.country, {...})`.
 - Idempotency: nếu đã có `ship_ho_orders.mmp_ref = mmpRef` → trả đơn cũ `{ ok:true, idempotent:true, orderId, code }` (kèm mã SMS đã sinh).
 - Tạo đơn:
-  - **SMS sinh mã order mới** (`code`) — canonical, unique (theo generator mã ship hộ hiện có / prefix theo brand). MMP KHÔNG quyết mã; `mmpRef` chỉ để map + idempotency.
+  - **SMS sinh mã order mới** (`code`) — canonical, unique. **Tạm thời**: dãy số tuần tự (vd sequence/counter zero-pad, hoặc cột `order_seq` bigserial → format `SH{n}`), đảm bảo unique như ràng buộc hiện có. **Backfill lại** theo format chính thức khi khách gửi (thêm cột lưu seq gốc để re-map an toàn). MMP KHÔNG quyết mã; `mmpRef` chỉ để map + idempotency.
   - `source='mmp'`, `mmp_ref=mmpRef`, `service` (express), `partner_brand_slug=brandSlug`, các field địa chỉ + country-specific, parcel.
   - Snapshot giá qua `estimateForBrand` (hoặc quote+computeOffer) → `carrierCostVnd/markupPercent/chargedVnd/quoteBreakdown/quotedAt` như requote, status `draft`. *(Đơn brand tạo vẫn để MEAN chốt carrier cuối; giá là estimate tại thời điểm tạo.)*
 - Trả `{ ok:true, orderId, code, estimate }` — `code` là mã SMS mới sinh để MMP lưu map.
 
-### 4b. Webhook SMS → MMP (cập nhật trạng thái cho brand)
+### 4b. Đồng bộ sự kiện MMP ⇄ SMS (thông tin xuyên suốt)
 
-Đồng bộ ngược để brand xem tiến độ/tracking/đối soát trong MMP. SMS chủ động push khi đơn `source='mmp'` đổi trạng thái.
+Mục tiêu: brand luôn biết **đơn đang ở đâu, phải trả bao nhiêu, có cần làm gì**. SMS là nguồn sự thật; MMP hiển thị.
+Vận chuyển qua webhook ký **HMAC** (convention `X-MEAN-Signature`/`X-MEAN-Timestamp`), hàng đợi + cron retry
+như `order-outbound`/`retry-mmp-orders`. Idempotent theo `mmpRef` + `event` + `occurredAt`. **Mọi payload gửi brand
+đều trung tính** (không tên hãng; service = "Express/Standard Delivery").
 
-- Gửi `POST {MMP_WEBHOOK_URL}/ship-ho/order-updates` với payload ký **HMAC** (cùng convention `X-MEAN-Signature`/`X-MEAN-Timestamp`, secret riêng `MMP_OUTBOUND_SECRET` hoặc dùng chung).
-- Payload: `{ mmpRef, code, status, trackingNumber?, deliveryStatus?, deliveredAt?, chargedVnd?, reconcileStatus?, updatedAt }`.
-- Sự kiện kích hoạt: quoted/confirmed, shipped (có tracking), delivered, billed/đối soát xong.
-- Độ tin cậy: hàng đợi + retry như `order-outbound`/`retry-mmp-orders` hiện có (tái dùng pattern outbound + cron retry). Idempotent phía MMP theo `mmpRef`+`status`.
-- *(Chi tiết danh sách sự kiện + mapping trạng thái chốt khi build; có thể tách phase riêng sau estimate + intake.)*
+Bổ sung backfill: MMP có thể gọi `GET /api/mmp/ship-ho/orders?updatedSince=<ts>` để đồng bộ bù khi webhook miss.
+
+Envelope chung: `{ event, mmpRef, code, occurredAt, data }`.
+
+#### A. Tạo & tiếp nhận đơn
+| Hướng | Event | Kích hoạt | `data` chính (brand-facing) |
+|---|---|---|---|
+| MMP→SMS | `order.created` | Brand tạo đơn | recipient, address, parcel, service → SMS trả `code` + estimate |
+| MMP→SMS | `order.updated` | Brand sửa khi còn `draft` | field thay đổi (chặn sau khi đã xử lý) |
+| MMP→SMS | `order.cancel_requested` | Brand xin huỷ khi chưa ship | lý do |
+| SMS→MMP | `order.received` | SMS nhận + gán mã | `code`, estimate snapshot |
+| SMS→MMP | `order.accepted` | MEAN nhận xử lý | eta xử lý (nếu có) |
+| SMS→MMP | `order.needs_info` | Địa chỉ/thiếu thông tin | field cần bổ sung (vd short-address SA) |
+| SMS→MMP | `order.rejected` | MEAN không nhận | lý do (ngoài vùng, sai địa chỉ) |
+| SMS→MMP | `order.cancelled` | Huỷ được chấp nhận | — |
+
+#### B. Giá & báo giá
+| Hướng | Event | Kích hoạt | `data` |
+|---|---|---|---|
+| SMS→MMP | `order.priced` | MEAN chốt line + giá cuối | `chargedVnd` cuối, lines (tách phụ phí), chênh lệch vs estimate + lý do |
+| MMP→SMS | `order.price_accepted` | Brand đồng ý giá (nếu lệch > ngưỡng) | — |
+
+#### C. Vận chuyển & tracking (cập nhật liên tục)
+| Hướng | Event | Kích hoạt | `data` |
+|---|---|---|---|
+| SMS→MMP | `shipment.booked` | Đã tạo vận đơn | `trackingNumber`, service ("Express Delivery"), dự kiến giao |
+| SMS→MMP | `shipment.picked_up` | Lấy hàng | thời điểm |
+| SMS→MMP | `shipment.in_transit` | Mốc quét chặng | vị trí/mô tả trung tính, thời điểm |
+| SMS→MMP | `shipment.customs` | Đang thông quan | trạng thái, hành động cần (nếu có) |
+| SMS→MMP | `shipment.exception` | Delay/giao lỗi/kẹt | loại lỗi + hành động brand cần làm |
+| SMS→MMP | `shipment.out_for_delivery` | Đang giao | — |
+| SMS→MMP | `shipment.delivered` | Đã giao | thời điểm, POD (nếu có) |
+| SMS→MMP | `shipment.returned` | Hoàn hàng (RTO) | lý do |
+
+#### D. Đối soát & công nợ (tài chính)
+| Hướng | Event | Kích hoạt | `data` |
+|---|---|---|---|
+| SMS→MMP | `order.reconciled` | Cước thực về, chốt giá cuối | `chargedVnd` cuối (nếu điều chỉnh), trạng thái đối soát |
+| SMS→MMP | `statement.issued` | Phát hành bảng kê kỳ | kỳ, danh sách đơn, tổng phải trả, hạn thanh toán |
+| SMS→MMP | `statement.paid` | Ghi nhận thanh toán | số tiền, còn lại (công nợ) |
+| SMS→MMP | `statement.overdue` | Quá hạn | số tiền quá hạn, số ngày |
+
+#### E. Độ tin cậy hệ thống
+- `sync.heartbeat` định kỳ (optional) + endpoint backfill `updatedSince` để MMP tự bù khi mất webhook.
+- Mọi event lưu outbox (bảng `mmp_ship_ho_events` hoặc tái dùng outbound hiện có) + retry tới khi MMP ack.
+
+*(Danh sách trên là bản brainstorm đầy đủ vòng đời; khi build sẽ chốt tập tối thiểu cho Phase 3 — thường:
+`order.received/accepted/priced`, `shipment.booked/delivered/exception`, `statement.issued/paid` — rồi mở rộng.)*
 
 ### 5. Surface cho MEAN
 
@@ -164,15 +212,17 @@ Logic:
 
 ## Đã chốt (từ Q&A)
 
-1. **Mã đơn:** MMP gửi đơn, **SMS sinh mã order mới** (canonical, unique); `mmp_ref` map + idempotency; trả mã SMS về MMP.
-2. **Estimate:** **1 quote duy nhất, FedEx làm chuẩn**; 2 service line **Express** (build ngay) + **Standard** (build sau, cùng core).
-3. **Webhook:** cần **SMS→MMP cập nhật thường xuyên** (trạng thái/tracking/đối soát) — mục 4b.
+1. **Định danh trung tính:** brand chỉ thấy **"Express Delivery" / "Standard Delivery"** + nhãn phụ phí trung tính; không lộ tên hãng.
+2. **Estimate:** 1 quote duy nhất, FedEx làm chuẩn (nội bộ); Express build ngay, Standard sau.
+3. **Mã đơn:** SMS sinh — **tạm dùng dãy số tuần tự**, backfill theo format chính thức sau.
+4. **Webhook:** cần SMS⇄MMP đồng bộ liên tục — catalog sự kiện đầy đủ ở mục 4b.
 
 ## Câu hỏi mở (chốt khi build)
 
-1. Cách định danh account FedEx **Express** vs **Standard** trong SMS (carrierKey riêng, cột `service`, hay account riêng) — để `estimateForBrand` chọn đúng line.
-2. Generator mã đơn ship hộ hiện có (prefix/format) để SMS sinh mã brand-order thống nhất.
-3. Danh sách sự kiện webhook + mapping trạng thái SMS→MMP, và endpoint/secret phía MMP.
+1. Map service **Express/Standard** → account/line FedEx nào trong SMS (cột `service` trên carrier account, hay 2 account riêng) — để `estimateForBrand` chọn đúng.
+2. Format mã đơn chính thức (khách gửi sau) → backfill dãy số tạm.
+3. Endpoint/secret webhook phía MMP + tập sự kiện tối thiểu chốt cho Phase 3 (gợi ý ở 4b).
+4. Ngưỡng lệch giá estimate↔giá cuối cần brand `price_accepted` (nếu áp dụng).
 
 ## Gợi ý phân đợt build (khi bắt tay)
 
