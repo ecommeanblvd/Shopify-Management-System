@@ -60,29 +60,17 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
   const inputCls = 'block w-full border rounded px-2 py-1 mt-1';
   return (
     <Card>
-      <CardContent className="p-4 space-y-3">
-        <label className="text-sm">Mã đơn *<input className={inputCls} value={f.code} onChange={set('code')} placeholder="DISCN001" /></label>
-        <label className="text-sm">Đối tác *
-          <select className={inputCls} value={f.partnerBrandSlug} onChange={set('partnerBrandSlug')}>
-            <option value="">— chọn —</option>
-            {partners.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Người nhận<input className={inputCls} value={f.recipientName} onChange={set('recipientName')} /></label>
-        <label className="text-sm">Số điện thoại
-          <div className="flex gap-2 mt-1">
-            <span className="inline-flex items-center px-2 border rounded bg-muted text-sm min-w-14 justify-center">
-              {f.country && dialCodeFor(f.country) ? `+${dialCodeFor(f.country)}` : '—'}
-            </span>
-            <input
-              className="block w-full border rounded px-2 py-1"
-              value={f.phone}
-              onChange={(e) => patch({ phone: e.target.value })}
-              placeholder="Số điện thoại người nhận"
-            />
-          </div>
-        </label>
-        <div className="grid grid-cols-3 gap-2">
+      <CardContent className="p-4 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <label className="text-sm">Mã đơn *<input className={inputCls} value={f.code} onChange={set('code')} placeholder="DISCN001" /></label>
+          <label className="text-sm">Đối tác *
+            <select className={inputCls} value={f.partnerBrandSlug} onChange={set('partnerBrandSlug')}>
+              <option value="">— chọn —</option>
+              {partners.map((p) => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
           <label className="text-sm">Quốc gia (ISO2) *
             <SearchSelect
               value={f.country}
@@ -103,18 +91,36 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
           </label>
           <label className="text-sm">Postcode<input className={inputCls} value={f.postcode} onChange={set('postcode')} /></label>
         </div>
-        <label className="text-sm">Địa chỉ<input className={inputCls} value={f.address1} onChange={set('address1')} /></label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-4">
+          <label className="text-sm">Người nhận<input className={inputCls} value={f.recipientName} onChange={set('recipientName')} /></label>
+          <label className="text-sm">Số điện thoại
+            <div className="flex gap-2 mt-1">
+              <span className="inline-flex items-center px-2 border rounded bg-muted text-sm min-w-14 justify-center">
+                {f.country && dialCodeFor(f.country) ? `+${dialCodeFor(f.country)}` : '—'}
+              </span>
+              <input
+                className="block w-full border rounded px-2 py-1"
+                value={f.phone}
+                onChange={(e) => patch({ phone: e.target.value })}
+                placeholder="Số điện thoại người nhận"
+              />
+            </div>
+          </label>
+        </div>
+        <label className="text-sm block">Địa chỉ<input className={inputCls} value={f.address1} onChange={set('address1')} /></label>
+        <div className="grid grid-cols-4 gap-4">
           <label className="text-sm">Cân (kg) *<input className={inputCls} value={f.weightKg} onChange={set('weightKg')} /></label>
           <label className="text-sm">D (cm)<input className={inputCls} value={f.dimLengthCm} onChange={set('dimLengthCm')} /></label>
           <label className="text-sm">R (cm)<input className={inputCls} value={f.dimWidthCm} onChange={set('dimWidthCm')} /></label>
           <label className="text-sm">C (cm)<input className={inputCls} value={f.dimHeightCm} onChange={set('dimHeightCm')} /></label>
         </div>
-        <label className="text-sm">Kiểu đóng gói
-          <select className={inputCls} value={f.packagingType} onChange={set('packagingType')}>
-            <option value="">—</option><option value="bag">Bag (Pak)</option><option value="box">Box</option>
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <label className="text-sm">Kiểu đóng gói
+            <select className={inputCls} value={f.packagingType} onChange={set('packagingType')}>
+              <option value="">—</option><option value="bag">Bag (Pak)</option><option value="box">Box</option>
+            </select>
+          </label>
+        </div>
         <div className="pt-1">
           <Button
             type="button"
