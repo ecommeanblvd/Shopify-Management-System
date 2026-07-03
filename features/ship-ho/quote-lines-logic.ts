@@ -1,10 +1,10 @@
-/** THUẦN: từ cước carrier + markup% → giá thu + margin cho 1 line. */
-import { applyMarkup } from './markup';
+/** THUẦN: từ cước carrier + base + markup% → giá thu + margin cho 1 line. */
+import { computeOffer } from './offer-pricing';
 
 export function summarizeLine(
   carrierCostVnd: number,
+  baseVnd: number,
   markupPercent: number,
 ): { chargedVnd: number; marginVnd: number } {
-  const chargedVnd = applyMarkup(carrierCostVnd, markupPercent);
-  return { chargedVnd, marginVnd: chargedVnd - carrierCostVnd };
+  return computeOffer(carrierCostVnd, baseVnd, markupPercent);
 }

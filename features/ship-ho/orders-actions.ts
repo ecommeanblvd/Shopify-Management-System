@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
-import { applyMarkup } from './markup';
+import { computeOffer } from './offer-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
 
@@ -132,7 +132,7 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     return { ok: false, error: `Quote lỗi: ${q.reason}` };
   }
 
-  const charged = applyMarkup(q.carrierCostVnd, Number(markupPercent));
+  const { chargedVnd: charged } = computeOffer(q.carrierCostVnd, q.baseVnd, Number(markupPercent));
   await db
     .update(schema.shipHoOrders)
     .set({
@@ -148,4 +148,21 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
   revalidatePath('/f/ship-ho');
   revalidatePath(`/f/ship-ho/${orderId}`);
   return { ok: true };
+}
+
+/** Xoá snapshot giá của 1 đơn về draft rồi requote bằng công thức hiện hành. */
+export async function clearAndRequoteOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  await db
+    .update(schema.shipHoOrders)
+    .set({
+      status: 'draft',
+      carrierCostVnd: null,
+      markupPercent: null,
+      chargedVnd: null,
+      quoteBreakdown: null,
+      quotedAt: null,
+    })
+    .where(eq(schema.shipHoOrders.id, orderId));
+  return await requoteShipHoOrder(orderId);
 }
