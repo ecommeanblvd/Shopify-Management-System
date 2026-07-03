@@ -45,22 +45,30 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
 
   const { code, seq } = await nextBrandOrderCode();
 
-  const [row] = await db.insert(schema.shipHoOrders).values({
-    code, partnerBrandSlug: input.brandSlug,
-    source: 'mmp', mmpRef: input.mmpRef, mmpOrderSeq: seq, service: 'express',
-    recipientName: input.recipient?.name || null, recipientPhone: input.recipient?.phone || null,
-    country: input.address.country.trim().toUpperCase(), city: input.address.city || null,
-    province: input.address.province || null, postcode: input.address.postcode || null,
-    address1: input.address.address1 || null, address2: input.address.address2 || null,
-    houseNumber: extra.normalized.houseNumber ?? null, shortAddress: extra.normalized.shortAddress ?? null, mapsUrl: extra.normalized.mapsUrl ?? null,
-    weightKg: String(input.parcel.weightKg),
-    dimLengthCm: input.parcel.dimLengthCm != null ? String(input.parcel.dimLengthCm) : null,
-    dimWidthCm: input.parcel.dimWidthCm != null ? String(input.parcel.dimWidthCm) : null,
-    dimHeightCm: input.parcel.dimHeightCm != null ? String(input.parcel.dimHeightCm) : null,
-    packagingType: input.parcel.packagingType ?? null,
-    chargedVnd: String(est.estimate.chargedVnd), quotedAt: new Date(),
-    status: 'draft', createdBy: `mmp:${input.brandSlug}`,
-  }).returning({ id: schema.shipHoOrders.id });
+  try {
+    const [row] = await db.insert(schema.shipHoOrders).values({
+      code, partnerBrandSlug: input.brandSlug,
+      source: 'mmp', mmpRef: input.mmpRef, mmpOrderSeq: seq, service: 'express',
+      recipientName: input.recipient?.name || null, recipientPhone: input.recipient?.phone || null,
+      country: input.address.country.trim().toUpperCase(), city: input.address.city || null,
+      province: input.address.province || null, postcode: input.address.postcode || null,
+      address1: input.address.address1 || null, address2: input.address.address2 || null,
+      houseNumber: extra.normalized.houseNumber ?? null, shortAddress: extra.normalized.shortAddress ?? null, mapsUrl: extra.normalized.mapsUrl ?? null,
+      weightKg: String(input.parcel.weightKg),
+      dimLengthCm: input.parcel.dimLengthCm != null ? String(input.parcel.dimLengthCm) : null,
+      dimWidthCm: input.parcel.dimWidthCm != null ? String(input.parcel.dimWidthCm) : null,
+      dimHeightCm: input.parcel.dimHeightCm != null ? String(input.parcel.dimHeightCm) : null,
+      packagingType: input.parcel.packagingType ?? null,
+      chargedVnd: String(est.estimate.chargedVnd), quotedAt: new Date(),
+      status: 'draft', createdBy: `mmp:${input.brandSlug}`,
+    }).returning({ id: schema.shipHoOrders.id });
 
-  return { ok: true, orderId: row.id, code, estimate: est.estimate };
+    return { ok: true, orderId: row.id, code, estimate: est.estimate };
+  } catch (e) {
+    // Race: concurrent duplicate mmp_ref rejected by the unique index → trả đơn đã tồn tại (idempotent).
+    const [dup] = await db.select().from(schema.shipHoOrders)
+      .where(eq(schema.shipHoOrders.mmpRef, input.mmpRef)).limit(1);
+    if (dup) return { ok: true, orderId: dup.id, code: dup.code, idempotent: true, estimate: est.estimate };
+    throw e;
+  }
 }
