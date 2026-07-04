@@ -1960,3 +1960,51 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),
 });
+
+// ---- Order Lifecycle (vòng đời đơn + SLA) ----------------------------------
+/** SLA mặc định toàn hệ thống cho từng đoạn vòng đời (admin sửa trong UI P2).
+ *  key: placed_to_production | production | qc | pack | ship | deliver. */
+export const lifecycleSla = pgTable('lifecycle_sla', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  key: text('key').notNull().unique(),
+  targetHours: integer('target_hours').notNull(),
+  note: text('note'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+/** Snapshot vòng đời 1 dòng/đơn — cron sync-lifecycle đối chiếu tín hiệu nguồn
+ *  và upsert. Các mốc first-seen (qc_pass/in_transit/out_for_delivery/
+ *  return_processing) chỉ set khi đang null. */
+export const orderLifecycle = pgTable('order_lifecycle', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull().unique(),
+  storeId: uuid('store_id').references(() => stores.id).notNull(),
+  currentStage: text('current_stage').notNull().default('placed'),
+  exception: boolean('exception').notNull().default(false),
+  exceptionNote: text('exception_note'),
+  // Mốc vòng đời (spec §3)
+  placedAt: timestamp('placed_at'),
+  productionStartAt: timestamp('production_start_at'),
+  productionConfirmedAt: timestamp('production_confirmed_at'),
+  productionEta: date('production_eta'),
+  goodsReceivedAt: timestamp('goods_received_at'),
+  qcPassAt: timestamp('qc_pass_at'),
+  packedAt: timestamp('packed_at'),
+  shippedAt: timestamp('shipped_at'),
+  inTransitAt: timestamp('in_transit_at'),
+  outForDeliveryAt: timestamp('out_for_delivery_at'),
+  deliveredAt: timestamp('delivered_at'),
+  returnProcessingAt: timestamp('return_processing_at'),
+  refundedAt: timestamp('refunded_at'),
+  completedAt: timestamp('completed_at'),
+  cancelledAt: timestamp('cancelled_at'),
+  // Delay (spec §4)
+  deadline: timestamp('deadline'),
+  delayStatus: text('delay_status').notNull().default('on_track'), // on_track|due_soon|overdue
+  delayHours: integer('delay_hours').notNull().default(0),
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+}, (t) => [
+  index('order_lifecycle_stage_idx').on(t.currentStage),
+  index('order_lifecycle_delay_idx').on(t.delayStatus),
+  index('order_lifecycle_store_idx').on(t.storeId),
+]);
