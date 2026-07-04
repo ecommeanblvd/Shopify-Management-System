@@ -1,54 +1,6 @@
-import { headers } from 'next/headers';
-import { notFound, redirect } from 'next/navigation';
-import { auth } from '@/lib/auth/auth';
-import { getRole } from '@/lib/auth/role';
-import { hasPermission } from '@/lib/auth/rbac';
-import { getFulfillmentDetail } from '@/features/fulfillment/queries';
-import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/queries';
-import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
-import { AddressVerifyCard } from '@/components/fulfillment/AddressVerifyCard';
-import { PackPanel } from '@/components/fulfillment/PackPanel';
-import { getMmpPushInfo } from '@/features/mmp/order-push-query';
-import { MmpPushBadge } from '@/components/fulfillment/MmpPushBadge';
-import { getLarkRecordsForOrder } from '@/features/lark/detail';
-import { LarkDetailCard } from '@/components/fulfillment/LarkDetailCard';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
-export default async function FulfillmentDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
+export default async function FulfillmentDetailRedirect({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect('/sign-in');
-  const role = await getRole(session.user.id);
-  if (!role || !hasPermission(role, 'view_fulfillment')) redirect('/');
-
-  const detail = await getFulfillmentDetail(orderId);
-  if (!detail) notFound();
-  const [picked, packs, larkRecords] = await Promise.all([
-    pickedUnassignedLines(orderId), listPacksForOrder(orderId), getLarkRecordsForOrder(orderId),
-  ]);
-
-  const canManage = hasPermission(role, 'manage_fulfillment');
-  const mmpPush = await getMmpPushInfo(orderId);
-  return (
-    <div className="space-y-6 p-6">
-      <OrderDetailPanel status={detail.fulfillment.status} lines={detail.lines} canManage={canManage} />
-      <MmpPushBadge info={mmpPush} orderId={orderId} canManage={canManage} />
-      <AddressVerifyCard address={detail.address} orderId={orderId} />
-      <PackPanel
-        orderId={orderId}
-        picked={picked}
-        packs={packs.map((p) => ({
-          id: p.id, code: p.code, carrierKey: p.carrierKey, trackingNumber: p.trackingNumber,
-          checkPackedAt: p.checkPackedAt as Date | null, actualWeightKg: p.actualWeightKg,
-          lines: p.lines.map((l) => ({ id: l.id, sku: l.sku, qty: l.qty, status: l.status, productTitle: l.productTitle })),
-          shopifyPushStatus: p.shopifyPushStatus, shopifyPushError: p.shopifyPushError,
-          deliveryStatus: p.deliveryStatus, deliveredAt: p.deliveredAt, trackDetail: p.trackDetail, lastTrackedAt: p.lastTrackedAt,
-        }))}
-        canManage={canManage}
-        canCheckPacked={hasPermission(role, 'check_packed')}
-      />
-      <LarkDetailCard records={larkRecords} />
-    </div>
-  );
+  redirect(`/f/lifecycle/${orderId}`);
 }
