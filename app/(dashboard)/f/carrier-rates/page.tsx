@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { Plus, Truck, Globe2, Coins, ArrowRight, AlertCircle, Sparkles, Scale } from 'lucide-react';
+import { Plus, Truck, Globe2, Coins, ArrowRight, AlertCircle, Sparkles, Scale, MapPin } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -47,6 +47,10 @@ export default async function CarrierRatesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/f/carrier-rates/geo-lookup" className={buttonVariants({ variant: 'outline' }) + ' gap-1.5 px-4 h-9'}>
+              <MapPin className="size-4" />
+              Tra cứu geo
+            </Link>
             <Link href="/f/carrier-rates/compare" className={buttonVariants({ variant: 'outline' }) + ' gap-1.5 px-4 h-9'}>
               <Scale className="size-4" />
               So sánh cước
