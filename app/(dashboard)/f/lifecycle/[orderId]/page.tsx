@@ -104,7 +104,7 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
           ? `${lines.length} dòng · ${lines.map((l) => l.sku).filter(Boolean).join(', ')}`
           : 'Chưa có';
       case 'brand': {
-        const vendors = [...new Set(brandRequests.map((b) => (b as { vendor?: string }).vendor).filter(Boolean))];
+        const vendors = [...new Set(brandRequests.map((b) => b.brandSlug).filter(Boolean))];
         return vendors.length > 0 ? vendors.join(', ') : '—';
       }
       case 'brandEta': {
@@ -118,9 +118,7 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
         const confirmed = brandRequests.filter(
           (b) => (b as { confirmStatus?: string }).confirmStatus === 'confirmed',
         ).length;
-        const delivered = brandRequests.filter(
-          (b) => (b as { deliveryStatus?: string }).deliveryStatus === 'delivered',
-        ).length;
+        const delivered = brandRequests.filter((b) => b.deliveredAt != null).length;
         return `${total} yêu cầu · ${confirmed} xác nhận · ${delivered} đã giao`;
       }
       case 'kcs':
