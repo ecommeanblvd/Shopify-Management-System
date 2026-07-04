@@ -141,7 +141,7 @@ export function WorklistTable({ rows }: Props) {
                 </td>
                 <td className="px-3 py-2">
                   <a
-                    href={`/f/fulfillment/${row.orderId}`}
+                    href={`/f/lifecycle/${row.orderId}`}
                     className="font-mono text-primary underline-offset-2 hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
