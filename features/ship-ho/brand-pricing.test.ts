@@ -43,4 +43,32 @@ describe('computeBrandCharge (Option A: fuel/VAT trên base đã markup)', () =>
     });
     expect(r.chargedVnd).toBe(150000); // 120000 + 30000
   });
+  it('packagingVnd > 0 → pass-through sau margin, không nhân fuel/VAT, có line riêng', () => {
+    const r = computeBrandCharge({
+      carrierCostVnd: 151632, baseVnd: 100000, fuelPercent: 17, vatPercent: 8, markupPercent: 30,
+      parts: { surchargesVnd: 20000, fuelRealVnd: 20400, vatRealVnd: 11232 },
+      serviceLabel: 'Express Delivery',
+      packagingVnd: 5000,
+    });
+    expect(r.chargedVnd).toBe(194540); // 189540 + 5000
+    expect(r.lines).toContainEqual({ label: 'Phí đóng gói', amountVnd: 5000 });
+    expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
+  });
+  it('packagingVnd 0 hoặc bỏ trống → không có line "Phí đóng gói", chargedVnd không đổi', () => {
+    const withZero = computeBrandCharge({
+      carrierCostVnd: 151632, baseVnd: 100000, fuelPercent: 17, vatPercent: 8, markupPercent: 30,
+      parts: { surchargesVnd: 20000, fuelRealVnd: 20400, vatRealVnd: 11232 },
+      serviceLabel: 'Express Delivery',
+      packagingVnd: 0,
+    });
+    const omitted = computeBrandCharge({
+      carrierCostVnd: 151632, baseVnd: 100000, fuelPercent: 17, vatPercent: 8, markupPercent: 30,
+      parts: { surchargesVnd: 20000, fuelRealVnd: 20400, vatRealVnd: 11232 },
+      serviceLabel: 'Express Delivery',
+    });
+    expect(withZero.chargedVnd).toBe(189540);
+    expect(omitted.chargedVnd).toBe(189540);
+    expect(withZero.lines.some((l) => l.label === 'Phí đóng gói')).toBe(false);
+    expect(omitted.lines.some((l) => l.label === 'Phí đóng gói')).toBe(false);
+  });
 });

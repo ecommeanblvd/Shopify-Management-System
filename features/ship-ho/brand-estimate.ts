@@ -85,11 +85,12 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     (b.remote + b.residential + b.perKg + b.demand + b.countryFixed + b.perStep + b.peak + b.addons) * factor,
   );
   const parts = { surchargesVnd, fuelRealVnd: Math.round(b.fuel * factor), vatRealVnd: Math.round(b.vat * factor) };
+  const packagingVnd = Math.round(b.packaging * factor);
 
   const { chargedVnd, lines } = computeBrandCharge({
     carrierCostVnd: carrierCost.vnd, baseVnd: base.vnd,
     fuelPercent: b.fuelPercent, vatPercent: b.vatPercent, markupPercent: Number(partner.markupPercent),
-    parts, serviceLabel: SERVICE_LABEL[service],
+    parts, serviceLabel: SERVICE_LABEL[service], packagingVnd,
   });
 
   return { ok: true, estimate: { chargedVnd, currency: 'VND', provisional: true, service, lines, notes: neutralNotes() } };
