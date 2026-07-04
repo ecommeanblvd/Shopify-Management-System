@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createShipHoOrder } from '@/features/ship-ho/orders-actions';
 import { quoteShipHoLines, type LineQuote } from '@/features/ship-ho/quote-lines-actions';
@@ -10,6 +10,7 @@ import { SearchSelect } from '@/components/ui/search-select';
 import { COUNTRIES, dialCodeFor } from '@/lib/geo/countries';
 import { citiesFor } from '@/lib/geo/cities';
 import { requirementFor, validateAddressExtra } from '@/lib/geo/address-requirements';
+import { lookupPostcodeAction } from '@/features/geo/geo-actions';
 
 const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.iso2, label: `${c.name} (${c.iso2})` }));
 
@@ -37,6 +38,24 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
     setLines([]); setSelectedAccountId(''); setCompareErr(null);
   };
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => patch({ [k]: e.target.value } as Partial<typeof f>);
+
+  const [geoHint, setGeoHint] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+  const geoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onPostcode(v: string) {
+    patch({ postcode: v });
+    if (geoTimer.current) clearTimeout(geoTimer.current);
+    if (!f.country || !v.trim()) { setGeoHint(null); return; }
+    geoTimer.current = setTimeout(async () => {
+      const r = await lookupPostcodeAction(f.country, v);
+      if (r.valid === true) {
+        setGeoHint({ tone: 'ok', text: `✓ ${r.city}${r.stateCode ? ' · ' + r.stateCode : ''}` });
+        if (r.city) patch({ city: r.city });
+      } else if (r.valid === false) {
+        setGeoHint({ tone: 'warn', text: '⚠ Không tìm thấy postcode' });
+      } else setGeoHint(null);
+    }, 500);
+  }
 
   const submit = () =>
     start(async () => {
@@ -96,7 +115,9 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
               disabled={!f.country}
             />
           </label>
-          <label className="text-sm">Postcode<input className={inputCls} value={f.postcode} onChange={set('postcode')} /></label>
+          <label className="text-sm">Postcode<input className={inputCls} value={f.postcode} onChange={(e) => onPostcode(e.target.value)} />
+            {geoHint && <span className={`block text-xs mt-0.5 ${geoHint.tone === 'ok' ? 'text-emerald-600' : 'text-amber-600'}`}>{geoHint.text}</span>}
+          </label>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm">Người nhận<input className={inputCls} value={f.recipientName} onChange={set('recipientName')} /></label>
