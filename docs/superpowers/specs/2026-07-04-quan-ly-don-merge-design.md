@@ -34,7 +34,9 @@ Gom 3 mục hiện có vào 1 nhóm nav (route giữ nguyên, chỉ đổi nhãn
 - **Vòng đời** → `/f/lifecycle`.
 - **Thống kê** → `/f/lifecycle/stats`.
 
-Cả worklist (`WorklistTable`) và lifecycle list đổi **link chi tiết** → trỏ về trang chi tiết hợp nhất.
+Điều hướng 3 tab bằng **tab bar chung trong trang** (pattern như Ship hộ: 1 nav entry + tab nội bộ),
+KHÔNG lồng nav trong Sidebar. Việc gộp **link chi tiết** về 1 trang để **P2** (sau khi trang hợp nhất
+đã hấp thụ address-verify + Lark của trang fulfillment detail hiện tại — nếu redirect ở P1 sẽ mất chức năng).
 
 ### 3.2 Trang chi tiết hợp nhất (trái tim)
 Route: dùng `/f/lifecycle/[orderId]` làm nơi triển khai (đã có stepper+timeline), trình bày dưới tên
@@ -79,8 +81,8 @@ Cấu trúc:
 
 | Phase | Deliverable | Rủi ro |
 |---|---|---|
-| **P1** | Nav group "Quản lí đơn" (3 tab) + trỏ cả 2 list về 1 trang chi tiết (lifecycle detail) + worklist detail redirect | Thấp — plumbing |
-| **P2** | Làm giàu trang chi tiết: `playbook.ts` + `stage-timing.ts` + `getOrderDossier` + render 4 lớp/point (đã qua/hiện tại/chưa tới) + pill việc worklist | Vừa — thêm mới, đọc-thuần |
+| **P1** | Nav gom 1 entry "Quản lí đơn" (thay 2 entry) + **tab bar chung** (Việc cần làm/Vòng đời/Thống kê) render đầu 3 trang + Sidebar highlight cho các route con. GIỮ 2 trang detail. | Thấp — chỉ nav/tab, không đổi logic/detail |
+| **P2** | Làm giàu trang chi tiết hợp nhất: `playbook.ts` + `stage-timing.ts` + `getOrderDossier` (gồm address-verify + Lark) + render 4 lớp/point + pill việc worklist. Rồi trỏ worklist list + fulfillment detail → trang hợp nhất (redirect trang detail cũ). | Vừa — thêm mới, đọc-thuần; redirect chỉ sau khi đủ giàu |
 
 ## 5. Test & lỗi
 
