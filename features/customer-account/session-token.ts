@@ -39,8 +39,12 @@ export function verifySessionToken(
   } catch { return { ok: false, reason: 'malformed' }; }
   if (header.alg !== 'HS256') return { ok: false, reason: 'malformed' };
 
+  // Lọc secret rỗng để tránh bypass khi env split ',,'.
+  const cleanSecrets = secrets.filter((s) => s.length > 0);
+  if (cleanSecrets.length === 0) return { ok: false, reason: 'bad_signature' };
+
   const sigBuf = Buffer.from(sig, 'base64url');
-  const matched = secrets.some((s) => {
+  const matched = cleanSecrets.some((s) => {
     const expected = crypto.createHmac('sha256', s).update(`${h}.${p}`).digest();
     return expected.length === sigBuf.length && crypto.timingSafeEqual(expected, sigBuf);
   });
@@ -49,7 +53,8 @@ export function verifySessionToken(
   const now = opts?.nowSeconds ?? Math.floor(Date.now() / 1000);
   if (typeof payload.exp !== 'number' || payload.exp <= now) return { ok: false, reason: 'expired' };
 
-  const allowed = opts?.allowedClientIds ?? [];
+  // Lọc client id rỗng để tránh bypass qua empty-string match khi env split ',,'.
+  const allowed = (opts?.allowedClientIds ?? []).filter((s) => s.length > 0);
   if (allowed.length > 0) {
     const auds = Array.isArray(payload.aud) ? payload.aud : payload.aud ? [payload.aud] : [];
     if (!auds.some((a) => allowed.includes(a))) return { ok: false, reason: 'bad_aud' };

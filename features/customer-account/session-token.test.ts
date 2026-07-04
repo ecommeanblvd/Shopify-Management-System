@@ -45,6 +45,52 @@ describe('verifySessionToken', () => {
   });
 });
 
+describe('aud array support', () => {
+  it('aud dạng array chứa allowedClientId → ok', () => {
+    const tok = sign({ ...base, aud: ['x', 'client-1'] }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW, allowedClientIds: ['client-1'] }).ok).toBe(true);
+  });
+  it('aud dạng array không chứa allowedClientId → bad_aud', () => {
+    const tok = sign({ ...base, aud: ['x'] }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW, allowedClientIds: ['client-1'] })).toEqual({ ok: false, reason: 'bad_aud' });
+  });
+  it('aud thiếu + allowedClientIds non-empty → bad_aud', () => {
+    const { aud: _a, ...noAud } = base;
+    const tok = sign({ ...noAud, exp: NOW + 300 }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW, allowedClientIds: ['client-1'] })).toEqual({ ok: false, reason: 'bad_aud' });
+  });
+});
+
+describe('empty secret / clientId hardening', () => {
+  it('secrets: [] → bad_signature (không crash)', () => {
+    expect(verifySessionToken(sign(base, 's1'), [], { nowSeconds: NOW })).toEqual({ ok: false, reason: 'bad_signature' });
+  });
+  it("secrets: [''] → bad_signature (không crash)", () => {
+    expect(verifySessionToken(sign(base, 's1'), [''], { nowSeconds: NOW })).toEqual({ ok: false, reason: 'bad_signature' });
+  });
+  it("allowedClientIds [''] + token aud '' ký đúng secret → ok ('' bị lọc → bỏ check aud)", () => {
+    const tok = sign({ ...base, aud: '' }, 's1');
+    // '' bị lọc khỏi allowed → allowed trở thành [] → không check aud → ok
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW, allowedClientIds: [''] }).ok).toBe(true);
+  });
+});
+
+describe('exp boundary', () => {
+  it('exp thiếu → expired', () => {
+    const { exp: _e, ...noExp } = base;
+    const tok = sign({ ...noExp }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW })).toEqual({ ok: false, reason: 'expired' });
+  });
+  it('exp là string → expired', () => {
+    const tok = sign({ ...base, exp: String(NOW + 300) }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW })).toEqual({ ok: false, reason: 'expired' });
+  });
+  it('exp === now (boundary) → expired (not-strictly-greater)', () => {
+    const tok = sign({ ...base, exp: NOW }, 's1');
+    expect(verifySessionToken(tok, ['s1'], { nowSeconds: NOW })).toEqual({ ok: false, reason: 'expired' });
+  });
+});
+
 describe('helpers', () => {
   it('shopDomainFromDest strip protocol + slash', () => {
     expect(shopDomainFromDest('https://a.myshopify.com/')).toBe('a.myshopify.com');
