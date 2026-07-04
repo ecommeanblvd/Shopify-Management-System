@@ -2,8 +2,9 @@
  * THUẦN: giá brand-facing ship hộ (Option A) — fuel & VAT áp trên base ĐÃ markup.
  *   margin     = baseVnd × markup% × (1+fuel%) × (1+vat%)
  *   chargedVnd = round(carrierCostVnd) + round(margin) + round(packagingVnd)
- * packagingVnd là pass-through (đúng giá vốn), cộng SAU margin, KHÔNG bị nhân fuel/VAT
- * (khớp cách engine xử lý packaging: cộng sau markup, ngoài base tính fuel/VAT).
+ * packagingVnd là pass-through THUẦN (đúng giá vốn), cộng SAU margin, KHÔNG bị nhân
+ * markup/fuel/VAT — quyết định nghiệp vụ cho giá brand. (Lưu ý: engine nội bộ CÓ nhân
+ * markup lên packaging; giá brand cố ý khác — brand chỉ trả đúng giá đóng gói.)
  * Lines (minh bạch, tổng == chargedVnd): markedBase, phụ phí, xăng dầu, [phí đóng gói], VAT (dòng cuối là residual).
  * KHÔNG lộ carrierCost/margin/markup ra ngoài — chỉ trả chargedVnd + lines trung tính.
  */
