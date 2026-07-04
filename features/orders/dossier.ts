@@ -4,7 +4,7 @@ import { db, schema } from '@/db/client';
 import { getLifecycle } from '@/features/lifecycle/queries';
 import { getFulfillmentDetail } from '@/features/fulfillment/queries';
 import { listBrandRequestsForOrder } from '@/features/fulfillment/brand-queries';
-import { listPacksForOrder } from '@/features/packing/queries';
+import { listPacksForOrder, pickedUnassignedLines } from '@/features/packing/queries';
 import { getMmpPushInfo } from '@/features/mmp/order-push-query';
 import { getLarkRecordsForOrder } from '@/features/lark/detail';
 import { deriveOrderStage, type StageSignals, type OrderStage } from '@/features/fulfillment/order-stage';
@@ -14,6 +14,8 @@ type FulfillmentDetail = Awaited<ReturnType<typeof getFulfillmentDetail>>;
 type Pack = Awaited<ReturnType<typeof listPacksForOrder>>[number];
 type BrandReq = Awaited<ReturnType<typeof listBrandRequestsForOrder>>[number];
 type LarkRecord = Awaited<ReturnType<typeof getLarkRecordsForOrder>>[number];
+type Picked = Awaited<ReturnType<typeof pickedUnassignedLines>>;
+type MmpInfo = Awaited<ReturnType<typeof getMmpPushInfo>>;
 
 export interface OrderDossier {
   lifecycle: Lifecycle;
@@ -24,6 +26,9 @@ export interface OrderDossier {
   larkRecords: LarkRecord[];
   /** Tình trạng hiện tại của đơn — suy ra từ StageSignals thực tế. */
   currentAction: OrderStage;
+  picked: Picked;
+  mmp: MmpInfo;
+  fulfillmentStatus: string | null;
 }
 
 export async function getOrderDossier(orderId: string): Promise<OrderDossier | null> {
@@ -40,13 +45,14 @@ export async function getOrderDossier(orderId: string): Promise<OrderDossier | n
     .then((rows) => rows[0] ?? null)
     .catch(() => null);
 
-  const [detail, brandRequests, packs, mmp, larkRecords, larkRow] = await Promise.all([
+  const [detail, brandRequests, packs, mmp, larkRecords, larkRow, picked] = await Promise.all([
     getFulfillmentDetail(orderId),
     listBrandRequestsForOrder(orderId),
     listPacksForOrder(orderId),
     getMmpPushInfo(orderId),
     larkSafe,
     larkStatusSafe,
+    pickedUnassignedLines(orderId),
   ]);
 
   // Build StageSignals cho "việc hiện tại".
@@ -85,5 +91,8 @@ export async function getOrderDossier(orderId: string): Promise<OrderDossier | n
     packs,
     larkRecords,
     currentAction,
+    picked,
+    mmp,
+    fulfillmentStatus: detail?.fulfillment?.status ?? null,
   };
 }
