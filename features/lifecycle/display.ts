@@ -20,9 +20,40 @@ export const STAGE_ORDER: StageKey[] = [
   'out_for_delivery', 'post_delivery', 'completed', 'refunded_full', 'cancelled',
 ];
 
-export type Tone = 'ok' | 'warn' | 'bad' | 'muted';
+/** Chuỗi chính (bỏ terminal refunded/cancelled) để đo tiến độ + stage kế tiếp. */
+export const MAIN_CHAIN: StageKey[] = [
+  'placed', 'production', 'qc', 'packed', 'shipped',
+  'in_transit', 'out_for_delivery', 'post_delivery', 'completed',
+];
+
+export function nextStage(stage: StageKey): StageKey | null {
+  const i = MAIN_CHAIN.indexOf(stage);
+  if (i < 0 || i >= MAIN_CHAIN.length - 1) return null;
+  return MAIN_CHAIN[i + 1];
+}
+
+export function stageProgress(stage: StageKey): { index: number; total: number } {
+  const total = MAIN_CHAIN.length;
+  const i = MAIN_CHAIN.indexOf(stage);
+  return { index: i < 0 ? total : i, total };
+}
+
+export type Tone = 'ok' | 'warn' | 'bad' | 'muted' | 'stale';
 export function delayTone(delayStatus: string): Tone {
-  return delayStatus === 'overdue' ? 'bad' : delayStatus === 'due_soon' ? 'warn' : 'ok';
+  return delayStatus === 'stale' ? 'stale'
+    : delayStatus === 'overdue' ? 'bad'
+    : delayStatus === 'due_soon' ? 'warn' : 'ok';
+}
+
+export function statusLabel(
+  delayStatus: string, delayHours: number,
+): { text: string; tone: Tone } {
+  switch (delayStatus) {
+    case 'stale': return { text: 'Nghi mất tín hiệu', tone: 'stale' };
+    case 'overdue': return { text: `Trễ ${fmtDuration(delayHours)}`, tone: 'bad' };
+    case 'due_soon': return { text: 'Sắp hạn', tone: 'warn' };
+    default: return { text: 'Đúng hạn', tone: 'ok' };
+  }
 }
 
 export function fmtDuration(hours: number | null): string {
@@ -71,7 +102,14 @@ export function stageAnchorAt(stage: string, m: Partial<Milestones>): Date | str
   }
 }
 
-export interface TimelineStep { key: string; label: string; at: Date | string | null; durationHrs: number | null }
+export interface TimelineStep {
+  key: string;
+  label: string;
+  at: Date | string | null;
+  durationHrs: number | null;
+  approx: boolean;
+  approxReason: 'first_seen' | 'out_of_order' | null;
+}
 
 const TIMELINE_ORDER: Array<{ key: keyof Milestones; label: string }> = [
   { key: 'placedAt', label: 'Đặt hàng' },
@@ -86,13 +124,44 @@ const TIMELINE_ORDER: Array<{ key: keyof Milestones; label: string }> = [
   { key: 'completedAt', label: 'Hoàn tất' },
 ];
 
-/** Các mốc đã đạt (at != null) + duration từ mốc đã-đạt liền trước. */
-export function buildTimeline(m: Milestones): TimelineStep[] {
-  const reached = TIMELINE_ORDER.filter((s) => m[s.key] != null);
-  return reached.map((s, i) => ({
-    key: s.key as string,
-    label: s.label,
-    at: m[s.key],
-    durationHrs: i === 0 ? null : hoursBetween(m[reached[i - 1].key], m[s.key]),
-  }));
+/** Mốc nguồn đáng tin (spine) để phát hiện lệch thứ tự. */
+const SPINE_KEYS = new Set<keyof Milestones>(['placedAt', 'shippedAt', 'deliveredAt', 'completedAt']);
+
+/** Timeline: các mốc đã đạt, sắp tăng dần theo thời gian thật; đánh dấu approx; duration an toàn. */
+export function buildTimeline(m: Milestones, syncedAt: Date | string | null): TimelineStep[] {
+  const canonical = new Map(TIMELINE_ORDER.map((s, i) => [s.key, i] as const));
+  const reached = TIMELINE_ORDER
+    .filter((s) => m[s.key] != null)
+    .map((s) => ({ key: s.key, label: s.label, ms: asMs(m[s.key])! }));
+  const spine = reached.filter((r) => SPINE_KEYS.has(r.key as keyof Milestones));
+  const syncMs = asMs(syncedAt);
+
+  const sorted = [...reached].sort((a, b) => a.ms - b.ms);
+
+  const built = sorted.map((r) => {
+    const cIdx = canonical.get(r.key) ?? 0;
+    const firstSeen = syncMs != null && Math.abs(r.ms - syncMs) <= 24 * 3600_000
+      && !SPINE_KEYS.has(r.key as keyof Milestones);
+    const outOfOrder = spine.some((s) => {
+      const sIdx = canonical.get(s.key) ?? 0;
+      return (sIdx > cIdx && s.ms < r.ms) || (sIdx < cIdx && s.ms > r.ms);
+    }) && !SPINE_KEYS.has(r.key as keyof Milestones);
+    const approxReason: TimelineStep['approxReason'] = firstSeen ? 'first_seen' : outOfOrder ? 'out_of_order' : null;
+    return {
+      key: r.key as string,
+      label: TIMELINE_ORDER.find((t) => t.key === r.key)!.label,
+      at: m[r.key as keyof Milestones],
+      ms: r.ms,
+      approx: approxReason != null,
+      approxReason,
+      durationHrs: null as number | null,
+    };
+  });
+
+  for (let i = 1; i < built.length; i++) {
+    if (!built[i].approx && !built[i - 1].approx) {
+      built[i].durationHrs = Math.max(0, (built[i].ms - built[i - 1].ms) / 3600_000);
+    }
+  }
+  return built.map(({ ms: _ms, ...step }) => step);
 }

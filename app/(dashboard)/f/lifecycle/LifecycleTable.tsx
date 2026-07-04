@@ -11,6 +11,7 @@ const TONE: Record<Tone, string> = {
   warn: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   bad: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   muted: 'bg-muted text-muted-foreground',
+  stale: 'bg-slate-100 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400',
 };
 
 export function LifecycleTable({ rows, counts, activeStage, activeDelay }: {

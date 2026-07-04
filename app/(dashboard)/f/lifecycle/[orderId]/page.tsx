@@ -23,7 +23,7 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
   }
   const lc = await getLifecycle(orderId);
   if (!lc) notFound();
-  const steps = buildTimeline(lc);
+  const steps = buildTimeline(lc, lc.syncedAt);
 
   return (
     <div className="max-w-3xl mx-auto px-6 md:px-10 py-8 space-y-6">
