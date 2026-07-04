@@ -12,8 +12,29 @@
 - Dịch vụ hiển thị cho brand: **"Express Delivery"** (đang có) và **"Standard Delivery"** (sắp có). **Không** dùng tên hãng vận chuyển ở bất kỳ đâu.
 - Giá trả về là **giá dự kiến (provisional)** theo cân nặng & kích thước brand khai báo. **Hóa đơn cuối** tính lại theo **cân & phụ phí thực tế** khi đơn vị vận chuyển xuất bill.
 - Tiền tệ: **VND** (số nguyên đồng).
+- **COD: chưa hỗ trợ ở v1** (không có trường COD trong estimate/orders). ETA giao hàng: **chưa trả ở estimate v1** — sẽ cập nhật qua webhook `shipment.booked` (mục 4) ở v2.
+
+## 0b. Base URL & môi trường
+
+| Môi trường | Base URL |
+|---|---|
+| Production | `https://<SMS_PROD_HOST>` — *(MEAN cấp; điền khi tích hợp)* |
+| Staging | `https://<SMS_STAGING_HOST>` — *(MEAN cấp; điền khi tích hợp)* |
+
+Tất cả path dưới đây nối vào Base URL (vd `POST {BASE_URL}/api/mmp/ship-ho/estimate`).
+Secret HMAC khác nhau theo môi trường (`MMP_WEBHOOK_SECRET` của từng env).
+
+## 0c. Brand được duyệt
+
+- Brand định danh bằng `brandSlug` = **`mmp_brands.slug`** (đã dùng chung ở tích hợp MMP hiện tại, vd `"kalisa"`).
+- Điều kiện được phép dùng ship hộ (SMS kiểm tra server-side mỗi request):
+  - Có bản ghi `ship_ho_partners` với `brand_slug = brandSlug`, **`status = 'active'`**, **`self_service_enabled = true`**.
+- Không thỏa → `403 { code: "brand_not_approved" }`. (Hiện đã bật cho **Kalisa**.)
+- MMP không cần gửi cờ gì thêm — chỉ gửi `brandSlug`; SMS tự kiểm tra.
 
 ## 1. Xác thực (HMAC SHA-256)
+
+> ⚠️ Lưu ý 2 điểm dễ nhầm: **(1)** env secret là **`MMP_WEBHOOK_SECRET`** (KHÔNG phải `MEAN_WEBHOOK_SECRET`). **(2)** Ký trên **`${timestamp}.${rawBody}`** — có timestamp ghép trước dấu chấm, KHÔNG phải ký rawBody trơn. (Giống hệt webhook MMP→SMS hiện có: `order-confirmations`, `products`.)
 
 Mọi request MMP→SMS phải ký:
 
@@ -38,9 +59,9 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
 {
   "brandSlug": "kalisa",
   "parcel": {
-    "country": "US",
+    "country": "SA",
     "city": "Riyadh",
-    "postcode": "10001",
+    "postcode": "12345",
     "weightKg": 1.2,
     "dimLengthCm": 30,
     "dimWidthCm": 20,
