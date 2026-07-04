@@ -180,3 +180,28 @@ describe('deadline + delay', () => {
     expect(r.delayStatus).toBe('on_track');
   });
 });
+
+describe('stale — đơn cũ ship chưa có tín hiệu giao', () => {
+  it('shipped > 30 ngày, chưa delivered → stale, delayHours = giờ kể từ shipped', () => {
+    const r = run(sig({ labelMinAt: d(24 * 40), hasTracking: true })); // gửi 40 ngày trước
+    expect(r.currentStage).toBe('shipped');
+    expect(r.delayStatus).toBe('stale');
+    expect(r.delayHours).toBe(24 * 40);
+  });
+  it('shipped 5 ngày → KHÔNG stale (overdue theo deliver SLA vẫn tính bình thường)', () => {
+    const r = run(sig({ labelMinAt: d(24 * 5), hasTracking: true }));
+    expect(r.currentStage).toBe('shipped');
+    expect(r.delayStatus).not.toBe('stale');
+  });
+  it('out_for_delivery > 30 ngày chưa delivered → stale', () => {
+    const r = run(sig({ labelMinAt: d(24 * 40), hasTracking: true, anyOutForDelivery: true }));
+    expect(r.currentStage).toBe('out_for_delivery');
+    expect(r.delayStatus).toBe('stale');
+  });
+  it('đã delivered → KHÔNG stale', () => {
+    // shipDeliveredMaxAt = 28 ngày trước (< 30d window → post_delivery, chưa completed)
+    const r = run(sig({ labelMinAt: d(24 * 40), packs: 1, packsDelivered: 1, shipDeliveredMaxAt: d(24 * 28) }));
+    expect(r.currentStage).toBe('post_delivery');
+    expect(r.delayStatus).not.toBe('stale');
+  });
+});

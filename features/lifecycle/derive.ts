@@ -16,7 +16,7 @@ export type StageKey =
   | 'completed' | 'refunded_full' | 'cancelled';
 
 export type SlaKey = 'placed_to_production' | 'production' | 'qc' | 'pack' | 'ship' | 'deliver';
-export type DelayStatus = 'on_track' | 'due_soon' | 'overdue';
+export type DelayStatus = 'on_track' | 'due_soon' | 'overdue' | 'stale';
 
 export const DEFAULT_SLA: Record<SlaKey, number> = {
   placed_to_production: 24, production: 240, qc: 48, pack: 48, ship: 24, deliver: 168,
@@ -24,6 +24,7 @@ export const DEFAULT_SLA: Record<SlaKey, number> = {
 
 const H = 3600_000;
 const COMPLETED_WINDOW_MS = 30 * 24 * H;
+const STALE_THRESHOLD_MS = 30 * 24 * H;
 /** Lark dispatch coi là sự cố khi CHƯA delivered. */
 const EXCEPTION_DISPATCH = ['Return-Processing', 'Package Lost', 'Delivery Attempt Failed'];
 
@@ -172,6 +173,16 @@ export function deriveLifecycle(
       const ratio = (now.getTime() - anchor.getTime()) / (deadline.getTime() - anchor.getTime());
       if (ratio >= 0.8) delayStatus = 'due_soon';
     }
+  }
+
+  // --- Stale: đơn cũ đã ship nhưng chưa có tín hiệu giao (spec redesign §4.1) ---
+  const shippedStages: StageKey[] = ['shipped', 'in_transit', 'out_for_delivery'];
+  if (
+    shippedStages.includes(currentStage) && !deliveredAt && shippedAt &&
+    now.getTime() - shippedAt.getTime() > STALE_THRESHOLD_MS
+  ) {
+    delayStatus = 'stale';
+    delayHours = Math.ceil((now.getTime() - shippedAt.getTime()) / H);
   }
 
   return {
