@@ -1,3 +1,6 @@
+import 'server-only';
+import { eq } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
 import { getLifecycle } from '@/features/lifecycle/queries';
 import { getFulfillmentDetail } from '@/features/fulfillment/queries';
 import { listBrandRequestsForOrder } from '@/features/fulfillment/brand-queries';
@@ -30,12 +33,20 @@ export async function getOrderDossier(orderId: string): Promise<OrderDossier | n
   // Lark best-effort: hàm đã có try/catch nội bộ nhưng thêm .catch ngoài cho chắc.
   const larkSafe = getLarkRecordsForOrder(orderId).catch((): LarkRecord[] => []);
 
-  const [detail, brandRequests, packs, mmp, larkRecords] = await Promise.all([
+  const larkStatusSafe = db
+    .select({ qcStatus: schema.larkOrderStatus.qcStatus, dispatchStatus: schema.larkOrderStatus.dispatchStatus })
+    .from(schema.larkOrderStatus)
+    .where(eq(schema.larkOrderStatus.orderId, orderId))
+    .then((rows) => rows[0] ?? null)
+    .catch(() => null);
+
+  const [detail, brandRequests, packs, mmp, larkRecords, larkRow] = await Promise.all([
     getFulfillmentDetail(orderId),
     listBrandRequestsForOrder(orderId),
     listPacksForOrder(orderId),
     getMmpPushInfo(orderId),
     larkSafe,
+    larkStatusSafe,
   ]);
 
   // Build StageSignals cho "việc hiện tại".
@@ -48,17 +59,18 @@ export async function getOrderDossier(orderId: string): Promise<OrderDossier | n
     outForDelivery: packs.filter((p) => p.deliveryStatus === 'out_for_delivery').length,
   };
 
-  // qcPassAt có giá trị → KCS đã pass.
-  const larkQc = lifecycle.qcPassAt != null ? 'pass' : null;
+  // Lấy qcStatus / dispatchStatus thật từ larkOrderStatus (pass/fail/pending/extra).
+  const larkQc = larkRow?.qcStatus ?? null;
+  const larkDispatch = larkRow?.dispatchStatus ?? null;
 
-  // allInStock: mọi line đã gán warehouseCode (tức đã pick từ kho).
+  // allInStock: xấp xỉ: đã pick/gán kho, không phải tồn-theo-SKU (canonical); đủ cho pill
   const lines = detail?.lines ?? [];
   const allInStock = lines.length > 0 && lines.every((l) => (l.warehouseCode ?? null) != null);
 
   const signals: StageSignals = {
     pushedMmp: mmp?.status === 'sent',
     larkQc,
-    larkDispatch: null, // Lark dispatch chỉ dùng trong lifecycle list — không cần ở đây
+    larkDispatch,
     ship,
     allInStock,
   };

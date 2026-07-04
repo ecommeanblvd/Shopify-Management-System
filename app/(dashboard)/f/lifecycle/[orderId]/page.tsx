@@ -109,14 +109,14 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
       }
       case 'brandEta': {
         const etas = brandRequests
-          .map((b) => (b as { expectedDeliveryDate?: string | null }).expectedDeliveryDate)
+          .map((b) => b.expectedDeliveryDate)
           .filter(Boolean);
-        return etas.length > 0 ? etas[etas.length - 1]! : '—';
+        return etas.length > 0 ? fmtDay(etas[etas.length - 1]!) : '—';
       }
       case 'brandRequests': {
         const total = brandRequests.length;
         const confirmed = brandRequests.filter(
-          (b) => (b as { confirmStatus?: string }).confirmStatus === 'confirmed',
+          (b) => b.confirmStatus === 'confirmed',
         ).length;
         const delivered = brandRequests.filter((b) => b.deliveredAt != null).length;
         return `${total} yêu cầu · ${confirmed} xác nhận · ${delivered} đã giao`;
@@ -180,6 +180,7 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TONE_CLS[st.tone] ?? TONE_CLS.muted}`}>
               {st.text}
             </span>
+            <span className="text-xs text-muted-foreground">ops:</span>
             <span className="inline-flex items-center rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-400">
               {currentAction.label}
             </span>
