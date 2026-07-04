@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { GET as countriesGET } from '@/app/api/mmp/ship-ho/countries/route';
 import { GET as citiesGET } from '@/app/api/mmp/ship-ho/cities/route';
+import { GET as statesGET } from '@/app/api/mmp/ship-ho/states/route';
+import { GET as postcodeGET } from '@/app/api/mmp/ship-ho/postcode/route';
 
 const SECRET = 'test-secret-geo';
 
@@ -12,6 +14,10 @@ function signedReq(url: string): NextRequest {
   return new Request(url, {
     headers: { 'x-mean-signature': `sha256=${sig}`, 'x-mean-timestamp': ts },
   }) as unknown as NextRequest;
+}
+
+function unsignedReq(url: string): NextRequest {
+  return new Request(url) as unknown as NextRequest;
 }
 
 beforeAll(() => {
@@ -39,28 +45,7 @@ describe('GET /api/mmp/ship-ho/countries', () => {
   });
 });
 
-describe('GET /api/mmp/ship-ho/cities', () => {
-  it('country=US → 200 + cities', async () => {
-    const res = await citiesGET(signedReq('https://x/api/mmp/ship-ho/cities?country=US'));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.country).toBe('US');
-    expect(body.cities).toContain('New York');
-  });
-
-  it('country lowercase → chuẩn hoá hoa', async () => {
-    const res = await citiesGET(signedReq('https://x/api/mmp/ship-ho/cities?country=us'));
-    const body = await res.json();
-    expect(body.country).toBe('US');
-    expect(body.cities.length).toBeGreaterThan(0);
-  });
-
-  it('nước chưa curate → cities []', async () => {
-    const res = await citiesGET(signedReq('https://x/api/mmp/ship-ho/cities?country=ZW'));
-    const body = await res.json();
-    expect(body).toEqual({ country: 'ZW', cities: [] });
-  });
-
+describe('GET /api/mmp/ship-ho/cities — auth + validation (không chạm DB)', () => {
   it('thiếu country → 400', async () => {
     const res = await citiesGET(signedReq('https://x/api/mmp/ship-ho/cities'));
     expect(res.status).toBe(400);
@@ -72,5 +57,23 @@ describe('GET /api/mmp/ship-ho/cities', () => {
     }) as unknown as NextRequest;
     const res = await citiesGET(req);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('geo routes — auth + validation (không chạm DB)', () => {
+  it('states thiếu chữ ký → 401', async () => {
+    expect((await statesGET(unsignedReq('https://x/api/mmp/ship-ho/states?country=US'))).status).toBe(401);
+  });
+
+  it('postcode thiếu chữ ký → 401', async () => {
+    expect((await postcodeGET(unsignedReq('https://x/api/mmp/ship-ho/postcode?country=US&code=90210'))).status).toBe(401);
+  });
+
+  it('states ký đúng nhưng thiếu country → 400', async () => {
+    expect((await statesGET(signedReq('https://x/api/mmp/ship-ho/states'))).status).toBe(400);
+  });
+
+  it('postcode ký đúng nhưng thiếu code → 400', async () => {
+    expect((await postcodeGET(signedReq('https://x/api/mmp/ship-ho/postcode?country=US'))).status).toBe(400);
   });
 });

@@ -5,7 +5,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { requireMmpSignature } from '@/features/mmp/require-signature';
-import { CITIES_BY_ISO } from '@/lib/geo/cities';
+import { listCities } from '@/features/geo/queries';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,10 +14,12 @@ export async function GET(req: NextRequest): Promise<Response> {
   const denied = await requireMmpSignature(req);
   if (denied) return denied;
 
-  const country = (new URL(req.url).searchParams.get('country') ?? '').toUpperCase();
+  const sp = new URL(req.url).searchParams;
+  const country = (sp.get('country') ?? '').toUpperCase();
   if (!/^[A-Z]{2}$/.test(country)) {
     return NextResponse.json({ error: 'country (ISO-3166-1 alpha-2) required' }, { status: 400 });
   }
 
-  return NextResponse.json({ country, cities: CITIES_BY_ISO[country] ?? [] });
+  const state = sp.get('state')?.toUpperCase() || undefined;
+  return NextResponse.json({ country, cities: await listCities(country, state) });
 }
