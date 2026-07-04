@@ -16,6 +16,9 @@ import { stagePlaybook, type InfoKey } from '@/features/lifecycle/playbook';
 import { segmentTimings, stageEstimateHrs } from '@/features/lifecycle/stage-timing';
 import { AddressVerifyCard } from '@/components/fulfillment/AddressVerifyCard';
 import { LarkDetailCard } from '@/components/fulfillment/LarkDetailCard';
+import { OrderDetailPanel } from '@/components/fulfillment/OrderDetailPanel';
+import { MmpPushBadge } from '@/components/fulfillment/MmpPushBadge';
+import { PackPanel } from '@/components/fulfillment/PackPanel';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -55,6 +58,9 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
     listSla(),
   ]);
   if (!dossier) notFound();
+
+  const canManage = hasPermission(role, 'manage_fulfillment');
+  const canCheckPacked = hasPermission(role, 'check_packed');
 
   const { lifecycle, address, lines, brandRequests, packs, larkRecords, currentAction } = dossier;
   const stage = lifecycle.currentStage as StageKey;
@@ -315,7 +321,22 @@ export default async function LifecycleDetailPage({ params }: { params: Promise<
       </Card>
 
       {/* === 4. PANEL BỔ TRỢ === */}
+      <OrderDetailPanel status={dossier.fulfillmentStatus ?? '—'} lines={dossier.lines} canManage={canManage} />
+      <MmpPushBadge info={dossier.mmp} orderId={orderId} canManage={canManage} />
       <AddressVerifyCard address={address} orderId={orderId} />
+      <PackPanel
+        orderId={orderId}
+        picked={dossier.picked}
+        packs={dossier.packs.map((p) => ({
+          id: p.id, code: p.code, carrierKey: p.carrierKey, trackingNumber: p.trackingNumber,
+          checkPackedAt: p.checkPackedAt as Date | null, actualWeightKg: p.actualWeightKg,
+          lines: p.lines.map((l) => ({ id: l.id, sku: l.sku, qty: l.qty, status: l.status, productTitle: l.productTitle })),
+          shopifyPushStatus: p.shopifyPushStatus, shopifyPushError: p.shopifyPushError,
+          deliveryStatus: p.deliveryStatus, deliveredAt: p.deliveredAt, trackDetail: p.trackDetail, lastTrackedAt: p.lastTrackedAt,
+        }))}
+        canManage={canManage}
+        canCheckPacked={canCheckPacked}
+      />
       <LarkDetailCard records={larkRecords} />
     </div>
   );
