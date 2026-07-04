@@ -606,6 +606,12 @@
       "when": 1783860000000,
       "tag": "0086_ship-ho-brand-self-service",
       "breakpoints": true
+    },{
+      "idx": 87,
+      "version": "7",
+      "when": 1783946400000,
+      "tag": "0087_order-lifecycle",
+      "breakpoints": true
     }
   ]
 }
