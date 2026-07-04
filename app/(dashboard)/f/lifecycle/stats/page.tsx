@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
@@ -9,7 +8,6 @@ import {
 } from '@/features/lifecycle/stats-queries';
 import { listSla } from '@/features/lifecycle/queries';
 import { aggregateLifecycle, SLA_SEGMENTS, type SlaKey, type GroupBy } from '@/features/lifecycle/stats-logic';
-import { buttonVariants } from '@/components/ui/button';
 import { StatsView } from './StatsView';
 import { OrderTabs } from '@/components/orders/OrderTabs';
 
@@ -61,7 +59,6 @@ export default async function LifecycleStatsPage({
           <h1 className="text-3xl font-semibold tracking-tight">Thống kê vòng đời</h1>
           <p className="text-sm text-muted-foreground">Thời gian trung bình/trung vị mỗi công đoạn + tỉ lệ trễ. {rows.length} đơn.</p>
         </div>
-        <Link href="/f/lifecycle" className={buttonVariants({ variant: 'outline' })}>← Dashboard</Link>
       </div>
       <StatsView
         groups={groups}

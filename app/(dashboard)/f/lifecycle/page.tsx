@@ -31,10 +31,7 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Pr
           <h1 className="text-3xl font-semibold tracking-tight">Vòng đời đơn hàng</h1>
           <p className="text-sm text-muted-foreground">Theo dõi công đoạn xử lý từng đơn + cảnh báo trễ so với SLA.</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/f/lifecycle/stats" className={buttonVariants({ variant: 'outline' })}>Thống kê</Link>
-          <Link href="/f/lifecycle/sla" className={buttonVariants({ variant: 'outline' })}>Cấu hình SLA</Link>
-        </div>
+        <Link href="/f/lifecycle/sla" className={buttonVariants({ variant: 'outline' })}>Cấu hình SLA</Link>
       </div>
       <LifecycleTable rows={rows} counts={counts} activeStage={sp.stage ?? null} activeDelay={sp.delay ?? null} />
     </div>
