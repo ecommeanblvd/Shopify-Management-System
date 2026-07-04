@@ -30,6 +30,7 @@ export async function lifecycleDurations(filter?: StatsFilter): Promise<Duration
     packedAt: schema.orderLifecycle.packedAt,
     shippedAt: schema.orderLifecycle.shippedAt,
     deliveredAt: schema.orderLifecycle.deliveredAt,
+    delayStatus: schema.orderLifecycle.delayStatus,
   })
     .from(schema.orderLifecycle)
     .leftJoin(schema.stores, eq(schema.stores.id, schema.orderLifecycle.storeId))
@@ -62,6 +63,7 @@ export async function lifecycleDurations(filter?: StatsFilter): Promise<Duration
     placedMonth: b.placedMonth,
     brands: brandMap.get(b.orderId) ?? [],
     carriers: carrierMap.get(b.orderId) ?? [],
+    stale: b.delayStatus === 'stale',
     dur: computeDurations(b),
   }));
 

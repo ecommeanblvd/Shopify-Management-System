@@ -15,7 +15,7 @@ const at = (h: number) => new Date(base + h * H);
 function row(over: Partial<DurationRow>): DurationRow {
   return {
     orderId: 'o', storeId: 's', storeName: 'S', placedMonth: '2026-01',
-    brands: [], carriers: [], dur: {} as Record<SlaKey, number>, ...over,
+    brands: [], carriers: [], stale: false, dur: {} as Record<SlaKey, number>, ...over,
   };
 }
 
@@ -108,6 +108,17 @@ describe('aggregateLifecycle', () => {
     const gs = aggregateLifecycle(rows, SLA, 'brand');
     expect(gs.map((g) => g.key)).toEqual(['A', 'B']); // A có 2 đơn
     expect(gs[0].orders).toBe(2);
+  });
+
+  it('row stale không tính vào đoạn deliver, vẫn tính đoạn khác', () => {
+    const rows = [
+      row({ stale: true, dur: { ...z(), deliver: 5000, ship: 10 } }),
+      row({ stale: false, dur: { ...z(), deliver: 100 } }),
+    ];
+    const [g] = aggregateLifecycle(rows, SLA, 'none');
+    expect(g.perStage.deliver.n).toBe(1);          // chỉ row không-stale
+    expect(g.perStage.deliver.avgHrs).toBe(100);
+    expect(g.perStage.ship.n).toBe(1);             // stale vẫn đóng góp đoạn ship
   });
 });
 

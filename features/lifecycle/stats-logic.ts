@@ -38,6 +38,7 @@ export interface DurationRow {
   placedMonth: string | null;
   brands: string[];
   carriers: string[];
+  stale: boolean;
   dur: Record<SlaKey, number | null>;
 }
 
@@ -86,6 +87,7 @@ export function aggregateLifecycle(
       }
       g.orders += 1;
       for (const seg of SLA_SEGMENTS) {
+        if (seg === 'deliver' && r.stale) continue;
         const v = r.dur[seg];
         if (v != null) g.segs[seg].push(v);
       }
