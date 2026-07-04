@@ -32,7 +32,8 @@
     "cron:create-sale": "dotenv -- tsx scripts/cron/create-sale-products.ts",
     "cron:refresh-vcb": "dotenv -- tsx scripts/cron/refresh-vcb-fx.ts",
     "cron:refresh-surcharges": "dotenv -- tsx scripts/cron/refresh-surcharges.ts",
-    "cron:sync-catalog": "dotenv -- tsx scripts/import-shopify-catalog.ts --apply"
+    "cron:sync-catalog": "dotenv -- tsx scripts/import-shopify-catalog.ts --apply",
+    "cron:sync-lifecycle": "dotenv -- tsx scripts/cron/sync-lifecycle.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
