@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { listLifecycle, stageCounts } from '@/features/lifecycle/queries';
 import { LifecycleTable } from './LifecycleTable';
 import { buttonVariants } from '@/components/ui/button';
+import { OrderTabs } from '@/components/orders/OrderTabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export default async function LifecyclePage({ searchParams }: { searchParams: Pr
   ]);
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
+      <OrderTabs />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Vòng đời đơn hàng</h1>

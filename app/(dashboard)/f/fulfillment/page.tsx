@@ -12,6 +12,7 @@ import { WorklistTable } from '@/components/fulfillment/WorklistTable';
 import { BackfillButton } from '@/components/fulfillment/BackfillButton';
 import { MmpBackfillButton } from '@/components/fulfillment/MmpBackfillButton';
 import { BrandOverdueBanner } from '@/components/fulfillment/BrandOverdueBanner';
+import { OrderTabs } from '@/components/orders/OrderTabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,7 @@ export default async function FulfillmentWorklistPage() {
 
   return (
     <div className="space-y-6 p-6">
+      <OrderTabs />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Vận hành đơn</h1>
