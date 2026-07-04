@@ -17,7 +17,7 @@ export interface ShipHoQuoteInput {
 }
 
 export type ShipHoQuoteResult =
-  | { ok: true; carrierCostVnd: number; zone: string; breakdown: QuoteBreakdown }
+  | { ok: true; carrierCostVnd: number; baseVnd: number; zone: string; breakdown: QuoteBreakdown }
   | { ok: false; reason: string };
 
 /** THUẦN: chọn cước ở VND. VND có thể là cost- hoặc display-currency của account. */
@@ -27,6 +27,19 @@ export function pickCarrierCostVnd(
 ): { ok: true; vnd: number } | { ok: false; reason: string } {
   if (snap.costCurrency === 'VND') return { ok: true, vnd: breakdown.carrierCost };
   if (snap.displayCurrency === 'VND') return { ok: true, vnd: breakdown.carrierCostDisplay };
+  return {
+    ok: false,
+    reason: `non_vnd_currency(cost=${snap.costCurrency},display=${snap.displayCurrency})`,
+  };
+}
+
+/** THUẦN: quy base (cost currency) về VND, cùng quy tắc chọn tiền như carrierCost. */
+export function pickBaseVnd(
+  snap: { costCurrency: string; displayCurrency: string; fxCostPerDisplay: number },
+  breakdown: { base: number },
+): { ok: true; vnd: number } | { ok: false; reason: string } {
+  if (snap.costCurrency === 'VND') return { ok: true, vnd: Math.round(breakdown.base) };
+  if (snap.displayCurrency === 'VND') return { ok: true, vnd: Math.round(breakdown.base / snap.fxCostPerDisplay) };
   return {
     ok: false,
     reason: `non_vnd_currency(cost=${snap.costCurrency},display=${snap.displayCurrency})`,
@@ -51,5 +64,8 @@ export async function quoteShipHoOrder(input: ShipHoQuoteInput): Promise<ShipHoQ
   const vnd = pickCarrierCostVnd(snap, res.breakdown);
   if (!vnd.ok) return { ok: false, reason: vnd.reason };
 
-  return { ok: true, carrierCostVnd: vnd.vnd, zone: res.zone, breakdown: res.breakdown };
+  const baseVnd = pickBaseVnd(snap, res.breakdown);
+  if (!baseVnd.ok) return { ok: false, reason: baseVnd.reason };
+
+  return { ok: true, carrierCostVnd: vnd.vnd, baseVnd: baseVnd.vnd, zone: res.zone, breakdown: res.breakdown };
 }

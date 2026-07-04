@@ -12,6 +12,7 @@ export interface ShipHoOrderRow {
   carrierCostVnd: string | null;
   chargedVnd: string | null;
   status: string;
+  source: string;
   createdAt: Date;
 }
 
@@ -35,6 +36,7 @@ export async function listShipHoOrders(filter?: {
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       chargedVnd: schema.shipHoOrders.chargedVnd,
       status: schema.shipHoOrders.status,
+      source: schema.shipHoOrders.source,
       createdAt: schema.shipHoOrders.createdAt,
     })
     .from(schema.shipHoOrders)

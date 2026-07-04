@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date, check, bigint } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 
@@ -1891,6 +1891,7 @@ export const shipHoPartners = pgTable('ship_ho_partners', {
   billingCycle: shipHoBillingCycleEnum('billing_cycle').notNull().default('monthly'),
   billingCurrency: text('billing_currency').notNull().default('VND'),
   status: shipHoPartnerStatusEnum('status').notNull().default('active'),
+  selfServiceEnabled: boolean('self_service_enabled').notNull().default(false),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -1935,6 +1936,11 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   dimWidthCm: numeric('dim_width_cm', { precision: 10, scale: 2 }),
   dimHeightCm: numeric('dim_height_cm', { precision: 10, scale: 2 }),
   packagingType: text('packaging_type'), // 'bag' | 'box' | null
+  // Brand self-service (MMP)
+  source: text('source').notNull().default('internal'), // 'internal' | 'mmp'
+  mmpRef: text('mmp_ref'),
+  service: text('service'), // 'express' | 'standard'
+  mmpOrderSeq: bigint('mmp_order_seq', { mode: 'number' }),
   // Carrier
   carrierKey: text('carrier_key'),
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id),

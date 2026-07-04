@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
+import { markupFloorError } from './partners-markup';
 
 export async function listBrandsForShipHo() {
   return db
@@ -40,8 +41,8 @@ export interface UpsertPartnerInput {
 export async function createShipHoPartner(input: UpsertPartnerInput): Promise<{ ok: boolean; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!input.brandSlug) return { ok: false, error: 'brandSlug required' };
-  const mk = Number(input.markupPercent);
-  if (!Number.isFinite(mk) || mk < 0) return { ok: false, error: 'markup không hợp lệ' };
+  const floorErr = markupFloorError(input.markupPercent);
+  if (floorErr) return { ok: false, error: floorErr };
   try {
     await db.insert(schema.shipHoPartners).values({
       brandSlug: input.brandSlug,
@@ -62,6 +63,8 @@ export async function updateShipHoPartner(
   input: Partial<UpsertPartnerInput> & { status?: 'active' | 'inactive' },
 ): Promise<{ ok: boolean; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  const floorErr = markupFloorError(input.markupPercent);
+  if (floorErr) return { ok: false, error: floorErr };
   try {
     await db
       .update(schema.shipHoPartners)
