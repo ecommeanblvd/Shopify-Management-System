@@ -349,8 +349,7 @@ export interface QuoteError {
 
 export type QuoteResult = QuoteOk | QuoteError;
 
-import { hasArabicScript, arabicCityCandidates } from './arabic-city-aliases';
-import { matchRemoteCity } from './remote-city-match';
+import { matchRemoteTier } from './remote-match';
 
 const ISO2_RE = /^[A-Z]{2}$/;
 
@@ -613,70 +612,9 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   // digits), city patterns are stored UPPERCASED at import time so
   // there's no collision between the two and lookup stays O(1).
   let remote = 0;
-  let matchedTier: string | null | undefined;
-  let matchedBy: 'postcode' | 'city' | 'country_default' | null = null;
-  const patterns = snap.remotePostcodes.get(country);
-  if (patterns) {
-    if (input.destinationPostcode) {
-      // Postcode formats vary between Shopify input and carrier lists:
-      // US ZIP+4 '98077-5629' vs stored '98077', JP '818-0084' vs
-      // '8180084', PT '5000-289'… Try: raw → alphanumeric-stripped →
-      // first segment before a separator (ZIP+4 prefix).
-      const raw = input.destinationPostcode.trim();
-      const stripped = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const prefix = raw.split(/[-\s]/)[0]?.toUpperCase().replace(/[^A-Z0-9]/g, '') ?? '';
-      for (const key of [...new Set([raw, stripped, prefix])]) {
-        if (!key) continue;
-        const t = patterns.get(key);
-        if (t !== undefined) {
-          matchedTier = t;
-          matchedBy = 'postcode';
-          break;
-        }
-      }
-    }
-    if (matchedBy === null && input.destinationCity) {
-      // Normalise: uppercase + strip non-alphanumeric. FedEx's source
-      // is inconsistent (SA "ABAALWOROOD" vs BH "Durrat Al Bahrain"),
-      // and incoming Shopify city values vary even more ("aba al
-      // worood", "Aba Alworood"). Stripping all separators normalises
-      // both sides. MUST stay in sync with the import script's
-      // city-pattern normalisation.
-      // Arabic-script cities ("الرس") reduce to an empty key under the
-      // A-Z0-9 normaliser — translate via the alias table first and try
-      // every Latin spelling the carrier lists use.
-      // Luôn kèm bản Latin chuẩn hoá — city Arabic+Latin lẫn lộn ("علي… Ali Sabah
-      // Al Salem (Umm Al Hayman)") strip non-alnum còn phần Latin để khớp town list.
-      const latinNorm = input.destinationCity.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const cityKeys = hasArabicScript(input.destinationCity)
-        ? [...arabicCityCandidates(input.destinationCity), latinNorm]
-        : [latinNorm];
-      // Khớp TOLERANT: exact + alias chính tả + bỏ tiền tố "AL" + prefix (city
-      // dính tên vùng). Tránh trượt khi city đơn ghi lệch so với list ODA.
-      const cityMatch = matchRemoteCity(cityKeys.filter((k) => k.length > 0), patterns);
-      if (cityMatch) {
-        matchedTier = cityMatch.tier;
-        matchedBy = 'city';
-      }
-    }
-    if (matchedBy === null) {
-      // Country-wide wildcard. When a single row for a country is
-      // stored with pattern '*', every destination in that country
-      // inherits its tier. Used when the carrier's published list is
-      // in a postal format we can't reconcile against modern Shopify
-      // data — e.g. FedEx IL ships its ODA list in legacy 5-digit
-      // codes while Israel Post switched to 7-digit in 2013, leaving
-      // no clean per-postcode mapping. Until FedEx publishes a 7-digit
-      // file we mark all of IL Tier B (every IL row in the published
-      // file is Tier B anyway, so the worst-case error is a small
-      // over-quote on the handful of non-remote IL postcodes).
-      const wildcard = patterns.get('*');
-      if (wildcard !== undefined) {
-        matchedTier = wildcard;
-        matchedBy = 'country_default';
-      }
-    }
-  }
+  const { tier: matchedTier, matchedBy } = matchRemoteTier(
+    snap.remotePostcodes.get(country), input.destinationPostcode, input.destinationCity,
+  );
   if (matchedBy !== null) {
     // matchedTier may be null (no tier) or a label like 'Tier A'.
     remote = sumRemoteFixed(snap.surcharges, matchedTier ?? null, chargeableWeightKg, effectiveDate);
