@@ -600,6 +600,12 @@
       "when": 1783773600000,
       "tag": "0085_ship-ho-address-extra",
       "breakpoints": true
+    },{
+      "idx": 86,
+      "version": "7",
+      "when": 1783860000000,
+      "tag": "0086_ship-ho-brand-self-service",
+      "breakpoints": true
     }
   ]
 }

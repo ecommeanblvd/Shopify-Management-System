@@ -2,7 +2,7 @@
 # 🧠 Second Brain (bộ nhớ dài hạn)
 
 Dự án này có hồ sơ trong **Second Brain vault** của CEO:
-`/Users/macos/Documents/Le Minh Tiep Second Brain/Shared/Projects/Shopify-Management-System/`
+`/Users/macos/Obsidian/Le Minh Tiep Second Brain/Shared/Projects/Shopify-Management-System/`
 
 **TRƯỚC khi làm việc lớn** (thêm feature / refactor / đổi kiến trúc):
 1. Đọc `Overview.md` — mục đích, stack, trạng thái.
