@@ -2014,3 +2014,48 @@ export const orderLifecycle = pgTable('order_lifecycle', {
   index('order_lifecycle_delay_idx').on(t.delayStatus),
   index('order_lifecycle_store_idx').on(t.storeId),
 ]);
+
+// ---------- Geo master (spec 2026-07-04-geo-master-design.md §3) ----------
+// Nguồn GeoNames per-country; nước chưa nạp → app fallback static lib/geo.
+
+export const geoStates = pgTable('geo_states', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code').notNull(), // ISO-3166-1 alpha-2
+  code: text('code').notNull(),                // admin1 code (vd 'CA')
+  name: text('name').notNull(),
+}, (t) => [
+  uniqueIndex('geo_states_country_code_uq').on(t.countryCode, t.code),
+]);
+
+export const geoCities = pgTable('geo_cities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code').notNull(),
+  stateCode: text('state_code'),
+  name: text('name').notNull(),
+  nameNorm: text('name_norm').notNull(), // UPPERCASE alnum — khớp quote engine
+}, (t) => [
+  uniqueIndex('geo_cities_uq').on(t.countryCode, t.stateCode, t.nameNorm),
+  index('geo_cities_country_idx').on(t.countryCode),
+]);
+
+export const geoPostcodes = pgTable('geo_postcodes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code').notNull(),
+  postcode: text('postcode').notNull(),       // raw như GeoNames
+  postcodeNorm: text('postcode_norm').notNull(),
+  city: text('city').notNull(),
+  stateCode: text('state_code'),
+  lat: numeric('lat', { precision: 9, scale: 5 }),
+  lng: numeric('lng', { precision: 9, scale: 5 }),
+}, (t) => [
+  uniqueIndex('geo_postcodes_uq').on(t.countryCode, t.postcodeNorm, t.city),
+  index('geo_postcodes_lookup_idx').on(t.countryCode, t.postcodeNorm),
+]);
+
+export const geoImports = pgTable('geo_imports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  countryCode: text('country_code').notNull().unique(),
+  source: text('source').notNull().default('geonames'),
+  importedAt: timestamp('imported_at').defaultNow().notNull(),
+  rows: integer('rows').notNull().default(0),
+});
