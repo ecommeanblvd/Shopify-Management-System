@@ -1,6 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { resendBrandRequest } from '@/features/fulfillment/brand-actions';
 import { lineSource } from '@/features/warehouse/staging-logic';
 import { SourceChip } from '@/components/fulfillment/SourceChip';
@@ -74,11 +75,12 @@ interface Props {
 }
 
 function ResendLineButton({ id }: { id: string }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   return (
     <button
       disabled={isPending}
-      onClick={() => startTransition(async () => { await resendBrandRequest(id); })}
+      onClick={() => startTransition(async () => { await resendBrandRequest(id); router.refresh(); })}
       className="ml-1.5 rounded border border-border px-1.5 py-0.5 text-xs hover:bg-muted disabled:opacity-50"
     >
       Gửi lại

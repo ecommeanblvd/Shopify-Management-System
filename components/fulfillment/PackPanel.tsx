@@ -54,6 +54,7 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
       weightKg: weight ? Number(weight) : null,
     });
     setSelected({}); setCarrier(''); setWeight(''); setPackaging('');
+    router.refresh();
   });
 
   return (
@@ -138,7 +139,7 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
               {canManage && !shipped && (
                 <div className="flex flex-wrap items-center gap-2">
                   {canCheckPacked && !checked && (
-                    <button disabled={isPending} onClick={() => startTransition(async () => { await markCheckPacked(p.id); })}
+                    <button disabled={isPending} onClick={() => startTransition(async () => { await markCheckPacked(p.id); router.refresh(); })}
                       className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
                       Check packed
                     </button>
@@ -147,7 +148,7 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
                     placeholder="Tracking number" disabled={!checked}
                     className="border border-input bg-input/30 rounded-md px-2 py-1 text-xs disabled:opacity-50" />
                   <button disabled={isPending || !checked || !(tracking[p.id] ?? '').trim()}
-                    onClick={() => startTransition(async () => { await shipPack(p.id, tracking[p.id] ?? ''); })}
+                    onClick={() => startTransition(async () => { await shipPack(p.id, tracking[p.id] ?? ''); router.refresh(); })}
                     className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
                     Ship
                   </button>
@@ -155,7 +156,7 @@ export function PackPanel({ orderId, picked, packs, canManage, canCheckPacked }:
               )}
               {canManage && shipped && p.shopifyPushStatus === 'failed' && (
                 <div className="flex items-center gap-2">
-                  <button disabled={isPending} onClick={() => startTransition(async () => { await pushPackFulfillment(p.id); })}
+                  <button disabled={isPending} onClick={() => startTransition(async () => { await pushPackFulfillment(p.id); router.refresh(); })}
                     className="rounded border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50">
                     Push lại Shopify
                   </button>
