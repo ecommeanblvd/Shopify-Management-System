@@ -80,6 +80,10 @@ Form ship-hộ nội bộ: gõ zip → autofill city/state (server action dùng 
 - **Cảnh báo lệch**: query so `carrierRemotePostcodes` (chỉ pattern postcode chính xác, bỏ wildcard/city-pattern)
   với `geo_postcodes` cho các nước đã nạp → list postcode "carrier có, master không" hiện trên trang lookup
   (badge count) — nghi list hãng lỗi thời hoặc master thiếu.
+  - ⚠️ **BẮT BUỘC normalize trước khi so**: `carrierRemotePostcodes.postcodePattern` lưu **raw** (vd `'SW1A 1AA'`,
+    `'5000-289'` có dấu cách/gạch), còn `geo_postcodes.postcodeNorm` là **stripped** (`normPostcode`). Phải áp
+    `normPostcode(postcodePattern)` (hoặc thử cả 3 key raw→stripped→prefix như quote engine `quote.ts:625-628`)
+    TRƯỚC khi so — nếu không sẽ báo false-positive "lệch" hàng loạt ở nước postcode có separator (UK/NL/CA/PT/JP).
 
 ## 7. Test & lỗi
 
