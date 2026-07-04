@@ -2059,3 +2059,50 @@ export const geoImports = pgTable('geo_imports', {
   importedAt: timestamp('imported_at').defaultNow().notNull(),
   rows: integer('rows').notNull().default(0),
 });
+
+// ---------- Customer Account Builder (spec 2026-07-05-customer-account-builder-design.md §4) ----------
+
+export const customerAccountConfigs = pgTable('customer_account_configs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull().unique(),
+  enabled: boolean('enabled').notNull().default(false),
+  /** Shape TS: features/customer-account/config-schema.ts (branding + modules[]) */
+  config: jsonb('config').notNull().default({}),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const customerAccountAssets = pgTable('customer_account_assets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  kind: text('kind').notNull(), // 'logo' | 'hero' | 'icon'
+  filename: text('filename').notNull(),
+  fileKey: text('file_key').notNull(),
+  contentType: text('content_type').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [index('customer_account_assets_store_idx').on(t.storeId)]);
+
+export const customerReturnRequests = pgTable('customer_return_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  shopifyCustomerId: text('shopify_customer_id').notNull(),
+  orderNumber: text('order_number'),
+  reason: text('reason').notNull(),
+  note: text('note'),
+  status: text('status').notNull().default('requested'), // requested|approved|rejected|received|refunded
+  adminNote: text('admin_note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('customer_return_requests_store_status_idx').on(t.storeId, t.status),
+  index('customer_return_requests_customer_idx').on(t.storeId, t.shopifyCustomerId),
+]);
+
+export const customerLoyalty = pgTable('customer_loyalty', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  shopifyCustomerId: text('shopify_customer_id').notNull(),
+  tier: text('tier').notNull(),
+  note: text('note'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [uniqueIndex('customer_loyalty_uq').on(t.storeId, t.shopifyCustomerId)]);
