@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
-import { estimateForBrand, type EstimateParcel, type BrandEstimate } from './brand-estimate';
+import { estimateForBrand, neutralNotes, type EstimateParcel, type BrandEstimate, type ShipHoService } from './brand-estimate';
 import { nextBrandOrderCode } from './brand-order-code';
 
 export interface BrandOrderInput {
@@ -25,17 +25,25 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
     return { ok: false, code: 'bad_input', error: 'brandSlug + mmpRef + address.country required' };
   }
 
-  // Idempotency theo mmp_ref.
+  // Idempotency: đơn đã tồn tại theo mmp_ref → trả ngay (KHÔNG re-estimate; dùng giá đã snapshot).
   const [existing] = await db.select().from(schema.shipHoOrders)
     .where(eq(schema.shipHoOrders.mmpRef, input.mmpRef)).limit(1);
+  if (existing) {
+    const total = Number(existing.chargedVnd ?? 0);
+    return {
+      ok: true, orderId: existing.id, code: existing.code, idempotent: true,
+      estimate: {
+        chargedVnd: total, currency: 'VND', provisional: true,
+        service: (existing.service as ShipHoService) ?? 'express',
+        lines: [{ label: 'Tổng giá dự kiến', amountVnd: total }],
+        notes: neutralNotes(),
+      },
+    };
+  }
 
-  // Estimate (cũng là guard approve + quote). Đơn brand luôn Express ở phase này.
+  // Đơn mới: estimate là guard approve + quote. Đơn brand luôn Express ở phase này.
   const est = await estimateForBrand(input.brandSlug, { ...input.parcel, country: input.address.country, service: 'express' });
   if (!est.ok) return { ok: false, code: est.code, error: est.error };
-
-  if (existing) {
-    return { ok: true, orderId: existing.id, code: existing.code, idempotent: true, estimate: est.estimate };
-  }
 
   // Validate địa chỉ theo nước (SA short-address/maps, GCC house-number).
   const extra = validateAddressExtra(input.address.country, {
