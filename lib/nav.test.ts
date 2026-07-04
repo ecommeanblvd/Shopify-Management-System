@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { primeRoleCache } from './auth/access';
 import { SYSTEM_ROLE_SEEDS } from './auth/permission-map';
-import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings, canSeeNavItem } from './nav';
+import { NAV, SETTINGS_ITEMS, SETTINGS_GROUPS, canSeeSettings, canSeeNavItem, navItemActive } from './nav';
 
 // canSeeSettings → hasPermission reads the role cache; prime it from seeds (no DB).
 beforeAll(() => {
@@ -83,5 +83,20 @@ describe('canSeeSettings', () => {
     expect(canSeeSettings('admin')).toBe(true);
     expect(canSeeSettings('operator')).toBe(true);
     expect(canSeeSettings('viewer')).toBe(true);
+  });
+});
+
+describe('navItemActive', () => {
+  const item = { href: '/f/fulfillment', match: ['/f/lifecycle'] };
+  it('exact href → active', () => { expect(navItemActive('/f/fulfillment', item)).toBe(true); });
+  it('route con của href → active', () => { expect(navItemActive('/f/fulfillment/brand-requests', item)).toBe(true); });
+  it('route trong match (lifecycle) → active', () => {
+    expect(navItemActive('/f/lifecycle', item)).toBe(true);
+    expect(navItemActive('/f/lifecycle/stats', item)).toBe(true);
+  });
+  it('route khác → không active', () => { expect(navItemActive('/f/ship-ho', item)).toBe(false); });
+  it('không match "/" như prefix', () => {
+    expect(navItemActive('/f/orders', { href: '/' })).toBe(false);
+    expect(navItemActive('/', { href: '/' })).toBe(true);
   });
 });

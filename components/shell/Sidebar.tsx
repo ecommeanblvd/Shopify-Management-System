@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { NAV } from '@/lib/nav';
+import { NAV, navItemActive } from '@/lib/nav';
 
 interface SidebarProps {
   /** Hrefs the current role may see — computed server-side (the permission
@@ -21,7 +21,7 @@ export function Sidebar({ visibleHrefs }: SidebarProps) {
       <nav className="p-3 space-y-1">
         {visible.map((item) => {
           const Icon = item.icon;
-          const active = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href));
+          const active = navItemActive(currentPath, item);
           return (
             <Link
               key={item.href}

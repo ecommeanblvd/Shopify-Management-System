@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, Warehouse, Ship, Activity } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, Warehouse, Ship } from 'lucide-react';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -9,6 +9,8 @@ export interface NavItem {
   /** null = ai cũng thấy; mảng = có MỘT trong các quyền là thấy (OR). */
   requires: Permission | Permission[] | null;
   description?: string;
+  /** Prefix path phụ để Sidebar highlight khi ở route con của module (vd tab khác route). */
+  match?: string[];
 }
 
 export type SettingsGroup = 'Stores' | 'Settings Sync' | 'Markets' | 'Admin';
@@ -23,8 +25,7 @@ export interface SettingsNavItem extends NavItem {
 export const NAV: NavItem[] = [
   { href: '/',                label: 'Dashboard',     icon: LayoutDashboard, requires: null },
   { href: '/f/orders',        label: 'Orders',        icon: ShoppingBag,     requires: 'view_orders' },
-  { href: '/f/fulfillment',   label: 'Vận hành đơn', icon: ClipboardList,   requires: 'view_fulfillment' },
-  { href: '/f/lifecycle',     label: 'Vòng đời đơn',  icon: Activity,        requires: 'view_fulfillment' },
+  { href: '/f/fulfillment',   label: 'Quản lí đơn',  icon: ClipboardList,   requires: 'view_fulfillment', match: ['/f/lifecycle'] },
   { href: '/f/warehouse',     label: 'Kho hàng',      icon: Warehouse,       requires: ['view_fulfillment', 'view_receiving'] },
   { href: '/f/carrier-rates', label: 'Carrier rates', icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/f/ship-ho',       label: 'Ship hộ',       icon: Ship,            requires: 'view_ship_ho' },
@@ -60,4 +61,11 @@ export function canSeeNavItem(role: string, requires: NavItem['requires']): bool
   if (requires === null) return true;
   const list = Array.isArray(requires) ? requires : [requires];
   return list.some((p) => hasPermission(role, p));
+}
+
+/** Nav item active khi path trùng href, là route con của href, hoặc thuộc match[]. */
+export function navItemActive(currentPath: string, item: Pick<NavItem, 'href' | 'match'>): boolean {
+  if (currentPath === item.href) return true;
+  const prefixes = [item.href, ...(item.match ?? [])];
+  return prefixes.some((p) => p !== '/' && currentPath.startsWith(p));
 }
