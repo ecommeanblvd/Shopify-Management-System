@@ -2106,3 +2106,59 @@ export const customerLoyalty = pgTable('customer_loyalty', {
   note: text('note'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [uniqueIndex('customer_loyalty_uq').on(t.storeId, t.shopifyCustomerId)]);
+
+// ---------- Order Journey (spec 2026-07-05-order-journey-design.md §5) ----------
+// Danh mục hub nhận hàng return (US / Middle East / VN…). Operation chọn hub khi duyệt claim.
+export const returnHubs = pgTable('return_hubs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  label: text('label').notNull(),                  // "US Hub"
+  recipientName: text('recipient_name').notNull(),
+  addressLine1: text('address_line1').notNull(),
+  addressLine2: text('address_line2'),
+  city: text('city').notNull(),
+  state: text('state'),
+  postalCode: text('postal_code'),
+  country: text('country').notNull(),              // ISO alpha-2, vd "US"
+  phone: text('phone'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Bảng HỢP NHẤT yêu cầu của khách trên một đơn: cancel | claim. Một state machine.
+// Tiền snapshot lúc tạo (bất biến) — admin refund đúng một con số.
+export const customerOrderRequests = pgTable('customer_order_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  shopifyCustomerId: text('shopify_customer_id').notNull(),
+  orderNumber: text('order_number'),
+  kind: text('kind').notNull(),                    // cancel | claim
+  status: text('status').notNull(),                // xem features/customer-account/request-status.ts
+  reasonCodes: text('reason_codes').array(),       // claim
+  description: text('description'),
+  photoKeys: text('photo_keys').array(),           // S3 keys, claim
+  fault: text('fault'),                            // customer | mean — admin điền khi duyệt
+  returnHubId: uuid('return_hub_id').references(() => returnHubs.id),
+  returnShippingPayer: text('return_shipping_payer'), // customer | mean
+  returnTrackingNumber: text('return_tracking_number'),
+  returnCarrier: text('return_carrier'),
+  orderTotal: numeric('order_total', { precision: 14, scale: 2 }).notNull(),
+  refundPercent: integer('refund_percent').notNull(), // 100 | 60
+  refundAmount: numeric('refund_amount', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  adminNote: text('admin_note'),
+  rejectedReason: text('rejected_reason'),
+  reviewedAt: timestamp('reviewed_at'),
+  approvedAt: timestamp('approved_at'),
+  trackingAddedAt: timestamp('tracking_added_at'),
+  receivedAt: timestamp('received_at'),
+  qcAt: timestamp('qc_at'),
+  refundedAt: timestamp('refunded_at'),
+  refundedMarkedBy: text('refunded_marked_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('customer_order_requests_store_status_idx').on(t.storeId, t.status),
+  index('customer_order_requests_order_idx').on(t.orderId),
+  index('customer_order_requests_customer_idx').on(t.storeId, t.shopifyCustomerId),
+]);
