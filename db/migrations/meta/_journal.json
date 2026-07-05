@@ -648,6 +648,12 @@
       "when": 1784464800000,
       "tag": "0093_wishlist-catalog",
       "breakpoints": true
+    },{
+      "idx": 94,
+      "version": "7",
+      "when": 1784551200000,
+      "tag": "0094_normalize-product-ids",
+      "breakpoints": true
     }
   ]
 }

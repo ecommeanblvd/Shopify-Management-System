@@ -72,7 +72,7 @@ export async function resolveCustomerEmail(storeId: string, customerId: string):
     const token = await getStoreToken(storeId);
     const res = await graphqlCall({
       shopDomain: store.shopDomain, apiVersion: store.apiVersion, token,
-      query: CUSTOMER_EMAIL_QUERY, variables: { id: customerId },
+      query: CUSTOMER_EMAIL_QUERY, variables: { id: `gid://shopify/Customer/${customerId}` },
     });
     if (res.errors) return null; // lỗi GraphQL-level (transient/access) → không cache, thử lại lần sau
     email = (res.data as { customer: { email: string | null } | null } | null)?.customer?.email ?? null;

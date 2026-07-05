@@ -110,7 +110,10 @@ export async function syncStoreProducts(domain: string, limit: number): Promise<
       const price = p.priceRangeV2?.minVariantPrice;
       buffer.push({
         storeId: storeRow.id,
-        shopifyProductId: p.id,
+        // Catalog phải khớp format numeric mà theme embed gửi lên (theme Liquid
+        // ShopifyAnalytics.meta.product.id là số trần, KHÔNG phải GID) — strip
+        // prefix để join được với wishlist_items.shopify_product_id.
+        shopifyProductId: p.id.replace('gid://shopify/Product/', ''),
         title: p.title,
         handle: p.handle,
         vendor: p.vendor ?? null,
