@@ -53,8 +53,8 @@ export default async function CustomerAccountPage({ searchParams }: PageProps): 
           wishlist, returns). Upload logo/icon dạng PNG nền trong suốt.
         </p>
         <nav className="flex items-center gap-2 pt-1">
-          <Link href="/f/customer-account/returns" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Đổi/trả
+          <Link href="/f/customer-account/requests" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Yêu cầu đơn hàng (cancel/claim)
           </Link>
           <Link href="/f/customer-account/loyalty" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             Loyalty
