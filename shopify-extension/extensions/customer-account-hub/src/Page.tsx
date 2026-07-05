@@ -62,7 +62,12 @@ function Hub() {
 
   return (
     <s-stack direction="block" gap="large-100">
-      <s-heading>My account</s-heading>
+      <s-grid gridTemplateColumns="1fr auto" gap="base">
+        <s-heading>My account</s-heading>
+        {view.name === 'detail' ? (
+          <s-button onClick={() => setView({ name: 'list' })}>Back to orders</s-button>
+        ) : null}
+      </s-grid>
       {config.branding.announcement ? (
         <s-banner>
           <s-text>{config.branding.announcement}</s-text>
@@ -73,7 +78,6 @@ function Hub() {
       ) : view.name === 'detail' ? (
         <OrderDetail
           orderId={view.orderId}
-          onBack={() => setView({ name: 'list' })}
           onClaim={() => setView({ name: 'claim', orderId: view.orderId })}
         />
       ) : (
@@ -140,11 +144,9 @@ function OrdersList({ onSelect }: { onSelect: (orderId: string) => void }) {
 
 function OrderDetail({
   orderId,
-  onBack,
   onClaim,
 }: {
   orderId: string;
-  onBack: () => void;
   onClaim: () => void;
 }) {
   const [data, setData] = useState<JourneyResponse | null>(null);
@@ -172,7 +174,6 @@ function OrderDetail({
   if (error) {
     return (
       <s-stack direction="block" gap="base">
-        <s-button onClick={onBack}>Back to orders</s-button>
         <s-banner tone="critical">
           <s-text>We couldn't load this order right now.</s-text>
         </s-banner>
@@ -249,8 +250,6 @@ function OrderDetail({
 
   return (
     <s-stack direction="block" gap="large">
-      <s-button onClick={onBack}>Back to orders</s-button>
-
       <s-stack direction="block" gap="small-500">
         <s-heading>Order {order.orderNumber}</s-heading>
         <s-text tone="subdued">
@@ -270,7 +269,7 @@ function OrderDetail({
             <s-text type="strong">{terminalStatus}</s-text>
           ) : (
             stepper.map((step) => (
-              <s-grid gridTemplateColumns="max-content 1fr" gap="base" key={step.label}>
+              <s-grid gridTemplateColumns="1fr auto" gap="base" key={step.label}>
                 <s-stack direction="block" gap="small-200">
                   {step.state === 'done' ? (
                     <>
@@ -286,7 +285,7 @@ function OrderDetail({
                     <s-text tone="subdued">○ {step.label}</s-text>
                   )}
                 </s-stack>
-                <s-stack direction="block" gap="small-500">
+                <s-stack direction="block" gap="small-500" alignItems="end">
                   {step.state === 'current' && actionZone ? actionZone : null}
                 </s-stack>
               </s-grid>
