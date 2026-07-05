@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canTransition, OPEN_STATUSES } from './request-status';
+import { canTransition, OPEN_STATUSES, validateClaimInput } from './request-status';
 
 describe('canTransition', () => {
   it('cancel: chỉ refund_pending → refunded', () => {
@@ -24,5 +24,28 @@ describe('canTransition', () => {
   it('OPEN_STATUSES không chứa trạng thái kết thúc', () => {
     expect(OPEN_STATUSES).not.toContain('rejected');
     expect(OPEN_STATUSES).not.toContain('refunded');
+  });
+});
+
+describe('validateClaimInput', () => {
+  it('toàn rác → error select at least one issue', () => {
+    const r = validateClaimInput(['garbage', 'nonsense'], ['p1.jpg']);
+    expect(r).toEqual({ ok: false, error: 'select at least one issue' });
+  });
+  it('rác lẫn hợp lệ → ok, âm thầm loại bỏ rác', () => {
+    const r = validateClaimInput(['other', 'garbage'], ['p1.jpg']);
+    expect(r).toEqual({ ok: true, reasons: ['other'] });
+  });
+  it('0 ảnh → error photos: 1-5 required', () => {
+    const r = validateClaimInput(['other'], []);
+    expect(r).toEqual({ ok: false, error: 'photos: 1-5 required' });
+  });
+  it('6 ảnh → error photos: 1-5 required', () => {
+    const r = validateClaimInput(['other'], ['1', '2', '3', '4', '5', '6']);
+    expect(r).toEqual({ ok: false, error: 'photos: 1-5 required' });
+  });
+  it('1-5 ảnh hợp lệ → ok', () => {
+    expect(validateClaimInput(['other'], ['1'])).toEqual({ ok: true, reasons: ['other'] });
+    expect(validateClaimInput(['other'], ['1', '2', '3', '4', '5'])).toEqual({ ok: true, reasons: ['other'] });
   });
 });

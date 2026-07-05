@@ -28,3 +28,13 @@ export function canTransition(kind: RequestKind, from: RequestStatus, to: Reques
   if (TERMINAL.includes(from)) return false;
   return (kind === 'cancel' ? CANCEL_EDGES : CLAIM_EDGES)[from]?.includes(to) ?? false;
 }
+
+/** THUẦN: validate input claim (reason codes hợp lệ + số ảnh 1-5). Rác trong reasonCodes bị âm thầm loại bỏ. */
+export function validateClaimInput(reasonCodes: string[], photoKeys: string[]):
+  { ok: true; reasons: ClaimReason[] } | { ok: false; error: string } {
+  const reasons = reasonCodes.filter((r): r is ClaimReason =>
+    (CLAIM_REASONS as readonly string[]).includes(r));
+  if (reasons.length === 0) return { ok: false, error: 'select at least one issue' };
+  if (photoKeys.length < 1 || photoKeys.length > 5) return { ok: false, error: 'photos: 1-5 required' };
+  return { ok: true, reasons };
+}

@@ -2,8 +2,8 @@
  *  Server LUÔN re-check policy — không tin client. Tiền snapshot tại đây. */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { evaluateOrderPolicy, type PolicyResult } from './order-policy';
-import { CLAIM_REASONS, OPEN_STATUSES, canTransition, type RequestStatus } from './request-status';
+import { evaluateOrderPolicy, money, type PolicyResult } from './order-policy';
+import { OPEN_STATUSES, canTransition, validateClaimInput, type RequestStatus } from './request-status';
 
 const customerIdExpr = sql`${schema.shopifyOrders.rawPayload}->'customer'->>'id'`;
 
@@ -26,7 +26,7 @@ async function loadOrderForCustomer(storeId: string, customerId: string, orderId
   return row ?? null;
 }
 
-export async function listOrderRequests(storeId: string, orderId: string) {
+async function listOrderRequests(storeId: string, orderId: string) {
   return db.select().from(schema.customerOrderRequests)
     .where(and(eq(schema.customerOrderRequests.storeId, storeId), eq(schema.customerOrderRequests.orderId, orderId)))
     .orderBy(desc(schema.customerOrderRequests.createdAt));
@@ -75,32 +75,44 @@ export async function createOrderRequest(
 
   if (input.kind === 'cancel') {
     if (!policy.canCancel) return { ok: false, error: 'cancellation not available' };
-    const [row] = await db.insert(schema.customerOrderRequests).values({
-      storeId, orderId, shopifyCustomerId: customerId, orderNumber: order.orderNumber,
-      kind: 'cancel',
-      status: 'refund_pending' satisfies RequestStatus,   // policy engine tự duyệt — vào thẳng queue refund
-      orderTotal: order.totalPrice,
-      refundPercent: policy.refundPercent,
-      refundAmount: policy.refundAmount,
-      currency: order.currency,
-    }).returning({ id: schema.customerOrderRequests.id });
-    return { ok: true, id: row.id };
+    try {
+      const [row] = await db.insert(schema.customerOrderRequests).values({
+        storeId, orderId, shopifyCustomerId: customerId, orderNumber: order.orderNumber,
+        kind: 'cancel',
+        status: 'refund_pending' satisfies RequestStatus,   // policy engine tự duyệt — vào thẳng queue refund
+        orderTotal: order.totalPrice,
+        refundPercent: policy.refundPercent,
+        refundAmount: policy.refundAmount,
+        currency: order.currency,
+      }).returning({ id: schema.customerOrderRequests.id });
+      return { ok: true, id: row.id };
+    } catch (e) {
+      if ((e as { code?: string })?.code === '23505') {
+        return { ok: false, error: 'a request is already in progress for this order' };
+      }
+      throw e;
+    }
   }
 
   // claim
   if (!policy.canClaim) return { ok: false, error: 'claim window closed' };
-  const reasons = input.reasonCodes.filter((r): r is (typeof CLAIM_REASONS)[number] =>
-    (CLAIM_REASONS as readonly string[]).includes(r));
-  if (reasons.length === 0) return { ok: false, error: 'select at least one issue' };
-  if (input.photoKeys.length < 1 || input.photoKeys.length > 5) return { ok: false, error: 'photos: 1-5 required' };
-  const [row] = await db.insert(schema.customerOrderRequests).values({
-    storeId, orderId, shopifyCustomerId: customerId, orderNumber: order.orderNumber,
-    kind: 'claim', status: 'submitted' satisfies RequestStatus,
-    reasonCodes: reasons, description: input.description.trim() || null,
-    photoKeys: input.photoKeys,
-    orderTotal: order.totalPrice, refundPercent: 100, refundAmount: order.totalPrice, currency: order.currency,
-  }).returning({ id: schema.customerOrderRequests.id });
-  return { ok: true, id: row.id };
+  const validated = validateClaimInput(input.reasonCodes, input.photoKeys);
+  if (!validated.ok) return { ok: false, error: validated.error };
+  try {
+    const [row] = await db.insert(schema.customerOrderRequests).values({
+      storeId, orderId, shopifyCustomerId: customerId, orderNumber: order.orderNumber,
+      kind: 'claim', status: 'submitted' satisfies RequestStatus,
+      reasonCodes: validated.reasons, description: input.description.trim() || null,
+      photoKeys: input.photoKeys,
+      orderTotal: order.totalPrice, refundPercent: 100, refundAmount: money(order.totalPrice, 1), currency: order.currency,
+    }).returning({ id: schema.customerOrderRequests.id });
+    return { ok: true, id: row.id };
+  } catch (e) {
+    if ((e as { code?: string })?.code === '23505') {
+      return { ok: false, error: 'a request is already in progress for this order' };
+    }
+    throw e;
+  }
 }
 
 export async function addReturnTracking(
