@@ -49,16 +49,24 @@ function fmtMoneyForPolicy(amount: string): string {
 
 const REQUEST_STATUS_LABELS: Record<string, Record<string, string>> = {
   cancel: {
-    pending: 'Cancellation pending',
+    submitted: 'Cancellation submitted',
+    under_review: 'Cancellation under review',
     approved: 'Cancellation approved',
     rejected: 'Cancellation rejected',
-    completed: 'Cancellation completed',
+    return_in_transit: 'Cancellation approved — refund processing',
+    received: 'Cancellation approved — refund processing',
+    refund_pending: 'Cancellation approved — refund processing',
+    refunded: 'Cancelled & refunded',
   },
   claim: {
-    pending: 'Claim under review',
-    approved: 'Claim approved',
+    submitted: 'Claim submitted — awaiting review',
+    under_review: 'Claim under review',
+    approved: 'Claim approved — please ship the item back',
     rejected: 'Claim rejected',
-    completed: 'Claim completed',
+    return_in_transit: 'Return shipment in transit',
+    received: 'Return received — quality check in progress',
+    refund_pending: 'Refund processing',
+    refunded: 'Refunded',
   },
 };
 

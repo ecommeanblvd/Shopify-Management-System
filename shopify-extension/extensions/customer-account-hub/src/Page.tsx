@@ -1,8 +1,7 @@
 import '@shopify/ui-extensions/preact';
 import { render } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { getConfig, getOrders, type OrderRow } from './lib/api';
-import { renderPlan } from './lib/render-plan';
 import {
   getJourney,
   postCancelRequest,
@@ -60,9 +59,6 @@ function Hub() {
       </s-section>
     );
   }
-
-  // renderPlan() reserved for future modules; the order journey view below is always shown when enabled.
-  renderPlan(config);
 
   return (
     <s-stack direction="block" gap="large-100">
@@ -156,6 +152,7 @@ function OrderDetail({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'critical'; message: string } | null>(null);
+  const cancelInFlight = useRef(false);
 
   const load = () =>
     getJourney(orderId).then((r) => {
@@ -188,6 +185,8 @@ function OrderDetail({
   const cancelMessage = cancelCopy(policy);
 
   const confirmCancel = async () => {
+    if (cancelInFlight.current) return;
+    cancelInFlight.current = true;
     setCancelling(true);
     setFeedback(null);
     try {
@@ -199,11 +198,17 @@ function OrderDetail({
     } catch (e) {
       setFeedback({ tone: 'critical', message: String((e as Error)?.message ?? e) });
     } finally {
+      cancelInFlight.current = false;
       setCancelling(false);
     }
   };
 
-  const claimWindowClosed = !policy.canClaim && policy.claimDeadline !== null;
+  const hasOpenRequest = requests.some((r) => !['rejected', 'refunded'].includes(r.status));
+  const claimWindowClosed =
+    !policy.canClaim &&
+    policy.claimDeadline !== null &&
+    !hasOpenRequest &&
+    Date.now() > new Date(policy.claimDeadline).getTime();
 
   return (
     <s-stack direction="block" gap="large">
@@ -265,7 +270,7 @@ function OrderDetail({
             {policy.canClaim ? (
               <s-button onClick={onClaim}>Report a problem</s-button>
             ) : claimWindowClosed ? (
-              <s-text tone="subdued">Claim window closed — please contact support for help.</s-text>
+              <s-text tone="subdued">Claim window closed (14 days after delivery).</s-text>
             ) : null}
           </s-stack>
         </s-stack>
@@ -375,6 +380,7 @@ function ClaimWizard({ orderId, onDone }: { orderId: string; onDone: () => void 
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitInFlight = useRef(false);
 
   const toggleReason = (code: ClaimReasonCode) => {
     setReasons((prev) => {
@@ -385,28 +391,45 @@ function ClaimWizard({ orderId, onDone }: { orderId: string; onDone: () => void 
     });
   };
 
+  const MAX_PHOTOS = 5;
+
   const onFilesChosen = async (e: any) => {
     const files: FileList | undefined = e?.currentTarget?.files ?? e?.target?.files;
     if (!files || files.length === 0) return;
     setUploading(true);
     setError(null);
+    const failedNames: string[] = [];
+    let skippedForLimit = 0;
+    let acceptedSoFar = photoKeys.length;
     try {
-      const keys: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files.item(i);
         if (!file) continue;
-        const { key } = await uploadPhoto(file);
-        keys.push(key);
+        if (acceptedSoFar >= MAX_PHOTOS) {
+          skippedForLimit++;
+          continue;
+        }
+        try {
+          const { key } = await uploadPhoto(file);
+          acceptedSoFar++;
+          setPhotoKeys((prev) => (prev.length >= MAX_PHOTOS ? prev : [...prev, key]));
+        } catch {
+          failedNames.push(file.name);
+        }
       }
-      setPhotoKeys((prev) => [...prev, ...keys]);
-    } catch (err) {
-      setError(String((err as Error)?.message ?? err));
+      if (failedNames.length > 0) {
+        setError(`Failed to upload: ${failedNames.join(', ')}. Please try again.`);
+      } else if (skippedForLimit > 0) {
+        setError(`Only ${MAX_PHOTOS} photos are allowed — ${skippedForLimit} file(s) were not uploaded.`);
+      }
     } finally {
       setUploading(false);
     }
   };
 
   const submit = async () => {
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -416,6 +439,7 @@ function ClaimWizard({ orderId, onDone }: { orderId: string; onDone: () => void 
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
     } finally {
+      submitInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -461,9 +485,12 @@ function ClaimWizard({ orderId, onDone }: { orderId: string; onDone: () => void 
             <input type="file" accept="image/png,image/jpeg" multiple onChange={onFilesChosen} />
             {uploading ? <s-spinner accessibilityLabel="Uploading photos" /> : null}
             <s-text tone="subdued">{photoKeys.length} photo(s) uploaded</s-text>
+            {photoKeys.length === 0 ? (
+              <s-text tone="subdued">At least 1 photo is required (max 5).</s-text>
+            ) : null}
             <s-stack direction="inline" gap="base">
               <s-button onClick={() => setStep(1)}>Back</s-button>
-              <s-button variant="primary" onClick={() => setStep(3)}>
+              <s-button variant="primary" disabled={photoKeys.length === 0} onClick={() => setStep(3)}>
                 Next
               </s-button>
             </s-stack>
@@ -476,7 +503,7 @@ function ClaimWizard({ orderId, onDone }: { orderId: string; onDone: () => void 
             <s-text tone="subdued">{photoKeys.length} photo(s) attached</s-text>
             <s-stack direction="inline" gap="base">
               <s-button onClick={() => setStep(2)}>Back</s-button>
-              <s-button variant="primary" disabled={submitting} onClick={submit}>
+              <s-button variant="primary" disabled={submitting || photoKeys.length === 0} onClick={submit}>
                 {submitting ? 'Submitting…' : 'Submit'}
               </s-button>
             </s-stack>

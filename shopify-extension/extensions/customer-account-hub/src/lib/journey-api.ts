@@ -75,7 +75,15 @@ export interface ReturnHub {
 }
 
 export type RequestKind = 'cancel' | 'claim';
-export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type RequestStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'return_in_transit'
+  | 'received'
+  | 'refund_pending'
+  | 'refunded';
 
 export interface JourneyRequest {
   id: string;

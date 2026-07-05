@@ -67,18 +67,25 @@ describe('cancelCopy', () => {
 
 describe('requestStatusLabel', () => {
   const cases: Array<[string, string, string]> = [
-    ['cancel', 'pending', 'Cancellation pending'],
-    ['cancel', 'approved', 'Cancellation approved'],
-    ['cancel', 'rejected', 'Cancellation rejected'],
-    ['cancel', 'completed', 'Cancellation completed'],
-    ['claim', 'pending', 'Claim under review'],
-    ['claim', 'approved', 'Claim approved'],
+    ['claim', 'submitted', 'Claim submitted — awaiting review'],
+    ['claim', 'under_review', 'Claim under review'],
+    ['claim', 'approved', 'Claim approved — please ship the item back'],
     ['claim', 'rejected', 'Claim rejected'],
-    ['claim', 'completed', 'Claim completed'],
+    ['claim', 'return_in_transit', 'Return shipment in transit'],
+    ['claim', 'received', 'Return received — quality check in progress'],
+    ['claim', 'refund_pending', 'Refund processing'],
+    ['claim', 'refunded', 'Refunded'],
+    ['cancel', 'refund_pending', 'Cancellation approved — refund processing'],
+    ['cancel', 'refunded', 'Cancelled & refunded'],
   ];
 
   it.each(cases)('kind=%s status=%s → %s', (kind, status, expected) => {
     expect(requestStatusLabel(kind, status)).toBe(expected);
+  });
+
+  it('unknown kind/status → generic fallback', () => {
+    expect(requestStatusLabel('cancel', 'mystery')).toBe('cancel mystery');
+    expect(requestStatusLabel('mystery', 'submitted')).toBe('mystery submitted');
   });
 });
 
