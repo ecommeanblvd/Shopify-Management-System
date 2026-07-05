@@ -25,13 +25,12 @@ interface Props {
 }
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
-  profile: 'Profile', credit: 'Store credit', tracking: 'Order tracking',
-  wishlist: 'Wishlist', returns: 'Returns',
+  tracking: 'Order Tracking (Journey)', wishlist: 'Wishlist',
 };
 
 const CHECKER = 'bg-muted [background-image:repeating-conic-gradient(theme(colors.border)_0_25%,transparent_0_50%)] [background-size:12px_12px]';
 
-/** Merge saved modules with every MODULE_KEY so all 5 rows show, saved order first. */
+/** Merge saved modules with every MODULE_KEY so all 2 rows show, saved order first. */
 function buildRows(config: CustomerAccountConfig): ModuleRow[] {
   const bySaved = new Map(config.modules.map((m) => [m.key, m]));
   const ordered: ModuleRow[] = config.modules.map((m) => ({ ...m }));
