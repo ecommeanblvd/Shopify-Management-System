@@ -31,6 +31,21 @@ declare global {
     id: string;
   }
 
+  /**
+   * The order in context on the `customer-account.order-status.block.render`
+   * target. `id` is a Shopify GID (`gid://shopify/Order/<numericId>`) and `name`
+   * is the merchant-facing number (e.g. `#1001`). Undefined until the order is
+   * fully processed, or when the page is only pre-authenticated.
+   *
+   * NOTE: the SMS timeline API keys on the *internal* order UUID, not this Shopify
+   * GID, so `OrderStatusBlock` matches on `name` against `getOrders()` to resolve
+   * the internal id. The `order` signal is only present on the order-status target.
+   */
+  interface OrderStatusOrder {
+    id: string;
+    name: string;
+  }
+
   /** Minimal shape of the customer-account `shopify` global used by this extension. */
   const shopify: {
     sessionToken: { get(): Promise<string> };
@@ -41,6 +56,8 @@ declare global {
     authenticatedAccount: {
       customer: ReadonlySignal<AuthenticatedCustomer | undefined>;
     };
+    /** Only defined on the `customer-account.order-status.block.render` target. */
+    order?: ReadonlySignal<OrderStatusOrder | undefined>;
   };
 }
 
