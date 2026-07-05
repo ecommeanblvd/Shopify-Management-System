@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canTransition, OPEN_STATUSES, validateClaimInput } from './request-status';
+import { canTransition, OPEN_STATUSES, pgErrorCode, validateClaimInput } from './request-status';
 
 describe('canTransition', () => {
   it('cancel: chỉ refund_pending → refunded', () => {
@@ -47,5 +47,21 @@ describe('validateClaimInput', () => {
   it('1-5 ảnh hợp lệ → ok', () => {
     expect(validateClaimInput(['other'], ['1'])).toEqual({ ok: true, reasons: ['other'] });
     expect(validateClaimInput(['other'], ['1', '2', '3', '4', '5'])).toEqual({ ok: true, reasons: ['other'] });
+  });
+});
+
+describe('pgErrorCode', () => {
+  it('tìm code ở root .code', () => {
+    expect(pgErrorCode({ code: '23505' })).toBe('23505');
+  });
+  it('tìm code ở .cause.code (drizzle wrap)', () => {
+    expect(pgErrorCode({ cause: { code: '23505' } })).toBe('23505');
+  });
+  it('ưu tiên root .code trước .cause.code', () => {
+    expect(pgErrorCode({ code: 'A', cause: { code: 'B' } })).toBe('A');
+  });
+  it('trả undefined nếu không có code', () => {
+    expect(pgErrorCode({})).toBeUndefined();
+    expect(pgErrorCode({ message: 'error' })).toBeUndefined();
   });
 });

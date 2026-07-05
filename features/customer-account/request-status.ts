@@ -38,3 +38,9 @@ export function validateClaimInput(reasonCodes: string[], photoKeys: string[]):
   if (photoKeys.length < 1 || photoKeys.length > 5) return { ok: false, error: 'photos: 1-5 required' };
   return { ok: true, reasons };
 }
+
+/** Extract PG error code từ DrizzleQueryError (wrap pg error ở .cause). */
+export function pgErrorCode(e: unknown): string | undefined {
+  return (e as { code?: string; cause?: { code?: string } })?.code
+    ?? (e as { cause?: { code?: string } })?.cause?.code;
+}

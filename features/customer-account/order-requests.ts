@@ -2,8 +2,8 @@
  *  Server LUÔN re-check policy — không tin client. Tiền snapshot tại đây. */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { evaluateOrderPolicy, money, type PolicyResult } from './order-policy';
-import { OPEN_STATUSES, canTransition, validateClaimInput, type RequestStatus } from './request-status';
+import { evaluateOrderPolicy, money } from './order-policy';
+import { OPEN_STATUSES, canTransition, pgErrorCode, validateClaimInput, type RequestStatus } from './request-status';
 
 const customerIdExpr = sql`${schema.shopifyOrders.rawPayload}->'customer'->>'id'`;
 
@@ -87,7 +87,7 @@ export async function createOrderRequest(
       }).returning({ id: schema.customerOrderRequests.id });
       return { ok: true, id: row.id };
     } catch (e) {
-      if ((e as { code?: string })?.code === '23505') {
+      if (pgErrorCode(e) === '23505') {
         return { ok: false, error: 'a request is already in progress for this order' };
       }
       throw e;
@@ -108,7 +108,7 @@ export async function createOrderRequest(
     }).returning({ id: schema.customerOrderRequests.id });
     return { ok: true, id: row.id };
   } catch (e) {
-    if ((e as { code?: string })?.code === '23505') {
+    if (pgErrorCode(e) === '23505') {
       return { ok: false, error: 'a request is already in progress for this order' };
     }
     throw e;
