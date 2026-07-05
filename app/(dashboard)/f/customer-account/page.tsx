@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { UserRound } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -50,6 +52,14 @@ export default async function CustomerAccountPage({ searchParams }: PageProps): 
           (logo/hero/announcement), và các module (profile, credit, tracking,
           wishlist, returns). Upload logo/icon dạng PNG nền trong suốt.
         </p>
+        <nav className="flex items-center gap-2 pt-1">
+          <Link href="/f/customer-account/returns" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Đổi/trả
+          </Link>
+          <Link href="/f/customer-account/loyalty" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Loyalty
+          </Link>
+        </nav>
       </header>
 
       <ConfigEditor
