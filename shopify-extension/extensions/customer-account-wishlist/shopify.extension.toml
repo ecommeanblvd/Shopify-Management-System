@@ -1,0 +1,25 @@
+api_version = "2026-04"
+
+# Full-page extension RIÊNG (Shopify: full-page target không được ở chung extension
+# với target khác). Menu account có mục "Wishlist" cạnh "Customer Account Hub".
+
+[[extensions]]
+type = "ui_extension"
+name = "Customer Account Wishlist"
+handle = "customer-account-wishlist"
+uid = "customer-account-wishlist"
+description = "MEAN customer account wishlist page: saved products + similar recommendations."
+
+  [[extensions.targeting]]
+  target = "customer-account.page.render"
+  module = "./src/Page.tsx"
+
+  [extensions.capabilities]
+  network_access = true
+
+  [extensions.settings]
+    [[extensions.settings.fields]]
+    key = "backend_url"
+    type = "single_line_text_field"
+    name = "SMS backend URL"
+    description = "Base URL của SMS (vd https://shopify-management-system-production.up.railway.app)."
