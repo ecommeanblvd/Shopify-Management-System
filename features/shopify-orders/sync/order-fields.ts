@@ -35,3 +35,11 @@ export const ORDER_NODE_FIELDS = `
   }
   fulfillments { trackingInfo { number company } }
 `.trim();
+
+/** Field customer chỉ query được khi app có read_customers trên store đó —
+ *  store thiếu scope mà query sẽ ACCESS_DENIED vỡ cả trang. */
+export const ORDER_CUSTOMER_FIELD = 'customer { id }';
+
+export function orderNodeFields(opts: { includeCustomer: boolean }): string {
+  return opts.includeCustomer ? `${ORDER_NODE_FIELDS}\n  ${ORDER_CUSTOMER_FIELD}` : ORDER_NODE_FIELDS;
+}

@@ -8,6 +8,19 @@ import { ensureFulfillmentForOrder } from '@/features/fulfillment/ensure-fulfill
 export type UpsertSource = 'webhook' | 'cron' | 'backfill';
 
 /**
+ * GraphQL trả customer.id dạng gid://shopify/Customer/N — normalize về N
+ * để khớp customerIdExpr (raw_payload->'customer'->>'id') + index 0089.
+ */
+export function normalizeCustomerGid<T extends { customer?: { id?: string | null } | null }>(payload: T): T {
+  const gid = payload.customer?.id;
+  if (typeof gid === 'string') {
+    const m = /^gid:\/\/shopify\/Customer\/(\d+)$/.exec(gid);
+    if (m) return { ...payload, customer: { ...payload.customer, id: m[1] } };
+  }
+  return payload;
+}
+
+/**
  * Idempotently upsert a Shopify order, its lines, and its refunds in a single
  * transaction. Safe to call from any of the three sync channels — last write
  * wins on the order row, lines are DELETE+INSERT-replaced (Shopify renumbers
@@ -15,9 +28,10 @@ export type UpsertSource = 'webhook' | 'cron' | 'backfill';
  */
 export async function upsertOrder(
   storeId: string,
-  payload: ShopifyOrderPayload,
+  rawPayload: ShopifyOrderPayload,
   source: UpsertSource,
 ): Promise<string | null> {
+  const payload = normalizeCustomerGid(rawPayload);
   const mapped = mapShopifyOrder(payload, storeId);
 
   // Cancel detection (spec §4e): the upsert below is last-write-wins, so the

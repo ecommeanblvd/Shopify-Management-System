@@ -103,6 +103,11 @@ export interface ShopifyOrderPayload {
     company?: string | null;
   } | null;
   totalWeight: number | null;                   // in grams
+  // Only present when the query included `customer { id }` — gated per-store
+  // on the read_customers scope (see order-fields.ts orderNodeFields). GID
+  // form (gid://shopify/Customer/N) as returned by GraphQL; normalized to the
+  // bare numeric id before persisting (see upsert-order.ts normalizeCustomerGid).
+  customer?: { id: string } | null;
   lineItems: { nodes: ShopifyLineItem[] };
   refunds: ShopifyRefund[];
   fulfillments: ShopifyFulfillment[];

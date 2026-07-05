@@ -3,20 +3,25 @@ import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { upsertOrder } from '../sync/upsert-order';
 import type { ShopifyOrderPayload } from '../shopify-types';
-import { ORDER_NODE_FIELDS } from '../sync/order-fields';
+import { orderNodeFields } from '../sync/order-fields';
 
 const PAGE_SIZE = 50;
 
-const PAGED_QUERY = `
+/** Per-store query — `customer { id }` only for stores with read_customers
+ *  scope (see order-fields.ts orderNodeFields), otherwise Shopify returns
+ *  ACCESS_DENIED and breaks the whole page. */
+function buildPagedQuery(includeCustomer: boolean): string {
+  return `
   query orders($q: String!, $cursor: String) {
     orders(first: ${PAGE_SIZE}, query: $q, after: $cursor, sortKey: UPDATED_AT) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        ${ORDER_NODE_FIELDS}
+        ${orderNodeFields({ includeCustomer })}
       }
     }
   }
 `.trim();
+}
 
 export interface StoreSyncResult {
   storeId: string;
@@ -49,6 +54,8 @@ export async function runHourlySync(): Promise<StoreSyncResult[]> {
       const q = `updated_at:>=${since.toISOString()}`;
 
       const token = await getStoreToken(store.id);
+      const includeCustomer = (store.scopes ?? []).includes('read_customers');
+      const pagedQuery = buildPagedQuery(includeCustomer);
       let cursor: string | null = null;
       let ingested = 0;
       do {
@@ -56,7 +63,7 @@ export async function runHourlySync(): Promise<StoreSyncResult[]> {
           shopDomain: store.shopDomain,
           apiVersion: store.apiVersion,
           token,
-          query: PAGED_QUERY,
+          query: pagedQuery,
           variables: { q, cursor },
         });
         const body = res as {
