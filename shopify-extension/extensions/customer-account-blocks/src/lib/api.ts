@@ -1,9 +1,13 @@
 import type { AccountConfig } from './render-plan';
 declare const shopify: { sessionToken: { get(): Promise<string> }; settings: { backend_url?: string } };
 
+// Toàn bộ store của MEAN trỏ về cùng một backend SMS, nên set sẵn URL này làm mặc định
+// để extension chạy ngay sau deploy mà không bắt buộc phải điền setting trong editor
+// (editor checkout hay lỗi tải). Ô setting `backend_url` vẫn override nếu cần đổi.
+const DEFAULT_BACKEND_URL = 'https://shopify-management-system-production.up.railway.app';
+
 async function smsFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = shopify.settings.backend_url;
-  if (!base) throw new Error('backend_url chưa cấu hình trong extension settings');
+  const base = (shopify.settings.backend_url ?? '').trim() || DEFAULT_BACKEND_URL;
   const token = await shopify.sessionToken.get();
   const res = await fetch(`${base}${path}`, {
     ...init,

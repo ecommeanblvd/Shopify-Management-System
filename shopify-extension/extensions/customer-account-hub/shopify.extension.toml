@@ -1,23 +1,19 @@
 api_version = "2026-04"
 
+# Full-page extension — PHẢI đứng riêng một extension (Shopify: full-page target
+# không được ở chung extension với target khác). Block targets nằm ở extension
+# customer-account-blocks. `handle` dùng để merchant thêm link vào header menu.
+
 [[extensions]]
 type = "ui_extension"
 name = "Customer Account Hub"
 handle = "customer-account-hub"
 uid = "customer-account-hub"
-description = "MEAN customer account: profile, credit, tracking, wishlist, returns."
+description = "MEAN customer account full page: profile, credit, tracking, wishlist, returns."
 
   [[extensions.targeting]]
   target = "customer-account.page.render"
   module = "./src/Page.tsx"
-
-  [[extensions.targeting]]
-  target = "customer-account.profile.block.render"
-  module = "./src/ProfileBlock.tsx"
-
-  [[extensions.targeting]]
-  target = "customer-account.order-status.block.render"
-  module = "./src/OrderStatusBlock.tsx"
 
   [extensions.capabilities]
   network_access = true
@@ -25,6 +21,6 @@ description = "MEAN customer account: profile, credit, tracking, wishlist, retur
   [extensions.settings]
     [[extensions.settings.fields]]
     key = "backend_url"
-    type = "url"
+    type = "single_line_text_field"
     name = "SMS backend URL"
     description = "Base URL của SMS (vd https://shopify-management-system-production.up.railway.app)."

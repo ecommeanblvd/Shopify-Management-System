@@ -1,7 +1,17 @@
 {
   "name": "customer-account-hub-extension",
   "private": true,
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@shopify/ui-extensions": "^2026.4.0", "preact": "^10.24.0" },
-  "devDependencies": { "typescript": "^5", "vitest": "^4" }
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.9.2",
+    "@shopify/ui-extensions": "^2026.4.0",
+    "preact": "^10.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4"
+  }
 }
