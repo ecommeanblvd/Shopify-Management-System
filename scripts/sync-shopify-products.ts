@@ -8,6 +8,9 @@
  * chỉ verify được ở variant level; xem VERIFY note dưới). Idempotent — Shopify là
  * nguồn sự thật, không giữ lịch sử.
  *
+ * SWEEP: Sau khi walk toàn bộ sản phẩm từ Shopify, mark các row không được touch
+ * là DELETED (status='DELETED', availableForSale=false) để khỏi recommendation.
+ *
  * VERIFY (2026-07-05, store cici-mean.myshopify.com, Admin API): query dưới đã
  * chạy thật với 1-2 sản phẩm thật và field khớp đúng như viết:
  *   - featuredImage { url } → có, trả URL CDN thật.
@@ -23,7 +26,7 @@
  *   pnpm tsx scripts/sync-shopify-products.ts --store cici-mean.myshopify.com --limit 100
  */
 import 'dotenv/config';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, lt } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { graphqlCall, getStoreToken } from '@/lib/shopify/client';
 
@@ -67,12 +70,13 @@ interface QueryData {
   products: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ProductNode[] };
 }
 
-export async function syncStoreProducts(domain: string, limit: number): Promise<{ products: number }> {
+export async function syncStoreProducts(domain: string, limit: number): Promise<{ products: number; swept: number }> {
   const [storeRow] = await db.select().from(schema.stores).where(eq(schema.stores.shopDomain, domain));
   if (!storeRow) throw new Error(`Store not connected: ${domain}`);
   console.log(`[products-sync] ${domain} → store ${storeRow.id}`);
   const token = await getStoreToken(storeRow.id);
 
+  const runStartedAt = new Date();
   let cursor: string | null = null;
   let total = 0;
   const BATCH = 200;
@@ -80,7 +84,7 @@ export async function syncStoreProducts(domain: string, limit: number): Promise<
 
   async function flush(): Promise<void> {
     if (buffer.length === 0) return;
-    await db.insert(schema.shopifyProducts).values(buffer).onConflictDoUpdate({
+    await db.insert(schema.shopifyProducts).values(buffer.map((v) => ({ ...v, syncedAt: new Date() }))).onConflictDoUpdate({
       target: [schema.shopifyProducts.storeId, schema.shopifyProducts.shopifyProductId],
       set: {
         title: sql`excluded.title`, handle: sql`excluded.handle`,
@@ -88,7 +92,7 @@ export async function syncStoreProducts(domain: string, limit: number): Promise<
         tags: sql`excluded.tags`, imageUrl: sql`excluded.image_url`,
         priceMin: sql`excluded.price_min`, currency: sql`excluded.currency`,
         availableForSale: sql`excluded.available_for_sale`, status: sql`excluded.status`,
-        syncedAt: sql`now()`,
+        syncedAt: sql`excluded.synced_at`,
       },
     });
     buffer = [];
@@ -117,6 +121,7 @@ export async function syncStoreProducts(domain: string, limit: number): Promise<
         currency: price?.currencyCode ?? null,
         availableForSale: p.variants.nodes.some((v) => v.availableForSale),
         status: p.status,
+        syncedAt: runStartedAt,
       });
       total++;
       if (buffer.length >= BATCH) await flush();
@@ -128,8 +133,18 @@ export async function syncStoreProducts(domain: string, limit: number): Promise<
     await new Promise((r) => setTimeout(r, 200)); // pacing GraphQL points
   }
   await flush();
-  console.log(`[products-sync] ${domain} done: ${total} products`);
-  return { products: total };
+
+  // Sweep sản phẩm không được touch trong run này (đã xóa hẳn trên Shopify).
+  const result = await db.update(schema.shopifyProducts)
+    .set({ availableForSale: false, status: 'DELETED', syncedAt: new Date() })
+    .where(and(
+      eq(schema.shopifyProducts.storeId, storeRow.id),
+      lt(schema.shopifyProducts.syncedAt, runStartedAt),
+    ));
+
+  const swept = result.rowCount ?? 0;
+  console.log(`[products-sync] ${domain} done: ${total} products, swept ${swept} deleted`);
+  return { products: total, swept };
 }
 
 async function main(): Promise<void> {
