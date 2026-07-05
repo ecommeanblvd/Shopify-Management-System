@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { RETURN_STATUSES, updateReturnStatus, type AdminReturnRow } from '@/features/customer-account/returns-admin';
+import { RETURN_STATUSES, type AdminReturnRow } from '@/features/customer-account/returns-shared';
+import { updateReturnStatus } from '@/features/customer-account/returns-actions';
 
 interface StoreRef { id: string; name: string; shopDomain: string }
 

@@ -7,11 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  deleteLoyalty,
-  upsertLoyalty,
-  type AdminLoyaltyRow,
-} from '@/features/customer-account/loyalty-admin';
+import { deleteLoyalty, upsertLoyalty } from '@/features/customer-account/loyalty-actions';
+import type { AdminLoyaltyRow } from '@/features/customer-account/loyalty-shared';
 
 interface StoreRef { id: string; name: string; shopDomain: string }
 
