@@ -91,7 +91,7 @@ function WishlistBody() {
   return (
     <s-stack direction="block" gap="large">
       <s-section heading="Saved products">
-        <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+        <s-grid gridTemplateColumns="repeat(auto-fill, minmax(180px, 1fr))" gap="base">
           {data.items.map((it) => (
             <SavedCard key={`${it.shopifyProductId}:${it.variantId ?? ''}`} item={it} onRemoved={reload} />
           ))}
@@ -100,7 +100,7 @@ function WishlistBody() {
 
       {data.recommendations.length > 0 ? (
         <s-section heading="You may also like">
-          <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+          <s-grid gridTemplateColumns="repeat(auto-fill, minmax(180px, 1fr))" gap="base">
             {data.recommendations.map((r) => (
               <RecCard key={r.shopifyProductId} rec={r} />
             ))}
@@ -117,6 +117,7 @@ function SavedCard({ item, onRemoved }: { item: WishlistItem; onRemoved: () => v
   const [error, setError] = useState<string | null>(null);
   const removeInFlight = useRef(false);
   const badge = soldOutBadge(item.availableForSale);
+  const href = `/products/${item.productHandle}`;
 
   const remove = async () => {
     if (removeInFlight.current) return;
@@ -136,29 +137,36 @@ function SavedCard({ item, onRemoved }: { item: WishlistItem; onRemoved: () => v
 
   return (
     <s-stack direction="block" gap="small-500">
-      {item.imageUrl ? <s-image src={item.imageUrl} alt={item.productTitle} objectFit="contain" /> : null}
-      <s-text type="strong">{item.productTitle}</s-text>
+      <s-link href={href} target="_blank">
+        {item.imageUrl ? (
+          <s-image src={item.imageUrl} alt={item.productTitle} aspectRatio="3/4" objectFit="contain" />
+        ) : null}
+      </s-link>
+      <s-link href={href} target="_blank">
+        <s-text type="strong">{item.productTitle}</s-text>
+      </s-link>
       {item.variantTitle ? <s-text tone="subdued">{item.variantTitle}</s-text> : null}
-      {item.price ? <s-text>{fmtMoney(item.price, item.currency)}</s-text> : null}
-      {badge ? <s-badge tone="critical">{badge}</s-badge> : null}
-      {error ? <s-text tone="critical">{error}</s-text> : null}
-      <s-stack direction="inline" gap="small-500">
-        <s-link href={`/products/${item.productHandle}`} target="_blank">
-          View product
-        </s-link>
+      <s-stack direction="inline" gap="small">
+        {item.price ? <s-text>{fmtMoney(item.price, item.currency)}</s-text> : null}
+        {badge ? <s-badge tone="critical">{badge}</s-badge> : null}
       </s-stack>
+      {error ? <s-text tone="critical">{error}</s-text> : null}
       {!confirming ? (
-        <s-button tone="critical" onClick={() => setConfirming(true)}>
+        <s-link tone="neutral" onClick={() => setConfirming(true)}>
           Remove
-        </s-button>
+        </s-link>
+      ) : removing ? (
+        <s-text tone="subdued">Removing…</s-text>
       ) : (
-        <s-stack direction="inline" gap="small-500">
-          <s-button tone="critical" disabled={removing} onClick={remove}>
-            {removing ? 'Removing…' : 'Confirm'}
-          </s-button>
-          <s-button disabled={removing} onClick={() => setConfirming(false)}>
-            Keep
-          </s-button>
+        <s-stack direction="inline" gap="small">
+          <s-text tone="subdued">Remove?</s-text>
+          <s-link tone="neutral" onClick={remove}>
+            Yes
+          </s-link>
+          <s-text tone="subdued">·</s-text>
+          <s-link tone="neutral" onClick={() => setConfirming(false)}>
+            No
+          </s-link>
         </s-stack>
       )}
     </s-stack>
@@ -166,15 +174,17 @@ function SavedCard({ item, onRemoved }: { item: WishlistItem; onRemoved: () => v
 }
 
 function RecCard({ rec }: { rec: WishlistRec }) {
+  const href = `/products/${rec.handle}`;
   return (
     <s-stack direction="block" gap="small-500">
-      {rec.imageUrl ? <s-image src={rec.imageUrl} alt={rec.title} objectFit="contain" /> : null}
-      <s-text type="strong">{rec.title}</s-text>
+      <s-link href={href} target="_blank">
+        {rec.imageUrl ? <s-image src={rec.imageUrl} alt={rec.title} aspectRatio="3/4" objectFit="contain" /> : null}
+      </s-link>
+      <s-link href={href} target="_blank">
+        <s-text type="strong">{rec.title}</s-text>
+      </s-link>
       {rec.vendor ? <s-text tone="subdued">{rec.vendor}</s-text> : null}
       {rec.price ? <s-text>{fmtMoney(rec.price, rec.currency)}</s-text> : null}
-      <s-link href={`/products/${rec.handle}`} target="_blank">
-        View product
-      </s-link>
     </s-stack>
   );
 }
