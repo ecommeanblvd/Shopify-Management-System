@@ -1,0 +1,30 @@
+api_version = "2026-04"
+
+[[extensions]]
+type = "ui_extension"
+name = "Customer Account Hub"
+handle = "customer-account-hub"
+uid = "customer-account-hub"
+description = "MEAN customer account: profile, credit, tracking, wishlist, returns."
+
+  [[extensions.targeting]]
+  target = "customer-account.page.render"
+  module = "./src/Page.tsx"
+
+  [[extensions.targeting]]
+  target = "customer-account.profile.block.render"
+  module = "./src/ProfileBlock.tsx"
+
+  [[extensions.targeting]]
+  target = "customer-account.order-status.block.render"
+  module = "./src/OrderStatusBlock.tsx"
+
+  [extensions.capabilities]
+  network_access = true
+
+  [extensions.settings]
+    [[extensions.settings.fields]]
+    key = "backend_url"
+    type = "url"
+    name = "SMS backend URL"
+    description = "Base URL của SMS (vd https://shopify-management-system-production.up.railway.app)."

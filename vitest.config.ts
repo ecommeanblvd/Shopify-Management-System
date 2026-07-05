@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'path';
 import { config as dotenvConfig } from 'dotenv';
 
@@ -18,6 +18,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['lib/**/*.test.ts', 'features/**/*.test.ts', 'components/**/*.test.ts'],
+    // Shopify extension package has its own vitest config; keep it out of the SMS root run.
+    exclude: [...configDefaults.exclude, 'shopify-extension/**'],
     coverage: {
       provider: 'v8',
       // Unit-coverage gate: pure-logic modules whose dependencies are fully injected

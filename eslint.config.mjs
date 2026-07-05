@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Shopify extension package: excluded from SMS root tooling (own tsconfig/vitest).
+    "shopify-extension/**",
   ]),
 ]);
 
