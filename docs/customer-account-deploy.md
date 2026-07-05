@@ -2,9 +2,11 @@
 
 Hướng dẫn deploy **Customer Account Hub** cho một store Shopify: 1 UI extension chung (Preact, `api_version 2026-04`) đọc config + data từ SMS API, render các module (profile, store credit + loyalty, order tracking, wishlist, returns) trên trang customer account của khách.
 
-> Kiến trúc: **config-hub trên SMS** (bật/tắt + cấu hình module + upload asset qua `/f/customer-account`) + **1 extension chung** dùng lại cho mọi store. Mỗi store cần 1 **Custom App** riêng (để có Client ID / secret cho session-token auth) nhưng dùng chung codebase extension.
+> Kiến trúc: **config-hub trên SMS** (bật/tắt + cấu hình module + upload asset qua `/f/customer-account`) + **1 extension chung** dùng lại cho mọi store.
 >
-> Làm **tuần tự** các bước 1 → 6. Bước 7 là các lưu ý thực tế **bắt buộc đọc**.
+> **Auth token dùng app Shopify — TÁI DÙNG app SMS sẵn có** (app đã kết nối các store, tạo trên Dev/Partner Dashboard, có `SHOPIFY_API_KEY`/`SHOPIFY_API_SECRET`). KHÔNG cần tạo custom app mới per store. Extension được thêm vào chính app đó qua Shopify CLI. SMS verify session token bằng secret của app này (đã tự fallback về `SHOPIFY_API_SECRET`/`SHOPIFY_API_KEY`).
+>
+> Làm **tuần tự** các bước 1 → 6. Bước 7 là các lưu ý thực tế **bắt buộc đọc** (đặc biệt (f) về scope `read_customers`).
 
 ---
 
@@ -20,31 +22,29 @@ Hướng dẫn deploy **Customer Account Hub** cho một store Shopify: 1 UI ext
 
 ---
 
-## 2. Tạo Custom App per store
+## 2. Dùng lại app SMS sẵn có (KHÔNG tạo app mới)
 
-Mỗi store một Custom App (lấy Client ID + API secret key để verify session token):
+App SMS (đã kết nối các store, tạo trên Dev/Partner Dashboard) chính là app chứa extension. Chỉ cần:
 
-1. Admin store → **Settings → Apps and sales channels → Develop apps**.
-2. **Create an app** → đặt tên (vd `MEAN Customer Account Hub`).
-3. **Configuration → Admin API integration → Configure**: bật scope **`read_customers`** → Save.
-4. **Install app** vào store.
-5. Tab **API credentials**: copy **API key (Client ID)** và **API secret key**.
-   - `read_customers` là scope tối thiểu cần cho hub. Giữ secret an toàn — chỉ nhập vào env Railway (bước 3), không commit.
+1. **Thêm scope `read_customers`** vào app (nếu chưa có — hiện `SHOPIFY_SCOPES` của SMS **chưa** gồm nó; cần cho token mang customer id — xem §7(f)). Trong app config (Partner Dashboard / `shopify.app.toml` của app SMS) thêm `read_customers` → các store phải **re-install** app để cấp scope mới (theo D-005).
+2. Ghi lại **Client ID** = `SHOPIFY_API_KEY` và **API secret** = `SHOPIFY_API_SECRET` (SMS đã có sẵn trong env Railway).
+
+> Không cần tạo Custom App per store. 1 app Shopify duy nhất phục vụ mọi store; extension + Admin API đều trên app đó.
 
 ---
 
-## 3. Cấu hình SMS env (Railway)
+## 3. Cấu hình SMS env (Railway) — thường KHÔNG cần thêm
 
-Trên Railway service của SMS backend, thêm/cập nhật env (SMS verify session token JWT HS256, thử lần lượt nhiều secret):
+SMS verify session token bằng secret của app. Code **tự fallback** về `SHOPIFY_API_SECRET`/`SHOPIFY_API_KEY` (SMS đã có), nên **không bắt buộc set env mới**.
+
+Chỉ set 2 env dưới nếu muốn dùng app/secret RIÊNG cho customer-account (tách khỏi app Admin API):
 
 | Env | Giá trị | Ghi chú |
 | --- | --- | --- |
-| `CUSTOMER_ACCOUNT_APP_SECRETS` | **API secret key** của Custom App | Nhiều store/app → phân cách bằng **dấu phẩy** (`secretA,secretB`). Bắt buộc. |
-| `CUSTOMER_ACCOUNT_APP_CLIENT_IDS` | **Client ID(s)** | Optional — nếu set, token verify thêm ràng buộc `aud`. Nhiều → phân cách dấu phẩy. |
+| `CUSTOMER_ACCOUNT_APP_SECRETS` | API secret key | Override `SHOPIFY_API_SECRET`. Nhiều app → phân cách **dấu phẩy**. |
+| `CUSTOMER_ACCOUNT_APP_CLIENT_IDS` | Client ID(s) | Override `SHOPIFY_API_KEY`. Nếu set → token verify ràng buộc `aud`. |
 
-Sau khi lưu env → **Redeploy** service để áp dụng.
-
-> Secret/Client ID rỗng bị lọc tự động; nếu không set secret nào, endpoint customer-account sẽ từ chối mọi request (verify fail).
+> Mặc định (không set): dùng `SHOPIFY_API_SECRET`/`SHOPIFY_API_KEY`. Secret rỗng bị lọc; không có secret nào → endpoint từ chối mọi request.
 
 ---
 
@@ -54,8 +54,8 @@ Sau khi lưu env → **Redeploy** service để áp dụng.
 cd shopify-extension
 ```
 
-1. Mở `shopify.app.toml`, thay 2 placeholder:
-   - `client_id` = **Client ID** (Custom App bước 2).
+1. **Link vào app SMS sẵn có** (khuyến nghị, thay vì điền tay): `shopify app config link` → chọn app SMS. Lệnh này điền `client_id` đúng bằng `SHOPIFY_API_KEY`. Hoặc điền tay `shopify.app.toml`:
+   - `client_id` = **Client ID** = `SHOPIFY_API_KEY` (app SMS).
    - `application_url` = **SMS URL** (vd `https://shopify-management-system-production.up.railway.app`).
 2. Cài dependency (package RIÊNG, tách khỏi tooling root của SMS):
    ```bash
@@ -111,14 +111,15 @@ Xong: khách đăng nhập vào customer account sẽ thấy hub theo đúng con
   - `GET /api/customer-account/returns` · `POST /api/customer-account/returns`
 
   (Wishlist dùng API storefront sẵn có, không qua session token.)
+- **(f) Scope `read_customers` — QUAN TRỌNG.** SMS xác định khách bằng claim `sub` (customer GID) trong session token; `sub` chỉ có khi app có scope **`read_customers`**. App SMS hiện **chưa** có scope này → các endpoint dữ liệu (`/orders`, `/loyalty`, `/returns`) sẽ trả **403 `no customer in token`** (module config/branding vẫn chạy, nhưng dữ liệu theo khách thì không). Cách xử lý: thêm `read_customers` vào scope app SMS → **re-install app trên từng store** (D-005: đổi scope phải cài lại). Khi `shopify app dev`, kiểm token có `sub` chưa; nếu đã có (không cần scope) thì bỏ qua bước này.
 
 ---
 
 ## Checklist nhanh
 
-- [ ] Custom App tạo, scope `read_customers`, có Client ID + secret.
-- [ ] Railway: `CUSTOMER_ACCOUNT_APP_SECRETS` (+ optional `CUSTOMER_ACCOUNT_APP_CLIENT_IDS`) → Redeploy.
-- [ ] `shopify.app.toml`: điền `client_id` + `application_url`.
-- [ ] `npm install` → `shopify app dev` (verify UI/fetch) → `shopify app deploy`.
+- [ ] **Tái dùng app SMS** (không tạo app mới); thêm scope `read_customers` → re-install trên các store (§7f).
+- [ ] Railway: **thường không cần thêm env** (fallback về `SHOPIFY_API_SECRET`/`SHOPIFY_API_KEY`); chỉ set `CUSTOMER_ACCOUNT_APP_SECRETS`/`CLIENT_IDS` nếu muốn app riêng.
+- [ ] `shopify app config link` (chọn app SMS) → điền `application_url` trong `shopify.app.toml`.
+- [ ] `cd shopify-extension && npm install` → `shopify app dev` (verify UI/fetch + token có `sub`) → `shopify app deploy`.
 - [ ] Checkout & Accounts Editor: thêm extension + nhập `backend_url` → Publish.
 - [ ] `/f/customer-account`: chọn store → bật + cấu hình module + upload PNG.
