@@ -25,32 +25,59 @@ const CUSTOMER_EMAIL_QUERY = /* GraphQL */ `
   query CustomerEmail($id: ID!) { customer(id: $id) { email } }
 `;
 
-/** Resolve customerId → email qua cache + Admin API. Store thiếu read_customers → GraphQL
- *  báo lỗi access denied → nuốt, trả null (degrade, không ném). */
+export type ResolveOutcome =
+  | { action: 'use-cache'; email: string | null }
+  | { action: 'skip-no-scope' }
+  | { action: 'query' };
+
+/** THUẦN: quyết định resolveCustomerEmail nên dùng cache, bỏ qua (thiếu scope), hay query Admin API.
+ *  Ưu tiên: cache còn hạn dùng được ngay (kể cả khi store hiện thiếu scope — đỡ 1 query); nếu
+ *  cache hết hạn/không có mà thiếu read_customers → skip (không query, không ghi cache) vì thiếu
+ *  scope là trạng thái của STORE, không phải của customer — store re-install có scope thì resolve
+ *  ngay lần sau, không vướng cache null 7 ngày. */
+export function planResolve(
+  cached: { email: string | null; resolvedAt: Date } | undefined,
+  scopes: string[],
+  now: Date,
+): ResolveOutcome {
+  if (cached && now.getTime() - cached.resolvedAt.getTime() < EMAIL_TTL_MS) {
+    return { action: 'use-cache', email: cached.email };
+  }
+  if (!scopes.includes('read_customers')) {
+    return { action: 'skip-no-scope' };
+  }
+  return { action: 'query' };
+}
+
+/** Resolve customerId → email qua cache + Admin API. Store thiếu read_customers → skip trước khi
+ *  query (xem planResolve). Lỗi transient (throw / res.errors) → trả null nhưng KHÔNG ghi cache,
+ *  để lần sau thử lại thay vì bị khoá null 7 ngày. */
 export async function resolveCustomerEmail(storeId: string, customerId: string): Promise<string | null> {
   const [cached] = await db.select().from(schema.customerIdentities).where(and(
     eq(schema.customerIdentities.storeId, storeId),
     eq(schema.customerIdentities.shopifyCustomerId, customerId),
   )).limit(1);
-  if (cached && Date.now() - cached.resolvedAt.getTime() < EMAIL_TTL_MS) {
-    return cached.email;
-  }
 
-  let email: string | null = null;
+  const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
+  const scopes = store?.scopes ?? [];
+
+  const plan = planResolve(cached, scopes, new Date());
+  if (plan.action === 'use-cache') return plan.email;
+  if (plan.action === 'skip-no-scope') return null;
+
+  if (!store) return null;
+
+  let email: string | null;
   try {
-    const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
-    if (store) {
-      const token = await getStoreToken(storeId);
-      const res = await graphqlCall({
-        shopDomain: store.shopDomain, apiVersion: store.apiVersion, token,
-        query: CUSTOMER_EMAIL_QUERY, variables: { id: customerId },
-      });
-      if (!res.errors) {
-        email = (res.data as { customer: { email: string | null } | null } | null)?.customer?.email ?? null;
-      }
-    }
+    const token = await getStoreToken(storeId);
+    const res = await graphqlCall({
+      shopDomain: store.shopDomain, apiVersion: store.apiVersion, token,
+      query: CUSTOMER_EMAIL_QUERY, variables: { id: customerId },
+    });
+    if (res.errors) return null; // lỗi GraphQL-level (transient/access) → không cache, thử lại lần sau
+    email = (res.data as { customer: { email: string | null } | null } | null)?.customer?.email ?? null;
   } catch {
-    email = null; // read_customers thiếu / lỗi transient → degrade
+    return null; // lỗi transient (network/5xx) → không cache, thử lại lần sau
   }
 
   await db.insert(schema.customerIdentities)
