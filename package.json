@@ -33,6 +33,7 @@
     "cron:refresh-vcb": "dotenv -- tsx scripts/cron/refresh-vcb-fx.ts",
     "cron:refresh-surcharges": "dotenv -- tsx scripts/cron/refresh-surcharges.ts",
     "cron:sync-catalog": "dotenv -- tsx scripts/import-shopify-catalog.ts --apply",
+    "cron:sync-products": "dotenv -- tsx scripts/sync-shopify-products.ts --all",
     "cron:sync-lifecycle": "dotenv -- tsx scripts/cron/sync-lifecycle.ts",
     "import:geonames": "dotenv -- tsx scripts/import-geonames.ts",
     "cron:sync-geo": "dotenv -- tsx scripts/cron/sync-geo.ts"
