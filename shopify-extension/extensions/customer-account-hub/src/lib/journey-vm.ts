@@ -13,15 +13,17 @@ export interface PolicyJson {
 export type StageTone = 'info' | 'success' | 'critical' | 'neutral';
 
 const STAGE_MAP: Record<string, { label: string; tone: StageTone }> = {
-  placed: { label: 'In production', tone: 'info' },
+  placed: { label: 'Order placed', tone: 'neutral' },
   production: { label: 'In production', tone: 'info' },
   qc: { label: 'Quality check', tone: 'info' },
-  pack: { label: 'Packed', tone: 'info' },
-  ship: { label: 'Shipped', tone: 'info' },
-  deliver: { label: 'Delivered', tone: 'success' },
+  packed: { label: 'Packed', tone: 'info' },
+  shipped: { label: 'Shipped', tone: 'info' },
+  in_transit: { label: 'Shipped', tone: 'info' },
+  out_for_delivery: { label: 'Out for delivery', tone: 'info' },
+  post_delivery: { label: 'Delivered', tone: 'success' },
   completed: { label: 'Delivered', tone: 'success' },
+  refunded_full: { label: 'Refunded', tone: 'neutral' },
   cancelled: { label: 'Cancelled', tone: 'critical' },
-  refunded: { label: 'Refunded', tone: 'critical' },
 };
 
 /** Maps a raw `currentStage` value to a display label + badge tone. */

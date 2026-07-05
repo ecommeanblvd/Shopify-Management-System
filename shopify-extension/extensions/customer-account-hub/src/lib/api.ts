@@ -16,7 +16,7 @@ async function smsFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type ModuleKey = 'profile' | 'credit' | 'tracking' | 'wishlist' | 'returns';
+export type ModuleKey = 'tracking' | 'wishlist';
 
 export interface ConfigModule {
   key: ModuleKey;

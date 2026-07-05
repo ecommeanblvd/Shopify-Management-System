@@ -68,10 +68,10 @@ export interface ReturnHub {
   addressLine1: string;
   addressLine2: string | null;
   city: string;
-  state: string;
-  postalCode: string;
+  state: string | null;
+  postalCode: string | null;
   country: string;
-  phone: string;
+  phone: string | null;
 }
 
 export type RequestKind = 'cancel' | 'claim';

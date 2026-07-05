@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, type PolicyJson } from './journey-vm';
 
 describe('stageChip', () => {
-  it('placed → In production / info', () => {
-    expect(stageChip('placed')).toEqual({ label: 'In production', tone: 'info' });
+  it('placed → Order placed / neutral', () => {
+    expect(stageChip('placed')).toEqual({ label: 'Order placed', tone: 'neutral' });
   });
   it('production → In production / info', () => {
     expect(stageChip('production')).toEqual({ label: 'In production', tone: 'info' });
@@ -11,23 +11,29 @@ describe('stageChip', () => {
   it('qc → Quality check / info', () => {
     expect(stageChip('qc')).toEqual({ label: 'Quality check', tone: 'info' });
   });
-  it('pack → Packed / info', () => {
-    expect(stageChip('pack')).toEqual({ label: 'Packed', tone: 'info' });
+  it('packed → Packed / info', () => {
+    expect(stageChip('packed')).toEqual({ label: 'Packed', tone: 'info' });
   });
-  it('ship → Shipped / info', () => {
-    expect(stageChip('ship')).toEqual({ label: 'Shipped', tone: 'info' });
+  it('shipped → Shipped / info', () => {
+    expect(stageChip('shipped')).toEqual({ label: 'Shipped', tone: 'info' });
   });
-  it('deliver → Delivered / success', () => {
-    expect(stageChip('deliver')).toEqual({ label: 'Delivered', tone: 'success' });
+  it('in_transit → Shipped / info', () => {
+    expect(stageChip('in_transit')).toEqual({ label: 'Shipped', tone: 'info' });
+  });
+  it('out_for_delivery → Out for delivery / info', () => {
+    expect(stageChip('out_for_delivery')).toEqual({ label: 'Out for delivery', tone: 'info' });
+  });
+  it('post_delivery → Delivered / success', () => {
+    expect(stageChip('post_delivery')).toEqual({ label: 'Delivered', tone: 'success' });
   });
   it('completed → Delivered / success', () => {
     expect(stageChip('completed')).toEqual({ label: 'Delivered', tone: 'success' });
   });
+  it('refunded_full → Refunded / neutral', () => {
+    expect(stageChip('refunded_full')).toEqual({ label: 'Refunded', tone: 'neutral' });
+  });
   it('cancelled → Cancelled / critical', () => {
     expect(stageChip('cancelled')).toEqual({ label: 'Cancelled', tone: 'critical' });
-  });
-  it('refunded → Refunded / critical', () => {
-    expect(stageChip('refunded')).toEqual({ label: 'Refunded', tone: 'critical' });
   });
   it('null → Processing / neutral', () => {
     expect(stageChip(null)).toEqual({ label: 'Processing', tone: 'neutral' });
