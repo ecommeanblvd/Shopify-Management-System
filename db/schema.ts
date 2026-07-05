@@ -2081,23 +2081,6 @@ export const customerAccountAssets = pgTable('customer_account_assets', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [index('customer_account_assets_store_idx').on(t.storeId)]);
 
-export const customerReturnRequests = pgTable('customer_return_requests', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
-  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
-  shopifyCustomerId: text('shopify_customer_id').notNull(),
-  orderNumber: text('order_number'),
-  reason: text('reason').notNull(),
-  note: text('note'),
-  status: text('status').notNull().default('requested'), // requested|approved|rejected|received|refunded
-  adminNote: text('admin_note'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-}, (t) => [
-  index('customer_return_requests_store_status_idx').on(t.storeId, t.status),
-  index('customer_return_requests_customer_idx').on(t.storeId, t.shopifyCustomerId),
-]);
-
 export const customerLoyalty = pgTable('customer_loyalty', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
