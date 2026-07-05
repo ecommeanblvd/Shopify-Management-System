@@ -15,6 +15,7 @@
  * Errors within a mutation group are collected and do NOT abort the run.
  */
 import { eq, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import {
@@ -96,12 +97,17 @@ const PRODUCTS_QUERY = /* GraphQL */ `
 `;
 
 const INVENTORY_MUTATION = /* GraphQL */ `
-  mutation SetOnHand($input: InventorySetQuantitiesInput!) {
-    inventorySetQuantities(input: $input) {
+  mutation SetOnHand($input: InventorySetQuantitiesInput!, $key: String!) {
+    inventorySetQuantities(input: $input) @idempotent(key: $key) {
       userErrors { field message }
     }
   }
 `;
+
+// inventorySetQuantities: 2025-01 dùng ignoreCompareQuantity (deprecated, đã XOÁ ở 2026-04).
+// Pin riêng call này ở 2026-04 + changeFromQuantity: null (= opt-out concurrency, đúng hành vi
+// "set tuyệt đối, bỏ so sánh" như ignoreCompareQuantity:true trước). Phần còn lại giữ store version.
+const INVENTORY_SET_API_VERSION = '2026-04';
 
 const STATUS_MUTATION = /* GraphQL */ `
   mutation SetStatus($id: ID!, $status: ProductStatus!) {
@@ -252,20 +258,20 @@ export async function syncMeanblvdToShopify(
     const input = {
       name: 'on_hand',
       reason: 'correction',
-      ignoreCompareQuantity: true,
       quantities: batch.map((s) => ({
         inventoryItemId: s.inventoryItemId,
         locationId,
         quantity: s.quantity,
+        changeFromQuantity: null, // opt-out concurrency (thay ignoreCompareQuantity:true)
       })),
     };
     try {
       const res = await graphqlCall({
         shopDomain: SHOP_DOMAIN,
-        apiVersion,
+        apiVersion: INVENTORY_SET_API_VERSION,
         token,
         query: INVENTORY_MUTATION,
-        variables: { input },
+        variables: { input, key: randomUUID() },
       });
       assertNoGraphqlErrors(res, `inventorySet batch@${i}`);
       collectUserErrors(res.data, 'inventorySetQuantities', `inventorySet batch@${i}`, errors);
