@@ -12,7 +12,7 @@ import {
   type ClaimReasonCode,
   type JourneyResponse,
 } from './lib/journey-api';
-import { stageChip, cancelCopy, requestStatusLabel, fmtMoney } from './lib/journey-vm';
+import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, buildStepper } from './lib/journey-vm';
 
 const CLAIM_REASON_LABELS: Record<ClaimReasonCode, string> = {
   damaged_package: 'Damaged package',
@@ -181,8 +181,9 @@ function OrderDetail({
   }
   if (!data) return <s-spinner accessibilityLabel="Loading order" />;
 
-  const { order, timeline, productionEta, policy, requests } = data;
+  const { order, placedAt, timeline, productionEta, items, policy, requests } = data;
   const cancelMessage = cancelCopy(policy);
+  const stepper = buildStepper(timeline);
 
   const confirmCancel = async () => {
     if (cancelInFlight.current) return;
@@ -210,69 +211,102 @@ function OrderDetail({
     !hasOpenRequest &&
     Date.now() > new Date(policy.claimDeadline).getTime();
 
+  // Cancelled/refunded orders: replace the stepper with a single terminal status line
+  // instead of a progress ladder that no longer applies.
+  const terminalStatus = requests.find((r) => r.kind === 'cancel' && r.status === 'refunded')
+    ? 'Order cancelled & refunded'
+    : requests.find((r) => r.kind === 'cancel')
+      ? 'Cancellation in progress'
+      : null;
+
+  const actionZone = policy.canCancel && cancelMessage ? (
+    <s-stack direction="block" gap="small-500">
+      <s-text>{cancelMessage}</s-text>
+      {!showCancelConfirm ? (
+        <s-link tone="critical" onClick={() => setShowCancelConfirm(true)}>
+          Cancel order
+        </s-link>
+      ) : cancelling ? (
+        <s-text tone="subdued">Cancelling…</s-text>
+      ) : (
+        <s-stack direction="inline" gap="small">
+          <s-text tone="subdued">Cancel this order?</s-text>
+          <s-link tone="critical" onClick={confirmCancel}>
+            Yes
+          </s-link>
+          <s-text tone="subdued">·</s-text>
+          <s-link tone="neutral" onClick={() => setShowCancelConfirm(false)}>
+            Keep
+          </s-link>
+        </s-stack>
+      )}
+    </s-stack>
+  ) : policy.canClaim ? (
+    <s-button onClick={onClaim}>Report a problem</s-button>
+  ) : claimWindowClosed ? (
+    <s-text tone="subdued">Claim window closed (14 days after delivery).</s-text>
+  ) : null;
+
   return (
     <s-stack direction="block" gap="large">
       <s-button onClick={onBack}>Back to orders</s-button>
 
-      <s-section heading={`Order ${order.orderNumber}`}>
-        <s-stack direction="block" gap="base">
-          <s-text>{fmtMoney(order.total, order.currency)}</s-text>
+      <s-stack direction="block" gap="small-500">
+        <s-heading>Order #{order.orderNumber}</s-heading>
+        <s-text tone="subdued">
+          Placed {placedAt ?? '—'} · {fmtMoney(order.total, order.currency)}
+        </s-text>
+      </s-stack>
 
-          {timeline ? (
-            <s-stack direction="block" gap="small-500">
-              <s-text type="strong">{timeline.currentStageLabel}</s-text>
-              {timeline.steps.map((step) => (
-                <s-stack key={step.label} direction="inline" gap="base" justifyContent="space-between">
-                  <s-text type={step.label === timeline.currentStageLabel ? 'strong' : undefined}>
-                    {step.label}
-                  </s-text>
-                  <s-text tone="subdued">{step.at ?? '—'}</s-text>
-                </s-stack>
-              ))}
-              {productionEta ? <s-text tone="subdued">Estimated completion: {productionEta}</s-text> : null}
-            </s-stack>
-          ) : null}
-
-          {feedback ? (
-            <s-banner tone={feedback.tone}>
-              <s-text>{feedback.message}</s-text>
-            </s-banner>
-          ) : null}
-
-          <s-divider />
-
-          <s-stack direction="block" gap="base">
-            {policy.canCancel && cancelMessage ? (
-              <s-stack direction="block" gap="small-500">
-                <s-text>{cancelMessage}</s-text>
-                {!showCancelConfirm ? (
-                  <s-button tone="critical" onClick={() => setShowCancelConfirm(true)}>
-                    Cancel order
-                  </s-button>
-                ) : (
-                  <s-stack direction="block" gap="small-500">
-                    <s-banner tone="warning">
-                      <s-text>{cancelMessage}</s-text>
-                    </s-banner>
-                    <s-stack direction="inline" gap="base">
-                      <s-button tone="critical" disabled={cancelling} onClick={confirmCancel}>
-                        {cancelling ? 'Cancelling…' : 'Confirm cancellation'}
-                      </s-button>
-                      <s-button disabled={cancelling} onClick={() => setShowCancelConfirm(false)}>
-                        Keep order
-                      </s-button>
-                    </s-stack>
-                  </s-stack>
-                )}
+      {items.length > 0 ? (
+        <s-section heading="Items">
+          <s-stack direction="block" gap="small-500">
+            {items.map((it, i) => (
+              <s-stack key={i} direction="inline" gap="base" justifyContent="space-between">
+                <s-text>
+                  {it.quantity}× {it.title}
+                  {it.variantTitle ? ` — ${it.variantTitle}` : ''}
+                </s-text>
+                <s-text tone="subdued">{fmtMoney(it.price, order.currency)}</s-text>
               </s-stack>
-            ) : null}
-
-            {policy.canClaim ? (
-              <s-button onClick={onClaim}>Report a problem</s-button>
-            ) : claimWindowClosed ? (
-              <s-text tone="subdued">Claim window closed (14 days after delivery).</s-text>
-            ) : null}
+            ))}
           </s-stack>
+        </s-section>
+      ) : null}
+
+      {feedback ? (
+        <s-banner tone={feedback.tone}>
+          <s-text>{feedback.message}</s-text>
+        </s-banner>
+      ) : null}
+
+      <s-section heading="Order status">
+        <s-stack direction="block" gap="small-500">
+          {terminalStatus ? (
+            <s-text type="strong">{terminalStatus}</s-text>
+          ) : (
+            stepper.map((step) => (
+              <s-stack direction="block" gap="small-200" key={step.label}>
+                <s-stack direction="inline" gap="base" justifyContent="space-between" alignItems="center">
+                  {step.state === 'done' ? (
+                    <s-text tone="subdued">✓ {step.label}</s-text>
+                  ) : step.state === 'current' ? (
+                    <s-stack direction="inline" gap="small" alignItems="center">
+                      <s-text type="strong">{step.label}</s-text>
+                      <s-badge tone="info">Current</s-badge>
+                    </s-stack>
+                  ) : (
+                    <s-text tone="subdued">○ {step.label}</s-text>
+                  )}
+                  <s-text tone="subdued">{step.at ?? ''}</s-text>
+                </s-stack>
+                {step.state === 'current' && actionZone ? (
+                  <s-stack direction="block" gap="small-500">{actionZone}</s-stack>
+                ) : null}
+              </s-stack>
+            ))
+          )}
+          {productionEta ? <s-text tone="subdued">Estimated completion: {productionEta}</s-text> : null}
         </s-stack>
       </s-section>
 

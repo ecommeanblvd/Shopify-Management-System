@@ -13,6 +13,7 @@ async function loadOrderForCustomer(storeId: string, customerId: string, orderId
     orderNumber: schema.shopifyOrders.shopifyOrderNumber,
     totalPrice: schema.shopifyOrders.totalPrice,
     currency: schema.shopifyOrders.currency,
+    createdAtShopify: schema.shopifyOrders.createdAtShopify,
     lc: schema.orderLifecycle,
   })
     .from(schema.shopifyOrders)
@@ -24,6 +25,16 @@ async function loadOrderForCustomer(storeId: string, customerId: string, orderId
     ))
     .limit(1);
   return row ?? null;
+}
+
+async function loadOrderLines(orderId: string) {
+  return db.select({
+    productTitle: schema.shopifyOrderLines.productTitle,
+    variantTitle: schema.shopifyOrderLines.variantTitle,
+    quantity: schema.shopifyOrderLines.quantity,
+    unitPrice: schema.shopifyOrderLines.unitPrice,
+  }).from(schema.shopifyOrderLines)
+    .where(eq(schema.shopifyOrderLines.orderId, orderId));
 }
 
 async function listOrderRequests(storeId: string, orderId: string) {
@@ -59,7 +70,8 @@ export async function getOrderJourney(storeId: string, customerId: string, order
     now: new Date(),
   });
   const requests = await listOrderRequests(storeId, orderId);
-  return { order, policy, requests };
+  const lines = await loadOrderLines(orderId);
+  return { order, policy, requests, lines };
 }
 
 type CreateInput =

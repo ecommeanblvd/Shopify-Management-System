@@ -100,10 +100,19 @@ export interface JourneyRequest {
   rejectedReason: string | null;
 }
 
+export interface JourneyItem {
+  title: string;
+  variantTitle: string | null;
+  quantity: number;
+  price: string;
+}
+
 export interface JourneyResponse {
   order: JourneyOrder;
+  placedAt: string | null;
   timeline: JourneyTimeline | null;
   productionEta: string | null;
+  items: JourneyItem[];
   policy: JourneyPolicy;
   requests: JourneyRequest[];
 }

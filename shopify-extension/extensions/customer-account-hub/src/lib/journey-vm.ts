@@ -86,3 +86,38 @@ export function fmtMoney(amount: string, currency: string): string {
   }
   return `${amount} ${currency}`;
 }
+
+// Same 6 customer-facing stages as the backend default (`defaultTimeline` in
+// features/customer-account/public-timeline.ts) — used when `timeline` is null
+// (degrade safely instead of rendering nothing).
+const DEFAULT_STEP_LABELS = [
+  'Placed', 'In production', 'Quality check', 'Packed', 'Shipped', 'Delivered',
+] as const;
+
+export type StepState = 'done' | 'current' | 'upcoming';
+
+export interface StepperStep {
+  label: string;
+  at: string | null;
+  state: StepState;
+}
+
+/**
+ * Builds the vertical stepper view-model from a journey timeline.
+ * - `at != null` and not the current stage → done
+ * - `label === currentStageLabel` → current
+ * - everything else → upcoming
+ * `timeline === null` → 6 default labels, all upcoming (no current — degrade safely).
+ */
+export function buildStepper(
+  timeline: { currentStageLabel: string; steps: Array<{ label: string; at: string | null }> } | null,
+): StepperStep[] {
+  if (!timeline) {
+    return DEFAULT_STEP_LABELS.map((label) => ({ label, at: null, state: 'upcoming' as StepState }));
+  }
+  return timeline.steps.map((step) => {
+    const state: StepState =
+      step.label === timeline.currentStageLabel ? 'current' : step.at != null ? 'done' : 'upcoming';
+    return { label: step.label, at: step.at, state };
+  });
+}

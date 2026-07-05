@@ -24,3 +24,27 @@ export function toPublicTimeline(
     steps,
   };
 }
+
+/**
+ * 6 giai đoạn chuẩn khách hàng (spec §3.2 order-journey-design.md, CEO đã duyệt copy):
+ * Placed → In production → Quality check → Packed → Shipped → Delivered.
+ * Đây là nhãn tiếng Anh dành cho khách quốc tế (khác STAGE_LABELS nội bộ tiếng Việt).
+ */
+export const CUSTOMER_STAGE_LABELS = [
+  'Placed', 'In production', 'Quality check', 'Packed', 'Shipped', 'Delivered',
+] as const;
+
+/**
+ * Fallback timeline khi đơn CHƯA có row `order_lifecycle` (chưa sync xong).
+ * Vẫn hiện đủ 6 giai đoạn chuẩn (upcoming) thay vì trả null — chỉ step Placed
+ * có mốc thời gian (từ `createdAtShopify` nếu có).
+ */
+export function defaultTimeline(placedAt: Date | null): PublicTimeline {
+  const placedIso = iso(placedAt);
+  return {
+    currentStage: 'placed',
+    currentStageLabel: CUSTOMER_STAGE_LABELS[0],
+    nextStageLabel: CUSTOMER_STAGE_LABELS[1],
+    steps: CUSTOMER_STAGE_LABELS.map((label, i) => ({ label, at: i === 0 ? placedIso : null })),
+  };
+}

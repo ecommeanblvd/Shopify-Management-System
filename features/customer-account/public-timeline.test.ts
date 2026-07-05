@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toPublicTimeline } from './public-timeline';
+import { toPublicTimeline, defaultTimeline } from './public-timeline';
 
 const base = {
   currentStage: 'shipped', syncedAt: '2026-03-20T00:00:00Z',
@@ -19,5 +19,26 @@ describe('toPublicTimeline', () => {
   it('đơn mới chỉ có placed', () => {
     const r = toPublicTimeline({ ...base, currentStage: 'placed', packedAt: null, shippedAt: null });
     expect(r.steps).toHaveLength(1);
+  });
+});
+
+describe('defaultTimeline', () => {
+  it('đủ 6 step, chỉ Placed có at (từ placedAt truyền vào)', () => {
+    const placedAt = new Date('2026-03-01T00:00:00Z');
+    const r = defaultTimeline(placedAt);
+    expect(r.currentStage).toBe('placed');
+    expect(r.currentStageLabel).toBe('Placed');
+    expect(r.steps).toHaveLength(6);
+    expect(r.steps.map((s) => s.label)).toEqual([
+      'Placed', 'In production', 'Quality check', 'Packed', 'Shipped', 'Delivered',
+    ]);
+    expect(r.steps[0].at).toBe(placedAt.toISOString());
+    r.steps.slice(1).forEach((s) => expect(s.at).toBeNull());
+  });
+
+  it('placedAt null → step Placed cũng at null', () => {
+    const r = defaultTimeline(null);
+    expect(r.steps[0].at).toBeNull();
+    expect(r.steps.every((s) => s.at === null)).toBe(true);
   });
 });

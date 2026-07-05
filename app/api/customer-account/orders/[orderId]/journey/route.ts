@@ -4,7 +4,7 @@ import { inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { authenticateExtension, caJson, preflight } from '../../../_shared';
 import { getOrderJourney } from '@/features/customer-account/order-requests';
-import { toPublicTimeline } from '@/features/customer-account/public-timeline';
+import { toPublicTimeline, defaultTimeline } from '@/features/customer-account/public-timeline';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ orderId: st
 
   const journey = await getOrderJourney(auth.store.id, auth.customerId, orderId);
   if (!journey) return caJson({ error: 'not found' }, 404);
-  const { order, policy, requests } = journey;
+  const { order, policy, requests, lines } = journey;
 
   const hubIds = [...new Set(requests.map((r) => r.returnHubId).filter((id): id is string => !!id))];
   const hubs = hubIds.length
@@ -62,8 +62,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ orderId: st
       total: order.totalPrice,
       currency: order.currency,
     },
-    timeline: order.lc ? toPublicTimeline(order.lc) : null,
+    placedAt: order.lc?.placedAt
+      ? order.lc.placedAt.toISOString()
+      : order.createdAtShopify.toISOString(),
+    timeline: order.lc ? toPublicTimeline(order.lc) : defaultTimeline(order.createdAtShopify),
     productionEta: order.lc?.productionEta ?? null,
+    items: lines.map((l) => ({
+      title: l.productTitle,
+      variantTitle: l.variantTitle,
+      quantity: l.quantity,
+      price: l.unitPrice,
+    })),
     policy: {
       canCancel: policy.canCancel,
       canClaim: policy.canClaim,
