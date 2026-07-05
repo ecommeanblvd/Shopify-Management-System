@@ -28,9 +28,10 @@ export interface ScoredProduct extends CatalogProduct { score: number; }
 const DEFAULT_TOP_N = 8;
 
 export function scoreProducts(seed: SeedSignals, candidates: CatalogProduct[], topN = DEFAULT_TOP_N): ScoredProduct[] {
-  const vendorSet = new Set(seed.vendors.filter(Boolean));
-  const typeSet = new Set(seed.productTypes.filter(Boolean));
-  const tagSet = new Set(seed.tags.filter(Boolean));
+  // Case-insensitive (fold): build seed sets from normalized values
+  const vendorSet = new Set(seed.vendors.filter(Boolean).map(v => v.toLowerCase().trim()));
+  const typeSet = new Set(seed.productTypes.filter(Boolean).map(t => t.toLowerCase().trim()));
+  const tagSet = new Set(seed.tags.filter(Boolean).map(t => t.toLowerCase().trim()));
   const excludeSet = new Set(seed.excludeProductIds);
 
   const scored: ScoredProduct[] = [];
@@ -39,9 +40,11 @@ export function scoreProducts(seed: SeedSignals, candidates: CatalogProduct[], t
     if (!c.availableForSale) continue;
     if (c.status !== 'ACTIVE') continue;
     let score = 0;
-    if (c.vendor && vendorSet.has(c.vendor)) score += 2;
-    if (c.productType && typeSet.has(c.productType)) score += 2;
-    for (const t of c.tags) if (tagSet.has(t)) score += 1;
+    if (c.vendor && vendorSet.has(c.vendor.toLowerCase().trim())) score += 2;
+    if (c.productType && typeSet.has(c.productType.toLowerCase().trim())) score += 2;
+    // Dedupe candidate tags before scoring (normalize + dedupe)
+    const candidateTagsDeduped = new Set(c.tags.map(t => t.toLowerCase().trim()));
+    for (const t of candidateTagsDeduped) if (tagSet.has(t)) score += 1;
     if (score === 0) continue;
     scored.push({ ...c, score });
   }

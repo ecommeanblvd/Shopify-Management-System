@@ -37,6 +37,7 @@ Trang full-page **Wishlist** trong customer account: khách xem các sản phẩ
 scoreProducts(seed: SeedSignals, candidates: CatalogProduct[]): ScoredProduct[]
 SeedSignals = { vendors: string[], productTypes: string[], tags: string[], excludeProductIds: string[] }
 Điểm: cùng vendor +2, cùng productType +2, mỗi tag chung +1. Loại: excludeProductIds, !availableForSale, status != ACTIVE, điểm 0.
+Matching vendor/productType/tag: **case-insensitive** (case-fold trước khi so — tag Shopify thực tế lẫn hoa/thường); tags của candidate **dedupe trước khi chấm** (tag trùng không cộng đôi).
 Trả top N (mặc định 8), tie-break: syncedAt mới hơn trước.
 ```
 Seed từ wishlist items (join shopify_products theo shopifyProductId để lấy vendor/type/tags của seed). Unit test đủ nhánh.

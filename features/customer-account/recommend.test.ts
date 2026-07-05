@@ -54,4 +54,26 @@ describe('scoreProducts', () => {
     ]);
     expect(r.map((x) => x.score)).toEqual([4, 2]);
   });
+  it('case-insensitive: seed tag "red" matches candidate "Red " (uppercase + space)', () => {
+    const r = scoreProducts(seed, [
+      p({ shopifyProductId: 'gid://shopify/Product/10', tags: ['Red '] }),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].score).toBe(1);
+  });
+  it('case-insensitive: seed vendor "Nike" matches candidate "NIKE" (uppercase)', () => {
+    const seedUpper = { ...seed, vendors: ['MEAN BLVD'], productTypes: [], tags: [] };
+    const r = scoreProducts(seedUpper, [
+      p({ shopifyProductId: 'gid://shopify/Product/11', vendor: 'mean blvd' }),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].score).toBe(2);
+  });
+  it('dedupe: candidate tags ["red","Red","RED"] with seed tag "red" scores +1 not +3', () => {
+    const r = scoreProducts(seed, [
+      p({ shopifyProductId: 'gid://shopify/Product/12', tags: ['red', 'Red', 'RED'] }),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].score).toBe(1);
+  });
 });
