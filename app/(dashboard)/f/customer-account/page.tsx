@@ -59,6 +59,9 @@ export default async function CustomerAccountPage({ searchParams }: PageProps): 
           <Link href="/f/customer-account/loyalty" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             Loyalty
           </Link>
+          <Link href="/f/customer-account/hubs" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Return hubs
+          </Link>
         </nav>
       </header>
 
