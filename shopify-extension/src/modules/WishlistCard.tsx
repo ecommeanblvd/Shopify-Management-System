@@ -4,10 +4,14 @@ import { resolveShopDomain } from '../lib/shop';
 import { Section } from './Section';
 
 interface WishlistItem {
-  productId?: string | null;
-  title: string;
+  id: string;
+  shopifyProductId: string;
+  productTitle: string;
+  variantTitle?: string | null;
+  productHandle: string;
   imageUrl?: string | null;
-  url?: string | null;
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
 }
 
 const EMAIL_QUERY = `
@@ -79,18 +83,25 @@ export function WishlistCard({
         <s-text tone="subdued">No saved items.</s-text>
       ) : (
         <s-stack direction="block" gap="base">
-          {items.map((item, i) => (
-            <s-stack key={item.productId ?? i} direction="inline" gap="base" alignItems="center">
-              {item.imageUrl ? (
-                <s-product-thumbnail src={item.imageUrl} alt={item.title} />
-              ) : null}
-              {item.url ? (
-                <s-link href={item.url}>{item.title}</s-link>
-              ) : (
-                <s-text>{item.title}</s-text>
-              )}
-            </s-stack>
-          ))}
+          {items.map((item, i) => {
+            const label = item.variantTitle
+              ? `${item.productTitle} · ${item.variantTitle}`
+              : item.productTitle;
+            const href = item.productHandle ? `/products/${item.productHandle}` : null;
+            return (
+              <s-stack
+                key={item.id ?? item.shopifyProductId ?? i}
+                direction="inline"
+                gap="base"
+                alignItems="center"
+              >
+                {item.imageUrl ? (
+                  <s-product-thumbnail src={item.imageUrl} alt={label} />
+                ) : null}
+                {href ? <s-link href={href}>{label}</s-link> : <s-text>{label}</s-text>}
+              </s-stack>
+            );
+          })}
         </s-stack>
       )}
     </Section>
