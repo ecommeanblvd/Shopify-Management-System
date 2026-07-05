@@ -1,9 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
-import { eq } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
-import { db, schema } from '@/db/client';
-import { hasPermission, type Role } from '@/lib/auth/rbac';
+import { hasPermission } from '@/lib/auth/rbac';
+import { getRole } from '@/lib/auth/role';
 import { getEnv } from '@/lib/env';
 
 // OAuth approach: HAND-ROLLED redirect.
@@ -29,13 +28,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   // 2. Check the user's role — must have manage_stores permission.
-  const [roleRow] = await db
-    .select()
-    .from(schema.roles)
-    .where(eq(schema.roles.userId, session.user.id))
-    .limit(1);
-
-  if (!roleRow || !hasPermission(roleRow.role as Role, 'manage_stores')) {
+  // getRole resolves the app_role KEY (from role_id, not the legacy enum) AND warms
+  // the permission cache that the synchronous hasPermission() reads. Querying
+  // schema.roles directly + passing the legacy `role` string skipped both, so on a
+  // cold process the cache was empty → hasPermission returned false → spurious 403.
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_stores')) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { hasPermission } from '@/lib/auth/rbac';
-import type { Role } from '@/lib/auth/rbac';
+import { getRole } from '@/lib/auth/role';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 
 const REQUIRED_SCOPES = ['read_shipping', 'read_checkout_branding', 'write_shipping', 'write_shop_settings'];
@@ -12,8 +12,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await auth.api.getSession({ headers: req.headers });
   if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const [roleRow] = await db.select().from(schema.roles).where(eq(schema.roles.userId, session.user.id)).limit(1);
-  if (!roleRow || !hasPermission(roleRow.role as Role, 'manage_stores')) {
+  // getRole resolves the role key + warms the permission cache hasPermission() reads
+  // (see install/route.ts). A raw schema.roles query skips the warm-up → cold 403.
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'manage_stores')) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
