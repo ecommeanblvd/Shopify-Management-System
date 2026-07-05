@@ -1370,6 +1370,42 @@ export const wishlistEvents = pgTable('wishlist_events', {
   index('wishlist_events_store_created_idx').on(t.storeId, t.createdAt),
 ]);
 
+// ---------- Wishlist Page: catalog sản phẩm (spec 2026-07-05-wishlist-page §3) ----------
+// Snapshot catalog Shopify cho recommendation engine. Sync Admin GraphQL products
+// (scope read_products — cả 4 store đã có), cron daily. Upsert theo (store_id, shopify_product_id).
+export const shopifyProducts = pgTable('shopify_products', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  shopifyProductId: text('shopify_product_id').notNull(),
+  title: text('title').notNull(),
+  handle: text('handle').notNull(),
+  vendor: text('vendor'),
+  productType: text('product_type'),
+  tags: text('tags').array(),
+  imageUrl: text('image_url'),
+  priceMin: numeric('price_min', { precision: 14, scale: 2 }),
+  currency: text('currency'),
+  availableForSale: boolean('available_for_sale').notNull().default(false),
+  status: text('status').notNull(),          // ACTIVE | ARCHIVED | DRAFT
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('shopify_products_store_product_idx').on(t.storeId, t.shopifyProductId),
+  index('shopify_products_store_status_idx').on(t.storeId, t.status),
+  index('shopify_products_store_vendor_idx').on(t.storeId, t.vendor),
+]);
+
+// Cache resolve Shopify customer GID → email (spec §4). Token extension chỉ có customerId;
+// wishlist match theo email HOẶC shopifyCustomerId. TTL 7 ngày (quá hạn resolve lại qua Admin API).
+export const customerIdentities = pgTable('customer_identities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  shopifyCustomerId: text('shopify_customer_id').notNull(),
+  email: text('email'),
+  resolvedAt: timestamp('resolved_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('customer_identities_store_customer_idx').on(t.storeId, t.shopifyCustomerId),
+]);
+
 // ─────────────────────────────────────────────────────────────────────
 // Audit log for every operator action on a function. Each row records
 // who changed what at which store, plus an opaque payload describing

@@ -642,6 +642,12 @@
       "when": 1784378400000,
       "tag": "0092_drop-return-requests",
       "breakpoints": true
+    },{
+      "idx": 93,
+      "version": "7",
+      "when": 1784464800000,
+      "tag": "0093_wishlist-catalog",
+      "breakpoints": true
     }
   ]
 }
