@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, buildStepper, type PolicyJson } from './journey-vm';
+import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, buildStepper, fmtDate, type PolicyJson } from './journey-vm';
 
 describe('stageChip', () => {
   it('placed → Order placed / neutral', () => {
@@ -166,5 +166,17 @@ describe('buildStepper', () => {
     ]);
     expect(r.every((s) => s.state === 'upcoming')).toBe(true);
     expect(r.every((s) => s.at === null)).toBe(true);
+  });
+});
+
+describe('fmtDate', () => {
+  it('valid ISO string → "Mon D, YYYY"', () => {
+    expect(fmtDate('2025-03-10T12:00:00Z')).toBe('Mar 10, 2025');
+  });
+  it('null → empty string', () => {
+    expect(fmtDate(null)).toBe('');
+  });
+  it('garbage string → empty string', () => {
+    expect(fmtDate('not-a-date')).toBe('');
   });
 });

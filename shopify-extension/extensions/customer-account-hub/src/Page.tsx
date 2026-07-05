@@ -12,7 +12,7 @@ import {
   type ClaimReasonCode,
   type JourneyResponse,
 } from './lib/journey-api';
-import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, buildStepper } from './lib/journey-vm';
+import { stageChip, cancelCopy, requestStatusLabel, fmtMoney, buildStepper, fmtDate } from './lib/journey-vm';
 
 const CLAIM_REASON_LABELS: Record<ClaimReasonCode, string> = {
   damaged_package: 'Damaged package',
@@ -181,7 +181,7 @@ function OrderDetail({
   }
   if (!data) return <s-spinner accessibilityLabel="Loading order" />;
 
-  const { order, placedAt, timeline, productionEta, items, policy, requests } = data;
+  const { order, placedAt, timeline, productionEta, policy, requests } = data;
   const cancelMessage = cancelCopy(policy);
   const stepper = buildStepper(timeline);
 
@@ -252,27 +252,11 @@ function OrderDetail({
       <s-button onClick={onBack}>Back to orders</s-button>
 
       <s-stack direction="block" gap="small-500">
-        <s-heading>Order #{order.orderNumber}</s-heading>
+        <s-heading>Order {order.orderNumber}</s-heading>
         <s-text tone="subdued">
-          Placed {placedAt ?? '—'} · {fmtMoney(order.total, order.currency)}
+          Placed {fmtDate(placedAt)} · {fmtMoney(order.total, order.currency)}
         </s-text>
       </s-stack>
-
-      {items.length > 0 ? (
-        <s-section heading="Items">
-          <s-stack direction="block" gap="small-500">
-            {items.map((it, i) => (
-              <s-stack key={i} direction="inline" gap="base" justifyContent="space-between">
-                <s-text>
-                  {it.quantity}× {it.title}
-                  {it.variantTitle ? ` — ${it.variantTitle}` : ''}
-                </s-text>
-                <s-text tone="subdued">{fmtMoney(it.price, order.currency)}</s-text>
-              </s-stack>
-            ))}
-          </s-stack>
-        </s-section>
-      ) : null}
 
       {feedback ? (
         <s-banner tone={feedback.tone}>
@@ -286,24 +270,26 @@ function OrderDetail({
             <s-text type="strong">{terminalStatus}</s-text>
           ) : (
             stepper.map((step) => (
-              <s-stack direction="block" gap="small-200" key={step.label}>
-                <s-stack direction="inline" gap="base" justifyContent="space-between" alignItems="center">
+              <s-grid gridTemplateColumns="max-content 1fr" gap="base" key={step.label}>
+                <s-stack direction="block" gap="small-200">
                   {step.state === 'done' ? (
-                    <s-text tone="subdued">✓ {step.label}</s-text>
+                    <>
+                      <s-text tone="subdued">✓ {step.label}</s-text>
+                      <s-text tone="subdued">{fmtDate(step.at)}</s-text>
+                    </>
                   ) : step.state === 'current' ? (
                     <s-stack direction="inline" gap="small" alignItems="center">
-                      <s-text type="strong">{step.label}</s-text>
+                      <s-text type="strong">● {step.label}</s-text>
                       <s-badge tone="info">Current</s-badge>
                     </s-stack>
                   ) : (
                     <s-text tone="subdued">○ {step.label}</s-text>
                   )}
-                  <s-text tone="subdued">{step.at ?? ''}</s-text>
                 </s-stack>
-                {step.state === 'current' && actionZone ? (
-                  <s-stack direction="block" gap="small-500">{actionZone}</s-stack>
-                ) : null}
-              </s-stack>
+                <s-stack direction="block" gap="small-500">
+                  {step.state === 'current' && actionZone ? actionZone : null}
+                </s-stack>
+              </s-grid>
             ))
           )}
           {productionEta ? <s-text tone="subdued">Estimated completion: {productionEta}</s-text> : null}

@@ -77,6 +77,14 @@ export function requestStatusLabel(kind: string, status: string): string {
   return REQUEST_STATUS_LABELS[kind]?.[status] ?? `${kind} ${status}`;
 }
 
+/** Formats an ISO date string as "Mon D, YYYY" (e.g. "Mar 10, 2025"). null/invalid → ''. */
+export function fmtDate(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 /** Formats a money string for display; `$X.XX` for USD, `"amount currency"` fallback otherwise. */
 export function fmtMoney(amount: string, currency: string): string {
   if (currency === 'USD') {
