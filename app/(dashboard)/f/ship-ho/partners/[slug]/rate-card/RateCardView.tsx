@@ -25,11 +25,11 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl }: {
     });
     const wb = utils.book_new();
     utils.book_append_sheet(wb, utils.json_to_sheet(rateRows, { header: rateHeader }), 'Bảng giá');
-    // Sheet 2: mapping zone → quốc gia riêng.
-    const zoneRows = card.zones.map((z) => ({ Zone: z.label, 'Quốc gia': z.countries.join(', ') }));
-    utils.book_append_sheet(wb, utils.json_to_sheet(zoneRows, { header: ['Zone', 'Quốc gia'] }), 'Zone quốc gia');
-    const notes = card.surchargeNotes.map((n) => [n]);
-    utils.book_append_sheet(wb, utils.aoa_to_sheet([['Phụ phí (FedEx tính khi bill)'], ...notes, [], ['Fuel', fuelUrl]]), 'Ghi chú');
+    // Sheet 2: bảng zone quốc gia kiểu carrier — 1 dòng / nước, sort theo tên.
+    const countryZoneRows = card.countryZones.map((cz) => ({ 'Quốc gia': `${cz.name} (${cz.code})`, Zone: cz.zone }));
+    utils.book_append_sheet(wb, utils.json_to_sheet(countryZoneRows, { header: ['Quốc gia', 'Zone'] }), 'Zone quốc gia');
+    const notes = card.surcharges.map((s) => [s.label, s.detail]);
+    utils.book_append_sheet(wb, utils.aoa_to_sheet([['Phụ phí (FedEx tính khi bill)', ''], ...notes, [], ['Fuel', fuelUrl]]), 'Ghi chú');
     writeFile(wb, `rate-card-${partnerSlug}.xlsx`);
   };
 
@@ -76,24 +76,17 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl }: {
             </table>
           </div>
 
-          {/* Bảng 2: mapping zone → quốc gia tách riêng. */}
+          {/* Bảng 2: zone quốc gia kiểu carrier — alphabet, nhiều cột, "Tên (CC) — Zone". */}
           <div className="text-sm font-medium">Bảng zone quốc gia</div>
-          <div className="border rounded overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/40">
-                <tr className="[&>th]:text-left [&>th]:p-2 [&>th]:whitespace-nowrap">
-                  <th className="w-28">Zone</th><th>Quốc gia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.zones.map((z) => (
-                  <tr key={z.label} className="border-b [&>td]:p-2 align-top">
-                    <td className="font-medium whitespace-nowrap">{z.label}</td>
-                    <td className="text-muted-foreground">{z.countries.join(', ')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border rounded p-3">
+            <div className="text-sm columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-x-6">
+              {card.countryZones.map((cz) => (
+                <div key={cz.code} className="flex justify-between gap-2 py-0.5 break-inside-avoid">
+                  <span className="whitespace-nowrap">{cz.name} ({cz.code})</span>
+                  <span className="text-muted-foreground whitespace-nowrap">{cz.zone}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -101,7 +94,9 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl }: {
       <div className="text-sm space-y-1">
         <div className="font-medium">Phụ phí (FedEx tính theo công thức của hãng khi xuất bill):</div>
         <ul className="list-disc pl-5 text-muted-foreground">
-          {card.surchargeNotes.map((n) => <li key={n}>{n}</li>)}
+          {card.surcharges.map((s) => (
+            <li key={s.label}><span className="font-medium text-foreground">{s.label}</span> — {s.detail}</li>
+          ))}
         </ul>
         <p>Phụ phí xăng dầu FedEx: <a className="text-blue-600 underline" href={fuelUrl} target="_blank" rel="noopener noreferrer">{fuelUrl}</a></p>
       </div>

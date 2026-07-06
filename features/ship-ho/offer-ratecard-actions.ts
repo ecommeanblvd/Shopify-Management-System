@@ -25,6 +25,6 @@ export async function getPartnerRateCard(
   const snap = await loadAccountSnapshot(fedex.id);
   if (!snap) return { ok: false, error: 'Không nạp được bảng giá FedEx' };
 
-  const card = buildRateCard(snap, Number(partner.markupPercent));
+  const card = buildRateCard(snap, Number(partner.markupPercent), new Date());
   return { ok: true, card, accountName: fedex.name };
 }
