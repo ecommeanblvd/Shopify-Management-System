@@ -133,7 +133,7 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     return { ok: false, error: `Quote lỗi: ${q.reason}` };
   }
 
-  const { chargedVnd: charged } = computeOffer(q.carrierCostVnd, q.baseVnd, Number(markupPercent));
+  const { chargedVnd: charged } = computeOffer(q.carrierCostVnd, q.baseVnd, Number(markupPercent), q.breakdown.vatPercent);
   await db
     .update(schema.shipHoOrders)
     .set({
