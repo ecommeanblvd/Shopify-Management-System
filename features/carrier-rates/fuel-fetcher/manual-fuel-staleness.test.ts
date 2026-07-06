@@ -7,7 +7,7 @@ function row(overrides: Partial<ManualFuelRow>): ManualFuelRow {
   return {
     accountId: 'acc-1',
     accountName: 'Test Account',
-    carrierKey: 'ups',
+    carrierKey: 'some-manual-carrier',
     fuelPercent: 27,
     updatedAt: NOW,
     ...overrides,
@@ -29,25 +29,32 @@ describe('findStaleManualFuel', () => {
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
-  it('flags ups fuel=0 as unset', () => {
-    const rows = [row({ carrierKey: 'ups', fuelPercent: 0 })];
+  it('ignores ups accounts (auto-fetched from assets.ups.com) even when stale', () => {
+    const rows = [
+      row({ carrierKey: 'ups', fuelPercent: 0, updatedAt: new Date('2026-01-01T00:00:00.000Z') }),
+    ];
+    expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
+  });
+
+  it('flags manual-carrier fuel=0 as unset', () => {
+    const rows = [row({ carrierKey: 'some-manual-carrier', fuelPercent: 0 })];
     const result = findStaleManualFuel(rows, NOW, 7);
     expect(result).toHaveLength(1);
     expect(result[0].reason).toBe('unset');
     expect(result[0].daysSince).toBeNull();
   });
 
-  it('flags ups fuel=27 updated 10 days ago as stale with daysSince 10 (staleDays 7)', () => {
+  it('flags manual-carrier fuel=27 updated 10 days ago as stale with daysSince 10 (staleDays 7)', () => {
     const tenDaysAgo = new Date('2026-06-26T00:00:00.000Z');
-    const rows = [row({ carrierKey: 'ups', fuelPercent: 27, updatedAt: tenDaysAgo })];
+    const rows = [row({ carrierKey: 'some-manual-carrier', fuelPercent: 27, updatedAt: tenDaysAgo })];
     const result = findStaleManualFuel(rows, NOW, 7);
     expect(result).toHaveLength(1);
     expect(result[0].reason).toBe('stale');
     expect(result[0].daysSince).toBe(10);
   });
 
-  it('does not flag ups fuel=27 updated today', () => {
-    const rows = [row({ carrierKey: 'ups', fuelPercent: 27, updatedAt: NOW })];
+  it('does not flag manual-carrier fuel=27 updated today', () => {
+    const rows = [row({ carrierKey: 'some-manual-carrier', fuelPercent: 27, updatedAt: NOW })];
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
@@ -58,8 +65,8 @@ describe('findStaleManualFuel', () => {
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
-  it('flags ups fuel=0 (placeholder row present but value 0) as unset', () => {
-    const rows = [row({ carrierKey: 'ups', fuelPercent: 0, updatedAt: NOW })];
+  it('flags manual-carrier fuel=0 (placeholder row present but value 0) as unset', () => {
+    const rows = [row({ carrierKey: 'some-manual-carrier', fuelPercent: 0, updatedAt: NOW })];
     const result = findStaleManualFuel(rows, NOW, 7);
     expect(result).toHaveLength(1);
     expect(result[0].reason).toBe('unset');

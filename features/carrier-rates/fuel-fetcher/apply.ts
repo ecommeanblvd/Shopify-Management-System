@@ -28,7 +28,9 @@ import {
   planWeeklyFuelActions,
   DHL_VN_PAGE_URL,
   type ExistingFuelRow,
+  type VnFuelWeek,
 } from './dhl-vn';
+import { fetchUpsFuelWeeks, UPS_FUEL_PAGE_URL } from './ups';
 
 export interface ApplyFuelInput {
   carrierAccountId: string;
@@ -214,69 +216,15 @@ export async function refreshDhlFuel(args: {
 }): Promise<ApplyFuelResult & { fetched?: DhlFuelFetchResult }> {
   try {
     const vn = await fetchDhlVnFuelWeeks();
-    const existingRows = await db
-      .select({
-        id: schema.carrierSurcharges.id,
-        value: schema.carrierSurcharges.value,
-        startsAt: schema.carrierSurcharges.startsAt,
-        endsAt: schema.carrierSurcharges.endsAt,
-      })
-      .from(schema.carrierSurcharges)
-      .where(
-        and(
-          eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
-          eq(schema.carrierSurcharges.kind, 'fuel_percent'),
-          eq(schema.carrierSurcharges.active, true),
-        ),
-      );
-    const existing: ExistingFuelRow[] = existingRows.map((r) => ({
-      id: r.id, value: Number(r.value), startsAt: r.startsAt, endsAt: r.endsAt,
-    }));
-    const actions = planWeeklyFuelActions(existing, vn.weeks);
-
-    let lastId = existing[existing.length - 1]?.id ?? '';
-    for (const a of actions) {
-      if (a.type === 'close') {
-        await db.update(schema.carrierSurcharges)
-          .set({ endsAt: a.endsAt, lastAutoFetchedAt: vn.fetchedAt, lastAutoSource: 'dhl-vn/weekly' })
-          .where(eq(schema.carrierSurcharges.id, a.id));
-      } else if (a.type === 'update') {
-        await db.update(schema.carrierSurcharges)
-          .set({
-            value: a.percent.toString(),
-            note: `Auto-fetched from DHL VN surcharges page (${a.raw})`,
-            lastAutoFetchedAt: vn.fetchedAt,
-            lastAutoSource: 'dhl-vn/weekly',
-            updatedBy: args.triggeredBy ?? null,
-          })
-          .where(eq(schema.carrierSurcharges.id, a.id));
-        lastId = a.id;
-      } else {
-        const [ins] = await db.insert(schema.carrierSurcharges)
-          .values({
-            carrierAccountId: args.carrierAccountId,
-            kind: 'fuel_percent',
-            value: a.percent.toString(),
-            active: true,
-            startsAt: a.startsAt,
-            endsAt: a.endsAt,
-            note: `Auto-fetched from DHL VN surcharges page (${a.raw}) — ${DHL_VN_PAGE_URL}`,
-            lastAutoFetchedAt: vn.fetchedAt,
-            lastAutoSource: 'dhl-vn/weekly',
-            updatedBy: args.triggeredBy ?? null,
-          })
-          .returning({ id: schema.carrierSurcharges.id });
-        lastId = ins!.id;
-      }
-    }
-
-    const newest = vn.weeks[vn.weeks.length - 1];
-    return {
-      surchargeId: lastId,
-      previousPercent: null,
-      newPercent: newest.percent,
-      changed: actions.length > 0,
-    };
+    return await applyWeeklyFuelPlan({
+      carrierAccountId: args.carrierAccountId,
+      weeks: vn.weeks,
+      fetchedAt: vn.fetchedAt,
+      sourceTag: 'dhl-vn/weekly',
+      noteLabel: 'DHL VN surcharges page',
+      notePageUrl: DHL_VN_PAGE_URL,
+      triggeredBy: args.triggeredBy,
+    });
   } catch (vnErr) {
     process.stderr.write(
       `refreshDhlFuel: VN page failed (${vnErr instanceof Error ? vnErr.message : vnErr}); falling back to dhl.de\n`,
@@ -294,6 +242,112 @@ export async function refreshDhlFuel(args: {
     });
     return { ...applied, fetched };
   }
+}
+
+/**
+ * Shared applier for weekly-window feeds (DHL VN page, UPS assets JSON):
+ * queries the account's active fuel_percent rows, diffs against the fetched
+ * weeks via `planWeeklyFuelActions` (no-overlap invariant — the engine SUMS
+ * applicable rows), and executes the close/update/insert actions.
+ */
+async function applyWeeklyFuelPlan(args: {
+  carrierAccountId: string;
+  weeks: VnFuelWeek[];
+  fetchedAt: Date;
+  /** Audit tag for `last_auto_source`, e.g. 'dhl-vn/weekly'. */
+  sourceTag: string;
+  /** Human label in the note column, e.g. 'DHL VN surcharges page'. */
+  noteLabel: string;
+  /** Public page URL appended to insert notes for the operator. */
+  notePageUrl: string;
+  triggeredBy: string | null;
+}): Promise<ApplyFuelResult> {
+  const existingRows = await db
+    .select({
+      id: schema.carrierSurcharges.id,
+      value: schema.carrierSurcharges.value,
+      startsAt: schema.carrierSurcharges.startsAt,
+      endsAt: schema.carrierSurcharges.endsAt,
+    })
+    .from(schema.carrierSurcharges)
+    .where(
+      and(
+        eq(schema.carrierSurcharges.carrierAccountId, args.carrierAccountId),
+        eq(schema.carrierSurcharges.kind, 'fuel_percent'),
+        eq(schema.carrierSurcharges.active, true),
+      ),
+    );
+  const existing: ExistingFuelRow[] = existingRows.map((r) => ({
+    id: r.id, value: Number(r.value), startsAt: r.startsAt, endsAt: r.endsAt,
+  }));
+  const actions = planWeeklyFuelActions(existing, args.weeks);
+
+  let lastId = existing[existing.length - 1]?.id ?? '';
+  for (const a of actions) {
+    if (a.type === 'close') {
+      await db.update(schema.carrierSurcharges)
+        .set({ endsAt: a.endsAt, lastAutoFetchedAt: args.fetchedAt, lastAutoSource: args.sourceTag })
+        .where(eq(schema.carrierSurcharges.id, a.id));
+    } else if (a.type === 'update') {
+      await db.update(schema.carrierSurcharges)
+        .set({
+          value: a.percent.toString(),
+          note: `Auto-fetched from ${args.noteLabel} (${a.raw})`,
+          lastAutoFetchedAt: args.fetchedAt,
+          lastAutoSource: args.sourceTag,
+          updatedBy: args.triggeredBy ?? null,
+        })
+        .where(eq(schema.carrierSurcharges.id, a.id));
+      lastId = a.id;
+    } else {
+      const [ins] = await db.insert(schema.carrierSurcharges)
+        .values({
+          carrierAccountId: args.carrierAccountId,
+          kind: 'fuel_percent',
+          value: a.percent.toString(),
+          active: true,
+          startsAt: a.startsAt,
+          endsAt: a.endsAt,
+          note: `Auto-fetched from ${args.noteLabel} (${a.raw}) — ${args.notePageUrl}`,
+          lastAutoFetchedAt: args.fetchedAt,
+          lastAutoSource: args.sourceTag,
+          updatedBy: args.triggeredBy ?? null,
+        })
+        .returning({ id: schema.carrierSurcharges.id });
+      lastId = ins!.id;
+    }
+  }
+
+  const newest = args.weeks[args.weeks.length - 1];
+  return {
+    surchargeId: lastId,
+    previousPercent: null,
+    newPercent: newest.percent,
+    changed: actions.length > 0,
+  };
+}
+
+/**
+ * UPS fuel refresh. Source: the public AEM asset JSON on assets.ups.com
+ * that backs the ups.com/vn fuel-surcharges page (the page itself is
+ * Akamai-gated; the asset CDN is not — see ups.ts). The 90-day history
+ * gives dated weekly windows, applied through the same weekly plan as
+ * DHL VN. No fallback source exists — on failure the cron exits non-zero.
+ */
+export async function refreshUpsFuel(args: {
+  carrierAccountId: string;
+  triggeredBy: string | null;
+}): Promise<ApplyFuelResult> {
+  const fetched = await fetchUpsFuelWeeks();
+  return applyWeeklyFuelPlan({
+    carrierAccountId: args.carrierAccountId,
+    weeks: fetched.weeks,
+    fetchedAt: fetched.fetchedAt,
+    sourceTag: 'ups/assets-json',
+    noteLabel: 'UPS fuel history (assets.ups.com)',
+    notePageUrl: UPS_FUEL_PAGE_URL,
+    triggeredBy: args.triggeredBy,
+  });
 }
 
 /**
@@ -324,6 +378,13 @@ export async function refreshCarrierFuel(args: {
   }
   if (key === 'dhl') {
     const r = await refreshDhlFuel({
+      carrierAccountId: args.carrierAccountId,
+      triggeredBy: args.triggeredBy,
+    });
+    return { ...r, carrierKey: key };
+  }
+  if (key === 'ups') {
+    const r = await refreshUpsFuel({
       carrierAccountId: args.carrierAccountId,
       triggeredBy: args.triggeredBy,
     });

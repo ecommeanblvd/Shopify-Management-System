@@ -1,7 +1,7 @@
 /**
- * Pure staleness check for carriers WITHOUT an auto-fetcher (e.g. UPS —
- * blocked by Akamai scraping protection, unlike FedEx/DHL which have
- * `fedex.ts` / `dhl.ts` fetchers wired into `apply.ts`).
+ * Pure staleness check for carriers WITHOUT an auto-fetcher (FedEx/DHL/UPS
+ * all have fetchers wired into `apply.ts` — `fedex.ts` / `dhl.ts` /
+ * `ups.ts` — so today this guards future manual-fuel carriers).
  *
  * These carriers' `fuel_percent` surcharge is entered by hand at
  * `/f/carrier-rates/[id]/surcharges`. Nothing keeps it fresh automatically,
@@ -16,7 +16,7 @@
 
 /** Carrier keys that have a working auto-fetch scraper (see `apply.ts`).
  *  Everything else is manual-fuel and eligible for the staleness reminder. */
-export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl'] as const;
+export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl', 'ups'] as const;
 
 export interface ManualFuelRow {
   accountId: string;
@@ -42,8 +42,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  *     **skip, never flag**. Nagging about a row that will never exist is
  *     pure noise.
  *   - `fuelPercent === 0` (a `fuel_percent` row EXISTS but its value is the
- *     0 placeholder, e.g. freshly seeded for UPS) → 'unset' (needs a real
- *     number entered).
+ *     0 placeholder from a fresh seed) → 'unset' (needs a real number
+ *     entered).
  *   - row exists, value > 0, `updatedAt` more than `staleDays` days before
  *     `now` → 'stale'.
  *   - row exists, value > 0, updated within `staleDays` → not flagged.
