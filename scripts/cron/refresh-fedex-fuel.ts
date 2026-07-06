@@ -3,8 +3,8 @@
  * Usage: `npm run cron:refresh-fuel`
  *
  * Iterates every enabled carrier account whose carrier key has an
- * auto-fetcher (currently 'fedex', 'dhl' and 'ups') and refreshes its
- * fuel_percent surcharge. Writes audit columns (last_auto_fetched_at,
+ * auto-fetcher (currently 'fedex', 'dhl', 'ups' and 'sf-express') and
+ * refreshes its fuel_percent surcharge. Writes audit columns (last_auto_fetched_at,
  * last_auto_source).
  *
  * Why a script instead of HTTP-pinging the API route?
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
     .where(
       and(
-        inArray(schema.carriers.key, ['fedex', 'dhl', 'ups']),
+        inArray(schema.carriers.key, ['fedex', 'dhl', 'ups', 'sf-express']),
         eq(schema.carrierAccounts.enabled, true),
       ),
     );

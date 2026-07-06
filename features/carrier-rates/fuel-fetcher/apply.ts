@@ -31,6 +31,7 @@ import {
   type VnFuelWeek,
 } from './dhl-vn';
 import { fetchUpsFuelWeeks, UPS_FUEL_PAGE_URL } from './ups';
+import { fetchSfFuelWeeks, SF_FUEL_PAGE_URL } from './sf';
 
 export interface ApplyFuelInput {
   carrierAccountId: string;
@@ -351,6 +352,32 @@ export async function refreshUpsFuel(args: {
 }
 
 /**
+ * SF Express (ShunFeng) fuel refresh. Source: the CHINA site's international
+ * fuel-surcharge page (server-rendered HTML — the VN site is an SPA/image with
+ * no fetchable data). Reads the "HK, Macau, Taiwan China, Asia" column (CEO's
+ * choice — SF used for VN→Asia). Applied via the shared weekly plan.
+ *
+ * ⚠ The CHN page trails the VN page's newest week by a few days, so a manually
+ * seeded newer open week (e.g. current week from the VN screenshot) is left
+ * intact — planWeeklyFuelActions only touches weeks the CHN page publishes.
+ */
+export async function refreshSfFuel(args: {
+  carrierAccountId: string;
+  triggeredBy: string | null;
+}): Promise<ApplyFuelResult> {
+  const fetched = await fetchSfFuelWeeks();
+  return applyWeeklyFuelPlan({
+    carrierAccountId: args.carrierAccountId,
+    weeks: fetched.weeks,
+    fetchedAt: fetched.fetchedAt,
+    sourceTag: 'sf/chn-asia',
+    noteLabel: 'SF fuel Asia column (sf-express.com/chn)',
+    notePageUrl: SF_FUEL_PAGE_URL,
+    triggeredBy: args.triggeredBy,
+  });
+}
+
+/**
  * Carrier-agnostic dispatcher. Looks up the carrier key for the given
  * account and delegates to the right per-carrier fetcher. Throws when
  * the carrier doesn't have an auto-fetcher yet — operator gets a clear
@@ -385,6 +412,13 @@ export async function refreshCarrierFuel(args: {
   }
   if (key === 'ups') {
     const r = await refreshUpsFuel({
+      carrierAccountId: args.carrierAccountId,
+      triggeredBy: args.triggeredBy,
+    });
+    return { ...r, carrierKey: key };
+  }
+  if (key === 'sf-express') {
+    const r = await refreshSfFuel({
       carrierAccountId: args.carrierAccountId,
       triggeredBy: args.triggeredBy,
     });

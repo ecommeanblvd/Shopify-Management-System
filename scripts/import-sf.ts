@@ -28,9 +28,10 @@ const ACCOUNT_NAME = 'SF Express (ShunFeng) — VN Export';
 const CARD_LABEL = 'SF Export 2025-02';
 const EFFECTIVE_FROM = '2025-02-01';
 
-// Fuel surcharge % — SF công bố hàng tuần (USGC jet fuel, EIA) nhưng KHÔNG có
-// nguồn máy-đọc công khai (site đã migrate Nuxt SPA; trang fuel chỉ đăng ví dụ).
-// Để 0 tạm — banner nhắc operator nhập. KHÔNG bịa số. KHÔNG vào AUTO_FUEL keys.
+// Fuel surcharge % — placeholder 0 CHỈ dùng khi account chưa có row fuel nào
+// (ensureSurcharges có guard bỏ qua nếu đã có). Thực tế fuel SF nay AUTO-fetch
+// cột Asia từ sf-express.com/chn (features/carrier-rates/fuel-fetcher/sf.ts,
+// đã vào AUTO_FUEL_CARRIER_KEYS + cron:refresh-fuel). KHÔNG bịa số.
 const SF_FUEL_PERCENT = 0;
 
 function parseArgs() {

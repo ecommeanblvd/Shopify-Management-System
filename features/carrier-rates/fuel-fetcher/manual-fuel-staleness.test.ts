@@ -36,6 +36,13 @@ describe('findStaleManualFuel', () => {
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
+  it('ignores sf-express accounts (auto-fetched from sf-express.com/chn) even when stale', () => {
+    const rows = [
+      row({ carrierKey: 'sf-express', fuelPercent: 0, updatedAt: new Date('2026-01-01T00:00:00.000Z') }),
+    ];
+    expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
+  });
+
   it('flags manual-carrier fuel=0 as unset', () => {
     const rows = [row({ carrierKey: 'some-manual-carrier', fuelPercent: 0 })];
     const result = findStaleManualFuel(rows, NOW, 7);

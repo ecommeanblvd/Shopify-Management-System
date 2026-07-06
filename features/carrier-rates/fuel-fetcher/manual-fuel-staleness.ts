@@ -16,7 +16,7 @@
 
 /** Carrier keys that have a working auto-fetch scraper (see `apply.ts`).
  *  Everything else is manual-fuel and eligible for the staleness reminder. */
-export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl', 'ups'] as const;
+export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl', 'ups', 'sf-express'] as const;
 
 export interface ManualFuelRow {
   accountId: string;
