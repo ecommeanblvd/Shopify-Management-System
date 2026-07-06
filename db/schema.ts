@@ -2003,6 +2003,23 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   createdBy: text('created_by'),
 });
 
+export const shipHoEventStatusEnum = pgEnum('ship_ho_event_status', ['pending', 'delivered', 'failed']);
+
+export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shipHoOrders.id).notNull(),
+  mmpRef: text('mmp_ref').notNull(),
+  code: text('code').notNull(),
+  event: text('event').notNull(),
+  occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+  payload: jsonb('payload').notNull(),
+  deliveryStatus: shipHoEventStatusEnum('delivery_status').notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // ---- Order Lifecycle (vòng đời đơn + SLA) ----------------------------------
 /** SLA mặc định toàn hệ thống cho từng đoạn vòng đời (admin sửa trong UI P2).
  *  key: placed_to_production | production | qc | pack | ship | deliver. */
