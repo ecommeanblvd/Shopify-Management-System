@@ -96,8 +96,8 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl, odaLooku
       <div className="text-sm space-y-1">
         <div className="font-medium">Phụ phí (FedEx tính theo công thức của hãng khi xuất bill):</div>
         <ul className="list-disc pl-5 text-muted-foreground">
-          {card.surcharges.map((s) => (
-            <li key={s.label}>
+          {card.surcharges.map((s, i) => (
+            <li key={`${s.kind}-${i}`}>
               <span className="font-medium text-foreground">{s.label}</span> — {s.detail}
               {s.kind === 'remote_fixed' && (
                 <> · <a className="text-blue-600 underline" href={odaLookupUrl}>Tra tier theo zip/tỉnh</a></>
