@@ -660,6 +660,12 @@
       "when": 1784637600000,
       "tag": "0095_ship-ho-order-events",
       "breakpoints": true
+    },{
+      "idx": 96,
+      "version": "7",
+      "when": 1784724000000,
+      "tag": "0096_ship-ho-partner-requests",
+      "breakpoints": true
     }
   ]
 }

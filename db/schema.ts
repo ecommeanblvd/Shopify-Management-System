@@ -2020,6 +2020,24 @@ export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const shipHoPartnerRequestStatusEnum = pgEnum('ship_ho_partner_request_status', ['pending', 'approved', 'rejected']);
+
+export const shipHoPartnerRequests = pgTable('ship_ho_partner_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  brandSlug: text('brand_slug').notNull(),
+  contactName: text('contact_name'),
+  contactEmail: text('contact_email'),
+  contactPhone: text('contact_phone'),
+  status: shipHoPartnerRequestStatusEnum('status').notNull().default('pending'),
+  payload: jsonb('payload').notNull(),
+  reviewNote: text('review_note'),
+  reviewedBy: text('reviewed_by'),
+  reviewedAt: timestamp('reviewed_at'),
+  callbackSentAt: timestamp('callback_sent_at'),
+  callbackError: text('callback_error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // ---- Order Lifecycle (vòng đời đơn + SLA) ----------------------------------
 /** SLA mặc định toàn hệ thống cho từng đoạn vòng đời (admin sửa trong UI P2).
  *  key: placed_to_production | production | qc | pack | ship | deliver. */
