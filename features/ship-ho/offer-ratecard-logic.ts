@@ -9,7 +9,7 @@ export const FEDEX_FUEL_URL = 'https://www.fedex.com/en-vn/shipping/fuel-surchar
 export interface RateCardCell { tierUpperKg: number; baseVnd: number; offerVnd: number }
 export interface RateCardZone { label: string; countries: string[]; cells: RateCardCell[] }
 export interface RateCardCountryZone { code: string; name: string; zone: string }
-export interface RateCardSurcharge { label: string; detail: string }
+export interface RateCardSurcharge { kind: string; label: string; detail: string }
 export interface RateCard {
   markupPercent: number;
   tiers: number[];
@@ -87,10 +87,7 @@ function buildSurcharges(
 
   const surcharges: RateCardSurcharge[] = [];
 
-  // fuel_percent: 1 dòng / row (không gộp — mỗi row đã là mức hiện hành).
-  for (const s of active.filter((x) => x.kind === 'fuel_percent')) {
-    surcharges.push({ label: 'Phụ phí xăng dầu (FedEx, theo tuần)', detail: `${s.value}% × cước` });
-  }
+  // fuel_percent: KHÔNG đưa vào surcharges — chỉ hiển thị link FedEx fuel surcharge (user tự track %).
 
   // remote_fixed: gộp mọi tier thành 1 dòng.
   const remoteRows = active.filter((s) => s.kind === 'remote_fixed');
@@ -103,6 +100,7 @@ function buildSurcharges(
       return `${tierLabel}: ${formula}`;
     });
     surcharges.push({
+      kind: 'remote_fixed',
       label: 'Phụ phí vùng xa (ODA — theo mã bưu chính đích)',
       detail: parts.join(' · '),
     });
@@ -112,7 +110,7 @@ function buildSurcharges(
   for (const s of active.filter((x) => x.kind === 'residential_fixed')) {
     let detail = `${vnd(s.value)}/lô`;
     if (s.countryCodes && s.countryCodes.length > 0) detail += ` (áp dụng: ${s.countryCodes.join(', ')})`;
-    surcharges.push({ label: 'Phụ phí địa chỉ dân cư', detail });
+    surcharges.push({ kind: 'residential_fixed', label: 'Phụ phí địa chỉ dân cư', detail });
   }
 
   // demand_per_kg: gộp theo value distinct.
@@ -121,24 +119,24 @@ function buildSurcharges(
     const distinctValues = Array.from(new Set(demandRows.map((s) => s.value))).sort((a, b) => a - b);
     const parts = distinctValues.map((v) => `${vnd(v)}/kg`);
     const detail = distinctValues.length > 1 ? `${parts.join(' · ')} (tùy khu vực đích)` : parts[0];
-    surcharges.push({ label: 'Phụ phí nhu cầu (Demand) theo kg', detail });
+    surcharges.push({ kind: 'demand_per_kg', label: 'Phụ phí nhu cầu (Demand) theo kg', detail });
   }
 
   // country_fixed: 1 dòng / row.
   for (const s of active.filter((x) => x.kind === 'country_fixed')) {
     let detail = `${vnd(s.value)}/lô`;
     if (s.countryCodes && s.countryCodes.length > 0) detail += ` (áp dụng: ${s.countryCodes.join(', ')})`;
-    surcharges.push({ label: 'Phí xử lý theo nước', detail });
+    surcharges.push({ kind: 'country_fixed', label: 'Phí xử lý theo nước', detail });
   }
 
   // addon_fixed: 1 dòng / row.
   for (const s of active.filter((x) => x.kind === 'addon_fixed')) {
-    surcharges.push({ label: 'Phí ký nhận trực tiếp (Direct Signature, khi chọn)', detail: `${vnd(s.value)}/lô` });
+    surcharges.push({ kind: 'addon_fixed', label: 'Phí ký nhận trực tiếp (Direct Signature, khi chọn)', detail: `${vnd(s.value)}/lô` });
   }
 
   // vat_percent: 1 dòng / row.
   for (const s of active.filter((x) => x.kind === 'vat_percent')) {
-    surcharges.push({ label: 'VAT', detail: `${s.value}%` });
+    surcharges.push({ kind: 'vat_percent', label: 'VAT', detail: `${s.value}%` });
   }
 
   return surcharges;

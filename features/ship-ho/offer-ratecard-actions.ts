@@ -9,7 +9,7 @@ import { buildRateCard, type RateCard } from './offer-ratecard-logic';
 
 export async function getPartnerRateCard(
   brandSlug: string,
-): Promise<{ ok: true; card: RateCard; accountName: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; card: RateCard; accountName: string; odaLookupUrl: string } | { ok: false; error: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
 
   const [partner] = await db
@@ -26,5 +26,6 @@ export async function getPartnerRateCard(
   if (!snap) return { ok: false, error: 'Không nạp được bảng giá FedEx' };
 
   const card = buildRateCard(snap, Number(partner.markupPercent), new Date());
-  return { ok: true, card, accountName: fedex.name };
+  const odaLookupUrl = `/f/carrier-rates/${fedex.id}/remote-postcodes`;
+  return { ok: true, card, accountName: fedex.name, odaLookupUrl };
 }

@@ -30,7 +30,7 @@ export default async function RateCardPage({ params }: { params: Promise<{ slug:
       {!r.ok ? (
         <p className="text-red-600">{r.error}</p>
       ) : (
-        <RateCardView card={r.card} partnerSlug={slug} accountName={r.accountName} fuelUrl={FEDEX_FUEL_URL} />
+        <RateCardView card={r.card} partnerSlug={slug} accountName={r.accountName} fuelUrl={FEDEX_FUEL_URL} odaLookupUrl={r.odaLookupUrl} />
       )}
     </div>
   );
