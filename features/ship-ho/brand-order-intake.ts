@@ -3,6 +3,7 @@ import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { estimateForBrand, neutralNotes, type EstimateParcel, type BrandEstimate, type ShipHoService } from './brand-estimate';
 import { nextBrandOrderCode } from './brand-order-code';
+import { emitShipHoEvent } from './mmp-events';
 
 export interface BrandOrderInput {
   brandSlug: string;
@@ -70,6 +71,11 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
       chargedVnd: String(est.estimate.chargedVnd), quotedAt: new Date(),
       status: 'draft', createdBy: `mmp:${input.brandSlug}`,
     }).returning({ id: schema.shipHoOrders.id });
+
+    await emitShipHoEvent(
+      { id: row.id, code, source: 'mmp', mmpRef: input.mmpRef },
+      'order.received', { chargedVnd: est.estimate.chargedVnd },
+    );
 
     return { ok: true, orderId: row.id, code, estimate: est.estimate };
   } catch (e) {

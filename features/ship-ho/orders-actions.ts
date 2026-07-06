@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
+import { emitShipHoEvent } from './mmp-events';
 import { computeOffer } from './offer-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
@@ -146,6 +147,28 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     .where(eq(schema.shipHoOrders.id, orderId));
 
   revalidatePath('/f/ship-ho');
+  revalidatePath(`/f/ship-ho/${orderId}`);
+  return { ok: true };
+}
+
+/** Từ chối đơn brand (mmp) → emit order.rejected cho MMP. Không đổi status đơn ở v1. */
+export async function rejectMmpOrder(orderId: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  const [o] = await db.select({ id: schema.shipHoOrders.id, code: schema.shipHoOrders.code, source: schema.shipHoOrders.source, mmpRef: schema.shipHoOrders.mmpRef })
+    .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
+  if (!o) return { ok: false, error: 'Không tìm thấy đơn' };
+  await emitShipHoEvent({ id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef }, 'order.rejected', { reason });
+  revalidatePath(`/f/ship-ho/${orderId}`);
+  return { ok: true };
+}
+
+/** Yêu cầu brand (mmp) bổ sung thông tin đơn → emit order.needs_info cho MMP. Không đổi status đơn ở v1. */
+export async function requestInfoMmpOrder(orderId: string, reason: string, requiredFields?: string[]): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  const [o] = await db.select({ id: schema.shipHoOrders.id, code: schema.shipHoOrders.code, source: schema.shipHoOrders.source, mmpRef: schema.shipHoOrders.mmpRef })
+    .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
+  if (!o) return { ok: false, error: 'Không tìm thấy đơn' };
+  await emitShipHoEvent({ id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef }, 'order.needs_info', { reason, ...(requiredFields?.length ? { requiredFields } : {}) });
   revalidatePath(`/f/ship-ho/${orderId}`);
   return { ok: true };
 }

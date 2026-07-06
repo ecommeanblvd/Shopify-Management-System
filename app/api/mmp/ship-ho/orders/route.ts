@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { verifyMmpSignature } from '@/features/mmp/hmac';
 import { intakeBrandOrder, type BrandOrderInput } from '@/features/ship-ho/brand-order-intake';
+import { getBackfillOrders } from '@/features/ship-ho/backfill';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,4 +33,24 @@ export async function POST(req: NextRequest): Promise<Response> {
   const r = await intakeBrandOrder(body);
   if (!r.ok) return NextResponse.json({ error: r.error, code: r.code }, { status: CODE_STATUS[r.code] ?? 400 });
   return NextResponse.json({ ok: true, orderId: r.orderId, code: r.code, idempotent: r.idempotent ?? false, estimate: r.estimate });
+}
+
+/**
+ * GET /api/mmp/ship-ho/orders?updatedSince=ISO8601&brandSlug=...
+ * MMP → SMS: đồng bộ bù (backfill) các đơn có event thay đổi kể từ updatedSince.
+ */
+export async function GET(req: NextRequest): Promise<Response> {
+  const secret = process.env.MMP_WEBHOOK_SECRET;
+  if (!secret) return NextResponse.json({ error: 'MMP_WEBHOOK_SECRET not configured' }, { status: 500 });
+  const rawBody = await req.text(); // '' cho GET
+  const hmac = verifyMmpSignature({ secret, rawBody, signatureHeader: req.headers.get('x-mean-signature'), timestampHeader: req.headers.get('x-mean-timestamp') });
+  if (!hmac.ok) return NextResponse.json({ error: 'signature verification failed', reason: hmac.reason }, { status: 401 });
+
+  const sinceRaw = req.nextUrl.searchParams.get('updatedSince');
+  const since = sinceRaw ? new Date(sinceRaw) : null;
+  if (!since || Number.isNaN(since.getTime())) return NextResponse.json({ error: 'updatedSince (ISO8601) required' }, { status: 400 });
+  const brandSlug = req.nextUrl.searchParams.get('brandSlug') || undefined;
+
+  const orders = await getBackfillOrders(since, brandSlug);
+  return NextResponse.json({ ok: true, orders, count: orders.length });
 }
