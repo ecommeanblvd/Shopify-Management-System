@@ -359,7 +359,7 @@ const ISO2_RE = /^[A-Z]{2}$/;
  * (with both columns NULL) is unaffected. The fuel-fetcher uses these
  * bounds to time-version weekly rates without losing historical context.
  */
-function isApplicable(s: SurchargeSnap, effectiveDate: Date): boolean {
+export function isApplicable(s: SurchargeSnap, effectiveDate: Date): boolean {
   if (!s.active) return false;
   const t = effectiveDate.getTime();
   if (s.startsAt && s.startsAt.getTime() > t) return false;
