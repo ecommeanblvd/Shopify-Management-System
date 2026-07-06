@@ -35,11 +35,13 @@ export async function setShipHoTracking(
     ...(input.carrierKey !== undefined ? { carrierKey: input.carrierKey } : {}),
     ...(bump ? { status: 'shipped' as const } : {}),
   }).where(eq(schema.shipHoOrders.id, orderId));
-  await emitShipHoEvent(
-    { id: cur.id, code: cur.code, source: cur.source, mmpRef: cur.mmpRef },
-    'shipment.booked',
-    { trackingNumber: tracking, service: cur.service ?? 'express' },
-  );
+  if (bump) {
+    await emitShipHoEvent(
+      { id: cur.id, code: cur.code, source: cur.source, mmpRef: cur.mmpRef },
+      'shipment.booked',
+      { trackingNumber: tracking, service: cur.service ?? 'express' },
+    );
+  }
   revalidatePath(`/f/ship-ho/${orderId}`);
   revalidatePath('/f/ship-ho');
   return { ok: true };

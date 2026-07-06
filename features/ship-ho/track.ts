@@ -31,6 +31,7 @@ export async function trackAndStoreShipHo(
       tracking: schema.shipHoOrders.trackingNumber,
       carrier: schema.shipHoOrders.carrierKey,
       status: schema.shipHoOrders.status,
+      deliveryStatus: schema.shipHoOrders.deliveryStatus,
     })
     .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
   if (!o) return { ok: false, error: 'order not found' };
@@ -44,12 +45,14 @@ export async function trackAndStoreShipHo(
       lastTrackedAt: new Date(),
       status: orderStatusAfterTrack(o.status, r.status) as typeof o.status,
     }).where(eq(schema.shipHoOrders.id, orderId));
-    const evt = deliveryStatusToEvent(r.status);
-    await emitShipHoEvent(
-      { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      evt,
-      evt === 'shipment.delivered' ? { deliveredAt: (r.deliveredAt ?? new Date()).toISOString() } : {},
-    );
+    if (r.status !== o.deliveryStatus) {
+      const evt = deliveryStatusToEvent(r.status);
+      await emitShipHoEvent(
+        { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+        evt,
+        evt === 'shipment.delivered' ? { deliveredAt: (r.deliveredAt ?? new Date()).toISOString() } : {},
+      );
+    }
     return { ok: true, status: r.status };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'track failed' };

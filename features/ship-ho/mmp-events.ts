@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
 
@@ -73,7 +73,7 @@ export async function deliverShipHoEvent(row: {
 /** Cron: gửi lại các event chưa 'delivered' (pending/failed) dưới ngưỡng. */
 export async function retryPendingShipHoEvents(): Promise<{ tried: number; delivered: number; failed: number }> {
   const rows = await db.select().from(schema.shipHoOrderEvents)
-    .where(and(inArray(schema.shipHoOrderEvents.deliveryStatus, ['pending', 'failed'] as const)))
+    .where(eq(schema.shipHoOrderEvents.deliveryStatus, 'pending'))
     .limit(200);
   let delivered = 0, failed = 0;
   for (const r of rows) {
