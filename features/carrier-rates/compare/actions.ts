@@ -9,7 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { loadAccountSnapshot } from '../engine/load';
 import { buildComparison, type ComparisonCube, type CompareCountryMeta } from './build-comparison';
 import { COMPARE_WEIGHT_GRID } from './weight-grid';
-import { topShopifyCountries } from './top-countries';
+import { topShopifyCountries, CHEAP_LINE_COUNTRIES } from './top-countries';
 
 export interface RateComparisonData {
   cube: ComparisonCube;
@@ -38,7 +38,7 @@ export async function getRateComparison(): Promise<RateComparisonData> {
 
   const now = new Date();
   const [countries, accounts] = await Promise.all([
-    topShopifyCountries(),
+    topShopifyCountries({ exclude: ['VN'], forceInclude: CHEAP_LINE_COUNTRIES }),
     db.select({ id: schema.carrierAccounts.id })
       .from(schema.carrierAccounts)
       .where(eq(schema.carrierAccounts.enabled, true)),
