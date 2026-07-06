@@ -131,7 +131,11 @@ async function ensureSurcharges(accountId: string, apply: boolean): Promise<{ ex
   const existingRows = await db.select({ kind: schema.carrierSurcharges.kind, note: schema.carrierSurcharges.note })
     .from(schema.carrierSurcharges).where(eq(schema.carrierSurcharges.carrierAccountId, accountId));
   const have = new Set(existingRows.map((r) => `${r.kind}::${r.note}`));
-  const toCreate = seeds.filter((s) => !have.has(`${s.kind}::${s.note}`));
+  // Guard: fuel_percent seed là placeholder 0. Nếu account ĐÃ có bất kỳ row
+  // fuel_percent nào (vd operator đã nhập tay % tuần / lịch sử Asia-Pacific),
+  // KHÔNG chèn placeholder 0 nữa — tránh dồn thêm dòng thừa (engine SUM fuel).
+  const hasFuel = existingRows.some((r) => r.kind === 'fuel_percent');
+  const toCreate = seeds.filter((s) => !have.has(`${s.kind}::${s.note}`) && !(s.kind === 'fuel_percent' && hasFuel));
   console.log(`Surcharges: ${have.size} có (tổng account), ${toCreate.length} cần tạo (của ${seeds.length} seed).`);
   if (apply) {
     for (const s of toCreate) {
