@@ -36,8 +36,17 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /**
  * Filter manual-fuel carrier rows (carrier key NOT in `AUTO_FUEL_CARRIER_KEYS`)
  * down to the ones that need an operator's attention:
- *   - `fuelPercent` is null or 0 → 'unset' (never configured, or blanked out).
- *   - `updatedAt` is more than `staleDays` days before `now` → 'stale'.
+ *   - `fuelPercent === null` (no `fuel_percent` surcharge row at all) → the
+ *     carrier is priced ALL-IN (e.g. Aramex: fuel + VAT already baked into
+ *     the rate card, so there's deliberately no separate fuel line) →
+ *     **skip, never flag**. Nagging about a row that will never exist is
+ *     pure noise.
+ *   - `fuelPercent === 0` (a `fuel_percent` row EXISTS but its value is the
+ *     0 placeholder, e.g. freshly seeded for UPS) → 'unset' (needs a real
+ *     number entered).
+ *   - row exists, value > 0, `updatedAt` more than `staleDays` days before
+ *     `now` → 'stale'.
+ *   - row exists, value > 0, updated within `staleDays` → not flagged.
  *
  * Rows for auto-fetch carriers (fedex/dhl) are always skipped — those are
  * kept fresh by the cron-driven scraper in `apply.ts`, so nagging about them
@@ -54,8 +63,10 @@ export function findStaleManualFuel(
   for (const row of rows) {
     if (autoKeys.has(row.carrierKey)) continue;
 
-    const isUnset = row.fuelPercent === null || row.fuelPercent === 0;
-    if (isUnset) {
+    // No fuel_percent row at all → all-in carrier, not applicable. Skip.
+    if (row.fuelPercent === null) continue;
+
+    if (row.fuelPercent === 0) {
       result.push({ ...row, reason: 'unset', daysSince: null });
       continue;
     }

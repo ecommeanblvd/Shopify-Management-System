@@ -51,8 +51,15 @@ describe('findStaleManualFuel', () => {
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
-  it('flags fuelPercent null as unset', () => {
-    const rows = [row({ carrierKey: 'ups', fuelPercent: null, updatedAt: null })];
+  it('ignores fuelPercent null (all-in carrier, e.g. Aramex — no fuel_percent row at all)', () => {
+    const rows = [
+      row({ carrierKey: 'aramex', fuelPercent: null, updatedAt: null }),
+    ];
+    expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
+  });
+
+  it('flags ups fuel=0 (placeholder row present but value 0) as unset', () => {
+    const rows = [row({ carrierKey: 'ups', fuelPercent: 0, updatedAt: NOW })];
     const result = findStaleManualFuel(rows, NOW, 7);
     expect(result).toHaveLength(1);
     expect(result[0].reason).toBe('unset');
