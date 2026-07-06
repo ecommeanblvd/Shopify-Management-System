@@ -108,10 +108,10 @@ describe('buildRateCard — surcharges (chi phí cụ thể + công thức, ch�
     expect(c.surcharges.some((x) => x.detail.includes('30'))).toBe(false);
     expect(c.surcharges.some((x) => x.detail.includes('15.000'))).toBe(false);
   });
-  it('fuel_percent: label + "{value}% × cước" (giữ số lẻ)', () => {
+  it('fuel_percent: KHÔNG xuất hiện trong surcharges (chỉ hiển thị link fuel FedEx trên UI)', () => {
     const c = buildRateCard(snap(), 30, ASOF);
-    const fuel = c.surcharges.find((x) => x.label === 'Phụ phí xăng dầu (FedEx, theo tuần)');
-    expect(fuel?.detail).toBe('38.25% × cước');
+    expect(c.surcharges.some((x) => x.kind === 'fuel_percent')).toBe(false);
+    expect(c.surcharges.find((x) => x.label === 'Phụ phí xăng dầu (FedEx, theo tuần)')).toBeUndefined();
   });
   it('remote_fixed 3 tier gộp 1 dòng đúng công thức max()', () => {
     const s = snap();
