@@ -7,7 +7,7 @@ import { db, schema } from '@/db/client';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import {
   ChevronLeft, Wrench, Flame, CalendarDays, MapPin, Home, TrendingUp, Leaf, Power, Pencil,
-  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine, Box,
+  RefreshCw, Zap, Globe2, Receipt, PackageCheck, TicketPercent, PenLine, Box, AlertTriangle,
 } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -20,6 +20,10 @@ import {
   type SurchargeKind, type SurchargeRow,
 } from '@/features/carrier-rates/surcharges-actions';
 import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import {
+  findStaleManualFuel,
+  type ManualFuelRow,
+} from '@/features/carrier-rates/fuel-fetcher/manual-fuel-staleness';
 import { seedFedexVietnamDemand } from '@/features/carrier-rates/seed-fedex-vn-demand';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -245,6 +249,39 @@ async function loadCountryOptions(accountId: string): Promise<{ iso: string; nam
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Compute the manual-fuel staleness banner for this account, or `null` when
+ * no banner is needed (auto-fetch carrier, or fuel is fresh).
+ *
+ * Picks the most-recently-updated ACTIVE `fuel_percent` row as "current" —
+ * mirrors the "first/canonical open row" convention used by `apply.ts`, but
+ * here we just need to know whether the operator has looked at it lately.
+ */
+function computeManualFuelStaleness(
+  carrierKey: string | null | undefined,
+  accountName: string,
+  accountId: string,
+  surcharges: SurchargeRow[],
+) {
+  const key = carrierKey ?? '';
+  const fuelRows = surcharges.filter((s) => s.kind === 'fuel_percent' && s.active);
+  const latest = fuelRows.reduce<SurchargeRow | null>((best, row) => {
+    if (!best || row.updatedAt > best.updatedAt) return row;
+    return best;
+  }, null);
+
+  const manualFuelRow: ManualFuelRow = {
+    accountId,
+    accountName,
+    carrierKey: key,
+    fuelPercent: latest ? Number(latest.value) : null,
+    updatedAt: latest ? latest.updatedAt : null,
+  };
+
+  const [stale] = findStaleManualFuel([manualFuelRow], new Date(), 7);
+  return stale ?? null;
+}
+
 async function createAction(accountId: string, kind: SurchargeKind, userId: string, formData: FormData) {
   'use server';
   const value = String(formData.get('value') ?? '');
@@ -374,6 +411,12 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
 
   const totalActive = surcharges.filter((s) => s.active).length;
 
+  // Manual-fuel staleness banner: only meaningful for carriers WITHOUT an
+  // auto-fetcher (everything except fedex/dhl — e.g. UPS, blocked by Akamai
+  // scraping). Reuse the fuel_percent rows already loaded above instead of
+  // an extra query; pick the most-recently-updated ACTIVE row as "current".
+  const staleFuel = computeManualFuelStaleness(account.carrierKey, account.name, id, surcharges);
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <Link
@@ -383,6 +426,20 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
         <ChevronLeft className="size-4" />
         {account.name}
       </Link>
+
+      {staleFuel && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+          <p className="text-sm">
+            <span className="font-semibold">Fuel nhập tay chưa cập nhật</span>
+            {' '}
+            {staleFuel.reason === 'unset' ? 'chưa đặt' : `${staleFuel.daysSince} ngày`}
+            {' — tra % tại '}
+            <span className="font-mono">{staleFuel.carrierKey}.com</span>
+            {' rồi cập nhật dòng fuel_percent bên dưới.'}
+          </p>
+        </div>
+      )}
 
       <header className="space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
