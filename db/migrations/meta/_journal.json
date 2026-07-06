@@ -666,6 +666,12 @@
       "when": 1784724000000,
       "tag": "0096_ship-ho-partner-requests",
       "breakpoints": true
+    },{
+      "idx": 97,
+      "version": "7",
+      "when": 1784810400000,
+      "tag": "0097_ups-carrier",
+      "breakpoints": true
     }
   ]
 }
