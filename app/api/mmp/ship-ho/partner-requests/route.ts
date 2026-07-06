@@ -4,7 +4,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { verifyMmpSignature } from '@/features/mmp/hmac';
-import { createPartnerRequest } from '@/features/ship-ho/partner-request-actions';
+import { createPartnerRequest } from '@/features/ship-ho/partner-request-intake';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

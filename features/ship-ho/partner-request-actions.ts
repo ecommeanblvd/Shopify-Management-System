@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
@@ -10,46 +10,33 @@ import { buildPartnerCallbackEnvelope } from './partner-request-envelope';
 
 /** Best-effort gửi callback; cập nhật callback_sent_at/error. Không throw. */
 async function sendPartnerCallback(reqRow: { id: string; brandSlug: string }, event: string, note: string | null): Promise<void> {
-  const url = process.env.MMP_SHIP_HO_WEBHOOK_URL;
-  const secret = process.env.MMP_OUTBOUND_SECRET;
-  const envelope = buildPartnerCallbackEnvelope(reqRow, event, note, new Date().toISOString());
-  if (!url || !secret) {
-    await db.update(schema.shipHoPartnerRequests).set({ callbackError: 'not configured' }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
-    return;
-  }
-  const rawBody = JSON.stringify(envelope);
-  const ts = Math.floor(Date.now() / 1000);
-  const signature = signMmpPayload(secret, ts, rawBody);
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-mean-signature': signature, 'x-mean-timestamp': String(ts) }, body: rawBody, signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) throw new Error(`http ${res.status}`);
-    await db.update(schema.shipHoPartnerRequests).set({ callbackSentAt: new Date(), callbackError: null }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
+    const url = process.env.MMP_SHIP_HO_WEBHOOK_URL;
+    const secret = process.env.MMP_OUTBOUND_SECRET;
+    const envelope = buildPartnerCallbackEnvelope(reqRow, event, note, new Date().toISOString());
+    if (!url || !secret) {
+      await db.update(schema.shipHoPartnerRequests).set({ callbackError: 'not configured' }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
+      return;
+    }
+    const rawBody = JSON.stringify(envelope);
+    const ts = Math.floor(Date.now() / 1000);
+    const signature = signMmpPayload(secret, ts, rawBody);
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-mean-signature': signature, 'x-mean-timestamp': String(ts) }, body: rawBody, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) throw new Error(`http ${res.status}`);
+      await db.update(schema.shipHoPartnerRequests).set({ callbackSentAt: new Date(), callbackError: null }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
+    } catch (e) {
+      await db.update(schema.shipHoPartnerRequests).set({ callbackError: e instanceof Error ? e.message : 'fetch failed' }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
+    }
   } catch (e) {
-    await db.update(schema.shipHoPartnerRequests).set({ callbackError: e instanceof Error ? e.message : 'fetch failed' }).where(eq(schema.shipHoPartnerRequests.id, reqRow.id));
+    console.warn('sendPartnerCallback failed:', e);
   }
-}
-
-/** MMP→SMS: nhận đăng ký. Dedupe 1 pending/brand. Trả ref. (Endpoint tự verify HMAC + auth; hàm này KHÔNG requireManage.) */
-export async function createPartnerRequest(
-  body: { brandSlug: string; contactName?: string; contactEmail?: string; contactPhone?: string; [k: string]: unknown },
-): Promise<{ ok: true; ref: string } | { ok: false; code: string; error: string }> {
-  if (!body.brandSlug) return { ok: false, code: 'bad_input', error: 'brandSlug required' };
-  const [dup] = await db.select({ id: schema.shipHoPartnerRequests.id }).from(schema.shipHoPartnerRequests)
-    .where(and(eq(schema.shipHoPartnerRequests.brandSlug, body.brandSlug), eq(schema.shipHoPartnerRequests.status, 'pending'))).limit(1);
-  if (dup) return { ok: true, ref: dup.id };
-  const [row] = await db.insert(schema.shipHoPartnerRequests).values({
-    brandSlug: body.brandSlug,
-    contactName: (body.contactName as string) || null,
-    contactEmail: (body.contactEmail as string) || null,
-    contactPhone: (body.contactPhone as string) || null,
-    payload: body,
-  }).returning({ id: schema.shipHoPartnerRequests.id });
-  return { ok: true, ref: row.id };
 }
 
 /** MEAN duyệt: markup ≥30, upsert partner self_service_enabled=true, set approved, callback. */
-export async function approvePartnerRequest(id: string, markupPercent: string, reviewer: string, note?: string): Promise<{ ok: boolean; error?: string }> {
-  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+export async function approvePartnerRequest(id: string, markupPercent: string, note?: string): Promise<{ ok: boolean; error?: string }> {
+  let reviewer: string;
+  try { reviewer = await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   const floorErr = markupFloorError(markupPercent);
   if (floorErr) return { ok: false, error: floorErr };
   const [req] = await db.select().from(schema.shipHoPartnerRequests).where(eq(schema.shipHoPartnerRequests.id, id)).limit(1);
@@ -68,8 +55,9 @@ export async function approvePartnerRequest(id: string, markupPercent: string, r
 }
 
 /** MEAN từ chối. */
-export async function rejectPartnerRequest(id: string, reason: string, reviewer: string): Promise<{ ok: boolean; error?: string }> {
-  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+export async function rejectPartnerRequest(id: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  let reviewer: string;
+  try { reviewer = await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   const [req] = await db.select().from(schema.shipHoPartnerRequests).where(eq(schema.shipHoPartnerRequests.id, id)).limit(1);
   if (!req) return { ok: false, error: 'Không tìm thấy request' };
   await db.update(schema.shipHoPartnerRequests).set({ status: 'rejected', reviewedBy: reviewer, reviewedAt: new Date(), reviewNote: reason }).where(eq(schema.shipHoPartnerRequests.id, id));
