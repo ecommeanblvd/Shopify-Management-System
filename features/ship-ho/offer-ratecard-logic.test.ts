@@ -108,6 +108,23 @@ describe('buildRateCard — surcharges (chi phí cụ thể + công thức, ch�
     expect(c.surcharges.some((x) => x.detail.includes('30'))).toBe(false);
     expect(c.surcharges.some((x) => x.detail.includes('15.000'))).toBe(false);
   });
+  it('LUÔN có dòng "Phí xử lý đơn hàng" = 50.000₫, không chú "(chưa VAT)", nằm TRÊN dòng VAT', () => {
+    const s = snap();
+    s.surcharges.push(surcharge({ kind: 'vat_percent', value: 8 }));
+    const c = buildRateCard(s, 30, ASOF);
+    const proc = c.surcharges.find((x) => x.kind === 'processing_fixed');
+    expect(proc).toEqual({ kind: 'processing_fixed', label: 'Phí xử lý đơn hàng', detail: '50.000₫' });
+    expect(proc!.detail).not.toMatch(/VAT|chưa|\(/);
+    const procIdx = c.surcharges.findIndex((x) => x.kind === 'processing_fixed');
+    const vatIdx = c.surcharges.findIndex((x) => x.kind === 'vat_percent');
+    expect(procIdx).toBeLessThan(vatIdx);
+  });
+  it('Phí xử lý xuất hiện KỂ CẢ khi không có phụ phí carrier nào', () => {
+    const s = snap();
+    s.surcharges = [];
+    const c = buildRateCard(s, 30, ASOF);
+    expect(c.surcharges.some((x) => x.kind === 'processing_fixed')).toBe(true);
+  });
   it('fuel_percent: KHÔNG xuất hiện trong surcharges (chỉ hiển thị link fuel FedEx trên UI)', () => {
     const c = buildRateCard(snap(), 30, ASOF);
     expect(c.surcharges.some((x) => x.kind === 'fuel_percent')).toBe(false);

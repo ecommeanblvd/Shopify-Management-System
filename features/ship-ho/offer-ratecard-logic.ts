@@ -1,5 +1,6 @@
 /** THUẦN: dựng rate card offer (base×(1+markup)) theo zone × mức cân từ snapshot carrier. */
 import { pickBaseVnd } from './quote-adapter';
+import { ORDER_PROCESSING_FEE_VND } from './offer-pricing';
 import { isApplicable, type SurchargeSnap } from '@/features/carrier-rates/engine/quote';
 import { countryByIso } from '@/lib/geo/countries';
 
@@ -134,7 +135,12 @@ function buildSurcharges(
     surcharges.push({ kind: 'addon_fixed', label: 'Phí ký nhận trực tiếp (Direct Signature, khi chọn)', detail: `${vnd(s.value)}/lô` });
   }
 
-  // vat_percent: 1 dòng / row.
+  // Phí xử lý đơn hàng ship hộ — cố định mỗi đơn, LUÔN áp (không phải phụ phí
+  // carrier). Ghi thẳng "50.000₫", KHÔNG chú "(chưa VAT)": dòng VAT ở dưới đã
+  // gộp VAT của khoản này.
+  surcharges.push({ kind: 'processing_fixed', label: 'Phí xử lý đơn hàng', detail: vnd(ORDER_PROCESSING_FEE_VND) });
+
+  // vat_percent: 1 dòng / row (đặt CUỐI để nằm dưới phí xử lý).
   for (const s of active.filter((x) => x.kind === 'vat_percent')) {
     surcharges.push({ kind: 'vat_percent', label: 'VAT', detail: `${s.value}%` });
   }
