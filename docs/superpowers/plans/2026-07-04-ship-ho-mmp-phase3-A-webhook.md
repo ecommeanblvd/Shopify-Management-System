@@ -16,7 +16,7 @@
 - **Payload trung tính** — không tên hãng, không cước gốc/margin/markup.
 - Event Plan A (trạng thái): `order.received`, `shipment.booked`, `shipment.in_transit`, `shipment.delivered`, `shipment.exception`, `order.rejected`, `order.needs_info`. **KHÔNG** phát `order.priced`/`order.reconciled` ở plan này (cần công thức brand — đi cùng plan rebill).
 - `emitShipHoEvent` best-effort: lỗi deliver KHÔNG làm hỏng action gọi nó (bọc try/catch, luôn ghi outbox trước).
-- Migration kế tiếp: **0090** (viết tay SQL + append `db/migrations/meta/_journal.json`, KHÔNG `db:generate`).
+- Migration kế tiếp: **0095** (viết tay SQL + append `db/migrations/meta/_journal.json`, KHÔNG `db:generate`).
 - Trước push: `npx tsc --noEmit` + `npx vitest run` xanh.
 - Commit message kết thúc bằng: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
 
@@ -25,7 +25,7 @@
 ### Task 1: DB — outbox `ship_ho_order_events`
 
 **Files:**
-- Create: `db/migrations/0090_ship-ho-order-events.sql`
+- Create: `db/migrations/0095_ship-ho-order-events.sql`
 - Modify: `db/schema.ts`, `db/migrations/meta/_journal.json`
 
 **Interfaces:**
@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Migration SQL**
 
-Tạo `db/migrations/0090_ship-ho-order-events.sql`:
+Tạo `db/migrations/0095_ship-ho-order-events.sql`:
 
 ```sql
 CREATE TYPE "ship_ho_event_status" AS ENUM('pending', 'delivered', 'failed');
@@ -83,14 +83,14 @@ export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
 
 - [ ] **Step 3: Append journal**
 
-Trong `db/migrations/meta/_journal.json`, sau entry `0089...` thêm (chỉnh `idx`/`when` tăng dần):
+Trong `db/migrations/meta/_journal.json`, sau entry `0094...` thêm (chỉnh `idx`/`when` tăng dần):
 
 ```json
     },{
-      "idx": 90,
+      "idx": 95,
       "version": "7",
       "when": 1783946400000,
-      "tag": "0090_ship-ho-order-events",
+      "tag": "0095_ship-ho-order-events",
       "breakpoints": true
 ```
 
@@ -101,7 +101,7 @@ Kiểm JSON hợp lệ: `node -e "JSON.parse(require('fs').readFileSync('db/migr
 
 Run: `npx tsc --noEmit` → PASS.
 ```bash
-git add db/migrations/0090_ship-ho-order-events.sql db/migrations/meta/_journal.json db/schema.ts
+git add db/migrations/0095_ship-ho-order-events.sql db/migrations/meta/_journal.json db/schema.ts
 git commit -m "feat(ship-ho): migration outbox ship_ho_order_events (webhook SMS→MMP)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
