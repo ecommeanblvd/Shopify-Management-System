@@ -7,11 +7,12 @@ export interface TopCountry {
 }
 
 /**
- * Cụm nước line ship rẻ (dưới ~$30/0.5kg): Đông Nam Á + Trung Quốc + Nhật +
- * Hàn. LUÔN xuất hiện trong bảng so sánh cước, dù không nằm top đơn Shopify.
+ * Cụm nước line ship rẻ (dưới ~$30/0.5kg): Đông Nam Á + Đông Á (Trung Quốc,
+ * Nhật, Hàn, Đài Loan, Hong Kong). LUÔN xuất hiện trong bảng so sánh cước,
+ * dù không nằm top đơn Shopify.
  */
 export const CHEAP_LINE_COUNTRIES = [
-  'TH', 'SG', 'MY', 'ID', 'PH', 'KH', 'LA', 'MM', 'BN', 'CN', 'JP', 'KR',
+  'TH', 'SG', 'MY', 'ID', 'PH', 'KH', 'LA', 'MM', 'BN', 'CN', 'JP', 'KR', 'TW', 'HK',
 ] as const;
 
 export interface TopShopifyCountriesOptions {
