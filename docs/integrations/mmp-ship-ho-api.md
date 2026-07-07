@@ -155,10 +155,10 @@ Gọi khi brand xác nhận tạo đơn. **SMS sinh mã đơn mới** và trả 
 
 **Response 200**
 ```json
-{ "ok": true, "orderId": "uuid", "code": "SH1000", "idempotent": false, "estimate": { /* như mục 2 */ } }
+{ "ok": true, "orderId": "uuid", "code": "26-INSLG-SV-000123", "idempotent": false, "estimate": { /* như mục 2 */ } }
 ```
 - Gửi lại cùng `mmpRef` → trả đơn cũ với `idempotent: true` (không tạo trùng).
-- `code` là **mã đơn SMS** (hiện dạng tạm `SH{n}`; sẽ đổi theo format chính thức sau — MMP luôn map theo `mmpRef`).
+- `code` **bằng đúng `mmpRef`** đã gửi (mã MMP tạo, `26-INSLG-SV-XXXX`) — SMS dùng làm mã đơn hiển thị. MMP map theo `mmpRef` (= `code`).
 
 **Lỗi:** như mục 2 (`400/401/403/422`) + `bad_input` khi thiếu trường địa chỉ theo nước.
 
