@@ -3,6 +3,7 @@ import { db, schema } from '@/db/client';
 import { listAccounts } from '@/features/carrier-rates/actions';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { quote } from '@/features/carrier-rates/engine/quote';
+import { isDefaultResidential } from '@/features/carrier-rates/residential-default';
 import { pickCarrierCostVnd, pickBaseVnd } from './quote-adapter';
 import { computeBrandCharge } from './brand-pricing';
 
@@ -70,6 +71,7 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     weightKg: parcel.weightKg, dimensions: dims, packagingType: parcel.packagingType ?? null,
     destinationCountry: country,
     destinationPostcode: parcel.postcode, destinationCity: parcel.city,
+    isResidential: isDefaultResidential(country),
   });
   if (!res.ok) return { ok: false, code: 'quote_failed', error: 'Không tính được cước cho tuyến này' };
 
@@ -94,5 +96,10 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     parts, serviceLabel: SERVICE_LABEL[service],
   });
 
-  return { ok: true, estimate: { chargedVnd, currency: 'VND', provisional: true, service, lines, notes: neutralNotes() } };
+  const notes = neutralNotes();
+  if (res.breakdown.residential > 0) {
+    notes.push('Địa chỉ nhà dân (US/CA) — đã gồm phụ phí giao nhà dân của hãng.');
+  }
+
+  return { ok: true, estimate: { chargedVnd, currency: 'VND', provisional: true, service, lines, notes } };
 }
