@@ -55,10 +55,11 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
 ```
 - Bắt buộc: `brandSlug`, `parcel.country` (ISO-2), `parcel.weightKg` > 0.
 - Tùy chọn: `city`, `postcode`, `dim*`, `packagingType` (`"bag" | "box"`), `service` (`"express"` mặc định; `"standard"` → `422 service_unavailable`).
-- Tùy chọn — **Direct Signature & Residential (Pha 2):**
-  - `directSignature` (boolean, mặc định `false`) — brand yêu cầu ký nhận trực tiếp không. Chỉ áp khi nước hỗ trợ dịch vụ.
-  - `streetLines` (string[], Pha 2) — dòng địa chỉ chi tiết để SMS xác thực nhà dân vs công ty qua FedEx API. Chưa gửi → Pha 1 mặc định US/CA là nhà dân.
-  - `stateOrProvinceCode` (string, Pha 2) — tỉnh/bang để validation. Tùy chọn, dùng kèm `streetLines`.
+- Tùy chọn — **Direct Signature (Pha 1, đang chạy):**
+  - `directSignature` (boolean, mặc định `false`) — brand yêu cầu ký nhận trực tiếp không. Chỉ cộng phí khi `= true` VÀ nước hỗ trợ dịch vụ (`directSignatureAvailable` trong response).
+- Tùy chọn — **Residential chính xác (Pha 2, khi MMP gửi street):**
+  - `streetLines` (string[]) — dòng địa chỉ chi tiết để SMS xác thực nhà dân vs công ty qua FedEx API. Chưa gửi → Pha 1 mặc định US/CA là nhà dân.
+  - `stateOrProvinceCode` (string) — tỉnh/bang để validation. Tùy chọn, dùng kèm `streetLines`.
 
 **Response 200**
 ```json
@@ -87,7 +88,7 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
 ```
 - `lines` cộng lại = `chargedVnd` (hiển thị trực tiếp cho brand).
 - `directSignatureAvailable` (boolean) — nước đích có hỗ trợ ký nhận trực tiếp không. **MMP chỉ hiển thị toggle "Yêu cầu ký nhận" khi = `true`.**
-- `directSignatureFeeVnd` (number) — phí ký nhận (92700₫/đơn) để MMP hiển thị nhãn. **Chỉ cộng vào `chargedVnd` nếu `directSignature=true` ở request VÀ nước hỗ trợ.** Mặc định gồm trong giá; nếu brand không chọn ký nhận, loại ra.
+- `directSignatureFeeVnd` (number) — phí ký nhận (92700₫/đơn) để MMP hiển thị nhãn. **Chỉ cộng vào `chargedVnd` khi `directSignature=true` ở request VÀ nước hỗ trợ.** Mặc định (`false`/omit) KHÔNG gồm phí này.
 
 **Lỗi**
 | HTTP | `code` | Ý nghĩa |
