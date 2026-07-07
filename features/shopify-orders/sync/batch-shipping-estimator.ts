@@ -24,6 +24,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote, type CarrierAccountSnapshot } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
+import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-signature';
 
 /** What the estimator falls back to when the order has no detectable
  *  shipping line (Shopify dropped it, free/manual fulfilment, pickup).
@@ -175,6 +176,7 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
         destinationPostcode: postcode ?? undefined,
         destinationCity: city ?? undefined,
         effectiveDate,
+        signatureOptIn: countrySupportsDirectSignature(country),
       });
       if (!q.ok) continue;
       const display = q.breakdown.carrierCostDisplay;
