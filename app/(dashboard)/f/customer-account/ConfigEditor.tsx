@@ -25,7 +25,7 @@ interface Props {
 }
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
-  tracking: 'Order Tracking (Journey)', wishlist: 'Wishlist',
+  tracking: 'Order Tracking (Journey)', wishlist: 'Wishlist', quiz: 'Style Quiz',
 };
 
 const CHECKER = 'bg-muted [background-image:repeating-conic-gradient(theme(colors.border)_0_25%,transparent_0_50%)] [background-size:12px_12px]';

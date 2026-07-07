@@ -1,7 +1,7 @@
 /** THUẦN: shape + sanitize config Customer Account (jsonb → typed). */
 import { z } from 'zod';
 
-export const MODULE_KEYS = ['tracking', 'wishlist'] as const;
+export const MODULE_KEYS = ['tracking', 'wishlist', 'quiz'] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 const brandingSchema = z.object({
