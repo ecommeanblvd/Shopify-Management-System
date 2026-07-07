@@ -684,6 +684,12 @@
       "when": 1784983200000,
       "tag": "0099_shipho-customer-ref",
       "breakpoints": true
+    },{
+      "idx": 100,
+      "version": "7",
+      "when": 1785069600000,
+      "tag": "0100_shipho-recipient-email",
+      "breakpoints": true
     }
   ]
 }

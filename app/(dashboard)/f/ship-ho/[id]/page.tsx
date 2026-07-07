@@ -39,7 +39,8 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         <div><span className="text-muted-foreground">Đối tác</span><div>{o.partnerBrandSlug}</div></div>
         <div><span className="text-muted-foreground">Trạng thái</span><div>{o.status}</div></div>
         <div><span className="text-muted-foreground">Người nhận</span><div>{o.recipientName ?? '—'}</div></div>
-        <div><span className="text-muted-foreground">Đến</span><div>{[o.address1, o.city, o.postcode, o.country].filter(Boolean).join(', ')}</div></div>
+        <div><span className="text-muted-foreground">Liên hệ</span><div>{[o.recipientEmail, o.recipientPhone].filter(Boolean).join(' · ') || '—'}</div></div>
+        <div><span className="text-muted-foreground">Đến</span><div>{[o.address1, o.city, o.province, o.postcode, o.country].filter(Boolean).join(', ')}</div></div>
         {o.houseNumber && <div><span className="text-muted-foreground">House Number</span><div>{o.houseNumber}</div></div>}
         {o.shortAddress && <div><span className="text-muted-foreground">Short Address</span><div>{o.shortAddress}</div></div>}
         {o.mapsUrl && <div><span className="text-muted-foreground">Google Maps</span><div><a href={o.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">{o.mapsUrl}</a></div></div>}

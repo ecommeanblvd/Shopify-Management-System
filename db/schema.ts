@@ -1956,6 +1956,7 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   recipientName: text('recipient_name'),
   recipientCompany: text('recipient_company'),
   recipientPhone: text('recipient_phone'),
+  recipientEmail: text('recipient_email'),
   country: text('country').notNull(),
   city: text('city'),
   province: text('province'),

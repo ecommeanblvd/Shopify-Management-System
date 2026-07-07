@@ -9,9 +9,10 @@ export interface BrandOrderInput {
   brandSlug: string;
   mmpRef: string;
   customerRef?: string;
-  recipient?: { name?: string; phone?: string };
+  recipient?: { name?: string; phone?: string; email?: string };
   address: {
-    country: string; city?: string; province?: string; postcode?: string;
+    // MMP gửi `state` (chuẩn spec mới); nhận cả `province` để tương thích ngược.
+    country: string; city?: string; state?: string; province?: string; postcode?: string;
     address1?: string; address2?: string;
     houseNumber?: string; shortAddress?: string; mapsUrl?: string;
   };
@@ -60,8 +61,10 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
       code: input.mmpRef, partnerBrandSlug: input.brandSlug,
       source: 'mmp', mmpRef: input.mmpRef, customerRef: input.customerRef || null, service: 'express',
       recipientName: input.recipient?.name || null, recipientPhone: input.recipient?.phone || null,
+      recipientEmail: input.recipient?.email || null,
       country: input.address.country.trim().toUpperCase(), city: input.address.city || null,
-      province: input.address.province || null, postcode: input.address.postcode || null,
+      // Bang/tỉnh: MMP gửi `state`; fallback `province` cho payload cũ.
+      province: input.address.state || input.address.province || null, postcode: input.address.postcode || null,
       address1: input.address.address1 || null, address2: input.address.address2 || null,
       houseNumber: extra.normalized.houseNumber ?? null, shortAddress: extra.normalized.shortAddress ?? null, mapsUrl: extra.normalized.mapsUrl ?? null,
       weightKg: String(input.parcel.weightKg),
