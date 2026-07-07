@@ -8,6 +8,7 @@ import { emitShipHoEvent } from './mmp-events';
 export interface BrandOrderInput {
   brandSlug: string;
   mmpRef: string;
+  customerRef?: string;
   recipient?: { name?: string; phone?: string };
   address: {
     country: string; city?: string; province?: string; postcode?: string;
@@ -57,7 +58,7 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
   try {
     const [row] = await db.insert(schema.shipHoOrders).values({
       code: input.mmpRef, partnerBrandSlug: input.brandSlug,
-      source: 'mmp', mmpRef: input.mmpRef, service: 'express',
+      source: 'mmp', mmpRef: input.mmpRef, customerRef: input.customerRef || null, service: 'express',
       recipientName: input.recipient?.name || null, recipientPhone: input.recipient?.phone || null,
       country: input.address.country.trim().toUpperCase(), city: input.address.city || null,
       province: input.address.province || null, postcode: input.address.postcode || null,

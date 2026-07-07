@@ -1975,6 +1975,7 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   // Brand self-service (MMP)
   source: text('source').notNull().default('internal'), // 'internal' | 'mmp'
   mmpRef: text('mmp_ref'),
+  customerRef: text('customer_ref'),
   service: text('service'), // 'express' | 'standard'
   mmpOrderSeq: bigint('mmp_order_seq', { mode: 'number' }),
   // Carrier
