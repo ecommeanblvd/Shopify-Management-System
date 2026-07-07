@@ -4,6 +4,7 @@ import { listAccounts } from '@/features/carrier-rates/actions';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { isDefaultResidential } from '@/features/carrier-rates/residential-default';
+import { countrySupportsDirectSignature, DIRECT_SIGNATURE_FEE_VND, shouldChargeDirectSignature } from '@/features/carrier-rates/direct-signature';
 import { pickCarrierCostVnd, pickBaseVnd } from './quote-adapter';
 import { computeBrandCharge } from './brand-pricing';
 
@@ -15,12 +16,15 @@ export interface EstimateParcel {
   dimLengthCm?: number; dimWidthCm?: number; dimHeightCm?: number;
   packagingType?: 'bag' | 'box' | null;
   service?: ShipHoService;
+  directSignature?: boolean;
 }
 
 export interface BrandEstimate {
   chargedVnd: number; currency: 'VND'; provisional: true; service: ShipHoService;
   lines: { label: string; amountVnd: number }[];
   notes: string[];
+  directSignatureAvailable: boolean;
+  directSignatureFeeVnd: number;
 }
 
 export type EstimateResult =
@@ -72,6 +76,7 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     destinationCountry: country,
     destinationPostcode: parcel.postcode, destinationCity: parcel.city,
     isResidential: isDefaultResidential(country),
+    signatureOptIn: shouldChargeDirectSignature(parcel.directSignature ?? false, country),
   });
   if (!res.ok) return { ok: false, code: 'quote_failed', error: 'Không tính được cước cho tuyến này' };
 
@@ -101,5 +106,12 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     notes.push('Địa chỉ nhà dân (US/CA) — đã gồm phụ phí giao nhà dân của hãng.');
   }
 
-  return { ok: true, estimate: { chargedVnd, currency: 'VND', provisional: true, service, lines, notes } };
+  return {
+    ok: true,
+    estimate: {
+      chargedVnd, currency: 'VND', provisional: true, service, lines, notes,
+      directSignatureAvailable: countrySupportsDirectSignature(country),
+      directSignatureFeeVnd: DIRECT_SIGNATURE_FEE_VND,
+    },
+  };
 }

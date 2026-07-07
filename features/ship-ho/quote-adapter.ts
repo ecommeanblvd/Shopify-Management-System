@@ -14,6 +14,7 @@ export interface ShipHoQuoteInput {
   destinationCountry: string;
   destinationPostcode?: string;
   destinationCity?: string;
+  signatureOptIn?: boolean;
 }
 
 export type ShipHoQuoteResult =
@@ -58,6 +59,7 @@ export async function quoteShipHoOrder(input: ShipHoQuoteInput): Promise<ShipHoQ
     destinationCountry: input.destinationCountry,
     destinationPostcode: input.destinationPostcode,
     destinationCity: input.destinationCity,
+    signatureOptIn: input.signatureOptIn ?? false,
   });
   if (!res.ok) return { ok: false, reason: res.code };
 

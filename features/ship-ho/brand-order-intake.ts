@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
+import { countrySupportsDirectSignature, DIRECT_SIGNATURE_FEE_VND } from '@/features/carrier-rates/direct-signature';
 import { estimateForBrand, neutralNotes, type EstimateParcel, type BrandEstimate, type ShipHoService } from './brand-estimate';
 import { nextBrandOrderCode } from './brand-order-code';
 import { emitShipHoEvent } from './mmp-events';
@@ -38,6 +39,8 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
         service: (existing.service as ShipHoService) ?? 'express',
         lines: [{ label: 'Tổng giá dự kiến', amountVnd: total }],
         notes: neutralNotes(),
+        directSignatureAvailable: countrySupportsDirectSignature(existing.country),
+        directSignatureFeeVnd: DIRECT_SIGNATURE_FEE_VND,
       },
     };
   }

@@ -17,3 +17,8 @@ const SET = new Set(FEDEX_DIRECT_SIGNATURE_COUNTRIES);
 export function countrySupportsDirectSignature(iso: string): boolean {
   return SET.has(iso.trim().toUpperCase());
 }
+
+/** THUẦN: brand có muốn DS và nước đích có hỗ trợ không → mới tính phí. */
+export function shouldChargeDirectSignature(wantDS: boolean, country: string): boolean {
+  return wantDS && countrySupportsDirectSignature(country);
+}
