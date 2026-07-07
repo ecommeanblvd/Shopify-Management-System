@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
+import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -28,8 +29,9 @@ export default async function ShipHoListPage({
   }
   const sp = await searchParams;
   const sourceFilter = sp['source'] === 'mmp' ? 'mmp' : null;
+  const q = typeof sp['q'] === 'string' ? sp['q'] : undefined;
   const allOrders = await listShipHoOrders();
-  const orders = sourceFilter ? allOrders.filter((o) => o.source === 'mmp') : allOrders;
+  const orders = filterShipHoOrders(allOrders, { q, source: sourceFilter ?? undefined });
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -52,23 +54,29 @@ export default async function ShipHoListPage({
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
         </div>
       </div>
+      <form className="mb-4" action="/f/ship-ho">
+        {sourceFilter && <input type="hidden" name="source" value="mmp" />}
+        <input name="q" defaultValue={q ?? ''} placeholder="Tìm mã đơn / mã gốc / tracking / brand…"
+          className="w-full max-w-md rounded border px-3 py-2 text-sm" />
+      </form>
       <Card>
         <CardContent className="p-0">
           <table className="w-full text-sm">
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:text-left [&>th]:p-3">
-                <th>Mã</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th><th>Cước gốc</th><th>Giá thu</th><th>Trạng thái</th>
+                <th>Mã</th><th>Mã đơn gốc</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th><th>Cước gốc</th><th>Giá thu</th><th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
               ) : orders.map((o) => (
                 <tr key={o.id} className="border-b hover:bg-muted/40 [&>td]:p-3">
                   <td>
                     <Link href={`/f/ship-ho/${o.id}`} className="font-medium underline-offset-2 hover:underline">{o.code}</Link>
                     {o.source === 'mmp' && <span className="ml-2 rounded bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5">MMP</span>}
                   </td>
+                  <td className="text-muted-foreground">{o.customerRef ?? '—'}</td>
                   <td>{o.brandName ?? o.partnerBrandSlug}</td>
                   <td>{o.country}</td>
                   <td>{o.weightKg} kg</td>

@@ -127,7 +127,8 @@ Gọi khi brand xác nhận tạo đơn. **SMS sinh mã đơn mới** và trả 
 ```json
 {
   "brandSlug": "kalisa",
-  "mmpRef": "MMP-ORDER-000123",
+  "mmpRef": "26-INSLG-SV-000123",
+  "customerRef": "ORD-BRAND-2024-001",
   "recipient": { "name": "Nguyen A", "phone": "+966 5xxxxxxx" },
   "address": {
     "country": "SA",
@@ -145,7 +146,8 @@ Gọi khi brand xác nhận tạo đơn. **SMS sinh mã đơn mới** và trả 
   }
 }
 ```
-- Bắt buộc: `brandSlug`, `mmpRef` (id đơn phía MMP — dùng để **idempotency**), `address.country`, `parcel.weightKg`.
+- Bắt buộc: `brandSlug`, `mmpRef` (mã đơn hệ thống MMP tạo — **dùng làm `code` hiển thị ở danh sách; cũng dùng để idempotency**), `address.country`, `parcel.weightKg`.
+- Tùy chọn: `customerRef` (mã đơn gốc của khách/brand để đối soát/track — SMS hiển thị cột "Mã đơn gốc"; nếu không gửi, cột để trống —).
 - **Trường địa chỉ theo quốc gia** (bắt buộc theo nước):
   - **SA (Saudi Arabia):** cần `shortAddress` (định dạng 4 chữ + 4 số, vd `RBMA4176`) **hoặc** `mapsUrl` (link http/https).
   - **AE, QA, KW, BH, OM:** cần `houseNumber`.
@@ -153,10 +155,10 @@ Gọi khi brand xác nhận tạo đơn. **SMS sinh mã đơn mới** và trả 
 
 **Response 200**
 ```json
-{ "ok": true, "orderId": "uuid", "code": "SH1000", "idempotent": false, "estimate": { /* như mục 2 */ } }
+{ "ok": true, "orderId": "uuid", "code": "26-INSLG-SV-000123", "idempotent": false, "estimate": { /* như mục 2 */ } }
 ```
 - Gửi lại cùng `mmpRef` → trả đơn cũ với `idempotent: true` (không tạo trùng).
-- `code` là **mã đơn SMS** (hiện dạng tạm `SH{n}`; sẽ đổi theo format chính thức sau — MMP luôn map theo `mmpRef`).
+- `code` **bằng đúng `mmpRef`** đã gửi (mã MMP tạo, `26-INSLG-SV-XXXX`) — SMS dùng làm mã đơn hiển thị. MMP map theo `mmpRef` (= `code`).
 
 **Lỗi:** như mục 2 (`400/401/403/422`) + `bad_input` khi thiếu trường địa chỉ theo nước.
 
