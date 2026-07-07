@@ -3,7 +3,7 @@ import { computeBrandCharge } from './brand-pricing';
 
 const STD = {
   carrierCostVnd: 151632, baseVnd: 100000, fuelPercent: 17, vatPercent: 8, markupPercent: 30,
-  parts: { surchargesVnd: 20000, fuelRealVnd: 20400, vatRealVnd: 11232 },
+  parts: { surchargesVnd: 20000, residentialVnd: 0, directSignatureVnd: 0, fuelRealVnd: 20400, vatRealVnd: 11232 },
   serviceLabel: 'Express Delivery',
 };
 
@@ -39,12 +39,44 @@ describe('computeBrandCharge (Option A: fuel/VAT trên base markup + phí xử l
   it('fuel 0, vat 0 → margin base×markup, phí xử lý 50k phẳng', () => {
     const r = computeBrandCharge({
       carrierCostVnd: 120000, baseVnd: 100000, fuelPercent: 0, vatPercent: 0, markupPercent: 30,
-      parts: { surchargesVnd: 20000, fuelRealVnd: 0, vatRealVnd: 0 },
+      parts: { surchargesVnd: 20000, residentialVnd: 0, directSignatureVnd: 0, fuelRealVnd: 0, vatRealVnd: 0 },
       serviceLabel: 'Express Delivery',
     });
     expect(r.chargedVnd).toBe(200000); // 120000 + 30000 + 50000
     expect(r.lines.find((l) => l.label === 'Phí xử lý đơn hàng')!.amountVnd).toBe(50000);
     expect(r.lines.find((l) => l.label === 'VAT')!.amountVnd).toBe(0);
+    expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
+  });
+
+  it('tách dòng riêng: Phí giao nhà dân + Ký nhận trực tiếp khi > 0, tổng vẫn == chargedVnd', () => {
+    const r = computeBrandCharge({
+      ...STD,
+      parts: { surchargesVnd: 68300, residentialVnd: 84400, directSignatureVnd: 92700, fuelRealVnd: 20400, vatRealVnd: 11232 },
+    });
+    expect(r.lines).toContainEqual({ label: 'Phụ phí vùng/địa chỉ', amountVnd: 68300 });
+    expect(r.lines).toContainEqual({ label: 'Phí giao nhà dân', amountVnd: 84400 });
+    expect(r.lines).toContainEqual({ label: 'Ký nhận trực tiếp (Direct Signature)', amountVnd: 92700 });
+    expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
+  });
+
+  it('ẩn dòng phụ phí = 0: không chọn ký nhận → KHÔNG có dòng Direct Signature; nước không nhà dân → KHÔNG có dòng Phí giao nhà dân', () => {
+    const r = computeBrandCharge({
+      ...STD,
+      parts: { surchargesVnd: 20000, residentialVnd: 0, directSignatureVnd: 0, fuelRealVnd: 20400, vatRealVnd: 11232 },
+    });
+    expect(r.lines.some((l) => l.label === 'Ký nhận trực tiếp (Direct Signature)')).toBe(false);
+    expect(r.lines.some((l) => l.label === 'Phí giao nhà dân')).toBe(false);
+    // dòng phụ phí vùng/địa chỉ vẫn còn vì > 0
+    expect(r.lines).toContainEqual({ label: 'Phụ phí vùng/địa chỉ', amountVnd: 20000 });
+  });
+
+  it('phụ phí vùng/địa chỉ = 0 thì ẩn luôn (đúng và đủ, không dòng thừa)', () => {
+    const r = computeBrandCharge({
+      ...STD,
+      parts: { surchargesVnd: 0, residentialVnd: 0, directSignatureVnd: 92700, fuelRealVnd: 20400, vatRealVnd: 11232 },
+    });
+    expect(r.lines.some((l) => l.label === 'Phụ phí vùng/địa chỉ')).toBe(false);
+    expect(r.lines).toContainEqual({ label: 'Ký nhận trực tiếp (Direct Signature)', amountVnd: 92700 });
     expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
   });
 });

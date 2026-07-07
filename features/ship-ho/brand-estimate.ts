@@ -88,10 +88,17 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   }
 
   const b = res.breakdown;
+  // Tách phụ phí thành 3 nhóm để hiển thị dòng riêng: nhà dân (residential),
+  // ký nhận (Direct Signature = addons), và phụ phí vùng/địa chỉ CHUNG còn lại.
   const surchargesVnd = Math.round(
-    (b.remote + b.residential + b.perKg + b.demand + b.countryFixed + b.perStep + b.peak + b.addons) * factor,
+    (b.remote + b.perKg + b.demand + b.countryFixed + b.perStep + b.peak) * factor,
   );
-  const parts = { surchargesVnd, fuelRealVnd: Math.round(b.fuel * factor), vatRealVnd: Math.round(b.vat * factor) };
+  const residentialVnd = Math.round(b.residential * factor);
+  const directSignatureVnd = Math.round(b.addons * factor);
+  const parts = {
+    surchargesVnd, residentialVnd, directSignatureVnd,
+    fuelRealVnd: Math.round(b.fuel * factor), vatRealVnd: Math.round(b.vat * factor),
+  };
 
   // Ship hộ KHÔNG có phí đóng gói (b.packaging của engine bỏ qua). Thay bằng phí
   // xử lý đơn hàng cố định (chịu VAT), cộng trong computeBrandCharge.

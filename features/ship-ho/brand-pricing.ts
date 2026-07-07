@@ -11,7 +11,16 @@
  */
 import { ORDER_PROCESSING_FEE_VND, processingFeeWithVat } from './offer-pricing';
 
-export interface BrandChargeParts { surchargesVnd: number; fuelRealVnd: number; vatRealVnd: number }
+export interface BrandChargeParts {
+  /** Phụ phí vùng/địa chỉ CHUNG (remote, xử lý hàng nhập, demand, per-kg, per-step, peak). */
+  surchargesVnd: number;
+  /** Phí giao nhà dân (residential) — tách dòng riêng cho brand thấy rõ. */
+  residentialVnd: number;
+  /** Phí ký nhận trực tiếp (Direct Signature) — tách dòng riêng, chỉ khi brand chọn. */
+  directSignatureVnd: number;
+  fuelRealVnd: number;
+  vatRealVnd: number;
+}
 export interface BrandChargeLine { label: string; amountVnd: number }
 
 export function computeBrandCharge(input: {
@@ -31,16 +40,23 @@ export function computeBrandCharge(input: {
 
   const markedBase = Math.round(baseVnd * (1 + m));
   const surLine = Math.round(parts.surchargesVnd);
+  const residentialLine = Math.round(parts.residentialVnd);
+  const dsLine = Math.round(parts.directSignatureVnd);
   const fuelLine = Math.round(parts.fuelRealVnd + f * deltaBase);
-  // VAT là dòng residual → gộp cả VAT của phí xử lý; tổng khớp tuyệt đối.
-  const vatLine = chargedVnd - markedBase - surLine - fuelLine - processingExVat;
+  // VAT là dòng residual → gộp cả VAT của phí xử lý + mọi phụ phí đã tách;
+  // tổng lines khớp chargedVnd tuyệt đối bất kể tách bao nhiêu dòng.
+  const vatLine = chargedVnd - markedBase - surLine - residentialLine - dsLine - fuelLine - processingExVat;
 
+  // Tách từng loại phụ phí thành dòng riêng (chỉ hiện khi > 0) để brand thấy
+  // ĐÚNG và ĐỦ các khoản. Dòng chung/fuel/xử lý/VAT luôn hiện.
   const lines: BrandChargeLine[] = [
     { label: `Cước cơ bản (${serviceLabel})`, amountVnd: markedBase },
-    { label: 'Phụ phí vùng/địa chỉ', amountVnd: surLine },
-    { label: 'Phụ phí xăng dầu', amountVnd: fuelLine },
-    { label: 'Phí xử lý đơn hàng', amountVnd: processingExVat },
-    { label: 'VAT', amountVnd: vatLine },
   ];
+  if (surLine > 0) lines.push({ label: 'Phụ phí vùng/địa chỉ', amountVnd: surLine });
+  if (residentialLine > 0) lines.push({ label: 'Phí giao nhà dân', amountVnd: residentialLine });
+  if (dsLine > 0) lines.push({ label: 'Ký nhận trực tiếp (Direct Signature)', amountVnd: dsLine });
+  lines.push({ label: 'Phụ phí xăng dầu', amountVnd: fuelLine });
+  lines.push({ label: 'Phí xử lý đơn hàng', amountVnd: processingExVat });
+  lines.push({ label: 'VAT', amountVnd: vatLine });
   return { chargedVnd, lines };
 }

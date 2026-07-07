@@ -73,7 +73,10 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
     "lines": [
       { "label": "Cước cơ bản (Express Delivery)", "amountVnd": 130000 },
       { "label": "Phụ phí vùng/địa chỉ", "amountVnd": 20000 },
+      { "label": "Phí giao nhà dân", "amountVnd": 84400 },
+      { "label": "Ký nhận trực tiếp (Direct Signature)", "amountVnd": 92700 },
       { "label": "Phụ phí xăng dầu", "amountVnd": 25500 },
+      { "label": "Phí xử lý đơn hàng", "amountVnd": 50000 },
       { "label": "VAT", "amountVnd": 14040 }
     ],
     "notes": [
@@ -86,7 +89,7 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
   }
 }
 ```
-- `lines` cộng lại = `chargedVnd` (hiển thị trực tiếp cho brand).
+- `lines` cộng lại = `chargedVnd` (hiển thị trực tiếp cho brand). Các dòng phụ phí tách RIÊNG khi > 0 để minh bạch: **"Phí giao nhà dân"** (residential) và **"Ký nhận trực tiếp (Direct Signature)"** chỉ xuất hiện khi thực sự áp; nếu = 0 thì ẩn. `lines` là danh sách động — MMP render nguyên si theo thứ tự trả về.
 - `directSignatureAvailable` (boolean) — nước đích có hỗ trợ ký nhận trực tiếp không. **MMP chỉ hiển thị toggle "Yêu cầu ký nhận" khi = `true`.**
 - `directSignatureFeeVnd` (number) — phí ký nhận (92700₫/đơn) để MMP hiển thị nhãn. **Chỉ cộng vào `chargedVnd` khi `directSignature=true` ở request VÀ nước hỗ trợ.** Mặc định (`false`/omit) KHÔNG gồm phí này.
 
