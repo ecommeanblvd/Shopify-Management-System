@@ -15,6 +15,16 @@ export const ARAMEX_VAT_PERCENT = 8;
 export const ARAMEX_DEFAULT_FUEL_PERCENT = 30;
 export const ARAMEX_SURCHARGE_NOTE_PREFIX = 'Aramex phụ phí 01/02/2024';
 
+/** Nước áp phụ phí Residential (CEO chốt): Mỹ, Canada, EU-27, Anh. Ngoài danh
+ *  sách này → không thu residential dù đích là nhà dân. */
+export const ARAMEX_RESIDENTIAL_COUNTRIES = [
+  'US', 'CA', 'GB',
+  // EU-27
+  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR',
+  'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK',
+  'SI', 'ES', 'SE',
+];
+
 export interface AramexSurcharge {
   kind: 'addon_fixed' | 'residential_fixed' | 'remote_fixed' | 'country_fixed';
   rawUsd: number;
@@ -30,7 +40,8 @@ export interface AramexSurcharge {
 /** 9 phụ phí công văn — RAW USD (nguồn sự thật, dùng để re-bake khi fuel đổi). */
 export const ARAMEX_SURCHARGES: AramexSurcharge[] = [
   { kind: 'addon_fixed', rawUsd: 15, fuelable: true, applyMode: 'when_billed', label: 'Sai địa chỉ (Bad address)' },
-  { kind: 'residential_fixed', rawUsd: 6.0, fuelable: true, applyMode: 'always', label: 'Địa chỉ khu dân cư (Residential)' },
+  { kind: 'residential_fixed', rawUsd: 6.0, fuelable: true, applyMode: 'always',
+    countryCodes: ARAMEX_RESIDENTIAL_COUNTRIES, label: 'Địa chỉ khu dân cư (Residential) — US/CA/EU/UK' },
   { kind: 'remote_fixed', rawUsd: 30, rawPerKg: 0.5, fuelable: true, applyMode: 'always', label: 'Vùng sâu vùng xa (Remote) max(30 USD/lô, 0.5 USD/kg)' },
   { kind: 'addon_fixed', rawUsd: 110, fuelable: true, applyMode: 'when_billed', label: 'Kiện quá trọng tải ≥70kg (Over Weight)/kiện' },
   { kind: 'addon_fixed', rawUsd: 82.5, fuelable: true, applyMode: 'when_billed', label: 'Kiện ngoại cỡ ≥120cm (Over Sized)/kiện' },

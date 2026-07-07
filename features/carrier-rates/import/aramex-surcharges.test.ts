@@ -35,6 +35,17 @@ describe('bakeAramexSurcharges', () => {
     expect(ddp30.value).toBe(32.4);
     expect(ddp34.value).toBe(32.4);
   });
+  it('residential surcharge is scoped to US/CA/EU/UK only', () => {
+    const res = bakeAramexSurcharges(30).find((r) => r.kind === 'residential_fixed')!;
+    expect(res.value).toBe(8.42);
+    expect(res.countryCodes).not.toBeNull();
+    expect(res.countryCodes).toEqual(expect.arrayContaining(['US', 'CA', 'GB', 'DE', 'FR']));
+    expect(res.countryCodes).toHaveLength(30); // US, CA, GB + EU-27
+    // ngoài danh sách → không có
+    expect(res.countryCodes).not.toContain('VN');
+    expect(res.countryCodes).not.toContain('AU');
+  });
+
   it('country_fixed rows carry their embargo/risk country lists', () => {
     const rows = bakeAramexSurcharges(30);
     const cf = rows.filter((r) => r.kind === 'country_fixed');
