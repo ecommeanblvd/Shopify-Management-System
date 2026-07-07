@@ -3,7 +3,6 @@ import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { countrySupportsDirectSignature, DIRECT_SIGNATURE_FEE_VND } from '@/features/carrier-rates/direct-signature';
 import { estimateForBrand, neutralNotes, type EstimateParcel, type BrandEstimate, type ShipHoService } from './brand-estimate';
-import { nextBrandOrderCode } from './brand-order-code';
 import { emitShipHoEvent } from './mmp-events';
 
 export interface BrandOrderInput {
@@ -55,12 +54,10 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
   });
   if (!extra.ok) return { ok: false, code: 'bad_input', error: extra.error ?? 'Thiếu thông tin địa chỉ' };
 
-  const { code, seq } = await nextBrandOrderCode();
-
   try {
     const [row] = await db.insert(schema.shipHoOrders).values({
-      code, partnerBrandSlug: input.brandSlug,
-      source: 'mmp', mmpRef: input.mmpRef, mmpOrderSeq: seq, service: 'express',
+      code: input.mmpRef, partnerBrandSlug: input.brandSlug,
+      source: 'mmp', mmpRef: input.mmpRef, service: 'express',
       recipientName: input.recipient?.name || null, recipientPhone: input.recipient?.phone || null,
       country: input.address.country.trim().toUpperCase(), city: input.address.city || null,
       province: input.address.province || null, postcode: input.address.postcode || null,
@@ -76,11 +73,11 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
     }).returning({ id: schema.shipHoOrders.id });
 
     await emitShipHoEvent(
-      { id: row.id, code, source: 'mmp', mmpRef: input.mmpRef },
+      { id: row.id, code: input.mmpRef, source: 'mmp', mmpRef: input.mmpRef },
       'order.received', { chargedVnd: est.estimate.chargedVnd },
     );
 
-    return { ok: true, orderId: row.id, code, estimate: est.estimate };
+    return { ok: true, orderId: row.id, code: input.mmpRef, estimate: est.estimate };
   } catch (e) {
     // Race: concurrent duplicate mmp_ref rejected by the unique index → trả đơn đã tồn tại (idempotent).
     const [dup] = await db.select().from(schema.shipHoOrders)
