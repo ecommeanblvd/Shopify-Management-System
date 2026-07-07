@@ -732,6 +732,12 @@ export const shopifyOrders = pgTable('shopify_orders', {
   shipAddress1: text('ship_address1'),
   shipAddress2: text('ship_address2'),
   shipProvinceCode: text('ship_province_code'),
+  // Carrier logistic staff CHỌN để đi hàng (quyết định outbound) — KHÁC
+  // shipping_carrier_key (carrier khách trả, sync re-derive mỗi lần). Sync
+  // KHÔNG đụng 3 cột này.
+  selectedCarrierKey: text('selected_carrier_key'),
+  selectedCarrierAt: timestamp('selected_carrier_at'),
+  selectedCarrierBy: text('selected_carrier_by'),
   shipName: text('ship_name'),
   shipCompany: text('ship_company'),
   // Kết quả verify FedEx Address Validation: phân loại + giao được + vấn đề.

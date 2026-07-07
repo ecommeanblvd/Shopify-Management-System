@@ -696,6 +696,12 @@
       "when": 1785156000000,
       "tag": "0101_style-quiz-results",
       "breakpoints": true
+    },{
+      "idx": 102,
+      "version": "7",
+      "when": 1785242400000,
+      "tag": "0102_order-selected-carrier",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getOrderDetailModal, type OrderModalData } from '@/features/fulfillment/order-modal';
+import { CarrierComparePanel } from './CarrierComparePanel';
 
 function fmtDate(iso: string | null): string {
   if (!iso || iso.length < 10) return '—';
@@ -90,6 +91,8 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string | null
                 ))}
               </div>
             )}
+
+            {orderId && <CarrierComparePanel orderId={orderId} />}
 
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Lark (vận hành)</div>
