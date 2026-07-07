@@ -46,12 +46,19 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
     "dimWidthCm": 20,
     "dimHeightCm": 10,
     "packagingType": "box",
-    "service": "express"
+    "service": "express",
+    "directSignature": false,
+    "streetLines": ["123 Main St", "Apt 4B"],
+    "stateOrProvinceCode": "NY"
   }
 }
 ```
 - Bắt buộc: `brandSlug`, `parcel.country` (ISO-2), `parcel.weightKg` > 0.
 - Tùy chọn: `city`, `postcode`, `dim*`, `packagingType` (`"bag" | "box"`), `service` (`"express"` mặc định; `"standard"` → `422 service_unavailable`).
+- Tùy chọn — **Direct Signature & Residential (Pha 2):**
+  - `directSignature` (boolean, mặc định `false`) — brand yêu cầu ký nhận trực tiếp không. Chỉ áp khi nước hỗ trợ dịch vụ.
+  - `streetLines` (string[], Pha 2) — dòng địa chỉ chi tiết để SMS xác thực nhà dân vs công ty qua FedEx API. Chưa gửi → Pha 1 mặc định US/CA là nhà dân.
+  - `stateOrProvinceCode` (string, Pha 2) — tỉnh/bang để validation. Tùy chọn, dùng kèm `streetLines`.
 
 **Response 200**
 ```json
@@ -72,11 +79,15 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
       "Giá dự kiến theo cân nặng & kích thước khai báo; hóa đơn cuối tính theo cân & phụ phí thực tế.",
       "Phụ phí xăng dầu áp theo tuần giao hàng của đơn vị vận chuyển.",
       "Đã gồm VAT."
-    ]
+    ],
+    "directSignatureAvailable": true,
+    "directSignatureFeeVnd": 92700
   }
 }
 ```
 - `lines` cộng lại = `chargedVnd` (hiển thị trực tiếp cho brand).
+- `directSignatureAvailable` (boolean) — nước đích có hỗ trợ ký nhận trực tiếp không. **MMP chỉ hiển thị toggle "Yêu cầu ký nhận" khi = `true`.**
+- `directSignatureFeeVnd` (number) — phí ký nhận (92700₫/đơn) để MMP hiển thị nhãn. **Chỉ cộng vào `chargedVnd` nếu `directSignature=true` ở request VÀ nước hỗ trợ.** Mặc định gồm trong giá; nếu brand không chọn ký nhận, loại ra.
 
 **Lỗi**
 | HTTP | `code` | Ý nghĩa |
@@ -87,6 +98,22 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
 | 422 | `quote_failed` | không tính được cước tuyến này |
 | 422 | `no_carrier` | chưa cấu hình dịch vụ |
 | 422 | `service_unavailable` | `standard` chưa mở |
+
+### Ghi chú: Residential & Direct Signature
+
+**Residential (phân loại nhà dân/công ty):**
+- **Pha 1 (hiện tại):** Mặc định US/CA = nhà dân (phụ phí nhà dân đã gồm trong cước). Các nước khác = công ty.
+- **Pha 2 (khi MMP gửi `streetLines`):** SMS xác thực chính xác từng địa chỉ qua FedEx Address Validation API; phí nhà dân chỉ cộng khi địa chỉ là nhà dân thực tế.
+
+**Direct Signature (ký nhận trực tiếp):**
+- Chỉ áp dụng nước hỗ trợ (kiểm `directSignatureAvailable` trong response).
+- Khi brand chọn `directSignature: true` ở request:
+  - SMS cộng thêm `directSignatureFeeVnd` (92700₫) vào cước.
+  - `chargedVnd` trong response = cước cơ bản + phụ phí + phí ký nhận + VAT.
+- Khi brand không chọn (`directSignature: false` hoặc omit):
+  - MMP **không cộng phí ký nhận**.
+  - `chargedVnd` = cước cơ bản + phụ phí (không gồm ký nhận) + VAT.
+- MMP chỉ hiển thị tùy chọn "Yêu cầu ký nhận" khi `directSignatureAvailable: true`.
 
 ## 3. Tạo đơn — `POST /api/mmp/ship-ho/orders`
 
