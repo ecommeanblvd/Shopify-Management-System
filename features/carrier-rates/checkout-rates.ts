@@ -1,4 +1,5 @@
 import { quote, type CarrierAccountSnapshot } from './engine/quote';
+import { countrySupportsDirectSignature } from './direct-signature';
 
 export interface CheckoutRateCarrier {
   serviceCode: string;
@@ -41,6 +42,7 @@ export function computeCheckoutRates(args: {
       isResidential,
       packagingType: 'box',
       effectiveDate: args.now,
+      signatureOptIn: countrySupportsDirectSignature(args.country),
     });
     if (!q.ok) continue;
     rates.push({

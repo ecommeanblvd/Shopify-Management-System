@@ -5,6 +5,7 @@
  * load snapshot + top nước rồi truyền vào.
  */
 import { quote, type CarrierAccountSnapshot } from '../engine/quote';
+import { countrySupportsDirectSignature } from '../direct-signature';
 
 /** Tỷ giá USD→VND fallback khi account không quote ở VND (không account nào
  *  hiện dùng nhánh này — cả ba đều VND ở cost hoặc display). */
@@ -71,6 +72,7 @@ export function buildComparison(
           weightKg,
           packagingType: 'bag',
           effectiveDate,
+          signatureOptIn: countrySupportsDirectSignature(country),
         });
         if (!res.ok) continue;
         rates.push({
