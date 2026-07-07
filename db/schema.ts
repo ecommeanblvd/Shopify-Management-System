@@ -2144,6 +2144,24 @@ export const customerAccountConfigs = pgTable('customer_account_configs', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/** Kết quả Style Quiz mỗi khách/session. answers + profile (3 trục) là jsonb;
+ *  câu hỏi giữ trong code (features/customer-account/style-quiz). */
+export const styleQuizResults = pgTable('style_quiz_results', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id),
+  customerId: text('customer_id'),
+  sessionKey: text('session_key').notNull(),
+  answers: jsonb('answers').notNull().default({}),
+  /** Shape TS: StyleProfile (features/customer-account/style-quiz/profile.ts) */
+  profile: jsonb('profile'),
+  levelReached: integer('level_reached').notNull().default(1),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => ({
+  storeCustomerIdx: index('style_quiz_results_store_customer_idx').on(t.storeId, t.customerId),
+  sessionIdx: index('style_quiz_results_session_idx').on(t.sessionKey),
+}));
+
 export const customerAccountAssets = pgTable('customer_account_assets', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
