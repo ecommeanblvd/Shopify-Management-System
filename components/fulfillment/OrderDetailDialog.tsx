@@ -29,7 +29,7 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string | null
   const s = data?.summary;
   return (
     <Dialog open={orderId != null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl lg:max-w-5xl">
         <DialogHeader>
           <DialogTitle>
             {s ? `${s.orderNumber ?? orderId}` : 'Chi tiết đơn'}
