@@ -3,8 +3,13 @@ import { db, schema } from '@/db/client';
 import { SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
 
 /** Idempotently create/update seeded roles + their permission keys, and backfill
- *  roles.role_id from the legacy roles.role enum. Re-run after extending
- *  SYSTEM_ROLE_SEEDS to push new default grants (it replaces each role's key set). */
+ *  roles.role_id from the legacy roles.role enum.
+ *
+ *  ADDITIVE-ONLY: seed là BASELINE tối thiểu — chỉ THÊM key mặc định còn thiếu,
+ *  KHÔNG xoá key admin đã cấp thêm trong Settings. (Trước đây delete+reinsert →
+ *  mỗi deploy wipe sạch quyền cấp tay — bug "quyền bị reset".) Muốn THU HỒI một
+ *  quyền mặc định của system role: bỏ khỏi SYSTEM_ROLE_SEEDS *và* revoke trong
+ *  Settings (seed không tự xoá). */
 export async function seedRoles(): Promise<void> {
   for (const [key, seed] of Object.entries(SYSTEM_ROLE_SEEDS)) {
     const [existing] = await db.select({ id: schema.appRoles.id }).from(schema.appRoles)
@@ -19,9 +24,10 @@ export async function seedRoles(): Promise<void> {
         .set({ name: seed.name, description: seed.description, isSystem: seed.isSystem })
         .where(eq(schema.appRoles.id, id));
     }
-    await db.delete(schema.rolePermissions).where(eq(schema.rolePermissions.roleId, id));
     if (seed.keys.length) {
-      await db.insert(schema.rolePermissions).values(seed.keys.map((permissionKey) => ({ roleId: id, permissionKey })));
+      await db.insert(schema.rolePermissions)
+        .values(seed.keys.map((permissionKey) => ({ roleId: id, permissionKey })))
+        .onConflictDoNothing();
     }
   }
   const roleIdByKey = new Map<string, string>();
