@@ -96,16 +96,6 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
 
-        {/* Kiện hàng brand khai — copy số thuần để dán vào form carrier */}
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Kiện hàng (brand khai)</div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <CopyField label="Cân nặng (kg)" value={String(Number(o.weightKg))} mono />
-            <CopyField label="Dài (cm)" value={o.dimLengthCm == null ? null : String(Number(o.dimLengthCm))} mono />
-            <CopyField label="Rộng (cm)" value={o.dimWidthCm == null ? null : String(Number(o.dimWidthCm))} mono />
-            <CopyField label="Cao (cm)" value={o.dimHeightCm == null ? null : String(Number(o.dimHeightCm))} mono />
-          </div>
-        </div>
       </CardContent></Card>
 
       <SmsMeasureCard
@@ -132,8 +122,8 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Cấu trúc giá &amp; đối soát</div>
             {o.smsMeasuredAt && o.quotedAt && o.quotedAt >= o.smsMeasuredAt && (
               <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:text-sky-400"
-                title="Giá đã tính lại theo số đo tại kho SMS (cân/kích thước lệch so brand khai)">
-                re-quote theo số đo SMS · {o.smsMeasuredAt.toLocaleDateString('vi-VN')}
+                title="Giá đã tính lại theo số đo tại kho Inecso (cân/kích thước lệch so brand khai)">
+                re-quote theo số đo Inecso · {o.smsMeasuredAt.toLocaleDateString('vi-VN')}
               </span>
             )}
           </div>

@@ -25,7 +25,7 @@ function calc(p: DeclaredParcel): { dimKg: number | null; chargeKg: number } {
 const fmt = (v: number | null | undefined, unit: string) => (v == null ? '—' : `${v} ${unit}`);
 
 /**
- * Cân & đo tại kho SMS. Mặc định: hiện số BRAND KHAI (MMP) tách trường rõ ràng +
+ * Cân & đo tại kho Inecso. Mặc định: hiện số BRAND KHAI (MMP) tách trường rõ ràng +
  * dim quy đổi. Bấm "Đo lại" → modal nhập số SMS (Inecso) đo. Sau khi đo: bảng so
  * sánh song song 2 bên + cột lệch; giá đổi thì đã tự báo MMP (order.priced).
  */
@@ -72,7 +72,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
   return (
     <Card><CardContent className="p-4 space-y-3 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Cân & đo tại kho SMS</div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Cân & đo tại kho Inecso</div>
         {canManage && (
           <button type="button" onClick={() => setOpen(true)}
             className="rounded-md border border-border px-3 py-1 text-xs font-medium transition hover:bg-muted">
@@ -134,7 +134,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
           </table>
           {smsCalc!.chargeKg !== decl.chargeKg && (
             <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-              ⚠ Cân tính phí lệch {smsCalc!.chargeKg > decl.chargeKg ? '+' : ''}{Math.round((smsCalc!.chargeKg - decl.chargeKg) * 1000) / 1000} kg so với brand khai — giá thu đã re-quote theo số đo SMS.
+              ⚠ Cân tính phí lệch {smsCalc!.chargeKg > decl.chargeKg ? '+' : ''}{Math.round((smsCalc!.chargeKg - decl.chargeKg) * 1000) / 1000} kg so với brand khai — giá thu đã re-quote theo số đo Inecso.
             </div>
           )}
         </div>
@@ -163,7 +163,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
 
       {/* Modal nhập số đo */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Nhập số đo tại kho SMS">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Nhập số đo tại kho Inecso">
           <div className="absolute inset-0 bg-black/50" onClick={() => !pending && setOpen(false)} />
           <div className="relative w-full max-w-md rounded-lg border border-border bg-background p-5 shadow-xl space-y-4">
             <div>
