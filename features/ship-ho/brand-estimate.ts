@@ -27,8 +27,21 @@ export interface BrandEstimate {
   directSignatureFeeVnd: number;
 }
 
+/**
+ * Snapshot NỘI BỘ (không trả cho brand/MMP) để lưu vào đơn: cước gốc, carrier,
+ * markup, breakdown. Cho phép bảng đơn hiện Carrier/Cước gốc/Margin ngay từ draft
+ * và reconcile tính được delta (actual−estimate).
+ */
+export interface EstimateInternal {
+  carrierKey: string;
+  carrierAccountId: string;
+  carrierCostVnd: number;
+  markupPercent: number;
+  breakdown: unknown;
+}
+
 export type EstimateResult =
-  | { ok: true; estimate: BrandEstimate }
+  | { ok: true; estimate: BrandEstimate; internal: EstimateInternal }
   | { ok: false; code: 'brand_not_approved' | 'no_carrier' | 'quote_failed' | 'service_unavailable' | 'bad_input'; error: string };
 
 const SERVICE_LABEL: Record<ShipHoService, string> = { express: 'Express Delivery', standard: 'Standard Delivery' };
@@ -119,6 +132,11 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
       chargedVnd, currency: 'VND', provisional: true, service, lines, notes,
       directSignatureAvailable: countrySupportsDirectSignature(country),
       directSignatureFeeVnd: DIRECT_SIGNATURE_FEE_VND,
+    },
+    internal: {
+      carrierKey: account.carrierKey ?? 'fedex', carrierAccountId: account.id,
+      carrierCostVnd: carrierCost.vnd, markupPercent: Number(partner.markupPercent),
+      breakdown: res.breakdown,
     },
   };
 }

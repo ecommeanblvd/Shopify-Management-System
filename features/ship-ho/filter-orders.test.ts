@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { filterShipHoOrders } from './filter-orders';
 
 const base = { id: '1', code: '26-INSLG-SV-0001', partnerBrandSlug: 'kalisa', brandName: 'Kalisa',
-  country: 'US', weightKg: '2', carrierKey: null, carrierCostVnd: null, chargedVnd: null,
+  country: 'US', weightKg: '2', carrierKey: null, carrierCostVnd: null, actualCarrierCostVnd: null,
+  chargedVnd: null, marginVnd: null,
   status: 'draft', source: 'mmp', createdAt: new Date(0),
   customerRef: 'KLS-9001', trackingNumber: '7712345', recipientName: 'Jaque' } as const;
 

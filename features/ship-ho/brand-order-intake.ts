@@ -90,6 +90,11 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
       dimWidthCm: input.parcel.dimWidthCm != null ? String(input.parcel.dimWidthCm) : null,
       dimHeightCm: input.parcel.dimHeightCm != null ? String(input.parcel.dimHeightCm) : null,
       packagingType: input.parcel.packagingType ?? null,
+      // Snapshot giá: carrier + cước gốc dự tính (để bảng hiện Carrier/Cước gốc/Margin
+      // ngay từ draft và reconcile tính được delta actual−estimate).
+      carrierKey: est.internal.carrierKey, carrierAccountId: est.internal.carrierAccountId,
+      carrierCostVnd: String(est.internal.carrierCostVnd), markupPercent: String(est.internal.markupPercent),
+      quoteBreakdown: est.internal.breakdown,
       chargedVnd: String(est.estimate.chargedVnd), quotedAt: new Date(),
       status: 'draft', createdBy: `mmp:${input.brandSlug}`,
     }).returning({ id: schema.shipHoOrders.id });

@@ -6,6 +6,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
+import { displayCarrierCost, displayMargin } from '@/features/ship-ho/pnl';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -64,13 +65,18 @@ export default async function ShipHoListPage({
           <table className="w-full text-sm">
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:text-left [&>th]:p-3">
-                <th>Mã</th><th>Mã đơn gốc</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th><th>Cước gốc</th><th>Giá thu</th><th>Trạng thái</th>
+                <th>Mã</th><th>Mã đơn gốc</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th>
+                <th className="text-right">Cước gốc</th><th className="text-right">Giá thu (dự tính)</th><th className="text-right">Margin</th><th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
-              ) : orders.map((o) => (
+                <tr><td colSpan={10} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+              ) : orders.map((o) => {
+                const num = (s: string | null) => (s == null ? null : Number(s));
+                const cost = displayCarrierCost(num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                const margin = displayMargin(num(o.chargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                return (
                 <tr key={o.id} className="border-b hover:bg-muted/40 [&>td]:p-3">
                   <td>
                     <Link href={`/f/ship-ho/${o.id}`} className="font-medium underline-offset-2 hover:underline">{o.code}</Link>
@@ -80,12 +86,27 @@ export default async function ShipHoListPage({
                   <td>{o.brandName ?? o.partnerBrandSlug}</td>
                   <td>{o.country}</td>
                   <td>{o.weightKg} kg</td>
-                  <td>{o.carrierKey ?? '—'}</td>
-                  <td>{o.carrierCostVnd ? Number(o.carrierCostVnd).toLocaleString('vi-VN') : '—'}</td>
-                  <td className="font-medium">{o.chargedVnd ? Number(o.chargedVnd).toLocaleString('vi-VN') : '—'}</td>
+                  <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="text-right tabular-nums">
+                    {cost.vnd == null ? <span className="text-muted-foreground">—</span> : (
+                      <>{cost.vnd.toLocaleString('vi-VN')}
+                        {!cost.actual && <span className="ml-1 text-[10px] text-muted-foreground">dự tính</span>}
+                      </>
+                    )}
+                  </td>
+                  <td className="text-right font-medium tabular-nums">{o.chargedVnd ? Number(o.chargedVnd).toLocaleString('vi-VN') : '—'}</td>
+                  <td className="text-right tabular-nums">
+                    {margin.vnd == null ? <span className="text-muted-foreground">—</span> : (
+                      <span className={margin.vnd >= 0 ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'font-medium text-red-600 dark:text-red-400'}>
+                        {margin.vnd >= 0 ? '+' : ''}{margin.vnd.toLocaleString('vi-VN')}
+                        {margin.estimated && <span className="ml-1 text-[10px] font-normal text-muted-foreground">dự tính</span>}
+                      </span>
+                    )}
+                  </td>
                   <td>{STATUS_LABEL[o.status] ?? o.status}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </CardContent>
