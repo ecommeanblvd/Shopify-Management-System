@@ -11,6 +11,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { MmpOrderActions } from './MmpOrderActions';
 import { TrackingCard } from './TrackingCard';
 import { SmsMeasureCard } from './SmsMeasureCard';
+import { CopyField } from './CopyField';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
   const marginVnd = price ? price.chargeTotal - price.costTotal : null;
   const hasBill = price?.billTotal != null;
   const canManage = hasPermission(role, 'manage_ship_ho');
+  // Form carrier cần tên nước tiếng Anh đầy đủ ("Saudi Arabia"), không phải mã ISO.
+  let countryName = o.country;
+  try { countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(o.country) ?? o.country; } catch { /* mã lạ → giữ ISO */ }
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -57,17 +61,49 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      <Card><CardContent className="p-4 grid grid-cols-2 gap-3 text-sm">
-        <div><span className="text-muted-foreground">Đối tác</span><div>{o.partnerBrandSlug}</div></div>
-        <div><span className="text-muted-foreground">Trạng thái</span><div>{o.status}</div></div>
-        <div><span className="text-muted-foreground">Người nhận</span><div>{o.recipientName ?? '—'}</div></div>
-        <div><span className="text-muted-foreground">Liên hệ</span><div>{[o.recipientEmail, o.recipientPhone].filter(Boolean).join(' · ') || '—'}</div></div>
-        <div><span className="text-muted-foreground">Đến</span><div>{[o.address1, o.city, o.province, o.postcode, o.country].filter(Boolean).join(', ')}</div></div>
-        {o.houseNumber && <div><span className="text-muted-foreground">House Number</span><div>{o.houseNumber}</div></div>}
-        {o.shortAddress && <div><span className="text-muted-foreground">Short Address</span><div>{o.shortAddress}</div></div>}
-        {o.mapsUrl && <div><span className="text-muted-foreground">Google Maps</span><div><a href={o.mapsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all">{o.mapsUrl}</a></div></div>}
-        <div><span className="text-muted-foreground">Cân</span><div>{o.weightKg} kg</div></div>
-        <div><span className="text-muted-foreground">Carrier</span><div>{o.carrierKey ?? '—'}</div></div>
+      <Card><CardContent className="p-4 space-y-4 text-sm">
+        {/* Meta nội bộ (không cần copy) */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+          <span>Đối tác: <b className="text-foreground">{o.partnerBrandSlug}</b></span>
+          <span>Trạng thái: <b className="text-foreground">{o.status}</b></span>
+          <span>Carrier: <b className="text-foreground uppercase">{o.carrierKey ?? '—'}</b></span>
+        </div>
+
+        {/* Các trường thông tin theo form carrier — mỗi field 1 nút copy */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chi tiết liên hệ</div>
+            <CopyField label="Tên liên hệ" value={o.recipientName} />
+            <CopyField label="Công ty" value={o.recipientCompany} />
+            <CopyField label="Số điện thoại" value={o.recipientPhone} mono />
+            <CopyField label="Email" value={o.recipientEmail} mono />
+          </div>
+          <div className="space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Địa chỉ</div>
+            <CopyField label="Quốc gia / Vùng" value={countryName} display={`${countryName} (${o.country})`} />
+            <CopyField label="Dòng địa chỉ 1" value={o.address1} />
+            <CopyField label="Dòng địa chỉ 2" value={o.address2} />
+            <div className="grid grid-cols-2 gap-2">
+              <CopyField label="Thành phố" value={o.city} />
+              <CopyField label="Bang / Tỉnh" value={o.province} />
+              <CopyField label="Mã bưu chính" value={o.postcode} mono />
+              {o.shortAddress ? <CopyField label="Địa chỉ ngắn (SA)" value={o.shortAddress} mono /> : <CopyField label="Số nhà" value={o.houseNumber} mono />}
+            </div>
+            {o.shortAddress && o.houseNumber && <CopyField label="Số nhà" value={o.houseNumber} mono />}
+            {o.mapsUrl && <CopyField label="Google Maps" value={o.mapsUrl} />}
+          </div>
+        </div>
+
+        {/* Kiện hàng brand khai — copy số thuần để dán vào form carrier */}
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Kiện hàng (brand khai)</div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <CopyField label="Cân nặng (kg)" value={String(Number(o.weightKg))} mono />
+            <CopyField label="Dài (cm)" value={o.dimLengthCm == null ? null : String(Number(o.dimLengthCm))} mono />
+            <CopyField label="Rộng (cm)" value={o.dimWidthCm == null ? null : String(Number(o.dimWidthCm))} mono />
+            <CopyField label="Cao (cm)" value={o.dimHeightCm == null ? null : String(Number(o.dimHeightCm))} mono />
+          </div>
+        </div>
       </CardContent></Card>
 
       <SmsMeasureCard
