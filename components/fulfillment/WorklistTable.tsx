@@ -72,6 +72,7 @@ type WorklistRow = {
   delivery: Badge;
   packs: number;
   tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }>;
+  selectedCarrierKey: string | null;
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
 };
 
@@ -167,7 +168,12 @@ export function WorklistTable({ rows }: Props) {
                 </td>
                 <td className="px-3 py-2 align-top">
                   {row.tracks.length === 0 ? (
-                    <BadgeCell b={row.delivery} />
+                    <div className="flex flex-col items-start gap-1">
+                      {row.selectedCarrierKey && (
+                        <span className="rounded bg-primary/10 px-1.5 py-px text-[11px] font-medium text-primary" title="Carrier đã chọn để đi hàng">→ {row.selectedCarrierKey}</span>
+                      )}
+                      <BadgeCell b={row.delivery} />
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-1">
                       {row.tracks.map((t) => {

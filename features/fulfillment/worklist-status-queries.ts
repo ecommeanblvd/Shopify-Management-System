@@ -11,6 +11,8 @@ export interface WorklistStatusRow {
   updatedAtShopify: Date | null; editedAt: Date | null; editedAfterFulfilledAt: Date | null;
   addrDeliverable: boolean | null; addrVerifiedAt: Date | null;
   addrConfidence: string | null;
+  /** Carrier logistic staff đã chọn để đi hàng (selected_carrier_key). */
+  selectedCarrierKey: string | null;
   kcs: { pending: number; pass: number; fail: number };
   ship: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number; tracks: Array<{ trackingNumber: string; carrierKey: string | null; deliveryStatus: string | null; deliveredAt: string | null }> };
   lark: { dispatchStatus: string | null; cxFfStatus: string | null; deliveryStatus: string | null; expectedDeliveryDate: string | null } | null;
@@ -32,6 +34,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     addrDeliverable: schema.shopifyOrders.addrDeliverable,
     addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
     addrConfidence: schema.shopifyOrders.addrConfidence,
+    selectedCarrierKey: schema.shopifyOrders.selectedCarrierKey,
     larkDispatch: schema.larkOrderStatus.dispatchStatus,
     larkCxFf: schema.larkOrderStatus.cxFfStatus,
     larkDelivery: schema.larkOrderStatus.deliveryStatus,
@@ -101,6 +104,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
       createdAtShopify: r.createdAtShopify,
       updatedAtShopify: r.updatedAtShopify, editedAt: r.editedAt, editedAfterFulfilledAt: r.editedAfterFulfilledAt,
       addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
+      selectedCarrierKey: r.selectedCarrierKey,
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },
       ship: { packs: ship.packs, withTracking: ship.withTracking, delivered: ship.delivered, exception: ship.exception, inTransit: ship.inTransit, tracks: s?.tracks ?? [] },
       lark,

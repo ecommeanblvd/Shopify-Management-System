@@ -44,6 +44,7 @@ export default async function FulfillmentWorklistPage() {
     delivery: summarizeDelivery(r.ship),
     packs: r.ship.packs,
     tracks: r.ship.tracks,
+    selectedCarrierKey: r.selectedCarrierKey,
     lark: r.lark,
   }));
 
