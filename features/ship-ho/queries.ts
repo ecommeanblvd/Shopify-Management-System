@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export interface ShipHoOrderRow {
@@ -8,6 +8,8 @@ export interface ShipHoOrderRow {
   brandName: string | null;
   country: string;
   weightKg: string;
+  /** Cân tính cước = max(khai báo, dim weight); từ quote_breakdown. Null nếu chưa quote. */
+  chargeableWeightKg: string | null;
   carrierKey: string | null;
   carrierCostVnd: string | null;
   actualCarrierCostVnd: string | null;
@@ -37,6 +39,7 @@ export async function listShipHoOrders(filter?: {
       brandName: schema.mmpBrands.displayName,
       country: schema.shipHoOrders.country,
       weightKg: schema.shipHoOrders.weightKg,
+      chargeableWeightKg: sql<string | null>`${schema.shipHoOrders.quoteBreakdown}->>'chargeableWeightKg'`,
       carrierKey: schema.shipHoOrders.carrierKey,
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,

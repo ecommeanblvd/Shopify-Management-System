@@ -85,7 +85,17 @@ export default async function ShipHoListPage({
                   <td className="text-muted-foreground">{o.customerRef ?? '—'}</td>
                   <td>{o.brandName ?? o.partnerBrandSlug}</td>
                   <td>{o.country}</td>
-                  <td>{o.weightKg} kg</td>
+                  <td>
+                    {o.weightKg} kg
+                    {(() => {
+                      const ch = o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg);
+                      return ch != null && ch > Number(o.weightKg) + 1e-9 ? (
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400" title="Tính cước theo cân quy đổi (dim weight) vì lớn hơn cân thực">
+                          tính cước {ch} kg (quy đổi)
+                        </div>
+                      ) : null;
+                    })()}
+                  </td>
                   <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
                   <td className="text-right tabular-nums">
                     {cost.vnd == null ? <span className="text-muted-foreground">—</span> : (
