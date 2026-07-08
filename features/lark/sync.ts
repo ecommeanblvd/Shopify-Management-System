@@ -231,12 +231,26 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             const patch: Record<string, unknown> = {
               deliveryStatus: s.deliveryState, deliverySource: 'lark', updatedAt: sql`now()`,
             };
-            if (s.deliveryState === 'delivered' && s.actualDeliveredAt) patch.deliveredAt = s.actualDeliveredAt;
+            // Ngày giao: ưu tiên "Ngày giao thực tế" ops điền; ops chưa điền (219
+            // record tính đến 08/07) → FIRST-SEEN: lấy thời điểm sync đầu tiên thấy
+            // delivered (cron hourly ⇒ sai số ≤1h) — transit stats không treo vì thiếu ngày.
+            if (s.deliveryState === 'delivered') patch.deliveredAt = s.actualDeliveredAt ?? new Date();
             const res = await tx.update(schema.shipments).set(patch).where(and(
               eq(schema.shipments.orderId, orderId),
               or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
             ));
             deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
+            // Row ĐÃ delivered nhưng thiếu ngày (đánh dấu trước khi có fallback, hoặc
+            // ops điền ngày muộn) → lấp ngày, không đổi status.
+            if (s.deliveryState === 'delivered') {
+              await tx.update(schema.shipments)
+                .set({ deliveredAt: s.actualDeliveredAt ?? new Date(), updatedAt: sql`now()` })
+                .where(and(
+                  eq(schema.shipments.orderId, orderId),
+                  eq(schema.shipments.deliveryStatus, 'delivered'),
+                  isNull(schema.shipments.deliveredAt),
+                ));
+            }
           }
         });
       }
