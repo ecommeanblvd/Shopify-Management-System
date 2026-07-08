@@ -13,7 +13,9 @@ export interface ShipHoOrderRow {
   carrierKey: string | null;
   carrierCostVnd: string | null;
   actualCarrierCostVnd: string | null;
+  actualWeightKg: string | null;
   chargedVnd: string | null;
+  actualChargedVnd: string | null;
   marginVnd: string | null;
   status: string;
   source: string;
@@ -43,7 +45,9 @@ export async function listShipHoOrders(filter?: {
       carrierKey: schema.shipHoOrders.carrierKey,
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
+      actualWeightKg: schema.shipHoOrders.actualWeightKg,
       chargedVnd: schema.shipHoOrders.chargedVnd,
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
       marginVnd: schema.shipHoOrders.marginVnd,
       status: schema.shipHoOrders.status,
       source: schema.shipHoOrders.source,

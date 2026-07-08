@@ -2009,6 +2009,13 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   reconcileStatus: text('reconcile_status'),
   deltaVnd: numeric('delta_vnd', { precision: 16, scale: 2 }),
   marginVnd: numeric('margin_vnd', { precision: 16, scale: 2 }),
+  // Re-bill theo cân thực: kéo từ hoá đơn carrier (carrier_bill_lines) theo tracking.
+  //   actualWeightKg     = cân thực carrier bill.
+  //   actualChargedVnd   = giá thu brand tính LẠI trên cân thực (re-quote, fuel tuần giao).
+  //   actualBillBreakdown= phụ phí thực + billNumber (jsonb, minh bạch).
+  actualWeightKg: numeric('actual_weight_kg', { precision: 10, scale: 3 }),
+  actualChargedVnd: numeric('actual_charged_vnd', { precision: 16, scale: 2 }),
+  actualBillBreakdown: jsonb('actual_bill_breakdown'),
   // Bill (P3)
   statementId: uuid('statement_id').references(() => shipHoStatements.id),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),

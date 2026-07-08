@@ -1,12 +1,13 @@
 /**
- * THUẦN: quy tắc hiển thị Cước gốc & Margin cho bảng đơn ship hộ.
+ * THUẦN: quy tắc hiển thị Cước gốc, Giá thu & Margin cho bảng đơn ship hộ.
  *
  * Vòng đời một đơn:
- *   - draft/quoted/shipped: chỉ có cước gốc DỰ TÍNH (snapshot lúc báo giá).
- *   - reconciled: có thêm cước gốc THỰC TẾ (từ bill carrier) → ưu tiên hiển thị.
+ *   - draft/quoted/shipped: chỉ có DỰ TÍNH (snapshot lúc báo giá) — cước gốc dự tính,
+ *     giá thu dự tính.
+ *   - reconciled (đã đối soát từ hoá đơn carrier): có THỰC TẾ — cước gốc thực (bill),
+ *     và giá thu thực (re-bill theo cân thực). Ưu tiên hiển thị số thực.
  *
- * Margin = Giá thu (charged) − Cước gốc. Dùng cước thực tế nếu đã đối soát, không
- * thì dùng dự tính (cờ `estimated=true` để UI gắn nhãn "dự tính").
+ * Margin = Giá thu − Cước gốc, mỗi vế ưu tiên số thực nếu đã có.
  */
 
 export function displayCarrierCost(
@@ -18,13 +19,28 @@ export function displayCarrierCost(
   return { vnd: null, actual: false };
 }
 
+/** Giá thu: thực (re-bill cân thực) ưu tiên dự tính (quote). */
+export function displayCharged(
+  quotedVnd: number | null,
+  actualChargedVnd: number | null,
+): { vnd: number | null; actual: boolean } {
+  if (actualChargedVnd != null) return { vnd: actualChargedVnd, actual: true };
+  if (quotedVnd != null) return { vnd: quotedVnd, actual: false };
+  return { vnd: null, actual: false };
+}
+
+/**
+ * Margin = Giá thu − Cước gốc. Mỗi vế ưu tiên số thực. Cờ `estimated=true` khi
+ * ĐƠN CHƯA đối soát cước (actualCostVnd == null) → UI gắn nhãn "dự tính".
+ */
 export function displayMargin(
-  chargedVnd: number | null,
+  quotedChargedVnd: number | null,
+  actualChargedVnd: number | null,
   estimatedCostVnd: number | null,
   actualCostVnd: number | null,
 ): { vnd: number | null; estimated: boolean } {
-  if (chargedVnd == null) return { vnd: null, estimated: true };
+  const charged = displayCharged(quotedChargedVnd, actualChargedVnd);
   const cost = displayCarrierCost(estimatedCostVnd, actualCostVnd);
-  if (cost.vnd == null) return { vnd: null, estimated: true };
-  return { vnd: Math.round(chargedVnd - cost.vnd), estimated: !cost.actual };
+  if (charged.vnd == null || cost.vnd == null) return { vnd: null, estimated: actualCostVnd == null };
+  return { vnd: Math.round(charged.vnd - cost.vnd), estimated: actualCostVnd == null };
 }

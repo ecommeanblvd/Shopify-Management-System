@@ -57,10 +57,31 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       </CardContent></Card>
 
       <Card><CardContent className="p-4 space-y-2 text-sm">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Đối soát cước</div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Đối soát cước (từ hóa đơn carrier)</div>
+        <div className="flex justify-between"><span>Cân thực (bill)</span><span>{o.actualWeightKg ? `${Number(o.actualWeightKg)} kg` : '—'}</span></div>
         <div className="flex justify-between"><span>Cước carrier thực</span><span>{vnd(o.actualCarrierCostVnd)}</span></div>
         <div className="flex justify-between"><span>Lệch engine (thực − ước tính)</span><span>{vnd(o.deltaVnd)}</span></div>
+        <div className="flex justify-between"><span>Giá thu thực (re-bill cân thực)</span><span>{vnd(o.actualChargedVnd)}</span></div>
         <div className="flex justify-between font-semibold border-t pt-2"><span>Margin (thu − thực)</span><span>{vnd(o.marginVnd)}</span></div>
+        {(() => {
+          const b = o.actualBillBreakdown as Record<string, unknown> | null;
+          if (!b) return null;
+          const rows: Array<[string, string]> = [
+            ['Base', 'base'], ['Giảm giá', 'discount'], ['Xăng dầu', 'fuel'], ['Vùng xa', 'remote'],
+            ['Demand/handling', 'demand'], ['Ký nhận', 'signature'], ['VAT', 'vat'], ['Khác', 'other'],
+          ];
+          const shown = rows.filter(([, k]) => typeof b[k] === 'number' && (b[k] as number) !== 0);
+          return (
+            <details className="mt-1 border-t pt-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground">Phụ phí thực từ bill {typeof b.billNumber === 'string' ? `· ${b.billNumber}` : ''}</summary>
+              <div className="mt-1 space-y-0.5">
+                {shown.map(([label, k]) => (
+                  <div key={k} className="flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span>{vnd(String(b[k]))}</span></div>
+                ))}
+              </div>
+            </details>
+          );
+        })()}
         {!o.reconcileStatus && <p className="text-muted-foreground text-xs">Chưa đối soát cước thực.</p>}
       </CardContent></Card>
 

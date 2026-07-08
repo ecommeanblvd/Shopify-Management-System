@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { displayCarrierCost, displayMargin } from './pnl';
+import { displayCarrierCost, displayCharged, displayMargin } from './pnl';
 
 describe('displayCarrierCost', () => {
-  it('ưu tiên cước thực tế khi đã đối soát', () => {
+  it('ưu tiên cước thực khi đã đối soát', () => {
     expect(displayCarrierCost(1_800_000, 1_950_000)).toEqual({ vnd: 1_950_000, actual: true });
   });
   it('dùng dự tính khi chưa có thực tế', () => {
@@ -13,21 +13,33 @@ describe('displayCarrierCost', () => {
   });
 });
 
+describe('displayCharged', () => {
+  it('ưu tiên giá thu thực (re-bill) khi có', () => {
+    expect(displayCharged(2_012_941, 2_150_000)).toEqual({ vnd: 2_150_000, actual: true });
+  });
+  it('dùng quote khi chưa re-bill', () => {
+    expect(displayCharged(2_012_941, null)).toEqual({ vnd: 2_012_941, actual: false });
+  });
+});
+
 describe('displayMargin', () => {
-  it('margin dự tính = charged − cước dự tính (chưa đối soát)', () => {
-    // Giá thu 2.012.941 − cước gốc dự tính 1.800.000 = 212.941
-    expect(displayMargin(2_012_941, 1_800_000, null)).toEqual({ vnd: 212_941, estimated: true });
+  it('margin dự tính = quote thu − quote cước (chưa đối soát)', () => {
+    expect(displayMargin(2_012_941, null, 1_800_000, null)).toEqual({ vnd: 212_941, estimated: true });
   });
-  it('margin thực tế = charged − cước thực tế (đã đối soát) → estimated=false', () => {
-    expect(displayMargin(2_012_941, 1_800_000, 1_950_000)).toEqual({ vnd: 62_941, estimated: false });
+  it('margin thực = giá thu thực − cước thực (đã đối soát)', () => {
+    // re-bill cân thực: thu 2.150.000, cước bill 1.950.000 → 200.000
+    expect(displayMargin(2_012_941, 2_150_000, 1_800_000, 1_950_000)).toEqual({ vnd: 200_000, estimated: false });
   });
-  it('margin âm khi cước thực tế vượt giá thu', () => {
-    expect(displayMargin(2_000_000, 1_800_000, 2_100_000)).toEqual({ vnd: -100_000, estimated: false });
+  it('đối soát cước nhưng thiếu giá thu thực → dùng quote cho vế thu, vẫn actual', () => {
+    expect(displayMargin(2_012_941, null, 1_800_000, 1_950_000)).toEqual({ vnd: 62_941, estimated: false });
+  });
+  it('margin âm khi cước thực vượt giá thu', () => {
+    expect(displayMargin(2_000_000, 2_000_000, 1_800_000, 2_100_000)).toEqual({ vnd: -100_000, estimated: false });
   });
   it('null khi thiếu giá thu', () => {
-    expect(displayMargin(null, 1_800_000, null)).toEqual({ vnd: null, estimated: true });
+    expect(displayMargin(null, null, 1_800_000, null)).toEqual({ vnd: null, estimated: true });
   });
-  it('null khi có giá thu nhưng chưa có cước nào', () => {
-    expect(displayMargin(2_012_941, null, null)).toEqual({ vnd: null, estimated: true });
+  it('null khi chưa có cước nào', () => {
+    expect(displayMargin(2_012_941, null, null, null)).toEqual({ vnd: null, estimated: true });
   });
 });

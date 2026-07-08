@@ -61,7 +61,12 @@ function toVndFactor(snap: { costCurrency: string; displayCurrency: string; fxCo
   return null;
 }
 
-export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel): Promise<EstimateResult> {
+/**
+ * @param asOf Ngày hiệu lực để chọn rate card + fuel tuần (mặc định hôm nay). Khi
+ *   RE-BILL theo cân thực, truyền ship_date của hoá đơn để tính giá thu thực theo
+ *   ĐÚNG fuel của tuần giao hàng (engine gate fuel/rate theo effectiveDate).
+ */
+export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel, asOf?: Date): Promise<EstimateResult> {
   const service: ShipHoService = parcel.service ?? 'express';
   if (service === 'standard') return { ok: false, code: 'service_unavailable', error: 'Standard Delivery chưa khả dụng' };
   const country = (parcel.country ?? '').trim().toUpperCase();
@@ -78,7 +83,7 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   // Express = account FedEx đang bật (map service→account chốt khi có nhiều line; hiện lấy FedEx enabled đầu tiên).
   const account = (await listAccounts()).find((a) => a.enabled && a.carrierKey === 'fedex');
   if (!account) return { ok: false, code: 'no_carrier', error: 'Chưa cấu hình đơn vị vận chuyển' };
-  const snap = await loadAccountSnapshot(account.id);
+  const snap = await loadAccountSnapshot(account.id, asOf ?? new Date());
   if (!snap) return { ok: false, code: 'no_carrier', error: 'Chưa nạp được bảng giá' };
 
   const dims = typeof parcel.dimLengthCm === 'number' && typeof parcel.dimWidthCm === 'number' && typeof parcel.dimHeightCm === 'number'

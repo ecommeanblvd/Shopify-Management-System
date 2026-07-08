@@ -6,7 +6,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
-import { displayCarrierCost, displayMargin } from '@/features/ship-ho/pnl';
+import { displayCarrierCost, displayCharged, displayMargin } from '@/features/ship-ho/pnl';
+import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -51,6 +52,7 @@ export default async function ShipHoListPage({
           <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' })}>Đối tác</Link>
           <Link href="/f/ship-ho/import" className={buttonVariants({ variant: 'outline' })}>Import</Link>
           <Link href="/f/ship-ho/reconcile" className={buttonVariants({ variant: 'outline' })}>Đối soát</Link>
+          <ReconcileBillsButton />
           <Link href="/f/ship-ho/statements" className={buttonVariants({ variant: 'outline' })}>Bảng kê</Link>
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
         </div>
@@ -66,7 +68,7 @@ export default async function ShipHoListPage({
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:text-left [&>th]:p-3">
                 <th>Mã</th><th>Mã đơn gốc</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th>
-                <th className="text-right">Cước gốc</th><th className="text-right">Giá thu (dự tính)</th><th className="text-right">Margin</th><th>Trạng thái</th>
+                <th className="text-right">Cước gốc</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th><th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
@@ -75,7 +77,9 @@ export default async function ShipHoListPage({
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const cost = displayCarrierCost(num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
-                const margin = displayMargin(num(o.chargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                const charged = displayCharged(num(o.chargedVnd), num(o.actualChargedVnd));
+                const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
                 return (
                 <tr key={o.id} className="border-b hover:bg-muted/40 [&>td]:p-3">
                   <td>
@@ -87,7 +91,11 @@ export default async function ShipHoListPage({
                   <td>{o.country}</td>
                   <td>
                     {o.weightKg} kg
-                    {(() => {
+                    {actualW != null && Math.abs(actualW - Number(o.weightKg)) > 1e-9 ? (
+                      <div className="text-[10px] font-medium text-sky-600 dark:text-sky-400" title="Cân thực từ hoá đơn carrier">
+                        thực {actualW} kg
+                      </div>
+                    ) : (() => {
                       const ch = o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg);
                       return ch != null && ch > Number(o.weightKg) + 1e-9 ? (
                         <div className="text-[10px] text-amber-600 dark:text-amber-400" title="Tính cước theo cân quy đổi (dim weight) vì lớn hơn cân thực">
@@ -104,7 +112,15 @@ export default async function ShipHoListPage({
                       </>
                     )}
                   </td>
-                  <td className="text-right font-medium tabular-nums">{o.chargedVnd ? Number(o.chargedVnd).toLocaleString('vi-VN') : '—'}</td>
+                  <td className="text-right font-medium tabular-nums">
+                    {charged.vnd == null ? <span className="text-muted-foreground">—</span> : (
+                      <>{charged.vnd.toLocaleString('vi-VN')}
+                        <span className={`ml-1 text-[10px] font-normal ${charged.actual ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'}`}>
+                          {charged.actual ? 'thực' : 'dự tính'}
+                        </span>
+                      </>
+                    )}
+                  </td>
                   <td className="text-right tabular-nums">
                     {margin.vnd == null ? <span className="text-muted-foreground">—</span> : (
                       <span className={margin.vnd >= 0 ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'font-medium text-red-600 dark:text-red-400'}>
