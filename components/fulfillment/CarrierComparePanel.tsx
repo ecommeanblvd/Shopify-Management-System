@@ -78,7 +78,7 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                 if (!r.ok || !b) {
                   return (
                     <tr key={r.accountId} className="border-t border-border/60 text-muted-foreground">
-                      <td className="px-3 py-3"><div className="font-medium text-foreground/70">{r.carrierKey}</div><div className="text-[11px]">{r.carrierName}</div></td>
+                      <td className="px-3 py-3 align-top"><div className="font-semibold text-foreground/70">{r.carrierKey}</div><div className="max-w-[150px] truncate text-[11px]" title={r.carrierName}>{r.carrierName}</div></td>
                       <td colSpan={7} className="px-3 py-3 text-xs italic">Không báo giá được cho tuyến này ({r.error})</td>
                     </tr>
                   );
@@ -90,12 +90,13 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                 return (
                   <tr key={r.accountId}
                     className={`border-t border-border/60 ${isCheap ? 'bg-emerald-500/[0.06]' : ''} ${isSel ? 'ring-1 ring-inset ring-emerald-500/40' : ''}`}>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 align-top">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold">{r.carrierKey}</span>
                         {isCheap && <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[10px] font-medium text-emerald-700 dark:text-emerald-400">rẻ nhất</span>}
                       </div>
-                      <div className="text-[11px] leading-tight text-muted-foreground">{r.carrierName}{r.costCurrency !== 'VND' ? ` · quy đổi từ ${r.costCurrency}` : ''}</div>
+                      <div className="max-w-[150px] truncate text-[11px] leading-tight text-muted-foreground" title={r.carrierName}>{r.carrierName}</div>
+                      {r.costCurrency !== 'VND' && <div className="text-[10px] leading-tight text-muted-foreground">quy đổi từ {r.costCurrency}</div>}
                     </td>
                     <td className="px-3 py-3 text-right">{num(b.base * k)}</td>
                     <td className="px-3 py-3 text-right">{b.fuelPercent ? <>{num(b.fuel * k)}<span className="ml-1 text-[10px] text-muted-foreground">{b.fuelPercent}%</span></> : <span className="text-muted-foreground">—</span>}</td>
