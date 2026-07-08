@@ -44,7 +44,7 @@ export default async function StyleQuizFunctionPage() {
   const byAxis = { color: QUIZ_QUESTIONS.filter((q) => q.axis === 'color'), body: QUIZ_QUESTIONS.filter((q) => q.axis === 'body'), archetype: QUIZ_QUESTIONS.filter((q) => q.axis === 'archetype') };
 
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10 max-w-5xl">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       {/* Header */}
       <header className="space-y-3">
         <Link href="/f/functions" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -87,6 +87,7 @@ export default async function StyleQuizFunctionPage() {
           Hồ sơ phong cách gồm <b>3 trục độc lập</b>. Mỗi trục có định nghĩa riêng và mức độ tin cậy khác nhau:
         </p>
 
+        <div className="grid gap-3 lg:grid-cols-3 items-start">
         <Card><CardContent className="p-4 space-y-2 text-sm">
           <div className="flex items-center gap-2 font-semibold">① Mùa màu theo làn da <Cred kind="C" /></div>
           <p className="text-muted-foreground">
@@ -120,6 +121,7 @@ export default async function StyleQuizFunctionPage() {
           </p>
           <p className="text-muted-foreground"><b>Tin cậy:</b> khung personal-style [C] (Kibbe/McJimsey điều chỉnh) — sở thích thẩm mỹ, không phải khoa học.</p>
         </CardContent></Card>
+        </div>
       </section>
 
       {/* 3. Cách recommendation hoạt động */}
