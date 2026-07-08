@@ -36,7 +36,10 @@ export async function deliverShipHoEvent(row: {
   id: string; mmpRef: string; code: string; event: string; occurredAt: Date; payload: unknown; attempts: number;
 }): Promise<void> {
   const url = process.env.MMP_SHIP_HO_WEBHOOK_URL;
-  const secret = process.env.MMP_OUTBOUND_SECRET;
+  // Secret CHUNG 2 chiều với MMP là MMP_WEBHOOK_SECRET (fingerprint ed699da6b1d1
+  // — đối chiếu 08/07). MMP_OUTBOUND_SECRET là secret KHÁC (flow brand-requests);
+  // ký nhầm bằng nó → MMP 401 toàn bộ event (bug đã gặp).
+  const secret = process.env.MMP_WEBHOOK_SECRET;
   if (!url || !secret) return; // chưa cấu hình → để pending, cron gửi sau
 
   const envelope = {
