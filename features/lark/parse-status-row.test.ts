@@ -50,6 +50,23 @@ describe('mapLarkDelivery', () => {
   });
 });
 
+describe('parseLarkStatus — Lark lookup shape {type, value} (cột đổi kiểu ~25/06)', () => {
+  it('Final | Delivery Status dạng {type:1, value:[{text}]} → vẫn parse + map delivered', () => {
+    const ms = Date.UTC(2026, 6, 1, 17, 0, 0); // 02/07 giờ VN
+    const r = parseLarkStatus({
+      'Final | Delivery Status': { type: 1, value: [{ text: 'Đúng dự kiến', type: 'text' }] },
+      'Ngày giao thực tế': ms,
+    });
+    expect(r.deliveryStatus).toBe('Đúng dự kiến');
+    expect(r.deliveryState).toBe('delivered');
+    expect(r.actualDeliveredAt?.toISOString()).toBe('2026-07-02T00:00:00.000Z');
+  });
+  it('CX-FF lookup shape lồng nhau cũng đọc được', () => {
+    const r = parseLarkStatus({ 'CX-FF Status (look up)': { type: 1, value: [{ text: 'Đã xác nhận', type: 'text' }] } });
+    expect(r.cxFfStatus).toBe('Đã xác nhận');
+  });
+});
+
 describe('parseLarkStatus delivery', () => {
   it('deliveryState + actualDeliveredAt', () => {
     const ms = Date.UTC(2026, 5, 3, 17, 0, 0); // 04/06 giờ VN

@@ -15,7 +15,10 @@ export interface PackRow {
   warnings: string[];
 }
 
-/** Lark text field: string | number | [{text}] | {text} → string|null. */
+/** Lark text field: string | number | [{text}] | {text} | {type,value} → string|null.
+ *  Shape {type, value} là cột lookup/formula (Lark đổi kiểu cột "Final | Delivery
+ *  Status" ~25/06 làm parser trả null hàng loạt → mất delivery status) — unwrap
+ *  đệ quy vào `value`. */
 export function larkText(v: unknown): string | null {
   if (v == null) return null;
   if (typeof v === 'string') return v.trim() || null;
@@ -27,6 +30,9 @@ export function larkText(v: unknown): string | null {
   if (typeof v === 'object' && 'text' in (v as object)) {
     const s = String((v as { text: unknown }).text ?? '').trim();
     return s || null;
+  }
+  if (typeof v === 'object' && 'value' in (v as object)) {
+    return larkText((v as { value: unknown }).value);
   }
   return null;
 }
