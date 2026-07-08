@@ -8,6 +8,7 @@ import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
 import { displayCarrierCost, displayCharged, displayMargin } from '@/features/ship-ho/pnl';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
+import { OrderRow } from './OrderRow';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -89,7 +90,8 @@ export default async function ShipHoListPage({
                 const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
                 const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
                 return (
-                <tr key={o.id} className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
+                <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
+                  className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
                   <td className="whitespace-nowrap">
                     <Link href={`/f/ship-ho/${o.id}`} className="font-medium underline-offset-2 hover:underline">{o.code}</Link>
                     {o.source === 'mmp' && <span className="ml-2 rounded bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5">MMP</span>}
@@ -142,7 +144,7 @@ export default async function ShipHoListPage({
                     )}
                   </td>
                   <td>{STATUS_LABEL[o.status] ?? o.status}</td>
-                </tr>
+                </OrderRow>
                 );
               })}
             </tbody>
