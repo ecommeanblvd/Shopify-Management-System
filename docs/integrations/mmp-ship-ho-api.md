@@ -187,7 +187,7 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `order.rejected` | Không nhận (kèm lý do) |
 | | `order.cancelled` | Đã hủy |
 | Giá | `order.measured` | SMS (Inecso) cân/đo lại kiện tại kho — **luôn gửi** (khớp hay lệch). MMP ghi kết quả lên đơn của brand; giá mới (nếu đổi) nằm trong `data.price`. Chi tiết payload: mục 4b. |
-| Vận chuyển | `shipment.booked` | Đã tạo vận đơn (`trackingNumber`, "Express Delivery", dự kiến giao) |
+| Vận chuyển | `shipment.booked` | Đã tạo/SỬA vận đơn. `data`: `{ trackingNumber, carrierKey ("fedex"\|"dhl"\|null), trackingUrl (link tra cứu public\|null), service, previousTrackingNumber? }`. Bắn lại mỗi lần tracking/carrier đổi — bản `occurredAt` mới nhất là hiện hành; `previousTrackingNumber` có mặt khi SỬA mã (MMP thay mã cũ). |
 | | `shipment.picked_up` / `in_transit` / `customs` / `out_for_delivery` | Mốc hành trình |
 | | `shipment.exception` | Sự cố (delay/kẹt/giao lỗi) + hành động cần |
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
