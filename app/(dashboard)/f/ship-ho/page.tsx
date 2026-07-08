@@ -64,12 +64,18 @@ export default async function ShipHoListPage({
       </form>
       <Card>
         <CardContent className="p-0">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col className="w-[15%]" /><col className="w-[11%]" /><col className="w-[9%]" />
+              <col className="w-[6%]" /><col className="w-[9%]" /><col className="w-[8%]" />
+              <col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" />
+              <col className="w-[8%]" />
+            </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-3">
                 <th className="text-left">Mã</th><th className="text-left">Mã đơn gốc</th><th className="text-left">Đối tác</th>
                 <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
-                <th className="text-right">Chi phí carrier</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th>
+                <th className="text-right whitespace-nowrap">Chi phí Carrier</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th>
                 <th className="text-left">Trạng thái</th>
               </tr>
             </thead>
@@ -84,7 +90,7 @@ export default async function ShipHoListPage({
                 const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
                 return (
                 <tr key={o.id} className="border-b hover:bg-muted/40 [&>td]:p-3">
-                  <td>
+                  <td className="whitespace-nowrap">
                     <Link href={`/f/ship-ho/${o.id}`} className="font-medium underline-offset-2 hover:underline">{o.code}</Link>
                     {o.source === 'mmp' && <span className="ml-2 rounded bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5">MMP</span>}
                   </td>
@@ -107,14 +113,14 @@ export default async function ShipHoListPage({
                     })()}
                   </td>
                   <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="text-right tabular-nums">
+                  <td className="text-right tabular-nums whitespace-nowrap">
                     {cost.vnd == null ? <span className="text-muted-foreground">—</span> : (
                       <>{cost.vnd.toLocaleString('vi-VN')}
                         {!cost.actual && <span className="ml-1 text-[10px] text-muted-foreground">dự tính</span>}
                       </>
                     )}
                   </td>
-                  <td className="text-right font-medium tabular-nums">
+                  <td className="text-right font-medium tabular-nums whitespace-nowrap">
                     {charged.vnd == null ? <span className="text-muted-foreground">—</span> : (
                       <>{charged.vnd.toLocaleString('vi-VN')}
                         <span className={`ml-1 text-[10px] font-normal ${charged.actual ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'}`}>
@@ -123,7 +129,7 @@ export default async function ShipHoListPage({
                       </>
                     )}
                   </td>
-                  <td className="text-right tabular-nums">
+                  <td className="text-right tabular-nums whitespace-nowrap">
                     {margin.vnd == null ? <span className="text-muted-foreground">—</span> : (
                       <span className={margin.vnd >= 0 ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'font-medium text-red-600 dark:text-red-400'}>
                         {margin.vnd >= 0 ? '+' : ''}{margin.vnd.toLocaleString('vi-VN')}
