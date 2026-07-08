@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
 import { displayCarrierCost, displayCharged, displayMargin } from '@/features/ship-ho/pnl';
+import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { OrderRow } from './OrderRow';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,9 +15,12 @@ import { buttonVariants } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Nháp', quoted: 'Đã báo giá', shipped: 'Đã gửi',
-  delivered: 'Đã giao', billed: 'Đã lên bảng kê', settled: 'Đã thanh toán',
+const TONE: Record<ShipHoTone, string> = {
+  ok: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  info: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  warn: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  bad: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  muted: 'bg-muted text-muted-foreground',
 };
 
 export default async function ShipHoListPage({
@@ -89,6 +93,10 @@ export default async function ShipHoListPage({
                 const charged = displayCharged(num(o.chargedVnd), num(o.actualChargedVnd));
                 const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
                 const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
+                const stage = deriveShipHoStage({
+                  status: o.status, trackingNumber: o.trackingNumber, deliveryStatus: o.deliveryStatus,
+                  reconcileStatus: o.reconcileStatus, marginVnd: num(o.marginVnd),
+                });
                 return (
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
@@ -132,7 +140,18 @@ export default async function ShipHoListPage({
                       </>
                     )}
                   </td>
-                  <td>{STATUS_LABEL[o.status] ?? o.status}</td>
+                  <td>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${TONE[stage.tone]}`}>
+                        {stage.label}
+                      </span>
+                      {stage.warnings.map((wn) => (
+                        <span key={wn} className={`inline-block rounded px-1.5 py-px text-[10px] font-semibold whitespace-nowrap ${TONE.bad}`} title="Đơn có vấn đề — mở chi tiết để kiểm tra">
+                          ⚠ {wn}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
                 </OrderRow>
                 );
               })}

@@ -22,6 +22,8 @@ export interface ShipHoOrderRow {
   createdAt: Date;
   customerRef: string | null;
   trackingNumber: string | null;
+  deliveryStatus: string | null;
+  reconcileStatus: string | null;
   recipientName: string | null;
 }
 
@@ -54,6 +56,8 @@ export async function listShipHoOrders(filter?: {
       createdAt: schema.shipHoOrders.createdAt,
       customerRef: schema.shipHoOrders.customerRef,
       trackingNumber: schema.shipHoOrders.trackingNumber,
+      deliveryStatus: schema.shipHoOrders.deliveryStatus,
+      reconcileStatus: schema.shipHoOrders.reconcileStatus,
       recipientName: schema.shipHoOrders.recipientName,
     })
     .from(schema.shipHoOrders)
