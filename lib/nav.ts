@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, Warehouse, Ship, UserRound } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, Warehouse, Ship } from 'lucide-react';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -31,8 +31,8 @@ export const NAV: NavItem[] = [
   { href: '/f/ship-ho',       label: 'Ship hộ',       icon: Ship,            requires: 'view_ship_ho' },
   { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
-  { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions' },
-  { href: '/f/customer-account', label: 'Customer Account', icon: UserRound,  requires: 'view_functions' },
+  // Customer Account + Style Quiz nằm TRONG hub Functions (không đứng riêng).
+  { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions', match: ['/f/customer-account'] },
   { href: '/settings',        label: 'Settings',      icon: Settings,        requires: null },
 ];
 

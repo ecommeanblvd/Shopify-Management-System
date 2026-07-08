@@ -1,7 +1,10 @@
 /** THUẦN: shape + sanitize config Customer Account (jsonb → typed). */
 import { z } from 'zod';
 
-export const MODULE_KEYS = ['tracking', 'wishlist', 'quiz'] as const;
+// Style Quiz ('quiz') ĐÃ TÁCH thành function riêng (/f/functions/style-quiz) — bật
+// theo store qua store_function_settings, không còn là module cấu hình ở đây.
+// getPublicConfig tự inject module 'quiz' cho extension khi function được bật.
+export const MODULE_KEYS = ['tracking', 'wishlist'] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 const brandingSchema = z.object({

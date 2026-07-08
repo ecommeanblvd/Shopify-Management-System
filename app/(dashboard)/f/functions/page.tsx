@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, ChevronRight, Power, Activity, Layers, ScrollText, AlertTriangle, Truck } from 'lucide-react';
+import { Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, UserRound, Palette, ChevronRight, Power, Activity, Layers, ScrollText, AlertTriangle, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 export const dynamic = 'force-dynamic';
 
 const ICONS: Record<string, LucideIcon> = {
-  Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark,
+  Heart, Gift, Bell, TrendingDown, Sparkles, Eye, Bookmark, UserRound, Palette,
 };
 
 export default async function FunctionsOverviewPage() {

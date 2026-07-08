@@ -19,7 +19,7 @@ export interface FunctionManifest {
   description: string;
   version: string;
   /** Lucide icon name (rendered by the dashboard nav + overview card). */
-  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles' | 'Eye' | 'Bookmark';
+  icon: 'Heart' | 'Gift' | 'Bell' | 'TrendingDown' | 'Sparkles' | 'Eye' | 'Bookmark' | 'UserRound' | 'Palette';
   /** Tailwind accent classes for the icon tile on the overview page. */
   accent: { fg: string; bg: string };
   routes: {
@@ -31,6 +31,30 @@ export interface FunctionManifest {
 }
 
 export const FUNCTIONS: FunctionManifest[] = [
+  {
+    key: 'customer-account',
+    name: 'Customer Account',
+    description:
+      'Trang tài khoản khách hàng tuỳ biến trên Shopify: theo dõi đơn (Journey), ' +
+      'wishlist, loyalty, đổi/trả — cấu hình branding + module bật/tắt theo từng store. ' +
+      'Ship qua Customer Account UI extension.',
+    version: '1.0.0',
+    icon: 'UserRound',
+    accent: { fg: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/10' },
+    routes: { admin: '/f/customer-account' },
+  },
+  {
+    key: 'style-quiz',
+    name: 'Style Quiz',
+    description:
+      'Quiz phong cách khoa học: khách trả lời → ra mùa màu hợp da, dáng người, ' +
+      'archetype → gợi ý sản phẩm theo catalog từng store. Gồm lý thuyết, cách set ' +
+      'up và bật theo store. Ship như module trong Customer Account.',
+    version: '1.0.0',
+    icon: 'Palette',
+    accent: { fg: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-500/10' },
+    routes: { admin: '/f/functions/style-quiz' },
+  },
   {
     key: 'wishlist',
     name: 'Wishlist',

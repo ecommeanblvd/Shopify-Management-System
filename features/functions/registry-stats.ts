@@ -25,7 +25,7 @@ type CountRow = { n: string };
 /** Returns a map keyed by function key. Calling code looks up by
  *  manifest key; absent rows default to zero in the consumer. */
 export async function getAllFunctionsActivity(): Promise<Map<string, FunctionActivity>> {
-  const [activeRows, wishlistEvents, recentlyViewedEvents, giftRegistryEvents, saveForLaterEvents] = await Promise.all([
+  const [activeRows, wishlistEvents, recentlyViewedEvents, giftRegistryEvents, saveForLaterEvents, caConfigs, quizResults] = await Promise.all([
     db.execute<ActiveRow>(sql`
       SELECT function_key, COUNT(*)::text AS n
         FROM store_function_settings
@@ -55,12 +55,27 @@ export async function getAllFunctionsActivity(): Promise<Map<string, FunctionAct
         FROM save_for_later_items
        WHERE saved_at > NOW() - INTERVAL '7 days';
     `),
+    // Customer Account bật/tắt qua customer_account_configs (không phải store_function_settings).
+    db.execute<CountRow>(sql`
+      SELECT COUNT(*)::text AS n
+        FROM customer_account_configs
+       WHERE enabled = true;
+    `),
+    // Style Quiz "events" = số lượt hoàn tất quiz gần đây.
+    db.execute<CountRow>(sql`
+      SELECT COUNT(*)::text AS n
+        FROM style_quiz_results
+       WHERE created_at > NOW() - INTERVAL '7 days';
+    `),
   ]);
 
   const active = new Map<string, number>();
   for (const r of activeRows.rows) active.set(r.function_key, Number(r.n));
 
+  const caActive = Number(caConfigs.rows[0]?.n ?? '0');
   const byKey: Record<string, number> = {
+    'customer-account': 0,
+    'style-quiz': Number(quizResults.rows[0]?.n ?? '0'),
     wishlist: Number(wishlistEvents.rows[0]?.n ?? '0'),
     'recently-viewed': Number(recentlyViewedEvents.rows[0]?.n ?? '0'),
     'gift-registry': Number(giftRegistryEvents.rows[0]?.n ?? '0'),
@@ -71,7 +86,8 @@ export async function getAllFunctionsActivity(): Promise<Map<string, FunctionAct
   for (const key of Object.keys(byKey)) {
     out.set(key, {
       key,
-      activeStoreCount: active.get(key) ?? 0,
+      // Customer Account đếm từ customer_account_configs; còn lại từ store_function_settings.
+      activeStoreCount: key === 'customer-account' ? caActive : (active.get(key) ?? 0),
       last7DaysEvents: byKey[key]!,
     });
   }
