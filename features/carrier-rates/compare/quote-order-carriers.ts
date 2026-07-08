@@ -37,6 +37,9 @@ export interface CarrierQuoteRow {
   breakdown?: QuoteBreakdown;
   zone?: string;
   tierUpperKg?: number;
+  /** Tạm ngưng CHỌN từ ngày này (ISO). null = chọn được. Vẫn báo giá. */
+  suspendedAt?: string | null;
+  suspendReason?: string | null;
 }
 
 /** Cước VND của account: costCurrency=VND → carrierCost; else display=VND →
@@ -48,7 +51,10 @@ function toVnd(costCcy: string, dispCcy: string, cost: number, display: number):
   return display; // fallback best-effort
 }
 
-export interface AccountSnap { carrierKey: string; carrierName: string; accountId: string; snap: CarrierAccountSnapshot; }
+export interface AccountSnap {
+  carrierKey: string; carrierName: string; accountId: string; snap: CarrierAccountSnapshot;
+  suspendedAt?: Date | null; suspendReason?: string | null;
+}
 
 /** THUẦN: cho danh sách snapshot + input → hàng so sánh, xếp cước tăng dần
  *  (quote lỗi xuống cuối). Test được không cần DB. */
@@ -64,7 +70,12 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
       effectiveDate: input.effectiveDate,
       signatureOptIn: sig,
     });
-    const common = { carrierKey: e.carrierKey, carrierName: e.carrierName, accountId: e.accountId, costCurrency: e.snap.costCurrency, displayCurrency: e.snap.displayCurrency };
+    const common = {
+      carrierKey: e.carrierKey, carrierName: e.carrierName, accountId: e.accountId,
+      costCurrency: e.snap.costCurrency, displayCurrency: e.snap.displayCurrency,
+      suspendedAt: e.suspendedAt ? e.suspendedAt.toISOString() : null,
+      suspendReason: e.suspendReason ?? null,
+    };
     if (q.ok) {
       const vndCost = toVnd(e.snap.costCurrency, e.snap.displayCurrency, q.breakdown.carrierCost, q.breakdown.carrierCostDisplay);
       return { ...common, ok: true, carrierCostDisplay: q.breakdown.carrierCostDisplay, vndCost, breakdown: q.breakdown, zone: q.zone, tierUpperKg: q.tier.upperKg };
@@ -79,7 +90,10 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
 /** Load mọi carrier account đang bật + snapshot rồi rank. */
 export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): Promise<CarrierQuoteRow[]> {
   const accounts = await db
-    .select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, carrierKey: schema.carriers.key })
+    .select({
+      id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, carrierKey: schema.carriers.key,
+      suspendedAt: schema.carrierAccounts.suspendedAt, suspendReason: schema.carrierAccounts.suspendReason,
+    })
     .from(schema.carrierAccounts)
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
     .where(eq(schema.carrierAccounts.enabled, true));
@@ -87,7 +101,7 @@ export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): P
   const entries: AccountSnap[] = [];
   for (const a of accounts) {
     const snap = await loadAccountSnapshot(a.id);
-    if (snap) entries.push({ carrierKey: a.carrierKey ?? '?', carrierName: a.name, accountId: a.id, snap });
+    if (snap) entries.push({ carrierKey: a.carrierKey ?? '?', carrierName: a.name, accountId: a.id, snap, suspendedAt: a.suspendedAt, suspendReason: a.suspendReason });
   }
   return rankCarrierQuotes(entries, input);
 }

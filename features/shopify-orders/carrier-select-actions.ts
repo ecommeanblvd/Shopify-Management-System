@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
@@ -51,6 +51,16 @@ export async function getOrderCarrierComparison(orderId: string): Promise<OrderC
 export async function assignOrderCarrier(orderId: string, carrierKey: string): Promise<{ ok: boolean; error?: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Chưa đăng nhập' };
+
+  // Guard: carrier đang tạm ngưng CHỌN thì chặn (không chỉ dựa UI disable).
+  const [acc] = await db.select({ suspendedAt: schema.carrierAccounts.suspendedAt, reason: schema.carrierAccounts.suspendReason })
+    .from(schema.carrierAccounts)
+    .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(and(eq(schema.carriers.key, carrierKey), eq(schema.carrierAccounts.enabled, true)))
+    .limit(1);
+  if (acc?.suspendedAt && acc.suspendedAt <= new Date()) {
+    return { ok: false, error: `${carrierKey} đang tạm ngưng${acc.reason ? ` (${acc.reason})` : ''}` };
+  }
 
   await db.update(schema.shopifyOrders).set({
     selectedCarrierKey: carrierKey,

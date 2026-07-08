@@ -61,6 +61,16 @@ describe('rankCarrierQuotes', () => {
     expect(rows[0].vndCost).toBe(1_300_000); // 50 USD × 26,000
   });
 
+  it('passes carrier suspension info through to the row (shown but flagged)', () => {
+    const susp = new Date('2026-06-01T00:00:00Z');
+    const rows = rankCarrierQuotes([
+      { carrierKey: 'dhl', carrierName: 'DHL', accountId: 'd', snap: snap('a', 280_000), suspendedAt: susp, suspendReason: 'Tạm ngưng dịch vụ' },
+    ], { country: 'TH', weightKg: 1 });
+    expect(rows[0].ok).toBe(true); // vẫn báo giá
+    expect(rows[0].suspendedAt).toBe(susp.toISOString());
+    expect(rows[0].suspendReason).toBe('Tạm ngưng dịch vụ');
+  });
+
   it('applies fuel + VAT surcharges into the compared carrier cost', () => {
     const withFuel = snap('f', 100_000);
     withFuel.surcharges = [

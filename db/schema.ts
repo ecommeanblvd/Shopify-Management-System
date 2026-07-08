@@ -290,6 +290,11 @@ export const carrierAccounts = pgTable('carrier_accounts', {
   // cộng (quy ước hóa đơn FedEx — đo 2.400+ dòng). DHL chờ confirm.
   totalsRoundingMode: text('totals_rounding_mode'),
   enabled: boolean('enabled').notNull().default(true),
+  // Tạm ngưng CHỌN (outbound): vẫn báo giá để so sánh, nhưng staff không chọn
+  // được carrier này khi suspended_at ≤ hiện tại. KHÁC enabled (enabled=false là
+  // ẩn hẳn khỏi hệ thống). suspend_reason hiển thị lý do.
+  suspendedAt: timestamp('suspended_at'),
+  suspendReason: text('suspend_reason'),
   notes: text('notes'),
   createdBy: text('created_by').references(() => user.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -27,9 +27,13 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
     });
   };
 
+  const now = Date.now();
+  const canSelect = (r: { suspendedAt?: string | null }) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > now;
   const okRows = data?.rows.filter((r) => r.ok) ?? [];
-  const cheapestKey = okRows[0]?.carrierKey;
-  const cheapestCost = okRows[0]?.vndCost ?? 0;
+  // "Rẻ nhất" = rẻ nhất trong nhóm CHỌN được (carrier tạm ngưng không tính dù giá thấp).
+  const cheapest = okRows.find(canSelect) ?? okRows[0];
+  const cheapestKey = cheapest?.carrierKey;
+  const cheapestCost = cheapest?.vndCost ?? 0;
 
   return (
     <section className="rounded-lg border border-border">
@@ -87,6 +91,9 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                 const k = r.costCurrency !== 'VND' && b.carrierCost ? (r.vndCost ?? 0) / b.carrierCost : 1;
                 const surchg = (b.remote + b.residential + b.demand + b.countryFixed + b.peak + b.addons + b.perStep + b.perKg) * k;
                 const delta = (r.vndCost ?? 0) - cheapestCost;
+                const selectable = canSelect(r);
+                const suspFrom = r.suspendedAt ? new Date(r.suspendedAt).toLocaleDateString('vi-VN') : null;
+                const reasonText = `${r.suspendReason || 'Tạm ngưng'}${suspFrom ? ` · từ ${suspFrom}` : ''}`;
                 return (
                   <tr key={r.accountId}
                     className={`border-t border-border/60 ${isCheap ? 'bg-emerald-500/[0.06]' : ''} ${isSel ? 'ring-1 ring-inset ring-emerald-500/40' : ''}`}>
@@ -108,10 +115,20 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                     </td>
                     <td className="px-3 py-3 text-left text-xs whitespace-nowrap text-muted-foreground">{r.zone}{r.tierUpperKg ? ` · ≤${r.tierUpperKg}kg` : ''}</td>
                     <td className="px-3 py-3 text-right">
-                      <button type="button" disabled={assigning || isSel} onClick={() => choose(r.carrierKey)}
-                        className={`rounded-md border px-3 py-1 text-xs font-medium transition disabled:opacity-60 ${isSel ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-border hover:bg-muted'}`}>
-                        {isSel ? '✓ Đã chọn' : pendingKey === r.carrierKey ? '…' : 'Chọn'}
-                      </button>
+                      {!selectable ? (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <button type="button" disabled title={reasonText}
+                            className="cursor-not-allowed rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground opacity-50">
+                            Tạm ngưng
+                          </button>
+                          <span className="max-w-[150px] text-right text-[10px] leading-tight text-muted-foreground">{reasonText}</span>
+                        </div>
+                      ) : (
+                        <button type="button" disabled={assigning || isSel} onClick={() => choose(r.carrierKey)}
+                          className={`rounded-md border px-3 py-1 text-xs font-medium transition disabled:opacity-60 ${isSel ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-border hover:bg-muted'}`}>
+                          {isSel ? '✓ Đã chọn' : pendingKey === r.carrierKey ? '…' : 'Chọn'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
