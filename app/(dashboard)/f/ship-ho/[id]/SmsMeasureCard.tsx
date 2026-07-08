@@ -38,6 +38,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
   const [h, setH] = useState(sms?.dimHeightCm ? String(sms.dimHeightCm) : '');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [priceChange, setPriceChange] = useState<{ oldVnd: number; newVnd: number } | null>(null);
   const [pending, start] = useTransition();
 
   const decl = chargeable(declared);
@@ -46,13 +47,13 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
   const chargeDiff = smsCalc ? Math.round((smsCalc.kg - decl.kg) * 1000) / 1000 : null;
 
   const save = () => start(async () => {
-    setError(null); setSaved(false);
+    setError(null); setSaved(false); setPriceChange(null);
     const r = await updateSmsMeasurement(orderId, {
       weightKg: Number(weight),
       dimLengthCm: l ? Number(l) : null, dimWidthCm: w ? Number(w) : null, dimHeightCm: h ? Number(h) : null,
     });
     if (!r.ok) setError(r.error);
-    else setSaved(true);
+    else { setSaved(true); setPriceChange(r.priceChange); }
   });
 
   const numInput = 'w-24 rounded border border-border bg-background px-2 py-1 text-sm tabular-nums';
@@ -127,8 +128,18 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
             className="rounded-md border border-border px-3 py-1.5 text-xs font-medium transition hover:bg-muted disabled:opacity-50">
             {pending ? 'Đang lưu…' : sms ? 'Cập nhật số đo' : 'Lưu số đo'}
           </button>
-          {saved && <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ Đã lưu</span>}
+          {saved && !priceChange && <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ Đã lưu — giá không đổi</span>}
           {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
+        </div>
+      )}
+
+      {/* Giá đổi sau đo lại → đã báo MMP ngay */}
+      {priceChange && (
+        <div className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-800 dark:text-sky-300">
+          💰 Giá thu cập nhật theo số đo mới: <s>{priceChange.oldVnd.toLocaleString('vi-VN')}₫</s> →{' '}
+          <b>{priceChange.newVnd.toLocaleString('vi-VN')}₫</b>{' '}
+          ({priceChange.newVnd - priceChange.oldVnd > 0 ? '+' : ''}{(priceChange.newVnd - priceChange.oldVnd).toLocaleString('vi-VN')}₫).
+          Đã gửi event <code>order.priced</code> sang MMP để brand biết giá mới.
         </div>
       )}
     </CardContent></Card>

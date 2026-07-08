@@ -186,7 +186,7 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `order.needs_info` | Thiếu thông tin (địa chỉ…) — cần brand bổ sung |
 | | `order.rejected` | Không nhận (kèm lý do) |
 | | `order.cancelled` | Đã hủy |
-| Giá | `order.priced` | Chốt giá (kèm chênh vs dự kiến + lý do) |
+| Giá | `order.priced` | Giá dự tính THAY ĐỔI sau khi SMS cân/đo lại tại kho (kg/thể tích lệch so brand khai). `data`: `{ chargedVnd, previousChargedVnd, deltaVnd, reason: "sms_remeasure", measured: { weightKg, dimLengthCm, dimWidthCm, dimHeightCm }, lines }` — `lines` là cấu trúc giá mới (render như estimate). MMP cập nhật giá hiển thị cho brand NGAY khi nhận. |
 | Vận chuyển | `shipment.booked` | Đã tạo vận đơn (`trackingNumber`, "Express Delivery", dự kiến giao) |
 | | `shipment.picked_up` / `in_transit` / `customs` / `out_for_delivery` | Mốc hành trình |
 | | `shipment.exception` | Sự cố (delay/kẹt/giao lỗi) + hành động cần |
