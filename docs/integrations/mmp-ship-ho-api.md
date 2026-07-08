@@ -118,6 +118,7 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
   - MMP **không cộng phí ký nhận**.
   - `chargedVnd` = cước cơ bản + phụ phí (không gồm ký nhận) + VAT.
 - MMP chỉ hiển thị tùy chọn "Yêu cầu ký nhận" khi `directSignatureAvailable: true`.
+- **Nước FedEx MIỄN Direct Signature (fix 08/07/2026):** FedEx không thu phí ký nhận ở 13 nước: **SA, QA, IL, IQ, OM, KZ, JO, MC, LU, CY, CZ, PE, AO**. Các nước này trả `directSignatureAvailable: false` ⇒ MMP ẩn toggle. Trước đây SA/IL/LU/CZ trả `available: true` nhưng bật DS lại không cộng phí (mâu thuẫn) — nay đã khớp: hoặc available+cộng phí, hoặc unavailable+ẩn toggle.
 
 ## 3. Tạo đơn — `POST /api/mmp/ship-ho/orders`
 

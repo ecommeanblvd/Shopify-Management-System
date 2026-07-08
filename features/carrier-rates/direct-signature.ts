@@ -13,9 +13,22 @@ export const FEDEX_DIRECT_SIGNATURE_COUNTRIES: string[] = [
   'AE', 'SA', 'IL', 'ZA', 'BR',
 ];
 
+/**
+ * Nước FedEx MIỄN Direct Signature (không thu phí) — PHẢI khớp
+ * `excluded_country_codes` của surcharge DS trên account FedEx. Trước đây
+ * availability list có SA/IL/LU/CZ trong khi surcharge lại miễn chúng → mâu
+ * thuẫn "hiện toggle nhưng không cộng phí" (bug MMP báo 08/07). Trừ tập này khỏi
+ * availability để available=false ⇒ MMP ẩn toggle, khớp thực tế FedEx không thu.
+ */
+export const DIRECT_SIGNATURE_EXEMPT_COUNTRIES: string[] = [
+  'SA', 'QA', 'IL', 'IQ', 'OM', 'KZ', 'JO', 'MC', 'LU', 'CY', 'CZ', 'PE', 'AO',
+];
+
 const SET = new Set(FEDEX_DIRECT_SIGNATURE_COUNTRIES);
+const EXEMPT = new Set(DIRECT_SIGNATURE_EXEMPT_COUNTRIES);
 export function countrySupportsDirectSignature(iso: string): boolean {
-  return SET.has(iso.trim().toUpperCase());
+  const u = iso.trim().toUpperCase();
+  return SET.has(u) && !EXEMPT.has(u);
 }
 
 /** THUẦN: brand có muốn DS và nước đích có hỗ trợ không → mới tính phí. */
