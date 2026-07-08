@@ -8,6 +8,8 @@ import { hasPermission, type Role } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
+import { getTransitStats, normalizeTransitRange } from '@/features/shipments/transit-stats';
+import { TransitStatsCard } from '@/components/dashboard/TransitStatsCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,8 +19,14 @@ function statusVariant(status: string): 'default' | 'destructive' | 'outline' {
   return 'outline';
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth.api.getSession({ headers: await headers() });
+  const sp = await searchParams;
+  const transitDays = normalizeTransitRange(typeof sp['transit'] === 'string' ? sp['transit'] : undefined);
 
   // All five reads are independent — run them in one parallel batch so
   // the page pays one DB round trip of latency, not five.
@@ -38,6 +46,8 @@ export default async function HomePage() {
   const canManageStores = !!callerRole && hasPermission(callerRole, 'manage_stores');
   const canViewMarkets = !!callerRole && hasPermission(callerRole, 'view_markets_history');
   const canRunFeature = !!callerRole && hasPermission(callerRole, 'run_feature');
+  const canViewTransit = !!callerRole && hasPermission(callerRole, 'view_fulfillment');
+  const transitStats = canViewTransit ? await getTransitStats(transitDays) : null;
 
   const active = stores.filter((s) => s.status === 'active').length;
   const errored = stores.filter((s) => s.status === 'error').length;
@@ -88,6 +98,9 @@ export default async function HomePage() {
           sub="Settings + Markets"
         />
       </div>
+
+      {/* Transit time theo tuyến (filter mốc thời gian) */}
+      {transitStats && <TransitStatsCard stats={transitStats} days={transitDays} />}
 
       {/* Two-column: Stores list + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
