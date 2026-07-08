@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getShipHoOrder } from '@/features/ship-ho/queries';
+import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { MmpOrderActions } from './MmpOrderActions';
@@ -24,6 +25,17 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
   }
   const o = await getShipHoOrder(id);
   if (!o) notFound();
+
+  const price = (o.quoteBreakdown && o.carrierCostVnd && o.chargedVnd)
+    ? shipHoPriceStructure({
+        breakdown: o.quoteBreakdown,
+        carrierCostVnd: Number(o.carrierCostVnd),
+        chargedVnd: Number(o.chargedVnd),
+        markupPercent: Number(o.markupPercent ?? 0),
+        serviceLabel: o.service === 'standard' ? 'Standard Delivery' : 'Express Delivery',
+      })
+    : null;
+  const marginVnd = price ? price.chargeTotal - price.costTotal : null;
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -48,12 +60,60 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         <div><span className="text-muted-foreground">Carrier</span><div>{o.carrierKey ?? '—'}</div></div>
       </CardContent></Card>
 
-      <Card><CardContent className="p-4 space-y-2 text-sm">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Giá</div>
-        <div className="flex justify-between"><span>Chi phí carrier (dự tính)</span><span>{vnd(o.carrierCostVnd)}</span></div>
-        <div className="flex justify-between"><span>Markup</span><span>{o.markupPercent ? o.markupPercent + '%' : '—'}</span></div>
-        <div className="flex justify-between font-semibold border-t pt-2"><span>Giá thu partner</span><span>{vnd(o.chargedVnd)}</span></div>
-        {!o.quotedAt && <p className="text-amber-600 text-xs">Chưa tính được giá — kiểm tra carrier account / rate card.</p>}
+      <Card><CardContent className="p-4 space-y-3 text-sm">
+        <div className="flex items-center justify-between">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Cấu trúc giá (dự tính)</div>
+          {o.markupPercent && <div className="text-xs text-muted-foreground">Markup <b>{Number(o.markupPercent)}%</b></div>}
+        </div>
+        {!price ? (
+          <div className="space-y-2">
+            <div className="flex justify-between"><span>Chi phí carrier (mình trả)</span><span>{vnd(o.carrierCostVnd)}</span></div>
+            <div className="flex justify-between font-semibold border-t pt-2"><span>Giá thu khách</span><span>{vnd(o.chargedVnd)}</span></div>
+            {!o.quotedAt && <p className="text-amber-600 text-xs">Chưa tính được giá — kiểm tra carrier account / rate card.</p>}
+            {o.quotedAt && <p className="text-muted-foreground text-xs">Đơn cũ chưa lưu breakdown chi tiết — chỉ có tổng.</p>}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm tabular-nums">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:py-1.5 [&>th]:font-medium">
+                  <th className="text-left">Khoản</th>
+                  <th className="text-right" title="Cước carrier tính cho MEAN">Chi phí Carrier</th>
+                  <th className="text-right" title="Giá dự định thu khách hàng">Giá thu khách</th>
+                  <th className="text-right" title="Chênh lệch = thu − chi">Chênh</th>
+                </tr>
+              </thead>
+              <tbody>
+                {price.rows.map((r) => {
+                  const diff = (r.chargeVnd ?? 0) - (r.costVnd ?? 0);
+                  return (
+                    <tr key={r.label} className="border-t border-border/60 [&>td]:py-2">
+                      <td className="text-left">
+                        {r.label}
+                        {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
+                      </td>
+                      <td className="text-right">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
+                      <td className="text-right">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>
+                      <td className="text-right text-muted-foreground">{diff !== 0 ? (diff > 0 ? '+' : '') + diff.toLocaleString('vi-VN') : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
+                  <td className="text-left">Tổng</td>
+                  <td className="text-right">{price.costTotal.toLocaleString('vi-VN')}</td>
+                  <td className="text-right">{price.chargeTotal.toLocaleString('vi-VN')}</td>
+                  <td className="text-right text-emerald-600 dark:text-emerald-400">+{(marginVnd ?? 0).toLocaleString('vi-VN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Cột <b>Chênh</b> ở dòng Tổng chính là <b>margin dự tính</b> (thu − chi). Số thực tế xem ở phần “Đối soát cước” bên dưới sau khi có hoá đơn carrier.
+              {price.factor !== 1 ? ' Chi phí gốc theo ngoại tệ đã quy về VND.' : ''}
+            </p>
+          </div>
+        )}
       </CardContent></Card>
 
       <Card><CardContent className="p-4 space-y-2 text-sm">
