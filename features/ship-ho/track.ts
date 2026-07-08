@@ -1,15 +1,13 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { trackFedex, type DeliveryStatus } from '@/lib/fedex/track';
-import { trackDhl } from '@/lib/dhl/track';
+import { type DeliveryStatus } from '@/lib/fedex/track';
+import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 import { emitShipHoEvent } from './mmp-events';
 import { deliveryStatusToEvent } from './mmp-events-map';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const TRACKERS = { fedex: trackFedex, dhl: trackDhl } as const;
-type TrackableCarrier = keyof typeof TRACKERS;
-const isTrackable = (c: string | null): c is TrackableCarrier => c === 'fedex' || c === 'dhl';
+const isTrackable = isTrackableCarrier;
 
 /** THUẦN: status đơn sau khi track. delivered → 'delivered'; nhưng KHÔNG hạ đơn
  *  đã 'billed'/'settled' (trạng thái tiền tệ cao hơn). Còn lại giữ nguyên. */
@@ -38,7 +36,7 @@ export async function trackAndStoreShipHo(
   if (!isTrackable(o.carrier)) return { ok: false, error: 'unsupported carrier' };
   if (!o.tracking) return { ok: false, error: 'no tracking' };
   try {
-    const r = await TRACKERS[o.carrier](o.tracking);
+    const r = await trackAny(o.carrier, o.tracking);
     await db.update(schema.shipHoOrders).set({
       deliveryStatus: r.status,
       deliveredAt: r.deliveredAt ?? undefined,

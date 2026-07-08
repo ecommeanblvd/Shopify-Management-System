@@ -1,14 +1,12 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { trackFedex, type DeliveryStatus } from '@/lib/fedex/track';
-import { trackDhl } from '@/lib/dhl/track';
+import { type DeliveryStatus } from '@/lib/fedex/track';
+import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Hãng đang hỗ trợ auto-track — mỗi hãng 1 client cùng shape kết quả. */
-const TRACKERS = { fedex: trackFedex, dhl: trackDhl } as const;
-type TrackableCarrier = keyof typeof TRACKERS;
-const isTrackable = (c: string | null): c is TrackableCarrier => c === 'fedex' || c === 'dhl';
+/** API hãng là nguồn chính; TrackingMore fallback khi hãng lỗi/giới hạn (lib/track-any). */
+const isTrackable = isTrackableCarrier;
 
 export async function trackAndStoreShipment(
   shipmentId: string,
@@ -20,10 +18,10 @@ export async function trackAndStoreShipment(
   if (!isTrackable(s.carrier)) return { ok: false, error: 'unsupported carrier' };
   if (!s.tracking) return { ok: false, error: 'no tracking' };
   try {
-    const r = await TRACKERS[s.carrier](s.tracking);
+    const r = await trackAny(s.carrier, s.tracking);
     await db.update(schema.shipments).set({
       deliveryStatus: r.status,
-      deliverySource: s.carrier,
+      deliverySource: r.source === 'trackingmore' ? 'trackingmore' : s.carrier,
       trackDetail: r.description,
       deliveredAt: r.deliveredAt ?? undefined, // chỉ set khi có
       lastTrackedAt: new Date(),
