@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { estimateForBrand } from './brand-estimate';
 import { emitShipHoEvent } from './mmp-events';
+import { buildMeasurementEventData } from './measure-event';
 
 export interface SmsMeasurementInput {
   weightKg: number;
@@ -15,16 +16,16 @@ export interface SmsMeasurementInput {
 }
 
 export type SmsMeasurementResult =
-  | { ok: true; priceChange: { oldVnd: number; newVnd: number } | null }
+  | { ok: true; matched: boolean; priceChange: { oldVnd: number; newVnd: number } | null }
   | { ok: false; error: string };
 
 /**
- * Nhân viên vận hành SMS cân & đo LẠI kiện khi hàng về kho → lưu để đối chiếu với
- * số brand khai bên MMP (KHÔNG ghi đè cân khai báo gốc — giữ làm bằng chứng).
+ * Nhân viên vận hành SMS (Inecso) cân & đo LẠI kiện khi hàng về kho → lưu để đối
+ * chiếu với số brand khai bên MMP (KHÔNG ghi đè cân khai báo gốc — giữ làm bằng chứng).
  *
- * Hàng chắc chắn vẫn gửi đi; nhưng nếu số đo mới làm GIÁ THU đổi (kg/thể tích →
- * bậc cân khác, phụ phí đổi) thì re-quote theo số đo SMS, cập nhật giá dự tính
- * của đơn và bắn event `order.priced` sang MMP NGAY để brand biết giá mới.
+ * Sau khi đo, LUÔN bắn event `order.measured` sang MMP để ghi lên đơn của brand:
+ * khớp → thông báo khớp (matched=true); lệch → số đo mới + delta; giá thu đổi sau
+ * re-quote → kèm block price (giá cũ/mới/chênh + lines mới). Hàng vẫn gửi đi bình thường.
  */
 export async function updateSmsMeasurement(
   orderId: string,
@@ -67,8 +68,9 @@ export async function updateSmsMeasurement(
     service: 'express',
   });
   const oldVnd = o.chargedVnd == null ? null : Math.round(Number(o.chargedVnd));
+  let newVnd = oldVnd;
   if (est.ok && oldVnd != null && est.estimate.chargedVnd !== oldVnd) {
-    const newVnd = est.estimate.chargedVnd;
+    newVnd = est.estimate.chargedVnd;
     // Cập nhật snapshot giá dự tính theo số đo SMS (giá brand sẽ trả).
     await db.update(schema.shipHoOrders).set({
       carrierKey: est.internal.carrierKey, carrierAccountId: est.internal.carrierAccountId,
@@ -76,29 +78,32 @@ export async function updateSmsMeasurement(
       quoteBreakdown: est.internal.breakdown,
       chargedVnd: String(newVnd), quotedAt: new Date(),
     }).where(eq(schema.shipHoOrders.id, orderId));
-
-    // Báo MMP NGAY: giá mới + chênh + lý do (đo lại tại kho SMS) + số đo + lines mới.
-    await emitShipHoEvent(
-      { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      'order.priced',
-      {
-        chargedVnd: newVnd,
-        previousChargedVnd: oldVnd,
-        deltaVnd: newVnd - oldVnd,
-        reason: 'sms_remeasure',
-        measured: {
-          weightKg: input.weightKg,
-          dimLengthCm: input.dimLengthCm ?? null,
-          dimWidthCm: input.dimWidthCm ?? null,
-          dimHeightCm: input.dimHeightCm ?? null,
-        },
-        lines: est.estimate.lines,
-      },
-    );
     priceChange = { oldVnd, newVnd };
   }
 
+  // LUÔN báo MMP kết quả đo (khớp hay lệch) để ghi lên đơn của brand.
+  const eventData = buildMeasurementEventData(
+    {
+      weightKg: Number(o.weightKg),
+      dimLengthCm: o.dimLengthCm == null ? null : Number(o.dimLengthCm),
+      dimWidthCm: o.dimWidthCm == null ? null : Number(o.dimWidthCm),
+      dimHeightCm: o.dimHeightCm == null ? null : Number(o.dimHeightCm),
+    },
+    {
+      weightKg: input.weightKg,
+      dimLengthCm: input.dimLengthCm ?? null,
+      dimWidthCm: input.dimWidthCm ?? null,
+      dimHeightCm: input.dimHeightCm ?? null,
+    },
+    { previousChargedVnd: oldVnd, chargedVnd: newVnd, lines: est.ok ? est.estimate.lines : undefined },
+  );
+  await emitShipHoEvent(
+    { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+    'order.measured',
+    eventData,
+  );
+
   revalidatePath(`/f/ship-ho/${orderId}`);
   revalidatePath('/f/ship-ho');
-  return { ok: true, priceChange };
+  return { ok: true, matched: eventData.matched, priceChange };
 }

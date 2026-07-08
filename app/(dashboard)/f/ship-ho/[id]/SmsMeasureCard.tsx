@@ -42,6 +42,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
   const [h, setH] = useState(sms?.dimHeightCm ? String(sms.dimHeightCm) : '');
   const [error, setError] = useState<string | null>(null);
   const [priceChange, setPriceChange] = useState<{ oldVnd: number; newVnd: number } | null>(null);
+  const [notified, setNotified] = useState<'matched' | 'mismatch' | null>(null);
   const [pending, start] = useTransition();
 
   const decl = calc(declared);
@@ -55,6 +56,7 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
     });
     if (!r.ok) { setError(r.error); return; }
     setPriceChange(r.priceChange);
+    setNotified(r.matched ? 'matched' : 'mismatch');
     setOpen(false);
   });
 
@@ -138,13 +140,24 @@ export function SmsMeasureCard({ orderId, declared, sms, canManage }: {
         </div>
       )}
 
+      {/* Đã bắn order.measured sang MMP (khớp hay lệch đều gửi) */}
+      {notified && (
+        <div className={`rounded border px-3 py-2 text-xs ${notified === 'matched'
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+          : 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300'}`}>
+          {notified === 'matched'
+            ? <>✓ Số đo khớp brand khai — đã gửi thông báo khớp (<code>order.measured</code>, matched=true) sang MMP.</>
+            : <>⚠ Số đo lệch brand khai — đã gửi số đo mới (<code>order.measured</code>, matched=false) sang MMP để ghi lên đơn brand.</>}
+        </div>
+      )}
+
       {/* Giá đổi sau đo lại → đã báo MMP ngay */}
       {priceChange && (
         <div className="rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-800 dark:text-sky-300">
           💰 Giá thu cập nhật theo số đo mới: <s>{priceChange.oldVnd.toLocaleString('vi-VN')}₫</s> →{' '}
           <b>{priceChange.newVnd.toLocaleString('vi-VN')}₫</b>{' '}
           ({priceChange.newVnd - priceChange.oldVnd > 0 ? '+' : ''}{(priceChange.newVnd - priceChange.oldVnd).toLocaleString('vi-VN')}₫).
-          Đã gửi event <code>order.priced</code> sang MMP để brand biết giá mới.
+          Giá mới nằm trong block <code>price</code> của event <code>order.measured</code> đã gửi MMP.
         </div>
       )}
 

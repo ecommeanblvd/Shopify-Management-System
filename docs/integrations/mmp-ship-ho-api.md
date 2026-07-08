@@ -186,7 +186,7 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `order.needs_info` | Thiếu thông tin (địa chỉ…) — cần brand bổ sung |
 | | `order.rejected` | Không nhận (kèm lý do) |
 | | `order.cancelled` | Đã hủy |
-| Giá | `order.priced` | Giá dự tính THAY ĐỔI sau khi SMS cân/đo lại tại kho (kg/thể tích lệch so brand khai). `data`: `{ chargedVnd, previousChargedVnd, deltaVnd, reason: "sms_remeasure", measured: { weightKg, dimLengthCm, dimWidthCm, dimHeightCm }, lines }` — `lines` là cấu trúc giá mới (render như estimate). MMP cập nhật giá hiển thị cho brand NGAY khi nhận. |
+| Giá | `order.measured` | SMS (Inecso) cân/đo lại kiện tại kho — **luôn gửi** (khớp hay lệch). MMP ghi kết quả lên đơn của brand; giá mới (nếu đổi) nằm trong `data.price`. Chi tiết payload: mục 4b. |
 | Vận chuyển | `shipment.booked` | Đã tạo vận đơn (`trackingNumber`, "Express Delivery", dự kiến giao) |
 | | `shipment.picked_up` / `in_transit` / `customs` / `out_for_delivery` | Mốc hành trình |
 | | `shipment.exception` | Sự cố (delay/kẹt/giao lỗi) + hành động cần |
@@ -197,6 +197,70 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `statement.paid` / `statement.overdue` | Thanh toán / quá hạn (công nợ) |
 
 **MMP→SMS bổ sung (v2):** `order.updated` (brand sửa khi chưa xử lý), `order.cancel_requested`, `order.price_accepted` (nếu giá cuối lệch quá ngưỡng).
+
+### 4b. Event `order.measured` — SMS cân/đo lại tại kho
+
+Khi hàng về kho, nhân viên SMS (Inecso) cân & đo lại kiện. **Mọi lần đo đều bắn event này** (khớp hay lệch) — cùng envelope + HMAC như các event khác (mục 4). MMP nhận và **ghi lên đơn hàng của brand**.
+
+**Schema `data`:**
+
+| Field | Kiểu | Ý nghĩa |
+|---|---|---|
+| `matched` | boolean | `true` = số SMS đo **khớp** brand khai (cân + kích thước + cân tính phí); `false` = lệch |
+| `declared` | object | Số **brand khai** lúc tạo đơn: `{ weightKg, dimLengthCm, dimWidthCm, dimHeightCm, dimWeightKg, chargeableWeightKg }` (dim = L×W×H/5000; chargeable = max(cân, dim); dim `null` nếu không khai kích thước) |
+| `measured` | object | Số **SMS đo** — cùng shape với `declared` |
+| `delta.weightKg` | number | Chênh cân (đo − khai) |
+| `delta.chargeableWeightKg` | number | Chênh **cân tính phí** (đây là số quyết định giá) |
+| `price.changed` | boolean | Giá thu có đổi sau re-quote theo số đo không. LƯU Ý: có thể `matched=true` nhưng `price.changed=true` (fuel tuần mới) và ngược lại |
+| `price.previousChargedVnd` | number\|null | Giá dự tính cũ (VND) |
+| `price.chargedVnd` | number\|null | Giá dự tính MỚI (VND) — brand sẽ trả giá này |
+| `price.deltaVnd` | number | Chênh giá (mới − cũ); `0` khi không đổi |
+| `price.lines` | array? | CHỈ khi `changed=true`: cấu trúc giá mới `[{ label, amountVnd }]`, tổng = `chargedVnd` — render như estimate |
+
+**Ví dụ 1 — KHỚP (MMP hiện "kho đã xác nhận số đo"):**
+```json
+{
+  "event": "order.measured", "mmpRef": "26-INSLG-SV-0003", "code": "26-INSLG-SV-0003",
+  "occurredAt": "2026-07-08T10:15:00.000Z",
+  "data": {
+    "matched": true,
+    "declared": { "weightKg": 2, "dimLengthCm": 30, "dimWidthCm": 24, "dimHeightCm": 11, "dimWeightKg": 1.584, "chargeableWeightKg": 2 },
+    "measured": { "weightKg": 2, "dimLengthCm": 30, "dimWidthCm": 24, "dimHeightCm": 11, "dimWeightKg": 1.584, "chargeableWeightKg": 2 },
+    "delta": { "weightKg": 0, "chargeableWeightKg": 0 },
+    "price": { "changed": false, "previousChargedVnd": 2012941, "chargedVnd": 2012941, "deltaVnd": 0 }
+  }
+}
+```
+
+**Ví dụ 2 — LỆCH + giá mới (MMP cập nhật giá hiển thị cho brand NGAY):**
+```json
+{
+  "event": "order.measured", "mmpRef": "26-INSLG-SV-0002", "code": "26-INSLG-SV-0002",
+  "occurredAt": "2026-07-08T10:20:00.000Z",
+  "data": {
+    "matched": false,
+    "declared": { "weightKg": 2, "dimLengthCm": 30, "dimWidthCm": 24, "dimHeightCm": 10, "dimWeightKg": 1.44, "chargeableWeightKg": 2 },
+    "measured": { "weightKg": 2.4, "dimLengthCm": 32, "dimWidthCm": 24, "dimHeightCm": 12, "dimWeightKg": 1.843, "chargeableWeightKg": 2.4 },
+    "delta": { "weightKg": 0.4, "chargeableWeightKg": 0.4 },
+    "price": {
+      "changed": true, "previousChargedVnd": 2182684, "chargedVnd": 2350000, "deltaVnd": 167316,
+      "lines": [
+        { "label": "Cước cơ bản (Express Delivery)", "amountVnd": 1400000 },
+        { "label": "Phụ phí vùng/địa chỉ", "amountVnd": 152700 },
+        { "label": "Phụ phí xăng dầu", "amountVnd": 540000 },
+        { "label": "Phí xử lý đơn hàng", "amountVnd": 50000 },
+        { "label": "VAT", "amountVnd": 207300 }
+      ]
+    }
+  }
+}
+```
+
+**MMP cần làm khi nhận:**
+1. Verify HMAC (`x-mean-signature` + `x-mean-timestamp`, secret outbound — như mọi event) → `200` để SMS ngừng retry.
+2. Ghi lên đơn brand: `matched=true` → note "Kho đã cân/đo lại — khớp số khai"; `matched=false` → hiện `measured` vs `declared` + delta.
+3. `price.changed=true` → **cập nhật giá hiển thị cho brand ngay** (`chargedVnd` mới + render `lines`); giá này thay giá quote cũ.
+4. Idempotent theo (`mmpRef`, `event`, `occurredAt`) — đo lại nhiều lần sinh nhiều event, lần mới nhất (occurredAt lớn nhất) là hiện hành.
 
 ## 5. Ghi chú tích hợp
 
