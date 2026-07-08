@@ -50,7 +50,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
 
       <Card><CardContent className="p-4 space-y-2 text-sm">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">Giá</div>
-        <div className="flex justify-between"><span>Cước carrier (gốc)</span><span>{vnd(o.carrierCostVnd)}</span></div>
+        <div className="flex justify-between"><span>Chi phí carrier (dự tính)</span><span>{vnd(o.carrierCostVnd)}</span></div>
         <div className="flex justify-between"><span>Markup</span><span>{o.markupPercent ? o.markupPercent + '%' : '—'}</span></div>
         <div className="flex justify-between font-semibold border-t pt-2"><span>Giá thu partner</span><span>{vnd(o.chargedVnd)}</span></div>
         {!o.quotedAt && <p className="text-amber-600 text-xs">Chưa tính được giá — kiểm tra carrier account / rate card.</p>}

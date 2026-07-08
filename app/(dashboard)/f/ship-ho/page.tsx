@@ -66,9 +66,11 @@ export default async function ShipHoListPage({
         <CardContent className="p-0">
           <table className="w-full text-sm">
             <thead className="border-b text-muted-foreground">
-              <tr className="[&>th]:text-left [&>th]:p-3">
-                <th>Mã</th><th>Mã đơn gốc</th><th>Đối tác</th><th>Đến</th><th>Cân</th><th>Carrier</th>
-                <th className="text-right">Cước gốc</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th><th>Trạng thái</th>
+              <tr className="[&>th]:p-3">
+                <th className="text-left">Mã</th><th className="text-left">Mã đơn gốc</th><th className="text-left">Đối tác</th>
+                <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
+                <th className="text-right">Chi phí carrier</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th>
+                <th className="text-left">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
