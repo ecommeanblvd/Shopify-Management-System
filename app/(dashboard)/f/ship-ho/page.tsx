@@ -99,20 +99,9 @@ export default async function ShipHoListPage({
                   <td className="text-muted-foreground">{o.customerRef ?? '—'}</td>
                   <td>{o.brandName ?? o.partnerBrandSlug}</td>
                   <td>{o.country}</td>
-                  <td>
-                    {o.weightKg} kg
-                    {actualW != null && Math.abs(actualW - Number(o.weightKg)) > 1e-9 ? (
-                      <div className="text-[10px] font-medium text-sky-600 dark:text-sky-400" title="Cân thực từ hoá đơn carrier">
-                        thực {actualW} kg
-                      </div>
-                    ) : (() => {
-                      const ch = o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg);
-                      return ch != null && ch > Number(o.weightKg) + 1e-9 ? (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400" title="Tính cước theo cân quy đổi (dim weight) vì lớn hơn cân thực">
-                          tính cước {ch} kg (quy đổi)
-                        </div>
-                      ) : null;
-                    })()}
+                  {/* Chỉ hiện CÂN TÍNH BILL: cân bill thực (đã đối soát) → chargeable từ quote → cân khai */}
+                  <td className="tabular-nums" title="Cân dùng để tính bill">
+                    {(actualW ?? (o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg)) ?? Number(o.weightKg))} kg
                   </td>
                   <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
