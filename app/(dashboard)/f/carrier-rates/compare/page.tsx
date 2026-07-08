@@ -26,7 +26,7 @@ export default async function CompareRatesPage() {
   ).size;
 
   return (
-    <div className="max-w-[100rem] mx-auto px-6 md:px-10 py-10 space-y-6">
+    <div className="px-6 md:px-10 py-10 space-y-6">
       <div className="space-y-3">
         <Link href="/f/carrier-rates" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="size-4" /> Carrier rates

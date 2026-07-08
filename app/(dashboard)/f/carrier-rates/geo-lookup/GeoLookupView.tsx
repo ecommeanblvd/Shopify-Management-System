@@ -41,7 +41,7 @@ export function GeoLookupView({ defaultCountry, defaultPostcode, defaultCity, lo
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 md:px-10 py-10 space-y-8">
+    <div className="px-6 md:px-10 py-10 space-y-8">
       {/* Breadcrumb */}
       <div className="space-y-3">
         <Link

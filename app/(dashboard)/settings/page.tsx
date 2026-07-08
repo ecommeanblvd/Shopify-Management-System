@@ -24,7 +24,7 @@ export default async function SettingsPage() {
     .filter((g) => g.items.length > 0);
 
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10 max-w-4xl">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <header className="space-y-3">
         <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <SettingsIcon className="size-3.5" />
@@ -43,7 +43,7 @@ export default async function SettingsPage() {
           <section key={group} className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{group}</h2>
             <Card>
-              <CardContent className="p-2">
+              <CardContent className="p-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {items.map((item) => <SettingsLink key={item.href} item={item} />)}
               </CardContent>
             </Card>
