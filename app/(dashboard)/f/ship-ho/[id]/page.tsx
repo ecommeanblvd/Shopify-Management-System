@@ -12,6 +12,7 @@ import { MmpOrderActions } from './MmpOrderActions';
 import { TrackingCard } from './TrackingCard';
 import { SmsMeasureCard } from './SmsMeasureCard';
 import { CopyField } from './CopyField';
+import { AddTrackingButton } from './AddTrackingButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">{o.code}</h1>
         <div className="flex items-center gap-3">
+          {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} />}
           {o.source === 'mmp' && <MmpOrderActions orderId={o.id} />}
           <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>
         </div>
@@ -125,8 +127,16 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       />
 
       <Card><CardContent className="p-4 space-y-3 text-sm">
-        <div className="flex items-center justify-between">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Cấu trúc giá (dự tính)</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Cấu trúc giá &amp; đối soát</div>
+            {o.smsMeasuredAt && o.quotedAt && o.quotedAt >= o.smsMeasuredAt && (
+              <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:text-sky-400"
+                title="Giá đã tính lại theo số đo tại kho SMS (cân/kích thước lệch so brand khai)">
+                re-quote theo số đo SMS · {o.smsMeasuredAt.toLocaleDateString('vi-VN')}
+              </span>
+            )}
+          </div>
           {o.markupPercent && <div className="text-xs text-muted-foreground">Markup <b>{Number(o.markupPercent)}%</b></div>}
         </div>
         {!price ? (
@@ -202,27 +212,39 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">
               {hasBill
-                ? 'Cột Lệch bill = cước thực − dự tính theo từng khoản (đỏ = carrier tính cao hơn dự tính). Margin thực xem ở phần Đối soát cước bên dưới.'
+                ? 'Cột Lệch bill = cước thực − dự tính theo từng khoản (đỏ = carrier tính cao hơn dự tính).'
                 : 'Cột Chênh ở dòng Tổng chính là margin dự tính (thu − chi). Khi có hoá đơn carrier, bảng sẽ thêm cột "Cước từ Carrier" để đối soát từng khoản.'}
               {price.factor !== 1 ? ' Chi phí gốc theo ngoại tệ đã quy về VND.' : ''}
             </p>
+
+            {/* Kết quả đối soát cuối — gộp cùng card, ngay dưới bảng */}
+            {hasBill ? (
+              <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Cân thực (bill)</div>
+                  <div className="font-medium tabular-nums">{o.actualWeightKg ? `${Number(o.actualWeightKg)} kg` : '—'}</div>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Giá thu thực (re-bill cân thực)</div>
+                  <div className="font-medium tabular-nums">{vnd(o.actualChargedVnd)}</div>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Lệch bill vs dự tính</div>
+                  <div className="font-medium tabular-nums">{vnd(o.deltaVnd)}</div>
+                </div>
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Margin thực (thu − bill)</div>
+                  <div className={`font-semibold tabular-nums ${o.marginVnd != null && Number(o.marginVnd) < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{vnd(o.marginVnd)}</div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-muted-foreground">Chưa đối soát cước thực — bấm “Đối soát từ hóa đơn carrier” ở danh sách đơn khi bill về.</p>
+            )}
           </div>
         )}
       </CardContent></Card>
 
-      <Card><CardContent className="p-4 space-y-2 text-sm">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Đối soát cước (từ hóa đơn carrier)</div>
-        <div className="flex justify-between"><span>Cân thực (bill)</span><span>{o.actualWeightKg ? `${Number(o.actualWeightKg)} kg` : '—'}</span></div>
-        <div className="flex justify-between"><span>Cước carrier thực</span><span>{vnd(o.actualCarrierCostVnd)}</span></div>
-        <div className="flex justify-between"><span>Lệch engine (thực − ước tính)</span><span>{vnd(o.deltaVnd)}</span></div>
-        <div className="flex justify-between"><span>Giá thu thực (re-bill cân thực)</span><span>{vnd(o.actualChargedVnd)}</span></div>
-        <div className="flex justify-between font-semibold border-t pt-2"><span>Margin (thu − thực)</span><span>{vnd(o.marginVnd)}</span></div>
-        {o.reconcileStatus && <p className="text-muted-foreground text-xs">Chi tiết từng khoản của bill xem cột “Cước từ Carrier” trong bảng Cấu trúc giá ở trên.</p>}
-        {!o.reconcileStatus && <p className="text-muted-foreground text-xs">Chưa đối soát cước thực.</p>}
-      </CardContent></Card>
-
       <TrackingCard
-        orderId={o.id}
         trackingNumber={o.trackingNumber}
         carrierKey={o.carrierKey}
         deliveryStatus={o.deliveryStatus}
