@@ -2016,6 +2016,13 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   actualWeightKg: numeric('actual_weight_kg', { precision: 10, scale: 3 }),
   actualChargedVnd: numeric('actual_charged_vnd', { precision: 16, scale: 2 }),
   actualBillBreakdown: jsonb('actual_bill_breakdown'),
+  // Cân & đo LẠI tại kho SMS khi hàng về (đối chiếu với số brand khai bên MMP).
+  smsWeightKg: numeric('sms_weight_kg', { precision: 10, scale: 3 }),
+  smsDimLengthCm: numeric('sms_dim_length_cm', { precision: 10, scale: 2 }),
+  smsDimWidthCm: numeric('sms_dim_width_cm', { precision: 10, scale: 2 }),
+  smsDimHeightCm: numeric('sms_dim_height_cm', { precision: 10, scale: 2 }),
+  smsMeasuredAt: timestamp('sms_measured_at'),
+  smsMeasuredBy: text('sms_measured_by'),
   // Bill (P3)
   statementId: uuid('statement_id').references(() => shipHoStatements.id),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),

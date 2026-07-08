@@ -1,16 +1,20 @@
 /**
- * THUẦN: dựng cấu trúc giá 2 phía cho 1 đơn ship hộ từ quoteBreakdown đã lưu:
- *   - Chi phí carrier (mình trả): base + phụ phí + fuel + VAT (quy VND).
- *   - Giá thu khách (dự tính): tái dùng computeBrandCharge → khớp tuyệt đối chargedVnd.
- * Dùng cho bảng chi tiết đơn để đối chiếu / đối soát.
+ * THUẦN: dựng cấu trúc giá cho 1 đơn ship hộ để đối chiếu 3 con số theo từng khoản:
+ *   - Chi phí Carrier DỰ TÍNH (mình trả, từ quoteBreakdown, quy VND).
+ *   - Cước TỪ CARRIER (thực, từ hoá đơn carrier đã đối soát — actualBillBreakdown).
+ *   - Giá thu khách DỰ TÍNH (tái dùng computeBrandCharge → khớp tuyệt đối chargedVnd).
+ * Kèm cân tính phí của từng công thức (quote chargeable vs bill billed weight) để
+ * chênh lệch cân lộ ra ngay.
  */
 import { computeBrandCharge, type BrandChargeParts } from './brand-pricing';
 
 export interface PriceStructureRow {
   label: string;
-  /** Chi phí carrier (VND). null = khoản này không có bên chi phí. */
+  /** Chi phí carrier dự tính (VND). null = khoản này không có bên chi phí. */
   costVnd: number | null;
-  /** Giá thu khách (VND). null = khoản này không có bên giá thu. */
+  /** Cước thực từ hoá đơn carrier (VND). null = chưa có bill hoặc khoản không có. */
+  billVnd: number | null;
+  /** Giá thu khách dự tính (VND). null = khoản này không có bên giá thu. */
   chargeVnd: number | null;
   /** % cho dòng fuel/VAT (hiển thị phụ). */
   percent?: number | null;
@@ -20,22 +24,35 @@ export interface ShipHoPriceStructure {
   rows: PriceStructureRow[];
   costTotal: number;
   chargeTotal: number;
+  /** Tổng cước bill thực (actualCarrierCostVnd). null khi chưa đối soát. */
+  billTotal: number | null;
+  /** Cân tính phí từng công thức: quote (chargeable) vs bill (billed weight). */
+  weights: { quoteKg: number | null; billKg: number | null };
   /** Hệ số quy cost-currency → VND (carrierCostVnd / breakdown.carrierCost). */
   factor: number;
+  /** Số hoá đơn carrier (nếu đã đối soát). */
+  billNumber: string | null;
 }
 
 const num = (v: unknown): number => {
   const n = typeof v === 'string' ? Number(v) : (v as number);
   return Number.isFinite(n) ? n : 0;
 };
+const numOrNull = (v: unknown): number | null => {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'string' ? Number(v) : (v as number);
+  return Number.isFinite(n) ? n : null;
+};
 
-/** Đọc breakdown (jsonb) → cấu trúc giá 2 phía. null nếu thiếu dữ liệu để quy đổi. */
+/** Đọc breakdown (jsonb) → cấu trúc giá 3 phía. null nếu thiếu dữ liệu để quy đổi. */
 export function shipHoPriceStructure(input: {
   breakdown: unknown;
   carrierCostVnd: number;
   chargedVnd: number;
   markupPercent: number;
   serviceLabel?: string;
+  /** Bill thực (sau đối soát): breakdown VND đã lưu + tổng + cân bill. */
+  actualBill?: { breakdown: unknown; totalVnd: number; weightKg: number | null } | null;
 }): ShipHoPriceStructure | null {
   const b = input.breakdown as Record<string, unknown> | null;
   if (!b || typeof b !== 'object') return null;
@@ -45,13 +62,25 @@ export function shipHoPriceStructure(input: {
   const factor = input.carrierCostVnd / carrierCost;
   const R = (v: unknown) => Math.round(num(v) * factor);
 
-  // ── Phía CHI PHÍ CARRIER (mình trả) ──
+  // ── Phía CHI PHÍ CARRIER dự tính (mình trả) ──
   const baseCost = R(b.base);
   const fuelCost = R(b.fuel);
   const vatCost = R(b.vat);
   const surCost = R(b.remote) + R(b.perKg) + R(b.demand) + R(b.countryFixed) + R(b.perStep) + R(b.peak) + R(b.residential) + R(b.addons);
   // Phần dư CHI PHÍ (giảm giá / làm tròn) để cột chi phí luôn khớp carrierCostVnd.
   const adjustCost = Math.round(input.carrierCostVnd - (baseCost + surCost + fuelCost + vatCost));
+
+  // ── Phía CƯỚC TỪ CARRIER (bill thực, breakdown đã là VND) ──
+  const ab = (input.actualBill?.breakdown ?? null) as Record<string, unknown> | null;
+  const billTotal = input.actualBill ? Math.round(input.actualBill.totalVnd) : null;
+  const baseBill = ab ? Math.round(num(ab.base)) : null;
+  const fuelBill = ab ? Math.round(num(ab.fuel)) : null;
+  const vatBill = ab ? Math.round(num(ab.vat)) : null;
+  const surBill = ab ? Math.round(num(ab.remote) + num(ab.demand) + num(ab.signature) + num(ab.other)) : null;
+  // Phần dư BILL (discount + làm tròn) để cột bill luôn khớp billTotal.
+  const adjustBill = billTotal != null
+    ? Math.round(billTotal - ((baseBill ?? 0) + (surBill ?? 0) + (fuelBill ?? 0) + (vatBill ?? 0)))
+    : null;
 
   // ── Phía GIÁ THU KHÁCH (tái dùng đúng engine giá brand) ──
   const parts: BrandChargeParts = {
@@ -84,15 +113,31 @@ export function shipHoPriceStructure(input: {
   const adjustCharge = Math.round(input.chargedVnd - chargeSum);
 
   const rows: PriceStructureRow[] = [
-    { label: 'Cước cơ bản', costVnd: baseCost, chargeVnd: chargeBase },
-    { label: 'Phụ phí (vùng/địa chỉ/ký nhận)', costVnd: surCost, chargeVnd: chargeSur },
-    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
-    { label: 'Phí xử lý đơn hàng', costVnd: null, chargeVnd: chargeProcessing },
-    { label: 'VAT', costVnd: vatCost, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },
+    { label: 'Cước cơ bản', costVnd: baseCost, billVnd: baseBill, chargeVnd: chargeBase },
+    { label: 'Phụ phí (vùng/địa chỉ/ký nhận)', costVnd: surCost, billVnd: surBill, chargeVnd: chargeSur },
+    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
+    { label: 'Phí xử lý đơn hàng', costVnd: null, billVnd: null, chargeVnd: chargeProcessing },
+    { label: 'VAT', costVnd: vatCost, billVnd: vatBill, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },
   ];
-  if (adjustCost !== 0 || adjustCharge !== 0) {
-    rows.push({ label: 'Giảm giá / điều chỉnh', costVnd: adjustCost || null, chargeVnd: adjustCharge || null });
+  if (adjustCost !== 0 || adjustCharge !== 0 || (adjustBill != null && adjustBill !== 0)) {
+    rows.push({
+      label: 'Giảm giá / điều chỉnh',
+      costVnd: adjustCost || null,
+      billVnd: adjustBill != null && adjustBill !== 0 ? adjustBill : null,
+      chargeVnd: adjustCharge || null,
+    });
   }
 
-  return { rows, costTotal: input.carrierCostVnd, chargeTotal: input.chargedVnd, factor };
+  return {
+    rows,
+    costTotal: input.carrierCostVnd,
+    chargeTotal: input.chargedVnd,
+    billTotal,
+    weights: {
+      quoteKg: numOrNull(b.chargeableWeightKg),
+      billKg: input.actualBill?.weightKg ?? null,
+    },
+    factor,
+    billNumber: ab && typeof ab.billNumber === 'string' ? ab.billNumber : null,
+  };
 }

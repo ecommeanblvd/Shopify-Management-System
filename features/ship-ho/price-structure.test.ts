@@ -6,7 +6,7 @@ import { computeBrandCharge } from './brand-pricing';
 const breakdown = {
   base: 1_000_000, remote: 50_000, perKg: 0, demand: 0, countryFixed: 0, perStep: 0, peak: 0,
   residential: 0, addons: 0, fuel: 300_000, fuelPercent: 30, vat: 184_236, vatPercent: 8,
-  carrierCost: 1_534_236,
+  carrierCost: 1_534_236, chargeableWeightKg: 2,
 };
 
 function expectedCharged(markup: number) {
@@ -77,5 +77,31 @@ describe('shipHoPriceStructure', () => {
 
   it('null khi thiếu breakdown', () => {
     expect(shipHoPriceStructure({ breakdown: null, carrierCostVnd: 1, chargedVnd: 1, markupPercent: 0 })).toBeNull();
+  });
+
+  it('chưa đối soát → cột bill null toàn bộ, billTotal null, weights.quoteKg từ breakdown', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    expect(s.billTotal).toBeNull();
+    expect(s.rows.every((r) => r.billVnd == null)).toBe(true);
+    expect(s.weights).toEqual({ quoteKg: 2, billKg: null });
+  });
+
+  it('có bill: cột bill tách khoản + dòng điều chỉnh (discount) giữ tổng khớp billTotal', () => {
+    const actualBill = {
+      breakdown: { base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 60_000, demand: 0, signature: 0, vat: 190_000, other: 10_000, billNumber: 'HANR000265761', shipDate: '2026-07-02' },
+      totalVnd: 1_550_000, // base+sur(70k)+fuel+vat = 1.630.000 → điều chỉnh = −80.000 (discount)
+      weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    expect(s.billTotal).toBe(1_550_000);
+    expect(s.rows.find((r) => r.label === 'Cước cơ bản')?.billVnd).toBe(1_050_000);
+    expect(s.rows.find((r) => r.label === 'Phụ phí (vùng/địa chỉ/ký nhận)')?.billVnd).toBe(70_000); // remote+other
+    expect(s.rows.find((r) => r.label === 'Phụ phí xăng dầu')?.billVnd).toBe(320_000);
+    expect(s.rows.find((r) => r.label === 'VAT')?.billVnd).toBe(190_000);
+    expect(s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh')?.billVnd).toBe(-80_000);
+    const billSum = s.rows.reduce((t, r) => t + (r.billVnd ?? 0), 0);
+    expect(billSum).toBe(1_550_000);
+    expect(s.weights).toEqual({ quoteKg: 2, billKg: 2.5 });
+    expect(s.billNumber).toBe('HANR000265761');
   });
 });

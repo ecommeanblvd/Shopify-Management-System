@@ -736,6 +736,13 @@
       "when": 1785415200000,
       "tag": "0104_shipho-actual-rebill",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1785501600000,
+      "tag": "0105_shipho-sms-measure",
+      "breakpoints": true
     }
   ]
 }
