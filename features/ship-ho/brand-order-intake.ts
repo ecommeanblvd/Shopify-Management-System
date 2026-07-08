@@ -28,10 +28,28 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
     return { ok: false, code: 'bad_input', error: 'brandSlug + mmpRef + address.country required' };
   }
 
-  // Idempotency: đơn đã tồn tại theo mmp_ref → trả ngay (KHÔNG re-estimate; dùng giá đã snapshot).
+  // Đơn đã tồn tại theo mmp_ref → CẬP NHẬT field khả biến (customerRef, liên hệ,
+  // địa chỉ trong-nước) khi MMP push lại, GIỮ NGUYÊN giá đã snapshot + code +
+  // country (D-011: tiền bất biến; đổi country/giá = đơn mới). KHÔNG re-estimate.
   const [existing] = await db.select().from(schema.shipHoOrders)
     .where(eq(schema.shipHoOrders.mmpRef, input.mmpRef)).limit(1);
   if (existing) {
+    const extra = validateAddressExtra(existing.country, {
+      houseNumber: input.address.houseNumber, shortAddress: input.address.shortAddress, mapsUrl: input.address.mapsUrl,
+    });
+    await db.update(schema.shipHoOrders).set({
+      customerRef: input.customerRef || null,
+      recipientName: input.recipient?.name || null,
+      recipientPhone: input.recipient?.phone || null,
+      recipientEmail: input.recipient?.email || null,
+      city: input.address.city || null,
+      province: input.address.state || input.address.province || null,
+      postcode: input.address.postcode || null,
+      address1: input.address.address1 || null,
+      address2: input.address.address2 || null,
+      ...(extra.ok ? { houseNumber: extra.normalized.houseNumber ?? null, shortAddress: extra.normalized.shortAddress ?? null, mapsUrl: extra.normalized.mapsUrl ?? null } : {}),
+    }).where(eq(schema.shipHoOrders.id, existing.id));
+
     const total = Number(existing.chargedVnd ?? 0);
     return {
       ok: true, orderId: existing.id, code: existing.code, idempotent: true,
