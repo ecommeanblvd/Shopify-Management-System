@@ -70,23 +70,25 @@ export default async function ShipHoListPage({
       <Card>
         <CardContent className="p-0">
           <table className="w-full table-fixed text-sm">
+            {/* 9 cột, tổng 100% — vừa 1 màn hình, không scroll ngang. Mã đơn gốc +
+                Nguồn gộp thành dòng 2 dưới Mã để tiết kiệm 1 cột. */}
             <colgroup>
-              <col className="w-[15%]" /><col className="w-[11%]" /><col className="w-[9%]" />
-              <col className="w-[6%]" /><col className="w-[9%]" /><col className="w-[8%]" />
-              <col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" />
-              <col className="w-[8%]" />
+              <col className="w-[17%]" /><col className="w-[8%]" />
+              <col className="w-[5%]" /><col className="w-[7%]" /><col className="w-[8%]" />
+              <col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[12%]" />
+              <col className="w-[17%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-3">
-                <th className="text-left">Mã</th><th className="text-left">Mã đơn gốc</th><th className="text-left">Đối tác</th>
+                <th className="text-left">Mã</th><th className="text-left">Đối tác</th>
                 <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
                 <th className="text-right whitespace-nowrap">Chi phí Carrier</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th>
-                <th className="text-left">Trạng thái</th>
+                <th className="text-left whitespace-nowrap">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={10} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const cost = displayCarrierCost(num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
@@ -100,12 +102,15 @@ export default async function ShipHoListPage({
                 return (
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
-                  <td className="whitespace-nowrap">
-                    <Link href={`/f/ship-ho/${o.id}`} className="font-medium underline-offset-2 hover:underline">{o.code}</Link>
-                    {o.source === 'mmp' && <span className="ml-2 rounded bg-indigo-100 text-indigo-700 text-xs px-1.5 py-0.5">MMP</span>}
+                  <td>
+                    <Link href={`/f/ship-ho/${o.id}`} className="block truncate font-medium underline-offset-2 hover:underline">{o.code}</Link>
+                    {/* Dòng 2: Nguồn (MMP/SMS) + mã đơn gốc — không đè cột bên khi màn bé */}
+                    <div className="truncate text-[10px] leading-tight text-muted-foreground">
+                      Nguồn: <span className={o.source === 'mmp' ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'font-medium'}>{o.source === 'mmp' ? 'MMP' : 'SMS'}</span>
+                      {o.customerRef ? ` · ${o.customerRef}` : ''}
+                    </div>
                   </td>
-                  <td className="text-muted-foreground">{o.customerRef ?? '—'}</td>
-                  <td>{o.brandName ?? o.partnerBrandSlug}</td>
+                  <td className="truncate">{o.brandName ?? o.partnerBrandSlug}</td>
                   <td>{o.country}</td>
                   {/* Chỉ hiện CÂN TÍNH BILL: cân bill thực (đã đối soát) → chargeable từ quote → cân khai */}
                   <td className="tabular-nums" title="Cân dùng để tính bill">
