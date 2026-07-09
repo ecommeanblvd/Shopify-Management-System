@@ -104,10 +104,10 @@ export default async function ShipHoListPage({
                   className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
                   <td>
                     <Link href={`/f/ship-ho/${o.id}`} className="block truncate font-medium underline-offset-2 hover:underline">{o.code}</Link>
-                    {/* Dòng 2: Nguồn (MMP/SMS) + mã đơn gốc — không đè cột bên khi màn bé */}
+                    {/* Dòng 2: mã đơn gốc + label nguồn (MMP/SMS) ngay sau — không đè cột bên */}
                     <div className="truncate text-[10px] leading-tight text-muted-foreground">
-                      Nguồn: <span className={o.source === 'mmp' ? 'font-medium text-indigo-600 dark:text-indigo-400' : 'font-medium'}>{o.source === 'mmp' ? 'MMP' : 'SMS'}</span>
-                      {o.customerRef ? ` · ${o.customerRef}` : ''}
+                      {o.customerRef ? `${o.customerRef} ` : ''}
+                      <span className={`rounded px-1 py-px font-medium ${o.source === 'mmp' ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'}`}>{o.source === 'mmp' ? 'MMP' : 'SMS'}</span>
                     </div>
                   </td>
                   <td className="truncate">{o.brandName ?? o.partnerBrandSlug}</td>
