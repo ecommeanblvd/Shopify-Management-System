@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createShipHoPartner, updateShipHoPartner, setPartnerTier } from '@/features/ship-ho/partners-actions';
 import { SHIP_HO_TIERS, resolveTier, effectiveMarkupPercent } from '@/features/ship-ho/tier-pricing';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 
 interface Partner {
   id: string; brandSlug: string; displayName: string | null;
@@ -110,7 +110,7 @@ export function PartnersManager({ partners, brands, canManage }: { partners: Par
                     <td>{p.billingCycle === 'weekly' ? 'Tuần' : 'Tháng'}</td>
                     <td>{p.status === 'active' ? 'Bật' : 'Tắt'}</td>
                     <td className="text-right space-x-2 flex justify-end">
-                      <Link href={`/f/ship-ho/partners/${p.brandSlug}/rate-card`} className="text-blue-600 underline text-sm">Rate card</Link>
+                      <Link href={`/f/ship-ho/partners/${p.brandSlug}/rate-card`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Rate card</Link>
                       {canManage && <Button variant="outline" size="sm" onClick={() => toggle(p)} disabled={pending}>{p.status === 'active' ? 'Tắt' : 'Bật'}</Button>}
                     </td>
                   </tr>

@@ -2,7 +2,6 @@
 
 import { utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
-import { MIN_MARKUP_PERCENT } from '@/features/ship-ho/offer-pricing';
 import type { RateCard } from '@/features/ship-ho/offer-ratecard-logic';
 
 const vnd = (v: number) => v.toLocaleString('vi-VN') + ' ₫';
@@ -10,7 +9,6 @@ const vnd = (v: number) => v.toLocaleString('vi-VN') + ' ₫';
 export function RateCardView({ card, partnerSlug, accountName, fuelUrl, odaLookupUrl }: {
   card: RateCard; partnerSlug: string; accountName: string; fuelUrl: string; odaLookupUrl: string;
 }) {
-  const below = card.markupPercent < MIN_MARKUP_PERCENT;
   const isEmpty = card.zones.length === 0 || card.zones.every((z) => z.cells.length === 0);
 
   // Lookup dùng chung cho cả bảng hiển thị và XLSX: mỗi zone 1 Map tierUpperKg→offerVnd.
@@ -39,8 +37,7 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl, odaLooku
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 print:hidden">
-        <span className="text-sm text-muted-foreground">Nguồn: {accountName} · markup {card.markupPercent}%</span>
-        {below && <span className="rounded bg-red-100 text-red-700 text-xs px-1.5 py-0.5">⚠ &lt; {MIN_MARKUP_PERCENT}%</span>}
+        <span className="text-sm text-muted-foreground">Nguồn: {accountName} · markup hiệu dụng theo tier: {card.markupPercent}%</span>
         <div className="ml-auto flex gap-2">
           <Button variant="outline" size="sm" onClick={exportXlsx}>Export XLSX</Button>
           <Button variant="outline" size="sm" onClick={() => window.print()}>Export PDF</Button>

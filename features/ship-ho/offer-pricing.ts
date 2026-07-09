@@ -5,8 +5,6 @@
  *   chargedVnd = carrierCostVnd + base×markup% + round(50.000 × (1+VAT%))
  *   margin     = base×markup%   (phí xử lý là khoản riêng, không tính vào margin markup)
  */
-export const MIN_MARKUP_PERCENT = 30;
-
 /** Phí xử lý đơn hàng ship hộ (VND, CHƯA gồm VAT) — cố định mỗi đơn. */
 export const ORDER_PROCESSING_FEE_VND = 50000;
 

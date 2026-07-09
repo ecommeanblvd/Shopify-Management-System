@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeOffer, MIN_MARKUP_PERCENT, ORDER_PROCESSING_FEE_VND, processingFeeWithVat } from './offer-pricing';
+import { computeOffer, ORDER_PROCESSING_FEE_VND, processingFeeWithVat } from './offer-pricing';
 
 describe('computeOffer (markup base-only + phí xử lý đơn hàng chịu VAT)', () => {
   it('charged = carrierCost + base×markup% + phí xử lý(50k+VAT)', () => {
@@ -31,8 +31,5 @@ describe('computeOffer (markup base-only + phí xử lý đơn hàng chịu VAT)
     expect(ORDER_PROCESSING_FEE_VND).toBe(50000);
     expect(processingFeeWithVat(8)).toBe(54000);
     expect(processingFeeWithVat(0)).toBe(50000);
-  });
-  it('MIN_MARKUP_PERCENT = 30', () => {
-    expect(MIN_MARKUP_PERCENT).toBe(30);
   });
 });

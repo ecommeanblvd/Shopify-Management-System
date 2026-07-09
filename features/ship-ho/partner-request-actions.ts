@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
-import { markupFloorError } from './partners-markup';
 import { requireManageShipHo } from './require-manage';
 import { buildPartnerCallbackEnvelope } from './partner-request-envelope';
 
@@ -33,12 +32,10 @@ async function sendPartnerCallback(reqRow: { id: string; brandSlug: string }, ev
   }
 }
 
-/** MEAN duyệt: markup ≥30, upsert partner self_service_enabled=true, set approved, callback. */
+/** MEAN duyệt: upsert partner self_service_enabled=true, set approved, callback. */
 export async function approvePartnerRequest(id: string, markupPercent: string, note?: string): Promise<{ ok: boolean; error?: string }> {
   let reviewer: string;
   try { reviewer = await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
-  const floorErr = markupFloorError(markupPercent);
-  if (floorErr) return { ok: false, error: floorErr };
   const [req] = await db.select().from(schema.shipHoPartnerRequests).where(eq(schema.shipHoPartnerRequests.id, id)).limit(1);
   if (!req) return { ok: false, error: 'Không tìm thấy request' };
 
