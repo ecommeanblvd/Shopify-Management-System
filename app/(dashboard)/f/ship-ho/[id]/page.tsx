@@ -13,6 +13,7 @@ import { TrackingCard } from './TrackingCard';
 import { SmsMeasureCard } from './SmsMeasureCard';
 import { CopyField } from './CopyField';
 import { AddTrackingButton } from './AddTrackingButton';
+import { ShipHoCarrierPanel } from './ShipHoCarrierPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,8 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           measuredAt: o.smsMeasuredAt ? o.smsMeasuredAt.toISOString() : null,
         }}
       />
+
+      <ShipHoCarrierPanel orderId={o.id} currentKey={o.carrierKey} canManage={canManage} />
 
       <Card><CardContent className="p-4 space-y-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
