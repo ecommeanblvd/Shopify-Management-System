@@ -194,6 +194,7 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
 | | `shipment.returned` | Hoàn hàng |
 | Tài chính | `order.reconciled` | Cước thực về → **giá cuối** (có thể khác dự kiến) |
+| Bảng giá | `ratecard.updated` | Loại đối tác (tier/strategic) của brand đổi → SMS PUSH rate card mới. `code` = brandSlug, `mmpRef` = null, `data` = payload y hệt endpoint pull /ratecard (có `version`, `tierName`, `discountPct`, cells `rackVnd/offerVnd`). MMP thay bảng giá hiển thị cho brand NGAY; kênh pull vẫn dùng được như cũ. |
 | | `statement.issued` | Bảng kê kỳ: danh sách đơn, tổng phải trả, hạn |
 | | `statement.paid` / `statement.overdue` | Thanh toán / quá hạn (công nợ) |
 

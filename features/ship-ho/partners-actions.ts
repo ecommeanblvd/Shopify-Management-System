@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { markupFloorError } from './partners-markup';
+import { pushBrandRateCardToMmp } from './ratecard-push';
 
 export async function listBrandsForShipHo() {
   return db
@@ -55,6 +56,16 @@ export async function setPartnerTier(
     ...(input.strategic !== undefined ? { strategic: input.strategic } : {}),
     ...(input.tierOverrideCode !== undefined ? { tierOverrideCode: input.tierOverrideCode || null } : {}),
   }).where(eq(schema.shipHoPartners.id, id));
+
+  // Đổi loại đối tác → AUTO PUSH rate card mới sang MMP để hiện cho brand ngay
+  // (best-effort; MMP vẫn pull được như cũ nếu push trượt).
+  const [p] = await db.select({ brandSlug: schema.shipHoPartners.brandSlug })
+    .from(schema.shipHoPartners).where(eq(schema.shipHoPartners.id, id)).limit(1);
+  if (p) {
+    const push = await pushBrandRateCardToMmp(p.brandSlug);
+    console.log(`[ship-ho] push ratecard ${p.brandSlug} sau đổi tier: ${push.ok ? 'OK' : 'FAIL'} — ${push.detail}`);
+  }
+
   revalidatePath('/f/ship-ho/partners');
   return { ok: true };
 }
