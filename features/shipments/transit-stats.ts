@@ -55,6 +55,28 @@ type LatestRow = { latest: string | null };
 
 const numOrNull = (s: string | null) => (s == null ? null : Number(s));
 
+/** THUẦN: pivot routes → ma trận nước × carrier (avg ngày + n giao) để so sánh
+ *  tốc độ giao giữa các carrier trên cùng tuyến. Chỉ gồm nước có ≥1 kiện giao. */
+export interface TransitPivotRow {
+  country: string;
+  byCarrier: Record<string, { avgDays: number; deliveredN: number }>;
+}
+export function pivotRoutesByCountry(routes: TransitRouteStat[]): { carriers: string[]; rows: TransitPivotRow[] } {
+  const carriers = [...new Set(routes.filter((r) => r.deliveredN > 0).map((r) => r.carrierKey))].sort();
+  const byCountry = new Map<string, TransitPivotRow>();
+  for (const r of routes) {
+    if (r.deliveredN === 0 || r.avgDays == null) continue;
+    let row = byCountry.get(r.country);
+    if (!row) { row = { country: r.country, byCarrier: {} }; byCountry.set(r.country, row); }
+    row.byCarrier[r.carrierKey] = { avgDays: r.avgDays, deliveredN: r.deliveredN };
+  }
+  // Sắp theo tổng kiện giao giảm dần — tuyến nhiều dữ liệu lên đầu.
+  const rows = [...byCountry.values()].sort((a, b) =>
+    Object.values(b.byCarrier).reduce((t, x) => t + x.deliveredN, 0)
+    - Object.values(a.byCarrier).reduce((t, x) => t + x.deliveredN, 0));
+  return { carriers, rows };
+}
+
 export async function getTransitStats(days: TransitRangeDays): Promise<TransitStats> {
   const [routes, carriers, latest] = await Promise.all([
     db.execute<RouteRow>(sql`

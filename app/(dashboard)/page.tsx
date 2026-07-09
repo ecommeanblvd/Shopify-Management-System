@@ -27,6 +27,7 @@ export default async function HomePage({
   const session = await auth.api.getSession({ headers: await headers() });
   const sp = await searchParams;
   const transitDays = normalizeTransitRange(typeof sp['transit'] === 'string' ? sp['transit'] : undefined);
+  const transitCarrier = typeof sp['tcarrier'] === 'string' && /^[a-z0-9-]{1,20}$/.test(sp['tcarrier']) ? sp['tcarrier'] : null;
 
   // All five reads are independent — run them in one parallel batch so
   // the page pays one DB round trip of latency, not five.
@@ -100,7 +101,7 @@ export default async function HomePage({
       </div>
 
       {/* Transit time theo tuyến (filter mốc thời gian) */}
-      {transitStats && <TransitStatsCard stats={transitStats} days={transitDays} />}
+      {transitStats && <TransitStatsCard stats={transitStats} days={transitDays} carrier={transitCarrier} />}
 
       {/* Two-column: Stores list + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
