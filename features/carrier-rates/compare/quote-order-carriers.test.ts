@@ -71,6 +71,17 @@ describe('rankCarrierQuotes', () => {
     expect(rows[0].suspendReason).toBe('Tạm ngưng dịch vụ');
   });
 
+  it('MẶC ĐỊNH không cộng addon when_billed (phụ phí theo-ca Aramex / ký nhận FedEx)', () => {
+    // Bug 09/07: default optIn theo nước → 5 phụ phí theo-ca Aramex ($766) bị cộng
+    // chồng vào mọi quote đi US. Baseline so sánh phải bỏ addon tùy chọn.
+    const withAddon = snap('a', 100_000);
+    withAddon.surcharges = [{ kind: 'addon_fixed', value: 442_000, active: true, applyMode: 'when_billed' }];
+    const def = rankCarrierQuotes([entry('aramex', withAddon)], { country: 'TH', weightKg: 1 });
+    expect(def[0].carrierCostDisplay).toBe(100_000); // không dính addon
+    const opted = rankCarrierQuotes([entry('aramex', withAddon)], { country: 'TH', weightKg: 1, signatureOptIn: true });
+    expect(opted[0].carrierCostDisplay).toBe(542_000); // opt-in tường minh mới cộng
+  });
+
   it('applies fuel + VAT surcharges into the compared carrier cost', () => {
     const withFuel = snap('f', 100_000);
     withFuel.surcharges = [

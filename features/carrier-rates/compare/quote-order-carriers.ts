@@ -10,7 +10,6 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote, type QuoteBreakdown, type CarrierAccountSnapshot } from '../engine/quote';
 import { loadAccountSnapshot } from '../engine/load';
-import { countrySupportsDirectSignature } from '../direct-signature';
 
 export interface OrderCarrierQuoteInput {
   country: string;
@@ -59,7 +58,11 @@ export interface AccountSnap {
 /** THUẦN: cho danh sách snapshot + input → hàng so sánh, xếp cước tăng dần
  *  (quote lỗi xuống cuối). Test được không cần DB. */
 export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuoteInput): CarrierQuoteRow[] {
-  const sig = input.signatureOptIn ?? countrySupportsDirectSignature(input.country);
+  // Mặc định KHÔNG opt-in ký nhận: optIn mở van cho MỌI addon when_billed của
+  // account — gồm 5 phụ phí THEO-CA của Aramex (quá cân/ngoại cỡ/pallet… tổng
+  // $766) → giá so sánh bung nổ (bug 09/07, giống trang compare). Caller muốn
+  // tính phí ký nhận thì truyền signatureOptIn=true tường minh.
+  const sig = input.signatureOptIn ?? false;
   const rows: CarrierQuoteRow[] = entries.map((e) => {
     const q = quote(e.snap, {
       weightKg: input.weightKg,
