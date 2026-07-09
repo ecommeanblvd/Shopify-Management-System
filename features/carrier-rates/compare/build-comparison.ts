@@ -5,7 +5,6 @@
  * load snapshot + top nước rồi truyền vào.
  */
 import { quote, type CarrierAccountSnapshot } from '../engine/quote';
-import { countrySupportsDirectSignature } from '../direct-signature';
 
 /** Tỷ giá USD→VND fallback khi account không quote ở VND (không account nào
  *  hiện dùng nhánh này — cả ba đều VND ở cost hoặc display). */
@@ -67,12 +66,16 @@ export function buildComparison(
     for (const weightKg of weights) {
       const rates: CarrierRate[] = [];
       for (const snap of snaps) {
+        // signatureOptIn=false: so sánh CƯỚC BASELINE (base + fuel + VAT). Addon
+        // when_billed (ký nhận FedEx, phụ phí tình-huống Aramex như quá khổ/xử lý
+        // đặc biệt $766) là phí TÙY CHỌN/theo ca — bật optIn từng kéo cả cụm addon
+        // Aramex vào làm US hiện 21tr/0.5kg (bug 09/07).
         const res = quote(snap, {
           destinationCountry: country,
           weightKg,
           packagingType: 'bag',
           effectiveDate,
-          signatureOptIn: countrySupportsDirectSignature(country),
+          signatureOptIn: false,
         });
         if (!res.ok) continue;
         rates.push({
