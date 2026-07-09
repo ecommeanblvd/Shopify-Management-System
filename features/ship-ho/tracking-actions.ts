@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { emitShipHoEvent } from './mmp-events';
+import { deliveryStatusToEvent } from './mmp-events-map';
+import { orderStatusAfterTrack } from './track';
 import { requireManageShipHo } from './require-manage';
 
 /** Link tra cứu public cho MMP render cạnh tracking. */
@@ -64,6 +66,60 @@ export async function setShipHoTracking(
       },
     );
   }
+  revalidatePath(`/f/ship-ho/${orderId}`);
+  revalidatePath('/f/ship-ho');
+  return { ok: true };
+}
+
+const MANUAL_STATUSES = ['in_transit', 'out_for_delivery', 'delivered', 'exception'] as const;
+export type ManualDeliveryStatus = (typeof MANUAL_STATUSES)[number];
+
+/**
+ * Staff SMS update TAY trạng thái giao của đơn ship hộ — dùng khi auto-track chưa
+ * khả dụng (FedEx Track API/TrackingMore bị khóa) hoặc có thông tin ngoài luồng.
+ * Đi CÙNG đường ray với auto-tracker: đổi trạng thái → bắn event shipment.* sang
+ * MMP; delivered → nâng status đơn (không hạ đơn đã billed/settled) + deliveredAt.
+ * Auto-tracker sau này có data thật sẽ tự ghi đè (trừ đơn đã delivered).
+ */
+export async function setShipHoDeliveryStatusManual(
+  orderId: string,
+  status: ManualDeliveryStatus,
+  deliveredAtIso?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  if (!MANUAL_STATUSES.includes(status)) return { ok: false, error: 'Trạng thái không hợp lệ' };
+
+  const [o] = await db.select({
+    id: schema.shipHoOrders.id, code: schema.shipHoOrders.code,
+    source: schema.shipHoOrders.source, mmpRef: schema.shipHoOrders.mmpRef,
+    status: schema.shipHoOrders.status, deliveryStatus: schema.shipHoOrders.deliveryStatus,
+  }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
+  if (!o) return { ok: false, error: 'Không tìm thấy đơn' };
+
+  const deliveredAt = status === 'delivered'
+    ? (deliveredAtIso && !isNaN(new Date(deliveredAtIso).getTime()) ? new Date(deliveredAtIso) : new Date())
+    : undefined;
+
+  await db.update(schema.shipHoOrders).set({
+    deliveryStatus: status,
+    deliveredAt,
+    lastTrackedAt: new Date(),
+    status: orderStatusAfterTrack(o.status, status) as typeof o.status,
+  }).where(eq(schema.shipHoOrders.id, orderId));
+
+  if (status !== o.deliveryStatus) {
+    const evt = deliveryStatusToEvent(status);
+    await emitShipHoEvent(
+      { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+      evt,
+      {
+        ...(evt === 'shipment.delivered' ? { deliveredAt: (deliveredAt ?? new Date()).toISOString() } : {}),
+        source: 'manual', // ops SMS nhập tay (phân biệt với carrier tracking)
+      },
+    );
+  }
+
   revalidatePath(`/f/ship-ho/${orderId}`);
   revalidatePath('/f/ship-ho');
   return { ok: true };

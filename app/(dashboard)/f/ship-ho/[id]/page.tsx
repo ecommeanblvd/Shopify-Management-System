@@ -238,10 +238,12 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       </CardContent></Card>
 
       <TrackingCard
+        orderId={o.id}
         trackingNumber={o.trackingNumber}
         carrierKey={o.carrierKey}
         deliveryStatus={o.deliveryStatus}
         deliveredAt={o.deliveredAt}
+        canManage={canManage}
       />
     </div>
   );
