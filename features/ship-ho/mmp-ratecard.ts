@@ -18,8 +18,10 @@ import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { ORDER_PROCESSING_FEE_VND } from './offer-pricing';
 import { buildRateCard, FEDEX_FUEL_URL, type RateCard } from './offer-ratecard-logic';
 import { neutralNotes } from './brand-estimate';
+import { resolveTier, effectiveMarkupPercent, RACK_MARKUP_PERCENT } from './tier-pricing';
 
-export interface MmpRateCardCell { tierUpperKg: number; offerVnd: number }
+/** rackVnd = bảng giá gốc (markup 40%); offerVnd = giá brand trả sau chiết khấu tier. */
+export interface MmpRateCardCell { tierUpperKg: number; rackVnd: number; offerVnd: number }
 export interface MmpRateCardZone { label: string; countries: string[]; cells: MmpRateCardCell[] }
 export interface MmpRateCardSurcharge { kind: string; label: string; detail: string }
 export interface MmpRateCardCountryZone { code: string; name: string; zone: string }
@@ -28,7 +30,12 @@ export interface MmpRateCardPayload {
   brandSlug: string;
   service: 'express';
   currency: 'VND';
+  /** LEGACY (markup hiệu dụng sau CK) — giữ backward-compat cho MMP. */
   markupPercent: number;
+  /** Tier chiết khấu của brand: offerVnd = rackVnd × (1 − discountPct/100). */
+  tierName: string;
+  discountPct: number;
+  rackMarkupPercent: number;
   /** Hash 12-hex nội dung (KHÔNG gồm generatedAt) — MMP so để biết khi nào rate card đổi. */
   version: string;
   generatedAt: string; // ISO
@@ -42,25 +49,33 @@ export interface MmpRateCardPayload {
   notes: string[];
 }
 
-/** THUẦN: RateCard (nội bộ) → payload MMP. Bỏ baseVnd, thêm hash/metadata/notes. */
+/** THUẦN: RateCard (nội bộ, tính ở markup HIỆU DỤNG) + rack card (markup 40%) →
+ *  payload MMP. Bỏ baseVnd; mỗi cell mang rackVnd (giá gốc) + offerVnd (sau CK). */
 export function shapeRateCardForMmp(
   card: RateCard,
-  meta: { brandSlug: string; generatedAt: Date },
+  meta: { brandSlug: string; generatedAt: Date; tierName: string; discountPct: number; rackCard: RateCard },
 ): MmpRateCardPayload {
-  const zones: MmpRateCardZone[] = card.zones.map((z) => ({
+  const zones: MmpRateCardZone[] = card.zones.map((z, zi) => ({
     label: z.label,
     countries: z.countries,
-    // Chỉ offerVnd (giá brand trả) — KHÔNG gửi baseVnd (giá vốn).
-    cells: z.cells.map((c) => ({ tierUpperKg: c.tierUpperKg, offerVnd: c.offerVnd })),
+    // rackVnd (bảng giá gốc 40%) + offerVnd (giá brand trả sau CK) — KHÔNG gửi baseVnd (giá vốn).
+    cells: z.cells.map((c, ci) => ({
+      tierUpperKg: c.tierUpperKg,
+      rackVnd: meta.rackCard.zones[zi]?.cells[ci]?.offerVnd ?? c.offerVnd,
+      offerVnd: c.offerVnd,
+    })),
   }));
 
   // Nội dung dùng để băm version — KHÔNG chứa generatedAt để hash ổn định giữa
-  // các lần gọi, chỉ đổi khi giá/markup/phụ phí/zone thực sự đổi.
+  // các lần gọi, chỉ đổi khi giá/tier/phụ phí/zone thực sự đổi.
   const content = {
     brandSlug: meta.brandSlug,
     service: 'express' as const,
     currency: 'VND' as const,
     markupPercent: card.markupPercent,
+    tierName: meta.tierName,
+    discountPct: Math.round(meta.discountPct * 100) / 100,
+    rackMarkupPercent: RACK_MARKUP_PERCENT,
     tiers: card.tiers,
     zones,
     countryZones: card.countryZones,
@@ -101,6 +116,19 @@ export async function buildBrandRateCardPayload(brandSlug: string): Promise<Buil
   if (!snap) return { ok: false, code: 'no_carrier' };
 
   const now = new Date();
-  const card = buildRateCard(snap, Number(partner.markupPercent), now);
-  return { ok: true, ratecard: shapeRateCardForMmp(card, { brandSlug: slug, generatedAt: now }) };
+  // Tier pricing: markup hiệu dụng theo tier; rack card riêng ở markup 40% để
+  // MMP hiển thị "giá gốc → chiết khấu → giá của bạn".
+  const tier = resolveTier({
+    strategic: partner.strategic, overrideCode: partner.tierOverrideCode, autoCode: partner.tierCode,
+  });
+  const effMarkup = Math.round(effectiveMarkupPercent(tier.discountPct) * 10000) / 10000;
+  const card = buildRateCard(snap, effMarkup, now);
+  const rackCard = buildRateCard(snap, RACK_MARKUP_PERCENT, now);
+  return {
+    ok: true,
+    ratecard: shapeRateCardForMmp(card, {
+      brandSlug: slug, generatedAt: now,
+      tierName: tier.name, discountPct: tier.discountPct, rackCard,
+    }),
+  };
 }

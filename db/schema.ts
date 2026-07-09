@@ -1934,11 +1934,18 @@ export const shipHoStatementStatusEnum = pgEnum('ship_ho_statement_status', ['dr
 export const shipHoPartners = pgTable('ship_ho_partners', {
   id: uuid('id').defaultRandom().primaryKey(),
   brandSlug: text('brand_slug').references(() => mmpBrands.slug).notNull().unique(),
+  /** LEGACY — pricing đã chuyển sang tier (spec 09/07/2026); giữ đọc tham khảo. */
   markupPercent: numeric('markup_percent', { precision: 8, scale: 4 }).notNull().default('0'),
   billingCycle: shipHoBillingCycleEnum('billing_cycle').notNull().default('monthly'),
   billingCurrency: text('billing_currency').notNull().default('VND'),
   status: shipHoPartnerStatusEnum('status').notNull().default('active'),
   selfServiceEnabled: boolean('self_service_enabled').notNull().default(false),
+  // Tier chiết khấu (tier-pricing.ts): strategic luôn Platinum; override admin ép;
+  // tier_code = auto theo volume tháng trước (cron ghi đầu tháng).
+  strategic: boolean('strategic').notNull().default(false),
+  tierCode: text('tier_code').notNull().default('standard'),
+  tierOverrideCode: text('tier_override_code'),
+  tierUpdatedAt: timestamp('tier_updated_at'),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -743,6 +743,13 @@
       "when": 1785501600000,
       "tag": "0105_shipho-sms-measure",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1785588000000,
+      "tag": "0106_shipho-partner-tier",
+      "breakpoints": true
     }
   ]
 }

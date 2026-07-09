@@ -27,8 +27,12 @@ export function computeBrandCharge(input: {
   carrierCostVnd: number; baseVnd: number;
   fuelPercent: number; vatPercent: number; markupPercent: number;
   parts: BrandChargeParts; serviceLabel: string;
+  /** Tier pricing (spec 09/07): hiển thị BẢNG GIÁ GỐC (markup 40%) + dòng chiết
+   *  khấu ÂM đưa về giá hiệu dụng. markupPercent phía trên PHẢI là markup hiệu
+   *  dụng đã trừ CK — rack chỉ đổi cách TRÌNH BÀY, không đổi tổng. */
+  rack?: { rackMarkupPercent: number; discountPct: number; tierName: string } | null;
 }): { chargedVnd: number; lines: BrandChargeLine[] } {
-  const { carrierCostVnd, baseVnd, fuelPercent, vatPercent, markupPercent, parts, serviceLabel } = input;
+  const { carrierCostVnd, baseVnd, fuelPercent, vatPercent, markupPercent, parts, serviceLabel, rack } = input;
   const f = fuelPercent / 100, v = vatPercent / 100, m = markupPercent / 100;
 
   const deltaBase = baseVnd * m;
@@ -49,9 +53,16 @@ export function computeBrandCharge(input: {
 
   // Tách từng loại phụ phí thành dòng riêng (chỉ hiện khi > 0) để brand thấy
   // ĐÚNG và ĐỦ các khoản. Dòng chung/fuel/xử lý/VAT luôn hiện.
-  const lines: BrandChargeLine[] = [
-    { label: `Cước cơ bản (${serviceLabel})`, amountVnd: markedBase },
-  ];
+  const lines: BrandChargeLine[] = [];
+  if (rack && rack.discountPct > 0) {
+    // rackBase + dòng CK âm = markedBase → mọi tổng phía sau giữ nguyên.
+    const rackBase = Math.round(baseVnd * (1 + rack.rackMarkupPercent / 100));
+    const discountShown = Math.round(rack.discountPct * 100) / 100; // 14.2857 → 14.29
+    lines.push({ label: `Cước cơ bản — bảng giá gốc (${serviceLabel})`, amountVnd: rackBase });
+    lines.push({ label: `Chiết khấu ${rack.tierName} (−${discountShown}% bảng giá gốc)`, amountVnd: markedBase - rackBase });
+  } else {
+    lines.push({ label: `Cước cơ bản (${serviceLabel})`, amountVnd: markedBase });
+  }
   if (surLine > 0) lines.push({ label: 'Phụ phí vùng/địa chỉ', amountVnd: surLine });
   if (residentialLine > 0) lines.push({ label: 'Phí giao nhà dân', amountVnd: residentialLine });
   if (dsLine > 0) lines.push({ label: 'Ký nhận trực tiếp (Direct Signature)', amountVnd: dsLine });

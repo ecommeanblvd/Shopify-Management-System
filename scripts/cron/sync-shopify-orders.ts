@@ -5,6 +5,7 @@ import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-ver
 import { trackPendingShipments } from '@/features/shipments/track';
 import { trackPendingShipHo } from '@/features/ship-ho/track';
 import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
+import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -61,6 +62,13 @@ async function main(): Promise<void> {
     process.stdout.write(`retry-ship-ho-events: tried ${rt.tried}, delivered ${rt.delivered}, failed ${rt.failed}\n`);
   } catch (e) {
     process.stderr.write(`retry-ship-ho-events: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Auto-tier chiết khấu ship hộ theo volume tháng trước (idempotent trong tháng).
+  try {
+    const tr = await refreshShipHoTiers();
+    process.stdout.write(`ship-ho-tiers: partners ${tr.partners}, changed ${tr.changed}\n`);
+  } catch (e) {
+    process.stderr.write(`ship-ho-tiers: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

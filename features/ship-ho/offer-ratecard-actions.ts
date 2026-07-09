@@ -6,6 +6,7 @@ import { listAccounts } from '@/features/carrier-rates/actions';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { requireManageShipHo } from './require-manage';
 import { buildRateCard, type RateCard } from './offer-ratecard-logic';
+import { resolveTier, effectiveMarkupPercent } from './tier-pricing';
 
 export async function getPartnerRateCard(
   brandSlug: string,
@@ -25,7 +26,11 @@ export async function getPartnerRateCard(
   const snap = await loadAccountSnapshot(fedex.id);
   if (!snap) return { ok: false, error: 'Không nạp được bảng giá FedEx' };
 
-  const card = buildRateCard(snap, Number(partner.markupPercent), new Date());
+  // Tier pricing (spec 09/07): markup hiệu dụng từ tier, không dùng markup_percent legacy.
+  const tier = resolveTier({
+    strategic: partner.strategic, overrideCode: partner.tierOverrideCode, autoCode: partner.tierCode,
+  });
+  const card = buildRateCard(snap, Math.round(effectiveMarkupPercent(tier.discountPct) * 10000) / 10000, new Date());
   const odaLookupUrl = `/f/carrier-rates/${fedex.id}/remote-postcodes`;
   return { ok: true, card, accountName: fedex.name, odaLookupUrl };
 }

@@ -40,7 +40,10 @@ chỉ thêm 1 lời gọi + lưu kết quả. SMS không đẩy chủ động.
       "brandSlug": "tinh-atelier",
       "service": "express",              // Express Delivery (FedEx)
       "currency": "VND",
-      "markupPercent": 30,               // markup riêng của brand này
+      "markupPercent": 26,               // LEGACY — markup hiệu dụng sau chiết khấu
+      "tierName": "Gold",                // tier chiết khấu hiện tại của brand
+      "discountPct": 10,                 // % chiết khấu trên bảng giá gốc
+      "rackMarkupPercent": 40,           // bảng giá gốc = base × 1.40
       "version": "a1b2c3d4e5f6",         // hash nội dung — xem §3
       "generatedAt": "2026-07-06T10:00:00.000Z",
       "effectiveDate": "2026-07-06",
@@ -50,9 +53,9 @@ chỉ thêm 1 lời gọi + lưu kết quả. SMS không đẩy chủ động.
           "label": "Zone A",
           "countries": ["TH", "SG", "MY", "HK", /* … ISO-2 */],
           "cells": [
-            { "tierUpperKg": 0.5, "offerVnd": 520000 },
-            { "tierUpperKg": 1,   "offerVnd": 585000 }
-            // … 1 ô / mốc cân
+            { "tierUpperKg": 0.5, "rackVnd": 560000, "offerVnd": 504000 },
+            { "tierUpperKg": 1,   "rackVnd": 630000, "offerVnd": 567000 }
+            // … 1 ô / mốc cân — offerVnd = rackVnd × (1 − discountPct/100)
           ]
         }
         // … 1 mục / zone
@@ -79,9 +82,14 @@ chỉ thêm 1 lời gọi + lưu kết quả. SMS không đẩy chủ động.
   ```
 
 ### Ý nghĩa các trường (QUAN TRỌNG khi hiển thị)
-- **`zones[].cells[].offerVnd`** = **giá brand phải trả cho cước cơ bản** theo (zone × mốc cân),
-  ĐÃ gồm markup của brand. Tra: nước → zone (bảng `countryZones`), cân → mốc (`tiers`,
-  lấy mốc `tierUpperKg` ĐẦU TIÊN ≥ cân tính cước). SMS **không gửi giá vốn/margin**.
+- **Tier chiết khấu (từ 09/07/2026):** brand được xếp bậc theo volume tháng trước —
+  Standard <20 đơn: 0% · Bronze 20–49: 4% · Silver 50–99: 7% · Gold 100–199: 10% ·
+  Platinum ≥200 / strategic: 14.29%. MMP hiển thị cho brand: **giá gốc (`rackVnd`,
+  gạch ngang) → chiết khấu `discountPct`% (`tierName`) → giá của bạn (`offerVnd`)**.
+- **`zones[].cells[].offerVnd`** = **giá brand phải trả cho cước cơ bản** theo (zone × mốc cân)
+  = `rackVnd × (1 − discountPct/100)`. Tra: nước → zone (bảng `countryZones`), cân → mốc
+  (`tiers`, lấy mốc `tierUpperKg` ĐẦU TIÊN ≥ cân tính cước). SMS **không gửi giá vốn/margin**.
+- **Chiết khấu KHÔNG áp** cho `surcharges`/`processingFeeVnd` (passthrough).
 - **`surcharges`** = các khoản CỘNG THÊM ngoài cước cơ bản (vùng xa, dân cư, phí xử lý
   đơn hàng, VAT…). `detail` là chuỗi mô tả sẵn để hiển thị. **`processingFeeVnd`** là
   phí xử lý đơn hàng cố định (50.000₫/đơn) tách riêng để MMP tính/hiển thị nếu cần.

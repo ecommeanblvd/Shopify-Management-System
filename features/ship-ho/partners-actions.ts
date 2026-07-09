@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
@@ -24,10 +24,39 @@ export async function listShipHoPartners() {
       billingCurrency: schema.shipHoPartners.billingCurrency,
       status: schema.shipHoPartners.status,
       note: schema.shipHoPartners.note,
+      // Tier chiết khấu (spec 09/07)
+      strategic: schema.shipHoPartners.strategic,
+      tierCode: schema.shipHoPartners.tierCode,
+      tierOverrideCode: schema.shipHoPartners.tierOverrideCode,
+      // Volume tháng trước (giờ VN) — cơ sở auto-tier, hiện cho admin tham chiếu.
+      lastMonthOrders: sql<number>`(
+        SELECT COUNT(*)::int FROM ship_ho_orders o
+        WHERE o.partner_brand_slug = ${schema.shipHoPartners.brandSlug}
+          AND o.created_at >= (date_trunc('month', (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '1 month') AT TIME ZONE 'Asia/Ho_Chi_Minh')
+          AND o.created_at <  (date_trunc('month', (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')) AT TIME ZONE 'Asia/Ho_Chi_Minh')
+      )`,
     })
     .from(schema.shipHoPartners)
     .leftJoin(schema.mmpBrands, eq(schema.mmpBrands.slug, schema.shipHoPartners.brandSlug))
     .orderBy(schema.mmpBrands.displayName);
+}
+
+/** Admin chỉnh tier: strategic flag + override (null/'' = theo auto). */
+export async function setPartnerTier(
+  id: string,
+  input: { strategic?: boolean; tierOverrideCode?: string | null },
+): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  const VALID = ['standard', 'bronze', 'silver', 'gold', 'platinum'];
+  if (input.tierOverrideCode != null && input.tierOverrideCode !== '' && !VALID.includes(input.tierOverrideCode)) {
+    return { ok: false, error: 'Tier không hợp lệ' };
+  }
+  await db.update(schema.shipHoPartners).set({
+    ...(input.strategic !== undefined ? { strategic: input.strategic } : {}),
+    ...(input.tierOverrideCode !== undefined ? { tierOverrideCode: input.tierOverrideCode || null } : {}),
+  }).where(eq(schema.shipHoPartners.id, id));
+  revalidatePath('/f/ship-ho/partners');
+  return { ok: true };
 }
 
 export interface UpsertPartnerInput {

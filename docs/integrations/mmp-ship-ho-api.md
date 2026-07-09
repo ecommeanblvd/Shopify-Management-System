@@ -92,6 +92,7 @@ Gọi mỗi khi brand nhập/đổi thông tin kiện để hiện giá dự ki�
 - `lines` cộng lại = `chargedVnd` (hiển thị trực tiếp cho brand). Các dòng phụ phí tách RIÊNG khi > 0 để minh bạch: **"Phí giao nhà dân"** (residential) và **"Ký nhận trực tiếp (Direct Signature)"** chỉ xuất hiện khi thực sự áp; nếu = 0 thì ẩn. `lines` là danh sách động — MMP render nguyên si theo thứ tự trả về.
 - `directSignatureAvailable` (boolean) — nước đích có hỗ trợ ký nhận trực tiếp không. **MMP chỉ hiển thị toggle "Yêu cầu ký nhận" khi = `true`.**
 - `directSignatureFeeVnd` (number) — phí ký nhận (92700₫/đơn) để MMP hiển thị nhãn. **Chỉ cộng vào `chargedVnd` khi `directSignature=true` ở request VÀ nước hỗ trợ.** Mặc định (`false`/omit) KHÔNG gồm phí này.
+- **Tier chiết khấu (từ 09/07/2026):** response thêm `tierName` + `discountPct`; `lines` gồm dòng `"Cước cơ bản — bảng giá gốc (…)"` và dòng ÂM `"Chiết khấu {tier} (−d% bảng giá gốc)"` — MMP render nguyên si (tổng lines vẫn = `chargedVnd`). Chi tiết bậc tier: xem doc ratecard.
 
 **Lỗi**
 | HTTP | `code` | Ý nghĩa |

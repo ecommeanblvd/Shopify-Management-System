@@ -60,6 +60,8 @@ export async function intakeBrandOrder(input: BrandOrderInput): Promise<IntakeRe
         notes: neutralNotes(),
         directSignatureAvailable: countrySupportsDirectSignature(existing.country),
         directSignatureFeeVnd: DIRECT_SIGNATURE_FEE_VND,
+        // Đơn idempotent giữ giá cũ — tier chỉ mang tính hiển thị, không re-price.
+        tierName: 'Standard', discountPct: 0,
       },
     };
   }
