@@ -4,6 +4,7 @@ import { signMmpBody } from '@/features/mmp/hmac';
 import { buildMmpOrderPayload, type MmpOrderLine } from '@/features/mmp/order-push-logic';
 import { hashOrderPayload, shouldPushOrder } from '@/features/mmp/order-push-state';
 import { isBrandStatus } from '@/features/fulfillment/brand-statuses';
+import { brandOwnedStore } from '@/features/mmp/brand-stores';
 
 /** Dựng rawBody MMP cho 1 đơn (đọc fulfillment + brand lines + order). Không POST. */
 async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } | { error: string }> {
@@ -43,11 +44,16 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   }
   // Gửi MMP: line ĐANG CHỜ brand sản xuất (status brand) + line ĐÃ NHẬN từ brand
   // (SKU có ngày nhận). MMP cần cả hai để đối soát công nợ theo brand + ngày nhận.
-  const brand = fLines.filter((l) => isBrandStatus(l.status) || (l.sku != null && recvBySku.has(l.sku)));
+  // NGOẠI LỆ store RIÊNG của brand (tinhatelier/mirermirer-official): MỌI line
+  // đều thuộc brand — gửi toàn bộ, vendor fallback về vendor chuẩn của store.
+  const owned = brandOwnedStore(ord.store);
+  const brand = owned
+    ? fLines
+    : fLines.filter((l) => isBrandStatus(l.status) || (l.sku != null && recvBySku.has(l.sku)));
   if (brand.length === 0) return { error: 'no brand lines' };
   const brandLines: MmpOrderLine[] = brand.map((l) => {
     const ra = l.sku != null ? recvBySku.get(l.sku) : undefined;
-    return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
+    return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? owned?.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
   });
   // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.
   const lineReceived = brandLines.map((l) => l.receivedAt).filter((d): d is string => !!d).sort();

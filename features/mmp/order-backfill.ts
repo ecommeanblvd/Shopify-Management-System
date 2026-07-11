@@ -9,6 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { pushOrderToMmp } from '@/features/mmp/order-outbound';
 import { pickBackfillOrderIds } from '@/features/mmp/backfill-select';
 import { BRAND_STATUSES } from '@/features/fulfillment/brand-statuses';
+import { BRAND_OWNED_STORES } from '@/features/mmp/brand-stores';
 
 /** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). pushOrderToMmp tự bỏ qua
  *  đơn đã sent-không-đổi (dedup phía mình) → chạy lại không flood; MMP dedupe là backstop.
@@ -54,9 +55,26 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<
       ),
     );
 
+  // + MỌI đơn của store RIÊNG của brand (tinhatelier/mirermirer-official) — cả
+  // đơn không có dòng phân bổ brand vẫn thuộc brand đó (payload builder tự gửi
+  // toàn bộ line cho store owned).
+  const ownedRows = await db
+    .selectDistinct({ orderId: schema.orderFulfillment.orderId })
+    .from(schema.orderFulfillment)
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
+    .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
+    .leftJoin(schema.mmpOrderPushes, eq(schema.mmpOrderPushes.orderId, schema.orderFulfillment.orderId))
+    .where(
+      and(
+        inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)),
+        or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+      ),
+    );
+
   // Dedupe (nhiều dòng brand cùng đơn → 1 orderId); total = đơn CẦN gửi.
-  const total = new Set(rows.map((r) => r.orderId)).size;
-  const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
+  const allIds = [...rows.map((r) => r.orderId), ...ownedRows.map((r) => r.orderId)];
+  const total = new Set(allIds).size;
+  const orderIds = pickBackfillOrderIds(allIds, opts?.limit);
 
   let pushed = 0,
     skipped = 0,
