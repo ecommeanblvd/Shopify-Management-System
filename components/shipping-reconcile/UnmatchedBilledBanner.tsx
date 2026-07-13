@@ -7,13 +7,24 @@ import type { UnmatchedBilledRow, UnmatchedSummary } from '@/features/shipments/
 
 const fmt = (n: number | null) => n === null ? '—' : Math.round(n).toLocaleString('vi-VN');
 
-export function UnmatchedBilledBanner({ rows, summary }: { rows: UnmatchedBilledRow[]; summary: UnmatchedSummary }) {
+export function UnmatchedBilledBanner({ rows, summary, shipHoRows = [] }: {
+  rows: UnmatchedBilledRow[]; summary: UnmatchedSummary;
+  /** Tracking thuộc đơn ship hộ — không phải tracking "lạ", chỉ hiện info riêng. */
+  shipHoRows?: UnmatchedBilledRow[];
+}) {
   const [open, setOpen] = useState(false);
-  if (rows.length === 0) return null;
+  const shipHoNote = shipHoRows.length > 0 ? (
+    <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 text-sm text-sky-800 dark:text-sky-300">
+      🚚 {shipHoRows.length} tracking trên hoá đơn thuộc <b>đơn ship hộ</b> ({shipHoRows.map((r) => r.shipHoCode).filter(Boolean).join(', ')}) — đối soát tự động ở <a href="/f/ship-ho" className="underline">module Ship hộ</a>, không phải tracking lạ.
+    </div>
+  ) : null;
+  if (rows.length === 0) return shipHoNote;
   const byCarrier = summary.byCarrier
     .map((c) => `${c.carrierKey ?? '—'}: ${c.count} (${fmt(c.sumVnd)}đ)`)
     .join(' · ');
   return (
+    <>
+    {shipHoNote}
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <button onClick={() => setOpen((v) => !v)} className="text-left font-medium text-amber-700 dark:text-amber-400">
@@ -42,5 +53,6 @@ export function UnmatchedBilledBanner({ rows, summary }: { rows: UnmatchedBilled
         </div>
       )}
     </div>
+    </>
   );
 }
