@@ -6,7 +6,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
-import { displayCarrierCost, displayCharged, displayMargin } from '@/features/ship-ho/pnl';
+import { displayCharged, displayMargin } from '@/features/ship-ho/pnl';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { OrderRow } from './OrderRow';
@@ -70,30 +70,35 @@ export default async function ShipHoListPage({
       <Card>
         <CardContent className="p-0">
           <table className="w-full table-fixed text-sm">
-            {/* 9 cột, tổng 100% — vừa 1 màn hình, không scroll ngang. Mã đơn gốc +
-                Nguồn gộp thành dòng 2 dưới Mã để tiết kiệm 1 cột. */}
+            {/* 10 cột, tổng 100% — vừa 1 màn hình, không scroll ngang. Chi phí dự
+                tính / Giá Bill (cước thực từ hoá đơn) / Giá thu TÁCH RIÊNG để khỏi
+                nhầm; Margin = Giá thu − (Giá Bill ?? Chi phí dự tính). */}
             <colgroup>
-              <col className="w-[17%]" /><col className="w-[8%]" />
-              <col className="w-[5%]" /><col className="w-[7%]" /><col className="w-[8%]" />
-              <col className="w-[13%]" /><col className="w-[13%]" /><col className="w-[12%]" />
+              <col className="w-[15%]" /><col className="w-[7%]" />
+              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[6%]" />
+              <col className="w-[11%]" /><col className="w-[11%]" /><col className="w-[12%]" /><col className="w-[11%]" />
               <col className="w-[17%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-3">
                 <th className="text-left">Mã</th><th className="text-left">Đối tác</th>
                 <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
-                <th className="text-right whitespace-nowrap">Chi phí Carrier</th><th className="text-right">Giá thu</th><th className="text-right">Margin</th>
+                <th className="text-right whitespace-nowrap" title="Cước carrier dự tính lúc báo giá">Chi phí dự tính</th>
+                <th className="text-right whitespace-nowrap" title="Cước thực từ hoá đơn carrier — có số là đơn đã được bill">Giá Bill</th>
+                <th className="text-right" title="Giá thu brand (quote; 'thực' = đã tính lại theo cân bill)">Giá thu</th>
+                <th className="text-right" title="Giá thu − (Giá Bill nếu có, không thì Chi phí dự tính)">Margin</th>
                 <th className="text-left whitespace-nowrap">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={10} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
-                const cost = displayCarrierCost(num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                const billVnd = num(o.actualCarrierCostVnd);
+                const estVnd = num(o.carrierCostVnd);
                 const charged = displayCharged(num(o.chargedVnd), num(o.actualChargedVnd));
-                const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), num(o.carrierCostVnd), num(o.actualCarrierCostVnd));
+                const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), estVnd, billVnd);
                 const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
                 const stage = deriveShipHoStage({
                   status: o.status, trackingNumber: o.trackingNumber, deliveryStatus: o.deliveryStatus,
@@ -117,12 +122,14 @@ export default async function ShipHoListPage({
                     {(actualW ?? (o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg)) ?? Number(o.weightKg))} kg
                   </td>
                   <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
+                  {/* Chi phí DỰ TÍNH (quote) — không trộn với bill */}
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
-                    {cost.vnd == null ? <span className="text-muted-foreground">—</span> : (
-                      <>
-                        <div>{cost.vnd.toLocaleString('vi-VN')}</div>
-                        {!cost.actual && <div className="text-[10px] leading-tight text-muted-foreground">dự tính</div>}
-                      </>
+                    {estVnd == null ? <span className="text-muted-foreground">—</span> : <div>{estVnd.toLocaleString('vi-VN')}</div>}
+                  </td>
+                  {/* Giá Bill — cước thực từ hoá đơn carrier; có số = đơn đã được bill */}
+                  <td className="text-right tabular-nums whitespace-nowrap align-top">
+                    {billVnd == null ? <span className="text-muted-foreground">—</span> : (
+                      <div className="font-medium text-sky-700 dark:text-sky-400">{billVnd.toLocaleString('vi-VN')}</div>
                     )}
                   </td>
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
