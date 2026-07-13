@@ -71,13 +71,16 @@ export function shipHoPriceStructure(input: {
   const adjustCost = Math.round(input.carrierCostVnd - (baseCost + surCost + fuelCost + vatCost));
 
   // ── Phía CƯỚC TỪ CARRIER (bill thực, breakdown đã là VND) ──
+  // Cước cơ bản bill = Freight − Base Discount (giá NET carrier offer mình) — để so
+  // thẳng hàng với cước cơ bản dự tính (bảng cước mua vào cũng là giá net); giá
+  // list + dòng chiết khấu riêng chỉ gây lệch đỏ/xanh ảo từng dòng.
   const ab = (input.actualBill?.breakdown ?? null) as Record<string, unknown> | null;
   const billTotal = input.actualBill ? Math.round(input.actualBill.totalVnd) : null;
-  const baseBill = ab ? Math.round(num(ab.base)) : null;
+  const baseBill = ab ? Math.round(num(ab.base) + num(ab.discount)) : null;
   const fuelBill = ab ? Math.round(num(ab.fuel)) : null;
   const vatBill = ab ? Math.round(num(ab.vat)) : null;
   const surBill = ab ? Math.round(num(ab.remote) + num(ab.demand) + num(ab.signature) + num(ab.other)) : null;
-  // Phần dư BILL (discount + làm tròn) để cột bill luôn khớp billTotal.
+  // Phần dư BILL (làm tròn / khoản lạ) để cột bill luôn khớp billTotal.
   const adjustBill = billTotal != null
     ? Math.round(billTotal - ((baseBill ?? 0) + (surBill ?? 0) + (fuelBill ?? 0) + (vatBill ?? 0)))
     : null;
