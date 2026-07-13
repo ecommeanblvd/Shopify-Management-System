@@ -118,6 +118,12 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       chargedVnd: schema.shipHoOrders.chargedVnd,
       prevActualChargedVnd: schema.shipHoOrders.actualChargedVnd,
       prevReconcile: schema.shipHoOrders.reconcileStatus,
+      dimLengthCm: schema.shipHoOrders.dimLengthCm,
+      dimWidthCm: schema.shipHoOrders.dimWidthCm,
+      dimHeightCm: schema.shipHoOrders.dimHeightCm,
+      smsDimLengthCm: schema.shipHoOrders.smsDimLengthCm,
+      smsDimWidthCm: schema.shipHoOrders.smsDimWidthCm,
+      smsDimHeightCm: schema.shipHoOrders.smsDimHeightCm,
     })
     .from(schema.shipHoOrders)
     .where(isNotNull(schema.shipHoOrders.trackingNumber));
@@ -128,18 +134,32 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     if (!billed) { summary.unmatched += 1; continue; }
     summary.matched += 1;
 
-    // Re-quote giá thu THỰC trên cân thực + fuel tuần giao (ship_date), dims null
-    // vì cân bill ĐÃ là chargeable weight của carrier.
+    // Re-quote giá thu THỰC: cột cân trên bill FBO là CÂN THỰC trên cân (scale),
+    // KHÔNG phải cân tính cước — carrier tính trên max(cân thực, dim weight) làm
+    // tròn bậc 0.5kg (kiểm chứng: net freight từng bill khớp đúng ô tier đó).
+    // → truyền cả dims (SMS đo ?? brand khai) để engine tính chargeable như carrier.
     let actualChargedVnd: number | null = null;
+    let billedChargeableKg: number | null = null;
     if (billed.weightKg != null && billed.weightKg > 0) {
       const asOf = billed.shipDate ? new Date(`${billed.shipDate}T00:00:00Z`) : undefined;
+      const dim = (sms: string | null, decl: string | null) => {
+        const v = sms ?? decl; return v == null ? undefined : Number(v);
+      };
       const est = await estimateForBrand(o.brandSlug, {
         country: o.country, city: o.city ?? undefined, postcode: o.postcode ?? undefined,
         weightKg: billed.weightKg, packagingType: (o.packagingType as 'bag' | 'box' | null) ?? undefined,
+        dimLengthCm: dim(o.smsDimLengthCm, o.dimLengthCm),
+        dimWidthCm: dim(o.smsDimWidthCm, o.dimWidthCm),
+        dimHeightCm: dim(o.smsDimHeightCm, o.dimHeightCm),
         service: 'express',
       }, asOf);
-      if (est.ok) { actualChargedVnd = est.estimate.chargedVnd; summary.requoted += 1; }
-      else summary.errors.push({ code: o.code, reason: `re-quote ${est.code}` });
+      if (est.ok) {
+        actualChargedVnd = est.estimate.chargedVnd;
+        const bd = est.internal.breakdown as { chargeableWeightKg?: unknown } | null;
+        const ch = bd && typeof bd.chargeableWeightKg === 'number' ? bd.chargeableWeightKg : null;
+        billedChargeableKg = ch ?? billed.weightKg;
+        summary.requoted += 1;
+      } else summary.errors.push({ code: o.code, reason: `re-quote ${est.code}` });
     }
 
     const quotedCharged = o.chargedVnd == null ? null : Number(o.chargedVnd);
@@ -147,13 +167,19 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     const margin = displayMargin(quotedCharged, actualChargedVnd, estCost, billed.totalVnd);
     const deltaVnd = estCost == null ? null : Math.round(billed.totalVnd - estCost);
 
+    // actualWeightKg = CÂN TÍNH CƯỚC carrier dùng (chargeable) — thứ mọi chỗ hiển
+    // thị gọi là "cân bill"; cân thực trên cân giữ ở breakdown (scaleWeightKg).
+    const kgToStore = billedChargeableKg ?? billed.weightKg;
     await db.update(schema.shipHoOrders).set({
       actualCarrierCostVnd: String(billed.totalVnd),
-      actualWeightKg: billed.weightKg == null ? null : String(billed.weightKg),
+      actualWeightKg: kgToStore == null ? null : String(kgToStore),
       actualChargedVnd: actualChargedVnd == null ? null : String(actualChargedVnd),
       deltaVnd: deltaVnd == null ? null : String(deltaVnd),
       marginVnd: margin.vnd == null ? null : String(margin.vnd),
-      actualBillBreakdown: { ...billed.surcharges, billNumber: billed.billNumber, shipDate: billed.shipDate },
+      actualBillBreakdown: {
+        ...billed.surcharges, billNumber: billed.billNumber, shipDate: billed.shipDate,
+        scaleWeightKg: billed.weightKg,
+      },
       reconcileStatus: 'reconciled',
     }).where(eq(schema.shipHoOrders.id, o.id));
 
@@ -170,7 +196,8 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           finalChargedVnd,
           previousChargedVnd: quotedCharged,
           deltaVnd: quotedCharged == null ? null : finalChargedVnd - quotedCharged,
-          billedWeightKg: billed.weightKg,
+          billedWeightKg: kgToStore,
+          scaleWeightKg: billed.weightKg,
         },
       );
     }
