@@ -133,12 +133,19 @@ export default async function ShipHoListPage({
                     )}
                   </td>
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
-                    {charged.vnd == null ? <span className="text-muted-foreground">—</span> : (
+                    {charged.vnd == null ? <span className="text-muted-foreground">—</span> : charged.actual ? (
+                      <>
+                        {/* Giá thu THỰC = tính lại theo cân bill (không phải số bill) */}
+                        <div className="font-medium">{charged.vnd.toLocaleString('vi-VN')}</div>
+                        <div className="text-[10px] leading-tight text-emerald-600 dark:text-emerald-400" title="Tính lại theo cân nặng carrier bill">thực · theo cân bill</div>
+                        {num(o.chargedVnd) != null && num(o.chargedVnd) !== charged.vnd && (
+                          <div className="text-[10px] leading-tight text-muted-foreground line-through">{Number(o.chargedVnd).toLocaleString('vi-VN')}</div>
+                        )}
+                      </>
+                    ) : (
                       <>
                         <div className="font-medium">{charged.vnd.toLocaleString('vi-VN')}</div>
-                        <div className={`text-[10px] leading-tight ${charged.actual ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'}`}>
-                          {charged.actual ? 'thực' : 'dự tính'}
-                        </div>
+                        <div className="text-[10px] leading-tight text-muted-foreground">dự kiến</div>
                       </>
                     )}
                   </td>

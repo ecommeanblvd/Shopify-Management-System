@@ -81,7 +81,7 @@ export default async function ShipHoReconcilePage() {
                   <th className="text-right">Chi phí dự tính</th>
                   <th className="text-right">Giá Bill</th>
                   <th className="text-right" title="Giá Bill − Chi phí dự tính">Lệch bill</th>
-                  <th className="text-right" title="Giá thu tính lại theo cân bill">Giá thu cuối</th>
+                  <th className="text-right" title="Tính lại theo cân nặng carrier bill — KHÔNG phải số bill">Giá thu thực</th>
                   <th className="text-right" title="Giá thu cuối − Giá Bill">Margin thực</th>
                 </tr>
               </thead>
@@ -107,7 +107,12 @@ export default async function ShipHoReconcilePage() {
                       <td className={`text-right ${delta != null && delta > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                         {delta == null ? '—' : `${delta > 0 ? '+' : ''}${vnd(delta)}`}
                       </td>
-                      <td className="text-right font-medium">{vnd(r.actualChargedVnd ?? r.chargedVnd)}</td>
+                      <td className="text-right">
+                        <div className="font-medium">{vnd(r.actualChargedVnd ?? r.chargedVnd)}</div>
+                        {r.actualChargedVnd != null && r.chargedVnd != null && Math.round(Number(r.chargedVnd)) !== Math.round(Number(r.actualChargedVnd)) && (
+                          <div className="text-[10px] leading-tight text-muted-foreground line-through">{vnd(r.chargedVnd)}</div>
+                        )}
+                      </td>
                       <td className={`text-right font-semibold ${margin != null && margin < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                         {margin == null ? '—' : `${margin >= 0 ? '+' : ''}${vnd(margin)}`}
                       </td>
