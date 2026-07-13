@@ -6,6 +6,7 @@ import { trackPendingShipments } from '@/features/shipments/track';
 import { trackPendingShipHo } from '@/features/ship-ho/track';
 import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
+import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -69,6 +70,13 @@ async function main(): Promise<void> {
     process.stdout.write(`ship-ho-tiers: partners ${tr.partners}, changed ${tr.changed}\n`);
   } catch (e) {
     process.stderr.write(`ship-ho-tiers: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Đối soát ship hộ từ hoá đơn carrier (up bill là tự sync trong ≤1h, khỏi bấm tay).
+  try {
+    const rc = await reconcileShipHoFromCarrierBillsCore();
+    process.stdout.write(`ship-ho-reconcile: matched ${rc.matched}/${rc.totalWithTracking}, requoted ${rc.requoted}, unmatched ${rc.unmatched}\n`);
+  } catch (e) {
+    process.stderr.write(`ship-ho-reconcile: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

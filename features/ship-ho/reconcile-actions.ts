@@ -8,6 +8,7 @@ import { parseCarrierInvoiceRow, computeReconcile } from './reconcile-logic';
 import { getBilledByTracking } from './carrier-invoice-lookup';
 import { estimateForBrand } from './brand-estimate';
 import { displayMargin } from './pnl';
+import { emitShipHoEvent } from './mmp-events';
 
 export interface ReconcileSummary {
   total: number;
@@ -82,21 +83,31 @@ export interface RebillSummary {
   errors: Array<{ code: string; reason: string }>;
 }
 
-/**
- * RE-BILL theo cân thực: với mọi đơn ship hộ có tracking, lookup hoá đơn carrier
- * đã upload (carrier_bill_lines) → kéo cân thực + cước thực + phụ phí thực về đơn,
- * tính LẠI giá thu brand trên cân thực (fuel tuần giao hàng theo ship_date), rồi
- * ghi actualCarrierCostVnd / actualWeightKg / actualChargedVnd / marginVnd / deltaVnd
- * + breakdown phụ phí thực. Idempotent: chạy lại cập nhật theo bill mới nhất.
- */
+/** Nút operator (auth) → đối soát ship hộ từ hoá đơn carrier. */
 export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> {
   await requireManageShipHo();
+  const summary = await reconcileShipHoFromCarrierBillsCore();
+  revalidatePath('/f/ship-ho');
+  return summary;
+}
+
+/**
+ * LÕI không-auth (cron hourly + nút operator): RE-BILL theo cân thực — với mọi
+ * đơn ship hộ có tracking, lookup hoá đơn carrier đã upload (carrier_bill_lines)
+ * → kéo cân thực + cước thực + phụ phí thực về đơn, tính LẠI giá thu brand trên
+ * cân thực (fuel tuần giao hàng theo ship_date), ghi actual* + margin/delta +
+ * breakdown. Đơn MỚI đối soát lần đầu (hoặc giá cuối đổi) → emit `order.reconciled`
+ * sang MMP (giá cuối, KHÔNG lộ cước carrier). Idempotent theo bill mới nhất.
+ */
+export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSummary> {
   const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, errors: [] };
 
   const orders = await db
     .select({
       id: schema.shipHoOrders.id,
       code: schema.shipHoOrders.code,
+      source: schema.shipHoOrders.source,
+      mmpRef: schema.shipHoOrders.mmpRef,
       brandSlug: schema.shipHoOrders.partnerBrandSlug,
       country: schema.shipHoOrders.country,
       city: schema.shipHoOrders.city,
@@ -105,6 +116,8 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
       trackingNumber: schema.shipHoOrders.trackingNumber,
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       chargedVnd: schema.shipHoOrders.chargedVnd,
+      prevActualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      prevReconcile: schema.shipHoOrders.reconcileStatus,
     })
     .from(schema.shipHoOrders)
     .where(isNotNull(schema.shipHoOrders.trackingNumber));
@@ -143,8 +156,27 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
       actualBillBreakdown: { ...billed.surcharges, billNumber: billed.billNumber, shipDate: billed.shipDate },
       reconcileStatus: 'reconciled',
     }).where(eq(schema.shipHoOrders.id, o.id));
+
+    // Giá cuối cho brand (contract: order.reconciled). Chỉ bắn khi MỚI đối soát
+    // lần đầu hoặc giá cuối ĐỔI (idempotent qua các lượt cron). Không lộ cước carrier.
+    const finalChargedVnd = actualChargedVnd ?? quotedCharged;
+    const prevFinal = o.prevActualChargedVnd == null ? null : Math.round(Number(o.prevActualChargedVnd));
+    const isNew = o.prevReconcile !== 'reconciled';
+    if (finalChargedVnd != null && (isNew || (actualChargedVnd != null && actualChargedVnd !== prevFinal))) {
+      await emitShipHoEvent(
+        { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+        'order.reconciled',
+        {
+          finalChargedVnd,
+          previousChargedVnd: quotedCharged,
+          deltaVnd: quotedCharged == null ? null : finalChargedVnd - quotedCharged,
+          billedWeightKg: billed.weightKg,
+        },
+      );
+    }
   }
 
-  revalidatePath('/f/ship-ho');
+  // KHÔNG revalidatePath ở core — cron chạy ngoài request context (trang ship hộ
+  // force-dynamic nên luôn fresh); wrapper action lo revalidate khi bấm nút.
   return summary;
 }
