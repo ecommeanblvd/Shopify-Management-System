@@ -115,9 +115,31 @@ export function shipHoPriceStructure(input: {
   const chargeSum = chargeBase + chargeSur + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(input.chargedVnd - chargeSum);
 
+  // ── Tách phụ phí thành TỪNG KHOẢN (charge = cost vì phụ phí pass-through, chỉ
+  // base mới markup). Gộp theo cột bill có sẵn (remote/demand/signature/other) để
+  // 3 phía thẳng hàng; cột bill của carrier gộp residential+ký nhận vào signature,
+  // phí NK/sửa địa chỉ/… vào other. Chỉ hiện dòng có số ở ít nhất 1 phía. */
+  const hasBill = ab != null;
+  const surItems: PriceStructureRow[] = [
+    { label: 'Phụ phí vùng xa', costVnd: R(b.remote), billVnd: hasBill ? Math.round(num(ab!.remote)) : null, chargeVnd: R(b.remote) },
+    { label: 'Phụ phí nhu cầu (demand)', costVnd: R(b.demand), billVnd: hasBill ? Math.round(num(ab!.demand)) : null, chargeVnd: R(b.demand) },
+    {
+      label: 'Giao nhà dân / ký nhận',
+      costVnd: R(b.residential) + R(b.addons),
+      billVnd: hasBill ? Math.round(num(ab!.signature)) : null,
+      chargeVnd: R(b.residential) + R(b.addons),
+    },
+    {
+      label: 'Phí xử lý NK / khác',
+      costVnd: R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak),
+      billVnd: hasBill ? Math.round(num(ab!.other)) : null,
+      chargeVnd: R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak),
+    },
+  ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
+
   const rows: PriceStructureRow[] = [
     { label: 'Cước cơ bản', costVnd: baseCost, billVnd: baseBill, chargeVnd: chargeBase },
-    { label: 'Phụ phí (vùng/địa chỉ/ký nhận)', costVnd: surCost, billVnd: surBill, chargeVnd: chargeSur },
+    ...surItems,
     { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
     { label: 'Phí xử lý đơn hàng', costVnd: null, billVnd: null, chargeVnd: chargeProcessing },
     { label: 'VAT', costVnd: vatCost, billVnd: vatBill, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },

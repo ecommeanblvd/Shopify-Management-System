@@ -115,7 +115,7 @@ function RowGroup({ r, open, kgDiff, onToggle }: {
 /** Bảng con: từng khoản charge 3 phía + lệch bill (giống trang chi tiết đơn). */
 function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
   return (
-    <table className="w-full max-w-3xl text-xs tabular-nums">
+    <table className="w-full text-xs tabular-nums">
       <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
         <tr className="[&>th]:py-1.5 [&>th]:pr-4 [&>th]:font-medium">
           <th className="text-left">Khoản</th>

@@ -37,7 +37,7 @@ describe('shipHoPriceStructure', () => {
   it('có đủ dòng base/phụ phí/fuel/xử lý/VAT; fuel & VAT kèm %', () => {
     const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
     expect(s.rows.map((r) => r.label)).toEqual([
-      'Cước cơ bản', 'Phụ phí (vùng/địa chỉ/ký nhận)', 'Phụ phí xăng dầu', 'Phí xử lý đơn hàng', 'VAT',
+      'Cước cơ bản', 'Phụ phí vùng xa', 'Phụ phí xăng dầu', 'Phí xử lý đơn hàng', 'VAT',
     ]);
     expect(s.rows.find((r) => r.label === 'Phụ phí xăng dầu')?.percent).toBe(30);
     expect(s.rows.find((r) => r.label === 'VAT')?.percent).toBe(8);
@@ -75,6 +75,31 @@ describe('shipHoPriceStructure', () => {
     expect(s.chargeTotal).toBe(charged);
   });
 
+  it('tách phụ phí thành từng khoản (charge = cost pass-through), tổng phụ phí bảo toàn', () => {
+    const bd = {
+      ...breakdown, remote: 40_000, demand: 20_000, residential: 30_000, addons: 25_000, perKg: 10_000,
+      base: 1_000_000, fuel: 300_000, vat: 184_236,
+      carrierCost: 1_000_000 + 125_000 + 300_000 + 184_236, // + tổng phụ phí 125k
+    };
+    const s = shipHoPriceStructure({ breakdown: bd, carrierCostVnd: bd.carrierCost, chargedVnd: 3_000_000, markupPercent: 25 })!;
+    const labels = s.rows.map((r) => r.label);
+    expect(labels).toContain('Phụ phí vùng xa');
+    expect(labels).toContain('Phụ phí nhu cầu (demand)');
+    expect(labels).toContain('Giao nhà dân / ký nhận');
+    expect(labels).toContain('Phí xử lý NK / khác');
+    // charge = cost cho từng khoản phụ phí (pass-through).
+    for (const l of ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân / ký nhận', 'Phí xử lý NK / khác']) {
+      const row = s.rows.find((r) => r.label === l)!;
+      expect(row.chargeVnd).toBe(row.costVnd);
+    }
+    // Σ các khoản phụ phí (cost) = tổng phụ phí gốc 125k.
+    const surSum = s.rows.filter((r) => ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân / ký nhận', 'Phí xử lý NK / khác'].includes(r.label))
+      .reduce((t, r) => t + (r.costVnd ?? 0), 0);
+    expect(surSum).toBe(125_000);
+    // Tổng cột chi phí vẫn khớp carrierCostVnd.
+    expect(s.rows.reduce((t, r) => t + (r.costVnd ?? 0), 0)).toBe(bd.carrierCost);
+  });
+
   it('null khi thiếu breakdown', () => {
     expect(shipHoPriceStructure({ breakdown: null, carrierCostVnd: 1, chargedVnd: 1, markupPercent: 0 })).toBeNull();
   });
@@ -95,7 +120,9 @@ describe('shipHoPriceStructure', () => {
     const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
     expect(s.billTotal).toBe(1_550_000);
     expect(s.rows.find((r) => r.label === 'Cước cơ bản')?.billVnd).toBe(970_000); // 1.050.000 − 80.000
-    expect(s.rows.find((r) => r.label === 'Phụ phí (vùng/địa chỉ/ký nhận)')?.billVnd).toBe(70_000); // remote+other
+    // Phụ phí tách khoản: vùng xa (remote 60k) + phí NK/khác (other 10k) = 70k.
+    expect(s.rows.find((r) => r.label === 'Phụ phí vùng xa')?.billVnd).toBe(60_000);
+    expect(s.rows.find((r) => r.label === 'Phí xử lý NK / khác')?.billVnd).toBe(10_000);
     expect(s.rows.find((r) => r.label === 'Phụ phí xăng dầu')?.billVnd).toBe(320_000);
     expect(s.rows.find((r) => r.label === 'VAT')?.billVnd).toBe(190_000);
     expect(s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh')?.billVnd ?? null).toBeNull();
