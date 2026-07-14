@@ -88,6 +88,52 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<
   return { pushed, skipped, failed, total };
 }
 
+/** Đẩy MỌI đơn của các store RIÊNG của brand (tinhatelier, mirermirer-official)
+ *  sang MMP — scope ĐÚNG 2 store này, KHÔNG kéo theo đơn brand của store khác
+ *  (khác pushUnsentBrandOrders) và KHÔNG sót đơn owned-store thiếu dòng brand-status
+ *  (khác forcePushAllBrandOrders). Store owned: mọi line thuộc brand nên payload
+ *  builder tự gửi toàn bộ.
+ *
+ *  - `force`=false (mặc định): chỉ gửi đơn CHƯA 'sent' (dedup — chạy lại rẻ).
+ *  - `force`=true: gửi lại tất cả kể cả đã sent (refresh status; MMP dedupe backstop).
+ *  - `dryRun`=true: CHỈ đếm số đơn sẽ gửi, KHÔNG POST (read-only, để xác nhận trước).
+ */
+export async function pushOwnedStoreOrders(opts?: {
+  limit?: number;
+  force?: boolean;
+  dryRun?: boolean;
+  onProgress?: (done: number, total: number, pushed: number, failed: number) => void;
+}): Promise<BackfillResult> {
+  const cond = opts?.force
+    ? inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES))
+    : and(
+        inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)),
+        or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+      );
+  const rows = await db
+    .selectDistinct({ orderId: schema.orderFulfillment.orderId })
+    .from(schema.orderFulfillment)
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
+    .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
+    .leftJoin(schema.mmpOrderPushes, eq(schema.mmpOrderPushes.orderId, schema.orderFulfillment.orderId))
+    .where(cond);
+
+  const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
+  const total = orderIds.length;
+  if (opts?.dryRun) return { pushed: 0, skipped: 0, failed: 0, total };
+
+  let pushed = 0, skipped = 0, failed = 0, done = 0;
+  for (const oid of orderIds) {
+    const r = await pushOrderToMmp(oid, { force: opts?.force });
+    if (r.ok && !r.skipped) pushed++;
+    else if (r.skipped || r.error === 'no brand lines' || r.error === 'not configured') skipped++;
+    else failed++;
+    done++;
+    if (opts?.onProgress && done % 50 === 0) opts.onProgress(done, total, pushed, failed);
+  }
+  return { pushed, skipped, failed, total };
+}
+
 /** FORCE đẩy lại TẤT CẢ đơn brand (kể cả đã 'sent') sang MMP — đồng bộ lại toàn bộ
  *  để MMP dựng đủ brand. KHÔNG auth (chạy qua script/cron có chủ đích). `onProgress`
  *  để script in tiến độ. */
