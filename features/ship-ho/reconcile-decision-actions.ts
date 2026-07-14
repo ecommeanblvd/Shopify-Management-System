@@ -23,6 +23,7 @@ async function loadOrderForDecision(orderId: string) {
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
       deltaVnd: schema.shipHoOrders.deltaVnd,
       reconcileStatus: schema.shipHoOrders.reconcileStatus,
+      reconcileDecision: schema.shipHoOrders.reconcileDecision,
     })
     .from(schema.shipHoOrders)
     .where(eq(schema.shipHoOrders.id, orderId))
@@ -92,5 +93,41 @@ export async function claimShipHoWithCarrier(orderId: string, reason?: string): 
       reason: trimmed,
     },
   );
+  revalidatePath('/f/ship-ho/reconcile');
+}
+
+/**
+ * KẾT LUẬN claim (đơn đang 'claiming'):
+ *   - `credited=true`  → carrier hoàn tiền chênh; decision='claim_credited'.
+ *   - `credited=false` → carrier từ chối;          decision='claim_rejected'.
+ * Cả hai: giá thu khách chính thức = giá TÍNH LẠI theo bill (actualChargedVnd) →
+ * đẩy `order.reconciled`. Chỉ cho phép khi đơn đang 'claiming'.
+ */
+export async function resolveShipHoClaim(orderId: string, credited: boolean): Promise<void> {
+  const userId = await requireManageShipHo();
+  const o = await loadOrderForDecision(orderId);
+  if (!o) throw new Error('Đơn không tồn tại.');
+  if (o.reconcileDecision !== 'claiming') throw new Error('Chỉ kết luận được đơn đang chờ claim.');
+
+  const decision = credited ? 'claim_credited' : 'claim_rejected';
+  await db
+    .update(schema.shipHoOrders)
+    .set({ reconcileDecision: decision, reconcileDecisionAt: new Date(), reconcileDecisionBy: userId })
+    .where(eq(schema.shipHoOrders.id, orderId));
+
+  const quoted = num(o.chargedVnd);
+  const finalChargedVnd = num(o.actualChargedVnd) ?? quoted;
+  if (finalChargedVnd != null) {
+    await emitShipHoEvent(
+      { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+      'order.reconciled',
+      {
+        finalChargedVnd,
+        previousChargedVnd: quoted,
+        deltaVnd: quoted == null ? null : finalChargedVnd - quoted,
+        reconcileResolution: decision,
+      },
+    );
+  }
   revalidatePath('/f/ship-ho/reconcile');
 }

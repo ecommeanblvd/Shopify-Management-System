@@ -11,7 +11,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { ReconcileUploader } from './ReconcileUploader';
 import { ReconcileBillsButton } from '../ReconcileBillsButton';
-import { acceptShipHoDiscrepancy, claimShipHoWithCarrier } from '@/features/ship-ho/reconcile-decision-actions';
+import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
 import { ReconciledRowsTable, type ReconciledRowData } from './ReconciledRowsTable';
 
 export const dynamic = 'force-dynamic';
@@ -115,7 +115,7 @@ export default async function ShipHoReconcilePage() {
         {reconciled.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">Chưa có đơn nào khớp hoá đơn carrier.</p>
         ) : (
-          <ReconciledRowsTable rows={reconciled} acceptAction={acceptShipHoDiscrepancy} claimAction={claimShipHoWithCarrier} />
+          <ReconciledRowsTable rows={reconciled} acceptAction={acceptShipHoDiscrepancy} claimAction={claimShipHoWithCarrier} resolveAction={resolveShipHoClaim} />
         )}
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
           Click một dòng để mở chi tiết từng khoản (cước cơ bản, phụ phí, fuel, VAT) so 3 phía: dự tính · bill · giá thu.

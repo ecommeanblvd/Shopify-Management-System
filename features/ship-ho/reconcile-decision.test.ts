@@ -32,4 +32,9 @@ describe('decideReconcile', () => {
   it('đang pending_review + cron chạy lại vẫn có sai lệch → vẫn pending_review', () => {
     expect(decideReconcile(50_000, 'pending_review')).toEqual({ decision: 'pending_review', shouldEmitCharge: false });
   });
+
+  it('claim đã KẾT LUẬN (credited/rejected) → giữ + đẩy giá; cron KHÔNG ghi đè', () => {
+    expect(decideReconcile(50_000, 'claim_credited')).toEqual({ decision: 'claim_credited', shouldEmitCharge: true });
+    expect(decideReconcile(50_000, 'claim_rejected')).toEqual({ decision: 'claim_rejected', shouldEmitCharge: true });
+  });
 });

@@ -31,6 +31,7 @@ interface Props {
   rows: ReconciledRowData[];
   acceptAction: (orderId: string) => Promise<void>;
   claimAction: (orderId: string, reason?: string) => Promise<void>;
+  resolveAction: (orderId: string, credited: boolean) => Promise<void>;
 }
 
 const vnd = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('vi-VN'));
@@ -38,7 +39,7 @@ const signed = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${
 
 /** Bảng đơn đã đối soát: click 1 dòng → mở chi tiết từng khoản charge 3 phía.
  *  Cột Action cuối: đơn có sai lệch chờ duyệt → mở modal accept/claim. */
-export function ReconciledRowsTable({ rows, acceptAction, claimAction }: Props) {
+export function ReconciledRowsTable({ rows, acceptAction, claimAction, resolveAction }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [modalRow, setModalRow] = useState<ReconciledRowData | null>(null);
   return (
@@ -76,6 +77,7 @@ export function ReconciledRowsTable({ rows, acceptAction, claimAction }: Props) 
         onClose={() => setModalRow(null)}
         acceptAction={acceptAction}
         claimAction={claimAction}
+        resolveAction={resolveAction}
       />
     </div>
   );
@@ -87,17 +89,22 @@ function ActionCell({ r, onAction }: { r: ReconciledRowData; onAction: () => voi
   if (d === 'accepted') {
     return <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Đã chấp nhận</span>;
   }
-  if (d === 'claiming') {
-    return <span className="text-xs font-medium text-amber-600 dark:text-amber-400">⏳ Đợi claim</span>;
+  if (d === 'claim_credited') {
+    return <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Claim được credit</span>;
   }
-  if (d === 'pending_review') {
+  if (d === 'claim_rejected') {
+    return <span className="text-xs font-medium text-muted-foreground">✓ Claim bị từ chối</span>;
+  }
+  // pending_review + claiming → nút mở modal (claiming để KẾT LUẬN credit/từ chối).
+  if (d === 'pending_review' || d === 'claiming') {
+    const label = d === 'claiming' ? '⏳ Đợi claim · kết luận' : 'Xử lý đối soát';
     return (
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onAction(); }}
-        className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+        className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-300 whitespace-nowrap"
       >
-        Xử lý đối soát
+        {label}
       </button>
     );
   }
@@ -161,16 +168,19 @@ function RowGroup({ r, open, kgDiff, onToggle, onAction }: {
 }
 
 /** Modal đối soát: so 3 phía + ô lý do + 2 nút chấp nhận (lỗi nội bộ) / claim carrier. */
-function DecisionModal({ row, onClose, acceptAction, claimAction }: {
+function DecisionModal({ row, onClose, acceptAction, claimAction, resolveAction }: {
   row: ReconciledRowData | null;
   onClose: () => void;
   acceptAction: (orderId: string) => Promise<void>;
   claimAction: (orderId: string, reason?: string) => Promise<void>;
+  resolveAction: (orderId: string, credited: boolean) => Promise<void>;
 }) {
   const router = useRouter();
   const [reason, setReason] = useState('');
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Đơn đang 'claiming' → modal ở chế độ KẾT LUẬN claim (credit/từ chối).
+  const resolveMode = row?.reconcileDecision === 'claiming';
 
   const run = (fn: () => Promise<void>) => {
     setError(null);
@@ -191,10 +201,15 @@ function DecisionModal({ row, onClose, acceptAction, claimAction }: {
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setReason(''); setError(null); onClose(); } }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Đối soát đơn {row?.code}</DialogTitle>
+          <DialogTitle>{resolveMode ? 'Kết luận claim' : 'Đối soát'} — đơn {row?.code}</DialogTitle>
           <DialogDescription>
-            So sánh chi phí dự tính với cước bill thực. Lệch do lỗi nội bộ → <b>Chấp nhận</b> (đẩy giá thu chính
-            thức sang MMP). Lệch cần đòi carrier → <b>Claim</b> (đơn sang “đợi claim”, giá thu GIỮ nguyên).
+            {resolveMode ? (
+              <>Đơn đang chờ claim carrier. <b>Được credit</b> = carrier hoàn tiền chênh; <b>Bị từ chối</b> =
+              carrier không hoàn. Cả hai đều chốt giá thu khách theo bill thực và đẩy sang MMP.</>
+            ) : (
+              <>So sánh chi phí dự tính với cước bill thực. Lệch do lỗi nội bộ → <b>Chấp nhận</b> (đẩy giá thu
+              chính thức sang MMP). Lệch cần đòi carrier → <b>Claim</b> (đơn sang “đợi claim”, giá thu GIỮ nguyên).</>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -214,33 +229,52 @@ function DecisionModal({ row, onClose, acceptAction, claimAction }: {
               <p className="text-sm text-muted-foreground">Thiếu breakdown báo giá cho đơn này.</p>
             )}
 
-            <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">Lý do (tuỳ chọn — gửi kèm khi Claim)</span>
-              <input
-                type="text"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="vd: FedEx tính sai residential / dư phụ phí…"
-                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm"
-                disabled={pending}
-              />
-            </label>
+            {!resolveMode && (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">Lý do (tuỳ chọn — gửi kèm khi Claim)</span>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="vd: FedEx tính sai residential / dư phụ phí…"
+                  className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm"
+                  disabled={pending}
+                />
+              </label>
+            )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
         )}
 
         <DialogFooter className="flex-row justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" size="sm"
-            disabled={pending || !row}
-            onClick={() => row && run(() => claimAction(row.id, reason))}>
-            Claim đơn vị vận chuyển
-          </Button>
-          <Button type="button" size="sm"
-            disabled={pending || !row}
-            onClick={() => row && run(() => acceptAction(row.id))}>
-            {pending ? 'Đang xử lý…' : 'Chấp nhận sai lệch (lỗi nội bộ)'}
-          </Button>
+          {resolveMode ? (
+            <>
+              <Button type="button" variant="outline" size="sm"
+                disabled={pending || !row}
+                onClick={() => row && run(() => resolveAction(row.id, false))}>
+                Claim bị từ chối
+              </Button>
+              <Button type="button" size="sm"
+                disabled={pending || !row}
+                onClick={() => row && run(() => resolveAction(row.id, true))}>
+                {pending ? 'Đang xử lý…' : 'Được credit'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="outline" size="sm"
+                disabled={pending || !row}
+                onClick={() => row && run(() => claimAction(row.id, reason))}>
+                Claim đơn vị vận chuyển
+              </Button>
+              <Button type="button" size="sm"
+                disabled={pending || !row}
+                onClick={() => row && run(() => acceptAction(row.id))}>
+                {pending ? 'Đang xử lý…' : 'Chấp nhận sai lệch (lỗi nội bộ)'}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
