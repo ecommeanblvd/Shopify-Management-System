@@ -34,3 +34,22 @@ export function decideReconcile(
   const shouldEmitCharge = CHARGE_FINALISED.has(decision);
   return { decision, shouldEmitCharge };
 }
+
+/** Trạng thái ô "Đối soát" trong bảng đơn (THUẦN). `actionable` → bấm mở modal. */
+export type ReconcileCellKind = 'none' | 'waiting' | 'done' | 'review' | 'claiming';
+export interface ReconcileCellState { kind: ReconcileCellKind; label: string; actionable: boolean }
+export function reconcileCellState(
+  reconcileStatus: string | null,
+  decision: string | null,
+  hasTracking: boolean,
+): ReconcileCellState {
+  if (reconcileStatus !== 'reconciled') {
+    return hasTracking
+      ? { kind: 'waiting', label: 'Chờ bill', actionable: false }
+      : { kind: 'none', label: '—', actionable: false };
+  }
+  if (decision === 'pending_review') return { kind: 'review', label: '⚠ Cần đối soát', actionable: true };
+  if (decision === 'claiming') return { kind: 'claiming', label: '⏳ Đang claim', actionable: true };
+  // null | accepted | claim_credited | claim_rejected → đã chốt.
+  return { kind: 'done', label: '✓ Đã đối soát', actionable: false };
+}

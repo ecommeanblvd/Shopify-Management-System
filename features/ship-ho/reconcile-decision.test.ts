@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideReconcile, REVIEW_TOLERANCE_VND } from './reconcile-decision';
+import { decideReconcile, reconcileCellState, REVIEW_TOLERANCE_VND } from './reconcile-decision';
 
 describe('decideReconcile', () => {
   it('khớp (delta trong tolerance) → decision null, tự đẩy giá', () => {
@@ -36,5 +36,23 @@ describe('decideReconcile', () => {
   it('claim đã KẾT LUẬN (credited/rejected) → giữ + đẩy giá; cron KHÔNG ghi đè', () => {
     expect(decideReconcile(50_000, 'claim_credited')).toEqual({ decision: 'claim_credited', shouldEmitCharge: true });
     expect(decideReconcile(50_000, 'claim_rejected')).toEqual({ decision: 'claim_rejected', shouldEmitCharge: true });
+  });
+});
+
+describe('reconcileCellState', () => {
+  it('chưa reconciled: có tracking → Chờ bill; không tracking → —', () => {
+    expect(reconcileCellState(null, null, true)).toEqual({ kind: 'waiting', label: 'Chờ bill', actionable: false });
+    expect(reconcileCellState(null, null, false)).toEqual({ kind: 'none', label: '—', actionable: false });
+  });
+  it('reconciled + khớp/accepted/claim_* → Đã đối soát (không bấm)', () => {
+    for (const d of [null, 'accepted', 'claim_credited', 'claim_rejected']) {
+      expect(reconcileCellState('reconciled', d, true)).toEqual({ kind: 'done', label: '✓ Đã đối soát', actionable: false });
+    }
+  });
+  it('pending_review → Cần đối soát (bấm được)', () => {
+    expect(reconcileCellState('reconciled', 'pending_review', true)).toEqual({ kind: 'review', label: '⚠ Cần đối soát', actionable: true });
+  });
+  it('claiming → Đang claim (bấm được)', () => {
+    expect(reconcileCellState('reconciled', 'claiming', true)).toEqual({ kind: 'claiming', label: '⏳ Đang claim', actionable: true });
   });
 });

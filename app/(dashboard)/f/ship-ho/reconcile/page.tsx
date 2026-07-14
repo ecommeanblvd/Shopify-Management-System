@@ -87,7 +87,9 @@ export default async function ShipHoReconcilePage() {
         chargedVnd: r.chargedVnd == null ? null : Number(r.chargedVnd),
         actualChargedVnd: r.actualChargedVnd == null ? null : Number(r.actualChargedVnd),
         marginVnd: r.marginVnd == null ? null : Number(r.marginVnd),
+        reconcileStatus: 'reconciled',
         reconcileDecision: r.reconcileDecision,
+        hasTracking: r.trackingNumber != null,
         structure,
       };
     });

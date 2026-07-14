@@ -4,10 +4,15 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db, schema } from '@/db/client';
 import { listShipHoOrders } from '@/features/ship-ho/queries';
 import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
 import { displayCharged, displayMargin } from '@/features/ship-ho/pnl';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
+import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
+import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
+import { ReconcileStatusCell, type ReconcileModalData } from '@/components/ship-ho/reconcile-decision-ui';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { OrderRow } from './OrderRow';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +44,54 @@ export default async function ShipHoListPage({
   const q = typeof sp['q'] === 'string' ? sp['q'] : undefined;
   const allOrders = await listShipHoOrders();
   const orders = filterShipHoOrders(allOrders, { q, source: sourceFilter ?? undefined });
+
+  // Dữ liệu ĐỐI SOÁT (quyết định + cấu trúc giá 3 phía) cho các đơn ĐÃ reconciled
+  // trên trang — để cột "Đối soát" mở modal accept/claim/resolve tại chỗ. Chỉ
+  // query các đơn reconciled (breakdown jsonb) → nhẹ, không đụng listShipHoOrders.
+  const ids = orders.map((o) => o.id);
+  const reconRows = ids.length === 0 ? [] : await db
+    .select({
+      id: schema.shipHoOrders.id,
+      reconcileDecision: schema.shipHoOrders.reconcileDecision,
+      deltaVnd: schema.shipHoOrders.deltaVnd,
+      carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
+      actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
+      chargedVnd: schema.shipHoOrders.chargedVnd,
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      actualWeightKg: schema.shipHoOrders.actualWeightKg,
+      quoteBreakdown: schema.shipHoOrders.quoteBreakdown,
+      actualBillBreakdown: schema.shipHoOrders.actualBillBreakdown,
+      markupPercent: schema.shipHoOrders.markupPercent,
+      service: schema.shipHoOrders.service,
+    })
+    .from(schema.shipHoOrders)
+    .where(and(inArray(schema.shipHoOrders.id, ids), eq(schema.shipHoOrders.reconcileStatus, 'reconciled')));
+
+  const nn = (v: string | null) => (v == null ? null : Number(v));
+  const reconMap = new Map<string, Omit<ReconcileModalData, 'code' | 'hasTracking'>>();
+  for (const r of reconRows) {
+    const structure = (r.quoteBreakdown && r.carrierCostVnd && r.chargedVnd)
+      ? shipHoPriceStructure({
+          breakdown: r.quoteBreakdown,
+          carrierCostVnd: Number(r.carrierCostVnd),
+          chargedVnd: Number(r.chargedVnd),
+          markupPercent: Number(r.markupPercent ?? 0),
+          serviceLabel: r.service === 'standard' ? 'Standard Delivery' : 'Express Delivery',
+          actualBill: r.actualBillBreakdown && r.actualCarrierCostVnd
+            ? { breakdown: r.actualBillBreakdown, totalVnd: Number(r.actualCarrierCostVnd), weightKg: r.actualWeightKg == null ? null : Number(r.actualWeightKg) }
+            : null,
+        })
+      : null;
+    reconMap.set(r.id, {
+      id: r.id,
+      reconcileStatus: 'reconciled',
+      reconcileDecision: r.reconcileDecision,
+      estVnd: nn(r.carrierCostVnd), billVnd: nn(r.actualCarrierCostVnd), deltaVnd: nn(r.deltaVnd),
+      chargedVnd: nn(r.chargedVnd), actualChargedVnd: nn(r.actualChargedVnd),
+      structure,
+    });
+  }
+  const reconcileActions = { acceptAction: acceptShipHoDiscrepancy, claimAction: claimShipHoWithCarrier, resolveAction: resolveShipHoClaim };
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -74,10 +127,10 @@ export default async function ShipHoListPage({
                 tính / Giá Bill (cước thực từ hoá đơn) / Giá thu TÁCH RIÊNG để khỏi
                 nhầm; Margin = Giá thu − (Giá Bill ?? Chi phí dự tính). */}
             <colgroup>
-              <col className="w-[15%]" /><col className="w-[7%]" />
-              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[6%]" />
-              <col className="w-[11%]" /><col className="w-[11%]" /><col className="w-[12%]" /><col className="w-[11%]" />
-              <col className="w-[17%]" />
+              <col className="w-[13%]" /><col className="w-[7%]" />
+              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[5%]" />
+              <col className="w-[10%]" /><col className="w-[10%]" /><col className="w-[11%]" /><col className="w-[10%]" />
+              <col className="w-[10%]" /><col className="w-[14%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-3">
@@ -87,12 +140,13 @@ export default async function ShipHoListPage({
                 <th className="text-right whitespace-nowrap" title="Cước thực từ hoá đơn carrier — có số là đơn đã được bill">Giá Bill</th>
                 <th className="text-right" title="Giá thu brand (quote; 'thực' = đã tính lại theo cân bill)">Giá thu</th>
                 <th className="text-right" title="Giá thu − (Giá Bill nếu có, không thì Chi phí dự tính)">Margin</th>
+                <th className="text-left whitespace-nowrap" title="Đối soát bill: khớp → tự động; sai lệch → cần duyệt (click)">Đối soát</th>
                 <th className="text-left whitespace-nowrap">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={10} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const billVnd = num(o.actualCarrierCostVnd);
@@ -104,6 +158,19 @@ export default async function ShipHoListPage({
                   status: o.status, trackingNumber: o.trackingNumber, deliveryStatus: o.deliveryStatus,
                   reconcileStatus: o.reconcileStatus, marginVnd: num(o.marginVnd),
                 });
+                const rec = reconMap.get(o.id);
+                const modalData: ReconcileModalData = {
+                  id: o.id, code: o.code,
+                  reconcileStatus: o.reconcileStatus,
+                  reconcileDecision: rec?.reconcileDecision ?? null,
+                  hasTracking: o.trackingNumber != null,
+                  estVnd: rec?.estVnd ?? estVnd,
+                  billVnd: rec?.billVnd ?? billVnd,
+                  deltaVnd: rec?.deltaVnd ?? (billVnd != null && estVnd != null ? billVnd - estVnd : null),
+                  chargedVnd: rec?.chargedVnd ?? num(o.chargedVnd),
+                  actualChargedVnd: rec?.actualChargedVnd ?? num(o.actualChargedVnd),
+                  structure: rec?.structure ?? null,
+                };
                 return (
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
@@ -158,6 +225,9 @@ export default async function ShipHoListPage({
                         {margin.estimated && <div className="text-[10px] leading-tight text-muted-foreground">dự tính</div>}
                       </>
                     )}
+                  </td>
+                  <td className="align-top">
+                    <ReconcileStatusCell row={modalData} actions={reconcileActions} />
                   </td>
                   <td>
                     <div className="flex flex-col items-start gap-1">
