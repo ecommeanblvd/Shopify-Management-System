@@ -32,6 +32,10 @@ describe('parsePackRow', () => {
     expect(r.labelDate).toBeNull();
     expect(r.warnings.some((w) => w.includes('tương lai'))).toBe(true);
   });
+  it('bỏ Label Created Date quá cũ / rác (<2020, vd 1997) → null', () => {
+    const r = parsePackRow({ 'Order Number': '#X', 'Label Created Date': Date.UTC(1997, 7, 14, 17, 0, 0) });
+    expect(r.labelDate).toBeNull();
+  });
   it('field dạng rich [{text}] → đọc được', () => {
     const r = parsePackRow({ 'Order Number': [{ text: 'TA2017', type: 'text' }], 'Couriers': [{ text: 'DHL' }] });
     expect(r.orderNumber).toBe('TA2017');

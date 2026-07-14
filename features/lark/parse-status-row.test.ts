@@ -13,6 +13,13 @@ describe('parseLarkStatus', () => {
     expect(r.deliveryStatus).toBe('Delivered');
   });
 
+  it('ngày giao rác (<2020, vd 1997) → null (không dính delivered/expected)', () => {
+    const junk = Date.UTC(1997, 7, 14, 17, 0, 0);
+    const r = parseLarkStatus({ 'Ngày giao thực tế': junk, 'Ngày giao dự kiến': junk });
+    expect(r.actualDeliveredAt).toBeNull();
+    expect(r.expectedDeliveryDate).toBeNull();
+  });
+
   it('Ngày giao dự kiến: epoch ms → UTC nửa đêm ngày-lịch VN', () => {
     // 2026-06-08 17:00:00 UTC = 2026-06-09 00:00 giờ VN → kỳ vọng 2026-06-09T00:00:00Z
     const ms = Date.UTC(2026, 5, 8, 17, 0, 0);

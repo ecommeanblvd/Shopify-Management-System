@@ -63,6 +63,21 @@ export function larkEpochToVnMidnight(ms: number): Date {
   return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
 }
 
+/** Nửa đêm NGÀY-LỊCH-VN của HÔM NAY, biểu diễn dạng UTC-treo (khớp cách lưu ngày). */
+function todayVnMidnightUtc(): number {
+  const vn = new Date(Date.now() + VN_OFFSET_MS);
+  return Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate());
+}
+
+// Ngày Lark hợp lệ >= mốc này. Epoch Lark hỏng hay ra ngày vô lý (vd 1997) —
+// loại tại nguồn để không rơi vào label/ngày giao.
+const MIN_PLAUSIBLE_MS = Date.UTC(2020, 0, 1);
+/** null nếu ngày quá cũ (rác); ngược lại giữ nguyên. Dùng cho mọi ngày đọc từ Lark. */
+export function plausibleLarkDate(d: Date | null): Date | null {
+  if (!d) return null;
+  return d.getTime() >= MIN_PLAUSIBLE_MS ? d : null;
+}
+
 export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const warnings: string[] = [];
   const orderNumber = larkText(fields['Order Number']) ?? '';
@@ -101,13 +116,15 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
-  // Một label KHÔNG THỂ được tạo trong tương lai. Lark hay bị điền placeholder
-  // (vd "31/12/2026") ở cột "Label Created Date" cho đơn CHƯA ship → nếu để lọt,
-  // reconcile lấy nó làm NGÀY SHIP (labelCreatedAt ?? processedAt) → hiện ngày
-  // ship rác ở tương lai + chọn sai rate-card/fuel. Chặn tại đây (grace 2 ngày
-  // cho lệch tz / label pre-gen) → đơn chưa ship có labelDate=null, reconcile
-  // fallback về ngày đặt / báo "chưa ship".
-  if (labelDate && labelDate.getTime() > Date.now() + 2 * 24 * 60 * 60 * 1000) {
+  // Loại ngày quá cũ (epoch Lark hỏng → 1997…): label không thể trước khi có brand.
+  labelDate = plausibleLarkDate(labelDate);
+  // Một label KHÔNG THỂ được tạo ở NGÀY LỊCH TƯƠNG LAI (theo lịch VN). Lark hay
+  // điền placeholder ("31/12/2026", hoặc ngày mai) ở cột "Label Created Date" cho
+  // đơn CHƯA ship → nếu để lọt, reconcile lấy nó làm NGÀY SHIP → hiện ngày ship
+  // rác + chọn sai rate-card/fuel. So theo ngày-lịch-VN (labelDate lưu dạng
+  // nửa-đêm-VN-treo-UTC) nên bền vững bất kể giờ chạy. → đơn chưa ship có
+  // labelDate=null; reconcile fallback về ngày đặt / báo "chưa ship".
+  if (labelDate && labelDate.getTime() > todayVnMidnightUtc()) {
     warnings.push(`Label Created Date ở tương lai (${labelDate.toISOString().slice(0, 10)}) → bỏ (đơn chưa ship?)`);
     labelDate = null;
   }

@@ -4,7 +4,7 @@
  * Dùng lại helper đọc field + epoch→VN-date của parse-pack-row (DRY).
  */
 import type { DeliveryStatus } from '@/lib/fedex/track';
-import { larkText, larkEpochToVnMidnight } from './parse-pack-row';
+import { larkText, larkEpochToVnMidnight, plausibleLarkDate } from './parse-pack-row';
 
 export interface LarkStatusRow {
   dispatchStatus: string | null;
@@ -15,9 +15,10 @@ export interface LarkStatusRow {
   actualDeliveredAt: Date | null;
 }
 
-/** Field date Lark = epoch ms (số). Non-số/null → null. */
+/** Field date Lark = epoch ms (số). Non-số/null → null. Loại ngày rác (<2020,
+ *  vd epoch hỏng → 1997) để không dính vào ngày giao thực tế / dự kiến. */
 function larkDate(v: unknown): Date | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return larkEpochToVnMidnight(v);
+  if (typeof v === 'number' && Number.isFinite(v)) return plausibleLarkDate(larkEpochToVnMidnight(v));
   return null;
 }
 
