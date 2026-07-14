@@ -7,6 +7,7 @@ import { requireManageShipHo } from './require-manage';
 import { parseCarrierInvoiceRow, computeReconcile } from './reconcile-logic';
 import { getBilledByTracking } from './carrier-invoice-lookup';
 import { estimateForBrand } from './brand-estimate';
+import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
 
@@ -138,8 +139,12 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // KHÔNG phải cân tính cước — carrier tính trên max(cân thực, dim weight) làm
     // tròn bậc 0.5kg (kiểm chứng: net freight từng bill khớp đúng ô tier đó).
     // → truyền cả dims (SMS đo ?? brand khai) để engine tính chargeable như carrier.
+    // Giá thu THỰC dựng theo công thức FedEx: cước cơ bản (bảng offer, cân bill) +
+    // phụ phí LẤY THEO BILL (pass-through, gồm residential/ký nhận quote không có)
+    // + fuel trên (base+phụ phí vận chuyển) + VAT bước cuối (gồm cả customs).
     let actualChargedVnd: number | null = null;
     let billedChargeableKg: number | null = null;
+    let sellBreakdown: Record<string, number> | null = null;
     if (billed.weightKg != null && billed.weightKg > 0) {
       const asOf = billed.shipDate ? new Date(`${billed.shipDate}T00:00:00Z`) : undefined;
       const dim = (sms: string | null, decl: string | null) => {
@@ -154,10 +159,27 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         service: 'express',
       }, asOf);
       if (est.ok) {
-        actualChargedVnd = est.estimate.chargedVnd;
         const bd = est.internal.breakdown as { chargeableWeightKg?: unknown } | null;
         const ch = bd && typeof bd.chargeableWeightKg === 'number' ? bd.chargeableWeightKg : null;
         billedChargeableKg = ch ?? billed.weightKg;
+        // Phụ phí VẬN CHUYỂN từ bill (fuel áp lên): vùng xa + demand + giao nhà dân/ký nhận.
+        const s = billed.surcharges;
+        const transportSur = s.remote + s.demand + s.signature;
+        const customsSur = s.other; // phí xử lý hàng NK/customs — không fuel, có VAT.
+        const rc = reconciledBrandCharge({
+          baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
+          transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur,
+          fuelPercent: est.internal.fuelPercent, vatPercent: est.internal.vatPercent,
+          serviceLabel: 'Express Delivery',
+        });
+        actualChargedVnd = rc.chargedVnd;
+        sellBreakdown = {
+          baseVnd: rc.markedBaseVnd, transportSurVnd: Math.round(transportSur), customsSurVnd: Math.round(customsSur),
+          remoteVnd: Math.round(s.remote), demandVnd: Math.round(s.demand), resSignVnd: Math.round(s.signature),
+          fuelVnd: rc.fuelVnd, fuelPercent: est.internal.fuelPercent,
+          processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
+          chargedVnd: rc.chargedVnd,
+        };
         summary.requoted += 1;
       } else summary.errors.push({ code: o.code, reason: `re-quote ${est.code}` });
     }
@@ -179,6 +201,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       actualBillBreakdown: {
         ...billed.surcharges, billNumber: billed.billNumber, shipDate: billed.shipDate,
         scaleWeightKg: billed.weightKg,
+        sell: sellBreakdown, // breakdown giá thu THỰC (để bảng đối soát hiện cột thu đúng phụ phí bill).
       },
       reconcileStatus: 'reconciled',
     }).where(eq(schema.shipHoOrders.id, o.id));

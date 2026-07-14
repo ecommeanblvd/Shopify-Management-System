@@ -100,6 +100,27 @@ describe('shipHoPriceStructure', () => {
     expect(s.rows.reduce((t, r) => t + (r.costVnd ?? 0), 0)).toBe(bd.carrierCost);
   });
 
+  it('có sell (đã đối soát): cột giá thu lấy theo bill — residential/ký nhận không bị thiếu', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 92_700, vat: 190_000, other: 0,
+        billNumber: 'B1', shipDate: '2026-07-02',
+        sell: {
+          baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0, resSignVnd: 92_700, customsSurVnd: 0,
+          fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_984_582,
+        },
+      },
+      totalVnd: 1_472_700, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    // Cột giá thu tổng = sell.chargedVnd (KHÔNG phải quote gốc).
+    expect(s.chargeTotal).toBe(1_984_582);
+    // Dòng giao nhà dân/ký nhận: charge = 92.700 (theo bill), KHÔNG còn 0.
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân / ký nhận')?.chargeVnd).toBe(92_700);
+    // Tổng cột giá thu khớp chargedVnd.
+    expect(s.rows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_984_582);
+  });
+
   it('null khi thiếu breakdown', () => {
     expect(shipHoPriceStructure({ breakdown: null, carrierCostVnd: 1, chargedVnd: 1, markupPercent: 0 })).toBeNull();
   });

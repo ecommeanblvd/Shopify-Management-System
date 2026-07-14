@@ -42,6 +42,11 @@ export interface EstimateInternal {
   carrierCostVnd: number;
   markupPercent: number;
   breakdown: unknown;
+  /** Cước cơ bản GỐC (chưa markup, VND) — để re-bill dựng cước cơ bản đã markup. */
+  baseVnd: number;
+  /** Fuel % tuần giao + VAT % của tuyến — để re-bill áp fuel/VAT theo công thức. */
+  fuelPercent: number;
+  vatPercent: number;
 }
 
 export type EstimateResult =
@@ -157,6 +162,7 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
       carrierKey: account.carrierKey ?? 'fedex', carrierAccountId: account.id,
       carrierCostVnd: carrierCost.vnd, markupPercent,
       breakdown: res.breakdown,
+      baseVnd: base.vnd, fuelPercent: b.fuelPercent, vatPercent: b.vatPercent,
     },
   };
 }

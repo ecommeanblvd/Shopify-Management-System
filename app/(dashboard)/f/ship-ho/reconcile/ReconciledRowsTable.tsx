@@ -130,7 +130,7 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
           <td className="text-left">Cân tính phí (kg)</td>
           <td className="text-right">{s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">{s.weights.billKg ?? '—'}</td>
-          <td className="text-right">{s.weights.quoteKg ?? '—'}</td>
+          <td className="text-right">{s.weights.billKg ?? s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">—</td>
         </tr>
         {s.rows.map((row) => {
