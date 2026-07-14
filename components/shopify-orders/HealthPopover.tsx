@@ -28,7 +28,7 @@ export interface HealthSnapshot {
 interface HealthPopoverProps {
   storeName: string;
   snapshot: HealthSnapshot;
-  /** Server action: start the 12-month backfill for this store. Fire-and-forget. */
+  /** Server action: start the full-history backfill for this store. Fire-and-forget. */
   startBackfillAction: () => Promise<void>;
 }
 

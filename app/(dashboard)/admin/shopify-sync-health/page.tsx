@@ -117,9 +117,9 @@ export default async function SyncHealth() {
                             size="sm"
                             variant="outline"
                             disabled={s.state?.backfillStatus === 'running'}
-                            title="Pull the last 12 months of orders via Shopify bulkOperation"
+                            title="Pull the store's full order history via Shopify bulkOperation, skipping orders already synced"
                           >
-                            {s.state?.backfillStatus === 'running' ? 'Backfilling…' : 'Backfill 12mo'}
+                            {s.state?.backfillStatus === 'running' ? 'Backfilling…' : 'Backfill all'}
                           </Button>
                         </form>
                         <form action={reregisterAction}>

@@ -10,7 +10,11 @@ import { db, schema } from '@/db/client';
 import { runBackfillForStore } from './run-backfill';
 
 /**
- * Kick off a 12-month order backfill for a store from a UI button.
+ * Kick off a full-history order backfill for a store from a UI button. Pulls
+ * every order Shopify will return (requires the `read_all_orders` scope for
+ * data older than 60 days), skipping orders already synced by asking Shopify
+ * for only those older than the oldest order already in the DB — see
+ * runBackfillForStore / buildBackfillFilter.
  *
  * Fire-and-forget: runBackfillForStore() polls Shopify's bulk operation
  * with 30s intervals and a 2-hour watchdog — far too long for an HTTP

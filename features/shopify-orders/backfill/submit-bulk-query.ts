@@ -11,9 +11,11 @@ const BULK_MUTATION = `
   }
 `;
 
+// <FILTER> is replaced with a Shopify search clause, e.g. `(query: "created_at:<=2024-...")`,
+// or left empty ('') to pull the store's entire order history.
 const ORDERS_QUERY = `
 {
-  orders(query: "created_at:>=<SINCE>") {
+  orders<FILTER> {
     edges { node {
       id name createdAt processedAt cancelledAt
       displayFinancialStatus displayFulfillmentStatus currencyCode
@@ -39,12 +41,21 @@ const ORDERS_QUERY = `
   }
 }`;
 
-export async function submitBackfillBulkQuery(storeId: string, sinceIso: string): Promise<string> {
+/**
+ * Submit a bulk order export.
+ *
+ * @param filterClause a Shopify `orders` search string (e.g. `created_at:<=2024-01-01T00:00:00Z`),
+ *   or '' to export the store's entire order history. Passing a `created_at:<=<oldest synced>`
+ *   clause is how the backfill skips orders it already has (Shopify filters server-side, so those
+ *   rows are never streamed back).
+ */
+export async function submitBackfillBulkQuery(storeId: string, filterClause: string): Promise<string> {
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) throw new Error(`store ${storeId} not found`);
   const token = await getStoreToken(storeId);
 
-  const query = ORDERS_QUERY.replace('<SINCE>', sinceIso);
+  const filter = filterClause ? `(query: ${JSON.stringify(filterClause)})` : '';
+  const query = ORDERS_QUERY.replace('<FILTER>', filter);
   const res = await graphqlCall({
     shopDomain: store.shopDomain,
     apiVersion: store.apiVersion,

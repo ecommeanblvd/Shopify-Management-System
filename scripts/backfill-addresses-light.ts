@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   console.log(`Cửa sổ: ${sinceDays} ngày (từ ${since.slice(0, 10)})`);
 
   console.log('Submit bulk query...');
-  await submitBackfillBulkQuery(storeId, since);
+  await submitBackfillBulkQuery(storeId, `created_at:>=${since}`);
   const start = Date.now();
   let url: string | null = null;
   while (true) {

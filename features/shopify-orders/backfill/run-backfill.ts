@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, min } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { upsertOrder } from '../sync/upsert-order';
 import { submitBackfillBulkQuery } from './submit-bulk-query';
@@ -13,9 +13,47 @@ export interface BackfillResult {
   ordersIngested: number;
   bulkOperationId: string;
   durationMs: number;
+  /** The Shopify search clause used, or '' for a full-history export. For observability/logs. */
+  filterClause: string;
 }
 
-export async function runBackfillForStore(storeId: string): Promise<BackfillResult> {
+/**
+ * Build the Shopify `orders` search clause for a historical backfill.
+ *
+ * We only want the orders we DON'T already have. Sync channels (webhook/cron)
+ * always pull the most-recent orders, so what's in the DB is a recent block and
+ * the gap is everything OLDER than it. We ask Shopify for `created_at:<=<oldest
+ * synced>` so it filters server-side and never streams back the rows we already
+ * hold — saving bulk-export time and API budget. `<=` (not `<`) re-fetches only
+ * the boundary order(s) sharing that exact timestamp, which `upsertOrder` dedups
+ * idempotently — cheap insurance against same-second ties leaving a hole.
+ *
+ * If the store has no orders at all (fresh connect / test store), returns '' to
+ * export the entire history.
+ */
+async function buildBackfillFilter(storeId: string): Promise<string> {
+  const [row] = await db
+    .select({ oldest: min(schema.shopifyOrders.createdAtShopify) })
+    .from(schema.shopifyOrders)
+    .where(eq(schema.shopifyOrders.storeId, storeId));
+  const oldest = row?.oldest ? new Date(row.oldest) : null;
+  return oldest ? `created_at:<=${oldest.toISOString()}` : '';
+}
+
+export interface BackfillOptions {
+  /**
+   * Override the Shopify `orders` search clause. Default (undefined) skips
+   * orders already synced — see buildBackfillFilter. Pass an explicit clause
+   * (e.g. `created_at:>=<iso>`) to force a re-fetch window, which is what the
+   * address re-sync scripts need to refresh fields on orders already in the DB.
+   */
+  filterClause?: string;
+}
+
+export async function runBackfillForStore(
+  storeId: string,
+  opts?: BackfillOptions,
+): Promise<BackfillResult> {
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) throw new Error(`store ${storeId} not found`);
 
@@ -28,11 +66,11 @@ export async function runBackfillForStore(storeId: string): Promise<BackfillResu
     });
 
   const start = Date.now();
-  const since = new Date(start - 365 * 24 * 60 * 60 * 1000).toISOString();
+  const filterClause = opts?.filterClause ?? (await buildBackfillFilter(storeId));
   let bulkId = '';
 
   try {
-    bulkId = await submitBackfillBulkQuery(storeId, since);
+    bulkId = await submitBackfillBulkQuery(storeId, filterClause);
     await db
       .update(schema.shopifySyncState)
       .set({ backfillCursor: bulkId })
@@ -66,7 +104,7 @@ export async function runBackfillForStore(storeId: string): Promise<BackfillResu
       .set({ backfillStatus: 'done', backfillFinishedAt: new Date() })
       .where(eq(schema.shopifySyncState.storeId, storeId));
 
-    return { storeId, ordersIngested: ingested, bulkOperationId: bulkId, durationMs: Date.now() - start };
+    return { storeId, ordersIngested: ingested, bulkOperationId: bulkId, durationMs: Date.now() - start, filterClause };
   } catch (err) {
     await db
       .update(schema.shopifySyncState)

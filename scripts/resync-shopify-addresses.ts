@@ -15,10 +15,13 @@ async function main(): Promise<void> {
     .from(schema.stores).where(eq(schema.stores.status, 'active'));
   const stores = onlyStore ? all.filter((s) => s.id === onlyStore) : all;
   console.log(`Re-sync ${stores.length} store active...\n`);
+  // This script's job is to REFRESH addresses on orders already in the DB, so it
+  // must re-fetch the recent window (not the dedup default, which would skip them).
+  const since = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
   let total = 0;
   for (const s of stores) {
     try {
-      const res = await runBackfillForStore(s.id);
+      const res = await runBackfillForStore(s.id, { filterClause: `created_at:>=${since}` });
       total += res.ordersIngested;
       console.log(`✓ ${s.name}: ${res.ordersIngested} đơn (${Math.round(res.durationMs / 1000)}s)`);
     } catch (e) {

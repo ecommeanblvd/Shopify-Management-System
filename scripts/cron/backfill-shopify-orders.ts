@@ -9,7 +9,8 @@ async function main(): Promise<void> {
   const storeId = storeArg.split('=')[1];
   const r = await runBackfillForStore(storeId);
   process.stdout.write(
-    `backfill: store=${r.storeId} ingested=${r.ordersIngested} duration=${(r.durationMs / 1000).toFixed(1)}s\n`,
+    `backfill: store=${r.storeId} ingested=${r.ordersIngested} ` +
+      `range=${r.filterClause || 'all-history'} duration=${(r.durationMs / 1000).toFixed(1)}s\n`,
   );
 }
 

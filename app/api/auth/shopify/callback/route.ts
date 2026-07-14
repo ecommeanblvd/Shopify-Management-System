@@ -149,7 +149,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Step 8c: Auto-trigger a 12-month order backfill on first connect.
+    // Step 8c: Auto-trigger a full-history order backfill on first connect.
     // Skip when the store already has a backfill that's running or done so
     // a re-install (token refresh, scope upgrade) doesn't burn API quota.
     // Fire-and-forget: the backfill polls Shopify for minutes-to-hours;
