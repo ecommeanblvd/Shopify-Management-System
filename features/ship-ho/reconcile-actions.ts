@@ -237,6 +237,17 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         },
       );
     }
+
+    // Đơn CÓ sai lệch → 'pending_review' (chờ operator duyệt): báo MMP "chờ đối soát",
+    // GIỮ giá dự tính (KHÔNG gửi giá thực tới khi accept/claim). Chỉ emit khi MỚI
+    // chuyển sang pending_review (tránh spam mỗi lượt cron).
+    if (nextDecision === 'pending_review' && o.prevDecision !== 'pending_review') {
+      await emitShipHoEvent(
+        { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+        'order.reconcile_pending',
+        { estimatedCostVnd: estCost, billedCostVnd: Math.round(billed.totalVnd), deltaVnd },
+      );
+    }
   }
 
   // KHÔNG revalidatePath ở core — cron chạy ngoài request context (trang ship hộ
