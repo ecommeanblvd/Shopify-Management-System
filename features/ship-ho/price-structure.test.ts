@@ -85,15 +85,20 @@ describe('shipHoPriceStructure', () => {
     const labels = s.rows.map((r) => r.label);
     expect(labels).toContain('Phụ phí vùng xa');
     expect(labels).toContain('Phụ phí nhu cầu (demand)');
-    expect(labels).toContain('Giao nhà dân / ký nhận');
+    // Tách 2 khoản: Giao nhà dân (residential 30k) + Ký nhận (addons 25k).
+    expect(labels).toContain('Giao nhà dân');
+    expect(labels).toContain('Ký nhận (direct signature)');
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân')?.costVnd).toBe(30_000);
+    expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.costVnd).toBe(25_000);
     expect(labels).toContain('Phí xử lý NK / khác');
+    const surLabels = ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân', 'Ký nhận (direct signature)', 'Phí xử lý NK / khác'];
     // charge = cost cho từng khoản phụ phí (pass-through).
-    for (const l of ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân / ký nhận', 'Phí xử lý NK / khác']) {
+    for (const l of surLabels) {
       const row = s.rows.find((r) => r.label === l)!;
       expect(row.chargeVnd).toBe(row.costVnd);
     }
     // Σ các khoản phụ phí (cost) = tổng phụ phí gốc 125k.
-    const surSum = s.rows.filter((r) => ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân / ký nhận', 'Phí xử lý NK / khác'].includes(r.label))
+    const surSum = s.rows.filter((r) => surLabels.includes(r.label))
       .reduce((t, r) => t + (r.costVnd ?? 0), 0);
     expect(surSum).toBe(125_000);
     // Tổng cột chi phí vẫn khớp carrierCostVnd.
@@ -115,14 +120,41 @@ describe('shipHoPriceStructure', () => {
     const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
     // Cột giá thu tổng = sell.chargedVnd (KHÔNG phải quote gốc).
     expect(s.chargeTotal).toBe(1_984_582);
-    // Dòng giao nhà dân/ký nhận: charge = 92.700 (theo bill), KHÔNG còn 0.
-    expect(s.rows.find((r) => r.label === 'Giao nhà dân / ký nhận')?.chargeVnd).toBe(92_700);
+    // Đơn CŨ (sell chưa tách residentialVnd/signatureVnd) → residential gộp trong
+    // signature bill → hiện toàn bộ 92.700 ở "Ký nhận", "Giao nhà dân" = 0.
+    expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.chargeVnd).toBe(92_700);
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân')?.chargeVnd ?? 0).toBe(0);
     // Tổng cột giá thu khớp chargedVnd.
     expect(s.rows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_984_582);
-    // Giá thu DỰ TÍNH (quote) tách riêng, = chargedVnd gốc; residential quote = 0.
+    // Giá thu DỰ TÍNH (quote) tách riêng, = chargedVnd gốc; ký nhận quote = 0 (breakdown addons 0).
     expect(s.quoteChargeTotal).toBe(expectedCharged(25));
-    expect(s.rows.find((r) => r.label === 'Giao nhà dân / ký nhận')?.quoteChargeVnd).toBe(0);
+    expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.quoteChargeVnd ?? 0).toBe(0);
     expect(s.rows.reduce((t, r) => t + (r.quoteChargeVnd ?? 0), 0)).toBe(expectedCharged(25));
+  });
+
+  it('có sell TÁCH residential + ký nhận: 2 dòng đúng số, tổng bảo toàn', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0,
+        signature: 52_700, residential: 40_000, vat: 190_000, other: 0,
+        billNumber: 'B2', shipDate: '2026-07-02',
+        sell: {
+          baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0,
+          resSignVnd: 92_700, residentialVnd: 40_000, signatureVnd: 52_700, customsSurVnd: 0,
+          fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_984_582,
+        },
+      },
+      totalVnd: 1_472_700, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    // Bill tách đúng.
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân')?.billVnd).toBe(40_000);
+    expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.billVnd).toBe(52_700);
+    // Giá thu thực tách đúng.
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân')?.chargeVnd).toBe(40_000);
+    expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.chargeVnd).toBe(52_700);
+    // Tổng cột giá thu vẫn khớp.
+    expect(s.rows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_984_582);
   });
 
   it('chưa có bill: giá thu dự tính = giá thu thực (chưa tính lại)', () => {

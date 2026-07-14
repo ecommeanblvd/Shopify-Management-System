@@ -162,9 +162,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         const bd = est.internal.breakdown as { chargeableWeightKg?: unknown } | null;
         const ch = bd && typeof bd.chargeableWeightKg === 'number' ? bd.chargeableWeightKg : null;
         billedChargeableKg = ch ?? billed.weightKg;
-        // Phụ phí VẬN CHUYỂN từ bill (fuel áp lên): vùng xa + demand + giao nhà dân/ký nhận.
+        // Phụ phí VẬN CHUYỂN từ bill (fuel áp lên): vùng xa + demand + giao nhà dân + ký nhận.
+        // signature nay ĐÃ tách residential ra → cộng lại cả 2 để tổng KHÔNG đổi.
         const s = billed.surcharges;
-        const transportSur = s.remote + s.demand + s.signature;
+        const transportSur = s.remote + s.demand + s.signature + s.residential;
         const customsSur = s.other; // phí xử lý hàng NK/customs — không fuel, có VAT.
         const rc = reconciledBrandCharge({
           baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
@@ -175,7 +176,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         actualChargedVnd = rc.chargedVnd;
         sellBreakdown = {
           baseVnd: rc.markedBaseVnd, transportSurVnd: Math.round(transportSur), customsSurVnd: Math.round(customsSur),
-          remoteVnd: Math.round(s.remote), demandVnd: Math.round(s.demand), resSignVnd: Math.round(s.signature),
+          remoteVnd: Math.round(s.remote), demandVnd: Math.round(s.demand),
+          // resSignVnd giữ lại (tổng cũ) để tương thích; thêm 2 khoản TÁCH cho bảng đối soát.
+          resSignVnd: Math.round(s.signature + s.residential),
+          residentialVnd: Math.round(s.residential), signatureVnd: Math.round(s.signature),
           fuelVnd: rc.fuelVnd, fuelPercent: est.internal.fuelPercent,
           processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
           chargedVnd: rc.chargedVnd,

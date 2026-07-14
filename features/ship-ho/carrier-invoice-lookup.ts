@@ -4,12 +4,16 @@
  *
  * `normalizeBilledLine` THUẦN (test được); `getBilledByTracking` là I/O thin wrapper.
  */
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 export interface BilledSurcharges {
   base: number; discount: number; fuel: number; remote: number;
+  /** Ký nhận (direct signature) — ĐÃ tách residential ra. */
   demand: number; signature: number; vat: number; other: number;
+  /** Giao nhà dân (residential address) — tách riêng khỏi signature để đối soát
+   *  rõ khoản nào thu thiếu. Nguồn: shipment_charges.residential (import ghi riêng). */
+  residential: number;
 }
 
 export interface BilledLookup {
@@ -27,22 +31,32 @@ export interface RawBillLine {
   demand: string | null; signature: string | null; vat: string | null; other: string | null;
   total: string | null;
   shipDate: string | null;
+  /** Residential (Giao nhà dân) từ shipment_charges — carrier_bill_lines.signature
+   *  GỘP cả residential, nên tách ra đây rồi trừ khỏi signature. null = không có. */
+  residentialRaw?: string | null;
 }
 
-const num = (s: string | null): number => (s == null || s === '' ? 0 : Number(s) || 0);
+const num = (s: string | null | undefined): number => (s == null || s === '' ? 0 : Number(s) || 0);
 
 /**
  * Quy 1 dòng bill (theo COST currency của account) về VND theo `factor`
  * (costCurrency==='VND' → 1). Trả cân, tổng cước VND, và phụ phí VND.
+ *
+ * `signature` trên carrier_bill_lines GỘP cả residential (Giao nhà dân) + direct
+ * signature (ký nhận). Ta tách residential ra (nguồn shipment_charges) → cột
+ * `residential` riêng và `signature` chỉ còn ký nhận. Tổng phụ phí KHÔNG đổi.
  */
 export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNumber: string | null): BilledLookup {
-  const s = (v: string | null) => Math.round(num(v) * vndFactor);
+  const s = (v: string | null | undefined) => Math.round(num(v) * vndFactor);
+  const residential = s(raw.residentialRaw);
+  // signature phẳng đã gộp residential → trừ ra (kẹp ≥0 phòng lệch làm tròn).
+  const signature = Math.max(0, s(raw.signature) - residential);
   return {
     weightKg: raw.weightKg == null || raw.weightKg === '' ? null : Number(raw.weightKg),
     totalVnd: s(raw.total),
     surcharges: {
       base: s(raw.base), discount: s(raw.discount), fuel: s(raw.fuel), remote: s(raw.remote),
-      demand: s(raw.demand), signature: s(raw.signature), vat: s(raw.vat), other: s(raw.other),
+      demand: s(raw.demand), signature, residential, vat: s(raw.vat), other: s(raw.other),
     },
     billNumber,
     shipDate: raw.shipDate,
@@ -74,6 +88,14 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       costCurrency: schema.carrierAccounts.costCurrency,
       displayCurrency: schema.carrierAccounts.displayCurrency,
       fx: schema.carrierAccounts.fxCostPerDisplay,
+      // Residential (Giao nhà dân) lưu RIÊNG ở shipment_charges (cùng cost currency,
+      // cùng lượt import FBO); carrier_bill_lines.signature gộp nó vào. Lấy ra để tách.
+      residentialRaw: sql<string | null>`(
+        SELECT sc.residential FROM ${schema.shipmentCharges} sc
+        JOIN ${schema.shipments} shp ON shp.id = sc.shipment_id
+        WHERE shp.tracking_number = ${schema.carrierBillLines.trackingNumber}
+        ORDER BY sc.imported_at DESC LIMIT 1
+      )`,
     })
     .from(schema.carrierBillLines)
     .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))

@@ -84,7 +84,7 @@ export function shipHoPriceStructure(input: {
   const baseBill = ab ? Math.round(num(ab.base) + num(ab.discount)) : null;
   const fuelBill = ab ? Math.round(num(ab.fuel)) : null;
   const vatBill = ab ? Math.round(num(ab.vat)) : null;
-  const surBill = ab ? Math.round(num(ab.remote) + num(ab.demand) + num(ab.signature) + num(ab.other)) : null;
+  const surBill = ab ? Math.round(num(ab.remote) + num(ab.demand) + num(ab.signature) + num(ab.residential) + num(ab.other)) : null;
   // Phần dư BILL (làm tròn / khoản lạ) để cột bill luôn khớp billTotal.
   const adjustBill = billTotal != null
     ? Math.round(billTotal - ((baseBill ?? 0) + (surBill ?? 0) + (fuelBill ?? 0) + (vatBill ?? 0)))
@@ -118,11 +118,13 @@ export function shipHoPriceStructure(input: {
   const qVat = pick((l) => l === 'VAT');
   const qRemote = R(b.remote);
   const qDemand = R(b.demand);
-  const qResSign = R(b.residential) + R(b.addons);
+  // Tách "Giao nhà dân" (residential) và "Ký nhận" (direct signature = addons).
+  const qResidential = R(b.residential);
+  const qSignature = R(b.addons);
   const qCustoms = R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak);
   const quoteTotal = input.chargedVnd;
   const adjustQuoteCharge = Math.round(
-    quoteTotal - (qBase + qRemote + qDemand + qResSign + qCustoms + qFuel + qProcessing + qVat),
+    quoteTotal - (qBase + qRemote + qDemand + qResidential + qSignature + qCustoms + qFuel + qProcessing + qVat),
   );
 
   // ── GIÁ THU THỰC — khi ĐÃ đối soát dùng breakdown THỰC (sell): cước cơ bản theo
@@ -136,10 +138,14 @@ export function shipHoPriceStructure(input: {
   const chargeVat = sell ? S(sell.vatVnd) : qVat;
   const chRemote = sell ? S(sell.remoteVnd) : qRemote;
   const chDemand = sell ? S(sell.demandVnd) : qDemand;
-  const chResSign = sell ? S(sell.resSignVnd) : qResSign;
+  // Đơn cũ (sell chưa có 2 field tách) fallback: residential từ quote, signature = phần còn lại.
+  const chResidential = sell ? S(sell.residentialVnd ?? 0) : qResidential;
+  const chSignature = sell
+    ? (sell.signatureVnd != null ? S(sell.signatureVnd) : Math.max(0, S(sell.resSignVnd) - S(sell.residentialVnd ?? 0)))
+    : qSignature;
   const chCustoms = sell ? S(sell.customsSurVnd) : qCustoms;
   const chargeTotalFinal = sell ? S(sell.chargedVnd) : quoteTotal;
-  const chargeSum = chargeBase + chRemote + chDemand + chResSign + chCustoms + chargeFuel + chargeProcessing + chargeVat;
+  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chCustoms + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(chargeTotalFinal - chargeSum);
 
   // ── Tách phụ phí thành TỪNG KHOẢN. Gộp theo cột bill có sẵn (remote/demand/
@@ -150,10 +156,16 @@ export function shipHoPriceStructure(input: {
     { label: 'Phụ phí vùng xa', costVnd: R(b.remote), billVnd: hasBill ? Math.round(num(ab!.remote)) : null, quoteChargeVnd: qRemote, chargeVnd: chRemote },
     { label: 'Phụ phí nhu cầu (demand)', costVnd: R(b.demand), billVnd: hasBill ? Math.round(num(ab!.demand)) : null, quoteChargeVnd: qDemand, chargeVnd: chDemand },
     {
-      label: 'Giao nhà dân / ký nhận',
-      costVnd: R(b.residential) + R(b.addons),
+      label: 'Giao nhà dân',
+      costVnd: R(b.residential),
+      billVnd: hasBill ? Math.round(num(ab!.residential)) : null,
+      quoteChargeVnd: qResidential, chargeVnd: chResidential,
+    },
+    {
+      label: 'Ký nhận (direct signature)',
+      costVnd: R(b.addons),
       billVnd: hasBill ? Math.round(num(ab!.signature)) : null,
-      quoteChargeVnd: qResSign, chargeVnd: chResSign,
+      quoteChargeVnd: qSignature, chargeVnd: chSignature,
     },
     {
       label: 'Phí xử lý NK / khác',
