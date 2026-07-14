@@ -63,6 +63,19 @@ export interface MappedOrder {
   trackingNumbers: string[];
 }
 
+/**
+ * Parse a Shopify ISO date, falling back when the field is missing or invalid.
+ * A `new Date(undefined)` yields an Invalid Date whose `.toISOString()` throws
+ * "Invalid time value" the moment Drizzle serialises it — one absent field in a
+ * GraphQL selection would otherwise abort a whole ingest. Guarding here keeps a
+ * query/field drift (e.g. a channel that forgets `updatedAt`) from crashing sync.
+ */
+function toDate(value: string | null | undefined, fallback: Date): Date {
+  if (!value) return fallback;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? fallback : d;
+}
+
 export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): MappedOrder {
   const lines = payload.lineItems.nodes.map((node) => mapLine(node));
   // grossLineTotal = Σ(original_unit_price × qty) — true GMV before any discount
@@ -77,10 +90,12 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       storeId,
       shopifyOrderId: payload.id,
       shopifyOrderNumber: payload.name,
-      createdAtShopify: new Date(payload.createdAt),
-      processedAtShopify: new Date(payload.processedAt),
-      updatedAtShopify: new Date(payload.updatedAt),
-      cancelledAtShopify: payload.cancelledAt ? new Date(payload.cancelledAt) : null,
+      createdAtShopify: toDate(payload.createdAt, new Date(0)),
+      // processedAt/updatedAt can be absent on some orders (or omitted by a
+      // channel's query) — fall back to createdAt rather than crash the insert.
+      processedAtShopify: toDate(payload.processedAt, toDate(payload.createdAt, new Date(0))),
+      updatedAtShopify: toDate(payload.updatedAt, toDate(payload.processedAt, toDate(payload.createdAt, new Date(0)))),
+      cancelledAtShopify: payload.cancelledAt ? toDate(payload.cancelledAt, new Date(0)) : null,
       financialStatus: payload.displayFinancialStatus,
       fulfillmentStatus: payload.displayFulfillmentStatus,
       currency: payload.currencyCode,
@@ -131,7 +146,7 @@ function mapLine(node: ShopifyLineItem): MappedOrder['lines'][number] {
 function mapRefund(r: ShopifyRefund): MappedOrder['refunds'][number] {
   return {
     shopifyRefundId: r.id,
-    refundedAt: new Date(r.createdAt),
+    refundedAt: toDate(r.createdAt, new Date(0)),
     amount: r.totalRefundedSet.shopMoney.amount,
     reason: r.note,
   };

@@ -34,6 +34,27 @@ describe('mapShopifyOrder', () => {
     expect(m.trackingNumbers).toEqual(['TRK-001']);
   });
 
+  // Regression: the backfill bulk query historically omitted `updatedAt`, so
+  // `new Date(undefined)` produced an Invalid Date that threw "Invalid time
+  // value" the moment Drizzle serialised it — aborting the whole backfill.
+  // The mapper must tolerate a missing date field and fall back, never throw.
+  it('falls back (does not throw) when updatedAt/processedAt are absent', () => {
+    const base = fixture('order-simple');
+    const partial = { ...base } as Partial<ShopifyOrderPayload>;
+    delete partial.updatedAt;
+    delete partial.processedAt;
+
+    const run = () => mapShopifyOrder(partial as ShopifyOrderPayload, 'store-1');
+    expect(run).not.toThrow();
+
+    const m = run();
+    const created = new Date(base.createdAt).getTime();
+    // Both absent fields fall back to createdAt, and remain valid (serialisable) dates.
+    expect(m.order.updatedAtShopify.getTime()).toBe(created);
+    expect(m.order.processedAtShopify.getTime()).toBe(created);
+    expect(() => m.order.updatedAtShopify.toISOString()).not.toThrow();
+  });
+
   it('captures refunds with amount + reason', () => {
     const m = mapShopifyOrder(fixture('order-refunded'), 'store-1');
     expect(m.refunds).toHaveLength(1);

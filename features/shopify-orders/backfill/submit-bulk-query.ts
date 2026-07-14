@@ -17,7 +17,7 @@ const ORDERS_QUERY = `
 {
   orders<FILTER> {
     edges { node {
-      id name createdAt processedAt cancelledAt
+      id name createdAt processedAt updatedAt cancelledAt
       displayFinancialStatus displayFulfillmentStatus currencyCode
       subtotalLineItemsQuantity
       totalDiscountsSet { shopMoney { amount currencyCode } }
