@@ -10,6 +10,7 @@ import { estimateForBrand } from './brand-estimate';
 import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
+import { decideReconcile } from './reconcile-decision';
 
 export interface ReconcileSummary {
   total: number;
@@ -119,6 +120,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       chargedVnd: schema.shipHoOrders.chargedVnd,
       prevActualChargedVnd: schema.shipHoOrders.actualChargedVnd,
       prevReconcile: schema.shipHoOrders.reconcileStatus,
+      prevDecision: schema.shipHoOrders.reconcileDecision,
       dimLengthCm: schema.shipHoOrders.dimLengthCm,
       dimWidthCm: schema.shipHoOrders.dimWidthCm,
       dimHeightCm: schema.shipHoOrders.dimHeightCm,
@@ -196,6 +198,11 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // actualWeightKg = CÂN TÍNH CƯỚC carrier dùng (chargeable) — thứ mọi chỗ hiển
     // thị gọi là "cân bill"; cân thực trên cân giữ ở breakdown (scaleWeightKg).
     const kgToStore = billedChargeableKg ?? billed.weightKg;
+
+    // Sai lệch cost thực vs dự tính → cần operator DUYỆT TAY (accept/claim) trước
+    // khi đẩy giá; khớp → tự đẩy như cũ. Quyết định đã chốt → giữ (không ghi đè).
+    const { decision: nextDecision, shouldEmitCharge } = decideReconcile(deltaVnd, o.prevDecision);
+
     await db.update(schema.shipHoOrders).set({
       actualCarrierCostVnd: String(billed.totalVnd),
       actualWeightKg: kgToStore == null ? null : String(kgToStore),
@@ -208,14 +215,16 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         sell: sellBreakdown, // breakdown giá thu THỰC (để bảng đối soát hiện cột thu đúng phụ phí bill).
       },
       reconcileStatus: 'reconciled',
+      reconcileDecision: nextDecision,
     }).where(eq(schema.shipHoOrders.id, o.id));
 
-    // Giá cuối cho brand (contract: order.reconciled). Chỉ bắn khi MỚI đối soát
-    // lần đầu hoặc giá cuối ĐỔI (idempotent qua các lượt cron). Không lộ cước carrier.
+    // Đẩy giá chính thức (order.reconciled) CHỈ KHI shouldEmitCharge (tự khớp hoặc
+    // đã 'accepted'). 'pending_review'/'claiming' → chưa đẩy. Chỉ bắn khi MỚI đối
+    // soát / giá cuối ĐỔI (idempotent). Không lộ cước carrier.
     const finalChargedVnd = actualChargedVnd ?? quotedCharged;
     const prevFinal = o.prevActualChargedVnd == null ? null : Math.round(Number(o.prevActualChargedVnd));
     const isNew = o.prevReconcile !== 'reconciled';
-    if (finalChargedVnd != null && (isNew || (actualChargedVnd != null && actualChargedVnd !== prevFinal))) {
+    if (shouldEmitCharge && finalChargedVnd != null && (isNew || (actualChargedVnd != null && actualChargedVnd !== prevFinal))) {
       await emitShipHoEvent(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
         'order.reconciled',

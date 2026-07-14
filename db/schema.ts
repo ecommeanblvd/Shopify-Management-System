@@ -2035,6 +2035,15 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   actualWeightKg: numeric('actual_weight_kg', { precision: 10, scale: 3 }),
   actualChargedVnd: numeric('actual_charged_vnd', { precision: 16, scale: 2 }),
   actualBillBreakdown: jsonb('actual_bill_breakdown'),
+  // Quyết định đối soát khi bill về CÓ sai lệch (deltaVnd≠0): operator xử lý tay.
+  //   pending_review = chờ xử lý (chưa đẩy giá) · accepted = chấp nhận lỗi nội bộ
+  //   (đã đẩy giá chính thức) · claiming = đòi carrier (đợi claim, giá giữ quote).
+  //   null = không cần duyệt (khớp / chưa có bill) — vẫn tự đẩy giá như cũ.
+  reconcileDecision: text('reconcile_decision'),
+  reconcileDecisionAt: timestamp('reconcile_decision_at'),
+  reconcileDecisionBy: text('reconcile_decision_by'),
+  /** Lý do claim (tuỳ chọn) — gửi kèm MMP + lưu vết. */
+  claimReason: text('claim_reason'),
   // Cân & đo LẠI tại kho SMS khi hàng về (đối chiếu với số brand khai bên MMP).
   smsWeightKg: numeric('sms_weight_kg', { precision: 10, scale: 3 }),
   smsDimLengthCm: numeric('sms_dim_length_cm', { precision: 10, scale: 2 }),

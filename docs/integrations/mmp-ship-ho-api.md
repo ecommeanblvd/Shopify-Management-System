@@ -193,7 +193,8 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `shipment.exception` | Sự cố (delay/kẹt/giao lỗi) + hành động cần |
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
 | | `shipment.returned` | Hoàn hàng |
-| Tài chính | `order.reconciled` | Hoá đơn carrier về → **giá cuối**. `data`: `{ finalChargedVnd, previousChargedVnd, deltaVnd, billedWeightKg }` — MMP cập nhật giá cuối cho brand (thay giá dự kiến). Bắn khi đối soát lần đầu hoặc giá cuối đổi. |
+| Tài chính | `order.reconciled` | Hoá đơn carrier về → **giá cuối**. `data`: `{ finalChargedVnd, previousChargedVnd, deltaVnd, billedWeightKg, reconcileResolution? }` — MMP cập nhật giá cuối cho brand (thay giá dự kiến). Bắn khi: (a) bill KHỚP dự tính (tự động), hoặc (b) operator **chấp nhận sai lệch** (lỗi nội bộ) — khi đó `reconcileResolution = "internal_error"`. Đơn CÓ sai lệch mà CHƯA duyệt thì KHÔNG bắn (giá giữ nguyên dự kiến). |
+| Tài chính | `order.claim_pending` 🆕 | Bill về CÓ sai lệch và operator quyết định **đòi carrier** (claim). MMP set đơn sang trạng thái **"đợi claim đơn vị vận chuyển"**; **KHÔNG** cập nhật giá cuối (giữ giá dự kiến tới khi claim xong). `data`: `{ deltaVnd, estimatedCostVnd, billedCostVnd, reason (string\|null) }`. |
 | Bảng giá | `ratecard.updated` | Loại đối tác (tier/strategic) của brand đổi → SMS PUSH rate card mới. `code` = brandSlug, `mmpRef` = null, `data` = payload y hệt endpoint pull /ratecard (có `version`, `tierName`, `discountPct`, cells `rackVnd/offerVnd`). MMP thay bảng giá hiển thị cho brand NGAY; kênh pull vẫn dùng được như cũ. |
 | | `statement.issued` | Bảng kê kỳ: danh sách đơn, tổng phải trả, hạn |
 | | `statement.paid` / `statement.overdue` | Thanh toán / quá hạn (công nợ) |

@@ -11,6 +11,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { ReconcileUploader } from './ReconcileUploader';
 import { ReconcileBillsButton } from '../ReconcileBillsButton';
+import { acceptShipHoDiscrepancy, claimShipHoWithCarrier } from '@/features/ship-ho/reconcile-decision-actions';
 import { ReconciledRowsTable, type ReconciledRowData } from './ReconciledRowsTable';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export default async function ShipHoReconcilePage() {
     carrierKey: schema.shipHoOrders.carrierKey,
     country: schema.shipHoOrders.country,
     reconcileStatus: schema.shipHoOrders.reconcileStatus,
+    reconcileDecision: schema.shipHoOrders.reconcileDecision,
     weightKg: schema.shipHoOrders.weightKg,
     chargeableWeightKg: sql<string | null>`${schema.shipHoOrders.quoteBreakdown}->>'chargeableWeightKg'`,
     actualWeightKg: schema.shipHoOrders.actualWeightKg,
@@ -85,6 +87,7 @@ export default async function ShipHoReconcilePage() {
         chargedVnd: r.chargedVnd == null ? null : Number(r.chargedVnd),
         actualChargedVnd: r.actualChargedVnd == null ? null : Number(r.actualChargedVnd),
         marginVnd: r.marginVnd == null ? null : Number(r.marginVnd),
+        reconcileDecision: r.reconcileDecision,
         structure,
       };
     });
@@ -112,7 +115,7 @@ export default async function ShipHoReconcilePage() {
         {reconciled.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">Chưa có đơn nào khớp hoá đơn carrier.</p>
         ) : (
-          <ReconciledRowsTable rows={reconciled} />
+          <ReconciledRowsTable rows={reconciled} acceptAction={acceptShipHoDiscrepancy} claimAction={claimShipHoWithCarrier} />
         )}
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
           Click một dòng để mở chi tiết từng khoản (cước cơ bản, phụ phí, fuel, VAT) so 3 phía: dự tính · bill · giá thu.

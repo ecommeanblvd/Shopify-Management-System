@@ -1,6 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 // CHỈ import type — cấu trúc giá tính ở page (RSC) rồi truyền xuống.
 import type { ShipHoPriceStructure } from '@/features/ship-ho/price-structure';
 
@@ -17,15 +22,25 @@ export interface ReconciledRowData {
   chargedVnd: number | null;
   actualChargedVnd: number | null;
   marginVnd: number | null;
+  /** null | 'pending_review' | 'accepted' | 'claiming' */
+  reconcileDecision: string | null;
   structure: ShipHoPriceStructure | null;
+}
+
+interface Props {
+  rows: ReconciledRowData[];
+  acceptAction: (orderId: string) => Promise<void>;
+  claimAction: (orderId: string, reason?: string) => Promise<void>;
 }
 
 const vnd = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('vi-VN'));
 const signed = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${vnd(v)}`);
 
-/** Bảng đơn đã đối soát: click 1 dòng → mở chi tiết từng khoản charge 3 phía. */
-export function ReconciledRowsTable({ rows }: { rows: ReconciledRowData[] }) {
+/** Bảng đơn đã đối soát: click 1 dòng → mở chi tiết từng khoản charge 3 phía.
+ *  Cột Action cuối: đơn có sai lệch chờ duyệt → mở modal accept/claim. */
+export function ReconciledRowsTable({ rows, acceptAction, claimAction }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [modalRow, setModalRow] = useState<ReconciledRowData | null>(null);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
@@ -40,6 +55,7 @@ export function ReconciledRowsTable({ rows }: { rows: ReconciledRowData[] }) {
             <th className="text-right" title="Giá Bill − Chi phí dự tính">Lệch bill</th>
             <th className="text-right" title="Tính lại theo cân nặng carrier bill — KHÔNG phải số bill">Giá thu thực</th>
             <th className="text-right" title="Giá thu thực − Giá Bill">Margin thực</th>
+            <th className="text-right">Đối soát</th>
           </tr>
         </thead>
         <tbody>
@@ -48,17 +64,48 @@ export function ReconciledRowsTable({ rows }: { rows: ReconciledRowData[] }) {
             const kgDiff = r.billKg != null && r.billKg !== r.quoteKg;
             return (
               <RowGroup key={r.id} r={r} open={open} kgDiff={kgDiff}
-                onToggle={() => setOpenId(open ? null : r.id)} />
+                onToggle={() => setOpenId(open ? null : r.id)}
+                onAction={() => setModalRow(r)} />
             );
           })}
         </tbody>
       </table>
+
+      <DecisionModal
+        row={modalRow}
+        onClose={() => setModalRow(null)}
+        acceptAction={acceptAction}
+        claimAction={claimAction}
+      />
     </div>
   );
 }
 
-function RowGroup({ r, open, kgDiff, onToggle }: {
-  r: ReconciledRowData; open: boolean; kgDiff: boolean; onToggle: () => void;
+/** Nhãn/badge cột Action theo trạng thái quyết định đối soát. */
+function ActionCell({ r, onAction }: { r: ReconciledRowData; onAction: () => void }) {
+  const d = r.reconcileDecision;
+  if (d === 'accepted') {
+    return <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Đã chấp nhận</span>;
+  }
+  if (d === 'claiming') {
+    return <span className="text-xs font-medium text-amber-600 dark:text-amber-400">⏳ Đợi claim</span>;
+  }
+  if (d === 'pending_review') {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onAction(); }}
+        className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+      >
+        Xử lý đối soát
+      </button>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
+}
+
+function RowGroup({ r, open, kgDiff, onToggle, onAction }: {
+  r: ReconciledRowData; open: boolean; kgDiff: boolean; onToggle: () => void; onAction: () => void;
 }) {
   return (
     <>
@@ -96,10 +143,11 @@ function RowGroup({ r, open, kgDiff, onToggle }: {
         <td className={`text-right font-semibold ${r.marginVnd != null && r.marginVnd < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
           {signed(r.marginVnd)}
         </td>
+        <td className="text-right whitespace-nowrap"><ActionCell r={r} onAction={onAction} /></td>
       </tr>
       {open && (
         <tr className="border-t border-border/40 bg-muted/20">
-          <td colSpan={9} className="px-6 py-3">
+          <td colSpan={10} className="px-6 py-3">
             {r.structure == null ? (
               <p className="py-2 text-sm text-muted-foreground">Thiếu breakdown báo giá — mở trang chi tiết đơn để xem thêm.</p>
             ) : (
@@ -109,6 +157,93 @@ function RowGroup({ r, open, kgDiff, onToggle }: {
         </tr>
       )}
     </>
+  );
+}
+
+/** Modal đối soát: so 3 phía + ô lý do + 2 nút chấp nhận (lỗi nội bộ) / claim carrier. */
+function DecisionModal({ row, onClose, acceptAction, claimAction }: {
+  row: ReconciledRowData | null;
+  onClose: () => void;
+  acceptAction: (orderId: string) => Promise<void>;
+  claimAction: (orderId: string, reason?: string) => Promise<void>;
+}) {
+  const router = useRouter();
+  const [reason, setReason] = useState('');
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const run = (fn: () => Promise<void>) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await fn();
+        setReason('');
+        onClose();
+        router.refresh();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Có lỗi xảy ra.');
+      }
+    });
+  };
+
+  const open = row !== null;
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setReason(''); setError(null); onClose(); } }}>
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Đối soát đơn {row?.code}</DialogTitle>
+          <DialogDescription>
+            So sánh chi phí dự tính với cước bill thực. Lệch do lỗi nội bộ → <b>Chấp nhận</b> (đẩy giá thu chính
+            thức sang MMP). Lệch cần đòi carrier → <b>Claim</b> (đơn sang “đợi claim”, giá thu GIỮ nguyên).
+          </DialogDescription>
+        </DialogHeader>
+
+        {row && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span>Chi phí dự tính: <b className="tabular-nums">{vnd(row.estVnd)}</b></span>
+              <span>Cước bill thực: <b className="tabular-nums text-sky-700 dark:text-sky-400">{vnd(row.billVnd)}</b></span>
+              <span>Lệch: <b className={`tabular-nums ${row.deltaVnd != null && row.deltaVnd > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{signed(row.deltaVnd)}</b></span>
+            </div>
+
+            {row.structure ? (
+              <div className="rounded-lg border border-border p-3 overflow-x-auto">
+                <StructureDetail s={row.structure} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Thiếu breakdown báo giá cho đơn này.</p>
+            )}
+
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Lý do (tuỳ chọn — gửi kèm khi Claim)</span>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="vd: FedEx tính sai residential / dư phụ phí…"
+                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm"
+                disabled={pending}
+              />
+            </label>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+        )}
+
+        <DialogFooter className="flex-row justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm"
+            disabled={pending || !row}
+            onClick={() => row && run(() => claimAction(row.id, reason))}>
+            Claim đơn vị vận chuyển
+          </Button>
+          <Button type="button" size="sm"
+            disabled={pending || !row}
+            onClick={() => row && run(() => acceptAction(row.id))}>
+            {pending ? 'Đang xử lý…' : 'Chấp nhận sai lệch (lỗi nội bộ)'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
