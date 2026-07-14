@@ -25,6 +25,13 @@ describe('parsePackRow', () => {
     const r = parsePackRow({ 'Label Created Date': Date.UTC(2026, 5, 7, 17, 0, 0) });
     expect(r.labelDate?.toISOString()).toBe('2026-06-08T00:00:00.000Z');
   });
+  it('bỏ Label Created Date ở TƯƠNG LAI (placeholder Lark cho đơn chưa ship) → null + warning', () => {
+    // Lark điền "31/12/2026" cho đơn chưa ship → label ở tương lai là bất khả.
+    const future = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000; // +10 năm, luôn future
+    const r = parsePackRow({ 'Order Number': '#X', 'Label Created Date': future });
+    expect(r.labelDate).toBeNull();
+    expect(r.warnings.some((w) => w.includes('tương lai'))).toBe(true);
+  });
   it('field dạng rich [{text}] → đọc được', () => {
     const r = parsePackRow({ 'Order Number': [{ text: 'TA2017', type: 'text' }], 'Couriers': [{ text: 'DHL' }] });
     expect(r.orderNumber).toBe('TA2017');

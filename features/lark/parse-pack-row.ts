@@ -101,5 +101,16 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
+  // Một label KHÔNG THỂ được tạo trong tương lai. Lark hay bị điền placeholder
+  // (vd "31/12/2026") ở cột "Label Created Date" cho đơn CHƯA ship → nếu để lọt,
+  // reconcile lấy nó làm NGÀY SHIP (labelCreatedAt ?? processedAt) → hiện ngày
+  // ship rác ở tương lai + chọn sai rate-card/fuel. Chặn tại đây (grace 2 ngày
+  // cho lệch tz / label pre-gen) → đơn chưa ship có labelDate=null, reconcile
+  // fallback về ngày đặt / báo "chưa ship".
+  if (labelDate && labelDate.getTime() > Date.now() + 2 * 24 * 60 * 60 * 1000) {
+    warnings.push(`Label Created Date ở tương lai (${labelDate.toISOString().slice(0, 10)}) → bỏ (đơn chưa ship?)`);
+    labelDate = null;
+  }
+
   return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, warnings };
 }
