@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MoneyInput } from '@/components/ui/money-input';
 import { currencyDecimals } from '@/lib/currency-format';
+import { CONFIDENCE_MAP } from '@/lib/address/confidence';
 import {
   Pencil, Save, RotateCcw, Loader2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
@@ -717,11 +718,14 @@ function AddressVerifyCard({
   const cls = a.class ? classMap[a.class] ?? classMap.UNKNOWN : null;
   const fullAddr = [a.name, a.company, a.line1, a.line2, a.city, a.province, a.postcode, country]
     .filter(Boolean).join(', ');
+  // Ưu tiên 4 mức addr_confidence; fallback boolean deliverable cho đơn cũ chưa re-verify.
+  const conf = a.confidence ? CONFIDENCE_MAP[a.confidence] ?? null : null;
+  const danger = conf ? conf.border : a.deliverable === false;
 
   return (
     <section>
       <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Địa chỉ giao</div>
-      <Card>
+      <Card className={danger ? 'border-red-500/40' : undefined}>
         <CardContent className="p-3 space-y-2 text-sm">
           {hasStreet ? (
             <div className="text-foreground">{fullAddr || '—'}</div>
@@ -731,9 +735,13 @@ function AddressVerifyCard({
           {a.verifiedAt ? (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {cls && <span className={`rounded px-2 py-0.5 font-medium ${cls.cls}`}>{cls.label}</span>}
-              <span className={`rounded px-2 py-0.5 font-medium ${a.deliverable ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-500/15 text-red-700 dark:text-red-400'}`}>
-                {a.deliverable ? '✓ Giao được' : '⚠ Không giao được'}
-              </span>
+              {conf ? (
+                <span className={`rounded px-2 py-0.5 font-medium ${conf.cls}`}>{conf.label}</span>
+              ) : (
+                <span className={`rounded px-2 py-0.5 font-medium ${a.deliverable ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-500/15 text-red-700 dark:text-red-400'}`}>
+                  {a.deliverable ? '✓ Giao được' : '⚠ Không giao được'}
+                </span>
+              )}
               {a.issue && <span className="rounded px-2 py-0.5 font-medium bg-red-500/10 text-red-600 dark:text-red-400" title="Vấn đề FedEx báo">{a.issue}</span>}
               <span className="text-muted-foreground">· verify {new Date(a.verifiedAt).toLocaleDateString('vi-VN')}</span>
             </div>

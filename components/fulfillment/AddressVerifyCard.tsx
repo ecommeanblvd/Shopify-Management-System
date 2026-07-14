@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { AddressVerifyButton } from './AddressVerifyButton';
+import { CONFIDENCE_MAP } from '@/lib/address/confidence';
 
 export interface FulfillmentAddress {
   country: string | null; city: string | null; line1: string | null; line2: string | null;
@@ -8,13 +9,6 @@ export interface FulfillmentAddress {
   addrStandardized: string | null; addrVerifiedAt: Date | null;
   addrConfidence: string | null;
 }
-
-const CONFIDENCE_MAP: Record<string, { label: string; cls: string; border: boolean }> = {
-  verified:        { label: '✓ Giao được', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', border: false },
-  census_verified: { label: '✓ Xác nhận qua Census', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', border: false },
-  zip_only:        { label: '⚠ Chưa xác minh số nhà (ZIP hợp lệ)', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400', border: false },
-  undeliverable:   { label: '⚠ Không giao được', cls: 'bg-red-500/15 text-red-700 dark:text-red-400', border: true },
-};
 
 const CLASS_MAP: Record<string, { label: string; cls: string }> = {
   RESIDENTIAL: { label: '🏠 Nhà dân', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
