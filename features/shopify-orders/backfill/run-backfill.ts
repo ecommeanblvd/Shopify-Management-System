@@ -57,12 +57,40 @@ export async function runBackfillForStore(
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId));
   if (!store) throw new Error(`store ${storeId} not found`);
 
+  // Write a progress heartbeat. Every call bumps backfillProgressAt so the
+  // health UI can tell a live run apart from a zombie one (fire-and-forget
+  // promise that died / process restarted mid-run leaves status='running').
+  const bump = (fields: Partial<typeof schema.shopifySyncState.$inferInsert>) =>
+    db
+      .update(schema.shopifySyncState)
+      .set({ ...fields, backfillProgressAt: new Date() })
+      .where(eq(schema.shopifySyncState.storeId, storeId));
+
   await db
     .insert(schema.shopifySyncState)
-    .values({ storeId, backfillStatus: 'running', backfillStartedAt: new Date() })
+    .values({
+      storeId,
+      backfillStatus: 'running',
+      backfillStartedAt: new Date(),
+      backfillPhase: 'submitting',
+      backfillObjectCount: 0,
+      backfillTotal: null,
+      backfillIngested: 0,
+      backfillProgressAt: new Date(),
+    })
     .onConflictDoUpdate({
       target: schema.shopifySyncState.storeId,
-      set: { backfillStatus: 'running', backfillStartedAt: new Date(), backfillError: null },
+      set: {
+        backfillStatus: 'running',
+        backfillStartedAt: new Date(),
+        backfillError: null,
+        // Reset last run's counters so the UI doesn't show stale numbers.
+        backfillPhase: 'submitting',
+        backfillObjectCount: 0,
+        backfillTotal: null,
+        backfillIngested: 0,
+        backfillProgressAt: new Date(),
+      },
     });
 
   const start = Date.now();
@@ -71,12 +99,10 @@ export async function runBackfillForStore(
 
   try {
     bulkId = await submitBackfillBulkQuery(storeId, filterClause);
-    await db
-      .update(schema.shopifySyncState)
-      .set({ backfillCursor: bulkId })
-      .where(eq(schema.shopifySyncState.storeId, storeId));
+    await bump({ backfillCursor: bulkId, backfillPhase: 'exporting' });
 
     let url: string | null = null;
+    let total: number | null = null;
     while (true) {
       if (Date.now() - start > WATCHDOG_MS) {
         throw new Error('bulk operation stuck > 2h, abort');
@@ -86,10 +112,20 @@ export async function runBackfillForStore(
       if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {
         throw new Error(`bulk operation ${s.status} (${s.errorCode ?? 'unknown'})`);
       }
-      if (s.status === 'COMPLETED') { url = s.url; break; }
+      // Live export progress: objectCount grows as Shopify writes the JSONL.
+      await bump({ backfillObjectCount: Number(s.objectCount ?? 0) });
+      if (s.status === 'COMPLETED') {
+        url = s.url;
+        total = s.rootObjectCount != null ? Number(s.rootObjectCount) : null;
+        break;
+      }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
     if (!url) throw new Error('bulk completed without url');
+
+    // Empty export (url present but 0 orders) still needs total=0 so the UI
+    // shows 0/0 = 100% rather than a null bar.
+    await bump({ backfillPhase: 'ingesting', backfillTotal: total ?? 0, backfillIngested: 0 });
 
     let ingested = 0;
     await streamBulkResult(url, async (orders) => {
@@ -97,23 +133,26 @@ export async function runBackfillForStore(
         await upsertOrder(storeId, o, 'backfill');
         ingested++;
       }
+      // One write per batch (~100 orders), not per order — cheap heartbeat.
+      await bump({ backfillIngested: ingested });
     });
 
-    await db
-      .update(schema.shopifySyncState)
-      .set({ backfillStatus: 'done', backfillFinishedAt: new Date() })
-      .where(eq(schema.shopifySyncState.storeId, storeId));
+    await bump({
+      backfillStatus: 'done',
+      backfillPhase: 'done',
+      backfillFinishedAt: new Date(),
+      backfillTotal: ingested,
+      backfillIngested: ingested,
+    });
 
     return { storeId, ordersIngested: ingested, bulkOperationId: bulkId, durationMs: Date.now() - start, filterClause };
   } catch (err) {
-    await db
-      .update(schema.shopifySyncState)
-      .set({
-        backfillStatus: 'failed',
-        backfillFinishedAt: new Date(),
-        backfillError: err instanceof Error ? err.message : String(err),
-      })
-      .where(eq(schema.shopifySyncState.storeId, storeId));
+    await bump({
+      backfillStatus: 'failed',
+      backfillPhase: 'failed',
+      backfillFinishedAt: new Date(),
+      backfillError: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }

@@ -1158,6 +1158,18 @@ export const shopifySyncState = pgTable('shopify_sync_state', {
   backfillStartedAt: timestamp('backfill_started_at'),
   backfillFinishedAt: timestamp('backfill_finished_at'),
   backfillError: text('backfill_error'),
+  // --- Backfill live progress (for the sync-health UI) ---
+  // Sub-phase within backfillStatus='running': 'submitting' | 'exporting' | 'ingesting'.
+  backfillPhase: text('backfill_phase'),
+  // Objects Shopify has exported so far (grows during the 'exporting' phase).
+  backfillObjectCount: integer('backfill_object_count'),
+  // Total orders to ingest (Shopify rootObjectCount, known once export completes).
+  backfillTotal: integer('backfill_total'),
+  // Orders upserted so far (grows during the 'ingesting' phase).
+  backfillIngested: integer('backfill_ingested'),
+  // Heartbeat: bumped on every progress write. The UI flags a run as stalled
+  // when this stops advancing (fire-and-forget promise died / process restarted).
+  backfillProgressAt: timestamp('backfill_progress_at'),
   lastWebhookAt: timestamp('last_webhook_at'),
   lastCronSyncAt: timestamp('last_cron_sync_at'),
   lastCronCursor: text('last_cron_cursor'),

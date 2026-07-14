@@ -11,6 +11,8 @@ import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { getStoreToken } from '@/lib/shopify/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { AutoRefresh } from './AutoRefresh';
+import { BackfillCell } from './BackfillCell';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +50,9 @@ export default async function SyncHealth() {
   const webhookCounts = webhookCountsRes.rows;
   const wcMap = new Map(webhookCounts.map((w) => [w.store_id, w]));
 
+  // Drive the auto-refresh only while at least one backfill is in flight.
+  const anyRunning = stores.some((s) => s.state?.backfillStatus === 'running');
+
   async function backfillTriggerAction(formData: FormData): Promise<void> {
     'use server';
     const storeId = String(formData.get('storeId'));
@@ -76,7 +81,10 @@ export default async function SyncHealth() {
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
-      <h1 className="text-3xl font-semibold tracking-tight">Shopify sync health</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-semibold tracking-tight">Shopify sync health</h1>
+        <AutoRefresh active={anyRunning} />
+      </div>
 
       <Card>
         <CardContent className="p-0">
@@ -102,7 +110,17 @@ export default async function SyncHealth() {
                       <div className="font-medium">{s.name}</div>
                       <div className="text-xs font-mono text-muted-foreground">{s.shopDomain}</div>
                     </td>
-                    <td className="px-4 py-2">{s.state?.backfillStatus ?? 'idle'}</td>
+                    <td className="px-4 py-2">
+                      <BackfillCell
+                        status={s.state?.backfillStatus ?? 'idle'}
+                        phase={s.state?.backfillPhase ?? null}
+                        objectCount={s.state?.backfillObjectCount ?? null}
+                        total={s.state?.backfillTotal ?? null}
+                        ingested={s.state?.backfillIngested ?? null}
+                        progressAt={s.state?.backfillProgressAt ?? null}
+                        error={s.state?.backfillError ?? null}
+                      />
+                    </td>
                     <td className="px-4 py-2">{ago(s.state?.lastWebhookAt)}</td>
                     <td className="px-4 py-2">{ago(s.state?.lastCronSyncAt)}</td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums">

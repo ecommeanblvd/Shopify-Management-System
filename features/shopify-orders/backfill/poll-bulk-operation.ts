@@ -5,7 +5,7 @@ import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 const POLL_QUERY = `
   query poll {
     currentBulkOperation {
-      id status errorCode objectCount url partialDataUrl
+      id status errorCode objectCount rootObjectCount url partialDataUrl
     }
   }
 `;
@@ -15,6 +15,10 @@ export interface BulkStatus {
   status: 'CREATED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'EXPIRED';
   errorCode: string | null;
   objectCount: string | null;
+  // Number of root objects (= orders) in the export. objectCount counts every
+  // object including nested line items / refunds, so rootObjectCount is the
+  // real "how many orders" total we ingest against.
+  rootObjectCount: string | null;
   url: string | null;
   partialDataUrl: string | null;
 }
