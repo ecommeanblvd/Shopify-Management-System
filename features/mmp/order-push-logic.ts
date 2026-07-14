@@ -15,12 +15,25 @@ export interface MmpOrderPayload {
    *  brand đã về kho. MMP đọc field cấp-order này (tên CHÍNH XÁC 'receivedAt') để
    *  đối soát công nợ. null nếu chưa nhận. (Per-line receivedAt vẫn gửi ở lines.) */
   receivedAt: string | null;
+  /** Trạng thái THANH TOÁN Shopify (displayFinancialStatus), giá trị thô:
+   *  PENDING | AUTHORIZED | PAID | PARTIALLY_PAID | PARTIALLY_REFUNDED |
+   *  REFUNDED | VOIDED | EXPIRED. MMP suy 'refunded'/'pending' từ đây. */
+  financialStatus: string | null;
+  /** Trạng thái GIAO HÀNG Shopify (displayFulfillmentStatus), giá trị thô:
+   *  FULFILLED | UNFULFILLED | PARTIALLY_FULFILLED | IN_PROGRESS | ON_HOLD |
+   *  SCHEDULED | RESTOCKED | null. MMP suy 'fulfilled' từ đây. */
+  fulfillmentStatus: string | null;
+  /** Thời điểm HUỶ đơn (ISO 8601) — null = chưa huỷ. MMP suy 'cancelled' = != null. */
+  cancelledAt: string | null;
   lines: MmpOrderLine[];
 }
 export function buildMmpOrderPayload(input: {
   orderNumber: string; store: string; recipientName: string | null; shipCountry: string | null;
   placedAt: string | null;
   receivedAt: string | null;
+  financialStatus: string | null;
+  fulfillmentStatus: string | null;
+  cancelledAt: string | null;
   brandLines: MmpOrderLine[];
 }): MmpOrderPayload {
   return {
@@ -30,6 +43,9 @@ export function buildMmpOrderPayload(input: {
     shipCountry: input.shipCountry,
     placedAt: input.placedAt,
     receivedAt: input.receivedAt,
+    financialStatus: input.financialStatus,
+    fulfillmentStatus: input.fulfillmentStatus,
+    cancelledAt: input.cancelledAt,
     lines: input.brandLines.map((l) => ({ sku: l.sku, title: l.title, qty: l.qty, vendor: l.vendor, receivedAt: l.receivedAt })),
   };
 }

@@ -110,18 +110,37 @@ Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng l
     "store": "Mirer",
     "recipientName": "Nguyen Van A",
     "shipCountry": "VN",
+    "placedAt": "2026-06-15T10:00:00.000Z",
+    "receivedAt": "2026-06-20T00:00:00.000Z",
+    "financialStatus": "PAID",
+    "fulfillmentStatus": "FULFILLED",
+    "cancelledAt": null,
     "lines": [
-      { "sku": "ABC-123", "title": "Product name", "qty": 1, "vendor": "denio" }
+      { "sku": "ABC-123", "title": "Product name", "qty": 1, "vendor": "denio", "receivedAt": "2026-06-20T00:00:00.000Z" }
     ]
   }
   ```
   - `recipientName` / `shipCountry`: PII tối giản — tên + quốc gia, không địa chỉ/SĐT/email.
-  - `lines`: chỉ dòng brand `{ sku, title, qty, vendor }`. Không giá.
+  - `placedAt`: ngày đặt đơn (Shopify `processed_at`, ISO). `null` nếu thiếu.
+  - `receivedAt` (cấp order): ngày MEAN nhận hàng từ brand MỚI NHẤT trong các line. `null` nếu chưa nhận.
+  - `lines`: chỉ dòng brand `{ sku, title, qty, vendor, receivedAt }`. Không giá. `receivedAt` per-line = ngày nhận của SKU đó.
   - **`vendor`** = giá trị cột vendor Shopify (= `brandSlug` trong brand-request, **cùng
     nguồn** nên nhất quán 2 chiều). MMP **route đơn về đúng brand** theo field này:
     đơn nhiều brand → MMP tách thành 1 Order/brand `(orderNumber, brandId)`, mỗi Order
     chỉ chứa line của brand đó. `vendor` có thể `null` nếu line Shopify thiếu vendor →
     MMP báo line không map được.
+
+  **🆕 Trạng thái đơn Shopify (2026-07-14 — cần MMP bổ sung lưu):** giá trị **thô** từ Shopify, MMP tự suy trạng thái hiển thị:
+
+  | Field | Kiểu | Giá trị có thể có | MMP suy ra |
+  | --- | --- | --- | --- |
+  | `financialStatus` | string \| null | `PENDING` `AUTHORIZED` `PAID` `PARTIALLY_PAID` `PARTIALLY_REFUNDED` `REFUNDED` `VOIDED` `EXPIRED` | `pending` = `PENDING`; `refunded` = `REFUNDED`/`PARTIALLY_REFUNDED` |
+  | `fulfillmentStatus` | string \| null | `FULFILLED` `UNFULFILLED` `PARTIALLY_FULFILLED` `IN_PROGRESS` `ON_HOLD` `SCHEDULED` `RESTOCKED` `null` | `fulfilled` = `FULFILLED` |
+  | `cancelledAt` | string(ISO) \| null | thời điểm huỷ, hoặc `null` | `cancelled` = `cancelledAt != null` |
+
+  - Đây là **trạng thái đơn Shopify cấp-order**, KHÁC trạng thái sản xuất brand (thể hiện qua việc line có mặt + `receivedAt`).
+  - **`draft`**: KHÔNG áp dụng — SMS chỉ sync đơn thật, không sync draft order.
+  - MMP nên lưu 3 field này và **cập nhật đè** mỗi lần nhận lại đơn (đơn có thể chuyển pending→paid→refunded, unfulfilled→fulfilled, hoặc bị cancel về sau).
 - **Response:** `2xx { "externalRef": "<mã tham chiếu MMP>" }` — SMS lưu `externalRef`
   nếu có. Non-2xx → SMS log lỗi nhưng **không chặn** luồng kiểm kho.
 - **Idempotency:** theo `orderNumber + store` (MMP nên dedupe theo cặp này).

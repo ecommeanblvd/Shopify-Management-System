@@ -23,6 +23,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       orderNumber: schema.shopifyOrders.shopifyOrderNumber,
       shipName: schema.shopifyOrders.shipName, shipCountry: schema.shopifyOrders.shipCountry,
       processedAt: schema.shopifyOrders.processedAtShopify,
+      financialStatus: schema.shopifyOrders.financialStatus,
+      fulfillmentStatus: schema.shopifyOrders.fulfillmentStatus,
+      cancelledAt: schema.shopifyOrders.cancelledAtShopify,
       store: schema.stores.name,
     })
     .from(schema.shopifyOrders)
@@ -62,6 +65,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     orderNumber: ord.orderNumber, store: ord.store, recipientName: ord.shipName, shipCountry: ord.shipCountry,
     placedAt: ord.processedAt ? ord.processedAt.toISOString() : null,
     receivedAt: orderReceivedAt,
+    financialStatus: ord.financialStatus ?? null,
+    fulfillmentStatus: ord.fulfillmentStatus ?? null,
+    cancelledAt: ord.cancelledAt ? ord.cancelledAt.toISOString() : null,
     brandLines,
   }));
   return { rawBody };
