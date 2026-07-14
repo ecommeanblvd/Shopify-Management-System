@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -19,7 +19,20 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
 type PageSize = typeof PAGE_SIZE_OPTIONS[number];
 
 interface OrdersTableProps {
-  orders: OrderRow[];
+  storeId: string;
+  /** First page, server-rendered so the table paints instantly. */
+  initialRows: OrderRow[];
+  /** Total orders in the store (matching current search) across all pages. */
+  initialTotalCount: number;
+  /** Server action (getStoreOrdersPage) — fetches one page of the store's
+   *  full order history. Bound to no store; the table passes storeId. */
+  fetchPageAction: (args: {
+    storeId: string;
+    page: number;
+    pageSize: number;
+    search: string;
+    sort: 'newest' | 'oldest';
+  }) => Promise<{ rows: OrderRow[]; totalCount: number }>;
   canEdit: boolean;
   /** Currency the operator enters COGs/shipping overrides in (e.g. 'VND'
    *  for Mirer). Falls back to the order currency when not set. */
@@ -41,7 +54,8 @@ interface OrdersTableProps {
 }
 
 export function OrdersTable({
-  orders, canEdit, costCurrency, fxRate, getDetailAction, saveAction,
+  storeId, initialRows, initialTotalCount, fetchPageAction,
+  canEdit, costCurrency, fxRate, getDetailAction, saveAction,
 }: OrdersTableProps) {
   // The Ship cost column flips into "cost currency" mode whenever both the
   // brand's cost currency and the FX rate are known. Revenue and everything
@@ -52,9 +66,51 @@ export function OrdersTable({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
+
+  // Server-driven pagination: the table shows the store's ENTIRE order history
+  // one page at a time. Each page / size / search change refetches just that
+  // page via getStoreOrdersPage instead of shipping every order to the browser,
+  // so payload stays flat no matter how large the store's history grows.
+  const [rows, setRows] = useState<OrderRow[]>(initialRows);
+  const [totalCount, setTotalCount] = useState(initialTotalCount);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [pending, startTransition] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = (next: { page: number; pageSize: number; search: string }): void => {
+    startTransition(async () => {
+      const res = await fetchPageAction({
+        storeId,
+        page: next.page,
+        pageSize: next.pageSize,
+        search: next.search,
+        sort: 'newest',
+      });
+      setRows(res.rows);
+      setTotalCount(res.totalCount);
+    });
+  };
+
+  const goPage = (p: number): void => {
+    setPage(p);
+    load({ page: p, pageSize, search });
+  };
+  const changePageSize = (s: PageSize): void => {
+    setPageSize(s);
+    setPage(0);
+    load({ page: 0, pageSize: s, search });
+  };
+  // Debounce search so we don't fire a query per keystroke. Matches the
+  // server action's own normalisation (leading '#' stripped, order number +
+  // recipient name), so the client hint stays truthful.
+  const onSearchChange = (v: string): void => {
+    setSearch(v);
+    setPage(0);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load({ page: 0, pageSize, search: v }), 350);
+  };
 
   const openRow = async (orderId: string): Promise<void> => {
     if (!canEdit) return;
@@ -67,48 +123,26 @@ export function OrdersTable({
     }
   };
 
-  // Substring match against the order number. Case-insensitive, ignores
-  // a leading "#" so operators can paste from Shopify admin's "#1234" or
-  // type "1234" — both work. Memoised so we don't re-scan thousands of
-  // orders on every keystroke.
-  const filtered = useMemo(() => {
-    const q = search.trim().replace(/^#/, '').toLowerCase();
-    if (!q) return orders;
-    return orders.filter((o) => o.shopifyOrderNumber.toLowerCase().includes(q));
-  }, [orders, search]);
-
-  // Reset to page 0 when the result set shrinks under the operator's feet.
-  // React 19's react-hooks/set-state-in-effect rule rejects setState
-  // inside useEffect. Use the "computed-key-during-render" pattern:
-  // compare the current filter signature to the last one and reset on
-  // change. Identical to the effect at runtime, lint-clean.
-  const filterSignature = `${search}|${pageSize}`;
-  const [filterSignatureRef, setFilterSignatureRef] = useState(filterSignature);
-  if (filterSignature !== filterSignatureRef) {
-    setFilterSignatureRef(filterSignature);
-    setPage(0);
-  }
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, totalPages - 1);
   const startIdx = safePage * pageSize;
-  const endIdx = Math.min(startIdx + pageSize, filtered.length);
-  const visible = filtered.slice(startIdx, endIdx);
+  const endIdx = startIdx + rows.length;
+  const visible = rows;
 
-  // Tally unpriced shipments by reason so the operator can see at a
-  // glance which root cause is biting (set weights? add a market?).
-  // Counts the FILTERED set so vendor/search narrows the diagnostic.
+  // Unpriced diagnostic — over the CURRENT page only (the rows we hold). With
+  // all-time server pagination we no longer have every order in memory, so this
+  // reflects "unpriced on this page" — still enough to spot a systemic gap.
   const unpriced = useMemo(() => {
     const counts: Record<string, number> = {};
     let total = 0;
-    for (const o of filtered) {
+    for (const o of rows) {
       if (o.shippingCostSource !== 'unknown') continue;
       total += 1;
       const key = o.shippingCostReason ?? 'unknown';
       counts[key] = (counts[key] ?? 0) + 1;
     }
     return { total, counts };
-  }, [filtered]);
+  }, [rows]);
 
   return (
     <>
@@ -120,15 +154,15 @@ export function OrdersTable({
             <input
               type="search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by order number — e.g. 1234 or #MR1234"
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Tìm theo mã đơn hoặc tên người nhận — vd 1234, #MR1234"
               className="w-full h-8 pl-8 pr-8 border border-input bg-input/30 rounded-md text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-              aria-label="Search orders by order number"
+              aria-label="Tìm đơn theo mã đơn hoặc tên người nhận"
             />
             {search && (
               <button
                 type="button"
-                onClick={() => setSearch('')}
+                onClick={() => onSearchChange('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
@@ -136,19 +170,17 @@ export function OrdersTable({
               </button>
             )}
           </div>
-          <div className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
-            {filtered.length === 0
-              ? 'No matches'
-              : `${(startIdx + 1).toLocaleString()}–${endIdx.toLocaleString()} of ${filtered.length.toLocaleString()}`}
-            {search && filtered.length !== orders.length && (
-              <span className="text-muted-foreground/60"> (filtered from {orders.length.toLocaleString()})</span>
-            )}
+          <div className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap inline-flex items-center gap-1.5">
+            {pending && <Loader2 className="size-3 animate-spin" />}
+            {totalCount === 0
+              ? (search ? 'Không có đơn khớp' : 'Chưa có đơn')
+              : `${(startIdx + 1).toLocaleString()}–${endIdx.toLocaleString()} / ${totalCount.toLocaleString()}`}
           </div>
           <div className="ml-auto flex items-center gap-2 text-xs">
             <span className="text-muted-foreground uppercase tracking-wider">Rows</span>
             <select
               value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+              onChange={(e) => changePageSize(Number(e.target.value) as PageSize)}
               className="h-7 border border-input bg-input/30 rounded-md px-1.5 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
               aria-label="Rows per page"
             >
@@ -239,9 +271,9 @@ export function OrdersTable({
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={canEdit ? 14 : 13} className="px-4 py-6 text-center text-muted-foreground">
-                    {orders.length === 0
-                      ? 'No orders in this window.'
-                      : `No orders match "${search}".`}
+                    {totalCount === 0 && !search
+                      ? 'Chưa có đơn nào.'
+                      : `Không có đơn khớp "${search}".`}
                   </td>
                 </tr>
               )}
@@ -319,16 +351,16 @@ export function OrdersTable({
               Page {safePage + 1} of {totalPages}
             </span>
             <div className="flex items-center gap-1">
-              <PageButton onClick={() => setPage(0)} disabled={safePage === 0} ariaLabel="First page">
+              <PageButton onClick={() => goPage(0)} disabled={safePage === 0 || pending} ariaLabel="First page">
                 <ChevronsLeft className="size-3.5" />
               </PageButton>
-              <PageButton onClick={() => setPage(safePage - 1)} disabled={safePage === 0} ariaLabel="Previous page">
+              <PageButton onClick={() => goPage(safePage - 1)} disabled={safePage === 0 || pending} ariaLabel="Previous page">
                 <ChevronLeft className="size-3.5" />
               </PageButton>
-              <PageButton onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages - 1} ariaLabel="Next page">
+              <PageButton onClick={() => goPage(safePage + 1)} disabled={safePage >= totalPages - 1 || pending} ariaLabel="Next page">
                 <ChevronRight className="size-3.5" />
               </PageButton>
-              <PageButton onClick={() => setPage(totalPages - 1)} disabled={safePage >= totalPages - 1} ariaLabel="Last page">
+              <PageButton onClick={() => goPage(totalPages - 1)} disabled={safePage >= totalPages - 1 || pending} ariaLabel="Last page">
                 <ChevronsRight className="size-3.5" />
               </PageButton>
             </div>

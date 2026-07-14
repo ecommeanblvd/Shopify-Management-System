@@ -7,7 +7,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
-import { getStoreMetrics } from '@/features/shopify-orders/dashboard-actions';
+import { getStoreMetrics, getStoreOrdersPage } from '@/features/shopify-orders/dashboard-actions';
 import { getOrderDetail, updateOrderOverrides } from '@/features/shopify-orders/order-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { updateStoreCostFx } from '@/features/shopify-orders/cost-fx-actions';
@@ -83,7 +83,7 @@ export default async function StoreOrders({
 
   const showVendor = VENDOR_FILTER_DOMAINS.includes(store.shopDomain);
 
-  const [metricsRes, syncStateRows, webhookCountsRes, orderCountRes] = await Promise.all([
+  const [metricsRes, syncStateRows, webhookCountsRes, orderCountRes, firstOrdersPage] = await Promise.all([
     getStoreMetrics({
       storeId,
       dateFrom,
@@ -100,6 +100,9 @@ export default async function StoreOrders({
     db.execute<{ n: string }>(sql`
       SELECT COUNT(*)::text AS n FROM shopify_orders WHERE store_id = ${storeId};
     `),
+    // First page of the all-time orders table (SSR for instant paint; the
+    // client fetches later pages via getStoreOrdersPage as an action).
+    getStoreOrdersPage({ storeId, page: 0, pageSize: 25, sort: 'newest' }),
   ]);
 
   const { orders: orderList } = metricsRes;
@@ -216,9 +219,13 @@ export default async function StoreOrders({
           window in-memory without a server roundtrip — the slow path
           users were hitting on every preset click. */}
       <OrdersBoard
+        storeId={storeId}
         cachedOrders={orderList}
         cacheFromISO={isoDate(dateFrom)}
         cacheToISO={isoDate(dateTo)}
+        initialOrderRows={firstOrdersPage.rows}
+        initialOrderTotalCount={firstOrdersPage.totalCount}
+        fetchOrdersPageAction={getStoreOrdersPage}
         initialFromISO={isoDate(userFrom)}
         initialToISO={isoDate(dateTo)}
         initialVendor={vendorFilter ?? []}

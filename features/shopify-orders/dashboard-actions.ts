@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, gte, lte, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, lte, inArray, or, ilike, asc, desc, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
@@ -41,16 +41,32 @@ export interface GetStoreMetricsResult {
  * coverage join — but defer until measured.
  */
 export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetStoreMetricsResult> {
-  const where = and(
-    eq(schema.shopifyOrders.storeId, args.storeId),
-    gte(schema.shopifyOrders.processedAtShopify, args.dateFrom),
-    lte(schema.shopifyOrders.processedAtShopify, args.dateTo),
-  );
+  const orders = await db
+    .select()
+    .from(schema.shopifyOrders)
+    .where(and(
+      eq(schema.shopifyOrders.storeId, args.storeId),
+      gte(schema.shopifyOrders.processedAtShopify, args.dateFrom),
+      lte(schema.shopifyOrders.processedAtShopify, args.dateTo),
+    ));
+  if (orders.length === 0) return { total: emptyAgg(), orders: [] };
+  const { rows, total } = await buildOrderRows(args.storeId, orders, args.vendorFilter);
+  rows.sort((a, b) => b.processedAt.getTime() - a.processedAt.getTime());
+  return { total, orders: rows };
+}
 
-  const orders = await db.select().from(schema.shopifyOrders).where(where);
-  if (orders.length === 0) {
-    return { total: emptyAgg(), orders: [] };
-  }
+/**
+ * Compute per-order metric rows for an already-fetched set of orders. Shared by
+ * the windowed KPI path (`getStoreMetrics`) and the all-time paginated table
+ * (`getStoreOrdersPage`) so the cost / margin / ship formulas live in exactly
+ * one place. Preserves the input order — the caller decides sorting.
+ */
+async function buildOrderRows(
+  storeId: string,
+  orders: (typeof schema.shopifyOrders.$inferSelect)[],
+  vendorFilter?: string[],
+): Promise<{ rows: OrderRow[]; total: AggregateMetrics }> {
+  if (orders.length === 0) return { rows: [], total: emptyAgg() };
   const orderIds = orders.map((o) => o.id);
 
   // Per-store cost FX — used to convert COGs that were entered in a brand
@@ -62,7 +78,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
       fxCostPerOrderCurrency: schema.stores.fxCostPerOrderCurrency,
     })
     .from(schema.stores)
-    .where(eq(schema.stores.id, args.storeId));
+    .where(eq(schema.stores.id, storeId));
   const storeFx = {
     costCurrency: store?.costCurrency ?? null,
     fxRate: store?.fxCostPerOrderCurrency !== null && store?.fxCostPerOrderCurrency !== undefined
@@ -102,7 +118,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         .select()
         .from(schema.skuCosts)
         .where(and(
-          eq(schema.skuCosts.storeId, args.storeId),
+          eq(schema.skuCosts.storeId, storeId),
           inArray(schema.skuCosts.sku, skus),
         ));
   const costIndex = indexCostsBySku(allCosts);
@@ -120,7 +136,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
         .select()
         .from(schema.shippingInvoices)
         .where(and(
-          eq(schema.shippingInvoices.storeId, args.storeId),
+          eq(schema.shippingInvoices.storeId, storeId),
           inArray(schema.shippingInvoices.trackingNumber, allTracking),
         ));
   const invoiceIndex = new Map(invoices.map((i) => [i.trackingNumber, i]));
@@ -149,10 +165,10 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
   const rows: OrderRow[] = [];
   for (const o of orders) {
     const oLines = lines.filter((l) => l.orderId === o.id);
-    const filteredLines = args.vendorFilter && args.vendorFilter.length > 0
-      ? oLines.filter((l) => l.vendor && args.vendorFilter!.includes(l.vendor))
+    const filteredLines = vendorFilter && vendorFilter.length > 0
+      ? oLines.filter((l) => l.vendor && vendorFilter.includes(l.vendor))
       : oLines;
-    if (args.vendorFilter && filteredLines.length === 0) continue;
+    if (vendorFilter && filteredLines.length === 0) continue;
 
     const grossLineTotal = sumNumeric(filteredLines.map((l) => Number(l.unitPrice) * l.quantity));
     const totalRefunded = refunds
@@ -369,9 +385,76 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     });
   }
 
-  rows.sort((a, b) => b.processedAt.getTime() - a.processedAt.getTime());
   const total = aggregateMetrics(allMetrics);
-  return { total, orders: rows };
+  return { rows, total };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// All-time, server-side paginated order list (the orders table).
+// Decoupled from getStoreMetrics' date window: the KPI cards stay a
+// windowed analytics tool, while this walks the store's ENTIRE history one
+// page at a time so payload/compute stay bounded regardless of store size.
+// ─────────────────────────────────────────────────────────────────────
+
+export interface GetStoreOrdersPageArgs {
+  storeId: string;
+  /** 0-based page index. */
+  page: number;
+  /** Rows per page (25 | 50 | 100 | 250 from the UI). */
+  pageSize: number;
+  /** Matches order number OR recipient name (ILIKE), leading '#' stripped. */
+  search?: string;
+  sort?: 'newest' | 'oldest';
+}
+
+export interface GetStoreOrdersPageResult {
+  rows: OrderRow[];
+  /** Total orders matching the filter across ALL pages — drives page count. */
+  totalCount: number;
+}
+
+export async function getStoreOrdersPage(
+  args: GetStoreOrdersPageArgs,
+): Promise<GetStoreOrdersPageResult> {
+  const { storeId, sort = 'newest' } = args;
+  const q = (args.search ?? '').trim().replace(/^#/, '');
+  const searchCond = q
+    ? or(
+        ilike(schema.shopifyOrders.shopifyOrderNumber, `%${q}%`),
+        ilike(schema.shopifyOrders.shipName, `%${q}%`),
+      )
+    : undefined;
+  const where = and(eq(schema.shopifyOrders.storeId, storeId), searchCond);
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.shopifyOrders)
+    .where(where);
+  const totalCount = countRow?.count ?? 0;
+  if (totalCount === 0) return { rows: [], totalCount: 0 };
+
+  // Clamp inputs so a stale/absurd page or size can't produce a negative
+  // OFFSET or an unbounded LIMIT.
+  const pageSize = Math.min(500, Math.max(1, Math.floor(args.pageSize)));
+  const lastPage = Math.max(0, Math.ceil(totalCount / pageSize) - 1);
+  const page = Math.min(lastPage, Math.max(0, Math.floor(args.page)));
+
+  const pageOrders = await db
+    .select()
+    .from(schema.shopifyOrders)
+    .where(where)
+    .orderBy(
+      sort === 'oldest'
+        ? asc(schema.shopifyOrders.processedAtShopify)
+        : desc(schema.shopifyOrders.processedAtShopify),
+    )
+    .limit(pageSize)
+    .offset(page * pageSize);
+
+  // buildOrderRows preserves input order, so the SQL sort above is the
+  // display order — no re-sort that would desync from the OFFSET window.
+  const { rows } = await buildOrderRows(storeId, pageOrders);
+  return { rows, totalCount };
 }
 
 function indexCostsBySku(

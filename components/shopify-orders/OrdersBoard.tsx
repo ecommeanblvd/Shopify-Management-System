@@ -10,14 +10,28 @@ import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 
 interface OrdersBoardProps {
+  storeId: string;
   /** Every order in the warmed server cache. Larger than the active
-   *  filter window — typically the last 90 days. Preset toggles that
-   *  fall inside this cache filter the array client-side, no roundtrip. */
+   *  filter window — typically the last 90 days. Feeds the KPI cards only
+   *  (the date presets re-aggregate this array client-side, no roundtrip). */
   cachedOrders: OrderRow[];
   /** Inclusive bounds of `cachedOrders` (YYYY-MM-DD). Filter requests
    *  that extend past these bounds fall back to a server roundtrip. */
   cacheFromISO: string;
   cacheToISO: string;
+
+  /** First page of the all-time orders table + its grand total. The table is
+   *  independent of the KPI date window — it paginates the store's full
+   *  history server-side via `fetchOrdersPageAction`. */
+  initialOrderRows: OrderRow[];
+  initialOrderTotalCount: number;
+  fetchOrdersPageAction: (args: {
+    storeId: string;
+    page: number;
+    pageSize: number;
+    search: string;
+    sort: 'newest' | 'oldest';
+  }) => Promise<{ rows: OrderRow[]; totalCount: number }>;
 
   /** Active filter from the URL on first render (YYYY-MM-DD). */
   initialFromISO: string;
@@ -53,9 +67,13 @@ interface OrdersBoardProps {
  * just visible rows) — still trigger a server refetch via `router.replace`.
  */
 export function OrdersBoard({
+  storeId,
   cachedOrders,
   cacheFromISO,
   cacheToISO,
+  initialOrderRows,
+  initialOrderTotalCount,
+  fetchOrdersPageAction,
   initialFromISO,
   initialToISO,
   initialVendor,
@@ -140,19 +158,19 @@ export function OrdersBoard({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Orders{' '}
             <span className="text-muted-foreground/60 font-mono tabular-nums normal-case tracking-normal">
-              ({cachedOrders.length.toLocaleString()}
-              {visibleOrders.length !== cachedOrders.length && (
-                <> &middot; <span className="text-foreground/70">{visibleOrders.length.toLocaleString()} in window</span></>
-              )})
+              ({initialOrderTotalCount.toLocaleString()} đơn · toàn bộ lịch sử)
             </span>
           </h2>
           <p className="text-xs text-muted-foreground">
-            Search by order #, or click any row to override per-line costs / shipping.
-            Date filter narrows the KPIs above only — table keeps the full cache.
+            Tìm theo mã đơn / tên người nhận, hoặc bấm 1 dòng để sửa giá vốn / ship.
+            Bảng hiển thị TẤT CẢ đơn (phân trang) — bộ lọc ngày chỉ ảnh hưởng KPI phía trên.
           </p>
         </div>
         <OrdersTable
-          orders={cachedOrders}
+          storeId={storeId}
+          initialRows={initialOrderRows}
+          initialTotalCount={initialOrderTotalCount}
+          fetchPageAction={fetchOrdersPageAction}
           canEdit={canEdit}
           costCurrency={costCurrency}
           fxRate={fxRate}
