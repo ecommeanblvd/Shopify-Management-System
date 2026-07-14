@@ -121,8 +121,9 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
           <th className="text-left">Khoản</th>
           <th className="text-right">Chi phí dự tính</th>
           <th className="text-right">Cước từ Carrier{s.billNumber ? ` · ${s.billNumber}` : ''}</th>
-          <th className="text-right">Giá thu khách</th>
-          <th className="text-right" title="Cước thực − dự tính theo từng khoản">Lệch bill</th>
+          <th className="text-right" title="Giá quote lúc khách tạo vận đơn trên MMP">Giá thu dự tính</th>
+          <th className="text-right" title="Tính lại theo bill (cân + phụ phí thực)">Giá thu thực</th>
+          <th className="text-right" title="Giá thu thực − Giá thu dự tính">Lệch thu</th>
         </tr>
       </thead>
       <tbody>
@@ -130,21 +131,23 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
           <td className="text-left">Cân tính phí (kg)</td>
           <td className="text-right">{s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">{s.weights.billKg ?? '—'}</td>
+          <td className="text-right">{s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">{s.weights.billKg ?? s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">—</td>
         </tr>
         {s.rows.map((row) => {
-          const delta = row.costVnd != null && row.billVnd != null ? row.billVnd - row.costVnd : null;
+          const delta = row.quoteChargeVnd != null && row.chargeVnd != null ? row.chargeVnd - row.quoteChargeVnd : null;
           return (
             <tr key={row.label} className="border-t border-border/40 [&>td]:py-1.5 [&>td]:pr-4">
               <td className="text-left">
                 {row.label}
                 {row.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{row.percent}%</span>}
               </td>
-              <td className="text-right">{vnd(row.costVnd)}</td>
-              <td className="text-right">{vnd(row.billVnd)}</td>
-              <td className="text-right">{vnd(row.chargeVnd)}</td>
-              <td className={`text-right ${delta == null || delta === 0 ? 'text-muted-foreground' : delta > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              <td className="text-right text-muted-foreground">{vnd(row.costVnd)}</td>
+              <td className="text-right text-muted-foreground">{vnd(row.billVnd)}</td>
+              <td className="text-right">{vnd(row.quoteChargeVnd)}</td>
+              <td className="text-right font-medium">{vnd(row.chargeVnd)}</td>
+              <td className={`text-right ${delta == null || delta === 0 ? 'text-muted-foreground' : delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {delta == null ? '—' : delta === 0 ? '0' : signed(delta)}
               </td>
             </tr>
@@ -152,11 +155,12 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
         })}
         <tr className="border-t border-border font-semibold [&>td]:py-1.5 [&>td]:pr-4">
           <td className="text-left">Tổng</td>
-          <td className="text-right">{vnd(s.costTotal)}</td>
-          <td className="text-right">{vnd(s.billTotal)}</td>
+          <td className="text-right text-muted-foreground">{vnd(s.costTotal)}</td>
+          <td className="text-right text-muted-foreground">{vnd(s.billTotal)}</td>
+          <td className="text-right">{vnd(s.quoteChargeTotal)}</td>
           <td className="text-right">{vnd(s.chargeTotal)}</td>
-          <td className={`text-right ${s.billTotal != null && s.billTotal - s.costTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-            {s.billTotal == null ? '—' : signed(s.billTotal - s.costTotal)}
+          <td className={`text-right ${s.chargeTotal - s.quoteChargeTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : s.chargeTotal - s.quoteChargeTotal < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+            {signed(s.chargeTotal - s.quoteChargeTotal)}
           </td>
         </tr>
       </tbody>

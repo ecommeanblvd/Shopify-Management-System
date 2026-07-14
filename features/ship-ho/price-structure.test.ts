@@ -119,6 +119,16 @@ describe('shipHoPriceStructure', () => {
     expect(s.rows.find((r) => r.label === 'Giao nhà dân / ký nhận')?.chargeVnd).toBe(92_700);
     // Tổng cột giá thu khớp chargedVnd.
     expect(s.rows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_984_582);
+    // Giá thu DỰ TÍNH (quote) tách riêng, = chargedVnd gốc; residential quote = 0.
+    expect(s.quoteChargeTotal).toBe(expectedCharged(25));
+    expect(s.rows.find((r) => r.label === 'Giao nhà dân / ký nhận')?.quoteChargeVnd).toBe(0);
+    expect(s.rows.reduce((t, r) => t + (r.quoteChargeVnd ?? 0), 0)).toBe(expectedCharged(25));
+  });
+
+  it('chưa có bill: giá thu dự tính = giá thu thực (chưa tính lại)', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    expect(s.quoteChargeTotal).toBe(s.chargeTotal);
+    for (const r of s.rows) expect(r.quoteChargeVnd).toBe(r.chargeVnd);
   });
 
   it('null khi thiếu breakdown', () => {

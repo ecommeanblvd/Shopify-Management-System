@@ -14,7 +14,9 @@ export interface PriceStructureRow {
   costVnd: number | null;
   /** Cước thực từ hoá đơn carrier (VND). null = chưa có bill hoặc khoản không có. */
   billVnd: number | null;
-  /** Giá thu khách dự tính (VND). null = khoản này không có bên giá thu. */
+  /** Giá thu khách DỰ TÍNH — quote lúc khách tạo vận đơn (VND). */
+  quoteChargeVnd: number | null;
+  /** Giá thu khách THỰC — tính lại theo bill (VND). Chưa có bill = null hoặc = dự tính. */
   chargeVnd: number | null;
   /** % cho dòng fuel/VAT (hiển thị phụ). */
   percent?: number | null;
@@ -23,6 +25,9 @@ export interface PriceStructureRow {
 export interface ShipHoPriceStructure {
   rows: PriceStructureRow[];
   costTotal: number;
+  /** Tổng giá thu DỰ TÍNH (quote gốc lúc khách tạo vận đơn). */
+  quoteChargeTotal: number;
+  /** Tổng giá thu THỰC (tính lại theo bill; = dự tính khi chưa có bill). */
   chargeTotal: number;
   /** Tổng cước bill thực (actualCarrierCostVnd). null khi chưa đối soát. */
   billTotal: number | null;
@@ -105,23 +110,35 @@ export function shipHoPriceStructure(input: {
   const pick = (test: (l: string) => boolean) =>
     lines.filter((l) => test(l.label)).reduce((s, l) => s + l.amountVnd, 0);
 
-  // Khi ĐÃ đối soát: cột giá thu dùng breakdown THỰC (sell) — cước cơ bản theo bảng
-  // offer ở cân bill + phụ phí LẤY THEO BILL (gồm residential/ký nhận quote không có)
-  // + fuel/VAT theo công thức FedEx. Chưa có bill → dùng breakdown quote như cũ.
+  // ── GIÁ THU DỰ TÍNH (quote lúc khách tạo vận đơn) — luôn từ breakdown quote,
+  // phụ phí = pass-through cost. Tổng = chargedVnd gốc đã báo brand.
+  const qBase = pick((l) => l.startsWith('Cước cơ bản'));
+  const qFuel = pick((l) => l === 'Phụ phí xăng dầu');
+  const qProcessing = pick((l) => l === 'Phí xử lý đơn hàng');
+  const qVat = pick((l) => l === 'VAT');
+  const qRemote = R(b.remote);
+  const qDemand = R(b.demand);
+  const qResSign = R(b.residential) + R(b.addons);
+  const qCustoms = R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak);
+  const quoteTotal = input.chargedVnd;
+  const adjustQuoteCharge = Math.round(
+    quoteTotal - (qBase + qRemote + qDemand + qResSign + qCustoms + qFuel + qProcessing + qVat),
+  );
+
+  // ── GIÁ THU THỰC — khi ĐÃ đối soát dùng breakdown THỰC (sell): cước cơ bản theo
+  // bảng offer ở cân bill + phụ phí LẤY THEO BILL (gồm residential/ký nhận quote
+  // không có) + fuel/VAT công thức FedEx. Chưa có bill → = giá dự tính.
   const sell = (ab?.sell ?? null) as Record<string, unknown> | null;
   const S = (v: unknown) => Math.round(num(v));
-  const chargeBase = sell ? S(sell.baseVnd) : pick((l) => l.startsWith('Cước cơ bản'));
-  const chargeFuel = sell ? S(sell.fuelVnd) : pick((l) => l === 'Phụ phí xăng dầu');
-  const chargeProcessing = sell ? S(sell.processingExVatVnd) : pick((l) => l === 'Phí xử lý đơn hàng');
-  const chargeVat = sell ? S(sell.vatVnd) : pick((l) => l === 'VAT');
-  // Charge phụ phí theo TỪNG KHOẢN: có sell → lấy theo bill (pass-through số bill);
-  // chưa có sell → = cost (quote pass-through).
-  const chRemote = sell ? S(sell.remoteVnd) : R(b.remote);
-  const chDemand = sell ? S(sell.demandVnd) : R(b.demand);
-  const chResSign = sell ? S(sell.resSignVnd) : R(b.residential) + R(b.addons);
-  const chCustoms = sell ? S(sell.customsSurVnd) : R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak);
-  const chargeTotalFinal = sell ? S(sell.chargedVnd) : input.chargedVnd;
-  // Phần dư GIÁ THU giữ cột khớp tổng (sell nội bộ nhất quán → ~0; quote backfill có thể lệch).
+  const chargeBase = sell ? S(sell.baseVnd) : qBase;
+  const chargeFuel = sell ? S(sell.fuelVnd) : qFuel;
+  const chargeProcessing = sell ? S(sell.processingExVatVnd) : qProcessing;
+  const chargeVat = sell ? S(sell.vatVnd) : qVat;
+  const chRemote = sell ? S(sell.remoteVnd) : qRemote;
+  const chDemand = sell ? S(sell.demandVnd) : qDemand;
+  const chResSign = sell ? S(sell.resSignVnd) : qResSign;
+  const chCustoms = sell ? S(sell.customsSurVnd) : qCustoms;
+  const chargeTotalFinal = sell ? S(sell.chargedVnd) : quoteTotal;
   const chargeSum = chargeBase + chRemote + chDemand + chResSign + chCustoms + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(chargeTotalFinal - chargeSum);
 
@@ -130,34 +147,35 @@ export function shipHoPriceStructure(input: {
   // signature, phí NK/sửa địa chỉ/… vào other. Chỉ hiện dòng có số ở ít nhất 1 phía.
   const hasBill = ab != null;
   const surItems: PriceStructureRow[] = [
-    { label: 'Phụ phí vùng xa', costVnd: R(b.remote), billVnd: hasBill ? Math.round(num(ab!.remote)) : null, chargeVnd: chRemote },
-    { label: 'Phụ phí nhu cầu (demand)', costVnd: R(b.demand), billVnd: hasBill ? Math.round(num(ab!.demand)) : null, chargeVnd: chDemand },
+    { label: 'Phụ phí vùng xa', costVnd: R(b.remote), billVnd: hasBill ? Math.round(num(ab!.remote)) : null, quoteChargeVnd: qRemote, chargeVnd: chRemote },
+    { label: 'Phụ phí nhu cầu (demand)', costVnd: R(b.demand), billVnd: hasBill ? Math.round(num(ab!.demand)) : null, quoteChargeVnd: qDemand, chargeVnd: chDemand },
     {
       label: 'Giao nhà dân / ký nhận',
       costVnd: R(b.residential) + R(b.addons),
       billVnd: hasBill ? Math.round(num(ab!.signature)) : null,
-      chargeVnd: chResSign,
+      quoteChargeVnd: qResSign, chargeVnd: chResSign,
     },
     {
       label: 'Phí xử lý NK / khác',
       costVnd: R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak),
       billVnd: hasBill ? Math.round(num(ab!.other)) : null,
-      chargeVnd: chCustoms,
+      quoteChargeVnd: qCustoms, chargeVnd: chCustoms,
     },
-  ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
+  ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.quoteChargeVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
 
   const rows: PriceStructureRow[] = [
-    { label: 'Cước cơ bản', costVnd: baseCost, billVnd: baseBill, chargeVnd: chargeBase },
+    { label: 'Cước cơ bản', costVnd: baseCost, billVnd: baseBill, quoteChargeVnd: qBase, chargeVnd: chargeBase },
     ...surItems,
-    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
-    { label: 'Phí xử lý đơn hàng', costVnd: null, billVnd: null, chargeVnd: chargeProcessing },
-    { label: 'VAT', costVnd: vatCost, billVnd: vatBill, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },
+    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, quoteChargeVnd: qFuel, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
+    { label: 'Phí xử lý đơn hàng', costVnd: null, billVnd: null, quoteChargeVnd: qProcessing, chargeVnd: chargeProcessing },
+    { label: 'VAT', costVnd: vatCost, billVnd: vatBill, quoteChargeVnd: qVat, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },
   ];
-  if (adjustCost !== 0 || adjustCharge !== 0 || (adjustBill != null && adjustBill !== 0)) {
+  if (adjustCost !== 0 || adjustCharge !== 0 || adjustQuoteCharge !== 0 || (adjustBill != null && adjustBill !== 0)) {
     rows.push({
       label: 'Giảm giá / điều chỉnh',
       costVnd: adjustCost || null,
       billVnd: adjustBill != null && adjustBill !== 0 ? adjustBill : null,
+      quoteChargeVnd: adjustQuoteCharge || null,
       chargeVnd: adjustCharge || null,
     });
   }
@@ -165,6 +183,7 @@ export function shipHoPriceStructure(input: {
   return {
     rows,
     costTotal: input.carrierCostVnd,
+    quoteChargeTotal: quoteTotal,
     chargeTotal: chargeTotalFinal,
     billTotal,
     weights: {

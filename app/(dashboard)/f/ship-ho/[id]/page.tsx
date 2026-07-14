@@ -147,8 +147,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                   <th className="text-left">Khoản</th>
                   <th className="text-right" title="Cước carrier dự tính lúc báo giá">Chi phí Carrier (dự tính)</th>
                   {hasBill && <th className="text-right" title="Cước thực từ hoá đơn carrier">Cước từ Carrier{price.billNumber ? ` · ${price.billNumber}` : ''}</th>}
-                  <th className="text-right" title="Giá dự định thu khách hàng">Giá thu khách</th>
-                  <th className="text-right" title={hasBill ? 'Lệch bill = cước thực − dự tính' : 'Chênh = thu − chi'}>{hasBill ? 'Lệch bill' : 'Chênh'}</th>
+                  <th className="text-right" title="Giá quote lúc khách tạo vận đơn trên MMP">{hasBill ? 'Giá thu dự tính' : 'Giá thu khách'}</th>
+                  {hasBill && <th className="text-right" title="Tính lại theo bill (cân + phụ phí thực)">Giá thu thực</th>}
+                  <th className="text-right" title={hasBill ? 'Lệch thu = thu thực − thu dự tính' : 'Chênh = thu − chi'}>{hasBill ? 'Lệch thu' : 'Chênh'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,22 +166,26 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                     </td>
                   )}
                   <td className="text-right">{price.weights.quoteKg ?? '—'}</td>
+                  {hasBill && <td className="text-right">{price.weights.billKg ?? price.weights.quoteKg ?? '—'}</td>}
                   <td className="text-right text-muted-foreground">—</td>
                 </tr>
                 {price.rows.map((r) => {
+                  // hasBill → Lệch thu (thực − dự tính); chưa bill → Chênh (thu − chi).
                   const diff = hasBill
-                    ? (r.billVnd == null && r.costVnd == null ? 0 : (r.billVnd ?? 0) - (r.costVnd ?? 0))
+                    ? (r.chargeVnd ?? 0) - (r.quoteChargeVnd ?? 0)
                     : (r.chargeVnd ?? 0) - (r.costVnd ?? 0);
+                  const good = hasBill ? diff > 0 : diff > 0; // thu tăng = xanh
                   return (
                     <tr key={r.label} className="border-t border-border/60 [&>td]:py-2">
                       <td className="text-left">
                         {r.label}
                         {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
                       </td>
-                      <td className="text-right">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right">{r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}</td>}
-                      <td className="text-right">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>
-                      <td className={`text-right ${hasBill && diff !== 0 ? (diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400') : 'text-muted-foreground'}`}>
+                      <td className="text-right text-muted-foreground">{r.costVnd == null ? '—' : r.costVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-muted-foreground">{r.billVnd == null ? '—' : r.billVnd.toLocaleString('vi-VN')}</td>}
+                      <td className="text-right">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right font-medium">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
+                      <td className={`text-right ${diff !== 0 ? (good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-muted-foreground'}`}>
                         {diff !== 0 ? (diff > 0 ? '+' : '') + diff.toLocaleString('vi-VN') : '—'}
                       </td>
                     </tr>
@@ -190,12 +195,13 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
               <tfoot>
                 <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
                   <td className="text-left">Tổng</td>
-                  <td className="text-right">{price.costTotal.toLocaleString('vi-VN')}</td>
-                  {hasBill && <td className="text-right">{price.billTotal!.toLocaleString('vi-VN')}</td>}
-                  <td className="text-right">{price.chargeTotal.toLocaleString('vi-VN')}</td>
+                  <td className="text-right text-muted-foreground">{price.costTotal.toLocaleString('vi-VN')}</td>
+                  {hasBill && <td className="text-right text-muted-foreground">{price.billTotal!.toLocaleString('vi-VN')}</td>}
+                  <td className="text-right">{price.quoteChargeTotal.toLocaleString('vi-VN')}</td>
+                  {hasBill && <td className="text-right">{price.chargeTotal.toLocaleString('vi-VN')}</td>}
                   {hasBill ? (
-                    <td className={`text-right ${price.billTotal! - price.costTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {price.billTotal! - price.costTotal > 0 ? '+' : ''}{(price.billTotal! - price.costTotal).toLocaleString('vi-VN')}
+                    <td className={`text-right ${price.chargeTotal - price.quoteChargeTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : price.chargeTotal - price.quoteChargeTotal < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                      {price.chargeTotal - price.quoteChargeTotal > 0 ? '+' : ''}{(price.chargeTotal - price.quoteChargeTotal).toLocaleString('vi-VN')}
                     </td>
                   ) : (
                     <td className="text-right text-emerald-600 dark:text-emerald-400">+{(marginVnd ?? 0).toLocaleString('vi-VN')}</td>
