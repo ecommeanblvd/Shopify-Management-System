@@ -289,7 +289,7 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
         <tr className="[&>th]:py-1.5 [&>th]:pr-4 [&>th]:font-medium">
           <th className="text-left">Khoản</th>
           <th className="text-right">Chi phí dự tính</th>
-          <th className="text-right">Cước từ Carrier{s.billNumber ? ` · ${s.billNumber}` : ''}</th>
+          <th className="text-right">Cước từ Carrier</th>
           <th className="text-right" title="Giá quote lúc khách tạo vận đơn trên MMP">Giá thu dự tính</th>
           <th className="text-right" title="Tính lại theo bill (cân + phụ phí thực)">Giá thu thực</th>
           <th className="text-right" title="Giá thu thực − Giá thu dự tính">Lệch thu</th>
@@ -325,7 +325,10 @@ function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
         <tr className="border-t border-border font-semibold [&>td]:py-1.5 [&>td]:pr-4">
           <td className="text-left">Tổng</td>
           <td className="text-right text-muted-foreground">{vnd(s.costTotal)}</td>
-          <td className="text-right text-muted-foreground">{vnd(s.billTotal)}</td>
+          <td className="text-right text-muted-foreground">
+            {s.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({s.billNumber})</span>}
+            {vnd(s.billTotal)}
+          </td>
           <td className="text-right">{vnd(s.quoteChargeTotal)}</td>
           <td className="text-right">{vnd(s.chargeTotal)}</td>
           <td className={`text-right ${s.chargeTotal - s.quoteChargeTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : s.chargeTotal - s.quoteChargeTotal < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>

@@ -146,7 +146,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                 <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:py-1.5 [&>th]:font-medium">
                   <th className="text-left">Khoản</th>
                   <th className="text-right" title="Cước carrier dự tính lúc báo giá">Chi phí Carrier (dự tính)</th>
-                  {hasBill && <th className="text-right" title="Cước thực từ hoá đơn carrier">Cước từ Carrier{price.billNumber ? ` · ${price.billNumber}` : ''}</th>}
+                  {hasBill && <th className="text-right" title="Cước thực từ hoá đơn carrier">Cước từ Carrier</th>}
                   <th className="text-right" title="Giá quote lúc khách tạo vận đơn trên MMP">{hasBill ? 'Giá thu dự tính' : 'Giá thu khách'}</th>
                   {hasBill && <th className="text-right" title="Tính lại theo bill (cân + phụ phí thực)">Giá thu thực</th>}
                   <th className="text-right" title={hasBill ? 'Lệch thu = thu thực − thu dự tính' : 'Chênh = thu − chi'}>{hasBill ? 'Lệch thu' : 'Chênh'}</th>
@@ -196,7 +196,12 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                 <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
                   <td className="text-left">Tổng</td>
                   <td className="text-right text-muted-foreground">{price.costTotal.toLocaleString('vi-VN')}</td>
-                  {hasBill && <td className="text-right text-muted-foreground">{price.billTotal!.toLocaleString('vi-VN')}</td>}
+                  {hasBill && (
+                    <td className="text-right text-muted-foreground">
+                      {price.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({price.billNumber})</span>}
+                      {price.billTotal!.toLocaleString('vi-VN')}
+                    </td>
+                  )}
                   <td className="text-right">{price.quoteChargeTotal.toLocaleString('vi-VN')}</td>
                   {hasBill && <td className="text-right">{price.chargeTotal.toLocaleString('vi-VN')}</td>}
                   {hasBill ? (
