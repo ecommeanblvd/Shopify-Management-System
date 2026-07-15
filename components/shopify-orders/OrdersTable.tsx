@@ -263,7 +263,7 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2">SKU cost</th>
                 <th className="text-right px-3 py-2">Revenue</th>
                 <th className="text-right px-3 py-2">Margin %</th>
-                <th className="text-left px-3 py-2">Overrides</th>
+                <th className="text-left px-3 py-2">Trạng thái</th>
                 {canEdit && <th className="px-3 py-2 w-10" aria-label="Edit" />}
               </tr>
             </thead>
@@ -325,13 +325,7 @@ export function OrdersTable({
                     {o.netGmv > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {o.hasOverrides ? (
-                      <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] uppercase tracking-wider">
-                        manual
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/60">default</span>
-                    )}
+                    <OrderStatusCell o={o} />
                   </td>
                   {canEdit && (
                     <td className="px-3 py-2 text-right text-muted-foreground">
@@ -683,6 +677,46 @@ function reasonLabel(reason: OrderRow['shippingCostReason']): string {
     default:
       return 'Shipping cost unavailable.';
   }
+}
+
+const STATUS_TONE: Record<'green' | 'amber' | 'red' | 'muted', string> = {
+  green: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  red: 'bg-red-500/15 text-red-600 dark:text-red-400',
+  muted: 'bg-muted text-muted-foreground',
+};
+function StatusBadge({ label, tone }: { label: string; tone: keyof typeof STATUS_TONE }) {
+  return <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${STATUS_TONE[tone]}`}>{label}</span>;
+}
+
+/** Trạng thái đơn Shopify: đã huỷ (đè), giao hàng, + thanh toán (chỉ khi khác PAID). */
+function OrderStatusCell({ o }: { o: OrderRow }) {
+  if (o.cancelledAt) return <StatusBadge label="Đã huỷ" tone="red" />;
+
+  const ful = o.fulfillmentStatus;
+  const fulfil: { label: string; tone: keyof typeof STATUS_TONE } =
+    ful === 'FULFILLED' ? { label: 'Đã giao', tone: 'green' }
+    : ful === 'PARTIALLY_FULFILLED' ? { label: 'Giao 1 phần', tone: 'amber' }
+    : ful === 'ON_HOLD' ? { label: 'Tạm giữ', tone: 'amber' }
+    : { label: 'Chưa giao', tone: 'muted' };
+
+  // Thanh toán — chỉ hiện badge khi KHÁC "đã trả đủ" (PAID/AUTHORIZED) để đỡ nhiễu.
+  const FIN: Record<string, { label: string; tone: keyof typeof STATUS_TONE }> = {
+    PENDING: { label: 'Chờ TT', tone: 'amber' },
+    PARTIALLY_PAID: { label: 'TT 1 phần', tone: 'amber' },
+    PARTIALLY_REFUNDED: { label: 'Hoàn 1 phần', tone: 'amber' },
+    REFUNDED: { label: 'Đã hoàn', tone: 'red' },
+    VOIDED: { label: 'Huỷ TT', tone: 'red' },
+    EXPIRED: { label: 'Hết hạn', tone: 'red' },
+  };
+  const fin = FIN[o.financialStatus];
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <StatusBadge label={fulfil.label} tone={fulfil.tone} />
+      {fin && <StatusBadge label={fin.label} tone={fin.tone} />}
+    </div>
+  );
 }
 
 function fmt(amount: number, currency: string): string {

@@ -19,6 +19,10 @@ export interface OrderRow extends OrderMetrics {
   processedAt: Date;
   lineCount: number;
   hasOverrides: boolean;
+  /** Trạng thái Shopify (thô) để hiển thị badge trạng thái đơn. */
+  financialStatus: string;
+  fulfillmentStatus: string | null;
+  cancelledAt: Date | null;
   /** Margin ship = ship rev − ship cost, ở đồng cost (VND). null khi cost unknown.
    *  Âm = charge thiếu (lỗ ship). Nguồn cost xem `shippingCostSource`. */
   shipMarginRaw: number | null;
@@ -380,6 +384,9 @@ async function buildOrderRows(
       processedAt: o.processedAtShopify,
       lineCount: filteredLines.length,
       hasOverrides,
+      financialStatus: o.financialStatus,
+      fulfillmentStatus: o.fulfillmentStatus,
+      cancelledAt: o.cancelledAtShopify,
       shipMarginRaw,
       shipMarginRawCurrency: rawCurrency,
     });
