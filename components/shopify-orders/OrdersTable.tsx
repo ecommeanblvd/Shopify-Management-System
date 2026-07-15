@@ -263,14 +263,15 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2">SKU cost</th>
                 <th className="text-right px-3 py-2">Revenue</th>
                 <th className="text-right px-3 py-2">Margin %</th>
-                <th className="text-left px-3 py-2">Trạng thái</th>
+                <th className="text-left px-3 py-2">Giao hàng</th>
+                <th className="text-left px-3 py-2">Thanh toán</th>
                 {canEdit && <th className="px-3 py-2 w-10" aria-label="Edit" />}
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 14 : 13} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={canEdit ? 15 : 14} className="px-4 py-6 text-center text-muted-foreground">
                     {totalCount === 0 && !search
                       ? 'Chưa có đơn nào.'
                       : `Không có đơn khớp "${search}".`}
@@ -324,9 +325,8 @@ export function OrdersTable({
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {o.netGmv > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
                   </td>
-                  <td className="px-3 py-2 text-xs">
-                    <OrderStatusCell o={o} />
-                  </td>
+                  <td className="px-3 py-2 text-xs"><FulfillmentCell o={o} /></td>
+                  <td className="px-3 py-2 text-xs"><PaymentCell o={o} /></td>
                   {canEdit && (
                     <td className="px-3 py-2 text-right text-muted-foreground">
                       <Pencil className="size-3.5 inline" />
@@ -689,34 +689,34 @@ function StatusBadge({ label, tone }: { label: string; tone: keyof typeof STATUS
   return <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${STATUS_TONE[tone]}`}>{label}</span>;
 }
 
-/** Trạng thái đơn Shopify: đã huỷ (đè), giao hàng, + thanh toán (chỉ khi khác PAID). */
-function OrderStatusCell({ o }: { o: OrderRow }) {
+/** Cột GIAO HÀNG: đã huỷ (đè) hoặc trạng thái fulfillment Shopify. */
+function FulfillmentCell({ o }: { o: OrderRow }) {
   if (o.cancelledAt) return <StatusBadge label="Đã huỷ" tone="red" />;
-
   const ful = o.fulfillmentStatus;
-  const fulfil: { label: string; tone: keyof typeof STATUS_TONE } =
+  const s: { label: string; tone: keyof typeof STATUS_TONE } =
     ful === 'FULFILLED' ? { label: 'Đã giao', tone: 'green' }
     : ful === 'PARTIALLY_FULFILLED' ? { label: 'Giao 1 phần', tone: 'amber' }
     : ful === 'ON_HOLD' ? { label: 'Tạm giữ', tone: 'amber' }
     : { label: 'Chưa giao', tone: 'muted' };
+  return <StatusBadge label={s.label} tone={s.tone} />;
+}
 
-  // Thanh toán — chỉ hiện badge khi KHÁC "đã trả đủ" (PAID/AUTHORIZED) để đỡ nhiễu.
-  const FIN: Record<string, { label: string; tone: keyof typeof STATUS_TONE }> = {
-    PENDING: { label: 'Chờ TT', tone: 'amber' },
-    PARTIALLY_PAID: { label: 'TT 1 phần', tone: 'amber' },
-    PARTIALLY_REFUNDED: { label: 'Hoàn 1 phần', tone: 'amber' },
-    REFUNDED: { label: 'Đã hoàn', tone: 'red' },
-    VOIDED: { label: 'Huỷ TT', tone: 'red' },
-    EXPIRED: { label: 'Hết hạn', tone: 'red' },
-  };
-  const fin = FIN[o.financialStatus];
-
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <StatusBadge label={fulfil.label} tone={fulfil.tone} />
-      {fin && <StatusBadge label={fin.label} tone={fin.tone} />}
-    </div>
-  );
+const FIN_STATUS: Record<string, { label: string; tone: keyof typeof STATUS_TONE }> = {
+  PAID: { label: 'Đã trả', tone: 'green' },
+  AUTHORIZED: { label: 'Đã duyệt', tone: 'green' },
+  PENDING: { label: 'Chờ TT', tone: 'amber' },
+  PARTIALLY_PAID: { label: 'TT 1 phần', tone: 'amber' },
+  PARTIALLY_REFUNDED: { label: 'Hoàn 1 phần', tone: 'amber' },
+  REFUNDED: { label: 'Đã hoàn', tone: 'red' },
+  VOIDED: { label: 'Huỷ TT', tone: 'red' },
+  EXPIRED: { label: 'Hết hạn', tone: 'red' },
+};
+/** Cột THANH TOÁN: trạng thái tài chính Shopify (luôn hiện). */
+function PaymentCell({ o }: { o: OrderRow }) {
+  const s = FIN_STATUS[o.financialStatus];
+  return s
+    ? <StatusBadge label={s.label} tone={s.tone} />
+    : <span className="text-muted-foreground/60">{o.financialStatus}</span>;
 }
 
 function fmt(amount: number, currency: string): string {
