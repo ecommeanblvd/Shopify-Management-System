@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -35,11 +36,13 @@ export function CostFxButton({
   const [fxRate, setFxRate] = useState(initialFxRate ?? '');
   const [packagingFee, setPackagingFee] = useState(initialPackagingFee ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const onSave = (): void => {
     startTransition(async () => {
       await saveAction({ storeId, costCurrency, fxRate, packagingFee });
       setOpen(false);
+      router.refresh(); // re-fetch server components → giá VND hiện ngay, không cần F5.
     });
   };
 
@@ -89,16 +92,20 @@ export function CostFxButton({
               <span className="text-xs uppercase tracking-wider text-muted-foreground">
                 Cost currency (ISO-3)
               </span>
-              <input
-                type="text"
-                placeholder="e.g. VND, USD"
+              <select
                 value={costCurrency}
-                onChange={(e) => setCostCurrency(e.target.value.toUpperCase())}
-                maxLength={3}
-                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono uppercase"
-              />
+                onChange={(e) => setCostCurrency(e.target.value)}
+                className="w-full h-9 border border-input bg-input/30 rounded-md px-3 text-sm font-mono"
+              >
+                <option value="">— Theo tiền đơn ({orderCurrency || 'USD'}) —</option>
+                <option value="USD">USD</option>
+                <option value="VND">VND</option>
+                {costCurrency !== '' && costCurrency !== 'USD' && costCurrency !== 'VND' && (
+                  <option value={costCurrency}>{costCurrency}</option>
+                )}
+              </select>
               <span className="block text-[11px] text-muted-foreground">
-                Leave blank to treat all COGs as already in the order currency.
+                Để trống = coi mọi giá vốn đã ở tiền của đơn.
               </span>
             </label>
 
