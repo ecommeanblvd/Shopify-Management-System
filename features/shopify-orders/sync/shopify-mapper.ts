@@ -3,6 +3,7 @@ import type {
   ShopifyLineItem,
   ShopifyRefund,
   ShopifyFulfillment,
+  ShopifyShippingLine,
 } from '../shopify-types';
 import { detectCarrierKey, type CarrierKey } from './detect-carrier';
 import { deriveTxnFee } from '../derive-txn-fee';
@@ -76,7 +77,31 @@ function toDate(value: string | null | undefined, fallback: Date): Date {
   return Number.isNaN(d.getTime()) ? fallback : d;
 }
 
+/** shippingLines về ARRAY — bulk trả array, paged/webhook trả connection {nodes}. */
+function shippingLinesOf(p: ShopifyOrderPayload): ShopifyShippingLine[] {
+  const sl = p.shippingLines as unknown;
+  if (Array.isArray(sl)) return sl as ShopifyShippingLine[];
+  if (sl && typeof sl === 'object' && Array.isArray((sl as { nodes?: unknown }).nodes)) {
+    return (sl as { nodes: ShopifyShippingLine[] }).nodes;
+  }
+  return [];
+}
+
+/** Ship rev THỰC NHẬN = Σ discountedPriceSet (phí ship sau giảm). null khi chưa có
+ *  dữ liệu discounted (đơn cũ chưa re-sync / không có shippingLines) → caller fallback
+ *  về totalShippingPriceSet (phí gốc). */
+function netShippingAmount(lines: ShopifyShippingLine[]): string | null {
+  let sum = 0;
+  let has = false;
+  for (const l of lines) {
+    const a = l.discountedPriceSet?.shopMoney?.amount;
+    if (a != null) { sum += Number(a) || 0; has = true; }
+  }
+  return has ? sum.toFixed(2) : null;
+}
+
 export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): MappedOrder {
+  const shipLines = shippingLinesOf(payload);
   const lines = payload.lineItems.nodes.map((node) => mapLine(node));
   // grossLineTotal = Σ(original_unit_price × qty) — true GMV before any discount
   const grossLineTotal = lines
@@ -101,7 +126,9 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       currency: payload.currencyCode,
       grossLineTotal,
       totalDiscount: payload.totalDiscountsSet.shopMoney.amount,
-      totalShipping: payload.totalShippingPriceSet.shopMoney.amount,
+      // Ship rev = phí ship SAU giảm (thực nhận); fallback phí gốc khi chưa có
+      // discounted (đơn cũ chưa re-sync). Store chạy promo free-ship → net < gốc.
+      totalShipping: netShippingAmount(shipLines) ?? payload.totalShippingPriceSet.shopMoney.amount,
       totalTax: payload.totalTaxSet.shopMoney.amount,
       totalPrice: payload.totalPriceSet.shopMoney.amount,
       shipCountry: payload.shippingAddress?.countryCodeV2 ?? null,
@@ -113,7 +140,7 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       shipName: payload.shippingAddress?.name ?? null,
       shipCompany: payload.shippingAddress?.company ?? null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
-      shippingCarrierKey: detectCarrierKey(payload.shippingLines),
+      shippingCarrierKey: detectCarrierKey(shipLines),
       transactionFee: txnFee.feeOrderCcy !== null ? String(txnFee.feeOrderCcy) : null,
       transactionFeeNative: txnFee.feeNative !== null ? String(txnFee.feeNative) : null,
       transactionFeeNativeCurrency: txnFee.feeNativeCurrency,

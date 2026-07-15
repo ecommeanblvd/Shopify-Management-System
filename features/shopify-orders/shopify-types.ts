@@ -51,6 +51,9 @@ export interface ShopifyFulfillment {
 export interface ShopifyShippingLine {
   title: string | null;
   code: string | null;
+  /** Phí ship SAU giảm giá (khách THỰC trả) — dùng làm ship rev thay vì
+   *  totalShippingPriceSet (phí GỐC, chưa trừ promo giảm ship). null = chưa sync. */
+  discountedPriceSet?: { shopMoney: { amount: string } } | null;
 }
 
 export interface ShopifyTxnFee {

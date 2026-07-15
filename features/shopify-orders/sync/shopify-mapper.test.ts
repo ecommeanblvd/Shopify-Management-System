@@ -55,6 +55,35 @@ describe('mapShopifyOrder', () => {
     expect(() => m.order.updatedAtShopify.toISOString()).not.toThrow();
   });
 
+  it('ship rev = phí ship SAU giảm (discountedPriceSet), KHÔNG phải phí gốc', () => {
+    // TINH free-ship: phí gốc 58.32, khách thực trả 0 → ship rev phải = 0.
+    const base = fixture('order-simple');
+    const p = {
+      ...base,
+      totalShippingPriceSet: { shopMoney: { amount: '58.32', currencyCode: 'USD' } },
+      shippingLines: [{ title: 'FedEx', code: 'fedex', discountedPriceSet: { shopMoney: { amount: '0.00' } } }],
+    } as unknown as ShopifyOrderPayload;
+    expect(mapShopifyOrder(p, 'store-1').order.totalShipping).toBe('0.00');
+  });
+
+  it('nhiều shipping line có giảm → net = Σ discountedPriceSet', () => {
+    const base = fixture('order-simple');
+    const p = {
+      ...base,
+      shippingLines: [
+        { title: 'A', code: 'fedex', discountedPriceSet: { shopMoney: { amount: '10.50' } } },
+        { title: 'B', code: 'dhl', discountedPriceSet: { shopMoney: { amount: '4.50' } } },
+      ],
+    } as unknown as ShopifyOrderPayload;
+    expect(mapShopifyOrder(p, 'store-1').order.totalShipping).toBe('15.00');
+  });
+
+  it('không có discountedPriceSet (đơn cũ chưa re-sync) → fallback phí gốc', () => {
+    const base = fixture('order-simple');
+    // order-simple không có shippingLines discounted → dùng totalShippingPriceSet.
+    expect(mapShopifyOrder(base, 'store-1').order.totalShipping).toBe(base.totalShippingPriceSet.shopMoney.amount);
+  });
+
   it('captures refunds with amount + reason', () => {
     const m = mapShopifyOrder(fixture('order-refunded'), 'store-1');
     expect(m.refunds).toHaveLength(1);

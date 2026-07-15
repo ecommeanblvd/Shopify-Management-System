@@ -34,6 +34,9 @@ export const ORDER_NODE_FIELDS = `
     totalRefundedSet { shopMoney { amount currencyCode } }
   }
   fulfillments { trackingInfo { number company } }
+  shippingLines(first: 20) {
+    nodes { title code discountedPriceSet { shopMoney { amount currencyCode } } }
+  }
 `.trim();
 
 /** Field customer chỉ query được khi app có read_customers trên store đó —
