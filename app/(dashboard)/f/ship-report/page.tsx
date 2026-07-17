@@ -8,13 +8,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { loadShipReport } from '@/features/ship-report/queries';
 import { pnlByMonth, pnlBreakdown } from '@/features/ship-report/pnl';
 import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/features/ship-report/surcharges';
+import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/features/shipments/transit-stats';
 
 export const dynamic = 'force-dynamic';
 
 const vnd = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('vi-VN'));
 const SEG_LABEL: Record<string, string> = { total: 'Tổng', shopify: 'Shopify', ship_ho: 'Ship hộ' };
 
-type SP = { tab?: string; months?: string; month?: string; sur?: string };
+type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string };
 
 export default async function ShipReportPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -25,7 +26,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   }
 
   const sp = await searchParams;
-  const tab = sp.tab === 'surcharge' ? 'surcharge' : 'pnl';
+  const tab = sp.tab === 'surcharge' ? 'surcharge' : sp.tab === 'transit' ? 'transit' : 'pnl';
   const monthsBack = [3, 6, 12].includes(Number(sp.months)) ? Number(sp.months) : 6;
 
   const raw = await loadShipReport(monthsBack);
@@ -34,12 +35,17 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const pickedMonth = sp.month && monthKeys.includes(sp.month) ? sp.month : monthKeys[0] ?? null;
   const breakdown = pickedMonth ? pnlBreakdown(raw.pnlItems, pickedMonth).slice(0, 20) : [];
 
+  // Tab Tốc độ giao: window theo ngày (POD từ bill + tracking), độc lập filter tháng.
+  const transitDays = normalizeTransitRange(sp.days);
+  const transit = tab === 'transit' ? await getTransitStats(transitDays) : null;
+  const transitMatrix = transit ? pivotRoutesByCountry(transit.routes) : null;
+
   const surRows = surchargeSummary(raw.surchargeItems, raw.totalShipments);
   const pickedSur = sp.sur && surRows.some((r) => r.type === sp.sur) ? sp.sur : surRows[0]?.type ?? null;
   const topRoutes = pickedSur ? surchargeTopRoutes(raw.surchargeItems, pickedSur) : [];
 
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ tab, months: String(monthsBack), ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
+    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
     return `/f/ship-report?${p.toString()}`;
   };
 
@@ -64,7 +70,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border text-sm">
-        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí']] as const).map(([key, label]) => (
+        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao']] as const).map(([key, label]) => (
           <Link key={key} href={qs({ tab: key })}
             className={`-mb-px border-b-2 px-3 py-2 font-medium ${tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
             {label}
@@ -72,7 +78,83 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
         ))}
       </div>
 
-      {tab === 'pnl' ? (
+      {tab === 'transit' && transit && transitMatrix ? (
+        <>
+          <div className="flex items-center gap-1 text-sm">
+            {[7, 14, 30, 90].map((d) => (
+              <Link key={d} href={qs({ days: String(d) })}
+                className={`rounded px-2.5 py-1 ${transitDays === d ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+                {d} ngày
+              </Link>
+            ))}
+            <span className="ml-2 text-xs text-muted-foreground">
+              Window: đơn tạo vận đơn trong {transitDays} ngày · ngày giao mới nhất: {transit.latestDeliveryAt ? new Date(transit.latestDeliveryAt).toLocaleDateString('vi-VN') : '—'}
+            </span>
+          </div>
+
+          <Card><CardContent className="p-0">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Tốc độ giao trung bình — quốc gia × line vận chuyển (ngày)</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                    <th className="text-left">Quốc gia</th>
+                    {transitMatrix.carriers.map((c) => <th key={c} className="text-right uppercase">{c}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {transitMatrix.rows.length === 0 ? (
+                    <tr><td colSpan={1 + transitMatrix.carriers.length} className="p-6 text-center text-muted-foreground">Chưa có đơn giao trong window này.</td></tr>
+                  ) : transitMatrix.rows.map((r) => {
+                    const best = Math.min(...transitMatrix.carriers.map((c) => r.byCarrier[c]?.avgDays ?? Infinity));
+                    return (
+                      <tr key={r.country} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
+                        <td className="text-left font-medium">{r.country}</td>
+                        {transitMatrix.carriers.map((c) => {
+                          const cell = r.byCarrier[c];
+                          return (
+                            <td key={c} className={`text-right ${cell && cell.avgDays === best ? 'font-semibold text-emerald-600 dark:text-emerald-400' : ''}`}>
+                              {cell ? `${cell.avgDays} (${cell.deliveredN})` : '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+              Số = ngày giao trung bình (số đơn đã giao). Xanh = line nhanh nhất tuyến. Ngày giao lấy từ POD bill carrier + tracking + Lark.
+            </p>
+          </CardContent></Card>
+
+          <Card><CardContent className="p-0">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Tổng hợp theo carrier</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                    <th className="text-left">Carrier</th><th className="text-right">Đã ship</th><th className="text-right">Đã giao</th>
+                    <th className="text-right">TB (ngày)</th><th className="text-right">Median (ngày)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transit.carriers.map((c) => (
+                    <tr key={c.carrierKey} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
+                      <td className="text-left uppercase font-medium">{c.carrierKey}</td>
+                      <td className="text-right">{c.shippedN}</td>
+                      <td className="text-right">{c.deliveredN}</td>
+                      <td className="text-right">{c.avgDays ?? '—'}</td>
+                      <td className="text-right">{c.medianDays ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent></Card>
+        </>
+      ) : tab === 'pnl' ? (
         <>
           <Card><CardContent className="p-0">
             <div className="border-b border-border px-4 py-3 text-sm font-semibold">P&L theo tháng ({monthsBack} tháng)</div>
