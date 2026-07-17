@@ -58,6 +58,7 @@ export function parseFedexInvoiceXml(text: string): FboBilledRow[] {
       invoiceDate: s(TAG.invoiceDate),
       dueDate: s(TAG.dueDate),
       shipDate: s(TAG.shipDate),
+      podAt: null, podName: null, // XML invoice không có cột POD (chỉ FBO xlsx).
       service: s(TAG.service),
       recipientCountry: s(TAG.recipientCountry),
       recipientStreet1: s(TAG.recipientStreet1),

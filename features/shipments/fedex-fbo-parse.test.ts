@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFboCharge, parseFboAmount, parseFedexFbo, consolidateFboShipping, fboChargeUnchanged } from './fedex-fbo-parse';
+import { classifyFboCharge, parseFboAmount, parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, parseFboPod } from './fedex-fbo-parse';
 import type { FboBilledRow } from './fedex-fbo-parse';
 
 describe('fboChargeUnchanged (re-import diff)', () => {
@@ -25,7 +25,7 @@ describe('fboChargeUnchanged (re-import diff)', () => {
 
 function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
   return {
-    awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null,
+    awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null, podAt: null, podName: null,
     shipDate: null, service: null, recipientCountry: null, recipientStreet1: null,
     recipientStreet2: null, recipientCity: null, recipientState: null, recipientPostcode: null,
     weightKg: null, base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
@@ -121,5 +121,18 @@ describe('consolidateFboShipping (AWB nhiều dòng cước+thuế)', () => {
 
   it('AWB 1 dòng cước thường → giữ nguyên', () => {
     expect(consolidateFboShipping([mkRow({ awb: 'C', base: 100, total: 100 })])).toHaveLength(1);
+  });
+});
+
+describe('parseFboPod', () => {
+  it('20260707 + 11:27 → 2026-07-07T11:27:00', () => {
+    expect(parseFboPod('20260707', '11:27')).toBe('2026-07-07T11:27:00');
+  });
+  it('thiếu giờ → 00:00; giờ 1 chữ số pad; sai định dạng ngày → null', () => {
+    expect(parseFboPod('20260707', null)).toBe('2026-07-07T00:00:00');
+    expect(parseFboPod('20260707', '9:05')).toBe('2026-07-07T09:05:00');
+    expect(parseFboPod('07-07-2026', '11:27')).toBeNull();
+    expect(parseFboPod(null, '11:27')).toBeNull();
+    expect(parseFboPod('', '')).toBeNull();
   });
 });

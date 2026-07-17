@@ -7,6 +7,7 @@ import { trackPendingShipHo } from '@/features/ship-ho/track';
 import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
+import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 
 async function main(): Promise<void> {
   const results = await runHourlySync();
@@ -70,6 +71,13 @@ async function main(): Promise<void> {
     process.stdout.write(`ship-ho-tiers: partners ${tr.partners}, changed ${tr.changed}\n`);
   } catch (e) {
     process.stderr.write(`ship-ho-tiers: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  // Áp POD từ bill FedEx → delivered_at (nguồn ngày giao chính thức, ghi đè Lark).
+  try {
+    const pod = await applyPodDeliveries();
+    process.stdout.write(`apply-pod: shipments ${pod.shipmentsUpdated}, ship-ho ${pod.shipHoUpdated}, events ${pod.shipHoEvents}\n`);
+  } catch (e) {
+    process.stderr.write(`apply-pod: ${e instanceof Error ? e.message : String(e)}\n`);
   }
   // Đối soát ship hộ từ hoá đơn carrier (up bill là tự sync trong ≤1h, khỏi bấm tay).
   try {

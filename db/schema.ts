@@ -654,6 +654,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   // FK ổn định tới shipment đã khớp (theo tracking + mã đơn). Dùng để đẩy billed
   // cước vào đối soát; đổi text tracking/đơn vẫn giữ liên kết. NULL = chưa khớp.
   shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'set null' }),
+  // POD từ bill FBO — bằng chứng giao hàng chính thức của FedEx (ngày giờ + người ký).
+  podAt: timestamp('pod_at'),
+  podName: text('pod_name'),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [

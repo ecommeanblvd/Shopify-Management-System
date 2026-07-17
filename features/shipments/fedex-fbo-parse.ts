@@ -79,6 +79,9 @@ export interface FboBilledRow {
    *  "Số tiền theo trọng lượng tính cước" (giá trị là CÂN, không phải tiền) +
    *  đơn vị (K=kg, P=lb). Dùng làm input quote chính xác nhất cho từng AWB. */
   weightKg: number | null;
+  /** POD từ bill: bằng chứng giao hàng chính thức của FedEx (ngày+giờ, người ký). */
+  podAt: string | null;   // 'YYYY-MM-DDTHH:mm:00' (giờ địa phương điểm giao)
+  podName: string | null;
   base: number; discount: number; fuel: number; demand: number; remote: number;
   signature: number; residential: number; addressCorrection: number; importHandling: number; vat: number;
   duty: number; other: number;
@@ -92,6 +95,9 @@ const META: Record<string, string> = {
   orderRef: 'số tham chiếu của người gửi 1',
   invoiceNumber: 'số hóa đơn fedex',
   invoiceDate: 'ngày lập hóa đơn',
+  podDate: 'ngày trong bằng chứng giao hàng',   // 20260707
+  podTime: 'thời gian trong bằng chứng giao hàng', // '11:27'
+  podName: 'tên trong bằng chứng giao hàng',
   dueDate: 'ngày đáo hạn',
   shipDate: 'ngày vận chuyển (đúng định dạng)',
   service: 'dịch vụ',
@@ -105,6 +111,19 @@ const META: Record<string, string> = {
   weightUnit: 'đơn vị trọng lượng tính cước',  // K=kg, P=lb
   awbTotal: 'tổng số tiền trong vận đơn hàng không',
 };
+
+/** POD FBO: '20260707' + '11:27' → '2026-07-07T11:27:00' (giờ địa phương điểm
+ *  giao — đủ cho delivered_at/transit theo NGÀY). Thiếu ngày/sai định dạng → null;
+ *  thiếu giờ → 00:00. */
+export function parseFboPod(dateStr: string | null, timeStr: string | null): string | null {
+  const d = String(dateStr ?? '').trim();
+  const m = d.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!m) return null;
+  const t = String(timeStr ?? '').trim().match(/^(\d{1,2}):(\d{2})/);
+  const hh = t ? t[1].padStart(2, '0') : '00';
+  const mm = t ? t[2] : '00';
+  return `${m[1]}-${m[2]}-${m[3]}T${hh}:${mm}:00`;
+}
 
 /** Quy cân FBO về KG theo đơn vị (P/LB → lb; K/KG → kg). */
 export function fboWeightToKg(value: number, unit: string | null): number {
@@ -158,6 +177,8 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
     weightKg: cols.meta.weight >= 0 && row[cols.meta.weight] != null
       ? fboWeightToKg(parseFboAmount(row[cols.meta.weight]), str(row, cols.meta.weightUnit)) || null
       : null,
+    podAt: parseFboPod(str(row, cols.meta.podDate), str(row, cols.meta.podTime)),
+    podName: str(row, cols.meta.podName),
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
     residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,
   };

@@ -29,6 +29,8 @@ export interface FboApLine {
   awb: string;
   orderRef: string | null;
   weightKg: number | null;
+  podAt: string | null;
+  podName: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
   signature: number; vat: number; other: number; total: number;
 }
@@ -40,6 +42,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     awb: r.awb,
     orderRef: r.orderRef,
     weightKg: r.weightKg,
+    podAt: r.podAt, podName: r.podName,
     base: r.base, discount: r.discount, fuel: r.fuel, remote: r.remote, demand: r.demand,
     signature: r.signature + r.residential,
     vat: r.vat,

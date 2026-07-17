@@ -4,7 +4,7 @@ import type { FboBilledRow } from './fedex-fbo-parse';
 
 function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
   return {
-    awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null,
+    awb: 'X', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null, podAt: null, podName: null,
     shipDate: null, service: null, recipientCountry: null,
     recipientStreet1: null, recipientStreet2: null, recipientCity: null,
     recipientState: null, recipientPostcode: null, weightKg: null,

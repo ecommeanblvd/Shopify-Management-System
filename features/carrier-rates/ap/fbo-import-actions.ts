@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import * as XLSX from 'xlsx';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { putObject } from '@/lib/storage/s3';
 import { parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
@@ -188,6 +189,7 @@ export async function importFboToDatabase(
         base: numStr(l.base), discount: numStr(l.discount), fuel: numStr(l.fuel), remote: numStr(l.remote),
         demand: numStr(l.demand), signature: numStr(l.signature), vat: numStr(l.vat), other: numStr(l.other),
         total: numStr(l.total),
+        podAt: l.podAt ? new Date(l.podAt) : null, podName: l.podName,
       })));
     }
 
@@ -279,8 +281,11 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
   const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
   const fileKey = `carrier-bills/${input.carrierAccountId}/fbo-${randomUUID()}${ext}`;
   await putObject(fileKey, input.bytes, input.contentType);
-  return importFboToDatabase(rows, {
+  const result = await importFboToDatabase(rows, {
     carrierAccountId: input.carrierAccountId, currency: input.currency, userId: input.userId,
     fileMeta: { fileKey, filename: input.filename, contentType: input.contentType, byteSize: input.bytes.length },
   });
+  // Áp POD (ngày giao chính thức trên bill) ngay sau import — best-effort, cron hourly là backstop.
+  try { await applyPodDeliveries(); } catch (e) { console.error('apply-pod after FBO import:', e); }
+  return result;
 }
