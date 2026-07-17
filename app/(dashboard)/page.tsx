@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { getTransitStats, normalizeTransitRange } from '@/features/shipments/transit-stats';
 import { TransitStatsCard } from '@/components/dashboard/TransitStatsCard';
+import { loadShipReport } from '@/features/ship-report/queries';
+import { pnlByMonth } from '@/features/ship-report/pnl';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +48,16 @@ export default async function HomePage({
   const callerRole = roleRows[0]?.role as Role | undefined;
   const canManageStores = !!callerRole && hasPermission(callerRole, 'manage_stores');
   const canViewMarkets = !!callerRole && hasPermission(callerRole, 'view_markets_history');
+  const canViewShipReport = !!callerRole && hasPermission(callerRole, 'view_carrier_rates');
+  // P&L ship tháng hiện tại (card tóm tắt, link /f/ship-report).
+  let shipPnl: { revenueVnd: number; costVnd: number; marginVnd: number; billedPct: number } | null = null;
+  if (canViewShipReport) {
+    try {
+      const raw = await loadShipReport(1);
+      const total = pnlByMonth(raw.pnlItems).find((r) => r.segment === 'total');
+      if (total) shipPnl = { revenueVnd: total.revenueVnd, costVnd: total.costVnd, marginVnd: total.marginVnd, billedPct: total.billedPct };
+    } catch { /* card best-effort, không chặn dashboard */ }
+  }
   const canRunFeature = !!callerRole && hasPermission(callerRole, 'run_feature');
   const canViewTransit = !!callerRole && hasPermission(callerRole, 'view_fulfillment');
   const transitStats = canViewTransit ? await getTransitStats(transitDays) : null;
@@ -102,6 +114,24 @@ export default async function HomePage({
 
       {/* Transit time theo tuyến (filter mốc thời gian) */}
       {transitStats && <TransitStatsCard stats={transitStats} days={transitDays} carrier={transitCarrier} />}
+
+      {/* P&L ship tháng này — tóm tắt, chi tiết ở /f/ship-report */}
+      {shipPnl && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="flex flex-wrap items-center gap-6 text-sm tabular-nums">
+              <span className="font-semibold">Ship tháng này</span>
+              <span>Thu <b>{shipPnl.revenueVnd.toLocaleString('vi-VN')}</b></span>
+              <span>Chi <b>{shipPnl.costVnd.toLocaleString('vi-VN')}</b></span>
+              <span className={shipPnl.marginVnd < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                Margin <b>{shipPnl.marginVnd >= 0 ? '+' : ''}{shipPnl.marginVnd.toLocaleString('vi-VN')}</b>
+              </span>
+              <span className="text-xs text-muted-foreground">phủ bill {shipPnl.billedPct}%</span>
+            </div>
+            <Link href="/f/ship-report" className="text-sm font-medium text-primary underline-offset-2 hover:underline">Báo cáo ship →</Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Two-column: Stores list + Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
