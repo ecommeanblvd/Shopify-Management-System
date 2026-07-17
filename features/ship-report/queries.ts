@@ -45,7 +45,7 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
       COALESCE(actual_carrier_cost_vnd, carrier_cost_vnd)::float8 AS cost_vnd,
       (reconcile_status = 'reconciled') AS billed
     FROM ship_ho_orders
-    WHERE created_at >= ${since} AND status NOT IN ('draft', 'cancelled')
+    WHERE created_at >= ${since} AND status::text NOT IN ('draft', 'cancelled')
   `);
 
   const pnlItems: ShipPnlItem[] = [
