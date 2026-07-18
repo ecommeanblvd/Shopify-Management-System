@@ -193,6 +193,21 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `shipment.exception` | Sự cố (delay/kẹt/giao lỗi) + hành động cần |
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
 | | `shipment.returned` | Hoàn hàng |
+
+### ⚠ `ratecard.updated` — trạng thái tích hợp (probe 17/07/2026)
+
+SMS đã push thử với đủ biến thể envelope, kết quả phía MMP:
+
+| Envelope | MMP trả | Nghĩa |
+|---|---|---|
+| `mmpRef: null` / thiếu `mmpRef` | 422 `{"error":"bad envelope"}` | Validator bắt buộc `mmpRef` là chuỗi |
+| `mmpRef: "<brandSlug>"` | 409 `{"error":"order not found; retry later"}` | Qua validation nhưng receiver route MỌI event vào nhánh tra cứu ĐƠN HÀNG |
+
+**MMP cần làm**: thêm nhánh xử lý event CẤP BRAND trước bước lookup đơn — khi
+`event === 'ratecard.updated'`, key theo `code` (brandSlug), `data` = payload y hệt
+response của endpoint pull `POST /api/mmp/ship-ho/ratecard`. SMS hiện gửi
+`mmpRef = brandSlug` (chuỗi, để qua validator hiện tại).
+
 | Tài chính | `order.reconciled` | Hoá đơn carrier về → **giá cuối**. `data`: `{ finalChargedVnd, previousChargedVnd, deltaVnd, billedWeightKg, reconcileResolution? }` — MMP cập nhật giá cuối cho brand (thay giá dự kiến). Bắn khi: (a) bill KHỚP dự tính (tự động), hoặc (b) operator **chấp nhận sai lệch** (lỗi nội bộ) — khi đó `reconcileResolution = "internal_error"`. Đơn CÓ sai lệch mà CHƯA duyệt thì KHÔNG bắn (giá giữ nguyên dự kiến). |
 | Tài chính | `order.reconcile_pending` 🆕 | Bill carrier về CÓ sai lệch (chi phí thực ≠ dự tính) và **đang CHỜ operator duyệt**. MMP set đơn về trạng thái **"chờ đối soát"**, **GIỮ giá dự tính** (gỡ giá thực + nhãn "đã đối soát" nếu đã lỡ nhận trước đó); **KHÔNG** cập nhật giá cuối tới khi operator quyết định. `data`: `{ estimatedCostVnd, billedCostVnd, deltaVnd }`. Sau đó SMS gửi `order.reconciled` (chấp nhận/kết luận claim) hoặc `order.claim_pending` (đi claim). |
 | Tài chính | `order.claim_pending` 🆕 | Bill về CÓ sai lệch và operator quyết định **đòi carrier** (claim). MMP set đơn sang trạng thái **"đợi claim đơn vị vận chuyển"**; **KHÔNG** cập nhật giá cuối (giữ giá dự kiến tới khi claim xong). `data`: `{ deltaVnd, estimatedCostVnd, billedCostVnd, reason (string\|null) }`. |

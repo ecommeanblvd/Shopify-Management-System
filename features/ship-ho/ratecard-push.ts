@@ -17,9 +17,12 @@ export async function pushBrandRateCardToMmp(brandSlug: string): Promise<{ ok: b
   const built = await buildBrandRateCardPayload(brandSlug);
   if (!built.ok) return { ok: false, detail: `không dựng được ratecard (${built.code})` };
 
+  // mmpRef = brandSlug (KHÔNG null): validator MMP bắt buộc mmpRef là chuỗi —
+  // null bị 422 "bad envelope" (probe 17/07). Phần còn lại chờ MMP thêm nhánh
+  // xử lý event cấp brand (hiện mọi event bị route vào lookup đơn → 409).
   const envelope = {
     event: 'ratecard.updated',
-    mmpRef: null,
+    mmpRef: brandSlug,
     code: brandSlug,
     occurredAt: new Date().toISOString(),
     data: built.ratecard,
