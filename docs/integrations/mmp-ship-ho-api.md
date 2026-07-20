@@ -194,6 +194,21 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
 | | `shipment.returned` | Hoàn hàng |
 
+### Đơn khởi tạo TỪ SMS (origin `sms`) — từ 20/07/2026
+
+Brand có thể đưa hàng trực tiếp cho MEAN mà không tạo đơn trên MMP → SMS tạo đơn hộ
+và ĐẨY sang MMP để brand vẫn thấy đơn + giá trên portal:
+
+- Envelope mọi event từ SMS nay có thêm field **`origin`**: `'mmp'` (đơn MMP tạo, như cũ)
+  hoặc `'sms'` (đơn SMS khởi tạo). Đơn origin sms: **`mmpRef` = mã đơn SMS** (`26-INSLG-SV-…`,
+  trùng `code`) — ref ổn định cho mọi event sau.
+- **MMP cần**: khi nhận `order.received` với `origin:'sms'` và ref chưa tồn tại → **TẠO đơn**
+  (upsert, latest-wins khi SMS requote gửi lại). `data`: `{ brandSlug, customerRef, recipientName,
+  country, city, weightKg, dimLengthCm/WidthCm/HeightCm, packagingType, service, chargedVnd, createdVia:'sms' }`.
+- Các event sau (`order.priced`, `shipment.booked`, `order.measured`, `shipment.delivered`,
+  `order.reconciled`, …) dùng cùng ref — xử lý như đơn thường. Nhận event với ref lạ trước khi
+  `order.received` tới (retry lệch thứ tự) → trả 409 như hiện tại, outbox SMS tự gửi lại.
+
 ### ⚠ `ratecard.updated` — trạng thái tích hợp (probe 17/07/2026)
 
 SMS đã push thử với đủ biến thể envelope, kết quả phía MMP:

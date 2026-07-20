@@ -146,6 +146,30 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     })
     .where(eq(schema.shipHoOrders.id, orderId));
 
+  // Đơn khởi tạo từ SMS: báo MMP để brand thấy đơn (origin sms, ref = code). Gửi
+  // đủ thông tin để MMP TẠO đơn phía họ; requote lại → gửi lại (MMP upsert latest-wins).
+  if (order.source !== 'mmp') {
+    await emitShipHoEvent(
+      { id: order.id, code: order.code, source: order.source, mmpRef: order.mmpRef },
+      'order.received',
+      {
+        brandSlug: order.partnerBrandSlug,
+        customerRef: order.customerRef ?? null,
+        recipientName: order.recipientName ?? null,
+        country: order.country,
+        city: order.city ?? null,
+        weightKg: Number(order.weightKg),
+        dimLengthCm: order.dimLengthCm == null ? null : Number(order.dimLengthCm),
+        dimWidthCm: order.dimWidthCm == null ? null : Number(order.dimWidthCm),
+        dimHeightCm: order.dimHeightCm == null ? null : Number(order.dimHeightCm),
+        packagingType: order.packagingType ?? null,
+        service: 'express',
+        chargedVnd: charged,
+        createdVia: 'sms',
+      },
+    );
+  }
+
   revalidatePath('/f/ship-ho');
   revalidatePath(`/f/ship-ho/${orderId}`);
   return { ok: true };

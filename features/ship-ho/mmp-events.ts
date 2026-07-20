@@ -5,23 +5,34 @@ import { signMmpPayload } from '@/features/mmp/hmac';
 export type ShipHoEmitOrder = { id: string; code: string; source: string; mmpRef: string | null };
 const MAX_ATTEMPTS = 8;
 
-/** THUẦN: dựng envelope webhook. */
+/** THUẦN: dựng envelope webhook. Đơn khởi tạo từ SMS (source 'internal') không có
+ *  mmpRef của MMP → dùng CODE SMS làm ref ổn định + origin:'sms' để MMP biết phải
+ *  TẠO đơn khi nhận order.received (thay vì lookup). Đơn mmp giữ nguyên shape cũ. */
 export function buildEnvelope(
   order: ShipHoEmitOrder, event: string, data: Record<string, unknown>, occurredAtIso: string,
 ) {
-  return { event, mmpRef: order.mmpRef, code: order.code, occurredAt: occurredAtIso, data };
+  return {
+    event,
+    mmpRef: order.mmpRef ?? order.code,
+    code: order.code,
+    origin: order.source === 'mmp' ? 'mmp' : 'sms',
+    occurredAt: occurredAtIso,
+    data,
+  };
 }
 
-/** Ghi 1 event vào outbox (CHỈ đơn brand) rồi thử gửi ngay (best-effort). No-op cho đơn nội bộ. */
+/** Ghi 1 event vào outbox rồi thử gửi ngay (best-effort). Gồm CẢ đơn khởi tạo từ
+ *  SMS (source 'internal', ref = code) — chỉ đạo CEO 20/07: brand thấy đơn SMS tạo
+ *  hộ trên MMP như đơn họ tự tạo. */
 export async function emitShipHoEvent(
   order: ShipHoEmitOrder, event: string, data: Record<string, unknown>,
 ): Promise<void> {
-  if (order.source !== 'mmp' || !order.mmpRef) return;
+  if (order.source === 'mmp' && !order.mmpRef) return; // đơn mmp thiếu ref (dữ liệu hỏng) — bỏ
   const now = new Date();
   let row;
   try {
     [row] = await db.insert(schema.shipHoOrderEvents).values({
-      orderId: order.id, mmpRef: order.mmpRef, code: order.code, event,
+      orderId: order.id, mmpRef: order.mmpRef ?? order.code, code: order.code, event,
       occurredAt: now, payload: data, deliveryStatus: 'pending', attempts: 0,
     }).returning();
   } catch (e) {
