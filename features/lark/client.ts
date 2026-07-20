@@ -27,6 +27,9 @@ async function getTenantToken(): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ app_id: env('LARK_APP_ID'), app_secret: env('LARK_APP_SECRET') }),
+    // Không timeout → kết nối treo là container cron treo VĨNH VIỄN, Railway không
+    // xếp lịch run mới (gap 17–20/07). 30s là quá đủ cho 1 call Lark.
+    signal: AbortSignal.timeout(30_000),
   });
   const j = (await res.json()) as { code: number; msg: string; tenant_access_token?: string; expire?: number };
   if (j.code !== 0 || !j.tenant_access_token) throw new Error(`[lark] token fail: code=${j.code} msg=${j.msg}`);
@@ -66,6 +69,7 @@ async function searchAllRecords(tableId: string, body: Record<string, unknown>, 
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     });
     const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean } };
     if (j.code !== 0) throw new Error(`[lark] search fail: code=${j.code} msg=${j.msg}`);
