@@ -39,12 +39,15 @@ export async function emitShipHoEvent(
     console.warn('[ship-ho] emit outbox insert failed', event, order.code, e);
     return;
   }
-  try { await deliverShipHoEvent(row); } catch (e) { console.warn('[ship-ho] deliver failed (sẽ retry)', event, order.code, e); }
+  try { await deliverShipHoEvent({ ...row, source: order.source }); } catch (e) { console.warn('[ship-ho] deliver failed (sẽ retry)', event, order.code, e); }
 }
 
 /** Gửi 1 event tới MMP; cập nhật delivery_status/attempts. Không throw ra ngoài trừ lỗi lập trình. */
 export async function deliverShipHoEvent(row: {
   id: string; mmpRef: string; code: string; event: string; occurredAt: Date; payload: unknown; attempts: number;
+  /** source của đơn ('mmp' | 'internal') → origin envelope. Outbox row không lưu
+   *  source nên caller phải truyền (emit có sẵn; retry join ship_ho_orders). */
+  source: string;
 }): Promise<void> {
   const url = process.env.MMP_SHIP_HO_WEBHOOK_URL;
   // Secret CHUNG 2 chiều với MMP là MMP_WEBHOOK_SECRET (fingerprint ed699da6b1d1
@@ -53,10 +56,12 @@ export async function deliverShipHoEvent(row: {
   const secret = process.env.MMP_WEBHOOK_SECRET;
   if (!url || !secret) return; // chưa cấu hình → để pending, cron gửi sau
 
-  const envelope = {
-    event: row.event, mmpRef: row.mmpRef, code: row.code,
-    occurredAt: row.occurredAt.toISOString(), data: row.payload,
-  };
+  // Dựng qua buildEnvelope (đường ĐÃ test) — trước đây dựng inline nên thiếu
+  // field `origin` dù buildEnvelope có (bug bắt được khi MMP hỏi contract 20/07).
+  const envelope = buildEnvelope(
+    { id: '', code: row.code, source: row.source, mmpRef: row.mmpRef },
+    row.event, row.payload as Record<string, unknown>, row.occurredAt.toISOString(),
+  );
   const rawBody = JSON.stringify(envelope);
   const ts = Math.floor(Date.now() / 1000);
   const signature = signMmpPayload(secret, ts, rawBody);
@@ -86,12 +91,16 @@ export async function deliverShipHoEvent(row: {
 
 /** Cron: gửi lại các event chưa 'delivered' (pending/failed) dưới ngưỡng. */
 export async function retryPendingShipHoEvents(): Promise<{ tried: number; delivered: number; failed: number }> {
-  const rows = await db.select().from(schema.shipHoOrderEvents)
+  const rows = await db.select({
+      ev: schema.shipHoOrderEvents,
+      source: schema.shipHoOrders.source,
+    }).from(schema.shipHoOrderEvents)
+    .innerJoin(schema.shipHoOrders, eq(schema.shipHoOrders.id, schema.shipHoOrderEvents.orderId))
     .where(eq(schema.shipHoOrderEvents.deliveryStatus, 'pending'))
     .limit(200);
   let delivered = 0, failed = 0;
-  for (const r of rows) {
-    await deliverShipHoEvent({ id: r.id, mmpRef: r.mmpRef, code: r.code, event: r.event, occurredAt: r.occurredAt, payload: r.payload, attempts: r.attempts });
+  for (const { ev: r, source } of rows) {
+    await deliverShipHoEvent({ id: r.id, mmpRef: r.mmpRef, code: r.code, event: r.event, occurredAt: r.occurredAt, payload: r.payload, attempts: r.attempts, source });
     const [after] = await db.select({ s: schema.shipHoOrderEvents.deliveryStatus }).from(schema.shipHoOrderEvents).where(eq(schema.shipHoOrderEvents.id, r.id)).limit(1);
     if (after?.s === 'delivered') delivered++; else if (after?.s === 'failed') failed++;
   }
