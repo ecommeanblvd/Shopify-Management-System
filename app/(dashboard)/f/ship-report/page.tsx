@@ -13,6 +13,10 @@ import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/
 export const dynamic = 'force-dynamic';
 
 const vnd = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('vi-VN'));
+/** ISO-2 → emoji quốc kỳ (regional indicator). */
+const flag = (cc: string) => /^[A-Z]{2}$/.test(cc) ? cc.replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0))) : '🏳️';
+const REGION_VI = new Intl.DisplayNames(['vi'], { type: 'region' });
+const countryName = (cc: string) => { try { return REGION_VI.of(cc) ?? cc; } catch { return cc; } };
 const SEG_LABEL: Record<string, string> = { total: 'Tổng', shopify: 'Shopify', ship_ho: 'Ship hộ' };
 
 type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string };
@@ -93,39 +97,45 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
           </div>
 
           <Card><CardContent className="p-0">
-            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Tốc độ giao trung bình — quốc gia × line vận chuyển (ngày)</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm tabular-nums">
-                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                    <th className="text-left">Quốc gia</th>
-                    {transitMatrix.carriers.map((c) => <th key={c} className="text-right uppercase">{c}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {transitMatrix.rows.length === 0 ? (
-                    <tr><td colSpan={1 + transitMatrix.carriers.length} className="p-6 text-center text-muted-foreground">Chưa có đơn giao trong window này.</td></tr>
-                  ) : transitMatrix.rows.map((r) => {
-                    const best = Math.min(...transitMatrix.carriers.map((c) => r.byCarrier[c]?.avgDays ?? Infinity));
-                    return (
-                      <tr key={r.country} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
-                        <td className="text-left font-medium">{r.country}</td>
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Tốc độ giao trung bình theo quốc gia (ngày)</div>
+            {transitMatrix.rows.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">Chưa có đơn giao trong window này.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-px bg-border/60 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {transitMatrix.rows.map((r) => {
+                  const best = Math.min(...transitMatrix.carriers.map((c) => r.byCarrier[c]?.avgDays ?? Infinity));
+                  const totalDelivered = transitMatrix.carriers.reduce((s2, c) => s2 + (r.byCarrier[c]?.deliveredN ?? 0), 0);
+                  return (
+                    <div key={r.country} className="bg-card p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl leading-none">{flag(r.country)}</span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{countryName(r.country)}</div>
+                          <div className="text-[10px] text-muted-foreground">{r.country} · {totalDelivered} đơn giao</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 space-y-0.5 text-xs tabular-nums">
                         {transitMatrix.carriers.map((c) => {
                           const cell = r.byCarrier[c];
+                          if (!cell) return null;
+                          const isBest = cell.avgDays === best && transitMatrix.carriers.filter((k) => r.byCarrier[k]).length > 1;
                           return (
-                            <td key={c} className={`text-right ${cell && cell.avgDays === best ? 'font-semibold text-emerald-600 dark:text-emerald-400' : ''}`}>
-                              {cell ? `${cell.avgDays} (${cell.deliveredN})` : '—'}
-                            </td>
+                            <div key={c} className="flex items-baseline justify-between gap-2">
+                              <span className="uppercase text-muted-foreground">{c}</span>
+                              <span className={isBest ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'font-medium'}>
+                                {cell.avgDays} ngày <span className="font-normal text-muted-foreground">({cell.deliveredN})</span>
+                              </span>
+                            </div>
                           );
                         })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-              Số = ngày giao trung bình (số đơn đã giao). Xanh = line nhanh nhất tuyến. Ngày giao lấy từ POD bill carrier + tracking + Lark.
+              Số ngày = trung bình từ tạo vận đơn đến giao (số đơn đã giao trong ngoặc). Xanh = line nhanh nhất tuyến khi có ≥2 line. Ngày giao lấy từ POD bill carrier + tracking + Lark.
             </p>
           </CardContent></Card>
 
