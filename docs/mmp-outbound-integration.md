@@ -123,7 +123,11 @@ Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng l
   - `recipientName` / `shipCountry`: PII tối giản — tên + quốc gia, không địa chỉ/SĐT/email.
   - `placedAt`: ngày đặt đơn (Shopify `processed_at`, ISO). `null` nếu thiếu.
   - `receivedAt` (cấp order): ngày MEAN nhận hàng từ brand MỚI NHẤT trong các line. `null` nếu chưa nhận.
-  - `lines`: chỉ dòng brand `{ sku, title, qty, vendor, receivedAt }`. Không giá. `receivedAt` per-line = ngày nhận của SKU đó.
+  - `lines`: chỉ dòng brand `{ sku, title, qty, vendor, receivedAt }`. `receivedAt` per-line = ngày nhận của SKU đó.
+  - **Giá (từ 18/07/2026) — CHỈ đơn của STORE RIÊNG của brand** (`store` ∈ {`tinhatelier`, `mirermirer-official`}) để brand đối soát doanh thu + phí ship:
+    - per-line thêm `unitPrice` (đơn giá bán, order currency);
+    - payload thêm khối `pricing`: `{ currency, subtotal, totalDiscount, totalShipping, totalTax, totalPrice }` — `subtotal` = Σ unitPrice×qty các line gửi kèm; `totalShipping` = phí ship khách trả (sau giảm); `totalPrice` = tổng khách thanh toán.
+    - Đơn store đa-brand (meanblvd/cici-mean) **không có** các field giá này — shape cũ giữ nguyên.
   - **`vendor`** = giá trị cột vendor Shopify (= `brandSlug` trong brand-request, **cùng
     nguồn** nên nhất quán 2 chiều). MMP **route đơn về đúng brand** theo field này:
     đơn nhiều brand → MMP tách thành 1 Order/brand `(orderNumber, brandId)`, mỗi Order

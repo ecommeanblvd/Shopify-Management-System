@@ -38,3 +38,28 @@ describe('buildMmpOrderPayload', () => {
     expect(p.cancelledAt).toBe('2026-01-05T00:00:00.000Z');
   });
 });
+
+describe('buildMmpOrderPayload — pricing (store riêng của brand)', () => {
+  const base = {
+    orderNumber: 'TA100', store: 'tinhatelier', recipientName: 'C', shipCountry: 'US',
+    placedAt: '2026-07-01T00:00:00.000Z', receivedAt: null,
+    financialStatus: 'PAID', fulfillmentStatus: 'FULFILLED', cancelledAt: null,
+  };
+  it('store riêng: line có unitPrice + khối pricing đầy đủ', () => {
+    const p = buildMmpOrderPayload({
+      ...base,
+      brandLines: [{ sku: 'A', title: 'X', qty: 2, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 45.5 }],
+      pricing: { currency: 'USD', subtotal: 91, totalDiscount: 10, totalShipping: 25, totalTax: 0, totalPrice: 106 },
+    });
+    expect(p.lines[0].unitPrice).toBe(45.5);
+    expect(p.pricing).toEqual({ currency: 'USD', subtotal: 91, totalDiscount: 10, totalShipping: 25, totalTax: 0, totalPrice: 106 });
+  });
+  it('store đa-brand (không pricing): payload GIỮ NGUYÊN shape cũ — không key giá', () => {
+    const p = buildMmpOrderPayload({
+      ...base, store: 'meanblvd',
+      brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'denio', receivedAt: null }],
+    });
+    expect('pricing' in p).toBe(false);
+    expect(Object.keys(p.lines[0]).sort()).toEqual(['qty','receivedAt','sku','title','vendor']);
+  });
+});

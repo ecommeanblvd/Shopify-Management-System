@@ -15,6 +15,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       id: schema.orderFulfillmentLines.id,
       sku: schema.orderFulfillmentLines.sku, qty: schema.orderFulfillmentLines.qty, status: schema.orderFulfillmentLines.status,
       title: schema.shopifyOrderLines.productTitle, vendor: schema.shopifyOrderLines.vendor,
+      unitPrice: schema.shopifyOrderLines.unitPrice,
     })
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
@@ -27,6 +28,11 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       fulfillmentStatus: schema.shopifyOrders.fulfillmentStatus,
       cancelledAt: schema.shopifyOrders.cancelledAtShopify,
       store: schema.stores.name,
+      currency: schema.shopifyOrders.currency,
+      totalDiscount: schema.shopifyOrders.totalDiscount,
+      totalShipping: schema.shopifyOrders.totalShipping,
+      totalTax: schema.shopifyOrders.totalTax,
+      totalPrice: schema.shopifyOrders.totalPrice,
     })
     .from(schema.shopifyOrders)
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
@@ -56,8 +62,24 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   if (brand.length === 0) return { error: 'no brand lines' };
   const brandLines: MmpOrderLine[] = brand.map((l) => {
     const ra = l.sku != null ? recvBySku.get(l.sku) : undefined;
-    return { sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? owned?.vendor ?? null, receivedAt: ra ? ra.toISOString() : null };
+    return {
+      sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? owned?.vendor ?? null,
+      receivedAt: ra ? ra.toISOString() : null,
+      // Giá CHỈ gửi cho store riêng của brand (đối soát) — store đa-brand không giá.
+      ...(owned && l.unitPrice != null ? { unitPrice: Number(l.unitPrice) } : {}),
+    };
   });
+  // Khối giá cấp đơn (order currency) — CHỈ store riêng của brand.
+  const pricing = owned
+    ? {
+        currency: ord.currency,
+        subtotal: brand.reduce((sum, l) => sum + (l.unitPrice != null ? Number(l.unitPrice) * l.qty : 0), 0),
+        totalDiscount: ord.totalDiscount == null ? null : Number(ord.totalDiscount),
+        totalShipping: ord.totalShipping == null ? null : Number(ord.totalShipping),
+        totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
+        totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
+      }
+    : null;
   // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.
   const lineReceived = brandLines.map((l) => l.receivedAt).filter((d): d is string => !!d).sort();
   const orderReceivedAt = lineReceived.length ? lineReceived[lineReceived.length - 1] : null;
@@ -69,6 +91,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     fulfillmentStatus: ord.fulfillmentStatus ?? null,
     cancelledAt: ord.cancelledAt ? ord.cancelledAt.toISOString() : null,
     brandLines,
+    pricing,
   }));
   return { rawBody };
 }
