@@ -6,7 +6,7 @@ import { eq, desc, and, or, isNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
-import { parsePackRow, type PackRow } from './parse-pack-row';
+import { parsePackRow, larkText, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus } from './parse-status-row';
@@ -128,8 +128,10 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     // đè field non-null). Xác định theo thời gian, không theo thứ tự Lark trả về.
     const recsByOrderId = new Map<string, typeof records>();
     for (const rec of records) {
-      const orderNumber = rec.fields['Order Number'] as unknown;
-      const num = typeof orderNumber === 'string' ? orderNumber.replace(/^#/, '') : null;
+      // larkText: unwrap cả dạng lookup {type,value:[{text}]} — Lark đổi kiểu cột
+      // 'Order Number' ~08/07 làm typeof==='string' skip TOÀN BỘ (larkStatusUpserted=0,
+      // deliveryFrozen=0 cả tuần mà cron vẫn "xanh"). Cùng lớp bug 25/06.
+      const num = larkText(rec.fields['Order Number'])?.replace(/^#/, '') ?? null;
       if (!num) continue;
       const orderId = orderIdByNumber.get(num);
       if (!orderId) continue;
