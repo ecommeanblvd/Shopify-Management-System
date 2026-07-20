@@ -1,10 +1,11 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { emitShipHoEvent } from './mmp-events';
+import { nextInternalCode, internalCodePrefix } from './internal-code';
 import { computeOffer } from './offer-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
@@ -38,7 +39,16 @@ export async function createShipHoOrder(
   input: CreateShipHoOrderInput,
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
-  if (!input.code?.trim()) return { ok: false, error: 'Thiếu mã đơn' };
+  // Mã trống → tự sinh `YY-INSMS-SV-NNNN` (namespace SMS, không đụng INSLG của
+  // MMP) — mã này là mmpRef gửi MMP cho đơn origin sms (contract 20/07).
+  let code = input.code?.trim() ?? '';
+  if (!code) {
+    const prefix = internalCodePrefix(new Date());
+    const [mx] = await db.select({ code: schema.shipHoOrders.code }).from(schema.shipHoOrders)
+      .where(sql`${schema.shipHoOrders.code} LIKE ${prefix + '%'}`)
+      .orderBy(sql`${schema.shipHoOrders.code} DESC`).limit(1);
+    code = nextInternalCode(new Date(), mx?.code ?? null);
+  }
   if (!input.partnerBrandSlug) return { ok: false, error: 'Thiếu partner' };
   if (!input.country?.trim()) return { ok: false, error: 'Thiếu quốc gia' };
   if (!Number.isFinite(Number(input.weightKg)) || Number(input.weightKg) <= 0) {
@@ -55,7 +65,7 @@ export async function createShipHoOrder(
     const [row] = await db
       .insert(schema.shipHoOrders)
       .values({
-        code: input.code.trim(),
+        code,
         partnerBrandSlug: input.partnerBrandSlug,
         recipientName: input.recipientName || null,
         recipientCompany: input.recipientCompany || null,
@@ -155,7 +165,22 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
       {
         brandSlug: order.partnerBrandSlug,
         customerRef: order.customerRef ?? null,
-        recipientName: order.recipientName ?? null,
+        recipient: {
+          name: order.recipientName ?? null,
+          company: order.recipientCompany ?? null,
+          phone: order.recipientPhone ?? null,
+        },
+        address: {
+          country: order.country,
+          city: order.city ?? null,
+          province: order.province ?? null,
+          postcode: order.postcode ?? null,
+          address1: order.address1 ?? null,
+          address2: order.address2 ?? null,
+          houseNumber: order.houseNumber ?? null,
+          shortAddress: order.shortAddress ?? null,
+          mapsUrl: order.mapsUrl ?? null,
+        },
         country: order.country,
         city: order.city ?? null,
         weightKg: Number(order.weightKg),

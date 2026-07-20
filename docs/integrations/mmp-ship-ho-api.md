@@ -194,20 +194,55 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `shipment.delivered` | Đã giao (thời điểm, POD nếu có) |
 | | `shipment.returned` | Hoàn hàng |
 
-### Đơn khởi tạo TỪ SMS (origin `sms`) — từ 20/07/2026
+### Đơn khởi tạo TỪ SMS (origin `sms`) — từ 20/07/2026 · ĐÃ CHỐT 4 CÂU HỎI CỦA MMP
 
 Brand có thể đưa hàng trực tiếp cho MEAN mà không tạo đơn trên MMP → SMS tạo đơn hộ
-và ĐẨY sang MMP để brand vẫn thấy đơn + giá trên portal:
+và ĐẨY sang MMP để brand vẫn thấy đơn + giá trên portal.
 
-- Envelope mọi event từ SMS nay có thêm field **`origin`**: `'mmp'` (đơn MMP tạo, như cũ)
-  hoặc `'sms'` (đơn SMS khởi tạo). Đơn origin sms: **`mmpRef` = mã đơn SMS** (`26-INSLG-SV-…`,
-  trùng `code`) — ref ổn định cho mọi event sau.
-- **MMP cần**: khi nhận `order.received` với `origin:'sms'` và ref chưa tồn tại → **TẠO đơn**
-  (upsert, latest-wins khi SMS requote gửi lại). `data`: `{ brandSlug, customerRef, recipientName,
-  country, city, weightKg, dimLengthCm/WidthCm/HeightCm, packagingType, service, chargedVnd, createdVia:'sms' }`.
-- Các event sau (`order.priced`, `shipment.booked`, `order.measured`, `shipment.delivered`,
-  `order.reconciled`, …) dùng cùng ref — xử lý như đơn thường. Nhận event với ref lạ trước khi
-  `order.received` tới (retry lệch thứ tự) → trả 409 như hiện tại, outbox SMS tự gửi lại.
+**Q1 — Ai sinh ref?** **SMS sinh**, format riêng **`YY-INSMS-SV-NNNN`** (prefix `INSMS`
+≠ `INSLG` → hai counter độc lập, không bao giờ đụng khoá; NNNN reset theo năm phía SMS).
+MMP **KHÔNG** sinh gì thêm và **KHÔNG parse format** — dùng `mmpRef` như **chuỗi opaque**
+làm khoá duy nhất. (Vài đơn cũ tạo trước 20/07 mang mã tự do, vd `#KLS1996` — vẫn là khoá
+nguyên văn, đừng reject theo format.) `ShipHoCounter` của MMP giữ nguyên cho đơn MMP tạo.
+
+**Q2 — Phân biệt origin?** Field **`origin`** trong envelope — SMS ĐÃ gửi (deploy 20/07):
+envelope nay là `{ event, mmpRef, code, origin: 'mmp'|'sms', occurredAt, data }` cho MỌI
+event (đơn MMP tạo cũng có `origin:'mmp'`). Với origin sms: `mmpRef` = `code`.
+
+**Q3 — PII?** Kênh ship-hộ **không phải** contract PII-minimal (đó là pipeline đơn BÁN
+Shopify). Chiều MMP→SMS vốn đã gửi tên + SĐT + địa chỉ khi tạo đơn (mục 3); chiều SMS→MMP
+gửi tương đương: `data.recipient { name, company, phone }` + `data.address { country, city,
+province, postcode, address1, address2, houseNumber, shortAddress, mapsUrl }`. Cùng kênh
+HMAC, cùng cấp dữ liệu.
+
+**Q4 — Status + quyền sửa?** SMS chỉ bắn `order.received` SAU khi đã báo giá → MMP tạo đơn
+ở trạng thái tương đương **"đã tiếp nhận & báo giá" (quoted)**, hiển thị `chargedVnd`.
+**Brand KHÔNG sửa được** — nguồn sự thật là SMS (đơn nhận hàng vật lý tại kho); cần đổi
+thông tin thì brand liên hệ MEAN, SMS sửa và re-emit `order.received` (upsert). MMP render
+read-only + badge "Tạo bởi MEAN" (gợi ý).
+
+**Idempotent:** cùng `mmpRef` không tạo trùng; `order.received` gửi lại (requote/sửa) =
+upsert latest-wins theo `occurredAt`. Event khác tới trước `order.received` (retry lệch thứ
+tự) → 409 như hiện tại, outbox SMS tự gửi lại.
+
+**`data` của `order.received` (origin sms):**
+```jsonc
+{
+  "brandSlug": "kalisa",
+  "customerRef": "KLS1996",            // mã đơn gốc brand (nếu có)
+  "recipient": { "name": "…", "company": null, "phone": "+966…" },
+  "address": { "country": "SA", "city": "Riyadh", "province": null, "postcode": "12345",
+               "address1": "…", "address2": null, "houseNumber": null,
+               "shortAddress": "RBMA4176", "mapsUrl": null },
+  "country": "SA", "city": "Riyadh",   // giữ phẳng để tương thích, trùng address
+  "weightKg": 1.2, "dimLengthCm": 30, "dimWidthCm": 20, "dimHeightCm": 10,
+  "packagingType": "box", "service": "express",
+  "chargedVnd": 1521833, "createdVia": "sms"
+}
+```
+
+Đề xuất của MMP về doc `sms-ship-ho-order-created-build-requirements.md` phía repo MMP: OK —
+mục này là nguồn chuẩn phía SMS, doc phía MMP là bản build-requirements đối chiếu.
 
 ### ⚠ `ratecard.updated` — trạng thái tích hợp (probe 17/07/2026)
 
