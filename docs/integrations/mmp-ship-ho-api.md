@@ -225,19 +225,35 @@ read-only + badge "Tạo bởi MEAN" (gợi ý).
 upsert latest-wins theo `occurredAt`. Event khác tới trước `order.received` (retry lệch thứ
 tự) → 409 như hiện tại, outbox SMS tự gửi lại.
 
-**`data` của `order.received` (origin sms):**
+**Chốt 2 câu hỏi build (20/07):**
+- **`brandSlug` nằm trong `data.brandSlug`** — envelope KHÔNG có brandSlug. Thiếu → 422 là đúng.
+- **Key giá là `chargedVnd`** (số nguyên VND) — đây là tên key JSON thật trên wire, không phải tên cột. MMP lấy `chargedVnd` làm primary và bỏ alias `pricedVnd`.
+- `origin` gửi đúng chuỗi thường `"sms"` / `"mmp"` (normalize trim+lowercase phía MMP vẫn hoan nghênh — defense in depth).
+- `occurredAt` của mỗi lần re-emit luôn là thời điểm emit (mới hơn bản trước) → upsert latest-wins an toàn.
+
+**Fixture THẬT (envelope nguyên văn SMS ký gửi — đơn #KLS1996 trên prod):**
 ```jsonc
 {
-  "brandSlug": "kalisa",
-  "customerRef": "KLS1996",            // mã đơn gốc brand (nếu có)
-  "recipient": { "name": "…", "company": null, "phone": "+966…" },
-  "address": { "country": "SA", "city": "Riyadh", "province": null, "postcode": "12345",
-               "address1": "…", "address2": null, "houseNumber": null,
-               "shortAddress": "RBMA4176", "mapsUrl": null },
-  "country": "SA", "city": "Riyadh",   // giữ phẳng để tương thích, trùng address
-  "weightKg": 1.2, "dimLengthCm": 30, "dimWidthCm": 20, "dimHeightCm": 10,
-  "packagingType": "box", "service": "express",
-  "chargedVnd": 1521833, "createdVia": "sms"
+  "event": "order.received",
+  "mmpRef": "#KLS1996",          // đơn cũ mã tự do; đơn mới: 26-INSMS-SV-NNNN
+  "code": "#KLS1996",
+  "origin": "sms",
+  "occurredAt": "2026-07-20T14:00:07.787Z",
+  "data": {
+    "brandSlug": "kalisa",
+    "customerRef": null,
+    "recipient": { "name": "Shadyah AlSalem", "company": null, "phone": "+966 56 125 3658" },
+    "address": {
+      "country": "SA", "city": "Jeddah", "province": null, "postcode": "22843",
+      "address1": "Makkah Province, Abdulah bin abdulatif Al sheikh, House: 0",
+      "address2": null, "houseNumber": null,
+      "shortAddress": "JRRR0000", "mapsUrl": "https://maps.app.goo.gl/fA5Bg996to6gCwGTA"
+    },
+    "country": "SA", "city": "Jeddah",
+    "weightKg": 2.2, "dimLengthCm": 35, "dimWidthCm": 25, "dimHeightCm": 12,
+    "packagingType": "box", "service": "express",
+    "chargedVnd": 2152915, "createdVia": "sms"
+  }
 }
 ```
 
