@@ -16,6 +16,7 @@
  *     payload is DELETED (the MMP feed is authoritative).
  */
 
+import { normalizeBrandDisplayName } from './brand-name';
 import crypto from 'node:crypto';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -49,7 +50,8 @@ function canonicalHash(p: MmpProduct): string {
 async function ensureBrand(slug: string): Promise<void> {
   await db
     .insert(schema.mmpBrands)
-    .values({ slug, displayName: slug, lastSeenAt: new Date() })
+    // Placeholder từ slug theo quy tắc tên chuẩn ("tom-fried" → "Tom Fried").
+    .values({ slug, displayName: normalizeBrandDisplayName(slug.replace(/-/g, ' ')), lastSeenAt: new Date() })
     .onConflictDoUpdate({
       target: schema.mmpBrands.slug,
       set: { lastSeenAt: new Date() },

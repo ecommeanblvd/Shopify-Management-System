@@ -182,3 +182,14 @@ với `{ requestId, status: 'confirmed'|'rejected', expectedDeliveryDate?, note?
 > **Chưa làm được gì cho tới khi MMP có receiver.** Trước đó, đẩy MMP luôn trả
 > `"not configured"`; cứ kiểm kho bình thường — dòng hết kho nằm chờ ở
 > `out_of_stock`/`awaiting_brand`, không mất, gửi lại sau được.
+
+
+## Quy tắc tên hiển thị brand (thống nhất 2 bên — 21/07/2026)
+
+- **Mỗi từ chỉ viết hoa CHỮ CÁI ĐẦU**, còn lại viết thường: `TOM FRIED` → `Tom Fried`,
+  `LEKIEU` → `Lekieu`, `À TOUS` → `À Tous`, `21SIX` → `21Six` (từ bắt đầu bằng số:
+  viết hoa chữ cái đầu tiên gặp). Unicode-aware.
+- SMS đã chuẩn hoá toàn bộ `display_name` (91/154 brand đổi) và áp quy tắc ở tầng ingest.
+- **MMP đồng bộ**: gọi `POST /api/mmp/brands` (HMAC như các endpoint khác, body `{}`)
+  → `{ ok, rule: 'title-case-first-letter-only', brands: [{ slug, displayName, status }] }`
+  — apply danh sách này + áp cùng quy tắc khi tạo brand mới phía MMP.
