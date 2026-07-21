@@ -3,7 +3,7 @@ import { BRAND_OWNED_STORES, brandOwnedStore } from './brand-stores';
 
 describe('brandOwnedStore', () => {
   it('map đúng 2 store riêng của brand', () => {
-    expect(brandOwnedStore('tinhatelier')).toEqual({ vendor: 'TINH Atelier', brandSlug: 'tinh-atelier' });
+    expect(brandOwnedStore('tinhatelier')).toEqual({ vendor: 'TINH Atelier', brandSlug: 'tinh' });
     expect(brandOwnedStore('mirermirer-official')).toEqual({ vendor: 'Mirer', brandSlug: 'mirer' });
   });
   it('store đa-brand / lạ / null → null', () => {

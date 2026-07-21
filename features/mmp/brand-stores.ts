@@ -7,7 +7,7 @@
  * khi line thiếu vendor).
  */
 export const BRAND_OWNED_STORES: Record<string, { vendor: string; brandSlug: string }> = {
-  tinhatelier: { vendor: 'TINH Atelier', brandSlug: 'tinh-atelier' },
+  tinhatelier: { vendor: 'TINH Atelier', brandSlug: 'tinh' }, // slug MMP đổi 18/06 (tinh-atelier cũ archived)
   'mirermirer-official': { vendor: 'Mirer', brandSlug: 'mirer' },
 };
 
