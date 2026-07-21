@@ -35,8 +35,10 @@ export interface FboApLine {
   signature: number; vat: number; other: number; total: number;
 }
 
-/** Gộp 1 FboBilledRow → dòng AP: residential→signature, (importHandling+duty)
- *  →other; total = tổng FBO (gồm duty). Bảo toàn: Σ thành phần = total. */
+/** Gộp 1 FboBilledRow → dòng AP: residential→signature, (importHandling+duty+
+ *  addressCorrection)→other; total = tổng FBO (gồm duty). Bảo toàn: Σ thành phần
+ *  = total. (addressCorrection từng bị RỚT → 289.200đ/đơn nằm ở "điều chỉnh" và
+ *  không tính sang brand — bug bắt 21/07.) */
 export function fboApLine(r: FboBilledRow): FboApLine {
   return {
     awb: r.awb,
@@ -46,7 +48,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     base: r.base, discount: r.discount, fuel: r.fuel, remote: r.remote, demand: r.demand,
     signature: r.signature + r.residential,
     vat: r.vat,
-    other: r.other + r.importHandling + r.duty,
+    other: r.other + r.importHandling + r.duty + r.addressCorrection,
     total: r.total,
   };
 }

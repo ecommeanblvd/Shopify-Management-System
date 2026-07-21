@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFboDate, groupFboIntoBills } from './fedex-fbo-bill';
+import { parseFboDate, groupFboIntoBills, fboApLine } from './fedex-fbo-bill';
 import type { FboBilledRow } from './fedex-fbo-parse';
 
 function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
@@ -69,5 +69,15 @@ describe('groupFboIntoBills', () => {
     const bills = groupFboIntoBills([mkRow({ awb: 'Z', total: 10 })]);
     expect(bills).toHaveLength(1);
     expect(bills[0].billNumber).toBeNull();
+  });
+});
+
+describe('fboApLine — addressCorrection không bị rớt', () => {
+  it('addressCorrection gộp vào other, Σ thành phần = total', () => {
+    const r = mkRow({ awb: 'AC1', base: 1_000_000, addressCorrection: 289_200, vat: 80_000, total: 1_369_200 });
+    const line = fboApLine(r);
+    expect(line.other).toBe(289_200);
+    const sum = line.base + line.discount + line.fuel + line.remote + line.demand + line.signature + line.vat + line.other;
+    expect(sum).toBe(1_369_200);
   });
 });
