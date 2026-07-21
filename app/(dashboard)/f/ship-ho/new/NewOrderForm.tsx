@@ -21,7 +21,7 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState({
-    code: '', partnerBrandSlug: '', recipientName: '', country: '', city: '', postcode: '',
+    code: '', customerRef: '', partnerBrandSlug: '', recipientName: '', country: '', city: '', postcode: '',
     address1: '', weightKg: '', dimLengthCm: '', dimWidthCm: '', dimHeightCm: '',
     packagingType: '' as '' | 'bag' | 'box', phone: '',
     houseNumber: '', shortAddress: '', mapsUrl: '',
@@ -71,7 +71,7 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
         ? (dial ? `+${dial} ${f.phone.trim()}` : f.phone.trim())
         : undefined;
       const r = await createShipHoOrder({
-        code: f.code, partnerBrandSlug: f.partnerBrandSlug, recipientName: f.recipientName,
+        code: f.code, customerRef: f.customerRef, partnerBrandSlug: f.partnerBrandSlug, recipientName: f.recipientName,
         recipientPhone,
         country: f.country, city: f.city, postcode: f.postcode, address1: f.address1,
         houseNumber: extra.normalized.houseNumber, shortAddress: extra.normalized.shortAddress, mapsUrl: extra.normalized.mapsUrl,
@@ -88,7 +88,8 @@ export function NewOrderForm({ partners, userEmail }: { partners: PartnerOpt[]; 
     <Card>
       <CardContent className="p-4 space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <label className="text-sm">Mã đơn *<input className={inputCls} value={f.code} onChange={set('code')} placeholder="DISCN001" /></label>
+          <label className="text-sm">Mã đơn (để trống = tự sinh)<input className={inputCls} value={f.code} onChange={set('code')} placeholder="Tự sinh 26-INSMS-SV-…" /></label>
+          <label className="text-sm">Mã tham chiếu của brand<input className={inputCls} value={f.customerRef} onChange={set('customerRef')} placeholder="#KLS2001 (mã đơn phía brand)" /></label>
           <label className="text-sm">Đối tác *
             <select className={inputCls} value={f.partnerBrandSlug} onChange={set('partnerBrandSlug')}>
               <option value="">— chọn —</option>

@@ -227,6 +227,14 @@ HMAC, cùng cấp dữ liệu.
 thông tin thì brand liên hệ MEAN, SMS sửa và re-emit `order.received` (upsert). MMP render
 read-only + badge "Tạo bởi MEAN" (gợi ý).
 
+**"Mã shop" — chốt semantics (21/07, sau feedback MMP):** `data.customerRef` là NGUỒN
+DUY NHẤT cho "Mã shop". `null` = brand không cung cấp mã → MMP hiển thị TRỐNG.
+**Bỏ fallback lấy `mmpRef`/smsRef điền vào Mã shop** — mã dải `INSMS`/`INSLG` là mã
+VẬN HÀNH nội bộ, không bao giờ là mã của brand. (Fallback từng đúng với ca legacy
+#KLS1996 vì ref tạm = mã khách; các đơn kiểu mới ref tạm là INSMS tự sinh → sai.)
+SMS đã thêm ô "Mã tham chiếu của brand" ở form tạo đơn — ops nhập là `customerRef`
+có giá trị thật; nhập sau thì SMS re-emit `order.received` (upsert).
+
 **Idempotent:** cùng `mmpRef` không tạo trùng; `order.received` gửi lại (requote/sửa) =
 upsert latest-wins theo `occurredAt`. Event khác tới trước `order.received` (retry lệch thứ
 tự) → 409 như hiện tại, outbox SMS tự gửi lại.

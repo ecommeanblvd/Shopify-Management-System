@@ -12,6 +12,9 @@ import { requireManageShipHo } from './require-manage';
 
 export interface CreateShipHoOrderInput {
   code: string;
+  /** Mã tham chiếu của brand/khách (vd #KLS1996) — hiển thị "Mã đơn gốc" + gửi
+   *  MMP làm "Mã shop". KHÔNG phải mã vận hành nội bộ. */
+  customerRef?: string;
   partnerBrandSlug: string;
   recipientName?: string;
   recipientCompany?: string;
@@ -72,6 +75,7 @@ export async function createShipHoOrder(
       .insert(schema.shipHoOrders)
       .values({
         code,
+        customerRef: input.customerRef?.trim() || null,
         partnerBrandSlug: input.partnerBrandSlug,
         recipientName: input.recipientName || null,
         recipientCompany: input.recipientCompany || null,
