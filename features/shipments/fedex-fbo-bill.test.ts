@@ -76,8 +76,9 @@ describe('fboApLine — addressCorrection không bị rớt', () => {
   it('addressCorrection gộp vào other, Σ thành phần = total', () => {
     const r = mkRow({ awb: 'AC1', base: 1_000_000, addressCorrection: 289_200, vat: 80_000, total: 1_369_200 });
     const line = fboApLine(r);
-    expect(line.other).toBe(289_200);
-    const sum = line.base + line.discount + line.fuel + line.remote + line.demand + line.signature + line.vat + line.other;
+    expect(line.addressCorrection).toBe(289_200);
+    expect(line.other).toBe(0);
+    const sum = line.base + line.discount + line.fuel + line.remote + line.demand + line.signature + line.vat + line.other + line.addressCorrection;
     expect(sum).toBe(1_369_200);
   });
 });

@@ -188,6 +188,7 @@ export async function importFboToDatabase(
         trackingNumber: l.awb, orderNumber: l.orderRef, weightKg: l.weightKg != null ? numStr(l.weightKg) : null,
         base: numStr(l.base), discount: numStr(l.discount), fuel: numStr(l.fuel), remote: numStr(l.remote),
         demand: numStr(l.demand), signature: numStr(l.signature), vat: numStr(l.vat), other: numStr(l.other),
+        addressCorrection: numStr(l.addressCorrection),
         total: numStr(l.total),
         podAt: l.podAt ? new Date(l.podAt) : null, podName: l.podName,
       })));

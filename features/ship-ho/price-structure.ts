@@ -144,8 +144,10 @@ export function shipHoPriceStructure(input: {
     ? (sell.signatureVnd != null ? S(sell.signatureVnd) : Math.max(0, S(sell.resSignVnd) - S(sell.residentialVnd ?? 0)))
     : qSignature;
   const chCustoms = sell ? S(sell.customsSurVnd) : qCustoms;
+  // Phí sửa địa chỉ: quote không dự tính được (chỉ phát sinh khi địa chỉ sai).
+  const chAc = sell ? S(sell.acVnd ?? 0) : 0;
   const chargeTotalFinal = sell ? S(sell.chargedVnd) : quoteTotal;
-  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chCustoms + chargeFuel + chargeProcessing + chargeVat;
+  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chAc + chCustoms + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(chargeTotalFinal - chargeSum);
 
   // ── Tách phụ phí thành TỪNG KHOẢN. Gộp theo cột bill có sẵn (remote/demand/
@@ -166,6 +168,12 @@ export function shipHoPriceStructure(input: {
       costVnd: R(b.addons),
       billVnd: hasBill ? Math.round(num(ab!.signature)) : null,
       quoteChargeVnd: qSignature, chargeVnd: chSignature,
+    },
+    {
+      label: 'Phí sửa địa chỉ (Address Correction)',
+      costVnd: null,
+      billVnd: hasBill ? Math.round(num(ab!.addressCorrection)) : null,
+      quoteChargeVnd: 0, chargeVnd: chAc,
     },
     {
       label: 'Phí xử lý NK / khác',

@@ -644,6 +644,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   signature: numeric('signature', { precision: 14, scale: 2 }),
   vat: numeric('vat', { precision: 14, scale: 2 }),
   other: numeric('other', { precision: 14, scale: 2 }),
+  // Phí sửa địa chỉ (Address Correction) — FedEx áp CẢ fuel lên khoản này
+  // (kiểm chứng bill 734105850: fuel = 38.25% × (freight + AC)).
+  addressCorrection: numeric('address_correction', { precision: 14, scale: 2 }),
   total: numeric('total', { precision: 14, scale: 2 }),
   // Breakdown chi tiết từng khoản phí của carrier (DHL: [{code,name,charge,tax,total}]).
   // Null cho dòng nhập tay/cũ → UI fallback về cột gộp base/fuel/other.

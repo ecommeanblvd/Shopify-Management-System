@@ -14,6 +14,8 @@ export interface BilledSurcharges {
   /** Giao nhà dân (residential address) — tách riêng khỏi signature để đối soát
    *  rõ khoản nào thu thiếu. Nguồn: shipment_charges.residential (import ghi riêng). */
   residential: number;
+  /** Phí sửa địa chỉ (Address Correction) — phụ phí VẬN CHUYỂN, FedEx áp fuel. */
+  addressCorrection: number;
 }
 
 export interface BilledLookup {
@@ -29,6 +31,7 @@ export interface RawBillLine {
   weightKg: string | null;
   base: string | null; discount: string | null; fuel: string | null; remote: string | null;
   demand: string | null; signature: string | null; vat: string | null; other: string | null;
+  addressCorrection: string | null;
   total: string | null;
   shipDate: string | null;
   /** Residential (Giao nhà dân) từ shipment_charges — carrier_bill_lines.signature
@@ -57,6 +60,7 @@ export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNum
     surcharges: {
       base: s(raw.base), discount: s(raw.discount), fuel: s(raw.fuel), remote: s(raw.remote),
       demand: s(raw.demand), signature, residential, vat: s(raw.vat), other: s(raw.other),
+      addressCorrection: s(raw.addressCorrection),
     },
     billNumber,
     shipDate: raw.shipDate,
@@ -83,6 +87,7 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       fuel: schema.carrierBillLines.fuel, remote: schema.carrierBillLines.remote,
       demand: schema.carrierBillLines.demand, signature: schema.carrierBillLines.signature,
       vat: schema.carrierBillLines.vat, other: schema.carrierBillLines.other,
+      addressCorrection: schema.carrierBillLines.addressCorrection,
       total: schema.carrierBillLines.total, shipDate: schema.carrierBillLines.shipDate,
       billNumber: schema.carrierBills.billNumber,
       costCurrency: schema.carrierAccounts.costCurrency,

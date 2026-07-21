@@ -32,13 +32,12 @@ export interface FboApLine {
   podAt: string | null;
   podName: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
-  signature: number; vat: number; other: number; total: number;
+  signature: number; vat: number; other: number; addressCorrection: number; total: number;
 }
 
-/** Gộp 1 FboBilledRow → dòng AP: residential→signature, (importHandling+duty+
- *  addressCorrection)→other; total = tổng FBO (gồm duty). Bảo toàn: Σ thành phần
- *  = total. (addressCorrection từng bị RỚT → 289.200đ/đơn nằm ở "điều chỉnh" và
- *  không tính sang brand — bug bắt 21/07.) */
+/** Gộp 1 FboBilledRow → dòng AP: residential→signature, (importHandling+duty)→
+ *  other; addressCorrection CỘT RIÊNG (hiện tên riêng khi đối soát + FedEx áp
+ *  fuel lên khoản này). Bảo toàn: Σ thành phần = total. */
 export function fboApLine(r: FboBilledRow): FboApLine {
   return {
     awb: r.awb,
@@ -48,7 +47,8 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     base: r.base, discount: r.discount, fuel: r.fuel, remote: r.remote, demand: r.demand,
     signature: r.signature + r.residential,
     vat: r.vat,
-    other: r.other + r.importHandling + r.duty + r.addressCorrection,
+    other: r.other + r.importHandling + r.duty,
+    addressCorrection: r.addressCorrection,
     total: r.total,
   };
 }

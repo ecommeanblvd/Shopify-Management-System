@@ -167,7 +167,9 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // Phụ phí VẬN CHUYỂN từ bill (fuel áp lên): vùng xa + demand + giao nhà dân + ký nhận.
         // signature nay ĐÃ tách residential ra → cộng lại cả 2 để tổng KHÔNG đổi.
         const s = billed.surcharges;
-        const transportSur = s.remote + s.demand + s.signature + s.residential;
+        // AC (sửa địa chỉ) cũng là phụ phí VẬN CHUYỂN: FedEx áp fuel lên nó
+        // (fuel bill = %(freight + AC), kiểm chứng bill 734105850).
+        const transportSur = s.remote + s.demand + s.signature + s.residential + s.addressCorrection;
         const customsSur = s.other; // phí xử lý hàng NK/customs — không fuel, có VAT.
         const rc = reconciledBrandCharge({
           baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
@@ -182,6 +184,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           // resSignVnd giữ lại (tổng cũ) để tương thích; thêm 2 khoản TÁCH cho bảng đối soát.
           resSignVnd: Math.round(s.signature + s.residential),
           residentialVnd: Math.round(s.residential), signatureVnd: Math.round(s.signature),
+          acVnd: Math.round(s.addressCorrection),
           fuelVnd: rc.fuelVnd, fuelPercent: est.internal.fuelPercent,
           processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
           chargedVnd: rc.chargedVnd,
