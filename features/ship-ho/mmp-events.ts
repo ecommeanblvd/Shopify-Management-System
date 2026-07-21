@@ -84,10 +84,22 @@ export async function deliverShipHoEvent(row: {
       // khách, vd #KLS1996) chuyển vào customerRef. Chỉ đạo CEO 21/07.
       if (row.event === 'order.received' && row.source !== 'mmp' && row.orderId) {
         try {
-          const body = (await res.json()) as { code?: unknown };
+          // MMP trả mã ở key `code` (contract) hoặc `mmpRef` (bản build thực tế 21/07) — nhận cả hai.
+          const body = (await res.json()) as { code?: unknown; mmpRef?: unknown };
+          const minted = body.code ?? body.mmpRef;
           const [cur] = await db.select({ code: schema.shipHoOrders.code, customerRef: schema.shipHoOrders.customerRef })
             .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, row.orderId)).limit(1);
-          const plan = cur ? planCodeAdoption(cur, body.code) : null;
+          let plan = cur ? planCodeAdoption(cur, minted) : null;
+          // CHẶN VA CHẠM: mã MMP cấp đã bị đơn KHÁC trong SMS chiếm (vd ops tạo tay
+          // mã INSLG) → không adopt, log rõ để xử lý tay — tránh unique violation.
+          if (plan) {
+            const [owner] = await db.select({ id: schema.shipHoOrders.id })
+              .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.code, plan.code)).limit(1);
+            if (owner && owner.id !== row.orderId) {
+              console.warn(`[ship-ho] adopt BỊ CHẶN: mã MMP cấp ${plan.code} đang thuộc đơn khác (${owner.id}) — cần xử lý xung đột counter`);
+              plan = null;
+            }
+          }
           if (plan) {
             await db.update(schema.shipHoOrders)
               .set({ code: plan.code, mmpRef: plan.mmpRef, customerRef: plan.customerRef })
