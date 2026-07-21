@@ -21,9 +21,9 @@ export function ReconciledRowsTable({ rows, ...actions }: { rows: ReconciledRowD
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm tabular-nums">
+      <table className="w-full text-xs tabular-nums xl:text-sm">
         <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+          <tr className="[&>th]:px-2 [&>th]:py-2 xl:[&>th]:px-3 [&>th]:font-medium">
             <th className="w-6" />
             <th className="text-left">Mã</th>
             <th className="text-left">Bill</th>
@@ -57,7 +57,7 @@ function RowGroup({ r, open, kgDiff, onToggle, actions }: {
   return (
     <>
       <tr
-        className="cursor-pointer border-t border-border/60 hover:bg-muted/40 [&>td]:px-3 [&>td]:py-2"
+        className="cursor-pointer border-t border-border/60 hover:bg-muted/40 [&>td]:px-2 [&>td]:py-2 xl:[&>td]:px-3"
         onClick={onToggle}
         title="Click để xem chi tiết từng khoản"
       >

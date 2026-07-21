@@ -133,16 +133,16 @@ export default async function ShipHoReconcilePage() {
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">Không còn đơn nào chờ bill.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm tabular-nums">
+            <table className="w-full text-xs tabular-nums xl:text-sm">
               <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                <tr className="[&>th]:px-2 [&>th]:py-2 xl:[&>th]:px-3 [&>th]:font-medium">
                   <th className="text-left">Mã</th><th className="text-left">Tracking</th><th className="text-left">Carrier</th>
                   <th className="text-left">Đến</th><th className="text-right">Chi phí dự tính</th><th className="text-right">Giá thu</th>
                 </tr>
               </thead>
               <tbody>
                 {waiting.map((r) => (
-                  <tr key={r.id} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
+                  <tr key={r.id} className="border-t border-border/60 [&>td]:px-2 [&>td]:py-2 xl:[&>td]:px-3">
                     <td className="text-left"><Link href={`/f/ship-ho/${r.id}`} className="font-medium text-primary underline-offset-2 hover:underline">{r.code}</Link></td>
                     <td className="text-left font-mono text-xs">{r.trackingNumber}</td>
                     <td className="text-left uppercase text-xs">{r.carrierKey ?? '—'}</td>

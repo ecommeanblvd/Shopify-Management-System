@@ -122,7 +122,7 @@ export default async function ShipHoListPage({
       </form>
       <Card>
         <CardContent className="p-0">
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full table-fixed text-xs xl:text-sm">
             {/* 10 cột, tổng 100% — vừa 1 màn hình, không scroll ngang. Chi phí dự
                 tính / Giá Bill (cước thực từ hoá đơn) / Giá thu TÁCH RIÊNG để khỏi
                 nhầm; Margin = Giá thu − (Giá Bill ?? Chi phí dự tính). */}
@@ -133,7 +133,7 @@ export default async function ShipHoListPage({
               <col className="w-[10%]" /><col className="w-[14%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
-              <tr className="[&>th]:p-3">
+              <tr className="[&>th]:p-2 xl:[&>th]:p-3">
                 <th className="text-left">Mã</th><th className="text-left">Đối tác</th>
                 <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
                 <th className="text-right whitespace-nowrap" title="Cước carrier dự tính lúc báo giá">Chi phí dự tính</th>
@@ -173,7 +173,7 @@ export default async function ShipHoListPage({
                 };
                 return (
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
-                  className="border-b hover:bg-muted/40 [&>td]:p-3 [&>td]:align-top">
+                  className="border-b hover:bg-muted/40 [&>td]:p-2 xl:[&>td]:p-3 [&>td]:align-top">
                   <td>
                     <Link href={`/f/ship-ho/${o.id}`} className="block truncate font-medium underline-offset-2 hover:underline">{o.code}</Link>
                     {/* Dòng 2: mã đơn gốc + label nguồn (MMP/SMS) ngay sau — không đè cột bên */}
