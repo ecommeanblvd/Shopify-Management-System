@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { emitShipHoEvent } from './mmp-events';
-import { nextInternalCode, internalCodePrefix } from './internal-code';
+import { internalCodePrefix } from './internal-code';
 import { computeOffer } from './offer-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
@@ -52,11 +52,11 @@ export async function createShipHoOrder(
     return { ok: false, error: 'Mã dạng INSLG do MMP cấp — không nhập tay. Để trống để hệ thống tự sinh mã INSMS.' };
   }
   if (!code) {
-    const prefix = internalCodePrefix(new Date());
-    const [mx] = await db.select({ code: schema.shipHoOrders.code }).from(schema.shipHoOrders)
-      .where(sql`${schema.shipHoOrders.code} LIKE ${prefix + '%'}`)
-      .orderBy(sql`${schema.shipHoOrders.code} DESC`).limit(1);
-    code = nextInternalCode(new Date(), mx?.code ?? null);
+    // Sequence Postgres — số cấp ra KHÔNG BAO GIỜ tái sử dụng (kể cả khi đơn sau
+    // này đổi sang mã MMP), hết cảnh số nhả ra rồi cấp lại gây loạn (bug 21/07).
+    const seq = await db.execute(sql`SELECT nextval('ship_ho_insms_seq') AS n`);
+    const n = Number((seq.rows[0] as { n?: unknown })?.n ?? 0);
+    code = `${internalCodePrefix(new Date())}${String(n).padStart(4, '0')}`;
   }
   if (!input.partnerBrandSlug) return { ok: false, error: 'Thiếu partner' };
   if (!input.country?.trim()) return { ok: false, error: 'Thiếu quốc gia' };
