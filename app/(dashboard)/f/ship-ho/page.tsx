@@ -15,6 +15,7 @@ import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } f
 import { ReconcileStatusCell, type ReconcileModalData } from '@/components/ship-ho/reconcile-decision-ui';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { OrderRow } from './OrderRow';
+import { TrackingCell } from './TrackingCell';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -39,6 +40,7 @@ export default async function ShipHoListPage({
   if (!role || !hasPermission(role, 'view_ship_ho')) {
     return <div className="max-w-3xl mx-auto px-6 py-16 text-center"><h1 className="text-2xl font-semibold">Forbidden</h1></div>;
   }
+  const canManage = hasPermission(role, 'manage_ship_ho');
   const sp = await searchParams;
   const sourceFilter = sp['source'] === 'mmp' ? 'mmp' : null;
   const q = typeof sp['q'] === 'string' ? sp['q'] : undefined;
@@ -129,15 +131,17 @@ export default async function ShipHoListPage({
             <colgroup>
               {/* Mã: bề rộng PX CỐ ĐỊNH (table-fixed tôn trọng tuyệt đối) — mã 16 ký tự
                   + dòng reference LUÔN đủ chỗ ở mọi màn hình; các cột % chia phần còn lại. */}
-              <col className="w-[140px] xl:w-[160px]" /><col className="w-[8%]" />
-              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[6%]" />
-              <col className="w-[10%]" /><col className="w-[10%]" /><col className="w-[11%]" /><col className="w-[10%]" />
-              <col className="w-[10%]" /><col className="w-[13%]" />
+              <col className="w-[140px] xl:w-[160px]" /><col className="w-[7%]" />
+              <col className="w-[4%]" /><col className="w-[5%]" /><col className="w-[5%]" />
+              <col className="w-[11%]" />
+              <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[10%]" /><col className="w-[9%]" />
+              <col className="w-[9%]" /><col className="w-[10%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-2 xl:[&>th]:p-3">
                 <th className="text-left">Mã</th><th className="text-left">Đối tác</th>
                 <th className="text-left">Đến</th><th className="text-left">Cân</th><th className="text-left">Carrier</th>
+                <th className="text-left">Tracking</th>
                 <th className="text-right whitespace-nowrap" title="Cước carrier dự tính lúc báo giá">Chi phí dự tính</th>
                 <th className="text-right whitespace-nowrap" title="Cước thực từ hoá đơn carrier — có số là đơn đã được bill">Giá Bill</th>
                 <th className="text-right" title="Giá thu brand (quote; 'thực' = đã tính lại theo cân bill)">Giá thu</th>
@@ -148,7 +152,7 @@ export default async function ShipHoListPage({
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={11} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const billVnd = num(o.actualCarrierCostVnd);
@@ -191,6 +195,10 @@ export default async function ShipHoListPage({
                     {(actualW ?? (o.chargeableWeightKg == null ? null : Number(o.chargeableWeightKg)) ?? Number(o.weightKg))} kg
                   </td>
                   <td>{o.carrierKey ? <span className="font-medium uppercase">{o.carrierKey}</span> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="overflow-visible">
+                    <TrackingCell orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey}
+                      deliveryStatus={o.deliveryStatus} canManage={canManage} />
+                  </td>
                   {/* Chi phí DỰ TÍNH (quote) — không trộn với bill */}
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
                     {estVnd == null ? <span className="text-muted-foreground">—</span> : <div>{estVnd.toLocaleString('vi-VN')}</div>}
