@@ -22,6 +22,7 @@ export function classifyFboCharge(label: string): FboBucket {
   if (t.includes('fuel')) return 'fuel';
   if (t.includes('demand')) return 'demand';
   if (t.includes('delivery area')) return 'remote'; // Out of Delivery Area Tier A/B/C
+  if (t.includes('pickup area')) return 'remote';   // Out of Pickup Area Tier A/B/C (phía lấy hàng — bắt 21/07)
   if (t.includes('signature')) return 'signature';
   if (t.includes('residential')) return 'residential';
   // Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ khi

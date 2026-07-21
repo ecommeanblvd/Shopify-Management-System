@@ -136,3 +136,13 @@ describe('parseFboPod', () => {
     expect(parseFboPod('', '')).toBeNull();
   });
 });
+
+describe('classifyFboCharge — nhãn bắt thêm 21/07', () => {
+  it('Out of Pickup Area → remote (mirror của Out of Delivery Area)', () => {
+    expect(classifyFboCharge('Out of Pickup Area Tier B')).toBe('remote');
+  });
+  it('Additional Handling / Third Party Billing → other (đã nhận diện, chưa đủ tần suất tách cột)', () => {
+    expect(classifyFboCharge('Additional Handling Chg - Packaging')).toBe('other');
+    expect(classifyFboCharge('Third Party Billing Surcharge')).toBe('other');
+  });
+});
