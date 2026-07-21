@@ -13,6 +13,7 @@ import { TrackingCard } from './TrackingCard';
 import { SmsMeasureCard } from './SmsMeasureCard';
 import { CopyField } from './CopyField';
 import { AddTrackingButton } from './AddTrackingButton';
+import { CustomerRefEditor } from './CustomerRefEditor';
 import { ShipHoCarrierPanel } from './ShipHoCarrierPanel';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +71,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           <span>Đối tác: <b className="text-foreground">{o.partnerBrandSlug}</b></span>
           <span>Trạng thái: <b className="text-foreground">{o.status}</b></span>
           <span>Carrier: <b className="text-foreground uppercase">{o.carrierKey ?? '—'}</b></span>
+          <span>Mã đơn gốc (brand): {canManage
+            ? <CustomerRefEditor orderId={o.id} customerRef={o.customerRef ?? null} />
+            : <b className="text-foreground">{o.customerRef ?? '—'}</b>}</span>
         </div>
 
         {/* Các trường thông tin theo form carrier — mỗi field 1 nút copy */}

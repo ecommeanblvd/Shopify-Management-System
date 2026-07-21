@@ -210,6 +210,47 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
   return { ok: true };
 }
 
+/** Bổ sung/sửa Mã đơn gốc (reference của brand, vd #KLS2001) SAU khi tạo đơn —
+ *  12 đơn đầu tạo khi form chưa có ô nhập (21/07). Đơn origin sms: re-emit
+ *  order.received để MMP cập nhật "Mã shop". */
+export async function updateShipHoCustomerRef(
+  orderId: string,
+  customerRef: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  const ref = customerRef.trim();
+  if (/-INS(LG|MS)-/i.test(ref)) {
+    return { ok: false, error: 'Đây là mã vận hành nội bộ — Mã đơn gốc phải là mã từ phía brand (vd #KLS2001).' };
+  }
+  const [o] = await db.select().from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
+  if (!o) return { ok: false, error: 'Không tìm thấy đơn' };
+  await db.update(schema.shipHoOrders).set({ customerRef: ref || null }).where(eq(schema.shipHoOrders.id, orderId));
+  if (o.source !== 'mmp' && o.status !== 'draft') {
+    await emitShipHoEvent(
+      { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
+      'order.received',
+      {
+        brandSlug: o.partnerBrandSlug, customerRef: ref || null,
+        recipient: { name: o.recipientName ?? null, company: o.recipientCompany ?? null, phone: o.recipientPhone ?? null },
+        address: { country: o.country, city: o.city ?? null, province: o.province ?? null, postcode: o.postcode ?? null,
+          address1: o.address1 ?? null, address2: o.address2 ?? null, houseNumber: o.houseNumber ?? null,
+          shortAddress: o.shortAddress ?? null, mapsUrl: o.mapsUrl ?? null },
+        country: o.country, city: o.city ?? null,
+        weightKg: Number(o.weightKg),
+        dimLengthCm: o.dimLengthCm == null ? null : Number(o.dimLengthCm),
+        dimWidthCm: o.dimWidthCm == null ? null : Number(o.dimWidthCm),
+        dimHeightCm: o.dimHeightCm == null ? null : Number(o.dimHeightCm),
+        packagingType: o.packagingType ?? null, service: 'express',
+        chargedVnd: o.chargedVnd == null ? null : Math.round(Number(o.chargedVnd)),
+        createdVia: 'sms',
+      },
+    );
+  }
+  revalidatePath('/f/ship-ho');
+  revalidatePath(`/f/ship-ho/${orderId}`);
+  return { ok: true };
+}
+
 /** Từ chối đơn brand (mmp) → emit order.rejected cho MMP. Không đổi status đơn ở v1. */
 export async function rejectMmpOrder(orderId: string, reason: string): Promise<{ ok: boolean; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
