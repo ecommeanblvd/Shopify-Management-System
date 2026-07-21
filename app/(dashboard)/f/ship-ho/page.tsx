@@ -127,10 +127,12 @@ export default async function ShipHoListPage({
                 tính / Giá Bill (cước thực từ hoá đơn) / Giá thu TÁCH RIÊNG để khỏi
                 nhầm; Margin = Giá thu − (Giá Bill ?? Chi phí dự tính). */}
             <colgroup>
-              <col className="w-[13%]" /><col className="w-[7%]" />
-              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[5%]" />
+              {/* Mã: bề rộng PX CỐ ĐỊNH (table-fixed tôn trọng tuyệt đối) — mã 16 ký tự
+                  + dòng reference LUÔN đủ chỗ ở mọi màn hình; các cột % chia phần còn lại. */}
+              <col className="w-[140px] xl:w-[160px]" /><col className="w-[8%]" />
+              <col className="w-[4%]" /><col className="w-[6%]" /><col className="w-[6%]" />
               <col className="w-[10%]" /><col className="w-[10%]" /><col className="w-[11%]" /><col className="w-[10%]" />
-              <col className="w-[10%]" /><col className="w-[14%]" />
+              <col className="w-[10%]" /><col className="w-[13%]" />
             </colgroup>
             <thead className="border-b text-muted-foreground">
               <tr className="[&>th]:p-2 xl:[&>th]:p-3">
@@ -175,7 +177,7 @@ export default async function ShipHoListPage({
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-2 xl:[&>td]:p-3 [&>td]:align-top">
                   <td>
-                    <Link href={`/f/ship-ho/${o.id}`} className="block truncate font-medium underline-offset-2 hover:underline">{o.code}</Link>
+                    <Link href={`/f/ship-ho/${o.id}`} className="block whitespace-nowrap font-medium underline-offset-2 hover:underline">{o.code}</Link>
                     {/* Dòng 2: mã đơn gốc + label nguồn (MMP/SMS) ngay sau — không đè cột bên */}
                     <div className="truncate text-[10px] leading-tight text-muted-foreground">
                       {o.customerRef ? `${o.customerRef} ` : ''}

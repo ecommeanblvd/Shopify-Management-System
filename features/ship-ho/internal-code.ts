@@ -32,9 +32,13 @@ export function planCodeAdoption(
 ): { code: string; mmpRef: string; customerRef: string | null } | null {
   const m = typeof minted === 'string' ? minted.trim() : '';
   if (!m || m === current.code) return null;
+  // Mã cũ chỉ chuyển vào customerRef khi là REFERENCE THẬT (khách/brand đặt, vd
+  // #KLS1996) — mã tạm INSMS tự sinh là mã nội bộ, đưa vào customerRef chỉ gây
+  // nhiễu cột "Mã đơn gốc" (CEO bắt 21/07).
+  const oldCodeIsRealRef = !/-INSMS-/i.test(current.code);
   return {
     code: m,
     mmpRef: m,
-    customerRef: current.customerRef ?? current.code,
+    customerRef: current.customerRef ?? (oldCodeIsRealRef ? current.code : null),
   };
 }

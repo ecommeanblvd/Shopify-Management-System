@@ -29,6 +29,10 @@ describe('planCodeAdoption', () => {
     expect(planCodeAdoption({ code: '26-INSMS-SV-0001', customerRef: '#KLS2001' }, '26-INSLG-SV-0014'))
       .toEqual({ code: '26-INSLG-SV-0014', mmpRef: '26-INSLG-SV-0014', customerRef: '#KLS2001' });
   });
+  it('mã tạm INSMS tự sinh KHÔNG đưa vào customerRef (không phải reference thật)', () => {
+    expect(planCodeAdoption({ code: '26-INSMS-SV-0003', customerRef: null }, '26-INSLG-SV-0016'))
+      .toEqual({ code: '26-INSLG-SV-0016', mmpRef: '26-INSLG-SV-0016', customerRef: null });
+  });
   it('response không có code / trùng code hiện tại / rỗng → null', () => {
     expect(planCodeAdoption({ code: 'A', customerRef: null }, undefined)).toBeNull();
     expect(planCodeAdoption({ code: 'A', customerRef: null }, '  ')).toBeNull();
