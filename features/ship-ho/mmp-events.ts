@@ -82,6 +82,10 @@ export async function deliverShipHoEvent(row: {
       // Đơn ORIGIN SMS: MMP là nơi cấp số chính thức (INSLG) — response order.received
       // trả { code } → SMS nhận mã đó làm code+mmpRef; mã operator nhập (reference
       // khách, vd #KLS1996) chuyển vào customerRef. Chỉ đạo CEO 21/07.
+      // TẠM DỪNG adopt (env SHIP_HO_ADOPT_DISABLED=1): handler MMP đang mint số
+      // MỚI cho MỌI ref INSMS chưa thấy (không tra smsRef đã lưu) → đốt số 0016-0020
+      // + va chạm dây chuyền 21/07. Bật lại khi MMP sửa matching theo smsRef.
+      if (process.env.SHIP_HO_ADOPT_DISABLED === '1') return;
       if (row.event === 'order.received' && row.source !== 'mmp' && row.orderId) {
         try {
           // MMP trả mã ở key `code` (contract) hoặc `mmpRef` (bản build thực tế 21/07) — nhận cả hai.
