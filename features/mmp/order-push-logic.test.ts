@@ -63,3 +63,23 @@ describe('buildMmpOrderPayload — pricing (store riêng của brand)', () => {
     expect(Object.keys(p.lines[0]).sort()).toEqual(['qty','receivedAt','sku','title','vendor']);
   });
 });
+
+describe('buildMmpOrderPayload — root currency (validator MMP siết 21/07)', () => {
+  it('có pricing → currency cấp gốc = pricing.currency', () => {
+    const p = buildMmpOrderPayload({
+      orderNumber: 'TA101', store: 'tinhatelier', recipientName: null, shipCountry: 'IE',
+      placedAt: null, receivedAt: null, financialStatus: 'PAID', fulfillmentStatus: null, cancelledAt: null,
+      brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 10 }],
+      pricing: { currency: 'EUR', subtotal: 10, totalDiscount: 0, totalShipping: 5, totalTax: 0, totalPrice: 15 },
+    });
+    expect(p.currency).toBe('EUR');
+  });
+  it('không pricing (store đa-brand) → không có key currency', () => {
+    const p = buildMmpOrderPayload({
+      orderNumber: 'M1', store: 'meanblvd', recipientName: null, shipCountry: 'US',
+      placedAt: null, receivedAt: null, financialStatus: null, fulfillmentStatus: null, cancelledAt: null,
+      brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'denio', receivedAt: null }],
+    });
+    expect('currency' in p).toBe(false);
+  });
+});

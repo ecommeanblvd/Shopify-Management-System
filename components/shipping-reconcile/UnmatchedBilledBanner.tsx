@@ -7,10 +7,12 @@ import type { UnmatchedBilledRow, UnmatchedSummary } from '@/features/shipments/
 
 const fmt = (n: number | null) => n === null ? '—' : Math.round(n).toLocaleString('vi-VN');
 
-export function UnmatchedBilledBanner({ rows, summary, shipHoRows = [] }: {
+export function UnmatchedBilledBanner({ rows, summary, shipHoRows = [], returnRows = [] }: {
   rows: UnmatchedBilledRow[]; summary: UnmatchedSummary;
   /** Tracking thuộc đơn ship hộ — không phải tracking "lạ", chỉ hiện info riêng. */
   shipHoRows?: UnmatchedBilledRow[];
+  /** Dòng bill là cước HÀNG HOÀN của đơn đã biết — hiện info riêng kèm đơn gốc. */
+  returnRows?: UnmatchedBilledRow[];
 }) {
   const [open, setOpen] = useState(false);
   const shipHoNote = shipHoRows.length > 0 ? (
@@ -18,13 +20,19 @@ export function UnmatchedBilledBanner({ rows, summary, shipHoRows = [] }: {
       🚚 {shipHoRows.length} tracking trên hoá đơn thuộc <b>đơn ship hộ</b> ({shipHoRows.map((r) => r.shipHoCode).filter(Boolean).join(', ')}) — đối soát tự động ở <a href="/f/ship-ho" className="underline">module Ship hộ</a>, không phải tracking lạ.
     </div>
   ) : null;
-  if (rows.length === 0) return shipHoNote;
+  const returnNote = returnRows.length > 0 ? (
+    <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 p-3 text-sm text-violet-800 dark:text-violet-300">
+      ↩️ {returnRows.length} tracking là <b>cước hàng HOÀN</b> của đơn đã biết: {returnRows.map((r) => `${r.returnOfOrderNumber} (${(r.amountVnd ?? 0).toLocaleString('vi-VN')}đ)`).join(' · ')} — đã gắn về đơn gốc, tính vào chi phí ship của đơn.
+    </div>
+  ) : null;
+  if (rows.length === 0) return <>{shipHoNote}{returnNote}</>;
   const byCarrier = summary.byCarrier
     .map((c) => `${c.carrierKey ?? '—'}: ${c.count} (${fmt(c.sumVnd)}đ)`)
     .join(' · ');
   return (
     <>
     {shipHoNote}
+    {returnNote}
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <button onClick={() => setOpen((v) => !v)} className="text-left font-medium text-amber-700 dark:text-amber-400">

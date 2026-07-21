@@ -27,11 +27,17 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
       CASE WHEN o.currency = COALESCE(st.cost_currency, o.currency) THEN o.total_shipping::float8
            WHEN st.fx_cost_per_order_currency IS NOT NULL THEN o.total_shipping::float8 * st.fx_cost_per_order_currency::float8
            ELSE NULL END AS revenue_vnd,
-      sc.total_amount::float8 AS cost_vnd
+      -- Chi phí = bill chiều đi + cước HÀNG HOÀN đã gắn về đơn (return_of_order_id).
+      CASE WHEN sc.total_amount IS NULL AND rt.ret IS NULL THEN NULL
+           ELSE COALESCE(sc.total_amount::float8, 0) + COALESCE(rt.ret, 0) END AS cost_vnd
     FROM shipments s
     JOIN shopify_orders o ON o.id = s.order_id
     JOIN stores st ON st.id = o.store_id
     LEFT JOIN shipment_charges sc ON sc.shipment_id = s.id
+    LEFT JOIN (
+      SELECT return_of_order_id AS oid, SUM(total::float8) AS ret
+      FROM carrier_bill_lines WHERE return_of_order_id IS NOT NULL GROUP BY 1
+    ) rt ON rt.oid = o.id
     WHERE s.label_created_at >= ${since}
   `);
 

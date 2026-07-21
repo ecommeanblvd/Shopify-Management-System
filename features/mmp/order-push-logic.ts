@@ -20,6 +20,8 @@ export interface MmpOrderPricing {
   totalTax: number | null;
   /** Tổng khách thanh toán. */
   totalPrice: number | null;
+  /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
+  returnShippingVnd?: number;
 }
 export interface MmpOrderPayload {
   orderNumber: string; store: string;
@@ -42,6 +44,9 @@ export interface MmpOrderPayload {
   /** Thời điểm HUỶ đơn (ISO 8601) — null = chưa huỷ. MMP suy 'cancelled' = != null. */
   cancelledAt: string | null;
   lines: MmpOrderLine[];
+  /** Currency CẤP GỐC — validator MMP (siết 21/07) bắt buộc khi line có unitPrice
+   *  ("cannot default to VND"). = pricing.currency; vắng với store đa-brand. */
+  currency?: string;
   /** CHỈ store riêng của brand — field vắng mặt với store đa-brand. */
   pricing?: MmpOrderPricing;
 }
@@ -70,6 +75,6 @@ export function buildMmpOrderPayload(input: {
       // Chỉ nhét key unitPrice khi có giá (store riêng) — payload store đa-brand giữ nguyên shape cũ.
       ...(l.unitPrice != null ? { unitPrice: l.unitPrice } : {}),
     })),
-    ...(input.pricing ? { pricing: input.pricing } : {}),
+    ...(input.pricing ? { currency: input.pricing.currency, pricing: input.pricing } : {}),
   };
 }

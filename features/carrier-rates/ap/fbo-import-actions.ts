@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
+import { applyReturnLinks } from '@/features/shipments/return-bill';
 import { putObject } from '@/lib/storage/s3';
 import { parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
@@ -289,5 +290,6 @@ export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult
   });
   // Áp POD (ngày giao chính thức trên bill) ngay sau import — best-effort, cron hourly là backstop.
   try { await applyPodDeliveries(); } catch (e) { console.error('apply-pod after FBO import:', e); }
+  try { await applyReturnLinks(); } catch (e) { console.error('return-links after FBO import:', e); }
   return result;
 }

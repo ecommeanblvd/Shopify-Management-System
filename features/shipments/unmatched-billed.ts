@@ -6,6 +6,8 @@ export interface UnmatchedBilledRow {
   accountId: string; accountName: string; amountVnd: number | null; billPeriodStart: string | null;
   /** Tracking thuộc đơn SHIP HỘ (mã đơn) — không phải "lạ", đối soát ở module Ship hộ. */
   shipHoCode: string | null;
+  /** Dòng bill là cước HÀNG HOÀN của đơn này (số đơn gốc) — không phải tracking lạ. */
+  returnOfOrderNumber: string | null;
 }
 export interface UnmatchedSummary { total: number; byCarrier: Array<{ carrierKey: string | null; count: number; sumVnd: number }> }
 
@@ -33,10 +35,12 @@ export async function listUnmatchedBilledTracking(): Promise<UnmatchedBilledRow[
       accountName: schema.carrierAccounts.name,
       carrierKey: schema.carriers.key,
       shipHoCode: schema.shipHoOrders.code,
+      returnOfOrderNumber: schema.shopifyOrders.shopifyOrderNumber,
     })
     .from(schema.carrierBillLines)
     .leftJoin(schema.shipments, eq(schema.shipments.trackingNumber, schema.carrierBillLines.trackingNumber))
     .leftJoin(schema.shipHoOrders, eq(schema.shipHoOrders.trackingNumber, schema.carrierBillLines.trackingNumber))
+    .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.carrierBillLines.returnOfOrderId))
     .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))
     .innerJoin(schema.carrierAccounts, eq(schema.carrierAccounts.id, schema.carrierBills.carrierAccountId))
     .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
@@ -60,6 +64,7 @@ export async function listUnmatchedBilledTracking(): Promise<UnmatchedBilledRow[
       amountVnd: r.total !== null ? Number(r.total) : null,
       billPeriodStart: r.billPeriodStart ?? null,
       shipHoCode: r.shipHoCode ?? null,
+      returnOfOrderNumber: r.returnOfOrderNumber ?? null,
     });
   }
   return out;

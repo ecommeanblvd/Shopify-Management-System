@@ -665,6 +665,8 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   // POD từ bill FBO — bằng chứng giao hàng chính thức của FedEx (ngày giờ + người ký).
   podAt: timestamp('pod_at'),
   podName: text('pod_name'),
+  // Dòng bill là cước HÀNG HOÀN → FK về đơn gốc (nhận diện từ orderRef "_R"/"RETURN OF").
+  returnOfOrderId: uuid('return_of_order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [

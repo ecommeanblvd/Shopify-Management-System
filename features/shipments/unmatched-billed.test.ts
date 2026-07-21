@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { summariseUnmatched, type UnmatchedBilledRow } from './unmatched-billed';
 
 const row = (o: Partial<UnmatchedBilledRow>): UnmatchedBilledRow => ({
-  tracking: 't', billNumber: 'B', carrierKey: 'dhl', accountId: 'a', accountName: 'DHL', amountVnd: 1000, billPeriodStart: '2026-05-01', shipHoCode: null, ...o,
+  tracking: 't', billNumber: 'B', carrierKey: 'dhl', accountId: 'a', accountName: 'DHL', amountVnd: 1000, billPeriodStart: '2026-05-01', shipHoCode: null, returnOfOrderNumber: null, ...o,
 });
 
 describe('summariseUnmatched', () => {

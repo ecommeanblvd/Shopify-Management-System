@@ -8,7 +8,7 @@ import { listUnmatchedBilledTracking } from '@/features/shipments/unmatched-bill
 
 export const dynamic = 'force-dynamic';
 
-const HEADER = ['tracking', 'bill_number', 'carrier', 'account', 'amount_vnd', 'bill_period_start', 'ship_ho_code'];
+const HEADER = ['tracking', 'bill_number', 'carrier', 'account', 'amount_vnd', 'bill_period_start', 'ship_ho_code', 'return_of_order'];
 
 export async function GET(): Promise<Response> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,7 +17,7 @@ export async function GET(): Promise<Response> {
   if (!role || !hasPermission(role, 'view_carrier_rates')) return new Response('Forbidden', { status: 403 });
 
   const rows = await listUnmatchedBilledTracking();
-  const out: CsvValue[][] = rows.map((r) => [r.tracking, r.billNumber, r.carrierKey, r.accountName, r.amountVnd, r.billPeriodStart, r.shipHoCode]);
+  const out: CsvValue[][] = rows.map((r) => [r.tracking, r.billNumber, r.carrierKey, r.accountName, r.amountVnd, r.billPeriodStart, r.shipHoCode, r.returnOfOrderNumber]);
   return new Response(csvBody(HEADER, out), {
     headers: {
       'content-type': 'text/csv; charset=utf-8',

@@ -83,9 +83,10 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
       </div>
       <LarkSyncBanner latest={latestLarkRun} />
       <UnmatchedBilledBanner
-        rows={unmatchedBilled.filter((r) => !r.shipHoCode)}
-        summary={summariseUnmatched(unmatchedBilled.filter((r) => !r.shipHoCode))}
+        rows={unmatchedBilled.filter((r) => !r.shipHoCode && !r.returnOfOrderNumber)}
+        summary={summariseUnmatched(unmatchedBilled.filter((r) => !r.shipHoCode && !r.returnOfOrderNumber))}
         shipHoRows={unmatchedBilled.filter((r) => r.shipHoCode)}
+        returnRows={unmatchedBilled.filter((r) => r.returnOfOrderNumber)}
       />
       <ReconcileTable
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}

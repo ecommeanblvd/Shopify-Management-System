@@ -69,6 +69,13 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       ...(owned && l.unitPrice != null ? { unitPrice: Number(l.unitPrice) } : {}),
     };
   });
+  // Cước hàng hoàn đã gắn về đơn (VND) — chỉ tra khi store riêng (tránh query thừa).
+  let returnShippingVnd = 0;
+  if (owned) {
+    const ret = await db.execute(sql`
+      SELECT COALESCE(SUM(total::float8), 0) AS v FROM carrier_bill_lines WHERE return_of_order_id = ${orderId}`);
+    returnShippingVnd = Math.round(Number((ret.rows[0] as { v?: unknown })?.v ?? 0));
+  }
   // Khối giá cấp đơn (order currency) — CHỈ store riêng của brand.
   const pricing = owned
     ? {
@@ -78,6 +85,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         totalShipping: ord.totalShipping == null ? null : Number(ord.totalShipping),
         totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
+        ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
       }
     : null;
   // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.
