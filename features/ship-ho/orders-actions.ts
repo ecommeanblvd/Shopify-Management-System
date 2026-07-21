@@ -42,6 +42,12 @@ export async function createShipHoOrder(
   // Mã trống → tự sinh `YY-INSMS-SV-NNNN` (namespace SMS, không đụng INSLG của
   // MMP) — mã này là mmpRef gửi MMP cho đơn origin sms (contract 20/07).
   let code = input.code?.trim() ?? '';
+  // CẤM nhập tay mã namespace INSLG (MMP cấp) — ops gõ tay 26-INSLG-SV-0013 ngày
+  // 20/07 đã giẫm counter MMP gây xung đột mã. Đơn SMS: để trống (tự sinh INSMS)
+  // hoặc dùng mã tham chiếu của khách.
+  if (/-INSLG-/i.test(code)) {
+    return { ok: false, error: 'Mã dạng INSLG do MMP cấp — không nhập tay. Để trống để hệ thống tự sinh mã INSMS.' };
+  }
   if (!code) {
     const prefix = internalCodePrefix(new Date());
     const [mx] = await db.select({ code: schema.shipHoOrders.code }).from(schema.shipHoOrders)
