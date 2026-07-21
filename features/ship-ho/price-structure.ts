@@ -143,11 +143,17 @@ export function shipHoPriceStructure(input: {
   const chSignature = sell
     ? (sell.signatureVnd != null ? S(sell.signatureVnd) : Math.max(0, S(sell.resSignVnd) - S(sell.residentialVnd ?? 0)))
     : qSignature;
-  const chCustoms = sell ? S(sell.customsSurVnd) : qCustoms;
+  // Tách NK / duty / other (21/07). Sell cũ chỉ có customsSurVnd → fallback vào dòng NK.
+  const qImport = R(b.countryFixed); // engine dự tính phí NK qua countryFixed (vd US 68.300)
+  const qOtherSur = R(b.perKg) + R(b.perStep) + R(b.peak);
+  const chImport = sell ? S(sell.importHandlingVnd ?? sell.customsSurVnd) : qImport;
+  const chDuty = sell ? S(sell.dutyVnd ?? 0) : 0;
+  const chOther = sell ? S(sell.otherVnd ?? 0) : qOtherSur;
+  const chCustoms = chImport + chDuty + chOther; // tổng nhóm (giữ cho chargeSum)
   // Phí sửa địa chỉ: quote không dự tính được (chỉ phát sinh khi địa chỉ sai).
   const chAc = sell ? S(sell.acVnd ?? 0) : 0;
   const chargeTotalFinal = sell ? S(sell.chargedVnd) : quoteTotal;
-  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chAc + chCustoms + chargeFuel + chargeProcessing + chargeVat;
+  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chAc + chImport + chDuty + chOther + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(chargeTotalFinal - chargeSum);
 
   // ── Tách phụ phí thành TỪNG KHOẢN. Gộp theo cột bill có sẵn (remote/demand/
@@ -176,10 +182,22 @@ export function shipHoPriceStructure(input: {
       quoteChargeVnd: 0, chargeVnd: chAc,
     },
     {
-      label: 'Phí xử lý NK / khác',
-      costVnd: R(b.perKg) + R(b.perStep) + R(b.countryFixed) + R(b.peak),
-      billVnd: hasBill ? Math.round(num(ab!.other)) : null,
-      quoteChargeVnd: qCustoms, chargeVnd: chCustoms,
+      label: 'Phí xử lý hàng nhập khẩu',
+      costVnd: R(b.countryFixed),
+      billVnd: hasBill ? Math.round(num(ab!.importHandling ?? ab!.other)) : null, // bill cũ chưa tách → hiện ở đây
+      quoteChargeVnd: qImport, chargeVnd: chImport,
+    },
+    {
+      label: 'Thuế / hải quan (duty)',
+      costVnd: null, // không dự tính được — pass-through thuần, không VAT
+      billVnd: hasBill ? Math.round(num(ab!.duty)) : null,
+      quoteChargeVnd: 0, chargeVnd: chDuty,
+    },
+    {
+      label: 'Phụ phí khác (chưa phân loại)',
+      costVnd: R(b.perKg) + R(b.perStep) + R(b.peak),
+      billVnd: hasBill && ab!.importHandling != null ? Math.round(num(ab!.other)) : null, // bill cũ: other đã hiện ở dòng NK
+      quoteChargeVnd: qOtherSur, chargeVnd: chOther,
     },
   ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.quoteChargeVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
 

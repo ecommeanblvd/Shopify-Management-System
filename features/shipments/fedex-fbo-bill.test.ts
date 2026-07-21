@@ -53,14 +53,16 @@ describe('groupFboIntoBills', () => {
     expect(b.lines).toHaveLength(2);
   });
 
-  it('line gộp residential→signature, (importHandling+duty+other)→other, total khớp', () => {
+  it('line gộp residential→signature; importHandling/duty tách cột riêng, total khớp', () => {
     const b = groupFboIntoBills(rows).find((x) => x.billNumber === '734001324')!;
     const a2 = b.lines.find((l) => l.awb === 'A2')!;
-    expect(a2.other).toBe(130_000); // importHandling 30k + duty 100k
+    expect(a2.importHandling).toBe(30_000);
+    expect(a2.duty).toBe(100_000);
+    expect(a2.other).toBe(0); // NK + duty đã tách cột riêng (21/07)
     expect(a2.total).toBe(680_000);
     // số học từng line khớp total
     for (const l of b.lines) {
-      expect(l.base + l.discount + l.fuel + l.remote + l.demand + l.signature + l.vat + l.other)
+      expect(l.base + l.discount + l.fuel + l.remote + l.demand + l.signature + l.vat + l.other + l.addressCorrection + l.importHandling + l.duty)
         .toBe(l.total);
     }
   });

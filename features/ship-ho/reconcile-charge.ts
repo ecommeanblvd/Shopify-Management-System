@@ -25,6 +25,9 @@ export interface ReconciledChargeInput {
   transportSurchargesVnd: number;
   /** Phí customs / xử lý hàng NK pass-through từ bill — KHÔNG fuel, CÓ VAT. */
   customsSurchargesVnd: number;
+  /** Thuế/hải quan (duty) FedEx ứng hộ — pass-through THUẦN: KHÔNG fuel, KHÔNG VAT
+   *  (đã là thuế, FedEx không đánh VAT lên khoản disbursement này). */
+  dutyVnd?: number;
   fuelPercent: number;
   vatPercent: number;
   serviceLabel: string;
@@ -32,6 +35,7 @@ export interface ReconciledChargeInput {
 
 export interface ReconciledCharge {
   chargedVnd: number;
+  dutyVnd: number;
   markedBaseVnd: number;
   fuelVnd: number;
   processingExVatVnd: number;
@@ -51,16 +55,18 @@ export function reconciledBrandCharge(i: ReconciledChargeInput): ReconciledCharg
   // VAT ở bước cuối trên TẤT CẢ (gồm cả customs + fuel + phí xử lý).
   const vatBase = markedBase + transport + customs + fuel + processingExVat;
   const vat = Math.round(vatBase * v);
-  const chargedVnd = vatBase + vat;
+  const duty = Math.round(i.dutyVnd ?? 0);
+  const chargedVnd = vatBase + vat + duty;
 
   const lines: BrandChargeLine[] = [
     { label: `Cước cơ bản (${i.serviceLabel})`, amountVnd: markedBase },
   ];
   if (transport > 0) lines.push({ label: 'Phụ phí vận chuyển (theo bill)', amountVnd: transport });
   if (customs > 0) lines.push({ label: 'Phí xử lý hàng NK (theo bill)', amountVnd: customs });
+  if (duty > 0) lines.push({ label: 'Thuế/hải quan (theo bill)', amountVnd: duty });
   lines.push({ label: 'Phụ phí xăng dầu', amountVnd: fuel });
   lines.push({ label: 'Phí xử lý đơn hàng', amountVnd: processingExVat });
   lines.push({ label: 'VAT', amountVnd: vat });
 
-  return { chargedVnd, markedBaseVnd: markedBase, fuelVnd: fuel, processingExVatVnd: processingExVat, vatVnd: vat, lines };
+  return { chargedVnd, dutyVnd: duty, markedBaseVnd: markedBase, fuelVnd: fuel, processingExVatVnd: processingExVat, vatVnd: vat, lines };
 }

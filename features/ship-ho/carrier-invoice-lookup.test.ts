@@ -3,7 +3,7 @@ import { normalizeBilledLine, costToVndFactor, type RawBillLine } from './carrie
 
 const raw: RawBillLine = {
   weightKg: '2.500', base: '1000000', discount: '-50000', fuel: '180000', remote: '0',
-  demand: '25000', signature: '0', vat: '150000', other: '0', addressCorrection: null, total: '1305000', shipDate: '2026-07-02',
+  demand: '25000', signature: '0', vat: '150000', other: '0', addressCorrection: null, importHandling: null, duty: null, total: '1305000', shipDate: '2026-07-02',
 };
 
 describe('costToVndFactor', () => {
@@ -29,7 +29,7 @@ describe('normalizeBilledLine', () => {
     expect(b.surcharges.fuel).toBe(234_000); // 9 × 26,000
   });
   it('null/rỗng → 0 cho phụ phí, weight null', () => {
-    const empty: RawBillLine = { weightKg: null, base: null, discount: null, fuel: null, remote: null, demand: null, signature: null, vat: null, other: null, addressCorrection: null, total: '0', shipDate: null };
+    const empty: RawBillLine = { weightKg: null, base: null, discount: null, fuel: null, remote: null, demand: null, signature: null, vat: null, other: null, addressCorrection: null, importHandling: null, duty: null, total: '0', shipDate: null };
     const b = normalizeBilledLine(empty, 1, null);
     expect(b.weightKg).toBeNull();
     expect(b.totalVnd).toBe(0);

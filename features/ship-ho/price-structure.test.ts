@@ -90,8 +90,8 @@ describe('shipHoPriceStructure', () => {
     expect(labels).toContain('Ký nhận (direct signature)');
     expect(s.rows.find((r) => r.label === 'Giao nhà dân')?.costVnd).toBe(30_000);
     expect(s.rows.find((r) => r.label === 'Ký nhận (direct signature)')?.costVnd).toBe(25_000);
-    expect(labels).toContain('Phí xử lý NK / khác');
-    const surLabels = ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân', 'Ký nhận (direct signature)', 'Phí xử lý NK / khác'];
+    expect(labels).toContain('Phụ phí khác (chưa phân loại)'); // perKg 10k trong fixture
+    const surLabels = ['Phụ phí vùng xa', 'Phụ phí nhu cầu (demand)', 'Giao nhà dân', 'Ký nhận (direct signature)', 'Phụ phí khác (chưa phân loại)'];
     // charge = cost cho từng khoản phụ phí (pass-through).
     for (const l of surLabels) {
       const row = s.rows.find((r) => r.label === l)!;
@@ -185,7 +185,7 @@ describe('shipHoPriceStructure', () => {
     expect(s.rows.find((r) => r.label === 'Cước cơ bản')?.billVnd).toBe(970_000); // 1.050.000 − 80.000
     // Phụ phí tách khoản: vùng xa (remote 60k) + phí NK/khác (other 10k) = 70k.
     expect(s.rows.find((r) => r.label === 'Phụ phí vùng xa')?.billVnd).toBe(60_000);
-    expect(s.rows.find((r) => r.label === 'Phí xử lý NK / khác')?.billVnd).toBe(10_000);
+    expect(s.rows.find((r) => r.label === 'Phí xử lý hàng nhập khẩu')?.billVnd).toBe(10_000); // bill cũ chưa tách cột → other hiện ở dòng NK
     expect(s.rows.find((r) => r.label === 'Phụ phí xăng dầu')?.billVnd).toBe(320_000);
     expect(s.rows.find((r) => r.label === 'VAT')?.billVnd).toBe(190_000);
     expect(s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh')?.billVnd ?? null).toBeNull();

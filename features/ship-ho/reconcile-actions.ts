@@ -170,10 +170,13 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // AC (sửa địa chỉ) cũng là phụ phí VẬN CHUYỂN: FedEx áp fuel lên nó
         // (fuel bill = %(freight + AC), kiểm chứng bill 734105850).
         const transportSur = s.remote + s.demand + s.signature + s.residential + s.addressCorrection;
-        const customsSur = s.other; // phí xử lý hàng NK/customs — không fuel, có VAT.
+        // Tách 3 khoản rõ ràng (21/07): NK + other-chưa-phân-loại → customs bucket
+        // (không fuel, có VAT); duty → pass-through thuần (không fuel, KHÔNG VAT).
+        const customsSur = s.importHandling + s.other;
+        const dutySur = s.duty;
         const rc = reconciledBrandCharge({
           baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
-          transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur,
+          transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur, dutyVnd: dutySur,
           fuelPercent: est.internal.fuelPercent, vatPercent: est.internal.vatPercent,
           serviceLabel: 'Express Delivery',
         });
@@ -185,6 +188,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           resSignVnd: Math.round(s.signature + s.residential),
           residentialVnd: Math.round(s.residential), signatureVnd: Math.round(s.signature),
           acVnd: Math.round(s.addressCorrection),
+          importHandlingVnd: Math.round(s.importHandling), dutyVnd: Math.round(dutySur), otherVnd: Math.round(s.other),
           fuelVnd: rc.fuelVnd, fuelPercent: est.internal.fuelPercent,
           processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
           chargedVnd: rc.chargedVnd,
