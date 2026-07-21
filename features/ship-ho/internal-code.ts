@@ -19,3 +19,22 @@ export function nextInternalCode(now: Date, maxExisting: string | null): string 
   }
   return `${prefix}${String(n + 1).padStart(4, '0')}`;
 }
+
+/**
+ * THUẦN: nhận mã đơn CHÍNH THỨC MMP trả về trong response order.received (origin
+ * sms) → kế hoạch cập nhật đơn: code + mmpRef = mã MMP; mã cũ operator nhập (thường
+ * là reference của khách, vd #KLS1996) chuyển vào customerRef nếu đang trống.
+ * Trả null nếu không có gì để đổi.
+ */
+export function planCodeAdoption(
+  current: { code: string; customerRef: string | null },
+  minted: unknown,
+): { code: string; mmpRef: string; customerRef: string | null } | null {
+  const m = typeof minted === 'string' ? minted.trim() : '';
+  if (!m || m === current.code) return null;
+  return {
+    code: m,
+    mmpRef: m,
+    customerRef: current.customerRef ?? current.code,
+  };
+}

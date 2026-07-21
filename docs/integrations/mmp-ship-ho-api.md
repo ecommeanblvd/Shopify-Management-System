@@ -199,11 +199,17 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 Brand có thể đưa hàng trực tiếp cho MEAN mà không tạo đơn trên MMP → SMS tạo đơn hộ
 và ĐẨY sang MMP để brand vẫn thấy đơn + giá trên portal.
 
-**Q1 — Ai sinh ref?** **SMS sinh**, format riêng **`YY-INSMS-SV-NNNN`** (prefix `INSMS`
-≠ `INSLG` → hai counter độc lập, không bao giờ đụng khoá; NNNN reset theo năm phía SMS).
-MMP **KHÔNG** sinh gì thêm và **KHÔNG parse format** — dùng `mmpRef` như **chuỗi opaque**
-làm khoá duy nhất. (Vài đơn cũ tạo trước 20/07 mang mã tự do, vd `#KLS1996` — vẫn là khoá
-nguyên văn, đừng reject theo format.) `ShipHoCounter` của MMP giữ nguyên cho đơn MMP tạo.
+**Q1 — Ai sinh ref? (BỔ SUNG 21/07 — 2 pha)** SMS gửi `mmpRef` TẠM = mã nội bộ
+(`YY-INSMS-SV-NNNN`, hoặc mã tự do với đơn cũ vd `#KLS1996` — thực chất là reference
+của khách). **MMP mint mã đơn CHÍNH THỨC từ `ShipHoCounter` (`YY-INSLG-SV-NNNN`) khi tạo
+đơn và TRẢ VỀ trong response**:
+```json
+{ "ok": true, "code": "26-INSLG-SV-0013" }
+```
+SMS nhận `code` này → tự cập nhật: `code` + `mmpRef` của đơn = mã MMP; mã tạm ban đầu
+chuyển vào `customerRef` (reference khách). **Mọi event SAU đó dùng `mmpRef` = mã MMP** —
+MMP nên map được CẢ ref tạm đã nhận lẫn mã chính thức (phòng event xen kẽ trong lúc đổi).
+Response thiếu `code` → SMS giữ ref tạm và tiếp tục dùng nó (backward-compatible).
 
 **Q2 — Phân biệt origin?** Field **`origin`** trong envelope — SMS ĐÃ gửi (deploy 20/07):
 envelope nay là `{ event, mmpRef, code, origin: 'mmp'|'sms', occurredAt, data }` cho MỌI

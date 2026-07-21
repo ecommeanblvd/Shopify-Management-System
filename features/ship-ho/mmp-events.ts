@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
+import { planCodeAdoption } from './internal-code';
 
 export type ShipHoEmitOrder = { id: string; code: string; source: string; mmpRef: string | null };
 const MAX_ATTEMPTS = 8;
@@ -44,7 +45,7 @@ export async function emitShipHoEvent(
 
 /** Gửi 1 event tới MMP; cập nhật delivery_status/attempts. Không throw ra ngoài trừ lỗi lập trình. */
 export async function deliverShipHoEvent(row: {
-  id: string; mmpRef: string; code: string; event: string; occurredAt: Date; payload: unknown; attempts: number;
+  id: string; orderId?: string; mmpRef: string; code: string; event: string; occurredAt: Date; payload: unknown; attempts: number;
   /** source của đơn ('mmp' | 'internal') → origin envelope. Outbox row không lưu
    *  source nên caller phải truyền (emit có sẵn; retry join ship_ho_orders). */
   source: string;
@@ -78,6 +79,30 @@ export async function deliverShipHoEvent(row: {
       await db.update(schema.shipHoOrderEvents)
         .set({ deliveryStatus: 'delivered', attempts, lastAttemptAt: new Date(), lastError: null })
         .where(eq(schema.shipHoOrderEvents.id, row.id));
+      // Đơn ORIGIN SMS: MMP là nơi cấp số chính thức (INSLG) — response order.received
+      // trả { code } → SMS nhận mã đó làm code+mmpRef; mã operator nhập (reference
+      // khách, vd #KLS1996) chuyển vào customerRef. Chỉ đạo CEO 21/07.
+      if (row.event === 'order.received' && row.source !== 'mmp' && row.orderId) {
+        try {
+          const body = (await res.json()) as { code?: unknown };
+          const [cur] = await db.select({ code: schema.shipHoOrders.code, customerRef: schema.shipHoOrders.customerRef })
+            .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, row.orderId)).limit(1);
+          const plan = cur ? planCodeAdoption(cur, body.code) : null;
+          if (plan) {
+            await db.update(schema.shipHoOrders)
+              .set({ code: plan.code, mmpRef: plan.mmpRef, customerRef: plan.customerRef })
+              .where(eq(schema.shipHoOrders.id, row.orderId));
+            // Event còn pending của đơn → chuyển sang ref mới để retry gửi đúng khoá.
+            await db.update(schema.shipHoOrderEvents)
+              .set({ mmpRef: plan.mmpRef, code: plan.code })
+              .where(and(
+                eq(schema.shipHoOrderEvents.orderId, row.orderId),
+                eq(schema.shipHoOrderEvents.deliveryStatus, 'pending'),
+              ));
+            console.log(`[ship-ho] adopt mã MMP: ${cur!.code} → ${plan.code}`);
+          }
+        } catch { /* response không phải JSON / không có code — bỏ qua */ }
+      }
       return;
     }
     throw new Error(`http ${res.status}`);
@@ -100,7 +125,7 @@ export async function retryPendingShipHoEvents(): Promise<{ tried: number; deliv
     .limit(200);
   let delivered = 0, failed = 0;
   for (const { ev: r, source } of rows) {
-    await deliverShipHoEvent({ id: r.id, mmpRef: r.mmpRef, code: r.code, event: r.event, occurredAt: r.occurredAt, payload: r.payload, attempts: r.attempts, source });
+    await deliverShipHoEvent({ id: r.id, orderId: r.orderId, mmpRef: r.mmpRef, code: r.code, event: r.event, occurredAt: r.occurredAt, payload: r.payload, attempts: r.attempts, source });
     const [after] = await db.select({ s: schema.shipHoOrderEvents.deliveryStatus }).from(schema.shipHoOrderEvents).where(eq(schema.shipHoOrderEvents.id, r.id)).limit(1);
     if (after?.s === 'delivered') delivered++; else if (after?.s === 'failed') failed++;
   }
