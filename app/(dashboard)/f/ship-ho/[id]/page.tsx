@@ -59,7 +59,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">{o.code}</h1>
         <div className="flex items-center gap-3">
-          {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} />}
+          {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} shippedAt={o.shippedAt} />}
           {o.source === 'mmp' && <MmpOrderActions orderId={o.id} />}
           <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>
         </div>
@@ -71,6 +71,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           <span>Đối tác: <b className="text-foreground">{o.partnerBrandSlug}</b></span>
           <span>Trạng thái: <b className="text-foreground">{o.status}</b></span>
           <span>Carrier: <b className="text-foreground uppercase">{o.carrierKey ?? '—'}</b></span>
+          <span>Ngày đi hàng: <b className="text-foreground">{o.shippedAt
+            ? new Date(`${o.shippedAt}T00:00:00`).toLocaleDateString('vi-VN')
+            : '—'}</b>{canManage && o.trackingNumber ? <span className="ml-1 text-[10px]">(sửa qua “✎ Sửa tracking”)</span> : null}</span>
           <span>Mã đơn gốc (brand): {canManage
             ? <CustomerRefEditor orderId={o.id} customerRef={o.customerRef ?? null} />
             : <b className="text-foreground">{o.customerRef ?? '—'}</b>}</span>

@@ -110,6 +110,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       code: schema.shipHoOrders.code,
       source: schema.shipHoOrders.source,
       mmpRef: schema.shipHoOrders.mmpRef,
+      shippedAt: schema.shipHoOrders.shippedAt,
       brandSlug: schema.shipHoOrders.partnerBrandSlug,
       country: schema.shipHoOrders.country,
       city: schema.shipHoOrders.city,
@@ -148,7 +149,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     let billedChargeableKg: number | null = null;
     let sellBreakdown: Record<string, number> | null = null;
     if (billed.weightKg != null && billed.weightKg > 0) {
-      const asOf = billed.shipDate ? new Date(`${billed.shipDate}T00:00:00Z`) : undefined;
+      // Ngày hiệu lực fuel/bảng giá: ship_date trên bill thắng; dòng bill thiếu
+      // → shipped_at của đơn (Logistic staff nhập khi đi hàng).
+      const shipDateStr = billed.shipDate ?? o.shippedAt;
+      const asOf = shipDateStr ? new Date(`${shipDateStr}T00:00:00Z`) : undefined;
       const dim = (sms: string | null, decl: string | null) => {
         const v = sms ?? decl; return v == null ? undefined : Number(v);
       };

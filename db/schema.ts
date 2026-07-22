@@ -2033,6 +2033,10 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   quotedAt: timestamp('quoted_at'),
   // Tracking (P2)
   trackingNumber: text('tracking_number'),
+  // Ngày đi hàng (Logistic staff): mặc định = ngày nhập tracking, sửa được vì có
+  // thể tạo tracking trước rồi đi hàng chậm 1-2 ngày. Dùng làm ngày hiệu lực fuel
+  // khi bill chưa về / dòng bill thiếu ship_date (bill vẫn thắng khi có).
+  shippedAt: date('shipped_at'),
   deliveryStatus: text('delivery_status'),
   deliveredAt: timestamp('delivered_at'),
   lastTrackedAt: timestamp('last_tracked_at'),

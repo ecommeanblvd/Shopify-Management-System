@@ -7,14 +7,17 @@ import { setShipHoTracking } from '@/features/ship-ho/tracking-actions';
  * Action chính của đơn: gắn/sửa tracking — button nổi bật (màu riêng) trên header,
  * mở modal nhập carrier + tracking. Card "Vận đơn & giao hàng" bên dưới CHỈ hiển thị.
  */
-export function AddTrackingButton({ orderId, trackingNumber, carrierKey }: {
+export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shippedAt }: {
   orderId: string;
   trackingNumber: string | null;
   carrierKey: string | null;
+  shippedAt: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [tn, setTn] = useState(trackingNumber ?? '');
   const [carrier, setCarrier] = useState(carrierKey ?? '');
+  // Ngày đi hàng: mặc định = hôm nay (ngày nhập tracking); staff sửa nếu đi chậm hơn.
+  const [shipDate, setShipDate] = useState(shippedAt ?? new Date().toLocaleDateString('en-CA'));
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -23,6 +26,7 @@ export function AddTrackingButton({ orderId, trackingNumber, carrierKey }: {
     const r = await setShipHoTracking(orderId, {
       trackingNumber: tn,
       carrierKey: carrier === 'fedex' || carrier === 'dhl' ? carrier : null,
+      shippedAt: shipDate || null,
     });
     if (!r.ok) { setErr(r.error ?? 'Lỗi'); return; }
     setOpen(false);
@@ -55,6 +59,11 @@ export function AddTrackingButton({ orderId, trackingNumber, carrierKey }: {
               <label className="block text-xs text-muted-foreground">Tracking number
                 <input className="mt-1 w-full rounded border border-border bg-background px-2.5 py-1.5 font-mono text-sm"
                   autoFocus value={tn} onChange={(e) => setTn(e.target.value)} placeholder="771234567890" />
+              </label>
+              <label className="block text-xs text-muted-foreground">Ngày đi hàng
+                <input type="date" className="mt-1 w-full rounded border border-border bg-background px-2.5 py-1.5 text-sm"
+                  value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
+                <span className="mt-0.5 block text-[11px]">Mặc định là hôm nay — sửa lại nếu tạo tracking trước, đi hàng chậm hơn 1-2 ngày.</span>
               </label>
             </div>
             {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}

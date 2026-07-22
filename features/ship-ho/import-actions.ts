@@ -1,10 +1,11 @@
 'use server';
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { parseShipHoImportRow, statusForImportedOrder, statusOnReimport, type ParsedShipHoImport } from './import-parse';
+import { vnToday } from './ship-date';
 
 export interface ShipHoImportSummary {
   total: number;
@@ -35,6 +36,8 @@ function toValues(p: ParsedShipHoImport, partnerBrandSlug: string) {
     packagingType: p.packagingType,
     carrierKey: p.carrierKey,
     trackingNumber: p.trackingNumber,
+    // File có tracking → ngày đi hàng mặc định = ngày nhập lên hệ thống (staff sửa sau).
+    shippedAt: p.trackingNumber ? vnToday() : null,
     status: statusForImportedOrder(p.trackingNumber) as 'shipped' | 'draft',
   };
 }
@@ -60,7 +63,11 @@ function updateSetFor(p: ParsedShipHoImport, partnerBrandSlug: string, currentSt
     status: statusOnReimport(currentStatus, p.trackingNumber),
   };
   // Chỉ ghi tracking/carrier khi file có giá trị — không xoá dữ liệu ops-entered.
-  if (p.trackingNumber != null) set.trackingNumber = p.trackingNumber;
+  if (p.trackingNumber != null) {
+    set.trackingNumber = p.trackingNumber;
+    // Ngày đi hàng: chỉ điền khi đơn CHƯA có (re-import không ghi đè ngày staff đã sửa).
+    set.shippedAt = sql`COALESCE(${schema.shipHoOrders.shippedAt}, ${vnToday()})`;
+  }
   if (p.carrierKey != null) set.carrierKey = p.carrierKey;
   return set;
 }

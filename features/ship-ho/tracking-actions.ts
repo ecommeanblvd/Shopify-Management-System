@@ -7,6 +7,7 @@ import { emitShipHoEvent } from './mmp-events';
 import { deliveryStatusToEvent } from './mmp-events-map';
 import { orderStatusAfterTrack } from './track';
 import { requireManageShipHo } from './require-manage';
+import { resolveShippedAt } from './ship-date';
 
 /** Link tra cứu public cho MMP render cạnh tracking. */
 function trackingUrl(carrierKey: string | null, tracking: string): string | null {
@@ -17,7 +18,13 @@ function trackingUrl(carrierKey: string | null, tracking: string): string | null
 
 export async function setShipHoTracking(
   orderId: string,
-  input: { trackingNumber: string; carrierKey?: 'fedex' | 'dhl' | null },
+  input: {
+    trackingNumber: string;
+    carrierKey?: 'fedex' | 'dhl' | null;
+    /** Ngày đi hàng 'YYYY-MM-DD' (Logistic staff chọn). Bỏ trống → giữ ngày đã
+     *  có, đơn chưa có → mặc định hôm nay (ngày nhập tracking, giờ VN). */
+    shippedAt?: string | null;
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireManageShipHo();
@@ -36,15 +43,21 @@ export async function setShipHoTracking(
       status: schema.shipHoOrders.status,
       trackingNumber: schema.shipHoOrders.trackingNumber,
       carrierKey: schema.shipHoOrders.carrierKey,
+      shippedAt: schema.shipHoOrders.shippedAt,
     })
     .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
   if (!cur) return { ok: false, error: 'Không tìm thấy đơn' };
+
+  // Ngày đi hàng: staff chọn > ngày đã có > hôm nay (= ngày nhập tracking).
+  const shipped = resolveShippedAt(cur.shippedAt, input.shippedAt);
+  if (!shipped.ok) return { ok: false, error: shipped.error };
 
   const newCarrier = input.carrierKey !== undefined ? input.carrierKey : cur.carrierKey;
   // Gán tracking → coi như đã gửi, trừ khi đã ở trạng thái cao hơn.
   const bump = cur.status === 'draft' || cur.status === 'quoted';
   await db.update(schema.shipHoOrders).set({
     trackingNumber: tracking,
+    shippedAt: shipped.value,
     ...(input.carrierKey !== undefined ? { carrierKey: input.carrierKey } : {}),
     ...(bump ? { status: 'shipped' as const } : {}),
   }).where(eq(schema.shipHoOrders.id, orderId));
