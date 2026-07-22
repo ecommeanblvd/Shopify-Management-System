@@ -30,8 +30,8 @@ export function ManualStatusControl({ orderId, current }: {
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
-      <span className="text-xs text-muted-foreground" title="Dùng khi tracking tự động chưa khả dụng — trạng thái sẽ tự đồng bộ sang MMP">Update tay:</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground" title="Dùng khi tracking tự động chưa khả dụng — trạng thái sẽ tự đồng bộ sang MMP">Trạng thái giao:</span>
       <select className="rounded border border-border bg-background px-2 py-1 text-xs"
         value={status} onChange={(e) => setStatus(e.target.value as ManualDeliveryStatus | '')}>
         <option value="">— chọn trạng thái —</option>

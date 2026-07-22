@@ -35,7 +35,7 @@ export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shipped
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md bg-sky-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-sky-700">
+        className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-sky-700">
         {trackingNumber ? '✎ Sửa tracking' : '＋ Gắn tracking'}
       </button>
 

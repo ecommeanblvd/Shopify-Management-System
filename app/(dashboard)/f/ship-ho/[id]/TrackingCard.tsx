@@ -1,5 +1,4 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { ManualStatusControl } from './ManualStatusControl';
 
 const DELIVERY_LABEL: Record<string, { label: string; cls: string }> = {
   in_transit: { label: 'Đang vận chuyển', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
@@ -16,13 +15,14 @@ const TRACK_URL: Record<string, (tn: string) => string> = {
 
 /**
  * CHỈ hiển thị trạng thái vận đơn (tracking đang ở đâu, có sự cố không).
- * Gắn/sửa tracking là button action riêng trên header (AddTrackingButton).
+ * Mọi thao tác (gắn/sửa tracking, update trạng thái tay) nằm trên thanh
+ * Thao tác kho đầu trang.
  */
 export function TrackingCard({
-  orderId, trackingNumber, carrierKey, deliveryStatus, deliveredAt, canManage,
+  trackingNumber, carrierKey, deliveryStatus, deliveredAt,
 }: {
-  orderId: string; trackingNumber: string | null; carrierKey: string | null;
-  deliveryStatus: string | null; deliveredAt: Date | null; canManage: boolean;
+  trackingNumber: string | null; carrierKey: string | null;
+  deliveryStatus: string | null; deliveredAt: Date | null;
 }) {
   const st = deliveryStatus ? (DELIVERY_LABEL[deliveryStatus] ?? { label: deliveryStatus, cls: 'bg-muted text-muted-foreground' }) : null;
   const url = trackingNumber && carrierKey && TRACK_URL[carrierKey] ? TRACK_URL[carrierKey](trackingNumber) : null;
@@ -50,7 +50,6 @@ export function TrackingCard({
           )}
         </div>
       )}
-      {canManage && trackingNumber && <ManualStatusControl orderId={orderId} current={deliveryStatus} />}
     </CardContent></Card>
   );
 }

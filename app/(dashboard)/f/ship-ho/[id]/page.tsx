@@ -15,6 +15,8 @@ import { CopyField } from './CopyField';
 import { AddTrackingButton } from './AddTrackingButton';
 import { CustomerRefEditor } from './CustomerRefEditor';
 import { ShipHoCarrierPanel } from './ShipHoCarrierPanel';
+import { MeasureButton } from './MeasureButton';
+import { ManualStatusControl } from './ManualStatusControl';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,16 +56,47 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
   let countryName = o.country;
   try { countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(o.country) ?? o.country; } catch { /* mã lạ → giữ ISO */ }
 
+  const declared = {
+    weightKg: Number(o.weightKg),
+    dimLengthCm: o.dimLengthCm == null ? null : Number(o.dimLengthCm),
+    dimWidthCm: o.dimWidthCm == null ? null : Number(o.dimWidthCm),
+    dimHeightCm: o.dimHeightCm == null ? null : Number(o.dimHeightCm),
+  };
+  const smsMeasured = o.smsWeightKg == null ? null : {
+    weightKg: Number(o.smsWeightKg),
+    dimLengthCm: o.smsDimLengthCm == null ? null : Number(o.smsDimLengthCm),
+    dimWidthCm: o.smsDimWidthCm == null ? null : Number(o.smsDimWidthCm),
+    dimHeightCm: o.smsDimHeightCm == null ? null : Number(o.smsDimHeightCm),
+    measuredAt: o.smsMeasuredAt ? o.smsMeasuredAt.toISOString() : null,
+  };
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight">{o.code}</h1>
-        <div className="flex items-center gap-3">
-          {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} shippedAt={o.shippedAt} />}
-          {o.source === 'mmp' && <MmpOrderActions orderId={o.id} />}
-          <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>
-        </div>
+        <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>
       </div>
+
+      {/* Thanh Thao tác kho — MỌI action của nhân viên nằm ngay đầu trang, theo
+          thứ tự quy trình: đo lại → chọn line → gắn tracking → update trạng thái.
+          Các card bên dưới CHỈ hiển thị thông tin. */}
+      {(canManage || o.source === 'mmp') && (
+        <Card><CardContent className="p-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Thao tác kho</span>
+            {canManage && <MeasureButton orderId={o.id} declared={declared} sms={smsMeasured} />}
+            {canManage && <ShipHoCarrierPanel orderId={o.id} currentKey={o.carrierKey} canManage={canManage} />}
+            {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} shippedAt={o.shippedAt} />}
+            {canManage && o.trackingNumber && (
+              <>
+                <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
+                <ManualStatusControl orderId={o.id} current={o.deliveryStatus} />
+              </>
+            )}
+            {o.source === 'mmp' && <MmpOrderActions orderId={o.id} />}
+          </div>
+        </CardContent></Card>
+      )}
 
       <Card><CardContent className="p-4 space-y-4 text-sm">
         {/* Meta nội bộ (không cần copy) */}
@@ -106,25 +139,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
 
       </CardContent></Card>
 
-      <SmsMeasureCard
-        orderId={o.id}
-        canManage={canManage}
-        declared={{
-          weightKg: Number(o.weightKg),
-          dimLengthCm: o.dimLengthCm == null ? null : Number(o.dimLengthCm),
-          dimWidthCm: o.dimWidthCm == null ? null : Number(o.dimWidthCm),
-          dimHeightCm: o.dimHeightCm == null ? null : Number(o.dimHeightCm),
-        }}
-        sms={o.smsWeightKg == null ? null : {
-          weightKg: Number(o.smsWeightKg),
-          dimLengthCm: o.smsDimLengthCm == null ? null : Number(o.smsDimLengthCm),
-          dimWidthCm: o.smsDimWidthCm == null ? null : Number(o.smsDimWidthCm),
-          dimHeightCm: o.smsDimHeightCm == null ? null : Number(o.smsDimHeightCm),
-          measuredAt: o.smsMeasuredAt ? o.smsMeasuredAt.toISOString() : null,
-        }}
-      />
-
-      <ShipHoCarrierPanel orderId={o.id} currentKey={o.carrierKey} canManage={canManage} />
+      <SmsMeasureCard declared={declared} sms={smsMeasured} />
 
       <Card><CardContent className="p-4 space-y-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -256,12 +271,10 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
       </CardContent></Card>
 
       <TrackingCard
-        orderId={o.id}
         trackingNumber={o.trackingNumber}
         carrierKey={o.carrierKey}
         deliveryStatus={o.deliveryStatus}
         deliveredAt={o.deliveredAt}
-        canManage={canManage}
       />
     </div>
   );
