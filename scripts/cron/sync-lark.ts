@@ -17,6 +17,7 @@
  */
 
 import { syncLarkPacks } from '@/features/lark/sync';
+import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 async function main(): Promise<void> {
   const s = await syncLarkPacks();
@@ -25,6 +26,16 @@ async function main(): Promise<void> {
   );
   for (const u of s.unmatched) {
     process.stdout.write(`  unmatched: ${u.orderNumber} — ${u.reason}\n`);
+  }
+  // Ngày MEAN nhận hàng từ brand (bảng Lark WH) → mmp_line_received — nguồn
+  // receivedAt cho payload MMP (công nợ theo kỳ nhận hàng). Best-effort: lỗi
+  // không chặn kết quả packs. Trước đây bước này CHỈ có ở route HTTP nên bảng
+  // đóng băng 29/06→22/07 (gap 426 đơn by_received phía MMP).
+  try {
+    const br = await syncBrandReceived();
+    process.stdout.write(`brand-received: fetched ${br.fetched}, upserted ${br.upserted}\n`);
+  } catch (err) {
+    process.stderr.write(`brand-received: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
   }
 }
 
