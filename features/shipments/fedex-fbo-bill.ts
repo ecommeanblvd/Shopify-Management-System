@@ -31,6 +31,9 @@ export interface FboApLine {
   weightKg: number | null;
   podAt: string | null;
   podName: string | null;
+  /** Ngày đi hàng ISO (parseFboDate) — re-bill cần để lấy fuel TUẦN GIAO (thiếu
+   *  → reconcile rơi về fuel hôm nay, lệch giá thu vài nghìn — bug bắt 22/07). */
+  shipDate: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
   signature: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; total: number;
 }
@@ -44,6 +47,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     orderRef: r.orderRef,
     weightKg: r.weightKg,
     podAt: r.podAt, podName: r.podName,
+    shipDate: parseFboDate(r.shipDate),
     base: r.base, discount: r.discount, fuel: r.fuel, remote: r.remote, demand: r.demand,
     signature: r.signature + r.residential,
     vat: r.vat,

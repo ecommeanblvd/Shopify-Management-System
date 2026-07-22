@@ -193,6 +193,7 @@ export async function importFboToDatabase(
         importHandling: numStr(l.importHandling), duty: numStr(l.duty),
         total: numStr(l.total),
         podAt: l.podAt ? new Date(l.podAt) : null, podName: l.podName,
+        shipDate: l.shipDate,
       })));
     }
 

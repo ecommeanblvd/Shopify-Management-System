@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeBilledLine, costToVndFactor, type RawBillLine } from './carrier-invoice-lookup';
+import { normalizeBilledLine, costToVndFactor, billImpliedFuelPercent, type RawBillLine, type BilledSurcharges } from './carrier-invoice-lookup';
 
 const raw: RawBillLine = {
   weightKg: '2.500', base: '1000000', discount: '-50000', fuel: '180000', remote: '0',
@@ -35,5 +35,31 @@ describe('normalizeBilledLine', () => {
     expect(b.totalVnd).toBe(0);
     expect(b.surcharges.base).toBe(0);
     expect(b.shipDate).toBeNull();
+  });
+});
+
+describe('billImpliedFuelPercent — fuel % FedEx THỰC ÁP suy từ chính bill', () => {
+  const s = (over: Partial<BilledSurcharges>): BilledSurcharges => ({
+    base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0, vat: 0,
+    other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, ...over,
+  });
+  it('SV-0016 thật: fuel 393.038 / (4.470.300 − 3.522.149 + demand 79.400) = 38,25%', () => {
+    expect(billImpliedFuelPercent(s({ base: 4_470_300, discount: -3_522_149, fuel: 393_038, demand: 79_400 }))).toBe(38.25);
+  });
+  it('SV-0015 thật: AC chịu fuel — 507.718 / (3.442.200 − 2.404.032 + AC 289.200) = 38,25%', () => {
+    expect(billImpliedFuelPercent(s({ base: 3_442_200, discount: -2_404_032, fuel: 507_718, addressCorrection: 289_200 }))).toBe(38.25);
+  });
+  it('lượng tử hoá bậc 0,25 (FedEx công bố theo bước 0,25%)', () => {
+    // 385/1000 = 38.5% chính xác; lệch làm tròn vài đồng vẫn về đúng bậc.
+    expect(billImpliedFuelPercent(s({ base: 1_000_000, fuel: 385_003 }))).toBe(38.5);
+  });
+  it('bill không có fuel (0) → null (caller fallback engine)', () => {
+    expect(billImpliedFuelPercent(s({ base: 1_000_000, fuel: 0 }))).toBeNull();
+  });
+  it('base chịu fuel ≤ 0 → null', () => {
+    expect(billImpliedFuelPercent(s({ base: 100, discount: -200, fuel: 50 }))).toBeNull();
+  });
+  it('tỉ lệ vô lý (>100%) → null, không tin dòng bill hỏng', () => {
+    expect(billImpliedFuelPercent(s({ base: 100_000, fuel: 200_000 }))).toBeNull();
   });
 });

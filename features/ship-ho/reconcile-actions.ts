@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { parseCarrierInvoiceRow, computeReconcile } from './reconcile-logic';
-import { getBilledByTracking } from './carrier-invoice-lookup';
+import { getBilledByTracking, billImpliedFuelPercent } from './carrier-invoice-lookup';
 import { estimateForBrand } from './brand-estimate';
 import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
@@ -174,10 +174,13 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // (không fuel, có VAT); duty → pass-through thuần (không fuel, KHÔNG VAT).
         const customsSur = s.importHandling + s.other;
         const dutySur = s.duty;
+        // Fuel % ưu tiên suy từ CHÍNH bill (mức FedEx thực áp cho lô này) —
+        // bảng fuel nội bộ có thể lệch tuần với mức bill; engine chỉ là fallback.
+        const fuelPct = billImpliedFuelPercent(s) ?? est.internal.fuelPercent;
         const rc = reconciledBrandCharge({
           baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
           transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur, dutyVnd: dutySur,
-          fuelPercent: est.internal.fuelPercent, vatPercent: est.internal.vatPercent,
+          fuelPercent: fuelPct, vatPercent: est.internal.vatPercent,
           serviceLabel: 'Express Delivery',
         });
         actualChargedVnd = rc.chargedVnd;
@@ -189,7 +192,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           residentialVnd: Math.round(s.residential), signatureVnd: Math.round(s.signature),
           acVnd: Math.round(s.addressCorrection),
           importHandlingVnd: Math.round(s.importHandling), dutyVnd: Math.round(dutySur), otherVnd: Math.round(s.other),
-          fuelVnd: rc.fuelVnd, fuelPercent: est.internal.fuelPercent,
+          fuelVnd: rc.fuelVnd, fuelPercent: fuelPct,
           processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
           chargedVnd: rc.chargedVnd,
         };

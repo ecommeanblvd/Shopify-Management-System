@@ -74,6 +74,24 @@ export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNum
   };
 }
 
+/**
+ * Fuel % FedEx THỰC ÁP cho lô hàng, suy từ chính dòng bill:
+ * fuel ÷ (net freight + phụ phí vận chuyển chịu fuel), lượng tử bậc 0,25%
+ * (FedEx công bố theo bước 0,25). Bảng fuel nội bộ (scrape fedex.com) có thể
+ * lệch tuần so với mức bill thực áp (kiểm chứng 21/07: bill ship 20-21/07 áp
+ * 38,25% trong khi bảng tuần 20-26/07 ghi 39,75%) → giá thu THỰC phải lấy %
+ * từ bill. Trả null khi bill không có fuel / số bất thường → caller fallback
+ * fuel engine theo ship_date.
+ */
+export function billImpliedFuelPercent(s: BilledSurcharges): number | null {
+  const fuelableBase = s.base + s.discount + s.remote + s.demand + s.signature
+    + s.residential + s.addressCorrection;
+  if (!(s.fuel > 0) || !(fuelableBase > 0)) return null;
+  const pct = Math.round((s.fuel / fuelableBase) * 100 * 4) / 4;
+  if (pct <= 0 || pct > 100) return null;
+  return pct;
+}
+
 /** COST currency → VND. costCurrency VND → 1; displayCurrency VND → 1/fx; khác → null. */
 export function costToVndFactor(costCurrency: string, displayCurrency: string, fxCostPerDisplay: number): number | null {
   if (costCurrency === 'VND') return 1;

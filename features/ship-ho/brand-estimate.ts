@@ -104,6 +104,9 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     destinationPostcode: parcel.postcode, destinationCity: parcel.city,
     isResidential: isDefaultResidential(country),
     signatureOptIn: shouldChargeDirectSignature(parcel.directSignature ?? false, country),
+    // asOf phải vào cả quote() — engine gate fuel/phụ phí theo effectiveDate,
+    // thiếu nó thì fuel luôn lấy tuần HIỆN TẠI dù snapshot đã load theo asOf.
+    effectiveDate: asOf,
   });
   if (!res.ok) return { ok: false, code: 'quote_failed', error: 'Không tính được cước cho tuyến này' };
 
