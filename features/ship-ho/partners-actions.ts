@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { pushBrandRateCardToMmp } from './ratecard-push';
+import { SHIP_HO_TIERS } from './tier-pricing';
 
 export async function listBrandsForShipHo() {
   return db
@@ -47,7 +48,7 @@ export async function setPartnerTier(
   input: { strategic?: boolean; tierOverrideCode?: string | null },
 ): Promise<{ ok: boolean; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
-  const VALID = ['standard', 'bronze', 'silver', 'gold', 'platinum'];
+  const VALID = SHIP_HO_TIERS.map((t) => t.code as string);
   if (input.tierOverrideCode != null && input.tierOverrideCode !== '' && !VALID.includes(input.tierOverrideCode)) {
     return { ok: false, error: 'Tier không hợp lệ' };
   }

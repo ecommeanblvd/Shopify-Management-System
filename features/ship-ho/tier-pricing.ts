@@ -1,19 +1,19 @@
 /**
  * THUẦN: bảng giá chiết khấu tier cho đối tác ship hộ.
  *
- * Mô hình (CEO chỉnh 23/07/2026 lần 2, thay spec 09/07): BẢNG GIÁ GỐC (rack) =
- * cước cơ bản × markup 40% (chỉ để TRÌNH BÀY CK). Thang markup hiệu dụng 5 mốc
- * trên base theo volume tháng trước: +25 / +20 / +15 / +10 / +5 (sàn 5% =
- * Platinum/strategic). CK chỉ đánh vào bảng cước gốc; phụ phí + phí xử lý 50k
- * passthrough (không CK).
+ * Mô hình (CEO chốt 23/07/2026 lần 3, thay spec 09/07): BẢNG GIÁ GỐC (rack) =
+ * cước cơ bản × markup 40% (chỉ để TRÌNH BÀY CK). Thang markup hiệu dụng 4 mốc
+ * trên base theo volume tháng trước: +20 / +16 / +12 / +8 (sàn 8% =
+ * Platinum/strategic; mốc 5% bị loại vì quá rủi ro). CK chỉ đánh vào bảng cước
+ * gốc; phụ phí + phí xử lý 50k passthrough (không CK).
  *
  * Ưu tiên resolve: strategic > override (admin ép) > auto (volume) > standard.
  */
 
 export const RACK_MARKUP_PERCENT = 40;
-const FLOOR_MARKUP_PERCENT = 5;
+const FLOOR_MARKUP_PERCENT = 8;
 
-export type ShipHoTierCode = 'standard' | 'bronze' | 'silver' | 'gold' | 'platinum';
+export type ShipHoTierCode = 'standard' | 'silver' | 'gold' | 'platinum';
 
 export interface ShipHoTier {
   code: ShipHoTierCode;
@@ -30,13 +30,12 @@ export interface ShipHoTier {
 const discountForMarkup = (markupPct: number): number =>
   (1 - (1 + markupPct / 100) / (1 + RACK_MARKUP_PERCENT / 100)) * 100;
 
-/** Thang 5 mốc markup hiệu dụng trên base (CEO 23/07, lần 2): 25/20/15/10/5. */
+/** Thang 4 mốc markup hiệu dụng trên base (CEO 23/07, lần 3): 20/16/12/8. */
 export const SHIP_HO_TIERS: ShipHoTier[] = [
-  { code: 'standard', name: 'Standard (+25%)', minOrders: 0, discountPct: discountForMarkup(25) },
-  { code: 'bronze', name: 'Bronze (+20%)', minOrders: 20, discountPct: discountForMarkup(20) },
-  { code: 'silver', name: 'Silver (+15%)', minOrders: 50, discountPct: discountForMarkup(15) },
-  { code: 'gold', name: 'Gold (+10%)', minOrders: 100, discountPct: discountForMarkup(10) },
-  { code: 'platinum', name: 'Platinum (+5%)', minOrders: 200, discountPct: discountForMarkup(FLOOR_MARKUP_PERCENT) },
+  { code: 'standard', name: 'Standard (+20%)', minOrders: 0, discountPct: discountForMarkup(20) },
+  { code: 'silver', name: 'Silver (+16%)', minOrders: 50, discountPct: discountForMarkup(16) },
+  { code: 'gold', name: 'Gold (+12%)', minOrders: 100, discountPct: discountForMarkup(12) },
+  { code: 'platinum', name: 'Platinum (+8%)', minOrders: 200, discountPct: discountForMarkup(FLOOR_MARKUP_PERCENT) },
 ];
 
 const BY_CODE = new Map(SHIP_HO_TIERS.map((t) => [t.code, t]));
