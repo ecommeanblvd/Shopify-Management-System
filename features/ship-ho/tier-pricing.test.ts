@@ -5,9 +5,9 @@ import {
 } from './tier-pricing';
 
 describe('SHIP_HO_TIERS', () => {
-  it('5 bậc, rack 40%, sàn markup hiệu dụng ĐÚNG 20%', () => {
+  it('7 bậc (5 volume + 2 nấc tay), rack 40%, sàn volume ĐÚNG 20%', () => {
     expect(RACK_MARKUP_PERCENT).toBe(40);
-    expect(SHIP_HO_TIERS).toHaveLength(5);
+    expect(SHIP_HO_TIERS).toHaveLength(7);
     const platinum = SHIP_HO_TIERS.find((t) => t.code === 'platinum')!;
     expect(effectiveMarkupPercent(platinum.discountPct)).toBeCloseTo(20, 6); // exact sàn
   });
@@ -40,9 +40,28 @@ describe('resolveTier — ưu tiên strategic > override > auto > standard', () 
     expect(resolveTier({ strategic: false, overrideCode: 'gold', autoCode: 'standard' }).code).toBe('gold');
   });
   it('override rác → bỏ qua, dùng auto', () => {
-    expect(resolveTier({ strategic: false, overrideCode: 'diamond', autoCode: 'silver' }).code).toBe('silver');
+    expect(resolveTier({ strategic: false, overrideCode: 'unobtainium', autoCode: 'silver' }).code).toBe('silver');
   });
   it('không gì cả → standard', () => {
     expect(resolveTier({ strategic: false, overrideCode: null, autoCode: null }).code).toBe('standard');
+  });
+});
+
+describe('2 nấc đặc biệt Diamond/Black (22/07) — dưới sàn volume, CHỈ admin gán tay', () => {
+  it('diamond → markup hiệu dụng ĐÚNG 15%; black → ĐÚNG 10%', () => {
+    const diamond = SHIP_HO_TIERS.find((t) => t.code === 'diamond')!;
+    const black = SHIP_HO_TIERS.find((t) => t.code === 'black')!;
+    expect(effectiveMarkupPercent(diamond.discountPct)).toBeCloseTo(15, 6);
+    expect(effectiveMarkupPercent(black.discountPct)).toBeCloseTo(10, 6);
+  });
+  it('volume KHÔNG bao giờ tự đạt diamond/black (kể cả 10.000 đơn)', () => {
+    expect(tierForVolume(10_000)).toBe('platinum');
+  });
+  it('admin override diamond/black → resolve đúng bậc', () => {
+    expect(resolveTier({ strategic: false, overrideCode: 'diamond', autoCode: 'gold' }).code).toBe('diamond');
+    expect(resolveTier({ strategic: false, overrideCode: 'black', autoCode: 'platinum' }).code).toBe('black');
+  });
+  it('strategic vẫn platinum (diamond/black chỉ qua override tay)', () => {
+    expect(resolveTier({ strategic: true, overrideCode: 'black', autoCode: null }).code).toBe('platinum');
   });
 });

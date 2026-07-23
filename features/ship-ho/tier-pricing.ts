@@ -12,7 +12,7 @@
 export const RACK_MARKUP_PERCENT = 40;
 const FLOOR_MARKUP_PERCENT = 20;
 
-export type ShipHoTierCode = 'standard' | 'bronze' | 'silver' | 'gold' | 'platinum';
+export type ShipHoTierCode = 'standard' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'black';
 
 export interface ShipHoTier {
   code: ShipHoTierCode;
@@ -21,10 +21,16 @@ export interface ShipHoTier {
   minOrders: number;
   /** % chiết khấu trên bảng giá gốc. */
   discountPct: number;
+  /** Nấc đặc biệt: volume KHÔNG tự đạt, chỉ admin override tay. */
+  manualOnly?: boolean;
 }
 
-/** Platinum: discount exact để markup hiệu dụng = ĐÚNG sàn 20%. */
-const PLATINUM_DISCOUNT_PCT = (1 - (1 + FLOOR_MARKUP_PERCENT / 100) / (1 + RACK_MARKUP_PERCENT / 100)) * 100;
+/** Discount exact để markup hiệu dụng = ĐÚNG m%: d = 1 − (1+m)/(1+rack). */
+const discountForMarkup = (markupPct: number): number =>
+  (1 - (1 + markupPct / 100) / (1 + RACK_MARKUP_PERCENT / 100)) * 100;
+
+/** Platinum: discount exact để markup hiệu dụng = ĐÚNG sàn volume 20%. */
+const PLATINUM_DISCOUNT_PCT = discountForMarkup(FLOOR_MARKUP_PERCENT);
 
 export const SHIP_HO_TIERS: ShipHoTier[] = [
   { code: 'standard', name: 'Standard', minOrders: 0, discountPct: 0 },
@@ -32,6 +38,10 @@ export const SHIP_HO_TIERS: ShipHoTier[] = [
   { code: 'silver', name: 'Silver', minOrders: 50, discountPct: 7 },
   { code: 'gold', name: 'Gold', minOrders: 100, discountPct: 10 },
   { code: 'platinum', name: 'Platinum', minOrders: 200, discountPct: PLATINUM_DISCOUNT_PCT },
+  // 2 nấc đặc biệt (22/07, CEO): thị trường kêu giá cao → mở thêm markup 15%/10%
+  // trên base. DƯỚI sàn volume 20% nên không tự đạt — chỉ admin gán tay khi đàm phán.
+  { code: 'diamond', name: 'Diamond (+15%)', minOrders: Number.POSITIVE_INFINITY, discountPct: discountForMarkup(15), manualOnly: true },
+  { code: 'black', name: 'Black (+10%)', minOrders: Number.POSITIVE_INFINITY, discountPct: discountForMarkup(10), manualOnly: true },
 ];
 
 const BY_CODE = new Map(SHIP_HO_TIERS.map((t) => [t.code, t]));
@@ -40,10 +50,10 @@ export function tierByCode(code: string | null | undefined): ShipHoTier | null {
   return code ? (BY_CODE.get(code as ShipHoTierCode) ?? null) : null;
 }
 
-/** Volume tháng trước → tier code (bậc cao nhất có minOrders ≤ n). */
+/** Volume tháng trước → tier code (bậc cao nhất có minOrders ≤ n; bỏ nấc manualOnly). */
 export function tierForVolume(ordersLastMonth: number): ShipHoTierCode {
   let best: ShipHoTier = SHIP_HO_TIERS[0];
-  for (const t of SHIP_HO_TIERS) if (ordersLastMonth >= t.minOrders) best = t;
+  for (const t of SHIP_HO_TIERS) if (!t.manualOnly && ordersLastMonth >= t.minOrders) best = t;
   return best.code;
 }
 
