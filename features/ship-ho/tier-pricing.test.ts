@@ -4,20 +4,20 @@ import {
   type ShipHoTierCode,
 } from './tier-pricing';
 
-describe('SHIP_HO_TIERS (thang CEO 23/07: +30/+25/+20/+15/+10 trên base)', () => {
-  it('5 bậc, rack 40% (chỉ trình bày CK), sàn volume ĐÚNG 10%', () => {
+describe('SHIP_HO_TIERS (thang CEO 23/07 lần 2: +25/+20/+15/+10/+5 trên base)', () => {
+  it('5 bậc, rack 40% (chỉ trình bày CK), sàn volume ĐÚNG 5%', () => {
     expect(RACK_MARKUP_PERCENT).toBe(40);
     expect(SHIP_HO_TIERS).toHaveLength(5);
     const platinum = SHIP_HO_TIERS.find((t) => t.code === 'platinum')!;
-    expect(effectiveMarkupPercent(platinum.discountPct)).toBeCloseTo(10, 6); // exact sàn
+    expect(effectiveMarkupPercent(platinum.discountPct)).toBeCloseTo(5, 6); // exact sàn
   });
-  it('markup hiệu dụng từng bậc ĐÚNG: 30 / 25 / 20 / 15 / 10', () => {
+  it('markup hiệu dụng từng bậc ĐÚNG: 25 / 20 / 15 / 10 / 5', () => {
     const by = Object.fromEntries(SHIP_HO_TIERS.map((t) => [t.code, effectiveMarkupPercent(t.discountPct)]));
-    expect(by.standard).toBeCloseTo(30, 6);
-    expect(by.bronze).toBeCloseTo(25, 6);
-    expect(by.silver).toBeCloseTo(20, 6);
-    expect(by.gold).toBeCloseTo(15, 6);
-    expect(by.platinum).toBeCloseTo(10, 6);
+    expect(by.standard).toBeCloseTo(25, 6);
+    expect(by.bronze).toBeCloseTo(20, 6);
+    expect(by.silver).toBeCloseTo(15, 6);
+    expect(by.gold).toBeCloseTo(10, 6);
+    expect(by.platinum).toBeCloseTo(5, 6);
   });
 });
 
