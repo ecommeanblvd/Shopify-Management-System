@@ -1,18 +1,19 @@
 /**
- * THUẦN: bảng giá chiết khấu tier cho đối tác ship hộ (spec 09/07/2026).
+ * THUẦN: bảng giá chiết khấu tier cho đối tác ship hộ.
  *
- * Mô hình: BẢNG GIÁ GỐC (rack) = cước cơ bản × markup 40%. Brand hưởng CHIẾT
- * KHẤU % trên bảng giá gốc theo volume tháng trước; sàn markup hiệu dụng 20%
- * (Platinum, discount = 1 − 1.2/1.4 — exact). CK chỉ đánh vào bảng cước gốc;
- * phụ phí + phí xử lý passthrough (không CK).
+ * Mô hình (CEO chốt 23/07/2026, thay spec 09/07): BẢNG GIÁ GỐC (rack) = cước
+ * cơ bản × markup 40% (chỉ để TRÌNH BÀY CK). Thang markup hiệu dụng 5 mốc trên
+ * base theo volume tháng trước: +30 / +25 / +20 / +15 / +10 (sàn 10% =
+ * Platinum/strategic). CK chỉ đánh vào bảng cước gốc; phụ phí + phí xử lý 50k
+ * passthrough (không CK).
  *
  * Ưu tiên resolve: strategic > override (admin ép) > auto (volume) > standard.
  */
 
 export const RACK_MARKUP_PERCENT = 40;
-const FLOOR_MARKUP_PERCENT = 20;
+const FLOOR_MARKUP_PERCENT = 10;
 
-export type ShipHoTierCode = 'standard' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'black';
+export type ShipHoTierCode = 'standard' | 'bronze' | 'silver' | 'gold' | 'platinum';
 
 export interface ShipHoTier {
   code: ShipHoTierCode;
@@ -29,19 +30,13 @@ export interface ShipHoTier {
 const discountForMarkup = (markupPct: number): number =>
   (1 - (1 + markupPct / 100) / (1 + RACK_MARKUP_PERCENT / 100)) * 100;
 
-/** Platinum: discount exact để markup hiệu dụng = ĐÚNG sàn volume 20%. */
-const PLATINUM_DISCOUNT_PCT = discountForMarkup(FLOOR_MARKUP_PERCENT);
-
+/** Thang 5 mốc markup hiệu dụng trên base (CEO 23/07): 30/25/20/15/10. */
 export const SHIP_HO_TIERS: ShipHoTier[] = [
-  { code: 'standard', name: 'Standard', minOrders: 0, discountPct: 0 },
-  { code: 'bronze', name: 'Bronze', minOrders: 20, discountPct: 4 },
-  { code: 'silver', name: 'Silver', minOrders: 50, discountPct: 7 },
-  { code: 'gold', name: 'Gold', minOrders: 100, discountPct: 10 },
-  { code: 'platinum', name: 'Platinum', minOrders: 200, discountPct: PLATINUM_DISCOUNT_PCT },
-  // 2 nấc đặc biệt (22/07, CEO): thị trường kêu giá cao → mở thêm markup 15%/10%
-  // trên base. DƯỚI sàn volume 20% nên không tự đạt — chỉ admin gán tay khi đàm phán.
-  { code: 'diamond', name: 'Diamond (+15%)', minOrders: Number.POSITIVE_INFINITY, discountPct: discountForMarkup(15), manualOnly: true },
-  { code: 'black', name: 'Black (+10%)', minOrders: Number.POSITIVE_INFINITY, discountPct: discountForMarkup(10), manualOnly: true },
+  { code: 'standard', name: 'Standard (+30%)', minOrders: 0, discountPct: discountForMarkup(30) },
+  { code: 'bronze', name: 'Bronze (+25%)', minOrders: 20, discountPct: discountForMarkup(25) },
+  { code: 'silver', name: 'Silver (+20%)', minOrders: 50, discountPct: discountForMarkup(20) },
+  { code: 'gold', name: 'Gold (+15%)', minOrders: 100, discountPct: discountForMarkup(15) },
+  { code: 'platinum', name: 'Platinum (+10%)', minOrders: 200, discountPct: discountForMarkup(FLOOR_MARKUP_PERCENT) },
 ];
 
 const BY_CODE = new Map(SHIP_HO_TIERS.map((t) => [t.code, t]));

@@ -181,8 +181,14 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // Fuel % ưu tiên suy từ CHÍNH bill (mức FedEx thực áp cho lô này) —
         // bảng fuel nội bộ có thể lệch tuần với mức bill; engine chỉ là fallback.
         const fuelPct = billImpliedFuelPercent(s) ?? est.internal.fuelPercent;
+        // Base giá thu THỰC = cước NET carrier bill (base − CK) × (1+markup) —
+        // CEO chốt 23/07: giá cho đối tác neo đúng mức carrier tính cho mình,
+        // để CK tuần của FedEx dao động cỡ nào phần cước cũng không bao giờ lỗ.
+        // Ratecard nội bộ chỉ còn là fallback khi dòng bill thiếu cột base.
+        const billNetFreight = s.base + s.discount;
         const rc = reconciledBrandCharge({
-          baseVnd: est.internal.baseVnd, markupPercent: est.internal.markupPercent,
+          baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
+          markupPercent: est.internal.markupPercent,
           transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur, dutyVnd: dutySur,
           fuelPercent: fuelPct, vatPercent: est.internal.vatPercent,
           serviceLabel: 'Express Delivery',
