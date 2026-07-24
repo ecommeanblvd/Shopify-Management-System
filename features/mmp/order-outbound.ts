@@ -33,6 +33,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       totalShipping: schema.shopifyOrders.totalShipping,
       totalTax: schema.shopifyOrders.totalTax,
       totalPrice: schema.shopifyOrders.totalPrice,
+      transactionFee: schema.shopifyOrders.transactionFee,
+      transactionFeeNative: schema.shopifyOrders.transactionFeeNative,
+      transactionFeeNativeCurrency: schema.shopifyOrders.transactionFeeNativeCurrency,
     })
     .from(schema.shopifyOrders)
     .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
@@ -86,6 +89,12 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
         ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
+        // Phí transaction cổng thanh toán (CEO 24/07 — store riêng cần cho đối
+        // soát net): fee quy đồng đơn + fee gốc theo đồng payout. null = đơn
+        // chưa sync được transactions.fees.
+        transactionFee: ord.transactionFee == null ? null : Number(ord.transactionFee),
+        transactionFeeNative: ord.transactionFeeNative == null ? null : Number(ord.transactionFeeNative),
+        transactionFeeNativeCurrency: ord.transactionFeeNativeCurrency ?? null,
       }
     : null;
   // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.

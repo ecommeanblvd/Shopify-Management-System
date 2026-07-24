@@ -22,6 +22,12 @@ export interface MmpOrderPricing {
   totalPrice: number | null;
   /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
   returnShippingVnd?: number;
+  /** Phí transaction cổng thanh toán quy về ĐỒNG ĐƠN (suy từ Shopify
+   *  transactions.fees; null = đơn chưa có dữ liệu fees). */
+  transactionFee?: number | null;
+  /** Phí transaction NGUYÊN GỐC theo đồng payout của cổng (kèm currency dưới). */
+  transactionFeeNative?: number | null;
+  transactionFeeNativeCurrency?: string | null;
 }
 export interface MmpOrderPayload {
   orderNumber: string; store: string;

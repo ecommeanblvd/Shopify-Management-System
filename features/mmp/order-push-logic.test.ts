@@ -83,3 +83,35 @@ describe('buildMmpOrderPayload — root currency (validator MMP siết 21/07)', 
     expect('currency' in p).toBe(false);
   });
 });
+
+describe('buildMmpOrderPayload — transaction fees (store riêng, 24/07)', () => {
+  const base = {
+    orderNumber: 'TA100', store: 'tinhatelier', recipientName: 'C', shipCountry: 'US',
+    placedAt: '2026-07-01T00:00:00.000Z', receivedAt: null,
+    financialStatus: 'PAID', fulfillmentStatus: 'FULFILLED', cancelledAt: null,
+  };
+  it('pricing kèm transactionFee (đồng đơn) + native passthrough nguyên vẹn', () => {
+    const p = buildMmpOrderPayload({
+      ...base,
+      brandLines: [{ sku: 'A', title: 'A', qty: 1, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 100 }],
+      pricing: {
+        currency: 'USD', subtotal: 100, totalDiscount: 0, totalShipping: 25, totalTax: 0, totalPrice: 125,
+        transactionFee: 4.93, transactionFeeNative: 128_960, transactionFeeNativeCurrency: 'VND',
+      },
+    });
+    expect(p.pricing?.transactionFee).toBe(4.93);
+    expect(p.pricing?.transactionFeeNative).toBe(128_960);
+    expect(p.pricing?.transactionFeeNativeCurrency).toBe('VND');
+  });
+  it('phí chưa suy được (đơn cũ chưa re-sync transactions) → key null, không vỡ shape', () => {
+    const p = buildMmpOrderPayload({
+      ...base,
+      brandLines: [{ sku: 'A', title: 'A', qty: 1, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 100 }],
+      pricing: {
+        currency: 'USD', subtotal: 100, totalDiscount: 0, totalShipping: 25, totalTax: 0, totalPrice: 125,
+        transactionFee: null, transactionFeeNative: null, transactionFeeNativeCurrency: null,
+      },
+    });
+    expect(p.pricing?.transactionFee).toBeNull();
+  });
+});
