@@ -129,6 +129,8 @@ Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng l
     - payload thêm khối `pricing`: `{ currency, subtotal, totalDiscount, totalShipping, totalTax, totalPrice }` — `subtotal` = Σ unitPrice×qty các line gửi kèm; `totalShipping` = phí ship khách trả (sau giảm); `totalPrice` = tổng khách thanh toán.
     - Payload có pricing thì kèm **`currency` CẤP GỐC** (= pricing.currency) — validator MMP yêu cầu khi line có unitPrice (siết 21/07).
     - `pricing.returnShippingVnd` (optional, **VND** — khác order currency): tổng cước HÀNG HOÀN đã phát sinh cho đơn, lấy từ bill carrier (nhận diện orderRef `_R` / `RETURN OF <tracking>`). Xuất hiện khi > 0 — để brand đối soát cả chi phí hoàn.
+    - **Phí transaction cổng thanh toán (từ 24/07/2026)** — 3 key luôn có mặt trong `pricing` của store riêng:
+      `transactionFee` (phí quy về **order currency**, suy từ Shopify `transactions.fees` các giao dịch SALE/CAPTURE thành công), `transactionFeeNative` + `transactionFeeNativeCurrency` (phí NGUYÊN GỐC theo đồng payout của cổng — ví dụ VND với Shopify Payments payout VN). Cả 3 = `null` khi đơn chưa có dữ liệu fees từ Shopify. Doanh thu net brand ≈ `totalPrice − transactionFee`.
     - Đơn store đa-brand (meanblvd/cici-mean) **không có** các field giá này — shape cũ giữ nguyên.
   - **`vendor`** = giá trị cột vendor Shopify (= `brandSlug` trong brand-request, **cùng
     nguồn** nên nhất quán 2 chiều). MMP **route đơn về đúng brand** theo field này:
