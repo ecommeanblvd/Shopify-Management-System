@@ -23,7 +23,8 @@ export async function getPartnerRateCard(
   const fedex = (await listAccounts()).find((a) => a.enabled && a.carrierKey === 'fedex');
   if (!fedex) return { ok: false, error: 'Chưa có carrier account FedEx đang bật' };
 
-  const snap = await loadAccountSnapshot(fedex.id);
+  // Ratecard chỉ cần dòng phụ phí, không cần postcode list (ODA 2026 ~130k dòng).
+  const snap = await loadAccountSnapshot(fedex.id, new Date(), { skipRemotePostcodes: true });
   if (!snap) return { ok: false, error: 'Không nạp được bảng giá FedEx' };
 
   // Tier pricing (spec 09/07): markup hiệu dụng từ tier, không dùng markup_percent legacy.

@@ -92,7 +92,9 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   // Express = account FedEx đang bật (map service→account chốt khi có nhiều line; hiện lấy FedEx enabled đầu tiên).
   const account = (await listAccounts()).find((a) => a.enabled && a.carrierKey === 'fedex');
   if (!account) return { ok: false, code: 'no_carrier', error: 'Chưa cấu hình đơn vị vận chuyển' };
-  const snap = await loadAccountSnapshot(account.id, asOf ?? new Date());
+  // remoteCountry: chỉ nạp ODA postcodes của nước đích — bảng full-list 2026
+  // ~130k dòng/account, nạp tất cả làm reconcile nhiều đơn nghẽn/đứt kết nối.
+  const snap = await loadAccountSnapshot(account.id, asOf ?? new Date(), { remoteCountry: country });
   if (!snap) return { ok: false, code: 'no_carrier', error: 'Chưa nạp được bảng giá' };
 
   const dims = typeof parcel.dimLengthCm === 'number' && typeof parcel.dimWidthCm === 'number' && typeof parcel.dimHeightCm === 'number'

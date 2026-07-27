@@ -16,6 +16,15 @@ import { pickRateCardForDate, listRateCards } from './rate-cards';
 export async function loadAccountSnapshot(
   carrierAccountId: string,
   effectiveDate: Date = new Date(),
+  opts?: {
+    /** Chỉ nạp remote/ODA postcodes của 1 nước đích (ISO-2). Bảng ODA full-list
+     *  2026 ~130k dòng/account — quote 1 đơn chỉ cần đúng nước của nó; bỏ trống
+     *  = nạp tất cả (calculator, dựng ratecard nhiều nước). */
+    remoteCountry?: string;
+    /** Bỏ hẳn postcode list (dựng ratecard: chỉ cần DÒNG phụ phí, không match
+     *  postcode cụ thể). */
+    skipRemotePostcodes?: boolean;
+  },
 ): Promise<CarrierAccountSnapshot | null> {
   const [account] = await db
     .select()
@@ -50,15 +59,20 @@ export async function loadAccountSnapshot(
     // Remote/ODA list is year-versioned (effective_from/to), applied by the
     // shipment's effectiveDate — same windowing as rate cards. A row covers the
     // date when effective_from ≤ date AND (effective_to IS NULL OR date < effective_to).
-    db.select().from(schema.carrierRemotePostcodes)
-      .where(and(
-        eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
-        lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
-        or(
-          isNull(schema.carrierRemotePostcodes.effectiveTo),
-          gt(schema.carrierRemotePostcodes.effectiveTo, remoteAsOf),
-        ),
-      )),
+    opts?.skipRemotePostcodes
+      ? Promise.resolve([] as (typeof schema.carrierRemotePostcodes.$inferSelect)[])
+      : db.select().from(schema.carrierRemotePostcodes)
+        .where(and(
+          eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
+          ...(opts?.remoteCountry
+            ? [eq(schema.carrierRemotePostcodes.countryCode, opts.remoteCountry.trim().toUpperCase())]
+            : []),
+          lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
+          or(
+            isNull(schema.carrierRemotePostcodes.effectiveTo),
+            gt(schema.carrierRemotePostcodes.effectiveTo, remoteAsOf),
+          ),
+        )),
   ]);
 
   // Cells scoped to the chosen rate card (NOT all cells for the account).

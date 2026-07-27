@@ -112,7 +112,9 @@ export async function buildBrandRateCardPayload(brandSlug: string): Promise<Buil
 
   const fedex = (await listAccounts()).find((a) => a.enabled && a.carrierKey === 'fedex');
   if (!fedex) return { ok: false, code: 'no_carrier' };
-  const snap = await loadAccountSnapshot(fedex.id);
+  // Ratecard chỉ cần DÒNG phụ phí (remote_fixed amounts...), không match postcode
+  // cụ thể → bỏ postcode list (bảng ODA 2026 ~130k dòng/account).
+  const snap = await loadAccountSnapshot(fedex.id, new Date(), { skipRemotePostcodes: true });
   if (!snap) return { ok: false, code: 'no_carrier' };
 
   const now = new Date();
