@@ -321,6 +321,20 @@ export const carrierZoneCountries = pgTable('carrier_zone_countries', {
   index('carrier_zone_countries_zone_idx').on(table.carrierZoneId),
 ]);
 
+// Zone theo DẢI BƯU CHÍNH trong 1 nước (FedEx: CN Hoa Nam → Zone K, còn lại W).
+// Engine match dải TRƯỚC carrier_zone_countries.
+export const carrierZonePostcodeRanges = pgTable('carrier_zone_postcode_ranges', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
+  carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
+  countryCode: text('country_code').notNull(),
+  rangeStart: integer('range_start').notNull(),
+  rangeEnd: integer('range_end').notNull(),
+  note: text('note'),
+}, (t) => [
+  index('carrier_zone_postcode_ranges_account_idx').on(t.carrierAccountId),
+]);
+
 // Tier price covers weights in (previous.upperKg, this.upperKg]. Highest tier = ∞.
 export const carrierWeightTiers = pgTable('carrier_weight_tiers', {
   id: uuid('id').defaultRandom().primaryKey(),

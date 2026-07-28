@@ -25,6 +25,9 @@ export interface RateCardSnapshot {
   fxCostPerDisplay: number;
   weightTiers: { upperKg: number }[];
   zonesByCountry: Map<string, { label: string; rateByTierUpper: Map<number, number> }>;
+  /** Zone theo dải bưu chính (CN Hoa Nam → Zone K) — card hiện dòng zone riêng
+   *  với mô tả dải thay danh sách nước. */
+  zonePostcodeRanges?: Array<{ countryCode: string; rangeStart: number; rangeEnd: number; zone: { label: string; rateByTierUpper: Map<number, number> } }>;
   /**
    * Structural subset of SurchargeSnap (engine/quote.ts) — snapshot thật (từ
    * loadAccountSnapshot) khớp type này. Dùng SurchargeSnap trực tiếp (thay vì
@@ -49,6 +52,15 @@ export function buildRateCard(snap: RateCardSnapshot, markupPercent: number, asO
     const e = byLabel.get(zone.label) ?? { zone, countries: [] };
     e.countries.push(country);
     byLabel.set(zone.label, e);
+  }
+
+  // Zone theo dải bưu chính (VD Zone K = CN Hoa Nam): mô tả "CN 350000–369999"
+  // đứng vào cột countries — zone chưa có trong byLabel thì thêm mới.
+  for (const r of snap.zonePostcodeRanges ?? []) {
+    const desc = `${r.countryCode} ${r.rangeStart}–${r.rangeEnd}`;
+    const e = byLabel.get(r.zone.label) ?? { zone: r.zone, countries: [] };
+    e.countries.push(desc);
+    byLabel.set(r.zone.label, e);
   }
 
   const zones: RateCardZone[] = [];

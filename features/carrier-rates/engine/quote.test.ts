@@ -1925,3 +1925,52 @@ describe("totals rounding mode — 'per_line' (FedEx invoice convention)", () =>
     });
   });
 });
+
+describe('zone theo dải bưu chính (CN Hoa Nam → Zone K, chart FedEx VN 2026)', () => {
+  const zoneW = { label: 'Zone W', rateByTierUpper: new Map([[1, 500_000]]) };
+  const zoneK = { label: 'Zone K', rateByTierUpper: new Map([[1, 420_000]]) };
+  const snapCn = () => makeSnap({
+    weightTiers: [{ upperKg: 1 }],
+    zonesByCountry: new Map([['CN', zoneW]]),
+    zonePostcodeRanges: [
+      { countryCode: 'CN', rangeStart: 350_000, rangeEnd: 369_999, zone: zoneK },
+      { countryCode: 'CN', rangeStart: 510_000, rangeEnd: 529_999, zone: zoneK },
+    ],
+  });
+
+  it('CN postcode 515000 (Quảng Đông) → Zone K, base K', () => {
+    const r = quote(snapCn(), { weightKg: 1, destinationCountry: 'CN', destinationPostcode: '515000' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.zone).toBe('Zone K');
+    expect(r.breakdown.base).toBe(420_000);
+    expect(r.notes).toContain('zone_postcode_override (Zone K)');
+  });
+  it('CN postcode 351200 (Phúc Kiến) → Zone K', () => {
+    const r = quote(snapCn(), { weightKg: 1, destinationCountry: 'CN', destinationPostcode: '351200' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.zone).toBe('Zone K');
+  });
+  it('CN postcode 100000 (Bắc Kinh) → giữ Zone W', () => {
+    const r = quote(snapCn(), { weightKg: 1, destinationCountry: 'CN', destinationPostcode: '100000' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.zone).toBe('Zone W');
+    expect(r.breakdown.base).toBe(500_000);
+  });
+  it('CN không postcode → Zone W (không đoán)', () => {
+    const r = quote(snapCn(), { weightKg: 1, destinationCountry: 'CN' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.zone).toBe('Zone W');
+  });
+  it('nước khác trùng số postcode → KHÔNG ăn dải CN', () => {
+    const s = snapCn();
+    s.zonesByCountry.set('SG', { label: 'Zone 1', rateByTierUpper: new Map([[1, 280_000]]) });
+    const r = quote(s, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '515000' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.zone).toBe('Zone 1');
+  });
+});

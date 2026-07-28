@@ -203,3 +203,25 @@ describe('buildRateCard — surcharges (chi phí cụ thể + công thức, ch�
     expect(() => buildRateCard(s, 30, ASOF)).not.toThrow();
   });
 });
+
+describe('buildRateCard — zone theo dải bưu chính (Zone K = CN Hoa Nam)', () => {
+  const zoneK = { label: 'Zone K', rateByTierUpper: new Map([[0.5, 542003], [1, 581174]]) };
+  const withK = (): RateCardSnapshot => ({
+    ...snap(),
+    zonePostcodeRanges: [
+      { countryCode: 'CN', rangeStart: 350000, rangeEnd: 369999, zone: zoneK },
+      { countryCode: 'CN', rangeStart: 510000, rangeEnd: 529999, zone: zoneK },
+    ],
+  });
+  it('Zone K xuất hiện trên card với mô tả dải bưu chính + cells đúng markup', () => {
+    const c = buildRateCard(withK(), 8, ASOF);
+    const k = c.zones.find((z) => z.label === 'Zone K')!;
+    expect(k).toBeTruthy();
+    expect(k.countries).toEqual(['CN 350000–369999', 'CN 510000–529999']);
+    expect(k.cells.find((x) => x.tierUpperKg === 0.5)!.offerVnd).toBe(Math.round(542003 * 1.08));
+  });
+  it('không có ranges → card y như cũ (không Zone K)', () => {
+    const c = buildRateCard(snap(), 8, ASOF);
+    expect(c.zones.find((z) => z.label === 'Zone K')).toBeUndefined();
+  });
+});

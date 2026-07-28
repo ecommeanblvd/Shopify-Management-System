@@ -42,12 +42,15 @@ export async function loadAccountSnapshot(
   // date columns compare as 'YYYY-MM-DD' strings; normalise effectiveDate once.
   const remoteAsOf = effectiveDate.toISOString().slice(0, 10);
 
-  const [zones, zoneCountries, tiers, surcharges, postcodes] = await Promise.all([
+  const [zones, zoneCountries, zonePostcodeRangeRows, tiers, surcharges, postcodes] = await Promise.all([
     db.select().from(schema.carrierZones)
       .where(eq(schema.carrierZones.carrierAccountId, carrierAccountId))
       .orderBy(asc(schema.carrierZones.position)),
     db.select().from(schema.carrierZoneCountries)
       .where(eq(schema.carrierZoneCountries.carrierAccountId, carrierAccountId)),
+    // Zone theo dải bưu chính (CN Hoa Nam → Zone K) — bảng nhỏ, không gating date.
+    db.select().from(schema.carrierZonePostcodeRanges)
+      .where(eq(schema.carrierZonePostcodeRanges.carrierAccountId, carrierAccountId)),
     db.select().from(schema.carrierWeightTiers)
       .where(eq(schema.carrierWeightTiers.carrierAccountId, carrierAccountId))
       .orderBy(asc(sql`(${schema.carrierWeightTiers.upperKg})::numeric`)),
@@ -108,6 +111,12 @@ export async function loadAccountSnapshot(
     if (zs) zonesByCountry.set(zc.countryCode, zs);
   }
 
+  // Zone override theo dải bưu chính (engine match trước zonesByCountry).
+  const zonePostcodeRanges = zonePostcodeRangeRows.flatMap((r) => {
+    const zs = zoneSnapById.get(r.carrierZoneId);
+    return zs ? [{ countryCode: r.countryCode.toUpperCase(), rangeStart: r.rangeStart, rangeEnd: r.rangeEnd, zone: zs }] : [];
+  });
+
   // Remote postcodes grouped by country, carrying tier alongside each pattern
   const remotePostcodes = new Map<string, Map<string, string | null>>();
   for (const p of postcodes) {
@@ -139,6 +148,7 @@ export async function loadAccountSnapshot(
       ? Number(account.chargeableRoundingKg)
       : null,
     zonesByCountry,
+    zonePostcodeRanges,
     weightTiers: tiers.map((t) => ({ upperKg: Number(t.upperKg) })),
     surcharges: surcharges.map((s) => ({
       kind: s.kind,

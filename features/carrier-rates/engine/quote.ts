@@ -155,6 +155,12 @@ export interface CarrierAccountSnapshot {
   totalsRoundingMode?: 'per_line' | null;
   /** ISO-2 country code → zone snapshot. */
   zonesByCountry: Map<string, ZoneSnap>;
+  /**
+   * Zone override theo DẢI BƯU CHÍNH trong 1 nước — match TRƯỚC zonesByCountry.
+   * FedEx VN chart: CN Hoa Nam (Phúc Kiến 350000-369999, Quảng Đông
+   * 510000-529999) → Zone K; CN còn lại → Zone W.
+   */
+  zonePostcodeRanges?: Array<{ countryCode: string; rangeStart: number; rangeEnd: number; zone: ZoneSnap }>;
   /** Tiers sorted ascending by upperKg. */
   weightTiers: WeightTierSnap[];
   /** Only active surcharges. */
@@ -471,12 +477,20 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
     return { ok: false, code: 'no_tiers', message: 'Account has no weight tiers configured.' };
   }
 
-  const zone = snap.zonesByCountry.get(country);
+  // Zone: dải bưu chính (CN Hoa Nam → K) thắng zone quốc gia. Postcode lấy
+  // phần chữ số đầu (CN 6 số); không parse được → rơi về zone quốc gia.
+  const pcDigits = (input.destinationPostcode ?? '').trim().replace(/\D/g, '');
+  const pcNum = pcDigits ? Number(pcDigits) : NaN;
+  const zoneOverride = Number.isFinite(pcNum)
+    ? snap.zonePostcodeRanges?.find((r) => r.countryCode === country && pcNum >= r.rangeStart && pcNum <= r.rangeEnd)
+    : undefined;
+  const zone = zoneOverride?.zone ?? snap.zonesByCountry.get(country);
   if (!zone) {
     return { ok: false, code: 'no_zone', message: `Country ${country} is not assigned to any zone.` };
   }
 
   const notes: string[] = [];
+  if (zoneOverride) notes.push(`zone_postcode_override (${zoneOverride.zone.label})`);
 
   // Dimensional weight — chargeableWeight = max(actual, L×W×H/divisor).
   // Falls back to actual weight when dimensions or divisor missing.
