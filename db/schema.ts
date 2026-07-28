@@ -1842,6 +1842,9 @@ export const mmpLineReceived = pgTable('mmp_line_received', {
   sku: text('sku').notNull(),
   receivedAt: timestamp('received_at').notNull(),
   vendor: text('vendor'),
+  // 'lark' = ops ghi thật (bảng Lark WH) · 'estimate_fulfill' = ước từ mốc
+  // fulfill Shopify (backfill đơn TA cũ 2024-2025 trước khi có bảng Lark).
+  source: text('source').notNull().default('lark'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
   uniqueIndex('mmp_line_received_order_sku_idx').on(t.orderNumber, t.sku),
