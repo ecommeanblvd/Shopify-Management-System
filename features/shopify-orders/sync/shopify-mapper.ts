@@ -25,6 +25,9 @@ export interface MappedOrder {
     grossLineTotal: string;
     totalDiscount: string;
     totalShipping: string;
+    /** Số tiền GIẢM phí ship (promo 50% off shipping…) = gốc − Σ discounted.
+     *  null = đơn không có shippingLines discounted (không biết). */
+    shippingDiscount: string | null;
     totalTax: string;
     totalPrice: string;
     shipCountry: string | null;
@@ -129,6 +132,13 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       // Ship rev = phí ship SAU giảm (thực nhận); fallback phí gốc khi chưa có
       // discounted (đơn cũ chưa re-sync). Store chạy promo free-ship → net < gốc.
       totalShipping: netShippingAmount(shipLines) ?? payload.totalShippingPriceSet.shopMoney.amount,
+      // Số tiền giảm ship (promo 50% off shipping) — MMP cần cho đối soát store riêng.
+      shippingDiscount: (() => {
+        const net = netShippingAmount(shipLines);
+        if (net == null) return null;
+        const gross = Number(payload.totalShippingPriceSet.shopMoney.amount) || 0;
+        return Math.max(0, gross - Number(net)).toFixed(2);
+      })(),
       totalTax: payload.totalTaxSet.shopMoney.amount,
       totalPrice: payload.totalPriceSet.shopMoney.amount,
       shipCountry: payload.shippingAddress?.countryCodeV2 ?? null,

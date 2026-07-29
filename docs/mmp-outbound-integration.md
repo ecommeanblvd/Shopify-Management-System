@@ -126,7 +126,7 @@ Sau khi `checkStockForOrder` hoàn tất (kể cả gửi brand-request riêng l
   - `lines`: chỉ dòng brand `{ sku, title, qty, vendor, receivedAt }`. `receivedAt` per-line = ngày nhận của SKU đó.
   - **Giá (từ 18/07/2026) — CHỈ đơn của STORE RIÊNG của brand** (`store` ∈ {`tinhatelier`, `mirermirer-official`}) để brand đối soát doanh thu + phí ship:
     - per-line thêm `unitPrice` (đơn giá bán, order currency);
-    - payload thêm khối `pricing`: `{ currency, subtotal, totalDiscount, totalShipping, totalTax, totalPrice }` — `subtotal` = Σ unitPrice×qty các line gửi kèm; `totalShipping` = phí ship khách trả (sau giảm); `totalPrice` = tổng khách thanh toán.
+    - payload thêm khối `pricing`: `{ currency, subtotal, totalDiscount, totalShipping, totalShippingDiscount, totalTax, totalPrice }` — `subtotal` = Σ unitPrice×qty các line gửi kèm; `totalShipping` = phí ship khách trả (SAU giảm); `totalShippingDiscount` = số tiền GIẢM phí ship (promo 50% off shipping của brand; phí gốc = totalShipping + totalShippingDiscount; null = đơn cũ chưa có dữ liệu shippingLines); `totalPrice` = tổng khách thanh toán.
     - Payload có pricing thì kèm **`currency` CẤP GỐC** (= pricing.currency) — validator MMP yêu cầu khi line có unitPrice (siết 21/07).
     - `pricing.returnShippingVnd` (optional, **VND** — khác order currency): tổng cước HÀNG HOÀN đã phát sinh cho đơn, lấy từ bill carrier (nhận diện orderRef `_R` / `RETURN OF <tracking>`). Xuất hiện khi > 0 — để brand đối soát cả chi phí hoàn.
     - **Phí transaction cổng thanh toán (từ 24/07/2026)** — 3 key luôn có mặt trong `pricing` của store riêng:

@@ -84,6 +84,29 @@ describe('mapShopifyOrder', () => {
     expect(mapShopifyOrder(base, 'store-1').order.totalShipping).toBe(base.totalShippingPriceSet.shopMoney.amount);
   });
 
+  it('shippingDiscount = phí gốc − Σ discounted (promo 50% off shipping)', () => {
+    const base = fixture('order-simple');
+    const p = {
+      ...base,
+      totalShippingPriceSet: { shopMoney: { amount: '58.32', currencyCode: 'USD' } },
+      shippingLines: [{ title: 'FedEx', code: 'fedex', discountedPriceSet: { shopMoney: { amount: '29.16' } } }],
+    } as unknown as ShopifyOrderPayload;
+    const o = mapShopifyOrder(p, 'store-1').order;
+    expect(o.totalShipping).toBe('29.16');
+    expect(o.shippingDiscount).toBe('29.16');
+  });
+
+  it('không giảm ship → shippingDiscount = 0.00; thiếu shippingLines → null (không biết)', () => {
+    const base = fixture('order-simple');
+    const noDiscount = {
+      ...base,
+      totalShippingPriceSet: { shopMoney: { amount: '20.00', currencyCode: 'USD' } },
+      shippingLines: [{ title: 'FedEx', code: 'fedex', discountedPriceSet: { shopMoney: { amount: '20.00' } } }],
+    } as unknown as ShopifyOrderPayload;
+    expect(mapShopifyOrder(noDiscount, 'store-1').order.shippingDiscount).toBe('0.00');
+    expect(mapShopifyOrder(base, 'store-1').order.shippingDiscount).toBeNull();
+  });
+
   it('captures refunds with amount + reason', () => {
     const m = mapShopifyOrder(fixture('order-refunded'), 'store-1');
     expect(m.refunds).toHaveLength(1);

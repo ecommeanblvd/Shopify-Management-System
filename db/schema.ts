@@ -744,6 +744,10 @@ export const shopifyOrders = pgTable('shopify_orders', {
   // totalDiscount maps Shopify's totalDiscountsSet — covers line + order discounts combined.
   totalDiscount: numeric('total_discount', { precision: 14, scale: 2 }).notNull(),
   totalShipping: numeric('total_shipping', { precision: 14, scale: 2 }).notNull(),
+  // Số tiền GIẢM phí ship (promo 50% off shipping…) = phí gốc − Σ discountedPriceSet.
+  // NULL = đơn chưa sync shippingLines (không biết). totalShipping ở trên là phí
+  // ship THỰC THU (sau giảm) khi có shippingLines; đơn cũ fallback phí gốc.
+  shippingDiscount: numeric('shipping_discount', { precision: 14, scale: 2 }),
   totalTax: numeric('total_tax', { precision: 14, scale: 2 }).notNull(),
   totalPrice: numeric('total_price', { precision: 14, scale: 2 }).notNull(),
   /** Phí transaction (payment processing + FX) quy về đồng ĐƠN. null khi chưa sync / Shopify không trả fee. */

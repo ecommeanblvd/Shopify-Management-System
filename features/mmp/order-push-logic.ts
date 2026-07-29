@@ -15,8 +15,11 @@ export interface MmpOrderPricing {
   /** Σ đơn giá × qty các line trong payload (trước giảm giá). */
   subtotal: number;
   totalDiscount: number | null;
-  /** Phí ship khách trả (sau giảm). */
+  /** Phí ship khách trả (SAU giảm). */
   totalShipping: number | null;
+  /** Số tiền GIẢM phí ship (promo 50% off shipping…). Phí ship GỐC =
+   *  totalShipping + totalShippingDiscount. null = đơn cũ chưa có dữ liệu. */
+  totalShippingDiscount?: number | null;
   totalTax: number | null;
   /** Tổng khách thanh toán. */
   totalPrice: number | null;

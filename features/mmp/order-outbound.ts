@@ -31,6 +31,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       currency: schema.shopifyOrders.currency,
       totalDiscount: schema.shopifyOrders.totalDiscount,
       totalShipping: schema.shopifyOrders.totalShipping,
+      shippingDiscount: schema.shopifyOrders.shippingDiscount,
       totalTax: schema.shopifyOrders.totalTax,
       totalPrice: schema.shopifyOrders.totalPrice,
       transactionFee: schema.shopifyOrders.transactionFee,
@@ -91,6 +92,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         subtotal: brand.reduce((sum, l) => sum + (l.unitPrice != null ? Number(l.unitPrice) * l.qty : 0), 0),
         totalDiscount: ord.totalDiscount == null ? null : Number(ord.totalDiscount),
         totalShipping: ord.totalShipping == null ? null : Number(ord.totalShipping),
+        // Promo 50% off shipping của brand: MMP đối soát phí ship cần cả số GIẢM.
+        // Phí ship gốc = totalShipping + totalShippingDiscount.
+        totalShippingDiscount: ord.shippingDiscount == null ? null : Number(ord.shippingDiscount),
         totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
         ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
