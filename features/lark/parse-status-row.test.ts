@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapLarkDelivery, parseLarkStatus } from './parse-status-row';
+import { mapLarkDelivery, parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 
 describe('parseLarkStatus', () => {
   it('đọc field text + lookup-array + formula', () => {
@@ -83,5 +83,32 @@ describe('parseLarkStatus delivery', () => {
   });
   it('không có ngày giao thực tế → null', () => {
     expect(parseLarkStatus({ 'Final | Delivery Status': 'Đang giao hàng' }).actualDeliveredAt).toBeNull();
+  });
+});
+
+describe('chặn ngày tương lai + fallback ngày giao (fix 29/07)', () => {
+  it('"Ngày giao thực tế" ở TƯƠNG LAI (ops gõ nhầm năm) → null, không nhận', () => {
+    const future = Date.now() + 30 * 24 * 3600 * 1000; // +30 ngày
+    const r = parseLarkStatus({ 'Final | Delivery Status': 'Đúng dự kiến', 'Ngày giao thực tế': future });
+    expect(r.actualDeliveredAt).toBeNull();
+  });
+  it('"Ngày giao dự kiến" tương lai vẫn được phép (chưa giao mà)', () => {
+    const future = Date.now() + 5 * 24 * 3600 * 1000;
+    const r = parseLarkStatus({ 'Ngày giao dự kiến': future });
+    expect(r.expectedDeliveryDate).not.toBeNull();
+  });
+
+  const now = new Date('2026-07-08T10:00:00Z');
+  it('resolveDeliveredAt: có ngày thực → dùng ngày thực', () => {
+    const actual = new Date('2026-02-27T00:00:00Z');
+    expect(resolveDeliveredAt({ actualDeliveredAt: actual, expectedDeliveryDate: new Date('2026-03-01T00:00:00Z') }, now)).toBe(actual);
+  });
+  it('thiếu ngày thực + dự kiến ĐÃ QUA (row phát hiện muộn) → dùng ngày dự kiến, KHÔNG dùng ngày sync', () => {
+    const expected = new Date('2026-03-01T00:00:00Z');
+    expect(resolveDeliveredAt({ actualDeliveredAt: null, expectedDeliveryDate: expected }, now)).toBe(expected);
+  });
+  it('thiếu cả hai / dự kiến còn ở tương lai → first-seen (now)', () => {
+    expect(resolveDeliveredAt({ actualDeliveredAt: null, expectedDeliveryDate: null }, now)).toBe(now);
+    expect(resolveDeliveredAt({ actualDeliveredAt: null, expectedDeliveryDate: new Date('2026-07-20T00:00:00Z') }, now)).toBe(now);
   });
 });

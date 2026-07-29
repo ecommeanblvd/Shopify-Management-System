@@ -9,7 +9,7 @@ import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
 import { parsePackRow, larkText, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
-import { parseLarkStatus } from './parse-status-row';
+import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
@@ -233,10 +233,10 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             const patch: Record<string, unknown> = {
               deliveryStatus: s.deliveryState, deliverySource: 'lark', updatedAt: sql`now()`,
             };
-            // Ngày giao: ưu tiên "Ngày giao thực tế" ops điền; ops chưa điền (219
-            // record tính đến 08/07) → FIRST-SEEN: lấy thời điểm sync đầu tiên thấy
-            // delivered (cron hourly ⇒ sai số ≤1h) — transit stats không treo vì thiếu ngày.
-            if (s.deliveryState === 'delivered') patch.deliveredAt = s.actualDeliveredAt ?? new Date();
+            // Ngày giao: "Ngày giao thực tế" ops điền → "Ngày giao dự kiến" nếu đã
+            // qua (row phát hiện muộn — cron chết dài ngày thì ngày sync sai cả
+            // tháng) → thời điểm sync (sai số ≤1h khi cron chạy đều).
+            if (s.deliveryState === 'delivered') patch.deliveredAt = resolveDeliveredAt(s);
             const res = await tx.update(schema.shipments).set(patch).where(and(
               eq(schema.shipments.orderId, orderId),
               or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
@@ -246,11 +246,24 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             // ops điền ngày muộn) → lấp ngày, không đổi status.
             if (s.deliveryState === 'delivered') {
               await tx.update(schema.shipments)
-                .set({ deliveredAt: s.actualDeliveredAt ?? new Date(), updatedAt: sql`now()` })
+                .set({ deliveredAt: resolveDeliveredAt(s), updatedAt: sql`now()` })
                 .where(and(
                   eq(schema.shipments.orderId, orderId),
                   eq(schema.shipments.deliveryStatus, 'delivered'),
                   isNull(schema.shipments.deliveredAt),
+                ));
+            }
+            // TỰ CHỮA LÀNH: ops điền "Ngày giao thực tế" MUỘN (sau khi row đã bị
+            // đóng ngày fallback) → sửa lại theo ngày thực. CHỈ đè nguồn 'lark' —
+            // POD bill carrier (D-019) và FedEx track không bị đụng.
+            if (s.deliveryState === 'delivered' && s.actualDeliveredAt) {
+              await tx.update(schema.shipments)
+                .set({ deliveredAt: s.actualDeliveredAt, updatedAt: sql`now()` })
+                .where(and(
+                  eq(schema.shipments.orderId, orderId),
+                  eq(schema.shipments.deliveryStatus, 'delivered'),
+                  eq(schema.shipments.deliverySource, 'lark'),
+                  ne(schema.shipments.deliveredAt, s.actualDeliveredAt),
                 ));
             }
           }

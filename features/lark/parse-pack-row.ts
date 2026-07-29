@@ -78,6 +78,18 @@ export function plausibleLarkDate(d: Date | null): Date | null {
   return d.getTime() >= MIN_PLAUSIBLE_MS ? d : null;
 }
 
+// Mốc THỰC TẾ (label đã tạo, hàng đã giao) không thể ở tương lai. Ops gõ nhầm
+// năm trên Lark (vd 30/12/2026 khi mới tháng 7) → TA2113 từng dính shipped_at
+// tương lai. Chừa 48h slack cho lệch múi giờ/nhập sớm biên ngày.
+const FUTURE_SLACK_MS = 48 * 60 * 60 * 1000;
+/** null nếu ngày rác HOẶC ở tương lai (quá 48h) — dùng cho mốc thực tế đã xảy ra.
+ *  Ngày DỰ KIẾN (được phép tương lai) vẫn dùng plausibleLarkDate. */
+export function plausiblePastLarkDate(d: Date | null, now: Date = new Date()): Date | null {
+  const p = plausibleLarkDate(d);
+  if (!p) return null;
+  return p.getTime() <= now.getTime() + FUTURE_SLACK_MS ? p : null;
+}
+
 export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const warnings: string[] = [];
   const orderNumber = larkText(fields['Order Number']) ?? '';
@@ -116,8 +128,11 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
-  // Loại ngày quá cũ (epoch Lark hỏng → 1997…): label không thể trước khi có brand.
-  labelDate = plausibleLarkDate(labelDate);
+  // Loại ngày quá cũ (epoch hỏng → 1997…) VÀ ngày tương lai (ops gõ nhầm năm /
+  // placeholder cho đơn chưa ship): label là mốc ĐÃ xảy ra, không thể ở tương lai.
+  const labelPlausible = plausibleLarkDate(labelDate);
+  labelDate = plausiblePastLarkDate(labelDate);
+  if (labelPlausible && !labelDate) warnings.push(`label date ở tương lai, bỏ qua: ${labelPlausible.toISOString().slice(0, 10)}`);
   // Một label KHÔNG THỂ được tạo ở NGÀY LỊCH TƯƠNG LAI (theo lịch VN). Lark hay
   // điền placeholder ("31/12/2026", hoặc ngày mai) ở cột "Label Created Date" cho
   // đơn CHƯA ship → nếu để lọt, reconcile lấy nó làm NGÀY SHIP → hiện ngày ship

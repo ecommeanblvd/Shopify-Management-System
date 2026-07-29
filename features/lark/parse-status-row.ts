@@ -4,7 +4,7 @@
  * Dùng lại helper đọc field + epoch→VN-date của parse-pack-row (DRY).
  */
 import type { DeliveryStatus } from '@/lib/fedex/track';
-import { larkText, larkEpochToVnMidnight, plausibleLarkDate } from './parse-pack-row';
+import { larkText, larkEpochToVnMidnight, plausibleLarkDate, plausiblePastLarkDate } from './parse-pack-row';
 
 export interface LarkStatusRow {
   dispatchStatus: string | null;
@@ -44,6 +44,23 @@ export function parseLarkStatus(fields: Record<string, unknown>): LarkStatusRow 
     deliveryStatus: larkText(fields['Final | Delivery Status']),
     expectedDeliveryDate: larkDate(fields['Ngày giao dự kiến']),
     deliveryState: mapLarkDelivery(larkText(fields['Final | Delivery Status'])),
-    actualDeliveredAt: larkDate(fields['Ngày giao thực tế']),
+    // Mốc THỰC TẾ → chặn cả ngày tương lai (gõ nhầm năm); dự kiến ở trên thì được.
+    actualDeliveredAt: plausiblePastLarkDate(larkDate(fields['Ngày giao thực tế'])),
   };
+}
+
+/**
+ * Ngày giao để GHI vào shipments khi row Lark delivered:
+ * 1. "Ngày giao thực tế" ops điền (chuẩn nhất);
+ * 2. "Ngày giao dự kiến" nếu ĐÃ QUA (row phát hiện muộn — vd cron chết dài ngày —
+ *    thì ngày dự kiến gần sự thật hơn nhiều so với ngày sync);
+ * 3. thời điểm sync (first-seen, sai số ≤1h khi cron chạy đều).
+ */
+export function resolveDeliveredAt(
+  s: Pick<LarkStatusRow, 'actualDeliveredAt' | 'expectedDeliveryDate'>,
+  now: Date = new Date(),
+): Date {
+  if (s.actualDeliveredAt) return s.actualDeliveredAt;
+  if (s.expectedDeliveryDate && s.expectedDeliveryDate.getTime() < now.getTime()) return s.expectedDeliveryDate;
+  return now;
 }
