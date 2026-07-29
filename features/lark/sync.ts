@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, desc, and, or, isNull, ne, sql } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
@@ -237,9 +237,16 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             // qua (row phát hiện muộn — cron chết dài ngày thì ngày sync sai cả
             // tháng) → thời điểm sync (sai số ≤1h khi cron chạy đều).
             if (s.deliveryState === 'delivered') patch.deliveredAt = resolveDeliveredAt(s);
+            // GUARD (29/07): pack CHƯA ship (không tracking, không label) thì không
+            // thể "delivered" — cột Final|Delivery Status trên Lark từng đánh nhầm
+            // cho 16 đơn Invalid Address/đang hold, làm SMS ghi delivered ảo.
+            const notYetShippedGuard = s.deliveryState === 'delivered'
+              ? [or(isNotNull(schema.shipments.trackingNumber), isNotNull(schema.shipments.labelCreatedAt))!]
+              : [];
             const res = await tx.update(schema.shipments).set(patch).where(and(
               eq(schema.shipments.orderId, orderId),
               or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
+              ...notYetShippedGuard,
             ));
             deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
             // Row ĐÃ delivered nhưng thiếu ngày (đánh dấu trước khi có fallback, hoặc
