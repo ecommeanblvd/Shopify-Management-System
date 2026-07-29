@@ -66,7 +66,12 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   const brandLines: MmpOrderLine[] = brand.map((l) => {
     const ra = l.sku != null ? recvBySku.get(l.sku) : undefined;
     return {
-      sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty, vendor: l.vendor ?? owned?.vendor ?? null,
+      // vendor: custom line item (Shipping Fee, đồ custom) có vendor = '' (chuỗi
+      // RỖNG, không phải null) → coi như thiếu để fallback vendor chuẩn của store
+      // riêng còn ăn. Vendor rỗng từng làm MMP không gắn được đơn vào brand
+      // (TA2013/TA2044/TA2098/TA2258 "mất tích" phía MMP, 29/07).
+      sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty,
+      vendor: (l.vendor?.trim() || owned?.vendor) ?? null,
       receivedAt: ra ? ra.toISOString() : null,
       // Giá CHỈ gửi cho store riêng của brand (đối soát) — store đa-brand không giá.
       ...(owned && l.unitPrice != null ? { unitPrice: Number(l.unitPrice) } : {}),
