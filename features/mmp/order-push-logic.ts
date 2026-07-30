@@ -1,13 +1,16 @@
 /** Builder thuần cho payload SMS→MMP orders. CHỈ field đã chốt (PII tối giản):
  *  orderNumber, store, tên người nhận, quốc gia ship, các dòng brand {sku,title,qty,vendor,receivedAt}.
- *  KHÔNG email/SĐT/địa chỉ chi tiết. GIÁ chỉ gửi cho STORE RIÊNG của brand
- *  (tinhatelier/mirermirer — chỉ đạo CEO 18/07: đối soát cần giá sản phẩm + ship);
- *  store đa-brand (meanblvd/cici) vẫn KHÔNG giá. Không I/O. */
+ *  KHÔNG email/SĐT/địa chỉ chi tiết. GIÁ:
+ *  - Store RIÊNG của brand (tinhatelier/mirermirer): giá line + KHỐI pricing cấp đơn.
+ *  - Store ĐA-BRAND (meanblvd/cici — CEO 30/07, phương án 1): giá THEO LINE
+ *    (unitPrice + lineDiscount) nhưng KHÔNG tổng cấp đơn — MMP phải lọc line theo
+ *    vendor, brand chỉ được thấy giá line của CHÍNH brand mình. Không I/O. */
 // `vendor` = giá trị cột vendor Shopify (= brandSlug ở brand-request) để MMP route
 // đơn về đúng brand. KHÔNG email/SĐT/địa chỉ.
 // `receivedAt` = ngày hàng về kho (per-line) để MMP đối soát công nợ theo brand.
-// `unitPrice` (đơn giá bán, order currency) — CHỈ store riêng của brand.
-export interface MmpOrderLine { sku: string | null; title: string; qty: number; vendor: string | null; receivedAt: string | null; unitPrice?: number | null }
+// `unitPrice` (đơn giá bán, order currency); `lineDiscount` = giảm giá PHÂN BỔ cho
+// line (order currency) — giá thực thu của line = unitPrice×qty − lineDiscount.
+export interface MmpOrderLine { sku: string | null; title: string; qty: number; vendor: string | null; receivedAt: string | null; unitPrice?: number | null; lineDiscount?: number | null }
 
 /** Khối giá cấp đơn (order currency) — CHỈ store riêng của brand. */
 export interface MmpOrderPricing {
@@ -68,7 +71,11 @@ export function buildMmpOrderPayload(input: {
   cancelledAt: string | null;
   brandLines: MmpOrderLine[];
   pricing?: MmpOrderPricing | null;
+  /** Currency của đơn — BẮT BUỘC kèm khi line có unitPrice mà KHÔNG có pricing
+   *  (store đa-brand, phương án 1): validator MMP đòi currency cấp gốc. */
+  currency?: string | null;
 }): MmpOrderPayload {
+  const linesHavePrice = input.brandLines.some((l) => l.unitPrice != null);
   return {
     orderNumber: input.orderNumber,
     store: input.store,
@@ -81,9 +88,14 @@ export function buildMmpOrderPayload(input: {
     cancelledAt: input.cancelledAt,
     lines: input.brandLines.map((l) => ({
       sku: l.sku, title: l.title, qty: l.qty, vendor: l.vendor, receivedAt: l.receivedAt,
-      // Chỉ nhét key unitPrice khi có giá (store riêng) — payload store đa-brand giữ nguyên shape cũ.
+      // Key giá chỉ xuất hiện khi có dữ liệu — đơn cũ thiếu giá giữ nguyên shape cũ.
       ...(l.unitPrice != null ? { unitPrice: l.unitPrice } : {}),
+      ...(l.lineDiscount != null ? { lineDiscount: l.lineDiscount } : {}),
     })),
-    ...(input.pricing ? { currency: input.pricing.currency, pricing: input.pricing } : {}),
+    // currency cấp gốc: theo pricing (store riêng), hoặc kèm riêng khi line có giá
+    // (store đa-brand — validator MMP bắt buộc currency khi có unitPrice).
+    ...(input.pricing
+      ? { currency: input.pricing.currency, pricing: input.pricing }
+      : linesHavePrice && input.currency ? { currency: input.currency } : {}),
   };
 }

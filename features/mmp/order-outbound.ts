@@ -16,6 +16,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       sku: schema.orderFulfillmentLines.sku, qty: schema.orderFulfillmentLines.qty, status: schema.orderFulfillmentLines.status,
       title: schema.shopifyOrderLines.productTitle, vendor: schema.shopifyOrderLines.vendor,
       unitPrice: schema.shopifyOrderLines.unitPrice,
+      discountAlloc: schema.shopifyOrderLines.discountAlloc,
     })
     .from(schema.orderFulfillmentLines)
     .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId))
@@ -74,8 +75,12 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       sku: l.sku, title: l.title ?? l.sku ?? '', qty: l.qty,
       vendor: (l.vendor?.trim() || owned?.vendor) ?? null,
       receivedAt: ra ? ra.toISOString() : null,
-      // Giá CHỈ gửi cho store riêng của brand (đối soát) — store đa-brand không giá.
-      ...(owned && l.unitPrice != null ? { unitPrice: Number(l.unitPrice) } : {}),
+      // Giá THEO LINE cho MỌI store (CEO 30/07, phương án 1): store đa-brand cũng
+      // gửi unitPrice + lineDiscount để MMP đối soát doanh số brand — MMP phải lọc
+      // line theo vendor, brand chỉ thấy giá line của chính mình. Tổng cấp đơn
+      // (pricing) vẫn CHỈ store riêng.
+      ...(l.unitPrice != null ? { unitPrice: Number(l.unitPrice) } : {}),
+      ...(l.discountAlloc != null ? { lineDiscount: Number(l.discountAlloc) } : {}),
     };
   });
   // Cước hàng hoàn đã gắn về đơn (VND) — chỉ tra khi store riêng (tránh query thừa).
@@ -118,6 +123,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
     cancelledAt: ord.cancelledAt ? ord.cancelledAt.toISOString() : null,
     brandLines,
     pricing,
+    currency: ord.currency ?? null, // store đa-brand: đi kèm khi line có unitPrice (validator MMP)
   }));
   return { rawBody };
 }

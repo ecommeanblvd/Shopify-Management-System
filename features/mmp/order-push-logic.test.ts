@@ -54,12 +54,23 @@ describe('buildMmpOrderPayload — pricing (store riêng của brand)', () => {
     expect(p.lines[0].unitPrice).toBe(45.5);
     expect(p.pricing).toEqual({ currency: 'USD', subtotal: 91, totalDiscount: 10, totalShipping: 25, totalTax: 0, totalPrice: 106 });
   });
-  it('store đa-brand (không pricing): payload GIỮ NGUYÊN shape cũ — không key giá', () => {
+  it('store đa-brand: KHÔNG pricing tổng, nhưng line CÓ giá (phương án 1 — CEO 30/07)', () => {
     const p = buildMmpOrderPayload({
-      ...base, store: 'meanblvd',
+      ...base, store: 'meanblvd', currency: 'USD',
+      brandLines: [{ sku: 'A', title: 'X', qty: 2, vendor: 'denio', receivedAt: null, unitPrice: 120, lineDiscount: 24 }],
+    });
+    expect('pricing' in p).toBe(false); // tổng cấp đơn vẫn giấu
+    expect(p.lines[0].unitPrice).toBe(120);
+    expect(p.lines[0].lineDiscount).toBe(24); // thực thu line = 120×2 − 24
+    expect(p.currency).toBe('USD'); // validator MMP đòi currency khi line có giá
+  });
+  it('đơn cũ chưa có giá line → shape cũ, không key giá/currency', () => {
+    const p = buildMmpOrderPayload({
+      ...base, store: 'meanblvd', currency: 'USD',
       brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'denio', receivedAt: null }],
     });
     expect('pricing' in p).toBe(false);
+    expect('currency' in p).toBe(false); // không giá → không cần currency
     expect(Object.keys(p.lines[0]).sort()).toEqual(['qty','receivedAt','sku','title','vendor']);
   });
 });
@@ -74,13 +85,22 @@ describe('buildMmpOrderPayload — root currency (validator MMP siết 21/07)', 
     });
     expect(p.currency).toBe('EUR');
   });
-  it('không pricing (store đa-brand) → không có key currency', () => {
+  it('không pricing + line không giá → không có key currency', () => {
     const p = buildMmpOrderPayload({
       orderNumber: 'M1', store: 'meanblvd', recipientName: null, shipCountry: 'US',
       placedAt: null, receivedAt: null, financialStatus: null, fulfillmentStatus: null, cancelledAt: null,
       brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'denio', receivedAt: null }],
     });
     expect('currency' in p).toBe(false);
+  });
+  it('không pricing nhưng line CÓ unitPrice → currency cấp gốc từ input.currency', () => {
+    const p = buildMmpOrderPayload({
+      orderNumber: 'M2', store: 'meanblvd', recipientName: null, shipCountry: 'US',
+      placedAt: null, receivedAt: null, financialStatus: null, fulfillmentStatus: null, cancelledAt: null,
+      brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'denio', receivedAt: null, unitPrice: 99 }],
+      currency: 'USD',
+    });
+    expect(p.currency).toBe('USD');
   });
 });
 
