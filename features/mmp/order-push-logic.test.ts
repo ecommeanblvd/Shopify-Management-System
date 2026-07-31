@@ -45,6 +45,14 @@ describe('buildMmpOrderPayload — pricing (store riêng của brand)', () => {
     placedAt: '2026-07-01T00:00:00.000Z', receivedAt: null,
     financialStatus: 'PAID', fulfillmentStatus: 'FULFILLED', cancelledAt: null,
   };
+  it('pricing kèm refundedAmount (hoàn MỘT PHẦN cũng có số) — passthrough nguyên vẹn', () => {
+    const p = buildMmpOrderPayload({
+      ...base, store: 'tinhatelier',
+      brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 100 }],
+      pricing: { currency: 'USD', subtotal: 100, totalDiscount: 0, totalShipping: 10, totalTax: 0, totalPrice: 110, refundedAmount: 38 },
+    });
+    expect(p.pricing?.refundedAmount).toBe(38); // doanh thu thực = 110 − 38
+  });
   it('store riêng: line có unitPrice + khối pricing đầy đủ', () => {
     const p = buildMmpOrderPayload({
       ...base,

@@ -26,6 +26,10 @@ export interface MmpOrderPricing {
   totalTax: number | null;
   /** Tổng khách thanh toán. */
   totalPrice: number | null;
+  /** Tổng tiền ĐÃ HOÀN cho khách (order currency, Σ mọi lần refund — hoàn MỘT
+   *  PHẦN cũng có số). 0 = chưa hoàn. Doanh thu thực = totalPrice − refundedAmount.
+   *  (MMP yêu cầu 30/07 — engine tự trừ doanh thu.) */
+  refundedAmount?: number;
   /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
   returnShippingVnd?: number;
   /** Phí transaction cổng thanh toán quy về ĐỒNG ĐƠN (suy từ Shopify

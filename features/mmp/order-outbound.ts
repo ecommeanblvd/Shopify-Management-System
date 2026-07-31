@@ -85,10 +85,15 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   });
   // Cước hàng hoàn đã gắn về đơn (VND) — chỉ tra khi store riêng (tránh query thừa).
   let returnShippingVnd = 0;
+  // Tổng tiền ĐÃ HOÀN khách (order currency) — refund một phần cũng có số.
+  let refundedAmount = 0;
   if (owned) {
     const ret = await db.execute(sql`
       SELECT COALESCE(SUM(total::float8), 0) AS v FROM carrier_bill_lines WHERE return_of_order_id = ${orderId}`);
     returnShippingVnd = Math.round(Number((ret.rows[0] as { v?: unknown })?.v ?? 0));
+    const refunds = await db.execute(sql`
+      SELECT COALESCE(SUM(amount::float8), 0) AS v FROM shopify_order_refunds WHERE order_id = ${orderId}`);
+    refundedAmount = Number((refunds.rows[0] as { v?: unknown })?.v ?? 0);
   }
   // Khối giá cấp đơn (order currency) — CHỈ store riêng của brand.
   const pricing = owned
@@ -102,6 +107,8 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         totalShippingDiscount: ord.shippingDiscount == null ? null : Number(ord.shippingDiscount),
         totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
+        // Refund (kể cả MỘT PHẦN): doanh thu thực = totalPrice − refundedAmount.
+        refundedAmount,
         ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
         // Phí transaction cổng thanh toán (CEO 24/07 — store riêng cần cho đối
         // soát net): fee quy đồng đơn + fee gốc theo đồng payout. null = đơn
