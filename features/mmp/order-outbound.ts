@@ -103,19 +103,20 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         totalDiscount: ord.totalDiscount == null ? null : Number(ord.totalDiscount),
         totalShipping: ord.totalShipping == null ? null : Number(ord.totalShipping),
         // Promo 50% off shipping của brand: MMP đối soát phí ship cần cả số GIẢM.
-        // Phí ship gốc = totalShipping + totalShippingDiscount.
-        totalShippingDiscount: ord.shippingDiscount == null ? null : Number(ord.shippingDiscount),
+        // Phí ship gốc = totalShipping + totalShippingDiscount. Validator MMP
+        // (31/07) không nhận null → KHÔNG có dữ liệu thì BỎ KEY.
+        ...(ord.shippingDiscount != null ? { totalShippingDiscount: Number(ord.shippingDiscount) } : {}),
         totalTax: ord.totalTax == null ? null : Number(ord.totalTax),
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
         // Refund (kể cả MỘT PHẦN): doanh thu thực = totalPrice − refundedAmount.
         refundedAmount,
         ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
         // Phí transaction cổng thanh toán (CEO 24/07 — store riêng cần cho đối
-        // soát net): fee quy đồng đơn + fee gốc theo đồng payout. null = đơn
-        // chưa sync được transactions.fees.
-        transactionFee: ord.transactionFee == null ? null : Number(ord.transactionFee),
-        transactionFeeNative: ord.transactionFeeNative == null ? null : Number(ord.transactionFeeNative),
-        transactionFeeNativeCurrency: ord.transactionFeeNativeCurrency ?? null,
+        // soát net): fee quy đồng đơn + fee gốc theo đồng payout. Validator MMP
+        // (31/07) không nhận null → đơn CHƯA có dữ liệu fees thì BỎ KEY.
+        ...(ord.transactionFee != null ? { transactionFee: Number(ord.transactionFee) } : {}),
+        ...(ord.transactionFeeNative != null ? { transactionFeeNative: Number(ord.transactionFeeNative) } : {}),
+        ...(ord.transactionFeeNativeCurrency != null ? { transactionFeeNativeCurrency: ord.transactionFeeNativeCurrency } : {}),
       }
     : null;
   // receivedAt cấp ĐƠN = ngày nhận MỚI NHẤT trong các line. null nếu chưa nhận.
