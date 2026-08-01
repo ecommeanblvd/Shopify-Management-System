@@ -896,6 +896,11 @@ export const shopifyOrderRefunds = pgTable('shopify_order_refunds', {
   refundedAt: timestamp('refunded_at').notNull(),
   amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
   reason: text('reason'),
+  // Breakdown khoản hoàn (MMP đối soát 31/07): hoàn SHIP riêng + hoàn ĐỒ theo SKU.
+  // shippingAmount = Σ refundShippingLines; lines = [{sku,title,qty,amount,tax}]
+  // từ refundLineItems (amount = subtotal của line hoàn). null = chưa sync chi tiết.
+  shippingAmount: numeric('shipping_amount', { precision: 14, scale: 2 }),
+  lines: jsonb('lines'),
 }, (t) => [
   index('shopify_order_refunds_order_idx').on(t.orderId),
   index('shopify_order_refunds_refunded_at_idx').on(t.refundedAt),

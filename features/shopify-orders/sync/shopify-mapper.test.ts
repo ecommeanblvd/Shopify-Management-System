@@ -107,6 +107,28 @@ describe('mapShopifyOrder', () => {
     expect(mapShopifyOrder(base, 'store-1').order.shippingDiscount).toBeNull();
   });
 
+  it('refund breakdown: hoàn SHIP riêng + hoàn ĐỒ theo SKU (đối soát MMP 31/07)', () => {
+    const base = fixture('order-refunded');
+    const p = {
+      ...base,
+      refunds: [{
+        id: 'gid://shopify/Refund/9', createdAt: '2026-07-08T00:00:00Z', note: null,
+        totalRefundedSet: { shopMoney: { amount: '99.72', currencyCode: 'USD' } },
+        refundLineItems: { nodes: [{ quantity: 2, lineItem: { sku: 'TINH-X', title: 'Dress' }, subtotalSet: { shopMoney: { amount: '60.00' } }, totalTaxSet: { shopMoney: { amount: '0.00' } } }] },
+        refundShippingLines: { nodes: [{ subtotalAmountSet: { shopMoney: { amount: '39.72' } } }] },
+      }],
+    } as unknown as ShopifyOrderPayload;
+    const r = mapShopifyOrder(p, 'store-1').refunds[0];
+    expect(r.amount).toBe('99.72');
+    expect(r.shippingAmount).toBe('39.72'); // hoàn CẢ tiền ship
+    expect(r.lines).toEqual([{ sku: 'TINH-X', title: 'Dress', qty: 2, amount: '60.00', tax: '0.00' }]);
+  });
+  it('refund cũ không có field chi tiết (payload trước nâng cấp) → shippingAmount/lines = null', () => {
+    const r = mapShopifyOrder(fixture('order-refunded'), 'store-1').refunds[0];
+    expect(r.shippingAmount).toBeNull();
+    expect(r.lines).toBeNull();
+  });
+
   it('captures refunds with amount + reason', () => {
     const m = mapShopifyOrder(fixture('order-refunded'), 'store-1');
     expect(m.refunds).toHaveLength(1);

@@ -95,6 +95,24 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       SELECT COALESCE(SUM(amount::float8), 0) AS v FROM shopify_order_refunds WHERE order_id = ${orderId}`);
     refundedAmount = Number((refunds.rows[0] as { v?: unknown })?.v ?? 0);
   }
+  // Chi tiết từng lần hoàn (hoàn ship? hoàn đồ nào?) — chỉ store riêng.
+  let refundDetails: Array<{ refundedAt: string; amount: number; shippingAmount?: number; lines?: Array<{ sku: string | null; title: string | null; qty: number; amount: number }> }> = [];
+  if (owned) {
+    const rows = await db.select({
+      refundedAt: schema.shopifyOrderRefunds.refundedAt,
+      amount: schema.shopifyOrderRefunds.amount,
+      shippingAmount: schema.shopifyOrderRefunds.shippingAmount,
+      lines: schema.shopifyOrderRefunds.lines,
+    }).from(schema.shopifyOrderRefunds).where(eq(schema.shopifyOrderRefunds.orderId, orderId));
+    refundDetails = rows.map((r) => ({
+      refundedAt: r.refundedAt.toISOString(),
+      amount: Number(r.amount),
+      ...(r.shippingAmount != null ? { shippingAmount: Number(r.shippingAmount) } : {}),
+      ...(Array.isArray(r.lines)
+        ? { lines: (r.lines as Array<{ sku: string | null; title: string | null; qty: number; amount: string }>).map((l) => ({ sku: l.sku, title: l.title, qty: l.qty, amount: Number(l.amount) })) }
+        : {}),
+    }));
+  }
   // Khối giá cấp đơn (order currency) — CHỈ store riêng của brand.
   const pricing = owned
     ? {
@@ -110,6 +128,8 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
         totalPrice: ord.totalPrice == null ? null : Number(ord.totalPrice),
         // Refund (kể cả MỘT PHẦN): doanh thu thực = totalPrice − refundedAmount.
         refundedAmount,
+        // Chi tiết từng lần hoàn (hoàn ship/hoàn đồ SKU nào) — vắng khi không có refund.
+        ...(refundDetails.length > 0 ? { refunds: refundDetails } : {}),
         ...(returnShippingVnd > 0 ? { returnShippingVnd } : {}),
         // Phí transaction cổng thanh toán (CEO 24/07 — store riêng cần cho đối
         // soát net): fee quy đồng đơn + fee gốc theo đồng payout. Validator MMP

@@ -32,6 +32,17 @@ export const ORDER_NODE_FIELDS = `
   refunds {
     id createdAt note
     totalRefundedSet { shopMoney { amount currencyCode } }
+    refundLineItems(first: 50) {
+      nodes {
+        quantity
+        lineItem { sku title }
+        subtotalSet { shopMoney { amount currencyCode } }
+        totalTaxSet { shopMoney { amount currencyCode } }
+      }
+    }
+    refundShippingLines(first: 10) {
+      nodes { subtotalAmountSet { shopMoney { amount currencyCode } } }
+    }
   }
   fulfillments { trackingInfo { number company } }
   shippingLines(first: 20) {

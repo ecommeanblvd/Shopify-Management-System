@@ -31,11 +31,22 @@ export interface ShopifyLineItem {
   }>;
 }
 
+export interface ShopifyRefundLineItem {
+  quantity: number;
+  lineItem: { sku: string | null; title: string | null } | null;
+  subtotalSet?: ShopifyMoneyBag | null;
+  totalTaxSet?: ShopifyMoneyBag | null;
+}
+
 export interface ShopifyRefund {
   id: string;
   createdAt: string;                            // ISO-8601
   totalRefundedSet: ShopifyMoneyBag;
   note: string | null;
+  /** Hoàn ĐỒ theo line — connection {nodes} (paged/webhook) hoặc array (bulk). */
+  refundLineItems?: { nodes?: ShopifyRefundLineItem[] } | ShopifyRefundLineItem[] | null;
+  /** Hoàn SHIP — mỗi node có subtotalAmountSet. */
+  refundShippingLines?: { nodes?: Array<{ subtotalAmountSet?: ShopifyMoneyBag | null }> } | Array<{ subtotalAmountSet?: ShopifyMoneyBag | null }> | null;
 }
 
 export interface ShopifyFulfillment {

@@ -118,7 +118,16 @@ export async function upsertOrder(
       await tx
         .insert(schema.shopifyOrderRefunds)
         .values({ ...refund, orderId: row!.id })
-        .onConflictDoNothing({ target: schema.shopifyOrderRefunds.shopifyRefundId });
+        // DoUpdate (thay DoNothing cũ): refund sync TRƯỚC khi có breakdown giờ
+        // re-sync là được lấp chi tiết ship/lines; amount/reason cũng refresh.
+        .onConflictDoUpdate({
+          target: schema.shopifyOrderRefunds.shopifyRefundId,
+          set: {
+            amount: refund.amount, reason: refund.reason,
+            ...(refund.shippingAmount != null ? { shippingAmount: refund.shippingAmount } : {}),
+            ...(refund.lines != null ? { lines: refund.lines } : {}),
+          },
+        });
     }
   });
 

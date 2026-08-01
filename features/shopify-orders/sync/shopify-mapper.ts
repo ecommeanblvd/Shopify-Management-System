@@ -63,6 +63,10 @@ export interface MappedOrder {
     refundedAt: Date;
     amount: string;
     reason: string | null;
+    /** Σ tiền hoàn SHIP của lần refund này (refundShippingLines). null = không sync được chi tiết. */
+    shippingAmount: string | null;
+    /** Hoàn ĐỒ theo line: [{sku,title,qty,amount,tax}] (amount = subtotal line hoàn). null = không có chi tiết. */
+    lines: Array<{ sku: string | null; title: string | null; qty: number; amount: string; tax: string }> | null;
   }>;
   trackingNumbers: string[];
 }
@@ -180,12 +184,34 @@ function mapLine(node: ShopifyLineItem): MappedOrder['lines'][number] {
   };
 }
 
+/** Connection {nodes} (paged/webhook) hoặc array trần (bulk) → array. */
+function nodesOf<T>(v: { nodes?: T[] } | T[] | null | undefined): T[] {
+  if (Array.isArray(v)) return v;
+  if (v && Array.isArray(v.nodes)) return v.nodes;
+  return [];
+}
+
 function mapRefund(r: ShopifyRefund): MappedOrder['refunds'][number] {
+  // Breakdown khoản hoàn (đối soát MMP): hoàn SHIP riêng + hoàn ĐỒ theo SKU.
+  // Refund có thể là "trả hàng, tiền 0" (chỉ lines) hoặc "hoàn tiền trần" (chỉ amount).
+  const shipLines = nodesOf(r.refundShippingLines);
+  const hasShipDetail = r.refundShippingLines != null;
+  const shippingAmount = shipLines
+    .reduce((sum, l) => sum + (Number(l.subtotalAmountSet?.shopMoney?.amount) || 0), 0);
+  const itemLines = nodesOf(r.refundLineItems).map((l) => ({
+    sku: l.lineItem?.sku ?? null,
+    title: l.lineItem?.title ?? null,
+    qty: l.quantity,
+    amount: (Number(l.subtotalSet?.shopMoney?.amount) || 0).toFixed(2),
+    tax: (Number(l.totalTaxSet?.shopMoney?.amount) || 0).toFixed(2),
+  }));
   return {
     shopifyRefundId: r.id,
     refundedAt: toDate(r.createdAt, new Date(0)),
     amount: r.totalRefundedSet.shopMoney.amount,
     reason: r.note,
+    shippingAmount: hasShipDetail ? shippingAmount.toFixed(2) : null,
+    lines: r.refundLineItems != null ? itemLines : null,
   };
 }
 

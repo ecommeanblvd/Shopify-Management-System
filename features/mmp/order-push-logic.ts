@@ -30,6 +30,18 @@ export interface MmpOrderPricing {
    *  PHẦN cũng có số). 0 = chưa hoàn. Doanh thu thực = totalPrice − refundedAmount.
    *  (MMP yêu cầu 30/07 — engine tự trừ doanh thu.) */
   refundedAmount?: number;
+  /** Chi tiết TỪNG LẦN hoàn (31/07 — MMP đối soát hoàn gì): amount = tổng tiền
+   *  hoàn lần đó; shippingAmount = phần hoàn PHÍ SHIP; lines = hoàn ĐỒ theo SKU
+   *  (amount line = subtotal phần hoàn của SKU đó). Lưu ý pattern Shopify: có lần
+   *  "trả hàng" ghi lines nhưng amount = 0, tiền hoàn thật nằm ở lần refund khác
+   *  không gắn lines — MMP nên đối soát theo TỔNG refundedAmount + dùng lines để
+   *  biết sản phẩm nào bị trả. Key vắng mặt = đơn không có refund. */
+  refunds?: Array<{
+    refundedAt: string;
+    amount: number;
+    shippingAmount?: number;
+    lines?: Array<{ sku: string | null; title: string | null; qty: number; amount: number }>;
+  }>;
   /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
   returnShippingVnd?: number;
   /** Phí transaction cổng thanh toán quy về ĐỒNG ĐƠN (suy từ Shopify
