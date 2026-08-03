@@ -85,9 +85,12 @@ export function shipHoPriceStructure(input: {
   const fuelBill = ab ? Math.round(num(ab.fuel)) : null;
   const vatBill = ab ? Math.round(num(ab.vat)) : null;
   const surBill = ab ? Math.round(num(ab.remote) + num(ab.demand) + num(ab.signature) + num(ab.residential) + num(ab.other)) : null;
+  // duty + AC + NK hiển thị ở DÒNG RIÊNG — phải trừ khỏi phần dư, không thì
+  // "điều chỉnh" hiện đúp đúng bằng duty (bill 736xxx gộp vào, bug 03/08).
+  const passBill = ab ? Math.round(num(ab.duty) + num(ab.addressCorrection) + num(ab.importHandling)) : null;
   // Phần dư BILL (làm tròn / khoản lạ) để cột bill luôn khớp billTotal.
   const adjustBill = billTotal != null
-    ? Math.round(billTotal - ((baseBill ?? 0) + (surBill ?? 0) + (fuelBill ?? 0) + (vatBill ?? 0)))
+    ? Math.round(billTotal - ((baseBill ?? 0) + (surBill ?? 0) + (fuelBill ?? 0) + (vatBill ?? 0) + (passBill ?? 0)))
     : null;
 
   // ── Phía GIÁ THU KHÁCH (tái dùng đúng engine giá brand) ──
