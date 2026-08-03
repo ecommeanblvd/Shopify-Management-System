@@ -100,10 +100,25 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   // Không có bill → không gửi (không suy đoán).
   let shippingCost: { carrierVnd: number; insHandlingVnd: number; totalVnd: number; source: 'carrier_bill' } | undefined;
   if (owned?.shipCost) {
+    // 2 nguồn cước thực (cùng gốc bill carrier, dedupe theo tracking):
+    // 1. shipment_charges nối qua shipments (đơn từ ~06/2025 có shipment);
+    // 2. carrier_bill_lines khớp MÃ ĐƠN (#TAxxxx) — đơn cũ 01-05/2025 không có
+    //    shipment để nối nhưng bill VẪN ghi ref (MMP báo thiếu 03/08). Loại dòng
+    //    hàng hoàn (return_of_order_id — đã gửi riêng ở returnShippingVnd).
     const sc = await db.execute(sql`
-      SELECT COALESCE(SUM(sc.total_amount::float8), 0) AS v
-      FROM shipments shp JOIN shipment_charges sc ON sc.shipment_id = shp.id
-      WHERE shp.order_id = ${orderId}`);
+      SELECT COALESCE((
+        SELECT SUM(sc.total_amount::float8)
+        FROM shipments shp JOIN shipment_charges sc ON sc.shipment_id = shp.id
+        WHERE shp.order_id = ${orderId}), 0)
+      + COALESCE((
+        SELECT SUM(l.total::float8)
+        FROM carrier_bill_lines l
+        WHERE l.order_number IS NOT NULL
+          AND replace(l.order_number, '#', '') = replace(${ord.orderNumber}, '#', '')
+          AND l.return_of_order_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM shipments shp2
+            WHERE shp2.order_id = ${orderId} AND shp2.tracking_number = l.tracking_number)), 0) AS v`);
     const carrierVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
     if (carrierVnd > 0) {
       // Toàn bộ bằng VND (CEO 03/08): $5 INS quy VND rồi cộng thẳng vào cước.
