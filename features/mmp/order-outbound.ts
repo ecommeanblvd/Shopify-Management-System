@@ -98,7 +98,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   // CHI PHÍ SHIP thực (CEO 03/08 — store có config shipCost, hiện chỉ TA):
   // cước carrier THẬT từ bill (Σ shipment_charges, VND) + phí xử lý INS $/đơn.
   // Không có bill → không gửi (không suy đoán).
-  let shippingCost: { carrierVnd: number; insHandlingUsd: number; totalUsd: number; fxVndPerUsd: number; source: 'carrier_bill' } | undefined;
+  let shippingCost: { carrierVnd: number; insHandlingVnd: number; totalVnd: number; source: 'carrier_bill' } | undefined;
   if (owned?.shipCost) {
     const sc = await db.execute(sql`
       SELECT COALESCE(SUM(sc.total_amount::float8), 0) AS v
@@ -106,12 +106,9 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
       WHERE shp.order_id = ${orderId}`);
     const carrierVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
     if (carrierVnd > 0) {
-      const { insHandlingUsd, fxVndPerUsd } = owned.shipCost;
-      shippingCost = {
-        carrierVnd, insHandlingUsd, fxVndPerUsd,
-        totalUsd: Math.round((carrierVnd / fxVndPerUsd + insHandlingUsd) * 100) / 100,
-        source: 'carrier_bill',
-      };
+      // Toàn bộ bằng VND (CEO 03/08): $5 INS quy VND rồi cộng thẳng vào cước.
+      const insHandlingVnd = Math.round(owned.shipCost.insHandlingUsd * owned.shipCost.fxVndPerUsd);
+      shippingCost = { carrierVnd, insHandlingVnd, totalVnd: carrierVnd + insHandlingVnd, source: 'carrier_bill' };
     }
   }
   // Chi tiết từng lần hoàn (hoàn ship? hoàn đồ nào?) — chỉ store riêng.

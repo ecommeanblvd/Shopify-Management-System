@@ -45,18 +45,18 @@ describe('buildMmpOrderPayload — pricing (store riêng của brand)', () => {
     placedAt: '2026-07-01T00:00:00.000Z', receivedAt: null,
     financialStatus: 'PAID', fulfillmentStatus: 'FULFILLED', cancelledAt: null,
   };
-  it('pricing kèm shippingCost (cước bill + phí INS $5) — passthrough nguyên vẹn', () => {
+  it('pricing kèm shippingCost VND (cước bill + phí INS $5 quy VND) — passthrough nguyên vẹn', () => {
     const p = buildMmpOrderPayload({
       ...base, store: 'tinhatelier',
       brandLines: [{ sku: 'A', title: 'X', qty: 1, vendor: 'TINH Atelier', receivedAt: null, unitPrice: 100 }],
       pricing: {
         currency: 'USD', subtotal: 100, totalDiscount: 0, totalShipping: 10, totalTax: 0, totalPrice: 110,
-        shippingCost: { carrierVnd: 1_602_175, insHandlingUsd: 5, totalUsd: 66.62, fxVndPerUsd: 26_000, source: 'carrier_bill' },
+        shippingCost: { carrierVnd: 1_602_175, insHandlingVnd: 130_000, totalVnd: 1_732_175, source: 'carrier_bill' },
       },
     });
-    // 1.602.175/26.000 = 61,62 + 5 = 66,62
-    expect(p.pricing?.shippingCost?.totalUsd).toBe(66.62);
-    expect(p.pricing?.shippingCost?.insHandlingUsd).toBe(5);
+    // totalVnd = 1.602.175 + ($5 × 26.000 = 130.000)
+    expect(p.pricing?.shippingCost?.totalVnd).toBe(1_732_175);
+    expect(p.pricing?.shippingCost?.insHandlingVnd).toBe(130_000);
   });
   it('pricing kèm refundedAmount (hoàn MỘT PHẦN cũng có số) — passthrough nguyên vẹn', () => {
     const p = buildMmpOrderPayload({
