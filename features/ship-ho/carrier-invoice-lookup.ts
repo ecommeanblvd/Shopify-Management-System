@@ -92,6 +92,35 @@ export function billImpliedFuelPercent(s: BilledSurcharges): number | null {
   return pct;
 }
 
+/**
+ * GỘP nhiều dòng bill của CÙNG 1 tracking thành 1 bức tranh đầy đủ. FedEx tách
+ * hoá đơn: bill CƯỚC (734xxx — freight/fuel/phụ phí) và bill THUẾ (736xxx —
+ * duty ứng hộ) là 2 dòng riêng; trước đây lookup LIMIT 1 → đơn nào dòng duty
+ * đứng trước là mất sạch cước (margin ảo, 03/08 — 7 đơn dính). Tiền cộng dồn;
+ * cân lấy max; ship date lấy sớm nhất có; billNumber nối ' + '.
+ */
+export function aggregateBilledLines(rows: BilledLookup[]): BilledLookup {
+  if (rows.length === 1) return rows[0];
+  const keys = Object.keys(rows[0].surcharges) as Array<keyof BilledSurcharges>;
+  const surcharges = Object.fromEntries(keys.map((k) => [k, rows.reduce((s, r) => s + r.surcharges[k], 0)])) as unknown as BilledSurcharges;
+  const weights = rows.map((r) => r.weightKg).filter((w): w is number => w != null);
+  const shipDates = rows.map((r) => r.shipDate).filter((d): d is string => !!d).sort();
+  const billNumbers = [...new Set(rows.map((r) => r.billNumber).filter((b): b is string => !!b))];
+  return {
+    weightKg: weights.length ? Math.max(...weights) : null,
+    totalVnd: rows.reduce((s, r) => s + r.totalVnd, 0),
+    surcharges,
+    billNumber: billNumbers.length ? billNumbers.join(' + ') : null,
+    shipDate: shipDates[0] ?? null,
+  };
+}
+
+/** Bill ĐÃ có phần CƯỚC chưa? Chỉ có duty (bill cước chưa về) → chưa đủ để
+ *  re-bill giá thu thực — coi như chưa có bill, tránh margin ảo. */
+export function billedHasFreight(b: BilledLookup): boolean {
+  return b.surcharges.base + b.surcharges.discount > 0;
+}
+
 /** COST currency → VND. costCurrency VND → 1; displayCurrency VND → 1/fx; khác → null. */
 export function costToVndFactor(costCurrency: string, displayCurrency: string, fxCostPerDisplay: number): number | null {
   if (costCurrency === 'VND') return 1;
@@ -100,12 +129,12 @@ export function costToVndFactor(costCurrency: string, displayCurrency: string, f
 }
 
 /**
- * Tìm dòng hoá đơn carrier khớp tracking. Ưu tiên dòng có total (đã parse đủ),
- * mới nhất (theo bill period). Trả null nếu chưa có bill nào cho tracking này.
+ * Tìm TẤT CẢ dòng hoá đơn carrier khớp tracking (cước + duty có thể nằm 2 bill
+ * khác nhau) và GỘP lại. Trả null nếu chưa có bill nào cho tracking này.
  */
 export async function getBilledByTracking(trackingNumber: string): Promise<BilledLookup | null> {
   if (!trackingNumber) return null;
-  const [row] = await db
+  const rows = await db
     .select({
       weightKg: schema.carrierBillLines.weightKg,
       base: schema.carrierBillLines.base, discount: schema.carrierBillLines.discount,
@@ -135,11 +164,16 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       eq(schema.carrierBillLines.trackingNumber, trackingNumber),
       isNotNull(schema.carrierBillLines.total),
     ))
-    .orderBy(schema.carrierBills.periodEnd)
-    .limit(1);
-  if (!row) return null;
+    .orderBy(schema.carrierBills.periodEnd);
+  if (rows.length === 0) return null;
 
-  const factor = costToVndFactor(row.costCurrency, row.displayCurrency, Number(row.fx));
+  const factor = costToVndFactor(rows[0].costCurrency, rows[0].displayCurrency, Number(rows[0].fx));
   if (factor == null) return null; // cấu hình tiền tệ không quy được VND
-  return normalizeBilledLine(row, factor, row.billNumber);
+  // residentialRaw là số CẤP LÔ HÀNG (từ shipment_charges) nhưng subquery gắn nó
+  // vào MỌI dòng — chỉ áp cho 1 dòng (ưu tiên dòng cước có signature gộp) để
+  // aggregate không nhân đôi residential.
+  const resIdx = Math.max(0, rows.findIndex((r) => Number(r.signature ?? 0) > 0));
+  const normalized = rows.map((r, i) =>
+    normalizeBilledLine({ ...r, residentialRaw: i === resIdx ? r.residentialRaw : null }, factor, r.billNumber));
+  return aggregateBilledLines(normalized);
 }

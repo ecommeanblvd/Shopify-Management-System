@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeBilledLine, costToVndFactor, billImpliedFuelPercent, type RawBillLine, type BilledSurcharges } from './carrier-invoice-lookup';
+import { normalizeBilledLine, costToVndFactor, billImpliedFuelPercent, aggregateBilledLines, billedHasFreight, type RawBillLine, type BilledSurcharges, type BilledLookup } from './carrier-invoice-lookup';
 
 const raw: RawBillLine = {
   weightKg: '2.500', base: '1000000', discount: '-50000', fuel: '180000', remote: '0',
@@ -61,5 +61,32 @@ describe('billImpliedFuelPercent — fuel % FedEx THỰC ÁP suy từ chính bil
   });
   it('tỉ lệ vô lý (>100%) → null, không tin dòng bill hỏng', () => {
     expect(billImpliedFuelPercent(s({ base: 100_000, fuel: 200_000 }))).toBeNull();
+  });
+});
+
+describe('aggregateBilledLines — 1 lô hàng có NHIỀU dòng bill (cước 734xxx + duty 736xxx)', () => {
+  const mk = (over: Partial<BilledLookup['surcharges']>, extra?: Partial<BilledLookup>): BilledLookup => ({
+    weightKg: null, totalVnd: 0, billNumber: null, shipDate: null,
+    surcharges: { base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0, vat: 0, other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, ...over },
+    ...extra,
+  });
+  it('SV-0029 thật: dòng duty đứng trước + dòng cước — gộp đủ cả hai', () => {
+    const duty = mk({ duty: 370_658 }, { totalVnd: 370_658, billNumber: '736056168', weightKg: 8.3 });
+    const freight = mk({ base: 11_176_700, discount: -7_500_000, fuel: 1_400_000, vat: 300_000 }, { totalVnd: 4_587_478, billNumber: '734110283', weightKg: 8.3, shipDate: '2026-07-20' });
+    const agg = aggregateBilledLines([duty, freight]);
+    expect(agg.surcharges.base).toBe(11_176_700);
+    expect(agg.surcharges.duty).toBe(370_658);
+    expect(agg.totalVnd).toBe(4_958_136); // cước + duty
+    expect(agg.weightKg).toBe(8.3);
+    expect(agg.shipDate).toBe('2026-07-20'); // lấy từ dòng có ship date
+    expect(agg.billNumber).toBe('736056168 + 734110283');
+  });
+  it('1 dòng duy nhất → giữ nguyên', () => {
+    const one = mk({ base: 100, discount: -20 }, { totalVnd: 80, billNumber: 'B1', weightKg: 1 });
+    expect(aggregateBilledLines([one])).toEqual(one);
+  });
+  it('billedHasFreight: chỉ có duty (bill cước chưa về) → false', () => {
+    expect(billedHasFreight(mk({ duty: 370_658 }, { totalVnd: 370_658 }))).toBe(false);
+    expect(billedHasFreight(mk({ base: 1_000_000, discount: -700_000 }, { totalVnd: 300_000 }))).toBe(true);
   });
 });

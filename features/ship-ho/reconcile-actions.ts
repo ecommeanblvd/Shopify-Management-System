@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { parseCarrierInvoiceRow, computeReconcile } from './reconcile-logic';
-import { getBilledByTracking, billImpliedFuelPercent } from './carrier-invoice-lookup';
+import { getBilledByTracking, billImpliedFuelPercent, billedHasFreight } from './carrier-invoice-lookup';
 import { estimateForBrand } from './brand-estimate';
 import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
@@ -136,6 +136,9 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
   for (const o of orders) {
     const billed = await getBilledByTracking(o.trackingNumber ?? '');
     if (!billed) { summary.unmatched += 1; continue; }
+    // Mới CHỈ có bill duty (bill CƯỚC chưa về) → chưa đủ để re-bill: bỏ qua như
+    // chưa có bill, tránh actualCarrierCost = mỗi duty → margin ảo (03/08).
+    if (!billedHasFreight(billed)) { summary.unmatched += 1; continue; }
     summary.matched += 1;
 
     // Re-quote giá thu THỰC: cột cân trên bill FBO là CÂN THỰC trên cân (scale),
