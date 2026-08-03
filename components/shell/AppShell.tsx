@@ -24,12 +24,18 @@ export async function AppShell({ email, name, role, children }: AppShellProps) {
   // The shell is pinned to the viewport: topbar and sidebar never scroll.
   // Only <main> scrolls vertically, so any in-page sticky (matrix thead,
   // future toolbars) anchors below the topbar instead of inside the page body.
+  // PRINT: giấu topbar + sidebar (in trang nào cũng chỉ cần nội dung), và bỏ
+  // pin viewport (h-screen + overflow-hidden làm bản in bị cắt còn 1 trang).
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      <Topbar email={email} name={name} role={role} />
-      <div className="flex flex-1 min-h-0">
-        <Sidebar visibleHrefs={visibleHrefs} />
-        <main className="flex-1 min-w-0 overflow-auto">
+    <div className="h-screen flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
+      <div className="contents print:hidden">
+        <Topbar email={email} name={name} role={role} />
+      </div>
+      <div className="flex flex-1 min-h-0 print:block print:min-h-0">
+        <div className="contents print:hidden">
+          <Sidebar visibleHrefs={visibleHrefs} />
+        </div>
+        <main className="flex-1 min-w-0 overflow-auto print:overflow-visible">
           {children}
         </main>
       </div>

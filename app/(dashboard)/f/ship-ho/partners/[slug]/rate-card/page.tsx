@@ -22,9 +22,12 @@ export default async function RateCardPage({ params }: { params: Promise<{ slug:
   const r = await getPartnerRateCard(slug);
 
   return (
-    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6 print:p-0 print:space-y-3">
+      {/* Bản in rate card: khổ NGANG (bảng nhiều zone), lề gọn. @page chỉ áp khi
+          in từ trang này — các trang khác không bị đổi hướng giấy. */}
+      <style>{'@media print { @page { size: A4 landscape; margin: 10mm; } }'}</style>
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Rate card · {slug}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight print:text-xl">Rate card · {slug}</h1>
         <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' }) + ' print:hidden'}>← Đối tác</Link>
       </div>
       {!r.ok ? (

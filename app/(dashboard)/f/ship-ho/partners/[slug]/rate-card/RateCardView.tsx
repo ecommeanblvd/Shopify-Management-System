@@ -52,7 +52,7 @@ export function RateCardView({ card, partnerSlug, accountName, fuelUrl, odaLooku
         <>
           {/* Bảng 1: giá xoay — cột đầu = mốc cân, mỗi zone 1 cột — trình bày như rate card hãng vận chuyển. */}
           <div className="text-sm font-medium">Bảng giá</div>
-          <div className="border rounded overflow-x-auto">
+          <div className="border rounded overflow-x-auto print:overflow-visible">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40">
                 <tr className="[&>th]:text-left [&>th]:p-2 [&>th]:whitespace-nowrap">
