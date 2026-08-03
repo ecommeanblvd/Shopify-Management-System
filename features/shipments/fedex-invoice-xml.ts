@@ -22,7 +22,10 @@ const TAG = {
   recipientState: 'Tiểu_bang_trong_địa_chỉ_của_người_nhận',
   recipientPostcode: 'Mã_bưu_chính_trong_địa_chỉ_của_người_nhận',
   weight: 'Số_tiền_theo_trọng_lượng_tính_cước', // giá trị là CÂN tính cước
-  weightUnit: 'Đơn_vị_trọng_lượng_thực_tế',     // K=kg, P=lb (FedEx VN: K)
+  // Đơn vị phải là của CHÍNH cân tính cước — không phải cân thực tế! Bug 03/08:
+  // dùng Đơn_vị_trọng_lượng_thực_tế (P) áp lên cân tính cước (0.5 K) → 0.5 lb
+  // = 0.227kg (#MBLVD29431 lệch cân ảo). Hai field có thể KHÁC đơn vị nhau.
+  weightUnit: 'Đơn_vị_trọng_lượng_tính_cước',   // K=kg, P=lb
   awbTotal: 'Tổng_số_tiền_trong_vận_đơn_hàng_không',
   chargeLabel: 'Nhãn_phí_trên_vận_đơn_hàng_không',
   chargeAmount: 'Số_tiền_phí_trên_vận_đơn_hàng_không',

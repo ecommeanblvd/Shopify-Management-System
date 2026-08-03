@@ -67,3 +67,28 @@ describe('parseFedexInvoiceXml', () => {
     expect(parseFedexInvoiceXml('<x/>')).toEqual([]);
   });
 });
+
+describe('đơn vị cân TÍNH CƯỚC độc lập với cân thực tế (bug #MBLVD29431, 03/08)', () => {
+  const xml = (unitTags: string) => `<?xml version="1.0"?><root><Invoice_Download>
+    <Số_hóa_đơn_FedEx>734110283</Số_hóa_đơn_FedEx>
+    <Ngày_lập_hóa_đơn>03-Aug-2026</Ngày_lập_hóa_đơn>
+    <Số_vận_đơn_hàng_không>874588278487</Số_vận_đơn_hàng_không>
+    <Trọng_lượng_thực_tế>1</Trọng_lượng_thực_tế>
+    ${unitTags}
+    <Số_tiền_theo_trọng_lượng_tính_cước>0.5</Số_tiền_theo_trọng_lượng_tính_cước>
+    <Tổng_số_tiền_trong_vận_đơn_hàng_không>1,602,175.00</Tổng_số_tiền_trong_vận_đơn_hàng_không>
+  </Invoice_Download></root>`;
+
+  it('cân thực 1 P nhưng cân tính cước 0.5 K → 0.5 kg (KHÔNG áp đơn vị P của cân thực)', () => {
+    const r = parseFedexInvoiceXml(xml(
+      '<Đơn_vị_trọng_lượng_thực_tế>P</Đơn_vị_trọng_lượng_thực_tế><Đơn_vị_trọng_lượng_tính_cước>K</Đơn_vị_trọng_lượng_tính_cước>',
+    ))[0];
+    expect(r.weightKg).toBe(0.5);
+  });
+  it('cân tính cước đơn vị P thật → quy lb→kg như cũ', () => {
+    const r = parseFedexInvoiceXml(xml(
+      '<Đơn_vị_trọng_lượng_thực_tế>P</Đơn_vị_trọng_lượng_thực_tế><Đơn_vị_trọng_lượng_tính_cước>P</Đơn_vị_trọng_lượng_tính_cước>',
+    ))[0];
+    expect(r.weightKg).toBe(0.227);
+  });
+});
