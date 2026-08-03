@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { BRAND_OWNED_STORES, brandOwnedStore } from './brand-stores';
 
 describe('brandOwnedStore', () => {
-  it('map đúng 2 store riêng của brand', () => {
-    expect(brandOwnedStore('tinhatelier')).toEqual({ vendor: 'TINH Atelier', brandSlug: 'tinh' });
+  it('map đúng 2 store riêng của brand (TA kèm config shipCost INS $5)', () => {
+    expect(brandOwnedStore('tinhatelier')).toEqual({
+      vendor: 'TINH Atelier', brandSlug: 'tinh',
+      shipCost: { insHandlingUsd: 5, fxVndPerUsd: 26_000 },
+    });
     expect(brandOwnedStore('mirermirer-official')).toEqual({ vendor: 'Mirer', brandSlug: 'mirer' });
   });
   it('store đa-brand / lạ / null → null', () => {
