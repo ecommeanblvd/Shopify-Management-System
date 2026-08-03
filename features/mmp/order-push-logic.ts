@@ -42,6 +42,18 @@ export interface MmpOrderPricing {
     shippingAmount?: number;
     lines?: Array<{ sku: string | null; title: string | null; qty: number; amount: number }>;
   }>;
+  /** CHI PHÍ SHIP thực của MEAN cho đơn (03/08 — hiện chỉ đơn TA): cước carrier
+   *  THẬT từ bill (VND) + phí đóng gói/xử lý INS ($/đơn). totalUsd =
+   *  carrierVnd/fxVndPerUsd + insHandlingUsd — dùng làm "chi phí ship" khi MMP
+   *  đối soát với brand. Key vắng mặt = đơn chưa có bill carrier trong SMS
+   *  (đơn cũ trước hệ thống / đơn VN / POS) — KHÔNG suy đoán số. */
+  shippingCost?: {
+    carrierVnd: number;
+    insHandlingUsd: number;
+    totalUsd: number;
+    fxVndPerUsd: number;
+    source: 'carrier_bill';
+  };
   /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
   returnShippingVnd?: number;
   /** Phí transaction cổng thanh toán quy về ĐỒNG ĐƠN (suy từ Shopify
