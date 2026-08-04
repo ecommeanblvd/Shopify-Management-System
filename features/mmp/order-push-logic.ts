@@ -51,7 +51,9 @@ export interface MmpOrderPricing {
     carrierVnd: number;
     insHandlingVnd: number;
     totalVnd: number;
-    source: 'carrier_bill';
+    /** carrier_bill = từ hoá đơn carrier trong SMS; ops_sheet = ops tra tay từ
+     *  bill cũ (sheet Lark 04/08 — đơn 2024-05/2025 trước hệ thống). */
+    source: 'carrier_bill' | 'ops_sheet';
   };
   /** Cước HÀNG HOÀN đã phát sinh cho đơn (VND — khác currency trên; từ bill carrier). */
   returnShippingVnd?: number;

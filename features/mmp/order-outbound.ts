@@ -98,7 +98,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
   // CHI PHÍ SHIP thực (CEO 03/08 — store có config shipCost, hiện chỉ TA):
   // cước carrier THẬT từ bill (Σ shipment_charges, VND) + phí xử lý INS $/đơn.
   // Không có bill → không gửi (không suy đoán).
-  let shippingCost: { carrierVnd: number; insHandlingVnd: number; totalVnd: number; source: 'carrier_bill' } | undefined;
+  let shippingCost: { carrierVnd: number; insHandlingVnd: number; totalVnd: number; source: 'carrier_bill' | 'ops_sheet' } | undefined;
   if (owned?.shipCost) {
     // 2 nguồn cước thực (cùng gốc bill carrier, dedupe theo tracking):
     // 1. shipment_charges nối qua shipments (đơn từ ~06/2025 có shipment);
@@ -120,11 +120,16 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
             SELECT 1 FROM shipments shp2
             JOIN shipment_charges sc2 ON sc2.shipment_id = shp2.id
             WHERE shp2.order_id = ${orderId} AND shp2.tracking_number = l.tracking_number)), 0) AS v`);
-    const carrierVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
+    const billedVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
+    // Fallback đơn CỔ (2024-05/2025, bill không có trong SMS): ops tra tay từ
+    // bill cũ → shipping_cost_override (sheet Lark 04/08). Bill trong SMS thắng.
+    const overrideVnd = billedVnd > 0 ? 0 : Math.round(Number(
+      ((await db.execute(sql`SELECT shipping_cost_override AS v FROM shopify_orders WHERE id = ${orderId}`)).rows[0] as { v?: unknown })?.v ?? 0));
+    const carrierVnd = billedVnd > 0 ? billedVnd : overrideVnd;
     if (carrierVnd > 0) {
       // Toàn bộ bằng VND (CEO 03/08): $5 INS quy VND rồi cộng thẳng vào cước.
       const insHandlingVnd = Math.round(owned.shipCost.insHandlingUsd * owned.shipCost.fxVndPerUsd);
-      shippingCost = { carrierVnd, insHandlingVnd, totalVnd: carrierVnd + insHandlingVnd, source: 'carrier_bill' };
+      shippingCost = { carrierVnd, insHandlingVnd, totalVnd: carrierVnd + insHandlingVnd, source: billedVnd > 0 ? 'carrier_bill' : 'ops_sheet' };
     }
   }
   // Chi tiết từng lần hoàn (hoàn ship? hoàn đồ nào?) — chỉ store riêng.
