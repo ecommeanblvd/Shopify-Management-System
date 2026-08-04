@@ -118,6 +118,7 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
           AND l.return_of_order_id IS NULL
           AND NOT EXISTS (
             SELECT 1 FROM shipments shp2
+            JOIN shipment_charges sc2 ON sc2.shipment_id = shp2.id
             WHERE shp2.order_id = ${orderId} AND shp2.tracking_number = l.tracking_number)), 0) AS v`);
     const carrierVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
     if (carrierVnd > 0) {
