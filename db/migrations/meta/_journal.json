@@ -841,6 +841,13 @@
       "when": 1786711200000,
       "tag": "0119_partner-contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1786797600000,
+      "tag": "0120_contract-mmp-push",
+      "breakpoints": true
     }
   ]
 }

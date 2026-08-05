@@ -106,10 +106,20 @@ export function ContractsView({ brandSlug, contracts, canManage }: {
                 return (
                   <tr key={c.id} className="border-b [&>td]:p-2 align-top">
                     <td>
-                      <div className="font-medium">{c.title}</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{c.title}</span>
+                        {c.source === 'mmp_push' && (
+                          <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:text-sky-400"
+                            title="MMP tự đẩy sang qua API">MMP gửi</span>
+                        )}
+                        {c.contractType && (
+                          <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{c.contractType}</span>
+                        )}
+                      </div>
                       {c.note && <div className="text-xs text-muted-foreground">{c.note}</div>}
                       <div className="text-[11px] text-muted-foreground">
                         Tải lên {new Date(c.uploadedAt).toLocaleDateString('vi-VN')}
+                        {c.version && <> · bản <code className="font-mono">{c.version}</code></>}
                       </div>
                     </td>
                     <td className="whitespace-nowrap">{vnDate(c.signedAt)}</td>

@@ -2012,6 +2012,15 @@ export const shipHoPartnerContracts = pgTable('ship_ho_partner_contracts', {
   id: uuid('id').defaultRandom().primaryKey(),
   partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
   title: text('title').notNull(),
+  /** Loại hợp đồng MMP gửi ('fulfillment'…). null = ops upload tay. */
+  contractType: text('contract_type'),
+  /** Mã bản MMP sinh — KHOÁ IDEMPOTENCY: cùng (brand, version) push lại chỉ
+   *  cập nhật, không tạo bản trùng. null = bản upload tay. */
+  version: text('version'),
+  /** Thời điểm MMP sinh bản hợp đồng này. */
+  generatedAt: timestamp('generated_at'),
+  /** 'mmp_push' = MMP đẩy sang qua API; 'upload' = ops tải file lên. */
+  source: text('source').notNull().default('upload'),
   fileKey: text('file_key').notNull(),
   filename: text('filename').notNull(),
   contentType: text('content_type').notNull(),

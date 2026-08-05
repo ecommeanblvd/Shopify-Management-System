@@ -22,6 +22,10 @@ export interface PartnerContract {
   expiresAt: string | null;
   note: string | null;
   uploadedAt: string;
+  /** 'mmp_push' = MMP đẩy sang qua API; 'upload' = ops tải file lên. */
+  source: string;
+  contractType: string | null;
+  version: string | null;
 }
 
 /** Xem hợp đồng = quyền XEM ship hộ (ops cần tra cứu); sửa/xoá mới cần manage. */
@@ -45,6 +49,9 @@ export async function listPartnerContracts(brandSlug: string): Promise<PartnerCo
     expiresAt: schema.shipHoPartnerContracts.expiresAt,
     note: schema.shipHoPartnerContracts.note,
     uploadedAt: schema.shipHoPartnerContracts.uploadedAt,
+    source: schema.shipHoPartnerContracts.source,
+    contractType: schema.shipHoPartnerContracts.contractType,
+    version: schema.shipHoPartnerContracts.version,
   })
     .from(schema.shipHoPartnerContracts)
     .where(eq(schema.shipHoPartnerContracts.partnerBrandSlug, brandSlug))

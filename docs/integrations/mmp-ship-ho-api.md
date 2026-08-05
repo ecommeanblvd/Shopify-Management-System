@@ -367,3 +367,44 @@ Khi hàng về kho, nhân viên SMS (Inecso) cân & đo lại kiện. **Mọi l�
 - Rate card cơ bản mỗi brand (bảng giá theo zone × mức cân, **giá đã gồm markup của brand**) sẽ được SMS cung cấp để MMP hiển thị (push hoặc `GET .../ratecard?brandSlug=` — v2). Estimate (mục 2) là nguồn giá chính xác theo từng kiện.
 - Không cache giá lâu ở MMP: phụ phí xăng dầu đổi theo tuần; luôn gọi estimate khi brand chốt.
 - Mọi số tiền là VND nguyên đồng. Không suy luận margin/cước gốc — SMS không cung cấp các số đó.
+
+---
+
+## Hợp đồng đối tác — MMP đẩy sang SMS (05/08/2026)
+
+MMP soạn hợp đồng ship hộ/fulfillment → đẩy sang SMS để lưu trữ cạnh rate card
+của đối tác (ops xem/tải trong `/f/ship-ho/partners/<slug>/contracts`).
+
+- **Endpoint:** `POST https://shopify-management-system-production.up.railway.app/api/mmp/ship-ho/contract`
+- **Auth:** HMAC SHA-256 — `x-mean-signature: sha256=<hex>` + `x-mean-timestamp: <unix秒>`,
+  ký `${timestamp}.${rawBody}` bằng `MMP_WEBHOOK_SECRET` (CÙNG scheme/secret với
+  webhook ship hộ hiện có — MMP tái dùng code ký sẵn).
+
+### Body
+```json
+{
+  "brandSlug": "tinh",
+  "brandName": "Tinh Atelier",
+  "contractType": "fulfillment",
+  "title": "Hợp đồng dịch vụ Fulfillment",
+  "version": "9f2ab31c7d04",
+  "generatedAt": "2026-08-05T04:00:00.000Z",
+  "html": "<html>…toàn bộ hợp đồng…</html>"
+}
+```
+| Field | Bắt buộc | Ghi chú |
+|---|---|---|
+| `brandSlug` | ✔ | Phải là brand ĐÃ là đối tác ship hộ trong SMS, nếu không → `403 brand_not_approved` |
+| `contractType` | ✔ | `fulfillment`… — hiện badge trong danh sách |
+| `title` | – | Trống → SMS tự đặt `Hợp đồng <contractType>` |
+| `version` | ✔ | **KHOÁ IDEMPOTENCY**: cùng `(brandSlug, version)` push lại chỉ CẬP NHẬT bản cũ; version mới = bản mới nằm cạnh (giữ lịch sử) |
+| `generatedAt` | – | ISO-8601; thiếu/sai định dạng → SMS lấy thời điểm nhận, KHÔNG chặn |
+| `html` | ✔ | Toàn bộ hợp đồng, tối đa **5 MB**; SMS lưu thành file `.html` trên R2, tải qua signed URL 5 phút |
+| `brandName` | – | Chỉ để đối chiếu, SMS không lưu (tên brand lấy từ DB) |
+
+### Response
+- `200 { ok: true, id, action: "created" | "updated" }`
+- `400 bad_input` (thiếu field/html quá lớn) · `401` sai chữ ký · `403 brand_not_approved` · `500` lỗi lưu trữ
+
+> Ops có thể upload thêm bản scan/PDF ký tay vào cùng đối tác — 2 nguồn nằm chung
+> danh sách, phân biệt bằng nhãn **"MMP gửi"** vs bản ops tải lên.
