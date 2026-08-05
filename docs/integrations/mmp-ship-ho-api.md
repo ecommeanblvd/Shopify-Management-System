@@ -375,7 +375,8 @@ Khi hàng về kho, nhân viên SMS (Inecso) cân & đo lại kiện. **Mọi l�
 MMP soạn hợp đồng ship hộ/fulfillment → đẩy sang SMS để lưu trữ cạnh rate card
 của đối tác (ops xem/tải trong `/f/ship-ho/partners/<slug>/contracts`).
 
-- **Endpoint:** `POST https://shopify-management-system-production.up.railway.app/api/mmp/ship-ho/contract`
+- **Endpoint (chính thức, chốt 05/08):** `POST https://shopify-management-system-production.up.railway.app/api/mmp/contracts`
+  — cùng base với `/api/mmp/products`. Alias cũ `/api/mmp/ship-ho/contract` vẫn chạy (cùng handler) nếu MMP đã trỏ sang.
 - **Auth:** HMAC SHA-256 — `x-mean-signature: sha256=<hex>` + `x-mean-timestamp: <unix秒>`,
   ký `${timestamp}.${rawBody}` bằng `MMP_WEBHOOK_SECRET` (CÙNG scheme/secret với
   webhook ship hộ hiện có — MMP tái dùng code ký sẵn).
@@ -395,11 +396,11 @@ của đối tác (ops xem/tải trong `/f/ship-ho/partners/<slug>/contracts`).
 | Field | Bắt buộc | Ghi chú |
 |---|---|---|
 | `brandSlug` | ✔ | Phải là brand ĐÃ là đối tác ship hộ trong SMS, nếu không → `403 brand_not_approved` |
-| `contractType` | ✔ | `fulfillment`… — hiện badge trong danh sách |
+| `contractType` | ✔ | `fulfillment` \| `sales` \| `mou` \| `nda` — hiện badge trong danh sách; loại mới ngoài 4 giá trị vẫn nhận (hiện nguyên mã), MMP không phải chờ SMS deploy |
 | `title` | – | Trống → SMS tự đặt `Hợp đồng <contractType>` |
 | `version` | ✔ | **KHOÁ IDEMPOTENCY**: cùng `(brandSlug, version)` push lại chỉ CẬP NHẬT bản cũ; version mới = bản mới nằm cạnh (giữ lịch sử) |
 | `generatedAt` | – | ISO-8601; thiếu/sai định dạng → SMS lấy thời điểm nhận, KHÔNG chặn |
-| `html` | ✔ | Toàn bộ hợp đồng, tối đa **5 MB**; SMS lưu thành file `.html` trên R2, tải qua signed URL 5 phút |
+| `html` | ✔ | Bản hoàn chỉnh tự chứa CSS, lưu + hiển thị NGUYÊN VĂN. Tối đa **5 MB** (hợp đồng thật ~195KB — thoải mái); SMS lưu file `.html` trên R2, mở qua signed URL 5 phút |
 | `brandName` | – | Chỉ để đối chiếu, SMS không lưu (tên brand lấy từ DB) |
 
 ### Response

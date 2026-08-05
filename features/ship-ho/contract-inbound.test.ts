@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMmpContract, MAX_CONTRACT_HTML_BYTES } from './contract-inbound';
+import { parseMmpContract, contractTypeLabel, MAX_CONTRACT_HTML_BYTES } from './contract-inbound';
 
 const OK = {
   brandSlug: 'tinh',
@@ -68,5 +68,21 @@ describe('parseMmpContract — payload thật MMP gửi 05/08', () => {
     if (!r.ok) return;
     expect(r.value.brandSlug).toBe('tinh');
     expect(r.value.version).toBe('v1');
+  });
+});
+
+describe('contractTypeLabel — 4 loại MMP dùng (05/08)', () => {
+  it('map đúng nhãn tiếng Việt', () => {
+    expect(contractTypeLabel('fulfillment')).toBe('Fulfillment');
+    expect(contractTypeLabel('sales')).toBe('Bán hàng');
+    expect(contractTypeLabel('mou')).toBe('MOU');
+    expect(contractTypeLabel('nda')).toBe('NDA');
+  });
+  it('loại lạ → hiện nguyên mã (MMP thêm loại mới không cần SMS deploy)', () => {
+    expect(contractTypeLabel('service_agreement')).toBe('service_agreement');
+  });
+  it('null/rỗng → null', () => {
+    expect(contractTypeLabel(null)).toBeNull();
+    expect(contractTypeLabel('')).toBeNull();
   });
 });

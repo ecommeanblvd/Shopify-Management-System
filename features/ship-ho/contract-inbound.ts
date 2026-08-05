@@ -31,8 +31,23 @@ export type ParseResult =
   | { ok: true; value: NormalizedContract }
   | { ok: false; error: string };
 
-/** HTML hợp đồng tối đa 5 MB — bản Word/HTML đầy đủ vẫn dưới ngưỡng này rất xa. */
+/** HTML hợp đồng tối đa 5 MB — hợp đồng thật ~195KB (Phụ lục 01 có bảng phí
+ *  ~200 điểm đến), ngưỡng này dư sức. */
 export const MAX_CONTRACT_HTML_BYTES = 5 * 1024 * 1024;
+
+/** Nhãn hiển thị theo loại hợp đồng MMP gửi. Loại lạ → hiện nguyên mã (không
+ *  chặn: MMP thêm loại mới không cần SMS deploy). */
+export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  fulfillment: 'Fulfillment',
+  sales: 'Bán hàng',
+  mou: 'MOU',
+  nda: 'NDA',
+};
+
+export function contractTypeLabel(t: string | null | undefined): string | null {
+  if (!t) return null;
+  return CONTRACT_TYPE_LABELS[t.toLowerCase()] ?? t;
+}
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 

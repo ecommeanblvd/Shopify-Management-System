@@ -8,6 +8,7 @@ import {
   type PartnerContract,
 } from '@/features/ship-ho/contract-actions';
 import { contractStatus, validateContractFile, type ContractState } from '@/features/ship-ho/contract-status';
+import { contractTypeLabel } from '@/features/ship-ho/contract-inbound';
 
 const STATE_STYLE: Record<ContractState, string> = {
   active: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
@@ -113,7 +114,7 @@ export function ContractsView({ brandSlug, contracts, canManage }: {
                             title="MMP tự đẩy sang qua API">MMP gửi</span>
                         )}
                         {c.contractType && (
-                          <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{c.contractType}</span>
+                          <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{contractTypeLabel(c.contractType)}</span>
                         )}
                       </div>
                       {c.note && <div className="text-xs text-muted-foreground">{c.note}</div>}
