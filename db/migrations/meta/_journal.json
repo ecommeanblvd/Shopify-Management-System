@@ -834,6 +834,13 @@
       "when": 1786624800000,
       "tag": "0118_refund-breakdown",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1786711200000,
+      "tag": "0119_partner-contracts",
+      "breakpoints": true
     }
   ]
 }

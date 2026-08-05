@@ -2002,6 +2002,30 @@ export const shipHoPartners = pgTable('ship_ho_partners', {
 });
 
 /** Bảng kê kỳ (P3 dùng; tạo sẵn để ship_ho_orders.statement_id FK được). */
+/**
+ * Hợp đồng ship hộ / fulfillment với đối tác brand (CEO 04/08/2026). MMP soạn
+ * hợp đồng → ops upload file vào đây, xem cạnh rate card của đối tác. NHIỀU bản
+ * mỗi đối tác (hợp đồng gốc + phụ lục + gia hạn) — không ghi đè, giữ lịch sử.
+ * File nằm trên R2 (fileKey), tải qua signed URL 5 phút.
+ */
+export const shipHoPartnerContracts = pgTable('ship_ho_partner_contracts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
+  title: text('title').notNull(),
+  fileKey: text('file_key').notNull(),
+  filename: text('filename').notNull(),
+  contentType: text('content_type').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  /** Ngày ký / ngày hết hạn (date, không giờ) — cảnh báo sắp hết hạn theo ngày. */
+  signedAt: date('signed_at'),
+  expiresAt: date('expires_at'),
+  note: text('note'),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+  uploadedBy: text('uploaded_by'),
+}, (t) => [
+  index('ship_ho_partner_contracts_partner_idx').on(t.partnerBrandSlug),
+]);
+
 export const shipHoStatements = pgTable('ship_ho_statements', {
   id: uuid('id').defaultRandom().primaryKey(),
   partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),

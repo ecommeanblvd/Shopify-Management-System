@@ -22,7 +22,11 @@ const TIER_BADGE: Record<string, string> = {
   platinum: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
 };
 
-export function PartnersManager({ partners, brands, canManage }: { partners: Partner[]; brands: Brand[]; canManage: boolean }) {
+export function PartnersManager({ partners, brands, canManage, contractCounts = {} }: {
+  partners: Partner[]; brands: Brand[]; canManage: boolean;
+  /** brandSlug → số hợp đồng đã lưu (badge cạnh nút Hợp đồng). */
+  contractCounts?: Record<string, number>;
+}) {
   const [pending, start] = useTransition();
   const [brandSlug, setBrandSlug] = useState('');
   const [cycle, setCycle] = useState<'weekly' | 'monthly'>('monthly');
@@ -111,6 +115,9 @@ export function PartnersManager({ partners, brands, canManage }: { partners: Par
                     <td>{p.status === 'active' ? 'Bật' : 'Tắt'}</td>
                     <td className="text-right space-x-2 flex justify-end">
                       <Link href={`/f/ship-ho/partners/${p.brandSlug}/rate-card`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Rate card</Link>
+                      <Link href={`/f/ship-ho/partners/${p.brandSlug}/contracts`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                        Hợp đồng{contractCounts[p.brandSlug] ? ` (${contractCounts[p.brandSlug]})` : ''}
+                      </Link>
                       {canManage && <Button variant="outline" size="sm" onClick={() => toggle(p)} disabled={pending}>{p.status === 'active' ? 'Tắt' : 'Bật'}</Button>}
                     </td>
                   </tr>

@@ -28,7 +28,10 @@ export default async function RateCardPage({ params }: { params: Promise<{ slug:
       <style>{'@media print { @page { size: A4 landscape; margin: 10mm; } }'}</style>
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold tracking-tight print:text-xl">Rate card · {slug}</h1>
-        <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' }) + ' print:hidden'}>← Đối tác</Link>
+        <div className="flex items-center gap-2 print:hidden">
+          <Link href={`/f/ship-ho/partners/${slug}/contracts`} className={buttonVariants({ variant: 'outline' })}>Hợp đồng</Link>
+          <Link href="/f/ship-ho/partners" className={buttonVariants({ variant: 'outline' })}>← Đối tác</Link>
+        </div>
       </div>
       {!r.ok ? (
         <p className="text-red-600">{r.error}</p>
