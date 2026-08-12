@@ -5,6 +5,7 @@ import type { Badge, BadgeTone } from '@/features/fulfillment/worklist-status';
 import { OrderDetailDialog } from './OrderDetailDialog';
 import { formatTrackingStatus, carrierTrackingUrl } from '@/features/fulfillment/worklist-status';
 import { STAGE_ORDER, stageLabel, type OrderStage } from '@/features/fulfillment/order-stage';
+import { filterWorklist } from '@/features/fulfillment/worklist-search';
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return '—';
@@ -83,17 +84,40 @@ interface Props {
 
 export function WorklistTable({ rows }: Props) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [query, setQuery] = useState('');
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
 
+  // Tìm kiếm + lọc trạng thái là AND. Dữ liệu đã ở client (query lấy toàn bộ
+  // đơn) → lọc tại chỗ, gõ tới đâu thấy tới đó.
   const filtered = useMemo(() => {
-    if (statusFilter === 'all') return rows;
-    return rows.filter((r) => r.stage.key === statusFilter);
-  }, [rows, statusFilter]);
+    const byStatus = statusFilter === 'all' ? rows : rows.filter((r) => r.stage.key === statusFilter);
+    return filterWorklist(byStatus, query);
+  }, [rows, statusFilter, query]);
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
+      {/* Tìm kiếm + lọc */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Tìm mã đơn, tracking, store…"
+            aria-label="Tìm kiếm đơn"
+            className="w-64 rounded border border-border bg-background py-1 pl-7 pr-7 sm:w-80"
+          />
+          <span aria-hidden className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground">⌕</span>
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Xoá tìm kiếm"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              ×
+            </button>
+          )}
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -104,6 +128,10 @@ export function WorklistTable({ rows }: Props) {
             <option key={key} value={key}>{stageLabel(key)}</option>
           ))}
         </select>
+        <span className="text-xs text-muted-foreground">
+          {filtered.length.toLocaleString('vi-VN')} đơn
+          {(query || statusFilter !== 'all') && ` / ${rows.length.toLocaleString('vi-VN')}`}
+        </span>
       </div>
 
       {/* Table */}
@@ -222,7 +250,9 @@ export function WorklistTable({ rows }: Props) {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
-                  Không có đơn nào.
+                  {query
+                    ? <>Không tìm thấy đơn nào khớp “{query}”{statusFilter !== 'all' && ' trong trạng thái đang lọc'}.</>
+                    : 'Không có đơn nào.'}
                 </td>
               </tr>
             )}
