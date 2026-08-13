@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
+import { CountryFlag } from '@/components/ui/country-flag';
 import { loadShipReport } from '@/features/ship-report/queries';
 import { pnlByMonth, pnlBreakdown } from '@/features/ship-report/pnl';
 import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/features/ship-report/surcharges';
@@ -108,7 +109,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                   return (
                     <div key={r.country} className="bg-card p-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl leading-none">{flag(r.country)}</span>
+                        <CountryFlag code={r.country} className="!h-6 !w-8" />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium">{countryName(r.country)}</div>
                           <div className="text-[10px] text-muted-foreground">{r.country} · {totalDelivered} đơn giao</div>

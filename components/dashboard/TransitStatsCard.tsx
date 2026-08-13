@@ -5,12 +5,7 @@ import {
   TRANSIT_RANGE_DAYS, pivotRoutesByCountry,
   type TransitRangeDays, type TransitStats,
 } from '@/features/shipments/transit-stats';
-
-/** ISO-2 → emoji cờ (regional indicators). */
-function flag(cc: string): string {
-  if (!/^[A-Z]{2}$/.test(cc)) return '';
-  return String.fromCodePoint(...[...cc].map((c) => 127397 + c.charCodeAt(0)));
-}
+import { CountryFlag } from '@/components/ui/country-flag';
 
 const fmtDate = (iso: string | null) => {
   if (!iso) return '—';
@@ -105,7 +100,7 @@ export function TransitStatsCard({ stats, days, carrier }: {
                     {routes.map((r) => (
                       <tr key={`${r.carrierKey}-${r.country}`} className="border-t border-border/60 [&>td]:px-4 [&>td]:py-2">
                         <td className="text-left">
-                          <span className="mr-1.5">{flag(r.country)}</span>
+                          <CountryFlag code={r.country} className="mr-1.5" />
                           <span className="font-medium">{r.country}</span>
                           <span className="ml-2 text-xs uppercase text-muted-foreground">{r.carrierKey}</span>
                           {r.deliveredN > 0 && r.deliveredN < 3 && <span className="ml-2 text-[10px] text-muted-foreground" title="Mẫu giao nhỏ — số chỉ tham khảo">mẫu nhỏ</span>}
@@ -152,7 +147,7 @@ export function TransitStatsCard({ stats, days, carrier }: {
                       const best = Math.min(...Object.values(row.byCarrier).map((x) => x.avgDays));
                       return (
                         <tr key={row.country} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
-                          <td className="text-left"><span className="mr-1">{flag(row.country)}</span><span className="font-medium">{row.country}</span></td>
+                          <td className="text-left"><CountryFlag code={row.country} className="mr-1" /><span className="font-medium">{row.country}</span></td>
                           {pivot.carriers.map((k) => {
                             const cell = row.byCarrier[k];
                             if (!cell) return <td key={k} className="text-right text-muted-foreground">—</td>;
