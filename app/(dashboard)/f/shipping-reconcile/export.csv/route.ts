@@ -10,6 +10,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { reconcileShipmentsWithStatus } from '@/features/shipments/reconcile-view';
 import { effStatus } from '@/features/shipments/reconcile-filter';
+import { presetRange, rangeFileSuffix, type ExportPreset } from '@/features/shipments/export-range';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,16 +42,27 @@ export async function GET(req: Request): Promise<Response> {
   const carrierParam = url.searchParams.get('carrier');
   const carrier = carrierParam === 'fedex' || carrierParam === 'dhl' ? carrierParam : undefined;
   const country = url.searchParams.get('country')?.toUpperCase() || undefined;
-  const from = url.searchParams.get('from');
-  const to = url.searchParams.get('to');
+  // Khoảng NGÀY SHIP (label_created_at) — 'YYYY-MM-DD', bao trọn 2 đầu.
+  const range = presetRange(
+    (url.searchParams.get('preset') as ExportPreset) || 'custom',
+    new Date(),
+    { from: url.searchParams.get('from'), to: url.searchParams.get('to') },
+  );
+  // `to` phải bao TRỌN ngày cuối (label lưu nửa đêm, nhưng đơn nhập tay có thể
+  // kèm giờ) → đẩy tới 23:59:59.999.
+  const toDate = range.to ? new Date(`${range.to}T23:59:59.999Z`) : undefined;
 
   const { rows } = await reconcileShipmentsWithStatus({
     carrierKey: carrier,
-    fromDate: from ? new Date(from) : undefined,
-    toDate: to ? new Date(to) : undefined,
+    fromDate: range.from ? new Date(`${range.from}T00:00:00Z`) : undefined,
+    toDate,
   });
 
-  const filtered = country ? rows.filter((r) => r.shipCountry === country) : rows;
+  let filtered = country ? rows.filter((r) => r.shipCountry === country) : rows;
+  // Lọc theo khoảng ngày = CHỈ đơn có ngày ship trong khoảng. (Bộ lọc chung giữ
+  // đơn chưa có ngày để không giấu việc cần làm trên trang; nhưng file export
+  // "đơn trong tháng X" mà lẫn đơn không rõ ngày thì sai bản chất.)
+  if (range.from || range.to) filtered = filtered.filter((r) => r.labelDate);
   filtered.sort((a, b) => Math.abs(b.deltaVnd ?? 0) - Math.abs(a.deltaVnd ?? 0));
 
   const out: CsvValue[][] = filtered.map((r) => [
@@ -67,7 +79,8 @@ export async function GET(req: Request): Promise<Response> {
   return new Response(csvBody(HEADER, out), {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': 'attachment; filename="shipping-reconcile.csv"',
+      // Tên file kèm khoảng ngày → tải nhiều kỳ không đè nhau, mở ra biết ngay kỳ nào.
+      'content-disposition': `attachment; filename="shipping-reconcile-${rangeFileSuffix(range)}.csv"`,
       'cache-control': 'no-store',
     },
   });

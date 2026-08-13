@@ -13,6 +13,7 @@ import type { IssueReportRecord } from '@/features/shipments/issue-report-action
 import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
 import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
 import { syncLarkPacksAction } from '@/features/lark/actions';
+import { ExportCsvMenu } from './ExportCsvMenu';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -137,13 +138,6 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
     debounceRef.current = setTimeout(() => pushParams(patch), 300);
   }
 
-  const exportHref = (() => {
-    const p = new URLSearchParams();
-    if (filters.carrier !== 'all') p.set('carrier', filters.carrier);
-    if (filters.country) p.set('country', filters.country);
-    return `/f/shipping-reconcile/export.csv${p.toString() ? `?${p}` : ''}`;
-  })();
-
   return (
     <div className="space-y-4">
       {/* Summary bar */}
@@ -192,7 +186,7 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
           <ReconcileIssuesModal openIssues={openIssues} reports={reports}
             carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups}
             internalErrorGroups={internalErrorGroups} />
-          <a href={exportHref} className="rounded border border-border px-3 py-1 hover:bg-muted">Export CSV</a>
+          <ExportCsvMenu carrier={filters.carrier} country={filters.country} />
           <button
             type="button"
             disabled={isPending}
