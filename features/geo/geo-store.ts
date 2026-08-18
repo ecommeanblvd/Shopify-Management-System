@@ -12,15 +12,25 @@ export interface GeoStoreDeps {
   fetchFile: (cc: string) => Promise<Buffer | null>; // null = file không tồn tại
 }
 
-/** Đọc raw bytes (đã gzip) từ Supabase Storage; lỗi bất kỳ (not-found/network) → null, không throw. */
+/** True khi lỗi từ AWS SDK là "không tồn tại" thật sự (không phải lỗi mạng/tạm thời). */
+function isNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return e.name === 'NoSuchKey' || e.Code === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404;
+}
+
+/**
+ * Đọc raw bytes (đã gzip) từ Supabase Storage.
+ * Not-found thật (NoSuchKey/404) → null (đây là trạng thái hợp lệ: nước chưa có từ điển).
+ * Lỗi khác (network/timeout/5xx…) → ném lại để load() KHÔNG cache kết quả này — lần gọi sau retry.
+ */
 async function fetchFileFromStorage(cc: string): Promise<Buffer | null> {
   try {
     const bytes = await getObject(`geo-dict/${cc.toUpperCase()}.json.gz`);
     return Buffer.from(bytes);
   } catch (err) {
-    // NoSuchKey/404 (nước chưa có từ điển) hoặc lỗi mạng — degrade an toàn, không chặn form nhập đơn (D-008).
-    console.warn(`[geo-store] Không đọc được geo-dict cho "${cc}", bỏ qua:`, err);
-    return null;
+    if (isNotFoundError(err)) return null;
+    throw err;
   }
 }
 
@@ -28,6 +38,12 @@ async function fetchFileFromStorage(cc: string): Promise<Buffer | null> {
  * Tạo geo store đọc từ điển geo theo nước, cache module-level.
  * Cache theo Promise (không phải giá trị đã resolve) để 2 lệnh gọi song song
  * cho cùng 1 nước chỉ trigger đúng 1 lần fetchFile — tránh double-fetch.
+ *
+ * Promise không bao giờ reject: mọi lỗi (fetchFile throw, gzip hỏng, JSON hỏng) đều
+ * bị bắt, console.warn, và resolve null — không crash form nhập đơn (D-008). Đồng thời
+ * entry lỗi bị evict khỏi cache ngay (không cache "not found" giả do lỗi tạm thời) để
+ * lần gọi kế tiếp tự retry; chỉ not-found THẬT (deps.fetchFile trả null, không throw)
+ * mới được cache lại như trạng thái hợp lệ.
  */
 export function createGeoStore(deps: GeoStoreDeps) {
   const cache = new Map<string, Promise<GeoCountryFile | null>>();
@@ -38,10 +54,24 @@ export function createGeoStore(deps: GeoStoreDeps) {
     if (cached) return cached;
 
     const promise = (async (): Promise<GeoCountryFile | null> => {
-      const raw = await deps.fetchFile(key);
-      if (!raw) return null;
-      const json = gunzipSync(raw).toString('utf-8');
-      return JSON.parse(json) as GeoCountryFile;
+      let raw: Buffer | null;
+      try {
+        raw = await deps.fetchFile(key);
+      } catch (err) {
+        console.warn(`[geo-store] fetchFile("${key}") lỗi, không cache — lần gọi sau sẽ retry:`, err);
+        cache.delete(key);
+        return null;
+      }
+      if (!raw) return null; // not-found thật — cache lại như trạng thái hợp lệ
+
+      try {
+        const json = gunzipSync(raw).toString('utf-8');
+        return JSON.parse(json) as GeoCountryFile;
+      } catch (err) {
+        console.warn(`[geo-store] Giải nén/parse geo-dict "${key}" lỗi, không cache — lần gọi sau sẽ retry:`, err);
+        cache.delete(key);
+        return null;
+      }
     })();
     cache.set(key, promise);
     return promise;
