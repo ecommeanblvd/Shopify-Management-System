@@ -1,13 +1,18 @@
 /**
- * Import GeoNames postal per-country vào geo_* tables.
+ * Import GeoNames postal per-country: tải + parse tươi từ GeoNames, dựng file
+ * geo-dict/{CC}.json.gz (features/geo/build-file.ts) rồi upload lên Storage —
+ * KHÔNG ghi geo_cities/geo_postcodes nữa (2 bảng này bị drop ở Task 5, chỉ còn
+ * geo_states + geo_imports là bookkeeping trong DB).
  * Usage: dotenv -- tsx scripts/import-geonames.ts --country US,CA,GB [--apply]
- * (mặc định dry-run in số liệu; --apply mới ghi DB)
+ * (mặc định dry-run in số liệu; --apply mới ghi Storage + DB)
  *
- * Delete-first per country CHỈ SAU KHI tải + parse OK. Chunk 1000. Idempotent.
+ * Delete-first (geo_states) CHỈ SAU KHI tải + parse + upload file OK. Chunk 1000. Idempotent.
  */
 import AdmZip from 'adm-zip';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { buildGeoCountryFileFromParsed, gzipGeoCountryFile, uploadGeoCountryFile } from '@/features/geo/build-file';
+import { geoStore } from '@/features/geo/geo-store';
 import { parseGeonamesZipTsv } from '@/features/geo/geonames-parse';
 
 const CHUNK = 1000;
@@ -31,19 +36,22 @@ async function fetchTsv(cc: string): Promise<string> {
 }
 
 async function importCountry(cc: string, apply: boolean): Promise<void> {
-  const tsv = await fetchTsv(cc); // lỗi → throw TRƯỚC khi động DB
+  const tsv = await fetchTsv(cc); // lỗi → throw TRƯỚC khi động Storage/DB
   const { rows, states, cities, skipped } = parseGeonamesZipTsv(tsv, cc);
   if (rows.length === 0) throw new Error(`${cc}: 0 rows sau parse — nghi file đổi format`);
   process.stdout.write(`${cc}: ${rows.length} postcodes, ${states.length} states, ${cities.length} cities, skip ${skipped}${apply ? '' : ' (dry-run)'}\n`);
   if (!apply) return;
 
+  // Dựng + upload file geo-dict trước (nguồn dữ liệu cities/postcodes thật). Nếu bước
+  // này fail, geo_states/geo_imports KHÔNG bị đụng — file+DB vẫn nhất quán với lần chạy trước.
+  const file = buildGeoCountryFileFromParsed(cities, rows);
+  const gz = gzipGeoCountryFile(file);
+  await uploadGeoCountryFile(cc, gz);
+  geoStore.invalidate(cc); // tránh cache in-process phục vụ file cũ sau khi upload xong
+
   await db.transaction(async (tx) => {
-    await tx.delete(schema.geoPostcodes).where(eq(schema.geoPostcodes.countryCode, cc));
-    await tx.delete(schema.geoCities).where(eq(schema.geoCities.countryCode, cc));
     await tx.delete(schema.geoStates).where(eq(schema.geoStates.countryCode, cc));
     for (let i = 0; i < states.length; i += CHUNK) await tx.insert(schema.geoStates).values(states.slice(i, i + CHUNK));
-    for (let i = 0; i < cities.length; i += CHUNK) await tx.insert(schema.geoCities).values(cities.slice(i, i + CHUNK));
-    for (let i = 0; i < rows.length; i += CHUNK) await tx.insert(schema.geoPostcodes).values(rows.slice(i, i + CHUNK));
     await tx.insert(schema.geoImports).values({ countryCode: cc, rows: rows.length })
       .onConflictDoUpdate({ target: schema.geoImports.countryCode, set: { importedAt: new Date(), rows: rows.length } });
   });

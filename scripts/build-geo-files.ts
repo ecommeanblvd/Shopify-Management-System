@@ -12,11 +12,12 @@
  * Mặc định: build tất cả nước có trong geo_imports. Không --upload → chỉ ghi file cục bộ.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { buildGeoCountryFile, gzipGeoCountryFile, uploadGeoCountryFile } from '@/features/geo/build-file';
 import type { GeoCountryFile } from '@/features/geo/geo-store';
-import { getObject, putObject } from '@/lib/storage/s3';
+import { getObject } from '@/lib/storage/s3';
 
 const OUT_DIR = './tmp-geo-files';
 
@@ -49,13 +50,8 @@ async function buildCountryFile(cc: string): Promise<{ file: GeoCountryFile; cit
   }).from(schema.geoPostcodes).where(eq(schema.geoPostcodes.countryCode, cc))
     .orderBy(asc(schema.geoPostcodes.postcodeNorm), asc(schema.geoPostcodes.city));
 
-  const postcodes: GeoCountryFile['postcodes'] = {};
-  for (const r of postcodeRows) {
-    (postcodes[r.postcodeNorm] ??= []).push({ city: r.city, stateCode: r.stateCode });
-  }
-
   return {
-    file: { cities: cities.map((c) => ({ name: c.name, stateCode: c.stateCode })), postcodes },
+    file: buildGeoCountryFile(cities, postcodeRows),
     cityRows: cities.length,
     postcodeRows: postcodeRows.length,
   };
@@ -70,14 +66,14 @@ async function processCountry(cc: string, upload: boolean): Promise<number | nul
     return null;
   }
 
-  const gz = gzipSync(Buffer.from(JSON.stringify(file), 'utf-8'));
+  const gz = gzipGeoCountryFile(file);
   process.stdout.write(
     `${cc}: ${cityRows} cities, ${postcodeRows} postcodes → ${(gz.length / 1024).toFixed(1)} KB gz`
     + `${upload ? ' (uploading...)' : ''}\n`,
   );
 
   if (upload) {
-    await putObject(`geo-dict/${cc}.json.gz`, gz, 'application/gzip');
+    await uploadGeoCountryFile(cc, gz);
   } else {
     mkdirSync(OUT_DIR, { recursive: true });
     writeFileSync(`${OUT_DIR}/${cc}.json.gz`, gz);
