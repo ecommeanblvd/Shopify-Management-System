@@ -20,15 +20,15 @@ import { getObject, putObject } from '@/lib/storage/s3';
 
 const OUT_DIR = './tmp-geo-files';
 
-function args(): { countries: string[] | null; upload: boolean; verify: string | null } {
+function args(): { countries: string[] | null; rejected: string[]; upload: boolean; verify: string | null } {
   const ci = process.argv.indexOf('--country');
   const list = ci >= 0 ? (process.argv[ci + 1] ?? '') : '';
-  const countries = list
-    ? list.split(',').map((s) => s.trim().toUpperCase()).filter((s) => /^[A-Z]{2}$/.test(s))
-    : null;
+  const tokens = list ? list.split(',').map((s) => s.trim().toUpperCase()).filter((s) => s.length > 0) : [];
+  const countries = ci >= 0 ? tokens.filter((s) => /^[A-Z]{2}$/.test(s)) : null;
+  const rejected = tokens.filter((s) => !/^[A-Z]{2}$/.test(s));
   const vi = process.argv.indexOf('--verify');
   const verify = vi >= 0 ? (process.argv[vi + 1] ?? '').trim().toUpperCase() : null;
-  return { countries, upload: process.argv.includes('--upload'), verify };
+  return { countries, rejected, upload: process.argv.includes('--upload'), verify };
 }
 
 async function listImportedCountries(): Promise<string[]> {
@@ -61,8 +61,15 @@ async function buildCountryFile(cc: string): Promise<{ file: GeoCountryFile; cit
   };
 }
 
-async function processCountry(cc: string, upload: boolean): Promise<number> {
+/** null = bỏ qua (không có dữ liệu trong DB — KHÔNG ghi đè file/Storage hiện có). */
+async function processCountry(cc: string, upload: boolean): Promise<number | null> {
   const { file, cityRows, postcodeRows } = await buildCountryFile(cc);
+
+  if (cityRows === 0 && postcodeRows === 0) {
+    process.stderr.write(`  bỏ qua ${cc}: không có dữ liệu trong DB — không ghi đè file\n`);
+    return null;
+  }
+
   const gz = gzipSync(Buffer.from(JSON.stringify(file), 'utf-8'));
   process.stdout.write(
     `${cc}: ${cityRows} cities, ${postcodeRows} postcodes → ${(gz.length / 1024).toFixed(1)} KB gz`
@@ -88,7 +95,11 @@ async function verifyCountry(cc: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { countries, upload, verify } = args();
+  const { countries, rejected, upload, verify } = args();
+
+  if (rejected.length > 0) {
+    process.stderr.write(`  cảnh báo: bỏ qua mã nước không hợp lệ trong --country: ${rejected.join(', ')}\n`);
+  }
 
   if (verify) {
     if (!/^[A-Z]{2}$/.test(verify)) { process.stderr.write('usage: --verify CC\n'); process.exitCode = 1; return; }
@@ -99,22 +110,28 @@ async function main(): Promise<void> {
   const targets = countries ?? await listImportedCountries();
   if (targets.length === 0) {
     process.stdout.write('build-geo-files: chưa có nước nào trong geo_imports — bỏ qua\n');
+    if (rejected.length > 0) process.exitCode = 1;
     return;
   }
 
   process.stdout.write(`build-geo-files: ${targets.length} nước (${upload ? 'upload lên Storage' : `ghi ra ${OUT_DIR}`})\n`);
   const errors: string[] = [];
+  let skipped = 0;
   let totalGz = 0;
   for (const cc of targets) {
     try {
-      totalGz += await processCountry(cc, upload);
+      const size = await processCountry(cc, upload);
+      if (size === null) skipped += 1;
+      else totalGz += size;
     } catch (e) {
       errors.push(`${cc}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  process.stdout.write(`Tổng: ${(totalGz / 1024 / 1024).toFixed(2)} MB gz, ${targets.length - errors.length}/${targets.length} nước OK\n`);
+  const ok = targets.length - errors.length - skipped;
+  process.stdout.write(`Tổng: ${(totalGz / 1024 / 1024).toFixed(2)} MB gz, ${ok}/${targets.length} nước OK`
+    + `${skipped ? `, ${skipped} bỏ qua (không có dữ liệu)` : ''}\n`);
   for (const e of errors) process.stderr.write(`  FAIL ${e}\n`);
-  if (errors.length) process.exitCode = 1;
+  if (errors.length > 0 || skipped > 0 || rejected.length > 0) process.exitCode = 1;
 }
 
 main().catch((err) => { process.stderr.write(String(err?.stack ?? err) + '\n'); process.exitCode = 1; }).finally(() => process.exit());
