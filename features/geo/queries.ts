@@ -1,6 +1,7 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { CITIES_BY_ISO } from '@/lib/geo/cities';
+import { geoStore } from './geo-store';
 import { normPostcode } from './geonames-parse';
 import { pickLookupResult, type GeoLookupResult } from './lookup-logic';
 
@@ -15,14 +16,16 @@ export async function listStates(cc: string): Promise<Array<{ code: string; name
     .from(schema.geoStates).where(eq(schema.geoStates.countryCode, cc)).orderBy(asc(schema.geoStates.name));
 }
 
-/** DB khi đã import; fallback curated static khi chưa (không vỡ MMP hiện tại). */
+/** Storage (geo-store) khi đã import; fallback curated static khi chưa (không vỡ MMP hiện tại). */
 export async function listCities(cc: string, state?: string): Promise<string[]> {
   if (!(await isCountryImported(cc))) return CITIES_BY_ISO[cc] ?? [];
-  const conds = [eq(schema.geoCities.countryCode, cc)];
-  if (state) conds.push(eq(schema.geoCities.stateCode, state));
-  const rows = await db.select({ name: schema.geoCities.name }).from(schema.geoCities)
-    .where(and(...conds)).orderBy(asc(schema.geoCities.name));
-  return rows.map((r) => r.name);
+  const cities = await geoStore.getCities(cc, state);
+  if (cities === null) {
+    // DB nói đã imported nhưng file Storage thiếu — bất nhất; fallback + cảnh báo.
+    console.warn(`[geo/queries] listCities("${cc}"): DB imported nhưng geo-store trả null — fallback CITIES_BY_ISO`);
+    return CITIES_BY_ISO[cc] ?? [];
+  }
+  return cities;
 }
 
 export type GeoLookupResultNullable = Omit<GeoLookupResult, 'valid'> & { valid: boolean | null };
@@ -30,9 +33,7 @@ export type GeoLookupResultNullable = Omit<GeoLookupResult, 'valid'> & { valid: 
 /** valid=null nghĩa "nước chưa nạp — không biết" (form không chặn). */
 export async function lookupPostcode(cc: string, code: string): Promise<GeoLookupResultNullable> {
   if (!(await isCountryImported(cc))) return { valid: null, city: null, stateCode: null, candidates: [] };
-  const rows = await db.select({ city: schema.geoPostcodes.city, stateCode: schema.geoPostcodes.stateCode })
-    .from(schema.geoPostcodes)
-    .where(and(eq(schema.geoPostcodes.countryCode, cc), eq(schema.geoPostcodes.postcodeNorm, normPostcode(code))))
-    .orderBy(asc(schema.geoPostcodes.city));
+  const rows = await geoStore.getPostcode(cc, normPostcode(code));
+  if (rows === null) return { valid: null, city: null, stateCode: null, candidates: [] };
   return pickLookupResult(rows);
 }

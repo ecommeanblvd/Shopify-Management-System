@@ -1,5 +1,6 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { geoStore } from './geo-store';
 import { normPostcode } from './geonames-parse';
 import { lookupPostcode } from './queries';
 import { listAccounts } from '@/features/carrier-rates/actions';
@@ -21,9 +22,8 @@ export async function geoRemoteDrift(country: string): Promise<{ checked: number
   const patterns = await db.selectDistinct({ p: schema.carrierRemotePostcodes.postcodePattern })
     .from(schema.carrierRemotePostcodes)
     .where(and(eq(schema.carrierRemotePostcodes.countryCode, cc), isNotNull(schema.carrierRemotePostcodes.postcodePattern)));
-  const master = await db.select({ n: schema.geoPostcodes.postcodeNorm })
-    .from(schema.geoPostcodes).where(eq(schema.geoPostcodes.countryCode, cc));
-  const masterSet = new Set(master.map((r) => r.n));
+  const masterSet = await geoStore.getPostcodeSet(cc);
+  if (!masterSet) return { checked: 0, missing: [] }; // Storage thiếu file dù DB nói imported — coi như chưa nạp
 
   const missing: string[] = [];
   let checked = 0;
