@@ -6,7 +6,7 @@
 
 **Architecture:** `geo-store.ts` mới đọc file `geo-dict/{CC}.json.gz` từ Supabase Storage (lazy, cache in-memory theo country). `geo_imports` + `geo_states` GIỮ trong DB (nhỏ, giảm diện thay đổi). Importer/cron build file thay vì insert rows. Sau khi parity-check + backup CSV → drop 2 bảng + 1 index thừa của `carrier_remote_postcodes`.
 
-**Tech Stack:** Next.js + drizzle (hiện có), thêm `@supabase/supabase-js`; gzip qua `node:zlib`.
+**Tech Stack:** Next.js + drizzle (hiện có); storage qua `lib/storage/s3.ts` CÓ SẴN (D-008 — vendor-neutral S3, đã cấu hình env prod + local, đang dùng ở nhiều feature) — KHÔNG thêm dependency mới; gzip qua `node:zlib`.
 
 ## Global Constraints
 
@@ -14,8 +14,7 @@
 - `isCountryImported`, `listStates` giữ nguyên DB (không đụng).
 - Behavior giữ nguyên: nước chưa nạp → `listCities` fallback `CITIES_BY_ISO`, `lookupPostcode` trả `valid: null`; postcode so sánh qua `normPostcode` như cũ.
 - KHÔNG đụng `carrier_remote_postcodes` data/engine — chỉ drop index thừa `carrier_remote_postcodes_lookup_idx` (prefix của unique idx).
-- Env mới: `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (SMS project `rjabevsgslcltpdktesb`) — server-only, thêm `.env` local + Railway (main app + cron-geo service) TRƯỚC khi deploy code đọc Storage.
-- Bucket Storage: `geo-dict`, private.
+- Storage: dùng `putObject`/`getObject` từ `@/lib/storage/s3` (D-008) với key prefix `geo-dict/{CC}.json.gz` trong bucket S3_BUCKET hiện có — KHÔNG env mới, KHÔNG bucket mới, KHÔNG supabase-js. Lỗi not-found từ getObject → geo-store trả null (nước chưa có file).
 - Drop bảng CHỈ sau khi: (1) backup CSV về `/Users/macos/Documents/sms-prod-backups/geo-YYYYMMDD/`, (2) file trên Storage parity-check OK, (3) code đọc file đã chạy đúng ở local.
 - Repo convention: tests vitest (`npm test`), `npx tsc --noEmit` sạch; tiếng Việt cho comment/label như code hiện có; commit không đẩy secrets.
 
@@ -45,7 +44,7 @@ export function createGeoStore(deps: GeoStoreDeps): {
 export const geoStore: ReturnType<typeof createGeoStore>  // default instance dùng Supabase Storage
 ```
 
-- Default `fetchFile`: `@supabase/supabase-js` `storage.from('geo-dict').download(`${cc}.json.gz`)` với env `SUPABASE_URL`/`SUPABASE_SECRET_KEY`; gunzip bằng `node:zlib` `gunzipSync`; parse JSON. Cache: Map<cc, GeoCountryFile> module-level; file ~vài MB/nước → chấp nhận giữ trong RAM.
+- Default `fetchFile`: `getObject(`geo-dict/${cc}.json.gz`)` từ `@/lib/storage/s3` (bắt lỗi NoSuchKey/404 → null); gunzip bằng `node:zlib` `gunzipSync`; parse JSON. Cache: Map<cc, GeoCountryFile> module-level; file ~vài MB/nước → chấp nhận giữ trong RAM.
 - TDD với fetchFile giả (fixture nhỏ 2 nước): cities lọc theo state; postcode hit/miss; country không có file → null; cache gọi fetchFile đúng 1 lần/nước; invalidate xoá cache.
 
 - [ ] Step 1: viết test (RED) · Step 2: implement (GREEN) · Step 3: `npx tsc --noEmit && npm test` · Step 4: commit `feat(geo): geo-store doc tu dien tu Supabase Storage`
@@ -63,7 +62,7 @@ export const geoStore: ReturnType<typeof createGeoStore>  // default instance d�
 
 Steps trong script: đọc rows theo nước → dựng `GeoCountryFile` (cities order by name asc; postcodes group theo `postcodeNorm`, giữ city asc) → `gzipSync(JSON.stringify(...))` → upload `geo-dict/{CC}.json.gz` (upsert). In ra size từng file + tổng.
 
-- [ ] Step 1: implement script · Step 2: TẠO BUCKET `geo-dict` (private) — SQL trên SMS project: `insert into storage.buckets (id, name, public) values ('geo-dict','geo-dict',false) on conflict do nothing;` (controller chạy qua dashboard) · Step 3: điền env SUPABASE_URL/SUPABASE_SECRET_KEY vào `.env` local (controller đưa — KHÔNG commit) · Step 4: chạy build KHÔNG upload, xem size hợp lý; chạy lại với `--upload` · Step 5: commit `feat(geo): script build + upload geo-dict files`
+- [ ] Step 1: implement script (upload qua `putObject` — env S3 đã có sẵn trong `.env`) · Step 2: chạy build KHÔNG upload, xem size hợp lý; chạy lại với `--upload` · Step 3: commit `feat(geo): script build + upload geo-dict files`
 
 ---
 
@@ -113,7 +112,7 @@ drop table if exists geo_cities;
 
 ### Task 6: Deploy + hậu kiểm
 
-- [ ] Step 1 (controller/CEO): thêm env `SUPABASE_URL` + `SUPABASE_SECRET_KEY` vào Railway (service app chính + service cron-geo) TRƯỚC khi push
+- [ ] Step 1 (controller/CEO): xác nhận service cron-geo trên Railway có đủ env `S3_*` (app chính chắc chắn có vì đang upload ảnh; cron-geo cần kiểm tra) TRƯỚC khi push
 - [ ] Step 2: push master → Railway deploy; smoke prod: form ship-ho autocomplete city + postcode lookup chạy đúng
 - [ ] Step 3: xác nhận Database Size trên Supabase org usage đã về ~500MB (dashboard cần vài phút–1h refresh)
 - [ ] Step 4: Second Brain — append `Activity Log.md` + `Decisions.md` (quyết định: geo dictionary sống ở Storage, lý do quota; thay thế: dictionary trong Postgres) của project Shopify-Management-System
