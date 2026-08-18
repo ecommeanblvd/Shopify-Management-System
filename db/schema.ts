@@ -548,7 +548,8 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
 }, (table) => [
   uniqueIndex('carrier_remote_postcodes_account_country_pattern_from_idx')
     .on(table.carrierAccountId, table.countryCode, table.postcodePattern, table.effectiveFrom),
-  index('carrier_remote_postcodes_lookup_idx').on(table.carrierAccountId, table.countryCode),
+  // carrier_remote_postcodes_lookup_idx (carrierAccountId, countryCode) đã bị drop
+  // (migration 0121) — dư thừa vì là PREFIX của unique idx phía trên.
 ]);
 
 /**
@@ -2229,30 +2230,9 @@ export const geoStates = pgTable('geo_states', {
   uniqueIndex('geo_states_country_code_uq').on(t.countryCode, t.code),
 ]);
 
-export const geoCities = pgTable('geo_cities', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  countryCode: text('country_code').notNull(),
-  stateCode: text('state_code'),
-  name: text('name').notNull(),
-  nameNorm: text('name_norm').notNull(), // UPPERCASE alnum — khớp quote engine
-}, (t) => [
-  uniqueIndex('geo_cities_uq').on(t.countryCode, t.stateCode, t.nameNorm),
-  index('geo_cities_country_idx').on(t.countryCode),
-]);
-
-export const geoPostcodes = pgTable('geo_postcodes', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  countryCode: text('country_code').notNull(),
-  postcode: text('postcode').notNull(),       // raw như GeoNames
-  postcodeNorm: text('postcode_norm').notNull(),
-  city: text('city').notNull(),
-  stateCode: text('state_code'),
-  lat: numeric('lat', { precision: 9, scale: 5 }),
-  lng: numeric('lng', { precision: 9, scale: 5 }),
-}, (t) => [
-  uniqueIndex('geo_postcodes_uq').on(t.countryCode, t.postcodeNorm, t.city),
-  index('geo_postcodes_lookup_idx').on(t.countryCode, t.postcodeNorm),
-]);
+// geoCities/geoPostcodes (từ điển nặng, 52MB+173MB) đã chuyển sang Supabase Storage —
+// xem features/geo/geo-store.ts. Bảng bị drop ở migration 0121 sau parity check PASS
+// (scripts/verify-geo-parity.ts) — xem docs/superpowers/plans/2026-08-18-geo-dict-to-storage.md.
 
 export const geoImports = pgTable('geo_imports', {
   id: uuid('id').defaultRandom().primaryKey(),
