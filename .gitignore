@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Quốc kỳ SVG copy từ node_modules (scripts/copy-flags.mjs) — không commit
 public/flags/
+
+# geo-dict build output cục bộ (scripts/build-geo-files.ts, không --upload) — không commit
+/tmp-geo-files/
