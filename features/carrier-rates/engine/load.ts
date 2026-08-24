@@ -1,6 +1,6 @@
 'use server';
 
-import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
@@ -21,6 +21,9 @@ export async function loadAccountSnapshot(
      *  2026 ~130k dòng/account — quote 1 đơn chỉ cần đúng nước của nó; bỏ trống
      *  = nạp tất cả (calculator, dựng ratecard nhiều nước). */
     remoteCountry?: string;
+    /** Như remoteCountry nhưng cho NHIỀU nước (batch nhiều đơn: dashboard,
+     *  đối soát). Rỗng = không lọc. Gộp cùng remoteCountry nếu truyền cả hai. */
+    remoteCountries?: readonly string[];
     /** Bỏ hẳn postcode list (dựng ratecard: chỉ cần DÒNG phụ phí, không match
      *  postcode cụ thể). */
     skipRemotePostcodes?: boolean;
@@ -67,9 +70,17 @@ export async function loadAccountSnapshot(
       : db.select().from(schema.carrierRemotePostcodes)
         .where(and(
           eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
-          ...(opts?.remoteCountry
-            ? [eq(schema.carrierRemotePostcodes.countryCode, opts.remoteCountry.trim().toUpperCase())]
-            : []),
+          ...(() => {
+            // Gộp remoteCountry + remoteCountries → 1 điều kiện IN. Bảng ODA
+            // ~1tr dòng/2 account: nạp full tốn ~118MB EGRESS mỗi lần gọi
+            // (Supabase tính tiền theo egress — 24/08 vượt quota 83GB/5GB).
+            const list = [
+              ...(opts?.remoteCountry ? [opts.remoteCountry] : []),
+              ...(opts?.remoteCountries ?? []),
+            ].map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c));
+            const uniq = [...new Set(list)];
+            return uniq.length ? [inArray(schema.carrierRemotePostcodes.countryCode, uniq)] : [];
+          })(),
           lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
           or(
             isNull(schema.carrierRemotePostcodes.effectiveTo),

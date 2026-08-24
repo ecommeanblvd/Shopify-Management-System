@@ -117,7 +117,11 @@ export interface BatchShippingEstimator {
  * Pre-warms every piece of carrier data a dashboard render might need,
  * then exposes a synchronous `estimate()` that's pure compute.
  */
-export async function createBatchShippingEstimator(): Promise<BatchShippingEstimator> {
+export async function createBatchShippingEstimator(
+  /** Nước đích của LÔ đơn sắp ước tính (ISO-2). Chỉ nạp ODA postcode của các
+   *  nước này — bỏ trống thì nạp tất cả (~1tr dòng, tốn egress). */
+  countries?: readonly string[],
+): Promise<BatchShippingEstimator> {
   // Every enabled carrier account joined to its parent carrier brand,
   // so we can group snapshots by carrier_key ('fedex' | 'dhl' | …).
   const accountRows = await db
@@ -132,7 +136,7 @@ export async function createBatchShippingEstimator(): Promise<BatchShippingEstim
   // Parallel snapshot load — total wait is one snapshot, not N.
   const snapshotEntries = await Promise.all(
     accountRows.map(async (row): Promise<[string, string | null, CarrierAccountSnapshot | null]> => {
-      return [row.id, row.carrierKey, await loadAccountSnapshot(row.id)];
+      return [row.id, row.carrierKey, await loadAccountSnapshot(row.id, new Date(), { remoteCountries: countries })];
     }),
   );
 

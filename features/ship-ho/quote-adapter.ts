@@ -49,7 +49,7 @@ export function pickBaseVnd(
 
 /** I/O: nạp snapshot + gọi engine, quy cước về VND. */
 export async function quoteShipHoOrder(input: ShipHoQuoteInput): Promise<ShipHoQuoteResult> {
-  const snap = await loadAccountSnapshot(input.carrierAccountId);
+  const snap = await loadAccountSnapshot(input.carrierAccountId, new Date(), { remoteCountry: input.destinationCountry });
   if (!snap) return { ok: false, reason: 'carrier_account_not_found' };
 
   const res = quote(snap, {

@@ -35,16 +35,37 @@ function client(): { s3: S3Client; bucket: string } {
   return { s3, bucket: process.env.S3_BUCKET! };
 }
 
+/**
+ * Dịch lỗi SDK sang câu người dùng hiểu được. Supabase Storage trả lỗi dạng
+ * JSON, còn SDK S3 lại cố parse XML → ném ra "char '{' is not expected", vô
+ * nghĩa với ops (24/08: quota egress bị vượt, cả app không upload được mà
+ * thông báo không hề nhắc tới hạn mức). Giữ nguyên lỗi khác.
+ */
+function storageError(e: unknown): Error {
+  const x = e as { $response?: { statusCode?: number; body?: unknown }; message?: string };
+  const status = x?.$response?.statusCode;
+  const raw = (() => { try { return String(x?.$response?.body ?? ''); } catch { return ''; } })();
+  if (status === 402 || /quota|restricted|exceed_egress/i.test(raw)) {
+    return new Error('Kho lưu trữ file đang bị KHOÁ do vượt hạn mức của nhà cung cấp — cần nâng gói/gỡ giới hạn chi tiêu rồi thử lại. (Dữ liệu hoá đơn vẫn import được, chỉ thiếu file gốc đính kèm.)');
+  }
+  if (status === 401 || status === 403) return new Error('Kho lưu trữ file từ chối truy cập (sai khoá hoặc hết hạn) — liên hệ quản trị.');
+  if (status && status >= 500) return new Error(`Kho lưu trữ file đang lỗi (HTTP ${status}) — thử lại sau ít phút.`);
+  return e instanceof Error ? e : new Error(String(e));
+}
+
 export async function putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
   const { s3, bucket } = client();
-  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
+  try {
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
+  } catch (e) { throw storageError(e); }
 }
 
 export async function getObject(key: string): Promise<Uint8Array> {
   const { s3, bucket } = client();
-  const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const bytes = await res.Body!.transformToByteArray();
-  return bytes;
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return await res.Body!.transformToByteArray();
+  } catch (e) { throw storageError(e); }
 }
 
 export async function getSignedDownloadUrl(key: string, expiresInSeconds = 300): Promise<string> {

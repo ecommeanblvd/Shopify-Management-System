@@ -162,7 +162,12 @@ async function buildOrderRows(
   // trips on stores with many orders. The batched version loads markets,
   // links, and snapshots once, then `estimate()` is pure compute with a
   // per-(country, weight) memo for repeat shipments.
-  const estimator = await createBatchShippingEstimator();
+  // Chỉ nạp ODA postcode của các nước có trong LÔ đơn này (bảng ~1tr dòng —
+  // nạp full mỗi lần render dashboard là nguồn egress lớn, Supabase 24/08).
+  const batchCountries = [...new Set(
+    orders.map((o) => (o.shipCountry ?? '').trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)),
+  )];
+  const estimator = await createBatchShippingEstimator(batchCountries);
 
   // Compute per-order metrics.
   const allMetrics: OrderMetrics[] = [];

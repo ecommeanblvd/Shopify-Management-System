@@ -51,7 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId));
     const carriers: CheckoutRateCarrier[] = [];
     for (const a of accts) {
-      const snapshot = await loadAccountSnapshot(a.id);
+      // CHỈ nạp ODA postcode của nước đích: bảng ~1tr dòng, nạp full mỗi lần
+      // khách bấm checkout là nguồn egress lớn nhất (Supabase 24/08: 83GB/5GB).
+      const snapshot = await loadAccountSnapshot(a.id, new Date(), { remoteCountry: country });
       // Tên hiển thị ở checkout — ngắn gọn theo carrier, không kèm năm/biến thể.
       const displayName = a.key === 'fedex' ? 'FedEx International Priority' : a.key === 'dhl' ? 'DHL Express' : a.name;
       if (snapshot) carriers.push({ serviceCode: a.key ?? a.id, serviceName: displayName, snapshot });
