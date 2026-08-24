@@ -173,7 +173,10 @@ async function tryCarriers(
 ): Promise<CarrierAttempt | null> {
   let best: CarrierAttempt | null = null;
   for (const id of carrierIds) {
-    const snap = await loadAccountSnapshot(id, effectiveDate ?? new Date(), { remoteCountry: country });
+    const snap = await loadAccountSnapshot(id, effectiveDate ?? new Date(), {
+      remoteCountry: country,
+      remotePostcodes: [postcode],
+    });
     if (!snap) continue;
     const q = quote(snap, {
       weightKg,

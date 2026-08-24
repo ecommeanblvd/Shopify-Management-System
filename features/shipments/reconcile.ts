@@ -180,6 +180,14 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     return true;
   });
 
+  // Nước đích của đúng lô đơn đang đối soát — snapshot chỉ nạp ODA của các
+  // nước này thay vì cả 1,03 triệu dòng mỗi card (D-025: nạp full là nguồn
+  // egress lớn nhất, Supabase khoá dịch vụ 24/08).
+  const nuocDich = [...new Set(
+    filtered.map((r) => r.shipCountry?.trim().toUpperCase()).filter((c): c is string => !!c),
+  )];
+  const maBuuChinh = [...new Set(filtered.map((r) => r.shipPostcode).filter((p): p is string => !!p))];
+
   // 2. Pre-load one snapshot PER rate card, grouped by carrier key.
   // A carrier (fedex/dhl) has one account; that account has N dated cards.
   // We load each card's snapshot once, then pick by ship date in the loop.
@@ -200,7 +208,10 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
     const snapByCard = new Map<string, Awaited<ReturnType<typeof loadAccountSnapshot>>>();
     for (const c of cards) {
       // Anchor load to the card's own start date so it resolves that card.
-      snapByCard.set(c.id, await loadAccountSnapshot(a.id, c.effectiveFrom));
+      snapByCard.set(c.id, await loadAccountSnapshot(a.id, c.effectiveFrom, {
+        remoteCountries: nuocDich,
+        remotePostcodes: maBuuChinh,
+      }));
     }
     byKey.set(a.key, { cards, snapByCard });
   }

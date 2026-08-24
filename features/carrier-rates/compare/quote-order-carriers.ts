@@ -103,7 +103,10 @@ export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): P
 
   const entries: AccountSnap[] = [];
   for (const a of accounts) {
-    const snap = await loadAccountSnapshot(a.id);
+    const snap = await loadAccountSnapshot(a.id, new Date(), {
+      remoteCountry: input.country,
+      remotePostcodes: [input.postcode],
+    });
     if (snap) entries.push({ carrierKey: a.carrierKey ?? '?', carrierName: a.name, accountId: a.id, snap, suspendedAt: a.suspendedAt, suspendReason: a.suspendReason });
   }
   return rankCarrierQuotes(entries, input);

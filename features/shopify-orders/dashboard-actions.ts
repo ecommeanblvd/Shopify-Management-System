@@ -167,7 +167,8 @@ async function buildOrderRows(
   const batchCountries = [...new Set(
     orders.map((o) => (o.shipCountry ?? '').trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)),
   )];
-  const estimator = await createBatchShippingEstimator(batchCountries);
+  const batchPostcodes = [...new Set(orders.map((o) => o.shipPostcode).filter((p): p is string => !!p))];
+  const estimator = await createBatchShippingEstimator(batchCountries, batchPostcodes);
 
   // Compute per-order metrics.
   const allMetrics: OrderMetrics[] = [];

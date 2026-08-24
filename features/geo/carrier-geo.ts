@@ -63,7 +63,10 @@ export async function lookupCarrierGeo(
   const accounts = await listAccounts();
   const carriers: CarrierGeoRow[] = [];
   for (const a of accounts) {
-    const snap = await loadAccountSnapshot(a.id);
+    const snap = await loadAccountSnapshot(a.id, new Date(), {
+      remoteCountry: cc,
+      remotePostcodes: [postcode],
+    });
     if (!snap) {
       carriers.push({
         accountId: a.id,

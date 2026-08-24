@@ -6,6 +6,7 @@ import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
 import { quote, type CarrierAccountSnapshot, type QuoteInput, type QuoteResult, type ZoneSnap } from './quote';
 import { pickRateCardForDate, listRateCards } from './rate-cards';
+import { chuanHoaDanhSachPostcode } from './remote-postcode-filter';
 
 /**
  * Loads everything the quote engine needs in one round-trip burst:
@@ -27,6 +28,11 @@ export async function loadAccountSnapshot(
     /** Bỏ hẳn postcode list (dựng ratecard: chỉ cần DÒNG phụ phí, không match
      *  postcode cụ thể). */
     skipRemotePostcodes?: boolean;
+    /** Đã biết chính xác mã bưu chính cần tra (checkout, đối soát, quote ship
+     *  hộ) → chỉ nạp đúng những dòng khớp, thay vì cả nước. Bảng ODA không có
+     *  dòng nào dùng ký tự đại diện nên lọc thẳng theo mã là ĐỦ và không mất
+     *  kết quả. Riêng US nạp cả nước đã là 112.589 dòng/lượt. */
+    remotePostcodes?: readonly (string | null | undefined)[];
   },
 ): Promise<CarrierAccountSnapshot | null> {
   const [account] = await db
@@ -81,6 +87,24 @@ export async function loadAccountSnapshot(
             const uniq = [...new Set(list)];
             return uniq.length ? [inArray(schema.carrierRemotePostcodes.countryCode, uniq)] : [];
           })(),
+          ...(() => {
+            const pc = chuanHoaDanhSachPostcode(opts?.remotePostcodes ?? []);
+            if (!pc.goc.length) return [];
+            // Khớp cả dạng gốc lẫn dạng đã bỏ ký tự ngăn cách: file hãng ghi
+            // '5000-289' còn địa chỉ khách gõ '5000289'.
+            const dieuKien = or(
+              inArray(schema.carrierRemotePostcodes.postcodePattern, pc.goc),
+              inArray(
+                sql`upper(regexp_replace(${schema.carrierRemotePostcodes.postcodePattern}, '[^A-Za-z0-9]', '', 'g'))`,
+                pc.rutGon,
+              ),
+              // ~24.000 dòng ghi TÊN THÀNH PHỐ thay vì mã bưu chính (NZ, AR,
+              // NG…). Engine khớp chúng qua destinationCity nên phải lấy kèm,
+              // nếu không sẽ tính THIẾU phụ phí ODA mà không báo lỗi.
+              sql`${schema.carrierRemotePostcodes.postcodePattern} !~ '[0-9]'`,
+            );
+            return dieuKien ? [dieuKien] : [];
+          })(),
           lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
           or(
             isNull(schema.carrierRemotePostcodes.effectiveTo),
@@ -88,6 +112,18 @@ export async function loadAccountSnapshot(
           ),
         )),
   ]);
+
+  // Chuông báo nạp full: 24/08 Supabase khoá dịch vụ vì egress 83GB/5GB, gần
+  // như toàn bộ đến từ những chỗ gọi snapshot mà quên truyền nước đích. Ai
+  // thêm luồng mới mà quên sẽ thấy ngay dòng này trong log Railway thay vì
+  // phải đợi tới lúc hết quota mới truy ra.
+  if (postcodes.length >= 20_000) {
+    console.warn(
+      `[carrier-snapshot] nạp ${postcodes.length.toLocaleString('vi-VN')} dòng ODA cho account ${carrierAccountId} — bộ lọc hiện tại quá rộng. ` +
+      'Luồng chạy thường xuyên nên truyền remotePostcodes (đã biết mã bưu chính) hoặc skipRemotePostcodes (không tra postcode); ' +
+      'lọc theo nước thôi vẫn nặng vì riêng US đã 112.589 dòng (D-025).',
+    );
+  }
 
   // Cells scoped to the chosen rate card (NOT all cells for the account).
   const cells = await db.select().from(schema.carrierRateCells)
@@ -201,7 +237,10 @@ export async function runQuote(
   input: QuoteInput,
   userId: string,
 ): Promise<QuoteResult & { snapshotLoaded: boolean }> {
-  const snap = await loadAccountSnapshot(carrierAccountId);
+  const snap = await loadAccountSnapshot(carrierAccountId, new Date(), {
+    remoteCountry: input.destinationCountry,
+    remotePostcodes: [input.destinationPostcode],
+  });
   if (!snap) {
     return {
       ok: false,

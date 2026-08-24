@@ -121,6 +121,10 @@ export async function createBatchShippingEstimator(
   /** Nước đích của LÔ đơn sắp ước tính (ISO-2). Chỉ nạp ODA postcode của các
    *  nước này — bỏ trống thì nạp tất cả (~1tr dòng, tốn egress). */
   countries?: readonly string[],
+  /** Mã bưu chính của chính lô đơn đó. Có danh sách này thì snapshot chỉ nạp
+   *  đúng dòng ODA cần — lọc theo nước thôi vẫn nặng vì riêng US đã 112.589
+   *  dòng. Đối chiếu trên 8.826 đơn thật: kết quả tra ODA giống hệt nạp full. */
+  postcodes?: readonly (string | null | undefined)[],
 ): Promise<BatchShippingEstimator> {
   // Every enabled carrier account joined to its parent carrier brand,
   // so we can group snapshots by carrier_key ('fedex' | 'dhl' | …).
@@ -136,7 +140,10 @@ export async function createBatchShippingEstimator(
   // Parallel snapshot load — total wait is one snapshot, not N.
   const snapshotEntries = await Promise.all(
     accountRows.map(async (row): Promise<[string, string | null, CarrierAccountSnapshot | null]> => {
-      return [row.id, row.carrierKey, await loadAccountSnapshot(row.id, new Date(), { remoteCountries: countries })];
+      return [row.id, row.carrierKey, await loadAccountSnapshot(row.id, new Date(), {
+        remoteCountries: countries,
+        remotePostcodes: postcodes,
+      })];
     }),
   );
 

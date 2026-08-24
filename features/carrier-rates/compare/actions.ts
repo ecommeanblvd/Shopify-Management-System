@@ -44,7 +44,9 @@ export async function getRateComparison(): Promise<RateComparisonData> {
       .where(eq(schema.carrierAccounts.enabled, true)),
   ]);
 
-  const snaps = (await Promise.all(accounts.map((a) => loadAccountSnapshot(a.id, now))))
+  // buildComparison quote theo (nước, cân) mà KHÔNG có postcode cụ thể → danh
+  // sách ODA không bao giờ được tra tới, bỏ hẳn cho nhẹ (D-025).
+  const snaps = (await Promise.all(accounts.map((a) => loadAccountSnapshot(a.id, now, { skipRemotePostcodes: true }))))
     .filter((s): s is NonNullable<typeof s> => s !== null);
 
   const cube = buildComparison(snaps, countries.map((c) => c.code), [...COMPARE_WEIGHT_GRID], now);

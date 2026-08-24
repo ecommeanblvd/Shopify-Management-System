@@ -66,7 +66,9 @@ export interface PushPlan {
  */
 export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan> {
   const warnings: string[] = [];
-  const snap = await loadAccountSnapshot(carrierAccountId);
+  // Push tính theo market/zone, không có postcode cụ thể → không cần danh sách
+  // ODA (D-025).
+  const snap = await loadAccountSnapshot(carrierAccountId, new Date(), { skipRemotePostcodes: true });
   if (!snap) {
     return { carrierAccountId, rows: [], breakdown: [], fuelPercent: null, feeCoverage: { covered: [], notCovered: [] }, warnings: ['Carrier account not found.'] };
   }
@@ -157,7 +159,7 @@ export async function buildPushPlan(carrierAccountId: string): Promise<PushPlan>
     new Set(allLinksForMarkets.map((l) => l.carrierAccountId).filter((id) => id !== carrierAccountId)),
   );
   for (const id of otherAccountIds) {
-    const s = await loadAccountSnapshot(id);
+    const s = await loadAccountSnapshot(id, new Date(), { skipRemotePostcodes: true });
     if (s) snapshotCache.set(id, s);
     else warnings.push(`Linked account ${id} could not be loaded — its rates skipped.`);
   }
@@ -303,7 +305,7 @@ export async function commitPushPlan(
     for (const l of linksForMarket) {
       let cached = snapshotCache.get(l.carrierAccountId);
       if (!cached) {
-        const loaded = await loadAccountSnapshot(l.carrierAccountId);
+        const loaded = await loadAccountSnapshot(l.carrierAccountId, new Date(), { skipRemotePostcodes: true });
         if (!loaded) continue;
         snapshotCache.set(l.carrierAccountId, loaded);
         cached = loaded;
