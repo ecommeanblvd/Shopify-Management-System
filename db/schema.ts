@@ -306,6 +306,10 @@ export const carrierZones = pgTable('carrier_zones', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   label: text('label').notNull(),
   position: integer('position').notNull().default(0),
+  // Trigger set_updated_at ở tầng DB đóng dấu mọi đường ghi (migration 0122):
+  // snapshot carrier đệm phần tĩnh trong bộ nhớ và dựa vào mốc này để biết
+  // cấu hình có đổi hay không, thay vì đọc lại cả bảng giá mỗi lượt (D-028).
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('carrier_zones_account_label_idx').on(table.carrierAccountId, table.label),
 ]);
@@ -316,6 +320,7 @@ export const carrierZoneCountries = pgTable('carrier_zone_countries', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   carrierZoneId: uuid('carrier_zone_id').references(() => carrierZones.id, { onDelete: 'cascade' }).notNull(),
   countryCode: text('country_code').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('carrier_zone_countries_account_country_idx').on(table.carrierAccountId, table.countryCode),
   index('carrier_zone_countries_zone_idx').on(table.carrierZoneId),
@@ -331,6 +336,7 @@ export const carrierZonePostcodeRanges = pgTable('carrier_zone_postcode_ranges',
   rangeStart: integer('range_start').notNull(),
   rangeEnd: integer('range_end').notNull(),
   note: text('note'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
   index('carrier_zone_postcode_ranges_account_idx').on(t.carrierAccountId),
 ]);
@@ -341,6 +347,7 @@ export const carrierWeightTiers = pgTable('carrier_weight_tiers', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   upperKg: numeric('upper_kg', { precision: 8, scale: 3 }).notNull(),
   position: integer('position').notNull().default(0),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('carrier_weight_tiers_account_upper_idx').on(table.carrierAccountId, table.upperKg),
 ]);
