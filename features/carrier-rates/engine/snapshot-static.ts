@@ -23,9 +23,12 @@ import { taoBoNhoDem } from './snapshot-cache';
 
 export type PhanTinhSnapshot = Omit<CarrierAccountSnapshot, 'remotePostcodes'>;
 
-/** Lưới an toàn cuối: dữ liệu đổi thì phiên bản bắt được ngay, TTL chỉ để
- *  mục cũ không nằm lại mãi trong bộ nhớ. */
-const TTL_MS = 10 * 60_000;
+/** Lưới an toàn cuối, KHÔNG phải cơ chế chính: mọi lượt đều so phiên bản cấu
+ *  hình nên dữ liệu đổi là nạp lại ngay, hạn dùng chỉ để mục cũ không nằm lại
+ *  mãi trong bộ nhớ. Đặt 10 phút thì mỗi account vẫn nạp lại ~6 lần/giờ dù
+ *  bảng giá không đổi (đo 24/08: 5 lượt nạp/15 phút, chiếm phần lớn lượng đọc
+ *  còn lại) — 1 giờ giữ đúng vai trò lưới mà không đọc lại vô ích. */
+const TTL_MS = 60 * 60_000;
 
 const dem = taoBoNhoDem<{ phienBan: string; snap: PhanTinhSnapshot | null }>({ ttlMs: TTL_MS });
 
