@@ -686,6 +686,12 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('carrier_bill_lines_bill_idx').on(table.billId),
+  // Đối soát tra theo vận đơn/mã đơn trong VÒNG LẶP (mỗi đơn 1 lần) — thiếu
+  // index thì quét cả bảng mỗi lần: 24/08 đo 10.205 seq scan / 80 triệu dòng
+  // đọc, góp phần vượt quota egress Supabase.
+  index('carrier_bill_lines_tracking_idx').on(table.trackingNumber),
+  index('carrier_bill_lines_order_number_idx').on(table.orderNumber),
+  index('carrier_bill_lines_return_of_idx').on(table.returnOfOrderId),
 ]);
 
 // Link table: which carrier account serves which market.
