@@ -182,6 +182,24 @@ describe('buildRateCard — surcharges (chi phí cụ thể + công thức, ch�
     const row = c.surcharges.find((x) => x.label === 'Phí xử lý theo nước');
     expect(row?.detail).toBe('120.000₫/lô (áp dụng: VN)');
   });
+  // Aramex dùng country_fixed cho phí hải quan đầu xuất; nhãn "Phí xử lý theo
+  // nước" không cho biết đó là khoản gì.
+  it('country_fixed có ghi chú: lấy ghi chú làm tên khoản phí', () => {
+    const s = snap();
+    s.surcharges.push(surcharge({ kind: 'country_fixed', value: 10524, note: 'Phí hải quan đầu xuất' }));
+    const c = buildRateCard(s, 30, ASOF);
+    const row = c.surcharges.find((x) => x.kind === 'country_fixed');
+    expect(row?.label).toBe('Phí hải quan đầu xuất');
+    expect(row?.detail).toBe('10.524₫/lô');
+  });
+
+  it('country_fixed không có ghi chú: giữ nhãn mặc định', () => {
+    const s = snap();
+    s.surcharges.push(surcharge({ kind: 'country_fixed', value: 120000, countryCodes: ['VN'] }));
+    const c = buildRateCard(s, 30, ASOF);
+    expect(c.surcharges.find((x) => x.kind === 'country_fixed')?.label).toBe('Phí xử lý theo nước');
+  });
+
   it('addon_fixed không có ghi chú: giữ nhãn mặc định Direct Signature', () => {
     const s = snap();
     s.surcharges.push(surcharge({ kind: 'addon_fixed', value: 45000 }));

@@ -135,11 +135,13 @@ function buildSurcharges(
     surcharges.push({ kind: 'demand_per_kg', label: 'Phụ phí nhu cầu (Demand) theo kg', detail });
   }
 
-  // country_fixed: 1 dòng / row.
+  // country_fixed: 1 dòng / row. Tên khoản lấy từ ghi chú như addon_fixed —
+  // cùng loại này phục vụ phí xử lý hàng nhập ở FedEx, phụ phí rủi ro ở DHL và
+  // phí hải quan đầu xuất ở Aramex.
   for (const s of active.filter((x) => x.kind === 'country_fixed')) {
     let detail = `${vnd(s.value)}/lô`;
     if (s.countryCodes && s.countryCodes.length > 0) detail += ` (áp dụng: ${s.countryCodes.join(', ')})`;
-    surcharges.push({ kind: 'country_fixed', label: 'Phí xử lý theo nước', detail });
+    surcharges.push({ kind: 'country_fixed', label: s.note?.trim() || 'Phí xử lý theo nước', detail });
   }
 
   // addon_fixed: 1 dòng / row. Cùng một loại nhưng mỗi hãng dùng cho khoản

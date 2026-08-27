@@ -120,9 +120,13 @@ function lines(row: ReconcileViewRow): ComponentLine[] {
     // gogreen: engine books DHL GoGreen under per_step_fixed.
     { label: 'GoGreen', billed: row.billedGogreen, engine: row.enginePerStep, fedex: fx('gogreen'), compKey: 'gogreen' },
     { label: 'VAT', billed: row.billedVat, engine: row.engineVat, fedex: fx('vat'), compKey: 'vat' },
-    // country_fixed counterpart: DHL Elevated Risk / FedEx US import handling.
+    // country_fixed counterpart: FedEx phí xử lý hàng nhập US, DHL phụ phí rủi
+    // ro, Aramex phí hải quan đầu xuất — cùng một loại nhưng mỗi hãng một tên,
+    // nên nhãn phải theo hãng thay vì gọi chung.
     {
-      label: row.carrierKey === 'fedex' ? 'Phí cố định nước (nhập US…)' : 'Phụ phí rủi ro / điểm đến hạn chế (ER/RD)',
+      label: row.carrierKey === 'fedex' ? 'Phí hải quan / xử lý hàng nhập (US…)'
+        : row.carrierKey === 'aramex' ? 'Phí hải quan đầu xuất'
+        : 'Phụ phí rủi ro / điểm đến hạn chế (ER/RD)',
       billed: sumEngine(row.billedElevatedRisk, row.billedImportHandling),
       engine: row.engineCountryFixed,
       fedex: fx('elevatedRisk'),

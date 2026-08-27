@@ -6,9 +6,10 @@
  *   - hoá đơn Hợp Nhất ghi bằng VNĐ trong khi bảng giá Aramex tính bằng USD,
  *     nên phần quy đổi nằm ở đối soát (dùng `carrier_bills.fx_rate` của chính
  *     hoá đơn — xem to-vnd.ts), không phải ở đây
- *   - bảng kê chỉ có ba khoản: cước gốc, phụ phí xăng dầu, phí phát sinh. Phí
- *     phát sinh gộp một cột không tách tên, xếp vào `demand` (cột vốn dùng cho
- *     phụ phí phẳng theo lô).
+ *   - bảng kê chỉ có ba khoản: cước gốc, phụ phí xăng dầu, và phí hải quan đầu
+ *     xuất (cột "Phí phát sinh" trên bảng kê, $0,4/lô — CEO xác nhận 27/08).
+ *     Khoản này vào `import_handling`, cùng cột với phí xử lý hàng nhập US của
+ *     FedEx, để màn đối soát hiện đúng dòng phí hải quan.
  *
  * KHÔNG kiểm quyền ở đây: hàm chỉ được gọi từ luồng nhập hoá đơn vốn đã gác
  * quyền. Muốn gọi từ nơi khác thì bọc thêm lớp kiểm quyền.
@@ -69,7 +70,10 @@ export async function ghiBilledAramex(billId: string): Promise<KetQuaGhiBilled> 
       currency: bill.currency,
       base: String(soTien(l.base)),
       fuel: String(soTien(l.fuel)),
-      demand: String(soTien(l.other)),
+      importHandling: String(soTien(l.other)),
+      // Ghi rõ 0 chứ không bỏ trống: nhập lại hoá đơn sau khi đổi cách xếp
+      // khoản phải DỌN cột cũ, nếu không số cũ nằm lại và bị đếm hai lần.
+      demand: '0',
       vat: String(soTien(l.vat)),
       billingWeightKg: l.weightKg != null ? String(l.weightKg) : null,
       source: 'aramex_invoice',
@@ -81,7 +85,7 @@ export async function ghiBilledAramex(billId: string): Promise<KetQuaGhiBilled> 
       set: {
         carrierAccountId: gt.carrierAccountId, trackingNumber: gt.trackingNumber,
         totalAmount: gt.totalAmount, currency: gt.currency, base: gt.base,
-        fuel: gt.fuel, demand: gt.demand, vat: gt.vat,
+        fuel: gt.fuel, importHandling: gt.importHandling, demand: gt.demand, vat: gt.vat,
         billingWeightKg: gt.billingWeightKg, source: gt.source, sourceHash: gt.sourceHash,
       },
     });
