@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseVnEInvoiceXml, parseVnEInvoicePdfText, trackingFromDescription, periodFromLines } from './vn-einvoice';
 
 const XML = `<?xml version="1.0" encoding="utf-8"?><HDon><DLHDon Id="Z4FEIAM96G_X"><TTChung><PBan>2.1.0</PBan><THDon>Hóa đơn giá trị gia tăng</THDon><KHMSHDon>1</KHMSHDon><KHHDon>K26TMB</KHHDon><SHDon>00007957</SHDon><NLap>2026-08-27</NLap><DVTTe>VND</DVTTe><TGia>1.00</TGia></TTChung><NDHDon><NBan><Ten>CÔNG TY CỔ PHẦN HỢP NHẤT QUỐC TẾ</Ten><MST>0305141894</MST></NBan><NMua><Ten>CÔNG TY CỔ PHẦN INECSO</Ten><MST>0109894073</MST></NMua><DSHHDVu>
-<HHDVu><TChat>1</TChat><STT>1</STT><THHDVu>Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278967006</THHDVu><DVTinh>Lô</DVTinh><SLuong>1.000000</SLuong><DGia>605656.000000</DGia><ThTien>605656.000000</ThTien><TSuat>8%</TSuat><TTKhac><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>48452.000000</DLieu></TTin></TTKhac></HHDVu>
-<HHDVu><TChat>1</TChat><STT>2</STT><THHDVu>Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278966995</THHDVu><DVTinh>Lô</DVTinh><SLuong>1.000000</SLuong><DGia>704582.000000</DGia><ThTien>704582.000000</ThTien><TSuat>8%</TSuat><TTKhac><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>56367.000000</DLieu></TTin></TTKhac></HHDVu>
+<HHDVu><TChat>1</TChat><STT>1</STT><THHDVu>Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278967006</THHDVu><DVTinh>Lô</DVTinh><SLuong>1.000000</SLuong><DGia>605656.000000</DGia><TLCKhau>0.0000</TLCKhau><STCKhau>0.000000</STCKhau><ThTien>605656.000000</ThTien><TSuat>8%</TSuat><TTKhac><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>48452.000000</DLieu></TTin></TTKhac></HHDVu>
+<HHDVu><TChat>1</TChat><STT>2</STT><THHDVu>Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278966995</THHDVu><DVTinh>Lô</DVTinh><SLuong>1.000000</SLuong><DGia>704582.000000</DGia><TLCKhau>0.0000</TLCKhau><STCKhau>0.000000</STCKhau><ThTien>704582.000000</ThTien><TSuat>8%</TSuat><TTKhac><TTin><TTruong>VATAmount</TTruong><KDLieu>numeric</KDLieu><DLieu>56367.000000</DLieu></TTin></TTKhac></HHDVu>
 </DSHHDVu><TToan><TgTCThue>1310238.000000</TgTCThue><TgTThue>104819.000000</TgTThue><TgTTTBSo>1415057.000000</TgTTTBSo></TToan></NDHDon></DLHDon></HDon>`;
 
 describe('parseVnEInvoiceXml', () => {
@@ -44,6 +44,36 @@ describe('parseVnEInvoiceXml', () => {
     expect(inv.warnings).toEqual([]);
     const lech = XML.replace('<TgTCThue>1310238.000000</TgTCThue>', '<TgTCThue>9999999.000000</TgTCThue>');
     expect(parseVnEInvoiceXml(lech)!.warnings.join(' ')).toMatch(/lệch/i);
+  });
+
+  // Hoá đơn tháng 8 để chiết khấu = 0, nhưng thẻ vẫn có sẵn. Bỏ qua là tháng
+  // nào Hợp Nhất cho chiết khấu thì bill ghi sai số phải trả.
+  it('đọc chiết khấu và thuế suất từng dòng', () => {
+    const coCk = XML
+      .replace('<TLCKhau>0.0000</TLCKhau><STCKhau>0.000000</STCKhau><ThTien>605656.000000</ThTien>',
+               '<TLCKhau>10.0000</TLCKhau><STCKhau>60566.000000</STCKhau><ThTien>545090.000000</ThTien>');
+    const l = parseVnEInvoiceXml(coCk)!.lines[0];
+    expect(l.discount).toBe(60566);
+    expect(l.vatPercent).toBe(8);
+    // ThTien của hoá đơn ĐÃ trừ chiết khấu — không được trừ thêm lần nữa.
+    expect(l.amountExVat).toBe(545090);
+  });
+
+  it('không có chiết khấu thì để 0, không phải null', () => {
+    expect(parseVnEInvoiceXml(XML)!.lines[0].discount).toBe(0);
+  });
+
+  it('hoá đơn thiếu hẳn thẻ chiết khấu vẫn đọc được, coi như 0', () => {
+    const khongCoThe = XML.replace(/<TLCKhau>[^<]*<\/TLCKhau><STCKhau>[^<]*<\/STCKhau>/g, '');
+    expect(parseVnEInvoiceXml(khongCoThe)!.lines[0].discount).toBe(0);
+  });
+
+  // MISA bù làm tròn ở một dòng để tổng thuế khớp đúng 8% của tổng tiền hàng
+  // (hoá đơn thật: dòng 3 lệch 2,44₫ so với 8% × tiền dòng). Vì vậy thuế phải
+  // LẤY TỪ FILE, không tự nhân thuế suất; chốt này canh tổng thuế thay vì từng dòng.
+  it('tổng thuế các dòng lệch tổng thuế hoá đơn thì cảnh báo', () => {
+    const lech = XML.replace('<DLieu>48452.000000</DLieu>', '<DLieu>99999.000000</DLieu>');
+    expect(parseVnEInvoiceXml(lech)!.warnings.join(' ')).toMatch(/thuế/i);
   });
 
   it('không phải hoá đơn điện tử Việt Nam thì trả null', () => {

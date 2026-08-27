@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { vnInvoiceToBill } from './vn-einvoice-bill';
 import type { VnEInvoice } from './vn-einvoice';
 
+const line = (over: Partial<VnEInvoice['lines'][number]> = {}) => ({
+  trackingNumber: '35278967006', description: 'số vận đơn 35278967006',
+  amountExVat: 605656, discount: 0, vatPercent: 8, vatAmount: 48452, total: 654108,
+  ...over,
+});
+
 const inv = (over: Partial<VnEInvoice> = {}): VnEInvoice => ({
   billNumber: '00007957', serial: '1K26TMB', issueDate: '2026-08-27', currency: 'VND',
   sellerName: 'CÔNG TY CỔ PHẦN HỢP NHẤT QUỐC TẾ', sellerTaxCode: '0305141894',
   buyerName: 'CÔNG TY CỔ PHẦN INECSO', buyerTaxCode: '0109894073',
   amountExVat: 1310238, vatAmount: 104819, amountInclVat: 1415057,
   lines: [
-    { trackingNumber: '35278967006', description: 'Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278967006', amountExVat: 605656, vatAmount: 48452, total: 654108 },
-    { trackingNumber: '35278966995', description: 'Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278966995', amountExVat: 704582, vatAmount: 56367, total: 760949 },
+    line({ description: 'Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278967006' }),
+    line({ trackingNumber: '35278966995', description: 'Cước chuyển phát nhanh tháng 08/2026 số vận đơn 35278966995', amountExVat: 704582, vatAmount: 56367, total: 760949 }),
   ],
   warnings: [],
   ...over,
@@ -62,6 +68,19 @@ describe('vnInvoiceToBill', () => {
 
   // Hoá đơn tài chính không tách phụ phí. Để 0 sẽ bị đọc nhầm là "carrier
   // không thu phụ phí", nên phải để trống.
+  // Chiết khấu là khoản có thật trên hoá đơn, khác hẳn phụ phí (thứ hoá đơn
+  // không in). Bỏ qua là dòng bill không giải thích được vì sao rẻ hơn đơn giá.
+  it('chiết khấu từng dòng đi vào cột chiết khấu của bill', () => {
+    const b = vnInvoiceToBill(inv({ lines: [line({ discount: 60566, amountExVat: 545090, total: 588697 })] }), 'VND');
+    expect(b.lines[0].discount).toBe(60566);
+    expect(b.lines[0].base).toBe(545090);
+  });
+
+  it('nguồn PDF không tách chiết khấu thì để trống, không ghi 0', () => {
+    const b = vnInvoiceToBill(inv({ lines: [line({ discount: null })] }), 'VND');
+    expect(b.lines[0].discount).toBeNull();
+  });
+
   it('không bịa phụ phí: fuel và các khoản khác để trống', () => {
     const l = vnInvoiceToBill(inv(), 'VND').lines[0];
     expect(l.fuel).toBeNull();
@@ -76,8 +95,8 @@ describe('vnInvoiceToBill', () => {
   it('bỏ qua dòng không phải cước vận đơn nhưng vẫn cảnh báo', () => {
     const b = vnInvoiceToBill(inv({
       lines: [
-        { trackingNumber: null, description: 'Phí dịch vụ tháng 08/2026', amountExVat: 100000, vatAmount: 8000, total: 108000 },
-        { trackingNumber: '35278967006', description: 'số vận đơn 35278967006', amountExVat: 605656, vatAmount: 48452, total: 654108 },
+        line({ trackingNumber: null, description: 'Phí dịch vụ tháng 08/2026', amountExVat: 100000, vatAmount: 8000, total: 108000 }),
+        line(),
       ],
     }), 'VND');
     expect(b.lines).toHaveLength(1);
@@ -96,7 +115,7 @@ describe('vnInvoiceToBill', () => {
 
   it('thuế từng dòng bị thiếu (nguồn PDF) thì để trống, tổng dòng vẫn là tiền chưa thuế', () => {
     const b = vnInvoiceToBill(inv({
-      lines: [{ trackingNumber: '35278967006', description: 'số vận đơn 35278967006', amountExVat: 605656, vatAmount: null, total: 605656 }],
+      lines: [line({ vatAmount: null, total: 605656 })],
     }), 'VND');
     expect(b.lines[0].vat).toBeNull();
     expect(b.lines[0].total).toBe(605656);

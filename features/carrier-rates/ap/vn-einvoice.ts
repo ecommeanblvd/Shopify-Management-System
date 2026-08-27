@@ -19,7 +19,13 @@ export interface VnEInvoiceLine {
   /** Số vận đơn trích từ mô tả dòng hàng. Null khi dòng không phải cước vận đơn. */
   trackingNumber: string | null;
   description: string;
+  /** ĐÃ trừ chiết khấu — chuẩn TT78 ghi ThTien = số lượng × đơn giá − chiết
+   *  khấu, nên không được trừ thêm lần nữa. */
   amountExVat: number;
+  /** Chiết khấu của dòng (0 khi không có). Bản in PDF không tách nên là null. */
+  discount: number | null;
+  /** Thuế suất của dòng, ví dụ 8. Null khi không đọc được. */
+  vatPercent: number | null;
   /** Null khi nguồn không có thuế từng dòng (bản PDF chỉ in tổng). */
   vatAmount: number | null;
   /** Tiền chưa thuế + thuế. Bằng amountExVat khi không biết thuế riêng. */
@@ -101,13 +107,33 @@ export function periodFromLines(
   return { periodStart: `${nam}-${hai(thang)}-01`, periodEnd: `${nam}-${hai(thang)}-${hai(cuoi)}` };
 }
 
-/** Cảnh báo khi tổng các dòng không khớp tổng hoá đơn (lệch quá 1đ do làm tròn). */
-function kiemTong(lines: readonly VnEInvoiceLine[], amountExVat: number): string[] {
+/**
+ * Cảnh báo khi cộng các dòng không ra tổng ghi trên hoá đơn (bỏ qua lệch 1₫ do
+ * làm tròn). Kiểm cả tiền hàng lẫn thuế: file hỏng có thể đúng tiền hàng mà sai
+ * thuế, lúc đó chỉ canh tiền hàng sẽ không phát hiện.
+ *
+ * Chỉ canh TỔNG, không canh từng dòng: MISA bù làm tròn ở một dòng để tổng thuế
+ * khớp đúng thuế suất × tổng tiền hàng (hoá đơn 1K26TMB-00007957 lệch 2,44₫ ở
+ * dòng 3) — canh từng dòng sẽ báo động sai trên hoá đơn hoàn toàn hợp lệ.
+ */
+function kiemTong(
+  lines: readonly VnEInvoiceLine[],
+  amountExVat: number,
+  vatAmount?: number,
+): string[] {
+  const out: string[] = [];
   const tongDong = lines.reduce((s, l) => s + l.amountExVat, 0);
-  if (Math.abs(tongDong - amountExVat) <= 1) return [];
-  return [
-    `Tổng các dòng (${tongDong.toLocaleString('vi-VN')}₫) lệch so với tổng ghi trên hoá đơn (${amountExVat.toLocaleString('vi-VN')}₫) — kiểm tra lại file.`,
-  ];
+  if (Math.abs(tongDong - amountExVat) > 1) {
+    out.push(`Tổng các dòng (${tongDong.toLocaleString('vi-VN')}₫) lệch so với tổng ghi trên hoá đơn (${amountExVat.toLocaleString('vi-VN')}₫) — kiểm tra lại file.`);
+  }
+  // Chỉ so khi MỌI dòng đều có thuế; bản in PDF không tách thuế từng dòng.
+  if (vatAmount !== undefined && lines.length > 0 && lines.every((l) => l.vatAmount !== null)) {
+    const tongThue = lines.reduce((s, l) => s + (l.vatAmount ?? 0), 0);
+    if (Math.abs(tongThue - vatAmount) > 1) {
+      out.push(`Cộng thuế các dòng (${tongThue.toLocaleString('vi-VN')}₫) lệch so với thuế ghi trên hoá đơn (${vatAmount.toLocaleString('vi-VN')}₫) — kiểm tra lại file.`);
+    }
+  }
+  return out;
 }
 
 export function parseVnEInvoiceXml(text: string): VnEInvoice | null {
@@ -128,10 +154,13 @@ export function parseVnEInvoiceXml(text: string): VnEInvoice | null {
     const amountExVat = soTien(tag(block, 'ThTien'));
     const vatRaw = truongKhac(block, 'VATAmount');
     const vatAmount = vatRaw ? soTien(vatRaw) : null;
+    const tsuat = tag(block, 'TSuat').match(/([\d.]+)\s*%/);
     lines.push({
       trackingNumber: trackingFromDescription(description),
       description,
       amountExVat,
+      discount: soTien(tag(block, 'STCKhau')),
+      vatPercent: tsuat ? Number(tsuat[1]) : null,
       vatAmount,
       total: amountExVat + (vatAmount ?? 0),
     });
@@ -142,7 +171,7 @@ export function parseVnEInvoiceXml(text: string): VnEInvoice | null {
   const vatAmount = soTien(tag(toan, 'TgTThue'));
   const amountInclVat = soTien(tag(toan, 'TgTTTBSo'));
 
-  const warnings = kiemTong(lines, amountExVat);
+  const warnings = kiemTong(lines, amountExVat, vatAmount);
   const thieuTracking = lines.filter((l) => !l.trackingNumber).length;
   if (thieuTracking > 0) {
     warnings.push(`${thieuTracking}/${lines.length} dòng không đọc được số vận đơn — sẽ nhập nhưng không khớp được đơn.`);
@@ -208,7 +237,9 @@ export function parseVnEInvoicePdfText(text: string): VnEInvoice | null {
       trackingNumber: tracking,
       description: raw.trim().replace(/\s{2,}/g, ' '),
       amountExVat: soTienVn(cuoi),
-      // Bản in KHÔNG có thuế từng dòng — chỉ có tổng ở cuối hoá đơn.
+      // Bản in KHÔNG tách thuế/chiết khấu từng dòng — chỉ có tổng ở cuối.
+      discount: null,
+      vatPercent: null,
       vatAmount: null,
       total: soTienVn(cuoi),
     });

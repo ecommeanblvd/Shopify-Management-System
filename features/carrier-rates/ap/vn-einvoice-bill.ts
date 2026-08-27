@@ -11,8 +11,11 @@ import { periodFromLines, type VnEInvoice } from './vn-einvoice';
 
 export interface VnBillLine {
   trackingNumber: string;
-  /** Tiền chưa thuế của vận đơn. Hoá đơn không tách nên đây là toàn bộ cước. */
+  /** Tiền chưa thuế của vận đơn, ĐÃ trừ chiết khấu. Hoá đơn không tách phụ phí
+   *  nên đây là toàn bộ cước. */
   base: number;
+  /** Chiết khấu hoá đơn ghi cho dòng. Null khi nguồn không tách (bản in PDF). */
+  discount: number | null;
   /** Null khi nguồn không có thuế từng dòng (bản PDF). */
   vat: number | null;
   total: number;
@@ -63,6 +66,7 @@ export function vnInvoiceToBill(
     .map((l) => ({
       trackingNumber: l.trackingNumber,
       base: l.amountExVat,
+      discount: l.discount,
       vat: l.vatAmount,
       total: l.total,
       fuel: null,

@@ -150,6 +150,7 @@ async function nhapHoaDonVn(
     lines: b.lines.map((l) => ({
       trackingNumber: l.trackingNumber,
       base: l.base,
+      discount: l.discount,
       vat: l.vat,
       total: l.total,
       note: l.note,
