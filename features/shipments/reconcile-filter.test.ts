@@ -52,9 +52,17 @@ describe('filterReconcileRows', () => {
   const rows = [
     row({ carrierKey: 'dhl', shipCountry: 'SA', deltaPct: 12, orderNumber: '#AAA' }),
     row({ carrierKey: 'fedex', shipCountry: 'US', deltaPct: 3, orderNumber: '#BBB' }),
+    row({ carrierKey: 'aramex', shipCountry: 'AE', deltaPct: -5, orderNumber: '#CCC' }),
   ];
   const base = { carrier: 'all', status: 'all', country: '', minPct: '', q: '' } as const;
   it('lọc carrier', () => { expect(filterReconcileRows(rows, { ...base, carrier: 'fedex' }).length).toBe(1); });
+  it('lọc được Aramex', () => {
+    const r = filterReconcileRows(rows, { ...base, carrier: 'aramex' });
+    expect(r.map((x) => x.orderNumber)).toEqual(['#CCC']);
+  });
+  it('"tất cả" vẫn gồm cả Aramex', () => {
+    expect(filterReconcileRows(rows, base).length).toBe(3);
+  });
   it('lọc country (không phân biệt hoa thường)', () => { expect(filterReconcileRows(rows, { ...base, country: 'sa' }).length).toBe(1); });
   it('lọc minPct (|deltaPct| ≥)', () => { expect(filterReconcileRows(rows, { ...base, minPct: '10' }).length).toBe(1); });
   it('lọc q theo order/tracking', () => { expect(filterReconcileRows(rows, { ...base, q: 'bbb' }).map((r) => r.orderNumber)).toEqual(['#BBB']); });

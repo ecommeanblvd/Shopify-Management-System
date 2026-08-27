@@ -44,7 +44,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
 
   // Lọc + summary + phân trang PHÍA SERVER (chỉ gửi trang đang xem xuống client).
   const filters: ReconcileFilters = {
-    carrier: (sp.carrier === 'fedex' || sp.carrier === 'dhl') ? sp.carrier : 'all',
+    carrier: (sp.carrier === 'fedex' || sp.carrier === 'dhl' || sp.carrier === 'aramex') ? sp.carrier : 'all',
     status: (['pending', 'reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error', 'credited', 'accepted', 'awaiting_measurement', 'awaiting_billed'] as const).includes(sp.status as never)
       ? (sp.status as ReconcileFilters['status']) : 'all',
     country: sp.country ?? '', minPct: sp.minPct ?? '', q: sp.q ?? '',

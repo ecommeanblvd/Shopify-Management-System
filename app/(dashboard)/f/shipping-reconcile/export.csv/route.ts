@@ -40,7 +40,8 @@ export async function GET(req: Request): Promise<Response> {
 
   const url = new URL(req.url);
   const carrierParam = url.searchParams.get('carrier');
-  const carrier = carrierParam === 'fedex' || carrierParam === 'dhl' ? carrierParam : undefined;
+  const carrier = carrierParam === 'fedex' || carrierParam === 'dhl' || carrierParam === 'aramex'
+    ? carrierParam : undefined;
   const country = url.searchParams.get('country')?.toUpperCase() || undefined;
   // Khoảng NGÀY SHIP (label_created_at) — 'YYYY-MM-DD', bao trọn 2 đầu.
   const range = presetRange(

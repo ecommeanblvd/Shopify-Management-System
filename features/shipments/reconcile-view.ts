@@ -110,7 +110,7 @@ export function mergeStatus(
 }
 
 interface ReconcileViewOptions {
-  carrierKey?: 'fedex' | 'dhl';
+  carrierKey?: 'fedex' | 'dhl' | 'aramex';
   fromDate?: Date;
   toDate?: Date;
 }

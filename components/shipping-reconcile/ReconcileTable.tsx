@@ -165,6 +165,7 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
           <option value="all">Tất cả carrier</option>
           <option value="fedex">FedEx</option>
           <option value="dhl">DHL</option>
+          <option value="aramex">Aramex</option>
         </select>
         <select value={filters.status} onChange={(e) => pushParams({ status: e.target.value === 'all' ? '' : e.target.value })} className="rounded border border-border bg-background px-2 py-1">
           <option value="all">Mọi trạng thái</option>
