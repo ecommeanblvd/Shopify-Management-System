@@ -615,6 +615,14 @@ export const carrierBills = pgTable('carrier_bills', {
   pdfFilename: text('pdf_filename'),
   pdfContentType: text('pdf_content_type'),
   pdfByteSize: integer('pdf_byte_size'),
+  /**
+   * Tỉ giá hãng dùng cho CHÍNH hoá đơn này (1 đơn vị `currency` gốc = ? VNĐ).
+   * Aramex tính giá USD nhưng Hợp Nhất xuất hoá đơn VNĐ và ghi tỉ giá của kỳ
+   * ngay trên bảng kê. Đối soát phải quy đổi theo số này — dùng tỉ giá tài
+   * khoản (con số hiện tại) cho hoá đơn cũ sẽ đẻ ra chênh lệch giả ở mọi đơn.
+   * NULL = hoá đơn xuất thẳng VNĐ (DHL/FedEx) → dùng tỉ giá tài khoản.
+   */
+  fxRate: numeric('fx_rate', { precision: 14, scale: 4 }),
   /** Tổng tiền + ngày đọc từ PDF hoá đơn (mảng C) — để đối soát với amount/issueDate/dueDate (từ XLSX). */
   pdfAmount: numeric('pdf_amount', { precision: 14, scale: 2 }),
   pdfIssueDate: date('pdf_issue_date'),

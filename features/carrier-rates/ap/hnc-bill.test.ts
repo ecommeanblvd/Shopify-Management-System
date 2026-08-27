@@ -108,3 +108,13 @@ describe('ghepBangKeVoiHoaDon', () => {
     expect(l.total).toBe(605656);
   });
 });
+
+describe('tỉ giá của hoá đơn', () => {
+  it('lấy thẳng tỉ giá bảng kê để đối soát dùng đúng số hãng đã tính', () => {
+    expect(ghepBangKeVoiHoaDon(bangKe(), hoaDon()).fxRate).toBe(26310);
+  });
+
+  it('bảng kê thiếu tỉ giá thì để trống, không lấy tỉ giá tài khoản thay', () => {
+    expect(ghepBangKeVoiHoaDon(bangKe({ fxRate: null }), hoaDon()).fxRate).toBeNull();
+  });
+});

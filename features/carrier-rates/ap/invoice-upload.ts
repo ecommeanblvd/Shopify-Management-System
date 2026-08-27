@@ -10,6 +10,7 @@ import { vnInvoiceToBill } from './vn-einvoice-bill';
 import { parseHncManifestRows, type HncManifest } from './hnc-manifest';
 import { ghepBangKeVoiHoaDon } from './hnc-bill';
 import { ghepCapBangKeHoaDon } from './hnc-pairing';
+import { ghiBilledAramex } from './aramex-billed';
 import * as XLSX from 'xlsx';
 import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
 import { matchInvoiceNumbers } from './match-invoice-pdf';
@@ -304,6 +305,8 @@ async function nhapHoSoAramex(ctx: InvoiceCtx, files: TepTai[]): Promise<Invoice
         dueDate: null,
         amount: b.amount,
         currency: b.currency,
+        // Tỉ giá của CHÍNH kỳ này — đối soát dùng nó thay vì tỉ giá tài khoản.
+        fxRate: b.fxRate,
         note: b.note,
         userId: ctx.userId,
         // Giữ bảng kê làm file nguồn: đây mới là bản có chi tiết.
@@ -322,6 +325,8 @@ async function nhapHoSoAramex(ctx: InvoiceCtx, files: TepTai[]): Promise<Invoice
         })),
       });
       const { khop, tong } = await napShipmentChoDongBill(billId);
+      // Đẩy số hãng đã thu vào đối soát ship.
+      const billed = await ghiBilledAramex(billId);
       soHoaDonDaTao.push(b.billNumber);
       const ten = [c.bangKe.ten, c.hoaDon?.ten].filter(Boolean).join(' + ');
       out.push({
@@ -331,7 +336,7 @@ async function nhapHoSoAramex(ctx: InvoiceCtx, files: TepTai[]): Promise<Invoice
         amount: b.amount,
         matched: khop,
         freight: tong,
-        message: `Khớp ${khop}/${tong} vận đơn${canhBao.length ? ' · ' + canhBao.join(' · ') : ''}`,
+        message: `Khớp ${khop}/${tong} vận đơn · đẩy ${billed.khop} dòng vào đối soát${canhBao.length ? ' · ' + canhBao.join(' · ') : ''}`,
       });
     } catch (e) {
       out.push(loi(c.bangKe.f, (e as Error).message || 'Lỗi tạo hoá đơn'));

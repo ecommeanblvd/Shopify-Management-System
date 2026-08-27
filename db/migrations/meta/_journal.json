@@ -869,6 +869,13 @@
       "when": 1787056800000,
       "tag": "0122_rate-tables-updated-at",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1787143200000,
+      "tag": "0123_bill-fx-rate",
+      "breakpoints": true
     }
   ]
 }

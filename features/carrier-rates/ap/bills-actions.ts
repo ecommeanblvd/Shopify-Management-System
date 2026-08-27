@@ -41,6 +41,9 @@ export interface CreateBillInput {
   dueDate?: string | null;
   amount: number;
   currency: string;
+  /** Tỉ giá ghi trên hoá đơn (1 đơn vị `currency` gốc = ? VNĐ). Chỉ hoá đơn
+   *  ngoại tệ mới có — xem carrier_bills.fx_rate. */
+  fxRate?: number | null;
   note?: string | null;
   userId: string;
   file?: UploadFile | null;
@@ -70,6 +73,7 @@ export async function createBill(input: CreateBillInput): Promise<{ id: string }
     dueDate: input.dueDate ?? null,
     amount: String(input.amount),
     currency: input.currency,
+    fxRate: input.fxRate != null ? String(input.fxRate) : null,
     fileKey,
     filename: input.file?.filename ?? null,
     contentType: input.file?.contentType ?? null,

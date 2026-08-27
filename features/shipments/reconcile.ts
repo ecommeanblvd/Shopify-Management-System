@@ -9,11 +9,12 @@
  * carrier behaviour the engine doesn't model yet.
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
+import { cuocEngineSangVnd } from '@/features/carrier-rates/engine/to-vnd';
 import { diagnoseReconcileRow, type ReconcileDiagnosis } from './reconcile-diagnose';
 import { inferPackagingFromDims } from './parse-packaging';
 
@@ -183,6 +184,22 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
   // Nước đích của đúng lô đơn đang đối soát — snapshot chỉ nạp ODA của các
   // nước này thay vì cả 1,03 triệu dòng mỗi card (D-025: nạp full là nguồn
   // egress lớn nhất, Supabase khoá dịch vụ 24/08).
+  // Tỉ giá của chính hoá đơn chứa mỗi đơn. Bảng giá Aramex tính bằng USD nhưng
+  // hoá đơn xuất VNĐ, và bảng kê ghi sẵn tỉ giá hãng dùng cho kỳ đó — lấy tỉ
+  // giá tài khoản (con số hiện tại) cho hoá đơn cũ sẽ đẻ chênh lệch giả ở mọi
+  // đơn, hoá đơn càng cũ càng lệch.
+  const tyGiaTheoDon = new Map<string, number>();
+  {
+    const rows = await db
+      .select({ shipmentId: schema.carrierBillLines.shipmentId, fxRate: schema.carrierBills.fxRate })
+      .from(schema.carrierBillLines)
+      .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))
+      .where(isNotNull(schema.carrierBills.fxRate));
+    for (const x of rows) {
+      if (x.shipmentId && x.fxRate) tyGiaTheoDon.set(x.shipmentId, Number(x.fxRate));
+    }
+  }
+
   const nuocDich = [...new Set(
     filtered.map((r) => r.shipCountry?.trim().toUpperCase()).filter((c): c is string => !!c),
   )];
@@ -318,13 +335,22 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
 
     // Dòng tiền-billed: đã cân + quote OK → có ước tính engine, nhưng chưa có
     // billed để so. Đẩy row (effStatus = awaiting_billed), bỏ qua diagnosis/tiền.
+    // Quy cước engine về tiền Việt để so với số hãng đã thu — theo tỉ giá của
+    // chính hoá đơn khi có, nếu không thì tỉ giá tài khoản.
+    const engineVnd = cuocEngineSangVnd({
+      carrierCost: q.breakdown.carrierCost,
+      costCurrency: snap.costCurrency,
+      fxRateBill: tyGiaTheoDon.get(r.shipmentId) ?? null,
+      fxCostPerDisplay: snap.fxCostPerDisplay,
+    });
+
     if (!hasBilled) {
-      rows.push(buildRow(r, q.breakdown, null));
+      rows.push(buildRow(r, q.breakdown, null, null, engineVnd));
       continue;
     }
 
     matched += 1;
-    sumEngine += q.breakdown.carrierCost;
+    sumEngine += engineVnd ?? q.breakdown.carrierCost;
 
     // Build the package-appropriate gross list rate ladder for this zone so
     // the diagnosis can invert the billed base back to a weight tier.
@@ -395,7 +421,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       shipCountry: r.shipCountry,
       residentialClass: r.residentialClass,
     });
-    rows.push(buildRow(r, q.breakdown, null, diagnosis));
+    rows.push(buildRow(r, q.breakdown, null, diagnosis, engineVnd));
   }
 
   // 3. Sort by absolute delta descending — operator sees worst fits first.
@@ -521,9 +547,12 @@ function buildRow(
   engine: EngineBreakdown | null,
   unmatchedReason: string | null,
   diagnosis: ReconcileDiagnosis | null = null,
+  /** Cước engine đã quy về tiền Việt. Bỏ trống = tài khoản vốn tính bằng VNĐ
+   *  (DHL/FedEx), dùng thẳng carrierCost như trước. */
+  engineVnd: number | null = null,
 ): ReconcileRow {
   const billedTotal = r.billedTotal != null ? Number(r.billedTotal) : null;
-  const engineTotal = engine?.carrierCost ?? null;
+  const engineTotal = engineVnd ?? engine?.carrierCost ?? null;
   const deltaVnd = (billedTotal !== null && engineTotal !== null)
     ? billedTotal - engineTotal
     : null;

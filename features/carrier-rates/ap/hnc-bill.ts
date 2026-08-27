@@ -40,6 +40,9 @@ export interface HncBillPrefill {
   issueDate: string | null;
   amount: number;
   currency: string;
+  /** Tỉ giá hãng dùng cho kỳ này, đọc thẳng từ bảng kê. Đối soát các đơn thuộc
+   *  hoá đơn phải quy đổi theo số này. */
+  fxRate: number | null;
   note: string;
   lines: HncBillLine[];
   warnings: string[];
@@ -138,6 +141,7 @@ export function ghepBangKeVoiHoaDon(
     issueDate: hoaDon?.issueDate ?? null,
     amount: tongPhaiTra,
     currency: hoaDon?.currency ?? 'VND',
+    fxRate: fx,
     note,
     lines,
     warnings,
