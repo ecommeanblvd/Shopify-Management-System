@@ -5,8 +5,12 @@ import { createBill } from './bills-actions';
 import { reconcileDhlBill } from './dhl-reconcile-actions';
 import { previewFboBill, previewFboRows, applyFboBill } from './fbo-import-actions';
 import { parseFedexInvoiceXml } from '@/features/shipments/fedex-invoice-xml';
-import { parseVnEInvoiceXml, parseVnEInvoicePdfText } from './vn-einvoice';
+import { parseVnEInvoiceXml, parseVnEInvoicePdfText, type VnEInvoice } from './vn-einvoice';
 import { vnInvoiceToBill } from './vn-einvoice-bill';
+import { parseHncManifestRows, type HncManifest } from './hnc-manifest';
+import { ghepBangKeVoiHoaDon } from './hnc-bill';
+import { ghepCapBangKeHoaDon } from './hnc-pairing';
+import * as XLSX from 'xlsx';
 import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
 import { matchInvoiceNumbers } from './match-invoice-pdf';
 import { compressPdf } from '@/lib/pdf/compress';
@@ -15,7 +19,7 @@ import { db, schema } from '@/db/client';
 import { eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
-export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'fedex_xml' | 'aramex_xml' | 'aramex_pdf' | 'invoice_pdf' | 'unsupported';
+export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'fedex_xml' | 'aramex_xlsx' | 'aramex_xml' | 'aramex_pdf' | 'invoice_pdf' | 'unsupported';
 
 /** Nhận dạng định dạng theo carrier + đuôi file. DHL=CSV/XML, FedEx=XLSX/XML,
  *  Aramex=XML/PDF hoá đơn điện tử Việt Nam. PDF các carrier khác chỉ để đính kèm. */
@@ -28,6 +32,10 @@ export function detectInvoiceFormat(carrierKey: string | null, filename: string)
   // Aramex Việt Nam (Hợp Nhất) phát hành hoá đơn điện tử: bản XML và bản in
   // PDF chứa CÙNG nội dung, nên PDF ở đây dựng được bill chứ không chỉ đính
   // kèm như PDF của FedEx/DHL.
+  // Bảng kê Excel là nguồn CHI TIẾT (cân nặng, nước đến, cước gốc, phụ phí
+  // xăng dầu, tỉ giá); hoá đơn XML bổ sung số hoá đơn + thuế + chữ ký số. Hợp
+  // Nhất đặt đuôi .xls nhưng ruột là xlsx.
+  if (carrierKey === 'aramex' && (ext === '.xls' || ext === '.xlsx')) return 'aramex_xlsx';
   if (carrierKey === 'aramex' && ext === '.xml') return 'aramex_xml';
   if (carrierKey === 'aramex' && ext === '.pdf') return 'aramex_pdf';
   if (ext === '.pdf') return 'invoice_pdf';
@@ -87,7 +95,7 @@ export function splitByPhase<T extends { filename: string }>(files: T[], carrier
   const spreadsheets: T[] = [], pdfs: T[] = [], unsupported: T[] = [];
   for (const f of files) {
     const fmt = detectInvoiceFormat(carrierKey, f.filename);
-    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx' || fmt === 'fedex_xml' || fmt === 'aramex_xml') spreadsheets.push(f);
+    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx' || fmt === 'fedex_xml' || fmt === 'aramex_xml' || fmt === 'aramex_xlsx') spreadsheets.push(f);
     else if (fmt === 'invoice_pdf' || fmt === 'aramex_pdf') pdfs.push(f);
     else unsupported.push(f);
   }
@@ -125,6 +133,21 @@ async function napShipmentChoDongBill(billId: string): Promise<{ khop: number; t
       FROM carrier_bill_lines WHERE bill_id = ${billId}`);
   const row = (r.rows ?? [])[0] as { tong: number; khop: number } | undefined;
   return { khop: row?.khop ?? 0, tong: row?.tong ?? 0 };
+}
+
+/** Đọc bảng kê Excel của Hợp Nhất. Trả null khi file không phải bảng kê. */
+export function docBangKeHnc(bytes: Uint8Array): HncManifest | null {
+  try {
+    const wb = XLSX.read(bytes, { type: 'array' });
+    for (const ten of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[ten], { header: 1, raw: true, defval: null });
+      const m = parseHncManifestRows(rows);
+      if (m) return m;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 /** Nhập một hoá đơn điện tử Việt Nam (Aramex/Hợp Nhất) thành bill + dòng bill. */
@@ -183,6 +206,16 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
     if (fbo.bills.length === 0) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML).' };
     return { ok: true as const, preview: fboPreviewFrom(fbo.bills, ctx.currency) };
   }
+  if (fmt === 'aramex_xlsx') {
+    const m = docBangKeHnc(file.bytes);
+    if (!m) return { ok: false as const, message: 'Không đúng định dạng bảng kê cước Hợp Nhất.' };
+    const b = ghepBangKeVoiHoaDon(m, null);
+    return { ok: true as const, preview: {
+      carrier: 'aramex' as const, format: fmt, billNumber: b.billNumber, amount: b.amount, currency: b.currency,
+      periodStart: b.periodStart, periodEnd: b.periodEnd, issueDate: b.issueDate, dueDate: null,
+      lineCount: b.lines.length, warnings: b.warnings,
+    } };
+  }
   if (fmt === 'aramex_xml' || fmt === 'aramex_pdf') {
     let inv;
     if (fmt === 'aramex_xml') {
@@ -222,7 +255,109 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
   return { ok: false as const, message: `File không đúng định dạng hoá đơn ${dinhDang}.` };
 }
 
+type TepTai = { bytes: Uint8Array; filename: string; contentType: string };
+
+/**
+ * Aramex nhập theo BỘ HỒ SƠ, không theo từng file: bảng kê Excel giữ phần chi
+ * tiết còn hoá đơn XML giữ số hoá đơn và thuế, phải ghép lại mới ra một bill
+ * đầy đủ. Xử lý rời từng file sẽ đẻ ra hai bill của cùng một kỳ.
+ */
+async function nhapHoSoAramex(ctx: InvoiceCtx, files: TepTai[]): Promise<InvoiceImportResult[]> {
+  const out: InvoiceImportResult[] = [];
+  const loi = (f: TepTai, message: string): InvoiceImportResult =>
+    ({ filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message });
+
+  const bangKes: Array<{ tong: number; ten: string; m: HncManifest; f: TepTai }> = [];
+  const hoaDons: Array<{ tong: number; ten: string; inv: VnEInvoice; f: TepTai }> = [];
+  const pdfs: TepTai[] = [];
+
+  for (const f of files) {
+    const fmt = detectInvoiceFormat('aramex', f.filename);
+    if (fmt === 'aramex_xlsx') {
+      const m = docBangKeHnc(f.bytes);
+      if (!m) { out.push(loi(f, 'Không đúng định dạng bảng kê cước Hợp Nhất')); continue; }
+      bangKes.push({ tong: m.amountInclVat ?? 0, ten: f.filename, m, f });
+    } else if (fmt === 'aramex_xml') {
+      const inv = parseVnEInvoiceXml(td(f.bytes));
+      if (!inv) { out.push(loi(f, 'Không đúng định dạng hoá đơn điện tử Việt Nam')); continue; }
+      hoaDons.push({ tong: inv.amountInclVat, ten: f.filename, inv, f });
+    } else if (fmt === 'aramex_pdf') {
+      pdfs.push(f);
+    } else {
+      out.push(loi(f, 'Aramex nhận bảng kê Excel (.xls) và hoá đơn XML'));
+    }
+  }
+
+  const { cap, hoaDonThua, warnings } = ghepCapBangKeHoaDon(bangKes, hoaDons);
+  const soHoaDonDaTao: string[] = [];
+
+  for (const c of cap) {
+    const b = ghepBangKeVoiHoaDon(c.bangKe.m, c.hoaDon?.inv ?? null);
+    const canhBao = [...warnings, ...b.warnings];
+    try {
+      const { id: billId } = await createBill({
+        carrierAccountId: ctx.carrierAccountId,
+        billNumber: b.billNumber,
+        periodStart: b.periodStart,
+        periodEnd: b.periodEnd,
+        issueDate: b.issueDate,
+        dueDate: null,
+        amount: b.amount,
+        currency: b.currency,
+        note: b.note,
+        userId: ctx.userId,
+        // Giữ bảng kê làm file nguồn: đây mới là bản có chi tiết.
+        file: { bytes: c.bangKe.f.bytes, filename: c.bangKe.f.filename, contentType: c.bangKe.f.contentType },
+        lines: b.lines.map((l) => ({
+          trackingNumber: l.trackingNumber,
+          weightKg: l.weightKg,
+          base: l.base,
+          fuel: l.fuel,
+          other: l.other,
+          vat: l.vat,
+          total: l.total,
+          shipDate: l.shipDate,
+          note: l.note,
+          charges: l.charges,
+        })),
+      });
+      const { khop, tong } = await napShipmentChoDongBill(billId);
+      soHoaDonDaTao.push(b.billNumber);
+      const ten = [c.bangKe.ten, c.hoaDon?.ten].filter(Boolean).join(' + ');
+      out.push({
+        filename: ten,
+        ok: true,
+        billNumber: b.billNumber,
+        amount: b.amount,
+        matched: khop,
+        freight: tong,
+        message: `Khớp ${khop}/${tong} vận đơn${canhBao.length ? ' · ' + canhBao.join(' · ') : ''}`,
+      });
+    } catch (e) {
+      out.push(loi(c.bangKe.f, (e as Error).message || 'Lỗi tạo hoá đơn'));
+    }
+  }
+
+  // Hoá đơn không có bảng kê: vẫn nhập được nhưng thiếu hẳn cân nặng và phụ phí.
+  for (const h of hoaDonThua) {
+    try {
+      const r = await nhapHoaDonVn(ctx, h.inv, h.f);
+      soHoaDonDaTao.push(h.inv.billNumber);
+      out.push({ ...r, message: `${r.message ?? ''} · Thiếu bảng kê Excel nên không có cân nặng, nước đến và phụ phí — đối soát chỉ so được tổng.` });
+    } catch (e) {
+      out.push(loi(h.f, (e as Error).message || 'Lỗi tạo hoá đơn'));
+    }
+  }
+
+  for (const f of pdfs) {
+    out.push(loi(f, 'PDF chỉ là bản in của hoá đơn XML — không cần tải. Bộ cần tải là bảng kê Excel + hoá đơn XML.'));
+  }
+
+  return out;
+}
+
 export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uint8Array; filename: string; contentType: string }[], existingBillNumbers: Set<string>): Promise<InvoiceImportResult[]> {
+  if (ctx.carrierKey === 'aramex') return nhapHoSoAramex(ctx, files);
   const out: InvoiceImportResult[] = [];
   const seen = new Set(existingBillNumbers);
   const { spreadsheets, pdfs, unsupported } = splitByPhase(files, ctx.carrierKey);
@@ -242,12 +377,6 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         seen.add(p.billNumber);
         const r = lines.length ? await reconcileDhlBill(billId) : null;
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
-      } else if (ctx.carrierKey === 'aramex') {
-        const inv = parseVnEInvoiceXml(td(f.bytes));
-        if (!inv) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn điện tử Việt Nam' }); continue; }
-        const r = await nhapHoaDonVn(ctx, inv, { bytes: f.bytes, filename: f.filename, contentType: 'application/xml' });
-        seen.add(inv.billNumber);
-        out.push(r);
       } else if (ctx.carrierKey === 'fedex') {
         // XML (FedEx Billing Online "Download") hay XLSX (FBO) — cùng pipeline FboBilledRow.
         const xmlRows = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml' ? parseFedexInvoiceXml(td(f.bytes)) : null;
@@ -283,35 +412,6 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         let text: string;
         try { text = await extractPdfText(f.bytes); }
         catch { out.push({ ...base, message: 'Không đọc được PDF' }); continue; }
-        // PDF hoá đơn Aramex chứa ĐỦ nội dung: nếu bill chưa có (người dùng chỉ
-        // tải PDF) thì dựng bill từ chính nó, còn nếu XML đã dựng bill ở pha
-        // trước thì chỉ đính bản in vào làm chứng từ.
-        if (detectInvoiceFormat(ctx.carrierKey, f.filename) === 'aramex_pdf') {
-          const inv = parseVnEInvoicePdfText(text);
-          if (!inv) { out.push({ ...base, message: 'Không đọc được nội dung hoá đơn trong PDF' }); continue; }
-          const ct = f.contentType || 'application/pdf';
-          const stored = await compressPdf(f.bytes);
-          const fileKey = `carrier-bills/${ctx.carrierAccountId}/pdf-${randomUUID()}.pdf`;
-          await putObject(fileKey, stored, ct);
-          const daCo = byNumber.get(inv.billNumber);
-          if (!daCo) {
-            const r = await nhapHoaDonVn(ctx, inv, null);
-            const [moi] = await db.select({ id: schema.carrierBills.id })
-              .from(schema.carrierBills)
-              .where(eq(schema.carrierBills.billNumber, inv.billNumber));
-            if (moi) byNumber.set(inv.billNumber, moi.id);
-            await db.update(schema.carrierBills)
-              .set({ pdfFileKey: fileKey, pdfFilename: f.filename, pdfContentType: ct, pdfByteSize: stored.length, pdfAmount: String(inv.amountInclVat), pdfIssueDate: inv.issueDate })
-              .where(eq(schema.carrierBills.billNumber, inv.billNumber));
-            out.push({ ...r, filename: f.filename });
-          } else {
-            await db.update(schema.carrierBills)
-              .set({ pdfFileKey: fileKey, pdfFilename: f.filename, pdfContentType: ct, pdfByteSize: stored.length, pdfAmount: String(inv.amountInclVat), pdfIssueDate: inv.issueDate })
-              .where(eq(schema.carrierBills.id, daCo));
-            out.push({ filename: f.filename, ok: true, billNumber: inv.billNumber, amount: inv.amountInclVat, matched: null, freight: null, message: 'Đính bản in PDF vào hoá đơn đã nhập từ XML' });
-          }
-          continue;
-        }
         const invoices = matchInvoiceNumbers(text, known);
         if (invoices.length === 0) { out.push({ ...base, message: 'Không khớp bill nào — import CSV/XLSX trước' }); continue; }
         const carrier = ctx.carrierKey === 'fedex' ? 'fedex' : 'dhl';

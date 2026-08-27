@@ -85,7 +85,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
   // Aramex Việt Nam (Hợp Nhất) phát hành hoá đơn điện tử: bản XML và bản in PDF
   // có cùng nội dung nên tải file nào cũng dựng được hoá đơn.
   const goiYDinhDang = carrierKey === 'aramex'
-    ? 'Kéo file hoá đơn điện tử Aramex — XML hoặc PDF, tải một trong hai hoặc cả hai đều được'
+    ? 'Tải BỘ hai file: bảng kê cước Excel (.xls) + hoá đơn XML. Bảng kê giữ cân nặng, nước đến và phụ phí; hoá đơn giữ số hoá đơn và thuế. PDF không cần.'
     : 'Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều';
 
   return (
