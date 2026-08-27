@@ -14,7 +14,7 @@ import { db, schema } from '@/db/client';
 import { quote } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { listRateCards, pickRateCardForDate, type RateCardWindow } from '@/features/carrier-rates/engine/rate-cards';
-import { cuocEngineSangVnd } from '@/features/carrier-rates/engine/to-vnd';
+import { heSoQuyDoiVnd } from '@/features/carrier-rates/engine/to-vnd';
 import { diagnoseReconcileRow, type ReconcileDiagnosis } from './reconcile-diagnose';
 import { inferPackagingFromDims } from './parse-packaging';
 
@@ -335,22 +335,29 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
 
     // Dòng tiền-billed: đã cân + quote OK → có ước tính engine, nhưng chưa có
     // billed để so. Đẩy row (effStatus = awaiting_billed), bỏ qua diagnosis/tiền.
-    // Quy cước engine về tiền Việt để so với số hãng đã thu — theo tỉ giá của
-    // chính hoá đơn khi có, nếu không thì tỉ giá tài khoản.
-    const engineVnd = cuocEngineSangVnd({
-      carrierCost: q.breakdown.carrierCost,
+    // Hệ số đưa MỌI số tiền của engine về VNĐ — theo tỉ giá của chính hoá đơn
+    // khi có, nếu không thì tỉ giá tài khoản. Phải quy đổi cả bảng chi tiết,
+    // không riêng cột tổng: để đô lẫn đồng trên cùng một hàng thì không so
+    // được, và phần chẩn đoán sai lệch cũng đọc nhầm.
+    const heSoVnd = heSoQuyDoiVnd({
       costCurrency: snap.costCurrency,
       fxRateBill: tyGiaTheoDon.get(r.shipmentId) ?? null,
       fxCostPerDisplay: snap.fxCostPerDisplay,
     });
+    const qdVnd = (x: number | null | undefined): number | null =>
+      x == null || heSoVnd === null ? null : (heSoVnd === 1 ? x : Math.round(x * heSoVnd));
+    const quyDoiLadder = (rates: Array<{ upperKg: number; rate: number }>) =>
+      heSoVnd === null || heSoVnd === 1
+        ? rates
+        : rates.map((x) => ({ upperKg: x.upperKg, rate: Math.round(x.rate * heSoVnd) }));
 
     if (!hasBilled) {
-      rows.push(buildRow(r, q.breakdown, null, null, engineVnd));
+      rows.push(buildRow(r, q.breakdown, null, null, heSoVnd));
       continue;
     }
 
     matched += 1;
-    sumEngine += engineVnd ?? q.breakdown.carrierCost;
+    sumEngine += qdVnd(q.breakdown.carrierCost) ?? q.breakdown.carrierCost;
 
     // Build the package-appropriate gross list rate ladder for this zone so
     // the diagnosis can invert the billed base back to a weight tier.
@@ -393,27 +400,32 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
         total: Number(r.billedTotal),
       },
       engine: {
-        base: q.breakdown.base,
-        discount: q.breakdown.discount,
-        fuel: q.breakdown.fuel,
-        remote: q.breakdown.remote,
-        demand: q.breakdown.demand,
-        residential: q.breakdown.residential,
-        peak: q.breakdown.peak,
-        addons: q.breakdown.addons,
-        addonReference: q.breakdown.addonReference,
+        // Đã quy về VNĐ để so cùng thước với số hãng thu.
+        base: qdVnd(q.breakdown.base) ?? q.breakdown.base,
+        discount: qdVnd(q.breakdown.discount) ?? q.breakdown.discount,
+        fuel: qdVnd(q.breakdown.fuel) ?? q.breakdown.fuel,
+        remote: qdVnd(q.breakdown.remote) ?? q.breakdown.remote,
+        demand: qdVnd(q.breakdown.demand) ?? q.breakdown.demand,
+        residential: qdVnd(q.breakdown.residential) ?? q.breakdown.residential,
+        peak: qdVnd(q.breakdown.peak) ?? q.breakdown.peak,
+        addons: qdVnd(q.breakdown.addons) ?? q.breakdown.addons,
+        addonReference: qdVnd(q.breakdown.addonReference) ?? q.breakdown.addonReference,
         addonExcludedForCountry: q.breakdown.addonExcludedForCountry,
-        perStep: q.breakdown.perStep,
-        countryFixed: q.breakdown.countryFixed,
-        countryFixedReference: q.breakdown.countryFixedReference,
-        vat: q.breakdown.vat,
-        total: q.breakdown.carrierCost,
+        perStep: qdVnd(q.breakdown.perStep) ?? q.breakdown.perStep,
+        countryFixed: qdVnd(q.breakdown.countryFixed) ?? q.breakdown.countryFixed,
+        countryFixedReference: qdVnd(q.breakdown.countryFixedReference) ?? q.breakdown.countryFixedReference,
+        vat: qdVnd(q.breakdown.vat) ?? q.breakdown.vat,
+        total: qdVnd(q.breakdown.carrierCost) ?? q.breakdown.carrierCost,
       },
       engineChargeableWeightKg: q.breakdown.chargeableWeightKg,
       engineTierUpperKg: q.tier.upperKg,
-      zoneRates,
+      // Bảng giá dùng để suy ngược bậc cân từ số hãng thu (VNĐ) — phải quy về
+      // cùng đơn vị, nếu không phép suy ngược ra bậc cân vô nghĩa.
+      zoneRates: quyDoiLadder(zoneRates),
       engineZoneLabel: zone?.label ?? '',
-      otherZoneRates: allZoneLadders(snap).filter((z) => z.zoneLabel !== zone?.label),
+      otherZoneRates: allZoneLadders(snap)
+        .filter((z) => z.zoneLabel !== zone?.label)
+        .map((z) => ({ zoneLabel: z.zoneLabel, rates: quyDoiLadder(z.rates) })),
       billedFuelableBase,
       fuelPercent: q.breakdown.fuelPercent,
       discountPercent: q.breakdown.discountPercent,
@@ -421,7 +433,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       shipCountry: r.shipCountry,
       residentialClass: r.residentialClass,
     });
-    rows.push(buildRow(r, q.breakdown, null, diagnosis, engineVnd));
+    rows.push(buildRow(r, q.breakdown, null, diagnosis, heSoVnd));
   }
 
   // 3. Sort by absolute delta descending — operator sees worst fits first.
@@ -547,12 +559,15 @@ function buildRow(
   engine: EngineBreakdown | null,
   unmatchedReason: string | null,
   diagnosis: ReconcileDiagnosis | null = null,
-  /** Cước engine đã quy về tiền Việt. Bỏ trống = tài khoản vốn tính bằng VNĐ
-   *  (DHL/FedEx), dùng thẳng carrierCost như trước. */
-  engineVnd: number | null = null,
+  /** Hệ số đưa số tiền engine về VNĐ (1 = tài khoản vốn tính bằng VNĐ, như
+   *  DHL/FedEx). null = không biết tỉ giá → để trống thay vì hiện số ngoại tệ
+   *  lẫn vào cột tiền Việt. */
+  heSoVnd: number | null = 1,
 ): ReconcileRow {
+  const qd = (x: number | null | undefined): number | null =>
+    x == null || heSoVnd === null ? null : (heSoVnd === 1 ? x : Math.round(x * heSoVnd));
   const billedTotal = r.billedTotal != null ? Number(r.billedTotal) : null;
-  const engineTotal = engineVnd ?? engine?.carrierCost ?? null;
+  const engineTotal = qd(engine?.carrierCost) ?? null;
   const deltaVnd = (billedTotal !== null && engineTotal !== null)
     ? billedTotal - engineTotal
     : null;
@@ -592,19 +607,21 @@ function buildRow(
     billedElevatedRisk: r.billedElevatedRisk !== null ? Number(r.billedElevatedRisk) : null,
     billedImportHandling: r.billedImportHandling != null ? Number(r.billedImportHandling) : null,
     engineTotal,
-    engineBase: engine?.base ?? null,
-    engineFuel: engine?.fuel ?? null,
+    // Mọi số tiền của engine quy sang VNĐ để cùng thước với cột hãng thu.
+    // engineFuelPercent là PHẦN TRĂM nên giữ nguyên.
+    engineBase: qd(engine?.base),
+    engineFuel: qd(engine?.fuel),
     engineFuelPercent: engine?.fuelPercent ?? null,
     billedFuelPercent: impliedBilledFuelPercent(r, engine?.fuelPercent ?? null),
-    engineRemote: engine?.remote ?? null,
-    engineDemand: engine?.demand ?? null,
-    engineResidential: engine?.residential ?? null,
-    enginePeak: engine?.peak ?? null,
-    engineAddons: engine?.addons ?? null,
-    enginePerStep: engine?.perStep ?? null,
-    engineCountryFixed: engine?.countryFixed ?? null,
-    engineVat: engine?.vat ?? null,
-    engineDiscount: engine?.discount ?? null,
+    engineRemote: qd(engine?.remote),
+    engineDemand: qd(engine?.demand),
+    engineResidential: qd(engine?.residential),
+    enginePeak: qd(engine?.peak),
+    engineAddons: qd(engine?.addons),
+    enginePerStep: qd(engine?.perStep),
+    engineCountryFixed: qd(engine?.countryFixed),
+    engineVat: qd(engine?.vat),
+    engineDiscount: qd(engine?.discount),
     engineReason: unmatchedReason,
     deltaVnd,
     deltaPct,

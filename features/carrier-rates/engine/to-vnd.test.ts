@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cuocEngineSangVnd } from './to-vnd';
+import { cuocEngineSangVnd, heSoQuyDoiVnd } from './to-vnd';
 
 describe('cuocEngineSangVnd', () => {
   it('tài khoản tính bằng tiền Việt thì giữ nguyên', () => {
@@ -40,5 +40,23 @@ describe('cuocEngineSangVnd', () => {
     const theoHoaDon = cuocEngineSangVnd({ carrierCost: 1000, costCurrency: 'USD', fxRateBill: 26310, fxCostPerDisplay: 1 / 26465 })!;
     const theoTaiKhoan = cuocEngineSangVnd({ carrierCost: 1000, costCurrency: 'USD', fxCostPerDisplay: 1 / 26465 })!;
     expect(theoTaiKhoan - theoHoaDon).toBe(155000);
+  });
+});
+
+describe('heSoQuyDoiVnd', () => {
+  it('tài khoản tính bằng tiền Việt thì hệ số là 1', () => {
+    expect(heSoQuyDoiVnd({ costCurrency: 'VND' })).toBe(1);
+  });
+
+  it('ưu tiên tỉ giá của hoá đơn', () => {
+    expect(heSoQuyDoiVnd({ costCurrency: 'USD', fxRateBill: 26310, fxCostPerDisplay: 1 / 26465 })).toBe(26310);
+  });
+
+  it('không có tỉ giá hoá đơn thì lấy nghịch đảo tỉ giá tài khoản', () => {
+    expect(heSoQuyDoiVnd({ costCurrency: 'USD', fxCostPerDisplay: 1 / 26465 })).toBeCloseTo(26465, 6);
+  });
+
+  it('không biết tỉ giá nào thì trả null', () => {
+    expect(heSoQuyDoiVnd({ costCurrency: 'USD' })).toBeNull();
   });
 });
