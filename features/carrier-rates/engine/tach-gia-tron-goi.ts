@@ -14,6 +14,17 @@
  *   → + VAT (% trên toàn bộ)
  * nên tách ngược đúng theo thứ tự đó.
  *
+ * CHỌN THAM SỐ CHO ĐÚNG — chỗ này đã sai một lần: `phiPhatSinh` chỉ được đặt
+ * khác 0 khi khoản đó ĐÃ NẰM TRONG giá trọn gói. Bảng giá HNC 01/07/2026 gồm
+ * cước gốc + 30% xăng dầu + 8% VAT và KHÔNG gồm phí hải quan $0,4 (khoản hãng
+ * thu thêm sau), nên phải tách với `phiPhatSinh: 0`.
+ *
+ * Cách tự kiểm khi không chắc: tách theo cả hai giả thiết rồi so cước gốc suy
+ * ra với cước gốc trên bảng kê. Giả thiết đúng cho ra chênh lệch ĐỀU giữa các
+ * tuyến (biên của hãng); giả thiết sai cho ra chênh lộn xộn. Kiểm chứng
+ * 27/08: trừ $0,4 ra → lệch 0,39–14,44% (lộn xộn); không trừ → đúng 3,00% mọi
+ * tuyến, Israel 15,00%, Ả-rập Xê-út bậc 4,5kg 6,00%.
+ *
  * LƯU Ý: tách rồi ghép lại phải ra lại chính con số cũ, nếu không giá báo cho
  * khách ở khâu thanh toán sẽ đổi — việc này chỉ nhằm mục đích đối soát, không
  * được phép động tới giá bán.
