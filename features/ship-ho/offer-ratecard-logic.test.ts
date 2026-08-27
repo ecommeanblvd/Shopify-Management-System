@@ -182,12 +182,31 @@ describe('buildRateCard — surcharges (chi phí cụ thể + công thức, ch�
     const row = c.surcharges.find((x) => x.label === 'Phí xử lý theo nước');
     expect(row?.detail).toBe('120.000₫/lô (áp dụng: VN)');
   });
-  it('addon_fixed: label Direct Signature + value/lô', () => {
+  it('addon_fixed không có ghi chú: giữ nhãn mặc định Direct Signature', () => {
     const s = snap();
     s.surcharges.push(surcharge({ kind: 'addon_fixed', value: 45000 }));
     const c = buildRateCard(s, 30, ASOF);
     const row = c.surcharges.find((x) => x.label.includes('Direct Signature'));
     expect(row?.detail).toBe('45.000₫/lô');
+  });
+
+  // Aramex dùng addon_fixed cho phí hải quan đầu xuất; gắn cứng nhãn "ký nhận
+  // trực tiếp" là ghi sai tên khoản phí trên bảng giá gửi đối tác.
+  it('addon_fixed có ghi chú: lấy ghi chú làm tên khoản phí', () => {
+    const s = snap();
+    s.surcharges.push(surcharge({ kind: 'addon_fixed', value: 10524, note: 'Phí hải quan đầu xuất', applyMode: 'always' }));
+    const c = buildRateCard(s, 30, ASOF);
+    const row = c.surcharges.find((x) => x.kind === 'addon_fixed');
+    expect(row?.label).toBe('Phí hải quan đầu xuất');
+    expect(row?.detail).toBe('10.524₫/lô');
+  });
+
+  it('khoản chỉ tính khi phát sinh thì ghi rõ "khi chọn"', () => {
+    const s = snap();
+    s.surcharges.push(surcharge({ kind: 'addon_fixed', value: 21060, note: 'Phí sai địa chỉ', applyMode: 'when_billed' }));
+    const c = buildRateCard(s, 30, ASOF);
+    const row = c.surcharges.find((x) => x.kind === 'addon_fixed');
+    expect(row?.label).toBe('Phí sai địa chỉ (khi phát sinh)');
   });
   it('vat_percent: "{value}%"', () => {
     const s = snap();

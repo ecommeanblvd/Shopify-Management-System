@@ -142,9 +142,16 @@ function buildSurcharges(
     surcharges.push({ kind: 'country_fixed', label: 'Phí xử lý theo nước', detail });
   }
 
-  // addon_fixed: 1 dòng / row.
+  // addon_fixed: 1 dòng / row. Cùng một loại nhưng mỗi hãng dùng cho khoản
+  // khác nhau (DHL: ký nhận trực tiếp; Aramex: phí hải quan đầu xuất), nên tên
+  // khoản lấy từ ghi chú của chính dòng đó — gắn cứng là ghi sai tên phí trên
+  // bảng giá gửi đối tác.
   for (const s of active.filter((x) => x.kind === 'addon_fixed')) {
-    surcharges.push({ kind: 'addon_fixed', label: 'Phí ký nhận trực tiếp (Direct Signature, khi chọn)', detail: `${vnd(s.value)}/lô` });
+    const ten = s.note?.trim();
+    const label = ten
+      ? (s.applyMode === 'when_billed' ? `${ten} (khi phát sinh)` : ten)
+      : 'Phí ký nhận trực tiếp (Direct Signature, khi chọn)';
+    surcharges.push({ kind: 'addon_fixed', label, detail: `${vnd(s.value)}/lô` });
   }
 
   // Phí xử lý đơn hàng ship hộ — cố định mỗi đơn, LUÔN áp (không phải phụ phí

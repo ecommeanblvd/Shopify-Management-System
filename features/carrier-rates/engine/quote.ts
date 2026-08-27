@@ -71,6 +71,10 @@ export interface SurchargeSnap {
   vatable?: boolean | null;
   /** Chế độ áp dụng của addon_fixed. Kind khác bỏ qua. NULL → 'always'. */
   applyMode?: 'always' | 'when_billed' | null;
+  /** Ghi chú của dòng phụ phí — dùng làm TÊN khoản phí khi hiển thị. Cần vì
+   *  cùng một `kind` phục vụ nhiều khoản khác nhau tuỳ hãng (addon_fixed là
+   *  ký nhận trực tiếp ở DHL nhưng phí hải quan đầu xuất ở Aramex). */
+  note?: string | null;
   /**
    * Effective-from / effective-to bounds. NULL on either side means
    * "unbounded that direction". Engine considers a row applicable for
