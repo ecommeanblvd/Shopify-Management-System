@@ -1974,3 +1974,47 @@ describe('zone theo dải bưu chính (CN Hoa Nam → Zone K, chart FedEx VN 202
     expect(r.zone).toBe('Zone 1');
   });
 });
+
+// Aramex tính giá bằng USD nên phần cent là số tiền thật, không phải số lẻ
+// làm tròn được. Trả kết quả bằng số nguyên sẽ biến $25,17 thành $25 — mất
+// 17 cent (~4.500₫) ở mỗi đơn, và cột chi tiết trên màn đối soát sai theo.
+describe('tài khoản tính bằng ngoại tệ giữ nguyên phần cent', () => {
+  const usdSnap = () => makeSnap({
+    costCurrency: 'USD',
+    displayCurrency: 'VND',
+    fxCostPerDisplay: 1 / 26_310,
+    zonesByCountry: new Map([
+      ['AE', { label: 'UAE', rateByTierUpper: new Map<number, number>([[0.5, 16.74], [1, 25.17], [2, 42.47]]) }],
+    ]),
+  });
+
+  it('cước gốc giữ đủ cent', () => {
+    const r = quote(usdSnap(), { weightKg: 1, destinationCountry: 'AE' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.base).toBe(25.17);
+    expect(r.breakdown.carrierCost).toBe(25.17);
+  });
+
+  it('phụ phí xăng dầu và VAT cũng giữ cent', () => {
+    const snap = usdSnap();
+    snap.surcharges = [
+      { kind: 'fuel_percent', value: 30, active: true, valuePerKg: null, tier: null, countryCodes: null, excludedCountryCodes: null, stepKg: null, stepFloorKg: null, fuelable: null, vatable: null, applyMode: 'always', startsAt: null, endsAt: null },
+      { kind: 'vat_percent', value: 8, active: true, valuePerKg: null, tier: null, countryCodes: null, excludedCountryCodes: null, stepKg: null, stepFloorKg: null, fuelable: null, vatable: null, applyMode: 'always', startsAt: null, endsAt: null },
+    ];
+    const r = quote(snap, { weightKg: 1, destinationCountry: 'AE' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // 25,17 × 30% = 7,551 → 7,55
+    expect(r.breakdown.fuel).toBeCloseTo(7.55, 2);
+    expect(Number.isInteger(r.breakdown.fuel)).toBe(false);
+  });
+
+  it('tài khoản tính bằng tiền Việt vẫn trả số nguyên như cũ', () => {
+    const r = quote(makeSnap(), { weightKg: 1, destinationCountry: 'SG' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.breakdown.base).toBe(280_000);
+    expect(Number.isInteger(r.breakdown.base)).toBe(true);
+  });
+});
