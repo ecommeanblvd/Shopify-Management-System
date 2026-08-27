@@ -13,6 +13,31 @@ describe('detectInvoiceFormat', () => {
     expect(detectInvoiceFormat(null, 'a.csv')).toBe('unsupported');
   });
 });
+describe('detectInvoiceFormat — Aramex (hoá đơn điện tử Việt Nam)', () => {
+  it('aramex + .xml → aramex_xml', () => {
+    expect(detectInvoiceFormat('aramex', '00007957_1K26TMB.xml')).toBe('aramex_xml');
+  });
+
+  // PDF Aramex phải TẠO được bill, khác PDF FedEx/DHL (chỉ đính vào bill có sẵn),
+  // vì bản in hoá đơn Việt Nam có đủ dòng vận đơn và số tiền.
+  it('aramex + .pdf → aramex_pdf, KHÔNG rơi vào nhánh invoice_pdf', () => {
+    expect(detectInvoiceFormat('aramex', '00007957_1K26TMB.pdf')).toBe('aramex_pdf');
+    expect(detectInvoiceFormat('aramex', 'HOADON.PDF')).toBe('aramex_pdf');
+  });
+
+  it('đuôi khác thì không nhận', () => {
+    expect(detectInvoiceFormat('aramex', 'a.csv')).toBe('unsupported');
+    expect(detectInvoiceFormat('aramex', 'a.xlsx')).toBe('unsupported');
+  });
+
+  it('XML xử lý trước, PDF sau — tải cả hai thì bill dựng từ XML rồi PDF đính vào', () => {
+    const r = splitByPhase([{ filename: 'hd.pdf' }, { filename: 'hd.xml' }], 'aramex');
+    expect(r.spreadsheets.map((f) => f.filename)).toEqual(['hd.xml']);
+    expect(r.pdfs.map((f) => f.filename)).toEqual(['hd.pdf']);
+    expect(r.unsupported).toEqual([]);
+  });
+});
+
 describe('toInvoicePreview', () => {
   it('chuẩn hoá DHL; warning khi currency lệch account', () => {
     const pv = toInvoicePreview({ kind: 'dhl', accountCurrency: 'VND', p: {

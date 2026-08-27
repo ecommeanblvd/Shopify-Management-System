@@ -44,6 +44,9 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   // quyền quản trị bảng giá đầy đủ (manage_carrier_rates — gác payments/xoá).
   const canAddInvoice = canManage || hasPermission(role, 'manage_shipping_invoices');
   const currency = account.costCurrency ?? 'VND';
+  // Aramex tính giá USD nhưng hoá đơn Hợp Nhất xuất VND — luồng nhập hoá đơn
+  // cần biết cả hai để không báo động nhầm về tiền tệ.
+  const displayCurrency = account.displayCurrency ?? currency;
 
   const [bills, payments, allLines] = await Promise.all([listBills(id), listPaymentsForAccount(id), listAllBillLines(id)]);
   const inputs = toSummaryInputs(bills, payments);
@@ -93,7 +96,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     const file = await fileFromForm(formData, 'file');
     if (!file) throw new Error('Chưa chọn file.');
     return previewOneInvoice(
-      { carrierKey: account.carrierKey, carrierAccountId: id, currency, userId: session!.user.id },
+      { carrierKey: account.carrierKey, carrierAccountId: id, currency, displayCurrency, userId: session!.user.id },
       file,
     );
   }
@@ -106,7 +109,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     })));
     const existing = new Set((await listBills(id)).map((b) => b.billNumber).filter(Boolean) as string[]);
     const res = await importCarrierInvoices(
-      { carrierKey: account.carrierKey, carrierAccountId: id, currency, userId: session!.user.id },
+      { carrierKey: account.carrierKey, carrierAccountId: id, currency, displayCurrency, userId: session!.user.id },
       ups, existing,
     );
     REV.forEach((p) => revalidatePath(p));
@@ -135,7 +138,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         </div>
         {canAddInvoice && (
           <div className="flex items-center gap-2">
-            <CarrierInvoiceDialog carrierKey={account.carrierKey as 'fedex' | 'dhl'} currency={currency} previewAction={previewInvoiceAction} importAction={importInvoicesAction} />
+            <CarrierInvoiceDialog carrierKey={account.carrierKey as 'fedex' | 'dhl' | 'aramex'} currency={currency} previewAction={previewInvoiceAction} importAction={importInvoicesAction} />
           </div>
         )}
       </header>

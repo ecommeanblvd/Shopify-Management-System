@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import type { InvoicePreview, InvoiceImportResult } from '@/features/carrier-rates/ap/invoice-upload';
 
 interface Props {
-  carrierKey: 'fedex' | 'dhl';
+  carrierKey: 'fedex' | 'dhl' | 'aramex';
   currency: string;
   previewAction: (fd: FormData) => Promise<{ ok: true; preview: InvoicePreview } | { ok: false; message: string }>;
   importAction: (fd: FormData) => Promise<InvoiceImportResult[]>;
@@ -81,7 +81,12 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
 
   const isSingle = files.length === 1;
   const isMulti = files.length > 1;
-  const carrierLabel = carrierKey === 'fedex' ? 'FedEx' : 'DHL';
+  const carrierLabel = carrierKey === 'fedex' ? 'FedEx' : carrierKey === 'aramex' ? 'Aramex' : 'DHL';
+  // Aramex Việt Nam (Hợp Nhất) phát hành hoá đơn điện tử: bản XML và bản in PDF
+  // có cùng nội dung nên tải file nào cũng dựng được hoá đơn.
+  const goiYDinhDang = carrierKey === 'aramex'
+    ? 'Kéo file hoá đơn điện tử Aramex — XML hoặc PDF, tải một trong hai hoặc cả hai đều được'
+    : 'Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều';
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
@@ -110,9 +115,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
               className="block w-full text-sm file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-1 file:text-xs"
               onChange={handleFileChange}
             />
-            <p className="text-[11px] text-muted-foreground">
-              Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều
-            </p>
+            <p className="text-[11px] text-muted-foreground">{goiYDinhDang}</p>
           </div>
 
           {/* Pending indicator */}
