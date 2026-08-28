@@ -7,41 +7,55 @@
  */
 import { classifyFboCharge, parseFboAmount, fboWeightToKg, type FboBilledRow } from './fedex-fbo-parse';
 
+/**
+ * Tên thẻ theo NGÔN NGỮ tải về. FedEx Billing Online xuất được cả bản tiếng
+ * Việt lẫn tiếng Anh — cùng đuôi .XML, cùng thẻ gốc <Download>, nhìn ngoài
+ * không phân biệt được. Chỉ nhận một bộ tên thì bản kia bị từ chối thẳng với
+ * câu "không đúng định dạng" (CEO gặp 28/08 với hoá đơn thuế/hải quan).
+ *
+ * Mỗi khoá liệt kê các tên có thể gặp, thử lần lượt.
+ */
 const TAG = {
-  awb: 'Số_vận_đơn_hàng_không',
-  orderRef: 'Số_tham_chiếu_của_người_gửi_1',
-  invoiceNumber: 'Số_hóa_đơn_FedEx',
-  invoiceDate: 'Ngày_lập_hóa_đơn',
-  dueDate: 'Ngày_đáo_hạn',
-  shipDate: 'Ngày_vận_chuyển_đúng_định_dạng',
-  service: 'Dịch_vụ',
-  recipientCountry: 'Quốc_giavùng_lãnh_thổ_trong_địa_chỉ_của_người_nhận',
-  recipientStreet1: 'Dòng_địa_chỉ_người_nhận_1',
-  recipientStreet2: 'Dòng_địa_chỉ_người_nhận_2',
-  recipientCity: 'Thành_phố_trong_địa_chỉ_của_người_nhận',
-  recipientState: 'Tiểu_bang_trong_địa_chỉ_của_người_nhận',
-  recipientPostcode: 'Mã_bưu_chính_trong_địa_chỉ_của_người_nhận',
-  weight: 'Số_tiền_theo_trọng_lượng_tính_cước', // giá trị là CÂN tính cước
+  awb: ['Số_vận_đơn_hàng_không', 'Air_Waybill_Number'],
+  orderRef: ['Số_tham_chiếu_của_người_gửi_1', 'Shipper_Reference_1'],
+  invoiceNumber: ['Số_hóa_đơn_FedEx', 'FedEx_Invoice_Number'],
+  invoiceDate: ['Ngày_lập_hóa_đơn', 'Invoice_Date'],
+  dueDate: ['Ngày_đáo_hạn', 'Due_Date'],
+  shipDate: ['Ngày_vận_chuyển_đúng_định_dạng', 'Ship_Date_formatted'],
+  service: ['Dịch_vụ', 'Service'],
+  recipientCountry: ['Quốc_giavùng_lãnh_thổ_trong_địa_chỉ_của_người_nhận', 'Recipient_Address_CountryTerritory'],
+  recipientStreet1: ['Dòng_địa_chỉ_người_nhận_1', 'Recipient_Address_Line_1'],
+  recipientStreet2: ['Dòng_địa_chỉ_người_nhận_2', 'Recipient_Address_Line_2'],
+  recipientCity: ['Thành_phố_trong_địa_chỉ_của_người_nhận', 'Recipient_Address_City'],
+  recipientState: ['Tiểu_bang_trong_địa_chỉ_của_người_nhận', 'Recipient_Address_State'],
+  recipientPostcode: ['Mã_bưu_chính_trong_địa_chỉ_của_người_nhận', 'Recipient_Address_Postcode'],
+  weight: ['Số_tiền_theo_trọng_lượng_tính_cước', 'Rated_Weight_Amount'], // giá trị là CÂN tính cước
   // Đơn vị phải là của CHÍNH cân tính cước — không phải cân thực tế! Bug 03/08:
   // dùng Đơn_vị_trọng_lượng_thực_tế (P) áp lên cân tính cước (0.5 K) → 0.5 lb
   // = 0.227kg (#MBLVD29431 lệch cân ảo). Hai field có thể KHÁC đơn vị nhau.
-  weightUnit: 'Đơn_vị_trọng_lượng_tính_cước',   // K=kg, P=lb
-  awbTotal: 'Tổng_số_tiền_trong_vận_đơn_hàng_không',
-  chargeLabel: 'Nhãn_phí_trên_vận_đơn_hàng_không',
-  chargeAmount: 'Số_tiền_phí_trên_vận_đơn_hàng_không',
+  weightUnit: ['Đơn_vị_trọng_lượng_tính_cước', 'Rated_Weight_Units'],   // K=kg, P=lb
+  awbTotal: ['Tổng_số_tiền_trong_vận_đơn_hàng_không', 'Air_Waybill_Total_Amount'],
+  chargeLabel: ['Nhãn_phí_trên_vận_đơn_hàng_không', 'Air_Waybill_Charge_Label'],
+  chargeAmount: ['Số_tiền_phí_trên_vận_đơn_hàng_không', 'Air_Waybill_Charge_Amount'],
 } as const;
 
-/** Text của tag đầu tiên trong block. '' nếu không có. */
-function tag(block: string, name: string): string {
-  const m = block.match(new RegExp(`<${name}>([^<]*)</${name}>`));
-  return m ? m[1].trim() : '';
+/** Text của thẻ đầu tiên khớp một trong các tên. '' nếu không có tên nào. */
+function tag(block: string, names: readonly string[]): string {
+  for (const name of names) {
+    const m = block.match(new RegExp(`<${name}>([^<]*)</${name}>`));
+    if (m) return m[1].trim();
+  }
+  return '';
 }
-/** Mọi giá trị của 1 tag (lặp) theo thứ tự. */
-function allTags(block: string, name: string): string[] {
-  const re = new RegExp(`<${name}>([^<]*)</${name}>`, 'g');
-  const out: string[] = []; let m: RegExpExecArray | null;
-  while ((m = re.exec(block)) !== null) out.push(m[1].trim());
-  return out;
+/** Mọi giá trị của thẻ lặp, theo thứ tự; lấy theo tên đầu tiên có mặt. */
+function allTags(block: string, names: readonly string[]): string[] {
+  for (const name of names) {
+    const re = new RegExp(`<${name}>([^<]*)</${name}>`, 'g');
+    const out: string[] = []; let m: RegExpExecArray | null;
+    while ((m = re.exec(block)) !== null) out.push(m[1].trim());
+    if (out.length) return out;
+  }
+  return [];
 }
 
 /** Parse XML FedEx → FboBilledRow[] (cùng shape parser XLSX). Bỏ block thiếu AWB. */
@@ -52,7 +66,7 @@ export function parseFedexInvoiceXml(text: string): FboBilledRow[] {
   for (const b of blocks) {
     const awb = tag(b, TAG.awb);
     if (!awb) continue;
-    const s = (k: string): string | null => tag(b, k) || null;
+    const s = (k: readonly string[]): string | null => tag(b, k) || null;
     const wRaw = tag(b, TAG.weight);
     const row: FboBilledRow = {
       awb,
