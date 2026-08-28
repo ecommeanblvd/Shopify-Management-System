@@ -117,6 +117,20 @@ export interface InvoiceImportResult { filename: string; ok: boolean; billNumber
 const td = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 /**
+ * Thông báo khi file không khớp định dạng của hãng ĐANG MỞ.
+ *
+ * Trước đây mọi hãng ngoài FedEx/Aramex đều nhận câu "không đúng định dạng hoá
+ * đơn DHL" — tải file FedEx nhầm chỗ thì được bảo là sai định dạng DHL, không
+ * hiểu vì sao. Nêu đúng tên hãng đang mở và nhắc kiểm tra chỗ đứng.
+ */
+export function thongBaoSaiDinhDang(carrierKey: string | null): string {
+  if (carrierKey === 'fedex') return 'File không khớp định dạng hoá đơn FedEx (XLSX hoặc XML của FedEx Billing Online).';
+  if (carrierKey === 'dhl') return 'File không khớp định dạng hoá đơn DHL (CSV hoặc XML).';
+  if (carrierKey === 'aramex') return 'File không khớp định dạng hoá đơn Aramex (bảng kê Excel + hoá đơn XML của Hợp Nhất).';
+  return `Chưa hỗ trợ nhập hoá đơn cho hãng này${carrierKey ? ` (${carrierKey})` : ''} — hiện chỉ nhận FedEx, DHL và Aramex. Kiểm tra xem có đang mở đúng tài khoản carrier không.`;
+}
+
+/**
  * Nối dòng bill với shipment theo số vận đơn. Hoá đơn Việt Nam chỉ có vận đơn
  * (không có mã đơn), nên đây là đường duy nhất để đối soát biết dòng bill này
  * thuộc đơn nào.
@@ -250,10 +264,7 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
       warnings: invoices.length ? [`PDF sẽ đính vào ${invoices.length} bill: ${invoices.join(', ')}`] : ['Không khớp bill nào — import CSV/XLSX trước'],
     } };
   }
-  const dinhDang = ctx.carrierKey === 'fedex' ? 'FedEx (XLSX/XML)'
-    : ctx.carrierKey === 'aramex' ? 'Aramex (XML/PDF hoá đơn điện tử)'
-    : 'DHL (CSV/XML)';
-  return { ok: false as const, message: `File không đúng định dạng hoá đơn ${dinhDang}.` };
+  return { ok: false as const, message: thongBaoSaiDinhDang(ctx.carrierKey) };
 }
 
 type TepTai = { bytes: Uint8Array; filename: string; contentType: string };
@@ -400,8 +411,7 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
 
   // Push unsupported results
   for (const f of unsupported) {
-    const dinhDang = ctx.carrierKey === 'fedex' ? 'FedEx (XLSX/XML)' : ctx.carrierKey === 'aramex' ? 'Aramex (XML/PDF hoá đơn điện tử)' : 'DHL (CSV/XML)';
-    out.push({ filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: `Không đúng định dạng hoá đơn ${dinhDang}` });
+    out.push({ filename: f.filename, ok: false, billNumber: null, amount: null, matched: null, freight: null, message: thongBaoSaiDinhDang(ctx.carrierKey) });
   }
 
   // Phase 2: PDFs — query bills fresh from DB (includes bills just created above)

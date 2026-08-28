@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase } from './invoice-upload';
+import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase, thongBaoSaiDinhDang } from './invoice-upload';
 
 describe('detectInvoiceFormat', () => {
   it('dhl + .csv → dhl_csv', () => { expect(detectInvoiceFormat('dhl', 'HANR1.csv')).toBe('dhl_csv'); });
@@ -118,5 +118,26 @@ describe('splitByPhase', () => {
     expect(r.spreadsheets.map((x) => x.filename)).toEqual(['b.xlsx']);
     expect(r.pdfs.map((x) => x.filename)).toEqual(['c.pdf']);
     expect(r.unsupported.map((x) => x.filename)).toEqual(['a.csv']);
+  });
+});
+
+describe('thongBaoSaiDinhDang', () => {
+  it('nêu đúng định dạng của hãng đang mở', () => {
+    expect(thongBaoSaiDinhDang('fedex')).toMatch(/FedEx/);
+    expect(thongBaoSaiDinhDang('dhl')).toMatch(/DHL/);
+    expect(thongBaoSaiDinhDang('aramex')).toMatch(/Aramex/);
+  });
+
+  // Trước đây mọi hãng chưa hỗ trợ đều nhận câu "sai định dạng DHL" — tải file
+  // FedEx nhầm tài khoản thì được bảo là sai định dạng DHL, không hiểu vì sao.
+  it('hãng chưa hỗ trợ thì nói rõ là chưa hỗ trợ, không đổ cho DHL', () => {
+    const m = thongBaoSaiDinhDang('ups');
+    expect(m).toMatch(/chưa hỗ trợ/i);
+    expect(m).toMatch(/ups/);
+    expect(m).not.toMatch(/định dạng hoá đơn DHL/);
+  });
+
+  it('nhắc kiểm tra đang mở đúng tài khoản carrier', () => {
+    expect(thongBaoSaiDinhDang('sf-express')).toMatch(/đúng tài khoản/i);
   });
 });
