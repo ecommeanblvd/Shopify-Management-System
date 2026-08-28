@@ -11,6 +11,7 @@ import { parseHncManifestRows, type HncManifest } from './hnc-manifest';
 import { ghepBangKeVoiHoaDon } from './hnc-bill';
 import { ghepCapBangKeHoaDon } from './hnc-pairing';
 import { ghiBilledAramex } from './aramex-billed';
+import { nhanDangXmlHoaDon, moTaLoaiXml } from './nhan-dang-xml';
 import * as XLSX from 'xlsx';
 import { extractPdfText } from '@/features/carrier-rates/import/pdf-text';
 import { matchInvoiceNumbers } from './match-invoice-pdf';
@@ -218,7 +219,23 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
     const fbo = fmt === 'fedex_xml'
       ? await previewFboRows(parseFedexInvoiceXml(td(file.bytes)))
       : await previewFboBill(file.bytes);
-    if (fbo.bills.length === 0) return { ok: false as const, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML).' };
+    if (fbo.bills.length === 0) {
+      if (fmt !== 'fedex_xml') return { ok: false as const, message: 'Không đọc được hoá đơn FedEx từ file XLSX này.' };
+      // FedEx Việt Nam cũng phát hành hoá đơn GTGT điện tử (chuẩn TT78) —
+      // cùng đuôi .xml nhưng cấu trúc khác hẳn file Billing Online. Đọc được
+      // thì nhận luôn, thay vì bắt người dùng tự đoán vì sao bị từ chối.
+      const inv = parseVnEInvoiceXml(td(file.bytes));
+      if (inv) {
+        const b = vnInvoiceToBill(inv, ctx.currency, ctx.displayCurrency);
+        return { ok: true as const, preview: {
+          carrier: 'fedex' as const, format: fmt, billNumber: b.billNumber, amount: b.amount, currency: b.currency,
+          periodStart: b.periodStart, periodEnd: b.periodEnd, issueDate: b.issueDate, dueDate: null,
+          lineCount: b.lines.length,
+          warnings: [...b.warnings, 'Đây là hoá đơn GTGT điện tử, chỉ có tổng tiền mỗi vận đơn — không có cân nặng và chi tiết phụ phí. Muốn đối soát từng khoản thì tải thêm file XML từ FedEx Billing Online.'],
+        } };
+      }
+      return { ok: false as const, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(file.bytes)))}, không phải file tải từ FedEx Billing Online.` };
+    }
     return { ok: true as const, preview: fboPreviewFrom(fbo.bills, ctx.currency) };
   }
   if (fmt === 'aramex_xlsx') {
@@ -395,9 +412,21 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
       } else if (ctx.carrierKey === 'fedex') {
         // XML (FedEx Billing Online "Download") hay XLSX (FBO) — cùng pipeline FboBilledRow.
-        const xmlRows = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml' ? parseFedexInvoiceXml(td(f.bytes)) : null;
+        const laXml = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml';
+        const xmlRows = laXml ? parseFedexInvoiceXml(td(f.bytes)) : null;
         const pre = xmlRows ? await previewFboRows(xmlRows) : await previewFboBill(f.bytes);
-        if (!pre.bills.length) { out.push({ ...base, message: 'Không đúng định dạng hoá đơn FedEx (FBO/XML)' }); continue; }
+        if (!pre.bills.length) {
+          // Không phải file Billing Online → thử đọc như hoá đơn GTGT điện tử.
+          const inv = laXml ? parseVnEInvoiceXml(td(f.bytes)) : null;
+          if (inv) {
+            const r = await nhapHoaDonVn(ctx, inv, f);
+            seen.add(inv.billNumber);
+            out.push({ ...r, message: `${r.message ?? ''} · Hoá đơn GTGT điện tử: chỉ có tổng mỗi vận đơn, không có cân nặng và chi tiết phụ phí.` });
+            continue;
+          }
+          out.push({ ...base, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(f.bytes)))}, không phải file tải từ FedEx Billing Online` });
+          continue;
+        }
         // KHÔNG bỏ qua khi bill trùng: re-import = applyFboBill CHỈ ghi shipment_charges
         // có thay đổi (giữ nguyên đơn đã đối soát). Bill mới thì tạo, trùng thì cập nhật.
         const res = await applyFboBill({ carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId, bytes: f.bytes, filename: f.filename, contentType: f.contentType, ...(xmlRows ? { rows: xmlRows } : {}) });
