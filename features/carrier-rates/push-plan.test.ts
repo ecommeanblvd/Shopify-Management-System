@@ -1,17 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { planPush, filterTreeByRateNames, filterTreeByRatePrefixes, type PushSource } from './push-plan';
+import { normalizeRateForShopify } from '@/features/settings-sync/domain/shipping';
 
 describe('planPush', () => {
   it('map nguồn → rate name manual + carrier engine', () => {
     const p = planPush(['fedex_engine', 'manual_fedex'] as PushSource[]);
     expect(p.engineCarriers).toEqual(['fedex']);
-    expect(p.manualRateNames).toEqual(['Standard shipping']);
+    expect(p.manualRateNames).toEqual(['Express Shipping']);
     expect(p.needsZoneSync).toBe(true);
   });
-  it('manual DHL → Express shipping; DHL engine → dhl', () => {
+  it('manual DHL → Standard shipping; DHL engine → dhl', () => {
     const p = planPush(['dhl_engine', 'manual_dhl'] as PushSource[]);
     expect(p.engineCarriers).toEqual(['dhl']);
-    expect(p.manualRateNames).toEqual(['Express shipping']);
+    expect(p.manualRateNames).toEqual(['Standard shipping']);
+  });
+  it('tên manual luôn bám theo normalizeRateForShopify — không được lệch', () => {
+    expect(planPush(['manual_fedex'] as PushSource[]).manualRateNames)
+      .toEqual([normalizeRateForShopify('FedEx IP (0-0.5 kg)').name]);
+    expect(planPush(['manual_dhl'] as PushSource[]).manualRateNames)
+      .toEqual([normalizeRateForShopify('DHL Express (0-0.5 kg)').name]);
   });
   it('chỉ engine (không manual) → manualRateNames rỗng, vẫn needsZoneSync (zone-only)', () => {
     const p = planPush(['fedex_engine'] as PushSource[]);

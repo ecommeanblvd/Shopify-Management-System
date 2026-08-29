@@ -1,9 +1,15 @@
-import type { ShippingTree, ShippingZone, ShippingRate } from '@/features/settings-sync/domain/shipping';
+import { normalizeRateForShopify, type ShippingTree, type ShippingZone, type ShippingRate } from '@/features/settings-sync/domain/shipping';
 
 export type PushSource = 'fedex_engine' | 'dhl_engine' | 'manual_fedex' | 'manual_dhl';
 
-const MANUAL_RATE_NAME: Record<string, string> = { manual_fedex: 'Standard shipping', manual_dhl: 'Express shipping' };
 const MANUAL_SOURCE_PREFIX: Record<string, string> = { manual_fedex: 'FedEx IP', manual_dhl: 'DHL Express' };
+/** Tên khách thấy ở thanh toán — DẪN XUẤT từ normalizeRateForShopify (nguồn duy
+ *  nhất), không gõ tay. Trước đây gõ tay và bị ngược: FedEx ghi thành "Standard
+ *  shipping", DHL ghi thành "Express shipping". */
+const MANUAL_RATE_NAME: Record<string, string> = {
+  manual_fedex: normalizeRateForShopify(MANUAL_SOURCE_PREFIX.manual_fedex).name,
+  manual_dhl: normalizeRateForShopify(MANUAL_SOURCE_PREFIX.manual_dhl).name,
+};
 
 export interface PushPlan {
   engineCarriers: string[];
