@@ -246,6 +246,15 @@ export function denormalizeToMutationInput(
   const currentZones = current.tree.zones;
   const effectiveZones = effective.zones ?? {};
 
+  /** Rate đang có cho đúng (zone, tên sau quy đổi, bậc cân) — xem ghi chú ở
+   *  buildProfileUpdateVariables. Dò theo tên sẽ chỉ thấy một trong hàng chục
+   *  rate cùng tên, khiến màn xem trước báo tạo mới toàn bộ. */
+  const rateDangCo = (zoneName: string, rateName: string) => {
+    const { name: tenShopify } = normalizeRateForShopify(rateName);
+    const band = parseWeightBand(rateName);
+    return current.bandRates?.[bandKeyOf(zoneName, tenShopify, band ? String(Math.round(band.upper * 1000) / 1000) : 'flat')];
+  };
+
   for (const [name, zone] of Object.entries(effectiveZones)) {
     const existing = currentZones[name];
     if (!existing) {
@@ -263,12 +272,12 @@ export function denormalizeToMutationInput(
 
     const existingZoneId = current.shopifyIds.zoneIdByName[name];
     for (const [rateName, r] of Object.entries(zone.rates)) {
-      const existingRate = existing.rates[rateName];
-      const existingRateId = current.shopifyIds.rateIdByZoneAndName[`${name}.${rateName}`];
+      const existingRate = rateDangCo(name, rateName);
+      const existingRateId = existingRate?.id ?? current.shopifyIds.rateIdByZoneAndName[`${name}.${rateName}`];
       if (!existingRate) {
         out.methodDefinitionsToCreate.push({
           zoneId: existingZoneId,
-          name: rateName,
+          name: normalizeRateForShopify(rateName).name,
           price: r.price,
           currency: r.currency,
         });
@@ -278,7 +287,7 @@ export function denormalizeToMutationInput(
         out.methodDefinitionsToDelete.push(existingRateId);
         out.methodDefinitionsToCreate.push({
           zoneId: existingZoneId,
-          name: rateName,
+          name: normalizeRateForShopify(rateName).name,
           price: r.price,
           currency: r.currency,
         });
@@ -294,12 +303,15 @@ export function denormalizeToMutationInput(
     // Replace-mode: KHÔNG xoá rate vắng mặt (bảo vệ rate carrier khác); chỉ phát
     // sinh recreate-delete ở trên. Bỏ hẳn loop xoá rate vắng mặt.
     if (replaceRateNames) continue;
-    for (const rateName of Object.keys(existing.rates)) {
-      if (!zone.rates[rateName]) {
-        out.methodDefinitionsToDelete.push(
-          current.shopifyIds.rateIdByZoneAndName[`${name}.${rateName}`],
-        );
-      }
+    // Rate cửa hàng có mà bảng giá không còn — so theo bậc cân, nếu không sẽ
+    // xoá nhầm hàng loạt rate đang chạy chỉ vì tên đặt khác.
+    const conGiu = new Set(Object.keys(zone.rates).map((rn) => {
+      const b = parseWeightBand(rn);
+      return bandKeyOf(name, normalizeRateForShopify(rn).name, b ? String(Math.round(b.upper * 1000) / 1000) : 'flat');
+    }));
+    for (const [key, br] of Object.entries(current.bandRates ?? {})) {
+      if (!key.startsWith(`${name}.`)) continue;
+      if (!conGiu.has(key)) out.methodDefinitionsToDelete.push(br.id);
     }
   }
 
@@ -392,13 +404,26 @@ export function buildProfileUpdateVariables(
   const effCountries = new Set<string>();
   for (const z of Object.values(effectiveZones)) for (const c of z.countries) effCountries.add(c);
 
+  // Tên rate của hệ thống mang sẵn bậc cân ("FedEx IP (0–0.5 kg)"), còn cửa
+  // hàng gộp mọi bậc dưới một tên và phân biệt bằng ĐIỀU KIỆN cân. Phải quy
+  // đổi, nếu không đồng bộ coi như chưa có rate nào và tạo thêm hàng nghìn rate
+  // tên mới bên cạnh rate cũ — khách thấy hàng chục lựa chọn ship trùng nhau
+  // cho cùng một đơn (đo trên MEAN BLVD: xoá 31, tạo 3.917).
   const md = (name: string, r: ShippingRate) => {
-    const wc = weightConditionsFromName(name);
+    const { name: tenShopify, conditions } = normalizeRateForShopify(name);
     return {
-      name,
+      name: tenShopify,
       rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } },
-      ...(wc.length ? { weightConditionsToCreate: wc } : {}),
+      ...(conditions.length ? { weightConditionsToCreate: conditions } : {}),
     };
+  };
+
+  /** Rate đang có trên Shopify cho đúng (zone, tên sau quy đổi, bậc cân). */
+  const rateDangCo = (zoneName: string, rateName: string) => {
+    const { name: tenShopify } = normalizeRateForShopify(rateName);
+    const band = parseWeightBand(rateName);
+    const key = bandKeyOf(zoneName, tenShopify, band ? String(Math.round(band.upper * 1000) / 1000) : 'flat');
+    return current.bandRates[key];
   };
 
   // Replace-mode: id rate được chọn (∈ replaceRateNames) đã tồn tại → xoá rồi
@@ -424,11 +449,12 @@ export function buildProfileUpdateVariables(
     const mdCreate: unknown[] = [];
     const mdUpdate: unknown[] = [];
     for (const [rn, r] of Object.entries(zone.rates)) {
-      const er = existing.rates[rn];
-      const erId = current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`];
+      // So theo BẬC CÂN, không theo tên: cửa hàng có 60 rate cùng tên nên tra
+      // theo tên chỉ thấy một cái và mọi bậc còn lại bị coi là chưa tồn tại.
+      const er = rateDangCo(name, rn);
       if (!er) mdCreate.push(md(rn, r));
-      else if (replaceRateNames?.has(rn)) { recreateDeleteIds.push(erId); mdCreate.push(md(rn, r)); }
-      else if (er.price !== r.price || er.currency !== r.currency) mdUpdate.push({ id: erId, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
+      else if (replaceRateNames?.has(rn)) { recreateDeleteIds.push(er.id); mdCreate.push(md(rn, r)); }
+      else if (er.price !== r.price || er.currency !== r.currency) mdUpdate.push({ id: er.id, rateDefinition: { price: { amount: String(r.price), currencyCode: r.currency } } });
     }
     if (mdCreate.length || mdUpdate.length) {
       const zu: Record<string, unknown> = { id: zoneId };
@@ -446,8 +472,15 @@ export function buildProfileUpdateVariables(
     for (const [name, zone] of Object.entries(currentZones)) {
       const eff = effectiveZones[name];
       if (eff) {
-        for (const rn of Object.keys(zone.rates)) {
-          if (!eff.rates[rn]) methodDefinitionsToDelete.push(current.shopifyIds.rateIdByZoneAndName[`${name}.${rn}`]);
+        // Tập (tên sau quy đổi + bậc cân) mà bảng giá hệ thống phủ cho zone này.
+        const conGiu = new Set(Object.keys(eff.rates).map((rn) => {
+          const { name: tenShopify } = normalizeRateForShopify(rn);
+          const b = parseWeightBand(rn);
+          return bandKeyOf(name, tenShopify, b ? String(Math.round(b.upper * 1000) / 1000) : 'flat');
+        }));
+        for (const [key, br] of Object.entries(current.bandRates)) {
+          if (!key.startsWith(`${name}.`)) continue;
+          if (!conGiu.has(key)) methodDefinitionsToDelete.push(br.id);
         }
         continue;
       }

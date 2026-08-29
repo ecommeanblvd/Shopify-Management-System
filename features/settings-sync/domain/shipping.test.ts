@@ -80,8 +80,11 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     expect(profile.zonesToDelete).toEqual(['gid://Z/20']); // OldAmerica bị phủ trùng US
   });
 
-  it('rate có tên bậc cân → gắn weightConditionsToCreate (gate theo cân)', () => {
-    const current = { tree: { zones: {} }, shopifyIds: { profileId: 'gid://P/1', locationGroupId: 'gid://LG/9', zoneIdByName: {}, rateIdByZoneAndName: {} } };
+  // Tên rate của hệ thống mang bậc cân; đẩy lên Shopify thì bậc cân chuyển vào
+  // ĐIỀU KIỆN còn tên gộp về khuôn của cửa hàng ("Standard shipping"), nếu
+  // không khách thấy mỗi bậc là một lựa chọn ship riêng.
+  it('rate có tên bậc cân → tên gộp + gắn weightConditionsToCreate', () => {
+    const current = { tree: { zones: {} }, bandRates: {}, shopifyIds: { profileId: 'gid://P/1', locationGroupId: 'gid://LG/9', zoneIdByName: {}, rateIdByZoneAndName: {} } };
     const effective = { zones: { 'America — FedEx D': { countries: ['US'], rates: {
       'FedEx IP (0–1 kg)': { type: 'flat' as const, price: 50, currency: 'USD' },
       'FedEx IP (1–1.5 kg)': { type: 'flat' as const, price: 60, currency: 'USD' },
@@ -90,8 +93,10 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     type MethodDef = { name: string; weightConditionsToCreate?: unknown };
     const profile = out.profile as { locationGroupsToUpdate: Array<{ zonesToCreate: Array<{ methodDefinitionsToCreate: MethodDef[] }> }> };
     const zc = profile.locationGroupsToUpdate[0].zonesToCreate[0].methodDefinitionsToCreate;
-    const r0 = zc.find((m) => m.name === 'FedEx IP (0–1 kg)')!;
-    const r1 = zc.find((m) => m.name === 'FedEx IP (1–1.5 kg)')!;
+    expect(zc.map((m) => m.name)).toEqual(['Standard shipping', 'Standard shipping']);
+    const bac = (upper: number) => zc.find((m) => JSON.stringify(m.weightConditionsToCreate).includes(`"value":${upper}`))!;
+    const r0 = bac(1);
+    const r1 = bac(1.5);
     // bậc 0–1: chỉ có cận trên ≤1 (bỏ ≥0)
     expect(r0.weightConditionsToCreate).toEqual([{ criteria: { value: 1, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' }]);
     // bậc 1–1.5: cận dưới +offset (≥1.01) để không chồng bậc trước tại biên; ≤1.5
@@ -113,6 +118,12 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
         'Standard shipping': { type: 'flat' as const, price: 50, currency: 'USD' },
         'Express shipping': { type: 'flat' as const, price: 60, currency: 'USD' },
       } } } },
+      // Rate không có điều kiện cân → bậc 'flat'. Tra rate hiện có đi qua
+      // bandRates (khoá gồm bậc cân), không qua tên nữa.
+      bandRates: {
+        'America — FedEx D.Standard shipping.flat': { id: 'gid://rate/std', price: 50, currency: 'USD' },
+        'America — FedEx D.Express shipping.flat': { id: 'gid://rate/exp', price: 60, currency: 'USD' },
+      },
       shopifyIds: {
         profileId: 'gid://P/1', locationGroupId: 'gid://LG/9',
         zoneIdByName: { 'America — FedEx D': 'gid://Z/20' },
