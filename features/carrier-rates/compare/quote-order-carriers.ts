@@ -20,6 +20,9 @@ export interface OrderCarrierQuoteInput {
   effectiveDate?: Date;
   /** null → suy theo nước (Direct Signature các nước hỗ trợ). */
   signatureOptIn?: boolean | null;
+  /** Địa chỉ nhà dân → cộng phụ phí giao nhà dân (FedEx/UPS US-CA…). Caller suy
+   *  từ phân loại FedEx Address Validation của đơn (xem residential-from-class). */
+  isResidential?: boolean;
 }
 
 export interface CarrierQuoteRow {
@@ -71,6 +74,7 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
       destinationCity: input.city ?? undefined,
       dimensions: input.dimensions ?? undefined,
       effectiveDate: input.effectiveDate,
+      isResidential: input.isResidential ?? false,
       signatureOptIn: sig,
     });
     const common = {

@@ -11,6 +11,9 @@ export const FEDEX_DIRECT_SIGNATURE_COUNTRIES: string[] = [
   'DK', 'SE', 'NO', 'FI', 'PL', 'CZ', 'HU', 'RO', 'GR',
   'AU', 'NZ', 'JP', 'KR', 'SG', 'HK', 'TW', 'MY', 'TH', 'PH', 'ID', 'IN', 'CN',
   'AE', 'SA', 'IL', 'ZA', 'BR',
+  // Bổ sung 29/08 theo hoá đơn thật (từ 03/06/2026): KW 47/50 lô bị thu,
+  // BH 5/6 — FedEx CÓ thu ở hai nước này mà allowlist cũ bỏ sót.
+  'KW', 'BH',
 ];
 
 /**
@@ -22,6 +25,8 @@ export const FEDEX_DIRECT_SIGNATURE_COUNTRIES: string[] = [
  */
 export const DIRECT_SIGNATURE_EXEMPT_COUNTRIES: string[] = [
   'SA', 'QA', 'IL', 'IQ', 'OM', 'KZ', 'JO', 'MC', 'LU', 'CY', 'CZ', 'PE', 'AO',
+  // AU thêm 29/08: 39/39 lô từ 03/06/2026 KHÔNG bị thu — FedEx không thu ở Úc.
+  'AU',
 ];
 
 const SET = new Set(FEDEX_DIRECT_SIGNATURE_COUNTRIES);

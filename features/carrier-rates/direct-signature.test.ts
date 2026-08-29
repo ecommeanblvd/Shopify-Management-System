@@ -6,8 +6,14 @@ import {
 
 describe('direct-signature config', () => {
   it('fee = 92.700đ', () => expect(DIRECT_SIGNATURE_FEE_VND).toBe(92700));
-  it('US/GB/DE/AU/JP có DS', () => {
-    for (const c of ['US', 'GB', 'DE', 'AU', 'JP']) expect(countrySupportsDirectSignature(c)).toBe(true);
+  it('US/GB/DE/JP có DS', () => {
+    for (const c of ['US', 'GB', 'DE', 'JP']) expect(countrySupportsDirectSignature(c)).toBe(true);
+  });
+  it('KW/BH có DS — hoá đơn thật cho thấy FedEx CÓ thu (KW 47/50, BH 5/6)', () => {
+    for (const c of ['KW', 'BH']) expect(countrySupportsDirectSignature(c)).toBe(true);
+  });
+  it('AU KHÔNG có DS — 39/39 lô từ 03/06/2026 không lô nào bị thu', () => {
+    expect(countrySupportsDirectSignature('AU')).toBe(false);
   });
   it('case-insensitive + nước không có DS → false', () => {
     expect(countrySupportsDirectSignature('us')).toBe(true);

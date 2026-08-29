@@ -24,7 +24,6 @@ import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote, type QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
-import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-signature';
 import type { EngineEstimateReason } from './batch-shipping-estimator';
 
 export interface EngineEstimateInput {
@@ -184,7 +183,9 @@ async function tryCarriers(
       destinationPostcode: postcode ?? undefined,
       destinationCity: city ?? undefined,
       effectiveDate,
-      signatureOptIn: countrySupportsDirectSignature(country),
+      // KHÔNG bật: ký nhận FedEx/DHL đã là apply_mode='always' nên engine tự
+      // cộng. Cờ này giờ chỉ mở phụ phí THEO-CA (UPS sai địa chỉ, pallet Aramex).
+      signatureOptIn: false,
     });
     if (q.ok) {
       const display = q.breakdown.carrierCostDisplay;

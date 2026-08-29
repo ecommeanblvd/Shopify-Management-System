@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
-import { computeCheckoutRates, type CheckoutRateCarrier } from '@/features/carrier-rates/checkout-rates';
+import { computeCheckoutRates, locCarrierCheckout, type CheckoutRateCarrier } from '@/features/carrier-rates/checkout-rates';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,11 +44,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const grams = (body.rate?.items ?? []).reduce((s, it) => s + (Number(it.grams) || 0) * (Number(it.quantity) || 1), 0);
     const weightKg = Math.round((grams / 1000) * 1000) / 1000;
 
-    // Carrier accounts (FedEx + DHL) → snapshot.
-    const accts = await db
-      .select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, key: schema.carriers.key })
+    // Carrier accounts → snapshot. CHỈ hãng trong danh sách trắng checkout và
+    // đang bật (locCarrierCheckout) — xem chú thích ở checkout-rates.ts.
+    const accts = locCarrierCheckout(await db
+      .select({
+        id: schema.carrierAccounts.id, name: schema.carrierAccounts.name,
+        key: schema.carriers.key, enabled: schema.carrierAccounts.enabled,
+      })
       .from(schema.carrierAccounts)
-      .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId));
+      .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId)));
     const carriers: CheckoutRateCarrier[] = [];
     for (const a of accts) {
       // Chỉ nạp đúng dòng ODA cần cho địa chỉ này. Lọc theo nước thôi vẫn

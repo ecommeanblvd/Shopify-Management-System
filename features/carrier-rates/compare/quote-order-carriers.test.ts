@@ -93,3 +93,24 @@ describe('rankCarrierQuotes', () => {
     expect(rows[0].carrierCostDisplay).toBe(140_400);
   });
 });
+
+describe('rankCarrierQuotes — phí giao nhà dân', () => {
+  function snapRes(id: string): CarrierAccountSnapshot {
+    const s = snap(id, 300_000);
+    s.zonesByCountry = new Map([['US', { label: 'Zone US', rateByTierUpper: new Map([[1, 300_000], [2, 400_000]]) }]]);
+    s.surcharges = [{ kind: 'residential_fixed', value: 84_400, active: true, countryCodes: ['US'] }];
+    return s;
+  }
+
+  it('mặc định KHÔNG cộng — giữ nguyên hành vi cho caller chưa truyền cờ', () => {
+    const rows = rankCarrierQuotes([entry('fedex', snapRes('a'))], { country: 'US', weightKg: 1 });
+    expect(rows[0].breakdown?.residential).toBe(0);
+  });
+
+  it('isResidential=true → cộng phí giao nhà dân vào cước', () => {
+    const tat = rankCarrierQuotes([entry('fedex', snapRes('a'))], { country: 'US', weightKg: 1 });
+    const bat = rankCarrierQuotes([entry('fedex', snapRes('a'))], { country: 'US', weightKg: 1, isResidential: true });
+    expect(bat[0].breakdown?.residential).toBe(84_400);
+    expect(bat[0].vndCost!).toBeGreaterThan(tat[0].vndCost!);
+  });
+});

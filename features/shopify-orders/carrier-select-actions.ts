@@ -6,6 +6,7 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { quoteOrderAcrossCarriers, type CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
+import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 
 export interface OrderCarrierComparison {
   rows: CarrierQuoteRow[];
@@ -29,6 +30,7 @@ export async function getOrderCarrierComparison(orderId: string): Promise<OrderC
     processedAtShopify: schema.shopifyOrders.processedAtShopify,
     shippingCarrierKey: schema.shopifyOrders.shippingCarrierKey,
     selectedCarrierKey: schema.shopifyOrders.selectedCarrierKey,
+    addrClass: schema.shopifyOrders.addrClass,
   }).from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, orderId)).limit(1);
 
   if (!o) return { rows: [], currentPaidKey: null, selectedKey: null, weightKg: null, country: null, error: 'Không tìm thấy đơn' };
@@ -43,6 +45,10 @@ export async function getOrderCarrierComparison(orderId: string): Promise<OrderC
     country: o.shipCountry, weightKg,
     postcode: o.shipPostcode, city: o.shipCity,
     effectiveDate: o.processedAtShopify ?? undefined,
+    // Phí giao nhà dân theo ĐÚNG phân loại FedEx của địa chỉ này (đã verify và
+    // lưu ở addr_class). Thiếu nó thì bảng so sánh bỏ hẳn 84.400đ (FedEx) /
+    // 95.410đ (UPS) mỗi đơn US-CA, tức giá vốn ghi thiếu.
+    isResidential: laNhaDan(o.addrClass, o.shipCountry),
   });
   return { rows, ...base };
 }

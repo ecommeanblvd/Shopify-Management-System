@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { quoteOrderAcrossCarriers, type CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
+import { isDefaultResidential } from '@/features/carrier-rates/residential-default';
 
 export interface ShipHoCarrierComparison {
   rows: CarrierQuoteRow[];
@@ -47,6 +48,9 @@ export async function getShipHoCarrierComparison(orderId: string): Promise<ShipH
     country: o.country, weightKg,
     postcode: o.postcode, city: o.city,
     dimensions,
+    // Đơn ship hộ chưa qua FedEx Address Validation → mặc định theo nước, giống
+    // brand-estimate đang dùng cho cùng đơn.
+    isResidential: isDefaultResidential(o.country),
   });
   return { rows, ...base };
 }

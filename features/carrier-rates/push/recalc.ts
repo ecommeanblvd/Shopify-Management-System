@@ -24,7 +24,6 @@
 // action stages the output into market_store_overrides.
 
 import { quote, type CarrierAccountSnapshot, type QuoteResult } from '../engine/quote';
-import { countrySupportsDirectSignature } from '../direct-signature';
 import type { MarketShipping, ShippingRate, ShippingZone } from '@/features/markets/types';
 
 export interface CarrierServiceForRecalc {
@@ -152,7 +151,9 @@ export function recalcMarket(input: RecalcMarketInput): RecalcResult {
           destinationCountry: representative,
           isResidential: true,
           packagingType: 'box',
-          signatureOptIn: countrySupportsDirectSignature(representative),
+          // KHÔNG bật: ký nhận FedEx/DHL đã là apply_mode='always' nên engine tự
+          // cộng. Cờ này giờ chỉ mở phụ phí THEO-CA (UPS sai địa chỉ, pallet Aramex).
+          signatureOptIn: false,
         });
         if (q.ok) {
           rates[rateName] = {

@@ -1,5 +1,18 @@
 import { quote, type CarrierAccountSnapshot } from './engine/quote';
-import { countrySupportsDirectSignature } from './direct-signature';
+
+/**
+ * Hãng được phép chào giá ở CHECKOUT. Cố ý là danh sách trắng, không phải "mọi
+ * account đang bật": Aramex/UPS/SF là line nội bộ để logistic chọn sau khi có
+ * đơn, không phải lựa chọn cho khách. Trước đây route nạp mọi account nên khách
+ * Mỹ nhìn thấy Aramex 21.649.138 VND và UPS 3.153.572 VND cho một kiện 0,8 kg
+ * (rò rỉ từ 26/06, phát hiện 29/08).
+ */
+export const CHECKOUT_CARRIER_KEYS: readonly string[] = ['fedex', 'dhl'];
+
+/** THUẦN: lọc account được chào ở checkout — đúng hãng VÀ đang bật. */
+export function locCarrierCheckout<T extends { key: string | null; enabled: boolean }>(accounts: T[]): T[] {
+  return accounts.filter((a) => a.enabled && a.key !== null && CHECKOUT_CARRIER_KEYS.includes(a.key));
+}
 
 export interface CheckoutRateCarrier {
   serviceCode: string;
@@ -42,7 +55,11 @@ export function computeCheckoutRates(args: {
       isResidential,
       packagingType: 'box',
       effectiveDate: args.now,
-      signatureOptIn: countrySupportsDirectSignature(args.country),
+      // KHÔNG bật: phí ký nhận của FedEx/DHL đã khai apply_mode='always' nên
+      // engine tự cộng theo nước (trừ danh sách miễn). Cờ này giờ CHỈ còn mở
+      // các phụ phí THEO-CA (UPS "sai địa chỉ" 1.973.060đ, cụm pallet Aramex
+      // $766) — không bao giờ được cộng vào giá khách thấy.
+      signatureOptIn: false,
     });
     if (!q.ok) continue;
     rates.push({
