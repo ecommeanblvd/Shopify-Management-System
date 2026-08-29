@@ -3,14 +3,14 @@ import { buildSystemUpdatePlan, isUpdateOnly } from './system-update-diff';
 import type { NormalizedShipping } from '@/features/settings-sync/domain/shipping';
 import { bandKeyOf } from '@/features/settings-sync/domain/shipping';
 
-// Store: zone NA2 (US) with two Standard shipping bands (upper 0.5 @ 54.5, upper 1 @ 66).
+// Store: zone NA2 (US) with two FedEx bands (hiển thị là "Express Shipping") (upper 0.5 @ 54.5, upper 1 @ 66).
 function storeNA2(): NormalizedShipping {
   return {
-    tree: { zones: { NA2: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 66, currency: 'USD' } } } } },
+    tree: { zones: { NA2: { countries: ['US'], rates: { 'Express Shipping': { type: 'flat', price: 66, currency: 'USD' } } } } },
     shopifyIds: { profileId: 'gid://p/1', locationGroupId: 'gid://lg/1', zoneIdByName: { NA2: 'gid://z/NA2' }, rateIdByZoneAndName: {} },
     bandRates: {
-      [bandKeyOf('NA2', 'Standard shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
-      [bandKeyOf('NA2', 'Standard shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
+      [bandKeyOf('NA2', 'Express Shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
+      [bandKeyOf('NA2', 'Express Shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
     },
   };
 }
@@ -54,7 +54,7 @@ describe('buildSystemUpdatePlan', () => {
       'FedEx IP (1–2 kg)': { type: 'flat' as const, price: 80, currency: 'USD' },
     } } } };
     const plan = buildSystemUpdatePlan(storeNA2(), sys);
-    expect(plan.zoneUpdates[0].creates).toEqual([{ name: 'Standard shipping', price: 80, currency: 'USD', upperKg: 2, lowerKg: 1 }]);
+    expect(plan.zoneUpdates[0].creates).toEqual([{ name: 'Express Shipping', price: 80, currency: 'USD', upperKg: 2, lowerKg: 1 }]);
     expect(isUpdateOnly(plan)).toBe(true); // create within existing zone stays on fast path
   });
 
@@ -80,8 +80,8 @@ describe('buildSystemUpdatePlan', () => {
     const store: NormalizedShipping = {
       tree: {
         zones: {
-          NA2: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 66, currency: 'USD' } } },
-          OLD_US: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 50, currency: 'USD' } } },
+          NA2: { countries: ['US'], rates: { 'Express Shipping': { type: 'flat', price: 66, currency: 'USD' } } },
+          OLD_US: { countries: ['US'], rates: { 'Express Shipping': { type: 'flat', price: 50, currency: 'USD' } } },
         },
       },
       shopifyIds: {
@@ -91,8 +91,8 @@ describe('buildSystemUpdatePlan', () => {
         rateIdByZoneAndName: {},
       },
       bandRates: {
-        [bandKeyOf('NA2', 'Standard shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
-        [bandKeyOf('NA2', 'Standard shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
+        [bandKeyOf('NA2', 'Express Shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
+        [bandKeyOf('NA2', 'Express Shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
       },
     };
     // System tree has only NA2 (US) with changed prices — no OLD_US.
@@ -104,13 +104,13 @@ describe('buildSystemUpdatePlan', () => {
   it('system zone with unsupported country (SY) matches store zone without it → fast path (isUpdateOnly)', () => {
     // Store: zone ME1 with ['AE'] — Shopify stripped SY on previous push.
     const store: NormalizedShipping = {
-      tree: { zones: { ME1: { countries: ['AE'], rates: { 'Standard shipping': { type: 'flat', price: 50, currency: 'USD' } } } } },
+      tree: { zones: { ME1: { countries: ['AE'], rates: { 'Express Shipping': { type: 'flat', price: 50, currency: 'USD' } } } } },
       shopifyIds: {
         profileId: 'gid://p/1', locationGroupId: 'gid://lg/1',
         zoneIdByName: { ME1: 'gid://z/ME1' }, rateIdByZoneAndName: {},
       },
       bandRates: {
-        [bandKeyOf('ME1', 'Standard shipping', 'flat')]: { id: 'gid://md/ME1', price: 50, currency: 'USD' },
+        [bandKeyOf('ME1', 'Express Shipping', 'flat')]: { id: 'gid://md/ME1', price: 50, currency: 'USD' },
       },
     };
     // System: zone ME1 includes SY (unsupported) + AE, same price.
@@ -126,7 +126,7 @@ describe('buildSystemUpdatePlan', () => {
     const store: NormalizedShipping = {
       tree: {
         zones: {
-          NA2: { countries: ['US'], rates: { 'Standard shipping': { type: 'flat', price: 66, currency: 'USD' } } },
+          NA2: { countries: ['US'], rates: { 'Express Shipping': { type: 'flat', price: 66, currency: 'USD' } } },
           VN_DOMESTIC: { countries: ['VN'], rates: { 'Free shipping': { type: 'flat', price: 0, currency: 'USD' } } },
         },
       },
@@ -137,8 +137,8 @@ describe('buildSystemUpdatePlan', () => {
         rateIdByZoneAndName: {},
       },
       bandRates: {
-        [bandKeyOf('NA2', 'Standard shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
-        [bandKeyOf('NA2', 'Standard shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
+        [bandKeyOf('NA2', 'Express Shipping', '0.5')]: { id: 'gid://md/A', price: 54.5, currency: 'USD' },
+        [bandKeyOf('NA2', 'Express Shipping', '1')]: { id: 'gid://md/B', price: 66, currency: 'USD' },
       },
     };
     // System tree has only NA2 (US) with identical prices — no VN zone.

@@ -256,6 +256,10 @@ export function denormalizeToMutationInput(
   };
 
   for (const [name, zone] of Object.entries(effectiveZones)) {
+    // Zone không còn rate nào sau khi lọc theo hãng: hãng đang đẩy không phục
+    // vụ zone này. Bỏ qua hoàn toàn — coi là "bảng giá bỏ hết rate" rồi đi xoá
+    // sẽ xoá sạch giá của hãng kia đang chạy ở đó.
+    if (Object.keys(zone.rates).length === 0) continue;
     const existing = currentZones[name];
     if (!existing) {
       out.zonesToCreate.push({
@@ -381,9 +385,18 @@ export function weightConditionsFromName(rateName: string): unknown[] {
   return conds;
 }
 
+/**
+ * Tên hiển thị ở trang thanh toán cho từng hãng.
+ *
+ * Khách chỉ thấy tên dịch vụ, không thấy hãng — để mình tự quyết định chạy hãng
+ * nào phía sau mà không phải sửa gì trên Shopify (CEO chốt 29/08).
+ *
+ * Hai hãng KHÔNG được trùng tên: rate được tra theo (zone, tên, bậc cân), trùng
+ * tên là hai hãng đè lên nhau ở cùng một bậc. Có test canh việc này.
+ */
 const RATE_NAME_MAP: Array<{ prefix: string; name: string }> = [
-  { prefix: 'FedEx IP', name: 'Standard shipping' },
-  { prefix: 'DHL Express', name: 'Express shipping' },
+  { prefix: 'FedEx IP', name: 'Express Shipping' },
+  { prefix: 'DHL Express', name: 'Standard shipping' },
 ];
 
 /** Đổi tên rate nguồn (FedEx IP / DHL Express theo bậc cân) → tên gộp + điều kiện
@@ -434,6 +447,9 @@ export function buildProfileUpdateVariables(
   const zonesToCreate: unknown[] = [];
   const zonesToUpdate: unknown[] = [];
   for (const [name, zone] of Object.entries(effectiveZones)) {
+    // Xem ghi chú ở denormalizeToMutationInput: zone rỗng rate = hãng đang đẩy
+    // không phục vụ zone này, không được đụng tới.
+    if (Object.keys(zone.rates).length === 0) continue;
     const existing = currentZones[name];
     if (!existing) {
       zonesToCreate.push({
@@ -472,6 +488,9 @@ export function buildProfileUpdateVariables(
     for (const [name, zone] of Object.entries(currentZones)) {
       const eff = effectiveZones[name];
       if (eff) {
+        // Zone không còn rate nào sau khi lọc theo hãng → hãng đang đẩy không
+        // phục vụ zone này. Không được xoá rate của hãng kia đang chạy ở đó.
+        if (Object.keys(eff.rates).length === 0) continue;
         // Tập (tên sau quy đổi + bậc cân) mà bảng giá hệ thống phủ cho zone này.
         const conGiu = new Set(Object.keys(eff.rates).map((rn) => {
           const { name: tenShopify } = normalizeRateForShopify(rn);

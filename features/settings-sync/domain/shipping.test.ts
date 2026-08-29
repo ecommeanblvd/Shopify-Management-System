@@ -93,7 +93,7 @@ describe('buildProfileUpdateVariables — đúng schema DeliveryProfileInput', (
     type MethodDef = { name: string; weightConditionsToCreate?: unknown };
     const profile = out.profile as { locationGroupsToUpdate: Array<{ zonesToCreate: Array<{ methodDefinitionsToCreate: MethodDef[] }> }> };
     const zc = profile.locationGroupsToUpdate[0].zonesToCreate[0].methodDefinitionsToCreate;
-    expect(zc.map((m) => m.name)).toEqual(['Standard shipping', 'Standard shipping']);
+    expect(zc.map((m) => m.name)).toEqual(['Express Shipping', 'Express Shipping']);
     const bac = (upper: number) => zc.find((m) => JSON.stringify(m.weightConditionsToCreate).includes(`"value":${upper}`))!;
     const r0 = bac(1);
     const r1 = bac(1.5);
@@ -230,17 +230,17 @@ describe('denormalizeToMutationInput', () => {
 });
 
 describe('normalizeRateForShopify', () => {
-  it('FedEx IP → Standard shipping + điều kiện cân (offset 0.01)', () => {
+  it('FedEx IP → Express Shipping + điều kiện cân (offset 0.01)', () => {
     expect(normalizeRateForShopify('FedEx IP (1.5–2 kg)')).toEqual({
-      name: 'Standard shipping',
+      name: 'Express Shipping',
       conditions: [
         { criteria: { value: 1.51, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
         { criteria: { value: 2, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
       ],
     });
   });
-  it('DHL Express → Express shipping', () => {
-    expect(normalizeRateForShopify('DHL Express (0–0.5 kg)').name).toBe('Express shipping');
+  it('DHL Express → Standard shipping', () => {
+    expect(normalizeRateForShopify('DHL Express (0–0.5 kg)').name).toBe('Standard shipping');
   });
   it('bậc đầu lower=0 → chỉ có điều kiện trên', () => {
     expect(normalizeRateForShopify('FedEx IP (0–0.5 kg)').conditions).toEqual([
@@ -281,7 +281,7 @@ describe('buildCleanRebuildVariables', () => {
       countries: unknown; methodDefinitionsToCreate: Array<Record<string, unknown>>;
     };
     expect(gc1.countries).toEqual([{ code: 'HK', includeAllProvinces: true }]);
-    expect(gc1.methodDefinitionsToCreate[0].name).toBe('Standard shipping');
+    expect(gc1.methodDefinitionsToCreate[0].name).toBe('Express Shipping');
     expect(gc1.methodDefinitionsToCreate[0].weightConditionsToCreate).toHaveLength(2);
     expect(gc1.methodDefinitionsToCreate[0].rateDefinition).toEqual({ price: { amount: '30', currencyCode: 'USD' } });
   });

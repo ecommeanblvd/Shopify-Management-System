@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeShopifyDeliveryProfile, buildProfileUpdateVariables, denormalizeToMutationInput } from './shipping';
+import { normalizeShopifyDeliveryProfile, buildProfileUpdateVariables, denormalizeToMutationInput, normalizeRateForShopify } from './shipping';
 
-/** Cửa hàng đang có zone NA2 với 2 bậc cân, đều tên "Standard shipping". */
+/** Cửa hàng đang có zone NA2 với 2 bậc cân, đều mang tên hiển thị của FedEx. */
 const shopifyHienCo = () => normalizeShopifyDeliveryProfile({
   deliveryProfiles: { edges: [{ node: {
     id: 'gid://p/1', name: 'General', default: true,
     profileLocationGroups: [{ locationGroup: { id: 'gid://lg/1' }, locationGroupZones: { edges: [{ node: {
       zone: { id: 'gid://z/NA2', name: 'NA2', countries: [{ code: { countryCode: 'US', restOfWorld: false } }] },
       methodDefinitions: { edges: [
-        { node: { id: 'gid://md/A', name: 'Standard shipping',
+        { node: { id: 'gid://md/A', name: 'Express Shipping',
           rateProvider: { __typename: 'DeliveryRateDefinition', price: { amount: '54.5', currencyCode: 'USD' } },
           methodConditions: [{ field: 'TOTAL_WEIGHT', operator: 'LESS_THAN_OR_EQUAL_TO', conditionCriteria: { __typename: 'Weight', value: 0.5, unit: 'KILOGRAMS' } }] } },
-        { node: { id: 'gid://md/B', name: 'Standard shipping',
+        { node: { id: 'gid://md/B', name: 'Express Shipping',
           rateProvider: { __typename: 'DeliveryRateDefinition', price: { amount: '66', currencyCode: 'USD' } },
           methodConditions: [
             { field: 'TOTAL_WEIGHT', operator: 'GREATER_THAN_OR_EQUAL_TO', conditionCriteria: { __typename: 'Weight', value: 0.51, unit: 'KILOGRAMS' } },
@@ -75,7 +75,7 @@ describe('đồng bộ giá ship: quy đổi tên rate về khuôn của cửa h
       { locationGroupsToUpdate: Array<{ zonesToUpdate?: Array<{ methodDefinitionsToCreate?: Array<Record<string, unknown>> }> }> };
     const tao = p.locationGroupsToUpdate[0].zonesToUpdate?.[0].methodDefinitionsToCreate ?? [];
     expect(tao).toHaveLength(1);
-    expect(tao[0].name).toBe('Standard shipping');
+    expect(tao[0].name).toBe('Express Shipping');
     expect(tao[0].weightConditionsToCreate).toEqual([
       { criteria: { value: 1.01, unit: 'KILOGRAMS' }, operator: 'GREATER_THAN_OR_EQUAL_TO' },
       { criteria: { value: 1.5, unit: 'KILOGRAMS' }, operator: 'LESS_THAN_OR_EQUAL_TO' },
@@ -92,7 +92,7 @@ describe('đồng bộ giá ship: quy đổi tên rate về khuôn của cửa h
     const p = buildProfileUpdateVariables(shopifyHienCo(), themZone, 'gid://lg/1').profile as
       { locationGroupsToUpdate: Array<{ zonesToCreate?: Array<{ name: string; methodDefinitionsToCreate: Array<{ name: string }> }> }> };
     const z = (p.locationGroupsToUpdate[0].zonesToCreate ?? []).find((x) => x.name === 'EU9')!;
-    expect(z.methodDefinitionsToCreate[0].name).toBe('Express shipping');
+    expect(z.methodDefinitionsToCreate[0].name).toBe('Standard shipping');
   });
 });
 
@@ -118,7 +118,7 @@ describe('xem trước phải đếm giống lúc ghi thật', () => {
     };
     const d = denormalizeToMutationInput(shopifyHienCo(), them);
     expect(d.methodDefinitionsToCreate).toHaveLength(1);
-    expect(d.methodDefinitionsToCreate[0].name).toBe('Standard shipping');
+    expect(d.methodDefinitionsToCreate[0].name).toBe('Express Shipping');
   });
 
   it('bậc cân cửa hàng có mà bảng giá bỏ đi thì mới tính là xoá', () => {
@@ -127,5 +127,57 @@ describe('xem trước phải đếm giống lúc ghi thật', () => {
     } } } };
     const d = denormalizeToMutationInput(shopifyHienCo(), bot);
     expect(d.methodDefinitionsToDelete).toEqual(['gid://md/B']);
+  });
+});
+
+describe('tên hiển thị của từng hãng', () => {
+  it('FedEx hiện là "Express Shipping" ở trang thanh toán', () => {
+    expect(normalizeRateForShopify('FedEx IP (0–0.5 kg)').name).toBe('Express Shipping');
+  });
+
+  it('DHL hiện là "Standard shipping"', () => {
+    expect(normalizeRateForShopify('DHL Express (0–0.5 kg)').name).toBe('Standard shipping');
+  });
+
+  // Rate được tra theo (zone, tên, bậc cân). Hai hãng trùng tên là đè lên nhau
+  // ở cùng một bậc — mất giá của một hãng mà không có dấu hiệu gì.
+  it('không hãng nào được trùng tên với hãng khác', () => {
+    const ten = ['FedEx IP (0–0.5 kg)', 'DHL Express (0–0.5 kg)'].map((x) => normalizeRateForShopify(x).name);
+    expect(new Set(ten).size).toBe(ten.length);
+  });
+
+  it('hãng chưa khai trong bảng thì giữ nguyên tên, không im lặng gộp nhầm', () => {
+    expect(normalizeRateForShopify('UPS Saver (0–0.5 kg)').name).toBe('UPS Saver (0–0.5 kg)');
+  });
+});
+
+// Đẩy riêng một hãng (lọc theo tên rate) thì zone mà hãng đó KHÔNG phục vụ sẽ
+// còn 0 rate sau khi lọc. Nếu coi đó là "bảng giá bỏ hết rate" mà đi xoá, thì
+// đẩy FedEx sẽ xoá sạch 4 zone chỉ có DHL — 25 nước đang bán được lập tức
+// không đặt hàng được nữa (đo thật trên MEAN BLVD trước khi đẩy).
+describe('đẩy riêng một hãng không được đụng zone hãng đó không phục vụ', () => {
+  const zoneRong = { zones: { NA2: { countries: ['US'], rates: {} } } };
+
+  it('zone rỗng rate sau khi lọc thì KHÔNG xoá rate đang chạy', () => {
+    const d = denormalizeToMutationInput(shopifyHienCo(), zoneRong);
+    expect(d.methodDefinitionsToDelete).toEqual([]);
+  });
+
+  it('cũng không tạo gì cho zone đó', () => {
+    const d = denormalizeToMutationInput(shopifyHienCo(), zoneRong);
+    expect(d.methodDefinitionsToCreate).toEqual([]);
+    expect(d.methodDefinitionsToUpdate).toEqual([]);
+  });
+
+  it('hàm ghi thật cũng bỏ qua zone rỗng', () => {
+    const p = buildProfileUpdateVariables(shopifyHienCo(), zoneRong, 'gid://lg/1').profile as
+      { methodDefinitionsToDelete?: string[]; locationGroupsToUpdate: Array<{ zonesToUpdate?: unknown[] }> };
+    expect(p.methodDefinitionsToDelete ?? []).toEqual([]);
+    expect(p.locationGroupsToUpdate[0].zonesToUpdate ?? []).toEqual([]);
+  });
+
+  it('zone có rate thì vẫn xử lý bình thường', () => {
+    const d = denormalizeToMutationInput(shopifyHienCo(), heThong);
+    expect(d.methodDefinitionsToUpdate.length).toBeGreaterThan(0);
   });
 });
