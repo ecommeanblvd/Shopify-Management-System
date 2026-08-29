@@ -964,6 +964,69 @@ describe('quote engine', () => {
     });
   });
 
+  describe("service_key='direct_signature' — bật/tắt riêng dịch vụ ký nhận", () => {
+    const snapKyNhan = () => makeSnap({
+      surcharges: [
+        { kind: 'addon_fixed', value: 92_700, active: true, fuelable: true, applyMode: 'always', serviceKey: 'direct_signature' },
+        { kind: 'fuel_percent', value: 50, active: true },
+      ],
+    });
+
+    it('mặc định CÓ dùng — hàng ta tự vận hành luôn gửi kèm ký nhận', () => {
+      const r = quote(snapKyNhan(), { weightKg: 1, destinationCountry: 'SG' });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addons).toBe(92_700);
+      expect(r.breakdown.addonReference).toBe(0);
+    });
+
+    it('directSignature=false (ship hộ, brand không chọn) → KHÔNG vào total, rơi xuống reference', () => {
+      const r = quote(snapKyNhan(), { weightKg: 1, destinationCountry: 'SG', directSignature: false });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addons).toBe(0);
+      expect(r.breakdown.addonReference).toBe(92_700);
+    });
+
+    it('tắt ký nhận cũng phải rút khỏi fuel + VAT, không chỉ trừ khỏi tổng', () => {
+      const co = quote(snapKyNhan(), { weightKg: 1, destinationCountry: 'SG' });
+      const khong = quote(snapKyNhan(), { weightKg: 1, destinationCountry: 'SG', directSignature: false });
+      expect(co.ok && khong.ok).toBe(true);
+      if (!co.ok || !khong.ok) return;
+      // fuelable=true → phần chênh phải LỚN HƠN đúng 92.700 (còn fuel 50% trên nó).
+      expect(co.breakdown.fuel - khong.breakdown.fuel).toBe(46_350);
+      expect(co.breakdown.carrierCost - khong.breakdown.carrierCost).toBeGreaterThan(92_700);
+    });
+
+    it('directSignature=false KHÔNG đụng phụ phí khác (chỉ tắt đúng dòng có service_key)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'addon_fixed', value: 92_700, active: true, fuelable: true, applyMode: 'always', serviceKey: 'direct_signature' },
+          { kind: 'addon_fixed', value: 40_000, active: true, fuelable: true, applyMode: 'always' },
+          { kind: 'fuel_percent', value: 50, active: true },
+        ],
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', directSignature: false });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.breakdown.addons).toBe(40_000);
+    });
+
+    it('nước MIỄN thì tắt hay bật đều không thu', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'addon_fixed', value: 92_700, active: true, applyMode: 'always', serviceKey: 'direct_signature', excludedCountryCodes: ['SG'] },
+        ],
+      });
+      for (const ds of [true, false]) {
+        const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', directSignature: ds });
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        expect(r.breakdown.addons).toBe(0);
+      }
+    });
+  });
+
   describe('addon_fixed (Dịch vụ bổ sung)', () => {
     it("apply_mode='always' cộng vào total, fuelable=false nằm NGOÀI fuel base (DHL Direct Signature)", () => {
       const snap = makeSnap({

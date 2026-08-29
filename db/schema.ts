@@ -478,6 +478,9 @@ export const carrierSurcharges = pgTable('carrier_surcharges', {
   // countryCodes (danh sách BAO GỒM); nếu có cả hai, exclusion thắng.
   // Dùng đầu tiên cho FedEx Direct Signature (13 nước miễn, spec 2026-06-11).
   excludedCountryCodes: jsonb('excluded_country_codes'),
+  // Khoá dịch vụ tuỳ chọn theo lô (vd 'direct_signature'). NULL = phụ phí
+  // thường. Xem migration 0124 + QuoteInput.directSignature.
+  serviceKey: text('service_key'),
   active: boolean('active').notNull().default(true),
   startsAt: timestamp('starts_at'),
   endsAt: timestamp('ends_at'),

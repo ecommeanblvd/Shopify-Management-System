@@ -215,6 +215,7 @@ async function docPhanTinh(
       fuelable: s.fuelable,
       vatable: s.vatable,
       applyMode: (s.applyMode === 'when_billed' ? 'when_billed' : 'always') as 'always' | 'when_billed',
+      serviceKey: s.serviceKey ?? null,
       note: s.note ?? null,
       // Engine gates each row by (startsAt, endsAt) against the caller's
       // effectiveDate inside `quote()`. Loader still filters `active=true`

@@ -105,7 +105,11 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
     destinationCountry: country,
     destinationPostcode: parcel.postcode, destinationCity: parcel.city,
     isResidential: isDefaultResidential(country),
-    signatureOptIn: shouldChargeDirectSignature(parcel.directSignature ?? false, country),
+    // Ship hộ: ký nhận theo LỰA CHỌN CỦA BRAND, không auto như hàng ta tự vận
+    // hành. signatureOptIn để false — cờ đó mở cả phụ phí theo-ca (sai địa chỉ,
+    // pallet), không phải thứ dùng để bật ký nhận.
+    directSignature: shouldChargeDirectSignature(parcel.directSignature ?? false, country),
+    signatureOptIn: false,
     // asOf phải vào cả quote() — engine gate fuel/phụ phí theo effectiveDate,
     // thiếu nó thì fuel luôn lấy tuần HIỆN TẠI dù snapshot đã load theo asOf.
     effectiveDate: asOf,
