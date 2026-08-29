@@ -6,13 +6,8 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { quoteOrderAcrossCarriers, type CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { isDefaultResidential } from '@/features/carrier-rates/residential-default';
+import { kyNhanTheoBaoGia } from './signature-from-quote';
 
-/** Báo giá đã lưu có cộng phí ký nhận không (breakdown.addons > 0). Thiếu báo
- *  giá → false: ship hộ không auto thu, đoán "có" là tính dư cho brand. */
-export function kyNhanTheoBaoGia(quoteBreakdown: unknown): boolean {
-  const b = quoteBreakdown as { addons?: unknown } | null | undefined;
-  return Number(b?.addons ?? 0) > 0;
-}
 
 export interface ShipHoCarrierComparison {
   rows: CarrierQuoteRow[];

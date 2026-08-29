@@ -23,6 +23,9 @@ export interface OrderCarrierQuoteInput {
   /** Địa chỉ nhà dân → cộng phụ phí giao nhà dân (FedEx/UPS US-CA…). Caller suy
    *  từ phân loại FedEx Address Validation của đơn (xem residential-from-class). */
   isResidential?: boolean;
+  /** Lô có dùng dịch vụ ký nhận không. Bỏ trống = có (hàng ta tự vận hành luôn
+   *  gửi kèm). Ship hộ truyền theo lựa chọn của brand. */
+  directSignature?: boolean;
 }
 
 export interface CarrierQuoteRow {
@@ -75,6 +78,7 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
       dimensions: input.dimensions ?? undefined,
       effectiveDate: input.effectiveDate,
       isResidential: input.isResidential ?? false,
+      ...(input.directSignature === undefined ? {} : { directSignature: input.directSignature }),
       signatureOptIn: sig,
     });
     const common = {
