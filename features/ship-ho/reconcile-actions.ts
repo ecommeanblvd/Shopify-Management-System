@@ -10,6 +10,7 @@ import { estimateForBrand } from './brand-estimate';
 import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
+import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile } from './reconcile-decision';
 
 export interface ReconcileSummary {
@@ -119,8 +120,6 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       trackingNumber: schema.shipHoOrders.trackingNumber,
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       chargedVnd: schema.shipHoOrders.chargedVnd,
-      prevActualChargedVnd: schema.shipHoOrders.actualChargedVnd,
-      prevReconcile: schema.shipHoOrders.reconcileStatus,
       prevDecision: schema.shipHoOrders.reconcileDecision,
       dimLengthCm: schema.shipHoOrders.dimLengthCm,
       dimWidthCm: schema.shipHoOrders.dimWidthCm,
@@ -132,6 +131,8 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     .from(schema.shipHoOrders)
     .where(isNotNull(schema.shipHoOrders.trackingNumber));
   summary.totalWithTracking = orders.length;
+  // Giá cuối đã gửi MMP của từng đơn — nạp 1 lượt để vòng lặp không query lẻ.
+  const daGuiTheoDon = await giaCuoiDaGuiTheoDon(orders.map((o) => o.id));
 
   for (const o of orders) {
     const billed = await getBilledByTracking(o.trackingNumber ?? '');
@@ -242,15 +243,15 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     }).where(eq(schema.shipHoOrders.id, o.id));
 
     // Đẩy giá chính thức (order.reconciled) CHỈ KHI shouldEmitCharge (tự khớp hoặc
-    // đã 'accepted'). 'pending_review'/'claiming' → chưa đẩy. Chỉ bắn khi MỚI đối
-    // soát / giá cuối ĐỔI (idempotent). Không lộ cước carrier.
+    // đã 'accepted'). 'pending_review'/'claiming' → chưa đẩy. Không lộ cước carrier.
+    //
+    // Chống bắn trùng: so với giá ĐÃ GỬI THẬT (đọc outbox), không so với cột trên
+    // đơn. Cột `actual_charged_vnd` bị ghi đè mỗi lượt chạy, còn upload lại hoá
+    // đơn thì reset `reconcile_status` → cờ "lần đầu" bật lại và bắn lại y giá cũ.
     const finalChargedVnd = actualChargedVnd ?? quotedCharged;
-    const prevFinal = o.prevActualChargedVnd == null ? null : Math.round(Number(o.prevActualChargedVnd));
-    const isNew = o.prevReconcile !== 'reconciled';
-    if (shouldEmitCharge && finalChargedVnd != null && (isNew || (actualChargedVnd != null && actualChargedVnd !== prevFinal))) {
-      await emitShipHoEvent(
+    if (shouldEmitCharge && finalChargedVnd != null) {
+      await banGiaCuoiNeuDoi(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-        'order.reconciled',
         {
           finalChargedVnd,
           previousChargedVnd: quotedCharged,
@@ -258,6 +259,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           billedWeightKg: kgToStore,
           scaleWeightKg: billed.weightKg,
         },
+        daGuiTheoDon.get(o.id) ?? null,
       );
     }
 

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { emitShipHoEvent } from './mmp-events';
+import { banGiaCuoiNeuDoi } from './final-charge-emit';
 
 const num = (v: string | null): number | null => {
   if (v == null) return null;
@@ -49,9 +50,9 @@ export async function acceptShipHoDiscrepancy(orderId: string): Promise<void> {
   const quoted = num(o.chargedVnd);
   const finalChargedVnd = num(o.actualChargedVnd) ?? quoted;
   if (finalChargedVnd != null) {
-    await emitShipHoEvent(
+    // Chặn bắn trùng: cùng giá VÀ cùng kết luận với lần đã gửi → bỏ.
+    await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      'order.reconciled',
       {
         finalChargedVnd,
         previousChargedVnd: quoted,
@@ -118,9 +119,9 @@ export async function resolveShipHoClaim(orderId: string, credited: boolean): Pr
   const quoted = num(o.chargedVnd);
   const finalChargedVnd = num(o.actualChargedVnd) ?? quoted;
   if (finalChargedVnd != null) {
-    await emitShipHoEvent(
+    // Chặn bắn trùng: cùng giá VÀ cùng kết luận với lần đã gửi → bỏ.
+    await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      'order.reconciled',
       {
         finalChargedVnd,
         previousChargedVnd: quoted,
