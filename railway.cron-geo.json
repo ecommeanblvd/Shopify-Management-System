@@ -1,5 +1,12 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "build": { "builder": "NIXPACKS", "buildCommand": "npm run build" },
-  "deploy": { "startCommand": "npm run cron:sync-geo" }
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run build"
+  },
+  "deploy": {
+    "startCommand": "npm run cron:sync-geo",
+    "cronSchedule": "0 9 1 * *",
+    "restartPolicyType": "NEVER"
+  }
 }

@@ -1,5 +1,12 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "build": { "builder": "NIXPACKS", "buildCommand": "npm run build" },
-  "deploy": { "startCommand": "npm run cron:remind-fuel" }
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm run build"
+  },
+  "deploy": {
+    "startCommand": "npm run cron:remind-fuel",
+    "cronSchedule": "0 8 * * 1",
+    "restartPolicyType": "NEVER"
+  }
 }
