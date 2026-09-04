@@ -31,13 +31,17 @@ export async function trackAny(carrierKey: string, trackingNumber: string): Prom
       return { status: r.status, description: r.description, deliveredAt: r.deliveredAt, source: 'carrier' };
     } catch (e) {
       if (!hasTrackingMoreKey()) throw e; // không có fallback → nổi lỗi như cũ
-      // Hãng lỗi (403/429/timeout…) → thử TrackingMore. Nếu fallback cũng lỗi thì
-      // ném lỗi GỐC của hãng (thông tin chẩn đoán tốt hơn).
+      // Hãng lỗi (403/429/timeout…) → thử TrackingMore. Nếu fallback CŨNG lỗi thì
+      // báo CẢ HAI lý do: trước đây chỉ ném lỗi của hãng nên lỗi của fallback bị
+      // nuốt sạch — nhìn log tưởng chỉ FedEx hỏng, trong khi TrackingMore đã hết
+      // quota từ lâu (bắt được 04/09, suýt chẩn đoán sai).
       try {
         const f = await trackViaTrackingMore(carrierKey, trackingNumber);
         return { ...f, source: 'trackingmore' };
-      } catch {
-        throw e;
+      } catch (eFallback) {
+        const loiHang = e instanceof Error ? e.message : String(e);
+        const loiDuPhong = eFallback instanceof Error ? eFallback.message : String(eFallback);
+        throw new Error(`cả hai nguồn tracking đều hỏng — ${carrierKey}: ${loiHang} | dự phòng: ${loiDuPhong}`);
       }
     }
   }
