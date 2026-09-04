@@ -1,7 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { eq, inArray, and, or, isNull, ne } from 'drizzle-orm';
+import { eq, inArray, and, or, isNull, ne, gte } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -29,7 +29,14 @@ export async function backfillMmpOrders(opts?: { limit?: number }): Promise<Back
 /** LÕI không-auth: đẩy đơn brand CHƯA gửi sang MMP. Dùng bởi nút operator + cron
  *  (đơn brand chưa từng push không được retry-cron đụng tới — retry chỉ lo dòng
  *  pending/failed đã có; auto-push lại chỉ bắn lúc thao tác phân bổ). */
-export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<BackfillResult> {
+export async function pushUnsentBrandOrders(opts?: { limit?: number; sinceDays?: number }): Promise<BackfillResult> {
+  // Cửa sổ ngày cho ĐƯỜNG CRON: chạy tự động mà không giới hạn thì lần đầu sẽ
+  // dội sang MMP toàn bộ tồn đọng từ 2020 (2.233 đơn, đo 04/09) — đơn cũ có
+  // trước khi tích hợp, không ai muốn nhận lại. Nút operator vẫn để trống =
+  // không giới hạn, vì đó là thao tác có chủ ý.
+  const moc = opts?.sinceDays && opts.sinceDays > 0
+    ? new Date(Date.now() - opts.sinceDays * 86_400_000)
+    : null;
   // Đơn có ≥1 dòng brand VÀ CHƯA gửi thành công sang MMP (chưa có dòng push,
   // hoặc đang pending/failed). LOẠI đơn đã 'sent': trước đây query lấy hết rồi
   // pushOrderToMmp tự bỏ qua đơn sent → khi bấm với limit N, N đơn đầu toàn
@@ -52,6 +59,7 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<
       and(
         inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]),
         or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+        ...(moc ? [gte(schema.orderFulfillment.createdAt, moc)] : []),
       ),
     );
 
@@ -68,6 +76,7 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number }): Promise<
       and(
         inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)),
         or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+        ...(moc ? [gte(schema.shopifyOrders.processedAtShopify, moc)] : []),
       ),
     );
 

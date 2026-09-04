@@ -52,6 +52,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Quy đổi USD của Aramex sai tỉ giá' },
   { key: 'remind-fuel', ten: 'Nhắc nhập xăng dầu thủ công', chuKyPhut: 7 * NGAY,
     hauQua: 'Quên nhập mức xăng dầu cho UPS/SF' },
+  { key: 'retry-mmp-orders', ten: 'Đẩy đơn sang MMP', chuKyPhut: 1 * GIO,
+    hauQua: 'MMP không nhận được đơn mới → đối soát công nợ brand thiếu đơn' },
   { key: 'retry-ship-ho-events', ten: 'Gửi lại sự kiện MMP còn kẹt', chuKyPhut: 15 * PHUT,
     hauQua: 'Sự kiện hỏng nằm kẹt vĩnh viễn, MMP không nhận được' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
