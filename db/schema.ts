@@ -2161,6 +2161,24 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
 
 export const shipHoEventStatusEnum = pgEnum('ship_ho_event_status', ['pending', 'delivered', 'failed']);
 
+/**
+ * Nhật ký chạy tác vụ nền — mỗi lần chạy 1 dòng. Xem migration 0125 và
+ * features/jobs/registry.ts (danh sách tác vụ + chu kỳ mong đợi).
+ */
+export const jobRuns = pgTable('job_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  jobKey: text('job_key').notNull(),
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  finishedAt: timestamp('finished_at'),
+  status: text('status').notNull().default('running'),
+  durationMs: integer('duration_ms'),
+  summary: jsonb('summary'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('job_runs_key_started_idx').on(t.jobKey, t.startedAt),
+]);
+
 export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
   id: uuid('id').defaultRandom().primaryKey(),
   orderId: uuid('order_id').references(() => shipHoOrders.id).notNull(),

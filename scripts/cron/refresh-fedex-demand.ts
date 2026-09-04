@@ -22,6 +22,7 @@
 
 import { checkFedExDemandUpdates } from '@/features/carrier-rates/demand-fetcher/alert';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const result = await checkFedExDemandUpdates();
 
@@ -44,14 +45,4 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(
-      `refresh-fedex-demand: fatal: ${err instanceof Error ? err.stack : String(err)}\n`,
-    );
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    // Drizzle's pg pool holds the process open otherwise.
-    process.exit();
-  });
+chayCron('refresh-demand', main);

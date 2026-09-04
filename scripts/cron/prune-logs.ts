@@ -10,6 +10,7 @@
 
 import { pruneOldLogs } from '@/features/db-maintenance/prune-logs';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const results = await pruneOldLogs();
   for (const r of results) {
@@ -19,9 +20,4 @@ async function main(): Promise<void> {
   process.stdout.write(`prune-logs: tổng ${tong.toLocaleString('vi-VN')} dòng đã dọn\n`);
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`prune-logs: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => process.exit());
+chayCron('prune-logs', main);

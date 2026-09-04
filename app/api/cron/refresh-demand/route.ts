@@ -25,6 +25,7 @@
 import { NextResponse } from 'next/server';
 import { checkFedExDemandUpdates } from '@/features/carrier-rates/demand-fetcher/alert';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 // Don't pre-render or cache.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,7 +44,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await checkFedExDemandUpdates();
+    const result = await chayJobApi('refresh-demand', () => checkFedExDemandUpdates());
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(

@@ -27,6 +27,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const accounts = await db
     .select({
@@ -75,12 +76,4 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`refresh-carrier-fuel: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    // Drizzle's pg pool holds the process open otherwise.
-    process.exit();
-  });
+chayCron('refresh-fuel', main);

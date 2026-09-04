@@ -10,6 +10,7 @@ import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcil
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const results = await runHourlySync();
   let failures = 0;
@@ -96,9 +97,4 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`sync-orders: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => process.exit());
+chayCron('sync-orders', main);

@@ -10,6 +10,7 @@
 
 import { refreshVcbFx } from '@/features/carrier-rates/fx/refresh-vcb';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const r = await refreshVcbFx();
   process.stdout.write(
@@ -17,9 +18,4 @@ async function main(): Promise<void> {
   );
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`refresh-vcb: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => process.exit());
+chayCron('refresh-vcb-fx', main);

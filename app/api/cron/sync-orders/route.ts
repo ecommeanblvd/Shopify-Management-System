@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server';
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 // Đồng bộ nhiều store có thể lâu — nới trần thời gian chạy.
@@ -34,7 +35,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const results = await runHourlySync();
+    const results = await chayJobApi('sync-orders', () => runHourlySync());
     return NextResponse.json({ ok: true, ran: results.length, results });
   } catch (err) {
     return NextResponse.json(

@@ -21,6 +21,7 @@ import { db, schema } from '@/db/client';
 import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 import { checkFedExDemandUpdates } from '@/features/carrier-rates/demand-fetcher/alert';
 
+import { chayCron } from '@/features/jobs/run';
 async function refreshFuel(): Promise<number> {
   const accounts = await db
     .select({ id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, carrierKey: schema.carriers.key })
@@ -66,9 +67,4 @@ async function main(): Promise<void> {
   if (fuelFailures + demandFailures > 0) process.exitCode = 1;
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`refresh-surcharges: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => process.exit());
+chayCron('refresh-surcharges', main);

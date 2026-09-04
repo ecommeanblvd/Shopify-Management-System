@@ -17,6 +17,7 @@
 
 import { and, eq, notInArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { chayCron } from '@/features/jobs/run';
 import {
   findStaleManualFuel,
   AUTO_FUEL_CARRIER_KEYS,
@@ -91,12 +92,4 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`remind-manual-fuel: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    // Drizzle's pg pool holds the process open otherwise.
-    process.exit();
-  });
+chayCron('remind-fuel', main);

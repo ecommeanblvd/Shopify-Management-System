@@ -67,8 +67,8 @@ describe('canSeeNavItem', () => {
 });
 
 describe('SETTINGS_ITEMS', () => {
-  it('has nine permission-gated, grouped, described items', () => {
-    expect(SETTINGS_ITEMS).toHaveLength(9);
+  it('has ten permission-gated, grouped, described items', () => {
+    expect(SETTINGS_ITEMS).toHaveLength(10);
     for (const item of SETTINGS_ITEMS) {
       expect(item.requires).toBeTruthy();
       expect(item.description.length).toBeGreaterThan(0);

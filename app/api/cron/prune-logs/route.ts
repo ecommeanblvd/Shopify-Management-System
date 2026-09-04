@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server';
 import { pruneOldLogs } from '@/features/db-maintenance/prune-logs';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -40,7 +41,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const results = await pruneOldLogs();
+    const results = await chayJobApi('prune-logs', () => pruneOldLogs());
     return NextResponse.json({
       ok: true,
       prunedAt: new Date().toISOString(),

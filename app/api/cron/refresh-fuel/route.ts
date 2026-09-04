@@ -29,6 +29,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 // Don't pre-render or cache.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -78,10 +79,10 @@ export async function GET(request: Request): Promise<Response> {
   const results: PerAccountResult[] = [];
   for (const account of accounts) {
     try {
-      const applied = await refreshCarrierFuel({
+      const applied = await chayJobApi('refresh-fuel', () => refreshCarrierFuel({
         carrierAccountId: account.id,
         triggeredBy: null, // Cron isn't a user — leave updatedBy untouched.
-      });
+      }));
       results.push({
         accountId: account.id,
         accountName: account.name,

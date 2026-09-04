@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSaleProducts } from '@/features/warehouse/create-sale';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
   try {
-    const summary = await createSaleProducts();
+    const summary = await chayJobApi('create-sale', () => createSaleProducts());
     return NextResponse.json({ ok: true, ...summary });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });

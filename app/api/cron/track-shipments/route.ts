@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { trackPendingShipments } from '@/features/shipments/track';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
   try {
-    const summary = await trackPendingShipments({ limit: 200 });
+    const summary = await chayJobApi('track-shipments', () => trackPendingShipments({ limit: 200 }));
     return NextResponse.json({ ok: true, ...summary });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });

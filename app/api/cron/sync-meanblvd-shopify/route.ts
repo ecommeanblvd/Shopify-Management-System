@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { syncMeanblvdToShopify } from '@/features/warehouse/meanblvd-sync';
 
+import { chayJobApi } from '@/features/jobs/api-run';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
   try {
-    const summary = await syncMeanblvdToShopify();
+    const summary = await chayJobApi('sync-meanblvd', () => syncMeanblvdToShopify());
     return NextResponse.json({ ok: true, ...summary });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });

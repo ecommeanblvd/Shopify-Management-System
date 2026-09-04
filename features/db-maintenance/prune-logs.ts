@@ -52,6 +52,16 @@ export const PRUNE_RULES: readonly PruneRule[] = [
     mode: 'null-column',
     column: 'raw',
   },
+  {
+    // Nhật ký chạy tác vụ nền (migration 0125). Giữ 90 ngày: đủ để soi một tác
+    // vụ chập chờn theo mùa, mà không để chính bảng giám sát phình ra.
+    key: 'job_runs',
+    moTa: 'Nhật ký chạy tác vụ nền quá 90 ngày',
+    table: 'job_runs',
+    timeColumn: 'started_at',
+    keepDays: 90,
+    mode: 'delete',
+  },
 ];
 
 export function cutoffFor(rule: Pick<PruneRule, 'keepDays'>, now: Date): Date {

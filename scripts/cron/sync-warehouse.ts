@@ -10,6 +10,7 @@
 
 import { syncWarehouseFromLark } from '@/features/warehouse/lark-sync';
 
+import { chayCron } from '@/features/jobs/run';
 async function main(): Promise<void> {
   const s = await syncWarehouseFromLark();
   process.stdout.write(
@@ -20,9 +21,4 @@ async function main(): Promise<void> {
   if (s.errors.length) process.exitCode = 1;
 }
 
-main()
-  .catch((err) => {
-    process.stderr.write(`sync-warehouse: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-    process.exitCode = 1;
-  })
-  .finally(() => process.exit());
+chayCron('sync-warehouse', main);
