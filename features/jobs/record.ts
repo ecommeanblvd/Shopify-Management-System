@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 /**
@@ -11,7 +11,11 @@ import { db, schema } from '@/db/client';
 export async function batDauJob(jobKey: string): Promise<string | null> {
   try {
     const [row] = await db.insert(schema.jobRuns)
-      .values({ jobKey, startedAt: new Date(), status: 'running' })
+      // Mốc thời gian lấy từ ĐỒNG HỒ DATABASE, không phải đồng hồ tiến trình:
+      // cron có thể chạy từ máy khác (Railway cron service, máy lập trình viên)
+      // và lệch giờ — đã gặp thật, lệch 5 ngày. Lệch giờ ở đây làm trang giám
+      // sát báo quá hạn oan hoặc tệ hơn, báo xanh khi tác vụ đã chết.
+      .values({ jobKey, startedAt: sql`now()`, status: 'running' })
       .returning({ id: schema.jobRuns.id });
     return row?.id ?? null;
   } catch (e) {
@@ -27,7 +31,7 @@ export async function ketThucJob(
   if (!id) return;
   try {
     await db.update(schema.jobRuns).set({
-      finishedAt: new Date(),
+      finishedAt: sql`now()`,
       status: ket.ok ? 'ok' : 'error',
       durationMs: Date.now() - ket.batDau,
       summary: (ket.summary ?? null) as object | null,
