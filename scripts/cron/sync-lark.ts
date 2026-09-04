@@ -20,6 +20,7 @@ import { syncLarkPacks } from '@/features/lark/sync';
 import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron } from '@/features/jobs/run';
+import { backfillCourierLark } from '@/features/lark/courier-backfill';
 async function main(): Promise<void> {
   const s = await syncLarkPacks();
   process.stdout.write(
@@ -37,6 +38,20 @@ async function main(): Promise<void> {
     process.stdout.write(`brand-received: fetched ${br.fetched}, upserted ${br.upserted}\n`);
   } catch (err) {
     process.stderr.write(`brand-received: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+
+  // Điền bù cột "Couriers": nhân viên chọn hãng trên hệ thống TRƯỚC khi dòng Lark
+  // tồn tại (dòng chỉ sinh lúc đóng hàng), nên ghi ngay lúc chọn gần như luôn
+  // trượt. Bám theo nhịp cron này để bên đóng hàng thấy hãng ngay lượt sau.
+  // Best-effort: hỏng không chặn kết quả packs.
+  try {
+    const c = await backfillCourierLark();
+    process.stdout.write(`courier→lark: điền ${c.daDien}, đối chiếu ${c.doiChieu}, lệch không ghi đè ${c.lechKhongGhi.length}, lỗi ${c.loi.length}\n`);
+    for (const l of c.lechKhongGhi) {
+      process.stdout.write(`  lệch: ${l.soDon} — Lark "${l.tenTrenLark}" vs hệ thống "${l.tenHeThong}"\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`courier→lark: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Lark Suite Bitable API client (read-only). Token cache trong RAM.
+ * Lark Suite Bitable API client. Token cache trong RAM.
  * Endpoint + auth: open.larksuite.com (Bitable v1). Throw khi code !== 0.
  */
 const DOMAIN = process.env.LARK_DOMAIN || 'https://open.larksuite.com';
@@ -77,6 +77,29 @@ async function searchAllRecords(tableId: string, body: Record<string, unknown>, 
     pageToken = j.data?.has_more ? j.data?.page_token : undefined;
   } while (pageToken);
   return out;
+}
+
+/**
+ * GHI đè vài trường của MỘT record bảng logistics.
+ *
+ * Đây là đường GHI DUY NHẤT vào Lark — mọi chỗ khác chỉ đọc. Giữ nó hẹp có chủ
+ * đích: chỉ nhận record_id + đúng các trường cần đổi, không có API xoá/tạo, để
+ * một lỗi lập trình không thể quét sạch bảng vận hành của team logistics.
+ */
+export async function updateLogRecordFields(
+  recordId: string, fields: Record<string, unknown>,
+): Promise<void> {
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${logTableId()}/records/${recordId}`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string };
+  if (j.code !== 0) throw new Error(`[lark] update fail: code=${j.code} msg=${j.msg}`);
 }
 
 /** Đọc TẤT CẢ record của bảng (phân trang page_token, 500/lần). */

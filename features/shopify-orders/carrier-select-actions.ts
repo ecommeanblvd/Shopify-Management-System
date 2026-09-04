@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth/auth';
 import { db, schema } from '@/db/client';
 import { quoteOrderAcrossCarriers, type CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
+import { dayCourierLenLark } from '@/features/lark/push-courier';
 
 export interface OrderCarrierComparison {
   rows: CarrierQuoteRow[];
@@ -53,8 +54,15 @@ export async function getOrderCarrierComparison(orderId: string): Promise<OrderC
   return { rows, ...base };
 }
 
-/** Staff chọn carrier đi hàng cho đơn → ghi selected_carrier_key (sync không đụng). */
-export async function assignOrderCarrier(orderId: string, carrierKey: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Staff chọn carrier đi hàng cho đơn → ghi selected_carrier_key (sync không đụng)
+ * VÀ đẩy tên hãng sang cột "Couriers" của bảng Lark logistics, để bên lên vận đơn
+ * + đóng hàng biết chạy hãng nào mà không phải hỏi lại.
+ *
+ * Lark hỏng KHÔNG làm hỏng việc chọn hãng: đơn vẫn được ghi, chỉ trả về cảnh báo
+ * để nhân viên biết mà điền tay.
+ */
+export async function assignOrderCarrier(orderId: string, carrierKey: string): Promise<{ ok: boolean; error?: string; lark?: { ok: boolean; daGhi: number; ten?: string; error?: string } }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Chưa đăng nhập' };
 
@@ -74,6 +82,10 @@ export async function assignOrderCarrier(orderId: string, carrierKey: string): P
     selectedCarrierBy: session.user.email ?? session.user.id,
   }).where(eq(schema.shopifyOrders.id, orderId));
 
+  const [o] = await db.select({ soDon: schema.shopifyOrders.shopifyOrderNumber })
+    .from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, orderId)).limit(1);
+  const lark = await dayCourierLenLark(o?.soDon ?? null, carrierKey);
+
   revalidatePath('/f/orders');
-  return { ok: true };
+  return { ok: true, lark };
 }

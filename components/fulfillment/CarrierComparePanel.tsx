@@ -16,13 +16,18 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
   const [loading, startLoad] = useTransition();
   const [assigning, startAssign] = useTransition();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  // Kết quả đẩy sang Lark của lần chọn gần nhất — staff cần biết bên đóng hàng
+  // đã thấy hãng chưa, hay phải điền tay.
+  const [lark, setLark] = useState<{ ok: boolean; daGhi: number; ten?: string; error?: string } | null>(null);
 
   const load = () => startLoad(async () => setData(await getOrderCarrierComparison(orderId)));
   const choose = (key: string) => {
     setPendingKey(key);
+    setLark(null);
     startAssign(async () => {
       const r = await assignOrderCarrier(orderId, key);
       if (r.ok) setData((d) => (d ? { ...d, selectedKey: key } : d));
+      setLark(r.lark ?? null);
       setPendingKey(null);
     });
   };
@@ -53,6 +58,16 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
           {loading ? 'Đang báo giá…' : data ? '↻ Tải lại' : 'So sánh cước carrier'}
         </button>
       </header>
+
+      {lark && (
+        <div className={`border-b px-4 py-2 text-sm ${lark.ok
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+          : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {lark.ok
+            ? `Đã ghi "${lark.ten}" vào cột Couriers trên Lark (${lark.daGhi} dòng) — bên đóng hàng thấy được.`
+            : `Chưa đẩy được sang Lark: ${lark.error}. Nhờ điền tay cột Couriers giúp bên đóng hàng.`}
+        </div>
+      )}
 
       {!data && !loading && (
         <p className="px-4 py-3 text-xs text-muted-foreground">Bấm “So sánh cước carrier” để báo giá đơn này qua mọi carrier đang bật.</p>
