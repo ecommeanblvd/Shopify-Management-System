@@ -1,7 +1,8 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
 import { planCodeAdoption } from './internal-code';
+import { lyDoBoQua } from './event-obsolete';
 
 export type ShipHoEmitOrder = { id: string; code: string; source: string; mmpRef: string | null };
 const MAX_ATTEMPTS = 8;
@@ -130,8 +131,9 @@ export async function deliverShipHoEvent(row: {
   }
 }
 
-/** Cron: gửi lại các event chưa 'delivered' (pending/failed) dưới ngưỡng. */
-export async function retryPendingShipHoEvents(): Promise<{ tried: number; delivered: number; failed: number }> {
+/** Cron: gửi lại các event chưa 'delivered'. Bản đã bị vượt (có sự kiện mới hơn
+ *  gửi thành công) được ĐÁNH DẤU BỎ, không gửi — gửi lại số cũ sẽ ghi đè MMP. */
+export async function retryPendingShipHoEvents(): Promise<{ tried: number; delivered: number; failed: number; boQua: number }> {
   const rows = await db.select({
       ev: schema.shipHoOrderEvents,
       source: schema.shipHoOrders.source,
@@ -139,11 +141,43 @@ export async function retryPendingShipHoEvents(): Promise<{ tried: number; deliv
     .innerJoin(schema.shipHoOrders, eq(schema.shipHoOrders.id, schema.shipHoOrderEvents.orderId))
     .where(eq(schema.shipHoOrderEvents.deliveryStatus, 'pending'))
     .limit(200);
-  let delivered = 0, failed = 0;
+  // Sự kiện ĐÃ GỬI THÀNH CÔNG của các đơn liên quan — để loại bản kẹt đã bị vượt.
+  // Gửi lại số cũ còn nguy hiểm hơn không gửi (xem event-obsolete.ts).
+  const orderIds = [...new Set(rows.map(({ ev }) => ev.orderId))];
+  const daGuiRows = orderIds.length === 0 ? [] : await db
+    .select({
+      orderId: schema.shipHoOrderEvents.orderId,
+      event: schema.shipHoOrderEvents.event,
+      occurredAt: schema.shipHoOrderEvents.occurredAt,
+    })
+    .from(schema.shipHoOrderEvents)
+    .where(and(
+      inArray(schema.shipHoOrderEvents.orderId, orderIds),
+      eq(schema.shipHoOrderEvents.deliveryStatus, 'delivered'),
+    ));
+  const daGuiTheoDon = new Map<string, Array<{ event: string; occurredAt: Date }>>();
+  for (const d of daGuiRows) {
+    const list = daGuiTheoDon.get(d.orderId) ?? [];
+    list.push({ event: d.event, occurredAt: d.occurredAt });
+    daGuiTheoDon.set(d.orderId, list);
+  }
+
+  let delivered = 0, failed = 0, boQua = 0;
   for (const { ev: r, source } of rows) {
+    const lyDo = lyDoBoQua(
+      { event: r.event, occurredAt: r.occurredAt },
+      daGuiTheoDon.get(r.orderId) ?? [],
+    );
+    if (lyDo) {
+      await db.update(schema.shipHoOrderEvents)
+        .set({ deliveryStatus: 'failed', lastError: lyDo, lastAttemptAt: new Date() })
+        .where(eq(schema.shipHoOrderEvents.id, r.id));
+      boQua++;
+      continue;
+    }
     await deliverShipHoEvent({ id: r.id, orderId: r.orderId, mmpRef: r.mmpRef, code: r.code, event: r.event, occurredAt: r.occurredAt, payload: r.payload, attempts: r.attempts, source });
     const [after] = await db.select({ s: schema.shipHoOrderEvents.deliveryStatus }).from(schema.shipHoOrderEvents).where(eq(schema.shipHoOrderEvents.id, r.id)).limit(1);
     if (after?.s === 'delivered') delivered++; else if (after?.s === 'failed') failed++;
   }
-  return { tried: rows.length, delivered, failed };
+  return { tried: rows.length, delivered, failed, boQua };
 }
