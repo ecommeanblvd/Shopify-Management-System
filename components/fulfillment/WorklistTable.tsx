@@ -7,11 +7,12 @@ import { formatTrackingStatus, carrierTrackingUrl } from '@/features/fulfillment
 import { STAGE_ORDER, stageLabel, type OrderStage } from '@/features/fulfillment/order-stage';
 import { filterWorklist } from '@/features/fulfillment/worklist-search';
 
+import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return '—';
   const date = d instanceof Date ? d : new Date(d);
   if (isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: MUI_GIO_KINH_DOANH });
 }
 
 const TONE: Record<BadgeTone, string> = {

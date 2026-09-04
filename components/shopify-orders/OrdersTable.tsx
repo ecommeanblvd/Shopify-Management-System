@@ -15,6 +15,7 @@ import type { OrderDetail } from '@/features/shopify-orders/order-actions';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 import { OrderPnlPanel } from './OrderPnlPanel';
 
+import { hienNgay } from '@/lib/timezone';
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
 type PageSize = typeof PAGE_SIZE_OPTIONS[number];
 
@@ -285,7 +286,7 @@ export function OrdersTable({
                   className={`border-b border-border/40 ${canEdit ? 'cursor-pointer hover:bg-muted/30' : ''}`}
                 >
                   <td className="px-3 py-2 font-mono">{o.shopifyOrderNumber}</td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">{new Date(o.processedAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{hienNgay(o.processedAt)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{o.lineCount}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">{fmt(o.subtotal, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive">
@@ -446,11 +447,11 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
-        <span>Ngày xử lý: <span className="text-foreground">{new Date(detail.processedAt).toLocaleDateString()}</span></span>
+        <span>Ngày xử lý: <span className="text-foreground">{hienNgay(detail.processedAt)}</span></span>
         <span>
           Ngày đi hàng:{' '}
           {detail.shipDate
-            ? <span className="text-foreground">{new Date(detail.shipDate).toLocaleDateString()}</span>
+            ? <span className="text-foreground">{hienNgay(detail.shipDate)}</span>
             : <span className="italic">chưa có</span>}
         </span>
       </div>
@@ -769,7 +770,7 @@ function AddressVerifyCard({
                 {a.deliverable ? '✓ Giao được' : '⚠ Không giao được'}
               </span>
               {a.issue && <span className="rounded px-2 py-0.5 font-medium bg-red-500/10 text-red-600 dark:text-red-400" title="Vấn đề FedEx báo">{a.issue}</span>}
-              <span className="text-muted-foreground">· verify {new Date(a.verifiedAt).toLocaleDateString('vi-VN')}</span>
+              <span className="text-muted-foreground">· verify {hienNgay(a.verifiedAt)}</span>
             </div>
           ) : hasStreet ? (
             <div className="text-xs text-muted-foreground">Chưa verify (chờ chạy Address Validation).</div>

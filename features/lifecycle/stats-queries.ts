@@ -10,7 +10,8 @@ export interface StatsFilter {
   toMonth?: string;   // 'YYYY-MM'
 }
 
-const monthExpr = sql<string>`to_char(${schema.orderLifecycle.placedAt}, 'YYYY-MM')`;
+// Gom tháng theo GIỜ NGHIỆP VỤ (UTC+7) — xem lib/timezone.ts.
+const monthExpr = sql<string>`to_char(${schema.orderLifecycle.placedAt} AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM')`;
 
 export async function lifecycleDurations(filter?: StatsFilter): Promise<DurationRow[]> {
   const conds = [];

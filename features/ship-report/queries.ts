@@ -14,14 +14,17 @@ export interface ShipReportRaw {
   totalShipments: number;
 }
 
-/** @param monthsBack số tháng gần nhất (tính cả tháng hiện tại). */
+/** Gom tháng theo GIỜ NGHIỆP VỤ (UTC+7), không theo UTC: đơn cuối tháng đặt
+ *  buổi tối giờ VN sẽ bị UTC xếp sang tháng trước — đo 04/09 có 91 đơn MEAN và
+ *  16 đơn Tinh lệch tháng, tức doanh thu tháng sai. Xem lib/timezone.ts.
+ *  @param monthsBack số tháng gần nhất (tính cả tháng hiện tại). */
 export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw> {
   const since = sql`date_trunc('month', NOW()) - ${sql.raw(String(Math.max(0, monthsBack - 1)))} * INTERVAL '1 month'`;
 
   // ── Shopify shipments: thu = totalShipping × fx (1 nếu cùng currency), chi = billed ──
   const shopify = await db.execute(sql`
     SELECT
-      to_char(s.label_created_at, 'YYYY-MM') AS month,
+      to_char(s.label_created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month,
       s.carrier_key AS carrier,
       o.ship_country AS country,
       CASE WHEN o.currency = COALESCE(st.cost_currency, o.currency) THEN o.total_shipping::float8
@@ -44,7 +47,7 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
   // ── Ship hộ: thu = actualCharged ?? charged; chi = actualCost ?? cost dự tính ──
   const shipHo = await db.execute(sql`
     SELECT
-      to_char(created_at, 'YYYY-MM') AS month,
+      to_char(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month,
       carrier_key AS carrier,
       country,
       COALESCE(actual_charged_vnd, charged_vnd)::float8 AS revenue_vnd,
@@ -77,7 +80,7 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
 
   // ── Phụ phí: shipment_charges (Shopify, unpivot cột) + carrier_bill_lines (ship hộ) ──
   const sur = await db.execute(sql`
-    SELECT to_char(s.label_created_at, 'YYYY-MM') AS month, s.carrier_key AS carrier, o.ship_country AS country,
+    SELECT to_char(s.label_created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month, s.carrier_key AS carrier, o.ship_country AS country,
            k.type, k.amount::float8 AS amount
     FROM shipments s
     JOIN shopify_orders o ON o.id = s.order_id
@@ -91,7 +94,7 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
     WHERE s.label_created_at >= ${since} AND k.amount IS NOT NULL AND k.amount::float8 > 0
   `);
   const surHo = await db.execute(sql`
-    SELECT to_char(sh.created_at, 'YYYY-MM') AS month, sh.carrier_key AS carrier, sh.country,
+    SELECT to_char(sh.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month, sh.carrier_key AS carrier, sh.country,
            k.type, k.amount::float8 AS amount
     FROM ship_ho_orders sh
     JOIN carrier_bill_lines bl ON bl.tracking_number = sh.tracking_number
