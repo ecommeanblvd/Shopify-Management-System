@@ -82,7 +82,11 @@ export interface RebillSummary {
   totalWithTracking: number;
   matched: number;      // có dòng bill khớp tracking
   requoted: number;     // tính lại được giá thu thực (có cân thực)
-  unmatched: number;    // chưa có bill cho tracking
+  unmatched: number;    // chưa có dòng bill nào cho tracking
+  /** Đã có bill nhưng MỚI CHỈ có dòng thuế, chưa có dòng cước → chưa re-bill được.
+   *  Tách khỏi `unmatched` để ops phân biệt "hãng chưa xuất hoá đơn cước" với
+   *  "chưa nạp hoá đơn" — hai việc phải xử khác nhau. */
+  dutyOnly: number;
   errors: Array<{ code: string; reason: string }>;
 }
 
@@ -103,7 +107,7 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
  * sang MMP (giá cuối, KHÔNG lộ cước carrier). Idempotent theo bill mới nhất.
  */
 export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSummary> {
-  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, errors: [] };
+  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, errors: [] };
 
   const orders = await db
     .select({
@@ -139,7 +143,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     if (!billed) { summary.unmatched += 1; continue; }
     // Mới CHỈ có bill duty (bill CƯỚC chưa về) → chưa đủ để re-bill: bỏ qua như
     // chưa có bill, tránh actualCarrierCost = mỗi duty → margin ảo (03/08).
-    if (!billedHasFreight(billed)) { summary.unmatched += 1; continue; }
+    if (!billedHasFreight(billed)) { summary.dutyOnly += 1; continue; }
     summary.matched += 1;
 
     // Re-quote giá thu THỰC: cột cân trên bill FBO là CÂN THỰC trên cân (scale),
