@@ -2165,6 +2165,20 @@ export const shipHoEventStatusEnum = pgEnum('ship_ho_event_status', ['pending', 
  * Nhật ký chạy tác vụ nền — mỗi lần chạy 1 dòng. Xem migration 0125 và
  * features/jobs/registry.ts (danh sách tác vụ + chu kỳ mong đợi).
  */
+/** Chia tiền 1 dòng bill cho nhiều đơn theo cân — xem migration 0126. */
+export const billLineAllocations = pgTable('bill_line_allocations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  billLineId: uuid('bill_line_id').notNull(),
+  orderId: uuid('order_id').notNull(),
+  amountVnd: numeric('amount_vnd', { precision: 14, scale: 2 }).notNull(),
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  splitEven: boolean('split_even').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('bill_line_allocations_line_order_idx').on(t.billLineId, t.orderId),
+  index('bill_line_allocations_order_idx').on(t.orderId),
+]);
+
 export const jobRuns = pgTable('job_runs', {
   id: uuid('id').defaultRandom().primaryKey(),
   jobKey: text('job_key').notNull(),

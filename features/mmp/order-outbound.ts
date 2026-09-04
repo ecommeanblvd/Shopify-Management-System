@@ -119,7 +119,20 @@ async function buildOrderMmpBody(orderId: string): Promise<{ rawBody: string } |
           AND NOT EXISTS (
             SELECT 1 FROM shipments shp2
             JOIN shipment_charges sc2 ON sc2.shipment_id = shp2.id
-            WHERE shp2.order_id = ${orderId} AND shp2.tracking_number = l.tracking_number)), 0) AS v`);
+            WHERE shp2.order_id = ${orderId} AND shp2.tracking_number = l.tracking_number)), 0)
+      -- 3. Dòng bill ghi mã đơn kiểu chữ tự do ("TA2300 + TA2301", "#MBLVD28958 (1)")
+      --    → đã bóc mã + chia tiền theo cân sang bill_line_allocations (migration
+      --    0126). Chỉ dòng KHÔNG khớp tuyệt đối mới có phân bổ, nên không đếm đôi.
+      + COALESCE((
+        SELECT SUM(a.amount_vnd::float8)
+        FROM bill_line_allocations a
+        JOIN carrier_bill_lines l2 ON l2.id = a.bill_line_id
+        WHERE a.order_id = ${orderId}
+          AND l2.return_of_order_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM shipments shp3
+            JOIN shipment_charges sc3 ON sc3.shipment_id = shp3.id
+            WHERE shp3.order_id = ${orderId} AND shp3.tracking_number = l2.tracking_number)), 0) AS v`);
     const billedVnd = Math.round(Number((sc.rows[0] as { v?: unknown })?.v ?? 0));
     // Fallback đơn CỔ (2024-05/2025, bill không có trong SMS): ops tra tay từ
     // bill cũ → shipping_cost_override (sheet Lark 04/08). Bill trong SMS thắng.
