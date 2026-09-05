@@ -12,6 +12,7 @@ import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
 import { coThayDoi } from './khong-doi';
+import { canDongTrangThai, canLapNgay, canSuaNgay, type ShipmentHienTai } from './can-freeze';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -87,9 +88,21 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
         dimLengthCm: schema.shipments.dimLengthCm, dimWidthCm: schema.shipments.dimWidthCm,
         dimHeightCm: schema.shipments.dimHeightCm,
         carrierKey: schema.shipments.carrierKey, labelCreatedAt: schema.shipments.labelCreatedAt,
+        orderId: schema.shipments.orderId,
+        deliveryStatus: schema.shipments.deliveryStatus, deliveredAt: schema.shipments.deliveredAt,
+        deliverySource: schema.shipments.deliverySource,
       })
       .from(schema.shipments);
     const shipmentById = new Map(existing.map((s) => [s.id, s as Record<string, unknown>]));
+    // Gom theo đơn để khối freeze biết TRƯỚC lệnh nào thật sự cần chạy.
+    const shipmentsByOrder = new Map<string, ShipmentHienTai[]>();
+    for (const sh of existing) {
+      if (!sh.orderId) continue;
+      const l = shipmentsByOrder.get(sh.orderId) ?? [];
+      l.push({ deliveryStatus: sh.deliveryStatus, deliveredAt: sh.deliveredAt,
+        deliverySource: sh.deliverySource, trackingNumber: sh.trackingNumber, labelCreatedAt: sh.labelCreatedAt });
+      shipmentsByOrder.set(sh.orderId, l);
+    }
     const shipmentByLogCode = new Map<string, string>();
     const shipmentByTracking = new Map<string, string>();
     for (const s of existing) {
@@ -275,6 +288,11 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       for (const batch of chunk(delRows, APPLY_CHUNK)) {
         await db.transaction(async (tx) => {
           for (const [orderId, s] of batch) {
+            // Kiểm ĐIỀU KIỆN TRƯỚC trong bộ nhớ — cùng điều kiện với mệnh đề
+            // WHERE bên dưới, nên kết quả y hệt mà bớt hàng nghìn vòng tới DB
+            // (đo 05/09: ~10.000 lệnh chạy để đổi vỏn vẹn 51 dòng).
+            const dsShip = shipmentsByOrder.get(orderId) ?? [];
+            const laDelivered = s.deliveryState === 'delivered';
             const patch: Record<string, unknown> = {
               deliveryStatus: s.deliveryState, deliverySource: 'lark', updatedAt: sql`now()`,
             };
@@ -288,15 +306,17 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             const notYetShippedGuard = s.deliveryState === 'delivered'
               ? [or(isNotNull(schema.shipments.trackingNumber), isNotNull(schema.shipments.labelCreatedAt))!]
               : [];
-            const res = await tx.update(schema.shipments).set(patch).where(and(
-              eq(schema.shipments.orderId, orderId),
-              or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
-              ...notYetShippedGuard,
-            ));
-            deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
+            if (canDongTrangThai(dsShip, laDelivered)) {
+              const res = await tx.update(schema.shipments).set(patch).where(and(
+                eq(schema.shipments.orderId, orderId),
+                or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
+                ...notYetShippedGuard,
+              ));
+              deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
+            }
             // Row ĐÃ delivered nhưng thiếu ngày (đánh dấu trước khi có fallback, hoặc
             // ops điền ngày muộn) → lấp ngày, không đổi status.
-            if (s.deliveryState === 'delivered') {
+            if (laDelivered && canLapNgay(dsShip)) {
               await tx.update(schema.shipments)
                 .set({ deliveredAt: resolveDeliveredAt(s), updatedAt: sql`now()` })
                 .where(and(
@@ -308,7 +328,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             // TỰ CHỮA LÀNH: ops điền "Ngày giao thực tế" MUỘN (sau khi row đã bị
             // đóng ngày fallback) → sửa lại theo ngày thực. CHỈ đè nguồn 'lark' —
             // POD bill carrier (D-019) và FedEx track không bị đụng.
-            if (s.deliveryState === 'delivered' && s.actualDeliveredAt) {
+            if (laDelivered && s.actualDeliveredAt && canSuaNgay(dsShip, s.actualDeliveredAt)) {
               await tx.update(schema.shipments)
                 .set({ deliveredAt: s.actualDeliveredAt, updatedAt: sql`now()` })
                 .where(and(
