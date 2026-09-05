@@ -6,6 +6,7 @@
  */
 import { and, eq, gte, inArray, or, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { coThayDoi } from '@/lib/khong-doi';
 import {
   deriveLifecycle, DEFAULT_SLA,
   type LifecyclePrev, type LifecycleSignals, type SlaKey,
@@ -22,7 +23,7 @@ export async function loadSlaMap(): Promise<Record<SlaKey, number>> {
 
 export async function syncOrderLifecycle(
   opts?: { sinceDays?: number },
-): Promise<{ scanned: number; upserted: number; errors: string[] }> {
+): Promise<{ scanned: number; upserted: number; boQua: number; errors: string[] }> {
   const sinceDays = opts?.sinceDays ?? 120;
   const cutoff = new Date(Date.now() - sinceDays * 24 * 3600_000);
   const now = new Date();
@@ -46,7 +47,7 @@ export async function syncOrderLifecycle(
         sql`${schema.orderLifecycle.currentStage} not in (${sql.join(TERMINAL.map((s) => sql`${s}`), sql`, `)})`,
       ),
     ));
-  if (orders.length === 0) return { scanned: 0, upserted: 0, errors };
+  if (orders.length === 0) return { scanned: 0, upserted: 0, boQua: 0, errors };
   const orderIds = orders.map((o) => o.id);
 
   // --- Batch aggregations (GROUP BY orderId) ---
@@ -119,6 +120,7 @@ export async function syncOrderLifecycle(
   const prevMap = new Map(prevRows.map((r) => [r.orderId, r]));
 
   let upserted = 0;
+  let boQua = 0;
   for (const o of orders) {
     try {
       const b = brandMap.get(o.id);
@@ -161,6 +163,13 @@ export async function syncOrderLifecycle(
       } : null;
 
       const snap = deriveLifecycle(signals, prev, sla, now);
+      // Bỏ qua đơn không đổi gì: trước 05/09 vòng lặp upsert MỌI đơn mỗi lượt
+      // (~2.577 lệnh) dù snapshot y hệt. `p` đã nạp đủ cột nên so được ngay,
+      // không tốn thêm truy vấn nào. Cùng cách đã đưa sync-lark 68,7 → 1,7 phút.
+      if (!coThayDoi(p as unknown as Record<string, unknown> | undefined, snap as unknown as Record<string, unknown>)) {
+        boQua += 1;
+        continue;
+      }
       await db.insert(schema.orderLifecycle)
         .values({ orderId: o.id, storeId: o.storeId, ...snap, syncedAt: now })
         .onConflictDoUpdate({
@@ -172,5 +181,5 @@ export async function syncOrderLifecycle(
       errors.push(`${o.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return { scanned: orders.length, upserted, errors };
+  return { scanned: orders.length, upserted, boQua, errors };
 }

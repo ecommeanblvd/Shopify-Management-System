@@ -2,10 +2,12 @@
  * So bản vá sắp ghi với giá trị ĐANG CÓ trong database, để bỏ qua lệnh ghi
  * không thay đổi gì.
  *
- * Vì sao cần: mỗi lượt sync-lark ghi lại ~3.770 dòng shipments và ~4.040 dòng
- * trạng thái, dù dữ liệu gần như không đổi — vì bản vá được dựng thẳng từ dữ
- * liệu Lark chứ không so với DB. Cộng với việc cron chạy khác vùng database
- * (~270ms/lệnh), đó là phần lớn trong 68 phút mỗi lượt (đo 05/09).
+ * Dùng chung cho MỌI luồng đồng bộ định kỳ.
+ *
+ * Vì sao cần: sync-lark ghi lại ~11.400 dòng mỗi lượt dù dữ liệu gần như không
+ * đổi — bản vá dựng thẳng từ nguồn chứ không so với DB. Mỗi lệnh là một vòng
+ * tới database, nên đó là phần lớn trong 68 phút mỗi lượt. Sau khi bỏ ghi thừa:
+ * 68,7 phút → 1,7 phút trên production (đo 05/09).
  *
  * `updatedAt` KHÔNG được tính là thay đổi — nó luôn khác, tính vào thì mọi dòng
  * đều "có thay đổi" và việc so sánh thành vô nghĩa.

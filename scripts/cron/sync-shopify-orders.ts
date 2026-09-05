@@ -11,7 +11,7 @@ import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
 
 import { chayCron } from '@/features/jobs/run';
-async function main(): Promise<void> {
+async function main() {
   const results = await runHourlySync();
   let failures = 0;
   for (const r of results) {
@@ -23,6 +23,9 @@ async function main(): Promise<void> {
     }
   }
   if (failures > 0) process.exitCode = 1;
+  // Trả số liệu để job_runs.summary ghi lại — không có nó thì nhìn nhật ký chỉ
+  // thấy "5,9 phút" mà không biết 5,9 phút đó làm được bao nhiêu việc.
+  const tomTat = { cuaHang: results.map((r) => ({ ten: r.storeName, donNap: r.ingested, loi: r.error ?? null })) };
   try {
     const mmp = await retryFailedMmpPushes();
     process.stdout.write(`retry-mmp: retried ${mmp.retried}, recovered ${mmp.recovered}, stillFailing ${mmp.stillFailing}\n`);
@@ -95,6 +98,7 @@ async function main(): Promise<void> {
   } catch (e) {
     process.stderr.write(`ship-ho-reconcile: ${e instanceof Error ? e.message : String(e)}\n`);
   }
+  return tomTat;
 }
 
 chayCron('sync-orders', main);

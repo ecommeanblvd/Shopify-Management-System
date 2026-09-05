@@ -11,7 +11,7 @@ import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
-import { coThayDoi } from './khong-doi';
+import { coThayDoi } from '@/lib/khong-doi';
 import { canDongTrangThai, canLapNgay, canSuaNgay, type ShipmentHienTai } from './can-freeze';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
