@@ -236,11 +236,19 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
           byNum.set(bare, arr);
         }
         const qcOrderIds = await resolveOrderIds([...byNum.keys()]);
+        // qc_status hiện có, để bỏ qua dòng không đổi — cùng lý do như hai phần
+        // trên. Đây là phần ghi lớn nhất còn lại sau tối ưu 05/09 (3.600 lệnh).
+        const qcHienTai = new Map(
+          (await db.select({ orderId: schema.larkOrderStatus.orderId, qcStatus: schema.larkOrderStatus.qcStatus })
+            .from(schema.larkOrderStatus)).map((r) => [r.orderId, r as Record<string, unknown>]),
+        );
         const qcRows: Array<{ orderId: string; qcStatus: string }> = [];
         for (const [bare, items] of byNum) {
           const orderId = qcOrderIds.get(bare);
           const status = mapQcCheck(latestQcCheck(items));
-          if (orderId && status) qcRows.push({ orderId, qcStatus: status });
+          if (orderId && status && coThayDoi(qcHienTai.get(orderId), { qcStatus: status })) {
+            qcRows.push({ orderId, qcStatus: status });
+          }
         }
         for (const batch of chunk(qcRows, APPLY_CHUNK)) {
           await db.transaction(async (tx) => {
