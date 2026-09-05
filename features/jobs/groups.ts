@@ -24,8 +24,12 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.
   'moi-15-phut': ['retry-mmp-orders', 'retry-ship-ho-events'],
   'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho'],
+  // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
+  // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
+  // nhìn "5,9 phút" không biết việc nào chậm.
+  'theo-don': ['push-unsent-brand', 'addr-verify', 'apply-pod', 'return-links', 'ship-ho-reconcile'],
   'hang-ngay': [
-    'refresh-fuel', 'refresh-surcharges', 'refresh-vcb-fx',
+    'ship-ho-tiers', 'refresh-fuel', 'refresh-surcharges', 'refresh-vcb-fx',
     'sync-warehouse', 'sync-meanblvd', 'create-sale', 'sync-catalog',
   ],
   'hang-tuan': ['prune-logs', 'refresh-demand', 'remind-fuel'],

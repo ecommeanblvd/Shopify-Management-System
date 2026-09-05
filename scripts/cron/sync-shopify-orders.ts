@@ -1,3 +1,14 @@
+/**
+ * Standalone Railway-friendly cron entry point.
+ * Usage: `npm run cron:sync-orders`
+ *
+ * Chạy chuỗi việc bám theo nhịp đồng bộ đơn. TRƯỚC 05/09 cả 11 việc dùng CHUNG
+ * một tên tác vụ `sync-orders`, nên nhật ký chỉ thấy "5,9 phút" mà không biết
+ * việc nào chậm. Nay mỗi việc ghi một dòng job_runs riêng — thấy ngay ai ăn
+ * thời gian, đúng cách đã giúp tìm ra sync-lark 68 phút.
+ *
+ * Một việc hỏng KHÔNG chặn các việc sau: chayMotJob nuốt lỗi và ghi lại.
+ */
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
@@ -9,96 +20,35 @@ import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
+import { chayMotJob } from '@/features/jobs/run';
 
-import { chayCron } from '@/features/jobs/run';
-async function main() {
-  const results = await runHourlySync();
-  let failures = 0;
-  for (const r of results) {
-    if (r.error) {
-      failures++;
-      process.stderr.write(`sync-orders: ${r.storeName} — FAILED: ${r.error}\n`);
-    } else {
-      process.stdout.write(`sync-orders: ${r.storeName} — ${r.ingested} orders\n`);
-    }
-  }
-  if (failures > 0) process.exitCode = 1;
-  // Trả số liệu để job_runs.summary ghi lại — không có nó thì nhìn nhật ký chỉ
-  // thấy "5,9 phút" mà không biết 5,9 phút đó làm được bao nhiêu việc.
-  const tomTat = { cuaHang: results.map((r) => ({ ten: r.storeName, donNap: r.ingested, loi: r.error ?? null })) };
-  try {
-    const mmp = await retryFailedMmpPushes();
-    process.stdout.write(`retry-mmp: retried ${mmp.retried}, recovered ${mmp.recovered}, stillFailing ${mmp.stillFailing}\n`);
-  } catch (e) {
-    process.stderr.write(`retry-mmp: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Đẩy đơn brand CHƯA từng push (kẽ hở: auto-push chỉ bắn lúc thao tác phân bổ,
-  // retry-cron chỉ lo dòng pending/failed đã có). Đã lọc 'sent' nên nhẹ + idempotent.
-  try {
-    const bf = await pushUnsentBrandOrders();
-    process.stdout.write(`push-unsent-brand: pushed ${bf.pushed}, skipped ${bf.skipped}, failed ${bf.failed}, total ${bf.total}\n`);
-  } catch (e) {
-    process.stderr.write(`push-unsent-brand: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Auto-verify địa chỉ đơn mới (chưa verify) qua FedEx. Cap 100/giờ + rate-limit
-  // trong hàm để không đụng giới hạn API.
-  try {
-    const av = await verifyUnverifiedAddresses({ limit: 100 });
-    process.stdout.write(`addr-verify: verified ${av.verified}, undeliverable ${av.undeliverable}, failed ${av.failed}\n`);
-  } catch (e) {
-    process.stderr.write(`addr-verify: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Cập nhật trạng thái giao (carrier API → fallback TrackingMore) cho shipment
-  // chưa giao (cap 100 + rate-limit trong hàm).
-  try {
-    const tk = await trackPendingShipments({ limit: 100 });
-    process.stdout.write(`track-shipments: tracked ${tk.tracked}, delivered ${tk.delivered}, failed ${tk.failed}, skipDHL ${tk.skippedDhl}\n`);
-  } catch (e) {
-    process.stderr.write(`track-shipments: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Track đơn ship hộ (bắn event trạng thái sang MMP khi đổi).
-  try {
-    const th = await trackPendingShipHo({ limit: 50 });
-    process.stdout.write(`track-ship-ho: tracked ${th.tracked}, delivered ${th.delivered}, failed ${th.failed}\n`);
-  } catch (e) {
-    process.stderr.write(`track-ship-ho: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Gửi lại event ship hộ chưa tới MMP (outbox pending).
-  try {
-    const rt = await retryPendingShipHoEvents();
-    process.stdout.write(`retry-ship-ho-events: tried ${rt.tried}, delivered ${rt.delivered}, failed ${rt.failed}\n`);
-  } catch (e) {
-    process.stderr.write(`retry-ship-ho-events: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Auto-tier chiết khấu ship hộ theo volume tháng trước (idempotent trong tháng).
-  try {
-    const tr = await refreshShipHoTiers();
-    process.stdout.write(`ship-ho-tiers: partners ${tr.partners}, changed ${tr.changed}\n`);
-  } catch (e) {
-    process.stderr.write(`ship-ho-tiers: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Áp POD từ bill FedEx → delivered_at (nguồn ngày giao chính thức, ghi đè Lark).
-  try {
-    const pod = await applyPodDeliveries();
-    process.stdout.write(`apply-pod: shipments ${pod.shipmentsUpdated}, ship-ho ${pod.shipHoUpdated}, events ${pod.shipHoEvents}\n`);
-  } catch (e) {
-    process.stderr.write(`apply-pod: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Gắn dòng bill HÀNG HOÀN về đơn gốc (orderRef "_R"/"RETURN OF").
-  try {
-    const rl = await applyReturnLinks();
-    process.stdout.write(`return-links: linked ${rl.linked}, unresolved ${rl.unresolved}\n`);
-  } catch (e) {
-    process.stderr.write(`return-links: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  // Đối soát ship hộ từ hoá đơn carrier (up bill là tự sync trong ≤1h, khỏi bấm tay).
-  try {
-    const rc = await reconcileShipHoFromCarrierBillsCore();
-    process.stdout.write(`ship-ho-reconcile: matched ${rc.matched}/${rc.totalWithTracking}, requoted ${rc.requoted}, unmatched ${rc.unmatched}\n`);
-  } catch (e) {
-    process.stderr.write(`ship-ho-reconcile: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
-  return tomTat;
+/** Thứ tự có ý nghĩa: nạp đơn trước, các việc ăn theo dữ liệu đơn sau. */
+const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
+  { key: 'sync-orders', fn: async () => {
+    const r = await runHourlySync();
+    const loi = r.filter((x) => x.error);
+    if (loi.length) throw new Error(loi.map((x) => `${x.storeName}: ${x.error}`).join(' | '));
+    return { cuaHang: r.map((x) => ({ ten: x.storeName, donNap: x.ingested })) };
+  } },
+  { key: 'retry-mmp-orders', fn: () => retryFailedMmpPushes() },
+  { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
+  { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
+  { key: 'track-shipments', fn: () => trackPendingShipments({ limit: 100 }) },
+  { key: 'track-ship-ho', fn: () => trackPendingShipHo({ limit: 50 }) },
+  { key: 'retry-ship-ho-events', fn: () => retryPendingShipHoEvents() },
+  { key: 'ship-ho-tiers', fn: () => refreshShipHoTiers() },
+  { key: 'apply-pod', fn: () => applyPodDeliveries() },
+  { key: 'return-links', fn: () => applyReturnLinks() },
+  { key: 'ship-ho-reconcile', fn: () => reconcileShipHoFromCarrierBillsCore() },
+];
+
+async function main(): Promise<void> {
+  let hong = 0;
+  for (const v of VIEC) if (!(await chayMotJob(v.key, v.fn))) hong++;
+  process.stdout.write(`xong: ${VIEC.length - hong}/${VIEC.length} việc ok\n`);
+  if (hong > 0) process.exitCode = 1;
 }
 
-chayCron('sync-orders', main);
+main()
+  .catch((err) => { process.stderr.write(`sync-orders fatal: ${err instanceof Error ? err.stack : String(err)}\n`); process.exitCode = 1; })
+  .finally(() => process.exit());

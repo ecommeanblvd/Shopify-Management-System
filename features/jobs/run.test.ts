@@ -10,8 +10,8 @@ import { join } from 'node:path';
  */
 const DIR = join(process.cwd(), 'scripts/cron');
 
-/** backfill: chạy tay. run-group: chạy NHIỀU tác vụ (dùng chayMotJob), có test riêng ở groups.test.ts. */
-const MIEN_TRU = new Set(['backfill-shopify-orders.ts', 'run-group.ts']);
+/** backfill: chạy tay. run-group + sync-shopify-orders: chạy NHIỀU tác vụ qua chayMotJob. */
+const MIEN_TRU = new Set(['backfill-shopify-orders.ts', 'run-group.ts', 'sync-shopify-orders.ts']);
 
 describe('script cron', () => {
   const files = readdirSync(DIR).filter((f) => f.endsWith('.ts') && !MIEN_TRU.has(f));
