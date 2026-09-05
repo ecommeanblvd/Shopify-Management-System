@@ -38,12 +38,16 @@ export default defineRailway(() => {
     networking: { privateNetworkEndpoint: "shopify-management-system" },
     env: { BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), CRON_SECRET: preserve(), DATABASE_URL: preserve(), DHL_API_KEY: preserve(), DHL_API_SECRET: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), EXTERNAL_API_KEY: preserve(), FEDEX_ACCOUNT_NUMBER: preserve(), FEDEX_API_BASE: preserve(), FEDEX_CLIENT_ID: preserve(), FEDEX_CLIENT_SECRET: preserve(), GOOGLE_CLIENT_ID: preserve(), GOOGLE_CLIENT_SECRET: preserve(), LARK_APP_ID: preserve(), LARK_APP_SECRET: preserve(), LARK_BASE_APP_TOKEN: preserve(), LARK_LOG_TABLE_ID: preserve(), LARK_QC_TABLE_ID: preserve(), MMP_ORDERS_URL: preserve(), MMP_OUTBOUND_SECRET: preserve(), MMP_OUTBOUND_URL: preserve(), MMP_SHIP_HO_WEBHOOK_URL: preserve(), MMP_WEBHOOK_SECRET: preserve(), RAILWAY_TOKEN: preserve(), S3_ACCESS_KEY_ID: preserve(), S3_BUCKET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve(), S3_SECRET_ACCESS_KEY: preserve(), SHIP_HO_ADOPT_DISABLED: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve(), TRACKINGMORE_API_KEY: preserve() },
   });
+  // Bổ sung 05/09: service này chạy 8 việc, trong đó addr-verify cần FedEx và
+  // track-ship-ho cần FedEx + TrackingMore + DHL — nhưng chỉ có FEDEX_API_BASE,
+  // KHÔNG có credential. Hậu quả: addr-verify hỏng 100/100, track-ship-ho hỏng
+  // 48/48 mỗi lượt, IM LẶNG, cho tới khi tách tác vụ ra mới lộ.
   const cronSyncOrders = service("cron-sync-orders", {
     source: repo,
     start: "npm run cron:sync-orders",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 * * * *", restartPolicyType: "NEVER" },
-    env: { BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_API_BASE: preserve(), S3_REGION: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
+    env: { FEDEX_CLIENT_ID: ShopifyManagementSystem.env.FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET: ShopifyManagementSystem.env.FEDEX_CLIENT_SECRET, FEDEX_ACCOUNT_NUMBER: ShopifyManagementSystem.env.FEDEX_ACCOUNT_NUMBER, DHL_API_KEY: ShopifyManagementSystem.env.DHL_API_KEY, TRACKINGMORE_API_KEY: ShopifyManagementSystem.env.TRACKINGMORE_API_KEY, MMP_ORDERS_URL: ShopifyManagementSystem.env.MMP_ORDERS_URL, MMP_OUTBOUND_SECRET: ShopifyManagementSystem.env.MMP_OUTBOUND_SECRET, MMP_SHIP_HO_WEBHOOK_URL: ShopifyManagementSystem.env.MMP_SHIP_HO_WEBHOOK_URL, MMP_WEBHOOK_SECRET: ShopifyManagementSystem.env.MMP_WEBHOOK_SECRET, BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_API_BASE: preserve(), S3_REGION: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
   });
 
   // ── Cron thêm 05/09: bốn tác vụ chết âm thầm (rà soát 04/09). Biến môi trường
