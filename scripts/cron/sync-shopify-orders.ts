@@ -8,14 +8,15 @@
  * thời gian, đúng cách đã giúp tìm ra sync-lark 68 phút.
  *
  * Một việc hỏng KHÔNG chặn các việc sau: chayMotJob nuốt lỗi và ghi lại.
+ *
+ * Ba việc đã CHUYỂN sang service cron riêng ngày 05/09 để chạy dày hơn mỗi giờ:
+ * retry-mmp-orders và retry-ship-ho-events (15 phút/lần — hàng đợi gửi đối tác
+ * cần nhanh) và track-shipments (6 giờ/lần). Để lại đây nữa là chạy trùng.
  */
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
-import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
-import { trackPendingShipments } from '@/features/shipments/track';
 import { trackPendingShipHo } from '@/features/ship-ho/track';
-import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
@@ -30,16 +31,13 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
     if (loi.length) throw new Error(loi.map((x) => `${x.storeName}: ${x.error}`).join(' | '));
     return { cuaHang: r.map((x) => ({ ten: x.storeName, donNap: x.ingested })) };
   } },
-  { key: 'retry-mmp-orders', fn: () => retryFailedMmpPushes() },
   // CỐ Ý không giới hạn ngày ở đây. Lượt 05/09 mất 885 giây (75% cả cron) nhưng
   // KHÔNG phải lãng phí — nó đẩy được 1.342 đơn tồn chưa từng sang MMP. Sau lượt
   // đó hàng đợi rỗng và việc này còn 0,1 giây. Đặt cửa sổ ngày ở đây sẽ chặn mất
   // đúng những đợt dọn tồn như vậy.
   { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
   { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
-  { key: 'track-shipments', fn: () => trackPendingShipments({ limit: 100 }) },
   { key: 'track-ship-ho', fn: () => trackPendingShipHo({ limit: 50 }) },
-  { key: 'retry-ship-ho-events', fn: () => retryPendingShipHoEvents() },
   { key: 'ship-ho-tiers', fn: () => refreshShipHoTiers() },
   { key: 'apply-pod', fn: () => applyPodDeliveries() },
   { key: 'return-links', fn: () => applyReturnLinks() },
