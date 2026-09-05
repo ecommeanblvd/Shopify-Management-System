@@ -31,6 +31,10 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
     return { cuaHang: r.map((x) => ({ ten: x.storeName, donNap: x.ingested })) };
   } },
   { key: 'retry-mmp-orders', fn: () => retryFailedMmpPushes() },
+  // CỐ Ý không giới hạn ngày ở đây. Lượt 05/09 mất 885 giây (75% cả cron) nhưng
+  // KHÔNG phải lãng phí — nó đẩy được 1.342 đơn tồn chưa từng sang MMP. Sau lượt
+  // đó hàng đợi rỗng và việc này còn 0,1 giây. Đặt cửa sổ ngày ở đây sẽ chặn mất
+  // đúng những đợt dọn tồn như vậy.
   { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
   { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
   { key: 'track-shipments', fn: () => trackPendingShipments({ limit: 100 }) },
