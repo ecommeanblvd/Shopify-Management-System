@@ -11,6 +11,7 @@ import { classifyPackRows, type ClassifyMaps } from './classify';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
+import { coThayDoi } from './khong-doi';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -36,6 +37,8 @@ export async function getLatestLarkRun(): Promise<LarkRunRow | null> {
 
 export interface LarkSyncSummary {
   created: number; updated: number;
+  /** Số lệnh ghi ĐÃ BỎ QUA vì dữ liệu không đổi (xem khong-doi.ts). */
+  boQuaKhongDoi?: number;
   unmatched: Array<{ orderNumber: string; reason: string }>;
   skipped: number; warnings: string[];
   larkStatusUpserted: number;
@@ -73,9 +76,20 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     const rows = records.map((r) => parsePackRow(r.fields)).filter((r) => r.orderNumber || r.logUniqueCode);
 
     // Maps đối chiếu
+    // Nạp CẢ các cột mà patchFrom sẽ ghi, để bỏ qua lệnh ghi không đổi gì.
+    // Trước 05/09 chỉ nạp 3 cột định danh → mọi dòng đều bị UPDATE mỗi lượt
+    // (3.770 lệnh/lượt) dù dữ liệu y nguyên.
     const existing = await db
-      .select({ id: schema.shipments.id, logUniqueCode: schema.shipments.logUniqueCode, trackingNumber: schema.shipments.trackingNumber })
+      .select({
+        id: schema.shipments.id, logUniqueCode: schema.shipments.logUniqueCode,
+        trackingNumber: schema.shipments.trackingNumber,
+        actualWeightKg: schema.shipments.actualWeightKg,
+        dimLengthCm: schema.shipments.dimLengthCm, dimWidthCm: schema.shipments.dimWidthCm,
+        dimHeightCm: schema.shipments.dimHeightCm,
+        carrierKey: schema.shipments.carrierKey, labelCreatedAt: schema.shipments.labelCreatedAt,
+      })
       .from(schema.shipments);
+    const shipmentById = new Map(existing.map((s) => [s.id, s as Record<string, unknown>]));
     const shipmentByLogCode = new Map<string, string>();
     const shipmentByTracking = new Map<string, string>();
     for (const s of existing) {
@@ -91,11 +105,17 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     // transaction khổng lồ: transaction dài bị Supabase pooler timeout/rớt
     // connection giữa chừng ("Failed query"). Sync idempotent nên fail giữa lô
     // không sao — chạy lại tiếp tục.
-    for (const batch of chunk(cls.update, APPLY_CHUNK)) {
+    // BỎ QUA dòng không đổi gì: mỗi lệnh ghi là một vòng tới database, mà cron
+    // có thể chạy khác vùng với DB (~270ms/lệnh) — bỏ được lệnh nào là bớt
+    // ngần ấy thời gian.
+    const canUpdate = cls.update
+      .map((u) => ({ u, patch: patchFrom(u.row) }))
+      .filter(({ u, patch }) => Object.keys(patch).length > 1 && coThayDoi(shipmentById.get(u.shipmentId), patch));
+    const boQuaUpdate = cls.update.length - canUpdate.length;
+    for (const batch of chunk(canUpdate, APPLY_CHUNK)) {
       await db.transaction(async (tx) => {
-        for (const u of batch) {
-          const patch = patchFrom(u.row);
-          if (Object.keys(patch).length > 1) await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, u.shipmentId));
+        for (const { u, patch } of batch) {
+          await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, u.shipmentId));
         }
       });
     }
@@ -155,7 +175,24 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
       }
       statusByOrderId.set(orderId, acc);
     }
-    const statusRows = [...statusByOrderId.entries()];
+    // Cùng lý do như phần shipments: bỏ qua dòng trạng thái không đổi
+    // (~4.040 upsert mỗi lượt trước 05/09).
+    const statusHienTai = new Map(
+      (await db.select({
+        orderId: schema.larkOrderStatus.orderId,
+        dispatchStatus: schema.larkOrderStatus.dispatchStatus,
+        cxFfStatus: schema.larkOrderStatus.cxFfStatus,
+        deliveryStatus: schema.larkOrderStatus.deliveryStatus,
+        expectedDeliveryDate: schema.larkOrderStatus.expectedDeliveryDate,
+      }).from(schema.larkOrderStatus)).map((r) => [r.orderId, r as Record<string, unknown>]),
+    );
+    const statusRows = [...statusByOrderId.entries()].filter(([orderId, s]) => coThayDoi(statusHienTai.get(orderId), {
+      dispatchStatus: s.dispatchStatus,
+      cxFfStatus: s.cxFfStatus,
+      deliveryStatus: s.deliveryStatus,
+      expectedDeliveryDate: s.expectedDeliveryDate ? s.expectedDeliveryDate.toISOString().slice(0, 10) : null,
+    }));
+    const boQuaStatus = statusByOrderId.size - statusRows.length;
     let larkStatusUpserted = 0;
     for (const batch of chunk(statusRows, APPLY_CHUNK)) {
       await db.transaction(async (tx) => {
@@ -281,7 +318,9 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     }
 
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: cls.update.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen };
+    // `updated` nay là số dòng THẬT SỰ ghi, không phải số dòng xét — để nhật ký
+    // phản ánh đúng khối lượng ghi. Thêm boQuaKhongDoi để thấy hiệu quả.
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: canUpdate.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen, boQuaKhongDoi: boQuaUpdate + boQuaStatus };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.
