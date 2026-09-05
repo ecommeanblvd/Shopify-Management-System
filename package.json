@@ -42,7 +42,8 @@
     "cron:remind-fuel": "dotenv -- tsx scripts/cron/remind-manual-fuel.ts",
     "cron:prune-logs": "dotenv -- tsx scripts/cron/prune-logs.ts",
     "cron:retry-ship-ho": "dotenv -- tsx scripts/cron/retry-ship-ho-events.ts",
-    "cron:retry-mmp-orders": "dotenv -- tsx scripts/cron/retry-mmp-orders.ts"
+    "cron:retry-mmp-orders": "dotenv -- tsx scripts/cron/retry-mmp-orders.ts",
+    "cron:group": "dotenv -- tsx scripts/cron/run-group.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
@@ -85,6 +86,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "railway": "^3.11.0",
     "tsx": "^4.22.3",
     "typescript": "^5",
     "vitest": "^4.1.6",

@@ -43,6 +43,10 @@ describe('trangThaiJob', () => {
   it('còn trong hạn mà đang chạy → dang_chay', () => {
     expect(trangThaiJob(job, chay(1, 'running'), now)).toBe('dang_chay');
   });
+
+  it("'running' quá một chu kỳ = tiến trình chết giữa chừng → tính là LỖI, không báo xanh", () => {
+    expect(trangThaiJob(job, chay(61, 'running'), now)).toBe('loi');
+  });
 });
 
 describe('sổ đăng ký', () => {

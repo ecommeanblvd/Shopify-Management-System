@@ -85,7 +85,12 @@ export function trangThaiJob(job: JobDinhNghia, lanCuoi: LanChayGanNhat | null, 
   const treMs = now.getTime() - lanCuoi.startedAt.getTime();
   if (treMs > hanChotMs(job.chuKyPhut)) return 'qua_han';
   if (lanCuoi.status === 'error') return 'loi';
-  if (lanCuoi.status === 'running') return 'dang_chay';
+  // 'running' quá lâu = tiến trình chết giữa chừng, không ai cập nhật lại dòng
+  // đó (đo 05/09: 4 dòng kẹt 'running' từ hôm trước). Coi là ĐANG CHẠY mãi thì
+  // trang giám sát nói dối — quá một chu kỳ thì tính là lỗi.
+  if (lanCuoi.status === 'running') {
+    return treMs > job.chuKyPhut * 60_000 ? 'loi' : 'dang_chay';
+  }
   return 'binh_thuong';
 }
 

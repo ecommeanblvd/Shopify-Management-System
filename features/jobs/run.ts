@@ -11,6 +11,27 @@ import { batDauJob, ketThucJob } from './record';
  * `jobKey` PHẢI có trong `JOB_REGISTRY`, nếu không trang giám sát sẽ không biết
  * chu kỳ mong đợi để tính quá hạn — có test canh việc này.
  */
+/**
+ * Chạy MỘT tác vụ, ghi nhật ký, KHÔNG thoát tiến trình. Dùng cho bộ chạy nhóm.
+ * Trả về true nếu xong xuôi. Lỗi được nuốt và ghi lại — một tác vụ hỏng không
+ * được kéo cả nhóm chết theo.
+ */
+export async function chayMotJob(jobKey: string, fn: () => Promise<unknown>): Promise<boolean> {
+  const batDau = Date.now();
+  const id = await batDauJob(jobKey);
+  try {
+    const summary = await fn();
+    await ketThucJob(id, { ok: true, summary, batDau });
+    process.stdout.write(`  ✓ ${jobKey} (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary).slice(0, 120) : ''}\n`);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    await ketThucJob(id, { ok: false, error: msg.slice(0, 2000), batDau });
+    process.stderr.write(`  ✗ ${jobKey}: ${msg.split('\n')[0]}\n`);
+    return false;
+  }
+}
+
 export function chayCron(jobKey: string, fn: () => Promise<unknown>): void {
   const batDau = Date.now();
   void (async () => {
