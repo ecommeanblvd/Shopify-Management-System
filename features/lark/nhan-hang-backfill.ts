@@ -23,6 +23,12 @@ export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { s
     .limit(500);
   if (cho.length === 0) return { doiChieu: 0, daTao: 0, daDien: 0, boQua: 0, loi: [], loiKhoa: [] };
 
+  // Dòng thiếu order/sku (khoá null) không đẩy được — loại khỏi lô gửi Lark
+  // ngay từ đầu, giữ doiChieu đúng nghĩa "đem đi đối chiếu", KHÔNG dựa vào
+  // fallback thông báo lỗi của dongBoNhanHangLark.
+  const choHopLe = cho.filter((c) => khoaNhanHang(c.orderNumber, c.sku) !== null);
+  const choThieuKhoa = cho.filter((c) => khoaNhanHang(c.orderNumber, c.sku) === null);
+
   // Mã món đã xác nhận của từng (order bare, sku) — nối qua orders.shopify_order_number.
   const mon = await db.select({
     orderNumber: sql<string>`ltrim(${schema.shopifyOrders.shopifyOrderNumber}, '#')`,
@@ -31,7 +37,7 @@ export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { s
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .where(and(
       isNotNull(schema.goodsReceiptItems.confirmedAt),
-      inArray(sql`ltrim(${schema.shopifyOrders.shopifyOrderNumber}, '#')`, [...new Set(cho.map((c) => c.orderNumber))]),
+      inArray(sql`ltrim(${schema.shopifyOrders.shopifyOrderNumber}, '#')`, [...new Set(choHopLe.map((c) => c.orderNumber))]),
     ))
     .orderBy(schema.goodsReceiptItems.unitCode);
   const maTheoKhoa = new Map<string, string[]>();
@@ -40,15 +46,22 @@ export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { s
     const k = `${m.orderNumber} ${m.sku}`;
     maTheoKhoa.set(k, [...(maTheoKhoa.get(k) ?? []), m.unitCode]);
   }
-  const dongs: DongNhanHang[] = cho.map((c) => ({
+  const dongs: DongNhanHang[] = choHopLe.map((c) => ({
     orderNumber: c.orderNumber, sku: c.sku, vendor: c.vendor,
     receivedAt: c.receivedAt instanceof Date ? c.receivedAt : new Date(c.receivedAt as unknown as string),
     maMon: maTheoKhoa.get(`${c.orderNumber} ${c.sku}`) ?? [],
   }));
   const kq = await dongBoNhanHangLark(dongs, listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields);
-  // Đóng dấu những dòng KHÔNG nằm trong danh sách lỗi.
+  // Ghi nhận các dòng bị loại từ đầu (khoá null) vào summary lỗi để không "biến mất" khỏi báo cáo.
+  for (const c of choThieuKhoa) kq.loi.push(`${c.orderNumber} ${c.sku}: thiếu order hoặc sku`);
+
+  // Đóng dấu những dòng KHÔNG nằm trong danh sách lỗi. Khoá null (order/sku
+  // rỗng) không bao giờ đóng dấu: dòng đó không đẩy được, để người xem.
   const loiKhoa = new Set(kq.loiKhoa);
-  const xong = cho.filter((c) => !loiKhoa.has(khoaNhanHang(c.orderNumber, c.sku) ?? '')).map((c) => c.id);
+  const xong = cho.filter((c) => {
+    const k = khoaNhanHang(c.orderNumber, c.sku);
+    return k !== null && !loiKhoa.has(k);
+  }).map((c) => c.id);
   if (xong.length) {
     await db.update(schema.mmpLineReceived).set({ larkPushedAt: sql`now()` }).where(inArray(schema.mmpLineReceived.id, xong));
   }
