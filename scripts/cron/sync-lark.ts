@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   // đóng băng 29/06→22/07 (gap 426 đơn by_received phía MMP).
   try {
     const br = await syncBrandReceived();
-    process.stdout.write(`brand-received: fetched ${br.fetched}, upserted ${br.upserted}\n`);
+    process.stdout.write(`brand-received: fetched ${br.fetched}, inserted ${br.inserted}\n`);
   } catch (err) {
     process.stderr.write(`brand-received: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
   }
