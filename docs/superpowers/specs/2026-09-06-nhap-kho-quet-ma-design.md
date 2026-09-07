@@ -47,7 +47,7 @@ Bốn bước, mỗi bước một thao tác chính, **không bước nào gõ S
    - Quét tem brand (`L:<lineId>`) → nhảy thẳng tới dòng đơn.
    - Chọn từ **danh sách chờ** (`listAwaitingGoods` lọc theo brand): *mã đơn · tên hàng · size · mong đợi N · hạn về*, có ô tìm theo mã đơn.
 3. **In tem món** — hiện *Đơn · hàng · size · mong đợi N*. Nút **In N tem** (sửa được N). Bấm → tạo N dòng `goods_receipt_items` (mã `WH`, nối `fulfillmentLineId`/`orderId`/`brandRequestId`) → mở trang in.
-4. **Quét xác nhận** — dán tem, quét lại từng tem. Khớp → đánh dấu đã xác nhận, đếm *1/2 → 2/2*. Đủ chiếc → dòng đơn chuyển "đã nhận", ghi ngày nhận (mục 5).
+4. **Quét xác nhận** — dán tem, quét lại từng tem. Khớp → đánh dấu đã xác nhận, đếm *1/2 → 2/2*. Đủ chiếc → `brand_order_requests.delivered_at` = lúc quét chiếc cuối, dòng `order_fulfillment_lines` chuyển `brand_confirmed → in_stock` (đúng chuyển trạng thái mà `receiving/actions.ts` đang làm khi QC pass + lưu kho), ghi ngày nhận (mục 5). QC vẫn làm sau trong Lark; "đã nhận" ≠ "QC pass".
 
 Quét xong về bước 2. Hết kiện → **Đóng phiếu**.
 
@@ -55,6 +55,7 @@ Quét xong về bước 2. Hết kiện → **Đóng phiếu**.
 | Tình huống | Xử lý |
 |---|---|
 | Brand gửi thiếu (1/2) | In 1 tem; dòng còn nợ 1, vẫn trong danh sách chờ |
+| Brand gửi **thừa** (3 chiếc cho dòng mong đợi 2) | In tối đa = số mong đợi; chiếc dư đi đường **Nhận ngoài kế hoạch** (cờ vàng) — không tự nâng số lượng đơn |
 | Hàng không có trong danh sách chờ | Nút **Nhận ngoài kế hoạch**: in tem, ghi SKU/tên, `fulfillmentLineId = NULL`, cờ vàng để ghép sau |
 | Quét nhầm (tem phiếu khác / món đã xác nhận / mã không tồn tại) | Báo đỏ + rung, **không ghi gì** |
 | Tem in rồi mà không quét xác nhận | Món tồn tại ở trạng thái "đã in, chưa xác nhận" — hiện cảnh báo trên phiếu, không tự coi là đã nhận |
@@ -76,7 +77,8 @@ In qua trình duyệt (`@page`), sinh QR phía client bằng thư viện npm. Tr
 
 Khi một dòng đơn đủ chiếc xác nhận:
 1. Ghi `mmp_line_received.received_at` (nguồn cho `receivedAt` trong payload MMP — công nợ theo kỳ nhận).
-2. Đẩy một dòng sang bảng Lark **"WH ngày MEAN nhận hàng"** (base `HxfAw0iRViHiNgkSlbBltpVkg3f`, table `tblFtdIn8H7ftfBL`): *Order Number, Lineitem SKU, ngày nhận, **Mã món** (cột mới, chuỗi `WH-… | WH-…`)*. Dùng đường ghi đã có (`updateLogRecordFields` mở rộng cho bảng này; thêm tạo dòng mới).
+2. Đẩy một dòng sang bảng Lark **"WH ngày MEAN nhận hàng"** (base `HxfAw0iRViHiNgkSlbBltpVkg3f`, table `tblFtdIn8H7ftfBL`): *Order Number, Lineitem SKU, ngày nhận, **Mã món** (chuỗi `WH-… | WH-…`)*. Dùng đường ghi đã có (`updateLogRecordFields` mở rộng cho bảng này; thêm tạo dòng mới).
+   **Điều kiện trước:** cột "Mã món" (kiểu Text) phải được **ops tạo trong Lark** trước khi bật — bảng do ops sở hữu, SMS không tự thêm cột; tên cột khai một chỗ trong mã (như `COT_COURIER`).
 3. `syncBrandReceived` (Lark → SMS) đổi luật: chỉ chèn khi `mmp_line_received` chưa có dòng đó; **không ghi đè**.
 
 Lark hỏng không chặn bước nhận: phiếu vẫn đóng, dòng Lark đánh dấu "chưa đẩy" và cron điền bù (cùng cách bộ điền bù Couriers, D-045).
@@ -84,6 +86,7 @@ Lark hỏng không chặn bước nhận: phiếu vẫn đóng, dòng Lark đán
 ## 6. Báo brand qua MMP
 
 Payload đơn (`MmpOrderLine`) thêm **hai trường cộng thêm**: `lineId: string` (Shopify Line ID) và `labelUrl: string | null` (PDF tem QR cả đơn). Không đổi trường cũ. Endpoint SMS sinh PDF theo đơn, ký URL có hạn. **Phải báo MMP** trước khi bật, để họ hiện link cho brand.
+Phần này **độc lập** với mục 3–5: kho nhận bằng danh sách chờ chạy được ngay không cần MMP đổi gì. Nếu MMP chưa sẵn sàng, tách thành plan riêng, không chặn phần kho.
 
 ## 7. Ngoài phạm vi (cố ý)
 - QC, kệ, đóng gói trong SMS — vẫn Lark (phương án C).
