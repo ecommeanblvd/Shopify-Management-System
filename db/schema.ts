@@ -1891,8 +1891,11 @@ export const mmpLineReceived = pgTable('mmp_line_received', {
   receivedAt: timestamp('received_at').notNull(),
   vendor: text('vendor'),
   // 'lark' = ops ghi thật (bảng Lark WH) · 'estimate_fulfill' = ước từ mốc
-  // fulfill Shopify (backfill đơn TA cũ 2024-2025 trước khi có bảng Lark).
+  // fulfill Shopify (backfill đơn TA cũ 2024-2025) · 'sms' = kho quét xác nhận
+  // trên SMS (nguồn sự thật từ 09/2026 — ghi đè 'lark', không bị 'lark' ghi đè).
   source: text('source').notNull().default('lark'),
+  /** Chỉ dùng cho source='sms': lúc đẩy xong sang bảng Lark. NULL = chưa đẩy. */
+  larkPushedAt: timestamp('lark_pushed_at'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
   uniqueIndex('mmp_line_received_order_sku_idx').on(t.orderNumber, t.sku),
@@ -1954,6 +1957,12 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   globalPrice: numeric('global_price', { precision: 14, scale: 2 }),
   globalPriceCurrency: text('global_price_currency'),
   weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  /** Lúc bấm "In N tem" (nhập kho quét mã). Có printed_at mà chưa có confirmed_at = tem in rồi chưa dán/quét. */
+  printedAt: timestamp('printed_at'),
+  /** Lúc quét xác nhận tem đã dán. Đủ chiếc của dòng → delivered_at + in_stock. */
+  confirmedAt: timestamp('confirmed_at'),
+  /** Cờ vàng "Nhận ngoài kế hoạch": brand gửi thừa hoặc hàng không có trong danh sách chờ. */
+  unplanned: boolean('unplanned').notNull().default(false),
   /** Kho hiện tại của món (GVM/AP/DM) — đổi khi chuyển kho. NULL tới khi lưu kho. */
   currentWarehouseCode: text('current_warehouse_code'),
   /** Vị trí trong kho ("Kệ 6-F"). */
