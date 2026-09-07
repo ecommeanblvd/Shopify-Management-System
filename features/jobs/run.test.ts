@@ -16,7 +16,8 @@ const MIEN_TRU = new Set(['backfill-shopify-orders.ts', 'run-group.ts', 'sync-sh
 describe('script cron', () => {
   const files = readdirSync(DIR).filter((f) => f.endsWith('.ts') && !MIEN_TRU.has(f));
 
-  it('có script để kiểm', () => expect(files.length).toBeGreaterThan(10));
+  // 07/09: còn 12 script sau khi bỏ 8 tác vụ chết; sàn 5 để bắt việc đọc nhầm thư mục.
+  it('có script để kiểm', () => expect(files.length).toBeGreaterThan(5));
 
   for (const f of files) {
     it(`${f} gọi chayCron với khoá nằm trong sổ đăng ký`, () => {

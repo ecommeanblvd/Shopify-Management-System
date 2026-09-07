@@ -61,11 +61,10 @@ Xem cấu hình THẬT đang chạy của một service (không phải cái tron
 
 Giờ trên Railway là **UTC**. `0 3 * * 1` = 10:00 sáng thứ Hai giờ Việt Nam.
 
-## Tác vụ có trong sổ đăng ký nhưng CHƯA service nào chạy
+## Tác vụ đã bỏ (07/09/2026)
 
-Kiểm `job_runs` ngày 07/09: 8 khoá chưa từng chạy — `refresh-vcb-fx`,
-`sync-warehouse`, `sync-meanblvd`, `create-sale`, `sync-catalog` (nhóm
-`hang-ngay`), `refresh-demand`, `remind-fuel` (nhóm `hang-tuan`), `sync-geo`
-(nhóm `hang-thang`). Service cũ của chúng đã bị xoá, service nhóm chưa tạo.
-Muốn bật: ba service dùng `cron:group -- hang-ngay | hang-tuan | hang-thang`
-theo mẫu trên. Quyết định bật hay bỏ hẳn khoá thuộc CEO.
+8 khoá chưa từng chạy (service cũ đã xoá) được CEO cho bỏ hẳn khỏi sổ đăng ký,
+nhóm, script cron và API route: `refresh-vcb-fx`, `sync-warehouse`,
+`sync-meanblvd`, `create-sale`, `sync-catalog`, `refresh-demand`, `remind-fuel`,
+`sync-geo`. Mã tính năng trong `features/` vẫn còn; bật lại = thêm khoá vào
+`registry.ts`, script vào `scripts/cron/`, khoá vào nhóm ở `groups.ts`.

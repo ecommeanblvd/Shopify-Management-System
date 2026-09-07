@@ -23,6 +23,10 @@ const PHUT = 1, GIO = 60, NGAY = 24 * 60;
 /** push-nhan-hang chạy LỒNG trong cron sync-lark (scripts/cron/sync-lark.ts gọi backfillNhanHangLark) — chu kỳ phải luôn khớp nhau. */
 const CHU_KY_SYNC_LARK = 1 * GIO;
 
+// 07/09/2026 (CEO): bỏ hẳn 8 khoá chưa từng chạy vì service cũ đã xoá —
+// sync-warehouse, sync-meanblvd, sync-catalog, sync-geo, create-sale,
+// refresh-demand, refresh-vcb-fx, remind-fuel. Mã tính năng vẫn còn trong
+// features/, muốn bật lại thì thêm khoá + script + nhóm.
 export const JOB_REGISTRY: readonly JobDinhNghia[] = [
   { key: 'sync-orders', ten: 'Đồng bộ đơn Shopify', chuKyPhut: 1 * GIO,
     hauQua: 'Đơn mới không về hệ thống' },
@@ -30,30 +34,14 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Bảng Lark lệch với hệ thống' },
   { key: 'sync-lifecycle', ten: 'Đồng bộ vòng đời đơn', chuKyPhut: 6 * GIO,
     hauQua: 'Bảng theo dõi tiến độ đơn đứng im' },
-  { key: 'sync-warehouse', ten: 'Đối soát tồn kho Lark', chuKyPhut: 1 * NGAY,
-    hauQua: 'Tồn kho lệch giữa Lark và hệ thống' },
-  { key: 'sync-meanblvd', ten: 'Đẩy tồn kho lên Shopify MEAN BLVD', chuKyPhut: 1 * NGAY,
-    hauQua: 'Shopify bán hàng đã hết tồn' },
-  { key: 'sync-catalog', ten: 'Đồng bộ catalog Shopify', chuKyPhut: 1 * NGAY,
-    hauQua: 'Sản phẩm mới/đổi tên không về hệ thống' },
-  { key: 'sync-geo', ten: 'Làm mới dữ liệu địa lý', chuKyPhut: 30 * NGAY,
-    hauQua: 'Danh mục tỉnh/thành cũ' },
-  { key: 'create-sale', ten: 'Tạo sản phẩm -Sale', chuKyPhut: 1 * NGAY,
-    hauQua: 'Hàng hoàn không lên sàn bán lại được' },
   { key: 'track-shipments', ten: 'Tra trạng thái giao (đơn hàng nhà)', chuKyPhut: 6 * GIO,
     hauQua: 'Không biết đơn đã giao hay chưa' },
   { key: 'track-ship-ho', ten: 'Tra trạng thái giao (ship hộ)', chuKyPhut: 6 * GIO,
     hauQua: 'Đối tác không thấy đơn đã giao' },
   { key: 'refresh-fuel', ten: 'Cập nhật phụ phí xăng dầu', chuKyPhut: 1 * NGAY,
     hauQua: 'Báo giá dùng mức xăng dầu tuần cũ' },
-  { key: 'refresh-demand', ten: 'Cập nhật phụ phí demand FedEx', chuKyPhut: 7 * NGAY,
-    hauQua: 'Thiếu phụ phí demand kỳ mới → tính thiếu cước' },
   { key: 'refresh-surcharges', ten: 'Cập nhật phụ phí hãng', chuKyPhut: 1 * NGAY,
     hauQua: 'Bảng phụ phí lạc hậu' },
-  { key: 'refresh-vcb-fx', ten: 'Cập nhật tỉ giá Vietcombank', chuKyPhut: 1 * NGAY,
-    hauQua: 'Quy đổi USD của Aramex sai tỉ giá' },
-  { key: 'remind-fuel', ten: 'Nhắc nhập xăng dầu thủ công', chuKyPhut: 7 * NGAY,
-    hauQua: 'Quên nhập mức xăng dầu cho UPS/SF' },
   { key: 'push-unsent-brand', ten: 'Đẩy đơn brand chưa gửi MMP', chuKyPhut: 1 * GIO,
     hauQua: 'Đơn brand không sang MMP → thiếu đơn khi đối soát công nợ' },
   { key: 'addr-verify', ten: 'Xác minh địa chỉ qua FedEx', chuKyPhut: 1 * GIO,

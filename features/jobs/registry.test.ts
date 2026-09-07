@@ -61,7 +61,7 @@ describe('sổ đăng ký', () => {
     }
   });
   it('gồm đủ các tác vụ đã phát hiện chết 04/09', () => {
-    for (const k of ['retry-ship-ho-events', 'prune-logs', 'track-shipments', 'refresh-vcb-fx', 'refresh-demand', 'sync-catalog'])
+    for (const k of ['retry-ship-ho-events', 'prune-logs', 'track-shipments'])
       expect(JOB_KEYS).toContain(k);
   });
   it('hanChotMs = 2 lần chu kỳ', () => {

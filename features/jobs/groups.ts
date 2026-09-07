@@ -31,12 +31,8 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
   // nhìn "5,9 phút" không biết việc nào chậm.
   'theo-don': ['push-unsent-brand', 'addr-verify', 'apply-pod', 'return-links', 'ship-ho-reconcile'],
-  'hang-ngay': [
-    'ship-ho-tiers', 'refresh-fuel', 'refresh-surcharges', 'refresh-vcb-fx',
-    'sync-warehouse', 'sync-meanblvd', 'create-sale', 'sync-catalog',
-  ],
-  'hang-tuan': ['prune-logs', 'refresh-demand', 'remind-fuel'],
-  'hang-thang': ['sync-geo'],
+  'hang-ngay': ['ship-ho-tiers', 'refresh-fuel', 'refresh-surcharges'],
+  'hang-tuan': ['prune-logs'],
 };
 
 export const TEN_NHOM = Object.keys(NHOM_JOB);
