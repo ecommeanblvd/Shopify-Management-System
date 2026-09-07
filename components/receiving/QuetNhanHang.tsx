@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { MayQuet } from './MayQuet';
 import type { BrandDangCho, DongCho } from '@/features/receiving/nhan-nhanh-queries';
@@ -25,6 +25,10 @@ export function QuetNhanHang({ brands }: { brands: BrandDangCho[] }) {
   const [pending, start] = useTransition();
   const [do_, setDo] = useState(false);
 
+  // Đọc state qua ref để onMa ổn định — đổi deps là camera khởi động lại.
+  const buocRef = useRef(buoc);
+  useEffect(() => { buocRef.current = buoc; }, [buoc]);
+
   const baoLoi = (msg: string) => { rung(); setDo(true); toast.error(msg); setTimeout(() => setDo(false), 600); };
 
   const chonBrand = (brand: string) => start(async () => {
@@ -34,30 +38,36 @@ export function QuetNhanHang({ brands }: { brands: BrandDangCho[] }) {
   });
 
   const quetBuoc2 = useCallback((ma: string) => {
-    if (buoc.b !== 2) return;
+    const b = buocRef.current;
+    if (b.b !== 2) return;
     start(async () => {
       const r = await layDongTheoMaQuet(ma);
       if (!r.ok) { baoLoi(r.loi); return; }
-      if (r.dong.brandSlug !== buoc.brand) { baoLoi(`Dòng này của brand ${r.dong.brandSlug ?? '?'}, phiếu đang mở là ${buoc.brand}`); return; }
-      setBuoc({ b: 3, brand: buoc.brand, phieu: buoc.phieu, dong: r.dong, soLuong: Math.max(0, r.dong.mongDoi - r.dong.daIn) });
+      if (r.dong.brandSlug !== b.brand) { baoLoi(`Dòng này của brand ${r.dong.brandSlug ?? '?'}, phiếu đang mở là ${b.brand}`); return; }
+      setBuoc({ b: 3, brand: b.brand, phieu: b.phieu, dong: r.dong, soLuong: Math.max(0, r.dong.mongDoi - r.dong.daIn) });
     });
-  }, [buoc]);
+  }, []);
 
   const quetBuoc4 = useCallback((ma: string) => {
-    if (buoc.b !== 4) return;
+    const b = buocRef.current;
+    if (b.b !== 4) return;
     start(async () => {
-      const r = await xacNhanQuet({ receiptId: buoc.phieu.id, maQuet: ma });
+      const r = await xacNhanQuet({ receiptId: b.phieu.id, maQuet: ma });
       if (!r.ok) { baoLoi(LOI[r.lyDo]); return; }
       toast.success(`${r.unitCode} ✓ ${r.lineId ? `${r.daXacNhan}/${r.mongDoi}` : 'ngoài kế hoạch'}`);
-      setBuoc({ ...buoc, daXacNhan: [...buoc.daXacNhan, r.unitCode], mongDoi: r.mongDoi || buoc.mongDoi });
+      setBuoc((prev) => prev.b === 4 ? { ...prev, daXacNhan: [...prev.daXacNhan, r.unitCode], mongDoi: r.mongDoi || prev.mongDoi } : prev);
       if (r.duChiec) toast.success('Đủ chiếc — đã chốt nhận hàng dòng này');
     });
-  }, [buoc]);
+  }, []);
 
   // Về bước 2 sau khi quét xong, tải lại danh sách chờ (dòng đủ chiếc sẽ biến mất).
   const veDanhSach = () => { if (buoc.b === 1) return; start(async () => { const dongs = await layDongCho(buoc.brand); setBuoc({ b: 2, brand: buoc.brand, phieu: buoc.phieu, dongs, loc: '' }); }); };
 
-  useEffect(() => { if (do_) document.body.classList.add('ring-4', 'ring-red-500'); else document.body.classList.remove('ring-4', 'ring-red-500'); }, [do_]);
+  useEffect(() => {
+    if (do_) document.body.classList.add('ring-4', 'ring-red-500');
+    else document.body.classList.remove('ring-4', 'ring-red-500');
+    return () => document.body.classList.remove('ring-4', 'ring-red-500');
+  }, [do_]);
 
   if (buoc.b === 1) {
     // brandSlug khởi tạo null trong DB (gán sau khi biết brand) — bỏ qua brand chưa
@@ -144,8 +154,9 @@ export function QuetNhanHang({ brands }: { brands: BrandDangCho[] }) {
       {!buoc.dong && (
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); start(async () => {
           const r = await nhanNgoaiKeHoach({ receiptId: buoc.phieu.id, sku: String(f.get('sku') || '') || null, productTitle: String(f.get('ten') || '') || null, soLuong: Number(f.get('n') || 1) });
+          if (r.ma.length === 0) { toast.error('Không có tem nào được tạo'); return; }
           window.open(`/f/warehouse/receiving/tem?ma=${r.ma.join(',')}`, '_blank');
-          setBuoc({ ...buoc, daIn: [...buoc.daIn, ...r.ma] });
+          setBuoc((prev) => prev.b === 4 ? { ...prev, daIn: [...prev.daIn, ...r.ma] } : prev);
         }); }}>
           <input name="ten" placeholder="Tên hàng" className="flex-1 rounded-md border px-2 py-2" />
           <input name="sku" placeholder="SKU (nếu có)" className="w-28 rounded-md border px-2 py-2" />
