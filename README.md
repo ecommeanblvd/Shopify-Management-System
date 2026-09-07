@@ -20,7 +20,7 @@ Next.js (App Router) · TypeScript · Drizzle ORM + Postgres · Better-Auth · `
 - One service for the Next.js app + an attached Postgres plugin.
 - Set every variable from `.env.example` in the Railway service. `DATABASE_URL` is provided automatically by the Postgres plugin.
 - `SHOPIFY_APP_URL` and `BETTER_AUTH_URL` must be the Railway public URL.
-- The deploy `startCommand` runs migrations then starts the server (see `railway.json`).
+- Build/start/cron của MỌI service khai trong `.railway/railway.ts` (Infrastructure as Code, xem `docs/cron-railway.md`); web `startCommand` chạy migrate + seed roles rồi start.
 
 ### Scheduled jobs (cron)
 
