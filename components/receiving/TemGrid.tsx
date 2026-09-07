@@ -15,7 +15,9 @@ export function TemGrid({ tems, kho }: { tems: Tem[]; kho: '50x30' | 'a4' }) {
        .tem { width: 70mm; height: 37mm; padding: 3mm; box-sizing: border-box; page-break-inside: avoid; }`
     : `@page { size: 50mm 30mm; margin: 0; }
        .tem-grid { display: block; }
-       .tem { width: 50mm; height: 30mm; padding: 2mm; box-sizing: border-box; page-break-after: always; }`;
+       .tem { width: 50mm; height: 30mm; padding: 2mm; box-sizing: border-box; page-break-after: always; }
+       /* tem cuối không đẩy thêm trang trắng */
+       .tem:last-child { page-break-after: auto; }`;
   return (
     <div>
       <style>{`@media print { .no-print { display: none !important; } } ${css}
@@ -30,7 +32,7 @@ export function TemGrid({ tems, kho }: { tems: Tem[]; kho: '50x30' | 'a4' }) {
       <div className="tem-grid">
         {tems.map((t) => (
           <div key={t.qr} className="tem">
-            <MaQR value={t.qr} size={96} />
+            <MaQR value={t.qr} size={240} />
             <div>
               <div className="chu">{t.chu}</div>
               {t.phu && <div className="phu">{t.phu}</div>}

@@ -26,7 +26,7 @@ async function temMon(maList: string[]): Promise<Tem[]> {
   if (maList.length === 0) return [];
   const rows = await db.select({
     unitCode: schema.goodsReceiptItems.unitCode, productTitle: schema.goodsReceiptItems.productTitle, variantTitle: schema.goodsReceiptItems.variantTitle,
-    lineId: schema.goodsReceiptItems.fulfillmentLineId, unplanned: schema.goodsReceiptItems.unplanned,
+    unplanned: schema.goodsReceiptItems.unplanned,
     orderNumber: schema.shopifyOrders.shopifyOrderNumber, brand: schema.brandOrderRequests.brandSlug,
     thuTu: sql<number>`row_number() over (partition by ${schema.goodsReceiptItems.fulfillmentLineId} order by ${schema.goodsReceiptItems.unitCode})::int`,
     tong: sql<number>`coalesce(${schema.orderFulfillmentLines.qty}, 1)`,
@@ -50,7 +50,7 @@ async function temMon(maList: string[]): Promise<Tem[]> {
 async function temDong(lineIds: string[]): Promise<Tem[]> {
   if (lineIds.length === 0) return [];
   const rows = await db.select({
-    lineId: schema.orderFulfillmentLines.id, shopifyLineId: schema.orderFulfillmentLines.shopifyLineId, qty: schema.orderFulfillmentLines.qty,
+    shopifyLineId: schema.orderFulfillmentLines.shopifyLineId, qty: schema.orderFulfillmentLines.qty,
     orderNumber: schema.shopifyOrders.shopifyOrderNumber, productTitle: schema.shopifyOrderLines.productTitle, variantTitle: schema.shopifyOrderLines.variantTitle,
     thuTuDong: sql<number>`row_number() over (partition by ${schema.orderFulfillmentLines.fulfillmentId} order by ${schema.orderFulfillmentLines.shopifyLineId})::int`,
   }).from(schema.orderFulfillmentLines)
