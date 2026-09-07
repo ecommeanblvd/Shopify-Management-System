@@ -18,7 +18,10 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   //    Đo thật 05/09 từ job_runs: sync-lark 68 PHÚT/lượt (lịch mỗi giờ → luôn
   //    chồng), sync-orders 6,8 phút. Đây mới là chỗ tốn tiền, không phải số
   //    lượng service.
-  'sync-lark': ['sync-lark'],
+  // push-nhan-hang chạy LỒNG trong script sync-lark.ts (qua chayMotJob), không
+  // qua run-group — khai chung nhóm để không "chưa xếp nhóm" (test canh việc
+  // này), dù thực thi là cùng một tiến trình với sync-lark.
+  'sync-lark': ['sync-lark', 'push-nhan-hang'],
   'sync-orders': ['sync-orders'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.

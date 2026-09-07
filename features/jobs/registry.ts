@@ -68,6 +68,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'MMP không nhận được đơn mới → đối soát công nợ brand thiếu đơn' },
   { key: 'retry-ship-ho-events', ten: 'Gửi lại sự kiện MMP còn kẹt', chuKyPhut: 15 * PHUT,
     hauQua: 'Sự kiện hỏng nằm kẹt vĩnh viễn, MMP không nhận được' },
+  { key: 'push-nhan-hang', ten: 'Đẩy "MEAN đã nhận" + Mã món lên Lark', chuKyPhut: 1 * GIO,
+    hauQua: 'QC/đóng gói trên Lark không thấy món đã về, MMP thiếu ngày nhận' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
     hauQua: 'Database phình tới trần dung lượng' },
 ];

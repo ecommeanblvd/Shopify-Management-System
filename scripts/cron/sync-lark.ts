@@ -19,8 +19,9 @@
 import { syncLarkPacks } from '@/features/lark/sync';
 import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
-import { chayCron } from '@/features/jobs/run';
+import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { backfillCourierLark } from '@/features/lark/courier-backfill';
+import { backfillNhanHangLark } from '@/features/lark/nhan-hang-backfill';
 async function main(): Promise<void> {
   const s = await syncLarkPacks();
   process.stdout.write(
@@ -53,6 +54,11 @@ async function main(): Promise<void> {
   } catch (err) {
     process.stderr.write(`courier→lark: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
   }
+
+  // "MEAN đã nhận" từ kho quét trên SMS → bảng Lark WH (kèm Mã món). Gác env
+  // LARK_NHAN_HANG_PUSH tới khi ops tạo cột "Mã món". Nhật ký riêng để trang
+  // giám sát thấy nó chạy hay không.
+  await chayMotJob('push-nhan-hang', backfillNhanHangLark);
 }
 
 chayCron('sync-lark', main);
