@@ -13,19 +13,29 @@ export function MayQuet({ onMa, dangBan }: { onMa: (ma: string) => void; dangBan
   const [loi, setLoi] = useState<string | null>(null);
   const [tay, setTay] = useState('');
 
+  // Đọc dangBan qua ref: không phải dep của effect nên đổi dangBan không làm
+  // camera khởi động lại (mất khung hình + nháy giữa các lượt quét).
+  const dangBanRef = useRef(dangBan);
+  useEffect(() => { dangBanRef.current = dangBan; }, [dangBan]);
+
   useEffect(() => {
+    // Unmount có thể xảy ra TRƯỚC KHI decodeFromConstraints() resolve (đổi
+    // bước ngay sau khi quét) — không dừng trong .then() thì stream camera vẫn
+    // chạy nền, giữ đèn camera sáng và rò tài nguyên.
+    let huy = false;
     let controls: IScannerControls | undefined;
     const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 150 });
     if (!video.current) return;
     reader.decodeFromConstraints({ video: { facingMode: 'environment' } }, video.current, (result) => {
       if (!result) return;
+      if (dangBanRef.current) return;
       const ma = result.getText();
       const now = Date.now();
       if (ma === cuoi.current.ma && now - cuoi.current.luc < 1500) return;
       cuoi.current = { ma, luc: now };
       onMa(ma);
-    }).then((c) => { controls = c; }).catch((e: unknown) => setLoi(e instanceof Error ? e.message : 'Không mở được camera'));
-    return () => { controls?.stop(); };
+    }).then((c) => { if (huy) c.stop(); else controls = c; }).catch((e: unknown) => setLoi(e instanceof Error ? e.message : 'Không mở được camera'));
+    return () => { huy = true; controls?.stop(); };
   }, [onMa]);
 
   return (
