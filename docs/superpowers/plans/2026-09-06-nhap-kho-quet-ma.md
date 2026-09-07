@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Hai tầng mã, mỗi tem một khoá** (spec §2.2, §2.3): tem món = `WH-00009890` (giữ nguyên `unit_code`, KHÔNG đổi 9.890 mã cũ); tem dòng đơn = `L:<shopifyLineId>` (14 chữ số). Không nối Product/Order ID vào mã.
+- **Hai tầng mã, mỗi tem một khoá** (spec §2.2, §2.3): tem món = `WH-00009890` (giữ nguyên `unit_code`, KHÔNG đổi 9.890 mã cũ); tem dòng đơn = `L:<shopifyLineId>` (hiện 14 chữ số; ID Shopify là số tăng dần nên regex nhận 6–20 chữ số, mã không có trong DB bị chặn ở bước tra). Không nối Product/Order ID vào mã.
 - **QR, không mã sọc** (§2.6). Phân biệt loại tem bằng tiền tố `WH-` / `L:`.
 - **Không bước nào gõ SKU** (§3). Ô nhập tay chỉ nhận MÃ QR khi camera hỏng.
 - **Đủ chiếc mới chốt** (§3 bước 4): `brand_order_requests.delivered_at` = lúc quét chiếc cuối; dòng `order_fulfillment_lines` chuyển `brand_confirmed → in_stock`; "đã nhận" ≠ "QC pass" (QC vẫn ở Lark).
