@@ -66,6 +66,11 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       <Card>
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border text-sm font-semibold">Đơn vị hàng ({items.length})</div>
+          {items.some((it) => it.printedAt && !it.confirmedAt) && (
+            <p className="px-5 pt-4 pb-2 text-sm text-amber-700">
+              {items.filter((it) => it.printedAt && !it.confirmedAt).length} tem đã in nhưng chưa quét xác nhận — chưa tính là đã nhận.
+            </p>
+          )}
           <ul className="divide-y divide-border">
             {items.map((it) => (
               <li key={it.id} className="px-5 py-4 space-y-2">
@@ -74,7 +79,11 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                     <div className="text-sm font-medium truncate">{it.unitCode} · {it.sku ?? '—'}</div>
                     <div className="text-xs text-muted-foreground truncate">{it.productTitle ?? ''} · {it.disposition}</div>
                   </div>
-                  <Badge variant={QC_VARIANT[it.qcResult]} className="h-5 text-[10px] uppercase tracking-wider">{it.qcResult}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={QC_VARIANT[it.qcResult]} className="h-5 text-[10px] uppercase tracking-wider">{it.qcResult}</Badge>
+                    {it.unplanned && <Badge className="h-5 bg-amber-500/15 text-amber-700 text-[10px] uppercase tracking-wider">Ngoài kế hoạch</Badge>}
+                    {it.printedAt && !it.confirmedAt && <Badge variant="outline" className="h-5 border-amber-500 text-amber-700 text-[10px] uppercase tracking-wider">Đã in, chưa xác nhận</Badge>}
+                  </div>
                 </div>
                 {it.qcResult === 'fail' && it.qcFailReason && (
                   <div className="text-xs text-amber-600">Lý do: {it.qcFailReason}</div>
