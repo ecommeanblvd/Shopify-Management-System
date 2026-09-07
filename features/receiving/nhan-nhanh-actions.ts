@@ -55,7 +55,9 @@ export async function inTemMon(i: { receiptId: string; lineId: string; soLuong: 
   const userId = await requirePerm('manage_receiving');
   const dong = await getDongTheoId(i.lineId);
   if (!dong) throw new Error('Dòng đơn không tồn tại');
-  const { theoDon, ngoaiKeHoach } = soTemDuocIn({ mongDoi: dong.mongDoi, daIn: dong.daIn, daXacNhan: dong.daXacNhan }, i.soLuong);
+  // Kẹp như nhanNgoaiKeHoach: tránh gõ nhầm số lớn mở hàng nghìn transaction.
+  const soLuong = Math.max(0, Math.min(50, Math.floor(i.soLuong)));
+  const { theoDon, ngoaiKeHoach } = soTemDuocIn({ mongDoi: dong.mongDoi, daIn: dong.daIn, daXacNhan: dong.daXacNhan }, soLuong);
   const maTheoDon: string[] = []; const maNgoaiKeHoach: string[] = [];
   const chung = { receiptId: i.receiptId, sku: dong.sku, productTitle: dong.productTitle, variantTitle: dong.variantTitle, printedAt: 'now' as const };
   for (let k = 0; k < theoDon; k++) {
@@ -113,10 +115,15 @@ export async function xacNhanQuet(i: { receiptId: string; maQuet: string }): Pro
     if (up.length === 0) return { ok: false as const, lyDo: 'da_xac_nhan' as const };
     if (!mon.fulfillmentLineId) return { ok: true as const, unitCode: ma.unitCode, lineId: null, daXacNhan: 0, mongDoi: 0, duChiec: false, chot: null };
 
+    // Khoá dòng: hai người quét chiếc cuối cùng cùng lúc → không khoá thì cả hai
+    // đếm thấy n = qty-1, không ai đủ chiếc để chốt, dòng kẹt mãi (mọi món đã
+    // confirmed nên không còn tem nào để quét lại).
     const [line] = await tx.select({
       id: schema.orderFulfillmentLines.id, fulfillmentId: schema.orderFulfillmentLines.fulfillmentId,
       status: schema.orderFulfillmentLines.status, qty: schema.orderFulfillmentLines.qty, sku: schema.orderFulfillmentLines.sku,
-    }).from(schema.orderFulfillmentLines).where(eq(schema.orderFulfillmentLines.id, mon.fulfillmentLineId)).limit(1);
+    }).from(schema.orderFulfillmentLines).where(eq(schema.orderFulfillmentLines.id, mon.fulfillmentLineId)).limit(1).for('update');
+    // mon được đọc TRƯỚC transaction — dòng có thể đã bị xoá giữa chừng.
+    if (!line) return { ok: false as const, lyDo: 'khong_ton_tai' as const };
     const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(schema.goodsReceiptItems)
       .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, line.id), sql`${schema.goodsReceiptItems.confirmedAt} is not null`));
     const dem = { mongDoi: line.qty, daIn: 0, daXacNhan: n };
@@ -124,7 +131,7 @@ export async function xacNhanQuet(i: { receiptId: string; maQuet: string }): Pro
 
     // ĐỦ CHIẾC → chốt (spec §3 bước 4, §5.1).
     if (line.status === 'brand_confirmed') {
-      await tx.update(schema.orderFulfillmentLines).set({ status: 'in_stock', allocatedQty: 0, updatedAt: sql`now()` })
+      await tx.update(schema.orderFulfillmentLines).set({ status: 'in_stock', warehouseInventoryId: null, allocatedQty: 0, updatedAt: sql`now()` })
         .where(eq(schema.orderFulfillmentLines.id, line.id));
       await tx.insert(schema.orderFulfillmentEvents).values({
         fulfillmentId: line.fulfillmentId, lineId: line.id, fromStatus: 'brand_confirmed', toStatus: 'in_stock',
