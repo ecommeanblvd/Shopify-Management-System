@@ -34,9 +34,11 @@ export interface KetQuaDongBoNhanHang {
   /** Lark đã có Mã món → bỏ qua, KHÔNG ghi đè (ops có thể đã sửa tay). */
   boQua: number;
   loi: string[];
+  /** Khoá "<order bare> <sku>" của các dòng lỗi — dùng để KHÔNG đóng dấu lark_pushed_at. Đừng tách từ `loi`: SKU có thể chứa ':'. */
+  loiKhoa: string[];
 }
 
-function khoa(orderNumber: string | null, sku: string | null): string | null {
+export function khoaNhanHang(orderNumber: string | null, sku: string | null): string | null {
   const so = orderNumber?.trim().replace(/^#/, '');
   const s = sku?.trim();
   return so && s ? `${so} ${s}` : null;
@@ -54,19 +56,25 @@ export async function dongBoNhanHangLark(
   taoRecord: (fields: Record<string, unknown>) => Promise<string>,
   capNhat: (recordId: string, fields: Record<string, unknown>) => Promise<void>,
 ): Promise<KetQuaDongBoNhanHang> {
-  const kq: KetQuaDongBoNhanHang = { doiChieu: dongs.length, daTao: 0, daDien: 0, boQua: 0, loi: [] };
+  const kq: KetQuaDongBoNhanHang = { doiChieu: dongs.length, daTao: 0, daDien: 0, boQua: 0, loi: [], loiKhoa: [] };
   if (dongs.length === 0) return kq;
   const recs = await docRecords();
   const theoKhoa = new Map<string, Array<{ record_id: string; fields: Record<string, unknown> }>>();
   for (const r of recs) {
-    const k = khoa(larkText(r.fields[COT_SO_DON]), larkText(r.fields[COT_SKU]));
+    const k = khoaNhanHang(larkText(r.fields[COT_SO_DON]), larkText(r.fields[COT_SKU]));
     if (!k) continue;
     const arr = theoKhoa.get(k) ?? [];
     arr.push(r); theoKhoa.set(k, arr);
   }
   for (const d of dongs) {
-    const k = khoa(d.orderNumber, d.sku)!;
-    const nhan = `${k}`;
+    const k = khoaNhanHang(d.orderNumber, d.sku);
+    if (!k) {
+      const nhanLoi = `${d.orderNumber} ${d.sku}`;
+      kq.loi.push(`${nhanLoi}: thiếu order hoặc sku`);
+      kq.loiKhoa.push(nhanLoi);
+      continue;
+    }
+    const nhan = k;
     try {
       const co = theoKhoa.get(k);
       if (!co || co.length === 0) { await taoRecord(dungFieldsNhanHang(d)); kq.daTao += 1; continue; }
@@ -78,6 +86,7 @@ export async function dongBoNhanHangLark(
       }
     } catch (e) {
       kq.loi.push(`${nhan}: ${e instanceof Error ? e.message : String(e)}`);
+      kq.loiKhoa.push(k);
     }
   }
   return kq;

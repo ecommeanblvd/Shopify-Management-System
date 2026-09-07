@@ -1,7 +1,7 @@
 import { and, eq, isNull, isNotNull, sql, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields } from './client';
-import { dongBoNhanHangLark, type DongNhanHang, type KetQuaDongBoNhanHang } from './push-nhan-hang';
+import { dongBoNhanHangLark, khoaNhanHang, type DongNhanHang, type KetQuaDongBoNhanHang } from './push-nhan-hang';
 
 /** Bật đẩy khi ops đã tạo cột "Mã món" trên Lark (spec §5.2). Chưa bật → không gọi Lark. */
 export function batDayNhanHang(): boolean {
@@ -14,14 +14,14 @@ export function batDayNhanHang(): boolean {
  * Đẩy được thì đóng dấu lark_pushed_at; lỗi thì để NULL cho lượt sau.
  */
 export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { skipped?: 'env' }> {
-  if (!batDayNhanHang()) return { doiChieu: 0, daTao: 0, daDien: 0, boQua: 0, loi: [], skipped: 'env' };
+  if (!batDayNhanHang()) return { doiChieu: 0, daTao: 0, daDien: 0, boQua: 0, loi: [], loiKhoa: [], skipped: 'env' };
   const cho = await db.select({
     id: schema.mmpLineReceived.id, orderNumber: schema.mmpLineReceived.orderNumber, sku: schema.mmpLineReceived.sku,
     vendor: schema.mmpLineReceived.vendor, receivedAt: schema.mmpLineReceived.receivedAt,
   }).from(schema.mmpLineReceived)
     .where(and(eq(schema.mmpLineReceived.source, 'sms'), isNull(schema.mmpLineReceived.larkPushedAt)))
     .limit(500);
-  if (cho.length === 0) return { doiChieu: 0, daTao: 0, daDien: 0, boQua: 0, loi: [] };
+  if (cho.length === 0) return { doiChieu: 0, daTao: 0, daDien: 0, boQua: 0, loi: [], loiKhoa: [] };
 
   // Mã món đã xác nhận của từng (order bare, sku) — nối qua orders.shopify_order_number.
   const mon = await db.select({
@@ -47,8 +47,8 @@ export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { s
   }));
   const kq = await dongBoNhanHangLark(dongs, listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields);
   // Đóng dấu những dòng KHÔNG nằm trong danh sách lỗi.
-  const loiKhoa = new Set(kq.loi.map((l) => l.split(':')[0]));
-  const xong = cho.filter((c) => !loiKhoa.has(`${c.orderNumber} ${c.sku}`)).map((c) => c.id);
+  const loiKhoa = new Set(kq.loiKhoa);
+  const xong = cho.filter((c) => !loiKhoa.has(khoaNhanHang(c.orderNumber, c.sku) ?? '')).map((c) => c.id);
   if (xong.length) {
     await db.update(schema.mmpLineReceived).set({ larkPushedAt: sql`now()` }).where(inArray(schema.mmpLineReceived.id, xong));
   }

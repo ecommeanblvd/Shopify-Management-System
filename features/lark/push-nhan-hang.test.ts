@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { dongBoNhanHangLark, dungFieldsNhanHang, COT_MA_MON, COT_NGAY_NHAN, COT_SKU, COT_SO_DON, COT_VENDOR } from './push-nhan-hang';
+import { dongBoNhanHangLark, dungFieldsNhanHang, khoaNhanHang, COT_MA_MON, COT_NGAY_NHAN, COT_SKU, COT_SO_DON, COT_VENDOR } from './push-nhan-hang';
 
 const d = (maMon: string[] = ['WH-00000001', 'WH-00000002']) => ({
   orderNumber: 'TA2331', sku: 'AO-X-XL', vendor: 'TINH', receivedAt: new Date('2026-09-06T03:00:00Z'), maMon,
@@ -21,7 +21,7 @@ describe('dongBoNhanHangLark', () => {
   it('chưa có dòng → tạo mới', async () => {
     const tao = vi.fn().mockResolvedValue('r-new'); const sua = vi.fn();
     const kq = await dongBoNhanHangLark([d()], async () => [], tao, sua);
-    expect(kq).toEqual({ doiChieu: 1, daTao: 1, daDien: 0, boQua: 0, loi: [] });
+    expect(kq).toEqual({ doiChieu: 1, daTao: 1, daDien: 0, boQua: 0, loi: [], loiKhoa: [] });
     expect(tao).toHaveBeenCalledWith(dungFieldsNhanHang(d()));
     expect(sua).not.toHaveBeenCalled();
   });
@@ -45,5 +45,31 @@ describe('dongBoNhanHangLark', () => {
     const tao = vi.fn().mockRejectedValue(new Error('403')); const sua = vi.fn();
     const kq = await dongBoNhanHangLark([d()], async () => [], tao, sua);
     expect(kq.loi).toEqual(['TA2331 AO-X-XL: 403']); expect(kq.daTao).toBe(0);
+    expect(kq.loiKhoa).toEqual(['TA2331 AO-X-XL']);
+  });
+  it('SKU chứa \':\' → loiKhoa giữ nguyên khoá (không bị cắt bởi split trên loi)', async () => {
+    const tao = vi.fn().mockRejectedValue(new Error('403')); const sua = vi.fn();
+    const kq = await dongBoNhanHangLark([{ ...d(['WH-1']), sku: 'AO:X:XL' }], async () => [], tao, sua);
+    expect(kq.loiKhoa).toEqual(['TA2331 AO:X:XL']);
+    expect(kq.loi[0]).toMatch(/^TA2331 AO:X:XL: /);
+  });
+  it('dòng thiếu sku → không gọi taoRecord, rơi vào loiKhoa', async () => {
+    const tao = vi.fn(); const sua = vi.fn();
+    const kq = await dongBoNhanHangLark([{ ...d(), sku: '' }], async () => [], tao, sua);
+    expect(tao).not.toHaveBeenCalled();
+    expect(kq.loiKhoa).toEqual(['TA2331 ']);
+    expect(kq.loi[0]).toBe('TA2331 : thiếu order hoặc sku');
+  });
+});
+
+describe('khoaNhanHang', () => {
+  it('trim khoảng trắng và bỏ dấu # ở order', () => {
+    expect(khoaNhanHang('#TA2331 ', ' AO-X ')).toBe('TA2331 AO-X');
+  });
+  it('thiếu sku → null', () => {
+    expect(khoaNhanHang('TA1', null)).toBeNull();
+  });
+  it('order rỗng → null', () => {
+    expect(khoaNhanHang('', 'X')).toBeNull();
   });
 });
