@@ -16,6 +16,13 @@ function tach(v: string | string[] | undefined): string[] {
   return [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 200);
 }
 
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `?dong=` đi thẳng vào `inArray` trên cột uuid — giá trị rác (không phải UUID) làm Postgres 500 cả trang. */
+function tachDong(v: string | string[] | undefined): string[] {
+  return tach(v).filter((x) => RE_UUID.test(x));
+}
+
 /**
  * Tem MÓN theo mã WH-: thứ tự i/n tính trong cùng dòng đơn (unit_code tăng dần).
  * `row_number() over (partition by fulfillment_line_id)` chỉ đúng khi mọi món
@@ -72,7 +79,7 @@ export default async function TemPage({ searchParams }: { searchParams: Promise<
   if (!role || !hasPermission(role, 'view_receiving')) redirect('/');
   const sp = await searchParams;
   const kho = sp.kho === 'a4' ? 'a4' : '50x30';
-  const tems = [...(await temMon(tach(sp.ma))), ...(await temDong(tach(sp.dong)))];
+  const tems = [...(await temMon(tach(sp.ma))), ...(await temDong(tachDong(sp.dong)))];
   if (tems.length === 0) return <p className="p-6 text-sm text-muted-foreground">Không có mã nào để in. Dùng ?ma=WH-… hoặc ?dong=&lt;lineId&gt;.</p>;
   return <TemGrid tems={tems} kho={kho} />;
 }

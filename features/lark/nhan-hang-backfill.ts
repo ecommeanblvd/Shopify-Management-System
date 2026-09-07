@@ -42,14 +42,14 @@ export async function backfillNhanHangLark(): Promise<KetQuaDongBoNhanHang & { s
     .orderBy(schema.goodsReceiptItems.unitCode);
   const maTheoKhoa = new Map<string, string[]>();
   for (const m of mon) {
-    if (!m.sku) continue;
-    const k = `${m.orderNumber} ${m.sku}`;
+    const k = khoaNhanHang(m.orderNumber, m.sku);
+    if (!k) continue;
     maTheoKhoa.set(k, [...(maTheoKhoa.get(k) ?? []), m.unitCode]);
   }
   const dongs: DongNhanHang[] = choHopLe.map((c) => ({
     orderNumber: c.orderNumber, sku: c.sku, vendor: c.vendor,
     receivedAt: c.receivedAt instanceof Date ? c.receivedAt : new Date(c.receivedAt as unknown as string),
-    maMon: maTheoKhoa.get(`${c.orderNumber} ${c.sku}`) ?? [],
+    maMon: maTheoKhoa.get(khoaNhanHang(c.orderNumber, c.sku) ?? '') ?? [],
   }));
   const kq = await dongBoNhanHangLark(dongs, listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields);
   // Ghi nhận các dòng bị loại từ đầu (khoá null) vào summary lỗi để không "biến mất" khỏi báo cáo.
