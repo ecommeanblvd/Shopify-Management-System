@@ -18,6 +18,12 @@ function logTableId(): string {
   return v;
 }
 
+// Bảng Lark "WH ngày MEAN nhận hàng" (base RIÊNG — app_token = wiki node, dùng
+// trực tiếp được). Cột 'Visible - WH-Ngày MEAN nhận hàng gần nhất' = ngày nhận.
+// app_token/table_id không phải secret nên để hằng số (env override nếu có).
+const BRAND_RECV_APP_TOKEN = process.env.LARK_BRAND_RECV_APP_TOKEN ?? 'HxfAw0iRViHiNgkSlbBltpVkg3f';
+const BRAND_RECV_TABLE_ID = process.env.LARK_BRAND_RECV_TABLE_ID ?? 'tblFtdIn8H7ftfBL';
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getTenantToken(): Promise<string> {
@@ -79,19 +85,9 @@ async function searchAllRecords(tableId: string, body: Record<string, unknown>, 
   return out;
 }
 
-/**
- * GHI đè vài trường của MỘT record bảng logistics.
- *
- * Đây là đường GHI DUY NHẤT vào Lark — mọi chỗ khác chỉ đọc. Giữ nó hẹp có chủ
- * đích: chỉ nhận record_id + đúng các trường cần đổi, không có API xoá/tạo, để
- * một lỗi lập trình không thể quét sạch bảng vận hành của team logistics.
- */
-export async function updateLogRecordFields(
-  recordId: string, fields: Record<string, unknown>,
-): Promise<void> {
+async function putRecord(appToken: string, tableId: string, recordId: string, fields: Record<string, unknown>): Promise<void> {
   const token = await getTenantToken();
-  const appToken = env('LARK_BASE_APP_TOKEN');
-  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${logTableId()}/records/${recordId}`;
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`;
   const res = await fetch(url, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -100,6 +96,42 @@ export async function updateLogRecordFields(
   });
   const j = (await res.json()) as { code: number; msg: string };
   if (j.code !== 0) throw new Error(`[lark] update fail: code=${j.code} msg=${j.msg}`);
+}
+
+async function postRecord(appToken: string, tableId: string, fields: Record<string, unknown>): Promise<string> {
+  const token = await getTenantToken();
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string; data?: { record?: { record_id?: string } } };
+  if (j.code !== 0 || !j.data?.record?.record_id) throw new Error(`[lark] create fail: code=${j.code} msg=${j.msg}`);
+  return j.data.record.record_id;
+}
+
+/**
+ * GHI đè vài trường của MỘT record bảng logistics.
+ *
+ * Đường ghi vào Lark giữ HẸP có chủ đích: chỉ record_id + đúng trường cần đổi,
+ * không có API xoá, để một lỗi lập trình không thể quét sạch bảng vận hành.
+ * Từ 09/2026 có thêm bảng "WH ngày MEAN nhận hàng" (hai hàm dưới) — vẫn chỉ
+ * sửa/tạo từng record, không xoá.
+ */
+export async function updateLogRecordFields(recordId: string, fields: Record<string, unknown>): Promise<void> {
+  return putRecord(env('LARK_BASE_APP_TOKEN'), logTableId(), recordId, fields);
+}
+
+/** Sửa vài trường của một record bảng "WH ngày MEAN nhận hàng". */
+export async function updateBrandReceivedRecordFields(recordId: string, fields: Record<string, unknown>): Promise<void> {
+  return putRecord(BRAND_RECV_APP_TOKEN, BRAND_RECV_TABLE_ID, recordId, fields);
+}
+
+/** Tạo MỘT record bảng "WH ngày MEAN nhận hàng". Trả record_id. */
+export async function createBrandReceivedRecord(fields: Record<string, unknown>): Promise<string> {
+  return postRecord(BRAND_RECV_APP_TOKEN, BRAND_RECV_TABLE_ID, fields);
 }
 
 /** Đọc TẤT CẢ record của bảng (phân trang page_token, 500/lần). */
@@ -112,12 +144,6 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
   if (!orderNumber.trim()) return [];
   return searchAllRecords(logTableId(), buildOrderNumberSearchBody(orderNumber));
 }
-
-// Bảng Lark "WH ngày MEAN nhận hàng" (base RIÊNG — app_token = wiki node, dùng
-// trực tiếp được). Cột 'Visible - WH-Ngày MEAN nhận hàng gần nhất' = ngày nhận.
-// app_token/table_id không phải secret nên để hằng số (env override nếu có).
-const BRAND_RECV_APP_TOKEN = process.env.LARK_BRAND_RECV_APP_TOKEN ?? 'HxfAw0iRViHiNgkSlbBltpVkg3f';
-const BRAND_RECV_TABLE_ID = process.env.LARK_BRAND_RECV_TABLE_ID ?? 'tblFtdIn8H7ftfBL';
 
 /** Đọc TẤT CẢ record bảng brand-received (đơn × SKU × ngày MEAN nhận). Phân trang. */
 export async function listBrandReceivedRecords(): Promise<LarkRecord[]> {
