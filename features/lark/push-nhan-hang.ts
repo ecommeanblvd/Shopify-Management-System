@@ -1,4 +1,5 @@
 import { larkText } from './parse-pack-row';
+import { larkDateField } from './parse-brand-received';
 
 /** Tên cột bảng Lark "WH ngày MEAN nhận hàng". Đổi tên cột bên Lark là hỏng — để MỘT chỗ. */
 export const COT_SO_DON = 'order_number';
@@ -17,7 +18,7 @@ export interface DongNhanHang {
 export function dungFieldsNhanHang(d: DongNhanHang): Record<string, unknown> {
   return {
     [COT_SO_DON]: d.orderNumber.trim().replace(/^#/, ''),
-    [COT_SKU]: d.sku,
+    [COT_SKU]: d.sku.trim(),
     [COT_VENDOR]: d.vendor,
     [COT_NGAY_NHAN]: d.receivedAt.getTime(),
     [COT_MA_MON]: d.maMon.join(' | '),
@@ -29,9 +30,9 @@ export interface KetQuaDongBoNhanHang {
   doiChieu: number;
   /** Lark chưa có → tạo mới. */
   daTao: number;
-  /** Lark đã có, ô Mã món trống → điền. */
+  /** Số dòng Lark khớp key đã được điền ít nhất 1 ô trống (Mã món và/hoặc ngày nhận) — có thể vượt `doiChieu` khi một khoá khớp nhiều record Lark. */
   daDien: number;
-  /** Lark đã có Mã món → bỏ qua, KHÔNG ghi đè (ops có thể đã sửa tay). */
+  /** Số dòng Lark khớp key nhưng cả hai ô đã có sẵn → bỏ qua, KHÔNG ghi đè (ops có thể đã sửa tay). Có thể vượt `doiChieu`. */
   boQua: number;
   loi: string[];
   /** Khoá "<order bare> <sku>" của các dòng lỗi — dùng để KHÔNG đóng dấu lark_pushed_at. Đừng tách từ `loi`: SKU có thể chứa ':'. */
@@ -79,9 +80,11 @@ export async function dongBoNhanHangLark(
       const co = theoKhoa.get(k);
       if (!co || co.length === 0) { await taoRecord(dungFieldsNhanHang(d)); kq.daTao += 1; continue; }
       for (const r of co) {
-        const hienTai = larkText(r.fields[COT_MA_MON]);
-        if (hienTai && hienTai.trim() !== '') { kq.boQua += 1; continue; }
-        await capNhat(r.record_id, { [COT_MA_MON]: d.maMon.join(' | ') });
+        const patch: Record<string, unknown> = {};
+        if (!larkText(r.fields[COT_MA_MON])) patch[COT_MA_MON] = d.maMon.join(' | ');
+        if (larkDateField(r.fields[COT_NGAY_NHAN]) == null) patch[COT_NGAY_NHAN] = d.receivedAt.getTime();
+        if (Object.keys(patch).length === 0) { kq.boQua += 1; continue; }
+        await capNhat(r.record_id, patch);
         kq.daDien += 1;
       }
     } catch (e) {

@@ -1,8 +1,11 @@
 /**
  * Sync bảng Lark "WH ngày MEAN nhận hàng" → mmp_line_received (order_number bare,
  * sku → received_at mới nhất). Nguồn ngày nhận hàng từ brand để đẩy MMP.
- * Best-effort (lỗi không chặn cron khác). Idempotent (chỉ chèn khi chưa có; không ghi đè).
+ * Best-effort (lỗi không chặn cron khác). Idempotent: chèn mới hoặc cập nhật
+ * dòng KHÔNG phải nguồn sms; dòng sms không bao giờ bị đè (§2.7) — kho quét là
+ * nguồn sự thật từ 09/2026, Lark chỉ còn bù cho đơn kho chưa quét.
  */
+import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listBrandReceivedRecords } from './client';
 import { parseBrandReceivedRow } from './parse-brand-received';
@@ -25,15 +28,19 @@ export async function syncBrandReceived(): Promise<BrandReceivedSyncResult> {
     }
   }
   const rows = [...byKey.values()];
-  // CHỈ LẤP CHỖ TRỐNG (spec §5.3): dòng đã có — dù nguồn 'lark' cũ hay 'sms' do kho
-  // quét — KHÔNG ghi đè. Từ 09/2026 SMS là nguồn sự thật cho "MEAN đã nhận";
-  // Lark chỉ còn bù cho đơn kho chưa quét trên SMS.
+  // Lark được phép cập nhật dòng Lark-owned ('lark'/'estimate_fulfill') của
+  // chính nó, nhưng KHÔNG BAO GIỜ đè dòng 'sms' — kho quét là nguồn sự thật
+  // từ 09/2026, Lark chỉ còn bù cho đơn kho chưa quét (spec §5.3, §2.7).
   let inserted = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const batch = rows.slice(i, i + CHUNK);
     const ins = await db.insert(schema.mmpLineReceived)
       .values(batch.map((b) => ({ orderNumber: b.orderNumber, sku: b.sku, receivedAt: b.receivedAt, vendor: b.vendor, updatedAt: new Date() })))
-      .onConflictDoNothing({ target: [schema.mmpLineReceived.orderNumber, schema.mmpLineReceived.sku] })
+      .onConflictDoUpdate({
+        target: [schema.mmpLineReceived.orderNumber, schema.mmpLineReceived.sku],
+        set: { receivedAt: sql`excluded.received_at`, vendor: sql`excluded.vendor`, updatedAt: new Date() },
+        setWhere: sql`${schema.mmpLineReceived.source} <> 'sms'`,
+      })
       .returning({ id: schema.mmpLineReceived.id });
     inserted += ins.length;
   }
