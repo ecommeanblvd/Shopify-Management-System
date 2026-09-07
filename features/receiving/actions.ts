@@ -1,17 +1,15 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, sql, desc } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { auth } from '@/lib/auth/auth';
-import { getRole } from '@/lib/auth/role';
-import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { recordAudit } from '@/lib/logging/audit';
 import { putObject } from '@/lib/storage/s3';
 import { decideDisposition, validateQc, nextSeqCode, parseSeq, type SourceType, type QcResult } from './logic';
 import { applyMovement } from '@/features/warehouse/ledger';
+import { requirePerm, withUniqueRetry } from './perm';
+import { taoMonTrongTx } from './tao-mon';
 
 const WAREHOUSES = ['GVM', 'AP', 'DM'] as const;
 /** Chặn tạo phiếu/dòng tồn ở mã kho lạ (chỉ GVM/AP/DM hợp lệ). */
@@ -19,30 +17,6 @@ function requireKnownWarehouse(code: string): string {
   const c = code.trim();
   if (!(WAREHOUSES as readonly string[]).includes(c)) throw new Error(`Mã kho không hợp lệ: ${code}`);
   return c;
-}
-
-async function requirePerm(perm: Permission): Promise<string> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) throw new Error('Unauthorized');
-  const role = await getRole(session.user.id);
-  if (!role || !hasPermission(role, perm)) throw new Error('Forbidden');
-  return session.user.id;
-}
-
-/** Retry a unit-of-work on a Postgres unique-violation (23505) — covers the
- *  read-max-then-insert race on generated sequential codes. */
-async function withUniqueRetry<R>(fn: () => Promise<R>, attempts = 4): Promise<R> {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e: unknown) {
-      const code = (e as { code?: string; cause?: { code?: string } })?.code
-        ?? (e as { cause?: { code?: string } })?.cause?.code;
-      if (code === '23505' && i < attempts - 1) continue;
-      throw e;
-    }
-  }
-  throw new Error('unreachable');
 }
 
 /** Upload an image to S3 under a receipts/ prefix; returns the object key. */
@@ -95,24 +69,14 @@ export interface AddReceiptItemInput {
 export async function addReceiptItem(input: AddReceiptItemInput): Promise<string> {
   const userId = await requirePerm('manage_receiving');
   const id = await withUniqueRetry(() => db.transaction(async (tx) => {
-    const [last] = await tx.select({ unitCode: schema.goodsReceiptItems.unitCode })
-      .from(schema.goodsReceiptItems).orderBy(desc(schema.goodsReceiptItems.unitCode)).limit(1);
-    const unitCode = nextSeqCode('WH', parseSeq('WH', last?.unitCode ?? null));
-    const [row] = await tx.insert(schema.goodsReceiptItems).values({
-      receiptId: input.receiptId, unitCode,
-      sku: input.sku?.trim() || null, productTitle: input.productTitle ?? null, variantTitle: input.variantTitle ?? null,
-      photoKey: input.photoKey ?? null,
-      brandRequestId: input.brandRequestId ?? null, fulfillmentLineId: input.fulfillmentLineId ?? null, orderId: input.orderId ?? null,
-      domPrice: input.domPrice ?? null, domPriceCurrency: input.domPriceCurrency ?? null,
-      globalPrice: input.globalPrice ?? null, globalPriceCurrency: input.globalPriceCurrency ?? null, weightKg: input.weightKg ?? null,
-    }).returning({ id: schema.goodsReceiptItems.id });
+    const { id } = await taoMonTrongTx(tx, input);
     // Hàng brand đã về → đóng follow-up (idempotent, chỉ set lần đầu).
     if (input.brandRequestId) {
       await tx.update(schema.brandOrderRequests)
         .set({ deliveredAt: sql`now()`, updatedAt: sql`now()` })
         .where(and(eq(schema.brandOrderRequests.id, input.brandRequestId), isNull(schema.brandOrderRequests.deliveredAt)));
     }
-    return row.id;
+    return id;
   }));
   try { await recordAudit({ userId, action: 'receiving_add_item', target: id, result: 'success' }); } catch (e) { console.error('audit failed', e); }
   revalidatePath(`/f/warehouse/receiving/${input.receiptId}`);
