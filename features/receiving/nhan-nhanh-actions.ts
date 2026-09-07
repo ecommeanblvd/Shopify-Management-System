@@ -12,17 +12,9 @@ import { docMaTem } from './ma-tem';
 import { soTemDuocIn, phanLoaiQuet, duChiec, type LyDoTuChoi } from './nhan-nhanh-logic';
 import { ghiNhanHangTrongTx } from './ghi-nhan-hang';
 import {
-  listBrandDangCho, listDongCho, getDongTheoShopifyLineId, getDongTheoId, getPhieuHomNay,
-  getMonTheoUnitCode, listMonTrongPhieu, type BrandDangCho, type DongCho,
+  listDongCho, getDongTheoShopifyLineId, getDongTheoId, getPhieuHomNay,
+  getMonTheoUnitCode, type DongCho,
 } from './nhan-nhanh-queries';
-import { batDayNhanHang } from '@/features/lark/nhan-hang-backfill';
-import { dongBoNhanHangLark } from '@/features/lark/push-nhan-hang';
-import { listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields } from '@/features/lark/client';
-
-export async function layBrandDangCho(): Promise<BrandDangCho[]> {
-  await requirePerm('view_receiving');
-  return listBrandDangCho();
-}
 
 export async function layDongCho(brandSlug: string): Promise<DongCho[]> {
   await requirePerm('view_receiving');
@@ -53,24 +45,39 @@ export async function moPhieuBrand(brandSlug: string): Promise<{ id: string; cod
 /** Bấm "In N tem": tạo N món (đã in, chưa xác nhận). Phần vượt mong đợi → ngoài kế hoạch (spec §3.1). */
 export async function inTemMon(i: { receiptId: string; lineId: string; soLuong: number }): Promise<{ maTheoDon: string[]; maNgoaiKeHoach: string[] }> {
   const userId = await requirePerm('manage_receiving');
+  // Chỉ đọc: sku/productTitle/variantTitle/brandRequestId/orderId/orderNumber
+  // không đổi giữa lúc đếm và lúc in — không cần đọc lại trong transaction.
   const dong = await getDongTheoId(i.lineId);
   if (!dong) throw new Error('Dòng đơn không tồn tại');
   // Kẹp như nhanNgoaiKeHoach: tránh gõ nhầm số lớn mở hàng nghìn transaction.
   const soLuong = Math.max(0, Math.min(50, Math.floor(i.soLuong)));
-  const { theoDon, ngoaiKeHoach } = soTemDuocIn({ mongDoi: dong.mongDoi, daIn: dong.daIn, daXacNhan: dong.daXacNhan }, soLuong);
-  const maTheoDon: string[] = []; const maNgoaiKeHoach: string[] = [];
   const chung = { receiptId: i.receiptId, sku: dong.sku, productTitle: dong.productTitle, variantTitle: dong.variantTitle, printedAt: 'now' as const };
-  for (let k = 0; k < theoDon; k++) {
-    const { unitCode } = await withUniqueRetry(() => db.transaction((tx) => taoMonTrongTx(tx, {
-      ...chung, brandRequestId: dong.brandRequestId, fulfillmentLineId: dong.lineId, orderId: dong.orderId,
-    })));
-    maTheoDon.push(unitCode);
-  }
-  for (let k = 0; k < ngoaiKeHoach; k++) {
-    const { unitCode } = await withUniqueRetry(() => db.transaction((tx) => taoMonTrongTx(tx, { ...chung, unplanned: true })));
-    maNgoaiKeHoach.push(unitCode);
-  }
-  try { await recordAudit({ userId, action: 'receiving_print_labels', target: i.receiptId, requestSummary: `${dong.orderNumber ?? ''} ${dong.sku ?? ''} ×${theoDon}+${ngoaiKeHoach}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
+
+  const { maTheoDon, maNgoaiKeHoach } = await withUniqueRetry(() => db.transaction(async (tx) => {
+    // Khoá dòng rồi mới đếm daIn: hai người cùng bấm "In tem" cho cùng dòng thì
+    // người thứ hai phải đợi và thấy số đã in của người thứ nhất — không khoá
+    // thì cả hai cùng đọc daIn = 0 và cùng in vượt mong đợi.
+    const [line] = await tx.select({ id: schema.orderFulfillmentLines.id, qty: schema.orderFulfillmentLines.qty })
+      .from(schema.orderFulfillmentLines).where(eq(schema.orderFulfillmentLines.id, i.lineId)).limit(1).for('update');
+    if (!line) throw new Error('Dòng đơn không tồn tại');
+    const [{ daIn }] = await tx.select({ daIn: sql<number>`count(*)::int` }).from(schema.goodsReceiptItems)
+      .where(eq(schema.goodsReceiptItems.fulfillmentLineId, i.lineId));
+    const { theoDon, ngoaiKeHoach } = soTemDuocIn({ mongDoi: line.qty, daIn, daXacNhan: 0 }, soLuong);
+    const maTheoDon: string[] = []; const maNgoaiKeHoach: string[] = [];
+    for (let k = 0; k < theoDon; k++) {
+      const { unitCode } = await taoMonTrongTx(tx, {
+        ...chung, brandRequestId: dong.brandRequestId, fulfillmentLineId: dong.lineId, orderId: dong.orderId,
+      });
+      maTheoDon.push(unitCode);
+    }
+    for (let k = 0; k < ngoaiKeHoach; k++) {
+      const { unitCode } = await taoMonTrongTx(tx, { ...chung, unplanned: true });
+      maNgoaiKeHoach.push(unitCode);
+    }
+    return { maTheoDon, maNgoaiKeHoach };
+  }));
+
+  try { await recordAudit({ userId, action: 'receiving_print_labels', target: i.receiptId, requestSummary: `${dong.orderNumber ?? ''} ${dong.sku ?? ''} ×${maTheoDon.length}+${maNgoaiKeHoach.length}`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
   revalidatePath(`/f/warehouse/receiving/${i.receiptId}`);
   return { maTheoDon, maNgoaiKeHoach };
 }
@@ -113,7 +120,7 @@ export async function xacNhanQuet(i: { receiptId: string; maQuet: string }): Pro
       .where(and(eq(schema.goodsReceiptItems.id, mon.id), isNull(schema.goodsReceiptItems.confirmedAt)))
       .returning({ id: schema.goodsReceiptItems.id });
     if (up.length === 0) return { ok: false as const, lyDo: 'da_xac_nhan' as const };
-    if (!mon.fulfillmentLineId) return { ok: true as const, unitCode: ma.unitCode, lineId: null, daXacNhan: 0, mongDoi: 0, duChiec: false, chot: null };
+    if (!mon.fulfillmentLineId) return { ok: true as const, unitCode: ma.unitCode, lineId: null, daXacNhan: 0, mongDoi: 0, duChiec: false };
 
     // Khoá dòng: hai người quét chiếc cuối cùng cùng lúc → không khoá thì cả hai
     // đếm thấy n = qty-1, không ai đủ chiếc để chốt, dòng kẹt mãi (mọi món đã
@@ -127,7 +134,7 @@ export async function xacNhanQuet(i: { receiptId: string; maQuet: string }): Pro
     const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(schema.goodsReceiptItems)
       .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, line.id), sql`${schema.goodsReceiptItems.confirmedAt} is not null`));
     const dem = { mongDoi: line.qty, daIn: 0, daXacNhan: n };
-    if (!duChiec(dem)) return { ok: true as const, unitCode: ma.unitCode, lineId: line.id, daXacNhan: n, mongDoi: line.qty, duChiec: false, chot: null };
+    if (!duChiec(dem)) return { ok: true as const, unitCode: ma.unitCode, lineId: line.id, daXacNhan: n, mongDoi: line.qty, duChiec: false };
 
     // ĐỦ CHIẾC → chốt (spec §3 bước 4, §5.1).
     if (line.status === 'brand_confirmed') {
@@ -147,34 +154,13 @@ export async function xacNhanQuet(i: { receiptId: string; maQuet: string }): Pro
       .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.brandOrderRequests.orderId))
       .where(eq(schema.brandOrderRequests.fulfillmentLineId, line.id)).limit(1);
     if (ctx?.orderNumber && line.sku) await ghiNhanHangTrongTx(tx, { orderNumber: ctx.orderNumber, sku: line.sku, vendor: ctx.vendor });
-    const maMon = await tx.select({ unitCode: schema.goodsReceiptItems.unitCode }).from(schema.goodsReceiptItems)
-      .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, line.id), sql`${schema.goodsReceiptItems.confirmedAt} is not null`))
-      .orderBy(schema.goodsReceiptItems.unitCode);
-    return {
-      ok: true as const, unitCode: ma.unitCode, lineId: line.id, daXacNhan: n, mongDoi: line.qty, duChiec: true,
-      chot: ctx?.orderNumber && line.sku ? { orderNumber: ctx.orderNumber, sku: line.sku, vendor: ctx.vendor, maMon: maMon.map((m) => m.unitCode) } : null,
-    };
+    return { ok: true as const, unitCode: ma.unitCode, lineId: line.id, daXacNhan: n, mongDoi: line.qty, duChiec: true };
   });
 
-  if (kq.ok && kq.chot && batDayNhanHang()) {
-    // Best-effort: Lark hỏng không chặn — cron push-nhan-hang điền bù theo lark_pushed_at.
-    try {
-      const r = await dongBoNhanHangLark([{ ...kq.chot, receivedAt: new Date() }], listBrandReceivedRecords, createBrandReceivedRecord, updateBrandReceivedRecordFields);
-      if (r.loi.length === 0) {
-        await db.update(schema.mmpLineReceived).set({ larkPushedAt: sql`now()` })
-          .where(and(eq(schema.mmpLineReceived.orderNumber, kq.chot.orderNumber.replace(/^#/, '')), eq(schema.mmpLineReceived.sku, kq.chot.sku)));
-      }
-    } catch (e) { console.error('[nhan-hang] lark push failed', e); }
-  }
+  // Đẩy Lark do cron push-nhan-hang lo (lark_pushed_at IS NULL) — không đọc cả
+  // bảng Lark trong lúc kho đang quét (tiền lệ D-045).
   try { await recordAudit({ userId, action: 'receiving_confirm_scan', target: i.receiptId, requestSummary: ma.unitCode, result: kq.ok ? 'success' : 'error' }); } catch (e) { console.error('audit failed', e); }
   revalidatePath(`/f/warehouse/receiving/${i.receiptId}`);
   revalidatePath('/f/warehouse/receiving');
-  if (!kq.ok) return kq;
-  const { chot: _chot, ...ra } = kq;
-  return ra;
-}
-
-export async function layMonTrongPhieu(receiptId: string) {
-  await requirePerm('view_receiving');
-  return listMonTrongPhieu(receiptId);
+  return kq;
 }
