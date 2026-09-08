@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import Link from 'next/link';
-import { sql, isNotNull } from 'drizzle-orm';
+import { sql, isNotNull, eq } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
@@ -13,12 +13,15 @@ import { ReconcileUploader } from './ReconcileUploader';
 import { ReconcileBillsButton } from '../ReconcileBillsButton';
 import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
 import { ReconciledRowsTable, type ReconciledRowData } from './ReconciledRowsTable';
+import { layDanhSachBrandShipHo } from '@/features/ship-ho/queries';
+import { docMucDoiSoat, locTheoBrand, locTheoDoiSoat, NHAN_DOI_SOAT } from '@/features/ship-ho/filter-orders';
+import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
 
 export const dynamic = 'force-dynamic';
 
 const vnd = (v: string | number | null) => (v == null ? '—' : Math.round(Number(v)).toLocaleString('vi-VN'));
 
-export default async function ShipHoReconcilePage() {
+export default async function ShipHoReconcilePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -26,10 +29,17 @@ export default async function ShipHoReconcilePage() {
     return <div className="max-w-3xl mx-auto px-6 py-16 text-center"><h1 className="text-2xl font-semibold">Forbidden</h1></div>;
   }
 
+  const sp = await searchParams;
+  const brand = typeof sp['brand'] === 'string' && sp['brand'] ? sp['brand'] : undefined;
+  const doiSoat = docMucDoiSoat(sp['doi_soat']);
+  const brands = await layDanhSachBrandShipHo();
+
   // Mọi đơn có tracking: đã đối soát (khớp bill) vs chờ bill.
-  const rows = await db.select({
+  const rowsAll = await db.select({
     id: schema.shipHoOrders.id,
     code: schema.shipHoOrders.code,
+    partnerBrandSlug: schema.shipHoOrders.partnerBrandSlug,
+    brandName: schema.mmpBrands.displayName,
     trackingNumber: schema.shipHoOrders.trackingNumber,
     carrierKey: schema.shipHoOrders.carrierKey,
     country: schema.shipHoOrders.country,
@@ -50,8 +60,14 @@ export default async function ShipHoReconcilePage() {
     markupPercent: schema.shipHoOrders.markupPercent,
     service: schema.shipHoOrders.service,
   }).from(schema.shipHoOrders)
+    .leftJoin(schema.mmpBrands, eq(schema.mmpBrands.slug, schema.shipHoOrders.partnerBrandSlug))
     .where(isNotNull(schema.shipHoOrders.trackingNumber))
     .orderBy(schema.shipHoOrders.code);
+  // Lọc brand + trạng thái đối soát cùng luật với badge cột "Đối soát" (CEO 08/09, cho Đức).
+  const rows = locTheoDoiSoat(locTheoBrand(rowsAll, brand), doiSoat);
+  // Đang lọc một mức cụ thể → chỉ hiện đúng bảng liên quan, khỏi cuộn qua bảng rỗng.
+  const hienDaDoiSoat = !doiSoat || doiSoat !== 'waiting';
+  const hienChoBill = !doiSoat || doiSoat === 'waiting';
 
   const waiting = rows.filter((r) => r.reconcileStatus !== 'reconciled');
   // Dòng đã đối soát: tính sẵn cấu trúc giá 3 phía (server) → client chỉ expand/hiện.
@@ -77,6 +93,7 @@ export default async function ShipHoReconcilePage() {
       return {
         id: r.id,
         code: r.code,
+        brandName: r.brandName ?? r.partnerBrandSlug,
         trackingNumber: r.trackingNumber,
         billNumber: r.billNumber,
         quoteKg: r.chargeableWeightKg != null ? Number(r.chargeableWeightKg) : Number(r.weightKg),
@@ -108,11 +125,12 @@ export default async function ShipHoReconcilePage() {
           <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách đơn</Link>
         </div>
       </div>
+      <BoLocDonShipHo brands={brands} brand={brand} doiSoat={doiSoat} soDong={rows.length} />
 
       {/* Đã đối soát */}
-      <Card><CardContent className="p-0">
+      {hienDaDoiSoat && <Card><CardContent className="p-0">
         <div className="border-b border-border px-4 py-3 text-sm font-semibold">
-          Đã đối soát ({reconciled.length})
+          {doiSoat && doiSoat !== 'done' ? NHAN_DOI_SOAT[doiSoat] : 'Đã đối soát'} ({reconciled.length})
         </div>
         {reconciled.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">Chưa có đơn nào khớp hoá đơn carrier.</p>
@@ -122,10 +140,10 @@ export default async function ShipHoReconcilePage() {
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
           Click một dòng để mở chi tiết từng khoản (cước cơ bản, phụ phí, fuel, VAT) so 3 phía: dự tính · bill · giá thu.
         </p>
-      </CardContent></Card>
+      </CardContent></Card>}
 
       {/* Chờ bill */}
-      <Card><CardContent className="p-0">
+      {hienChoBill && <Card><CardContent className="p-0">
         <div className="border-b border-border px-4 py-3 text-sm font-semibold">
           Chờ hoá đơn carrier ({waiting.length})
         </div>
@@ -136,7 +154,7 @@ export default async function ShipHoReconcilePage() {
             <table className="w-full text-xs tabular-nums xl:text-sm">
               <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr className="[&>th]:px-2 [&>th]:py-2 xl:[&>th]:px-3 [&>th]:font-medium">
-                  <th className="text-left">Mã</th><th className="text-left">Tracking</th><th className="text-left">Carrier</th>
+                  <th className="text-left">Mã</th><th className="text-left">Đối tác</th><th className="text-left">Tracking</th><th className="text-left">Carrier</th>
                   <th className="text-left">Đến</th><th className="text-right">Chi phí dự tính</th><th className="text-right">Giá thu</th>
                 </tr>
               </thead>
@@ -144,6 +162,7 @@ export default async function ShipHoReconcilePage() {
                 {waiting.map((r) => (
                   <tr key={r.id} className="border-t border-border/60 [&>td]:px-2 [&>td]:py-2 xl:[&>td]:px-3">
                     <td className="text-left"><Link href={`/f/ship-ho/${r.id}`} className="font-medium text-primary underline-offset-2 hover:underline">{r.code}</Link></td>
+                    <td className="text-left truncate">{r.brandName ?? r.partnerBrandSlug}</td>
                     <td className="text-left font-mono text-xs">{r.trackingNumber}</td>
                     <td className="text-left uppercase text-xs">{r.carrierKey ?? '—'}</td>
                     <td className="text-left">{r.country}</td>
@@ -158,7 +177,7 @@ export default async function ShipHoReconcilePage() {
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
           Đơn có tracking nhưng chưa xuất hiện trên hoá đơn carrier nào — sẽ tự khớp khi kỳ bill sau được upload (Carrier rates → Bills).
         </p>
-      </CardContent></Card>
+      </CardContent></Card>}
 
       {/* Import thủ công — phương án phụ */}
       <details className="rounded-lg border border-border p-4">

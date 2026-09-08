@@ -24,6 +24,7 @@ export interface ShipHoOrderRow {
   trackingNumber: string | null;
   deliveryStatus: string | null;
   reconcileStatus: string | null;
+  reconcileDecision: string | null;
   recipientName: string | null;
 }
 
@@ -58,12 +59,24 @@ export async function listShipHoOrders(filter?: {
       trackingNumber: schema.shipHoOrders.trackingNumber,
       deliveryStatus: schema.shipHoOrders.deliveryStatus,
       reconcileStatus: schema.shipHoOrders.reconcileStatus,
+      reconcileDecision: schema.shipHoOrders.reconcileDecision,
       recipientName: schema.shipHoOrders.recipientName,
     })
     .from(schema.shipHoOrders)
     .leftJoin(schema.mmpBrands, eq(schema.mmpBrands.slug, schema.shipHoOrders.partnerBrandSlug))
     .where(conds.length ? and(...conds) : undefined)
     .orderBy(desc(schema.shipHoOrders.createdAt));
+}
+
+/** Danh sách brand đối tác ship hộ (slug + tên hiển thị) cho bộ lọc — theo tên A→Z. */
+export async function layDanhSachBrandShipHo(): Promise<Array<{ slug: string; name: string }>> {
+  const rows = await db
+    .select({ slug: schema.shipHoPartners.brandSlug, name: schema.mmpBrands.displayName })
+    .from(schema.shipHoPartners)
+    .leftJoin(schema.mmpBrands, eq(schema.mmpBrands.slug, schema.shipHoPartners.brandSlug));
+  return rows
+    .map((r) => ({ slug: r.slug, name: r.name ?? r.slug }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 }
 
 export async function getShipHoOrder(id: string) {

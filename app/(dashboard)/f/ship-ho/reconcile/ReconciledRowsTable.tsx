@@ -8,6 +8,8 @@ import {
 
 /** Row bảng đối soát = dữ liệu modal (ReconcileModalData) + vài cột hiển thị riêng. */
 export interface ReconciledRowData extends ReconcileModalData {
+  /** Tên brand đối tác — hiện dưới mã đơn để lọc theo brand đọc được ngay. */
+  brandName: string | null;
   trackingNumber: string | null;
   billNumber: string | null;
   quoteKg: number;
@@ -70,6 +72,7 @@ function RowGroup({ r, open, kgDiff, onToggle, actions }: {
           >
             {r.code}
           </Link>
+          <div className="text-[10px] leading-tight text-muted-foreground">{r.brandName}</div>
           <div className="font-mono text-[10px] text-muted-foreground">{r.trackingNumber}</div>
         </td>
         <td className="text-left font-mono text-xs">{r.billNumber ?? '—'}</td>

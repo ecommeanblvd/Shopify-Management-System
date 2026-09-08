@@ -6,8 +6,9 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listShipHoOrders } from '@/features/ship-ho/queries';
-import { filterShipHoOrders } from '@/features/ship-ho/filter-orders';
+import { listShipHoOrders, layDanhSachBrandShipHo } from '@/features/ship-ho/queries';
+import { filterShipHoOrders, docMucDoiSoat } from '@/features/ship-ho/filter-orders';
+import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
 import { displayCharged, displayMargin } from '@/features/ship-ho/pnl';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
@@ -44,8 +45,11 @@ export default async function ShipHoListPage({
   const sp = await searchParams;
   const sourceFilter = sp['source'] === 'mmp' ? 'mmp' : null;
   const q = typeof sp['q'] === 'string' ? sp['q'] : undefined;
-  const allOrders = await listShipHoOrders();
-  const orders = filterShipHoOrders(allOrders, { q, source: sourceFilter ?? undefined });
+  // Bộ lọc brand + trạng thái đối soát (CEO 08/09, cho Đức đối soát) — trên URL để chia sẻ/F5 giữ lọc.
+  const brand = typeof sp['brand'] === 'string' && sp['brand'] ? sp['brand'] : undefined;
+  const doiSoat = docMucDoiSoat(sp['doi_soat']);
+  const [allOrders, brands] = await Promise.all([listShipHoOrders(), layDanhSachBrandShipHo()]);
+  const orders = filterShipHoOrders(allOrders, { q, source: sourceFilter ?? undefined, brand, doiSoat });
 
   // Dữ liệu ĐỐI SOÁT (quyết định + cấu trúc giá 3 phía) cho các đơn ĐÃ reconciled
   // trên trang — để cột "Đối soát" mở modal accept/claim/resolve tại chỗ. Chỉ
@@ -117,11 +121,16 @@ export default async function ShipHoListPage({
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
         </div>
       </div>
-      <form className="mb-4" action="/f/ship-ho">
-        {sourceFilter && <input type="hidden" name="source" value="mmp" />}
-        <input name="q" defaultValue={q ?? ''} placeholder="Tìm mã đơn / mã gốc / tracking / brand…"
-          className="w-full max-w-md rounded border px-3 py-2 text-sm" />
-      </form>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <form action="/f/ship-ho" className="flex-1 min-w-[16rem] max-w-md">
+          {sourceFilter && <input type="hidden" name="source" value="mmp" />}
+          {brand && <input type="hidden" name="brand" value={brand} />}
+          {doiSoat && <input type="hidden" name="doi_soat" value={doiSoat} />}
+          <input name="q" defaultValue={q ?? ''} placeholder="Tìm mã đơn / mã gốc / tracking / brand…"
+            className="w-full rounded border px-3 py-2 text-sm" />
+        </form>
+        <BoLocDonShipHo brands={brands} brand={brand} doiSoat={doiSoat} soDong={orders.length} />
+      </div>
       <Card>
         <CardContent className="p-0">
           <table className="w-full table-fixed text-xs xl:text-sm">
@@ -152,7 +161,7 @@ export default async function ShipHoListPage({
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">Chưa có đơn ship hộ.</td></tr>
+                <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">{(brand || doiSoat || q) ? 'Không có đơn nào khớp bộ lọc.' : 'Chưa có đơn ship hộ.'}</td></tr>
               ) : orders.map((o) => {
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const billVnd = num(o.actualCarrierCostVnd);
