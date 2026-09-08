@@ -144,8 +144,10 @@ describe('docWorkbook — khuôn Calista (USD, "TỔNG (A):" ₫, B return, TỔ
   it('không có "TỔNG (A):" → dùng TỔNG THANH TOÁN (A-B) ÷ (Σ A − Σ return)', () => {
     const rows = cal.rows.filter((r) => !r.some((c) => /^TỔNG \([AB]\):$/.test(String(c ?? ''))));
     const { bangKe } = docWorkbook([{ ...cal, rows }]);
-    // Dòng A có VND sẵn ở cột Note → tỉ giá suy từ chính các dòng đó (26.080), không cần dòng TỔNG.
-    expect(bangKe[0].tiGia).toBeCloseTo(26080, 0);
+    // Dòng A giữ VND sẵn (Note); return thiếu Note → đổi theo dòng TỔNG THANH TOÁN (A-B) ÷ (Σ A − Σ return) = 26.053.
+    const b = bangKe[0];
+    expect(b.lines.map((l) => l.tt)).toEqual([1_434_400, 3_912_000]);
+    expect(b.returns[0].tt).toBe(Math.round(172.5 * (846_737 / (205 - 172.5))));
   });
 });
 
@@ -213,7 +215,8 @@ describe('docWorkbook — khuôn Linh Phùng (một tab hai mục: A USD có VND
     const b = bangKe[0];
     expect(b.currency).toBe('VND'); expect(b.returns).toHaveLength(0); expect(b.lines).toHaveLength(3);
     expect(b.lines[0]).toMatchObject({ tt: 5_679_222, ttGoc: 237 });
-    const kyVong = Math.round(228 * (5_679_222 / 237));
+    // Dòng thiếu Note đổi theo dòng "TỔNG " ₫ mục A ÷ Σ USD mục A (11.142.778 ÷ 465 = 23.963), không suy từ dòng Note.
+    const kyVong = Math.round(228 * (11_142_778 / 465));
     expect(b.lines[1].tt).toBe(kyVong);
     expect(b.lines[2]).toMatchObject({ tt: 3_742_500 }); expect(b.lines[2].ttGoc).toBeUndefined();
     expect(b.lines.reduce((s, d) => s + d.tt, 0)).toBe(5_679_222 + kyVong + 3_742_500);

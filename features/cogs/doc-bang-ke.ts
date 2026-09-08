@@ -101,10 +101,13 @@ export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumRet
   const ungA: number[] = []; const dauA = tongVndMucA(rows); if (dauA != null) ungA.push(dauA);
   for (const r of rows) if (r.some((c) => /^TỔNG \(A\):?$/i.test(chuoi(c)))) { const v = vndCua(r); if (v != null && v > 0) ungA.push(v); }
   for (const v of ungA) { const r = theoA(v); if (r != null) return r; }
-  // 2) tổng kỳ: "TỔNG (A±B)" → "Tổng"/"TỔNG:" → "TỔNG THANH TOÁN…" (lấy dòng cuối cùng của mỗi nhãn).
-  const timCuoi = (re: RegExp) => [...rows].reverse().find((r) => r.some((c) => re.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
-  for (const re of [/^TỔNG \(A\s*[-+]\s*B\)$/i, /^(Tổng|TỔNG:?)$/i, /^TỔNG THANH TOÁN/i]) {
-    const row = timCuoi(re); const r = theoKy(row ? vndCua(row) : null); if (r != null) return r;
+  // 2) tổng kỳ, theo thứ tự: "TỔNG (A±B)" → "TỔNG:" (Happy Clothing: dòng quy đổi thuần, đứng TRƯỚC "TỔNG THANH TOÁN:")
+  //    → "Tổng"/"TỔNG" (dòng ĐẦU tiên — dòng cuối cùng thường lặp lại TỔNG THANH TOÁN gồm VAT) → "TỔNG THANH TOÁN…" (dòng cuối).
+  const coVnd = (r: O[]) => r.some((c) => /₫|đ$/i.test(chuoi(c)));
+  const timDau = (re: RegExp) => rows.find((r) => r.some((c) => re.test(chuoi(c))) && coVnd(r));
+  const timCuoi = (re: RegExp) => [...rows].reverse().find((r) => r.some((c) => re.test(chuoi(c))) && coVnd(r));
+  for (const row of [timCuoi(/^TỔNG \(A\s*[-+]\s*B\)$/i), timDau(/^TỔNG:$/i), timDau(/^(Tổng|TỔNG)$/i), timCuoi(/^TỔNG THANH TOÁN/i)]) {
+    const r = theoKy(row ? vndCua(row) : null); if (r != null) return r;
   }
   return null;
 }
@@ -205,12 +208,9 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       const thieu = usd.filter((d) => d.ttVndSan == null);
       let rate: number | null = null;
       if (thieu.length > 0) {
-        // Tỉ giá: ưu tiên suy từ chính các dòng USD đã có VND sẵn (cùng tab, cùng kỳ); không có → từ dòng TỔNG ₫ ÷ Σ USD.
-        // Ưu tiên dòng mục A (return kỳ cũ mang tỉ giá cũ, không dùng để suy tỉ giá kỳ này).
-        const goc = coSan.filter((d) => d.mucA).length ? coSan.filter((d) => d.mucA) : coSan;
-        const sumSanUsd = goc.reduce((s, d) => s + d.ttGoc!, 0);
-        if (goc.length > 0 && sumSanUsd > 0) rate = goc.reduce((s, d) => s + d.tt, 0) / sumSanUsd;
-        else {
+        // Tỉ giá cho dòng thiếu: ƯU TIÊN dòng TỔNG ₫ của sheet (số MEAN trả; Calista T6 chỉ 1/29 dòng có Note — suy từ
+        // một dòng lệch 0,03%); không có dòng TỔNG mới suy từ các dòng USD đã có VND sẵn (ưu tiên mục A, không dùng return kỳ cũ).
+        {
           const sumA = bk.lines.filter((d) => d.ttGoc != null && d.mucA).reduce((s, d) => s + d.ttGoc!, 0);
           const sumLines = bk.lines.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
           const sumReturns = bk.returns.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
@@ -219,6 +219,11 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
             lines: bk.lines.filter((d) => d.ttGoc == null).reduce((s, d) => s + d.tt, 0),
             returns: bk.returns.filter((d) => d.ttGoc == null).reduce((s, d) => s + d.tt, 0),
           });
+          if (rate == null) {
+            const goc = coSan.filter((d) => d.mucA).length ? coSan.filter((d) => d.mucA) : coSan;
+            const sumSanUsd = goc.reduce((s, d) => s + d.ttGoc!, 0);
+            if (goc.length > 0 && sumSanUsd > 0) rate = goc.reduce((s, d) => s + d.tt, 0) / sumSanUsd;
+          }
         }
         if (rate != null) for (const d of thieu) d.tt = Math.round(d.ttGoc! * rate);
       }
