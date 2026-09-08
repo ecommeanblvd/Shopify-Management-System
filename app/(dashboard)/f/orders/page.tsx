@@ -8,7 +8,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ShoppingBag, Truck } from 'lucide-react';
+import { ShoppingBag, Truck, TrendingUp, FileSpreadsheet } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,8 @@ export default async function OrdersLanding() {
   const stores = await db.select().from(schema.stores).where(eq(schema.stores.status, 'active'));
 
   const canManageInvoices = hasPermission(role, 'manage_shipping_invoices');
+  const canViewCogs = hasPermission(role, 'view_cogs');
+  const canManageCogs = hasPermission(role, 'manage_cogs');
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
@@ -47,6 +49,22 @@ export default async function OrdersLanding() {
             <Button type="button" size="sm" variant="outline" className="h-9 gap-2">
               <Truck className="size-4" />
               Shipping invoices
+            </Button>
+          </Link>
+        )}
+        {canViewCogs && (
+          <Link href="/f/orders/lai-gop">
+            <Button type="button" size="sm" variant="outline" className="h-9 gap-2">
+              <TrendingUp className="size-4" />
+              Lãi gộp
+            </Button>
+          </Link>
+        )}
+        {canManageCogs && (
+          <Link href="/f/orders/cogs/bang-ke">
+            <Button type="button" size="sm" variant="outline" className="h-9 gap-2">
+              <FileSpreadsheet className="size-4" />
+              Bảng kê brand
             </Button>
           </Link>
         )}
