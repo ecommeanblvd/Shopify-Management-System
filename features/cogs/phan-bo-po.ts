@@ -15,23 +15,30 @@ export interface DongDon { orderId: string; shopifyLineId: string; maDon: string
 export interface PhanBo { orderId: string; shopifyLineId: string; maDon: string; sku: string; thangDat: string; amountVnd: number; tuPO: Array<{ refCode: string; period: string; qty: number; donGiaVnd: number }> }
 export interface KhongPhanBo { orderId: string; shopifyLineId: string; maDon: string; sku: string | null; thangDat: string; lyDo: 'không có SKU trong PO' | 'PO hết số lượng' | 'chưa có PO trước tháng đặt' | 'thiếu SKU' }
 
-const SIZES = new Set(['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'FREE', 'F', 'OS', 'CUSTOMIZE']);
+const SIZES = new Set(['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '4XL', 'FREE', 'F', 'OS', 'CUSTOMIZE']);
+const laMaDenio = (t: string) => /^(PK)?(DN)?0*\d{3,4}$/i.test(t);
+const chuanDenio = (c: string) => c.toUpperCase().replace(/^PKDN0*(\d+)$/, 'PK$1').replace(/^PK0*(\d+)$/, 'PK$1').replace(/^DN0*(\d+)$/, 'DN$1');
 
-/** 'Denio-DN0729+PK0729-M-CRE' → { codes:[DN729,PK729], size:'M', colours:['CRE'] }. Bỏ hậu tố -PO/-Sale và chất liệu PLA. */
+/**
+ * Tách SKU brand bất kỳ: bỏ tiền tố brand (phần đầu trước '-'), bỏ chất liệu 'PLA' và hậu tố -PO/-Sale,
+ * tìm token SIZE đầu tiên; phần trước size = mã sản phẩm (có thể nhiều đoạn: 'FW25-01'), phần sau = màu.
+ *   'Denio-DN0729+PK0729-M-CRE'      → codes [DN729, PK729], size M, colours [CRE]
+ *   'LaVierge-FW25-01-S-NBEI-PLA'    → codes ['FW25-01'],     size S, colours [NBEI]
+ *   'HappyClothing-VD0176-Customize-PIN' → codes ['VD0176'], size CUSTOMIZE, colours [PIN]
+ * Mã kiểu Denio (DN0729/PKDN0729/PK0729) được chuẩn hoá để bundle ↔ PO rời ghép được.
+ */
 export function tachSkuDenio(sku: string): { codes: string[]; size: string | null; colours: string[] } {
-  const parts = sku.replace(/^Denio-/i, '').replace(/-(PO|Sale)$/i, '').split('-').filter(Boolean);
-  const codes: string[] = []; let size: string | null = null; const colours: string[] = [];
-  const chuan = (c: string) => c.toUpperCase().replace(/^PKDN0*(\d+)$/, 'PK$1').replace(/^PK0*(\d+)$/, 'PK$1').replace(/^DN0*(\d+)$/, 'DN$1');
-  for (const p of parts) {
-    if (/^((PK)?(DN)?\d{3,4})(\+(PK)?(DN)?\d{3,4})*$/i.test(p)) for (const c of p.split('+')) codes.push(chuan(c));
-    else if (SIZES.has(p.toUpperCase())) size = p.toUpperCase();
-    else if (/^PLA$/i.test(p)) continue;
-    else colours.push(p.toUpperCase());
-  }
-  return { codes, size, colours };
+  const parts = sku.replace(/-(PO|Sale)$/i, '').split('-').slice(1).map((x) => x.trim()).filter((x) => x && !/^PLA$/i.test(x));
+  const iSize = parts.findIndex((t) => SIZES.has(t.toUpperCase()));
+  // Không có size (phụ kiện Denio 'PKDN0729-CRE'): token đầu là mã, phần còn lại là màu.
+  const truoc = iSize >= 0 ? parts.slice(0, iSize) : parts.slice(0, 1);
+  const sau = iSize >= 0 ? parts.slice(iSize + 1) : parts.slice(1);
+  const denio = truoc.flatMap((t) => t.split('+')).filter(laMaDenio);
+  const codes = denio.length ? [...new Set(denio.map(chuanDenio))] : (truoc.length ? [truoc.join('-').toUpperCase()] : []);
+  return { codes, size: iSize >= 0 ? parts[iSize].toUpperCase() : null, colours: sau.map((t) => t.toUpperCase()) };
 }
 
-/** Khoá ghép PO ↔ dòng đơn: mã chính (DN…) + size + màu. */
+/** Khoá ghép PO ↔ dòng đơn: mã chính (Denio: mã DN…, khác: cả cụm mã) + size + màu. */
 export function khoaSku(sku: string): string | null {
   const t = tachSkuDenio(sku);
   const main = t.codes.find((c) => c.startsWith('DN')) ?? t.codes[0];

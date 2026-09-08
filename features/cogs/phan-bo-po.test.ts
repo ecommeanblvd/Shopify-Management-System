@@ -57,3 +57,20 @@ describe('phanBoPO — nhập trước dùng trước, chỉ PO kỳ ≤ tháng 
     expect(r.khong.map((k) => [k.maDon, k.lyDo])).toEqual([['#Y', 'chưa có PO trước tháng đặt'], ['#X', 'không có SKU trong PO'], ['#Z', 'thiếu SKU']]);
   });
 });
+
+describe('khoaSku — brand khác Denio (La Vierge, Happy Clothing, Calista)', () => {
+  it('La Vierge: mã hai đoạn FW25-01, bỏ PLA → khớp PO ghi không có PLA', () => {
+    expect(khoaSku('LaVierge-FW25-01-S-NBEI-PLA')).toBe('FW25-01|S|NBEI');
+    expect(khoaSku('LaVierge-RS25-07-S-CBG')).toBe('RS25-07|S|CBG');
+    expect(khoaSku('LaVierge-FW25-01-S-NBEI-PLA')).not.toBe(khoaSku('LaVierge-FW25-01-M-NBEI-PLA'));
+  });
+  it('Happy Clothing / Calista: một đoạn mã, size Customize hoặc XXS/3XL', () => {
+    expect(khoaSku('HappyClothing-VD0176-Customize-PIN')).toBe('VD0176|CUSTOMIZE|PIN');
+    expect(khoaSku('Calista-4951002-S-BR&WH')).toBe('4951002|S|BR&WH');
+    expect(khoaSku('Calista-VD0241-3XL-BBLA&KFGK-PLA')).toBe('VD0241|3XL|BBLA&KFGK');
+  });
+  it('Denio vẫn như cũ', () => {
+    expect(khoaSku('Denio-DN0729+PK0729-M-CRE')).toBe('DN729|M|CRE');
+    expect(khoaSku('Denio-PKDN0729-CRE')).toBe('PK729||CRE');
+  });
+});

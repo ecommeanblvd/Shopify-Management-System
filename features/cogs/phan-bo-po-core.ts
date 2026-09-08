@@ -38,7 +38,9 @@ export async function phanBoPOCore(brandSlug: string, opts?: { dryRun?: boolean;
      FROM shopify_order_lines l
      JOIN shopify_orders o ON o.id = l.order_id
      LEFT JOIN order_line_cogs c ON c.order_id = l.order_id AND c.shopify_line_id = l.shopify_line_id AND c.kind = 'cogs' AND c.source <> 'po'
-     WHERE lower(l.vendor) LIKE lower($1) || '%' AND o.cancelled_at_shopify IS NULL AND c.id IS NULL AND o.processed_at_shopify >= '2026-01-01'`,
+     -- vendor ↔ slug so sau khi bỏ ký tự không phải chữ/số: 'La Vierge' ↔ 'la-vierge', 'Calista de Minh Thanh' ↔ 'calista-de-minh-thanh'.
+     WHERE regexp_replace(lower(l.vendor), '[^a-z0-9]', '', 'g') = regexp_replace(lower($1), '[^a-z0-9]', '', 'g')
+       AND o.cancelled_at_shopify IS NULL AND c.id IS NULL AND o.processed_at_shopify >= '2026-01-01'`,
     [brandSlug],
   );
   const dongDon = (rows as Array<Record<string, unknown>>).map<DongDon & { storeId: string }>((r) => ({
