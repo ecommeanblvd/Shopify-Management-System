@@ -8,6 +8,7 @@ import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { docWorkbook, kiemCongThuc, type BangKe, type O } from './doc-bang-ke';
 import { ghepBangKe, chuanHoaMaDon, type DonTraCuu, type KetQuaGhep } from './ghep-line';
+import { duocGhiDe } from './uu-tien-nguon';
 
 export function sheetIdTuUrl(url: string): string | null { return /\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec(url)?.[1] ?? null; }
 export function urlXuatXlsx(sheetId: string): string { return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`; }
@@ -128,6 +129,13 @@ export async function apDungBangKeDaDoc(input: {
   const ky = await ghepTatCa(input.bangKe);
   const daGhi: Array<{ period: string; lines: number; offline: number; returns: number }> = [];
   const khongKhop: ApDungKhongKhop[] = [];
+  // Thứ tự ưu tiên nguồn (uu-tien-nguon.ts, spec §7 refined): `mmp` kế nhiệm
+  // `brand_statement` — dòng `mmp` luôn được ghi đè lên dòng đang có bất kỳ
+  // nguồn nào (kể cả `brand_statement`), nên KHÔNG cần setWhere. Ngược lại,
+  // dòng `brand_statement` không được ghi đè dòng đang là `mmp` (chỉ
+  // `duocGhiDe('mmp', 'brand_statement')` = false) — setWhere chặn đúng
+  // trường hợp đó, để sheet import lại một kỳ cũ không xoá mất số đã lên MMP.
+  const setWhereUuTien = duocGhiDe('mmp', input.source) ? undefined : sql`${schema.orderLineCogs.source} <> 'mmp'`;
   // Nhiều kỳ ghi TUẦN TỰ, mỗi kỳ một transaction riêng — nếu một kỳ sau lỗi
   // (DB tạm ngắt, deadlock, v.v.) các kỳ TRƯỚC đã commit không được coi là mất
   // trắng: trả về `daGhi` (những kỳ đã ghi) kèm `loi` thay vì throw, để người
@@ -144,11 +152,35 @@ export async function apDungBangKeDaDoc(input: {
         await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.source, input.source), eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
         const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
           for (const t of g.theoLine) {
+            const amount = String(kind === 'return' ? -t.amount : t.amount);
+            const detail = { dong: t.dong, cachKhop: t.cachKhop, slSheet: t.slSheet, du: t.du, lechCongThuc: t.dong.filter((d) => !kiemCongThuc(d)).length, tenFile: input.tenFile };
+            if (input.source === 'mmp') {
+              // MMP là nguồn KẾ NHIỆM sheet: trước khi ghi dòng MMP của line này, xoá
+              // dòng `brand_statement` CŨ của ĐÚNG line (order_id, shopify_line_id,
+              // kind) ở BẤT KỲ kỳ nào — MMP có thể ghi nhận line vào kỳ khác kỳ sheet
+              // đã ghi trước đó (ví dụ sheet ghi theo tháng đặt, MMP ghi theo tháng
+              // thực nhận từ brand); index duy nhất chỉ bắt trùng CÙNG kỳ nên không tự
+              // dọn được trường hợp khác kỳ này — không xoá thì line tồn tại 2 dòng
+              // COGS ở 2 kỳ khác nhau, báo cáo cộng trùng giá vốn.
+              await tx.delete(schema.orderLineCogs).where(and(
+                eq(schema.orderLineCogs.orderId, t.line.orderId),
+                eq(schema.orderLineCogs.shopifyLineId, t.line.shopifyLineId),
+                eq(schema.orderLineCogs.kind, kind),
+                eq(schema.orderLineCogs.source, 'brand_statement'),
+              ));
+            }
             await tx.insert(schema.orderLineCogs).values({
               orderId: t.line.orderId, shopifyLineId: t.line.shopifyLineId, storeId: t.line.storeId, kind, period: bk.period,
-              amount: String(kind === 'return' ? -t.amount : t.amount), currency, source: input.source, brandSlug: input.brandSlug, statementRef: ref,
-              detail: { dong: t.dong, cachKhop: t.cachKhop, slSheet: t.slSheet, du: t.du, lechCongThuc: t.dong.filter((d) => !kiemCongThuc(d)).length, tenFile: input.tenFile },
-              importedBy: input.userId,
+              amount, currency, source: input.source, brandSlug: input.brandSlug, statementRef: ref,
+              detail, importedBy: input.userId,
+            }).onConflictDoUpdate({
+              // Trùng (order_id, shopify_line_id, kind, period) — CHƯA có `source` trong
+              // index này (spec §7 refined: một line/kind/kỳ chỉ có MỘT dòng, nguồn nào
+              // thắng theo `uu-tien-nguon.ts` thì đứng). `setWhereUuTien` chặn đúng
+              // trường hợp `brand_statement` cố đè dòng đang là `mmp`.
+              target: [schema.orderLineCogs.orderId, schema.orderLineCogs.shopifyLineId, schema.orderLineCogs.kind, schema.orderLineCogs.period],
+              set: { amount, currency, source: input.source, brandSlug: input.brandSlug, statementRef: ref, detail, importedBy: input.userId, importedAt: sql`now()` },
+              setWhere: setWhereUuTien,
             });
           }
           for (const o of g.offline) {

@@ -13,9 +13,13 @@ theo kỳ ghi nhận**, không theo SKU.
 Một line có thể có giá vốn từ nhiều nguồn; khi trùng, hệ thống lấy theo thứ tự ưu tiên sau (nguồn tự động
 **không bao giờ đè** số đã đối soát với brand):
 
-1. **`brand_statement`** — nhập từ bảng kê công nợ brand (trang này), ngang hàng ưu tiên với `mmp` (đợt 2: webhook MMP đẩy cùng cấu trúc).
-2. **`csv`** — sửa tay qua luồng CSV/`cost_override` hiện có.
-3. **`shopify_unit_cost`** — *Cost per item* trên Shopify (đợt 2: cron `sync-unit-cost` + `apply-own-cogs`, dùng cho hàng tự sản xuất — TINH, Mirer, hàng MEAN tự sản).
+1. **`mmp`** — webhook MMP đẩy bảng kê (đợt 2, chưa bật) — **KẾ NHIỆM** `brand_statement`: một khi một line đã
+   có dòng `mmp`, dòng `brand_statement` (kể cả nhập lại/kỳ khác) không còn ghi đè được nữa (xem "Thứ tự ưu
+   tiên nguồn — chi tiết" bên dưới).
+2. **`brand_statement`** — nhập từ bảng kê công nợ brand (trang này, xlsx tay) — quy trình TẠM trước khi brand
+   chuyển hẳn sang đẩy qua MMP.
+3. **`csv`** — sửa tay qua luồng CSV/`cost_override` hiện có.
+4. **`shopify_unit_cost`** — *Cost per item* trên Shopify (đợt 2: cron `sync-unit-cost` + `apply-own-cogs`, dùng cho hàng tự sản xuất — TINH, Mirer, hàng MEAN tự sản).
 
 Giá vốn hàng brand = **Tổng thành tiền TT (trước VAT)** trên bảng kê, ghi nhận vào **kỳ (tháng) THỰC NHẬN**
 trên bảng kê — không phải tháng đặt hàng. Hàng tự sản xuất (đợt 2) ghi theo tháng đặt.
@@ -110,8 +114,11 @@ ngày**, gồm hai bước lồng nhau trong một script (`scripts/cron/cogs-ow
 
 1. **`sync-unit-cost`** (`features/cogs/unit-cost-sync.ts`) — đọc *Cost per item* (`inventoryItem.unitCost`)
    từng biến thể qua GraphQL Shopify, một truy vấn DISTINCT ON/store để tra giá hiện có, chỉ **ghi khi giá đổi**
-   vào `sku_costs` (nguồn `shopify`, `effective_from` = lúc đồng bộ). Lỗi một store không chặn store khác,
-   nhưng `chayCron` vẫn báo đỏ (`process.exitCode = 1`) khi có `loi` — không nuốt lỗi im lặng.
+   vào `sku_costs` (nguồn `shopify`, `effective_from` = lúc đồng bộ). Trên store đa-brand `meanblvd`, chỉ ghi
+   SKU của **vendor tự sản xuất** (`laHangTuSanXuat`, đọc thêm `product.vendor` từ Shopify) — biến thể của
+   brand khác trên cùng store bị bỏ qua (`boQuaVendor`), không đè giá của brand outsource lên `sku_costs`. Lỗi
+   một store không chặn store khác, nhưng `chayCron` vẫn báo đỏ (`process.exitCode = 1`) khi có `loi` — không
+   nuốt lỗi im lặng.
 2. **`apply-own-cogs`** (`features/cogs/own-cogs.ts`, chạy lồng qua `chayMotJob('apply-own-cogs', …)`) — quét
    line đơn **90 ngày gần đây**, chưa huỷ, thuộc store/vendor tự sản xuất, **chưa có** `order_line_cogs`
    `kind='cogs'` từ bất kỳ nguồn nào (`onConflictDoNothing` — nguồn tay luôn thắng, không đè). Với mỗi line,
@@ -144,8 +151,27 @@ Xem chi tiết quyết định và khảo sát dữ liệu tại
 `HMAC_SHA256(MMP_WEBHOOK_SECRET, "<timestamp>.<rawBody>")`, header `x-mean-signature` / `x-mean-timestamp`
 (mẫu `app/api/mmp/order-confirmations/route.ts`). Nhận cấu trúc trung gian giống bộ nhập bảng kê ở trên —
 đi qua **đúng luật ghép dòng** (mục "Luật ghép dòng bảng kê vào line đơn" phía trên) và hàm ghi
-`apDungBangKeDaDoc` (`features/cogs/bang-ke-import.ts`), nguồn `source = 'mmp'` — ngang hàng ưu tiên với
-`brand_statement`, không đè lên nhau (xoá theo kỳ được lọc đúng `source` đang ghi).
+`apDungBangKeDaDoc` (`features/cogs/bang-ke-import.ts`), nguồn `source = 'mmp'` — **KẾ NHIỆM** `brand_statement`
+(xem "Thứ tự ưu tiên nguồn — chi tiết" bên dưới), không phải nguồn ngang hàng.
+
+### Thứ tự ưu tiên nguồn — chi tiết (spec §7 refined, quyết định 2026-09-08)
+
+`order_line_cogs` chỉ có một index duy nhất (order_id, shopify_line_id, kind, period) — **không có `source`**
+trong đó — nên một line/kind/kỳ chỉ tồn tại **một dòng**; nguồn nào thắng do hàm thuần `duocGhiDe`
+(`features/cogs/uu-tien-nguon.ts`) quyết định khi ghi (upsert `onConflictDoUpdate`):
+
+- **`mmp` là nguồn KẾ NHIỆM `brand_statement`** — MMP thay thế hoàn toàn quy trình bảng kê xlsx tay: dòng `mmp`
+  luôn ghi đè dòng đang có (kể cả `brand_statement`), còn dòng `brand_statement` **không bao giờ** ghi đè được
+  dòng đang là `mmp` (nhập lại một kỳ sheet cũ, hoặc MMP đẩy sai kỳ trước, không được xoá mất số đã lên MMP).
+  Vì MMP có thể ghi nhận một line vào kỳ (tháng thực nhận) khác kỳ sheet cũ đã ghi (tháng đặt), trước khi ghi
+  dòng `mmp` của một line, hệ thống còn xoá thêm dòng `brand_statement` CŨ của đúng line đó ở **bất kỳ kỳ
+  nào** — tránh line tồn tại hai dòng COGS ở hai kỳ khác nhau.
+- Cả hai nguồn "bảng kê" (`brand_statement`, `mmp`) đều **đè `shopify_unit_cost`** (ưu tiên thấp nhất — Cost
+  per item Shopify chỉ là số tạm khi chưa đối soát brand).
+- **`shopify_unit_cost` không bao giờ đè nguồn nào khác** — `own-cogs.ts` dùng `onConflictDoNothing`, thấp hơn
+  cả mức "so ưu tiên", tách biệt với luật `duocGhiDe`.
+- Xoá theo kỳ khi re-import (đoạn trên) vẫn lọc đúng `source` đang ghi — không đụng dòng nguồn khác cùng
+  brand/kỳ; luật ghi đè ở trên chỉ áp dụng khi **trùng đúng (order_id, line, kind, period)**.
 
 ```json
 { "brandSlug": "denio", "period": "2026-09",
