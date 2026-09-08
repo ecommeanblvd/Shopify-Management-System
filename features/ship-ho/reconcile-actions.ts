@@ -12,6 +12,7 @@ import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile, donDaDongBang } from './reconcile-decision';
+import { khopOBangGia, layOBangGia } from './bill-base-check';
 
 export interface ReconcileSummary {
   total: number;
@@ -89,6 +90,8 @@ export interface RebillSummary {
   dutyOnly: number;
   /** Đã đối soát và bill không đổi → GIỮ NGUYÊN giá đã chốt, không tính lại (CEO 08/09). */
   frozen: number;
+  /** Cước net FedEx trên bill KHÔNG trùng ô nào của bảng giá cố định → ops soi rate card / dòng bill. */
+  baseLech: Array<{ code: string; netVnd: number; lechVnd: number | null; ganNhat: string | null }>;
   errors: Array<{ code: string; reason: string }>;
 }
 
@@ -110,7 +113,7 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
  * Đơn ĐÃ đối soát mà bill không đổi → đóng băng (không tính lại) — xem donDaDongBang.
  */
 export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSummary> {
-  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, frozen: 0, errors: [] };
+  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, frozen: 0, baseLech: [], errors: [] };
 
   const orders = await db
     .select({
@@ -205,11 +208,16 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // Fuel % ưu tiên suy từ CHÍNH bill (mức FedEx thực áp cho lô này) —
         // bảng fuel nội bộ có thể lệch tuần với mức bill; engine chỉ là fallback.
         const fuelPct = billImpliedFuelPercent(s) ?? est.internal.fuelPercent;
-        // Base giá thu THỰC = cước NET carrier bill (base − CK) × (1+markup) —
-        // CEO chốt 23/07: giá cho đối tác neo đúng mức carrier tính cho mình,
-        // để CK tuần của FedEx dao động cỡ nào phần cước cũng không bao giờ lỗ.
+        // Base giá thu THỰC = cước NET carrier bill (base − CK) × (1+markup).
+        // Bảng giá hợp đồng FedEx CỐ ĐỊNH (CEO 08/09, sửa lý do D-022): cước net
+        // trên bill chính là ô bảng giá tại mốc cân + loại gói FedEx đã xác định
+        // theo hàng thực (94/95 đơn khớp từng đồng). Neo bill = tra đúng ô bảng giá
+        // của brand mà không lo đơn khai sai loại gói hay thiếu kích thước.
         // Ratecard nội bộ chỉ còn là fallback khi dòng bill thiếu cột base.
         const billNetFreight = s.base + s.discount;
+        // Net bill KHÔNG trùng ô nào của bảng giá → dữ liệu lệch (rate card / dòng bill), báo ops.
+        const kiemO = khopOBangGia(billNetFreight, await layOBangGia(est.internal.carrierAccountId, o.country, shipDateStr ?? null));
+        if (!kiemO.khop) summary.baseLech.push({ code: o.code, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
         const rc = reconciledBrandCharge({
           baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
           markupPercent: est.internal.markupPercent,
@@ -229,6 +237,9 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           fuelVnd: rc.fuelVnd, fuelPercent: fuelPct,
           processingExVatVnd: rc.processingExVatVnd, vatVnd: rc.vatVnd, vatPercent: est.internal.vatPercent,
           chargedVnd: rc.chargedVnd,
+          // 1 = net bill trùng ô bảng giá cố định; 0 = lệch (kèm số lệch so ô gần nhất).
+          baseKhopBangGia: kiemO.khop ? 1 : 0,
+          ...(kiemO.khop ? {} : { baseLechVnd: kiemO.lechVnd ?? 0 }),
         };
         summary.requoted += 1;
       } else summary.errors.push({ code: o.code, reason: `re-quote ${est.code}` });

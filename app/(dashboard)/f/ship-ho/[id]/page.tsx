@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { getShipHoOrder } from '@/features/ship-ho/queries';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { resolveTier } from '@/features/ship-ho/tier-pricing';
+import { khopOBangGia, layOBangGia, type KetQuaKhopO } from '@/features/ship-ho/bill-base-check';
 import { db, schema } from '@/db/client';
 import { eq, sql } from 'drizzle-orm';
 import { sqlGioKinhDoanh } from '@/lib/timezone';
@@ -65,6 +66,18 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
        and to_char(${sqlGioKinhDoanh('created_at')}, 'YYYY-MM') = to_char((now() at time zone 'UTC' at time zone 'Asia/Bangkok') - interval '1 month', 'YYYY-MM')`,
   ));
   const donThangTruoc = Number(thangTruoc.rows[0]?.n ?? 0);
+  // Cước net FedEx trên bill phải trùng một ô bảng giá cố định (CEO 08/09) — kiểm sống
+  // trên trang để đơn cũ (đã đóng băng) cũng được soi, không phụ thuộc cột đã lưu.
+  let kiemBase: (KetQuaKhopO & { netVnd: number }) | null = null;
+  if (hasBill && o.actualBillBreakdown) {
+    const ab = o.actualBillBreakdown as { base?: unknown; discount?: unknown; shipDate?: unknown };
+    const netVnd = Number(ab.base ?? 0) + Number(ab.discount ?? 0);
+    const [acc] = await db.select({ carrierAccountId: schema.shipHoOrders.carrierAccountId }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, o.id)).limit(1);
+    if (netVnd > 0 && acc?.carrierAccountId) {
+      const ngay = typeof ab.shipDate === 'string' ? ab.shipDate : (o.shippedAt ?? null);
+      kiemBase = { ...khopOBangGia(netVnd, await layOBangGia(acc.carrierAccountId, o.country, ngay)), netVnd };
+    }
+  }
   const canManage = hasPermission(role, 'manage_ship_ho');
   // Form carrier cần tên nước tiếng Anh đầy đủ ("Saudi Arabia"), không phải mã ISO.
   let countryName = o.country;
@@ -165,6 +178,20 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                 re-quote theo số đo Inecso · {o.smsMeasuredAt.toLocaleDateString('vi-VN')}
               </span>
             )}
+            {kiemBase && (kiemBase.khop
+              ? kiemBase.o && (
+                <span className="rounded bg-emerald-500/10 px-1.5 py-px text-[10px] text-emerald-700 dark:text-emerald-400"
+                  title="Cước net FedEx trên bill trùng đúng một ô của bảng giá hợp đồng cố định (mốc cân × loại gói FedEx đã xác định)">
+                  net bill = ô {kiemBase.o.loaiGoi} {kiemBase.o.kg} kg
+                </span>
+              )
+              : (
+                <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                  title="Cước net FedEx trên bill KHÔNG trùng ô nào của bảng giá cố định — soi lại rate card hoặc dòng bill">
+                  ⚠ net bill {kiemBase.netVnd.toLocaleString('vi-VN')} lệch bảng giá
+                  {kiemBase.ganNhat && <> · gần nhất {kiemBase.ganNhat.loaiGoi} {kiemBase.ganNhat.kg} kg = {Math.round(kiemBase.ganNhat.vnd).toLocaleString('vi-VN')} ({kiemBase.lechVnd! > 0 ? '+' : ''}{kiemBase.lechVnd!.toLocaleString('vi-VN')})</>}
+                </span>
+              ))}
           </div>
           {o.markupPercent && (
             <div className="text-xs text-muted-foreground" title="Markup theo bậc sản lượng tháng trước của đối tác: Standard +20% · Silver +16% (≥50 đơn) · Gold +12% (≥100) · Platinum +8% (≥200); strategic/override do admin đặt">

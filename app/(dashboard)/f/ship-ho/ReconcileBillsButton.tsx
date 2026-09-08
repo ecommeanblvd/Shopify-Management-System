@@ -32,6 +32,12 @@ export function ReconcileBillsButton() {
           <div className="flex justify-between"><span className="text-muted-foreground">Khớp hóa đơn</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{result.matched}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Re-bill giá thu thực</span><span>{result.requoted}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Đã chốt, giữ nguyên</span><span>{result.frozen}</span></div>
+          {result.baseLech.length > 0 && (
+            <div className="mt-1 border-t border-border pt-1 text-amber-600 dark:text-amber-400">
+              <div className="font-medium">Cước net bill lệch bảng giá ({result.baseLech.length})</div>
+              {result.baseLech.slice(0, 5).map((b) => <div key={b.code}>{b.code}: net {b.netVnd.toLocaleString('vi-VN')}{b.ganNhat ? ` · gần nhất ${b.ganNhat}` : ''}{b.lechVnd != null ? ` (${b.lechVnd > 0 ? '+' : ''}${b.lechVnd.toLocaleString('vi-VN')})` : ''}</div>)}
+            </div>
+          )}
           <div className="flex justify-between"><span className="text-muted-foreground">Chưa có hóa đơn</span><span>{result.unmatched}</span></div>
           {result.errors.length > 0 && (
             <div className="mt-1 border-t border-border pt-1 text-amber-600 dark:text-amber-400">
