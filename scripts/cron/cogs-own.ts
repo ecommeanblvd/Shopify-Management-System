@@ -44,7 +44,7 @@ async function main(): Promise<{ sync: SyncUnitCostResult; apply: ApplyOwnCogsRe
   if (s.loi.length > 0) process.exitCode = 1;
 
   let apply: ApplyOwnCogsResult = { xemXet: 0, ghi: 0, khongCoGia: 0 };
-  await chayMotJob('apply-own-cogs', async () => {
+  const ok = await chayMotJob('apply-own-cogs', async () => {
     apply = await applyOwnCogs({ dryRun });
     process.stdout.write(
       `apply-own-cogs: xem xét ${apply.xemXet} line, ghi ${apply.ghi}, không có giá ${apply.khongCoGia}` +
@@ -52,6 +52,10 @@ async function main(): Promise<{ sync: SyncUnitCostResult; apply: ApplyOwnCogsRe
     );
     return apply;
   });
+  // `chayMotJob` tự nuốt lỗi (trả false, không throw) để bước (1) ở trên không
+  // bị mất nếu bước này hỏng — nhưng cùng lý do ở (1): không được để cron báo
+  // xanh khi apply-own-cogs thật ra đã lỗi.
+  if (!ok) process.exitCode = 1;
 
   return { sync: s, apply };
 }
