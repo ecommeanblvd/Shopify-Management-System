@@ -144,7 +144,8 @@ describe('docWorkbook — khuôn Calista (USD, "TỔNG (A):" ₫, B return, TỔ
   it('không có "TỔNG (A):" → dùng TỔNG THANH TOÁN (A-B) ÷ (Σ A − Σ return)', () => {
     const rows = cal.rows.filter((r) => !r.some((c) => /^TỔNG \([AB]\):$/.test(String(c ?? ''))));
     const { bangKe } = docWorkbook([{ ...cal, rows }]);
-    expect(bangKe[0].tiGia).toBeCloseTo(846_737 / (205 - 172.5), 0);
+    // Dòng A có VND sẵn ở cột Note → tỉ giá suy từ chính các dòng đó (26.080), không cần dòng TỔNG.
+    expect(bangKe[0].tiGia).toBeCloseTo(26080, 0);
   });
 });
 
@@ -171,13 +172,12 @@ describe('docWorkbook — khuôn La Vierge (USD + VND từng dòng ở cột Not
     expect(b.returns[0]).toMatchObject({ tt: 3_063_930, ttGoc: 117.5 });
     expect(b.tiGia).toBeCloseTo((2_717_400 + 2_264_500 + 3_063_930) / (105 + 87.5 + 117.5), 0);
   });
-  it('một dòng thiếu VND sẵn → dòng đó đổi theo tỉ giá kỳ (Tổng ₫ ÷ (A − B)), dòng khác giữ số sẵn', () => {
+  it('một dòng thiếu VND sẵn → đổi theo tỉ giá suy từ các dòng mục A có VND sẵn (không lấy return kỳ cũ)', () => {
     const rows = lv.rows.map((r, i) => (i === 4 ? r.map((c, j) => (j === 9 ? null : c)) : r));
     const { bangKe } = docWorkbook([{ ...lv, rows }]);
     const b = bangKe[0];
     expect(b.lines[0].tt).toBe(2_717_400);
-    const rate = 1_917_970 / (192.5 - 117.5);
-    expect(b.lines[1].tt).toBe(Math.round(87.5 * rate));
+    expect(b.lines[1].tt).toBe(Math.round(87.5 * (2_717_400 / 105))); // 2.264.500 — đúng số sheet
   });
   it('cột Note ghi nghìn ₫ kiểu "2,717.400" (La Vierge T5) → nhân 1.000', () => {
     const rows = lv.rows.map((r, i) => (i === 3 ? r.map((c, j) => (j === 9 ? '2,717.400' : c)) : r));
@@ -189,5 +189,69 @@ describe('docWorkbook — khuôn La Vierge (USD + VND từng dòng ở cột Not
     const { bangKe } = docWorkbook([{ ...lv, rows }]);
     expect(bangKe[0].lines[0].ttVndSan).toBeUndefined();
     expect(bangKe[0].lines[0].tt).toBe(Math.round(105 * (1_917_970 / 75)));
+  });
+});
+
+describe('docWorkbook — khuôn Linh Phùng (một tab hai mục: A USD có VND sẵn, B VNĐ)', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const lp = {
+    name: ' File đối soát T82026', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: Linh Phùng'],
+      [null, 'A. Đơn thực nhận trong tháng (USD)'], HDR,
+      ['12/08/2026', '#MBLVD29887', 'Lyssandra …', 'LinhPhung-LP-PF-14-M-KILA-PLA', '1', '$474.00', '50%', null, '$237.00', '5,679,222', 'x', 'T8', '8'],
+      ['12/08/2026', '#MBLVD29876', 'Helia …', 'LinhPhung-LP-PF24-05-XS-LYE', '1', '$456.00', '50%', null, '$228.00', null, 'x', 'T8', '8'],
+      [null, null, 'TỔNG', null, '2', '$930.00', null, null, '$465.00'], [null, null, null, null, null, 'TỔNG ', null, null, '11,142,778 ₫'],
+      [null, 'B. Đơn thực nhận trong tháng (VNĐ)'], HDR,
+      ['05/08/2026', '#MBLVD29800', 'Áo …', 'LinhPhung-LP-SS-01-S-WHI', '1', '4,990,000 ₫', '25%', null, '3,742,500 ₫', null, 'x', 'T8', '8'],
+      [null, null, 'TỔNG (B)', null, '1', '4,990,000 ₫', null, null, '3,742,500 ₫'],
+      [null, null, 'TỔNG THANH TOÁN (A+B)', null, '3', null, null, null, '14,885,278 ₫'], [null, null, 'Tổng', null, null, null, null, null, '14,885,278 ₫'],
+    ],
+  };
+  it('dòng USD có VND sẵn dùng số sẵn; dòng USD thiếu đổi theo tỉ giá suy từ dòng có sẵn; dòng VNĐ mục B giữ nguyên', () => {
+    const { bangKe } = docWorkbook([lp]);
+    const b = bangKe[0];
+    expect(b.currency).toBe('VND'); expect(b.returns).toHaveLength(0); expect(b.lines).toHaveLength(3);
+    expect(b.lines[0]).toMatchObject({ tt: 5_679_222, ttGoc: 237 });
+    const kyVong = Math.round(228 * (5_679_222 / 237));
+    expect(b.lines[1].tt).toBe(kyVong);
+    expect(b.lines[2]).toMatchObject({ tt: 3_742_500 }); expect(b.lines[2].ttGoc).toBeUndefined();
+    expect(b.lines.reduce((s, d) => s + d.tt, 0)).toBe(5_679_222 + kyVong + 3_742_500);
+  });
+});
+
+describe('docWorkbook — Linh Phùng: cột Note lệch tỉ giá TỔNG (trước VAT) và dòng return lệch cột', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const lp = {
+    name: ' File đối soát T82026', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: Linh Phùng'],
+      [null, 'A. Đơn thực nhận trong tháng (USD)'], HDR,
+      ['12/08/2026', '#MBLVD29887', 'x', 'LinhPhung-LP-PF-14-M-KILA-PLA', '1', '$474.00', '50%', null, '$237.00', '5,679,222', 'x', 'T8', '8'], // 237 × 25.880 ÷ 1,08
+      ['12/08/2026', '#MBLVD29876', 'x', 'LinhPhung-LP-PF24-05-XS-LYE', '1', '$456.00', '50%', null, '$228.00', '5,463,556', 'x', 'T8', '8'],
+      [null, null, 'TỔNG', null, '2', '$930.00', null, null, '$465.00'], [null, null, null, null, null, 'TỔNG ', null, null, '12,034,200 ₫'], // 465 × 25.880
+      [null, 'B. Đơn thực nhận trong tháng (VNĐ)'], HDR,
+      ['05/08/2026', '#MBLVD29800', 'x', 'LinhPhung-LP-SS-01-S-WHI', '1', '4,990,000 ₫', '25%', null, '3,742,500 ₫', null, 'x', 'T8', '8'],
+      [null, null, 'Tổng', null, null, null, null, null, '15,776,700 ₫'],
+    ],
+  };
+  it('Σ cột Note lệch 8% so dòng TỔNG ₫ → bỏ Note, đổi theo tỉ giá TỔNG (25.880); mục B VNĐ giữ nguyên', () => {
+    const { bangKe } = docWorkbook([lp]);
+    const b = bangKe[0];
+    expect(b.lines.map((d) => d.tt)).toEqual([237 * 25880, 228 * 25880, 3_742_500]);
+    expect(b.tiGia).toBe(25880);
+    expect(b.canhBao.some((c) => /lệch dòng TỔNG/.test(c))).toBe(true);
+  });
+  it('dòng return thiếu cột "Giá phụ kiện": Thành tiền lấy ở ô bên trái, có cảnh báo', () => {
+    const HDR_B = ['Ngày trả', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Giá phụ kiện', 'Tổng thành tiền TT', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+    const t6 = { name: 'File đối soát T62026', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/06/2026 đến 30/06/2026\n\nBrand: Linh Phùng'],
+      ['A. Đơn thực nhận trong tháng '], HDR,
+      ['02/06/2026', '#MBLVD28800', 'x', 'LinhPhung-LP-A-S-NUD', '1', '5,190,000 ₫', '25%', null, '3,892,500 ₫', null, 'x', 'T6', '5'],
+      ['B. Đơn return trong tháng '], HDR_B,
+      ['02/06/2026', '#MBLVD28870', 'x', 'LinhPhung-LP-RS24-03-S-NUD', '1', '5,190,000 ₫', '25%', null, '3,892,500 ₫', null, '#MBLVD28870…', 'T6', '5'],
+    ] };
+    const { bangKe } = docWorkbook([t6]);
+    expect(bangKe[0].returns).toHaveLength(1);
+    expect(bangKe[0].returns[0]).toMatchObject({ maDon: '#MBLVD28870', tt: 3_892_500 });
+    expect(bangKe[0].canhBao.some((c) => /lệch cột/.test(c))).toBe(true);
   });
 });

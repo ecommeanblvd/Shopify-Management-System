@@ -59,7 +59,8 @@ async function kiemBrand(brandSlug: string, tenTrenSheet: string): Promise<strin
   const [b] = await db.select({ slug: schema.mmpBrands.slug, ten: schema.mmpBrands.displayName }).from(schema.mmpBrands).where(eq(schema.mmpBrands.slug, brandSlug)).limit(1);
   if (!b) return `Không có brand "${brandSlug}" trong hệ thống`;
   // So sau khi bỏ gạch nối/khoảng trắng/hoa thường: sheet "Calista de Minh Thanh" ↔ display "Calista-de-minh-thanh" / slug "calista-de-minh-thanh".
-  const chuan = (x: string) => x.toLowerCase().replace(/[^a-z0-9\u00C0-\u1EF9]/g, '');
+  // Bỏ dấu tiếng Việt ("Linh Phùng" ↔ "Linh Phung"), gạch nối, khoảng trắng, hoa/thường.
+  const chuan = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '');
   const t = chuan(tenTrenSheet);
   return t === chuan(b.slug) || t === chuan(b.ten ?? '') ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
 }

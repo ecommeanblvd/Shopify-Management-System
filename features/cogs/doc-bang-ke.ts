@@ -19,6 +19,8 @@ export interface DongBangKe {
   ttGoc?: number;
   /** VND ghi sẵn trên sheet cho dòng USD (cột Note — La Vierge); nếu có thì `tt` lấy đúng số này. */
   ttVndSan?: number;
+  /** Dòng thuộc mục A (để suy tỉ giá theo dòng "TỔNG (A):"). */
+  mucA?: boolean;
 }
 export interface BangKe {
   brand: string; period: string; tuNgay: string; denNgay: string; sheet: string;
@@ -68,6 +70,19 @@ function tongVndTheoNhan(rows: O[][], ...res: RegExp[]): number | null {
   }
   return null;
 }
+/** Giá trị ₫ trên dòng TỔNG đầu tiên nằm TRƯỚC mục B (tổng của mục A) — Linh Phùng "TỔNG ", La Vierge "TỔNG THANH TOÁN (B):" (nhãn sai). */
+function tongVndMucA(rows: O[][]): number | null {
+  const iB = rows.findIndex((r) => r.some((c) => /^B\.\s*Đơn/i.test(chuoi(c))));
+  const pham = iB >= 0 ? rows.slice(0, iB) : rows;
+  const tongA = tongVndTheoNhan(pham, /^TỔNG \(A\):?$/i);
+  if (tongA != null) return tongA;
+  for (const r of pham) {
+    if (!r.some((c) => /^TỔNG/i.test(chuoi(c)))) continue;
+    const o = r.find((c) => /₫|đ$/i.test(chuoi(c))); const v = docTien(o); if (v != null && v > 0) return v;
+  }
+  return null;
+}
+
 /**
  * Tỉ giá VND/USD của một tab sheet USD, suy từ chính sheet:
  *   1) "TỔNG (A):" ₫ ÷ Σ USD mục A (Calista, Happy Clothing kỳ có dòng này) — chắc nhất vì không dính return/B;
@@ -90,7 +105,7 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (/thực bán/i.test(sh.name) || coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i)) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
     if (!coO(sh.rows, /A\.\s*Đơn (MEAN )?thực nhận/i)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false; let sumA = 0;
+    let muc: 'A' | 'B' | null = null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
       if (/^A\.\s*Đơn (MEAN )?thực nhận/i.test(dau)) { muc = 'A'; cot = null; return; }
@@ -101,8 +116,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       if (!muc || !cot) return;
       const maDon = chuoi(r[cot.maDon]);
       if (!maDon.startsWith('#')) return;
-      const ttRaw = r[cot.tt];
-      const tt = docTien(typeof ttRaw === 'string' ? ttRaw.replace(/\$/g, '') : ttRaw);
+      let ttRaw = r[cot.tt];
+      let tt = docTien(typeof ttRaw === 'string' ? ttRaw.replace(/\$/g, '') : ttRaw);
+      if (tt == null && cot.tt > 0) {
+        // Dòng thiếu một cột (Linh Phùng mục return: không có ô "Giá phụ kiện") → dữ liệu dồn sang trái một ô:
+        // ô "Tổng thành tiền" trống, số tiền nằm ở ô bên trái, còn ô Code nằm đúng chỗ TT. Nhận khi ô trái là tiền hợp lệ
+        // và ô TT hiện tại KHÔNG phải tiền (là mã Code hoặc trống).
+        const trai = r[cot.tt - 1]; const ttTrai = docTien(typeof trai === 'string' ? trai.replace(/\$/g, '') : trai);
+        if (ttTrai != null && ttTrai > 0) { ttRaw = trai; tt = ttTrai; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} dòng lệch cột — lấy Thành tiền ở ô bên trái (${ttTrai.toLocaleString('vi-VN')})`); }
+      }
       if (tt == null) { bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Thành tiền`); return; }
       const laUsd = typeof ttRaw === 'string' && ttRaw.includes('$'); if (laUsd) coUsd = true;
       // VND từng dòng ghi sẵn ở cột Note (số ≥ 1.000, không có '$') — chỉ dùng cho dòng USD.
@@ -125,26 +147,58 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         code: cot.code >= 0 ? chuoi(r[cot.code]) || null : null, hangSheet: i + 1,
         ...(laUsd ? { ttGoc: tt } : {}),
         ...(ttVndSan != null ? { ttVndSan } : {}),
+        ...(muc === 'A' ? { mucA: true } : {}),
       };
       (muc === 'A' || !bLaReturn ? bk.lines : bk.returns).push(d);
-      if (muc === 'A') sumA += tt;
     });
     if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
     if (coUsd) {
-      // Sheet USD → đổi mọi dòng sang VND theo tỉ giá chính sheet dùng (TỔNG ₫ ÷ Σ USD). Không có dòng TỔNG ₫ → giữ USD + cảnh báo.
-      const sumLines = bk.lines.reduce((s, d) => s + (d.ttGoc ?? d.tt), 0); const sumReturns = bk.returns.reduce((s, d) => s + (d.ttGoc ?? d.tt), 0);
-      const rate = tiGiaTuSheet(sh.rows, sumA, sumLines, sumReturns);
+      // Chỉ ĐỔI các dòng USD (có ttGoc); dòng VND trong cùng tab (Linh Phùng: mục A USD, mục B VNĐ) giữ nguyên.
       const tatCa = [...bk.lines, ...bk.returns];
-      const coSan = tatCa.filter((d) => d.ttVndSan != null);
-      if (coSan.length === tatCa.length && tatCa.length > 0) {
-        // Mọi dòng đều có VND sẵn trên sheet → dùng thẳng (khớp từng đồng với tổng ₫ của brand).
-        for (const d of tatCa) { d.ttGoc = d.ttGoc ?? d.tt; d.tt = d.ttVndSan!; }
-        const sumUsd = tatCa.reduce((s, d) => s + (d.ttGoc ?? 0), 0);
-        bk.tiGia = sumUsd > 0 ? Math.round((tatCa.reduce((s, d) => s + d.tt, 0) / sumUsd) * 100) / 100 : undefined; bk.currency = 'VND';
-      } else if (rate != null) {
-        bk.tiGia = Math.round(rate * 100) / 100; bk.currency = 'VND';
-        // Dòng có VND sẵn dùng số sẵn; dòng thiếu đổi theo tỉ giá kỳ.
-        for (const d of tatCa) { d.ttGoc = d.ttGoc ?? d.tt; d.tt = d.ttVndSan ?? Math.round(d.ttGoc * rate); }
+      const usd = tatCa.filter((d) => d.ttGoc != null);
+      let coSan = usd.filter((d) => d.ttVndSan != null);
+      if (coSan.length) {
+        // Kiểm TỔNG THỂ: Σ(lines) − Σ(returns) tính bằng VND sẵn (dòng USD thiếu VND sẵn thì ước theo tỉ giá suy từ
+        // các dòng có sẵn) phải ≈ dòng TỔNG ₫ của sheet (số MEAN trả). Linh Phùng T8: cột Note = trước VAT (÷1,08)
+        // trong khi TỔNG ₫ = USD × tỉ giá → lệch 3,4% → không tin Note, đổi theo tỉ giá TỔNG. Lệch ≤ 0,5% → tin Note.
+        const sanA = coSan.filter((d) => d.mucA); const goc = sanA.length ? sanA : coSan;
+        const rateSan = goc.reduce((s, d) => s + d.ttVndSan!, 0) / goc.reduce((s, d) => s + d.ttGoc!, 0);
+        const uocVnd = (d: DongBangKe) => d.ttGoc == null ? d.tt : (d.ttVndSan ?? Math.round(d.ttGoc * rateSan));
+        // Hai mốc: (i) tổng ₫ của mục A (dòng TỔNG trước mục B) so Σ A; (ii) dòng "Tổng"/"TỔNG THANH TOÁN" cuối so Σ lines − Σ returns.
+        // Tin cột VND sẵn nếu khớp ≥ một mốc có sẵn; lệch cả các mốc có → bỏ.
+        const tongA = tongVndMucA(sh.rows);
+        const tong = [...sh.rows].reverse().find((r) => r.some((c) => /^(Tổng|TỔNG THANH TOÁN.*|TỔNG:?)$/i.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
+        const tongCuoi = tong ? docTien(tong.find((c) => /₫|đ$/i.test(chuoi(c)))) : null;
+        const sumA = bk.lines.filter((d) => d.mucA).reduce((s, d) => s + uocVnd(d), 0);
+        const sumAll = bk.lines.reduce((s, d) => s + uocVnd(d), 0) - bk.returns.reduce((s, d) => s + uocVnd(d), 0);
+        const khop = (v: number | null, kv: number) => v != null && kv > 0 && Math.abs(kv / v - 1) <= 0.005;
+        const coMoc = tongA != null || (tongCuoi != null && tongCuoi > 0);
+        if (coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll)) {
+          bk.canhBao.push(`${sh.name}: cột VND từng dòng (Σ A ${Math.round(sumA).toLocaleString('vi-VN')}) lệch dòng TỔNG ₫ (${Math.round(tongA ?? tongCuoi ?? 0).toLocaleString('vi-VN')}) — bỏ, dùng tỉ giá TỔNG`);
+          for (const d of coSan) delete d.ttVndSan; coSan = [];
+        }
+      }
+      for (const d of coSan) d.tt = d.ttVndSan!;
+      const thieu = usd.filter((d) => d.ttVndSan == null);
+      let rate: number | null = null;
+      if (thieu.length > 0) {
+        // Tỉ giá: ưu tiên suy từ chính các dòng USD đã có VND sẵn (cùng tab, cùng kỳ); không có → từ dòng TỔNG ₫ ÷ Σ USD.
+        // Ưu tiên dòng mục A (return kỳ cũ mang tỉ giá cũ, không dùng để suy tỉ giá kỳ này).
+        const goc = coSan.filter((d) => d.mucA).length ? coSan.filter((d) => d.mucA) : coSan;
+        const sumSanUsd = goc.reduce((s, d) => s + d.ttGoc!, 0);
+        if (goc.length > 0 && sumSanUsd > 0) rate = goc.reduce((s, d) => s + d.tt, 0) / sumSanUsd;
+        else {
+          const sumA = bk.lines.filter((d) => d.ttGoc != null && d.mucA).reduce((s, d) => s + d.ttGoc!, 0);
+          const sumLines = bk.lines.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
+          const sumReturns = bk.returns.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
+          rate = tiGiaTuSheet(sh.rows, sumA, sumLines, sumReturns);
+        }
+        if (rate != null) for (const d of thieu) d.tt = Math.round(d.ttGoc! * rate);
+      }
+      if (thieu.length === 0 || rate != null) {
+        bk.currency = 'VND';
+        const sumUsd = usd.reduce((s, d) => s + d.ttGoc!, 0);
+        bk.tiGia = sumUsd > 0 ? Math.round((usd.reduce((s, d) => s + d.tt, 0) / sumUsd) * 100) / 100 : undefined;
       } else { bk.currency = 'USD'; bk.canhBao.push(`${sh.name}: sheet tính USD nhưng không thấy dòng TỔNG (₫) để đổi — giữ USD`); }
     } else bk.currency = 'VND';
     bangKe.push(bk);
