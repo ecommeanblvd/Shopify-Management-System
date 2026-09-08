@@ -32,14 +32,35 @@ export function ranhThang(period: string): { from: Date; to: Date } {
   return { from, to };
 }
 
-/** `mmp_brands.display_name` cho một slug (vd 'denio' → 'Denio'). Không có →
- *  trả nguyên slug (đủ dùng làm vendorFilter, chỉ đơn giản không khớp được gì). */
-async function tenVendor(brand: string): Promise<string> {
+/**
+ * Mọi cách viết THẬT của vendor Shopify khớp một brand (theo `mmp_brands`).
+ *
+ * Vendor trên `shopify_order_lines` do người bán/đối tác gõ tay trên Shopify —
+ * lệch hoa/thường với `mmp_brands.display_name` là chuyện thường (thực tế bắt
+ * được: 'Denio' VÀ 'DeNio' cùng tồn tại cho brand denio). `getStoreMetrics` lọc
+ * vendor theo khớp CHÍNH XÁC (phân biệt hoa/thường) nên nếu chỉ truyền đúng
+ * `display_name`, những đơn ghi vendor viết khác hoa/thường sẽ bị loại âm thầm
+ * — doanh thu tính ra thiếu hoặc bằng 0 dù dữ liệu vẫn ở đó. Hàm này dò TRƯỚC
+ * trong `shopify_order_lines` mọi spelling thật khớp `display_name`/`slug`
+ * không phân biệt hoa/thường, rồi trả nguyên các spelling đó để truyền thẳng
+ * vào `vendorFilter` (khớp chính xác từng spelling, không cần sửa
+ * `getStoreMetrics`). Không tìm thấy spelling nào → trả `[displayName]`: bộ
+ * lọc vẫn áp, ra rỗng — trung thực với thực trạng thay vì âm thầm bỏ lọc.
+ */
+async function vendorsCuaBrand(brandSlug: string): Promise<string[]> {
   const [row] = await db
-    .select({ displayName: schema.mmpBrands.displayName })
+    .select({ displayName: schema.mmpBrands.displayName, slug: schema.mmpBrands.slug })
     .from(schema.mmpBrands)
-    .where(eq(schema.mmpBrands.slug, brand));
-  return row?.displayName ?? brand;
+    .where(eq(schema.mmpBrands.slug, brandSlug));
+  const displayName = row?.displayName ?? brandSlug;
+  const slug = row?.slug ?? brandSlug;
+  const { rows } = await db.$client.query(
+    `SELECT DISTINCT vendor FROM shopify_order_lines
+     WHERE vendor IS NOT NULL AND lower(vendor) IN (lower($1), lower($2))`,
+    [displayName, slug],
+  );
+  const found = (rows as Array<{ vendor: string }>).map((r) => r.vendor);
+  return found.length > 0 ? found : [displayName];
 }
 
 interface ThongKeLine { storeId: string; period: string; soLine: number; soLineCoCogs: number; doanhThuLineCoCogs: number }
@@ -47,7 +68,7 @@ interface ThongKeLine { storeId: string; period: string; soLine: number; soLineC
 /** Truy vấn phụ: đếm line + doanh thu line (unit_price×qty − discount_alloc) của
  *  các đơn CHƯA HUỶ trong `thang`/`storeIds`, tách có/không có `order_line_cogs`
  *  kind='cogs' (bất kỳ kỳ nhập) — gộp theo (storeId, period nghiệp vụ). */
-async function thongKeLine(thang: string[], storeIds: string[], vendorName?: string): Promise<ThongKeLine[]> {
+async function thongKeLine(thang: string[], storeIds: string[], vendorNames?: string[]): Promise<ThongKeLine[]> {
   if (thang.length === 0 || storeIds.length === 0) return [];
   const { rows } = await db.$client.query(
     `SELECT o.store_id AS store_id, ${thangSql('o.processed_at_shopify')} AS period,
@@ -61,9 +82,9 @@ async function thongKeLine(thang: string[], storeIds: string[], vendorName?: str
      WHERE o.store_id = ANY($1::uuid[])
        AND o.cancelled_at_shopify IS NULL
        AND ${thangSql('o.processed_at_shopify')} = ANY($2::text[])
-       AND ($3::text IS NULL OR l.vendor = $3)
+       AND ($3::text[] IS NULL OR l.vendor = ANY($3::text[]))
      GROUP BY 1, 2`,
-    [storeIds, thang, vendorName ?? null],
+    [storeIds, thang, vendorNames ?? null],
   );
   return (rows as Array<Record<string, unknown>>).map((r) => ({
     storeId: String(r.store_id),
@@ -75,12 +96,14 @@ async function thongKeLine(thang: string[], storeIds: string[], vendorName?: str
 }
 
 /** Doanh thu theo tháng × store, đọc qua `getStoreMetrics` (spec §6). Bỏ đơn đã
- *  huỷ. `brand` lọc theo vendor (line thuộc brand đó) — cả doanh thu lẫn line
- *  count đều được lọc cùng brand để `phuDoanhThu`/`phuLine` so được với nhau. */
+ *  huỷ. `brand` lọc theo TẬP spelling vendor thật khớp brand đó (xem
+ *  `vendorsCuaBrand` — vendor Shopify gõ tay, lệch hoa/thường với
+ *  `mmp_brands.display_name`) — cả doanh thu lẫn line count đều lọc cùng tập
+ *  spelling để `phuDoanhThu`/`phuLine` so được với nhau. */
 export async function doanhThuTheoThang(thang: string[], storeIds: string[], brand?: string): Promise<DoanhThuThang[]> {
   if (thang.length === 0 || storeIds.length === 0) return [];
-  const vendorName = brand ? await tenVendor(brand) : undefined;
-  const thongKe = await thongKeLine(thang, storeIds, vendorName);
+  const vendorNames = brand ? await vendorsCuaBrand(brand) : undefined;
+  const thongKe = await thongKeLine(thang, storeIds, vendorNames);
   const layThongKe = (storeId: string, period: string) =>
     thongKe.find((t) => t.storeId === storeId && t.period === period);
 
@@ -90,7 +113,7 @@ export async function doanhThuTheoThang(thang: string[], storeIds: string[], bra
     for (const storeId of storeIds) {
       const { orders } = await getStoreMetrics({
         storeId, dateFrom: from, dateTo: to,
-        vendorFilter: vendorName ? [vendorName] : undefined,
+        vendorFilter: vendorNames,
       });
       const active = orders.filter((o) => o.cancelledAt == null);
       if (active.length === 0) continue;
@@ -113,7 +136,9 @@ export async function doanhThuTheoThang(thang: string[], storeIds: string[], bra
 
 /** COGS theo LINE đơn (`order_line_cogs`), gộp theo (period, storeId, brandSlug,
  *  currency) — sum(amount) đã gồm cả return (amount âm). `thuocThangTruoc` =
- *  phần amount của các đơn ĐẶT THÁNG TRƯỚC kỳ báo cáo (bảng kê brand chốt trễ). */
+ *  phần amount của các đơn ĐẶT THÁNG TRƯỚC kỳ báo cáo (bảng kê brand chốt trễ).
+ *  Lọc theo `brand` ở đây dùng thẳng `brand_slug` (cột có sẵn trên bảng, do
+ *  chính import gán) — KHÔNG qua vendor nên không dính lệch hoa/thường. */
 export async function cogsTheoThang(thang: string[], storeIds?: string[], brand?: string): Promise<CogsThang[]> {
   if (thang.length === 0) return [];
   const dieuKien: string[] = ['c.period = ANY($1::text[])'];
@@ -142,7 +167,8 @@ export async function cogsTheoThang(thang: string[], storeIds?: string[], brand?
 }
 
 /** COGS offline brand (`brand_cogs_offline`: PO/MTB ngoài Shopify), gộp theo
- *  (period, brandSlug) — sum(amount) đã gồm cả return (amount âm). */
+ *  (period, brandSlug) — sum(amount) đã gồm cả return (amount âm). Lọc `brand`
+ *  dùng thẳng `brand_slug` (cột sẵn có), không qua vendor. */
 export async function offlineTheoThang(thang: string[], brand?: string): Promise<OfflineThang[]> {
   if (thang.length === 0) return [];
   const dieuKien: string[] = ['period = ANY($1::text[])'];
@@ -170,7 +196,9 @@ export async function tiGiaThang(): Promise<TiGiaThang[]> {
 }
 
 /** Line của đơn CHƯA HUỶ đặt trong `period` (giờ nghiệp vụ) mà chưa có dòng
- *  `order_line_cogs` kind='cogs' (bất kỳ nguồn) — danh sách cho người nhập bù. */
+ *  `order_line_cogs` kind='cogs' (bất kỳ nguồn) — danh sách cho người nhập bù.
+ *  Không lọc theo brand (không có tham số brand) nên không đụng vấn đề
+ *  hoa/thường của vendor. */
 export async function lineChuaCoCogs(period: string, storeIds?: string[]): Promise<Array<{ store: string; brand: string | null; maDon: string; sku: string | null; sl: number; doanhThu: number; currency: string }>> {
   const dieuKien: string[] = [`${thangSql('o.processed_at_shopify')} = $1`, 'o.cancelled_at_shopify IS NULL', 'c.id IS NULL'];
   const params: unknown[] = [period];
@@ -200,7 +228,9 @@ export async function lineChuaCoCogs(period: string, storeIds?: string[]): Promi
   }));
 }
 
-/** Chi tiết mọi dòng COGS của một kỳ (line-level + offline), để soát/đối chiếu. */
+/** Chi tiết mọi dòng COGS của một kỳ (line-level + offline), để soát/đối chiếu.
+ *  Lọc `brand` dùng thẳng `brand_slug` (cột sẵn có trên cả hai bảng nguồn),
+ *  không qua vendor nên không đụng vấn đề hoa/thường. */
 export async function chiTietThang(period: string, brand?: string): Promise<Array<{ brandSlug: string | null; maDon: string; sku: string | null; amount: number; source: string; statementRef: string | null; kind: string }>> {
   const dieuKienLine: string[] = ['c.period = $1'];
   const dieuKienOffline: string[] = ['period = $1'];
