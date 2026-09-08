@@ -28,7 +28,10 @@ export function csvBody(
   header: string[],
   rows: Iterable<CsvValue[]>,
 ): string {
-  const lines: string[] = [header.join(',')];
+  // Header chạy qua csvEscape như data row — trước đây join(',') trần nên một
+  // header chứa dấu phẩy (hiếm nhưng có thể xảy ra khi đổi tên cột) sẽ ra CSV
+  // sai cột dù data row cùng giá trị lại được quote đúng.
+  const lines: string[] = [csvRow(header)];
   for (const row of rows) lines.push(csvRow(row));
   return lines.join('\n') + '\n';
 }

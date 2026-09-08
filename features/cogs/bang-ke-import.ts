@@ -20,6 +20,13 @@ export async function taiWorkbook(input: { url?: string; buffer?: Uint8Array }):
     if (!id) throw new Error('Link không phải Google Sheet');
     const res = await fetch(urlXuatXlsx(id), { signal: AbortSignal.timeout(60_000), redirect: 'follow' });
     if (!res.ok) throw new Error(`Google trả ${res.status} — sheet phải ở chế độ "ai có link đều xem được"`);
+    // Sheet không public: Google redirect về trang đăng nhập/thông báo lỗi
+    // (200 OK, content-type text/html) thay vì trả file xlsx — XLSX.read sẽ
+    // đọc nhầm HTML đó và nổ lỗi khó hiểu ở bước sau. Chặn sớm bằng content-type.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('spreadsheet') && !contentType.includes('officedocument') && contentType.includes('text/html')) {
+      throw new Error('Google không trả file xlsx — sheet phải ở chế độ "ai có link đều xem được"');
+    }
     buf = new Uint8Array(await res.arrayBuffer());
   }
   const wb = XLSX.read(buf, { type: 'array' });
@@ -78,7 +85,7 @@ export async function xemTruocBangKe(input: { brandSlug: string; url?: string; b
   return {
     brand: r.brand, boQua: r.boQua, loi: r.loi,
     ky: r.ky.map(({ bk, ghep, ghepReturn }) => ({
-      period: bk.period, sheet: bk.sheet, tongDong: bk.lines.length,
+      period: bk.period, sheet: bk.sheet, tongDong: bk.lines.length + bk.returns.length,
       khopSku: ghep.theoLine.filter((t) => t.cachKhop === 'sku').reduce((s, t) => s + t.dong.length, 0),
       khopMaGoc: ghep.theoLine.filter((t) => t.cachKhop === 'ma_goc').reduce((s, t) => s + t.dong.length, 0),
       donMotLine: ghep.theoLine.filter((t) => t.cachKhop === 'don_mot_line').reduce((s, t) => s + t.dong.length, 0),
@@ -92,31 +99,43 @@ export async function xemTruocBangKe(input: { brandSlug: string; url?: string; b
   };
 }
 
-export async function apDungBangKe(input: { brandSlug: string; url?: string; buffer?: Uint8Array; periods: string[]; userId: string; tenFile: string }) {
+export async function apDungBangKe(input: { brandSlug: string; url?: string; buffer?: Uint8Array; periods: string[]; userId: string; tenFile: string }): Promise<{
+  daGhi: Array<{ period: string; lines: number; offline: number; returns: number }>;
+  loi?: string;
+}> {
   const r = await docVaGhep(input);
   if (r.loi) throw new Error(r.loi);
   const daGhi: Array<{ period: string; lines: number; offline: number; returns: number }> = [];
+  // Nhiều kỳ ghi TUẦN TỰ, mỗi kỳ một transaction riêng — nếu một kỳ sau lỗi
+  // (DB tạm ngắt, deadlock, v.v.) các kỳ TRƯỚC đã commit không được coi là mất
+  // trắng: trả về `daGhi` (những kỳ đã ghi) kèm `loi` thay vì throw, để người
+  // dùng biết chính xác đã ghi tới đâu thay vì tưởng nhầm cả lô đều thất bại.
   for (const { bk, ghep, ghepReturn } of r.ky) {
     if (!input.periods.includes(bk.period)) continue;
     const ref = `${input.brandSlug} ${bk.period}`;
-    await db.transaction(async (tx) => {
-      await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, 'brand_statement'), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
-      await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
-      const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
-        for (const t of g.theoLine) {
-          await tx.insert(schema.orderLineCogs).values({
-            orderId: t.line.orderId, shopifyLineId: t.line.shopifyLineId, storeId: t.line.storeId, kind, period: bk.period,
-            amount: String(kind === 'return' ? -t.amount : t.amount), currency: 'VND', source: 'brand_statement', brandSlug: input.brandSlug, statementRef: ref,
-            detail: { dong: t.dong, cachKhop: t.cachKhop, slSheet: t.slSheet, du: t.du, lechCongThuc: t.dong.filter((d) => !kiemCongThuc(d)).length, tenFile: input.tenFile },
-            importedBy: input.userId,
-          });
-        }
-        for (const o of g.offline) {
-          await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency: 'VND', statementRef: ref });
-        }
-      };
-      await ghiLine(ghep, 'cogs'); await ghiLine(ghepReturn, 'return');
-    });
+    try {
+      await db.transaction(async (tx) => {
+        await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, 'brand_statement'), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
+        await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
+        const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
+          for (const t of g.theoLine) {
+            await tx.insert(schema.orderLineCogs).values({
+              orderId: t.line.orderId, shopifyLineId: t.line.shopifyLineId, storeId: t.line.storeId, kind, period: bk.period,
+              amount: String(kind === 'return' ? -t.amount : t.amount), currency: 'VND', source: 'brand_statement', brandSlug: input.brandSlug, statementRef: ref,
+              detail: { dong: t.dong, cachKhop: t.cachKhop, slSheet: t.slSheet, du: t.du, lechCongThuc: t.dong.filter((d) => !kiemCongThuc(d)).length, tenFile: input.tenFile },
+              importedBy: input.userId,
+            });
+          }
+          for (const o of g.offline) {
+            await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency: 'VND', statementRef: ref });
+          }
+        };
+        await ghiLine(ghep, 'cogs'); await ghiLine(ghepReturn, 'return');
+      });
+    } catch (e) {
+      const loi = e instanceof Error ? e.message : 'Lỗi không rõ';
+      return { daGhi, loi: `Kỳ ${bk.period}: ${loi}` };
+    }
     daGhi.push({ period: bk.period, lines: ghep.theoLine.length, offline: ghep.offline.length + ghepReturn.offline.length, returns: ghepReturn.theoLine.length });
     try { await recordAudit({ userId: input.userId, action: 'cogs_import', target: ref, requestSummary: `${input.tenFile}: ${ghep.theoLine.length} line, ${ghep.offline.length} offline, ${ghep.khongKhop.length} không khớp`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
   }

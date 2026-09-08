@@ -12,34 +12,9 @@ import { thangKinhDoanh } from '@/lib/timezone';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { doanhThuTheoThang, cogsTheoThang, offlineTheoThang, tiGiaThang } from '@/features/cogs/queries';
 import { tinhBaoCao } from '@/features/cogs/bao-cao-logic';
+import { thangHopLe, thangTruoc, danhSachThang } from '@/features/cogs/thang';
 
 export const dynamic = 'force-dynamic';
-
-function thangHopLe(s: string | null): s is string {
-  return !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
-}
-
-function thangTruoc(period: string, soThang: number): string {
-  const [nam, thang] = period.split('-').map(Number);
-  const tongThang = nam * 12 + (thang - 1) - soThang;
-  const namMoi = Math.floor(tongThang / 12);
-  const thangMoi = (tongThang % 12) + 1;
-  return `${namMoi}-${String(thangMoi).padStart(2, '0')}`;
-}
-
-function danhSachThang(tuVao: string, denVao: string): string[] {
-  const tu = tuVao <= denVao ? tuVao : denVao;
-  const den = tuVao <= denVao ? denVao : tuVao;
-  const out: string[] = [];
-  let [nam, thang] = tu.split('-').map(Number);
-  const [namCuoi, thangCuoi] = den.split('-').map(Number);
-  while ((nam < namCuoi || (nam === namCuoi && thang <= thangCuoi)) && out.length < 36) {
-    out.push(`${nam}-${String(thang).padStart(2, '0')}`);
-    thang += 1;
-    if (thang > 12) { thang = 1; nam += 1; }
-  }
-  return out;
-}
 
 const HEADER = [
   'Tháng', 'Doanh thu thuần', 'Phí ship', 'Giá vốn', 'Lãi gộp', 'Chi brand ngoài Shopify',

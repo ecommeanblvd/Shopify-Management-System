@@ -31,10 +31,14 @@ export async function GET(req: Request): Promise<Response> {
   let storeIds: string[] | undefined;
   if (storeParam) {
     const storesAll = await db.select().from(schema.stores).where(eq(schema.stores.status, 'active'));
-    storeIds = storesAll.some((s) => s.id === storeParam) ? [storeParam] : undefined;
+    if (!storesAll.some((s) => s.id === storeParam)) {
+      return new Response('Sai tham số store', { status: 400 });
+    }
+    storeIds = [storeParam];
   }
+  const brandParam = url.searchParams.get('brand') ?? undefined;
 
-  const rows = await lineChuaCoCogs(period, storeIds);
+  const rows = await lineChuaCoCogs(period, storeIds, brandParam);
   const out: CsvValue[][] = rows.map((r) => [r.store, r.brand, r.maDon, r.sku, r.sl, r.doanhThu, r.currency]);
 
   // BOM UTF-8 để Excel nhận đúng chữ có dấu.

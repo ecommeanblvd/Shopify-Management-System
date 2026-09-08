@@ -71,9 +71,15 @@ export function BangKeImporter({ brands }: BangKeImporterProps) {
         const tongDong = r.daGhi.reduce((s, d) => s + d.lines, 0);
         const tongOffline = r.daGhi.reduce((s, d) => s + d.offline, 0);
         const tongReturn = r.daGhi.reduce((s, d) => s + d.returns, 0);
-        toast.success(
-          `Đã ghi ${r.daGhi.length} kỳ — ${tongDong} dòng, ${tongOffline} offline, ${tongReturn} return`,
-        );
+        const tomTat = `Đã ghi ${r.daGhi.length} kỳ — ${tongDong} dòng, ${tongOffline} offline, ${tongReturn} return`;
+        if (r.loi) {
+          // Một kỳ sau lỗi giữa chừng — apDungBangKe vẫn trả về những kỳ ĐÃ
+          // GHI trước đó thay vì throw, nên phải báo cả hai: đã ghi tới đâu
+          // và lỗi gì, không được nuốt mất thông tin đã ghi.
+          toast.error(`${tomTat}. ${r.loi}`);
+        } else {
+          toast.success(tomTat);
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Lỗi không rõ');
       }
@@ -148,7 +154,7 @@ export function BangKeImporter({ brands }: BangKeImporterProps) {
                       <TableHead className="w-8" />
                       <TableHead>Kỳ</TableHead>
                       <TableHead>Tab</TableHead>
-                      <TableHead className="text-right">Dòng</TableHead>
+                      <TableHead className="text-right">Dòng (A+B)</TableHead>
                       <TableHead className="text-right">Khớp SKU</TableHead>
                       <TableHead className="text-right">Khớp mã gốc</TableHead>
                       <TableHead className="text-right">Đơn 1 line</TableHead>
