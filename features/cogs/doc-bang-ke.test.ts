@@ -255,3 +255,32 @@ describe('docWorkbook — Linh Phùng: cột Note lệch tỉ giá TỔNG (trư�
     expect(bangKe[0].canhBao.some((c) => /lệch cột/.test(c))).toBe(true);
   });
 });
+
+describe('docWorkbook — khuôn Montsand (tiêu đề "BẢNG KÊ ĐƠN HÀNG CẦN THANH TOÁN", mục A/B "phát sinh", tab không có mục A)', () => {
+  const HDR = ['Ngáy báo ', 'Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá sản phẩm', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ báo đơn', 'Kỳ thanh toán '];
+  const t3 = { name: 'Đơn thực nhận đối soát T3', rows: [
+    [null, null, null, null, 'BẢNG KÊ ĐƠN HÀNG CẦN THANH TOÁN\n\nTừ ngày 01/03/2026 đến 31/03/2026\n\nBrand: MONTSAND'],
+    ['A. Đơn phát sinh trong tháng (trước 13/02/2026)'], HDR,
+    ['10/02/2026', '03/03/2026', '#MBLVD27600', 'x', 'Montsand-VE75-XL-BLU', '1', '17,500,000 ₫', '15%', null, '14,875,000 ₫', null, 'c', '2', 'T3'],
+    [null, null, 'TỔNG (A)', null, '1', '17,500,000 ₫', null, null, null, '14,875,000 ₫'],
+    ['B. Đơn phát sinh trong tháng (sau 13/02/2026)'], HDR,
+    ['20/02/2026', '05/03/2026', '#MBLVD27700', 'y', 'Montsand-D232-S-WHI', '1', '11,660,000 ₫', '50%', null, '5,830,000 ₫', null, 'c', '2', 'T3'],
+    [null, null, 'TỔNG (B)', null, '1', '11,660,000 ₫', null, null, null, '5,830,000 ₫'], [null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, null, '22,361,400 ₫'],
+  ] };
+  const t8 = { name: '  Đơn thực nhận đối soát T8', rows: [
+    [null, null, null, null, 'BẢNG KÊ CÔNG NỢ\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: MONTSAND'],
+    ['Ngày báo ', ...HDR.slice(1)],
+    ['26/06/2026', '25/08/2026', '#MBLVD29333', 'z', 'Montsand-VE75-XL-BLU', '1', '17,500,000 ₫', '50%', null, '8,750,000 ₫', null, 'c', '6', 'T8'],
+    [null, null, 'TỔNG ', null, '1', '17,500,000 ₫', null, null, null, '8,750,000 ₫'],
+  ] };
+  it('T3: tiêu đề khác, A và B "phát sinh" đều cộng, giá đọc từ "Giá sản phẩm"', () => {
+    const { bangKe } = docWorkbook([t3]);
+    expect(bangKe[0]).toMatchObject({ brand: 'MONTSAND', period: '2026-03' });
+    expect(bangKe[0].lines.map((l) => l.tt)).toEqual([14_875_000, 5_830_000]); expect(bangKe[0].returns).toHaveLength(0);
+    expect(bangKe[0].lines[0].giaNoiDia).toBe(17_500_000);
+  });
+  it('T8: không có dòng mục A nhưng tab tên "thực nhận" → cả tab là mục A', () => {
+    const { bangKe, boQua } = docWorkbook([t8]);
+    expect(boQua).toEqual([]); expect(bangKe[0].lines).toHaveLength(1); expect(bangKe[0].lines[0].tt).toBe(8_750_000);
+  });
+});

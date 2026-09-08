@@ -31,7 +31,8 @@ export interface BangKe {
   tiGia?: number;
 }
 
-const RE_TIEU_DE = /BẢNG KÊ CÔNG NỢ\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n|]+)/i;
+// "BẢNG KÊ CÔNG NỢ" (đa số) hoặc "BẢNG KÊ ĐƠN HÀNG CẦN THANH TOÁN" (Montsand T1–T4).
+const RE_TIEU_DE = /BẢNG KÊ[^\n]*\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n|]+)/i;
 const chuoi = (v: O): string => (v == null ? '' : String(v)).trim();
 
 function timTieuDe(rows: O[][]): { tu: string; den: string; brand: string } | null {
@@ -51,7 +52,7 @@ function chiSoCot(r: O[]) {
   return {
     ngay: ngayIdx >= 0 ? ngayIdx : 0,
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
-    gia: tim('giá nội địa'), ck: timPrefix('% ck'), custom: tim('phí customize'),
+    gia: tim('giá nội địa', 'giá sản phẩm'), ck: timPrefix('% ck'), custom: tim('phí customize'),
     // Denio: "Tổng thành tiền TT"; Happy Clothing: "Thành tiền".
     tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : tim('thành tiền'), code: tim('code'),
     // La Vierge: cột "Note" chứa thành tiền quy VND từng dòng ("2,717,400") — dùng thẳng khi có, chính xác hơn tỉ giá kỳ.
@@ -101,14 +102,17 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
   const bangKe: BangKe[] = []; const boQua: string[] = [];
   for (const sh of sheets) {
     const td = timTieuDe(sh.rows);
-    if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ CÔNG NỢ`); continue; }
+    if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ … Từ ngày … Brand:`); continue; }
     if (/thực bán/i.test(sh.name) || coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i)) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
-    if (!coO(sh.rows, /A\.\s*Đơn (MEAN )?thực nhận/i)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
+    // Mục A: "A. Đơn thực nhận", "A. Đơn MEAN thực nhận", "A. Đơn phát sinh trong tháng (trước 13/02)" (Montsand)…
+    const khongCoMucA = !coO(sh.rows, /^A\.\s*Đơn/i);
+    // Montsand: tab "Đơn thực nhận đối soát T8" không có dòng "A. Đơn thực nhận" — bảng bắt đầu ngay sau tiêu đề → coi cả tab là mục A.
+    if (khongCoMucA && !/thực nhận/i.test(sh.name)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
+    let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
-      if (/^A\.\s*Đơn (MEAN )?thực nhận/i.test(dau)) { muc = 'A'; cot = null; return; }
+      if (/^A\.\s*Đơn/i.test(dau)) { muc = 'A'; cot = null; return; }
       // Mục B: Denio = "B. Đơn return" (trừ tiền); Happy Clothing = "B. Đơn Happy Clothing Global thực nhận"
       // (đơn trên store riêng của brand, mã #HC… — cộng tiền như mục A, ghép thành offline vì không có trên Shopify).
       if (/^B\.\s*Đơn/i.test(dau)) { muc = 'B'; bLaReturn = /\bre(turn)?\b/i.test(dau); cot = null; return; }
