@@ -12,7 +12,7 @@
 import { and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { BRAND_OWNED_STORES } from '@/features/mmp/brand-stores';
-import { ngayKinhDoanh, thangKinhDoanh } from '@/lib/timezone';
+import { sqlGioKinhDoanh } from '@/lib/timezone';
 import { laHangTuSanXuat } from './vendor-tu-san-xuat';
 
 const STORE_TU_SAN_XUAT = [...Object.keys(BRAND_OWNED_STORES), 'meanblvd'];
@@ -25,7 +25,10 @@ interface DongUngVien {
   sku: string | null;
   vendor: string | null;
   quantity: number;
-  processedAtShopify: Date;
+  /** 'YYYY-MM' — tháng nghiệp vụ (giờ Bangkok) của processed_at_shopify. */
+  period: string;
+  /** 'YYYY-MM-DD' — ngày nghiệp vụ (giờ Bangkok) của processed_at_shopify. */
+  ngayDat: string;
 }
 
 export interface ApplyOwnCogsOptions { dryRun?: boolean }
@@ -36,11 +39,22 @@ export interface ApplyOwnCogsResult { xemXet: number; ghi: number; khongCoGia: n
  * `order_line_cogs` kind='cogs' (bất kỳ nguồn) — ứng viên để tính giá vốn.
  * Lọc thô theo TÊN STORE ở SQL (giảm số dòng kéo về); lọc CHÍNH XÁC theo
  * vendor bằng `laHangTuSanXuat` (nguồn sự thật duy nhất) ở JS ngay sau đó.
+ *
+ * `period`/`ngay_dat` tính THẲNG TRONG SQL qua `sqlGioKinhDoanh` (giờ Bangkok)
+ * — KHÔNG kéo `processed_at_shopify` (timestamp UTC-naive) ra JS rồi gọi
+ * `ngayKinhDoanh`/`thangKinhDoanh` ở tầng ứng dụng: `pg` parse cột
+ * `timestamp` (không múi giờ) theo múi giờ LOCAL của tiến trình Node (xem
+ * cảnh báo ở `lib/timezone.ts`/`lib/timezone-bind.ts`) — chạy ở máy không
+ * `TZ=UTC` (ví dụ Asia/Saigon +7) ra kỳ/ngày SAI, dù Railway luôn set
+ * `TZ=UTC`. Tính trong SQL thì đúng bất kể tiến trình chạy ở đâu.
  */
 async function ungVienChuaCoCogs(): Promise<DongUngVien[]> {
+  const gioBangKok = sqlGioKinhDoanh('o.processed_at_shopify');
   const { rows } = await db.$client.query(
     `SELECT l.order_id, l.shopify_line_id, o.store_id, s.name AS store_name,
-            l.sku, l.vendor, l.quantity::int AS quantity, o.processed_at_shopify
+            l.sku, l.vendor, l.quantity::int AS quantity,
+            to_char(${gioBangKok}, 'YYYY-MM') AS period,
+            to_char(${gioBangKok}, 'YYYY-MM-DD') AS ngay_dat
      FROM shopify_order_lines l
      JOIN shopify_orders o ON o.id = l.order_id
      JOIN stores s ON s.id = o.store_id
@@ -63,7 +77,8 @@ async function ungVienChuaCoCogs(): Promise<DongUngVien[]> {
       sku: r.sku == null ? null : String(r.sku),
       vendor: r.vendor == null ? null : String(r.vendor),
       quantity: Number(r.quantity),
-      processedAtShopify: r.processed_at_shopify instanceof Date ? r.processed_at_shopify : new Date(String(r.processed_at_shopify)),
+      period: String(r.period),
+      ngayDat: String(r.ngay_dat),
     }))
     .filter((r) => laHangTuSanXuat(r.storeName, r.vendor));
 }
@@ -108,9 +123,8 @@ export async function applyOwnCogs(opts: ApplyOwnCogsOptions = {}): Promise<Appl
 
   let ghi = 0, khongCoGia = 0;
   for (const line of ungVien) {
-    const ngay = ngayKinhDoanh(line.processedAtShopify)!;
     const arr = line.sku ? giaIndex.get(`${line.storeId}|${line.sku}`) : undefined;
-    const cost = arr?.find((g) => g.effectiveFrom <= ngay);
+    const cost = arr?.find((g) => g.effectiveFrom <= line.ngayDat);
     if (!cost) { khongCoGia++; continue; }
 
     ghi++;
@@ -122,7 +136,7 @@ export async function applyOwnCogs(opts: ApplyOwnCogsOptions = {}): Promise<Appl
       shopifyLineId: line.shopifyLineId,
       storeId: line.storeId,
       kind: 'cogs',
-      period: thangKinhDoanh(line.processedAtShopify)!,
+      period: line.period,
       amount: String(Number(cost.costPerUnit) * line.quantity),
       currency: cost.currency,
       source: 'shopify_unit_cost',

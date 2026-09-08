@@ -8,7 +8,6 @@
  * Chỉ ghi khi giá THẬT SỰ ĐỔI (`khacGia`) — tránh mỗi ngày insert một dòng
  * `sku_costs` y hệt hôm trước, làm phình bảng lịch sử giá vô nghĩa.
  */
-import { and, desc, eq, lte } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getEnv } from '@/lib/env';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
@@ -53,15 +52,23 @@ interface QueryData {
  * Đọc "Cost per item" mọi biến thể của một store, phân trang
  * `productVariants(first: 250)`. Chỉ giữ dòng CÓ sku và `unitCost.amount > 0`
  * — biến thể chưa khai giá vốn trên Shopify trả về null/0, bỏ qua (không có
- * gì để ghi).
+ * gì để ghi). `apiVersion` ưu tiên cột `stores.api_version` (giống mọi call
+ * site Shopify khác trong repo — mỗi store có thể ở version khác nhau),
+ * fallback `SHOPIFY_API_VERSION` khi store chưa có giá trị này.
  */
-export async function docUnitCostShopify(store: { id: string; shopDomain: string }): Promise<UnitCostRow[]> {
+export async function docUnitCostShopify(store: { id: string; shopDomain: string; apiVersion?: string | null }): Promise<UnitCostRow[]> {
   const token = await getStoreToken(store.id);
-  const apiVersion = getEnv().SHOPIFY_API_VERSION;
+  const apiVersion = store.apiVersion ?? getEnv().SHOPIFY_API_VERSION;
   const out: UnitCostRow[] = [];
   let after: string | null = null;
   do {
     const res = await graphqlCall({ shopDomain: store.shopDomain, apiVersion, token, query: QUERY, variables: { after } });
+    // graphqlCall() không tự ném lỗi khi Shopify trả `errors` cùng `data`
+    // rỗng/thiếu field (lỗi truy vấn, không phải lỗi HTTP) — kiểm tay trước
+    // khi đụng `res.data`, tránh đọc `undefined.productVariants` mù mờ.
+    if (Array.isArray(res.errors) && res.errors.length > 0) {
+      throw new Error(`Shopify GraphQL: ${JSON.stringify(res.errors).slice(0, 200)}`);
+    }
     const data = res.data as QueryData;
     for (const n of data.productVariants.nodes) {
       const amount = Number(n.inventoryItem?.unitCost?.amount ?? 0);
@@ -78,6 +85,31 @@ export async function docUnitCostShopify(store: { id: string; shopDomain: string
  *  (đa-brand, nhưng vendor MEAN BLVD tự sản xuất — xem `vendor-tu-san-xuat.ts`). */
 function tenStoreTuSanXuat(): string[] {
   return [...Object.keys(BRAND_OWNED_STORES), 'meanblvd'];
+}
+
+interface GiaHienTai { costPerUnit: string; currency: string }
+
+/**
+ * Giá hiệu lực HIỆN TẠI (effective_from mới nhất ≤ `homNay`) của MỌI sku
+ * store này đã từng khai — MỘT truy vấn duy nhất (`DISTINCT ON` theo sku,
+ * sắp giảm dần effective_from), thay vì một SELECT riêng cho từng SKU trong
+ * vòng lặp (store TINH ~1.300 dòng/12 tháng → hàng trăm round-trip DB nếu
+ * làm theo SKU).
+ */
+async function giaHienTaiTheoStore(storeId: string, homNay: string): Promise<Map<string, GiaHienTai>> {
+  const { rows } = await db.$client.query(
+    `SELECT DISTINCT ON (sku) sku, cost_per_unit, currency
+     FROM sku_costs
+     WHERE store_id = $1 AND effective_from <= $2::date
+     ORDER BY sku, effective_from DESC`,
+    [storeId, homNay],
+  );
+  return new Map(
+    (rows as Array<Record<string, unknown>>).map((r) => [
+      String(r.sku),
+      { costPerUnit: String(r.cost_per_unit), currency: String(r.currency) },
+    ]),
+  );
 }
 
 export interface SyncUnitCostOptions { dryRun?: boolean }
@@ -105,21 +137,13 @@ export async function syncUnitCost(opts: SyncUnitCostOptions = {}): Promise<Sync
     if (!store) { loi.push(`store "${name}" chưa kết nối`); continue; }
     stores++;
     try {
-      const unitCosts = await docUnitCostShopify({ id: store.id, shopDomain: store.shopDomain });
+      const unitCosts = await docUnitCostShopify({ id: store.id, shopDomain: store.shopDomain, apiVersion: store.apiVersion });
       doc += unitCosts.length;
-      for (const uc of unitCosts) {
-        const [hienTai] = await db
-          .select({ costPerUnit: schema.skuCosts.costPerUnit, currency: schema.skuCosts.currency })
-          .from(schema.skuCosts)
-          .where(and(
-            eq(schema.skuCosts.storeId, store.id),
-            eq(schema.skuCosts.sku, uc.sku),
-            lte(schema.skuCosts.effectiveFrom, homNay),
-          ))
-          .orderBy(desc(schema.skuCosts.effectiveFrom))
-          .limit(1);
+      const hienTaiMap = await giaHienTaiTheoStore(store.id, homNay);
 
-        if (!khacGia(hienTai ?? null, uc)) { boQua++; continue; }
+      for (const uc of unitCosts) {
+        const hienTai = hienTaiMap.get(uc.sku) ?? null;
+        if (!khacGia(hienTai, uc)) { boQua++; continue; }
         ghi++;
         if (dryRun) continue;
 
