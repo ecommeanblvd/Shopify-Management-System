@@ -16,6 +16,20 @@ describe('docTien', () => {
     expect(docTien('-1.657.500 ₫')).toBe(-1657500);
     expect(docTien('1 861 500 ₫')).toBe(1861500);
   });
+  it('phẩy-nghìn (xlsx xuất từ Google Sheet)', () => {
+    expect(docTien('2,152,000 ₫')).toBe(2152000);
+    expect(docTien('200,000 ₫')).toBe(200000);
+    expect(docTien('-2,550,000 ₫')).toBe(-2550000);
+  });
+  it('một dấu, không đủ 3 chữ số sau → dấu thập phân', () => {
+    expect(docTien('1,5')).toBe(1.5);
+    expect(docTien('1.5')).toBe(1.5);
+    expect(docTien('12,50')).toBe(12.5);
+  });
+  it('cả hai dấu cùng xuất hiện → dấu sau cùng là thập phân', () => {
+    expect(docTien('1,234.56')).toBe(1234.56);
+    expect(docTien('1.234,56')).toBe(1234.56);
+  });
 });
 describe('docPhanTram', () => {
   it('35% → 0.35, số thô giữ nguyên, rỗng → null', () => {

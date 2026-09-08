@@ -1,14 +1,36 @@
 /** THUẦN: tiền tệ cho giá vốn — đọc số kiểu VN trên bảng kê, đổi tiền theo tháng. */
 
-/** '1.861.500 ₫' → 1861500. Chữ, phần trăm, rỗng → null. */
+/**
+ * '1.861.500 ₫' → 1861500 (chấm-nghìn) hoặc '2,152,000 ₫' → 2152000 (phẩy-nghìn, xlsx xuất từ Google Sheet).
+ * Cả hai dấu cùng xuất hiện → dấu SAU CÙNG là thập phân, dấu còn lại là nghìn (xoá).
+ * Chỉ một loại dấu → xuất hiện >1 lần, HOẶC đúng 1 lần và theo sau là đúng 3 chữ số ở cuối chuỗi → là dấu nghìn (xoá);
+ * ngược lại là dấu thập phân (đổi thành '.'). Chữ, phần trăm, rỗng → null.
+ */
 export function docTien(s: string | number | null | undefined): number | null {
   if (s == null) return null;
   if (typeof s === 'number') return Number.isFinite(s) ? s : null;
   const t = s.trim();
   if (!t || t.includes('%')) return null;
-  const clean = t.replace(/[₫đ\s]/gi, '').replace(/\./g, '').replace(',', '.');
-  if (!/^-?\d+(\.\d+)?$/.test(clean)) return null;
-  return Number(clean);
+  let core = t.replace(/[₫đ\s]/gi, '');
+  let neg = false;
+  if (core.startsWith('-')) { neg = true; core = core.slice(1); }
+  const hasComma = core.includes(',');
+  const hasDot = core.includes('.');
+  let clean = core;
+  if (hasComma && hasDot) {
+    const decimal = core.lastIndexOf(',') > core.lastIndexOf('.') ? ',' : '.';
+    const khac = decimal === ',' ? '.' : ',';
+    clean = core.split(khac).join('');
+    if (decimal !== '.') clean = clean.split(decimal).join('.');
+  } else if (hasComma || hasDot) {
+    const dau = hasComma ? ',' : '.';
+    const soLan = core.split(dau).length - 1;
+    const laNghin = soLan > 1 || new RegExp(`\\${dau}\\d{3}$`).test(core);
+    clean = laNghin ? core.split(dau).join('') : core.replace(dau, '.');
+  }
+  if (!/^\d+(\.\d+)?$/.test(clean)) return null;
+  const n = Number(clean);
+  return neg ? -n : n;
 }
 
 /** '35%' → 0.35. Số thô (0.4) giữ nguyên. Rỗng → null. */
