@@ -1,10 +1,11 @@
 'use server';
 
-import { and, eq, gte, lte, inArray, or, ilike, asc, desc, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, ilike, asc, desc, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
 import { createBatchShippingEstimator } from './sync/batch-shipping-estimator';
+import { mocUtcNaive } from '@/lib/timezone-bind';
 
 export interface GetStoreMetricsArgs {
   storeId: string;
@@ -45,13 +46,20 @@ export interface GetStoreMetricsResult {
  * coverage join — but defer until measured.
  */
 export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetStoreMetricsResult> {
+  // BUG ĐÃ ĐO: `gte/lte` với Date JS trực tiếp để `pg` tự serialise — driver
+  // format Date theo múi giờ LOCAL của tiến trình, còn `processed_at_shopify`
+  // là `timestamp` KHÔNG múi giờ nên Postgres bỏ luôn offset khi parse. Trên
+  // máy `TZ=Asia/Saigon` mốc lọc lệch 7 giờ so với instant thật (492 vs 495
+  // đơn tháng 2026-08 — thiếu hẳn 3 đơn). Bind tay bằng chuỗi ISO UTC
+  // (`mocUtcNaive`, xem lib/timezone-bind.ts) rồi ép `::timestamp` để kết quả
+  // luôn đúng bất kể TZ tiến trình.
   const orders = await db
     .select()
     .from(schema.shopifyOrders)
     .where(and(
       eq(schema.shopifyOrders.storeId, args.storeId),
-      gte(schema.shopifyOrders.processedAtShopify, args.dateFrom),
-      lte(schema.shopifyOrders.processedAtShopify, args.dateTo),
+      sql`${schema.shopifyOrders.processedAtShopify} >= ${mocUtcNaive(args.dateFrom)}::timestamp`,
+      sql`${schema.shopifyOrders.processedAtShopify} <= ${mocUtcNaive(args.dateTo)}::timestamp`,
     ));
   if (orders.length === 0) return { total: emptyAgg(), orders: [] };
   const { rows, total } = await buildOrderRows(args.storeId, orders, args.vendorFilter);
