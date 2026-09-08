@@ -299,3 +299,25 @@ describe('docWorkbook — kỳ brand chưa điền Tổng thành tiền (Keira T
     expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
   });
 });
+
+describe('docWorkbook — khuôn Maison des Copains (mục A VND, mục B USD, tab "Bản sao")', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá Global', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const t8 = { name: ' File đối soát T82026', rows: [
+    ['sss', null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: Maison des Copains'],
+    ['A. Đơn thực nhận trong tháng '], HDR,
+    ['06/08/2026', '#MBLVD29624', 'x', 'MaisonDCP-MDC06DS24S011-SG003-S-LOV', '1', '5,890,000 đ', '25%', null, '4,417,500 đ', null, 'c', 'T8', '7'],
+    [null, null, 'TỔNG (A)', null, '1', '5,890,000', null, null, '4,417,500'],
+    ['B. Đơn thực nhận trong tháng '], HDR,
+    ['10/08/2026', '#MBLVD29700', 'y', 'MaisonDCP-MDC07DS25S005-SW002-S-CRE', '1', '$450', '50%', null, '$225', null, 'c', 'T8', '7'],
+    [null, null, 'TỔNG (B)', null, '1', '$450', null, null, '$225'], [null, null, 'TỔNG (B)', null, null, null, null, null, '5,823,000 ₫'],
+    [null, null, 'TỔNG THANH TOÁN (A+B)', null, null, null, null, null, '10,240,500 đ'],
+  ] };
+  const banSao = { ...t8, name: 'Bản sao của File đối soát T8202' };
+  it('dòng USD mục B đổi theo (TỔNG THANH TOÁN − phần VND) ÷ USD = 25.880; dòng VND giữ nguyên; giá đọc từ "Giá Global"', () => {
+    const { bangKe, boQua } = docWorkbook([t8, banSao]);
+    expect(bangKe).toHaveLength(1); expect(boQua).toEqual([expect.stringContaining('bản sao')]);
+    const b = bangKe[0];
+    expect(b.lines.map((d) => d.tt)).toEqual([4_417_500, 5_823_000]);
+    expect(b.lines[0].giaNoiDia).toBe(5_890_000); expect(b.lines[1].ttGoc).toBe(225); expect(b.tiGia).toBe(25880);
+  });
+});

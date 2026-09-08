@@ -52,7 +52,7 @@ function chiSoCot(r: O[]) {
   return {
     ngay: ngayIdx >= 0 ? ngayIdx : 0,
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
-    gia: tim('giá nội địa', 'giá sản phẩm'), ck: timPrefix('% ck'), custom: tim('phí customize'),
+    gia: tim('giá nội địa', 'giá sản phẩm', 'giá global'), ck: timPrefix('% ck'), custom: tim('phí customize'),
     // Denio: "Tổng thành tiền TT"; Happy Clothing: "Thành tiền".
     tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : tim('thành tiền'), code: tim('code'),
     // La Vierge: cột "Note" chứa thành tiền quy VND từng dòng ("2,717,400") — dùng thẳng khi có, chính xác hơn tỉ giá kỳ.
@@ -89,18 +89,23 @@ function tongVndMucA(rows: O[][]): number | null {
  *   1) "TỔNG (A):" ₫ ÷ Σ USD mục A (Calista, Happy Clothing kỳ có dòng này) — chắc nhất vì không dính return/B;
  *   2) "TỔNG:" hoặc "TỔNG THANH TOÁN…" ₫ ÷ (Σ USD lines − Σ USD returns) — HC (B Global cộng), Denio-kiểu (A − B return).
  */
-export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumReturns: number): number | null {
-  const tongA = tongVndTheoNhan(rows, /^TỔNG \(A\):?$/i);
-  if (tongA != null && sumA > 0) return tongA / sumA;
-  const tong = tongVndTheoNhan(rows, /^TỔNG:?$/i, /^TỔNG THANH TOÁN/i);
-  const mauSo = sumLines - sumReturns;
-  if (tong != null && mauSo > 0) return tong / mauSo;
+export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumReturns: number, vnd: { a: number; lines: number; returns: number } = { a: 0, lines: 0, returns: 0 }): number | null {
+  // 1) Tổng ₫ của mục A ("TỔNG (A):" hoặc dòng TỔNG ₫ đầu tiên trước mục B) — trừ phần VND thuần trong A rồi chia USD mục A.
+  const tongA = tongVndMucA(rows);
+  if (tongA != null && sumA > 0 && tongA - vnd.a > 0) return (tongA - vnd.a) / sumA;
+  // 2) Dòng tổng kỳ cuối ("Tổng", "TỔNG THANH TOÁN…", "TỔNG:") — trừ phần VND thuần (lines − returns) rồi chia USD (lines − returns).
+  const cuoi = [...rows].reverse().find((r) => r.some((c) => /^(Tổng|TỔNG:?|TỔNG THANH TOÁN.*)$/i.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
+  const tong = cuoi ? docTien(cuoi.find((c) => /₫|đ$/i.test(chuoi(c)))) : null;
+  const mauSo = sumLines - sumReturns; const tuSo = tong == null ? null : tong - (vnd.lines - vnd.returns);
+  if (tuSo != null && tuSo > 0 && mauSo > 0) return tuSo / mauSo;
   return null;
 }
 
 export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { bangKe: BangKe[]; boQua: string[] } {
   const bangKe: BangKe[] = []; const boQua: string[] = [];
   for (const sh of sheets) {
+    // Tab "Bản sao của …"/"Copy of …" là bản nháp nhân đôi kỳ (Maison des Copains T7) → bỏ, tránh ghi hai lần một kỳ.
+    if (/^\s*(Bản sao|Copy of)/i.test(sh.name)) { boQua.push(`${sh.name}: tab bản sao (bỏ)`); continue; }
     const td = timTieuDe(sh.rows);
     if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ … Từ ngày … Brand:`); continue; }
     if (/thực bán/i.test(sh.name) || coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i)) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
@@ -201,7 +206,11 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
           const sumA = bk.lines.filter((d) => d.ttGoc != null && d.mucA).reduce((s, d) => s + d.ttGoc!, 0);
           const sumLines = bk.lines.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
           const sumReturns = bk.returns.filter((d) => d.ttGoc != null).reduce((s, d) => s + d.ttGoc!, 0);
-          rate = tiGiaTuSheet(sh.rows, sumA, sumLines, sumReturns);
+          rate = tiGiaTuSheet(sh.rows, sumA, sumLines, sumReturns, {
+            a: bk.lines.filter((d) => d.ttGoc == null && d.mucA).reduce((s, d) => s + d.tt, 0),
+            lines: bk.lines.filter((d) => d.ttGoc == null).reduce((s, d) => s + d.tt, 0),
+            returns: bk.returns.filter((d) => d.ttGoc == null).reduce((s, d) => s + d.tt, 0),
+          });
         }
         if (rate != null) for (const d of thieu) d.tt = Math.round(d.ttGoc! * rate);
       }
