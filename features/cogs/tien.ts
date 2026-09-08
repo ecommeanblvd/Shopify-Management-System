@@ -28,7 +28,7 @@ export interface KetQuaDoiTien { amount: number; rate: number; periodDung: strin
 /** Đổi tiền theo tỉ giá THÁNG. Thiếu tháng → tháng gần nhất TRƯỚC đó và cờ `tam`. Không có → null. */
 export function doiTienTheoThang(amount: number, from: string, to: string, period: string, rates: TiGiaThang[]): KetQuaDoiTien | null {
   if (from === to) return { amount, rate: 1, periodDung: period, tam: false };
-  const cap = rates.filter((r) => r.from === from && r.to === to && r.period <= period).sort((a, b) => (a.period < b.period ? 1 : -1));
+  const cap = rates.filter((r) => r.from === from && r.to === to && r.period <= period).sort((a, b) => b.period.localeCompare(a.period)); // Giảm dần theo kỳ; cùng kỳ (không nên xảy ra — unique index) thì giữ thứ tự đầu vào.
   const r = cap[0];
   if (!r) return null;
   return { amount: amount * r.rate, rate: r.rate, periodDung: r.period, tam: r.period !== period };

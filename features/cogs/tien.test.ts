@@ -12,10 +12,17 @@ describe('docTien', () => {
     expect(docTien('')).toBeNull(); expect(docTien(null)).toBeNull();
     expect(docTien('Insert Price')).toBeNull(); expect(docTien('35%')).toBeNull();
   });
+  it('số âm và cách nghìn bằng khoảng trắng', () => {
+    expect(docTien('-1.657.500 ₫')).toBe(-1657500);
+    expect(docTien('1 861 500 ₫')).toBe(1861500);
+  });
 });
 describe('docPhanTram', () => {
   it('35% → 0.35, số thô giữ nguyên, rỗng → null', () => {
     expect(docPhanTram('35%')).toBe(0.35); expect(docPhanTram(0.4)).toBe(0.4); expect(docPhanTram('')).toBeNull();
+  });
+  it('dấu phẩy làm dấu thập phân', () => {
+    expect(docPhanTram('0,35')).toBe(0.35);
   });
 });
 describe('doiTienTheoThang', () => {
@@ -31,5 +38,11 @@ describe('doiTienTheoThang', () => {
   });
   it('không có tháng nào trước → null', () => {
     expect(doiTienTheoThang(10, 'USD', 'VND', '2026-05', rates)).toBeNull();
+  });
+  it('kỳ trùng → giữ thứ tự đầu vào (stable sort)', () => {
+    const duplicateRates = [{ from: 'USD', to: 'VND', period: '2026-06', rate: 26000 }, { from: 'USD', to: 'VND', period: '2026-06', rate: 26999 }];
+    expect(doiTienTheoThang(10, 'USD', 'VND', '2026-06', duplicateRates)).toEqual({ amount: 260000, rate: 26000, periodDung: '2026-06', tam: false });
+    const reversedRates = [{ from: 'USD', to: 'VND', period: '2026-06', rate: 26999 }, { from: 'USD', to: 'VND', period: '2026-06', rate: 26000 }];
+    expect(doiTienTheoThang(10, 'USD', 'VND', '2026-06', reversedRates)).toEqual({ amount: 269990, rate: 26999, periodDung: '2026-06', tam: false });
   });
 });
