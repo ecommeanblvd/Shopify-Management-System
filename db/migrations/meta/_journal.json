@@ -911,6 +911,13 @@
       "when": 1787575200000,
       "tag": "0128_gia-von-line",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1787661600000,
+      "tag": "0129_brand-cogs-offline-source",
+      "breakpoints": true
     }
   ]
 }

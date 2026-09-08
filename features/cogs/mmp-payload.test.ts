@@ -79,7 +79,17 @@ describe('docPayloadMmp', () => {
     });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.loi).toMatch(/currency/i);
+    expect(r.loi).toMatch(/VND/i);
+  });
+
+  it('currency USD (khác VND, dù đúng 3 ký tự) → ok:false — hợp đồng payload chỉ nhận VND', () => {
+    const r = docPayloadMmp({
+      brandSlug: 'denio', period: '2026-09',
+      lines: [{ orderNumber: '#MBLVD29521', sku: 'X', qty: 1, amount: 100, currency: 'USD', kind: 'cogs' }],
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.loi).toMatch(/VND/i);
   });
 
   it('json không phải object → ok:false', () => {
@@ -104,5 +114,17 @@ describe('docPayloadMmp', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.loi).toMatch(/refCode/i);
+  });
+
+  it('lines VÀ offline đều rỗng → ok:false — không được xoá sạch kỳ mà không ghi gì', () => {
+    const r = docPayloadMmp({ brandSlug: 'denio', period: '2026-09', lines: [], offline: [] });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.loi).toMatch(/rỗng/i);
+  });
+
+  it('thiếu cả lines lẫn offline (mặc định []) → ok:false giống rỗng tường minh', () => {
+    const r = docPayloadMmp({ brandSlug: 'denio', period: '2026-09' });
+    expect(r.ok).toBe(false);
   });
 });

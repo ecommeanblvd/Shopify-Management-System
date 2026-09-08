@@ -39,12 +39,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   const [brand] = await db.select({ slug: schema.mmpBrands.slug }).from(schema.mmpBrands).where(eq(schema.mmpBrands.slug, r.bangKe.brand)).limit(1);
   if (!brand) return NextResponse.json({ error: `Không có brand "${r.bangKe.brand}" trong hệ thống` }, { status: 400 });
 
-  const ref = (json as { lines?: Array<{ ref?: string }> }).lines?.find((l) => l?.ref)?.ref ?? r.bangKe.period;
+  // `ref` chỉ dùng để đặt tên audit (tenFile) — lấy từ chính BangKe đã parse (cột `code`, đổ từ
+  // `lines[].ref` trong docPayloadMmp), không đọc lại JSON thô.
+  const ref = [...r.bangKe.lines, ...r.bangKe.returns].find((d) => d.code)?.code ?? r.bangKe.period;
   const ket = await apDungBangKeDaDoc({
     brandSlug: r.bangKe.brand, bangKe: [r.bangKe], periods: [r.bangKe.period],
     userId: null, tenFile: `mmp ${ref}`, source: 'mmp',
   });
-  if (ket.loi) return NextResponse.json({ error: ket.loi }, { status: 500 });
+  if (ket.loi) return NextResponse.json({ error: ket.loi, wroteNothing: true }, { status: 500 });
 
   const ghi = ket.daGhi[0] ?? { lines: 0, offline: 0, returns: 0 };
   return NextResponse.json({

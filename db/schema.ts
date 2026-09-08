@@ -979,9 +979,15 @@ export const brandCogsOffline = pgTable('brand_cogs_offline', {
   qty: integer('qty').notNull().default(1),
   amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
   currency: text('currency').notNull(),
+  /** 'brand_statement' | 'mmp' — như order_line_cogs.source, để xoá theo kỳ đúng nguồn (không đụng
+   *  dòng nguồn khác cùng brand+period). Migration 0129. */
+  source: text('source').notNull().default('brand_statement'),
   statementRef: text('statement_ref'),
   importedAt: timestamp('imported_at').defaultNow().notNull(),
-}, (t) => [index('brand_cogs_offline_brand_period_idx').on(t.brandSlug, t.period)]);
+}, (t) => [
+  index('brand_cogs_offline_brand_period_idx').on(t.brandSlug, t.period),
+  index('brand_cogs_offline_source_idx').on(t.brandSlug, t.period, t.source),
+]);
 
 /** Tỉ giá theo tháng: 1 from = rate to — spec §3.3. */
 export const fxMonthRates = pgTable('fx_month_rates', {

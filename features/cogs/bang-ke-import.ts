@@ -138,12 +138,10 @@ export async function apDungBangKeDaDoc(input: {
     const ref = `${input.brandSlug} ${bk.period}`;
     try {
       await db.transaction(async (tx) => {
-        // Xoá đúng NGUỒN đang ghi — MMP đẩy lại kỳ này không được xoá dòng nhập từ bảng kê xlsx và ngược lại.
+        // Xoá đúng NGUỒN đang ghi (order_line_cogs.source, brand_cogs_offline.source — migration 0129)
+        // — MMP đẩy lại kỳ này không được xoá dòng nhập từ bảng kê xlsx và ngược lại.
         await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, input.source), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
-        // `brand_cogs_offline` KHÔNG có cột `source` (chưa tách nguồn ở bảng này) — xoá vẫn theo
-        // brandSlug+period như trước khi tách hàm, nghĩa là ghi đè offline của MỌI nguồn cùng kỳ.
-        // Biết là hạn chế còn lại khi webhook MMP thật sự bật; chưa xử lý trong task này.
-        await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
+        await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.source, input.source), eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
         const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
           for (const t of g.theoLine) {
             await tx.insert(schema.orderLineCogs).values({
@@ -154,7 +152,7 @@ export async function apDungBangKeDaDoc(input: {
             });
           }
           for (const o of g.offline) {
-            await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency, statementRef: ref });
+            await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency, source: input.source, statementRef: ref });
           }
         };
         await ghiLine(ghep, 'cogs'); await ghiLine(ghepReturn, 'return');

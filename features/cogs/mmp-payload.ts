@@ -8,7 +8,6 @@
 import type { BangKe, DongBangKe } from './doc-bang-ke';
 
 const RE_PERIOD = /^\d{4}-\d{2}$/;
-const RE_CURRENCY = /^[A-Za-z]{3}$/;
 
 interface DongPayload {
   maDon: string; sku: unknown; qty: unknown; amount: unknown; currency: unknown; kind: unknown; code: string | null;
@@ -34,7 +33,8 @@ function docDong(raw: unknown, nhan: string, maDonKey: 'orderNumber' | 'refCode'
   if (!chuoiKhongRong(r.sku)) return { ok: false, loi: `${nhan}: thiếu sku` };
   if (!soDuong(r.qty)) return { ok: false, loi: `${nhan}: qty phải là số dương` };
   if (!soDuong(r.amount)) return { ok: false, loi: `${nhan}: amount phải là số dương` };
-  if (r.currency != null && !RE_CURRENCY.test(String(r.currency))) return { ok: false, loi: `${nhan}: currency phải là mã 3 ký tự` };
+  // Hợp đồng payload MMP hiện chỉ nhận VND (xem docs/cogs.md) — tiền tệ khác dừng ngay, không quy đổi ngầm.
+  if (r.currency != null && String(r.currency).toUpperCase() !== 'VND') return { ok: false, loi: `Chưa hỗ trợ tiền tệ khác VND (dòng ${nhan})` };
   if (r.kind !== 'cogs' && r.kind !== 'return') return { ok: false, loi: `${nhan}: kind phải là 'cogs' hoặc 'return'` };
   return { ok: true, dong: { maDon, sku: r.sku, qty: r.qty, amount: r.amount, currency: r.currency, kind: r.kind, code: chuoiKhongRong(r.ref) ? r.ref : null } };
 }
@@ -58,6 +58,7 @@ export function docPayloadMmp(json: unknown): { ok: true; bangKe: BangKe } | { o
   if (!Array.isArray(linesRaw)) return { ok: false, loi: 'lines phải là mảng' };
   const offlineRaw = p.offline ?? [];
   if (!Array.isArray(offlineRaw)) return { ok: false, loi: 'offline phải là mảng' };
+  if (linesRaw.length === 0 && offlineRaw.length === 0) return { ok: false, loi: 'Payload không có dòng nào (lines và offline đều rỗng)' };
 
   const { tuNgay, denNgay } = khoangNgayTuPeriod(p.period);
   const lines: DongBangKe[] = [];

@@ -118,11 +118,15 @@ Xem chi tiết quyết định và khảo sát dữ liệu tại
 ```
 
 - `brandSlug` phải khớp một brand đã có trong `mmp_brands`; `period` dạng `YYYY-MM`.
+- `lines[]` và `offline[]` **không được cùng rỗng** — payload rỗng (không có dòng nào) bị từ chối thẳng, để
+  tránh trường hợp webhook xoá sạch giá vốn của kỳ mà không ghi lại gì (kỳ trước đó có dữ liệu → mất trắng).
 - `lines[]`: dòng thuộc đơn Shopify, `orderNumber` là mã đơn (có thể có `#`). `offline[]` (tuỳ chọn): dòng
   không thuộc Shopify (PO, MTB…), `refCode` thay cho `orderNumber` — vẫn đi qua luật ghép như dòng thường,
   `refCode` không đúng mẫu `MBLVDPO…`/`MTB…` thì báo "không khớp" (`khong_co_don`) thay vì tự suy đoán.
 - `kind: 'cogs'` → cộng vào giá vốn kỳ; `kind: 'return'` → trừ vào giá vốn kỳ (route tự ghi số âm khi lưu,
-  payload luôn gửi số dương). `amount`/`qty` phải là số dương; `currency` mặc định `VND`, chỉ nhận mã 3 ký tự.
+  payload luôn gửi số dương). `amount`/`qty` phải là số dương.
+- `currency`: **chỉ nhận `VND`** (bỏ trống cũng được, mặc định `VND`) — hợp đồng payload đợt này CHƯA hỗ trợ
+  tiền tệ khác, đẩy `USD` hay bất kỳ mã nào khác `VND` đều bị từ chối, không tự quy đổi ngầm.
 - `ref` (tuỳ chọn, chỉ có ở `lines[]`) là mã tham chiếu bảng kê MMP — lưu vào cột `code` giống cột `Code` của
   bảng kê xlsx, chỉ mang tính tra cứu, không ảnh hưởng luật ghép.
 
@@ -134,10 +138,11 @@ Response `200`:
 ```
 
 `lines`/`offline`/`returns` là số dòng **đã ghi** (giống `daGhi` của bộ nhập bảng kê); `khongKhop` liệt kê
-dòng không ghép được (không ghi) để MMP đối chiếu và gửi lại. Lỗi HMAC → `401`; payload sai hình dạng, brand
-không tồn tại, hoặc `period`/`amount`/`currency` không hợp lệ → `400`; thiếu `MMP_WEBHOOK_SECRET` trên SMS
-hoặc lỗi ghi DB → `500`.
+dòng không ghép được (không ghi) để MMP đối chiếu và gửi lại. Lỗi HMAC → `401`; payload sai hình dạng (kể cả
+payload rỗng), brand không tồn tại, hoặc `period`/`amount`/`currency` không hợp lệ → `400`; thiếu
+`MMP_WEBHOOK_SECRET` trên SMS hoặc lỗi ghi DB (kèm `wroteNothing: true` — kỳ đang ghi KHÔNG bị xoá dở, xem
+`apDungBangKeDaDoc`) → `500`.
 
-**Hạn chế đã biết**: bảng `brand_cogs_offline` chưa có cột `source` — xoá dòng cũ theo kỳ khi ghi lại vẫn xoá
-offline của MỌI nguồn (kể cả `brand_statement`) trong cùng kỳ, không riêng `mmp`. Cần thêm cột `source` cho
-bảng này trước khi bật đồng thời cả hai nguồn ghi offline cho cùng brand+kỳ.
+`brand_cogs_offline` có cột `source` (`'brand_statement' | 'mmp'`, migration `0129_brand-cogs-offline-
+source.sql`) giống `order_line_cogs.source` — xoá theo kỳ khi ghi lại chỉ xoá đúng nguồn đang ghi, hai nguồn
+không đụng dữ liệu của nhau.
