@@ -62,7 +62,9 @@ async function kiemBrand(brandSlug: string, tenTrenSheet: string): Promise<strin
   // Bỏ dấu tiếng Việt ("Linh Phùng" ↔ "Linh Phung"), gạch nối, khoảng trắng, hoa/thường.
   const chuan = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '');
   const t = chuan(tenTrenSheet);
-  return t === chuan(b.slug) || t === chuan(b.ten ?? '') ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
+  // Khớp đủ, hoặc tên sheet là TIỀN TỐ của tên hệ thống ("Eegen" ↔ "Eegen Studio") khi ≥ 4 ký tự.
+  const khop = (x: string) => x === t || (t.length >= 4 && x.startsWith(t));
+  return khop(chuan(b.slug)) || khop(chuan(b.ten ?? '')) ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
 }
 
 interface KyDaGhep { bk: BangKe; ghep: KetQuaGhep; ghepReturn: KetQuaGhep }

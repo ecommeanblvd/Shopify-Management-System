@@ -136,9 +136,11 @@ describe('docWorkbook — khuôn Calista (USD, "TỔNG (A):" ₫, B return, TỔ
   it('tỉ giá = TỔNG (A): ₫ ÷ Σ USD mục A (26.080), return đổi cùng tỉ giá, không cảnh báo cột Ngày trả', () => {
     const { bangKe } = docWorkbook([cal]);
     const b = bangKe[0];
-    expect(b).toMatchObject({ brand: 'Calista de Minh Thanh', period: '2026-07', currency: 'VND', tiGia: 26080 });
+    expect(b).toMatchObject({ brand: 'Calista de Minh Thanh', period: '2026-07', currency: 'VND' });
+    expect(b.tiGia).toBeCloseTo(26080, -1); // tỉ giá trung bình cả tab (return lấy số brand ghi nên lệch vài đồng)
     expect(b.lines.map((l) => l.tt)).toEqual([1_434_400, 3_912_000]);
-    expect(b.returns[0]).toMatchObject({ maDon: '#MBLVD29000', ttGoc: 172.5, tt: 4_498_800 });
+    // Return duy nhất thiếu VND sẵn → lấy đúng dòng "TỔNG (B):" ₫ SAU tiêu đề mục B (số brand ghi), không nhân tỉ giá kỳ.
+    expect(b.returns[0]).toMatchObject({ maDon: '#MBLVD29000', ttGoc: 172.5, tt: 4_499_663 });
     expect(b.canhBao).toEqual([]);
   });
   it('không có "TỔNG (A):" → dùng TỔNG THANH TOÁN (A-B) ÷ (Σ A − Σ return)', () => {
@@ -361,5 +363,38 @@ describe('docWorkbook — Tracy Studio T6: dòng TỔNG (A) đầu là số đ�
     const { bangKe } = docWorkbook([t6]);
     expect(bangKe[0].tiGia).toBe(26076);
     expect(bangKe[0].lines.reduce((s, d) => s + d.tt, 0)).toBe(744 * 26076 + 649 * 26076);
+  });
+});
+
+describe('docWorkbook — kỳ có ≥ 50% dòng trống Thành tiền (Eegen T8) → chưa hoàn tất', () => {
+  it('11 dòng trống + 1 dòng có số → bỏ hết, cảnh báo', () => {
+    const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+    const rows: unknown[][] = [[null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: Eegen'], ['A. Đơn thực nhận trong tháng '], HDR];
+    for (let i = 0; i < 11; i++) rows.push(['13/07/2026', '#MBLVD2950' + i, 'x', 'Eegen-ED011-L-BBL', '1', '380', null, null, null, null, 'c', null, null]);
+    rows.push(['13/07/2026', '#MBLVD29599', 'y', 'Eegen-ED012-M-BBL', '1', '$126', '50%', null, '$63', null, 'c', 'T8', '7']);
+    rows.push([null, null, 'Tổng (A)', null, '12', '$5,080.00', '$63.00'], [null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, '0 ₫']);
+    const { bangKe } = docWorkbook([{ name: 'Đối soát T82026 đơn thực nhận', rows: rows as never }]);
+    expect(bangKe[0].lines).toEqual([]);
+    expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
+  });
+});
+
+describe('docWorkbook — Eegen T4: return kỳ cũ có dòng TỔNG ₫ riêng sau mục B, dòng return thiếu một cột', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const t4 = { name: ' Đối soát T42026 đơn thực nhận', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/04/2026 đến 30/04/2026\n\nBrand: Eegen'],
+    ['A. Đơn thực nhận trong tháng '], HDR,
+    ['21/04/2026', '#MBLVD28415', 'x', 'Eegen-ED062-XL-PIN', '1', '$395.00', '55%', null, '$177.75', '4,640,697 ₫', 'c', 'T4', '4'],
+    ['17/04/2026', '#MBLVD28412', 'y', 'Eegen-ED071-S-CRE', '1', '$415.00', '55%', null, '$186.75', '4,875,669 ₫', 'c', 'T4', '4'],
+    ['Tổng (A)', '2', '$810.00', '$364.50'], ['TỔNG', '9,516,366 ₫'], ['VAT (8%)', '761,309 ₫'], ['TỔNG THANH TOÁN', '10,277,675 ₫'],
+    ['B. Đơn return trong tháng '], HDR,
+    ['11/02/2026', '#MBLVD27346', 'z', 'Eegen-ED062-L-PIN', '1', '395.00$', '65%', '$138.25', '#MBLVD27346Eegen-ED062-L-PIN1', 'T2', '2'],
+    ['Tổng (B)', '1', '395.00$', '', '$138.25'], ['TỔNG', '3,569,615 ₫'],
+  ] };
+  it('A lấy Note; return lệch cột đọc $138,25 và lấy đúng 3.569.615 ₫ từ dòng TỔNG sau mục B (tỉ giá cũ 25.820)', () => {
+    const { bangKe } = docWorkbook([t4]);
+    const b = bangKe[0];
+    expect(b.lines.map((d) => d.tt)).toEqual([4_640_697, 4_875_669]);
+    expect(b.returns[0]).toMatchObject({ maDon: '#MBLVD27346', ttGoc: 138.25, tt: 3_569_615 });
   });
 });

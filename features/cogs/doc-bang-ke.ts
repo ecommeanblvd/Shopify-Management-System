@@ -84,6 +84,18 @@ function tongVndMucA(rows: O[][]): number | null {
   return null;
 }
 
+/** Giá trị ₫ trên dòng TỔNG đầu tiên nằm SAU tiêu đề mục B (tổng của mục B/return). Eegen T4: return kỳ cũ có "TỔNG 3.569.615 ₫" riêng. */
+function tongVndMucB(rows: O[][]): number | null {
+  const iB = rows.findIndex((r) => r.some((c) => /^B\.\s*Đơn/i.test(chuoi(c))));
+  if (iB < 0) return null;
+  for (const r of rows.slice(iB + 1)) {
+    if (r.some((c) => /^[C-Z]\.\s*Đơn/i.test(chuoi(c)))) break;
+    if (!r.some((c) => /^TỔNG/i.test(chuoi(c)))) continue;
+    const o = r.find((c) => /₫|đ$/i.test(chuoi(c))); const v = docTien(o); if (v != null && v > 0) return v;
+  }
+  return null;
+}
+
 /**
  * Tỉ giá VND/USD của một tab sheet USD, suy từ chính sheet:
  *   1) "TỔNG (A):" ₫ ÷ Σ USD mục A (Calista, Happy Clothing kỳ có dòng này) — chắc nhất vì không dính return/B;
@@ -125,7 +137,7 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     // Montsand: tab "Đơn thực nhận đối soát T8" không có dòng "A. Đơn thực nhận" — bảng bắt đầu ngay sau tiêu đề → coi cả tab là mục A.
     if (khongCoMucA && !/thực nhận/i.test(sh.name)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
+    let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let soDongDon = 0; let soKhongDocTT = 0; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
       if (/^A\.\s*Đơn/i.test(dau)) { muc = 'A'; cot = null; return; }
@@ -136,6 +148,7 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       if (!muc || !cot) return;
       const maDon = chuoi(r[cot.maDon]);
       if (!maDon.startsWith('#')) return;
+      soDongDon += 1;
       let ttRaw = r[cot.tt];
       let tt = docTien(typeof ttRaw === 'string' ? ttRaw.replace(/\$/g, '') : ttRaw);
       if (tt == null && cot.tt > 0) {
@@ -145,7 +158,7 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         const trai = r[cot.tt - 1]; const ttTrai = docTien(typeof trai === 'string' ? trai.replace(/\$/g, '') : trai);
         if (ttTrai != null && ttTrai > 0) { ttRaw = trai; tt = ttTrai; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} dòng lệch cột — lấy Thành tiền ở ô bên trái (${ttTrai.toLocaleString('vi-VN')})`); }
       }
-      if (tt == null) { bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Thành tiền`); return; }
+      if (tt == null) { soKhongDocTT += 1; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Thành tiền`); return; }
       const laUsd = typeof ttRaw === 'string' && ttRaw.includes('$'); if (laUsd) coUsd = true;
       // VND từng dòng ghi sẵn ở cột Note (số ≥ 1.000, không có '$') — chỉ dùng cho dòng USD.
       const noteRaw = cot.note >= 0 ? r[cot.note] : null;
@@ -174,8 +187,9 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
     // Kỳ brand CHƯA điền "Tổng thành tiền" (Keira Tong T8: mọi dòng $0.00, cột % CK chép nhầm giá) → không coi là bảng kê
     // hoàn tất: bỏ toàn bộ dòng của tab, báo cảnh báo, để không ghi giá vốn 0 lên đơn.
-    if (bk.lines.length > 0 && bk.lines.every((d) => d.tt <= 0)) {
-      bk.canhBao.push(`${sh.name}: mọi dòng có Tổng thành tiền = 0 — kỳ chưa hoàn tất, KHÔNG nhập`);
+    // … hoặc ≥ 50% dòng đơn không đọc được Thành tiền (Eegen T8: 11/12 dòng trống, 1 dòng lẻ).
+    if ((bk.lines.length > 0 && bk.lines.every((d) => d.tt <= 0)) || (soDongDon >= 2 && soKhongDocTT * 2 >= soDongDon)) {
+      bk.canhBao.push(`${sh.name}: ${soKhongDocTT}/${soDongDon} dòng không có Tổng thành tiền — kỳ chưa hoàn tất, KHÔNG nhập`);
       bk.lines = []; bk.returns = [];
     }
     if (coUsd) {
@@ -226,6 +240,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
           }
         }
         if (rate != null) for (const d of thieu) d.tt = Math.round(d.ttGoc! * rate);
+        // Return kỳ cũ (tỉ giá cũ) duy nhất thiếu VND sẵn mà mục B có dòng TỔNG ₫ riêng SAU tiêu đề B → lấy đúng số brand ghi
+        // (Eegen T4: 138,25 $ × 25.820 = 3.569.615 ₫, khác tỉ giá kỳ 26.108). Chỉ nhận khi tỉ giá suy ra hợp lý.
+        const thieuReturn = bk.returns.filter((d) => d.ttGoc != null && d.ttVndSan == null);
+        const tongB = tongVndMucB(sh.rows);
+        if (thieuReturn.length === 1 && tongB != null) {
+          const daCo = bk.returns.filter((d) => d.ttVndSan != null).reduce((s, d) => s + d.tt, 0);
+          const conLai = Math.round(tongB - daCo); const r0 = conLai / thieuReturn[0].ttGoc!;
+          if (conLai > 0 && r0 >= 15_000 && r0 <= 40_000) thieuReturn[0].tt = conLai;
+        }
       }
       if (thieu.length === 0 || rate != null) {
         bk.currency = 'VND';
