@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { BangKeImporter } from '@/components/cogs/BangKeImporter';
+import { PhanBoPOButton } from '@/components/cogs/PhanBoPOButton';
 import { layBrands } from '@/features/cogs/actions';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,16 @@ export default async function BangKeBrandPage() {
       </header>
 
       <BangKeImporter brands={brands} />
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-semibold tracking-tight">Phân bổ hàng PO xuống đơn</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Dòng đơn không có trên bảng kê nhưng SKU (mã · size · màu) nằm trong PO MEAN đã mua của brand → lấy giá vốn theo PO,
+          nhập trước dùng trước, chỉ PO kỳ trước hoặc cùng tháng đặt mới được tính; hết số lượng thì chuyển PO kế tiếp.
+          Chạy lại bất kỳ lúc nào (xoá và phân bổ lại toàn bộ dòng nguồn PO của brand).
+        </p>
+        <PhanBoPOButton brands={brands} />
+      </section>
     </div>
   );
 }

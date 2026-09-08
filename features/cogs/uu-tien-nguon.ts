@@ -10,12 +10,14 @@
  *   giờ đè nguồn nào khác (thực thi ở `own-cogs.ts` qua `onConflictDoNothing`, không dùng
  *   hàm này).
  */
-export type Source = 'brand_statement' | 'mmp' | 'shopify_unit_cost';
+export type Source = 'brand_statement' | 'mmp' | 'shopify_unit_cost' | 'po';
 
 /** Số càng lớn, ưu tiên càng cao. */
 const THU_TU: Record<Source, number> = {
   shopify_unit_cost: 0,
   brand_statement: 1,
+  /** Phân bổ từ PO (hàng MEAN mua đứt, kê #MBLVDPO/#MTB) — cùng gốc bảng kê brand nên ngang `brand_statement`; `mmp` kế nhiệm cả hai. */
+  po: 1,
   mmp: 2,
 };
 

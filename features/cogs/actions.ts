@@ -83,3 +83,22 @@ export async function layTiGiaVcbAction(period: string): Promise<{ rate: number 
   revalidatePath('/f/orders/lai-gop');
   return { rate: r.sell };
 }
+
+/** Phân bổ PO (hàng MEAN mua đứt, kê #MBLVDPO/#MTB) xuống dòng đơn không có trên bảng kê —
+ *  FIFO theo kỳ PO ≤ tháng đặt (CEO 08/09). `dryRun` chỉ tính, không ghi. */
+export async function phanBoPOAction(brandSlug: string, dryRun: boolean): Promise<{
+  dongXet: number; daPhanBo: number; tongVnd: number;
+  theoPO: Array<{ refCode: string; qty: number; vnd: number }>;
+  khong: Array<{ maDon: string; sku: string | null; thangDat: string; lyDo: string }>;
+  dryRun: boolean;
+}> {
+  const userId = await requireCogs('manage_cogs');
+  if (!brandSlug) throw new Error('Chọn brand');
+  const { phanBoPOCore } = await import('./phan-bo-po-core');
+  const r = await phanBoPOCore(brandSlug, { dryRun, userId });
+  if (!dryRun) { revalidatePath('/f/orders/lai-gop'); revalidatePath('/f/orders/cogs/bang-ke'); }
+  return {
+    dongXet: r.dongXet, daPhanBo: r.daPhanBo, tongVnd: r.tongVnd, theoPO: r.theoPO,
+    khong: r.khong.map((k) => ({ maDon: k.maDon, sku: k.sku, thangDat: k.thangDat, lyDo: k.lyDo })), dryRun,
+  };
+}

@@ -208,3 +208,17 @@ payload rỗng), brand không tồn tại, hoặc `period`/`amount`/`currency` k
 `brand_cogs_offline` có cột `source` (`'brand_statement' | 'mmp'`, migration `0129_brand-cogs-offline-
 source.sql`) giống `order_line_cogs.source` — xoá theo kỳ khi ghi lại chỉ xoá đúng nguồn đang ghi, hai nguồn
 không đụng dữ liệu của nhau.
+
+## Phân bổ hàng PO xuống đơn (nguồn `po`)
+
+Brand kê hai loại tiền trên bảng kê: **theo đơn** (dòng khớp mã đơn + SKU → `order_line_cogs`, nguồn `brand_statement`) và **mua đứt** (`#MBLVDPO…`, `#MTB…` → `brand_cogs_offline`, có SKU + số lượng). Đơn bán hàng lấy từ kho PO thì brand **không** kê theo đơn, nên dòng đơn đó không có giá vốn dù tiền đã trả trong PO.
+
+Nút **"Phân bổ PO → đơn"** (trang Bảng kê brand, quyền `manage_cogs`) làm việc này, luật CEO chốt 08/09/2026:
+
+- Chỉ xét dòng đơn của brand **chưa có giá vốn nguồn khác** (`brand_statement`/`mmp`/`shopify_unit_cost`), đơn chưa huỷ, đặt từ 01/2026.
+- Ghép PO ↔ dòng đơn theo **mã chính + size + màu** (`khoaSku`: bỏ `Denio-`, chất liệu `PLA`, hậu tố `-PO`/`-Sale`; `DN0729+PK0729` ghép theo `DN729`).
+- **Nhập trước dùng trước**: PO xếp theo kỳ kê rồi số PO; chỉ PO có **kỳ ≤ tháng đặt** được dùng (không có ngày nhập PO nên lấy kỳ kê làm mốc); hết số lượng thì sang PO kế tiếp; dòng SL>1 có thể lấy từ hai PO, thiếu chiếc thì **không ghi** và báo "PO hết số lượng".
+- Giá vốn = giá mua trong PO (amount/qty). Ghi `order_line_cogs` nguồn `po`, **kỳ = tháng đặt** (đi cùng doanh thu; khác dòng bảng kê ghi theo kỳ thực nhận), `statement_ref` = mã PO, `detail.tuPO` = từng lô.
+- Idempotent: mỗi lần chạy xoá hết dòng `po` của brand rồi phân bổ lại. Ưu tiên nguồn: `po` ngang `brand_statement`, `mmp` kế nhiệm cả hai.
+- Báo cáo lãi gộp: dòng `po` trừ vào COGS như dòng bảng kê; cột "offline" vẫn hiện tổng tiền PO/MTB đã trả (thông tin, không trừ lần hai).
+- Dòng không phân bổ được (SKU không có trong PO, PO hết số lượng, chưa có PO trước tháng đặt) → ops gửi brand xác nhận, rồi nhập bổ sung bằng bảng kê.
