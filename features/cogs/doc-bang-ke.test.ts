@@ -184,11 +184,12 @@ describe('docWorkbook — khuôn La Vierge (USD + VND từng dòng ở cột Not
     const { bangKe } = docWorkbook([{ ...lv, rows }]);
     expect(bangKe[0].lines[0]).toMatchObject({ ttVndSan: 2_717_400, tt: 2_717_400 });
   });
-  it('cột Note ghi đơn vị lạ (tỉ lệ VND/USD ngoài 15–40 và 15k–40k) → bỏ, đổi theo tỉ giá kỳ', () => {
+  it('cột Note ghi đơn vị lạ (tỉ lệ VND/USD ngoài 15–40 và 15k–40k) → bỏ, đổi theo tỉ giá từ dòng TỔNG ₫ mục A (trước mục B)', () => {
     const rows = lv.rows.map((r, i) => (i === 3 || i === 4 || i === 9 ? r.map((c, j) => (j === 9 ? '271' : c)) : r));
     const { bangKe } = docWorkbook([{ ...lv, rows }]);
     expect(bangKe[0].lines[0].ttVndSan).toBeUndefined();
-    expect(bangKe[0].lines[0].tt).toBe(Math.round(105 * (1_917_970 / 75)));
+    // Dòng ₫ đầu tiên trước mục B (4.981.900, nhãn "(B):" sai) là tổng mục A → 4.981.900 ÷ 192,5 = 25.880 → 105 × 25.880
+    expect(bangKe[0].lines[0].tt).toBe(2_717_400);
   });
 });
 
