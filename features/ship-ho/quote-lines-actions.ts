@@ -67,7 +67,7 @@ export async function quoteShipHoLines(
       destinationCity: input.city || undefined,
     });
     if (!q.ok) continue; // line không quote được tuyến này → ẩn
-    const { chargedVnd, marginVnd } = summarizeLine(q.carrierCostVnd, q.baseVnd, markup, q.breakdown.vatPercent);
+    const { chargedVnd, marginVnd } = summarizeLine(q.carrierCostVnd, q.baseVnd, markup, q.breakdown.vatPercent, q.breakdown.fuelPercent);
     lines.push({
       accountId: a.id,
       name: a.name,

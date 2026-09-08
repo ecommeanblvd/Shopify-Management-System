@@ -1,5 +1,6 @@
 /**
- * THUẦN: giá brand-facing ship hộ (Option A) — fuel & VAT áp trên base ĐÃ markup.
+ * THUẦN: giá brand-facing ship hộ — MỘT công thức với computeOffer (CEO chốt 08/09):
+ * ((base + markup + phụ phí) × (1+fuel%) + 50.000) × (1+VAT%). Tương đương:
  *   margin     = baseVnd × markup% × (1+fuel%) × (1+vat%)
  *   chargedVnd = round(carrierCostVnd) + round(margin) + round(50.000 × (1+vat%))
  * Mỗi đơn ship hộ CÓ PHÍ XỬ LÝ ĐƠN HÀNG cố định 50.000 (chịu VAT) và KHÔNG có phí

@@ -80,3 +80,13 @@ describe('computeBrandCharge (Option A: fuel/VAT trên base markup + phí xử l
     expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
   });
 });
+
+describe('computeBrandCharge — cùng một công thức với computeOffer (CEO 08/09)', () => {
+  it('chargedVnd khớp tuyệt đối computeOffer với cùng carrierCost/base/markup/VAT/fuel', async () => {
+    const { computeOffer } = await import('./offer-pricing');
+    const r = computeBrandCharge(STD);
+    expect(r.chargedVnd).toBe(
+      computeOffer(STD.carrierCostVnd, STD.baseVnd, STD.markupPercent, STD.vatPercent, STD.fuelPercent).chargedVnd,
+    );
+  });
+});

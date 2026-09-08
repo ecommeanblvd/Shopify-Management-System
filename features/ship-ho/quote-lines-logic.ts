@@ -1,5 +1,5 @@
-/** THUẦN: từ cước carrier + base + markup% + VAT% → giá thu + margin cho 1 line.
- *  Giá thu gồm phí xử lý đơn hàng cố định (chịu VAT) — xem computeOffer. */
+/** THUẦN: từ cước carrier + base + markup% + VAT% + fuel% → giá thu + margin cho 1 line.
+ *  Cùng một công thức với computeOffer (offer-pricing.ts). */
 import { computeOffer } from './offer-pricing';
 
 export function summarizeLine(
@@ -7,6 +7,7 @@ export function summarizeLine(
   baseVnd: number,
   markupPercent: number,
   vatPercent: number,
+  fuelPercent: number,
 ): { chargedVnd: number; marginVnd: number; processingFeeVnd: number } {
-  return computeOffer(carrierCostVnd, baseVnd, markupPercent, vatPercent);
+  return computeOffer(carrierCostVnd, baseVnd, markupPercent, vatPercent, fuelPercent);
 }

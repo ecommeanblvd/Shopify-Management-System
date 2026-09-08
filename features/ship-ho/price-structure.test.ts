@@ -59,7 +59,7 @@ describe('shipHoPriceStructure', () => {
     // carrierCost = base+sur+fuel+vat − 100k (discount) → residual = −100k.
     const withDiscount = { ...breakdown, discount: -100_000, carrierCost: 1_434_236 };
     const s = shipHoPriceStructure({ breakdown: withDiscount, carrierCostVnd: 1_434_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
-    const adj = s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh');
+    const adj = s.rows.find((r) => r.label === 'Điều chỉnh khớp số đã ghi');
     expect(adj?.costVnd).toBe(-100_000);
     const costSum = s.rows.reduce((t, r) => t + (r.costVnd ?? 0), 0);
     expect(costSum).toBe(1_434_236);
@@ -68,7 +68,7 @@ describe('shipHoPriceStructure', () => {
   it('đơn backfill: chargedVnd gốc lệch breakdown → dòng điều chỉnh giữ cột thu khớp', () => {
     const charged = expectedCharged(25) + 138_411; // chargedVnd gốc cao hơn recompute
     const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: charged, markupPercent: 25 })!;
-    const adj = s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh');
+    const adj = s.rows.find((r) => r.label === 'Điều chỉnh khớp số đã ghi');
     expect(adj?.chargeVnd).toBe(138_411);
     const chargeSum = s.rows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0);
     expect(chargeSum).toBe(charged);
@@ -188,7 +188,7 @@ describe('shipHoPriceStructure', () => {
     expect(s.rows.find((r) => r.label === 'Phí xử lý hàng nhập khẩu')?.billVnd).toBe(10_000); // bill cũ chưa tách cột → other hiện ở dòng NK
     expect(s.rows.find((r) => r.label === 'Phụ phí xăng dầu')?.billVnd).toBe(320_000);
     expect(s.rows.find((r) => r.label === 'VAT')?.billVnd).toBe(190_000);
-    expect(s.rows.find((r) => r.label === 'Giảm giá / điều chỉnh')?.billVnd ?? null).toBeNull();
+    expect(s.rows.find((r) => r.label === 'Điều chỉnh khớp số đã ghi')?.billVnd ?? null).toBeNull();
     const billSum = s.rows.reduce((t, r) => t + (r.billVnd ?? 0), 0);
     expect(billSum).toBe(1_550_000);
     expect(s.weights).toEqual({ quoteKg: 2, billKg: 2.5 });

@@ -6,6 +6,10 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getShipHoOrder } from '@/features/ship-ho/queries';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
+import { resolveTier } from '@/features/ship-ho/tier-pricing';
+import { db, schema } from '@/db/client';
+import { eq, sql } from 'drizzle-orm';
+import { sqlGioKinhDoanh } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { MmpOrderActions } from './MmpOrderActions';
@@ -51,6 +55,16 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
     : null;
   const marginVnd = price ? price.chargeTotal - price.costTotal : null;
   const hasBill = price?.billTotal != null;
+  // Bậc chiết khấu + sản lượng tháng trước của đối tác — giải thích vì sao markup khác nhau giữa brand.
+  const [partner] = await db.select({
+    strategic: schema.shipHoPartners.strategic, tierOverrideCode: schema.shipHoPartners.tierOverrideCode, tierCode: schema.shipHoPartners.tierCode,
+  }).from(schema.shipHoPartners).where(eq(schema.shipHoPartners.brandSlug, o.partnerBrandSlug)).limit(1);
+  const tier = partner ? resolveTier({ strategic: partner.strategic, overrideCode: partner.tierOverrideCode, autoCode: partner.tierCode }) : null;
+  const thangTruoc = await db.execute<{ n: number }>(sql.raw(
+    `select count(*)::int as n from ship_ho_orders where partner_brand_slug = '${o.partnerBrandSlug.replace(/'/g, "''")}'
+       and to_char(${sqlGioKinhDoanh('created_at')}, 'YYYY-MM') = to_char((now() at time zone 'UTC' at time zone 'Asia/Bangkok') - interval '1 month', 'YYYY-MM')`,
+  ));
+  const donThangTruoc = Number(thangTruoc.rows[0]?.n ?? 0);
   const canManage = hasPermission(role, 'manage_ship_ho');
   // Form carrier cần tên nước tiếng Anh đầy đủ ("Saudi Arabia"), không phải mã ISO.
   let countryName = o.country;
@@ -152,7 +166,12 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
               </span>
             )}
           </div>
-          {o.markupPercent && <div className="text-xs text-muted-foreground">Markup <b>{Number(o.markupPercent)}%</b></div>}
+          {o.markupPercent && (
+            <div className="text-xs text-muted-foreground" title="Markup theo bậc sản lượng tháng trước của đối tác: Standard +20% · Silver +16% (≥50 đơn) · Gold +12% (≥100) · Platinum +8% (≥200); strategic/override do admin đặt">
+              Markup <b className="text-foreground">{Number(o.markupPercent)}%</b>
+              {tier && <> · {tier.name}</>} · {donThangTruoc} đơn tháng trước
+            </div>
+          )}
         </div>
         {!price ? (
           <div className="space-y-2">
@@ -163,19 +182,28 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           </div>
         ) : (
           <div className="overflow-x-auto">
+            {/* Hai khối tách bạch (CEO 08/09): CHI PHÍ = MEAN trả carrier (xanh lam) · THU = brand trả MEAN (xanh lục).
+                Mỗi khối có Dự tính / Thực / Lệch; cột Margin = thu − chi của từng khoản. */}
             <table className="w-full text-sm tabular-nums">
               <thead>
+                <tr className="text-[10px] uppercase tracking-wider [&>th]:py-1 [&>th]:font-semibold">
+                  <th className="text-left text-muted-foreground">Khoản</th>
+                  <th colSpan={hasBill ? 3 : 1} className="text-center text-sky-700 dark:text-sky-400 border-b-2 border-sky-500/40">Chi phí — MEAN trả carrier</th>
+                  <th colSpan={hasBill ? 3 : 1} className="text-center text-emerald-700 dark:text-emerald-400 border-b-2 border-emerald-500/40">Thu — Brand trả MEAN</th>
+                  <th className="text-center text-muted-foreground border-b-2 border-border">Margin</th>
+                </tr>
                 <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:py-1.5 [&>th]:font-medium">
-                  <th className="text-left">Khoản</th>
-                  <th className="text-right" title="Cước carrier dự tính lúc báo giá">Chi phí Carrier (dự tính)</th>
-                  {hasBill && <th className="text-right" title="Cước thực từ hoá đơn carrier">Cước từ Carrier</th>}
-                  <th className="text-right" title="Giá quote lúc khách tạo vận đơn trên MMP">{hasBill ? 'Giá thu dự tính' : 'Giá thu khách'}</th>
-                  {hasBill && <th className="text-right" title="Tính lại theo bill (cân + phụ phí thực)">Giá thu thực</th>}
-                  <th className="text-right" title={hasBill ? 'Lệch thu = thu thực − thu dự tính' : 'Chênh = thu − chi'}>{hasBill ? 'Lệch thu' : 'Chênh'}</th>
+                  <th className="text-left"></th>
+                  <th className="text-right" title="Cước carrier dự tính lúc báo giá">Dự tính</th>
+                  {hasBill && <th className="text-right" title="Cước thực từ hoá đơn carrier">Bill</th>}
+                  {hasBill && <th className="text-right" title="Lệch chi = bill − dự tính (đỏ = carrier tính cao hơn)">Lệch chi</th>}
+                  <th className="text-right" title="Giá đã báo brand lúc tạo đơn">Dự tính</th>
+                  {hasBill && <th className="text-right" title="Tính lại theo bill: cước carrier thật + cước cơ bản × markup + phí xử lý">Thực</th>}
+                  {hasBill && <th className="text-right" title="Lệch thu = thực − dự tính (xanh = thu thêm)">Lệch thu</th>}
+                  <th className="text-right" title={hasBill ? 'Thu thực − chi bill' : 'Thu dự tính − chi dự tính'}>{hasBill ? 'Thực' : 'Dự tính'}</th>
                 </tr>
               </thead>
               <tbody>
-                {/* Cân tính phí ở từng công thức — lệch cân lộ ra ngay tại đây */}
                 <tr className="border-t border-border/60 bg-muted/30 [&>td]:py-1.5 text-xs">
                   <td className="text-left text-muted-foreground">Cân tính phí (kg)</td>
                   <td className="text-right">{price.weights.quoteKg ?? '—'}</td>
@@ -187,59 +215,70 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                       )}
                     </td>
                   )}
+                  {hasBill && <td className="text-right text-muted-foreground">—</td>}
                   <td className="text-right">{price.weights.quoteKg ?? '—'}</td>
                   {hasBill && <td className="text-right">{price.weights.billKg ?? price.weights.quoteKg ?? '—'}</td>}
+                  {hasBill && <td className="text-right text-muted-foreground">—</td>}
                   <td className="text-right text-muted-foreground">—</td>
                 </tr>
                 {price.rows.map((r) => {
-                  // hasBill → Lệch thu (thực − dự tính); chưa bill → Chênh (thu − chi).
-                  const diff = hasBill
-                    ? (r.chargeVnd ?? 0) - (r.quoteChargeVnd ?? 0)
-                    : (r.chargeVnd ?? 0) - (r.costVnd ?? 0);
-                  const good = hasBill ? diff > 0 : diff > 0; // thu tăng = xanh
+                  const cost = r.costVnd ?? 0, bill = r.billVnd ?? 0, quote = r.quoteChargeVnd ?? 0, charge = r.chargeVnd ?? 0;
+                  const lechChi = hasBill && (r.billVnd != null || r.costVnd != null) ? bill - cost : null;
+                  const lechThu = hasBill && (r.chargeVnd != null || r.quoteChargeVnd != null) ? charge - quote : null;
+                  const margin = hasBill ? charge - bill : quote - cost;
+                  const so = (v: number | null, dau = false) => v == null || v === 0 ? '—' : (dau && v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
+                  const mauLechChi = lechChi == null || lechChi === 0 ? 'text-muted-foreground' : lechChi > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400';
+                  const mauLechThu = lechThu == null || lechThu === 0 ? 'text-muted-foreground' : lechThu > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                  const mauMargin = margin === 0 ? 'text-muted-foreground' : margin > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                  const laKhop = r.label === 'Điều chỉnh khớp số đã ghi';
                   return (
-                    <tr key={r.label} className="border-t border-border/60 [&>td]:py-2">
-                      <td className="text-left">
+                    <tr key={r.label} className={`border-t border-border/60 [&>td]:py-2 ${laKhop ? 'text-muted-foreground italic' : ''}`}>
+                      <td className="text-left" title={laKhop ? 'Đơn tạo trước 08/09: giá đã báo brand khác tổng các dòng tách theo công thức hiện tại — dòng này bù cho khớp. Đơn mới không còn dòng này.' : undefined}>
                         {r.label}
                         {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
                       </td>
-                      <td className="text-right text-muted-foreground">{r.costVnd == null ? '—' : r.costVnd.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right text-muted-foreground">{r.billVnd == null ? '—' : r.billVnd.toLocaleString('vi-VN')}</td>}
-                      <td className="text-right">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right font-medium">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
-                      <td className={`text-right ${diff !== 0 ? (good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-muted-foreground'}`}>
-                        {diff !== 0 ? (diff > 0 ? '+' : '') + diff.toLocaleString('vi-VN') : '—'}
-                      </td>
+                      <td className="text-right text-sky-700 dark:text-sky-400">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-sky-700 dark:text-sky-400">{r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mauLechChi}`}>{so(lechChi, true)}</td>}
+                      <td className="text-right text-emerald-700 dark:text-emerald-400">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right font-medium text-emerald-700 dark:text-emerald-400">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mauLechThu}`}>{so(lechThu, true)}</td>}
+                      <td className={`text-right ${mauMargin}`}>{so(margin, true)}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
-                  <td className="text-left">Tổng</td>
-                  <td className="text-right text-muted-foreground">{price.costTotal.toLocaleString('vi-VN')}</td>
-                  {hasBill && (
-                    <td className="text-right text-muted-foreground">
-                      {price.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({price.billNumber})</span>}
-                      {price.billTotal!.toLocaleString('vi-VN')}
-                    </td>
-                  )}
-                  <td className="text-right">{price.quoteChargeTotal.toLocaleString('vi-VN')}</td>
-                  {hasBill && <td className="text-right">{price.chargeTotal.toLocaleString('vi-VN')}</td>}
-                  {hasBill ? (
-                    <td className={`text-right ${price.chargeTotal - price.quoteChargeTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : price.chargeTotal - price.quoteChargeTotal < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                      {price.chargeTotal - price.quoteChargeTotal > 0 ? '+' : ''}{(price.chargeTotal - price.quoteChargeTotal).toLocaleString('vi-VN')}
-                    </td>
-                  ) : (
-                    <td className="text-right text-emerald-600 dark:text-emerald-400">+{(marginVnd ?? 0).toLocaleString('vi-VN')}</td>
-                  )}
-                </tr>
+                {(() => {
+                  const lechChiTong = hasBill ? price.billTotal! - price.costTotal : null;
+                  const lechThuTong = hasBill ? price.chargeTotal - price.quoteChargeTotal : null;
+                  const marginTong = hasBill ? price.chargeTotal - price.billTotal! : (marginVnd ?? 0);
+                  const mau = (v: number | null, tot: 'chi' | 'thu' | 'margin') => v == null || v === 0 ? 'text-muted-foreground'
+                    : (tot === 'chi' ? v < 0 : v > 0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                  const so = (v: number | null) => v == null ? '—' : (v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
+                  return (
+                    <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
+                      <td className="text-left">Tổng</td>
+                      <td className="text-right text-sky-700 dark:text-sky-400">{price.costTotal.toLocaleString('vi-VN')}</td>
+                      {hasBill && (
+                        <td className="text-right text-sky-700 dark:text-sky-400">
+                          {price.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({price.billNumber})</span>}
+                          {price.billTotal!.toLocaleString('vi-VN')}
+                        </td>
+                      )}
+                      {hasBill && <td className={`text-right ${mau(lechChiTong, 'chi')}`}>{so(lechChiTong)}</td>}
+                      <td className="text-right text-emerald-700 dark:text-emerald-400">{price.quoteChargeTotal.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-emerald-700 dark:text-emerald-400">{price.chargeTotal.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mau(lechThuTong, 'thu')}`}>{so(lechThuTong)}</td>}
+                      <td className={`text-right ${mau(marginTong, 'margin')}`}>{so(marginTong)}</td>
+                    </tr>
+                  );
+                })()}
               </tfoot>
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {hasBill
-                ? 'Cột Lệch bill = cước thực − dự tính theo từng khoản (đỏ = carrier tính cao hơn dự tính).'
-                : 'Cột Chênh ở dòng Tổng chính là margin dự tính (thu − chi). Khi có hoá đơn carrier, bảng sẽ thêm cột "Cước từ Carrier" để đối soát từng khoản.'}
+              Giá thu = cước carrier (pass-through toàn bộ) + cước cơ bản × markup + phí xử lý 50.000 (có VAT). Xăng dầu, VAT, phụ phí, ký nhận, phí NK là chi phí carrier chuyển thẳng, không markup.
+              {hasBill ? ' Lệch chi: đỏ = carrier tính cao hơn dự tính. Lệch thu: xanh = thu brand thêm. Margin = thu thực − bill.' : ' Chưa có bill: Margin = thu dự tính − chi dự tính.'}
               {price.factor !== 1 ? ' Chi phí gốc theo ngoại tệ đã quy về VND.' : ''}
             </p>
 

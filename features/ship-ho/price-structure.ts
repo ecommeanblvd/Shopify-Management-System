@@ -213,7 +213,7 @@ export function shipHoPriceStructure(input: {
   ];
   if (adjustCost !== 0 || adjustCharge !== 0 || adjustQuoteCharge !== 0 || (adjustBill != null && adjustBill !== 0)) {
     rows.push({
-      label: 'Giảm giá / điều chỉnh',
+      label: 'Điều chỉnh khớp số đã ghi',
       costVnd: adjustCost || null,
       billVnd: adjustBill != null && adjustBill !== 0 ? adjustBill : null,
       quoteChargeVnd: adjustQuoteCharge || null,
