@@ -771,6 +771,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { fetchVcbUsd } from '@/lib/fx/vcb';
 import { requireCogs } from './perm';
+import { docTien } from './tien';
 import { xemTruocBangKe, apDungBangKe, type XemTruoc } from './bang-ke-import';
 
 async function nguon(fd: FormData): Promise<{ url?: string; buffer?: Uint8Array; tenFile: string }> {
@@ -800,8 +801,10 @@ export async function apDungAction(fd: FormData) {
 }
 export async function luuTiGiaAction(fd: FormData): Promise<void> {
   await requireCogs('manage_cogs');
-  const period = String(fd.get('period')); const rate = Number(String(fd.get('rate')).replace(/[,.\s]/g, (m) => (m === '.' ? '.' : '')));
-  if (!/^\d{4}-\d{2}$/.test(period) || !Number.isFinite(rate) || rate <= 0) throw new Error('Kỳ hoặc tỉ giá không hợp lệ');
+  const period = String(fd.get('period'));
+  // Dùng docTien: người Việt gõ 26.500 (chấm nghìn) — Number() sẽ hiểu là 26,5.
+  const rate = docTien(String(fd.get('rate') ?? ''));
+  if (!/^\d{4}-\d{2}$/.test(period) || rate == null || rate <= 0) throw new Error('Kỳ hoặc tỉ giá không hợp lệ');
   await db.insert(schema.fxMonthRates).values({ fromCurrency: 'USD', toCurrency: 'VND', period, rate: String(rate), source: 'manual' })
     .onConflictDoUpdate({ target: [schema.fxMonthRates.fromCurrency, schema.fxMonthRates.toCurrency, schema.fxMonthRates.period], set: { rate: String(rate), source: 'manual', updatedAt: sql`now()` } });
   revalidatePath('/f/orders/lai-gop');
