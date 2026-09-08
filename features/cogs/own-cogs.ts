@@ -11,11 +11,8 @@
  */
 import { and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { BRAND_OWNED_STORES } from '@/features/mmp/brand-stores';
 import { sqlGioKinhDoanh } from '@/lib/timezone';
-import { laHangTuSanXuat } from './vendor-tu-san-xuat';
-
-const STORE_TU_SAN_XUAT = [...Object.keys(BRAND_OWNED_STORES), 'meanblvd'];
+import { brandSlugTuSanXuat, laHangTuSanXuat, STORE_TU_SAN_XUAT } from './vendor-tu-san-xuat';
 
 interface DongUngVien {
   orderId: string;
@@ -130,7 +127,7 @@ export async function applyOwnCogs(opts: ApplyOwnCogsOptions = {}): Promise<Appl
     ghi++;
     if (dryRun) continue;
 
-    const brandSlug = BRAND_OWNED_STORES[line.storeName]?.brandSlug ?? 'meanblvd';
+    const brandSlug = brandSlugTuSanXuat(line.storeName);
     await db.insert(schema.orderLineCogs).values({
       orderId: line.orderId,
       shopifyLineId: line.shopifyLineId,

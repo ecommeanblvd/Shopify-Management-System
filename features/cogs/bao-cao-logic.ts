@@ -24,7 +24,11 @@ export function tinhBaoCao(input: { thang: string[]; doanhThu: DoanhThuThang[]; 
     for (const c of input.cogs.filter((x) => x.period === period)) {
       const v = doiTienTheoThang(c.amount, c.currency, VND, period, input.rates);
       if (!v) { thieuTiGia = true; continue; }
-      cogs += v.amount; thuocThangTruoc += c.thuocThangTruoc; tiGiaTam ||= v.tam;
+      // thuocThangTruoc CÙNG đơn vị tiền với c.amount (cả hai đọc từ order_line_cogs
+      // của kỳ này) — đổi VND bằng ĐÚNG tỉ giá v.rate vừa tra cho c.amount (không gọi
+      // lại doiTienTheoThang — cùng from/to/period nên rate giống hệt, gọi lại chỉ tốn
+      // thêm một lượt tìm kiếm mảng rates vô ích).
+      cogs += v.amount; thuocThangTruoc += c.thuocThangTruoc * v.rate; tiGiaTam ||= v.tam;
     }
     const offline = input.offline.filter((x) => x.period === period).reduce((s, x) => s + x.amount, 0);
     return {

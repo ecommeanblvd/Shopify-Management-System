@@ -23,6 +23,17 @@ describe('tinhBaoCao', () => {
     const r = tinhBaoCao({ thang: ['2026-08'], doanhThu: [{ period: '2026-08', storeId: 's2', currency: 'VND', doanhThuThuan: 500, phiShip: 0, soDon: 1, soLine: 1, soLineCoCogs: 1, doanhThuLineCoCogs: 500, doanhThuLineTong: 500 }], cogs: [], offline: [], rates });
     expect(r[0]).toMatchObject({ doanhThuThuan: 500, tiGiaTam: false, thieuTiGia: false, phuLine: 1 });
   });
+  it('thuocThangTruoc đổi tiền theo ĐÚNG tỉ giá đã tra cho cogs (USD→VND), không cộng thẳng số USD vào VND', () => {
+    const r = tinhBaoCao({
+      thang: ['2026-08'],
+      doanhThu: [],
+      cogs: [{ period: '2026-08', storeId: 's1', brandSlug: 'tinh', amount: 100, currency: 'USD', thuocThangTruoc: 40 }],
+      offline: [],
+      rates: [{ from: 'USD', to: 'VND', period: '2026-08', rate: 26_000 }],
+    });
+    expect(r[0]).toMatchObject({ cogs: 2_600_000, thuocThangTruoc: 1_040_000, tiGiaTam: false, thieuTiGia: false });
+  });
+
   it('phuDoanhThu dùng mẫu số doanhThuLineTong (mức LINE), không phải doanhThuThuan (mức ĐƠN, gồm cả shipping) — hai giá trị khác nhau', () => {
     // doanhThuThuan (order-level, có cộng thêm phí ship thu của khách vào giá
     // trị đơn theo cách tính netGmv) = 1200, nhưng tổng doanh thu LINE thực tế
