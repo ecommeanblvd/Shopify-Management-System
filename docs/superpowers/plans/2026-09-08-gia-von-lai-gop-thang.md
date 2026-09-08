@@ -985,11 +985,54 @@ export async function chiTietThang(period: string, brand?: string): Promise<Arra
 
 ### Task 12: Cron `sync-unit-cost` + `apply-own-cogs` (hàng tự sản xuất)
 
-**Files:** Create `features/cogs/unit-cost-sync.ts` (+test cho phần thuần), `features/cogs/own-cogs.ts`, `scripts/cron/sync-unit-cost.ts`, `scripts/cron/apply-own-cogs.ts`; Modify `features/jobs/registry.ts` (2 khoá), `features/jobs/groups.ts` (`hang-ngay` thêm `'sync-unit-cost', 'apply-own-cogs'`), `package.json` (`cron:sync-unit-cost`, `cron:apply-own-cogs`), `.railway/railway.ts` (service `cron-hang-ngay`: `start: "npm run cron:group -- hang-ngay"`, `cronSchedule: "0 2 * * *"`, env DATABASE_URL + SHOPIFY_* + FEDEX_* như web), `features/cogs/vendor-tu-san-xuat.ts` (hằng `VENDOR_TU_SAN_XUAT = ['MEAN BLVD', 'TINH Atelier', 'Mirer']` — xác nhận tên vendor thật bằng `select distinct vendor` trước).
+**Files:**
+- Create: `features/cogs/vendor-tu-san-xuat.ts` (+test), `features/cogs/unit-cost-sync.ts` (+test phần thuần), `features/cogs/own-cogs.ts`, `scripts/cron/cogs-own.ts`
+- Modify: `features/jobs/registry.ts` (2 khoá), `features/jobs/groups.ts` (`hang-ngay` thêm `'sync-unit-cost', 'apply-own-cogs'`), `package.json` (`"cron:cogs-own": "dotenv -- tsx scripts/cron/cogs-own.ts"`), `.railway/railway.ts` (service `cron-cogs-own`)
 
-- `unit-cost-sync.ts`: với mỗi store, GraphQL `productVariants(first:250){ nodes{ sku inventoryItem{ unitCost{ amount currencyCode } } } }` phân trang (`getStoreToken`, `graphqlCall`, `SHOPIFY_API_VERSION`), ghi `sku_costs` (`source='shopify'`, `effectiveFrom` = hôm nay Bangkok) chỉ khi giá khác giá hiệu lực hiện tại. Phần thuần `khacGia(cu, moi)` có test.
-- `own-cogs.ts`: line của đơn 90 ngày gần đây, vendor ∈ `VENDOR_TU_SAN_XUAT` hoặc store ∈ `BRAND_OWNED_STORES`, chưa có `order_line_cogs kind='cogs'` → tra `sku_costs` hiệu lực (`effective_from <= processed_at::date`, mới nhất) → insert `source='shopify_unit_cost'`, `period` = tháng đặt (Bangkok), `amount = cost × quantity`, `currency` của `sku_costs`. Không đè dòng nguồn khác (unique index + `onConflictDoNothing`).
-- Kiểm: `npx vitest run features/cogs features/jobs`, chạy tay hai script với `--dry-run`? (thêm cờ `DRY_RUN=1` in ra thay vì ghi), rồi `railway config plan/apply`.
+**Interfaces:**
+- Consumes: `getStoreToken(storeId)`, `graphqlCall({ shopDomain, apiVersion, token, query, variables })` (`lib/shopify/client.ts`); `BRAND_OWNED_STORES` (`features/mmp/brand-stores.ts`); `schema.skuCosts` (storeId, sku, costPerUnit numeric(14,4)→string, currency, effectiveFrom date→'YYYY-MM-DD', source, uploadedBy null); `schema.orderLineCogs`; `chayCron`, `chayMotJob` (`features/jobs/run.ts`); `ngayKinhDoanh`, `thangKinhDoanh`, `sqlGioKinhDoanh` (`lib/timezone.ts`).
+- Produces:
+  ```ts
+  // vendor-tu-san-xuat.ts (thuần)
+  export const VENDOR_TU_SAN_XUAT_MEANBLVD = ['MEAN BLVD'] as const;
+  export function laHangTuSanXuat(storeName: string, vendor: string | null): boolean; // store ∈ BRAND_OWNED_STORES → true (mọi line); meanblvd → vendor ∈ VENDOR_TU_SAN_XUAT_MEANBLVD (không phân biệt hoa/thường, trim); store khác → false
+  // unit-cost-sync.ts
+  export interface UnitCostRow { sku: string; amount: number; currency: string }
+  export function khacGia(cu: { costPerUnit: string; currency: string } | null, moi: UnitCostRow): boolean; // thuần: khác khi chưa có, hoặc |Number(cu)−moi| > 0.0001, hoặc currency khác
+  export async function docUnitCostShopify(store: { id: string; shopDomain: string }): Promise<UnitCostRow[]>; // phân trang productVariants(first:250), chỉ unitCost.amount > 0 và sku có
+  export async function syncUnitCost(): Promise<{ stores: number; doc: number; ghi: number; boQua: number; loi: string[] }>; // với mỗi store trong BRAND_OWNED_STORES + meanblvd: đọc, so với giá hiệu lực hiện tại (effective_from mới nhất ≤ hôm nay), khác → insert sku_costs { source: 'shopify', effectiveFrom: ngayKinhDoanh(new Date()), uploadedBy: null } (onConflictDoUpdate theo (storeId, sku, effectiveFrom))
+  // own-cogs.ts
+  export async function applyOwnCogs(): Promise<{ xemXet: number; ghi: number; khongCoGia: number }>; // line của đơn 90 ngày gần đây (processed_at ≥ now() − 90 ngày, chưa huỷ), laHangTuSanXuat(store, vendor), chưa có order_line_cogs kind='cogs' → giá SKU hiệu lực (sku_costs cùng store, effective_from ≤ processed_at::date, mới nhất) → insert { kind:'cogs', period: thangKinhDoanh(processed_at), amount: cost×quantity, currency: sku_costs.currency, source:'shopify_unit_cost', brandSlug: BRAND_OWNED_STORES[store]?.brandSlug ?? 'meanblvd', statementRef: 'shopify_unit_cost' } với onConflictDoNothing (không đè nguồn khác)
+  ```
+- Script `scripts/cron/cogs-own.ts` theo mẫu `scripts/cron/sync-lark.ts`: `chayCron('sync-unit-cost', main)`, trong `main` sau khi sync xong gọi `await chayMotJob('apply-own-cogs', applyOwnCogs)`; cờ `DRY_RUN=1` → chỉ in số liệu, không ghi (truyền `{ dryRun }` vào hai hàm).
+- Registry: `{ key: 'sync-unit-cost', ten: 'Đọc Cost per item từ Shopify', chuKyPhut: 1 * NGAY, hauQua: 'Giá vốn hàng tự sản xuất không cập nhật' }`, `{ key: 'apply-own-cogs', ten: 'Ghi giá vốn hàng tự sản xuất theo line', chuKyPhut: 1 * NGAY, hauQua: 'Báo cáo lãi gộp thiếu giá vốn hàng TINH/Mirer/MEAN' }`.
+- Railway (`.railway/railway.ts`), thêm service và đưa vào `resources`:
+  ```ts
+  const cronCogsOwn = service("cron-cogs-own", {
+    source: repo,
+    build: { builder: "NIXPACKS", buildCommand: "echo 'cron service: skip Next build (tsx chạy thẳng TS)'" },
+    start: "npm run cron:cogs-own",
+    replicas: { "asia-southeast1-eqsg3a": 1 },
+    deploy: { cronSchedule: "0 2 * * *", restartPolicyType: "NEVER" },
+    env: {
+      TZ: "UTC",
+      DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL,
+      ENCRYPTION_KEY_V1: ShopifyManagementSystem.env.ENCRYPTION_KEY_V1,
+      ENCRYPTION_KEY_CURRENT: ShopifyManagementSystem.env.ENCRYPTION_KEY_CURRENT,
+      SHOPIFY_API_KEY: ShopifyManagementSystem.env.SHOPIFY_API_KEY,
+      SHOPIFY_API_SECRET: ShopifyManagementSystem.env.SHOPIFY_API_SECRET,
+      SHOPIFY_SCOPES: ShopifyManagementSystem.env.SHOPIFY_SCOPES,
+      SHOPIFY_APP_URL: ShopifyManagementSystem.env.SHOPIFY_APP_URL,
+      SHOPIFY_API_VERSION: ShopifyManagementSystem.env.SHOPIFY_API_VERSION,
+      BETTER_AUTH_SECRET: ShopifyManagementSystem.env.BETTER_AUTH_SECRET,
+      BETTER_AUTH_URL: ShopifyManagementSystem.env.BETTER_AUTH_URL,
+    },
+  });
+  ```
+  (`lib/env.ts` parse ĐỦ 10 biến này bằng zod — thiếu một biến là script chết lúc import, đúng bài học D-053.)
+
+- [ ] **Step 1: Test thuần** — `vendor-tu-san-xuat.test.ts`: `laHangTuSanXuat('tinhatelier', 'bất kỳ')` → true; `('tinhatelier', null)` → true; `('meanblvd', 'MEAN BLVD')` → true; `('meanblvd', 'mean blvd ')` → true; `('meanblvd', 'DeNio')` → false; `('cici-mean', 'Cici')` → false. `unit-cost-sync.test.ts` cho `khacGia`: null → true; cùng giá cùng tiền → false; lệch 0.5 → true; khác tiền → true; `'292.0000'` vs 292 → false.
+- [ ] **Step 2:** chạy → FAIL. **Step 3:** viết bốn module + script + registry + groups + package.json + IaC. **Step 4:** `npx vitest run features/cogs features/jobs && npx tsc --noEmit`; chạy `DRY_RUN=1 npm run cron:cogs-own` in số: store, biến thể đọc được, bao nhiêu SKU có unitCost > 0 (TINH khảo sát có 6), bao nhiêu line sẽ ghi; KHÔNG ghi. **Step 5:** `railway config plan` (chỉ thêm 1 service + 11 biến) → `railway config apply --yes`. **Step 6:** commit `feat(cogs): cron sync-unit-cost + apply-own-cogs cho hàng tự sản xuất; service cron-cogs-own`.
 
 ### Task 13: Webhook MMP `POST /api/mmp/cogs`
 
