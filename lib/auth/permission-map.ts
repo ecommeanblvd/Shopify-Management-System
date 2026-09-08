@@ -38,6 +38,8 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   check_packed: ['fulfillment.pack_check:view', 'fulfillment.pack_check:create'],
   view_ship_ho: ['ship_ho:view'],
   manage_ship_ho: ['ship_ho:view', 'ship_ho:create', 'ship_ho:edit'],
+  view_cogs: ['orders.cogs:view'],
+  manage_cogs: ['orders.cogs:view', 'orders.cogs:edit'],
 };
 
 const OPERATOR_OLD = [

@@ -2,6 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { OLD_TO_NEW, SYSTEM_ROLE_SEEDS } from './permission-map';
 import { isValidKey, allPermissionKeys } from './permissions';
 
+// Regression — Task 1 fix: orders.cogs (view_cogs/manage_cogs) must be wired
+// end-to-end so pages/actions are not Forbidden for admin.
+describe('orders.cogs RBAC wiring (Task 1 fix)', () => {
+  it('allPermissionKeys() includes orders.cogs:view, orders.cogs:edit', () => {
+    const keys = allPermissionKeys();
+    expect(keys).toContain('orders.cogs:view');
+    expect(keys).toContain('orders.cogs:edit');
+  });
+
+  it('OLD_TO_NEW[view_cogs] maps to orders.cogs:view', () => {
+    expect(OLD_TO_NEW['view_cogs']).toBeDefined();
+    expect(OLD_TO_NEW['view_cogs']).toContain('orders.cogs:view');
+  });
+
+  it('OLD_TO_NEW[manage_cogs] maps to all orders.cogs keys', () => {
+    expect(OLD_TO_NEW['manage_cogs']).toBeDefined();
+    expect(OLD_TO_NEW['manage_cogs']).toContain('orders.cogs:view');
+    expect(OLD_TO_NEW['manage_cogs']).toContain('orders.cogs:edit');
+  });
+
+  it('admin seed includes orders.cogs:view, orders.cogs:edit', () => {
+    const adminKeys = new Set(SYSTEM_ROLE_SEEDS.admin.keys);
+    expect(adminKeys.has('orders.cogs:view')).toBe(true);
+    expect(adminKeys.has('orders.cogs:edit')).toBe(true);
+  });
+
+  it('operator seed does NOT include orders.cogs keys (admin only)', () => {
+    const opKeys = new Set(SYSTEM_ROLE_SEEDS.operator.keys);
+    expect(opKeys.has('orders.cogs:view')).toBe(false);
+    expect(opKeys.has('orders.cogs:edit')).toBe(false);
+  });
+
+  it('viewer seed does NOT include orders.cogs keys (admin only)', () => {
+    const viewerKeys = new Set(SYSTEM_ROLE_SEEDS.viewer.keys);
+    expect(viewerKeys.has('orders.cogs:view')).toBe(false);
+    expect(viewerKeys.has('orders.cogs:edit')).toBe(false);
+  });
+});
+
 // Regression — Finding 1: ship_ho must be wired end-to-end so pages/actions
 // are not Forbidden for admin/operator.
 describe('ship_ho RBAC wiring (regression — Finding 1)', () => {

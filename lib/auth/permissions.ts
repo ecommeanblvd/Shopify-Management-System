@@ -17,6 +17,7 @@ export interface ScopeDef {
 
 export const CATALOG: ScopeDef[] = [
   { key: 'orders', label: 'Đơn hàng', actions: ['view', 'edit'] },
+  { key: 'orders.cogs', label: 'Đơn hàng — Giá vốn & lãi gộp', actions: ['view', 'edit'] },
   { key: 'fulfillment.operations', label: 'Vận hành — thao tác (pick/pack/ship)', actions: ['view', 'edit'] },
   { key: 'fulfillment.logistics', label: 'Vận hành — logistics (tracking)', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'fulfillment.warehouse', label: 'Kho MEAN', actions: ['view', 'create', 'edit', 'delete'] },
