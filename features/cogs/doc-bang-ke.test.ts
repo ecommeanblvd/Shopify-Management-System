@@ -37,6 +37,38 @@ describe('docWorkbook', () => {
     const rows = thucNhan.rows.map((r, i) => (i === 1 ? ['', 'pp', 'pp', r[3], r[3], r[3]] : r));
     expect(docWorkbook([{ name: 'T8', rows }]).bangKe[0].brand).toBe('Denio');
   });
+  it('cột STT thêm vào đầu: ngay/sku/tt vẫn chính xác', () => {
+    const rows = thucNhan.rows.map((r, i) =>
+      i === 4 ? ['STT', ...HDR] :
+      (i > 4 && i < 8) ? [i - 5, ...r] : r
+    );
+    const { bangKe } = docWorkbook([{ name: 'T8', rows }]);
+    expect(bangKe[0].lines[0]).toMatchObject({ ngay: '03/08/2026', sku: 'Denio-DN0785-Customize-NPOT-PLA', tt: 1861500 });
+  });
+  it('tiêu đề với chữ thường: mã đơn/sku vẫn match', () => {
+    const rows = thucNhan.rows.map((r, i) =>
+      i === 4 ? HDR.map(h => h.toLowerCase()) : r
+    );
+    const { bangKe } = docWorkbook([{ name: 'T8', rows }]);
+    expect(bangKe[0].lines).toHaveLength(2);
+    expect(bangKe[0].lines[0].maDon).toBe('#MBLVD29521');
+  });
+  it('tiêu đề có cả "Mã đơn hàng" (col 1) và "Mã đơn" (col 2): chọn exact "Mã đơn"', () => {
+    const rows = thucNhan.rows.map((r, i) => {
+      if (i === 4) return ['Ngày nhận', 'Mã đơn hàng', 'Mã đơn', ...HDR.slice(2)];
+      if (i > 4 && i < 8) return [r[0], '', r[1], ...r.slice(2)];
+      return r;
+    });
+    const { bangKe } = docWorkbook([{ name: 'T8', rows }]);
+    expect(bangKe[0].lines[0].maDon).toBe('#MBLVD29521');
+  });
+  it('dòng có Số lượng trống: cảnh báo, không vào lines', () => {
+    const rows = [...thucNhan.rows];
+    rows.splice(6, 0, ['05/08/2026', '#MBLVD29999', 'X', 'Denio-DN0001-S-BLA', '', '1.000.000 ₫', '35%', '', '', '650.000 ₫', '', '', 'T8', 7]);
+    const { bangKe } = docWorkbook([{ name: 'T8', rows }]);
+    expect(bangKe[0].lines.map((l) => l.maDon)).not.toContain('#MBLVD29999');
+    expect(bangKe[0].canhBao.some((c) => c.includes('#MBLVD29999') && c.includes('Số lượng'))).toBe(true);
+  });
 });
 describe('kiemCongThuc', () => {
   it('TT = giá×SL×(1−CK) + customize (sai số ≤ 1)', () => {

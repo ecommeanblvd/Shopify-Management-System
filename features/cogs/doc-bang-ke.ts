@@ -1,5 +1,5 @@
 /**
- * THUẦN: mảy ô của mọi sheet trong workbook bảng kê brand → BangKe[] (spec §5).
+ * THUẦN: mảng ô của mọi sheet trong workbook bảng kê brand → BangKe[] (spec §5).
  * Tìm cột theo TÊN tiêu đề, không theo vị trí — các tháng có cột thừa/thiếu.
  */
 import { docTien, docPhanTram } from './tien';
@@ -26,13 +26,16 @@ function timTieuDe(rows: O[][]): { tu: string; den: string; brand: string } | nu
   return null;
 }
 function coO(rows: O[][], re: RegExp): boolean { return rows.some((r) => r.some((c) => re.test(chuoi(c)))); }
-function laHangTieuDe(r: O[]): boolean { const s = r.map(chuoi); return s.includes('Mã đơn') && s.includes('SKU'); }
+function laHangTieuDe(r: O[]): boolean { const s = r.map((c) => chuoi(c).toLowerCase()); return s.includes('mã đơn') && s.includes('sku'); }
 function chiSoCot(r: O[]) {
   const s = r.map((c) => chuoi(c).toLowerCase());
-  const tim = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x === t || x.startsWith(t)));
+  const tim = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x === t));
+  const timPrefix = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x.startsWith(t)));
+  const ngayIdx = tim('ngày nhận', 'ngày return', 'ngày báo đơn', 'ngày');
   return {
-    ngay: 0, maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
-    gia: tim('giá nội địa'), ck: tim('% ck'), custom: tim('phí customize'), tt: tim('tổng thành tiền'), code: tim('code'),
+    ngay: ngayIdx >= 0 ? ngayIdx : 0,
+    maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
+    gia: tim('giá nội địa'), ck: tim('% ck'), custom: tim('phí customize'), tt: timPrefix('tổng thành tiền'), code: tim('code'),
   };
 }
 /** dd/mm/yyyy → 'yyyy-mm'. */
@@ -45,25 +48,28 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ CÔNG NỢ`); continue; }
     if (!coO(sh.rows, /A\.\s*Đơn thực nhận/i)) { boQua.push(`${sh.name}: ${coO(sh.rows, /A\.\s*Đơn thực bán/i) ? 'tab thực bán (chỉ tham khảo)' : 'không có mục A. Đơn thực nhận'}`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = null; let cot: ReturnType<typeof chiSoCot> | null = null;
+    let muc: 'A' | 'B' | null = null; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
       if (/^A\.\s*Đơn thực nhận/i.test(dau)) { muc = 'A'; cot = null; return; }
       if (/^B\.\s*Đơn re/i.test(dau)) { muc = 'B'; cot = null; return; }
-      if (laHangTieuDe(r)) { cot = chiSoCot(r); return; }
+      if (laHangTieuDe(r)) { cot = chiSoCot(r); if (cot.ngay === 0 && r.map((c) => chuoi(c).toLowerCase()).findIndex((x) => x === 'ngày nhận' || x === 'ngày return' || x === 'ngày báo đơn' || x === 'ngày') < 0) ngayMissing = true; return; }
       if (!muc || !cot) return;
       const maDon = chuoi(r[cot.maDon]);
       if (!maDon.startsWith('#')) return;
       const tt = docTien(r[cot.tt]);
       if (tt == null) { bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Tổng thành tiền TT`); return; }
+      const slVal = docTien(r[cot.sl]);
+      if (slVal == null || slVal <= 0) { bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Số lượng`); return; }
       const d: DongBangKe = {
         ngay: chuoi(r[cot.ngay]), maDon, tenSp: chuoi(r[cot.tenSp]), sku: chuoi(r[cot.sku]),
-        sl: docTien(r[cot.sl]) ?? 1, giaNoiDia: docTien(r[cot.gia]), ck: docPhanTram(r[cot.ck]),
+        sl: slVal, giaNoiDia: docTien(r[cot.gia]), ck: docPhanTram(r[cot.ck]),
         phiCustomize: cot.custom >= 0 ? docTien(r[cot.custom]) : null, tt,
         code: cot.code >= 0 ? chuoi(r[cot.code]) || null : null, hangSheet: i + 1,
       };
       (muc === 'A' ? bk.lines : bk.returns).push(d);
     });
+    if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
     bangKe.push(bk);
   }
   return { bangKe, boQua };
