@@ -14,7 +14,7 @@ export default defineRailway(() => {
     start: "npm run cron:sync-lifecycle",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 */6 * * *", restartPolicyType: "NEVER" },
-    env: { BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_ACCOUNT_NUMBER: preserve(), FEDEX_API_BASE: preserve(), FEDEX_CLIENT_ID: preserve(), FEDEX_CLIENT_SECRET: preserve(), GOOGLE_CLIENT_ID: preserve(), GOOGLE_CLIENT_SECRET: preserve(), MMP_ORDERS_URL: preserve(), MMP_OUTBOUND_SECRET: preserve(), MMP_OUTBOUND_URL: preserve(), MMP_WEBHOOK_SECRET: preserve(), S3_ACCESS_KEY_ID: preserve(), S3_BUCKET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve(), S3_SECRET_ACCESS_KEY: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
+    env: { TZ: "UTC", BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_ACCOUNT_NUMBER: preserve(), FEDEX_API_BASE: preserve(), FEDEX_CLIENT_ID: preserve(), FEDEX_CLIENT_SECRET: preserve(), GOOGLE_CLIENT_ID: preserve(), GOOGLE_CLIENT_SECRET: preserve(), MMP_ORDERS_URL: preserve(), MMP_OUTBOUND_SECRET: preserve(), MMP_OUTBOUND_URL: preserve(), MMP_WEBHOOK_SECRET: preserve(), S3_ACCESS_KEY_ID: preserve(), S3_BUCKET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve(), S3_SECRET_ACCESS_KEY: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
   });
   const syncLarkOperation = service("sync Lark operation", {
     source: repo,
@@ -23,7 +23,7 @@ export default defineRailway(() => {
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "15 * * * *", restartPolicyType: "NEVER" },
     networking: { privateNetworkEndpoint: "mean-merchant-portal" },
-    env: { AUTH_GOOGLE_ID: preserve(), AUTH_GOOGLE_SECRET: preserve(), AUTH_SECRET: preserve(), DATABASE_URL: preserve(), LARK_APP_ID: preserve(), LARK_APP_SECRET: preserve(), LARK_BASE_APP_TOKEN: preserve(), LARK_LOG_TABLE_ID: preserve(), LARK_QC_TABLE_ID: preserve(), MEAN_API_BASE_URL: preserve(), MEAN_API_TOKEN: preserve(), MEAN_WEBHOOK_SECRET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve() },
+    env: { TZ: "UTC", AUTH_GOOGLE_ID: preserve(), AUTH_GOOGLE_SECRET: preserve(), AUTH_SECRET: preserve(), DATABASE_URL: preserve(), LARK_APP_ID: preserve(), LARK_APP_SECRET: preserve(), LARK_BASE_APP_TOKEN: preserve(), LARK_LOG_TABLE_ID: preserve(), LARK_QC_TABLE_ID: preserve(), MEAN_API_BASE_URL: preserve(), MEAN_API_TOKEN: preserve(), MEAN_WEBHOOK_SECRET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve() },
   });
   const SyncFedExDHLDataFromURL = service("Sync FedEx/DHL data from URL", {
     source: repo,
@@ -33,7 +33,7 @@ export default defineRailway(() => {
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 1 * * *", restartPolicyType: "NEVER" },
     networking: { privateNetworkEndpoint: "enthusiastic-serenity" },
-    env: { DATABASE_URL: preserve() },
+    env: { TZ: "UTC", DATABASE_URL: preserve() },
   });
   // 07/09: chuyển từ railway.json (config-as-code, hết hạn 2026-12-01) sang IaC.
   // Giá trị build/start/cron dưới đây chép từ các file railway*.json đang được
@@ -46,7 +46,7 @@ export default defineRailway(() => {
     start: "npm run db:migrate && npm run db:seed-roles && npm run start",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     networking: { privateNetworkEndpoint: "shopify-management-system" },
-    env: { BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), CRON_SECRET: preserve(), DATABASE_URL: preserve(), DHL_API_KEY: preserve(), DHL_API_SECRET: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), EXTERNAL_API_KEY: preserve(), FEDEX_ACCOUNT_NUMBER: preserve(), FEDEX_API_BASE: preserve(), FEDEX_CLIENT_ID: preserve(), FEDEX_CLIENT_SECRET: preserve(), GOOGLE_CLIENT_ID: preserve(), GOOGLE_CLIENT_SECRET: preserve(), LARK_APP_ID: preserve(), LARK_APP_SECRET: preserve(), LARK_BASE_APP_TOKEN: preserve(), LARK_LOG_TABLE_ID: preserve(), LARK_QC_TABLE_ID: preserve(), MMP_ORDERS_URL: preserve(), MMP_OUTBOUND_SECRET: preserve(), MMP_OUTBOUND_URL: preserve(), MMP_SHIP_HO_WEBHOOK_URL: preserve(), MMP_WEBHOOK_SECRET: preserve(), RAILWAY_TOKEN: preserve(), S3_ACCESS_KEY_ID: preserve(), S3_BUCKET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve(), S3_SECRET_ACCESS_KEY: preserve(), SHIP_HO_ADOPT_DISABLED: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve(), TRACKINGMORE_API_KEY: preserve() },
+    env: { TZ: "UTC", BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), CRON_SECRET: preserve(), DATABASE_URL: preserve(), DHL_API_KEY: preserve(), DHL_API_SECRET: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), EXTERNAL_API_KEY: preserve(), FEDEX_ACCOUNT_NUMBER: preserve(), FEDEX_API_BASE: preserve(), FEDEX_CLIENT_ID: preserve(), FEDEX_CLIENT_SECRET: preserve(), GOOGLE_CLIENT_ID: preserve(), GOOGLE_CLIENT_SECRET: preserve(), LARK_APP_ID: preserve(), LARK_APP_SECRET: preserve(), LARK_BASE_APP_TOKEN: preserve(), LARK_LOG_TABLE_ID: preserve(), LARK_QC_TABLE_ID: preserve(), MMP_ORDERS_URL: preserve(), MMP_OUTBOUND_SECRET: preserve(), MMP_OUTBOUND_URL: preserve(), MMP_SHIP_HO_WEBHOOK_URL: preserve(), MMP_WEBHOOK_SECRET: preserve(), RAILWAY_TOKEN: preserve(), S3_ACCESS_KEY_ID: preserve(), S3_BUCKET: preserve(), S3_ENDPOINT: preserve(), S3_REGION: preserve(), S3_SECRET_ACCESS_KEY: preserve(), SHIP_HO_ADOPT_DISABLED: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve(), TRACKINGMORE_API_KEY: preserve() },
   });
   // Bổ sung 05/09: service này chạy 8 việc, trong đó addr-verify cần FedEx và
   // track-ship-ho cần FedEx + TrackingMore + DHL — nhưng chỉ có FEDEX_API_BASE,
@@ -58,7 +58,7 @@ export default defineRailway(() => {
     start: "npm run cron:sync-orders",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 * * * *", restartPolicyType: "NEVER" },
-    env: { FEDEX_CLIENT_ID: ShopifyManagementSystem.env.FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET: ShopifyManagementSystem.env.FEDEX_CLIENT_SECRET, FEDEX_ACCOUNT_NUMBER: ShopifyManagementSystem.env.FEDEX_ACCOUNT_NUMBER, DHL_API_KEY: ShopifyManagementSystem.env.DHL_API_KEY, TRACKINGMORE_API_KEY: ShopifyManagementSystem.env.TRACKINGMORE_API_KEY, MMP_ORDERS_URL: ShopifyManagementSystem.env.MMP_ORDERS_URL, MMP_OUTBOUND_SECRET: ShopifyManagementSystem.env.MMP_OUTBOUND_SECRET, MMP_SHIP_HO_WEBHOOK_URL: ShopifyManagementSystem.env.MMP_SHIP_HO_WEBHOOK_URL, MMP_WEBHOOK_SECRET: ShopifyManagementSystem.env.MMP_WEBHOOK_SECRET, BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_API_BASE: preserve(), S3_REGION: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
+    env: { TZ: "UTC", FEDEX_CLIENT_ID: ShopifyManagementSystem.env.FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET: ShopifyManagementSystem.env.FEDEX_CLIENT_SECRET, FEDEX_ACCOUNT_NUMBER: ShopifyManagementSystem.env.FEDEX_ACCOUNT_NUMBER, DHL_API_KEY: ShopifyManagementSystem.env.DHL_API_KEY, TRACKINGMORE_API_KEY: ShopifyManagementSystem.env.TRACKINGMORE_API_KEY, MMP_ORDERS_URL: ShopifyManagementSystem.env.MMP_ORDERS_URL, MMP_OUTBOUND_SECRET: ShopifyManagementSystem.env.MMP_OUTBOUND_SECRET, MMP_SHIP_HO_WEBHOOK_URL: ShopifyManagementSystem.env.MMP_SHIP_HO_WEBHOOK_URL, MMP_WEBHOOK_SECRET: ShopifyManagementSystem.env.MMP_WEBHOOK_SECRET, BETTER_AUTH_SECRET: preserve(), BETTER_AUTH_URL: preserve(), BOOTSTRAP_ADMIN_EMAILS: preserve(), DATABASE_URL: preserve(), ENCRYPTION_KEY_CURRENT: preserve(), ENCRYPTION_KEY_V1: preserve(), FEDEX_API_BASE: preserve(), S3_REGION: preserve(), SHOPIFY_API_KEY: preserve(), SHOPIFY_API_SECRET: preserve(), SHOPIFY_API_VERSION: preserve(), SHOPIFY_APP_URL: preserve(), SHOPIFY_SCOPES: preserve() },
   });
 
   // ── Cron thêm 05/09: bốn tác vụ chết âm thầm (rà soát 04/09). Biến môi trường
@@ -69,7 +69,7 @@ export default defineRailway(() => {
     start: "npm run cron:retry-mmp-orders",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "*/15 * * * *", restartPolicyType: "NEVER" },
-    env: {
+    env: { TZ: "UTC",
       DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL,
       MMP_ORDERS_URL: ShopifyManagementSystem.env.MMP_ORDERS_URL,
       MMP_OUTBOUND_SECRET: ShopifyManagementSystem.env.MMP_OUTBOUND_SECRET,
@@ -85,7 +85,7 @@ export default defineRailway(() => {
     start: "npm run cron:retry-ship-ho",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "*/15 * * * *", restartPolicyType: "NEVER" },
-    env: {
+    env: { TZ: "UTC",
       DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL,
       MMP_SHIP_HO_WEBHOOK_URL: ShopifyManagementSystem.env.MMP_SHIP_HO_WEBHOOK_URL,
       MMP_WEBHOOK_SECRET: ShopifyManagementSystem.env.MMP_WEBHOOK_SECRET,
@@ -96,7 +96,7 @@ export default defineRailway(() => {
     start: "npm run cron:track-shipments",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 */6 * * *", restartPolicyType: "NEVER" },
-    env: {
+    env: { TZ: "UTC",
       DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL,
       FEDEX_API_BASE: ShopifyManagementSystem.env.FEDEX_API_BASE,
       FEDEX_CLIENT_ID: ShopifyManagementSystem.env.FEDEX_CLIENT_ID,
@@ -111,7 +111,7 @@ export default defineRailway(() => {
     start: "npm run cron:prune-logs",
     replicas: { "asia-southeast1-eqsg3a": 1 },
     deploy: { cronSchedule: "0 3 * * 1", restartPolicyType: "NEVER" },
-    env: { DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL },
+    env: { TZ: "UTC", DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL },
   });
 
   return project("Shopify Management System", {

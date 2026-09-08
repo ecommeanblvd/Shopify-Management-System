@@ -541,7 +541,7 @@ export async function getMissingCostOrders(
       FROM shopify_orders o
       JOIN shopify_order_lines l ON l.order_id = o.id
      WHERE o.store_id = ${storeId}
-       AND o.processed_at_shopify BETWEEN ${dateFrom} AND ${dateTo}
+       AND o.processed_at_shopify BETWEEN ${mocUtcNaive(dateFrom)}::timestamp AND ${mocUtcNaive(dateTo)}::timestamp
        AND l.sku IS NOT NULL
        AND NOT EXISTS (
          SELECT 1 FROM sku_costs c
@@ -581,7 +581,7 @@ export async function getMissingInvoiceShipments(
         FROM shopify_orders o,
              jsonb_array_elements(o.raw_payload -> 'fulfillments') AS f
        WHERE o.store_id = ${storeId}
-         AND o.processed_at_shopify BETWEEN ${dateFrom} AND ${dateTo}
+         AND o.processed_at_shopify BETWEEN ${mocUtcNaive(dateFrom)}::timestamp AND ${mocUtcNaive(dateTo)}::timestamp
     )
     SELECT t.order_id, t.shopify_order_number, t.tracking_number
       FROM tracked t
