@@ -5,6 +5,7 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { quoteShipHoOrder } from './quote-adapter';
 import { summarizeLine } from './quote-lines-logic';
+import { markupTheoBac } from './tier-pricing';
 import { listAccounts } from '@/features/carrier-rates/actions';
 
 export interface LineQuote {
@@ -47,7 +48,7 @@ export async function quoteShipHoLines(
     .from(schema.shipHoPartners)
     .where(eq(schema.shipHoPartners.brandSlug, input.partnerBrandSlug))
     .limit(1);
-  const markup = Number(partner?.markupPercent ?? '0');
+  const markup = markupTheoBac(partner); // theo bậc, không đọc cột markup_percent cũ (CEO 08/09)
 
   const accounts = (await listAccounts()).filter((a) => a.enabled);
   const dims =

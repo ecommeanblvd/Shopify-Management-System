@@ -13,6 +13,7 @@ import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile, donDaDongBang } from './reconcile-decision';
 import { khopOBangGia, layOBangGia } from './bill-base-check';
+import { markupKhiReBill } from './tier-pricing';
 
 export interface ReconcileSummary {
   total: number;
@@ -131,6 +132,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       chargedVnd: schema.shipHoOrders.chargedVnd,
       prevDecision: schema.shipHoOrders.reconcileDecision,
+      markupPercent: schema.shipHoOrders.markupPercent,
       reconcileStatus: schema.shipHoOrders.reconcileStatus,
       actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
@@ -220,7 +222,9 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         if (!kiemO.khop) summary.baseLech.push({ code: o.code, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
         const rc = reconciledBrandCharge({
           baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
-          markupPercent: est.internal.markupPercent,
+          // Markup ĐÃ GHI lúc báo giá (CEO 08/09): brand được báo bao nhiêu trả bấy nhiêu;
+          // đổi bậc chỉ áp cho đơn báo giá sau. Chưa có → bậc hiện tại (est).
+          markupPercent: markupKhiReBill(o.markupPercent, est.internal.markupPercent),
           transportSurchargesVnd: transportSur, customsSurchargesVnd: customsSur, dutyVnd: dutySur,
           fuelPercent: fuelPct, vatPercent: est.internal.vatPercent,
           serviceLabel: 'Express Delivery',

@@ -7,7 +7,7 @@ import { isDefaultResidential } from '@/features/carrier-rates/residential-defau
 import { countrySupportsDirectSignature, DIRECT_SIGNATURE_FEE_VND, shouldChargeDirectSignature } from '@/features/carrier-rates/direct-signature';
 import { pickCarrierCostVnd, pickBaseVnd } from './quote-adapter';
 import { computeBrandCharge } from './brand-pricing';
-import { resolveTier, effectiveMarkupPercent, RACK_MARKUP_PERCENT } from './tier-pricing';
+import { resolveTier, RACK_MARKUP_PERCENT, markupTheoBac } from './tier-pricing';
 
 export type ShipHoService = 'express' | 'standard';
 
@@ -142,7 +142,7 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   const tier = resolveTier({
     strategic: partner.strategic, overrideCode: partner.tierOverrideCode, autoCode: partner.tierCode,
   });
-  const markupPercent = Math.round(effectiveMarkupPercent(tier.discountPct) * 10000) / 10000;
+  const markupPercent = markupTheoBac(partner); // cùng nguồn với báo giá nội bộ (orders-actions)
 
   // Ship hộ KHÔNG có phí đóng gói (b.packaging của engine bỏ qua). Thay bằng phí
   // xử lý đơn hàng cố định (chịu VAT), cộng trong computeBrandCharge.

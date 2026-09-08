@@ -65,3 +65,19 @@ export function resolveTier(p: {
 export function effectiveMarkupPercent(discountPct: number): number {
   return ((1 + RACK_MARKUP_PERCENT / 100) * (1 - discountPct / 100) - 1) * 100;
 }
+
+/** Markup hiệu dụng (%) theo BẬC của đối tác — nguồn duy nhất cho báo giá MMP, báo giá
+ *  nội bộ (SMS/import) và tách dòng (CEO 08/09: "từ giờ tính theo đúng tier của từng
+ *  brand"). Không đối tác → Standard. Làm tròn 4 chữ số như brand-estimate. */
+export function markupTheoBac(p: { strategic: boolean; tierOverrideCode: string | null; tierCode: string | null } | null | undefined): number {
+  const tier = resolveTier({ strategic: p?.strategic ?? false, overrideCode: p?.tierOverrideCode ?? null, autoCode: p?.tierCode ?? null });
+  return Math.round(effectiveMarkupPercent(tier.discountPct) * 10000) / 10000;
+}
+
+/** Markup dùng khi TÍNH LẠI theo bill: ưu tiên markup ĐÃ GHI trên đơn lúc báo giá (brand
+ *  được báo bao nhiêu trả bấy nhiêu; đổi bậc chỉ áp cho đơn báo giá sau đó) → Dự tính và
+ *  Thực khớp nhau khi cân không đổi. Đơn chưa có markup (chưa báo giá) → theo bậc hiện tại. */
+export function markupKhiReBill(daGhi: string | number | null | undefined, theoBacHienTai: number): number {
+  const v = daGhi == null || daGhi === '' ? NaN : Number(daGhi);
+  return Number.isFinite(v) && v >= 0 ? v : theoBacHienTai;
+}

@@ -7,6 +7,7 @@ import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { emitShipHoEvent } from './mmp-events';
 import { internalCodePrefix } from './internal-code';
 import { computeOffer } from './offer-pricing';
+import { markupTheoBac } from './tier-pricing';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
 
@@ -127,7 +128,9 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     .from(schema.shipHoPartners)
     .where(eq(schema.shipHoPartners.brandSlug, order.partnerBrandSlug))
     .limit(1);
-  const markupPercent = partner?.markupPercent ?? '0';
+  // Markup theo BẬC của đối tác (CEO 08/09) — không đọc cột markup_percent cũ nữa,
+  // để báo giá nội bộ = báo giá MMP = giá tính lại khi bill về.
+  const markupPercent = markupTheoBac(partner);
 
   const dims =
     order.dimLengthCm && order.dimWidthCm && order.dimHeightCm
