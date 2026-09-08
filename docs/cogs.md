@@ -222,3 +222,13 @@ Nút **"Phân bổ PO → đơn"** (trang Bảng kê brand, quyền `manage_cogs
 - Idempotent: mỗi lần chạy xoá hết dòng `po` của brand rồi phân bổ lại. Ưu tiên nguồn: `po` ngang `brand_statement`, `mmp` kế nhiệm cả hai.
 - Báo cáo lãi gộp: dòng `po` trừ vào COGS như dòng bảng kê; cột "offline" vẫn hiện tổng tiền PO/MTB đã trả (thông tin, không trừ lần hai).
 - Dòng không phân bổ được (SKU không có trong PO, PO hết số lượng, chưa có PO trước tháng đặt) → ops gửi brand xác nhận, rồi nhập bổ sung bằng bảng kê.
+
+## Sheet tính bằng USD (Happy Clothing) và mục B không phải return
+
+Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT", mục "A. Đơn thực nhận" / "B. Đơn return". Happy Clothing (08/09/2026): giá và thành tiền bằng **USD** ("$935.00"), cột "Thành tiền", mục "A. Đơn MEAN thực nhận" và **"B. Đơn Happy Clothing Global thực nhận"** — đơn `#HC…` trên store riêng của brand, không có trên Shopify của MEAN → ghi bảng offline (`brand_cogs_offline`, mã `#HC…`), **không phải return**.
+
+- **Đổi tiền:** mỗi tab thực nhận có dòng "TỔNG:" (hoặc "TỔNG THANH TOÁN:") bằng ₫. Tỉ giá kỳ = số ₫ đó ÷ Σ USD của mọi dòng A + B; từng dòng đổi sang VND ngay khi đọc (`tt` = VND, `ttGoc` = USD, `BangKe.tiGia`). Không thấy dòng ₫ → giữ USD + cảnh báo (không ghi được VND). Không dùng `fx_month_rates` cho việc này vì sheet đã nói rõ MEAN trả bao nhiêu ₫.
+- Ưu tiên "TỔNG:" hơn "TỔNG THANH TOÁN:" vì dòng sau có kỳ cộng thêm khoản khác (T7/2026: 217.038.412 vs 221.886.162 ₫).
+- Tab "… thực bán" bỏ qua theo tên tab (khuôn HC vẫn ghi "A. Đơn MEAN thực nhận" trong tab thực bán nhưng cột Thành tiền trống).
+- Ngày tiêu đề chấp nhận "31/8/2026"; tên brand lấy đủ ("Happy Clothing").
+- Nhập thật 8 kỳ 01–08/2026: 80 dòng đơn (100% khớp SKU đúng), 61 dòng #HC offline, Σ A+B khớp TỔNG (A)/(B) từng kỳ, tỉ giá 25.720–26.108.

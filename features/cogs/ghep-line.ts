@@ -5,7 +5,8 @@ export interface LineDon { orderId: string; storeId: string; shopifyLineId: stri
 export interface DonTraCuu { orderId: string; storeId: string; maDon: string; lines: LineDon[] }
 
 export function chuanHoaMaDon(s: string): string { return s.replace(/\s+/g, '').replace(/^#/, '').toUpperCase(); }
-export function laMaNgoaiShopify(maDon: string): boolean { return /^MBLVDPO/i.test(maDon) || /^MTB/i.test(maDon); }
+/** Mã không thuộc đơn Shopify của MEAN → ghi bảng offline: PO/MTB (MEAN mua đứt Denio), #HC… (đơn store riêng Happy Clothing Global). */
+export function laMaNgoaiShopify(maDon: string): boolean { return /^MBLVDPO/i.test(maDon) || /^MTB/i.test(maDon) || /^HC\d/i.test(maDon); }
 
 /** Token mã sản phẩm: bỏ tiền tố brand, tách theo '+', bỏ tiền tố 'PK' khi sau nó còn mã chữ+số (PKDN0729 → DN0729);
  * PK0729 (không mã chữ) giữ nguyên → ['DN0729','PK0729'…]. Giữ thứ tự, bỏ trùng. */

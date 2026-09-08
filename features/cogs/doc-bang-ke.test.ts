@@ -80,3 +80,40 @@ describe('kiemCongThuc', () => {
     expect(kiemCongThuc({ ngay: '', maDon: '', tenSp: '', sku: '', sl: 1, giaNoiDia: null, ck: null, phiCustomize: null, tt: 250000, code: null, hangSheet: 1 })).toBe(true);
   });
 });
+
+describe('docWorkbook — khuôn Happy Clothing (USD, "A. Đơn MEAN thực nhận", "B. Đơn … Global", TỔNG ₫)', () => {
+  const HDR_HC = ['Ngày báo', 'Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK HĐ', 'Phí customize', 'Thành tiền', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const hc = {
+    name: 'File đối soát T32026 thực nhận', rows: [
+      [null, null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/03/2026 đến 31/3/2026\n\nBrand: Happy Clothing'], [],
+      [null, 'A. Đơn MEAN thực nhận trong tháng '], HDR_HC,
+      ['22/01/2026', '03/03/2026', '#MBLVD27148', 'Sylvia …', 'HappyClothing-VD0176-Customize-PIN', '1', '$935.00', '40%', '$93.50', '$654.50', null, '#MBLVD27148HappyClothing-VD0176-Customize-PIN1', 'T3', '1'],
+      ['20/02/2026', '02/03/2026', '#MBLVD27710', 'Samara …', 'HappyClothing-VD0188-M', '1', '$1,080.00', '40%', null, '$648.00', null, '', 'T3', '2'],
+      [], ['B. Đơn Happy Clothing Global thực nhận trong tháng '], HDR_HC,
+      ['12/02/2026', '02/03/2026', '#HC1340', 'Emily …', 'HappyClothing-VD0104-XS-BLA', '1', '$867.00', '50%', null, '$433.50', null, '', 'T3', '2'],
+      [], [null, null, null, 'TỔNG (A)', null, '2', '$2,015.00', null, null, '$1,302.50'], [null, null, null, 'TỔNG (B)', null, '1', '$867.00', null, null, '$433.50'],
+      [null, null, null, 'TỔNG (A + B)', null, null, null, null, null, '$1,736.00'], [null, null, null, null, null, null, 'TỔNG THANH TOÁN', null, null, '45,136,000 ₫'],
+    ],
+  };
+  const hcBan = { name: 'File đối soát T32026 thực bán', rows: [[null, null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/03/2026 đến 31/03/2026\n\nBrand: Happy Clothing'], [null, 'A. Đơn MEAN thực nhận '], HDR_HC, ['03/03/2026', '', '#MBLVD28005', 'x', 'HappyClothing-VD0241-3XL', '1', '$1,357.00', '40%', null, null]] };
+  it('đọc kỳ 2026-03 (ngày "31/3/2026"), brand đủ tên, B Global vào lines (không phải return), tiền đổi VND theo tỉ giá sheet', () => {
+    const { bangKe, boQua } = docWorkbook([hc, hcBan]);
+    expect(bangKe).toHaveLength(1);
+    const b = bangKe[0];
+    expect(b).toMatchObject({ brand: 'Happy Clothing', period: '2026-03', currency: 'VND', tiGia: 26000 }); // 45.136.000 ÷ 1.736
+    expect(b.lines).toHaveLength(3); expect(b.returns).toHaveLength(0);
+    expect(b.lines[0]).toMatchObject({ maDon: '#MBLVD27148', sku: 'HappyClothing-VD0176-Customize-PIN', ttGoc: 654.5, tt: 17_017_000, giaNoiDia: 935, ck: 0.4, phiCustomize: 93.5 });
+    expect(b.lines[2]).toMatchObject({ maDon: '#HC1340', ttGoc: 433.5, tt: 11_271_000 });
+    expect(boQua).toEqual([expect.stringContaining('thực bán')]);
+  });
+  it('kiemCongThuc kiểm trên USD gốc', () => {
+    const { bangKe } = docWorkbook([hc]);
+    expect(bangKe[0].lines.every(kiemCongThuc)).toBe(true);
+  });
+  it('sheet USD không có dòng TỔNG ₫ → giữ USD + cảnh báo', () => {
+    const rows = hc.rows.filter((r) => !r.some((c) => /TỔNG THANH TOÁN/.test(String(c ?? ''))));
+    const { bangKe } = docWorkbook([{ ...hc, rows }]);
+    expect(bangKe[0].currency).toBe('USD'); expect(bangKe[0].lines[0].tt).toBe(654.5);
+    expect(bangKe[0].canhBao.some((c) => /TỔNG/.test(c))).toBe(true);
+  });
+});

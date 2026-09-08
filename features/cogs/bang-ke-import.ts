@@ -85,6 +85,7 @@ export interface XemTruocKy {
   period: string; sheet: string; tongDong: number; khopSku: number; khopMaGoc: number; donMotLine: number; offline: number;
   khongKhop: Array<{ maDon: string; sku: string; tt: number; lyDo: string }>; returns: number; tongTT: number; tongReturn: number;
   lechCongThuc: number; du: Array<{ maDon: string; sku: string; slSheet: number; quantity: number }>; canhBao: string[];
+  currency: 'VND' | 'USD'; tiGia: number | null;
 }
 export interface XemTruoc { brand: string; boQua: string[]; ky: XemTruocKy[]; loi?: string }
 
@@ -104,7 +105,7 @@ export async function xemTruocBangKe(input: { brandSlug: string; url?: string; b
       returns: bk.returns.length, tongTT: bk.lines.reduce((s, d) => s + d.tt, 0), tongReturn: bk.returns.reduce((s, d) => s + d.tt, 0),
       lechCongThuc: [...bk.lines, ...bk.returns].filter((d) => !kiemCongThuc(d)).length,
       du: ghep.theoLine.filter((t) => t.du).map((t) => ({ maDon: t.dong[0].maDon, sku: t.line.sku ?? '', slSheet: t.slSheet, quantity: t.line.quantity })),
-      canhBao: bk.canhBao,
+      canhBao: bk.canhBao, currency: bk.currency ?? 'VND', tiGia: bk.tiGia ?? null,
     })),
   };
 }
@@ -125,7 +126,6 @@ export async function apDungBangKeDaDoc(input: {
   khongKhop: ApDungKhongKhop[];
   loi?: string;
 }> {
-  const currency = input.currency ?? 'VND';
   const ky = await ghepTatCa(input.bangKe);
   const daGhi: Array<{ period: string; lines: number; offline: number; returns: number }> = [];
   const khongKhop: ApDungKhongKhop[] = [];
@@ -144,6 +144,8 @@ export async function apDungBangKeDaDoc(input: {
     if (!input.periods.includes(bk.period)) continue;
     khongKhop.push(...[...ghep.khongKhop, ...ghepReturn.khongKhop].map((k) => ({ period: bk.period, maDon: k.dong.maDon, sku: k.dong.sku, tt: k.dong.tt, lyDo: k.lyDo })));
     const ref = `${input.brandSlug} ${bk.period}`;
+    // Sheet USD đã đổi sang VND khi đọc (bk.currency='VND', bk.tiGia); chỉ còn USD khi thiếu dòng TỔNG ₫.
+    const currency = bk.currency ?? input.currency ?? 'VND';
     try {
       await db.transaction(async (tx) => {
         // Xoá đúng NGUỒN đang ghi (order_line_cogs.source, brand_cogs_offline.source — migration 0129)
