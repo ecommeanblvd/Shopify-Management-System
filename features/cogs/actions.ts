@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { fetchVcbUsd } from '@/lib/fx/vcb';
+import { thangKinhDoanh } from '@/lib/timezone';
 import { requireCogs } from './perm';
 import { xemTruocBangKe, apDungBangKe, type XemTruoc } from './bang-ke-import';
 import { docTien } from './tien';
@@ -33,6 +34,7 @@ export async function xemTruocAction(fd: FormData): Promise<XemTruoc> {
 
 export async function apDungAction(fd: FormData): Promise<{
   daGhi: Array<{ period: string; lines: number; offline: number; returns: number }>;
+  loi?: string;
 }> {
   const userId = await requireCogs('manage_cogs');
   const n = await nguon(fd);
@@ -64,6 +66,12 @@ export async function luuTiGiaAction(fd: FormData): Promise<void> {
 
 export async function layTiGiaVcbAction(period: string): Promise<{ rate: number }> {
   await requireCogs('manage_cogs');
+  if (!/^\d{4}-\d{2}$/.test(period)) throw new Error('Kỳ không hợp lệ');
+  // Tỉ giá VCB đọc trực tiếp trang VCB HÔM NAY — chỉ đúng cho tháng hiện tại.
+  // Tháng đã qua phải nhập tay theo tỉ giá của đúng kỳ đó (tra lịch sử VCB),
+  // không được lấy tỉ giá HÔM NAY gán ngược cho tháng cũ.
+  const thangHienTai = thangKinhDoanh(new Date());
+  if (period !== thangHienTai) throw new Error('Chỉ lấy tỉ giá VCB cho tháng hiện tại; tháng đã qua nhập tay theo tỉ giá kỳ đó');
   const r = await fetchVcbUsd();
   await db
     .insert(schema.fxMonthRates)

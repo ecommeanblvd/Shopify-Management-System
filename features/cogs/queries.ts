@@ -63,18 +63,22 @@ async function vendorsCuaBrand(brandSlug: string): Promise<string[]> {
   return found.length > 0 ? found : [displayName];
 }
 
-interface ThongKeLine { storeId: string; period: string; soLine: number; soLineCoCogs: number; doanhThuLineCoCogs: number }
+interface ThongKeLine { storeId: string; period: string; soLine: number; soLineCoCogs: number; doanhThuLineCoCogs: number; doanhThuLineTong: number }
 
 /** Truy vấn phụ: đếm line + doanh thu line (unit_price×qty − discount_alloc) của
  *  các đơn CHƯA HUỶ trong `thang`/`storeIds`, tách có/không có `order_line_cogs`
- *  kind='cogs' (bất kỳ kỳ nhập) — gộp theo (storeId, period nghiệp vụ). */
+ *  kind='cogs' (bất kỳ kỳ nhập) — gộp theo (storeId, period nghiệp vụ).
+ *  `doanhThuLineTong` = cùng công thức nhưng KHÔNG lọc FILTER — tổng doanh thu
+ *  TẤT CẢ line của bucket, làm mẫu số cho `phuDoanhThu` cùng cơ sở "line" với
+ *  `doanhThuLineCoCogs` (khác `doanhThuThuan` ở mức đơn, có gồm cả shipping). */
 async function thongKeLine(thang: string[], storeIds: string[], vendorNames?: string[]): Promise<ThongKeLine[]> {
   if (thang.length === 0 || storeIds.length === 0) return [];
   const { rows } = await db.$client.query(
     `SELECT o.store_id AS store_id, ${thangSql('o.processed_at_shopify')} AS period,
             count(*)::int AS so_line,
             count(clc.shopify_line_id)::int AS so_line_co_cogs,
-            COALESCE(SUM(l.unit_price * l.quantity - l.discount_alloc) FILTER (WHERE clc.shopify_line_id IS NOT NULL), 0)::float8 AS doanh_thu_line_co_cogs
+            COALESCE(SUM(l.unit_price * l.quantity - l.discount_alloc) FILTER (WHERE clc.shopify_line_id IS NOT NULL), 0)::float8 AS doanh_thu_line_co_cogs,
+            COALESCE(SUM(l.unit_price * l.quantity - l.discount_alloc), 0)::float8 AS doanh_thu_line_tong
      FROM shopify_order_lines l
      JOIN shopify_orders o ON o.id = l.order_id
      LEFT JOIN (SELECT DISTINCT order_id, shopify_line_id FROM order_line_cogs WHERE kind = 'cogs') clc
@@ -92,6 +96,7 @@ async function thongKeLine(thang: string[], storeIds: string[], vendorNames?: st
     soLine: Number(r.so_line),
     soLineCoCogs: Number(r.so_line_co_cogs),
     doanhThuLineCoCogs: Number(r.doanh_thu_line_co_cogs),
+    doanhThuLineTong: Number(r.doanh_thu_line_tong),
   }));
 }
 
@@ -107,29 +112,35 @@ export async function doanhThuTheoThang(thang: string[], storeIds: string[], bra
   const layThongKe = (storeId: string, period: string) =>
     thongKe.find((t) => t.storeId === storeId && t.period === period);
 
+  // Trang lãi-gộp mặc định 6 tháng × 4 store = 24 cặp (storeId, period) —
+  // trước đây gọi getStoreMetrics tuần tự (~29s), giờ chạy song song bằng
+  // Promise.all: build hết danh sách cặp, map sang promise rồi đợi tất cả.
+  const capThangStore = thang.flatMap((period) => storeIds.map((storeId) => ({ period, storeId })));
+  const ketQua = await Promise.all(
+    capThangStore.map(async ({ period, storeId }) => {
+      const { from, to } = ranhThang(period);
+      const { orders } = await getStoreMetrics({ storeId, dateFrom: from, dateTo: to, vendorFilter: vendorNames });
+      return { period, storeId, orders };
+    }),
+  );
+
   const out: DoanhThuThang[] = [];
-  for (const period of thang) {
-    const { from, to } = ranhThang(period);
-    for (const storeId of storeIds) {
-      const { orders } = await getStoreMetrics({
-        storeId, dateFrom: from, dateTo: to,
-        vendorFilter: vendorNames,
-      });
-      const active = orders.filter((o) => o.cancelledAt == null);
-      if (active.length === 0) continue;
-      const st = layThongKe(storeId, period);
-      out.push({
-        period,
-        storeId,
-        currency: active[0].currency,
-        doanhThuThuan: active.reduce((s, o) => s + (o.netGmv - o.discount), 0),
-        phiShip: active.reduce((s, o) => s + o.shippingCost, 0),
-        soDon: active.length,
-        soLine: st?.soLine ?? 0,
-        soLineCoCogs: st?.soLineCoCogs ?? 0,
-        doanhThuLineCoCogs: st?.doanhThuLineCoCogs ?? 0,
-      });
-    }
+  for (const { period, storeId, orders } of ketQua) {
+    const active = orders.filter((o) => o.cancelledAt == null);
+    if (active.length === 0) continue;
+    const st = layThongKe(storeId, period);
+    out.push({
+      period,
+      storeId,
+      currency: active[0].currency,
+      doanhThuThuan: active.reduce((s, o) => s + (o.netGmv - o.discount), 0),
+      phiShip: active.reduce((s, o) => s + o.shippingCost, 0),
+      soDon: active.length,
+      soLine: st?.soLine ?? 0,
+      soLineCoCogs: st?.soLineCoCogs ?? 0,
+      doanhThuLineCoCogs: st?.doanhThuLineCoCogs ?? 0,
+      doanhThuLineTong: st?.doanhThuLineTong ?? 0,
+    });
   }
   return out;
 }
@@ -197,12 +208,18 @@ export async function tiGiaThang(): Promise<TiGiaThang[]> {
 
 /** Line của đơn CHƯA HUỶ đặt trong `period` (giờ nghiệp vụ) mà chưa có dòng
  *  `order_line_cogs` kind='cogs' (bất kỳ nguồn) — danh sách cho người nhập bù.
- *  Không lọc theo brand (không có tham số brand) nên không đụng vấn đề
- *  hoa/thường của vendor. */
-export async function lineChuaCoCogs(period: string, storeIds?: string[]): Promise<Array<{ store: string; brand: string | null; maDon: string; sku: string | null; sl: number; doanhThu: number; currency: string }>> {
+ *  `brand` lọc theo TẬP spelling vendor thật khớp brand đó (xem
+ *  `vendorsCuaBrand` — cùng cách brand lọc trong `doanhThuTheoThang`, tránh
+ *  lệch hoa/thường của vendor Shopify gõ tay). */
+export async function lineChuaCoCogs(period: string, storeIds?: string[], brand?: string): Promise<Array<{ store: string; brand: string | null; maDon: string; sku: string | null; sl: number; doanhThu: number; currency: string }>> {
   const dieuKien: string[] = [`${thangSql('o.processed_at_shopify')} = $1`, 'o.cancelled_at_shopify IS NULL', 'c.id IS NULL'];
   const params: unknown[] = [period];
   if (storeIds && storeIds.length > 0) { params.push(storeIds); dieuKien.push(`o.store_id = ANY($${params.length}::uuid[])`); }
+  if (brand) {
+    const vendorNames = await vendorsCuaBrand(brand);
+    params.push(vendorNames);
+    dieuKien.push(`l.vendor = ANY($${params.length}::text[])`);
+  }
 
   const { rows } = await db.$client.query(
     `SELECT s.name AS store, l.vendor AS brand, o.shopify_order_number AS ma_don, l.sku,

@@ -19,8 +19,8 @@ export interface TiGiaHang {
 
 const NGUON: Record<string, string> = { manual: 'nhập tay', vcb: 'VCB' };
 
-/** Form nhập tỉ giá USD→VND theo tháng (chỉ hiện khi `manage_cogs`) — mỗi dòng có ô nhập thủ công và nút lấy tỉ giá bán ra VCB. */
-export function TiGiaForm({ hang }: { hang: TiGiaHang[] }) {
+/** Form nhập tỉ giá USD→VND theo tháng (chỉ hiện khi `manage_cogs`) — mỗi dòng có ô nhập thủ công; nút "Lấy VCB" chỉ hiện ở dòng THÁNG HIỆN TẠI vì `layTiGiaVcbAction` chỉ chấp nhận tháng hiện tại (tháng đã qua phải nhập tay theo tỉ giá đúng kỳ đó). */
+export function TiGiaForm({ hang, thangHienTai }: { hang: TiGiaHang[]; thangHienTai: string }) {
   const [nhap, setNhap] = useState<Record<string, string>>({});
   const [dangLuu, startLuu] = useTransition();
   const [dangVcb, startVcb] = useTransition();
@@ -94,9 +94,11 @@ export function TiGiaForm({ hang }: { hang: TiGiaHang[] }) {
                       <Button type="button" size="sm" variant="outline" onClick={() => luu(h.period)} disabled={dangXuLy}>
                         Lưu
                       </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => layVcb(h.period)} disabled={dangXuLy}>
-                        Lấy VCB
-                      </Button>
+                      {h.period === thangHienTai && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => layVcb(h.period)} disabled={dangXuLy}>
+                          Lấy VCB
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
