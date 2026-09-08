@@ -147,3 +147,47 @@ describe('docWorkbook — khuôn Calista (USD, "TỔNG (A):" ₫, B return, TỔ
     expect(bangKe[0].tiGia).toBeCloseTo(846_737 / (205 - 172.5), 0);
   });
 });
+
+describe('docWorkbook — khuôn La Vierge (USD + VND từng dòng ở cột Note)', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const lv = {
+    name: 'File đối soát T8', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: La Vierge'],
+      [null, 'A. Đơn thực nhận trong tháng '], HDR,
+      ['06/08/2026', '#MBLVD29627', 'Venetian …', 'LaVierge-FW25-01-S-NBEI-PLA', '1', '$210.00', '50%', null, '$105.00', '2,717,400', 'x', 'T8', '7'],
+      ['04/08/2026', '#MBLVD29604', 'Elizabeth …', 'LaVierge-FW25-03-M-NALM-PLA', '1', '$175.00', '50%', null, '$87.50', '2,264,500', 'x', 'T8', '7'],
+      [null, null, 'TỔNG THANH TOÁN (A)', null, '2', '$385.00', null, null, '$192.50'], [null, null, null, null, null, 'TỔNG THANH TOÁN (B):', null, null, '4,981,900 ₫'],
+      [null, 'B. Đơn return trong tháng '], ['Ngày return', ...HDR.slice(1)],
+      ['10/08/2026', '#MBLVD29000', 'Ret …', 'LaVierge-FW25-02-S-BLA', '1', '$235.00', '50%', null, '$117.50', '3,063,930', 'x', 'T8', '7'],
+      [null, null, 'TỔNG THANH TOÁN  (A-B)', null, null, null, null, null, '1,917,970 ₫'], [null, null, 'Tổng', null, null, null, null, null, '1,917,970 ₫'],
+    ],
+  };
+  it('mọi dòng có VND sẵn → tt lấy đúng số cột Note, ttGoc giữ USD, tỉ giá suy ra ≈ 25.880', () => {
+    const { bangKe } = docWorkbook([lv]);
+    const b = bangKe[0];
+    expect(b.currency).toBe('VND');
+    expect(b.lines.map((l) => l.tt)).toEqual([2_717_400, 2_264_500]);
+    expect(b.lines[0]).toMatchObject({ ttGoc: 105, ttVndSan: 2_717_400 });
+    expect(b.returns[0]).toMatchObject({ tt: 3_063_930, ttGoc: 117.5 });
+    expect(b.tiGia).toBeCloseTo((2_717_400 + 2_264_500 + 3_063_930) / (105 + 87.5 + 117.5), 0);
+  });
+  it('một dòng thiếu VND sẵn → dòng đó đổi theo tỉ giá kỳ (Tổng ₫ ÷ (A − B)), dòng khác giữ số sẵn', () => {
+    const rows = lv.rows.map((r, i) => (i === 4 ? r.map((c, j) => (j === 9 ? null : c)) : r));
+    const { bangKe } = docWorkbook([{ ...lv, rows }]);
+    const b = bangKe[0];
+    expect(b.lines[0].tt).toBe(2_717_400);
+    const rate = 1_917_970 / (192.5 - 117.5);
+    expect(b.lines[1].tt).toBe(Math.round(87.5 * rate));
+  });
+  it('cột Note ghi nghìn ₫ kiểu "2,717.400" (La Vierge T5) → nhân 1.000', () => {
+    const rows = lv.rows.map((r, i) => (i === 3 ? r.map((c, j) => (j === 9 ? '2,717.400' : c)) : r));
+    const { bangKe } = docWorkbook([{ ...lv, rows }]);
+    expect(bangKe[0].lines[0]).toMatchObject({ ttVndSan: 2_717_400, tt: 2_717_400 });
+  });
+  it('cột Note ghi đơn vị lạ (tỉ lệ VND/USD ngoài 15–40 và 15k–40k) → bỏ, đổi theo tỉ giá kỳ', () => {
+    const rows = lv.rows.map((r, i) => (i === 3 || i === 4 || i === 9 ? r.map((c, j) => (j === 9 ? '271' : c)) : r));
+    const { bangKe } = docWorkbook([{ ...lv, rows }]);
+    expect(bangKe[0].lines[0].ttVndSan).toBeUndefined();
+    expect(bangKe[0].lines[0].tt).toBe(Math.round(105 * (1_917_970 / 75)));
+  });
+});
