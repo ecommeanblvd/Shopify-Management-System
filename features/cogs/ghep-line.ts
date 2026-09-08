@@ -7,7 +7,8 @@ export interface DonTraCuu { orderId: string; storeId: string; maDon: string; li
 export function chuanHoaMaDon(s: string): string { return s.replace(/\s+/g, '').replace(/^#/, '').toUpperCase(); }
 export function laMaNgoaiShopify(maDon: string): boolean { return /^MBLVDPO/i.test(maDon) || /^MTB/i.test(maDon); }
 
-/** Token mã sản phẩm: bỏ tiền tố brand, tách theo '+', bỏ tiền tố 'PK' → ['DN0729','PK0729'…]. Giữ thứ tự, bỏ trùng. */
+/** Token mã sản phẩm: bỏ tiền tố brand, tách theo '+', bỏ tiền tố 'PK' khi sau nó còn mã chữ+số (PKDN0729 → DN0729);
+ * PK0729 (không mã chữ) giữ nguyên → ['DN0729','PK0729'…]. Giữ thứ tự, bỏ trùng. */
 export function maGoc(sku: string): string[] {
   const phan = sku.split('-').slice(1);            // bỏ 'Denio'
   const out: string[] = [];
@@ -36,8 +37,10 @@ function chonLine(dong: DongBangKe, lines: LineDon[]): { line: LineDon; cach: 's
   if (dung.length === 1) return { line: dung[0], cach: 'sku' };
   if (dung.length > 1) return 'mo_ho';
   const goc = maGoc(dong.sku);
+  let soUngVien = 0;
   if (goc.length) {
     let ungVien = lines.filter((l) => { const g = maGoc(l.sku ?? ''); return goc.some((x) => g.includes(x)); });
+    soUngVien = ungVien.length;
     if (ungVien.length > 1) {
       const tk = tokenKhac(dong.sku);
       const hop = ungVien.filter((l) => [...tk].every((t) => tokenKhac(l.sku ?? '').has(t)));
@@ -47,7 +50,8 @@ function chonLine(dong: DongBangKe, lines: LineDon[]): { line: LineDon; cach: 's
     if (ungVien.length > 1) return 'mo_ho';
   }
   if (lines.length === 1) return { line: lines[0], cach: 'don_mot_line' };
-  return lines.length === 0 ? null : 'mo_ho';
+  if (lines.length === 0) return null;
+  return soUngVien > 1 ? 'mo_ho' : null;
 }
 
 export function ghepBangKe(dongs: DongBangKe[], don: Map<string, DonTraCuu>): KetQuaGhep {
@@ -64,6 +68,7 @@ export function ghepBangKe(dongs: DongBangKe[], don: Map<string, DonTraCuu>): Ke
     const k = `${d.orderId}|${c.line.shopifyLineId}`;
     const cur = gom.get(k) ?? { line: c.line, dong: [], amount: 0, slSheet: 0, du: false, cachKhop: c.cach };
     cur.dong.push(dg); cur.amount += dg.tt; cur.slSheet += dg.sl; cur.du = cur.slSheet > c.line.quantity;
+    // Nhóm nhiều dòng: chỉ giữ 'sku' khi MỌI dòng khớp SKU đúng — không nói quá độ tin cậy.
     if (c.cach !== 'sku') cur.cachKhop = c.cach;
     gom.set(k, cur);
   }

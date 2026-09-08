@@ -43,4 +43,10 @@ describe('ghepBangKe', () => {
     const kq = ghepBangKe([d('#MBLVD5', 'Denio-DN0729-M-CRE', 1)], new Map([don('MBLVD5', [line('L1', 'Denio-DN0729+PK0729-S-CRE'), line('L2', 'Denio-DN0729+PK0729-M-CRE')])]));
     expect(kq.theoLine[0].line.shopifyLineId).toBe('L2');
   });
+  it('nhiều line trong đơn, sheet không khớp mã gốc → khong_co_line_khop', () => {
+    const kq = ghepBangKe([d('#MBLVD6', 'Denio-DN0999-M-CRE', 1)], new Map([don('MBLVD6', [line('L1', 'Denio-DN0001-S-CRE'), line('L2', 'Denio-DN0002-M-CRE')])]));
+    expect(kq.khongKhop).toHaveLength(1);
+    expect(kq.khongKhop[0]).toMatchObject({ lyDo: 'khong_co_line_khop' });
+    expect(kq.theoLine).toHaveLength(0);
+  });
 });
