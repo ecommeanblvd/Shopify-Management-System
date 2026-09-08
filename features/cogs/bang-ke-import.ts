@@ -62,15 +62,22 @@ async function kiemBrand(brandSlug: string, tenTrenSheet: string): Promise<strin
 }
 
 interface KyDaGhep { bk: BangKe; ghep: KetQuaGhep; ghepReturn: KetQuaGhep }
-async function docVaGhep(input: { brandSlug: string; url?: string; buffer?: Uint8Array }): Promise<{ brand: string; boQua: string[]; ky: KyDaGhep[]; loi?: string }> {
-  const sheets = await taiWorkbook(input);
-  const { bangKe, boQua } = docWorkbook(sheets);
-  if (bangKe.length === 0) return { brand: '', boQua, ky: [], loi: 'Không có tab bảng kê thực nhận nào' };
-  const loi = await kiemBrand(input.brandSlug, bangKe[0].brand);
-  if (loi) return { brand: bangKe[0].brand, boQua, ky: [], loi };
+
+/** tra-đơn + ghép line cho mọi kỳ của một `BangKe[]` đã đọc (xlsx hoặc payload MMP). */
+async function ghepTatCa(bangKe: BangKe[]): Promise<KyDaGhep[]> {
   const maDons = [...new Set(bangKe.flatMap((b) => [...b.lines, ...b.returns].map((d) => chuanHoaMaDon(d.maDon))))];
   const don = await traDon(maDons);
-  return { brand: bangKe[0].brand, boQua, ky: bangKe.map((bk) => ({ bk, ghep: ghepBangKe(bk.lines, don), ghepReturn: ghepBangKe(bk.returns, don) })) };
+  return bangKe.map((bk) => ({ bk, ghep: ghepBangKe(bk.lines, don), ghepReturn: ghepBangKe(bk.returns, don) }));
+}
+
+/** Tải + đọc workbook xlsx, kiểm brand khớp tiêu đề sheet. KHÔNG ghép — dùng chung cho xem trước và áp dụng. */
+async function docVaKiemBrand(input: { brandSlug: string; url?: string; buffer?: Uint8Array }): Promise<{ brand: string; boQua: string[]; bangKe: BangKe[]; loi?: string }> {
+  const sheets = await taiWorkbook(input);
+  const { bangKe, boQua } = docWorkbook(sheets);
+  if (bangKe.length === 0) return { brand: '', boQua, bangKe: [], loi: 'Không có tab bảng kê thực nhận nào' };
+  const loi = await kiemBrand(input.brandSlug, bangKe[0].brand);
+  if (loi) return { brand: bangKe[0].brand, boQua, bangKe: [], loi };
+  return { brand: bangKe[0].brand, boQua, bangKe };
 }
 
 export interface XemTruocKy {
@@ -81,10 +88,12 @@ export interface XemTruocKy {
 export interface XemTruoc { brand: string; boQua: string[]; ky: XemTruocKy[]; loi?: string }
 
 export async function xemTruocBangKe(input: { brandSlug: string; url?: string; buffer?: Uint8Array }): Promise<XemTruoc> {
-  const r = await docVaGhep(input);
+  const r = await docVaKiemBrand(input);
+  if (r.loi) return { brand: r.brand, boQua: r.boQua, ky: [], loi: r.loi };
+  const ky = await ghepTatCa(r.bangKe);
   return {
-    brand: r.brand, boQua: r.boQua, loi: r.loi,
-    ky: r.ky.map(({ bk, ghep, ghepReturn }) => ({
+    brand: r.brand, boQua: r.boQua,
+    ky: ky.map(({ bk, ghep, ghepReturn }) => ({
       period: bk.period, sheet: bk.sheet, tongDong: bk.lines.length + bk.returns.length,
       khopSku: ghep.theoLine.filter((t) => t.cachKhop === 'sku').reduce((s, t) => s + t.dong.length, 0),
       khopMaGoc: ghep.theoLine.filter((t) => t.cachKhop === 'ma_goc').reduce((s, t) => s + t.dong.length, 0),
@@ -99,45 +108,73 @@ export async function xemTruocBangKe(input: { brandSlug: string; url?: string; b
   };
 }
 
-export async function apDungBangKe(input: { brandSlug: string; url?: string; buffer?: Uint8Array; periods: string[]; userId: string; tenFile: string }): Promise<{
+export interface ApDungKhongKhop { period: string; maDon: string; sku: string; tt: number; lyDo: string }
+
+/**
+ * Ghép + ghi một `BangKe[]` ĐÃ ĐỌC (xlsx qua `docWorkbook`, hoặc payload MMP qua `docPayloadMmp`) vào
+ * `order_line_cogs`/`brand_cogs_offline`, theo đúng luật ghép (spec §4) và transaction-mỗi-kỳ (spec §6).
+ * Dùng chung cho `apDungBangKe` (xlsx, `source: 'brand_statement'`) và webhook MMP (`source: 'mmp'`) —
+ * tách riêng để hai nguồn không đụng dữ liệu của nhau (xem ghi chú xoá theo `source` bên dưới).
+ */
+export async function apDungBangKeDaDoc(input: {
+  brandSlug: string; bangKe: BangKe[]; periods: string[]; userId: string | null; tenFile: string;
+  source: 'brand_statement' | 'mmp'; currency?: string;
+}): Promise<{
   daGhi: Array<{ period: string; lines: number; offline: number; returns: number }>;
+  khongKhop: ApDungKhongKhop[];
   loi?: string;
 }> {
-  const r = await docVaGhep(input);
-  if (r.loi) throw new Error(r.loi);
+  const currency = input.currency ?? 'VND';
+  const ky = await ghepTatCa(input.bangKe);
   const daGhi: Array<{ period: string; lines: number; offline: number; returns: number }> = [];
+  const khongKhop: ApDungKhongKhop[] = [];
   // Nhiều kỳ ghi TUẦN TỰ, mỗi kỳ một transaction riêng — nếu một kỳ sau lỗi
   // (DB tạm ngắt, deadlock, v.v.) các kỳ TRƯỚC đã commit không được coi là mất
   // trắng: trả về `daGhi` (những kỳ đã ghi) kèm `loi` thay vì throw, để người
   // dùng biết chính xác đã ghi tới đâu thay vì tưởng nhầm cả lô đều thất bại.
-  for (const { bk, ghep, ghepReturn } of r.ky) {
+  for (const { bk, ghep, ghepReturn } of ky) {
     if (!input.periods.includes(bk.period)) continue;
+    khongKhop.push(...[...ghep.khongKhop, ...ghepReturn.khongKhop].map((k) => ({ period: bk.period, maDon: k.dong.maDon, sku: k.dong.sku, tt: k.dong.tt, lyDo: k.lyDo })));
     const ref = `${input.brandSlug} ${bk.period}`;
     try {
       await db.transaction(async (tx) => {
-        await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, 'brand_statement'), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
+        // Xoá đúng NGUỒN đang ghi — MMP đẩy lại kỳ này không được xoá dòng nhập từ bảng kê xlsx và ngược lại.
+        await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, input.source), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
+        // `brand_cogs_offline` KHÔNG có cột `source` (chưa tách nguồn ở bảng này) — xoá vẫn theo
+        // brandSlug+period như trước khi tách hàm, nghĩa là ghi đè offline của MỌI nguồn cùng kỳ.
+        // Biết là hạn chế còn lại khi webhook MMP thật sự bật; chưa xử lý trong task này.
         await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
         const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
           for (const t of g.theoLine) {
             await tx.insert(schema.orderLineCogs).values({
               orderId: t.line.orderId, shopifyLineId: t.line.shopifyLineId, storeId: t.line.storeId, kind, period: bk.period,
-              amount: String(kind === 'return' ? -t.amount : t.amount), currency: 'VND', source: 'brand_statement', brandSlug: input.brandSlug, statementRef: ref,
+              amount: String(kind === 'return' ? -t.amount : t.amount), currency, source: input.source, brandSlug: input.brandSlug, statementRef: ref,
               detail: { dong: t.dong, cachKhop: t.cachKhop, slSheet: t.slSheet, du: t.du, lechCongThuc: t.dong.filter((d) => !kiemCongThuc(d)).length, tenFile: input.tenFile },
               importedBy: input.userId,
             });
           }
           for (const o of g.offline) {
-            await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency: 'VND', statementRef: ref });
+            await tx.insert(schema.brandCogsOffline).values({ brandSlug: input.brandSlug, period: bk.period, kind, refCode: o.maDon, sku: o.sku, qty: Math.round(o.sl), amount: String(kind === 'return' ? -o.tt : o.tt), currency, statementRef: ref });
           }
         };
         await ghiLine(ghep, 'cogs'); await ghiLine(ghepReturn, 'return');
       });
     } catch (e) {
       const loi = e instanceof Error ? e.message : 'Lỗi không rõ';
-      return { daGhi, loi: `Kỳ ${bk.period}: ${loi}` };
+      return { daGhi, khongKhop, loi: `Kỳ ${bk.period}: ${loi}` };
     }
     daGhi.push({ period: bk.period, lines: ghep.theoLine.length, offline: ghep.offline.length + ghepReturn.offline.length, returns: ghepReturn.theoLine.length });
     try { await recordAudit({ userId: input.userId, action: 'cogs_import', target: ref, requestSummary: `${input.tenFile}: ${ghep.theoLine.length} line, ${ghep.offline.length} offline, ${ghep.khongKhop.length} không khớp`, result: 'success' }); } catch (e) { console.error('audit failed', e); }
   }
-  return { daGhi };
+  return { daGhi, khongKhop };
+}
+
+export async function apDungBangKe(input: { brandSlug: string; url?: string; buffer?: Uint8Array; periods: string[]; userId: string; tenFile: string }): Promise<{
+  daGhi: Array<{ period: string; lines: number; offline: number; returns: number }>;
+  loi?: string;
+}> {
+  const r = await docVaKiemBrand(input);
+  if (r.loi) throw new Error(r.loi);
+  const res = await apDungBangKeDaDoc({ brandSlug: input.brandSlug, bangKe: r.bangKe, periods: input.periods, userId: input.userId, tenFile: input.tenFile, source: 'brand_statement' });
+  return { daGhi: res.daGhi, loi: res.loi };
 }

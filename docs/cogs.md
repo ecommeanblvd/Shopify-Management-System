@@ -96,8 +96,48 @@ chênh lệch thu/chi ship hiện rõ trong "Rev thực tế" thay vì bị ẩn
 - Cron `sync-unit-cost` đọc `inventoryItem.unitCost` từ Shopify ghi vào `sku_costs` (nguồn `shopify`) cho hàng
   tự sản xuất (TINH, Mirer, hàng MEAN tự sản).
 - Cron `apply-own-cogs` ghi `order_line_cogs` cho các line chưa có giá vốn từ `sku_costs` hiệu lực.
-- Webhook `POST /api/mmp/cogs` (ký HMAC) nhận cấu trúc trung gian giống bộ nhập bảng kê, nguồn `source = 'mmp'`,
-  đi qua đúng luật ghép và hàm ghi ở trên — chờ CEO xác nhận thiết kế với MMP trước khi làm.
+- Webhook `POST /api/mmp/cogs` — route **đã tồn tại trong code, ký HMAC, nhưng CHƯA BẬT/CHƯA BÁO cho MMP**
+  (chờ CEO xác nhận thiết kế với MMP trước khi công bố). Xem hợp đồng payload bên dưới.
 
 Xem chi tiết quyết định và khảo sát dữ liệu tại
 `docs/superpowers/specs/2026-09-08-gia-von-lai-gop-thang-design.md`.
+
+## Hợp đồng payload MMP (chưa bật)
+
+`POST /api/mmp/cogs` — HMAC SHA-256 giống mọi endpoint `mmp` khác: `sha256=<hex>` của
+`HMAC_SHA256(MMP_WEBHOOK_SECRET, "<timestamp>.<rawBody>")`, header `x-mean-signature` / `x-mean-timestamp`
+(mẫu `app/api/mmp/order-confirmations/route.ts`). Nhận cấu trúc trung gian giống bộ nhập bảng kê ở trên —
+đi qua **đúng luật ghép dòng** (mục "Luật ghép dòng bảng kê vào line đơn" phía trên) và hàm ghi
+`apDungBangKeDaDoc` (`features/cogs/bang-ke-import.ts`), nguồn `source = 'mmp'` — ngang hàng ưu tiên với
+`brand_statement`, không đè lên nhau (xoá theo kỳ được lọc đúng `source` đang ghi).
+
+```json
+{ "brandSlug": "denio", "period": "2026-09",
+  "lines": [{ "orderNumber": "#MBLVD29521", "sku": "Denio-DN0785-Customize-NPOT-PLA", "qty": 1, "amount": 1861500, "currency": "VND", "kind": "cogs", "ref": "MMP-STMT-2026-09-0001" }],
+  "offline": [{ "refCode": "#MBLVDPO24", "sku": "Denio-DN0815-M-WCCM-PLA", "qty": 1, "amount": 1374000, "currency": "VND", "kind": "cogs" }] }
+```
+
+- `brandSlug` phải khớp một brand đã có trong `mmp_brands`; `period` dạng `YYYY-MM`.
+- `lines[]`: dòng thuộc đơn Shopify, `orderNumber` là mã đơn (có thể có `#`). `offline[]` (tuỳ chọn): dòng
+  không thuộc Shopify (PO, MTB…), `refCode` thay cho `orderNumber` — vẫn đi qua luật ghép như dòng thường,
+  `refCode` không đúng mẫu `MBLVDPO…`/`MTB…` thì báo "không khớp" (`khong_co_don`) thay vì tự suy đoán.
+- `kind: 'cogs'` → cộng vào giá vốn kỳ; `kind: 'return'` → trừ vào giá vốn kỳ (route tự ghi số âm khi lưu,
+  payload luôn gửi số dương). `amount`/`qty` phải là số dương; `currency` mặc định `VND`, chỉ nhận mã 3 ký tự.
+- `ref` (tuỳ chọn, chỉ có ở `lines[]`) là mã tham chiếu bảng kê MMP — lưu vào cột `code` giống cột `Code` của
+  bảng kê xlsx, chỉ mang tính tra cứu, không ảnh hưởng luật ghép.
+
+Response `200`:
+
+```json
+{ "period": "2026-09", "lines": 1, "offline": 1, "returns": 0,
+  "khongKhop": [{ "orderNumber": "#MBLVD00000", "sku": "X", "amount": 100000, "lyDo": "khong_co_don" }] }
+```
+
+`lines`/`offline`/`returns` là số dòng **đã ghi** (giống `daGhi` của bộ nhập bảng kê); `khongKhop` liệt kê
+dòng không ghép được (không ghi) để MMP đối chiếu và gửi lại. Lỗi HMAC → `401`; payload sai hình dạng, brand
+không tồn tại, hoặc `period`/`amount`/`currency` không hợp lệ → `400`; thiếu `MMP_WEBHOOK_SECRET` trên SMS
+hoặc lỗi ghi DB → `500`.
+
+**Hạn chế đã biết**: bảng `brand_cogs_offline` chưa có cột `source` — xoá dòng cũ theo kỳ khi ghi lại vẫn xoá
+offline của MỌI nguồn (kể cả `brand_statement`) trong cùng kỳ, không riêng `mmp`. Cần thêm cột `source` cho
+bảng này trước khi bật đồng thời cả hai nguồn ghi offline cho cùng brand+kỳ.
