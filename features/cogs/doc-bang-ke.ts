@@ -156,6 +156,12 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       (muc === 'A' || !bLaReturn ? bk.lines : bk.returns).push(d);
     });
     if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
+    // Kỳ brand CHƯA điền "Tổng thành tiền" (Keira Tong T8: mọi dòng $0.00, cột % CK chép nhầm giá) → không coi là bảng kê
+    // hoàn tất: bỏ toàn bộ dòng của tab, báo cảnh báo, để không ghi giá vốn 0 lên đơn.
+    if (bk.lines.length > 0 && bk.lines.every((d) => d.tt <= 0)) {
+      bk.canhBao.push(`${sh.name}: mọi dòng có Tổng thành tiền = 0 — kỳ chưa hoàn tất, KHÔNG nhập`);
+      bk.lines = []; bk.returns = [];
+    }
     if (coUsd) {
       // Chỉ ĐỔI các dòng USD (có ttGoc); dòng VND trong cùng tab (Linh Phùng: mục A USD, mục B VNĐ) giữ nguyên.
       const tatCa = [...bk.lines, ...bk.returns];

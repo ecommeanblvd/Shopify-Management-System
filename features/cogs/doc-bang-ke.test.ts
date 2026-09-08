@@ -284,3 +284,18 @@ describe('docWorkbook — khuôn Montsand (tiêu đề "BẢNG KÊ ĐƠN HÀNG C
     expect(boQua).toEqual([]); expect(bangKe[0].lines).toHaveLength(1); expect(bangKe[0].lines[0].tt).toBe(8_750_000);
   });
 });
+
+describe('docWorkbook — kỳ brand chưa điền Tổng thành tiền (Keira Tong T8)', () => {
+  it('mọi dòng TT = $0.00 → bỏ hết dòng + cảnh báo "chưa hoàn tất"', () => {
+    const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'KT', 'Code ', 'Kỳ thanh toán', 'Kỳ báo đơn'];
+    const t8 = { name: ' Thực nhận T8', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: KEIRA TONG'], HDR,
+      ['03/08/2026', '#MBLVD29568', 'x', 'KeiraTong-KS06B103328W3-M-WWHI-PLA', '1', '$140.00', '140', null, '$0.00', null, null, 'c', 'T8', '7'],
+      ['10/08/2026', '#MBLVD29569', 'y', 'KeiraTong-KS06A003331W1-S-WWHI-PLA', '1', '$248.00', '248', null, '$0.00', null, null, 'c', 'T8', '7'],
+      [null, null, 'TỔNG (A)', null, '2', '$388', null, null, '0'],
+    ] };
+    const { bangKe } = docWorkbook([t8]);
+    expect(bangKe[0].lines).toEqual([]);
+    expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
+  });
+});
