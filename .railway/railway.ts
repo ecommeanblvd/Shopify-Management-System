@@ -114,7 +114,32 @@ export default defineRailway(() => {
     env: { TZ: "UTC", DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL },
   });
 
+  // 08/09: giá vốn hàng TỰ SẢN XUẤT (tinhatelier, mirermirer-official,
+  // meanblvd/MEAN BLVD) — sync-unit-cost (đọc Cost per item Shopify) +
+  // apply-own-cogs (ghi order_line_cogs theo line), lồng trong cùng script
+  // scripts/cron/cogs-own.ts (xem features/jobs/run.ts::chayMotJob).
+  const cronCogsOwn = service("cron-cogs-own", {
+    source: repo,
+    build: { builder: "NIXPACKS", buildCommand: "echo 'cron service: skip Next build (tsx chạy thẳng TS)'" },
+    start: "npm run cron:cogs-own",
+    replicas: { "asia-southeast1-eqsg3a": 1 },
+    deploy: { cronSchedule: "0 2 * * *", restartPolicyType: "NEVER" },
+    env: {
+      TZ: "UTC",
+      DATABASE_URL: ShopifyManagementSystem.env.DATABASE_URL,
+      ENCRYPTION_KEY_V1: ShopifyManagementSystem.env.ENCRYPTION_KEY_V1,
+      ENCRYPTION_KEY_CURRENT: ShopifyManagementSystem.env.ENCRYPTION_KEY_CURRENT,
+      SHOPIFY_API_KEY: ShopifyManagementSystem.env.SHOPIFY_API_KEY,
+      SHOPIFY_API_SECRET: ShopifyManagementSystem.env.SHOPIFY_API_SECRET,
+      SHOPIFY_SCOPES: ShopifyManagementSystem.env.SHOPIFY_SCOPES,
+      SHOPIFY_APP_URL: ShopifyManagementSystem.env.SHOPIFY_APP_URL,
+      SHOPIFY_API_VERSION: ShopifyManagementSystem.env.SHOPIFY_API_VERSION,
+      BETTER_AUTH_SECRET: ShopifyManagementSystem.env.BETTER_AUTH_SECRET,
+      BETTER_AUTH_URL: ShopifyManagementSystem.env.BETTER_AUTH_URL,
+    },
+  });
+
   return project("Shopify Management System", {
-    resources: [cronRetryMmp, cronRetryShipHo, cronTrack, cronPruneLogs, cronSyncLifecycle, syncLarkOperation, SyncFedExDHLDataFromURL, ShopifyManagementSystem, cronSyncOrders, postgresVolume],
+    resources: [cronRetryMmp, cronRetryShipHo, cronTrack, cronPruneLogs, cronCogsOwn, cronSyncLifecycle, syncLarkOperation, SyncFedExDHLDataFromURL, ShopifyManagementSystem, cronSyncOrders, postgresVolume],
   });
 });

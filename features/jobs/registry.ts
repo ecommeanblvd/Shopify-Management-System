@@ -62,6 +62,10 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'QC/đóng gói trên Lark không thấy món đã về, MMP thiếu ngày nhận' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
     hauQua: 'Database phình tới trần dung lượng' },
+  { key: 'sync-unit-cost', ten: 'Đọc Cost per item từ Shopify', chuKyPhut: 1 * NGAY,
+    hauQua: 'Giá vốn hàng tự sản xuất không cập nhật' },
+  { key: 'apply-own-cogs', ten: 'Ghi giá vốn hàng tự sản xuất theo line', chuKyPhut: 1 * NGAY,
+    hauQua: 'Báo cáo lãi gộp thiếu giá vốn hàng TINH/Mirer/MEAN' },
 ];
 
 export const JOB_KEYS: readonly string[] = JOB_REGISTRY.map((j) => j.key);

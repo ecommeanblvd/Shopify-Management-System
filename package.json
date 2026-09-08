@@ -35,7 +35,8 @@
     "cron:prune-logs": "dotenv -- tsx scripts/cron/prune-logs.ts",
     "cron:retry-ship-ho": "dotenv -- tsx scripts/cron/retry-ship-ho-events.ts",
     "cron:retry-mmp-orders": "dotenv -- tsx scripts/cron/retry-mmp-orders.ts",
-    "cron:group": "dotenv -- tsx scripts/cron/run-group.ts"
+    "cron:group": "dotenv -- tsx scripts/cron/run-group.ts",
+    "cron:cogs-own": "dotenv -- tsx scripts/cron/cogs-own.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
