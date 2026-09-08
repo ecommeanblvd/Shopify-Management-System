@@ -232,3 +232,5 @@ Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT"
 - Tab "… thực bán" bỏ qua theo tên tab (khuôn HC vẫn ghi "A. Đơn MEAN thực nhận" trong tab thực bán nhưng cột Thành tiền trống).
 - Ngày tiêu đề chấp nhận "31/8/2026"; tên brand lấy đủ ("Happy Clothing").
 - Nhập thật 8 kỳ 01–08/2026: 80 dòng đơn (100% khớp SKU đúng), 61 dòng #HC offline, Σ A+B khớp TỔNG (A)/(B) từng kỳ, tỉ giá 25.720–26.108.
+
+**Calista de Minh Thanh (08/09/2026):** khuôn Denio nhưng tiền USD, có "TỔNG (A):" ₫ và "TỔNG (B):" ₫ riêng, "TỔNG THANH TOÁN (A-B)". Tỉ giá kỳ ưu tiên **"TỔNG (A):" ₫ ÷ Σ USD mục A** (không dính return), rồi mới đến "TỔNG:"/"TỔNG THANH TOÁN…" ÷ (Σ lines − Σ return). Cột ngày mục return "Ngày trả" được nhận. Tên brand so khớp bỏ gạch nối/khoảng trắng ("Calista de Minh Thanh" ↔ "Calista-de-minh-thanh"). Kỳ chưa điền "Tổng thành tiền TT" (T8) → 0 dòng, không nhập. Cột "% CK BFCM" thứ hai chưa vào công thức kiểm → vài dòng báo "lệch công thức" nhưng tiền vẫn lấy đúng cột TT.

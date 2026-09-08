@@ -58,8 +58,10 @@ async function traDon(maDons: string[]): Promise<Map<string, DonTraCuu>> {
 async function kiemBrand(brandSlug: string, tenTrenSheet: string): Promise<string | null> {
   const [b] = await db.select({ slug: schema.mmpBrands.slug, ten: schema.mmpBrands.displayName }).from(schema.mmpBrands).where(eq(schema.mmpBrands.slug, brandSlug)).limit(1);
   if (!b) return `Không có brand "${brandSlug}" trong hệ thống`;
-  const t = tenTrenSheet.toLowerCase();
-  return t === b.slug.toLowerCase() || t === (b.ten ?? '').toLowerCase() ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
+  // So sau khi bỏ gạch nối/khoảng trắng/hoa thường: sheet "Calista de Minh Thanh" ↔ display "Calista-de-minh-thanh" / slug "calista-de-minh-thanh".
+  const chuan = (x: string) => x.toLowerCase().replace(/[^a-z0-9\u00C0-\u1EF9]/g, '');
+  const t = chuan(tenTrenSheet);
+  return t === chuan(b.slug) || t === chuan(b.ten ?? '') ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
 }
 
 interface KyDaGhep { bk: BangKe; ghep: KetQuaGhep; ghepReturn: KetQuaGhep }

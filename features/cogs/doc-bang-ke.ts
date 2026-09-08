@@ -43,7 +43,7 @@ function chiSoCot(r: O[]) {
   const s = r.map((c) => chuoi(c).toLowerCase());
   const tim = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x === t));
   const timPrefix = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x.startsWith(t)));
-  const ngayIdx = tim('ngày nhận', 'ngày return', 'ngày báo đơn', 'ngày');
+  const ngayIdx = tim('ngày nhận', 'ngày return', 'ngày trả', 'ngày báo đơn', 'ngày');
   return {
     ngay: ngayIdx >= 0 ? ngayIdx : 0,
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
@@ -55,14 +55,26 @@ function chiSoCot(r: O[]) {
 /** dd/mm/yyyy → 'yyyy-mm'. */
 export function periodTuNgay(ddmmyyyy: string): string { const [, m, y] = ddmmyyyy.split('/'); return `${y}-${m.padStart(2, '0')}`; }
 
-/** Dòng tổng quy VND của sheet USD: ưu tiên "TỔNG:" (thuần quy đổi) rồi "TỔNG THANH TOÁN" (có thể cộng khoản khác). */
-function timTongVnd(rows: O[][]): number | null {
-  const uuTien = [/^TỔNG:?$/i, /^TỔNG THANH TOÁN:?$/i];
-  for (const re of uuTien) for (const r of rows) {
+/** Giá trị ₫ trên dòng có nhãn khớp `re` (ưu tiên theo thứ tự truyền vào). */
+function tongVndTheoNhan(rows: O[][], ...res: RegExp[]): number | null {
+  for (const re of res) for (const r of rows) {
     if (!r.some((c) => re.test(chuoi(c)))) continue;
     const o = r.find((c) => /₫|đ$/i.test(chuoi(c)));
     const v = docTien(o); if (v != null && v > 0) return v;
   }
+  return null;
+}
+/**
+ * Tỉ giá VND/USD của một tab sheet USD, suy từ chính sheet:
+ *   1) "TỔNG (A):" ₫ ÷ Σ USD mục A (Calista, Happy Clothing kỳ có dòng này) — chắc nhất vì không dính return/B;
+ *   2) "TỔNG:" hoặc "TỔNG THANH TOÁN…" ₫ ÷ (Σ USD lines − Σ USD returns) — HC (B Global cộng), Denio-kiểu (A − B return).
+ */
+export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumReturns: number): number | null {
+  const tongA = tongVndTheoNhan(rows, /^TỔNG \(A\):?$/i);
+  if (tongA != null && sumA > 0) return tongA / sumA;
+  const tong = tongVndTheoNhan(rows, /^TỔNG:?$/i, /^TỔNG THANH TOÁN/i);
+  const mauSo = sumLines - sumReturns;
+  if (tong != null && mauSo > 0) return tong / mauSo;
   return null;
 }
 
@@ -74,14 +86,14 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (/thực bán/i.test(sh.name) || coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i)) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
     if (!coO(sh.rows, /A\.\s*Đơn (MEAN )?thực nhận/i)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
+    let muc: 'A' | 'B' | null = null; let bLaReturn = false; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false; let sumA = 0;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
       if (/^A\.\s*Đơn (MEAN )?thực nhận/i.test(dau)) { muc = 'A'; cot = null; return; }
       // Mục B: Denio = "B. Đơn return" (trừ tiền); Happy Clothing = "B. Đơn Happy Clothing Global thực nhận"
       // (đơn trên store riêng của brand, mã #HC… — cộng tiền như mục A, ghép thành offline vì không có trên Shopify).
       if (/^B\.\s*Đơn/i.test(dau)) { muc = 'B'; bLaReturn = /\bre(turn)?\b/i.test(dau); cot = null; return; }
-      if (laHangTieuDe(r)) { cot = chiSoCot(r); if (cot.ngay === 0 && r.map((c) => chuoi(c).toLowerCase()).findIndex((x) => x === 'ngày nhận' || x === 'ngày return' || x === 'ngày báo đơn' || x === 'ngày') < 0) ngayMissing = true; return; }
+      if (laHangTieuDe(r)) { cot = chiSoCot(r); if (cot.ngay === 0 && r.map((c) => chuoi(c).toLowerCase()).findIndex((x) => x === 'ngày nhận' || x === 'ngày return' || x === 'ngày trả' || x === 'ngày báo đơn' || x === 'ngày') < 0) ngayMissing = true; return; }
       if (!muc || !cot) return;
       const maDon = chuoi(r[cot.maDon]);
       if (!maDon.startsWith('#')) return;
@@ -99,14 +111,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         ...(laUsd ? { ttGoc: tt } : {}),
       };
       (muc === 'A' || !bLaReturn ? bk.lines : bk.returns).push(d);
+      if (muc === 'A') sumA += tt;
     });
     if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
     if (coUsd) {
       // Sheet USD → đổi mọi dòng sang VND theo tỉ giá chính sheet dùng (TỔNG ₫ ÷ Σ USD). Không có dòng TỔNG ₫ → giữ USD + cảnh báo.
-      const tongUsd = [...bk.lines, ...bk.returns].reduce((s, d) => s + (d.ttGoc ?? d.tt), 0);
-      const tongVnd = timTongVnd(sh.rows);
-      if (tongVnd != null && tongUsd > 0) {
-        const rate = tongVnd / tongUsd; bk.tiGia = Math.round(rate * 100) / 100; bk.currency = 'VND';
+      const sumLines = bk.lines.reduce((s, d) => s + (d.ttGoc ?? d.tt), 0); const sumReturns = bk.returns.reduce((s, d) => s + (d.ttGoc ?? d.tt), 0);
+      const rate = tiGiaTuSheet(sh.rows, sumA, sumLines, sumReturns);
+      if (rate != null) {
+        bk.tiGia = Math.round(rate * 100) / 100; bk.currency = 'VND';
         for (const d of [...bk.lines, ...bk.returns]) { d.ttGoc = d.ttGoc ?? d.tt; d.tt = Math.round(d.ttGoc * rate); }
       } else { bk.currency = 'USD'; bk.canhBao.push(`${sh.name}: sheet tính USD nhưng không thấy dòng TỔNG (₫) để đổi — giữ USD`); }
     } else bk.currency = 'VND';

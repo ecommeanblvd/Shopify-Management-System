@@ -117,3 +117,33 @@ describe('docWorkbook — khuôn Happy Clothing (USD, "A. Đơn MEAN thực nh�
     expect(bangKe[0].canhBao.some((c) => /TỔNG/.test(c))).toBe(true);
   });
 });
+
+describe('docWorkbook — khuôn Calista (USD, "TỔNG (A):" ₫, B return, TỔNG THANH TOÁN (A-B))', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK HĐ', 'Phí customize', 'Giá phụ kiện', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán', 'Kỳ báo đơn'];
+  const cal = {
+    name: ' File đối soát T7 thực nhận ', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/07/2026 đến 31/07/2026\n\nBrand: Calista de Minh Thanh'],
+      [null, 'A. Đơn thực nhận trong tháng '], HDR,
+      ['02/07/2026', '#MBLVD29184', 'Solstice …', 'Calista-CBAL15-S-WBRI-PLA', '1', '$110.00', '50%', null, null, '$55.00', '1,434,400 ₫', 'x', 'T7', '6'],
+      ['06/07/2026', '#MBLVD29180', 'Grace …', 'Calista-4951004-L-NUD', '1', '$300.00', '50%', null, null, '$150.00', '3,912,000 ₫', 'x', 'T7', '6'],
+      [null, null, 'TỔNG (A)', null, '2', '$410.00', null, null, null, '$205.00'], [null, null, null, null, null, 'TỔNG (A):', null, null, null, '5,346,400 ₫'],
+      [null, 'B. Đơn return trong tháng '], ['Ngày trả', ...HDR.slice(1)],
+      ['10/07/2026', '#MBLVD29000', 'Ret …', 'Calista-4951795-L-VAC', '1', '$345.00', '50%', null, null, '$172.50', null, 'x', 'T7', '6'],
+      [null, null, 'TỔNG (B)', null, '1', '$345.00', null, null, null, '$172.50'], [null, null, null, null, null, 'TỔNG (B):', null, null, null, '4,499,663 ₫'],
+      [null, null, 'TỔNG THANH TOÁN (A-B)', null, null, null, null, null, null, '846,737 đ'],
+    ],
+  };
+  it('tỉ giá = TỔNG (A): ₫ ÷ Σ USD mục A (26.080), return đổi cùng tỉ giá, không cảnh báo cột Ngày trả', () => {
+    const { bangKe } = docWorkbook([cal]);
+    const b = bangKe[0];
+    expect(b).toMatchObject({ brand: 'Calista de Minh Thanh', period: '2026-07', currency: 'VND', tiGia: 26080 });
+    expect(b.lines.map((l) => l.tt)).toEqual([1_434_400, 3_912_000]);
+    expect(b.returns[0]).toMatchObject({ maDon: '#MBLVD29000', ttGoc: 172.5, tt: 4_498_800 });
+    expect(b.canhBao).toEqual([]);
+  });
+  it('không có "TỔNG (A):" → dùng TỔNG THANH TOÁN (A-B) ÷ (Σ A − Σ return)', () => {
+    const rows = cal.rows.filter((r) => !r.some((c) => /^TỔNG \([AB]\):$/.test(String(c ?? ''))));
+    const { bangKe } = docWorkbook([{ ...cal, rows }]);
+    expect(bangKe[0].tiGia).toBeCloseTo(846_737 / (205 - 172.5), 0);
+  });
+});
