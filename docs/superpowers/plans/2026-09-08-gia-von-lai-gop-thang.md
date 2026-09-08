@@ -51,7 +51,7 @@
 
 **Files:**
 - Create: `db/migrations/0128_gia-von-line.sql`
-- Modify: `db/schema.ts` (thêm 3 bảng sau `skuCosts`, khoảng dòng 950), `db/migrations/meta/_journal.json`, `lib/auth/rbac.ts:36-53`
+- Modify: `db/schema.ts` (thêm 3 bảng sau `skuCosts`, khoảng dòng 950), `db/migrations/meta/_journal.json`, `lib/auth/rbac.ts:36-53`, `lib/auth/permissions.ts` (CATALOG), `lib/auth/permission-map.ts` (OLD_TO_NEW)
 
 **Interfaces:**
 - Produces: `schema.orderLineCogs`, `schema.brandCogsOffline`, `schema.fxMonthRates`; `Permission` thêm `'view_cogs' | 'manage_cogs'`.
@@ -164,6 +164,7 @@ export const fxMonthRates = pgTable('fx_month_rates', {
 - [ ] **Step 3: journal** — thêm sau idx 127: `{ "idx": 128, "version": "7", "when": 1787575200000, "tag": "0128_gia-von-line", "breakpoints": true }`.
 
 - [ ] **Step 4: rbac.ts** — thêm `| 'view_cogs' | 'manage_cogs'` vào cuối union `Permission` (sau `'manage_ship_ho'`), và thêm `'view_cogs', 'manage_cogs',` vào mảng `admin` của `MATRIX` (chỉ admin).
+  **Đường kiểm THẬT** (`hasPermission` không đọc `MATRIX` — nó tra `OLD_TO_NEW` rồi role cache seed từ `CATALOG`): thêm vào `lib/auth/permissions.ts` `CATALOG` sau scope `orders`: `{ key: 'orders.cogs', label: 'Đơn hàng — Giá vốn & lãi gộp', actions: ['view', 'edit'] }`; vào `lib/auth/permission-map.ts` `OLD_TO_NEW`: `view_cogs: ['orders.cogs:view']`, `manage_cogs: ['orders.cogs:view', 'orders.cogs:edit']` (KHÔNG thêm vào `OPERATOR_OLD`/`VIEWER_OLD`); chạy `npm run db:seed-roles`. Test: hai khoá `isValidKey`, admin seed có cả hai, operator/viewer không có.
 
 - [ ] **Step 5: Kiểm** — `npm run db:migrate && npx tsc --noEmit && npx vitest run lib/auth`. Expected: migration áp dụng; tsc sạch; test rbac (nếu có snapshot quyền admin thì cập nhật).
 
