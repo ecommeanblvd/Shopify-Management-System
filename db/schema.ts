@@ -946,6 +946,54 @@ export const skuCosts = pgTable('sku_costs', {
   index('sku_costs_lookup_idx').on(t.storeId, t.sku, t.effectiveFrom),
 ]);
 
+/** Giá vốn theo LINE đơn — spec 2026-09-08 §3.1. kind 'return' ghi amount âm. */
+export const orderLineCogs = pgTable('order_line_cogs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  shopifyLineId: text('shopify_line_id').notNull(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  kind: text('kind').notNull().default('cogs'),
+  period: text('period').notNull(),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  source: text('source').notNull(),
+  brandSlug: text('brand_slug'),
+  statementRef: text('statement_ref'),
+  detail: jsonb('detail'),
+  importedBy: text('imported_by').references(() => user.id, { onDelete: 'set null' }),
+  importedAt: timestamp('imported_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('order_line_cogs_line_kind_period_idx').on(t.orderId, t.shopifyLineId, t.kind, t.period),
+  index('order_line_cogs_period_idx').on(t.period),
+  index('order_line_cogs_brand_period_idx').on(t.brandSlug, t.period),
+]);
+
+/** Dòng bảng kê brand không thuộc đơn Shopify (PO, MTB) — spec §3.2. */
+export const brandCogsOffline = pgTable('brand_cogs_offline', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  brandSlug: text('brand_slug').notNull(),
+  period: text('period').notNull(),
+  kind: text('kind').notNull().default('cogs'),
+  refCode: text('ref_code').notNull(),
+  sku: text('sku'),
+  qty: integer('qty').notNull().default(1),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull(),
+  statementRef: text('statement_ref'),
+  importedAt: timestamp('imported_at').defaultNow().notNull(),
+}, (t) => [index('brand_cogs_offline_brand_period_idx').on(t.brandSlug, t.period)]);
+
+/** Tỉ giá theo tháng: 1 from = rate to — spec §3.3. */
+export const fxMonthRates = pgTable('fx_month_rates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fromCurrency: text('from_currency').notNull(),
+  toCurrency: text('to_currency').notNull(),
+  period: text('period').notNull(),
+  rate: numeric('rate', { precision: 18, scale: 6 }).notNull(),
+  source: text('source').notNull().default('manual'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [uniqueIndex('fx_month_rates_pair_period_idx').on(t.fromCurrency, t.toCurrency, t.period)]);
+
 export const shippingInvoices = pgTable('shipping_invoices', {
   id: uuid('id').defaultRandom().primaryKey(),
   storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),

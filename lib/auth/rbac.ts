@@ -37,7 +37,9 @@ export type Permission =
   | 'view_pack_check'
   | 'check_packed'
   | 'view_ship_ho'
-  | 'manage_ship_ho';
+  | 'manage_ship_ho'
+  | 'view_cogs'
+  | 'manage_cogs';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -52,6 +54,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products', 'manage_mmp_products',
     'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
+    'view_cogs', 'manage_cogs',
   ],
   operator: [
     'view', 'run_feature',
