@@ -11,7 +11,7 @@ import { reconciledBrandCharge } from './reconcile-charge';
 import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
-import { decideReconcile } from './reconcile-decision';
+import { decideReconcile, donDaDongBang } from './reconcile-decision';
 
 export interface ReconcileSummary {
   total: number;
@@ -87,6 +87,8 @@ export interface RebillSummary {
    *  Tách khỏi `unmatched` để ops phân biệt "hãng chưa xuất hoá đơn cước" với
    *  "chưa nạp hoá đơn" — hai việc phải xử khác nhau. */
   dutyOnly: number;
+  /** Đã đối soát và bill không đổi → GIỮ NGUYÊN giá đã chốt, không tính lại (CEO 08/09). */
+  frozen: number;
   errors: Array<{ code: string; reason: string }>;
 }
 
@@ -105,9 +107,10 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
  * cân thực (fuel tuần giao hàng theo ship_date), ghi actual* + margin/delta +
  * breakdown. Đơn MỚI đối soát lần đầu (hoặc giá cuối đổi) → emit `order.reconciled`
  * sang MMP (giá cuối, KHÔNG lộ cước carrier). Idempotent theo bill mới nhất.
+ * Đơn ĐÃ đối soát mà bill không đổi → đóng băng (không tính lại) — xem donDaDongBang.
  */
 export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSummary> {
-  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, errors: [] };
+  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, frozen: 0, errors: [] };
 
   const orders = await db
     .select({
@@ -125,6 +128,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
       chargedVnd: schema.shipHoOrders.chargedVnd,
       prevDecision: schema.shipHoOrders.reconcileDecision,
+      reconcileStatus: schema.shipHoOrders.reconcileStatus,
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
+      actualBillBreakdown: schema.shipHoOrders.actualBillBreakdown,
       dimLengthCm: schema.shipHoOrders.dimLengthCm,
       dimWidthCm: schema.shipHoOrders.dimWidthCm,
       dimHeightCm: schema.shipHoOrders.dimHeightCm,
@@ -145,6 +152,15 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // chưa có bill, tránh actualCarrierCost = mỗi duty → margin ảo (03/08).
     if (!billedHasFreight(billed)) { summary.dutyOnly += 1; continue; }
     summary.matched += 1;
+    // Đã đối soát + bill không đổi → đóng băng: không tính lại giá thu (markup bậc
+    // hiện tại có thể đã khác lúc chốt), không ghi DB, không emit gì (CEO 08/09).
+    const ab = o.actualBillBreakdown as { billNumber?: unknown } | null;
+    if (donDaDongBang({
+      reconcileStatus: o.reconcileStatus,
+      actualChargedVnd: o.actualChargedVnd == null ? null : Number(o.actualChargedVnd),
+      actualCarrierCostVnd: o.actualCarrierCostVnd == null ? null : Number(o.actualCarrierCostVnd),
+      billNumber: typeof ab?.billNumber === 'string' ? ab.billNumber : null,
+    }, { billNumber: billed.billNumber ?? null, totalVnd: billed.totalVnd })) { summary.frozen += 1; continue; }
 
     // Re-quote giá thu THỰC: cột cân trên bill FBO là CÂN THỰC trên cân (scale),
     // KHÔNG phải cân tính cước — carrier tính trên max(cân thực, dim weight) làm

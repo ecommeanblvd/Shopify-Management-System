@@ -31,6 +31,7 @@ export function ReconcileBillsButton() {
           <div className="flex justify-between"><span className="text-muted-foreground">Đơn có tracking</span><span>{result.totalWithTracking}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Khớp hóa đơn</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{result.matched}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Re-bill giá thu thực</span><span>{result.requoted}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Đã chốt, giữ nguyên</span><span>{result.frozen}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Chưa có hóa đơn</span><span>{result.unmatched}</span></div>
           {result.errors.length > 0 && (
             <div className="mt-1 border-t border-border pt-1 text-amber-600 dark:text-amber-400">

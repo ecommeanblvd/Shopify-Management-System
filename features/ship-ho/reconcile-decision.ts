@@ -53,3 +53,22 @@ export function reconcileCellState(
   // null | accepted | claim_credited | claim_rejected → đã chốt.
   return { kind: 'done', label: '✓ Đã đối soát', actionable: false };
 }
+
+/**
+ * THUẦN: đơn đã đối soát có bị ĐÓNG BĂNG (cron không tính lại giá thu) không.
+ * CEO chốt 08/09: đã đối soát với brand thì con số đứng yên — cron chỉ tính lại
+ * khi BILL đổi (nạp lại có sửa, bill thuế về sau → tổng đổi, hoặc số bill khác).
+ * Nếu không có luật này, cron mỗi giờ tính lại bằng markup BẬC HIỆN TẠI của brand:
+ * brand lên/xuống bậc là hoá đơn cũ đổi theo.
+ * Chưa có giá thu thực (re-quote từng lỗi) → vẫn cho tính lại để tự lành.
+ */
+export function donDaDongBang(
+  daLuu: { reconcileStatus: string | null; actualChargedVnd: number | null; actualCarrierCostVnd: number | null; billNumber: string | null },
+  bill: { billNumber: string | null; totalVnd: number },
+): boolean {
+  if (daLuu.reconcileStatus !== 'reconciled') return false;
+  if (daLuu.actualChargedVnd == null || daLuu.actualCarrierCostVnd == null) return false;
+  if (Math.abs(daLuu.actualCarrierCostVnd - bill.totalVnd) > 1) return false;
+  if (daLuu.billNumber != null && bill.billNumber != null && daLuu.billNumber !== bill.billNumber) return false;
+  return true;
+}

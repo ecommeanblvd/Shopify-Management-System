@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideReconcile, reconcileCellState, REVIEW_TOLERANCE_VND } from './reconcile-decision';
+import { decideReconcile, donDaDongBang, reconcileCellState, REVIEW_TOLERANCE_VND } from './reconcile-decision';
 
 describe('decideReconcile', () => {
   it('khớp (delta trong tolerance) → decision null, tự đẩy giá', () => {
@@ -54,5 +54,31 @@ describe('reconcileCellState', () => {
   });
   it('claiming → Đang claim (bấm được)', () => {
     expect(reconcileCellState('reconciled', 'claiming', true)).toEqual({ kind: 'claiming', label: '⏳ Đang claim', actionable: true });
+  });
+});
+
+describe('donDaDongBang — đơn đã đối soát không tính lại khi bill không đổi (CEO 08/09)', () => {
+  const daLuu = { reconcileStatus: 'reconciled', actualChargedVnd: 1_567_050, actualCarrierCostVnd: 1_416_688, billNumber: 'HANR000265761' };
+  const bill = { billNumber: 'HANR000265761', totalVnd: 1_416_688 };
+  it('cùng bill, cùng tổng, đã có giá thu thực → đóng băng', () => {
+    expect(donDaDongBang(daLuu, bill)).toBe(true);
+  });
+  it('lệch tổng ≤ 1đ (làm tròn numeric) vẫn coi là cùng bill', () => {
+    expect(donDaDongBang(daLuu, { ...bill, totalVnd: 1_416_688.4 })).toBe(true);
+  });
+  it('chưa reconciled → không đóng băng', () => {
+    expect(donDaDongBang({ ...daLuu, reconcileStatus: null }, bill)).toBe(false);
+  });
+  it('chưa có giá thu thực (re-quote từng lỗi) → tính lại', () => {
+    expect(donDaDongBang({ ...daLuu, actualChargedVnd: null }, bill)).toBe(false);
+  });
+  it('tổng bill đổi (bill thuế về sau / nạp lại có sửa) → tính lại', () => {
+    expect(donDaDongBang(daLuu, { ...bill, totalVnd: 1_500_000 })).toBe(false);
+  });
+  it('số bill đổi → tính lại', () => {
+    expect(donDaDongBang(daLuu, { ...bill, billNumber: 'HANR000264033' })).toBe(false);
+  });
+  it('đơn cũ chưa lưu số bill (null) nhưng tổng khớp → vẫn đóng băng', () => {
+    expect(donDaDongBang({ ...daLuu, billNumber: null }, bill)).toBe(true);
   });
 });
