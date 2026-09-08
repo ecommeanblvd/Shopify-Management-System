@@ -1,5 +1,6 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { giaThuBangKe } from './statement-logic';
 
 export async function listShipHoStatements() {
   return db
@@ -43,12 +44,22 @@ export async function getShipHoStatement(id: string) {
       code: schema.shipHoOrders.code,
       country: schema.shipHoOrders.country,
       chargedVnd: schema.shipHoOrders.chargedVnd,
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      reconcileStatus: schema.shipHoOrders.reconcileStatus,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
       marginVnd: schema.shipHoOrders.marginVnd,
     })
     .from(schema.shipHoOrders)
     .where(eq(schema.shipHoOrders.statementId, id));
-  return { statement: st, orders };
+  // giaThuVnd = số đưa vào bảng kê (giá thực nếu đã có bill, không thì giá báo); theoBill = đã có bill.
+  return {
+    statement: st,
+    orders: orders.map((o) => ({
+      ...o,
+      giaThuVnd: giaThuBangKe(o),
+      theoBill: o.reconcileStatus === 'reconciled' && o.actualChargedVnd != null,
+    })),
+  };
 }
 
 /** Báo cáo margin: tổng marginVnd theo partner (chỉ đơn đã đối soát). */

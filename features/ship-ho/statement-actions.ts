@@ -4,7 +4,8 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement } from './statement-logic';
+import { summarizeStatement, giaThuBangKe } from './statement-logic';
+import { tinhLaiTongBangKe } from './statement-core';
 
 /** Gom đơn đủ điều kiện bill của partner trong kỳ (có chargedVnd, chưa vào kê,
  *  đã gửi/giao, quotedAt trong [start,end]) → tạo ship_ho_statements + gán. */
@@ -24,7 +25,10 @@ export async function generateStatement(
   if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', orderCount: 0, totalChargedVnd: 0, dryRun };
 
   const orders = await db
-    .select({ id: schema.shipHoOrders.id, chargedVnd: schema.shipHoOrders.chargedVnd })
+    .select({
+      id: schema.shipHoOrders.id, chargedVnd: schema.shipHoOrders.chargedVnd,
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus,
+    })
     .from(schema.shipHoOrders)
     .where(and(
       eq(schema.shipHoOrders.partnerBrandSlug, partnerBrandSlug),
@@ -35,7 +39,8 @@ export async function generateStatement(
       sql`${schema.shipHoOrders.quotedAt}::date <= ${periodEnd}`,
     ));
 
-  const sums = summarizeStatement(orders.map((o) => Number(o.chargedVnd)));
+  // Đơn đã có bill → giá thực; chưa có bill → giá báo (CEO 08/09).
+  const sums = summarizeStatement(orders.map((o) => giaThuBangKe(o)).filter((v): v is number => v != null));
   if (dryRun || orders.length === 0) {
     return { ok: true, orderCount: sums.orderCount, totalChargedVnd: sums.totalChargedVnd, dryRun };
   }
@@ -55,6 +60,18 @@ export async function generateStatement(
 
   revalidatePath('/f/ship-ho/statements');
   return { ok: true, statementId: st.id, orderCount: sums.orderCount, totalChargedVnd: sums.totalChargedVnd, dryRun };
+}
+
+/** Tính lại tổng bảng kê NHÁP theo giá thực của các đơn đã có bill (bill về sau khi tạo kê). */
+export async function recomputeDraftStatement(id: string): Promise<{ ok: boolean; error?: string; orderCount: number; totalChargedVnd: number; truoc?: number }> {
+  try {
+    await requireManageShipHo();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e), orderCount: 0, totalChargedVnd: 0 };
+  }
+  const r = await tinhLaiTongBangKe(id);
+  if (r.ok) revalidatePath('/f/ship-ho/statements');
+  return r;
 }
 
 /** issued: đánh dấu đã gửi partner. paid: đã thu → đơn trong kê chuyển 'settled'. */

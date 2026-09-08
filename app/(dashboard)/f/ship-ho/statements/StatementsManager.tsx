@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { utils, writeFile } from 'xlsx';
-import { generateStatement, setStatementStatus } from '@/features/ship-ho/statement-actions';
+import { generateStatement, setStatementStatus, recomputeDraftStatement } from '@/features/ship-ho/statement-actions';
 import { fetchStatementForExport } from '@/features/ship-ho/statement-export-action';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,13 +42,23 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
       if (!r.ok) setMsg(r.error ?? 'Lỗi cập nhật trạng thái');
     });
 
+  const tinhLai = (id: string) =>
+    start(async () => {
+      setMsg(null);
+      const r = await recomputeDraftStatement(id);
+      if (!r.ok) { setMsg(r.error ?? 'Lỗi tính lại'); return; }
+      setMsg(`Đã tính lại: ${r.orderCount} đơn · ${(r.truoc ?? 0).toLocaleString('vi-VN')} → ${r.totalChargedVnd.toLocaleString('vi-VN')} ₫ (đơn đã có bill thu theo giá thực)`);
+    });
+
   const exportXlsx = (id: string, label: string) =>
     start(async () => {
       const data = await fetchStatementForExport(id);
       if (!data) return;
       const rows = data.orders.map((o) => ({
         'Mã đơn': o.code, 'Nước': o.country,
-        'Giá thu (VND)': o.chargedVnd == null ? '' : Number(o.chargedVnd),
+        'Giá thu (VND)': o.giaThuVnd == null ? '' : o.giaThuVnd, // giá thực nếu đã có bill, không thì giá báo
+        'Giá báo (VND)': o.chargedVnd == null ? '' : Number(o.chargedVnd),
+        'Theo bill': o.theoBill ? 'x' : '',
         'Cước thực (VND)': o.actualCarrierCostVnd == null ? '' : Number(o.actualCarrierCostVnd),
         'Margin (VND)': o.marginVnd == null ? '' : Number(o.marginVnd),
       }));
@@ -100,7 +110,7 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Bảng kê</div>
         <Card><CardContent className="p-0">
           <table className="w-full text-sm">
-            <thead className="border-b text-muted-foreground"><tr className="[&>th]:text-left [&>th]:p-3"><th>Partner</th><th>Kỳ</th><th>Đơn</th><th>Tổng thu</th><th>Trạng thái</th><th></th></tr></thead>
+            <thead className="border-b text-muted-foreground"><tr className="[&>th]:text-left [&>th]:p-3"><th>Partner</th><th>Kỳ</th><th>Đơn</th><th title="Đơn đã có bill thu theo giá thực, chưa có bill thu theo giá báo (CEO 08/09)">Tổng thu</th><th>Trạng thái</th><th></th></tr></thead>
             <tbody>
               {statements.map((s) => (
                 <tr key={s.id} className="border-b [&>td]:p-3">
@@ -111,6 +121,7 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
                   <td>{s.status === 'draft' ? 'Nháp' : s.status === 'issued' ? 'Đã gửi' : 'Đã thu'}</td>
                   <td className="text-right space-x-1">
                     <Button variant="outline" size="sm" onClick={() => exportXlsx(s.id, `${s.partnerBrandSlug}-${s.periodStart}`)} disabled={pending}>Xuất</Button>
+                    {canManage && s.status === 'draft' && <Button variant="outline" size="sm" title="Cập nhật tổng theo giá thực của các đơn đã có bill (bill về sau khi tạo kê)" onClick={() => tinhLai(s.id)} disabled={pending}>Tính lại</Button>}
                     {canManage && s.status === 'draft' && <Button variant="outline" size="sm" onClick={() => mark(s.id, 'issued')} disabled={pending}>Gửi</Button>}
                     {canManage && s.status === 'issued' && <Button size="sm" onClick={() => mark(s.id, 'paid')} disabled={pending}>Đã thu</Button>}
                   </td>
