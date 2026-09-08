@@ -738,7 +738,7 @@ export async function apDungBangKe(input: { brandSlug: string; url?: string; buf
 }
 ```
 
-- [ ] **Step 4:** `npx vitest run features/cogs && npx tsc --noEmit`. Kiểm thật (KHÔNG ghi): script tạm trong `scripts/` gọi `xemTruocBangKe({ brandSlug: 'denio', url: '<link CEO gửi>' })` và in `ky.map(k => [k.period, k.tongDong, k.khopSku, k.khopMaGoc, k.offline, k.khongKhop.length, k.tongTT])`. Expected khớp khảo sát: 8 kỳ; tổng dòng 865; Σ TT theo kỳ 01: 166.648.800 · 02: 206.330.000 · 03: 180.710.000 · 04: 148.573.400 · 05: 171.324.000 · 06: 90.762.850 · 07: 47.381.000 · 08: 123.789.500; offline 183; khongKhop tổng ≤ 5 (nếu lớn hơn, đọc danh sách và sửa luật trước khi sang Task 6). Xoá script tạm.
+- [ ] **Step 4:** `npx vitest run features/cogs && npx tsc --noEmit`. Kiểm thật (KHÔNG ghi): script tạm trong `scripts/` gọi `xemTruocBangKe({ brandSlug: 'denio', url: '<link CEO gửi>' })` và in `ky.map(k => [k.period, k.tongDong, k.khopSku, k.khopMaGoc, k.offline, k.khongKhop.length, k.tongTT])`. Expected — MỐC LÀ TỔNG (A)/(B) TRÊN CHÍNH SHEET (bản text Drive dùng khảo sát 08/09 thiếu dòng ở T2–T4, không dùng nữa): 8 kỳ; mục A (dòng/SL/Σ TT) 01: 135/135/166.648.800 · 02: 231/237/285.990.000 · 03: 143/153/191.110.000 · 04: 113/116/149.887.400 · 05: 128/128/171.324.000 · 06: 62/62/90.762.850 · 07: 34/34/47.381.000 · 08: 91/91/123.789.500; mục B (dòng/Σ TT) 01: 2/1.754.000 · 04: 11/13.184.000 · 05: 11/11.636.000 · 06: 2/3.228.000 · 08: 1/1.657.500, các kỳ khác không có B; khongKhop tổng ≤ 10 (nếu lớn hơn, đọc danh sách và sửa luật trước khi sang Task 6). Tab T1/T4/T5/T6 báo "không thấy cột Ngày, dùng cột đầu" là bình thường (tiêu đề cột ngày khác tên). Xoá script tạm.
 
 - [ ] **Step 5:** commit `feat(cogs): bộ nhập bảng kê brand — tải sheet, ghép line, xem trước, áp dụng theo kỳ`
 
@@ -840,7 +840,7 @@ select period, count(*) filter (where kind='cogs') as lines, sum(amount) filter 
 from order_line_cogs where brand_slug='denio' and source='brand_statement' group by 1 order by 1;
 select period, count(*), sum(amount) from brand_cogs_offline where brand_slug='denio' group by 1 order by 1;
 ```
-Expected: 8 kỳ; Σ(lines.tt + offline.amount) mỗi kỳ = Σ TT mục A của kỳ trong khảo sát; offline tổng 183 dòng.
+Expected: 8 kỳ; với mỗi kỳ, Σ amount(kind='cogs' trong order_line_cogs) + Σ amount(kind='cogs' trong brand_cogs_offline) + Σ TT các dòng khongKhop (không ghi) = Σ TT mục A của kỳ theo TỔNG (A) trên sheet (bảng số ở Task 5 Step 4); tương tự kind='return' với TỔNG (B).
 - [ ] **Step 3:** Ghi vào Second Brain Activity Log một dòng: "Nhập bảng kê Denio 01–08/2026 vào order_line_cogs: N line, 183 offline, K không khớp (liệt kê)".
 
 ---
