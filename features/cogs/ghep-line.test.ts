@@ -50,3 +50,28 @@ describe('ghepBangKe', () => {
     expect(kq.theoLine).toHaveLength(0);
   });
 });
+
+describe('ghepBangKe — đơn có nhiều line cùng SKU (Calista #MBLVD26692)', () => {
+  const dong = (sku: string, tt: number, sl = 1) => ({ ngay: '', maDon: '#MBLVD26692', tenSp: '', sku, sl, giaNoiDia: null, ck: null, phiCustomize: null, tt, code: null, hangSheet: 1 });
+  const don: DonTraCuu = { orderId: 'o1', storeId: 's1', maDon: 'MBLVD26692', lines: [
+    { orderId: 'o1', storeId: 's1', shopifyLineId: 'L1', sku: 'Calista-4951002-S-BR&WH', quantity: 1, variantTitle: null },
+    { orderId: 'o1', storeId: 's1', shopifyLineId: 'L2', sku: 'MBLVD-Cosmetic-Bag-BL/PK', quantity: 1, variantTitle: null },
+    { orderId: 'o1', storeId: 's1', shopifyLineId: 'L3', sku: 'Calista-4951002-S-BR&WH', quantity: 1, variantTitle: null },
+  ] };
+  const map = new Map([[don.maDon, don]]);
+  it('một dòng sheet → gán line đầu cùng SKU, cách sku, không mơ hồ', () => {
+    const r = ghepBangKe([dong('Calista-4951002-S-BR&WH', 2_507_700)], map);
+    expect(r.khongKhop).toEqual([]);
+    expect(r.theoLine).toHaveLength(1); expect(r.theoLine[0].line.shopifyLineId).toBe('L1'); expect(r.theoLine[0].cachKhop).toBe('sku'); expect(r.theoLine[0].du).toBe(false);
+  });
+  it('hai dòng sheet → hai line, mỗi line một dòng, không dư', () => {
+    const r = ghepBangKe([dong('Calista-4951002-S-BR&WH', 2_507_700), dong('Calista-4951002-S-BR&WH', 2_507_700)], map);
+    expect(r.theoLine.map((t) => t.line.shopifyLineId).sort()).toEqual(['L1', 'L3']);
+    expect(r.theoLine.every((t) => !t.du && t.amount === 2_507_700)).toBe(true);
+  });
+  it('ba dòng sheet cho hai line → dòng thứ ba dồn về line đầu và báo dư', () => {
+    const r = ghepBangKe([1, 2, 3].map(() => dong('Calista-4951002-S-BR&WH', 100)), map);
+    const l1 = r.theoLine.find((t) => t.line.shopifyLineId === 'L1')!;
+    expect(l1.slSheet).toBe(2); expect(l1.du).toBe(true);
+  });
+});

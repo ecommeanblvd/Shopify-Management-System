@@ -32,11 +32,17 @@ export interface KetQuaGhep {
   khongKhop: Array<{ dong: DongBangKe; lyDo: LyDoKhongKhop }>;
 }
 
-function chonLine(dong: DongBangKe, lines: LineDon[]): { line: LineDon; cach: 'sku' | 'ma_goc' | 'don_mot_line' } | 'mo_ho' | null {
+function chonLine(dong: DongBangKe, lines: LineDon[], daGan: (l: LineDon) => number = () => 0): { line: LineDon; cach: 'sku' | 'ma_goc' | 'don_mot_line' } | 'mo_ho' | null {
   const sku = dong.sku.trim().toUpperCase();
   const dung = lines.filter((l) => (l.sku ?? '').trim().toUpperCase() === sku);
   if (dung.length === 1) return { line: dung[0], cach: 'sku' };
-  if (dung.length > 1) return 'mo_ho';
+  if (dung.length > 1) {
+    // Đơn có NHIỀU line cùng một SKU (khách mua 2 chiếc giống nhau, Shopify tách 2 line): các line
+    // hoán đổi được cho nhau nên gán tuần tự — line còn chỗ (số dòng sheet đã gán < quantity) lấy trước;
+    // đủ hết thì line đầu (sẽ báo "dư"). Không phải mơ hồ vì kết quả tiền như nhau dù chọn line nào.
+    // (Calista #MBLVD26692, 08/09/2026.) SKU khác nhau mà cùng khớp → vẫn mơ hồ.
+    return { line: dung.find((l) => daGan(l) < l.quantity) ?? dung[0], cach: 'sku' };
+  }
   const goc = maGoc(dong.sku);
   let soUngVien = 0;
   if (goc.length) {
@@ -63,7 +69,7 @@ export function ghepBangKe(dongs: DongBangKe[], don: Map<string, DonTraCuu>): Ke
     if (laMaNgoaiShopify(ma)) { kq.offline.push(dg); continue; }
     const d = don.get(ma);
     if (!d) { kq.khongKhop.push({ dong: dg, lyDo: 'khong_co_don' }); continue; }
-    const c = chonLine(dg, d.lines);
+    const c = chonLine(dg, d.lines, (l) => gom.get(`${d.orderId}|${l.shopifyLineId}`)?.slSheet ?? 0);
     if (c === null) { kq.khongKhop.push({ dong: dg, lyDo: 'khong_co_line_khop' }); continue; }
     if (c === 'mo_ho') { kq.khongKhop.push({ dong: dg, lyDo: 'mo_ho' }); continue; }
     const k = `${d.orderId}|${c.line.shopifyLineId}`;
