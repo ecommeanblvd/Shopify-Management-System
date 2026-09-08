@@ -91,13 +91,49 @@ Dùng lại đúng định nghĩa `netGmv − discount` đã có sẵn trong das
 về cùng đơn hàng); báo cáo lãi gộp trừ ngay phí ship **thực** trả cho hãng vận chuyển ở cột kế bên, nên phần
 chênh lệch thu/chi ship hiện rõ trong "Rev thực tế" thay vì bị ẩn trong doanh thu.
 
-## Đợt 2 — chưa làm
+## Đợt 2 — trạng thái
 
-- Cron `sync-unit-cost` đọc `inventoryItem.unitCost` từ Shopify ghi vào `sku_costs` (nguồn `shopify`) cho hàng
-  tự sản xuất (TINH, Mirer, hàng MEAN tự sản).
-- Cron `apply-own-cogs` ghi `order_line_cogs` cho các line chưa có giá vốn từ `sku_costs` hiệu lực.
+- Cron `sync-unit-cost` + `apply-own-cogs` (hàng tự sản xuất) — **đã chạy production** (02:00 UTC hằng ngày).
+  Chi tiết ở mục ngay dưới.
 - Webhook `POST /api/mmp/cogs` — route **đã tồn tại trong code, ký HMAC, nhưng CHƯA BẬT/CHƯA BÁO cho MMP**
   (chờ CEO xác nhận thiết kế với MMP trước khi công bố). Xem hợp đồng payload bên dưới.
+
+## Hàng tự sản xuất — cron `cogs-own`
+
+Áp dụng cho **TINH** (`tinhatelier`), **Mirer** (`mirermirer-official`) — mọi line của hai store này — và
+riêng trên store đa-brand `meanblvd`, chỉ line có `vendor = 'MEAN BLVD'` (so sánh không phân biệt hoa/thường)
+— luật thuần ở `laHangTuSanXuat` (`features/cogs/vendor-tu-san-xuat.ts`). Hàng outsource (brand khác gửi bảng
+kê PO/MTB) không đi qua cron này.
+
+Service Railway `cron-cogs-own` (`npm run cron:cogs-own`, IaC `.railway/railway.ts`), chạy **02:00 UTC hằng
+ngày**, gồm hai bước lồng nhau trong một script (`scripts/cron/cogs-own.ts`):
+
+1. **`sync-unit-cost`** (`features/cogs/unit-cost-sync.ts`) — đọc *Cost per item* (`inventoryItem.unitCost`)
+   từng biến thể qua GraphQL Shopify, một truy vấn DISTINCT ON/store để tra giá hiện có, chỉ **ghi khi giá đổi**
+   vào `sku_costs` (nguồn `shopify`, `effective_from` = lúc đồng bộ). Lỗi một store không chặn store khác,
+   nhưng `chayCron` vẫn báo đỏ (`process.exitCode = 1`) khi có `loi` — không nuốt lỗi im lặng.
+2. **`apply-own-cogs`** (`features/cogs/own-cogs.ts`, chạy lồng qua `chayMotJob('apply-own-cogs', …)`) — quét
+   line đơn **90 ngày gần đây**, chưa huỷ, thuộc store/vendor tự sản xuất, **chưa có** `order_line_cogs`
+   `kind='cogs'` từ bất kỳ nguồn nào (`onConflictDoNothing` — nguồn tay luôn thắng, không đè). Với mỗi line,
+   tra `sku_costs` cùng store/SKU có `effective_from` ≤ **ngày đặt hàng** (giờ nghiệp vụ Bangkok,
+   `processed_at_shopify`), lấy bản **mới nhất thoả điều kiện**; không có giá phù hợp → đếm vào `khongCoGia`,
+   bỏ qua (không chặn line khác). Kỳ ghi (`period`) = **tháng đặt hàng**, khác với hàng brand ghi theo tháng
+   thực nhận bảng kê.
+
+**Không hồi tố**: giá mới đồng bộ từ Shopify chỉ có hiệu lực từ lúc đồng bộ trở đi (`effective_from` = ngày
+chạy cron) — line đặt **trước** ngày đó không tự động có giá (không có `sku_costs` nào với `effective_from` ≤
+ngày đặt), phải nhập tay (CSV/bảng kê) nếu cần giá vốn hồi tố. Đây là thiết kế có chủ ý (spec không yêu cầu
+truy hồi giá lịch sử cho hàng tự sản xuất), không phải lỗi — lần chạy production đầu tiên (2026-09-08) minh
+hoạ đúng hành vi này: 10 `sku_costs` được ghi (giá mới), nhưng `apply-own-cogs` ghi 0/289 line vì toàn bộ 289
+line ứng viên đều đặt trước ngày giá có hiệu lực.
+
+**`DRY_RUN=1`**: chỉ in số liệu sẽ đọc/sẽ ghi ra log, không ghi gì vào `sku_costs`/`order_line_cogs` — dùng để
+kiểm tra trước khi chạy thật hoặc khi đổi luật vendor/store.
+
+**Biến môi trường** (service `cron-cogs-own`, 11 biến, xem `.railway/railway.ts`): `TZ=UTC` (bắt buộc — xem
+cảnh báo giờ nghiệp vụ ở `ungVienChuaCoCogs`), `DATABASE_URL`, `ENCRYPTION_KEY_V1`, `ENCRYPTION_KEY_CURRENT`,
+`SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`, `SHOPIFY_APP_URL`, `SHOPIFY_API_VERSION`,
+`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 
 Xem chi tiết quyết định và khảo sát dữ liệu tại
 `docs/superpowers/specs/2026-09-08-gia-von-lai-gop-thang-design.md`.
