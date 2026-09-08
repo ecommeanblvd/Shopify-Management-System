@@ -1,0 +1,9 @@
+#!/bin/sh
+# Chặn push khi type-check hoặc test đỏ (quy tắc toàn cục: không bao giờ push đỏ).
+# Bật: git config core.hooksPath .githooks   (đã ghi trong docs/README). Build/e2e chạy ở deploy, không ở đây.
+set -e
+echo "[pre-push] npx tsc --noEmit"
+npx tsc --noEmit
+echo "[pre-push] npx vitest run"
+npx vitest run --reporter=dot
+echo "[pre-push] xanh — cho push"

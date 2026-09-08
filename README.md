@@ -79,3 +79,7 @@ Open an issue first for non-trivial changes. PRs should be focused, include test
 ## Roadmap
 
 This is sub-project #1 of 6. See `docs/superpowers/specs/` for the full design and the roadmap (settings write, theme control, feature-module framework, debug/monitoring, customer service).
+
+## Git hook chặn push đỏ
+
+Sau khi clone, bật hook một lần: `git config core.hooksPath .githooks`. Hook `pre-push` chạy `npx tsc --noEmit` và `npx vitest run`, đỏ thì không cho push. `npm run build` và e2e chạy ở deploy.
