@@ -322,3 +322,41 @@ describe('docWorkbook — khuôn Maison des Copains (mục A VND, mục B USD, t
     expect(b.lines[0].giaNoiDia).toBe(5_890_000); expect(b.lines[1].ttGoc).toBe(225); expect(b.tiGia).toBe(25880);
   });
 });
+
+describe('docWorkbook — Tracy Studio: TỔNG THANH TOÁN gồm VAT, mốc tỉ giá là "TỔNG (A-B)" trước thuế', () => {
+  const HDR = ['Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const t7 = { name: 'Đối soát T72026', rows: [
+    [null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/07/2026 đến 31/07/2026\n\nBrand: TRACY STUDIO'],
+    ['A. Đơn thực nhận trong tháng '], HDR,
+    ['#MBLVD29400', 'x', 'Tracy-V1060-L-WHI', '1', '$1,088.00', '50%', null, '$544.00', null, 'c', 'T7', '6'],
+    ['#MBLVD29401', 'y', 'Tracy-V1061-M-WHI', '1', '$1,000.00', '50%', null, '$500.00', null, 'c', 'T7', '6'],
+    ['B. Đơn return trong tháng '], HDR,
+    ['#MBLVD29300', 'z', 'Tracy-V1050-S-WHI', '1', '$800.00', '50%', null, '$400.00', null, 'c', 'T7', '5'],
+    [null, null, 'TỔNG (A-B)', null, null, null, null, '16,795,520 đ'], [null, null, 'TỔNG THANH TOÁN', null, null, null, null, '18,139,162 ₫'],
+  ] };
+  it('tỉ giá = TỔNG (A-B) ₫ ÷ (Σ A − Σ return) = 26.080, không dùng TỔNG THANH TOÁN (×1,08)', () => {
+    const { bangKe } = docWorkbook([t7]);
+    expect(bangKe[0].tiGia).toBe(26080);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([544 * 26080, 500 * 26080]);
+    expect(bangKe[0].returns[0].tt).toBe(400 * 26080);
+  });
+});
+
+describe('docWorkbook — Tracy Studio T6: dòng TỔNG (A) đầu là số đối chiếu (tỉ giá phi lý) → bỏ, lấy dòng TỔNG (A) ₫ thật phía dưới', () => {
+  const HDR = ['Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const t6 = { name: 'Đối soát T62026', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/06/2026 đến 30/06/2026\n\nBrand: TRACY STUDIO'],
+    ['A. Đơn thực nhận trong tháng ', 'Tỷ giá MEAN', 'MEAN'], HDR,
+    ['#MBLVD29131', 'x', 'Tracy-A-V1256-XL-BBLA-PLA', '1', '$1,488.00', '50%', null, '$744.00', null, 'c', 'T6', '6'],
+    ['#MBLVD29238', 'y', 'Tracy-V0877-XXL-BLA', '1', '$1,298.00', '50%', null, '$649.00', null, 'c', 'T6', '6'],
+    ['Tổng', '36,323,868', '2,905,909', '39,229,777'],
+    ['TỔNG (A)', '2', '$2,786.00', '$1,393.00', '20,375,000 ₫', '36,000,000', '-186,270'], // ₫ đầu = số đối chiếu → 20.375.000/1393 = 14.627 ✗
+    ['Tỷ giá Vietcombank ngày chốt công nợ (30/06/2026)', '26,076 ₫'],
+    ['TỔNG (A)', '36,323,868 đ'], ['THUẾ GTGT (8%) (A*8%)', '2,905,909 ₫'], ['TỔNG THANH TOÁN', '39,229,777 ₫'],
+  ] };
+  it('tỉ giá 26.076 từ dòng TỔNG (A) 36.323.868 đ; Σ lines = 36.323.868', () => {
+    const { bangKe } = docWorkbook([t6]);
+    expect(bangKe[0].tiGia).toBe(26076);
+    expect(bangKe[0].lines.reduce((s, d) => s + d.tt, 0)).toBe(744 * 26076 + 649 * 26076);
+  });
+});

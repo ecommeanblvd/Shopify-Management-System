@@ -90,14 +90,22 @@ function tongVndMucA(rows: O[][]): number | null {
  *   2) "TỔNG:" hoặc "TỔNG THANH TOÁN…" ₫ ÷ (Σ USD lines − Σ USD returns) — HC (B Global cộng), Denio-kiểu (A − B return).
  */
 export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumReturns: number, vnd: { a: number; lines: number; returns: number } = { a: 0, lines: 0, returns: 0 }): number | null {
-  // 1) Tổng ₫ của mục A ("TỔNG (A):" hoặc dòng TỔNG ₫ đầu tiên trước mục B) — trừ phần VND thuần trong A rồi chia USD mục A.
-  const tongA = tongVndMucA(rows);
-  if (tongA != null && sumA > 0 && tongA - vnd.a > 0) return (tongA - vnd.a) / sumA;
-  // 2) Dòng tổng kỳ cuối ("Tổng", "TỔNG THANH TOÁN…", "TỔNG:") — trừ phần VND thuần (lines − returns) rồi chia USD (lines − returns).
-  const cuoi = [...rows].reverse().find((r) => r.some((c) => /^(Tổng|TỔNG:?|TỔNG THANH TOÁN.*)$/i.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
-  const tong = cuoi ? docTien(cuoi.find((c) => /₫|đ$/i.test(chuoi(c)))) : null;
-  const mauSo = sumLines - sumReturns; const tuSo = tong == null ? null : tong - (vnd.lines - vnd.returns);
-  if (tuSo != null && tuSo > 0 && mauSo > 0) return tuSo / mauSo;
+  // Nhiều ứng viên dòng TỔNG ₫, xét theo thứ tự ưu tiên; chỉ nhận ứng viên cho TỈ GIÁ HỢP LÝ (15.000–40.000 VND/USD).
+  // Tracy Studio T6: dòng "TỔNG (A)" đầu có ₫ là số đối chiếu (83 triệu, tỉ giá 14.630 ✗) — dòng "TỔNG (A) 148.189.908 đ"
+  // phía dưới mới là tổng trước thuế thật (26.076 ✓). "TỔNG THANH TOÁN" thường gồm VAT 8% → để cuối cùng.
+  const hopLy = (r: number | null) => r != null && r >= 15_000 && r <= 40_000 ? r : null;
+  const vndCua = (r: O[]) => docTien(r.find((c) => /₫|đ$/i.test(chuoi(c))));
+  const theoA = (v: number | null) => (v != null && sumA > 0 && v - vnd.a > 0 ? hopLy((v - vnd.a) / sumA) : null);
+  const theoKy = (v: number | null) => { const mau = sumLines - sumReturns; return v != null && mau > 0 && v - (vnd.lines - vnd.returns) > 0 ? hopLy((v - (vnd.lines - vnd.returns)) / mau) : null; };
+  // 1) tổng mục A: "TỔNG (A):" / dòng TỔNG ₫ đầu trước mục B, rồi mọi dòng "TỔNG (A)" có ₫ (theo thứ tự xuất hiện).
+  const ungA: number[] = []; const dauA = tongVndMucA(rows); if (dauA != null) ungA.push(dauA);
+  for (const r of rows) if (r.some((c) => /^TỔNG \(A\):?$/i.test(chuoi(c)))) { const v = vndCua(r); if (v != null && v > 0) ungA.push(v); }
+  for (const v of ungA) { const r = theoA(v); if (r != null) return r; }
+  // 2) tổng kỳ: "TỔNG (A±B)" → "Tổng"/"TỔNG:" → "TỔNG THANH TOÁN…" (lấy dòng cuối cùng của mỗi nhãn).
+  const timCuoi = (re: RegExp) => [...rows].reverse().find((r) => r.some((c) => re.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
+  for (const re of [/^TỔNG \(A\s*[-+]\s*B\)$/i, /^(Tổng|TỔNG:?)$/i, /^TỔNG THANH TOÁN/i]) {
+    const row = timCuoi(re); const r = theoKy(row ? vndCua(row) : null); if (r != null) return r;
+  }
   return null;
 }
 
