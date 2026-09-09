@@ -145,7 +145,9 @@ export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumRet
 export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { bangKe: BangKe[]; boQua: string[] } {
   const bangKe: BangKe[] = []; const boQua: string[] = [];
   // Tên tab bị Google cắt ở 31 ký tự ("… T1 đơn thực nh") → so tiền tố "thực nh"/"thực b".
-  const laTenNhan = (n: string) => /thực nh/i.test(n), laTenBan = (n: string) => /thực b/i.test(n);
+  // Tên bị cắt ngay sau "đơn thực"/"đơn thự" (Hobb: "File đối soát T72026 đơn thực ", "T12026 đơn thự") → tab thực nhận (tab thực bán cùng kỳ
+  // còn chỗ cho chữ "b": "… đơn thực b").
+  const laTenNhan = (n: string) => /thực nh/i.test(n) || /đơn thự(c)?\s*$/i.test(n), laTenBan = (n: string) => /thực b/i.test(n);
   const noiDungBan = (rows: O[][]) => coO(rows, /A\.\s*Đơn (MEAN )?thực bán/i);
   // Kỳ đã có tab bảng kê thực nhận "thật" (tên nói rõ, hoặc tên không nói gì và nội dung không phải thực bán). Tab tên không
   // nói gì mà nội dung "A. Đơn thực bán" chỉ là tham khảo KHI kỳ đó có tab thực nhận; nếu là tab duy nhất của kỳ (TINH Atelier

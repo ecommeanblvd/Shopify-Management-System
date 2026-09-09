@@ -667,3 +667,17 @@ describe('docWorkbook — I.H.F: một tab ba mục A/B USD + C VND; mục C có
     expect(bk.tiGia).toBe(26085);
   });
 });
+
+describe('docWorkbook — Hobb: tên tab bị cắt ngay sau "đơn thực" là tab thực nhận (không có dòng mục A)', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (name: string) => ({ name, rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/07/2026 đến 31/07/2026\n\nBrand: Hobb'], HDR,
+    ['10/07/2026', '#MBLVD29500', 'x', 'Hobb-H1-S-BLA', '1', '2,000,000 ₫', '25%', null, '1,500,000 ₫', null, 'c', 'T7', '7'],
+    [null, null, 'Tổng thanh toán', null, '1', '2,000,000 ₫', null, null, '1,500,000 ₫'],
+  ] });
+  it('"… đơn thực " và "… đơn thự" → đọc như thực nhận; "… đơn thực b" → thực bán (bỏ)', () => {
+    const { bangKe, boQua } = docWorkbook([tab(' File đối soát T72026 đơn thực '), tab('T12026 đơn thự'), tab('File đối soát T72026 đơn thực b')]);
+    expect(bangKe.map((b) => b.lines.length)).toEqual([1, 1]);
+    expect(boQua.some((b) => /đơn thực b: tab thực bán/.test(b))).toBe(true);
+  });
+});
