@@ -317,9 +317,16 @@ export function OrdersTable({
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {o.skuCostCoverage === 0 ? (
-                      <span className="text-amber-600 dark:text-amber-400" title="no SKU cost data">—</span>
+                      <span className="text-amber-600 dark:text-amber-400" title="Chưa có giá vốn (dự tính lẫn thực)">—</span>
                     ) : (
-                      fmt(o.skuCost, o.currency)
+                      <span title={o.soDongGiaVonThuc === o.lineCount ? 'Giá vốn THỰC — bảng kê brand đã chốt / PO / MMP' : o.soDongGiaVonThuc > 0 ? `${o.soDongGiaVonThuc}/${o.lineCount} dòng giá thực, còn lại dự tính (bảng giá brand)` : 'Giá vốn DỰ TÍNH — bảng giá brand (sku_costs) / override'}>
+                        {fmt(o.skuCost, o.currency)}
+                        {o.soDongGiaVonThuc > 0 && (
+                          <span className={`ml-1 text-[9px] normal-case ${o.soDongGiaVonThuc === o.lineCount ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                            {o.soDongGiaVonThuc === o.lineCount ? 'thực' : `${o.soDongGiaVonThuc}/${o.lineCount} thực`}
+                          </span>
+                        )}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold">{fmt(o.revenue, o.currency)}</td>

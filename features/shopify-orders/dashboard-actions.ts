@@ -3,6 +3,7 @@
 import { and, eq, inArray, or, ilike, asc, desc, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { computeOrderMetrics, type OrderMetrics } from './metrics/compute';
+import { giaVonThucTheoDong } from './gia-von-thuc';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
 import { createBatchShippingEstimator } from './sync/batch-shipping-estimator';
 import { mocUtcNaive } from '@/lib/timezone-bind';
@@ -28,6 +29,8 @@ export interface OrderRow extends OrderMetrics {
    *  Âm = charge thiếu (lỗ ship). Nguồn cost xem `shippingCostSource`. */
   shipMarginRaw: number | null;
   shipMarginRawCurrency: string;
+  /** Số dòng đơn đã có giá vốn THỰC (bảng kê brand đã chốt / PO / MMP). = lineCount → cột SKU cost là giá thực; 0 → chỉ dự tính. */
+  soDongGiaVonThuc: number;
 }
 
 export interface GetStoreMetricsResult {
@@ -120,6 +123,16 @@ async function buildOrderRows(
     .select()
     .from(schema.shopifyOrderRefunds)
     .where(inArray(schema.shopifyOrderRefunds.orderId, orderIds));
+
+  // Giá vốn THỰC từng dòng (order_line_cogs — bảng kê brand đã chốt / PO / MMP), VND. Ưu tiên hơn sku_costs (giá dự tính);
+  // override tay vẫn thắng. CEO 09/09/2026 — xem features/shopify-orders/gia-von-thuc.ts.
+  const cogsRows = await db
+    .select({ orderId: schema.orderLineCogs.orderId, shopifyLineId: schema.orderLineCogs.shopifyLineId, kind: schema.orderLineCogs.kind, amount: schema.orderLineCogs.amount, currency: schema.orderLineCogs.currency, source: schema.orderLineCogs.source, period: schema.orderLineCogs.period, statementRef: schema.orderLineCogs.statementRef })
+    .from(schema.orderLineCogs)
+    .where(inArray(schema.orderLineCogs.orderId, orderIds));
+  const cogsTheoDon = new Map<string, typeof cogsRows>();
+  for (const r of cogsRows) { const a = cogsTheoDon.get(r.orderId) ?? []; a.push(r); cogsTheoDon.set(r.orderId, a); }
+  const giaVonThucCuaDon = (orderId: string) => giaVonThucTheoDong((cogsTheoDon.get(orderId) ?? []).map((r) => ({ ...r, amount: Number(r.amount) })));
 
   // Cost lookup per (sku, processedAt) — fetch all rows for SKUs we touch
   // and pick the latest effective per order in JS.
@@ -333,6 +346,8 @@ async function buildOrderRows(
     // Costs that arrive in a different currency than the order are converted
     // to the order currency via the per-store FX rate before the revenue
     // formula sees them, so revenue/margin stay in a single currency.
+    const giaVonThuc = giaVonThucCuaDon(o.id);
+    let soDongGiaVonThuc = 0;
     const skuCosts = filteredLines.map((l) => {
       if (l.costOverride !== null) {
         // Manual override on the line — interpreted as the store's
@@ -346,6 +361,12 @@ async function buildOrderRows(
           costPerUnit: converted,
           costCurrency: o.currency,
         };
+      }
+      // Giá vốn THỰC (VND, cả dòng) — chỉ dùng khi store tính chi phí bằng VND để quy về đồng đơn.
+      const thuc = giaVonThuc.get(l.shopifyLineId);
+      if (thuc && (storeFx.costCurrency ?? 'VND') === 'VND' && l.quantity > 0) {
+        soDongGiaVonThuc += 1;
+        return { lineId: l.id, quantity: l.quantity, costPerUnit: convertCost(thuc.vnd, 'VND', o.currency) / l.quantity, costCurrency: o.currency };
       }
       const cost = l.sku
         ? (costIndex.get(l.sku) ?? []).find((c) => new Date(c.effectiveFrom) <= o.processedAtShopify)
@@ -403,6 +424,7 @@ async function buildOrderRows(
       cancelledAt: o.cancelledAtShopify,
       shipMarginRaw,
       shipMarginRawCurrency: rawCurrency,
+      soDongGiaVonThuc,
     });
   }
 
@@ -548,6 +570,11 @@ export async function getMissingCostOrders(
           WHERE c.store_id = o.store_id
             AND c.sku = l.sku
             AND c.effective_from <= o.processed_at_shopify::date
+       )
+       -- dòng đã có giá vốn THỰC từ bảng kê / PO / MMP thì không còn "thiếu giá vốn"
+       AND NOT EXISTS (
+         SELECT 1 FROM order_line_cogs g
+          WHERE g.order_id = o.id AND g.shopify_line_id = l.shopify_line_id AND g.kind = 'cogs' AND g.currency = 'VND'
        )
      GROUP BY o.id, o.shopify_order_number, o.processed_at_shopify
      ORDER BY o.processed_at_shopify DESC
