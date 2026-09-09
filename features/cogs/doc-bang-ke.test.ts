@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docWorkbook, kiemCongThuc } from './doc-bang-ke';
+import { docWorkbook, kiemCongThuc, tiGiaGhiTrenSheet, type O } from './doc-bang-ke';
 
 const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Giá phụ kiện', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
 const thucNhan = {
@@ -469,5 +469,62 @@ describe('docWorkbook — De Theia T4: mục B return KHÔNG có hàng tiêu đ�
     const { bangKe } = docWorkbook([t4]);
     expect(bangKe[0].lines).toHaveLength(1); expect(bangKe[0].returns).toHaveLength(1);
     expect(bangKe[0].returns[0]).toMatchObject({ maDon: '#MBLVD27461', tt: 3_937_500 });
+  });
+});
+
+describe("docWorkbook — L'Scarlett: tab ghi rõ 'Tỷ giá Vietcombank', dòng TỔNG CÔNG NỢ đã gồm VAT 8%", () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', null, 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (name: string, ky: string, dong: O[][], duoi: O[][]) => ({ name, rows: [
+    [`BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/${ky}/2026 đến 30/${ky}/2026\n\nBrand: L'SCARLETT`], ['A. Đơn thực nhận trong tháng'], HDR, ...dong, ...duoi,
+  ] });
+  it('T5: Note = TT × 26.085 (trước thuế) khớp dòng Tỷ giá → tin Note, không nhân tỉ giá 28.172 suy từ TỔNG gồm VAT', () => {
+    const t5 = tab('File đối soát T5 thực nhận', '05', [
+      ['02/05/2026', '#MBLVD28623', 'x', 'LScarlett-LSD023-L-BBLA-PLA', '1', '$656.00', '50%', null, '$328.00', '8,555,880 ₫', '684,470 ₫', 'c', 'T5', '4'],
+      ['12/05/2026', '#MBLVD28729', 'y', 'LScarlett-LSD009-M-BBLA-PLA', '1', '$751.00', '50%', null, '$375.50', '9,794,918 ₫', '783,593 ₫', 'c', 'T5', '5'],
+    ], [
+      [null, null, 'TỔNG (A)', null, '2', '$1,407.00', null, null, '$703.50', '$18,350,798.00', '$1,468,063.00'],
+      [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (31/05/2026):', null, null, null, null, null, '26,085 ₫'],
+      [null, null, 'TỔNG CÔNG NỢ MEAN THANH TOÁN:', null, null, null, null, null, '19,818,862 ₫'],
+    ]);
+    const { bangKe } = docWorkbook([t5]);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([8_555_880, 9_794_918]);
+    expect(bangKe[0].canhBao).toEqual([]);
+  });
+  it('T6: không có cột VND từng dòng → tỉ giá lấy từ dòng Tỷ giá (26.076), không phải TỔNG CÔNG NỢ ÷ Σ USD (28.162)', () => {
+    const t6 = tab('File đối soát T6 thực nhận', '06', [
+      ['10/06/2026', '#MBLVD28999', 'x', 'LScarlett-LSD014-XXL-YBAN-PLA', '1', '$1,206.00', '50%', null, '$603.00', null, null, 'c', 'T6', '6'],
+      ['12/06/2026', '#MBLVD29038', 'y', 'LScarlett-LSD002-M-KDYK-PLA', '1', '$956.00', '50%', null, '$478.00', null, null, 'c', 'T6', '6'],
+    ], [
+      [null, null, 'TỔNG (A)', null, '2', '$2,162.00', null, null, '$1,081.00'],
+      [null, null, 'VAT 8%', null, null, null, null, null, '$86.48'],
+      [null, null, null, null, null, null, null, null, '$1,167.48'],
+      [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (30/06/2026):', null, null, null, null, null, '26,076 ₫'],
+      [null, null, 'TỔNG CÔNG NỢ MEAN THANH TOÁN:', null, null, null, null, null, '30,443,209 ₫'],
+    ]);
+    const { bangKe } = docWorkbook([t6]);
+    expect(bangKe[0].tiGia).toBe(26076);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([Math.round(603 * 26076), Math.round(478 * 26076)]);
+  });
+  it('tiGiaGhiTrenSheet: đọc dòng Tỷ giá, bỏ số ngoài 15k–40k, null khi không có', () => {
+    expect(tiGiaGhiTrenSheet([[null, 'Tỷ giá Vietcombank ngày chốt công nợ (30/04/2026)', '26,108 ₫']])).toBe(26108);
+    expect(tiGiaGhiTrenSheet([['Tỉ giá:', '1,08']])).toBeNull();
+    expect(tiGiaGhiTrenSheet([['TỔNG:', '46,145,890 ₫']])).toBeNull();
+  });
+});
+
+describe('docWorkbook — Happy Clothing T5: Thành tiền "609.60 đ" gõ nhầm đơn vị trong tab USD', () => {
+  const HDR = ['Ngày báo', 'Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán', 'Kỳ báo đơn'];
+  const t5 = { name: 'File đối soát T52026 thực nhận', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/05/2026 đến 31/05/2026\n\nBrand: Happy Clothing'], ['A. Đơn thực nhận trong tháng'], HDR,
+    ['04/05/2026', '13/05/2026', '#MBLVD28657', 'x', 'HappyClothing-VDFW010-M-OBR', '1', '$1,016.00', '40%', '609.60 đ', 'Xuất HĐ', 'c', 'T5', '5'],
+    ['05/05/2026', '13/05/2026', '#MBLVD28717', 'y', 'HappyClothing-VDFW003-S-PIN', '1', '$1,016.00', '40%', '$609.60', 'Xuất HĐ', 'c', 'T5', '5'],
+    [null, null, 'TỔNG (A)', null, null, '2', '$2,032.00', null, '$1,219.20'],
+    [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (31/05/2026):', null, null, null, null, null, '26,085 ₫'],
+    [null, null, 'TỔNG:', null, null, null, null, null, '31,802,832 ₫'],
+  ] };
+  it('coi 609.60 đ là USD (Giá có $, số < 1.000) → cả hai dòng = 609,6 × 26.085; có cảnh báo sai đơn vị', () => {
+    const { bangKe } = docWorkbook([t5]);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([15_901_416, 15_901_416]);
+    expect(bangKe[0].canhBao.some((c) => /sai đơn vị/.test(c))).toBe(true);
   });
 });

@@ -98,7 +98,20 @@ function tongVndMucB(rows: O[][]): number | null {
 }
 
 /**
+ * Dòng brand GHI RÕ tỉ giá trên tab ("Tỷ giá Vietcombank ngày chốt công nợ (30/06/2026): 26,076 ₫" — L'Scarlett):
+ * là mốc chắc nhất, đứng trên mọi mốc suy từ dòng TỔNG. Chỉ nhận nếu 15.000–40.000.
+ */
+export function tiGiaGhiTrenSheet(rows: O[][]): number | null {
+  for (const r of rows) {
+    if (!r.some((c) => /^t[ỷỉ]\s*giá/i.test(chuoi(c)))) continue;
+    for (const c of r) { const v = docTien(c); if (v != null && v >= 15_000 && v <= 40_000) return v; }
+  }
+  return null;
+}
+
+/**
  * Tỉ giá VND/USD của một tab sheet USD, suy từ chính sheet:
+ *   0) dòng "Tỷ giá …: 26,076 ₫" brand ghi rõ (tiGiaGhiTrenSheet);
  *   1) "TỔNG (A):" ₫ ÷ Σ USD mục A (Calista, Happy Clothing kỳ có dòng này) — chắc nhất vì không dính return/B;
  *   2) "TỔNG:" hoặc "TỔNG THANH TOÁN…" ₫ ÷ (Σ USD lines − Σ USD returns) — HC (B Global cộng), Denio-kiểu (A − B return).
  */
@@ -106,6 +119,7 @@ export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumRet
   // Nhiều ứng viên dòng TỔNG ₫, xét theo thứ tự ưu tiên; chỉ nhận ứng viên cho TỈ GIÁ HỢP LÝ (15.000–40.000 VND/USD).
   // Tracy Studio T6: dòng "TỔNG (A)" đầu có ₫ là số đối chiếu (83 triệu, tỉ giá 14.630 ✗) — dòng "TỔNG (A) 148.189.908 đ"
   // phía dưới mới là tổng trước thuế thật (26.076 ✓). "TỔNG THANH TOÁN" thường gồm VAT 8% → để cuối cùng.
+  const ghi = tiGiaGhiTrenSheet(rows); if (ghi != null) return ghi;
   const hopLy = (r: number | null) => r != null && r >= 15_000 && r <= 40_000 ? r : null;
   const vndCua = (r: O[]) => docTien(r.find((c) => /₫|đ$/i.test(chuoi(c))));
   const theoA = (v: number | null) => (v != null && sumA > 0 && v - vnd.a > 0 ? hopLy((v - vnd.a) / sumA) : null);
@@ -171,7 +185,13 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         if ((oTT.startsWith('#') || traiKhongPhaiCustomize) && ttTrai != null && ttTrai > 0) { ttRaw = trai; tt = ttTrai; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} dòng lệch cột — lấy Thành tiền ở ô bên trái (${ttTrai.toLocaleString('vi-VN')})`); }
       }
       if (tt == null) { soKhongDocTT += 1; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Thành tiền`); return; }
-      const laUsd = typeof ttRaw === 'string' && ttRaw.includes('$'); if (laUsd) coUsd = true;
+      // Dòng USD: ô Thành tiền có '$'. Brand gõ nhầm đơn vị ("609.60 đ" — Happy Clothing T5 #MBLVD28657, Giá "$1,016.00" × 60%):
+      // ô Giá có '$' mà Thành tiền < 1.000 thì không thể là VND (không có giá vốn dưới 1.000 ₫) → vẫn là USD.
+      const giaRaw = cot.gia >= 0 ? r[cot.gia] : null;
+      const giaUsd = typeof giaRaw === 'string' && giaRaw.includes('$');
+      let laUsd = typeof ttRaw === 'string' && ttRaw.includes('$');
+      if (!laUsd && giaUsd && tt < 1_000) { laUsd = true; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} Thành tiền "${chuoi(ttRaw)}" ghi sai đơn vị — Giá là USD nên coi là ${tt} $`); }
+      if (laUsd) coUsd = true;
       // VND từng dòng ghi sẵn ở cột Note (số ≥ 1.000, không có '$') — chỉ dùng cho dòng USD.
       const noteRaw = cot.note >= 0 ? r[cot.note] : null;
       const vndDong = laUsd && noteRaw != null && !String(noteRaw).includes('$') ? docTien(noteRaw) : null;
@@ -232,7 +252,11 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         const sumAll = bk.lines.reduce((s, d) => s + uocVnd(d), 0) - bk.returns.reduce((s, d) => s + uocVnd(d), 0);
         const khop = (v: number | null, kv: number) => v != null && kv > 0 && Math.abs(kv / v - 1) <= 0.005;
         const coMoc = tongA != null || (tongCuoi != null && tongCuoi > 0);
-        if (coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll)) {
+        // Brand ghi rõ tỉ giá trên tab và cột VND sẵn đúng tỉ giá đó (≤0,5%) → TIN cột VND dù dòng TỔNG ₫ lệch
+        // (L'Scarlett T5/T7: "TỔNG CÔNG NỢ MEAN THANH TOÁN" đã gồm VAT 8%, Note = TT × tỉ giá Vietcombank = trước thuế).
+        const rateGhi = tiGiaGhiTrenSheet(sh.rows);
+        const khopGhi = rateGhi != null && Math.abs(rateSan / rateGhi - 1) <= 0.005;
+        if (!khopGhi && coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll)) {
           bk.canhBao.push(`${sh.name}: cột VND từng dòng (Σ A ${Math.round(sumA).toLocaleString('vi-VN')}) lệch dòng TỔNG ₫ (${Math.round(tongA ?? tongCuoi ?? 0).toLocaleString('vi-VN')}) — bỏ, dùng tỉ giá TỔNG`);
           for (const d of coSan) delete d.ttVndSan; coSan = [];
         }
