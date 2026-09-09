@@ -681,3 +681,32 @@ describe('docWorkbook — Hobb: tên tab bị cắt ngay sau "đơn thực" là 
     expect(boQua.some((b) => /đơn thực b: tab thực bán/.test(b))).toBe(true);
   });
 });
+
+describe('docWorkbook — The Soul: tab T4 chép cột "Kỳ thanh toán T3" nhưng kỳ 03 đã có tab riêng → giữ kỳ tiêu đề', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (name: string, ky: string, ma: string, kyTT: string) => ({ name, rows: [
+    [`BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/${ky}/2026 đến 30/${ky}/2026\n\nBrand: The Soul`], ['A. Đơn thực nhận trong tháng'], HDR,
+    [`10/${ky}/2026`, ma, 'x', 'TheSoul-S1-M-BLA', '1', '4,000,000 ₫', '25%', null, '3,000,000 ₫', null, 'c', kyTT, '3'],
+    [null, null, 'TỔNG (A)', null, '1', '4,000,000 ₫', null, null, '3,000,000 ₫'],
+  ] });
+  it('có tab T3 riêng → tab T4 giữ 2026-04 (cảnh báo); không có tab T3 → đổi sang 2026-03 như LaLing', () => {
+    const co = docWorkbook([tab('FIle đối soát T32026', '03', '#MBLVD28000', 'T3'), tab('Đối soát T42026', '04', '#MBLVD28100', 'T3')]).bangKe;
+    expect(co.map((b) => b.period)).toEqual(['2026-03', '2026-04']);
+    expect(co[1].canhBao.some((c) => /đã có tab riêng/.test(c))).toBe(true);
+    const khong = docWorkbook([tab('Đối soát T42026', '04', '#MBLVD28100', 'T3')]).bangKe;
+    expect(khong[0].period).toBe('2026-03');
+  });
+});
+
+describe('docWorkbook — LaLing: hai tab dán ngược tiêu đề (T2 mang tiêu đề 03, T3 mang tiêu đề 02) → cả hai đổi theo Kỳ thanh toán', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (name: string, ky: string, ma: string, kyTT: string) => ({ name, rows: [
+    [`BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/${ky}/2026 đến 28/${ky}/2026\n\nBrand: LaLing`], ['A. Đơn thực nhận trong tháng'], HDR,
+    [`10/${ky}/2026`, ma, 'x', 'LaLing-L1-M-BLA', '1', '4,000,000 ₫', '25%', null, '3,000,000 ₫', null, 'c', kyTT, '2'],
+    [null, null, 'Tổng', null, '1', '4,000,000 ₫', null, null, '3,000,000 ₫'],
+  ] });
+  it('tab "T2" tiêu đề 03/kỳ TT T2 → 2026-02; tab "T3" tiêu đề 02/kỳ TT T3 → 2026-03', () => {
+    const { bangKe } = docWorkbook([tab('File đối soát T22026', '03', '#MBLVD27400', 'T2'), tab('File đối soát T32026', '02', '#MBLVD27900', 'T3')]);
+    expect(bangKe.map((b) => [b.sheet, b.period])).toEqual([['File đối soát T22026', '2026-02'], ['File đối soát T32026', '2026-03']]);
+  });
+});

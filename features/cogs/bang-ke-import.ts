@@ -141,6 +141,8 @@ export async function apDungBangKeDaDoc(input: {
   // (DB tạm ngắt, deadlock, v.v.) các kỳ TRƯỚC đã commit không được coi là mất
   // trắng: trả về `daGhi` (những kỳ đã ghi) kèm `loi` thay vì throw, để người
   // dùng biết chính xác đã ghi tới đâu thay vì tưởng nhầm cả lô đều thất bại.
+  // Hai tab cùng kỳ (Mirer 12/2024: hai tab tiêu đề 12/2024) → chỉ XOÁ kỳ một lần, tab sau ghi thêm, không xoá dòng tab trước.
+  const daXoa = new Set<string>();
   for (const { bk, ghep, ghepReturn } of ky) {
     if (!input.periods.includes(bk.period)) continue;
     // Tab không có dòng nào (kỳ chưa hoàn tất, tab "TINH Global" toàn $0) KHÔNG được xoá dữ liệu kỳ đó do tab khác cùng kỳ đã ghi.
@@ -153,8 +155,11 @@ export async function apDungBangKeDaDoc(input: {
       await db.transaction(async (tx) => {
         // Xoá đúng NGUỒN đang ghi (order_line_cogs.source, brand_cogs_offline.source — migration 0129)
         // — MMP đẩy lại kỳ này không được xoá dòng nhập từ bảng kê xlsx và ngược lại.
-        await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, input.source), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
-        await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.source, input.source), eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
+        if (!daXoa.has(bk.period)) {
+          await tx.delete(schema.orderLineCogs).where(and(eq(schema.orderLineCogs.source, input.source), eq(schema.orderLineCogs.brandSlug, input.brandSlug), eq(schema.orderLineCogs.period, bk.period)));
+          await tx.delete(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.source, input.source), eq(schema.brandCogsOffline.brandSlug, input.brandSlug), eq(schema.brandCogsOffline.period, bk.period)));
+          daXoa.add(bk.period);
+        }
         const ghiLine = async (g: KetQuaGhep, kind: 'cogs' | 'return') => {
           for (const t of g.theoLine) {
             const amount = String(kind === 'return' ? -t.amount : t.amount);

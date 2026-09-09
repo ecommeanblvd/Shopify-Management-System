@@ -27,6 +27,8 @@ export interface DongBangKe {
 export interface BangKe {
   brand: string; period: string; tuNgay: string; denNgay: string; sheet: string;
   lines: DongBangKe[]; returns: DongBangKe[]; canhBao: string[];
+  /** Kỳ do cột "Kỳ thanh toán" đề xuất khi khác tháng tiêu đề; quyết định sau khi đọc hết các tab (xem docWorkbook). */
+  kyTTDeXuat?: string;
   /** Đơn vị của `tt` sau khi đọc: 'VND' (mặc định) — hoặc 'USD' nếu sheet USD mà không tìm được dòng TỔNG ₫ để đổi. */
   currency?: 'VND' | 'USD';
   /** Tỉ giá VND/USD suy từ chính sheet (dòng TỔNG ₫ ÷ Σ USD) khi sheet tính USD. */
@@ -245,7 +247,9 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     // khi CẢ TAB đồng nhất một kỳ và kỳ đó khác tháng tiêu đề.
     if (kyTTs.size === 1) {
       const thang = [...kyTTs][0]; const period = `${bk.period.slice(0, 4)}-${String(thang).padStart(2, '0')}`;
-      if (thang >= 1 && thang <= 12 && period !== bk.period) { bk.canhBao.push(`${sh.name}: tiêu đề ghi kỳ ${bk.period} nhưng mọi dòng ghi Kỳ thanh toán T${thang} → dùng ${period}`); bk.period = period; }
+      // Chỉ ĐỀ XUẤT; quyết định sau khi đọc hết các tab (The Soul: tab T4 chép cột "Kỳ thanh toán T3" của tab T3 → không được đổi
+      // vì kỳ 03 đã có tab riêng; LaLing: hai tab dán ngược tiêu đề, cả hai cùng đổi → được).
+      if (thang >= 1 && thang <= 12 && period !== bk.period) bk.kyTTDeXuat = period;
     }
     // Kỳ brand CHƯA điền "Tổng thành tiền" (Keira Tong T8: mọi dòng $0.00, cột % CK chép nhầm giá) → không coi là bảng kê
     // hoàn tất: bỏ toàn bộ dòng của tab, báo cảnh báo, để không ghi giá vốn 0 lên đơn.
@@ -350,6 +354,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       }
     }
     bangKe.push(bk);
+  }
+  // Quyết định đổi kỳ theo cột "Kỳ thanh toán": tab X đổi sang P chỉ khi KHÔNG có tab Y khác mang tiêu đề P mà Y không tự đổi đi
+  // (Y "giữ" P). LaLing T2/T3 dán ngược tiêu đề → cả hai đổi; The Soul T4 chép "T3" trong khi tab T3 thật giữ 03 → T4 giữ 04.
+  for (const bk of bangKe) {
+    const P = bk.kyTTDeXuat; if (!P) continue;
+    const coTabGiu = bangKe.some((y) => y !== bk && y.period === P && (!y.kyTTDeXuat || y.kyTTDeXuat === y.period));
+    if (coTabGiu) bk.canhBao.push(`${bk.sheet}: mọi dòng ghi Kỳ thanh toán ${P.slice(5)} nhưng kỳ ${P} đã có tab riêng → giữ kỳ tiêu đề ${bk.period}`);
+    else { bk.canhBao.push(`${bk.sheet}: tiêu đề ghi kỳ ${bk.period} nhưng mọi dòng ghi Kỳ thanh toán T${Number(P.slice(5))} → dùng ${P}`); bk.period = P; }
+    delete bk.kyTTDeXuat;
   }
   // Suy rộng trong cùng brand (CEO 09/09: giá vốn quy về trước thuế cho mọi brand): brand đã chứng minh ghi Thành tiền gồm VAT ở ≥ 1 kỳ
   // (Note = TT ÷ 1,08) thì các kỳ khác của brand cũng gồm VAT — trừ tab tự chứng minh TT trước thuế: có dòng "VAT"/"Thuế GTGT" riêng,
