@@ -32,10 +32,17 @@ const TTL_MS = 60 * 60_000;
 
 const dem = taoBoNhoDem<{ phienBan: string; snap: PhanTinhSnapshot | null }>({ ttlMs: TTL_MS });
 
+/** Dấu vân tay cấu hình cũng được đệm 30 giây: trang Orders mỗi lượt tải dựng snapshot cho 5 account → 5 truy vấn 14 subquery
+ *  (đo 09/09/2026: ~0,5 s mỗi cái qua mạng). Ops sửa bảng giá thì tối đa 30 giây sau engine mới thấy — chấp nhận được; ai cần
+ *  ngay thì gọi xoaDemSnapshot(). */
+const DEM_PHIEN_BAN_MS = 30_000;
+const demPhienBan = taoBoNhoDem<string>({ ttlMs: DEM_PHIEN_BAN_MS, sucChua: 32 });
+
 /** Dọn sạch phần đệm. Bình thường KHÔNG cần gọi — phiên bản cấu hình tự bắt
  *  thay đổi. Để lộ ra cho test và cho trường hợp cần ép nạp lại. */
 export function xoaDemSnapshot(): void {
   dem.xoa();
+  demPhienBan.xoa();
 }
 
 export function soMucDangDem(): number {
@@ -87,7 +94,7 @@ export async function napPhanTinhSnapshot(
 ): Promise<PhanTinhSnapshot | null> {
   // Bảng giá chọn theo NGÀY nên khoá đệm cũng chỉ tới ngày.
   const khoa = `${carrierAccountId}|${effectiveDate.toISOString().slice(0, 10)}`;
-  const phienBan = await phienBanCauHinh(carrierAccountId);
+  const phienBan = await demPhienBan.lay(carrierAccountId, () => phienBanCauHinh(carrierAccountId));
 
   const dangCo = await dem.lay(khoa, async () => ({
     phienBan,

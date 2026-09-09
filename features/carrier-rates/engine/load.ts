@@ -47,46 +47,40 @@ export async function loadAccountSnapshot(
   // Remote/ODA list is year-versioned (effective_from/to), applied by the
   // shipment's effectiveDate — same windowing as rate cards. A row covers the
   // date when effective_from ≤ date AND (effective_to IS NULL OR date < effective_to).
-  const postcodes = opts?.skipRemotePostcodes
-    ? []
-    : await db.select().from(schema.carrierRemotePostcodes)
-      .where(and(
-        eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId),
-        ...(() => {
-          // Gộp remoteCountry + remoteCountries → 1 điều kiện IN. Bảng ODA
-          // ~1tr dòng/2 account: nạp full tốn ~118MB EGRESS mỗi lần gọi
-          // (Supabase tính tiền theo egress — 24/08 vượt quota 83GB/5GB).
-          const list = [
-            ...(opts?.remoteCountry ? [opts.remoteCountry] : []),
-            ...(opts?.remoteCountries ?? []),
-          ].map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c));
-          const uniq = [...new Set(list)];
-          return uniq.length ? [inArray(schema.carrierRemotePostcodes.countryCode, uniq)] : [];
-        })(),
-        ...(() => {
-          const pc = chuanHoaDanhSachPostcode(opts?.remotePostcodes ?? []);
-          if (!pc.goc.length) return [];
-          // Khớp cả dạng gốc lẫn dạng đã bỏ ký tự ngăn cách: file hãng ghi
-          // '5000-289' còn địa chỉ khách gõ '5000289'.
-          const dieuKien = or(
-            inArray(schema.carrierRemotePostcodes.postcodePattern, pc.goc),
-            inArray(
-              sql`upper(regexp_replace(${schema.carrierRemotePostcodes.postcodePattern}, '[^A-Za-z0-9]', '', 'g'))`,
-              pc.rutGon,
-            ),
-            // ~24.000 dòng ghi TÊN THÀNH PHỐ thay vì mã bưu chính (NZ, AR,
-            // NG…). Engine khớp chúng qua destinationCity nên phải lấy kèm,
-            // nếu không sẽ tính THIẾU phụ phí ODA mà không báo lỗi.
-            sql`${schema.carrierRemotePostcodes.postcodePattern} !~ '[0-9]'`,
-          );
-          return dieuKien ? [dieuKien] : [];
-        })(),
-        lte(schema.carrierRemotePostcodes.effectiveFrom, remoteAsOf),
-        or(
-          isNull(schema.carrierRemotePostcodes.effectiveTo),
-          gt(schema.carrierRemotePostcodes.effectiveTo, remoteAsOf),
-        ),
-      ));
+  // Bảng ODA 1,03 triệu dòng (243 MB). Viết một WHERE với OR ba điều kiện thì Postgres quét hết dòng của các nước trong
+  // danh sách rồi mới lọc (US 112k dòng → 1,4 s mỗi account, 5 account ≈ 7 s cho một lượt tải trang Orders, đo 09/09/2026).
+  // Tách thành ba nhánh UNION, mỗi nhánh đúng một index (migration 0130):
+  //   (a) mã gốc      → (account, country, postcode_pattern)          — index unique sẵn có;
+  //   (b) mã rút gọn  → (account, country, upper(regexp_replace(…)))  — index biểu thức;
+  //   (c) dòng ghi TÊN THÀNH PHỐ (không có chữ số) → index từng phần WHERE postcode_pattern !~ '[0-9]'.
+  // Kết quả giống hệt bản OR cũ (cùng ba điều kiện, cùng lọc ngày hiệu lực), chỉ khác đường đi.
+  const postcodes = opts?.skipRemotePostcodes ? [] : await (async () => {
+    const nuoc = [...new Set([
+      ...(opts?.remoteCountry ? [opts.remoteCountry] : []),
+      ...(opts?.remoteCountries ?? []),
+    ].map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))];
+    const pc = chuanHoaDanhSachPostcode(opts?.remotePostcodes ?? []);
+    const t = schema.carrierRemotePostcodes;
+    const chung = [
+      eq(t.carrierAccountId, carrierAccountId),
+      ...(nuoc.length ? [inArray(t.countryCode, nuoc)] : []),
+      lte(t.effectiveFrom, remoteAsOf),
+      or(isNull(t.effectiveTo), gt(t.effectiveTo, remoteAsOf)),
+    ];
+    if (!pc.goc.length) {
+      // Không có mã cụ thể → như cũ: cả nước (calculator / dựng ratecard).
+      return db.select().from(t).where(and(...chung));
+    }
+    const nhanhGoc = db.select().from(t).where(and(...chung, inArray(t.postcodePattern, pc.goc)));
+    const nhanhRutGon = db.select().from(t).where(and(...chung, inArray(
+      sql`upper(regexp_replace(${t.postcodePattern}, '[^A-Za-z0-9]', '', 'g'))`, pc.rutGon.length ? pc.rutGon : pc.goc)));
+    const nhanhThanhPho = db.select().from(t).where(and(...chung, sql`${t.postcodePattern} !~ '[0-9]'`));
+    const [a, b, c] = await Promise.all([nhanhGoc, nhanhRutGon, nhanhThanhPho]);
+    // Gộp, bỏ trùng theo id (một dòng có thể khớp cả (a) và (b)).
+    const theoId = new Map<string, (typeof a)[number]>();
+    for (const r of [...a, ...b, ...c]) theoId.set(r.id, r);
+    return [...theoId.values()];
+  })();
 
   // Chuông báo nạp full: 24/08 Supabase khoá dịch vụ vì egress 83GB/5GB, gần
   // như toàn bộ đến từ những chỗ gọi snapshot mà quên truyền nước đích. Ai
