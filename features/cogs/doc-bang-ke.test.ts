@@ -239,12 +239,12 @@ describe('docWorkbook — Linh Phùng: cột Note lệch tỉ giá TỔNG (trư�
       [null, null, 'Tổng', null, null, null, null, null, '15,776,700 ₫'],
     ],
   };
-  it('Σ cột Note lệch 8% so dòng TỔNG ₫ → bỏ Note, đổi theo tỉ giá TỔNG (25.880); mục B VNĐ giữ nguyên', () => {
+  it('Σ cột Note = dòng TỔNG ₫ ÷ 1,08 → Thành tiền gồm VAT: giá vốn lấy Note (trước thuế), tỉ giá vẫn 25.880; mục B VNĐ giữ nguyên', () => {
     const { bangKe } = docWorkbook([lp]);
     const b = bangKe[0];
-    expect(b.lines.map((d) => d.tt)).toEqual([237 * 25880, 228 * 25880, 3_742_500]);
+    expect(b.lines.map((d) => d.tt)).toEqual([5_679_222, 5_463_556, 3_742_500]);
     expect(b.tiGia).toBe(25880);
-    expect(b.canhBao.some((c) => /lệch dòng TỔNG/.test(c))).toBe(true);
+    expect(b.canhBao.some((c) => /gồm VAT/.test(c))).toBe(true);
   });
   it('dòng return thiếu cột "Giá phụ kiện": Thành tiền lấy ở ô bên trái, có cảnh báo', () => {
     const HDR_B = ['Ngày trả', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Giá phụ kiện', 'Tổng thành tiền TT', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
@@ -599,5 +599,50 @@ describe('docWorkbook — Raffiné: cột tiền tên "Tổng tiền thanh toán
       [null, null, 'TỔNG (A)', null, '1', '4,940,000 ₫', null, null, '3,952,000 ₫'],
     ] }]);
     expect(bangKe[0].lines.map((d) => d.tt)).toEqual([3_952_000]);
+  });
+});
+
+
+describe('docWorkbook — chuẩn hoá trước thuế (CEO 09/09/2026): Huelleyrose ghi Thành tiền gồm VAT, Note = TT ÷ 1,08', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (note1: O, note2: O) => ({ name: 'Thực nhận T3', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/03/2026 đến 31/03/2026\n\nBrand: HUELLEYROSE'], ['A. Đơn thực nhận trong tháng'], HDR,
+    ['16/03/2026', '#MBLVD27335', 'x', 'HLR-BST027-15-L-AKED-PLA', '1', '4,400,000 đ', '30%', null, '3,080,000 ₫', note1, 'c', 'T3', '2'],
+    ['13/03/2026', '#MBLVD27885', 'y', 'HLR-BST027-16-L-NEGG', '1', '4,000,000 đ', '30%', null, '2,800,000 ₫', note2, 'c', 'T3', '2'],
+    ['20/03/2026', '#MBLVD27900', 'z', 'HLR-BST027-17-M-BLA', '1', '4,000,000 đ', '30%', null, '2,800,000 ₫', null, 'c', 'T3', '2'],
+    [null, null, 'TỔNG (A)', null, '3', '12,400,000 ₫', null, null, '8,680,000 ₫'],
+  ] });
+  it('Note = TT ÷ 1,08 ở 2/3 dòng → cả tab gồm VAT: dòng có Note lấy Note, dòng thiếu Note chia 1,08; có cảnh báo', () => {
+    const { bangKe } = docWorkbook([tab('2,851,852 ₫', '2,592,593 ₫')]);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([2_851_852, 2_592_593, Math.round(2_800_000 / 1.08)]);
+    expect(bangKe[0].canhBao.some((c) => /gồm VAT/.test(c))).toBe(true);
+  });
+  it('Note không phải TT ÷ 1,08 (ghi chú khác / bằng TT) → giữ nguyên Thành tiền', () => {
+    const { bangKe } = docWorkbook([tab('3,080,000 ₫', 'Xuất HĐ')]);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([3_080_000, 2_800_000, 2_800_000]);
+    expect(bangKe[0].canhBao).toEqual([]);
+  });
+});
+
+describe('docWorkbook — suy rộng gồm VAT trong cùng brand (Huelleyrose T4 không có Note, Larmes T1–T3)', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  const tab = (ky: string, note: O, duoi: O[][]) => ({ name: `Thực nhận T${Number(ky)}`, rows: [
+    [`BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/${ky}/2026 đến 30/${ky}/2026\n\nBrand: HUELLEYROSE`], ['A. Đơn thực nhận trong tháng'], HDR,
+    [`10/${ky}/2026`, '#MBLVD28000', 'x', 'HLR-BST027-15-S-AKED-PLA', '1', '4,400,000 đ', '30%', null, '3,080,000 ₫', note, 'c', `T${Number(ky)}`, '2'],
+    [null, null, 'TỔNG (A)', null, '1', '4,400,000 ₫', null, null, '3,080,000 ₫'], ...duoi,
+  ] });
+  it('kỳ có Note chứng minh gồm VAT → kỳ không Note của cùng brand cũng ÷ 1,08 (cảnh báo); kỳ có dòng VAT riêng hoặc TỔNG THANH TOÁN = Σ × 1,08 giữ nguyên', () => {
+    const t3 = tab('03', '2,851,852 ₫', []);
+    const t4 = tab('04', null, []);
+    const t5 = tab('05', null, [[null, null, 'VAT 8%', null, null, null, null, null, '246,400 ₫'], [null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, '3,326,400 ₫']]);
+    const t6 = tab('06', null, [[null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, '3,326,400 ₫']]);
+    const { bangKe } = docWorkbook([t3, t4, t5, t6]);
+    const tt = Object.fromEntries(bangKe.map((b) => [b.period, b.lines[0].tt]));
+    expect(tt).toEqual({ '2026-03': 2_851_852, '2026-04': Math.round(3_080_000 / 1.08), '2026-05': 3_080_000, '2026-06': 3_080_000 });
+    expect(bangKe.find((b) => b.period === '2026-04')!.canhBao.some((c) => /kỳ này cũng quy về trước thuế/.test(c))).toBe(true);
+  });
+  it('không kỳ nào có bằng chứng → không đụng gì', () => {
+    const { bangKe } = docWorkbook([tab('03', null, []), tab('04', 'Xuất HĐ', [])]);
+    expect(bangKe.map((b) => b.lines[0].tt)).toEqual([3_080_000, 3_080_000]);
   });
 });

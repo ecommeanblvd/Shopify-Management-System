@@ -19,6 +19,8 @@ export interface DongBangKe {
   ttGoc?: number;
   /** VND ghi sẵn trên sheet cho dòng USD (cột Note — La Vierge); nếu có thì `tt` lấy đúng số này. */
   ttVndSan?: number;
+  /** Dòng VND mà cột Note = TT ÷ 1,08 → brand ghi Thành tiền GỒM VAT 8 %, Note là số trước thuế (Huelleyrose). */
+  truocThue?: number;
   /** Dòng thuộc mục A (để suy tỉ giá theo dòng "TỔNG (A):"). */
   mucA?: boolean;
 }
@@ -218,6 +220,9 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         if (r0 >= 15_000 && r0 <= 40_000) ttVndSan = Math.round(vndDong);
         else if (r0 >= 15 && r0 <= 40) ttVndSan = Math.round(vndDong * 1000);
       }
+      // Dòng VND có Note = TT ÷ 1,08 (±0,3 %) → Thành tiền gồm VAT, Note là trước thuế (Huelleyrose 2026; CEO 09/09: giá vốn quy về trước thuế).
+      const noteVnd = !laUsd && noteRaw != null ? docTien(noteRaw) : null;
+      const truocThue = noteVnd != null && noteVnd > 0 && tt > 0 && Math.abs(tt / noteVnd / 1.08 - 1) <= 0.003 ? Math.round(noteVnd) : null;
       const slVal = docTien(r[cot.sl]);
       if (slVal == null || slVal <= 0) { bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Số lượng`); return; }
       const d: DongBangKe = {
@@ -227,6 +232,7 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         code: cot.code >= 0 ? chuoi(r[cot.code]) || null : null, hangSheet: i + 1,
         ...(laUsd ? { ttGoc: tt } : {}),
         ...(ttVndSan != null ? { ttVndSan } : {}),
+        ...(truocThue != null ? { truocThue } : {}),
         ...(muc === 'A' ? { mucA: true } : {}),
       };
       (muc === 'A' || !bLaReturn ? bk.lines : bk.returns).push(d);
@@ -251,12 +257,14 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       const tatCa = [...bk.lines, ...bk.returns];
       const usd = tatCa.filter((d) => d.ttGoc != null);
       let coSan = usd.filter((d) => d.ttVndSan != null);
+      // Thành tiền USD gồm VAT: cột VND sẵn = TỔNG ₫ ÷ 1,08 (Linh Phùng T8) → Note là trước thuế, giá vốn lấy Note; dòng thiếu Note chia 1,08.
+      let ttGomVat = false; let rateSanNgoai: number | null = null;
       if (coSan.length) {
         // Kiểm TỔNG THỂ: Σ(lines) − Σ(returns) tính bằng VND sẵn (dòng USD thiếu VND sẵn thì ước theo tỉ giá suy từ
         // các dòng có sẵn) phải ≈ dòng TỔNG ₫ của sheet (số MEAN trả). Linh Phùng T8: cột Note = trước VAT (÷1,08)
         // trong khi TỔNG ₫ = USD × tỉ giá → lệch 3,4% → không tin Note, đổi theo tỉ giá TỔNG. Lệch ≤ 0,5% → tin Note.
         const sanA = coSan.filter((d) => d.mucA); const goc = sanA.length ? sanA : coSan;
-        const rateSan = goc.reduce((s, d) => s + d.ttVndSan!, 0) / goc.reduce((s, d) => s + d.ttGoc!, 0);
+        const rateSan = goc.reduce((s, d) => s + d.ttVndSan!, 0) / goc.reduce((s, d) => s + d.ttGoc!, 0); rateSanNgoai = rateSan;
         const uocVnd = (d: DongBangKe) => d.ttGoc == null ? d.tt : (d.ttVndSan ?? Math.round(d.ttGoc * rateSan));
         // Hai mốc: (i) tổng ₫ của mục A (dòng TỔNG trước mục B) so Σ A; (ii) dòng "Tổng"/"TỔNG THANH TOÁN" cuối so Σ lines − Σ returns.
         // Tin cột VND sẵn nếu khớp ≥ một mốc có sẵn; lệch cả các mốc có → bỏ.
@@ -271,7 +279,11 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         // (L'Scarlett T5/T7: "TỔNG CÔNG NỢ MEAN THANH TOÁN" đã gồm VAT 8%, Note = TT × tỉ giá Vietcombank = trước thuế).
         const rateGhi = tiGiaGhiTrenSheet(sh.rows);
         const khopGhi = rateGhi != null && Math.abs(rateSan / rateGhi - 1) <= 0.005;
-        if (!khopGhi && coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll)) {
+        const khopTruocThue = !khopGhi && coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll) && (khop(tongA, sumA * 1.08) || khop(tongCuoi, sumAll * 1.08));
+        if (khopTruocThue) {
+          ttGomVat = true;
+          bk.canhBao.push(`${sh.name}: cột VND từng dòng = dòng TỔNG ₫ ÷ 1,08 → Thành tiền gồm VAT 8 %, giá vốn lấy số trước thuế (Note)`);
+        } else if (!khopGhi && coMoc && !khop(tongA, sumA) && !khop(tongCuoi, sumAll)) {
           bk.canhBao.push(`${sh.name}: cột VND từng dòng (Σ A ${Math.round(sumA).toLocaleString('vi-VN')}) lệch dòng TỔNG ₫ (${Math.round(tongA ?? tongCuoi ?? 0).toLocaleString('vi-VN')}) — bỏ, dùng tỉ giá TỔNG`);
           for (const d of coSan) delete d.ttVndSan; coSan = [];
         }
@@ -316,10 +328,41 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       if (thieu.length === 0 || rate != null) {
         bk.currency = 'VND';
         const sumUsd = usd.reduce((s, d) => s + d.ttGoc!, 0);
-        bk.tiGia = sumUsd > 0 ? Math.round((usd.reduce((s, d) => s + d.tt, 0) / sumUsd) * 100) / 100 : undefined;
+        bk.tiGia = ttGomVat
+          ? (rate ?? (rateSanNgoai != null ? Math.round(rateSanNgoai * 1.08 * 100) / 100 : undefined))
+          : (sumUsd > 0 ? Math.round((usd.reduce((s, d) => s + d.tt, 0) / sumUsd) * 100) / 100 : undefined);
+        if (ttGomVat) for (const d of thieu) d.tt = Math.round(d.tt / 1.08);
       } else { bk.currency = 'USD'; bk.canhBao.push(`${sh.name}: sheet tính USD nhưng không thấy dòng TỔNG (₫) để đổi — giữ USD`); }
     } else bk.currency = 'VND';
+    // Chuẩn hoá TRƯỚC THUẾ cho dòng VND (CEO 09/09/2026): quá nửa dòng VND của tab có Note = TT ÷ 1,08 → cả tab ghi Thành tiền gồm VAT 8 %
+    // → dòng có Note lấy Note, dòng còn lại chia 1,08. Brand ghi TT trước thuế + dòng "VAT 8%" riêng ở tổng không bị ảnh hưởng.
+    {
+      const vnd = [...bk.lines, ...bk.returns].filter((d) => d.ttGoc == null);
+      const coNote = vnd.filter((d) => d.truocThue != null);
+      if (coNote.length >= 1 && coNote.length * 2 >= vnd.length) {
+        for (const d of vnd) d.tt = d.truocThue ?? Math.round(d.tt / 1.08);
+        bk.canhBao.push(`${sh.name}: cột Note = Thành tiền ÷ 1,08 (${coNote.length}/${vnd.length} dòng) → Thành tiền gồm VAT 8 %, giá vốn quy về trước thuế`);
+      }
+    }
     bangKe.push(bk);
+  }
+  // Suy rộng trong cùng brand (CEO 09/09: giá vốn quy về trước thuế cho mọi brand): brand đã chứng minh ghi Thành tiền gồm VAT ở ≥ 1 kỳ
+  // (Note = TT ÷ 1,08) thì các kỳ khác của brand cũng gồm VAT — trừ tab tự chứng minh TT trước thuế: có dòng "VAT"/"Thuế GTGT" riêng,
+  // hoặc dòng TỔNG THANH TOÁN cuối = Σ TT × 1,08. Larmes chỉ ghi Note ở T4/T8, Huelleyrose không ghi Note ở T4 — giá brand không đổi theo tháng.
+  const gomVat = bangKe.filter((b) => b.canhBao.some((c) => /gồm VAT/.test(c)));
+  if (gomVat.length) {
+    for (const bk of bangKe) {
+      if (gomVat.includes(bk) || (bk.lines.length === 0 && bk.returns.length === 0)) continue;
+      const sh = sheets.find((x) => x.name === bk.sheet)!;
+      const coDongThue = sh.rows.some((r) => r.some((c) => /^(VAT|THUẾ|Thuế GTGT)/i.test(chuoi(c))));
+      const tong = [...sh.rows].reverse().find((r) => r.some((c) => /^TỔNG THANH TOÁN/i.test(chuoi(c))) && r.some((c) => /₫|đ$/i.test(chuoi(c))));
+      const tongCuoi = tong ? docTien(tong.find((c) => /₫|đ$/i.test(chuoi(c)))) : null;
+      const sumKy = bk.lines.reduce((t, d) => t + d.tt, 0) - bk.returns.reduce((t, d) => t + d.tt, 0);
+      const tongDaCongVat = tongCuoi != null && sumKy > 0 && Math.abs(tongCuoi / (sumKy * 1.08) - 1) <= 0.005;
+      if (coDongThue || tongDaCongVat) continue;
+      for (const d of [...bk.lines, ...bk.returns]) d.tt = Math.round(d.tt / 1.08);
+      bk.canhBao.push(`${bk.sheet}: brand ghi Thành tiền gồm VAT 8 % ở kỳ ${gomVat.map((b) => b.period).join(', ')} → kỳ này cũng quy về trước thuế (÷ 1,08)`);
+    }
   }
   return { bangKe, boQua };
 }

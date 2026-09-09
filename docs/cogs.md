@@ -225,6 +225,15 @@ Nút **"Phân bổ PO → đơn"** (trang Bảng kê brand, quyền `manage_cogs
 
 - **Chỉ mã đơn mua đứt mới là PO** (`laMaPO`, 09/09/2026): `#MBLVDPO…`, `#MTB…`, `#PO-001`. Các mã offline khác (`#HC…` store brand, `#MXHS…` XiaoHongShu, `#OS…`/`#MOS…`/`#CSM…` Off Store) là hàng đã bán ở kênh khác, không phân bổ xuống đơn Shopify (TINH Atelier: 2 dòng #MOS từng bị gán nhầm cho đơn TA…, đã xoá).
 
+## Giá vốn luôn TRƯỚC THUẾ (VAT 8 %) — quyết định CEO 09/09/2026
+
+Brand ghi "Thành tiền" theo hai kiểu: (a) **trước thuế**, dòng "VAT 8%"/"THUẾ GTGT" cộng riêng ở tổng (Whiteplan, Montsand, Mirer, Arti, L'Scarlett…) — giữ TT; (b) **đã gồm VAT**, cột Note = TT ÷ 1,08 (Huelleyrose, Linh Phùng, Larmes, Jenny K Tran | Divine, De Theia, Sissy Nation, Darling Diva, LYP). Bộ đọc quy về trước thuế theo ba luật:
+1. **Dòng VND** có Note = TT ÷ 1,08 (±0,3 %); quá nửa dòng VND của tab như vậy → cả tab gồm VAT: dòng có Note lấy Note, dòng thiếu Note chia 1,08 (`truocThue`).
+2. **Dòng USD** có cột VND sẵn mà Σ = dòng TỔNG ₫ ÷ 1,08 → Note là trước thuế: lấy Note; dòng thiếu Note = USD × tỉ giá ÷ 1,08; `tiGia` vẫn là tỉ giá thật (Linh Phùng T8 — trước đây bỏ Note và lấy USD × tỉ giá).
+3. **Suy rộng trong cùng workbook**: brand đã chứng minh gồm VAT ở ≥ 1 kỳ → các kỳ khác không có Note cũng ÷ 1,08, trừ tab tự chứng minh trước thuế (có dòng "VAT"/"THUẾ", hoặc TỔNG THANH TOÁN = Σ TT × 1,08). Lý do: giá brand không đổi theo tháng (Huelleyrose T4, Larmes T1–T3/T5–T7 không ghi Note).
+Brand không có bất kỳ dấu hiệu VAT nào (Denio, Poem, Nhat Vy, Echele, Beloved…) giữ nguyên TT — không thể biết TT có gồm VAT hay không từ sheet.
+Đã nhập lại 8 brand (55 kỳ 2026): Σ giá vốn 1.644,9 → 1.526,5 triệu ₫ (−7,2 %): Linh Phùng 372,8→351,2; Larmes 284,4→266,6; Jenny K Tran | Divine 361,2→346,5; De Theia 163,7→156,7; Sissy Nation 130,0→121,0; Darling Diva 78,6→73,7; Huelleyrose 144,0→140,8; LYP 74,1→70,0. Hồi quy 43 brand khớp sau khi nhập lại.
+
 ## Sheet tính bằng USD (Happy Clothing) và mục B không phải return
 
 Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT", mục "A. Đơn thực nhận" / "B. Đơn return". Happy Clothing (08/09/2026): giá và thành tiền bằng **USD** ("$935.00"), cột "Thành tiền", mục "A. Đơn MEAN thực nhận" và **"B. Đơn Happy Clothing Global thực nhận"** — đơn `#HC…` trên store riêng của brand, không có trên Shopify của MEAN → ghi bảng offline (`brand_cogs_offline`, mã `#HC…`), **không phải return**.
@@ -293,7 +302,7 @@ Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT"
 
 **Đợt 15 brand (09/09/2026)** — Jadeite T.H, Seychas, Arti Apparel, Lamoris, Delicate, Ritara, SoDope Club, Huelleyrose, Cordia, Lovelyn, LYP, Thésong, Raffiné, Decode House, Kalisa. Mọi kỳ 2026 Σ = tổng brand (≤ 2đ). Hai luật đọc mới: (1) **nhiều dòng return kỳ cũ** thiếu VND sẵn chia dòng "TỔNG ₫ mục B" theo USD từng dòng (Arti Apparel T8: 2 return tỉ giá 26.076 của kỳ 06, dòng tổng dán nhãn nhầm "TỔNG (A)"); (2) cột tiền tên **"Tổng tiền thanh toán"** (Raffiné) nhận như "Tổng thành tiền TT". Ghi chú riêng:
 - Jadeite T.H / Arti Apparel / Lamoris / Thésong / Kalisa / SoDope Club: USD + Tỷ giá Vietcombank, "TỔNG THANH TOÁN" gồm VAT → giá vốn = TT × tỉ giá trước thuế. Jadeite T3 không có dòng mục A (cả tab = A).
-- Huelleyrose: cột Note = TT ÷ 1,08 (brand ghi giá gồm VAT, Note trước thuế) — vẫn lấy cột TT theo luật chung, **chờ CEO quyết có chuẩn hoá VAT không** (Linh Phùng T8 cùng kiểu). PO #PO-001/#MBLVDPO06: phân bổ 9 dòng Σ 27.720.000đ; 5 dòng T2 đặt trước kỳ PO (như Rosee de Matin).
+- Huelleyrose: cột Note = TT ÷ 1,08 (brand ghi giá gồm VAT, Note trước thuế) → CEO 09/09 chốt quy về trước thuế cho mọi brand (xem mục "Giá vốn luôn TRƯỚC THUẾ"). PO #PO-001/#MBLVDPO06: phân bổ 9 dòng Σ 27.720.000đ; 5 dòng T2 đặt trước kỳ PO (như Rosee de Matin).
 - LYP T6: dòng "CẤN TRỪ TIỀN CỌC (B) 10.000.000" là khấu trừ tiền cọc MEAN đã ứng, không phải giá vốn → giá vốn = TỔNG (A).
 - Ritara/Decode House/Sissy-kiểu: tab thực nhận ghi mục "A. Đơn thực bán" (tên tab thắng). SoDope Club chỉ có T2/T3/T6/T7; Huelleyrose T2–T5; Thésong T5–T7; Kalisa T7–T8; Lovelyn thiếu T2; Decode House thiếu T4/T8; Raffiné thiếu T6/T8.
 - Nhập (dòng đơn + offline): Jadeite 39+18 #MTB; Seychas 33; Arti 39+2 return+6 #MTB; Lamoris 35+7 return+38 offline (PO 2 dòng); Delicate 39; Ritara 40; SoDope 15; Huelleyrose 24+14 PO (phân bổ 9); Cordia 42; Lovelyn 36; LYP 37+2 #MTB; Thésong 20+5 #MBLVDPO; Raffiné 24; Decode House 20+1 return; Kalisa 15. Khớp SKU 100 %, 0 không khớp.
