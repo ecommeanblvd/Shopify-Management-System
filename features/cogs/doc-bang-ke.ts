@@ -132,7 +132,10 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (/^\s*(Bản sao|Copy of)/i.test(sh.name)) { boQua.push(`${sh.name}: tab bản sao (bỏ)`); continue; }
     const td = timTieuDe(sh.rows);
     if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ … Từ ngày … Brand:`); continue; }
-    if (/thực bán/i.test(sh.name) || coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i)) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
+    // Tab thực bán: theo TÊN tab; tên không nói gì thì mới xét nội dung. Tên có "thực nhận" thì luôn là bảng kê thực nhận
+    // (De Theia T1–T5 ghi nhầm tiêu đề mục "A. Đơn thực bán" trong tab thực nhận).
+    const tenBan = /thực bán/i.test(sh.name), tenNhan = /thực nhận/i.test(sh.name);
+    if (tenBan || (!tenNhan && coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i))) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
     // Mục A: "A. Đơn thực nhận", "A. Đơn MEAN thực nhận", "A. Đơn phát sinh trong tháng (trước 13/02)" (Montsand)…
     const khongCoMucA = !coO(sh.rows, /^A\.\s*Đơn/i);
     // Montsand: tab "Đơn thực nhận đối soát T8" không có dòng "A. Đơn thực nhận" — bảng bắt đầu ngay sau tiêu đề → coi cả tab là mục A.
@@ -145,7 +148,9 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
       // "A. ĐƠN RETURN TRONG THÁNG"); còn lại là mục cộng (A, hoặc B kiểu Happy Clothing Global / Whiteplan / Montsand).
       if (/^[A-Z]\.\s*Đơn/i.test(dau)) {
         const laReturn = /\bre(turn)?\b|\btrả\b|\bhoàn\b/i.test(dau);
-        muc = laReturn ? 'B' : (/^A\./i.test(dau) ? 'A' : 'B'); bLaReturn = laReturn; cot = null; return;
+        // GIỮ bản đồ cột của mục trước: mục sau có thể không lặp lại hàng tiêu đề (De Theia T4: "B. Đơn return" rồi dữ liệu ngay);
+        // nếu mục sau có hàng tiêu đề riêng thì laHangTieuDe() phía dưới sẽ ghi đè.
+        muc = laReturn ? 'B' : (/^A\./i.test(dau) ? 'A' : 'B'); bLaReturn = laReturn; return;
       }
       if (laHangTieuDe(r)) { cot = chiSoCot(r); if (cot.ngay === 0 && r.map((c) => chuoi(c).toLowerCase()).findIndex((x) => x === 'ngày nhận' || x === 'ngày return' || x === 'ngày trả' || x === 'ngày báo đơn' || x === 'ngày báo' || x === 'ngày') < 0) ngayMissing = true; return; }
       if (!muc || !cot) return;
@@ -158,8 +163,12 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         // Dòng thiếu một cột (Linh Phùng mục return: không có ô "Giá phụ kiện") → dữ liệu dồn sang trái một ô:
         // ô "Tổng thành tiền" trống, số tiền nằm ở ô bên trái, còn ô Code nằm đúng chỗ TT. Nhận khi ô trái là tiền hợp lệ
         // và ô TT hiện tại KHÔNG phải tiền (là mã Code hoặc trống).
+        // Chỉ khi dòng THỰC SỰ lệch: ô ở vị trí Thành tiền đang chứa mã Code ("#MBLVD…"). Nếu ô đó trống thì đây là dòng
+        // brand chưa điền Thành tiền (De Theia T8) — KHÔNG lấy ô bên trái (đó là Phí customize).
+        const oTT = chuoi(r[cot.tt]);
         const trai = r[cot.tt - 1]; const ttTrai = docTien(typeof trai === 'string' ? trai.replace(/\$/g, '') : trai);
-        if (ttTrai != null && ttTrai > 0) { ttRaw = trai; tt = ttTrai; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} dòng lệch cột — lấy Thành tiền ở ô bên trái (${ttTrai.toLocaleString('vi-VN')})`); }
+        const traiKhongPhaiCustomize = cot.custom < 0 || cot.tt - 1 !== cot.custom;
+        if ((oTT.startsWith('#') || traiKhongPhaiCustomize) && ttTrai != null && ttTrai > 0) { ttRaw = trai; tt = ttTrai; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} dòng lệch cột — lấy Thành tiền ở ô bên trái (${ttTrai.toLocaleString('vi-VN')})`); }
       }
       if (tt == null) { soKhongDocTT += 1; bk.canhBao.push(`${sh.name} hàng ${i + 1}: ${maDon} không đọc được Thành tiền`); return; }
       const laUsd = typeof ttRaw === 'string' && ttRaw.includes('$'); if (laUsd) coUsd = true;

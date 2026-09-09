@@ -441,3 +441,33 @@ describe('docWorkbook — tên brand có dấu "|" (Jenny K Tran | Divine)', () 
     expect(bangKe[0].brand).toBe('JENNY K TRAN | DIVINE'); expect(bangKe[0].lines[0].tt).toBe(396 * 26080);
   });
 });
+
+describe('docWorkbook — De Theia T8: Thành tiền trống nhưng có Phí customize → KHÔNG lấy nhầm customize, kỳ chưa hoàn tất', () => {
+  it('14 dòng TT trống (có customize) → 0 dòng + cảnh báo chưa hoàn tất', () => {
+    const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán', 'Kỳ báo đơn'];
+    const rows: unknown[][] = [[null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 30/08/2026\n\nBrand: De Theia'], [null, 'A. Đơn thực nhận trong tháng'], HDR];
+    for (let i = 0; i < 3; i++) rows.push(['14/08/2026', '#MBLVD2958' + i, 'x', 'Detheia-503640242586' + i + '-Customize-WHI', '1', '1280000', null, '384000', null, null, '#MBLVD2958' + i + 'Detheia…', null, null]);
+    rows.push([null, null, 'TỔNG THANH TOÁN ', null, '3', '3,840,000 ₫', null, null, '0 ₫']);
+    const { bangKe } = docWorkbook([{ name: 'File đối soát T8 thực nhận', rows: rows as never }]);
+    expect(bangKe[0].lines).toEqual([]);
+    expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
+    expect(bangKe[0].canhBao.some((c) => /lệch cột/.test(c))).toBe(false);
+  });
+});
+
+describe('docWorkbook — De Theia T4: mục B return KHÔNG có hàng tiêu đề riêng → dùng bản đồ cột của mục A', () => {
+  it('2 dòng return ngay sau "B. Đơn return trong tháng" vẫn được đọc và trừ', () => {
+    const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán', 'Kỳ báo đơn'];
+    const t4 = { name: 'File đối soát T4 thực nhận', rows: [
+      [null, null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/04/2026 đến 30/04/2026\n\nBrand: De Theia'], [null, 'A. Đơn thực nhận trong tháng'], HDR,
+      ['02/04/2026', '#MBLVD28337', 'x', 'Detheia-5036402670867-S-BLA', '1', '3,450,000 đ', '25%', null, '2,587,500 ₫', null, 'c', 'T4', '4'],
+      [null, null, 'TỔNG (A)', null, '1', '3,450,000 ₫', null, null, '2,587,500 ₫'],
+      ['B. Đơn return trong tháng'],
+      ['11/02/2026', '#MBLVD27461', 'y', 'Detheia-5036402714578-M-BBLA-PLA', '1', '5,250,000 đ', '25%', null, '3,937,500 ₫', null, 'c', null, '2'],
+      [null, null, 'TỔNG (B)', null, '1', '5,250,000 ₫', null, null, '3,937,500 ₫'], [null, null, 'TỔNG (A-B)', null, null, null, null, null, '-1,350,000 ₫'],
+    ] };
+    const { bangKe } = docWorkbook([t4]);
+    expect(bangKe[0].lines).toHaveLength(1); expect(bangKe[0].returns).toHaveLength(1);
+    expect(bangKe[0].returns[0]).toMatchObject({ maDon: '#MBLVD27461', tt: 3_937_500 });
+  });
+});
