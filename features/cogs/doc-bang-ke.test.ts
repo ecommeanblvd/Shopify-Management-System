@@ -563,3 +563,41 @@ describe('docWorkbook — TINH Atelier: tiêu đề "đến ngày", tab tên kh�
     expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
   });
 });
+
+describe('docWorkbook — Arti Apparel T8: HAI dòng return kỳ cũ lấy TỔNG ₫ mục B (tỉ giá kỳ 06) chia theo USD', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Phí customize', 'Thành tiền', 'Note', 'Code ', 'Kỳ thanh toán '];
+  const t8 = { name: 'File đối soát T82026', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: Arti Apparel'], ['A. Đơn thực nhận  trong tháng'], HDR,
+    ['05/08/2026', '#MBLVD29800', 'x', 'Arti-A1-S-BLA', '1', '$516.00', '50%', null, '$258.00', null, 'c', 'T8'],
+    [null, null, 'TỔNG  (A)', null, '1', '$516.00', null, null, '$258.00'],
+    [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (31/08/2026)', null, null, null, null, null, '25,880 ₫'],
+    [null, null, 'TỔNG (A)', null, null, null, null, null, '6,677,040 đ'],
+    ['B. Đơn return  trong tháng'], HDR,
+    ['10/08/2026', '#MBLVD29500', 'y', 'Arti-A2-M-WHI', '1', '$200.00', '50%', null, '$100.00', null, 'c', 'T6'],
+    ['12/08/2026', '#MBLVD29501', 'z', 'Arti-A3-L-WHI', '1', '$143.00', '50%', null, '$71.50', null, 'c', 'T6'],
+    [null, null, 'TỔNG  (B)', null, '2', '$343.00', null, null, '$171.50'],
+    [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (30/06/2026)', null, null, null, null, null, '26,076 ₫'],
+    [null, null, 'TỔNG (A)', null, null, null, null, null, '4,472,034 đ'],
+    [null, null, 'TỔNG  (A-B)', null, null, null, null, null, '2,205,006 đ'],
+    [null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, '2,381,406 ₫'],
+  ] };
+  it('Σ return = 4.472.034 (171,5 $ × 26.076), không phải × 25.880; từng dòng chia theo USD', () => {
+    const { bangKe } = docWorkbook([t8]);
+    const bk = bangKe[0];
+    expect(bk.lines.map((d) => d.tt)).toEqual([258 * 25880]);
+    expect(bk.returns.reduce((s, d) => s + d.tt, 0)).toBe(4_472_034);
+    expect(bk.returns.map((d) => d.tt)).toEqual([Math.round(100 * 26076), 4_472_034 - Math.round(100 * 26076)]);
+  });
+});
+
+describe('docWorkbook — Raffiné: cột tiền tên "Tổng tiền thanh toán"', () => {
+  it('đọc được Thành tiền từ cột "Tổng tiền thanh toán"', () => {
+    const { bangKe } = docWorkbook([{ name: 'File đối soát T12026', rows: [
+      ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/01/2026 đến 31/01/2026\n\nBrand: Raffine'], ['A. Đơn thực nhận trong tháng'],
+      ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa', '% CK', 'Phí customize', 'Tổng tiền thanh toán', 'Note', 'Code', 'Kỳ thanh toán', 'Kỳ báo đơn'],
+      ['10/01/2026', '#MBLVD27000', 'x', 'Raffine-R1-S-BLA', '1', '4,940,000 ₫', '20%', null, '3,952,000 ₫', null, 'c', 'T1', '1'],
+      [null, null, 'TỔNG (A)', null, '1', '4,940,000 ₫', null, null, '3,952,000 ₫'],
+    ] }]);
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([3_952_000]);
+  });
+});

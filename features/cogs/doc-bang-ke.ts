@@ -55,7 +55,8 @@ function chiSoCot(r: O[]) {
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
     gia: tim('giá nội địa', 'giá sản phẩm', 'giá global', 'giá vnd', 'giá usd'), ck: timPrefix('% ck'), kyTT: tim('kỳ thanh toán'), custom: tim('phí customize'),
     // Denio: "Tổng thành tiền TT"; Happy Clothing: "Thành tiền".
-    tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : tim('thành tiền'), code: tim('code'),
+    // Cột tiền brand trả: "Tổng thành tiền TT" (chuẩn), "Thành tiền" (HC), "Tổng tiền thanh toán" (Raffiné 2026).
+    tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : timPrefix('tổng tiền thanh toán') >= 0 ? timPrefix('tổng tiền thanh toán') : tim('thành tiền'), code: tim('code'),
     // La Vierge: cột "Note" chứa thành tiền quy VND từng dòng ("2,717,400") — dùng thẳng khi có, chính xác hơn tỉ giá kỳ.
     note: tim('note'),
   };
@@ -301,10 +302,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         // (Eegen T4: 138,25 $ × 25.820 = 3.569.615 ₫, khác tỉ giá kỳ 26.108). Chỉ nhận khi tỉ giá suy ra hợp lý.
         const thieuReturn = bk.returns.filter((d) => d.ttGoc != null && d.ttVndSan == null);
         const tongB = tongVndMucB(sh.rows);
-        if (thieuReturn.length === 1 && tongB != null) {
+        // Nhiều dòng return kỳ cũ (Arti Apparel T8/2026: 2 dòng, tỉ giá 26.076 của kỳ 06) chia TỔNG ₫ mục B theo USD từng dòng,
+        // dồn phần làm tròn vào dòng cuối để Σ return = đúng số brand.
+        if (thieuReturn.length >= 1 && tongB != null) {
           const daCo = bk.returns.filter((d) => d.ttVndSan != null).reduce((s, d) => s + d.tt, 0);
-          const conLai = Math.round(tongB - daCo); const r0 = conLai / thieuReturn[0].ttGoc!;
-          if (conLai > 0 && r0 >= 15_000 && r0 <= 40_000) thieuReturn[0].tt = conLai;
+          const conLai = Math.round(tongB - daCo); const sumUsd = thieuReturn.reduce((s, d) => s + d.ttGoc!, 0); const r0 = conLai / sumUsd;
+          if (conLai > 0 && r0 >= 15_000 && r0 <= 40_000) {
+            let daChia = 0;
+            thieuReturn.forEach((d, i) => { d.tt = i === thieuReturn.length - 1 ? conLai - daChia : Math.round(d.ttGoc! * r0); daChia += d.tt; });
+          }
         }
       }
       if (thieu.length === 0 || rate != null) {
