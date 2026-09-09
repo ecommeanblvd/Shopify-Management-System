@@ -44,7 +44,7 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
             />
             <div className={`flex justify-between font-semibold border-t border-border/60 pt-1 ${cell(mp.loss, mp.missing)}`}>
               <span>{mp.missing ? 'Margin SP' : `${mp.loss ? '⚠' : '✓'} Margin SP ${gv.dung === 'thuc' ? '(theo giá thực)' : '(theo dự tính)'}`}</span>
-              <span>{mp.missing ? '—' : `${mp.deltaVnd >= 0 ? '+' : ''}${vnd(mp.deltaVnd)} · ${pctTxt(mp.pct)}`}</span>
+              {mp.missing ? <span>—</span> : <SoVaPct so={`${mp.deltaVnd >= 0 ? '+' : ''}${vnd(mp.deltaVnd)}`} pct={pctTxt(mp.pct)} />}
             </div>
           </div>
           <div className={`rounded-lg border p-2.5 space-y-0.5 ${ms.loss ? 'border-red-500/40 bg-red-500/5' : 'border-border'}`}>
@@ -52,7 +52,7 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
             <Row label={`Ship — DHL/FedEx${ms.source === 'engine' ? ' (tạm tính)' : ''}`} value={ms.missing ? 'chưa có' : vnd(ms.costVnd)} />
             <div className={`flex justify-between font-semibold border-t border-border/60 pt-1 ${cell(ms.loss, ms.missing)}`}>
               <span>{ms.missing ? 'Margin Ship' : ms.loss ? '⚠ Margin Ship' : '✓ Margin Ship'}</span>
-              <span>{ms.missing ? '—' : `${ms.deltaVnd >= 0 ? '+' : ''}${vnd(ms.deltaVnd)} · ${pctTxt(ms.pct)}`}</span>
+              {ms.missing ? <span>—</span> : <SoVaPct so={`${ms.deltaVnd >= 0 ? '+' : ''}${vnd(ms.deltaVnd)}`} pct={pctTxt(ms.pct)} />}
             </div>
           </div>
         </div>
@@ -81,10 +81,21 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
       <div className={`flex items-center justify-between rounded-lg border p-3 ${revBorder}`}>
         <span className={`font-bold ${revText}`}>REVENUE mình tạo ra</span>
         <span className={`font-bold text-lg ${revText}`}>
-          {p.revenueVnd == null ? 'thiếu dữ liệu' : `${vnd(p.revenueVnd)} · ${pctTxt(p.revenuePct)} / GMV`}
+          {p.revenueVnd == null ? 'thiếu dữ liệu' : <SoVaPct so={vnd(p.revenueVnd)} pct={`${pctTxt(p.revenuePct)} / GMV`} lon />}
         </span>
       </div>
     </div>
+  );
+}
+
+/** Số tiền là chính (đậm, tabular), phần trăm là phụ: chữ nhỏ hơn, mờ 55 %, cách một khoảng — CEO 09/09: "số là chính, phần trăm là phụ".
+ *  Ngăn cách bằng khoảng trắng thay dấu "·" để hai con số không dính vào nhau. */
+function SoVaPct({ so, pct, lon }: { so: string; pct: string; lon?: boolean }) {
+  return (
+    <span className="inline-flex items-baseline gap-2 tabular-nums">
+      <span>{so}</span>
+      {pct && <span className={`font-normal opacity-55 ${lon ? 'text-sm' : 'text-[11px]'}`}>{pct}</span>}
+    </span>
   );
 }
 
