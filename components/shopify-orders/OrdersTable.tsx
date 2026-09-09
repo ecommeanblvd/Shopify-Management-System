@@ -248,7 +248,8 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2 hidden xl:table-cell">Refunded</th>
                 <th className="text-right px-3 py-2 hidden xl:table-cell">Discount</th>
                 <th className="text-right px-3 py-2 whitespace-nowrap">Ship rev</th>
-                <th className="text-right px-3 py-2" title="GMV = Subtotal + Ship rev — TRƯỚC chiết khấu. Discount trừ ở Revenue.">GMV</th>
+                <th className="text-right px-3 py-2 hidden xl:table-cell whitespace-nowrap" title="Gross sales (GMV) = Subtotal + Ship rev — TRƯỚC chiết khấu, trước hoàn.">Gross sales</th>
+                <th className="text-right px-3 py-2 whitespace-nowrap" title="Net sales = Gross − Discount − Refund = số khách THỰC TRẢ (khớp total_price Shopify). Mẫu số của Margin %.">Net sales</th>
                 <th className="text-right px-3 py-2 whitespace-nowrap" title="Margin ship = Ship rev − Ship cost (billed thật khi có, engine khi chưa). Âm = charge thiếu. Chi tiết cost: bấm vào đơn.">
                   Margin ship
                   {showShipInCostCurrency && (
@@ -271,7 +272,7 @@ export function OrdersTable({
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 15 : 14} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={canEdit ? 16 : 15} className="px-4 py-6 text-center text-muted-foreground">
                     {totalCount === 0 && !search
                       ? 'Chưa có đơn nào.'
                       : `Không có đơn khớp "${search}".`}
@@ -293,7 +294,8 @@ export function OrdersTable({
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums hidden xl:table-cell whitespace-nowrap">{fmt(o.discount, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">{fmt(o.shippingRevenue, o.currency)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums font-medium whitespace-nowrap">{fmt(o.gmv, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums hidden xl:table-cell whitespace-nowrap">{fmt(o.gmv, o.currency)}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums font-medium whitespace-nowrap">{fmt(o.netSales, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                     {o.shipMarginRaw === null ? (
                       <span
@@ -330,7 +332,7 @@ export function OrdersTable({
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold whitespace-nowrap">{fmt(o.revenue, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {o.netGmv > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
+                    {o.netSales > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
                   </td>
                   <td className="px-3 py-2 text-xs"><FulfillmentCell o={o} /></td>
                   <td className="px-3 py-2 text-xs"><PaymentCell o={o} /></td>

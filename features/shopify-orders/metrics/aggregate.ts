@@ -9,6 +9,8 @@ export interface AggregateMetrics {
   gmv: number;
   refundedAmount: number;
   netGmv: number;
+  /** Σ khách thực trả = Σ (gmv − discount − refund). Mẫu số Margin %. */
+  netSales: number;
   discount: number;
   shippingRevenue: number;
   shippingCost: number;
@@ -23,7 +25,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
   if (orders.length === 0) {
     return {
       orderCount: 0, currency: '',
-      subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, discount: 0,
+      subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, netSales: 0, discount: 0,
       shippingRevenue: 0, shippingCost: 0, skuCost: 0, tax: 0,
       revenue: 0, margin: 0, skuCostCoverage: 0,
     };
@@ -31,6 +33,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
   const sum = (k: keyof OrderMetrics) => orders.reduce((s, o) => s + (o[k] as number), 0);
   const gmv = sum('gmv');
   const netGmv = sum('netGmv');
+  const netSales = sum('netSales');
   const revenue = sum('revenue');
   return {
     orderCount: orders.length,
@@ -39,13 +42,14 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
     gmv,
     refundedAmount: sum('refundedAmount'),
     netGmv,
+    netSales,
     discount: sum('discount'),
     shippingRevenue: sum('shippingRevenue'),
     shippingCost: sum('shippingCost'),
     skuCost: sum('skuCost'),
     tax: sum('tax'),
     revenue,
-    margin: netGmv > 0 ? revenue / netGmv : 0,
+    margin: netSales > 0 ? revenue / netSales : 0,
     skuCostCoverage: orders.reduce((s, o) => s + o.skuCostCoverage, 0) / orders.length,
   };
 }

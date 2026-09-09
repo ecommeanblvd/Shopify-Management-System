@@ -7,14 +7,14 @@ interface MetricsKpisProps {
 
 export function MetricsKpis({ metrics }: MetricsKpisProps) {
   const tiles: Array<{ label: string; value: string; sub: string; tone?: 'pos' | 'neg' }> = [
-    { label: 'GMV', value: fmt(metrics.gmv, metrics.currency), sub: 'gross merchandise value' },
+    { label: 'Gross sales (GMV)', value: fmt(metrics.gmv, metrics.currency), sub: 'trước chiết khấu, gồm ship' },
     {
       label: 'Refunded',
       value: fmt(metrics.refundedAmount, metrics.currency),
       sub: 'window refunds',
       tone: 'neg',
     },
-    { label: 'Net GMV', value: fmt(metrics.netGmv, metrics.currency), sub: 'GMV − refunded' },
+    { label: 'Net sales', value: fmt(metrics.netSales, metrics.currency), sub: 'khách thực trả = GMV − discount − refund' },
     {
       label: 'Revenue',
       value: fmt(metrics.revenue, metrics.currency),
@@ -24,7 +24,7 @@ export function MetricsKpis({ metrics }: MetricsKpisProps) {
     {
       label: 'Margin %',
       value: `${(metrics.margin * 100).toFixed(1)}%`,
-      sub: 'revenue / net GMV',
+      sub: 'revenue / net sales',
     },
     {
       label: 'Orders',

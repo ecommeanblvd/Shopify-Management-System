@@ -133,7 +133,8 @@ export async function doanhThuTheoThang(thang: string[], storeIds: string[], bra
       period,
       storeId,
       currency: active[0].currency,
-      doanhThuThuan: active.reduce((s, o) => s + (o.netGmv - o.discount), 0),
+      // = Net sales (khách thực trả), cùng định nghĩa với bảng Orders / KPI (D-061).
+      doanhThuThuan: active.reduce((s, o) => s + o.netSales, 0),
       phiShip: active.reduce((s, o) => s + o.shippingCost, 0),
       soDon: active.length,
       soLine: st?.soLine ?? 0,

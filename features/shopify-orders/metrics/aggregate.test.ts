@@ -9,6 +9,7 @@ const baseMetric = (overrides: Partial<OrderMetrics>): OrderMetrics => ({
   gmv: 100,
   refundedAmount: 0,
   netGmv: 100,
+  netSales: 100,
   discount: 0,
   shippingRevenue: 10,
   shippingCost: 8,
@@ -28,7 +29,7 @@ describe('aggregateMetrics', () => {
   it('sums fields across orders', () => {
     const agg = aggregateMetrics([
       baseMetric({ orderId: 'o1' }),
-      baseMetric({ orderId: 'o2', gmv: 200, netGmv: 200, revenue: 144 }),
+      baseMetric({ orderId: 'o2', gmv: 200, netGmv: 200, netSales: 200, revenue: 144 }),
     ]);
     expect(agg.orderCount).toBe(2);
     expect(agg.gmv).toBe(300);
@@ -36,10 +37,10 @@ describe('aggregateMetrics', () => {
     expect(agg.revenue).toBe(216);
   });
 
-  it('weighted-average margin = revenue / netGmv across the set', () => {
+  it('weighted-average margin = revenue / netSales across the set', () => {
     const agg = aggregateMetrics([
-      baseMetric({ revenue: 50, netGmv: 100 }),
-      baseMetric({ revenue: 25, netGmv: 100 }),
+      baseMetric({ revenue: 50, netSales: 100 }),
+      baseMetric({ revenue: 25, netSales: 100 }),
     ]);
     expect(agg.margin).toBeCloseTo(0.375, 4);
   });

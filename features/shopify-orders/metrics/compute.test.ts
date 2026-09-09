@@ -47,6 +47,7 @@ describe('computeOrderMetrics', () => {
     expect(m.gmv).toBe(110); // 100 line items + 10 ship rev
     expect(m.refundedAmount).toBe(0);
     expect(m.netGmv).toBe(110);
+    expect(m.netSales).toBe(110);
     expect(m.discount).toBe(0);
     expect(m.shippingRevenue).toBe(10);
     expect(m.shippingCost).toBe(8);
@@ -65,7 +66,9 @@ describe('computeOrderMetrics', () => {
       totalRefunded: 30,
     }));
     expect(m.netGmv).toBe(80);
+    expect(m.netSales).toBe(60); // khách thực trả = 110 − 20 CK − 30 hoàn
     expect(m.revenue).toBe(22);
+    expect(m.margin).toBeCloseTo(22 / 60, 4); // Margin % chia cho Net sales, không chia gross (D-061)
   });
 
   it('flags partial SKU cost coverage when a line has no cost row', () => {

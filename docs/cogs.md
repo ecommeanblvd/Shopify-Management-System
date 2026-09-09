@@ -69,7 +69,7 @@ brand. Toàn bộ số tiền quy về **VND**; tháng gom theo giờ kinh doanh
 
 | Cột | Ý nghĩa |
 |---|---|
-| Doanh thu thuần | `netGmv − discount` theo đúng định nghĩa dashboard hiện có (đã gồm phí ship khách trả), của đơn **đặt trong tháng**, đổi VND theo tỉ giá tháng |
+| Doanh thu thuần | `netSales` = `netGmv − discount` (Net sales — khách thực trả) theo đúng định nghĩa dashboard (đã gồm phí ship khách trả), của đơn **đặt trong tháng**, đổi VND theo tỉ giá tháng |
 | Phí ship thực | phí ship thực trả (hoá đơn → override → ước lượng, như dashboard), đổi VND |
 | Giá vốn | tổng `order_line_cogs` có `period` = tháng đang xem, cộng dòng `cogs`, trừ dòng `return` |
 | **Rev thực tế (lãi gộp)** | Doanh thu thuần − Phí ship thực − Giá vốn |

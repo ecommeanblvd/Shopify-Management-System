@@ -54,10 +54,14 @@ export interface OrderMetrics {
   /** True Gross Merchandise Value = subtotal + shippingRevenue.
    *  Matches the operator's mental model:
    *    Revenue = GMV − Discount − ShipCost − SkuCost */
+  /** Gross sales (GMV) = subtotal + ship rev — TRƯỚC chiết khấu, trước hoàn (đúng thuật ngữ; Shopify: Gross sales). */
   gmv: number;
   refundedAmount: number;
   /** GMV − refundedAmount. */
+  /** GMV − refund (chưa trừ chiết khấu). Giữ để tương thích; chỉ số hiển thị dùng netSales. */
   netGmv: number;
+  /** Net sales = GMV − discount − refund = số khách THỰC TRẢ (khớp total_price Shopify). Mẫu số của Margin % (CEO 09/09/2026). */
+  netSales: number;
   discount: number;
   shippingRevenue: number;
   shippingCost: number;
@@ -102,7 +106,10 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
   // shipRev is now folded into gmv.
   const revenue =
     netGmv - input.totalDiscount - input.shippingCost.amount - skuCost;
-  const margin = netGmv > 0 ? revenue / netGmv : 0;
+  // Net sales = khách thực trả (Shopify: Net sales + shipping). Margin % chia cho số này, không chia cho gross —
+  // đơn giảm giá mạnh mới không bị "đẹp" giả (D-061, CEO 09/09/2026).
+  const netSales = netGmv - input.totalDiscount;
+  const margin = netSales > 0 ? revenue / netSales : 0;
 
   return {
     orderId: input.orderId,
@@ -111,6 +118,7 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
     gmv,
     refundedAmount,
     netGmv,
+    netSales,
     discount: input.totalDiscount,
     shippingRevenue,
     shippingCost: input.shippingCost.amount,
