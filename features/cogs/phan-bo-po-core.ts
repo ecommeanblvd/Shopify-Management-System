@@ -9,7 +9,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { sqlGioKinhDoanh } from '@/lib/timezone';
-import { phanBoPO, type DongDon, type DongPO, type KhongPhanBo, type PhanBo } from './phan-bo-po';
+import { phanBoPO, type DongDon, type DongPO, type KhongPhanBo, type PhanBo, laMaPO } from './phan-bo-po';
 
 export interface KetQuaPhanBoPO {
   brandSlug: string;
@@ -26,7 +26,7 @@ export async function phanBoPOCore(brandSlug: string, opts?: { dryRun?: boolean;
     refCode: schema.brandCogsOffline.refCode, period: schema.brandCogsOffline.period, sku: schema.brandCogsOffline.sku,
     qty: schema.brandCogsOffline.qty, amount: schema.brandCogsOffline.amount,
   }).from(schema.brandCogsOffline).where(and(eq(schema.brandCogsOffline.brandSlug, brandSlug), eq(schema.brandCogsOffline.kind, 'cogs'))))
-    .filter((r) => r.sku && r.qty > 0)
+    .filter((r) => r.sku && r.qty > 0 && laMaPO(r.refCode))
     .map<DongPO>((r) => ({ refCode: r.refCode, period: r.period, sku: r.sku!, qty: r.qty, amountVnd: Number(r.amount) }));
 
   // Dòng đơn của brand (theo vendor, không phân biệt hoa/thường), đơn chưa huỷ, CHƯA có

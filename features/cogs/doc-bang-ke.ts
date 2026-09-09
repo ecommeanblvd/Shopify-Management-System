@@ -33,7 +33,7 @@ export interface BangKe {
 
 // "BẢNG KÊ CÔNG NỢ" (đa số) hoặc "BẢNG KÊ ĐƠN HÀNG CẦN THANH TOÁN" (Montsand T1–T4).
 // Tên brand lấy đủ đến hết dòng — kể cả dấu "|" ("JENNY K TRAN | DIVINE" là một brand riêng trong hệ thống).
-const RE_TIEU_DE = /BẢNG KÊ[^\n]*\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n]+)/i;
+const RE_TIEU_DE = /BẢNG KÊ[^\n]*\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến(?:\s+ngày)?\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n]+)/i;
 const chuoi = (v: O): string => (v == null ? '' : String(v)).trim();
 
 function timTieuDe(rows: O[][]): { tu: string; den: string; brand: string } | null {
@@ -49,11 +49,11 @@ function chiSoCot(r: O[]) {
   const s = r.map((c) => chuoi(c).toLowerCase());
   const tim = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x === t));
   const timPrefix = (...ten: string[]) => s.findIndex((x) => ten.some((t) => x.startsWith(t)));
-  const ngayIdx = tim('ngày nhận', 'ngày return', 'ngày trả', 'ngày báo đơn', 'ngày báo', 'ngày');
+  const ngayIdx = tim('ngày nhận', 'ngày return', 'ngày trả', 'ngày báo đơn', 'ngày báo', 'ngày phát sinh trên web', 'ngày');
   return {
     ngay: ngayIdx >= 0 ? ngayIdx : 0,
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
-    gia: tim('giá nội địa', 'giá sản phẩm', 'giá global'), ck: timPrefix('% ck'), kyTT: tim('kỳ thanh toán'), custom: tim('phí customize'),
+    gia: tim('giá nội địa', 'giá sản phẩm', 'giá global', 'giá vnd', 'giá usd'), ck: timPrefix('% ck'), kyTT: tim('kỳ thanh toán'), custom: tim('phí customize'),
     // Denio: "Tổng thành tiền TT"; Happy Clothing: "Thành tiền".
     tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : tim('thành tiền'), code: tim('code'),
     // La Vierge: cột "Note" chứa thành tiền quy VND từng dòng ("2,717,400") — dùng thẳng khi có, chính xác hơn tỉ giá kỳ.
@@ -141,6 +141,18 @@ export function tiGiaTuSheet(rows: O[][], sumA: number, sumLines: number, sumRet
 
 export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { bangKe: BangKe[]; boQua: string[] } {
   const bangKe: BangKe[] = []; const boQua: string[] = [];
+  // Tên tab bị Google cắt ở 31 ký tự ("… T1 đơn thực nh") → so tiền tố "thực nh"/"thực b".
+  const laTenNhan = (n: string) => /thực nh/i.test(n), laTenBan = (n: string) => /thực b/i.test(n);
+  const noiDungBan = (rows: O[][]) => coO(rows, /A\.\s*Đơn (MEAN )?thực bán/i);
+  // Kỳ đã có tab bảng kê thực nhận "thật" (tên nói rõ, hoặc tên không nói gì và nội dung không phải thực bán). Tab tên không
+  // nói gì mà nội dung "A. Đơn thực bán" chỉ là tham khảo KHI kỳ đó có tab thực nhận; nếu là tab duy nhất của kỳ (TINH Atelier
+  // T4–T8/2026: "File đối soát T42026", đã điền Thành tiền + TỔNG THANH TOÁN) thì chính nó là bảng kê.
+  const kyCoThucNhan = new Set<string>();
+  for (const sh of sheets) {
+    if (/^\s*(Bản sao|Copy of)/i.test(sh.name) || laTenBan(sh.name)) continue;
+    const td = timTieuDe(sh.rows); if (!td) continue;
+    if (laTenNhan(sh.name) || !noiDungBan(sh.rows)) kyCoThucNhan.add(periodTuNgay(td.tu));
+  }
   for (const sh of sheets) {
     // Tab "Bản sao của …"/"Copy of …" là bản nháp nhân đôi kỳ (Maison des Copains T7) → bỏ, tránh ghi hai lần một kỳ.
     if (/^\s*(Bản sao|Copy of)/i.test(sh.name)) { boQua.push(`${sh.name}: tab bản sao (bỏ)`); continue; }
@@ -148,13 +160,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     if (!td) { boQua.push(`${sh.name}: không có tiêu đề BẢNG KÊ … Từ ngày … Brand:`); continue; }
     // Tab thực bán: theo TÊN tab; tên không nói gì thì mới xét nội dung. Tên có "thực nhận" thì luôn là bảng kê thực nhận
     // (De Theia T1–T5 ghi nhầm tiêu đề mục "A. Đơn thực bán" trong tab thực nhận).
-    const tenBan = /thực bán/i.test(sh.name), tenNhan = /thực nhận/i.test(sh.name);
-    if (tenBan || (!tenNhan && coO(sh.rows, /A\.\s*Đơn (MEAN )?thực bán/i))) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
+    const tenBan = laTenBan(sh.name), tenNhan = laTenNhan(sh.name);
+    const banTheoNoiDung = !tenBan && !tenNhan && noiDungBan(sh.rows);
+    if (tenBan || (banTheoNoiDung && kyCoThucNhan.has(periodTuNgay(td.tu)))) { boQua.push(`${sh.name}: tab thực bán (chỉ tham khảo)`); continue; }
+    const canhBaoDau = banTheoNoiDung ? [`${sh.name}: tiêu đề mục "A. Đơn thực bán" nhưng là tab duy nhất của kỳ → đọc như bảng kê thực nhận`] : [];
     // Mục A: "A. Đơn thực nhận", "A. Đơn MEAN thực nhận", "A. Đơn phát sinh trong tháng (trước 13/02)" (Montsand)…
     const khongCoMucA = !coO(sh.rows, /^A\.\s*Đơn/i);
     // Montsand: tab "Đơn thực nhận đối soát T8" không có dòng "A. Đơn thực nhận" — bảng bắt đầu ngay sau tiêu đề → coi cả tab là mục A.
-    if (khongCoMucA && !/thực nhận/i.test(sh.name)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
-    const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
+    if (khongCoMucA && !tenNhan) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
+    const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: canhBaoDau };
     let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let soDongDon = 0; let soKhongDocTT = 0; const kyTTs = new Set<number>(); let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';

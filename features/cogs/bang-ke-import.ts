@@ -147,6 +147,8 @@ export async function apDungBangKeDaDoc(input: {
   // dùng biết chính xác đã ghi tới đâu thay vì tưởng nhầm cả lô đều thất bại.
   for (const { bk, ghep, ghepReturn } of ky) {
     if (!input.periods.includes(bk.period)) continue;
+    // Tab không có dòng nào (kỳ chưa hoàn tất, tab "TINH Global" toàn $0) KHÔNG được xoá dữ liệu kỳ đó do tab khác cùng kỳ đã ghi.
+    if (bk.lines.length === 0 && bk.returns.length === 0) continue;
     khongKhop.push(...[...ghep.khongKhop, ...ghepReturn.khongKhop].map((k) => ({ period: bk.period, maDon: k.dong.maDon, sku: k.dong.sku, tt: k.dong.tt, lyDo: k.lyDo })));
     const ref = `${input.brandSlug} ${bk.period}`;
     // Sheet USD đã đổi sang VND khi đọc (bk.currency='VND', bk.tiGia); chỉ còn USD khi thiếu dòng TỔNG ₫.

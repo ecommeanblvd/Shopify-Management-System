@@ -528,3 +528,38 @@ describe('docWorkbook — Happy Clothing T5: Thành tiền "609.60 đ" gõ nhầ
     expect(bangKe[0].canhBao.some((c) => /sai đơn vị/.test(c))).toBe(true);
   });
 });
+
+describe('docWorkbook — TINH Atelier: tiêu đề "đến ngày", tab tên không nói gì với mục "A. Đơn thực bán" là tab duy nhất của kỳ, tên tab bị cắt', () => {
+  const HDR = ['Kỳ báo đơn', 'Ngày phát sinh trên web', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá USD', 'Phí customize', '% CK', 'Tổng thành tiền TT', 'Note', 'Code', 'Kỳ thanh toán', 'Mã '];
+  const t4 = (name: string, tt: O) => ({ name, rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/04/2026 đến ngày 30/04/2026\n\nBrand: TINH Atelier'], ['A. Đơn thực bán trong tháng '], HDR,
+    [null, '04/04/2026', '#MBLVD28206', 'x', 'TINH-SS25-09-Cream-L-CRE', '1', '$144.00', null, '30%', tt, null, 'c', 'T4', '#CSM002'],
+    [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (30/04/2026):', null, null, null, null, null, null, '26,108 ₫'],
+    [null, null, 'TỔNG THANH TOÁN', null, null, null, null, null, null, '2,631,686 ₫'],
+  ] });
+  it('"đến ngày" trong tiêu đề vẫn đọc được kỳ; tab duy nhất của kỳ dù ghi "A. Đơn thực bán" → là bảng kê, có cảnh báo', () => {
+    const { bangKe, boQua } = docWorkbook([t4(' File đối soát T42026', '$100.80')]);
+    expect(boQua).toEqual([]);
+    expect(bangKe).toHaveLength(1);
+    expect(bangKe[0].period).toBe('2026-04');
+    expect(bangKe[0].lines.map((d) => d.tt)).toEqual([Math.round(100.8 * 26108)]);
+    expect(bangKe[0].canhBao.some((c) => /tab duy nhất của kỳ/.test(c))).toBe(true);
+  });
+  it('cùng kỳ có tab "thực nhận" thì tab "A. Đơn thực bán" tên không nói gì chỉ là tham khảo (bỏ)', () => {
+    const nhan = { ...t4('File đối soát T42026 đơn thực nhận', '$100.80'), rows: t4('x', '$100.80').rows.map((r, i) => (i === 1 ? ['A. Đơn thực nhận trong tháng'] : r)) };
+    const { bangKe, boQua } = docWorkbook([t4('File đối soát T42026', '$100.80'), nhan]);
+    expect(bangKe).toHaveLength(1);
+    expect(bangKe[0].sheet).toBe('File đối soát T42026 đơn thực nhận');
+    expect(boQua.some((b) => /File đối soát T42026: tab thực bán/.test(b))).toBe(true);
+  });
+  it('tên tab bị Google cắt "… đơn thực nh" vẫn là tab thực nhận (tên thắng nội dung "A. Đơn thực bán")', () => {
+    const { bangKe, boQua } = docWorkbook([t4('   File đối soát T1 đơn thực nh', '$100.80')]);
+    expect(boQua).toEqual([]); expect(bangKe).toHaveLength(1); expect(bangKe[0].canhBao).toEqual([]);
+  });
+  it('tab chưa điền Thành tiền (T8) → 0 dòng + cảnh báo chưa hoàn tất, không lỗi', () => {
+    const t8 = t4('File đối soát T82026 ', null); t8.rows.splice(4, 0, [null, '05/08/2026', '#MBLVD30000', 'y', 'TINH-H24-09BR-M-WADM-PLA', '1', '$297.00', null, null, null, null, 'c', null, '#CSM003']);
+    const { bangKe } = docWorkbook([t8]);
+    expect(bangKe[0].lines).toHaveLength(0);
+    expect(bangKe[0].canhBao.some((c) => /chưa hoàn tất/.test(c))).toBe(true);
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tachSkuDenio, khoaSku, phanBoPO, type DongDon, type DongPO } from './phan-bo-po';
+import { tachSkuDenio, khoaSku, phanBoPO, type DongDon, type DongPO, laMaPO } from './phan-bo-po';
 
 describe('tachSkuDenio / khoaSku', () => {
   it('bundle + packaging: DN0729+PK0729-M-CRE → DN729|M|CRE', () => {
@@ -72,5 +72,14 @@ describe('khoaSku — brand khác Denio (La Vierge, Happy Clothing, Calista)', (
   it('Denio vẫn như cũ', () => {
     expect(khoaSku('Denio-DN0729+PK0729-M-CRE')).toBe('DN729|M|CRE');
     expect(khoaSku('Denio-PKDN0729-CRE')).toBe('PK729||CRE');
+  });
+});
+
+describe('laMaPO — chỉ mã đơn mua đứt mới được phân bổ xuống đơn', () => {
+  it('PO: #MBLVDPO15, #MTB003, #PO-001, PO12 (không #)', () => {
+    for (const m of ['#MBLVDPO15', '#MTB003', '#PO-001', 'PO12', ' #mblvdpo30 ']) expect(laMaPO(m)).toBe(true);
+  });
+  it('không phải PO: #HC1368 (store brand), #MXHS1536 (XiaoHongShu), #OS007 / #MOS10023 (Off Store), #MBLVD28657 (đơn Shopify)', () => {
+    for (const m of ['#HC1368', '#MXHS1536', '#OS007', '#MOS10023', '#MBLVD28657', 'TA1951']) expect(laMaPO(m)).toBe(false);
   });
 });
