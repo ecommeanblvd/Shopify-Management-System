@@ -398,3 +398,36 @@ describe('docWorkbook — Eegen T4: return kỳ cũ có dòng TỔNG ₫ riêng 
     expect(b.returns[0]).toMatchObject({ maDon: '#MBLVD27346', ttGoc: 138.25, tt: 3_569_615 });
   });
 });
+
+describe('docWorkbook — LaLing: mục "A. ĐƠN RETURN" vẫn là return; tiêu đề sai tháng → tin cột Kỳ thanh toán', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ thanh toán ', 'Kỳ báo đơn'];
+  it('T6: mục thứ hai ghi "A. ĐƠN RETURN TRONG THÁNG" → trừ', () => {
+    const t6 = { name: 'File đối soát T62026 thực nhận', rows: [
+      [null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/06/2026 đến 30/06/2026\n\nBrand: LaLing'],
+      ['A. ĐƠN THỰC NHẬN TRONG THÁNG'], HDR,
+      ['22/06/2026', '#MBLVD28885', 'x', 'LaLing-LL01-S-WHI', '1', '3,000,000 ₫', '25%', null, '2,250,000 ₫', null, 'c', 'T6', '5'],
+      ['A. ĐƠN RETURN TRONG THÁNG'], HDR,
+      ['10/06/2026', '#MBLVD28000', 'y', 'LaLing-LL02-M-BLA', '1', '2,850,000 ₫', '25%', null, '2,137,500 ₫', null, 'c', 'T6', '4'],
+      [null, 'TỔNG (A-B)', null, null, null, null, null, null, '112,500 ₫'],
+    ] };
+    const { bangKe } = docWorkbook([t6]);
+    expect(bangKe[0].lines).toHaveLength(1); expect(bangKe[0].returns).toHaveLength(1);
+    expect(bangKe[0].returns[0].tt).toBe(2_137_500); expect(bangKe[0].period).toBe('2026-06');
+  });
+  it('tab T3 mang tiêu đề 02/2026 nhưng mọi dòng ghi Kỳ thanh toán T3 → kỳ 2026-03 + cảnh báo', () => {
+    const t3 = { name: 'File đối soát T32026 thực nhận', rows: [
+      [null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/02/2026 đến 28/02/2026\n\nBrand: LaLing'],
+      ['A. ĐƠN THỰC NHẬN TRONG THÁNG'], HDR,
+      ['26/03/2026', '#MBLVD27486', 'x', 'LaLing-LL01-S-WHI', '1', '3,000,000 ₫', '25%', null, '2,250,000 ₫', null, 'c', 'T3', '2'],
+      ['05/03/2026', '#MBLVD27543', 'y', 'LaLing-LL02-M-BLA', '1', '2,000,000 ₫', '25%', null, '1,500,000 ₫', null, 'c', 'T3', '2'],
+    ] };
+    const { bangKe } = docWorkbook([t3]);
+    expect(bangKe[0].period).toBe('2026-03');
+    expect(bangKe[0].canhBao.some((c) => /Kỳ thanh toán T3/.test(c))).toBe(true);
+  });
+  it('cột Kỳ thanh toán khớp tiêu đề → giữ nguyên, không cảnh báo', () => {
+    const t8 = { name: 'x', rows: [[null, null, 'BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/08/2026 đến 31/08/2026\n\nBrand: LaLing'], ['A. ĐƠN THỰC NHẬN TRONG THÁNG'], HDR, ['04/08/2026', '#MBLVD29646', 'x', 'LaLing-LL01-S-WHI', '1', '3,000,000 ₫', '25%', null, '2,250,000 ₫', null, 'c', 'T8', '7']] };
+    const { bangKe } = docWorkbook([t8]);
+    expect(bangKe[0].period).toBe('2026-08'); expect(bangKe[0].canhBao.filter((c) => /Kỳ thanh toán/.test(c))).toEqual([]);
+  });
+});

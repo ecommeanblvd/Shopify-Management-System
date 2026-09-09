@@ -52,7 +52,7 @@ function chiSoCot(r: O[]) {
   return {
     ngay: ngayIdx >= 0 ? ngayIdx : 0,
     maDon: tim('mã đơn'), tenSp: tim('tên sản phẩm'), sku: tim('sku'), sl: tim('số lượng'),
-    gia: tim('giá nội địa', 'giá sản phẩm', 'giá global'), ck: timPrefix('% ck'), custom: tim('phí customize'),
+    gia: tim('giá nội địa', 'giá sản phẩm', 'giá global'), ck: timPrefix('% ck'), kyTT: tim('kỳ thanh toán'), custom: tim('phí customize'),
     // Denio: "Tổng thành tiền TT"; Happy Clothing: "Thành tiền".
     tt: timPrefix('tổng thành tiền') >= 0 ? timPrefix('tổng thành tiền') : tim('thành tiền'), code: tim('code'),
     // La Vierge: cột "Note" chứa thành tiền quy VND từng dòng ("2,717,400") — dùng thẳng khi có, chính xác hơn tỉ giá kỳ.
@@ -137,13 +137,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
     // Montsand: tab "Đơn thực nhận đối soát T8" không có dòng "A. Đơn thực nhận" — bảng bắt đầu ngay sau tiêu đề → coi cả tab là mục A.
     if (khongCoMucA && !/thực nhận/i.test(sh.name)) { boQua.push(`${sh.name}: không có mục A. Đơn thực nhận`); continue; }
     const bk: BangKe = { brand: td.brand, period: periodTuNgay(td.tu), tuNgay: td.tu, denNgay: td.den, sheet: sh.name, lines: [], returns: [], canhBao: [] };
-    let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let soDongDon = 0; let soKhongDocTT = 0; let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
+    let muc: 'A' | 'B' | null = khongCoMucA ? 'A' : null; let bLaReturn = false; let soDongDon = 0; let soKhongDocTT = 0; const kyTTs = new Set<number>(); let cot: ReturnType<typeof chiSoCot> | null = null; let ngayMissing = false; let coUsd = false;
     sh.rows.forEach((r, i) => {
       const dau = r.map(chuoi).find((x) => x) ?? '';
-      if (/^A\.\s*Đơn/i.test(dau)) { muc = 'A'; cot = null; return; }
-      // Mục B: Denio = "B. Đơn return" (trừ tiền); Happy Clothing = "B. Đơn Happy Clothing Global thực nhận"
-      // (đơn trên store riêng của brand, mã #HC… — cộng tiền như mục A, ghép thành offline vì không có trên Shopify).
-      if (/^B\.\s*Đơn/i.test(dau)) { muc = 'B'; bLaReturn = /\bre(turn)?\b/i.test(dau); cot = null; return; }
+      // Tiêu đề mục "X. Đơn …": chữ cái KHÔNG quyết định cộng/trừ — có chữ return/trả/hoàn là mục TRỪ (LaLing T6 ghi
+      // "A. ĐƠN RETURN TRONG THÁNG"); còn lại là mục cộng (A, hoặc B kiểu Happy Clothing Global / Whiteplan / Montsand).
+      if (/^[A-Z]\.\s*Đơn/i.test(dau)) {
+        const laReturn = /\bre(turn)?\b|\btrả\b|\bhoàn\b/i.test(dau);
+        muc = laReturn ? 'B' : (/^A\./i.test(dau) ? 'A' : 'B'); bLaReturn = laReturn; cot = null; return;
+      }
       if (laHangTieuDe(r)) { cot = chiSoCot(r); if (cot.ngay === 0 && r.map((c) => chuoi(c).toLowerCase()).findIndex((x) => x === 'ngày nhận' || x === 'ngày return' || x === 'ngày trả' || x === 'ngày báo đơn' || x === 'ngày báo' || x === 'ngày') < 0) ngayMissing = true; return; }
       if (!muc || !cot) return;
       const maDon = chuoi(r[cot.maDon]);
@@ -183,8 +185,15 @@ export function docWorkbook(sheets: Array<{ name: string; rows: O[][] }>): { ban
         ...(muc === 'A' ? { mucA: true } : {}),
       };
       (muc === 'A' || !bLaReturn ? bk.lines : bk.returns).push(d);
+      if (cot.kyTT >= 0) { const k = /^T?(\d{1,2})$/i.exec(chuoi(r[cot.kyTT])); if (k) kyTTs.add(Number(k[1])); }
     });
     if (ngayMissing) bk.canhBao.push(`${sh.name}: không thấy cột Ngày, dùng cột đầu`);
+    // Tiêu đề ghi sai tháng (LaLing: tab T3 mang tiêu đề 02/2026, mọi dòng ghi "Kỳ thanh toán T3") → tin cột Kỳ thanh toán
+    // khi CẢ TAB đồng nhất một kỳ và kỳ đó khác tháng tiêu đề.
+    if (kyTTs.size === 1) {
+      const thang = [...kyTTs][0]; const period = `${bk.period.slice(0, 4)}-${String(thang).padStart(2, '0')}`;
+      if (thang >= 1 && thang <= 12 && period !== bk.period) { bk.canhBao.push(`${sh.name}: tiêu đề ghi kỳ ${bk.period} nhưng mọi dòng ghi Kỳ thanh toán T${thang} → dùng ${period}`); bk.period = period; }
+    }
     // Kỳ brand CHƯA điền "Tổng thành tiền" (Keira Tong T8: mọi dòng $0.00, cột % CK chép nhầm giá) → không coi là bảng kê
     // hoàn tất: bỏ toàn bộ dòng của tab, báo cảnh báo, để không ghi giá vốn 0 lên đơn.
     // … hoặc ≥ 50% dòng đơn không đọc được Thành tiền (Eegen T8: 11/12 dòng trống, 1 dòng lẻ).
