@@ -84,6 +84,31 @@ export async function layTiGiaVcbAction(period: string): Promise<{ rate: number 
   return { rate: r.sell };
 }
 
+/** Store để chọn khi ước giá vốn dự tính (id + tên). */
+export async function layStores(): Promise<Array<{ id: string; name: string }>> {
+  await requireCogs('manage_cogs');
+  const { db, schema } = await import('@/db/client');
+  const rows = await db.select({ id: schema.stores.id, name: schema.stores.name }).from(schema.stores);
+  return rows.map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Ước giá vốn DỰ TÍNH cho SKU chưa có bảng giá (lịch sử bảng kê → MMP VND × CK) và ghi vào sku_costs (nguồn "uoc:%"). */
+export async function uocGiaVonDuTinhAction(storeId: string, dryRun: boolean): Promise<{
+  skuXet: number; daCoGia: number; uocLichSuSku: number; uocLichSuMaSp: number; uocMmp: number; khong: number;
+  khongTheoVendor: Array<{ vendor: string; n: number }>; daGhi: number; dryRun: boolean;
+}> {
+  const userId = await requireCogs('manage_cogs');
+  if (!storeId) throw new Error('Chọn store');
+  const { uocGiaVonDuTinhCore } = await import('./gia-du-tinh-core');
+  const r = await uocGiaVonDuTinhCore(storeId, { dryRun, userId });
+  if (!dryRun) { revalidatePath('/f/orders'); revalidatePath('/f/orders/lai-gop'); revalidatePath('/f/orders/cogs/bang-ke'); }
+  const theoVendor = new Map<string, number>(); for (const k of r.khong) theoVendor.set(k.vendor ?? '(trống)', (theoVendor.get(k.vendor ?? '(trống)') ?? 0) + 1);
+  return {
+    skuXet: r.skuXet, daCoGia: r.daCoGia, uocLichSuSku: r.uocLichSu.filter((u) => u.nguon === 'lich_su_sku').length, uocLichSuMaSp: r.uocLichSu.filter((u) => u.nguon === 'lich_su_ma_sp').length,
+    uocMmp: r.uoc.length, khong: r.khong.length, khongTheoVendor: [...theoVendor.entries()].map(([vendor, n]) => ({ vendor, n })).sort((a, b) => b.n - a.n), daGhi: r.daGhi, dryRun,
+  };
+}
+
 /** Phân bổ PO (hàng MEAN mua đứt, kê #MBLVDPO/#MTB) xuống dòng đơn không có trên bảng kê —
  *  FIFO theo kỳ PO ≤ tháng đặt (CEO 08/09). `dryRun` chỉ tính, không ghi. */
 export async function phanBoPOAction(brandSlug: string, dryRun: boolean): Promise<{

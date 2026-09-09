@@ -5,7 +5,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { BangKeImporter } from '@/components/cogs/BangKeImporter';
 import { PhanBoPOButton } from '@/components/cogs/PhanBoPOButton';
-import { layBrands } from '@/features/cogs/actions';
+import { UocGiaVonButton } from '@/components/cogs/UocGiaVonButton';
+import { layBrands, layStores } from '@/features/cogs/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ export default async function BangKeBrandPage() {
   }
 
   const brands = await layBrands();
+  const stores = await layStores();
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
@@ -46,6 +48,15 @@ export default async function BangKeBrandPage() {
           Chạy lại bất kỳ lúc nào (xoá và phân bổ lại toàn bộ dòng nguồn PO của brand).
         </p>
         <PhanBoPOButton brands={brands} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-semibold tracking-tight">Giá vốn dự tính cho SKU chưa có bảng giá</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Đơn chưa đối soát vẫn cần giá vốn dự tính để ra Revenue tạm và thấy sản phẩm nào đang thiếu giá. Ước theo giá thực gần nhất
+          của đúng SKU hoặc cùng mã sản phẩm (bảng kê), rồi MMP niêm yết VND × (1 − CK). Bảng kê về sẽ đè lên bằng giá thực.
+        </p>
+        <UocGiaVonButton stores={stores} />
       </section>
     </div>
   );

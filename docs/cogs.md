@@ -243,6 +243,15 @@ Trang Orders (`/f/orders/[storeId]`, panel P&L của từng đơn) trước đâ
 - **Danh sách đơn + KPI** (`dashboard-actions.ts`, cột "SKU cost", Revenue, Margin %, "cost coverage"): từng dòng lấy override tay → giá vốn THỰC (`order_line_cogs`, quy VND → đồng đơn qua FX store, chia số lượng) → `sku_costs`. Cột SKU cost gắn nhãn "thực" (đủ dòng) hoặc "n/m thực" (một phần); không nhãn = dự tính. Thẻ "đơn thiếu giá vốn" bỏ dòng đã có giá thực.
 - **Margin SP và Tổng chi dùng giá THỰC khi mọi dòng đã có**, không thì dự tính (`giaVon.dung = 'thuc' | 'du_tinh' | 'thieu'`). Panel hiện cả hai dòng "vốn dự tính" và "vốn thực (bảng kê đã chốt) n/m dòng"; bảng line items thêm cột "Giá vốn thực" kèm nhãn nguồn (bảng kê / PO / MMP).
 
+## Giá vốn DỰ TÍNH cho SKU chưa có bảng giá (CEO 09/09/2026)
+
+CEO mở đơn thấy "Default cost: no cost" mọi dòng → không biết sản phẩm nào thiếu giá, đơn chưa đối soát không ra Revenue dự tính. `sku_costs` gần như trống (4 dòng), MMP `cost_price` trống, và **giá MMP bằng USD là giá bán global của MEAN, không phải giá nội địa brand** (Lamai $191 × 26.000 = 4,97 tr trong khi brand charge 1,46 tr) → không dùng được. Chỉ 824 sản phẩm MMP niêm yết VND (portal brand) là giá nội địa.
+Giải pháp (`features/cogs/gia-du-tinh.ts` thuần + `gia-du-tinh-core.ts`, nút "Giá vốn dự tính" trên `/f/orders/cogs/bang-ke`): với mỗi SKU đã bán trên store (2026, đơn chưa huỷ) mà chưa có bảng giá ops upload / Shopify sync:
+1. **`uoc:lich_su_bang_ke`** — giá thực gần nhất (kỳ mới nhất) của đúng SKU; không có thì của **cùng mã sản phẩm cùng brand** (`maSanPham`: SKU cắt trước token size XS…XXXL/Onesize/Customize; KHÔNG coi số là size vì brand đánh số mẫu).
+2. **`uoc:mmp_vnd_x_ck`** — MMP niêm yết VND × (1 − CK brand); CK = mức phổ biến nhất trong bảng kê đã nhập của brand (`ckTheoBrand`), brand họ hàng dùng chung (I.H.F Atelier ↔ i-h-f); giá niêm yết chỉ nhận 100.000–100.000.000 ₫ (MMP có dòng rác 1,08 tỉ).
+Ghi vào `sku_costs` hiệu lực 2026-01-01, nguồn "uoc:%"; chạy lại xoá + ghi lại các dòng "uoc:%", không đụng nguồn khác. Giá thực từ bảng kê luôn đè lên (D-060).
+Kết quả store MEAN BLVD 09/09: 3.541 SKU đã bán → ước 2.786 (đúng SKU 2.558, cùng mã SP 205, MMP VND 23); 754 SKU chưa có giá (MEAN BLVD tự sản xuất 227, còn lại brand chưa kê mẫu đó: De Theia 29, SoDope 24, Montsand 17, Cénes 14, Mirer 14…). Dòng đơn 2026 có giá: 4.088/5.487 (74,5 %) = 3.614 giá thực + 474 chỉ dự tính.
+
 ## Sheet tính bằng USD (Happy Clothing) và mục B không phải return
 
 Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT", mục "A. Đơn thực nhận" / "B. Đơn return". Happy Clothing (08/09/2026): giá và thành tiền bằng **USD** ("$935.00"), cột "Thành tiền", mục "A. Đơn MEAN thực nhận" và **"B. Đơn Happy Clothing Global thực nhận"** — đơn `#HC…` trên store riêng của brand, không có trên Shopify của MEAN → ghi bảng offline (`brand_cogs_offline`, mã `#HC…`), **không phải return**.
