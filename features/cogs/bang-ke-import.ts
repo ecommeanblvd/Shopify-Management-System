@@ -7,6 +7,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
 import { docWorkbook, kiemCongThuc, type BangKe, type O } from './doc-bang-ke';
+import { khopTenBrand } from './ten-brand';
 import { ghepBangKe, chuanHoaMaDon, type DonTraCuu, type KetQuaGhep } from './ghep-line';
 import { duocGhiDe } from './uu-tien-nguon';
 
@@ -58,13 +59,8 @@ async function traDon(maDons: string[]): Promise<Map<string, DonTraCuu>> {
 async function kiemBrand(brandSlug: string, tenTrenSheet: string): Promise<string | null> {
   const [b] = await db.select({ slug: schema.mmpBrands.slug, ten: schema.mmpBrands.displayName }).from(schema.mmpBrands).where(eq(schema.mmpBrands.slug, brandSlug)).limit(1);
   if (!b) return `Không có brand "${brandSlug}" trong hệ thống`;
-  // So sau khi bỏ gạch nối/khoảng trắng/hoa thường: sheet "Calista de Minh Thanh" ↔ display "Calista-de-minh-thanh" / slug "calista-de-minh-thanh".
-  // Bỏ dấu tiếng Việt ("Linh Phùng" ↔ "Linh Phung"), gạch nối, khoảng trắng, hoa/thường.
-  const chuan = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const t = chuan(tenTrenSheet);
-  // Khớp đủ, hoặc tên sheet là TIỀN TỐ của tên hệ thống ("Eegen" ↔ "Eegen Studio") khi ≥ 4 ký tự.
-  const khop = (x: string) => x === t || (t.length >= 4 && x.startsWith(t));
-  return khop(chuan(b.slug)) || khop(chuan(b.ten ?? '')) ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
+  // Luật so tên (thuần, có test): bỏ dấu/gạch/khoảng trắng; bằng nhau, tiền tố ≥ 4 ký tự, hoặc lệch 1 ký tự ("MADDY HATE ROSE"). Xem ten-brand.ts.
+  return khopTenBrand(tenTrenSheet, b.slug, b.ten) ? null : `Sheet ghi Brand: ${tenTrenSheet}, đang nhập cho ${b.ten ?? b.slug}`;
 }
 
 interface KyDaGhep { bk: BangKe; ghep: KetQuaGhep; ghepReturn: KetQuaGhep }

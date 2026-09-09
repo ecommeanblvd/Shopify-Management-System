@@ -239,10 +239,10 @@ describe('docWorkbook — Linh Phùng: cột Note lệch tỉ giá TỔNG (trư�
       [null, null, 'Tổng', null, null, null, null, null, '15,776,700 ₫'],
     ],
   };
-  it('Σ cột Note = dòng TỔNG ₫ ÷ 1,08 → Thành tiền gồm VAT: giá vốn lấy Note (trước thuế), tỉ giá vẫn 25.880; mục B VNĐ giữ nguyên', () => {
+  it('Σ cột Note = dòng TỔNG ₫ ÷ 1,08 → Thành tiền gồm VAT: dòng USD lấy Note (trước thuế), mục B VNĐ cùng tab cũng ÷ 1,08; tỉ giá vẫn 25.880', () => {
     const { bangKe } = docWorkbook([lp]);
     const b = bangKe[0];
-    expect(b.lines.map((d) => d.tt)).toEqual([5_679_222, 5_463_556, 3_742_500]);
+    expect(b.lines.map((d) => d.tt)).toEqual([5_679_222, 5_463_556, Math.round(3_742_500 / 1.08)]);
     expect(b.tiGia).toBe(25880);
     expect(b.canhBao.some((c) => /gồm VAT/.test(c))).toBe(true);
   });
@@ -644,5 +644,26 @@ describe('docWorkbook — suy rộng gồm VAT trong cùng brand (Huelleyrose T4
   it('không kỳ nào có bằng chứng → không đụng gì', () => {
     const { bangKe } = docWorkbook([tab('03', null, []), tab('04', 'Xuất HĐ', [])]);
     expect(bangKe.map((b) => b.lines[0].tt)).toEqual([3_080_000, 3_080_000]);
+  });
+});
+
+describe('docWorkbook — I.H.F: một tab ba mục A/B USD + C VND; mục C có Note = TT ÷ 1,08 → CẢ TAB (kể cả dòng USD đã đổi) quy về trước thuế', () => {
+  const HDR = ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá global', '% CK ', 'Phí customize', 'Thành tiền', 'Note', 'Code ', 'Kỳ thanh toán '];
+  const t5 = { name: 'File đối soát T5 thực nhận', rows: [
+    ['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/05/2026 đến 31/05/2026\n\nBrand: I.H.F'], HDR,
+    ['05/05/2026', '#MBLVD28600', 'x', 'IHF-A1-S-BLA', '1', '$1,000.00', '50%', null, '$500.00', null, 'c', 'T5'],
+    [null, null, 'TỔNG (A)', null, '1', '$1,000.00', null, null, '$500.00'],
+    [null, null, 'Tỷ giá Vietcombank ngày chốt công nợ (31/05/2026):', null, null, null, null, null, '26,085 ₫'],
+    [null, null, 'TỔNG (A+B)', null, null, null, null, null, '13,042,500 ₫'],
+    ['C. Đơn thực nhận (VNĐ)'], HDR,
+    ['10/05/2026', '#MBLVD28650', 'y', 'IHF-C1-M-WHI', '1', '4,000,000 ₫', '25%', null, '3,000,000 ₫', '2,777,778 ₫', 'c', 'T5'],
+    [null, null, 'TỔNG (C)', null, '1', '4,000,000 ₫', null, null, '3,000,000 ₫'],
+    [null, null, 'TỔNG THANH TOÁN (A + B + C)', null, null, null, null, null, '16,042,500 ₫'],
+  ] };
+  it('dòng VND lấy Note trước thuế, dòng USD = USD × tỉ giá ÷ 1,08; tỉ giá vẫn 26.085', () => {
+    const { bangKe } = docWorkbook([t5]);
+    const bk = bangKe[0];
+    expect(bk.lines.map((d) => d.tt)).toEqual([Math.round(500 * 26085 / 1.08), 2_777_778]);
+    expect(bk.tiGia).toBe(26085);
   });
 });
