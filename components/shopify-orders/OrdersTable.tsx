@@ -250,18 +250,19 @@ export function OrdersTable({
                 <th className="text-right px-3 py-2 whitespace-nowrap">Ship rev</th>
                 <th className="text-right px-3 py-2 hidden xl:table-cell whitespace-nowrap" title="Gross sales (GMV) = Subtotal + Ship rev — TRƯỚC chiết khấu, trước hoàn.">Gross sales</th>
                 <th className="text-right px-3 py-2 whitespace-nowrap" title="Net sales = Gross − Discount − Refund = số khách THỰC TRẢ (khớp total_price Shopify). Mẫu số của Margin %.">Net sales</th>
-                <th className="text-right px-3 py-2 whitespace-nowrap" title="Margin ship = Ship rev − Ship cost (billed thật khi có, engine khi chưa). Âm = charge thiếu. Chi tiết cost: bấm vào đơn.">
+                {/* Tiêu đề hai chữ cho xuống dòng như "Giao hàng" (không nowrap) để cột không rộng bằng cả cụm "MARGIN SHIP VND". */}
+                <th className="text-right px-3 py-2" title="Margin ship = Ship rev − Ship cost (billed thật khi có, engine khi chưa). Âm = charge thiếu. Chi tiết cost: bấm vào đơn.">
                   Margin ship
                   {showShipInCostCurrency && (
                     <span
-                      className="ml-1 px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal"
+                      className="block ml-auto w-fit px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono normal-case tracking-normal"
                       title={`Displayed in ${costCurrency} at FX ${fxRate!.toLocaleString()}.`}
                     >
                       {costCurrency}
                     </span>
                   )}
                 </th>
-                <th className="text-right px-3 py-2 whitespace-nowrap">SKU cost</th>
+                <th className="text-right px-3 py-2" title="Margin SP (gross margin hàng) = Net sales hàng (Net sales − Ship rev) − SKU cost. Rê chuột lên số để xem SKU cost và nguồn (thực / dự tính).">Margin SP</th>
                 <th className="text-right px-3 py-2">Revenue</th>
                 <th className="text-right px-3 py-2 whitespace-nowrap">Margin %</th>
                 <th className="text-left px-3 py-2">Giao hàng</th>
@@ -318,19 +319,20 @@ export function OrdersTable({
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                     {o.skuCostCoverage === 0 ? (
-                      <span className="text-amber-600 dark:text-amber-400" title="Chưa có giá vốn (dự tính lẫn thực)">—</span>
+                      <span className="text-amber-600 dark:text-amber-400" title="Chưa có giá vốn (dự tính lẫn thực) → chưa tính được Margin SP">—</span>
                     ) : (
-                      <span title={o.soDongGiaVonThuc === o.lineCount ? 'Giá vốn THỰC — bảng kê brand đã chốt / PO / MMP' : o.soDongGiaVonThuc > 0 ? `${o.soDongGiaVonThuc}/${o.lineCount} dòng giá thực, còn lại dự tính (bảng giá brand)` : 'Giá vốn DỰ TÍNH — bảng giá brand (sku_costs) / override'}>
-                        {fmt(o.skuCost, o.currency)}
-                        {o.soDongGiaVonThuc > 0 && (
-                          <span className={`ml-1 text-[9px] normal-case ${o.soDongGiaVonThuc === o.lineCount ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                            {o.soDongGiaVonThuc === o.lineCount ? 'thực' : `${o.soDongGiaVonThuc}/${o.lineCount} thực`}
-                          </span>
-                        )}
+                      <span
+                        className={o.marginSp < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}
+                        title={`Margin SP = net sales hàng − SKU cost ${fmt(o.skuCost, o.currency)} · ${o.soDongGiaVonThuc === o.lineCount ? 'giá vốn THỰC (bảng kê brand đã chốt / PO / MMP)' : o.soDongGiaVonThuc > 0 ? `${o.soDongGiaVonThuc}/${o.lineCount} dòng giá thực, còn lại dự tính` : 'giá vốn DỰ TÍNH (bảng giá brand)'}`}
+                      >
+                        {fmt(o.marginSp, o.currency)}
+                        <span className={`ml-1 text-[9px] normal-case ${o.soDongGiaVonThuc === o.lineCount ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {o.soDongGiaVonThuc === o.lineCount ? 'thực' : o.soDongGiaVonThuc > 0 ? `${o.soDongGiaVonThuc}/${o.lineCount} thực` : 'dự tính'}
+                        </span>
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold whitespace-nowrap">{fmt(o.revenue, o.currency)}</td>
+                  <td className={`px-3 py-2 text-right font-mono tabular-nums font-bold whitespace-nowrap ${o.revenue < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{fmt(o.revenue, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                     {o.netSales > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
                   </td>

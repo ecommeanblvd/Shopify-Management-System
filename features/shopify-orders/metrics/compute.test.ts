@@ -56,6 +56,7 @@ describe('computeOrderMetrics', () => {
     expect(m.skuCostCoverage).toBe(1);
     expect(m.revenue).toBe(72);
     expect(m.margin).toBeCloseTo(72 / 110, 4);
+    expect(m.marginSp).toBe(70); // net sales hàng 100 − SKU cost 30
   });
 
   it('subtracts discount + refunds from netGmv before revenue', () => {
@@ -69,6 +70,7 @@ describe('computeOrderMetrics', () => {
     expect(m.netSales).toBe(60); // khách thực trả = 110 − 20 CK − 30 hoàn
     expect(m.revenue).toBe(22);
     expect(m.margin).toBeCloseTo(22 / 60, 4); // Margin % chia cho Net sales, không chia gross (D-061)
+    expect(m.marginSp).toBe(20); // (60 − 10 ship rev) − 30 SKU cost
   });
 
   it('flags partial SKU cost coverage when a line has no cost row', () => {

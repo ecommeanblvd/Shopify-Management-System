@@ -15,6 +15,8 @@ export interface AggregateMetrics {
   shippingRevenue: number;
   shippingCost: number;
   skuCost: number;
+  /** Σ Margin SP = Σ (net sales hàng − SKU cost). */
+  marginSp: number;
   tax: number;
   revenue: number;
   margin: number;
@@ -26,7 +28,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
     return {
       orderCount: 0, currency: '',
       subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, netSales: 0, discount: 0,
-      shippingRevenue: 0, shippingCost: 0, skuCost: 0, tax: 0,
+      shippingRevenue: 0, shippingCost: 0, skuCost: 0, marginSp: 0, tax: 0,
       revenue: 0, margin: 0, skuCostCoverage: 0,
     };
   }
@@ -47,6 +49,7 @@ export function aggregateMetrics(orders: readonly OrderMetrics[]): AggregateMetr
     shippingRevenue: sum('shippingRevenue'),
     shippingCost: sum('shippingCost'),
     skuCost: sum('skuCost'),
+    marginSp: sum('marginSp'),
     tax: sum('tax'),
     revenue,
     margin: netSales > 0 ? revenue / netSales : 0,

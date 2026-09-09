@@ -80,6 +80,9 @@ export interface OrderMetrics {
   shippingCostReason: ShippingCostReason | null;
   skuCost: number;
   skuCostCoverage: number;
+  /** Margin SP (gross margin hàng) = Net sales hàng (Net sales − Ship rev) − SKU cost. Cặp với Margin ship = Ship rev − Ship cost;
+   *  Revenue = Margin SP + Margin ship − phí. CEO 09/09/2026. */
+  marginSp: number;
   tax: number;
   revenue: number;
   margin: number;
@@ -110,6 +113,7 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
   // đơn giảm giá mạnh mới không bị "đẹp" giả (D-061, CEO 09/09/2026).
   const netSales = netGmv - input.totalDiscount;
   const margin = netSales > 0 ? revenue / netSales : 0;
+  const marginSp = netSales - shippingRevenue - skuCost;
 
   return {
     orderId: input.orderId,
@@ -128,6 +132,7 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
     shippingCostReason: input.shippingCost.reason ?? null,
     skuCost,
     skuCostCoverage: coverage,
+    marginSp,
     tax: input.totalTax,
     revenue,
     margin,

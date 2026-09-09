@@ -514,7 +514,7 @@ function emptyAgg(): AggregateMetrics {
   return {
     orderCount: 0, currency: '',
     subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, netSales: 0, discount: 0,
-    shippingRevenue: 0, shippingCost: 0, skuCost: 0, tax: 0,
+    shippingRevenue: 0, shippingCost: 0, skuCost: 0, marginSp: 0, tax: 0,
     revenue: 0, margin: 0, skuCostCoverage: 0,
   };
 }
