@@ -8,7 +8,7 @@ export function chuanHoaMaDon(s: string): string { return s.replace(/\s+/g, '').
 /** Mã không thuộc đơn Shopify của MEAN → ghi bảng offline: PO/MTB (MEAN mua đứt Denio), #HC… (đơn store riêng
  *  Happy Clothing Global), #MXHS… (đơn sàn XiaoHongShu, Trung Quốc — CEO 08/09). */
 /** Thêm 08/09 (Maison des Copains): "#PO-001" (PO mua đứt, cách ghi khác), "#OS007"/"#MOS10011" (đơn ngoài Shopify — chờ CEO xác nhận kênh). */
-/** Mã KHÔNG phải đơn Shopify MEAN: PO (#MBLVDPO, #MTB, #PO-001), store brand (#HC), XiaoHongShu (#MXHS), Off Store (#OS/#MOS), hàng ký gửi (#CSM009 — Nhat Vy T6/2026). */
+/** Mã KHÔNG phải đơn Shopify MEAN: PO (#MBLVDPO, #MTB, #PO-001), store brand (#HC), XiaoHongShu (#MXHS), Off Store (#OS/#MOS), #CSM… cũng là đơn Off Store (LaMai T8/2026 ghi Note "đơn offstore"; Nhat Vy T6/2026 #CSM009). */
 export function laMaNgoaiShopify(maDon: string): boolean { return /^MBLVDPO/i.test(maDon) || /^MTB/i.test(maDon) || /^HC\d/i.test(maDon) || /^MXHS\d/i.test(maDon) || /^PO-?\d/i.test(maDon) || /^M?OS\d/i.test(maDon) || /^CSM\d/i.test(maDon); }
 
 /** Token mã sản phẩm: bỏ tiền tố brand, tách theo '+', bỏ tiền tố 'PK' khi sau nó còn mã chữ+số (PKDN0729 → DN0729);

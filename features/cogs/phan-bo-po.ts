@@ -40,7 +40,7 @@ export function tachSkuDenio(sku: string): { codes: string[]; size: string | nul
 
 /**
  * Mã trên bảng offline là ĐƠN MUA ĐỨT (PO) — hàng MEAN đã mua về kho, được phân bổ xuống đơn Shopify: #MBLVDPO…, #MTB…, #PO-001.
- * KHÔNG phải PO: #HC… (đơn store riêng của brand), #MXHS… (XiaoHongShu), #OS…/#MOS… (bán tại showroom Off Store) — đó là hàng đã
+ * KHÔNG phải PO: #HC… (đơn store riêng của brand), #MXHS… (XiaoHongShu), #OS…/#MOS…/#CSM… (bán tại showroom Off Store) — đó là hàng đã
  * bán ở kênh khác, không còn để giao đơn Shopify (TINH Atelier 09/09: 2 dòng #MOS10023/24 từng bị gán nhầm cho đơn TA…).
  */
 export function laMaPO(refCode: string): boolean { return /^#?(MBLVDPO|MTB|PO)/i.test(refCode.trim()); }
