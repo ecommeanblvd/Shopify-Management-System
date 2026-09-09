@@ -16,6 +16,10 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
   }
   const mp = p.marginSp;
   const ms = p.marginShip;
+  const gv = p.giaVon;
+  const tongDong = detail.lines.length;
+  const dongThuc = detail.lines.filter((l) => l.giaVonThucVnd != null).length;
+  const soDongThuc = dongThuc > 0 && dongThuc < tongDong ? ` ${dongThuc}/${tongDong} dòng` : '';
   const cell = (loss: boolean, missing: boolean) =>
     missing ? 'text-muted-foreground' : loss ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400';
   const revState = p.revenueVnd == null ? 'na' : p.revenueVnd >= 0 ? 'pos' : 'neg';
@@ -32,9 +36,14 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-border p-2.5 space-y-0.5">
             <Row label="SP — bán" value={vnd(mp.revenueVnd)} />
-            <Row label="SP — vốn" value={mp.missing ? 'thiếu giá vốn' : vnd(mp.costVnd)} />
+            <Row label="SP — vốn dự tính (bảng giá brand)" value={gv.duTinhVnd == null ? 'thiếu' : vnd(gv.duTinhVnd)} muted={gv.dung === 'thuc'} />
+            <Row
+              label={`SP — vốn thực (bảng kê đã chốt)${soDongThuc}`}
+              value={gv.thucVnd == null ? 'chưa đối soát' : vnd(gv.thucVnd)}
+              amber={gv.thucVnd != null && gv.dung !== 'thuc'}
+            />
             <div className={`flex justify-between font-semibold border-t border-border/60 pt-1 ${cell(mp.loss, mp.missing)}`}>
-              <span>{mp.missing ? 'Margin SP' : mp.loss ? '⚠ Margin SP' : '✓ Margin SP'}</span>
+              <span>{mp.missing ? 'Margin SP' : `${mp.loss ? '⚠' : '✓'} Margin SP ${gv.dung === 'thuc' ? '(theo giá thực)' : '(theo dự tính)'}`}</span>
               <span>{mp.missing ? '—' : `${mp.deltaVnd >= 0 ? '+' : ''}${vnd(mp.deltaVnd)} · ${pctTxt(mp.pct)}`}</span>
             </div>
           </div>
@@ -79,9 +88,9 @@ export function OrderPnlPanel({ detail }: { detail: OrderDetail }) {
   );
 }
 
-function Row({ label, value, red, amber }: { label: string; value: string; red?: boolean; amber?: boolean }) {
+function Row({ label, value, red, amber, muted }: { label: string; value: string; red?: boolean; amber?: boolean; muted?: boolean }) {
   return (
-    <div className={`flex justify-between ${red ? 'text-red-600 dark:text-red-400' : amber ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+    <div className={`flex justify-between ${red ? 'text-red-600 dark:text-red-400' : amber ? 'text-amber-600 dark:text-amber-400' : muted ? 'text-muted-foreground/70' : ''}`}>
       <span className="text-muted-foreground">{label}</span>
       <span className="tabular-nums">{value}</span>
     </div>

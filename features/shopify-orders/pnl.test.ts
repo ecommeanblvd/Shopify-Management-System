@@ -80,3 +80,25 @@ describe('computeOrderPnl', () => {
     expect(r.revenueVnd).toBe(35_800_000 - 22_800_855);
   });
 });
+
+describe('computeOrderPnl — giá vốn dự tính vs thực (CEO 09/09/2026)', () => {
+  it('có giá vốn thực đủ dòng → margin & tổng chi dùng giá thực, vẫn giữ dự tính để so', () => {
+    const r = computeOrderPnl({ ...base, giaVonThucVnd: 15_000_000, giaVonThucComplete: true });
+    expect(r.giaVon).toEqual({ duTinhVnd: 18_000_000, thucVnd: 15_000_000, dung: 'thuc' });
+    expect(r.marginSp.costVnd).toBe(15_000_000);
+    expect(r.tongChiVnd).toBe(15_000_000 + 3_674_855 + 1_126_000);
+  });
+  it('giá thực chưa đủ dòng → dùng dự tính, thucVnd vẫn hiện phần đã có', () => {
+    const r = computeOrderPnl({ ...base, giaVonThucVnd: 7_000_000, giaVonThucComplete: false });
+    expect(r.giaVon).toEqual({ duTinhVnd: 18_000_000, thucVnd: 7_000_000, dung: 'du_tinh' });
+    expect(r.marginSp.costVnd).toBe(18_000_000);
+  });
+  it('không có dự tính nhưng có giá thực đủ → vẫn ra margin theo thực', () => {
+    const r = computeOrderPnl({ ...base, skuCostVnd: null, skuCostComplete: false, giaVonThucVnd: 15_000_000, giaVonThucComplete: true });
+    expect(r.giaVon.dung).toBe('thuc'); expect(r.marginSp.missing).toBe(false); expect(r.complete).toBe(true);
+  });
+  it('không có gì → thieu (như cũ)', () => {
+    const r = computeOrderPnl({ ...base, skuCostVnd: null, skuCostComplete: false });
+    expect(r.giaVon).toEqual({ duTinhVnd: null, thucVnd: null, dung: 'thieu' }); expect(r.marginSp.missing).toBe(true);
+  });
+});

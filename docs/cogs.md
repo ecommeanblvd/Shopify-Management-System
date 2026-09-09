@@ -235,6 +235,13 @@ Khi tab đã bị coi là gồm VAT (luật 1 hoặc 2) thì **mọi dòng của
 Brand không có bất kỳ dấu hiệu VAT nào (Denio, Poem, Nhat Vy, Echele, Beloved, Margée Atelier, White Chic, Docemeo, Maddy Hates Rose, Lecia…) giữ nguyên TT — không thể biết TT có gồm VAT hay không từ sheet.
 Đã nhập lại 8 brand (55 kỳ 2026): Σ giá vốn 1.644,9 → 1.526,5 triệu ₫ (−7,2 %): Linh Phùng 372,8→351,2; Larmes 284,4→266,6; Jenny K Tran | Divine 361,2→346,5; De Theia 163,7→156,7; Sissy Nation 130,0→121,0; Darling Diva 78,6→73,7; Huelleyrose 144,0→140,8; LYP 74,1→70,0. Hồi quy 43 brand khớp sau khi nhập lại.
 
+## Hai giá vốn trên trang Đơn hàng: dự tính và thực (CEO 09/09/2026)
+
+Trang Orders (`/f/orders/[storeId]`, panel P&L của từng đơn) trước đây chỉ có giá vốn từ `sku_costs` (bảng giá brand gửi ban đầu) + override tay. CEO: "giá COGS theo brand lúc đầu là giả định, bản đối soát đã chốt là giá thực đơn bị charge — luôn có phần dự tính và phần thực tế nối vào order" (như ship: giá báo vs giá bill).
+- **Dự tính** = `costOverride ?? sku_costs` × số lượng (như cũ) → `pnl.giaVon.duTinhVnd`.
+- **Thực** = `order_line_cogs` của đơn (`features/shopify-orders/gia-von-thuc.ts`, thuần): mỗi dòng đơn lấy dòng kind=cogs nguồn ưu tiên cao nhất (mmp > brand_statement = po > shopify_unit_cost), cùng nguồn lấy kỳ mới nhất, cộng return (âm); chỉ nhận VND. → `pnl.giaVon.thucVnd`, từng dòng `giaVonThucVnd/Nguon/Ky`.
+- **Margin SP và Tổng chi dùng giá THỰC khi mọi dòng đã có**, không thì dự tính (`giaVon.dung = 'thuc' | 'du_tinh' | 'thieu'`). Panel hiện cả hai dòng "vốn dự tính" và "vốn thực (bảng kê đã chốt) n/m dòng"; bảng line items thêm cột "Giá vốn thực" kèm nhãn nguồn (bảng kê / PO / MMP).
+
 ## Sheet tính bằng USD (Happy Clothing) và mục B không phải return
 
 Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT", mục "A. Đơn thực nhận" / "B. Đơn return". Happy Clothing (08/09/2026): giá và thành tiền bằng **USD** ("$935.00"), cột "Thành tiền", mục "A. Đơn MEAN thực nhận" và **"B. Đơn Happy Clothing Global thực nhận"** — đơn `#HC…` trên store riêng của brand, không có trên Shopify của MEAN → ghi bảng offline (`brand_cogs_offline`, mã `#HC…`), **không phải return**.

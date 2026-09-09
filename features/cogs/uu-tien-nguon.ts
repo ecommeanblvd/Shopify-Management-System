@@ -26,6 +26,9 @@ const THU_TU: Record<Source, number> = {
  * Cùng nguồn → luôn được (ghi lại/cập nhật chính nguồn đó, ví dụ nhập lại một
  * kỳ sheet cũ). Khác nguồn → chỉ khi `moi` ưu tiên CAO HƠN `hienTai`.
  */
+/** Thứ tự ưu tiên của một nguồn (−1 nếu không biết) — dùng khi một dòng đơn có nhiều dòng giá vốn (chọn nguồn cao nhất). */
+export function uuTienNguon(s: string): number { return THU_TU[s as Source] ?? -1; }
+
 export function duocGhiDe(hienTai: Source, moi: Source): boolean {
   if (hienTai === moi) return true;
   return THU_TU[moi] > THU_TU[hienTai];

@@ -468,6 +468,7 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                   <th className="text-right px-3 py-2">Qty</th>
                   <th className="text-right px-3 py-2">Unit price</th>
                   <th className="text-right px-3 py-2">Default cost</th>
+                  <th className="text-right px-3 py-2">Giá vốn thực <span className="normal-case text-[9px]">(bảng kê, cả dòng)</span></th>
                   <th className="text-right px-3 py-2 w-44">
                     Cost override / unit
                     {!sameCcy && (
@@ -495,6 +496,11 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                       {l.defaultCostPerUnit !== null
                         ? fmt(l.defaultCostPerUnit, l.defaultCostCurrency ?? detail.currency)
                         : <span className="italic text-amber-600 dark:text-amber-400">no cost</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-xs">
+                      {l.giaVonThucVnd !== null
+                        ? <>{fmt(l.giaVonThucVnd, 'VND')} <span className="text-[9px] text-muted-foreground" title={`kỳ ${l.giaVonThucKy ?? ''}`}>{l.giaVonThucNguon === 'po' ? 'PO' : l.giaVonThucNguon === 'mmp' ? 'MMP' : 'bảng kê'}</span></>
+                        : <span className="text-muted-foreground/60">chưa đối soát</span>}
                     </td>
                     <td className="px-3 py-2">
                       {editing ? (

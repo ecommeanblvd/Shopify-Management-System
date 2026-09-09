@@ -1,6 +1,7 @@
 'use server';
 
 import { and, eq, sql } from 'drizzle-orm';
+import { giaVonThucTheoDong } from './gia-von-thuc';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
@@ -31,6 +32,10 @@ export interface OrderLineDetail {
   defaultCostPerUnit: number | null;
   defaultCostCurrency: string | null;
   costOverride: number | null;
+  /** Giá vốn THỰC cả dòng (VND) từ bảng kê brand đã chốt / PO / MMP — null khi chưa đối soát. Xem gia-von-thuc.ts. */
+  giaVonThucVnd: number | null;
+  giaVonThucNguon: string | null;
+  giaVonThucKy: string | null;
 }
 
 export interface OrderShippingDetail {
@@ -163,6 +168,15 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     .from(schema.stores)
     .where(eq(schema.stores.id, order.storeId));
   const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
+
+  // Giá vốn THỰC từ order_line_cogs (bảng kê brand đã chốt, PO, MMP) — nối vào từng dòng, đối lập giá vốn dự tính sku_costs.
+  const cogsRows = await db
+    .select({ shopifyLineId: schema.orderLineCogs.shopifyLineId, kind: schema.orderLineCogs.kind, amount: schema.orderLineCogs.amount, currency: schema.orderLineCogs.currency, source: schema.orderLineCogs.source, period: schema.orderLineCogs.period, statementRef: schema.orderLineCogs.statementRef })
+    .from(schema.orderLineCogs)
+    .where(eq(schema.orderLineCogs.orderId, orderId));
+  const giaVonThuc = giaVonThucTheoDong(cogsRows.map((r) => ({ ...r, amount: Number(r.amount) })));
+  let giaVonThucVnd = 0; let giaVonThucComplete = lines.length > 0;
+  for (const l of lines) { const g = giaVonThuc.get(l.shopifyLineId); if (!g) { giaVonThucComplete = false; continue; } giaVonThucVnd += g.vnd; }
 
   const refundRows = await db
     .select({ amt: schema.shopifyOrderRefunds.amount })
@@ -363,6 +377,8 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         discountVnd: discountVnd ?? 0, refundVnd: refundVnd ?? 0,
         skuCostVnd: skuComplete ? skuCostVnd : null,
         skuCostComplete: skuComplete,
+        giaVonThucVnd: giaVonThuc.size > 0 ? giaVonThucVnd : null,
+        giaVonThucComplete,
         shipCostVnd, shipCostSource,
         transactionFeeVnd,
       });
@@ -398,6 +414,9 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         defaultCostPerUnit: c ? Number(c.costPerUnit) : null,
         defaultCostCurrency: c?.currency ?? null,
         costOverride: l.costOverride !== null ? Number(l.costOverride) : null,
+        giaVonThucVnd: giaVonThuc.get(l.shopifyLineId)?.vnd ?? null,
+        giaVonThucNguon: giaVonThuc.get(l.shopifyLineId)?.nguon ?? null,
+        giaVonThucKy: giaVonThuc.get(l.shopifyLineId)?.ky ?? null,
       };
     }),
     shipping: {
