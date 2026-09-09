@@ -32,7 +32,8 @@ export interface BangKe {
 }
 
 // "BẢNG KÊ CÔNG NỢ" (đa số) hoặc "BẢNG KÊ ĐƠN HÀNG CẦN THANH TOÁN" (Montsand T1–T4).
-const RE_TIEU_DE = /BẢNG KÊ[^\n]*\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n|]+)/i;
+// Tên brand lấy đủ đến hết dòng — kể cả dấu "|" ("JENNY K TRAN | DIVINE" là một brand riêng trong hệ thống).
+const RE_TIEU_DE = /BẢNG KÊ[^\n]*\s+Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+Brand:\s*([^\n]+)/i;
 const chuoi = (v: O): string => (v == null ? '' : String(v)).trim();
 
 function timTieuDe(rows: O[][]): { tu: string; den: string; brand: string } | null {

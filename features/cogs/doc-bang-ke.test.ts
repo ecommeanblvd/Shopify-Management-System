@@ -431,3 +431,13 @@ describe('docWorkbook — LaLing: mục "A. ĐƠN RETURN" vẫn là return; tiê
     expect(bangKe[0].period).toBe('2026-08'); expect(bangKe[0].canhBao.filter((c) => /Kỳ thanh toán/.test(c))).toEqual([]);
   });
 });
+
+describe('docWorkbook — tên brand có dấu "|" (Jenny K Tran | Divine)', () => {
+  it('lấy đủ "JENNY K TRAN | DIVINE"', () => {
+    const rows = [['BẢNG KÊ CÔNG NỢ \n\nTừ ngày 01/07/2026 đến 31/07/2026\n\nBrand: JENNY K TRAN | DIVINE'], ['A. Đơn thực nhận trong tháng'],
+      ['Ngày nhận', 'Mã đơn', 'Tên sản phẩm', 'SKU', 'Số lượng', 'Giá nội địa ', '% CK ', 'Phí customize', 'Tổng thành tiền TT', 'Note', 'Code ', 'Kỳ báo đơn'],
+      ['02/07/2026', '#MBLVD29172', 'x', 'JKTDV-D112S-M-WBRI-PLA', '1', '$720', '45%', null, '$396.00', null, 'c', '6'], ['TỔNG CÔNG NỢ MEAN THANH TOÁN:', '10,327,680 ₫']];
+    const { bangKe } = docWorkbook([{ name: 'T7', rows }]);
+    expect(bangKe[0].brand).toBe('JENNY K TRAN | DIVINE'); expect(bangKe[0].lines[0].tt).toBe(396 * 26080);
+  });
+});
