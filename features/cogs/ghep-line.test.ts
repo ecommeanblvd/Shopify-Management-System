@@ -8,7 +8,7 @@ const don = (maDon: string, lines: ReturnType<typeof line>[]): [string, DonTraCu
 
 describe('chuẩn hoá', () => {
   it('mã đơn bỏ #, khoảng trắng, hoa', () => { expect(chuanHoaMaDon(' #mblvd29521 ')).toBe('MBLVD29521'); });
-  it('mã ngoài Shopify', () => { expect(laMaNgoaiShopify('MBLVDPO24')).toBe(true); expect(laMaNgoaiShopify('MTB1490')).toBe(true); expect(laMaNgoaiShopify('HC1340')).toBe(true); expect(laMaNgoaiShopify('MXHS1552')).toBe(true); expect(laMaNgoaiShopify('PO-001')).toBe(true); expect(laMaNgoaiShopify('OS007')).toBe(true); expect(laMaNgoaiShopify('MOS10011')).toBe(true); expect(laMaNgoaiShopify('MBLVD29521')).toBe(false); });
+  it('mã ngoài Shopify', () => { expect(laMaNgoaiShopify('MBLVDPO24')).toBe(true); expect(laMaNgoaiShopify('MTB1490')).toBe(true); expect(laMaNgoaiShopify('HC1340')).toBe(true); expect(laMaNgoaiShopify('MXHS1552')).toBe(true); expect(laMaNgoaiShopify('PO-001')).toBe(true); expect(laMaNgoaiShopify('OS007')).toBe(true); expect(laMaNgoaiShopify('MOS10011')).toBe(true); expect(laMaNgoaiShopify('CSM009')).toBe(true); expect(laMaNgoaiShopify('MBLVD29521')).toBe(false); });
   it('mã gốc: bỏ brand, tách +, bỏ tiền tố PK', () => {
     expect(maGoc('Denio-DN0729+PK0729-Customize-CRE')).toEqual(['DN0729', 'PK0729']);
     expect(maGoc('Denio-PKDN0729-CRE')).toEqual(['DN0729']);

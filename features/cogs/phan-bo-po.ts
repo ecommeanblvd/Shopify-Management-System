@@ -38,7 +38,6 @@ export function tachSkuDenio(sku: string): { codes: string[]; size: string | nul
   return { codes, size: iSize >= 0 ? parts[iSize].toUpperCase() : null, colours: sau.map((t) => t.toUpperCase()) };
 }
 
-/** Khoá ghép PO ↔ dòng đơn: mã chính (Denio: mã DN…, khác: cả cụm mã) + size + màu. */
 /**
  * Mã trên bảng offline là ĐƠN MUA ĐỨT (PO) — hàng MEAN đã mua về kho, được phân bổ xuống đơn Shopify: #MBLVDPO…, #MTB…, #PO-001.
  * KHÔNG phải PO: #HC… (đơn store riêng của brand), #MXHS… (XiaoHongShu), #OS…/#MOS… (bán tại showroom Off Store) — đó là hàng đã
@@ -46,8 +45,12 @@ export function tachSkuDenio(sku: string): { codes: string[]; size: string | nul
  */
 export function laMaPO(refCode: string): boolean { return /^#?(MBLVDPO|MTB|PO)/i.test(refCode.trim()); }
 
+/**
+ * Khoá ghép PO ↔ dòng đơn: mã chính (Denio: mã DN…, khác: cả cụm mã) + size + màu.
+ * Hậu tố "-PO-Sale" trên SKU đơn (Nhat Vy: "NHATVY-SP000389-M-NBEI&BBLA-PLA-PO-Sale" = hàng PO bán sale) bỏ đi để khớp SKU trong PO.
+ */
 export function khoaSku(sku: string): string | null {
-  const t = tachSkuDenio(sku);
+  const t = tachSkuDenio(sku.replace(/-PO-Sale$/i, ''));
   const main = t.codes.find((c) => c.startsWith('DN')) ?? t.codes[0];
   if (!main) return null;
   return `${main}|${t.size ?? ''}|${t.colours.join('&')}`;

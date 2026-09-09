@@ -83,3 +83,10 @@ describe('laMaPO — chỉ mã đơn mua đứt mới được phân bổ xuốn
     for (const m of ['#HC1368', '#MXHS1536', '#OS007', '#MOS10023', '#MBLVD28657', 'TA1951']) expect(laMaPO(m)).toBe(false);
   });
 });
+
+describe('khoaSku — hậu tố "-PO-Sale" (Nhat Vy) bỏ đi để khớp PO', () => {
+  it('cùng khoá với SKU gốc', () => {
+    expect(khoaSku('NHATVY-SP000389-M-NBEI&BBLA-PLA-PO-Sale')).toBe(khoaSku('NHATVY-SP000389-M-NBEI&BBLA-PLA'));
+    expect(khoaSku('NHATVY-SP000310-S-DRD-PO-Sale')).toBe(khoaSku('NHATVY-SP000310-S-DRD'));
+  });
+});
