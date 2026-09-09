@@ -2,6 +2,7 @@
 
 import { and, eq, sql } from 'drizzle-orm';
 import { giaVonThucTheoDong } from './gia-von-thuc';
+import { ghiChuGiaDuTinh } from '@/features/cogs/gia-du-tinh';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
@@ -34,6 +35,8 @@ export interface OrderLineDetail {
   giaVonThucVnd: number | null;
   giaVonThucNguon: string | null;
   giaVonThucKy: string | null;
+  /** Ghi chú giá dự tính: kỳ CK tier đang áp; "tạm" khi đơn ở tháng sau kỳ đó (CEO 09/09/2026: tier theo doanh số tháng). */
+  defaultCostGhiChu: string | null;
 }
 
 export interface OrderShippingDetail {
@@ -194,19 +197,23 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
 
   // Cost lookup for the order's processed_at date.
   const skus = lines.map((l) => l.sku).filter((s): s is string => !!s);
-  let costMap = new Map<string, { costPerUnit: string; currency: string }>();
+  let costMap = new Map<string, { costPerUnit: string; currency: string; source: string }>();
   if (skus.length > 0) {
     const costsRes = await db.execute<{
-      sku: string; cost_per_unit: string; currency: string;
+      sku: string; cost_per_unit: string; currency: string; source: string;
     }>(sql`
-      SELECT DISTINCT ON (sku) sku, cost_per_unit::text AS cost_per_unit, currency
+      SELECT DISTINCT ON (sku) sku, cost_per_unit::text AS cost_per_unit, currency, source
         FROM sku_costs
        WHERE store_id = ${order.storeId}
          AND sku IN (${sql.join(skus.map((s) => sql`${s}`), sql`, `)})
          AND effective_from <= ${order.processedAtShopify.toISOString().slice(0, 10)}::date
        ORDER BY sku, effective_from DESC;
     `);
-    costMap = new Map(costsRes.rows.map((r) => [r.sku, { costPerUnit: r.cost_per_unit, currency: r.currency }]));
+    costMap = new Map(costsRes.rows.map((r) => [r.sku, { costPerUnit: r.cost_per_unit, currency: r.currency, source: r.source }]));
+  }
+  // Tháng đơn theo giờ kinh doanh (+07) để so với kỳ CK tier đang áp cho giá dự tính.
+  const thangDon = new Date(order.processedAtShopify.getTime() + 7 * 3600_000).toISOString().slice(0, 7);
+  {
   }
 
   // Shipping default — invoice if matched by tracking, else engine estimate, else unknown.
@@ -409,6 +416,7 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         giaVonThucVnd: giaVonThuc.get(l.shopifyLineId)?.vnd ?? null,
         giaVonThucNguon: giaVonThuc.get(l.shopifyLineId)?.nguon ?? null,
         giaVonThucKy: giaVonThuc.get(l.shopifyLineId)?.ky ?? null,
+        defaultCostGhiChu: ghiChuGiaDuTinh(c?.source, thangDon),
       };
     }),
     shipping: {

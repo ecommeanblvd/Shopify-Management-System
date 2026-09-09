@@ -96,6 +96,8 @@ export async function layStores(): Promise<Array<{ id: string; name: string }>> 
 export async function uocGiaVonDuTinhAction(storeId: string, dryRun: boolean): Promise<{
   skuXet: number; daCoGia: number; uocLichSuSku: number; uocLichSuMaSp: number; uocMmp: number; khong: number;
   khongTheoVendor: Array<{ vendor: string; n: number }>; daGhi: number; dryRun: boolean;
+  /** Tier tháng: số SKU theo tier brand, số mức giá theo tháng sẽ ghi, brand có CK đổi giữa các kỳ. */
+  skuTheoTier: number; soMucGia: number; brandDoiCk: Array<{ brandSlug: string; ckTheoKy: Array<[string, number]> }>;
 }> {
   const userId = await requireCogs('manage_cogs');
   if (!storeId) throw new Error('Chọn store');
@@ -106,6 +108,7 @@ export async function uocGiaVonDuTinhAction(storeId: string, dryRun: boolean): P
   return {
     skuXet: r.skuXet, daCoGia: r.daCoGia, uocLichSuSku: r.uocLichSu.filter((u) => u.nguon === 'lich_su_sku').length, uocLichSuMaSp: r.uocLichSu.filter((u) => u.nguon === 'lich_su_ma_sp').length,
     uocMmp: r.uoc.length, khong: r.khong.length, khongTheoVendor: [...theoVendor.entries()].map(([vendor, n]) => ({ vendor, n })).sort((a, b) => b.n - a.n), daGhi: r.daGhi, dryRun,
+    skuTheoTier: r.skuTheoTier, soMucGia: r.mucGia.length, brandDoiCk: r.brandDoiCk,
   };
 }
 

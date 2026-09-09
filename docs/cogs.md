@@ -250,8 +250,18 @@ CEO mở đơn thấy "Default cost: no cost" mọi dòng → không biết sả
 Giải pháp (`features/cogs/gia-du-tinh.ts` thuần + `gia-du-tinh-core.ts`, nút "Giá vốn dự tính" trên `/f/orders/cogs/bang-ke`): với mỗi SKU đã bán trên store (2026, đơn chưa huỷ) mà chưa có bảng giá ops upload / Shopify sync:
 1. **`uoc:lich_su_bang_ke`** — giá thực gần nhất (kỳ mới nhất) của đúng SKU; không có thì của **cùng mã sản phẩm cùng brand** (`maSanPham`: SKU cắt trước token size XS…XXXL/Onesize/Customize; KHÔNG coi số là size vì brand đánh số mẫu).
 2. **`uoc:mmp_vnd_x_ck`** — MMP niêm yết VND × (1 − CK brand); CK = mức phổ biến nhất trong bảng kê đã nhập của brand (`ckTheoBrand`), brand họ hàng dùng chung (I.H.F Atelier ↔ i-h-f); giá niêm yết chỉ nhận 100.000–100.000.000 ₫ (MMP có dòng rác 1,08 tỉ).
-Ghi vào `sku_costs` hiệu lực 2026-01-01, nguồn "uoc:%"; chạy lại xoá + ghi lại các dòng "uoc:%", không đụng nguồn khác. Giá thực từ bảng kê luôn đè lên (D-060).
-Kết quả store MEAN BLVD 09/09: 3.541 SKU đã bán → ước 2.786 (đúng SKU 2.558, cùng mã SP 205, MMP VND 23); 754 SKU chưa có giá (MEAN BLVD tự sản xuất 227, còn lại brand chưa kê mẫu đó: De Theia 29, SoDope 24, Montsand 17, Cénes 14, Mirer 14…). Dòng đơn 2026 có giá: 4.088/5.487 (74,5 %) = 3.614 giá thực + 474 chỉ dự tính.
+Ghi vào `sku_costs` nguồn "uoc:%"; chạy lại xoá + ghi lại các dòng "uoc:%", không đụng nguồn khác. Giá thực từ bảng kê luôn đè lên (D-060).
+Kết quả store MEAN BLVD 09/09 (bản đầu): 3.541 SKU đã bán → ước 2.786 (đúng SKU 2.558, cùng mã SP 205, MMP VND 23); 754 SKU chưa có giá (MEAN BLVD tự sản xuất 227, còn lại brand chưa kê mẫu đó: De Theia 29, SoDope 24, Montsand 17, Cénes 14, Mirer 14…). Dòng đơn 2026 có giá: 4.088/5.487 (74,5 %) = 3.614 giá thực + 474 chỉ dự tính.
+
+### CK theo TIER THÁNG — giá dự tính đúng tháng đơn (CEO 09/09/2026, D-062)
+
+CEO lưu ý: **mức CK của brand đi theo tier, tier tính theo doanh số THÁNG đó** → lấy thẳng giá thực kỳ gần nhất (mang CK kỳ đó) áp cho tháng khác là sai. Dữ liệu xác nhận: 11/74 brand có CK đổi theo kỳ (TINH 25 → 30 → 72 %, Denio 40 → 35 (T6–T7) → 40 %, Maison des Copains 50 → 25 % từ T6, Mirer 50 → 30 % T7, Eegen 55 ↔ 65 %, Happy Clothing 40 → 45 %, Decode House 25 → 20 %, Poem/Rosee/Huelleyrose tăng một tháng, Thésong 50 → 55 %); ~15 brand có hai mức CK trong cùng tháng (theo dòng hàng, không phải theo tháng: I.H.F 50/25 %, phụ kiện 0 %…).
+Cách làm mới (`ckTheoBrandKy`, `laMucTierBrand`, `dongGiaTheoKy`, 14 test):
+1. Tách **giá nội địa** (niêm yết, VND) khỏi giá thực của dòng nguồn: giá thực × Σ[tt/(1 − ck)]/Σ tt trên `detail.dong` (tt đã là VND trước thuế; KHÔNG dùng cột `giaNoiDia` vì sheet USD ghi bằng USD). CK hiệu dụng của SKU = 1 − giá thực/giá nội địa.
+2. **CK brand × kỳ** = mức phổ biến nhất trong bảng kê kỳ đó. SKU **theo tier** khi CK của nó là một mức tier của brand (mức chung ở kỳ nào đó — Denio 40 % vẫn theo tier dù kỳ nguồn T6 đang 35 %); CK lạ (belt 0 %, I.H.F 25 %, đầm kèm quà) → **CK riêng**, giá phẳng = đúng giá thực dòng nguồn.
+3. Với SKU theo tier ghi **một dòng `sku_costs` mỗi lần CK brand đổi**, `effective_from` = đầu tháng kỳ đó; dòng đầu 2026-01-01 dùng CK kỳ gần nhất ≤ 01/2026 (không có → kỳ đầu tiên brand kê). Tháng không có kỳ kê (T4 Decode House) kế thừa dòng trước. Các trang đọc `sku_costs` vốn chọn dòng `effective_from ≤ ngày đơn` nên không đổi chỗ đọc.
+4. Nguồn ghi kèm kỳ: `uoc:lich_su_bang_ke@ck=2026-06`. Đơn ở tháng SAU kỳ CK đang áp (T8–T9 chưa kê) là **đang dùng tier kỳ trước — tạm**; modal đơn ghi "tier kỳ 2026-07 (tạm)" màu hổ phách dưới Default cost (`ghiChuGiaDuTinh`). Khi bảng kê tháng đó về, giá thực đè lên.
+Kết quả 09/09 (sau đợt 8 brand chiều): 2.836 SKU ước → 4.042 mức giá (2.685 SKU theo tier, 143 SKU CK riêng); so bản đầu: 415 dòng đơn dự tính giữ giá, **58 dòng đổi** (ví dụ Maison des Copains T3 7,34 → 4,90 tr theo tier 50 %; TINH T1 1,01 → 2,70 tr theo tier 25 %; Denio T6 1,49 → 1,62 tr theo tier 35 %); ~370 dòng T8–T9 đang dùng tier kỳ trước (tạm). Dòng đơn 2026 có giá: 4.132/5.476 (75,5 %) = 3.653 thực + 479 chỉ dự tính.
 
 ## Sheet tính bằng USD (Happy Clothing) và mục B không phải return
 

@@ -75,9 +75,16 @@ export function uocGiaVonDuTinh(skus: SkuBan[], variants: VariantMMP[], ck: Map<
   return { uoc, khong };
 }
 
-/** Một dòng lịch sử giá thực: SKU, brand (vendor), giá vốn thực 1 chiếc (VND), kỳ bảng kê. */
-export interface LichSuGia { sku: string; vendor: string | null; unitVnd: number; period: string }
-export interface GiaUocLichSu { sku: string; giaVon: number; nguon: 'lich_su_sku' | 'lich_su_ma_sp'; theoSku: string; period: string }
+/** Một dòng lịch sử giá thực: SKU, brand (vendor + slug bảng kê), giá vốn thực 1 chiếc (VND), giá nội địa 1 chiếc quy VND
+ *  (Σ giá niêm yết × sl của dòng bảng kê, cùng hệ số quy đổi với giá thực — null khi bảng kê không ghi), kỳ bảng kê. */
+export interface LichSuGia { sku: string; vendor: string | null; brandSlug: string | null; unitVnd: number; giaNoiDiaVnd: number | null; period: string }
+/** giaNoiDia/ck: giá niêm yết (VND) và CK hiệu dụng của DÒNG NGUỒN (1 − giá thực/niêm yết, 4 chữ số) — đầu vào cho dongGiaTheoKy. */
+export interface GiaUocLichSu { sku: string; giaVon: number; nguon: 'lich_su_sku' | 'lich_su_ma_sp'; theoSku: string; period: string; brandSlug: string | null; giaNoiDia: number; ck: number }
+
+const noiDiaVaCk = (h: LichSuGia): { giaNoiDia: number; ck: number } => {
+  const nd = h.giaNoiDiaVnd != null && h.giaNoiDiaVnd > 0 ? h.giaNoiDiaVnd : h.unitVnd;
+  return { giaNoiDia: Math.round(nd), ck: Math.max(0, Math.round((1 - h.unitVnd / nd) * 10_000) / 10_000) };
+};
 
 /** Mã sản phẩm = phần SKU trước token size (XS/S/M/L/XL/XXL/XXXL/Onesize/Customize/Free) — cùng mã thường cùng giá, khác size/màu. */
 export function maSanPham(sku: string): string {
@@ -101,10 +108,79 @@ export function uocGiaVonTuLichSu(skus: SkuBan[], lichSu: LichSuGia[]): { uoc: G
   const uoc: GiaUocLichSu[] = []; const conLai: SkuBan[] = [];
   for (const s of skus) {
     const h = theoSku.get(s.sku.trim().toLowerCase());
-    if (h) { uoc.push({ sku: s.sku, giaVon: Math.round(h.unitVnd), nguon: 'lich_su_sku', theoSku: h.sku, period: h.period }); continue; }
+    if (h) { uoc.push({ sku: s.sku, giaVon: Math.round(h.unitVnd), nguon: 'lich_su_sku', theoSku: h.sku, period: h.period, brandSlug: h.brandSlug, ...noiDiaVaCk(h) }); continue; }
     const m = theoMa.get(chuanBrand(s.vendor) + '|' + maSanPham(s.sku));
-    if (m) { uoc.push({ sku: s.sku, giaVon: Math.round(m.unitVnd), nguon: 'lich_su_ma_sp', theoSku: m.sku, period: m.period }); continue; }
+    if (m) { uoc.push({ sku: s.sku, giaVon: Math.round(m.unitVnd), nguon: 'lich_su_ma_sp', theoSku: m.sku, period: m.period, brandSlug: m.brandSlug, ...noiDiaVaCk(m) }); continue; }
     conLai.push(s);
   }
   return { uoc, conLai };
+}
+
+/* ───────── CK theo TIER THÁNG ─────────
+ * CEO 09/09/2026: tier CK của brand tính theo doanh số THÁNG đó, nên giá thực kỳ T8 (CK 40 %) không dùng thẳng cho đơn T6
+ * (CK 35 %). Giá dự tính = giá nội địa × (1 − CK của brand ĐÚNG THÁNG đơn); tháng chưa kê dùng CK kỳ gần nhất trước đó
+ * (tạm — đến khi bảng kê tháng đó về thì giá thực đè lên). Ghi vào sku_costs một dòng mỗi lần CK đổi (effective_from = đầu
+ * tháng) — các trang đọc sku_costs vốn đã chọn dòng effective_from ≤ ngày đơn nên không cần đổi chỗ đọc. */
+
+/** Mức CK phổ biến nhất của mỗi brand theo TỪNG KỲ bảng kê (ck ∈ (0,1)); hoà → mức lớn hơn. Kỳ sắp tăng dần. */
+export function ckTheoBrandKy(rows: Array<{ brandSlug: string; period: string; ck: number | null }>): Map<string, Map<string, number>> {
+  const dem = new Map<string, Map<string, Map<number, number>>>();
+  for (const r of rows) {
+    if (r.ck == null || !(r.ck > 0 && r.ck < 1)) continue;
+    const b = dem.get(r.brandSlug) ?? new Map<string, Map<number, number>>(); const k = b.get(r.period) ?? new Map<number, number>();
+    k.set(r.ck, (k.get(r.ck) ?? 0) + 1); b.set(r.period, k); dem.set(r.brandSlug, b);
+  }
+  const out = new Map<string, Map<string, number>>();
+  for (const [b, theoKy] of dem) {
+    const m = new Map<string, number>();
+    for (const ky of [...theoKy.keys()].sort()) { const best = [...theoKy.get(ky)!.entries()].sort((x, y) => y[1] - x[1] || y[0] - x[0])[0]; m.set(ky, best[0]); }
+    out.set(b, m);
+  }
+  return out;
+}
+
+/** Hai mức CK coi là cùng mức khi lệch < 0,5 điểm % (giá thực/niêm yết làm tròn đồng → 0,4 có thể ra 0,3999). */
+export const cungMucCk = (a: number, b: number | undefined): boolean => b != null && Math.abs(a - b) < 0.005;
+
+/** CK của SKU có phải một mức tier của brand (mức chung của brand ở kỳ nào đó)? Không → SKU có CK riêng (phụ kiện 0 %, dòng hàng riêng). */
+export const laMucTierBrand = (ck: number, kyBrand: Map<string, number> | undefined): boolean => !!kyBrand && [...kyBrand.values()].some((c) => cungMucCk(ck, c));
+
+/** giaVonPhang: giá thực 1 chiếc của dòng nguồn — dùng nguyên cho SKU không theo tier (tránh lệch vài đồng do CK làm tròn 4 chữ số). */
+export interface SkuGiaNoiDia { sku: string; brandSlug: string | null; giaNoiDia: number; ck: number; theoTier: boolean; giaVonPhang?: number }
+export interface MucGiaTheoKy { sku: string; effectiveFrom: string; giaVon: number; ck: number; kyCk: string | null }
+
+/**
+ * Dựng các mức giá dự tính theo tháng cho từng SKU:
+ *  - `theoTier` và brand có CK theo kỳ: dòng đầu hiệu lực `tuKy`-01 với CK của kỳ gần nhất ≤ tuKy (không có → kỳ đầu tiên sau đó),
+ *    rồi mỗi kỳ > tuKy mà CK đổi so với dòng trước → thêm dòng hiệu lực đầu tháng kỳ đó. Tháng không có kỳ kê kế thừa dòng trước.
+ *  - SKU có CK riêng (phụ kiện 0 %, dòng hàng riêng) hay brand chưa có CK theo kỳ: một dòng phẳng với CK của chính nó, kyCk null.
+ */
+export function dongGiaTheoKy(items: SkuGiaNoiDia[], ckKy: Map<string, Map<string, number>>, tuKy = '2026-01'): MucGiaTheoKy[] {
+  const out: MucGiaTheoKy[] = [];
+  const dauThang = (ky: string) => `${ky}-01`;
+  for (const it of items) {
+    const kyBrand = it.theoTier && it.brandSlug ? ckKy.get(it.brandSlug) : undefined;
+    if (!kyBrand || kyBrand.size === 0) { out.push({ sku: it.sku, effectiveFrom: dauThang(tuKy), giaVon: it.giaVonPhang ?? uocGiaVon(it.giaNoiDia, it.ck), ck: it.ck, kyCk: null }); continue; }
+    const kys = [...kyBrand.keys()].sort();
+    const truoc = kys.filter((k) => k <= tuKy); const dau = truoc.length ? truoc[truoc.length - 1] : kys[0];
+    let ckHienTai = kyBrand.get(dau)!;
+    out.push({ sku: it.sku, effectiveFrom: dauThang(tuKy), giaVon: uocGiaVon(it.giaNoiDia, ckHienTai), ck: ckHienTai, kyCk: dau });
+    for (const k of kys) {
+      if (k <= tuKy || k <= dau) continue;
+      const c = kyBrand.get(k)!; if (cungMucCk(c, ckHienTai)) continue;
+      ckHienTai = c; out.push({ sku: it.sku, effectiveFrom: dauThang(k), giaVon: uocGiaVon(it.giaNoiDia, c), ck: c, kyCk: k });
+    }
+  }
+  return out;
+}
+
+/** Nguồn sku_costs kèm kỳ CK áp dụng: "uoc:lich_su_bang_ke@ck=2026-06"; giá phẳng (không theo tier) giữ nguyên nguồn gốc. */
+export const nguonTheoKy = (nguon: string, kyCk: string | null): string => (kyCk ? `${nguon}@ck=${kyCk}` : nguon);
+/** Đọc lại kỳ CK từ nguồn sku_costs — null khi không phải dòng ước theo tier. */
+export const kyCkTuNguon = (source: string | null | undefined): string | null => source?.match(/@ck=(\d{4}-\d{2})$/)?.[1] ?? null;
+/** Ghi chú cho giá dự tính trên đơn: đơn rơi vào tháng SAU kỳ CK đang áp → đang dùng tier kỳ trước (tạm, chờ bảng kê tháng đó). */
+export function ghiChuGiaDuTinh(source: string | null | undefined, thangDon: string): string | null {
+  const ky = kyCkTuNguon(source);
+  if (!ky) return null;
+  return ky < thangDon ? `CK tier kỳ ${ky} — tạm, chưa có bảng kê tháng ${thangDon}` : `CK tier kỳ ${ky}`;
 }

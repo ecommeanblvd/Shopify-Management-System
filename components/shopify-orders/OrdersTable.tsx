@@ -480,7 +480,7 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                       {l.defaultCostPerUnit !== null
-                        ? fmt(l.defaultCostPerUnit, l.defaultCostCurrency ?? detail.currency)
+                        ? <>{fmt(l.defaultCostPerUnit, l.defaultCostCurrency ?? detail.currency)}{l.defaultCostGhiChu && <div className={`text-[9px] leading-tight ${l.defaultCostGhiChu.includes('tạm') ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground/70'}`} title={l.defaultCostGhiChu}>{l.defaultCostGhiChu.includes('tạm') ? `tier kỳ ${l.defaultCostGhiChu.slice(11, 18)} (tạm)` : `tier kỳ ${l.defaultCostGhiChu.slice(11, 18)}`}</div>}</>
                         : <span className="italic text-amber-600 dark:text-amber-400">no cost</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums text-xs">
