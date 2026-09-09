@@ -27,11 +27,9 @@ export interface OrderLineDetail {
   quantity: number;
   unitPrice: string;
   discountAlloc: string;
-  /** Cost effective for this line at the order's processed_at — null when no
-   *  sku_costs row matches. The operator can override this. */
+  /** Giá vốn DỰ TÍNH 1 chiếc tại ngày xử lý đơn (`sku_costs`: ops upload / đồng bộ Shopify / ước "uoc:%") — null khi chưa có bảng giá. */
   defaultCostPerUnit: number | null;
   defaultCostCurrency: string | null;
-  costOverride: number | null;
   /** Giá vốn THỰC cả dòng (VND) từ bảng kê brand đã chốt / PO / MMP — null khi chưa đối soát. Xem gia-von-thuc.ts. */
   giaVonThucVnd: number | null;
   giaVonThucNguon: string | null;
@@ -345,18 +343,13 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
   const subtotalOrderCcy = lines.reduce((s, l) => s + Number(l.unitPrice) * l.quantity, 0);
   const discountOrderCcy = order.totalDiscount != null ? Number(order.totalDiscount) : 0;
 
-  // Giá vốn (đã ở cost currency = VND): costOverride ?? defaultCostPerUnit, ×qty.
-  // defaultCostPerUnit không nằm trên row thô — tra từ costMap (như khối .map()
-  // ở dưới). costOverride là numeric → string|null từ drizzle.
+  // Giá vốn DỰ TÍNH (đã ở cost currency = VND): `sku_costs` × qty. Giá THỰC (bảng kê) tính riêng ở trên và thắng khi đủ dòng.
   let skuCostVnd = 0;
   let skuComplete = true;
   for (const l of lines) {
     const c = l.sku ? costMap.get(l.sku) : undefined;
-    const defaultCostPerUnit = c ? Number(c.costPerUnit) : null;
-    const unit = l.costOverride !== null ? Number(l.costOverride)
-      : (defaultCostPerUnit !== null ? defaultCostPerUnit : null);
-    if (unit === null) { skuComplete = false; continue; }
-    skuCostVnd += unit * l.quantity;
+    if (!c) { skuComplete = false; continue; }
+    skuCostVnd += Number(c.costPerUnit) * l.quantity;
   }
 
   const shipCostVnd = billedCostVnd ?? engineCostVnd ?? null;
@@ -413,7 +406,6 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
         discountAlloc: l.discountAlloc,
         defaultCostPerUnit: c ? Number(c.costPerUnit) : null,
         defaultCostCurrency: c?.currency ?? null,
-        costOverride: l.costOverride !== null ? Number(l.costOverride) : null,
         giaVonThucVnd: giaVonThuc.get(l.shopifyLineId)?.vnd ?? null,
         giaVonThucNguon: giaVonThuc.get(l.shopifyLineId)?.nguon ?? null,
         giaVonThucKy: giaVonThuc.get(l.shopifyLineId)?.ky ?? null,
@@ -466,8 +458,6 @@ function extractTrackingNumbers(payload: unknown): string[] {
 
 export interface UpdateOrderOverridesInput {
   orderId: string;
-  /** Per-line cost override. Pass `null` to clear (revert to sku_costs lookup). */
-  lineCosts: Record<string, number | null>;
   /** Per-order shipping cost override. `null` clears it. */
   shippingCostOverride: number | null;
   shippingCostOverrideNote: string | null;
@@ -480,7 +470,6 @@ export interface UpdateOrderOverridesInput {
 }
 
 export interface UpdateOrderOverridesResult {
-  linesUpdated: number;
   shippingUpdated: boolean;
 }
 
@@ -500,21 +489,7 @@ export async function updateOrderOverrides(
     .where(eq(schema.shopifyOrders.id, input.orderId));
   if (!order) throw new Error(`order ${input.orderId} not found`);
 
-  let linesUpdated = 0;
   await db.transaction(async (tx) => {
-    for (const [lineId, cost] of Object.entries(input.lineCosts)) {
-      await tx
-        .update(schema.shopifyOrderLines)
-        .set({ costOverride: cost === null ? null : cost.toString() })
-        .where(
-          and(
-            eq(schema.shopifyOrderLines.id, lineId),
-            eq(schema.shopifyOrderLines.orderId, input.orderId),
-          ),
-        );
-      linesUpdated++;
-    }
-
     await tx
       .update(schema.shopifyOrders)
       .set({
@@ -528,7 +503,7 @@ export async function updateOrderOverrides(
   });
 
   revalidatePath(`/f/orders/${order.storeId}`);
-  return { linesUpdated, shippingUpdated: true };
+  return { shippingUpdated: true };
 }
 
 // Silence unused-import warnings for helpers kept available to extend later.

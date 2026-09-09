@@ -342,26 +342,11 @@ async function buildOrderRows(
     // reconciliation. The store-level packaging_fee is left in the
     // schema for the future Shopify-pricing engine to consume.
 
-    // Per-line SKU cost — line-level override wins over the sku_costs lookup.
-    // Costs that arrive in a different currency than the order are converted
-    // to the order currency via the per-store FX rate before the revenue
-    // formula sees them, so revenue/margin stay in a single currency.
+    // Giá vốn từng dòng: THỰC (order_line_cogs — bảng kê brand đã chốt / PO / MMP) trước, không có mới đến DỰ TÍNH (`sku_costs`).
+    // Giá ở tiền tệ khác đơn được quy về tiền tệ đơn qua FX store trước khi vào công thức revenue, để revenue/margin cùng một đồng.
     const giaVonThuc = giaVonThucCuaDon(o.id);
     let soDongGiaVonThuc = 0;
     const skuCosts = filteredLines.map((l) => {
-      if (l.costOverride !== null) {
-        // Manual override on the line — interpreted as the store's
-        // configured cost currency (Mirer's VND), or the order's own
-        // currency when the store has no FX set up.
-        const rawCurrency = storeFx.costCurrency ?? o.currency;
-        const converted = convertCost(Number(l.costOverride), rawCurrency, o.currency);
-        return {
-          lineId: l.id,
-          quantity: l.quantity,
-          costPerUnit: converted,
-          costCurrency: o.currency,
-        };
-      }
       // Giá vốn THỰC (VND, cả dòng) — chỉ dùng khi store tính chi phí bằng VND để quy về đồng đơn.
       const thuc = giaVonThuc.get(l.shopifyLineId);
       if (thuc && (storeFx.costCurrency ?? 'VND') === 'VND' && l.quantity > 0) {
@@ -400,10 +385,7 @@ async function buildOrderRows(
       skuCosts,
     });
 
-    const hasLineOverride = filteredLines.some((l) => l.costOverride !== null);
-    const hasOverrides = hasLineOverride
-      || o.shippingCostOverride !== null
-      || o.shipWeightKgOverride !== null;
+    const hasOverrides = o.shippingCostOverride !== null || o.shipWeightKgOverride !== null;
     // Margin ship (đồng raw = cost currency, VND): ship rev (quy về raw ccy)
     // − ship cost raw. null khi chưa biết cost (unknown) hoặc không quy được.
     const shipRevRaw = rawCurrency === o.currency

@@ -49,11 +49,10 @@ interface OrdersBoardProps {
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
     orderId: string;
-    lineCosts: Record<string, number | null>;
     shippingCostOverride: number | null;
     shippingCostOverrideNote: string | null;
     shipWeightKgOverride: number | null;
-  }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>;
+  }) => Promise<{ shippingUpdated: boolean }>;
 }
 
 /**

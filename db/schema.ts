@@ -862,6 +862,8 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   total: numeric('total', { precision: 14, scale: 2 }).notNull(),
   // Optional per-line COGs override. When set, takes precedence over the
   // sku_costs lookup. Same per-unit precision as sku_costs.cost_per_unit.
+  /** @deprecated 09/09/2026 — cột "chi thật" nhập tay, chưa từng dùng (0/15.563 dòng). Giá vốn thực nay lấy tự động từ
+   *  `order_line_cogs` (bảng kê brand đã chốt / PO / MMP). Giữ cột để không mất lịch sử, KHÔNG đọc/ghi nữa. */
   costOverride: numeric('cost_override', { precision: 14, scale: 4 }),
 }, (t) => [
   index('shopify_order_lines_order_idx').on(t.orderId),

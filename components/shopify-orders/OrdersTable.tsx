@@ -6,8 +6,6 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MoneyInput } from '@/components/ui/money-input';
-import { currencyDecimals } from '@/lib/currency-format';
 import {
   Pencil, Save, RotateCcw, Loader2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
@@ -47,11 +45,10 @@ interface OrdersTableProps {
   getDetailAction: (orderId: string) => Promise<OrderDetail | null>;
   saveAction: (input: {
     orderId: string;
-    lineCosts: Record<string, number | null>;
     shippingCostOverride: number | null;
     shippingCostOverrideNote: string | null;
     shipWeightKgOverride: number | null;
-  }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>;
+  }) => Promise<{ shippingUpdated: boolean }>;
 }
 
 export function OrdersTable({
@@ -377,7 +374,7 @@ export function OrdersTable({
               {detail ? `Order ${detail.shopifyOrderNumber}` : 'Loading…'}
             </DialogTitle>
             <DialogDescription>
-              Chi tiết đơn + so sánh phí ship (khách trả vs hệ thống vs billed thực tế). Bấm “Sửa” để chỉnh giá vốn từng dòng / cân nặng. Chi phí ship billed tự lấy từ hoá đơn carrier — không sửa tay.
+              Chi tiết đơn + so sánh phí ship (khách trả vs hệ thống vs billed thực tế). Giá vốn thực lấy từ bảng kê brand đã chốt / PO, giá vốn dự tính từ bảng giá — không sửa tay. Bấm “Sửa” để chỉnh cân nặng / ghi chú ship.
             </DialogDescription>
           </DialogHeader>
           {loading || !detail ? (
@@ -406,15 +403,6 @@ interface OrderEditFormProps {
 }
 
 function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditFormProps) {
-  const cogsCcy = costCurrency || detail.currency;
-  const sameCcy = cogsCcy === detail.currency;
-  // Initial state mirrors whatever's already in the DB. Empty string = no
-  // override; falls back to defaults at compute time.
-  const [lineCosts, setLineCosts] = useState<Record<string, string>>(
-    Object.fromEntries(
-      detail.lines.map((l) => [l.lineId, l.costOverride !== null ? String(l.costOverride) : '']),
-    ),
-  );
   const [shippingNote, setShippingNote] = useState<string>(detail.shipping.shippingCostOverrideNote ?? '');
   const [weightOverride, setWeightOverride] = useState<string>(
     detail.shipWeightKgOverride !== null ? String(detail.shipWeightKgOverride) : '',
@@ -424,16 +412,10 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
   const [pending, startTransition] = useTransition();
 
   const onSave = (): void => {
-    const lineCostsPayload: Record<string, number | null> = {};
-    for (const [id, raw] of Object.entries(lineCosts)) {
-      const trimmed = raw.trim();
-      lineCostsPayload[id] = trimmed === '' ? null : Number(trimmed);
-    }
     const weight = weightOverride.trim() === '' ? null : Number(weightOverride);
     startTransition(async () => {
       await saveAction({
         orderId: detail.orderId,
-        lineCosts: lineCostsPayload,
         // Chi phí ship billed tự lấy từ hoá đơn carrier → KHÔNG sửa tay. Giữ
         // nguyên giá trị override cũ (nếu có) để không xoá dữ liệu lịch sử.
         shippingCostOverride: detail.shipping.shippingCostOverride,
@@ -446,7 +428,6 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
   };
 
   const onReset = (): void => {
-    setLineCosts(Object.fromEntries(detail.lines.map((l) => [l.lineId, ''])));
     setShippingNote('');
     setWeightOverride('');
   };
@@ -476,14 +457,6 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                   <th className="text-right px-3 py-2">Unit price</th>
                   <th className="text-right px-3 py-2">Default cost</th>
                   <th className="text-right px-3 py-2">Giá vốn thực <span className="normal-case text-[9px]">(bảng kê, cả dòng)</span></th>
-                  <th className="text-right px-3 py-2 w-44">
-                    Cost override / unit
-                    {!sameCcy && (
-                      <span className="ml-1 px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-mono">
-                        {cogsCcy}
-                      </span>
-                    )}
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -508,31 +481,6 @@ function OrderEditForm({ detail, costCurrency, saveAction, onSaved }: OrderEditF
                       {l.giaVonThucVnd !== null
                         ? <>{fmt(l.giaVonThucVnd, 'VND')} <span className="text-[9px] text-muted-foreground" title={`kỳ ${l.giaVonThucKy ?? ''}`}>{l.giaVonThucNguon === 'po' ? 'PO' : l.giaVonThucNguon === 'mmp' ? 'MMP' : 'bảng kê'}</span></>
                         : <span className="text-muted-foreground/60">chưa đối soát</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {editing ? (
-                        <div className="flex items-center gap-1.5">
-                          <MoneyInput
-                            value={lineCosts[l.lineId] ?? ''}
-                            onValueChange={(raw) =>
-                              setLineCosts((s) => ({ ...s, [l.lineId]: raw }))
-                            }
-                            decimals={currencyDecimals(cogsCcy)}
-                            placeholder={l.defaultCostPerUnit !== null
-                              ? `default: ${l.defaultCostPerUnit.toLocaleString()}`
-                              : 'blank = no cost'}
-                            inputClassName="h-8 text-xs text-right px-2"
-                            className="flex-1"
-                          />
-                          <span className="text-[10px] font-mono text-muted-foreground shrink-0">{cogsCcy}</span>
-                        </div>
-                      ) : (
-                        <div className="text-right font-mono tabular-nums text-xs">
-                          {l.costOverride !== null
-                            ? <>{fmt(l.costOverride, cogsCcy)} <span className="text-[9px] text-muted-foreground">{cogsCcy}</span></>
-                            : <span className="text-muted-foreground/60">—</span>}
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))}

@@ -235,13 +235,7 @@ export default async function StoreOrders({
         costCurrency={store.costCurrency}
         fxRate={store.fxCostPerOrderCurrency !== null ? Number(store.fxCostPerOrderCurrency) : null}
         getDetailAction={getOrderDetail}
-        saveAction={updateOrderOverrides as unknown as (input: {
-          orderId: string;
-          lineCosts: Record<string, number | null>;
-          shippingCostOverride: number | null;
-          shippingCostOverrideNote: string | null;
-          shipWeightKgOverride: number | null;
-        }) => Promise<{ linesUpdated: number; shippingUpdated: boolean }>}
+        saveAction={updateOrderOverrides}
       />
     </div>
   );
