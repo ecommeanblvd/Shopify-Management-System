@@ -7,6 +7,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { CountryFlag } from '@/components/ui/country-flag';
+import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
+import { demTheoLyDo } from '@/features/shipments/ly-do-cham';
 import { loadShipReport } from '@/features/ship-report/queries';
 import { pnlByMonth, pnlBreakdown } from '@/features/ship-report/pnl';
 import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/features/ship-report/surcharges';
@@ -403,6 +405,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                     <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
                       <th className="text-left">Đơn</th><th className="text-left">Nước</th><th className="text-left">Line</th>
                       <th className="text-right">Ngày gửi</th><th className="text-right">Ngày giao</th><th className="text-right">Số ngày</th>
+                      <th className="text-left">Lý do chậm</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -414,15 +417,20 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                         <td className="text-right text-xs text-muted-foreground">{k.ngayGui}</td>
                         <td className="text-right text-xs text-muted-foreground">{k.ngayGiao}</td>
                         <td className="text-right font-medium text-amber-600 dark:text-amber-400">{soNgay(k.soNgay)}</td>
+                        <td className="text-left"><LyDoChamSelect shipmentId={k.shipmentId} banDau={k.lyDoCham} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-                Hệ thống CHƯA lưu nguyên nhân chậm. Muốn tách được “không liên hệ được khách” với “kẹt thông quan” thì cần
-                thêm một cột lý do trong bảng Lark rồi đồng bộ về đây.
-              </p>
+              <div className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                Chọn lý do ngay ở cột cuối, lưu tức thì. Dấu ◦ là nhóm ngoài tầm kiểm soát của vị trí logistics (Quy chế mục
+                VII) nên được loại khỏi KPI nhân sự; dấu • vẫn tính. Chưa gán lý do thì mặc định VẪN tính vào KPI.
+                {(() => {
+                  const dem = demTheoLyDo(chuan.dsNgoaiLe.map((k) => k.lyDoCham));
+                  return dem.length ? <> Trong danh sách này: {dem.map((d) => `${d.ten} ${d.n}`).join(' · ')}.</> : null;
+                })()}
+              </div>
             </CardContent></Card>
           )}
 

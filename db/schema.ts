@@ -1069,6 +1069,12 @@ export const shipments = pgTable('shipments', {
   originHub: text('origin_hub'),
   /** Free-text note for one-off context. */
   note: text('note'),
+  /** Lý do giao chậm (mã trong features/shipments/ly-do-cham.ts) — ops gán cho kiện vượt ngưỡng. NULL = chưa gán,
+   *  và chưa gán thì KHÔNG được loại khỏi KPI nhân sự. */
+  lyDoCham: text('ly_do_cham'),
+  lyDoChamGhiChu: text('ly_do_cham_ghi_chu'),
+  lyDoChamBy: text('ly_do_cham_by').references(() => user.id, { onDelete: 'set null' }),
+  lyDoChamAt: timestamp('ly_do_cham_at'),
   /** Operator who ran the secondary check-packed verification step. */
   checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
   /** Timestamp when the check-packed verification was completed. */

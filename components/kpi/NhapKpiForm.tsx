@@ -37,11 +37,11 @@ export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, gateTuDong }: {
         </label>
 
         <label className="space-y-1 text-sm">
-          <div className="font-medium">P1.4 · Tỉ lệ đơn Kho đóng đúng size thùng (%)</div>
+          <div className="font-medium">P1.4 · Ghi đè tỉ lệ đóng đúng size thùng (%)</div>
           <input type="number" min={0} max={100} step={0.1} className={`${o} w-full`}
             value={v.tyLeSizeThung == null ? '' : Math.round(v.tyLeSizeThung * 1000) / 10}
             onChange={(e) => setV({ ...v, tyLeSizeThung: e.target.value === '' ? null : so(e.target.value) / 100 })} />
-          <div className="text-[11px] text-muted-foreground">Kết quả audit Kho. Bỏ trống = chưa audit, tiêu chí này tính 0đ.</div>
+          <div className="text-[11px] text-muted-foreground">Bỏ trống = dùng số hệ thống tự đo (lệch cân tính cước vs cân carrier charge). Chỉ điền khi cần ghi đè vì miễn trừ theo mục VII.</div>
         </label>
 
         <label className="space-y-1 text-sm">

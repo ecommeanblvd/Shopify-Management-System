@@ -65,7 +65,8 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
-    tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),
+    // 1.4 tự chấm từ lệch cân (chọn sai thùng); ô nhập tay chỉ dùng khi cần ghi đè (miễn trừ theo mục VII).
+    tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),
     soDonShipHo: auto.soDonShipHo,
     gateDat,
     roRiGiam: nhap?.roRiGiam ?? false,
@@ -212,7 +213,8 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
             <tbody>
               {[
                 ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, 'Cước carrier thực trả vượt cước thu của khách. Cần quản lý quy trách nhiệm trước khi trừ KPI.'],
-                ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, 'Chấm theo bảng SOP cam kết từng nước và từng hãng (Báo cáo ship → SOP & KPI).'],
+                ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, `Chấm theo bảng SOP cam kết từng nước và từng hãng. Đã loại ${auto.slaLoaiTru} kiện chậm vì lý do ngoài tầm kiểm soát (Quy chế mục VII).`],
+                ['Đóng đúng size thùng', `${auto.sizeThung.dung + auto.sizeThung.nheHon}/${auto.sizeThung.n} = ${pct(auto.sizeThung.tyLeDung)}`, `Đo bằng lệch giữa cân tính cước của mình và cân carrier charge: lệch từ 0,5 kg là chọn sai thùng (thùng chật, phồng ra). Kỳ này ${auto.sizeThung.saiThung} kiện sai, dôi ${auto.sizeThung.kgDoiRa} kg phải trả thêm.`],
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}.`],
@@ -244,7 +246,8 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
           banDau={{
             ky,
             soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
-            tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),
+            // 1.4 tự chấm từ lệch cân (chọn sai thùng); ô nhập tay chỉ dùng khi cần ghi đè (miễn trừ theo mục VII).
+    tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),
             roRiGiam: nhap?.roRiGiam ?? false,
             khacPhucGoc: nhap?.khacPhucGoc ?? false,
             gateOverride: nhap?.gateOverride ?? null,

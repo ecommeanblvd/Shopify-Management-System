@@ -8,6 +8,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
+import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
+import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
 
 export interface SoLieuTuDong {
   tu: string; den: string;
@@ -18,6 +20,11 @@ export interface SoLieuTuDong {
   slaTong: { n: number; dungHan: number; tyLe: number | null };
   /** 1.2 — chi tiết từng nước để nhân sự biết tuyến nào kéo điểm xuống. */
   slaTheoNuoc: DongKpiNuoc[];
+  /** 1.2 — kiện bị loại khỏi KPI theo Quy chế mục VII (lý do ngoài tầm kiểm soát), kèm phân loại lý do. */
+  slaLoaiTru: number;
+  lyDoCham: DemLyDo[];
+  /** 1.4 — đóng đúng size thùng, đo bằng lệch cân tính cước vs cân carrier charge. */
+  sizeThung: KetQuaSizeThung;
   /** 1.3 — kiện phát sinh phí sửa địa chỉ / xử lý chứng từ trên bill. */
   kienCoBill: number;
   kienLoiChungTu: number;
@@ -36,7 +43,7 @@ export interface SoLieuTuDong {
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
-  const [amCuoc, chungTu, shipHo, gate, thuHoi, kienGiao] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, thuHoi, kienGiao, canRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null }>(sql`
       WITH b AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -71,10 +78,22 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         FROM shipment_reconcile_status
        WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
     docKienGiao(tu, den),
+    db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
+      SELECT s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
+             s.dim_height_cm::text AS c, c.billing_weight_kg::text AS billed
+        FROM shipments s JOIN shipment_charges c ON c.shipment_id = s.id
+       WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
   ]);
 
-  const theoNuoc = chamKpi(kienGiao, tu);
+  // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
+  // (SOP đo trải nghiệm khách thì vẫn tính mọi kiện — xem tab Tiêu chuẩn giao.)
+  const tinhKpi = kienGiao.filter((k) => !loaiTruKhoiKpi(k.lyDoCham));
+  const theoNuoc = chamKpi(tinhKpi, tu);
   const sop = tongKpi(theoNuoc, tu);
+  const so = (v: string | null) => (v == null ? null : Number(v));
+  const sizeThung = chamSizeThung(canRows.rows.map((r) => ({
+    thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed),
+  })));
 
   const soKienBill = Number(chungTu.rows[0]?.tong ?? 0);
   const kienLoi = Number(chungTu.rows[0]?.loi ?? 0);
@@ -90,6 +109,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     amCuocVnd: Math.round(Number(amCuoc.rows[0]?.tong ?? 0)),
     slaTong: { n: sop.n, dungHan: sop.dungHan, tyLe: sop.tyLeDungHan },
     slaTheoNuoc: theoNuoc,
+    slaLoaiTru: kienGiao.length - tinhKpi.length,
+    lyDoCham: demTheoLyDo(kienGiao.filter((k) => k.lyDoCham != null || k.soNgay > 20).map((k) => k.lyDoCham)),
+    sizeThung,
     kienCoBill: soKienBill,
     kienLoiChungTu: kienLoi,
     tyLeLoiChungTu: soKienBill > 0 ? kienLoi / soKienBill : null,

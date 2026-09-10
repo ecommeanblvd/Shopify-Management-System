@@ -109,7 +109,9 @@ export interface DoPhuNam { nam: string; soDaGui: number; soDaGiao: number }
 
 /** Một kiện ngoại lệ để ops truy nguyên nhân (hệ thống chưa lưu lý do). */
 export interface KienNgoaiLe {
-  maDon: string; country: string; line: string; soNgay: number; ngayGui: string; ngayGiao: string;
+  shipmentId: string; maDon: string; country: string; line: string; soNgay: number; ngayGui: string; ngayGiao: string;
+  /** Mã lý do chậm ops đã gán (features/shipments/ly-do-cham.ts); null = chưa gán. */
+  lyDoCham: string | null;
 }
 
 export interface TieuChuanGiao {
@@ -185,10 +187,10 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
       SELECT to_char(s.label_created_at, 'YYYY') AS nam, COUNT(*)::text AS gui,
              (COUNT(*) FILTER (WHERE ${daGiao}))::text AS giao
       FROM shipments s WHERE s.label_created_at IS NOT NULL AND ${trongPhamVi} GROUP BY 1 ORDER BY 1;`),
-    db.execute<{ ma: string; country: string | null; line: string | null; ngay: string; gui: string; giao: string }>(sql`
-      SELECT o.shopify_order_number AS ma, o.ship_country AS country, s.carrier_key AS line,
+    db.execute<{ id: string; ma: string; country: string | null; line: string | null; ngay: string; gui: string; giao: string; ly_do: string | null }>(sql`
+      SELECT s.id, o.shopify_order_number AS ma, o.ship_country AS country, s.carrier_key AS line,
              ROUND(${ngay}::numeric, 1)::text AS ngay,
-             s.label_created_at::date::text AS gui, s.delivered_at::date::text AS giao
+             s.label_created_at::date::text AS gui, s.delivered_at::date::text AS giao, s.ly_do_cham AS ly_do
       ${tuBang} AND ${laNgoaiLe} ORDER BY ${ngay} DESC LIMIT 30;`),
   ]);
 
@@ -201,7 +203,8 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
     theoLineNuoc: theoLineNuoc.rows.map(doc),
     doPhuTheoNam: doPhuNam.rows.map((r) => ({ nam: r.nam, soDaGui: Number(r.gui), soDaGiao: Number(r.giao) })),
     dsNgoaiLe: dsNgoaiLe.rows.map((r) => ({
-      maDon: r.ma, country: r.country ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay), ngayGui: r.gui, ngayGiao: r.giao,
+      shipmentId: r.id, maDon: r.ma, country: r.country ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay),
+      ngayGui: r.gui, ngayGiao: r.giao, lyDoCham: r.ly_do,
     })),
     guiTu: moc.rows[0]?.tu ?? null,
     guiDen: moc.rows[0]?.den ?? null,
@@ -213,14 +216,14 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
  * Kiện đã ghi nhận giao trong khoảng NGÀY GỬI [tu, den] (ISO date, bao trọn ngày) — đầu vào cho chấm KPI SOP.
  * Chỉ lấy kiện có đủ hai mốc và ngày giao không sớm hơn ngày gửi.
  */
-export async function docKienGiao(tu: string, den: string): Promise<Array<{ country: string; line: string; soNgay: number }>> {
-  const { rows } = await db.execute<{ cc: string | null; line: string | null; ngay: string }>(sql`
-    SELECT COALESCE(o.ship_country, '?') AS cc, COALESCE(s.carrier_key, '?') AS line,
+export async function docKienGiao(tu: string, den: string): Promise<Array<{ country: string; line: string; soNgay: number; lyDoCham: string | null }>> {
+  const { rows } = await db.execute<{ cc: string | null; line: string | null; ngay: string; ly_do: string | null }>(sql`
+    SELECT COALESCE(o.ship_country, '?') AS cc, COALESCE(s.carrier_key, '?') AS line, s.ly_do_cham AS ly_do,
            (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay
       FROM shipments s JOIN shopify_orders o ON o.id = s.order_id
      WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
        AND s.delivered_at::timestamp >= s.label_created_at
        AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp
        AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`);
-  return rows.map((r) => ({ country: r.cc ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay) }));
+  return rows.map((r) => ({ country: r.cc ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay), lyDoCham: r.ly_do }));
 }
