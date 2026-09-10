@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { cacKhoaSku, ckTheoBrand, ckTheoBrandKy, cungBrand, cungMucCk, dongGiaTheoKy, ghiChuGiaDuTinh, laMucTierBrand, kyCkTuNguon, maSanPham, nguonTheoKy, uocGiaVon, uocGiaVonDuTinh, uocGiaVonTuLichSu } from './gia-du-tinh';
+import { cacKhoaSku, chuanBrand, ckTheoBrand, ckTheoBrandKy, cungBrand, cungMucCk, dongGiaTheoKy, ghiChuGiaDuTinh, laMucTierBrand, kyCkTuNguon, maSanPham, nguonTheoKy, uocGiaVon, uocGiaVonDuTinh, uocGiaVonTuLichSu } from './gia-du-tinh';
 
 describe('gia-du-tinh', () => {
   it('cacKhoaSku: nguyên + bỏ tiền tố', () => {
     expect(cacKhoaSku('Denio-DN0713-S-BLA')).toEqual(['denio-dn0713-s-bla', 'dn0713-s-bla']);
     expect(cacKhoaSku('DN0713-S-BLA')).toEqual(['dn0713-s-bla', 's-bla']);
     expect(cacKhoaSku('ABC')).toEqual(['abc']);
+  });
+  it('chuanBrand: bỏ dấu tiếng Việt/Pháp rồi mới bỏ ký tự — vendor có dấu vẫn khớp slug (H2B à La Mode, CÉNES, Esmée)', () => {
+    expect(chuanBrand('H2B à La Mode')).toBe('h2balamode'); expect(chuanBrand('h2b-a-la-mode')).toBe('h2balamode');
+    expect(chuanBrand('CÉNES')).toBe('cenes'); expect(chuanBrand('ESMÉE')).toBe(chuanBrand('esmee'));
   });
   it('cungBrand: vendor ↔ slug bỏ ký tự, tiền tố ≥ 3', () => {
     expect(cungBrand('Calista de Minh Thanh', 'calista-de-minh-thanh')).toBe(true);

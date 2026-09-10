@@ -10,6 +10,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { sqlGioKinhDoanh } from '@/lib/timezone';
 import { phanBoPO, type DongDon, type DongPO, type KhongPhanBo, type PhanBo, laMaPO } from './phan-bo-po';
+import { chuanBrand } from './gia-du-tinh';
 
 export interface KetQuaPhanBoPO {
   brandSlug: string;
@@ -32,16 +33,19 @@ export async function phanBoPOCore(brandSlug: string, opts?: { dryRun?: boolean;
   // Dòng đơn của brand (theo vendor, không phân biệt hoa/thường), đơn chưa huỷ, CHƯA có
   // giá vốn nguồn khác 'po' (dòng 'po' cũ sẽ bị xoá và phân bổ lại).
   const thang = `to_char(${sqlGioKinhDoanh('o.processed_at_shopify')}, 'YYYY-MM')`;
-  const { rows } = await db.$client.query(
+  // vendor ↔ slug so sau khi bỏ dấu + ký tự không phải chữ/số (chuanBrand): 'La Vierge' ↔ 'la-vierge', 'H2B à La Mode' ↔ 'h2b-a-la-mode'
+  // (so trong SQL bằng regexp bỏ '[^a-z0-9]' từng làm rơi chữ có dấu → 'h2blamode' ≠ 'h2balamode', PO #MTB1330 không phân bổ được, 10/09/2026).
+  const { rows: vendorRows } = await db.$client.query(`SELECT DISTINCT vendor FROM shopify_order_lines WHERE vendor IS NOT NULL`);
+  const vendors = (vendorRows as Array<{ vendor: string }>).map((r) => r.vendor).filter((v) => chuanBrand(v) === chuanBrand(brandSlug));
+  const { rows } = vendors.length === 0 ? { rows: [] } : await db.$client.query(
     `SELECT l.order_id, l.shopify_line_id, o.store_id, o.shopify_order_number AS ma_don, l.sku, l.quantity::int AS qty,
             ${thang} AS thang_dat, to_char(${sqlGioKinhDoanh('o.processed_at_shopify')}, 'YYYY-MM-DD') AS ngay_dat
      FROM shopify_order_lines l
      JOIN shopify_orders o ON o.id = l.order_id
      LEFT JOIN order_line_cogs c ON c.order_id = l.order_id AND c.shopify_line_id = l.shopify_line_id AND c.kind = 'cogs' AND c.source <> 'po'
-     -- vendor ↔ slug so sau khi bỏ ký tự không phải chữ/số: 'La Vierge' ↔ 'la-vierge', 'Calista de Minh Thanh' ↔ 'calista-de-minh-thanh'.
-     WHERE regexp_replace(lower(l.vendor), '[^a-z0-9]', '', 'g') = regexp_replace(lower($1), '[^a-z0-9]', '', 'g')
+     WHERE l.vendor = ANY($1::text[])
        AND o.cancelled_at_shopify IS NULL AND c.id IS NULL AND o.processed_at_shopify >= '2026-01-01'`,
-    [brandSlug],
+    [vendors],
   );
   const dongDon = (rows as Array<Record<string, unknown>>).map<DongDon & { storeId: string }>((r) => ({
     orderId: String(r.order_id), shopifyLineId: String(r.shopify_line_id), storeId: String(r.store_id), maDon: String(r.ma_don),
