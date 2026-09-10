@@ -42,12 +42,13 @@ export function CreditNoteUpload() {
         <input ref={inputRef} type="file" multiple accept=".msg,.zip,.xml,.csv"
           onChange={(e) => chon(e.target.files)} className="hidden" id="cn-file" />
         <Button variant="outline" disabled={pending} onClick={() => inputRef.current?.click()}>
-          <Upload className="mr-1.5 size-4" /> Chọn tệp credit note
+          <Upload className="mr-1.5 size-4" /> Tải hoá đơn điều chỉnh
         </Button>
         {pending && <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Đang đọc…</span>}
         <span className="text-xs text-muted-foreground">
-          Nhận email .msg của carrier (đọc luôn XML + CSV bên trong), hoặc .zip / .xml / .csv rời. Chọn nhiều tệp một lần được.
-          Hệ thống tự phân loại credit note (carrier trả lại) hay billing note (mình trả thêm) theo dấu tổng tiền trên hoá đơn.
+          Chỉ dành cho chứng từ ĐIỀU CHỈNH. Kéo cả email .msg vào (đọc luôn XML + CSV bên trong), hoặc .zip / .xml / .csv rời;
+          chọn nhiều tệp một lần được. Hệ thống tự tách credit note (carrier trả lại) và billing note (mình trả thêm).
+          Nếu lỡ tải hoá đơn cước kỳ vào đây thì hệ thống báo lại chứ không ghi sai chỗ.
         </span>
       </div>
 
@@ -68,15 +69,15 @@ export function CreditNoteUpload() {
                   <td className="text-left text-xs">{r.tenFile}</td>
                   <td className="text-left">{r.hoaDon ? `${r.hoaDon.kyHieu}-${r.hoaDon.soHoaDon}` : '—'}</td>
                   <td className="text-left text-xs" title={r.canCuPhanLoai ?? ''}>
-                    {r.loai ? <span className={r.loai === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{NHAN_LOAI[r.loai]}</span> : '—'}
+                    {r.loai ? <span className={r.loai === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : r.loai === 'debit' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}>{NHAN_LOAI[r.loai]}</span> : '—'}
                   </td>
                   <td className="text-right">{r.hoaDon?.ngay ?? '—'}</td>
                   <td className={`text-right font-medium ${(r.hoaDon?.tongCong ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
                     {r.hoaDon ? tien(Math.abs(r.hoaDon.tongCong)) : '—'}
                   </td>
                   <td className="text-right text-muted-foreground">{r.soDongChiTiet ? `${r.soDongKhopKien}/${r.soDongChiTiet} khớp kiện` : '—'}</td>
-                  <td className="text-left text-[11px] text-muted-foreground">
-                    {r.daCo ? 'Đã có, đã cập nhật lại. ' : ''}{r.canhBao.join(' ')}
+                  <td className={`text-left text-[11px] ${r.daGhi ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {r.daGhi ? (r.daCo ? 'Đã có, đã cập nhật lại. ' : 'Đã ghi. ') : 'CHƯA ghi. '}{r.canhBao.join(' ')}
                   </td>
                 </tr>
               ))}

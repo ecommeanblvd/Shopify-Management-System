@@ -62,19 +62,30 @@ export function maThamChieu(noiDung: string): string[] {
 }
 
 /**
- * Loại hoá đơn điều chỉnh của carrier:
- *   - 'credit' — điều chỉnh GIẢM, carrier trả lại tiền (đây là tiền thu hồi của KPI Pillar 3);
- *   - 'debit'  — điều chỉnh TĂNG hoặc thu thêm, mình phải trả thêm.
- * Căn cứ chính là DẤU của tổng tiền; nội dung hoá đơn chỉ dùng khi tổng bằng 0 (hiếm, hoá đơn thay thế).
+ * Loại chứng từ carrier gửi về:
+ *   - 'credit'  — hoá đơn ĐIỀU CHỈNH GIẢM, carrier trả lại tiền (tiền thu hồi của KPI Pillar 3);
+ *   - 'debit'   — hoá đơn ĐIỀU CHỈNH TĂNG (billing note), mình phải trả thêm;
+ *   - 'cuoc_ky' — hoá đơn CƯỚC KỲ bình thường (không phải điều chỉnh) → thuộc luồng công nợ, không vào bảng điều chỉnh.
+ *
+ * Phải tách 'cuoc_ky' vì email hoá đơn cước kỳ của carrier có XML + CSV y hệt email điều chỉnh; chỉ nhìn dấu tổng tiền
+ * thì hoá đơn cước kỳ (dương) sẽ bị xếp nhầm thành billing note.
  */
 export type LoaiHoaDon = 'credit' | 'debit';
+export type LoaiChungTu = LoaiHoaDon | 'cuoc_ky';
 
-export function phanLoaiHoaDon(h: Pick<HoaDonDienTu, 'tongCong' | 'noiDung'>): { loai: LoaiHoaDon; canCu: string } {
+const CO_DIEU_CHINH = /điều chỉnh/i;
+const GIAM = /điều chỉnh giảm/i;
+
+export function phanLoaiHoaDon(h: Pick<HoaDonDienTu, 'tongCong' | 'noiDung'>): { loai: LoaiChungTu; canCu: string } {
+  const nd = h.noiDung ?? '';
+  if (GIAM.test(nd)) return { loai: 'credit', canCu: 'Nội dung ghi "điều chỉnh giảm"' };
   if (h.tongCong < 0) return { loai: 'credit', canCu: 'Tổng tiền âm — carrier trả lại' };
-  if (h.tongCong > 0) return { loai: 'debit', canCu: 'Tổng tiền dương — mình phải trả thêm' };
-  const nd = (h.noiDung ?? '').toLowerCase();
-  if (nd.includes('điều chỉnh giảm')) return { loai: 'credit', canCu: 'Nội dung ghi "điều chỉnh giảm"' };
-  return { loai: 'debit', canCu: 'Tổng bằng 0, không thấy dấu hiệu điều chỉnh giảm' };
+  if (CO_DIEU_CHINH.test(nd)) return { loai: 'debit', canCu: 'Nội dung ghi điều chỉnh, tổng tiền dương — mình trả thêm' };
+  return { loai: 'cuoc_ky', canCu: 'Không thấy chữ "điều chỉnh" và tổng tiền dương — hoá đơn cước kỳ bình thường' };
 }
 
-export const NHAN_LOAI: Record<LoaiHoaDon, string> = { credit: 'Credit note (thu hồi)', debit: 'Billing note (trả thêm)' };
+export const NHAN_LOAI: Record<LoaiChungTu, string> = {
+  credit: 'Credit note (thu hồi)',
+  debit: 'Billing note (trả thêm)',
+  cuoc_ky: 'Hoá đơn cước kỳ',
+};

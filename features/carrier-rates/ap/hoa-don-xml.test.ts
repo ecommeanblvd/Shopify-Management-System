@@ -27,12 +27,13 @@ describe('hoa-don-xml', () => {
     const h = docHoaDonXml(XML)!;
     expect(maThamChieu(h.noiDung)).toEqual(['HANR000284295', 'HANR000284299']);
   });
-  it('phân loại credit / billing note theo dấu tổng tiền', () => {
-    expect(phanLoaiHoaDon({ tongCong: -3_453_840, noiDung: 'Điều chỉnh giảm' }).loai).toBe('credit');
-    expect(phanLoaiHoaDon({ tongCong: 12_000_000, noiDung: 'Cước phí dịch vụ' }).loai).toBe('debit');
-    // Tổng bằng 0 (hoá đơn thay thế) thì đọc nội dung.
+  it('phân loại credit / billing note / hoá đơn cước kỳ', () => {
+    expect(phanLoaiHoaDon({ tongCong: -3_453_840, noiDung: 'Điều chỉnh giảm cho hoá đơn 21237' }).loai).toBe('credit');
+    expect(phanLoaiHoaDon({ tongCong: -100, noiDung: 'không ghi gì' }).loai).toBe('credit');
+    expect(phanLoaiHoaDon({ tongCong: 12_000_000, noiDung: 'Điều chỉnh tăng cho hoá đơn 21237' }).loai).toBe('debit');
+    // Hoá đơn cước kỳ: dương và KHÔNG có chữ "điều chỉnh" → không được xếp thành billing note.
+    expect(phanLoaiHoaDon({ tongCong: 250_000_000, noiDung: 'Cước phí sử dụng dịch vụ DHL. Số tài khoản: 527888723.' }).loai).toBe('cuoc_ky');
     expect(phanLoaiHoaDon({ tongCong: 0, noiDung: 'Hoá đơn điều chỉnh giảm cho hoá đơn số 21237' }).loai).toBe('credit');
-    expect(phanLoaiHoaDon({ tongCong: 0, noiDung: 'Cước phí sử dụng dịch vụ' }).loai).toBe('debit');
   });
   it('file không phải hoá đơn hoặc thiếu ngày → null', () => {
     expect(docHoaDonXml('<root/>')).toBeNull();

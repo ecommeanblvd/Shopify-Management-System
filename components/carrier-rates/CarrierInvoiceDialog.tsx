@@ -91,13 +91,13 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted">
-        <FilePlus2 className="size-4" /> Thêm hoá đơn carrier
+        <FilePlus2 className="size-4" /> Thêm hoá đơn cước kỳ
       </DialogTrigger>
 
       <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-sm">
-            Thêm hoá đơn {carrierLabel}
+            Thêm hoá đơn cước kỳ {carrierLabel}
           </DialogTitle>
         </DialogHeader>
 

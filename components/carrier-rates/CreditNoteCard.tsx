@@ -17,10 +17,12 @@ export function CreditNoteCard({ rows, tongThang }: {
     <Card><CardContent className="space-y-4 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold">Hoá đơn điều chỉnh carrier</div>
-          <p className="text-[11px] text-muted-foreground">
-            Tải hết vào đây, hệ thống tự tách credit note (carrier trả lại) và billing note (mình trả thêm). Tiền tính theo
-            NGÀY TRÊN HOÁ ĐƠN; một hoá đơn VAT là một chứng từ. Riêng credit note là số vào KPI Pillar 3.
+          <div className="text-sm font-semibold">Hoá đơn điều chỉnh carrier (credit / billing note)</div>
+          <p className="max-w-3xl text-[11px] text-muted-foreground">
+            Chứng từ ĐIỀU CHỈNH một hoá đơn đã xuất: carrier trả lại tiền (credit note) hoặc thu thêm (billing note).
+            Hệ thống tự tách hai loại, tiền tính theo NGÀY TRÊN HOÁ ĐƠN, một hoá đơn VAT là một chứng từ; credit note là
+            số vào KPI Pillar 3. <b>Hoá đơn cước kỳ hàng tháng thì dùng nút “Thêm hoá đơn cước kỳ” ở góc trên</b> —
+            nó vào công nợ và đối soát từng kiện, khác hẳn chỗ này.
           </p>
         </div>
         {tongThang.length > 0 && (
