@@ -2508,6 +2508,8 @@ export const creditNotes = pgTable('credit_notes', {
   soHoaDon: text('so_hoa_don').notNull(),
   kyHieu: text('ky_hieu').notNull(),
   ngay: date('ngay').notNull(),
+  /** 'credit' = điều chỉnh giảm (carrier trả lại — tiền thu hồi KPI); 'debit' = billing note, mình trả thêm. */
+  loai: text('loai').notNull().default('credit'),
   carrierKey: text('carrier_key'),
   truocThue: numeric('truoc_thue', { precision: 16, scale: 2 }).notNull().default('0'),
   tienThue: numeric('tien_thue', { precision: 16, scale: 2 }).notNull().default('0'),
@@ -2521,6 +2523,7 @@ export const creditNotes = pgTable('credit_notes', {
 }, (t) => [
   uniqueIndex('credit_notes_so_ky_unique').on(t.kyHieu, t.soHoaDon),
   index('credit_notes_ngay_idx').on(t.ngay),
+  index('credit_notes_loai_ngay_idx').on(t.loai, t.ngay),
 ]);
 
 /** Chi tiết kiện trong ĐỢT điều chỉnh (CSV carrier) — để truy đơn nào được hoàn; KHÔNG dùng cộng tiền. */

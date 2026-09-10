@@ -946,6 +946,13 @@
       "when": 1787841600000,
       "tag": "0133_credit-notes",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1787845200000,
+      "tag": "0134_credit-notes-loai",
+      "breakpoints": true
     }
   ]
 }

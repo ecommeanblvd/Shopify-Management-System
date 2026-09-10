@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docHoaDonXml, maThamChieu } from './hoa-don-xml';
+import { docHoaDonXml, maThamChieu, phanLoaiHoaDon } from './hoa-don-xml';
 
 // Rút gọn từ file thật DHL gửi 04/09/2026 (hoá đơn 465 ký hiệu 1K26THA, credit note −3.453.840đ).
 const XML = `<?xml version="1.0" encoding="UTF-8"?><HDon><DLHDon><TTChung>
@@ -26,6 +26,13 @@ describe('hoa-don-xml', () => {
   it('bóc mã tham chiếu carrier từ nội dung hoá đơn', () => {
     const h = docHoaDonXml(XML)!;
     expect(maThamChieu(h.noiDung)).toEqual(['HANR000284295', 'HANR000284299']);
+  });
+  it('phân loại credit / billing note theo dấu tổng tiền', () => {
+    expect(phanLoaiHoaDon({ tongCong: -3_453_840, noiDung: 'Điều chỉnh giảm' }).loai).toBe('credit');
+    expect(phanLoaiHoaDon({ tongCong: 12_000_000, noiDung: 'Cước phí dịch vụ' }).loai).toBe('debit');
+    // Tổng bằng 0 (hoá đơn thay thế) thì đọc nội dung.
+    expect(phanLoaiHoaDon({ tongCong: 0, noiDung: 'Hoá đơn điều chỉnh giảm cho hoá đơn số 21237' }).loai).toBe('credit');
+    expect(phanLoaiHoaDon({ tongCong: 0, noiDung: 'Cước phí sử dụng dịch vụ' }).loai).toBe('debit');
   });
   it('file không phải hoá đơn hoặc thiếu ngày → null', () => {
     expect(docHoaDonXml('<root/>')).toBeNull();

@@ -73,17 +73,24 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
   const openIssues = [...groups.values()].sort((a, b) => Math.abs(b.sumDelta) - Math.abs(a.sumDelta));
 
   // Credit note đã nhập (tiền thu hồi cộng theo NGÀY HOÁ ĐƠN — CEO 10/09/2026).
-  const { rows: cnRows } = await db.execute<{ id: string; so: string; ky: string; ngay: string; tong: string; n: string; ten: string | null }>(sql`
-    SELECT c.id, c.so_hoa_don AS so, c.ky_hieu AS ky, c.ngay::text AS ngay, c.tong_cong::text AS tong,
+  const { rows: cnRows } = await db.execute<{ id: string; so: string; ky: string; ngay: string; tong: string; n: string; ten: string | null; loai: string }>(sql`
+    SELECT c.id, c.so_hoa_don AS so, c.ky_hieu AS ky, c.ngay::text AS ngay, c.tong_cong::text AS tong, c.loai,
            (SELECT COUNT(*) FROM credit_note_lines l WHERE l.credit_note_id = c.id)::text AS n, c.ten_file AS ten
       FROM credit_notes c ORDER BY c.ngay DESC, c.so_hoa_don DESC LIMIT 30;`);
   const creditNotes = cnRows.map((r) => ({
     id: r.id, soHoaDon: r.so, kyHieu: r.ky, ngay: r.ngay, tongCong: Number(r.tong), soDong: Number(r.n), tenFile: r.ten,
+    loai: r.loai === 'debit' ? ('debit' as const) : ('credit' as const),
   }));
-  const { rows: cnThang } = await db.execute<{ thang: string; tong: string; n: string }>(sql`
-    SELECT to_char(ngay, 'YYYY-MM') AS thang, SUM(ABS(tong_cong))::text AS tong, COUNT(*)::text AS n
+  const { rows: cnThang } = await db.execute<{ thang: string; tong: string; n: string; tong_debit: string; n_debit: string }>(sql`
+    SELECT to_char(ngay, 'YYYY-MM') AS thang,
+           COALESCE(SUM(ABS(tong_cong)) FILTER (WHERE loai = 'credit'), 0)::text AS tong,
+           COUNT(*) FILTER (WHERE loai = 'credit')::text AS n,
+           COALESCE(SUM(ABS(tong_cong)) FILTER (WHERE loai = 'debit'), 0)::text AS tong_debit,
+           COUNT(*) FILTER (WHERE loai = 'debit')::text AS n_debit
       FROM credit_notes GROUP BY 1 ORDER BY 1 DESC LIMIT 4;`);
-  const creditNoteThang = cnThang.map((r) => ({ thang: r.thang, tong: Number(r.tong), n: Number(r.n) }));
+  const creditNoteThang = cnThang.map((r) => ({
+    thang: r.thang, tong: Number(r.tong), n: Number(r.n), tongDebit: Number(r.tong_debit), nDebit: Number(r.n_debit),
+  }));
 
   return (
     <div className="space-y-6 p-6">

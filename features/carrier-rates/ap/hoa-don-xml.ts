@@ -60,3 +60,21 @@ export function docHoaDonXml(xml: string): HoaDonDienTu | null {
 export function maThamChieu(noiDung: string): string[] {
   return [...new Set((noiDung.match(/\b[A-Z]{3,4}\d{6,}\b/g) ?? []))];
 }
+
+/**
+ * Loại hoá đơn điều chỉnh của carrier:
+ *   - 'credit' — điều chỉnh GIẢM, carrier trả lại tiền (đây là tiền thu hồi của KPI Pillar 3);
+ *   - 'debit'  — điều chỉnh TĂNG hoặc thu thêm, mình phải trả thêm.
+ * Căn cứ chính là DẤU của tổng tiền; nội dung hoá đơn chỉ dùng khi tổng bằng 0 (hiếm, hoá đơn thay thế).
+ */
+export type LoaiHoaDon = 'credit' | 'debit';
+
+export function phanLoaiHoaDon(h: Pick<HoaDonDienTu, 'tongCong' | 'noiDung'>): { loai: LoaiHoaDon; canCu: string } {
+  if (h.tongCong < 0) return { loai: 'credit', canCu: 'Tổng tiền âm — carrier trả lại' };
+  if (h.tongCong > 0) return { loai: 'debit', canCu: 'Tổng tiền dương — mình phải trả thêm' };
+  const nd = (h.noiDung ?? '').toLowerCase();
+  if (nd.includes('điều chỉnh giảm')) return { loai: 'credit', canCu: 'Nội dung ghi "điều chỉnh giảm"' };
+  return { loai: 'debit', canCu: 'Tổng bằng 0, không thấy dấu hiệu điều chỉnh giảm' };
+}
+
+export const NHAN_LOAI: Record<LoaiHoaDon, string> = { credit: 'Credit note (thu hồi)', debit: 'Billing note (trả thêm)' };

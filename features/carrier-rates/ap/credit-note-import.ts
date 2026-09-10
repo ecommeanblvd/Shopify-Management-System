@@ -18,13 +18,16 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { bocTep } from './boc-tep';
-import { docHoaDonXml, maThamChieu, type HoaDonDienTu } from './hoa-don-xml';
+import { docHoaDonXml, maThamChieu, phanLoaiHoaDon, type HoaDonDienTu, type LoaiHoaDon } from './hoa-don-xml';
 import { parseDhlInvoiceCsv, tachTheoHoaDon, type DhlShipment } from './dhl-invoice-csv';
 
 export interface KetQuaNhapCreditNote {
   tenFile: string;
   /** Hoá đơn đọc được; null khi file không chứa hoá đơn điện tử. */
   hoaDon: HoaDonDienTu | null;
+  /** Hệ thống tự phân loại: credit note (thu hồi) hay billing note (trả thêm). */
+  loai: LoaiHoaDon | null;
+  canCuPhanLoai: string | null;
   /** Đã có sẵn trong hệ thống (nhập lại thì cập nhật, không tạo trùng). */
   daCo: boolean;
   soDongChiTiet: number;
@@ -50,10 +53,10 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     if (h) { hoaDon = h; break; }
   }
   if (!hoaDon) {
-    return { tenFile, hoaDon: null, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
+    return { tenFile, hoaDon: null, loai: null, canCuPhanLoai: null, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
       canhBao: ['Không tìm thấy hoá đơn điện tử (.xml) trong tệp — gửi nguyên email .msg hoặc file zip hoá đơn.'] };
   }
-  if (hoaDon.tongCong > 0) canhBao.push('Hoá đơn mang số DƯƠNG — đây là hoá đơn thu tiền, không phải credit note.');
+  const { loai, canCu } = phanLoaiHoaDon(hoaDon);
 
   // 2) Chi tiết từng kiện (CSV) — chỉ để truy đơn, không cộng tiền.
   const chiTiet: DhlShipment[] = [];
@@ -80,6 +83,7 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
   const carrierKey = /dhl/i.test(hoaDon.benBan) ? 'dhl' : /fedex/i.test(hoaDon.benBan) ? 'fedex' : null;
   const gt = {
     ngay: hoaDon.ngay,
+    loai,
     carrierKey,
     truocThue: String(hoaDon.truocThue),
     tienThue: String(hoaDon.tienThue),
@@ -126,5 +130,5 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
 
   revalidatePath('/f/shipping-reconcile');
   revalidatePath('/f/ship-report');
-  return { tenFile, hoaDon, daCo: !!cu, soDongChiTiet: chiTiet.length, soDongKhopKien: khop, canhBao };
+  return { tenFile, hoaDon, loai, canCuPhanLoai: canCu, daCo: !!cu, soDongChiTiet: chiTiet.length, soDongKhopKien: khop, canhBao };
 }

@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { nhapCreditNote, type KetQuaNhapCreditNote } from '@/features/carrier-rates/ap/credit-note-import';
+import { NHAN_LOAI } from '@/features/carrier-rates/ap/hoa-don-xml';
 
 const tien = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 
@@ -46,6 +47,7 @@ export function CreditNoteUpload() {
         {pending && <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Đang đọc…</span>}
         <span className="text-xs text-muted-foreground">
           Nhận email .msg của carrier (đọc luôn XML + CSV bên trong), hoặc .zip / .xml / .csv rời. Chọn nhiều tệp một lần được.
+          Hệ thống tự phân loại credit note (carrier trả lại) hay billing note (mình trả thêm) theo dấu tổng tiền trên hoá đơn.
         </span>
       </div>
 
@@ -56,7 +58,7 @@ export function CreditNoteUpload() {
           <table className="w-full text-sm tabular-nums">
             <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                <th className="text-left">Tệp</th><th className="text-left">Hoá đơn</th><th className="text-right">Ngày</th>
+                <th className="text-left">Tệp</th><th className="text-left">Hoá đơn</th><th className="text-left">Loại</th><th className="text-right">Ngày</th>
                 <th className="text-right">Số tiền</th><th className="text-right">Chi tiết kiện</th><th className="text-left">Ghi chú</th>
               </tr>
             </thead>
@@ -65,6 +67,9 @@ export function CreditNoteUpload() {
                 <tr key={`${r.tenFile}-${i}`} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left text-xs">{r.tenFile}</td>
                   <td className="text-left">{r.hoaDon ? `${r.hoaDon.kyHieu}-${r.hoaDon.soHoaDon}` : '—'}</td>
+                  <td className="text-left text-xs" title={r.canCuPhanLoai ?? ''}>
+                    {r.loai ? <span className={r.loai === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>{NHAN_LOAI[r.loai]}</span> : '—'}
+                  </td>
                   <td className="text-right">{r.hoaDon?.ngay ?? '—'}</td>
                   <td className={`text-right font-medium ${(r.hoaDon?.tongCong ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
                     {r.hoaDon ? tien(Math.abs(r.hoaDon.tongCong)) : '—'}

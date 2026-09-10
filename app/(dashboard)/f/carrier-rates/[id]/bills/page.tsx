@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { sql } from 'drizzle-orm';
+import { db } from '@/db/client';
+import { CreditNoteCard } from '@/components/carrier-rates/CreditNoteCard';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -49,6 +52,26 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   const displayCurrency = account.displayCurrency ?? currency;
 
   const [bills, payments, allLines] = await Promise.all([listBills(id), listPaymentsForAccount(id), listAllBillLines(id)]);
+
+  // Hoá đơn điều chỉnh (credit / billing note) — nhân sự logistics tải thẳng email .msg vào đây.
+  const { rows: cnRows } = await db.execute<{ id: string; so: string; ky: string; ngay: string; tong: string; n: string; ten: string | null; loai: string }>(sql`
+    SELECT c.id, c.so_hoa_don AS so, c.ky_hieu AS ky, c.ngay::text AS ngay, c.tong_cong::text AS tong, c.loai,
+           (SELECT COUNT(*) FROM credit_note_lines l WHERE l.credit_note_id = c.id)::text AS n, c.ten_file AS ten
+      FROM credit_notes c ORDER BY c.ngay DESC, c.so_hoa_don DESC LIMIT 30;`);
+  const creditNotes = cnRows.map((r) => ({
+    id: r.id, soHoaDon: r.so, kyHieu: r.ky, ngay: r.ngay, tongCong: Number(r.tong), soDong: Number(r.n), tenFile: r.ten,
+    loai: r.loai === 'debit' ? ('debit' as const) : ('credit' as const),
+  }));
+  const { rows: cnThang } = await db.execute<{ thang: string; tong: string; n: string; tong_debit: string; n_debit: string }>(sql`
+    SELECT to_char(ngay, 'YYYY-MM') AS thang,
+           COALESCE(SUM(ABS(tong_cong)) FILTER (WHERE loai = 'credit'), 0)::text AS tong,
+           COUNT(*) FILTER (WHERE loai = 'credit')::text AS n,
+           COALESCE(SUM(ABS(tong_cong)) FILTER (WHERE loai = 'debit'), 0)::text AS tong_debit,
+           COUNT(*) FILTER (WHERE loai = 'debit')::text AS n_debit
+      FROM credit_notes GROUP BY 1 ORDER BY 1 DESC LIMIT 4;`);
+  const creditNoteThang = cnThang.map((r) => ({
+    thang: r.thang, tong: Number(r.tong), n: Number(r.n), tongDebit: Number(r.tong_debit), nDebit: Number(r.n_debit),
+  }));
   const inputs = toSummaryInputs(bills, payments);
   const today = new Date().toISOString().slice(0, 10);
   const summary = summariseAp(inputs.bills, inputs.payments, today);
@@ -142,6 +165,8 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
           </div>
         )}
       </header>
+
+      {canAddInvoice && <CreditNoteCard rows={creditNotes} tongThang={creditNoteThang} />}
 
       <NewSurchargesReport accountId={id} currency={currency} rows={unknownCharges} />
 

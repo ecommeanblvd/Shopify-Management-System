@@ -76,7 +76,7 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
        WHERE s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
     db.execute<{ tong: string | null; n: string }>(sql`
       SELECT SUM(ABS(tong_cong::numeric))::text AS tong, COUNT(*)::text AS n
-        FROM credit_notes WHERE ngay >= ${tu}::date AND ngay <= ${den}::date;`),
+        FROM credit_notes WHERE loai = 'credit' AND ngay >= ${tu}::date AND ngay <= ${den}::date;`),
     db.execute<{ thu: string | null; dien: string | null }>(sql`
       SELECT SUM(COALESCE(recovered_vnd::numeric, 0))::text AS thu,
              -- Thuộc diện khiếu nại = mọi dòng ta xác định HÃNG SAI: đang đòi, đã có credit note, hoặc mới flag.
