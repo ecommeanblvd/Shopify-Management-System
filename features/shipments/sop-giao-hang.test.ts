@@ -1,62 +1,73 @@
 import { describe, it, expect } from 'vitest';
-import { NHOM_SOP, chamKpi, nhomCuaNuoc, tongKpi, type KienGiao } from './sop-giao-hang';
+import {
+  CAM_KET_NUOC, LO_TRINH_LOI, chamKpi, loiToiDaTaiNgay, mienCuaNuoc, slaCuaLine, slaCuaNuoc, tongKpi, type KienGiao,
+} from './sop-giao-hang';
 
-const k = (country: string, soNgay: number): KienGiao => ({ country, soNgay });
-const lay = (rows: ReturnType<typeof chamKpi>, ma: string) => rows.find((r) => r.nhom.ma === ma)!;
+const k = (country: string, line: string, soNgay: number): KienGiao => ({ country, line, soNgay });
+const lay = (rows: ReturnType<typeof chamKpi>, cc: string) => rows.find((r) => r.country === cc)!;
+const KY = '2026-09-01';
 
 describe('sop-giao-hang', () => {
-  it('nhomCuaNuoc: theo bảng; nước lạ rơi vào nhóm cuối', () => {
-    expect(nhomCuaNuoc('JP').ma).toBe('chau-a');
-    expect(nhomCuaNuoc('us').ma).toBe('bac-my-anh-uc');
-    expect(nhomCuaNuoc('DE').ma).toBe('chau-au');
-    expect(nhomCuaNuoc('AE').ma).toBe('uae');
-    expect(nhomCuaNuoc('SA').ma).toBe('trung-dong');
-    expect(nhomCuaNuoc('ZW').ma).toBe('khac');
+  it('slaCuaNuoc: nước đã khai lấy mức riêng, nước khác lấy mức của miền', () => {
+    expect(slaCuaNuoc('US')).toBe(5);
+    expect(slaCuaNuoc('sa')).toBe(7);
+    expect(slaCuaNuoc('HK')).toBe(3);
+    expect(slaCuaNuoc('NL')).toBe(mienCuaNuoc('NL').slaNgay); // chưa khai riêng → mức Châu Âu
+    expect(slaCuaNuoc('ZW')).toBe(10); // nhóm còn lại
   });
-  it('mỗi nước chỉ thuộc đúng một nhóm', () => {
-    const all = NHOM_SOP.flatMap((n) => n.nuoc);
-    expect(all.length).toBe(new Set(all).size);
+  it('slaCuaLine: hãng nhanh hơn có thước riêng, hãng khác dùng mức của nước', () => {
+    expect(slaCuaLine('SA', 'aramex')).toBe(4);
+    expect(slaCuaLine('SA', 'fedex')).toBe(7);
+    expect(slaCuaLine('sa', 'ARAMEX')).toBe(4);
+    expect(slaCuaLine('NL', 'aramex')).toBe(slaCuaNuoc('NL'));
   });
-  it('chấm KPI: đúng hạn khi ≤ SLA; trễ tách vận chuyển và ngoại lệ; cả hai đều là trễ', () => {
-    // Nhóm Bắc Mỹ SLA 7, lỗi tối đa 10 %.
+  it('mức nội bộ của hãng không được lỏng hơn cam kết với khách', () => {
+    for (const [cc, ck] of Object.entries(CAM_KET_NUOC)) {
+      for (const [line, sla] of Object.entries(ck.theoLine ?? {})) {
+        expect(`${cc}/${line}=${sla}`).toBe(`${cc}/${line}=${Math.min(sla, ck.slaNgay)}`);
+      }
+    }
+  });
+  it('loiToiDaTaiNgay: siết dần theo lộ trình, trước mốc đầu dùng mốc đầu', () => {
+    expect(loiToiDaTaiNgay('2026-09-01').loiToiDa).toBe(0.35);
+    expect(loiToiDaTaiNgay('2025-05-01').loiToiDa).toBe(0.35);
+    expect(loiToiDaTaiNgay('2027-01-01').loiToiDa).toBe(0.28);
+    expect(loiToiDaTaiNgay('2027-08-15').loiToiDa).toBe(0.15);
+    expect(loiToiDaTaiNgay('2028-03-01').loiToiDa).toBe(0.10);
+    expect(LO_TRINH_LOI.map((m) => m.loiToiDa)).toEqual([...LO_TRINH_LOI.map((m) => m.loiToiDa)].sort((a, b) => b - a));
+  });
+  it('chấm theo nước và theo từng hãng, mỗi hãng bằng thước của nó', () => {
     const r = lay(chamKpi([
-      ...Array.from({ length: 9 }, () => k('US', 5)), // đúng hạn
-      k('US', 7),                                     // đúng hạn (bằng SLA)
-      k('US', 9),                                     // trễ vận chuyển
-      k('US', 44),                                    // ngoại lệ
-    ]), 'bac-my-anh-uc');
-    expect(r.n).toBe(12);
-    expect(r.dungHan).toBe(10);
+      k('SA', 'aramex', 4), k('SA', 'aramex', 6), // Aramex SLA 4 → 1 đúng, 1 trễ
+      k('SA', 'fedex', 6), k('SA', 'fedex', 7), k('SA', 'fedex', 9), // FedEx SLA 7 → 2 đúng, 1 trễ
+    ], KY), 'SA');
+    expect(r.slaNgay).toBe(7);
+    expect(r.dungHan).toBe(4); // mức nước 7 ngày: chỉ kiện 9 ngày là trễ
+    const ara = r.theoLine.find((l) => l.line === 'aramex')!;
+    expect(ara.slaNgay).toBe(4);
+    expect(ara.dungHan).toBe(1);
+    expect(ara.tyLeTre).toBeCloseTo(0.5, 5);
+    expect(ara.dat).toBe(false); // 50 % > 35 %
+    const fed = r.theoLine.find((l) => l.line === 'fedex')!;
+    expect(fed.dungHan).toBe(2);
+    expect(fed.dat).toBe(true); // 33 % ≤ 35 %
+  });
+  it('kiện quá ngưỡng ngoại lệ vẫn tính là trễ, chỉ tách để quy nguyên nhân', () => {
+    const r = lay(chamKpi([k('US', 'fedex', 3), k('US', 'fedex', 9), k('US', 'fedex', 40)], KY), 'US');
     expect(r.treVanChuyen).toBe(1);
     expect(r.ngoaiLe).toBe(1);
-    expect(r.tyLeTre).toBeCloseTo(2 / 12, 5);
-    expect(r.dat).toBe(false); // 16,7 % > 10 %
+    expect(r.tyLeTre).toBeCloseTo(2 / 3, 5);
   });
-  it('đạt KPI khi tỉ lệ trễ đúng bằng mức cho phép', () => {
-    const r = lay(chamKpi([...Array.from({ length: 9 }, () => k('CA', 3)), k('CA', 30)]), 'bac-my-anh-uc');
-    expect(r.tyLeTre).toBeCloseTo(0.1, 5);
-    expect(r.dat).toBe(true);
+  it('loại Việt Nam; sắp nước theo số kiện giảm dần', () => {
+    const rows = chamKpi([k('VN', 'fedex', 190), k('US', 'fedex', 3), k('US', 'fedex', 4), k('JP', 'fedex', 2)], KY);
+    expect(rows.map((r) => r.country)).toEqual(['US', 'JP']);
   });
-  it('loại Việt Nam khỏi KPI; nhóm không có kiện thì không chấm', () => {
-    const rows = chamKpi([k('VN', 190), k('JP', 2)]);
-    expect(lay(rows, 'chau-a').n).toBe(1);
-    expect(lay(rows, 'khac').n).toBe(0);
-    expect(lay(rows, 'khac').dat).toBeNull();
-    expect(lay(rows, 'khac').tyLeDungHan).toBeNull();
-  });
-  it('chi tiết theo nước sắp theo số kiện giảm dần', () => {
-    const r = lay(chamKpi([k('JP', 2), k('JP', 3), k('JP', 9), k('SG', 1)]), 'chau-a');
-    expect(r.theoNuoc.map((x) => x.country)).toEqual(['JP', 'SG']);
-    expect(r.theoNuoc[0].dungHan).toBe(2);
-    expect(r.theoNuoc[0].dat).toBe(false); // 1/3 trễ
-  });
-  it('tongKpi: gộp mọi nhóm, chỉ đạt khi KHÔNG nhóm nào trượt', () => {
-    const rows = chamKpi([...Array.from({ length: 10 }, () => k('JP', 2)), ...Array.from({ length: 10 }, () => k('US', 20))]);
-    const t = tongKpi(rows);
-    expect(t.n).toBe(20);
-    expect(t.dungHan).toBe(10);
-    expect(t.soNhomDat).toBe(1);
-    expect(t.soNhomCham).toBe(1);
-    expect(t.dat).toBe(false);
+  it('tongKpi: gộp mọi nước, dùng mức lỗi của kỳ', () => {
+    const rows = chamKpi([...Array.from({ length: 7 }, () => k('US', 'fedex', 3)), ...Array.from({ length: 3 }, () => k('US', 'fedex', 12))], KY);
+    const t = tongKpi(rows, KY);
+    expect(t.n).toBe(10); expect(t.dungHan).toBe(7);
+    expect(t.loiToiDa).toBe(0.35);
+    expect(t.dat).toBe(true); // 30 % ≤ 35 %
+    expect(tongKpi(rows, '2027-05-01').dat).toBe(false); // cùng số liệu, kỳ siết 22 % → trượt
   });
 });

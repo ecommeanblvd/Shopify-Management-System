@@ -16,7 +16,7 @@ import {
   docKienGiao, docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
 } from '@/features/shipments/tieu-chuan-giao';
 import {
-  NGUONG_NGOAI_LE_SOP, NHOM_SOP, NUOC_LOAI_TRU, chamKpi, tongKpi,
+  LO_TRINH_LOI, NGUONG_NGOAI_LE_SOP, NUOC_LOAI_TRU, chamKpi, loiToiDaTaiNgay, mienCuaNuoc, tongKpi,
 } from '@/features/shipments/sop-giao-hang';
 
 export const dynamic = 'force-dynamic';
@@ -72,8 +72,9 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const homNay = new Date(Date.now() + 7 * 3600_000); // ngày theo giờ kinh doanh (+07)
   const kySop = KY_SOP.find((x) => x.ma === sp.ky) ?? KY_SOP[3];
   const [tuSop, denSop] = [kySop.tu(homNay), kySop.den(homNay)];
-  const kpi = tab === 'sop' ? chamKpi(await docKienGiao(tuSop, denSop)) : null;
-  const kpiTong = kpi ? tongKpi(kpi) : null;
+  const kpi = tab === 'sop' ? chamKpi(await docKienGiao(tuSop, denSop), tuSop) : null;
+  const kpiTong = kpi ? tongKpi(kpi, tuSop) : null;
+  const mucLoi = loiToiDaTaiNgay(tuSop);
 
   // Tab Tiêu chuẩn giao: toàn bộ lịch sử (mặc định), tách theo line ship × quốc gia (CEO 10/09/2026).
   const phamVi = chuanHoaPhamVi(sp.pv);
@@ -133,10 +134,10 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
             {[
-              { nhan: 'Đúng hạn', so: pct(kpiTong.tyLeDungHan), phu: `${kpiTong.dungHan}/${kpiTong.n} kiện giao trong cam kết`, mau: kpiTong.dat === false ? 'xau' : 'tot' },
+              { nhan: 'Đúng hạn', so: pct(kpiTong.tyLeDungHan), phu: `${kpiTong.dungHan}/${kpiTong.n} kiện giao trong cam kết · ngưỡng kỳ này: lỗi ≤ ${Math.round(mucLoi.loiToiDa * 100)}%`, mau: kpiTong.dat === false ? 'xau' : 'tot' },
               { nhan: 'Trễ vận chuyển', so: String(kpiTong.treVanChuyen), phu: `quá cam kết nhưng ≤ ${NGUONG_NGOAI_LE_SOP} ngày — line + ops` },
               { nhan: 'Ngoại lệ', so: String(kpiTong.ngoaiLe), phu: `quá ${NGUONG_NGOAI_LE_SOP} ngày — không liên hệ được khách / thông quan` },
-              { nhan: 'Nhóm đạt', so: `${kpiTong.soNhomDat}/${kpi.filter((d) => d.dat !== null).length}`, phu: `${kpiTong.soNhomCham} nhóm chưa đạt`, mau: kpiTong.soNhomCham > 0 ? 'xau' : 'tot' },
+              { nhan: 'Nước đạt', so: `${kpiTong.soNuocDat}/${kpi.length}`, phu: `${kpiTong.soNuocCham} nước chưa đạt`, mau: kpiTong.soNuocCham > 0 ? 'xau' : 'tot' },
               { nhan: 'Kiện chấm', so: kpiTong.n.toLocaleString('vi-VN'), phu: 'kiện đã ghi nhận giao trong kỳ' },
             ].map((t) => (
               <div key={t.nhan} className="space-y-1 bg-card p-4">
@@ -148,52 +149,64 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
           </div>
 
           <Card><CardContent className="p-0">
-            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Bảng cam kết (SOP) và kết quả kỳ này</div>
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
+              <span className="text-sm font-semibold">Bảng cam kết (SOP) và kết quả kỳ này</span>
+              <span className="text-[11px] text-muted-foreground">
+                Lộ trình siết lỗi: {LO_TRINH_LOI.map((m) => `${m.nhan} ≤${Math.round(m.loiToiDa * 100)}%`).join(' → ')}
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm tabular-nums">
                 <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                    <th className="text-left">Nhóm tuyến / nước</th>
-                    <th className="text-right" title="Giao trong ngần này ngày kể từ ngày gửi là ĐÚNG HẠN">Ngày cam kết</th>
-                    <th className="text-right" title="Tỉ lệ trễ tối đa còn được coi là đạt">Lỗi tối đa</th>
-                    <th className="text-right" title="Mức ngày phải siết xuống ở quý sau">Mục tiêu</th>
+                    <th className="text-left">Nước / hãng</th>
+                    <th className="text-right" title="Số ngày nói với khách. Dòng hãng là mức nội bộ của hãng đó.">Cam kết</th>
                     <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th>
                     <th className="text-right">Trễ VC</th><th className="text-right">Ngoại lệ</th>
                     <th className="text-right">% đúng hạn</th><th className="text-right">Kết quả</th>
                   </tr>
                 </thead>
                 <tbody>
+                  {kpi.length === 0 && (
+                    <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">Chưa có kiện nào ghi nhận giao trong kỳ.</td></tr>
+                  )}
                   {kpi.map((d) => (
-                    <Fragment key={d.nhom.ma}>
+                    <Fragment key={d.country}>
                       <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
-                        <td className="text-left">{d.nhom.ten}</td>
-                        <td className="text-right">{d.nhom.slaNgay} ngày</td>
-                        <td className="text-right text-muted-foreground">{Math.round(d.nhom.loiToiDa * 100)}%</td>
-                        <td className="text-right text-muted-foreground">{d.nhom.mucTieuNgay} ngày</td>
-                        <td className="text-right">{d.n || '—'}</td>
-                        <td className="text-right">{d.n ? d.dungHan : '—'}</td>
-                        <td className="text-right">{d.n ? d.treVanChuyen : '—'}</td>
-                        <td className="text-right text-amber-600 dark:text-amber-400">{d.n ? d.ngoaiLe : '—'}</td>
+                        <td className="text-left">
+                          <span className="inline-flex items-center gap-2">
+                            <CountryFlag code={d.country} className="!h-4 !w-6" />
+                            <span>{countryName(d.country)}</span>
+                            <span className="text-[11px] font-normal text-muted-foreground">{mienCuaNuoc(d.country).ten}</span>
+                          </span>
+                        </td>
+                        <td className="text-right">{d.slaNgay} ngày</td>
+                        <td className="text-right">{d.n}</td>
+                        <td className="text-right">{d.dungHan}</td>
+                        <td className="text-right">{d.treVanChuyen}</td>
+                        <td className="text-right text-amber-600 dark:text-amber-400">{d.ngoaiLe || '—'}</td>
                         <td className="text-right">{pct(d.tyLeDungHan)}</td>
                         <td className={`text-right font-semibold ${d.dat === true ? 'text-emerald-600 dark:text-emerald-400' : d.dat === false ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                           {d.dat === true ? 'Đạt' : d.dat === false ? 'Chưa đạt' : '—'}
                         </td>
                       </tr>
-                      <tr className="border-t border-border/40 text-[11px] text-muted-foreground">
-                        <td colSpan={10} className="px-3 pb-1 pt-0 leading-snug">Căn cứ: {d.nhom.canCu}. Nước: {d.nhom.nuoc.length ? d.nhom.nuoc.join(', ') : 'mọi nước chưa xếp nhóm'}</td>
-                      </tr>
-                      {d.theoNuoc.map((c) => (
-                        <tr key={`${d.nhom.ma}-${c.country}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
-                          <td className="pl-10 text-left">
-                            <span className="inline-flex items-center gap-2"><CountryFlag code={c.country} className="!h-3.5 !w-5" />{countryName(c.country)}</span>
+                      {d.canCu && (
+                        <tr className="border-t border-border/40 text-[11px] text-muted-foreground">
+                          <td colSpan={8} className="px-3 pb-1 pt-0 leading-snug">Căn cứ: {d.canCu}</td>
+                        </tr>
+                      )}
+                      {d.theoLine.map((l) => (
+                        <tr key={`${d.country}-${l.line}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
+                          <td className="pl-10 text-left text-xs uppercase">{l.line}</td>
+                          <td className={`text-right ${l.slaNgay < d.slaNgay ? 'font-medium text-foreground' : ''}`}>{l.slaNgay} ngày</td>
+                          <td className="text-right">{l.n}</td>
+                          <td className="text-right">{l.dungHan}</td>
+                          <td className="text-right">{l.treVanChuyen}</td>
+                          <td className="text-right">{l.ngoaiLe || '—'}</td>
+                          <td className="text-right">{pct(l.tyLeDungHan)}</td>
+                          <td className={`text-right ${l.dat === false ? 'text-red-600 dark:text-red-400' : l.dat === true ? 'text-emerald-600/80 dark:text-emerald-400/80' : ''}`}>
+                            {l.dat === true ? 'Đạt' : l.dat === false ? 'Chưa đạt' : '—'}
                           </td>
-                          <td colSpan={3} />
-                          <td className="text-right">{c.n}</td>
-                          <td className="text-right">{c.dungHan}</td>
-                          <td className="text-right">{c.treVanChuyen}</td>
-                          <td className="text-right">{c.ngoaiLe}</td>
-                          <td className="text-right">{pct(c.tyLeDungHan)}</td>
-                          <td className={`text-right ${c.dat === false ? 'text-red-600 dark:text-red-400' : ''}`}>{c.dat === false ? 'Chưa đạt' : c.dat === true ? 'Đạt' : '—'}</td>
                         </tr>
                       ))}
                     </Fragment>
@@ -210,8 +223,18 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
               NGÀY GỬI nên một kiện luôn được chấm vào tháng nó rời kho, không bị đẩy sang tháng sau.
             </p>
             <p>
-              Nhóm đạt KPI khi tỉ lệ trễ ≤ mức lỗi tối đa. Trễ gồm cả hai loại: trễ vận chuyển và ngoại lệ. Ngoại lệ tách
-              riêng để quy nguyên nhân chứ KHÔNG được miễn trừ, vì phần lớn vẫn xử lý được bằng cách gọi khách sớm và
+              Số ngày cam kết đặt đúng bằng số nói với khách, nên nó ngắn như một tuyến express chứ không phải mức dễ đạt.
+              Bù lại tỉ lệ lỗi cho phép mở rộng lúc khởi động rồi siết dần theo lộ trình ở trên: kỳ này đang là{' '}
+              {Math.round(mucLoi.loiToiDa * 100)}% ({mucLoi.nhan}).
+            </p>
+            <p>
+              Mỗi nước có một mức cam kết chung, và trong nước đó mỗi hãng bị chấm bằng thước của chính hãng. Hãng nào
+              nhanh hơn mặt bằng tuyến thì mức nội bộ ngắn hơn (in đậm) — Aramex đi Vùng Vịnh là ví dụ, để hãng nhanh
+              không núp sau mức chung.
+            </p>
+            <p>
+              Nước đạt KPI khi tỉ lệ trễ ≤ mức lỗi tối đa của kỳ. Trễ gồm cả hai loại: trễ vận chuyển và ngoại lệ. Ngoại lệ
+              tách riêng để quy nguyên nhân chứ KHÔNG được miễn trừ, vì phần lớn vẫn xử lý được bằng cách gọi khách sớm và
               chuẩn bị giấy tờ thông quan trước.
             </p>
             <p>
@@ -219,8 +242,8 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
               nhập là mất mẫu chứ không phải được bỏ qua. {Object.entries(NUOC_LOAI_TRU).map(([cc, ly]) => `${cc} không tính: ${ly.toLowerCase()}`).join(' · ')}.
             </p>
             <p>
-              Mức cam kết lấy từ dữ liệu 2026 ở tab “Tiêu chuẩn giao”, đặt tại mức đội đang đạt khoảng 90 %. Cột “mục tiêu”
-              là mức quý sau phải siết xuống — khi một nhóm giữ được 3 tháng liên tiếp trên mức cam kết thì hạ SLA xuống mục tiêu.
+              Mức cam kết lấy từ phân bố thật 2026 ở tab “Tiêu chuẩn giao”, đặt quanh mức hiện đạt 65–85 % — tức phải cải
+              thiện mới đạt. Nước chưa đủ 10 kiện đã giao thì dùng mức mặc định của miền.
             </p>
           </CardContent></Card>
         </>
