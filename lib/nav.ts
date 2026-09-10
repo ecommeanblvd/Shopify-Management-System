@@ -67,7 +67,7 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
   { href: '/f/markets',               label: 'Markets',         icon: Globe,       requires: 'view_markets_history',  group: 'Markets',       description: 'Per-market shipping configuration.' },
   { href: '/f/markets/history',       label: 'Markets history', icon: History,     requires: 'view_markets_history',  group: 'Markets',       description: 'Changes to market configuration over time.' },
   { href: '/f/jobs',                  label: 'Tác vụ nền',      icon: Activity,    requires: 'view_functions',        group: 'Admin',         description: 'Tác vụ nào đang chạy, cái nào ngưng — đọc nhật ký do chính tác vụ ghi ra.' },
-  { href: '/f/kpi-logistics',         label: 'KPI Logistics',   icon: Target,      requires: 'manage_users',          group: 'Admin',         description: 'Bảng lương KPI của Logistics Operations Specialist theo tháng (chỉ admin — gắn với lương).' },
+  { href: '/f/ship-report?tab=kpi',    label: 'KPI Logistics',   icon: Target,      requires: 'manage_users',          group: 'Admin',         description: 'Bảng điểm KPI của Logistics Operations Specialist theo tháng (nằm trong Báo cáo ship, chỉ admin).' },
   { href: '/admin/users',             label: 'Users',           icon: Users,       requires: 'manage_users',          group: 'Admin',         description: 'Manage users and their roles.' },
   { href: '/admin/roles',             label: 'Roles',           icon: ShieldCheck, requires: 'manage_users',          group: 'Admin',         description: 'Phân quyền theo role.' },
   { href: '/admin/feature-flags',     label: 'Feature flags',   icon: ToggleRight, requires: 'manage_users',          group: 'Admin',         description: 'Toggle features on or off.' },
