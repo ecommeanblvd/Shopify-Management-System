@@ -360,7 +360,9 @@ Bộ đọc nhận hai khuôn sheet. Denio: VND, cột "Tổng thành tiền TT"
 
 **Đợt 4 brand nhỏ + Hy Phuong (10/09/2026)** — CEO gửi lại: Lalin có sheet RIÊNG (brand "LALIN", slug `lalin`, không nằm trong sheet LaLING như tưởng), Randomlist (link không ghi tên — đọc tiêu đề sheet ra "Randomlist"), Pesty, LEA'S by LeHa; An Heritage và Dear José trả HTTP 401 (chưa mở quyền). Mọi kỳ Σ = sheet, khớp SKU 100 %, 0 không khớp. Lalin VND CK 25 % T3/T4/T6/T7 (tab T8 có 1 dòng #MBLVD29669 chưa điền TT → chờ; tab T2 chỉ có thực bán); Randomlist USD CK 55 % T5/T7; Pesty VND CK 25 % — chỉ T3/2026 là thực nhận, tab "T2/T5 thực nhận" là số liệu 2025 (ngoài phạm vi), T2/2026 chỉ có tab thực bán → 2 dòng T2–T3 (PARTIALLY_REFUNDED) chưa kê; LEA'S sheet ghi brand "LEA'S" (khớp tiền tố slug `lea-s-by-leha`) T4/T5, 2 dòng T2 chưa kê. **Hy Phuong không có file đối soát** → CEO đưa file sản phẩm (tab 2025/2026, cột "Domestic Price (VND)") + CK 30 %: ghi `sku_costs` nguồn `bang_gia_brand:hy-phuong ck30` (giá DỰ TÍNH = niêm yết × 0,7, không phải giá thực; không mang tiền tố "uoc:" để nút ước không xoá) cho 2 SKU khớp mã sản phẩm (A96-V180&V130 Áo Ngọc Lan 1.450.000 → 1.015.000; A52S Áo Lam Khuê 950.000 → 665.000); 2 SKU D16/D17 không có trong file (D17 đã hoàn tiền). Độ phủ: Lalin 7/10 (1 hoàn, 2 T7–T8 chưa kê), Randomlist 2/4, Pesty 2/4, LEA'S 2/4. Ước lại: 2.896 SKU → 4.100 mức giá.
 
-**Độ phủ MEAN BLVD 2026 (10/09, sau đợt này):** 3.732 giá thực + 469 chỉ dự tính = 4.201/5.482 dòng (76,6 %).
+**An Heritage + Dear José (10/09/2026, CEO mở quyền):** Dear José chỉ có tab "Đối soát T8" 1 dòng (VND, CK 30 %) → nhập T8, khớp 100 %; 3 dòng T3/T4/T8 khác brand chưa kê (1/4). An Heritage chỉ có tab T8 với 2 dòng (#MBLVD29786, #MBLVD30073) **chưa điền Thành tiền** → bộ đọc bỏ tab (kỳ chưa hoàn tất), không nhập; brand này **chưa có trong `mmp_brands`** → khi brand điền xong phải tạo slug `an-heritage` (như Lemonrin/Esmée) rồi nhập.
+
+**Độ phủ MEAN BLVD 2026 (10/09, sau đợt này):** 3.733 giá thực + 469 chỉ dự tính = 4.202/5.482 dòng (76,6 %).
 
 **Độ phủ MEAN BLVD 2026 (10/09, sau đợt 5 brand nhỏ):** 3.719 giá thực + 469 chỉ dự tính = 4.188/5.482 dòng (76,4 %).
 
