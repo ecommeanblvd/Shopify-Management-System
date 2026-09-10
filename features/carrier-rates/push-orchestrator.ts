@@ -20,6 +20,8 @@ export async function pushShippingToStores(
   for (const storeId of input.storeIds) {
     const res: PushStoreResult = { storeId, zoneCreated: 0, rateOps: 0, engineZones: 0, errors: [] };
     try {
+      // D-071: rate flat thủ công không còn được đẩy — sẽ hiện cạnh rate engine.
+      if (plan.manualSourcePrefixes.length > 0) throw new Error('Rate thủ công đã ngừng dùng ở checkout (D-071): chỉ còn hai mức Standard / Express từ engine.');
       // 1) Clean-rebuild bảng giá HỆ THỐNG theo ĐÚNG carrier được chọn:
       //    Manual FedEx → chỉ rate "Standard shipping"; Manual DHL → chỉ "Express
       //    shipping". Vì clean-rebuild xoá+tạo lại cả zone, mỗi zone CHỈ chứa rate
@@ -39,7 +41,7 @@ export async function pushShippingToStores(
       }
       // 2) Engine (tự đăng ký CarrierService khi apply)
       if (plan.engineCarriers.length) {
-        const r = await pushCarrierRates({ storeId, carriers: plan.engineCarriers, withBackup: false, dryRun: input.dryRun });
+        const r = await pushCarrierRates({ storeId, carriers: plan.engineCarriers, dryRun: input.dryRun });
         res.engineZones = r.zonesTargeted;
       }
     } catch (e) {

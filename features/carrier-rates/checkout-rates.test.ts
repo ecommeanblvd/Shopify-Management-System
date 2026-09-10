@@ -1,43 +1,75 @@
 import { describe, it, expect } from 'vitest';
 import { computeCheckoutRates, locCarrierCheckout, CHECKOUT_CARRIER_KEYS } from './checkout-rates';
+import { loTenHang, TEN_MUC } from './hai-muc-giao';
 import type { CarrierAccountSnapshot } from './engine/quote';
 
-function snap(label: string, name: string): CarrierAccountSnapshot {
+function snap(label: string, name: string, country = 'US', base = 1_300_000): CarrierAccountSnapshot {
   return {
     id: 'a', name, costCurrency: 'VND', displayCurrency: 'USD', fxCostPerDisplay: 26_000,
     weightTiers: [{ upperKg: 1 }, { upperKg: 5 }],
-    zonesByCountry: new Map([['US', { label, rateByTierUpper: new Map([[1, 1_300_000], [5, 2_600_000]]) }]]),
+    zonesByCountry: new Map([[country, { label, rateByTierUpper: new Map([[1, base], [5, base * 2]]) }]]),
     surcharges: [{ kind: 'markup_percent', value: 15, active: true }],
     remotePostcodes: new Map(),
   };
 }
 
-describe('computeCheckoutRates', () => {
-  it('quote mỗi carrier phục vụ đích → rate Shopify (total_price cents)', () => {
+describe('computeCheckoutRates — hai mức Standard / Express (D-071)', () => {
+  it('một hãng phục vụ đích → ĐÚNG 2 rate Standard < Express, cents dạng chuỗi, USD', () => {
     const rates = computeCheckoutRates({
       country: 'US', postalCode: '10560', weightKg: 0.8,
-      carriers: [
-        { serviceCode: 'fedex', serviceName: 'FedEx IP', snapshot: snap('Zone US', 'FedEx') },
-        { serviceCode: 'dhl', serviceName: 'DHL Express', snapshot: snap('Zone US', 'DHL') },
-      ],
+      carriers: [{ carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx') }],
     });
-    expect(rates).toHaveLength(2);
-    expect(rates[0].service_code).toBe('fedex');
-    expect(rates[0].currency).toBe('USD');
+    expect(rates.map((r) => r.service_name)).toEqual([TEN_MUC.standard, TEN_MUC.express]);
+    expect(rates.map((r) => r.service_code)).toEqual(['standard', 'express']);
+    expect(rates.every((r) => r.currency === 'USD')).toBe(true);
     // finalDisplay = (1.3M base ×1.15 markup)/26000 ≈ 57.5 USD → 5750 cents
     expect(Number(rates[0].total_price)).toBeGreaterThan(5000);
     expect(rates[0].total_price).toMatch(/^\d+$/);
+    expect(Number(rates[0].total_price)).toBeLessThan(Number(rates[1].total_price));
   });
 
-  it('carrier không phục vụ đích (no zone) → bỏ qua', () => {
-    const s = snap('Zone US', 'FedEx');
-    const rates = computeCheckoutRates({ country: 'ZZ', weightKg: 1, carriers: [{ serviceCode: 'fedex', serviceName: 'FedEx', snapshot: s }] });
+  it('có cả FedEx và DHL → vẫn chỉ 2 rate, giá gốc là FedEx (ưu tiên), dù DHL rẻ hơn', () => {
+    const rates = computeCheckoutRates({
+      country: 'US', weightKg: 0.8,
+      carriers: [
+        { carrierKey: 'dhl', snapshot: snap('Zone US', 'DHL', 'US', 1_000_000) },   // rẻ hơn
+        { carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx', 'US', 1_300_000) },
+      ],
+    });
+    expect(rates).toHaveLength(2);
+    // FedEx: 1.3M×1.15/26000 = 57.5 → 5750; nếu lấy DHL sẽ là 4423.
+    expect(rates[0].total_price).toBe('5750');
+  });
+
+  it('FedEx không có zone tới nước đó → rơi về DHL làm giá gốc (RW1–RW4 chỉ DHL)', () => {
+    const rates = computeCheckoutRates({
+      country: 'MM', weightKg: 1,
+      carriers: [
+        { carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx', 'US') },
+        { carrierKey: 'dhl', snapshot: snap('Zone MM', 'DHL', 'MM', 1_000_000) },
+      ],
+    });
+    expect(rates).toHaveLength(2);
+    expect(rates[0].total_price).toBe('4423');
+  });
+
+  it('không hãng nào phục vụ đích → []', () => {
+    const rates = computeCheckoutRates({ country: 'ZZ', weightKg: 1, carriers: [{ carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx') }] });
     expect(rates).toHaveLength(0);
   });
 
-  it('giỏ không cân (0) → tối thiểu 0,5kg, vẫn ra rate', () => {
-    const rates = computeCheckoutRates({ country: 'US', weightKg: 0, carriers: [{ serviceCode: 'f', serviceName: 'F', snapshot: snap('Zone US', 'F') }] });
-    expect(rates).toHaveLength(1);
+  it('giỏ không cân (0) → tối thiểu 0,5kg, vẫn ra 2 rate', () => {
+    const rates = computeCheckoutRates({ country: 'US', weightKg: 0, carriers: [{ carrierKey: 'fedex', snapshot: snap('Zone US', 'F') }] });
+    expect(rates).toHaveLength(2);
+  });
+
+  it('KHÔNG lộ tên hãng ở tên rate hay mô tả, kể cả khi tên account có chữ FedEx', () => {
+    const rates = computeCheckoutRates({ country: 'US', weightKg: 0.8, carriers: [{ carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx Vietnam — IP 2026') }] });
+    for (const r of rates) {
+      expect(loTenHang(r.service_name)).toBe(false);
+      expect(loTenHang(r.description ?? '')).toBe(false);
+      expect(loTenHang(r.service_code)).toBe(false);
+    }
   });
 });
 
@@ -57,8 +89,8 @@ describe('locCarrierCheckout', () => {
     expect(locCarrierCheckout([acc(null), acc('fedex')]).map((a) => a.key)).toEqual(['fedex']);
   });
 
-  it('danh sách trắng không được lỡ tay thêm hãng nội bộ', () => {
-    expect([...CHECKOUT_CARRIER_KEYS].sort()).toEqual(['dhl', 'fedex']);
+  it('danh sách trắng không được lỡ tay thêm hãng nội bộ; FedEx đứng trước DHL (ưu tiên làm giá gốc)', () => {
+    expect([...CHECKOUT_CARRIER_KEYS]).toEqual(['fedex', 'dhl']);
   });
 });
 
@@ -71,9 +103,9 @@ describe('computeCheckoutRates — phụ phí theo-ca', () => {
     ];
     const rates = computeCheckoutRates({
       country: 'US', postalCode: '10560', weightKg: 0.8,
-      carriers: [{ serviceCode: 'ups', serviceName: 'UPS', snapshot: s }],
+      carriers: [{ carrierKey: 'fedex', snapshot: s }],
     });
-    // 1.973.060đ ≈ 75 USD; nếu bị cộng thì giá vọt lên trên 100 USD.
+    // 1.973.060đ ≈ 75 USD; nếu bị cộng thì giá Standard vọt lên trên 100 USD.
     expect(Number(rates[0].total_price)).toBeLessThan(10_000);
   });
 
@@ -83,14 +115,8 @@ describe('computeCheckoutRates — phụ phí theo-ca', () => {
       { kind: 'markup_percent', value: 15, active: true },
       { kind: 'addon_fixed', value: 92_700, active: true, applyMode: 'always' },
     ];
-    const khong = computeCheckoutRates({
-      country: 'US', postalCode: '10560', weightKg: 0.8,
-      carriers: [{ serviceCode: 'fedex', serviceName: 'FedEx', snapshot: snap('Zone US', 'FedEx') }],
-    });
-    const co = computeCheckoutRates({
-      country: 'US', postalCode: '10560', weightKg: 0.8,
-      carriers: [{ serviceCode: 'fedex', serviceName: 'FedEx', snapshot: s }],
-    });
+    const khong = computeCheckoutRates({ country: 'US', postalCode: '10560', weightKg: 0.8, carriers: [{ carrierKey: 'fedex', snapshot: snap('Zone US', 'FedEx') }] });
+    const co = computeCheckoutRates({ country: 'US', postalCode: '10560', weightKg: 0.8, carriers: [{ carrierKey: 'fedex', snapshot: s }] });
     expect(Number(co[0].total_price)).toBeGreaterThan(Number(khong[0].total_price));
   });
 });

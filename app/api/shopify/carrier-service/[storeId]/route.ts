@@ -8,10 +8,12 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Shopify CarrierService callback (B1 — engine). Shopify POST mỗi lần khách tới
- * bước shipping, kèm địa chỉ + items. Ta quote từng carrier (DHL/FedEx) theo cân
- * + địa chỉ thật (gồm ODA/residential/fuel) rồi trả rate. Trả MẢNG rate (cả 2
- * carrier) để khách chọn. Lỗi → trả {rates:[]} (Shopify ẩn carrier service đó,
- * KHÔNG chặn checkout).
+ * bước shipping, kèm địa chỉ + items. Ta quote hãng ưu tiên (FedEx, rơi về DHL)
+ * theo cân + địa chỉ thật (gồm ODA/residential/fuel) rồi trả ĐÚNG HAI rate
+ * "Standard Shipping" / "Express Shipping" — khách không thấy tên hãng (D-071).
+ * Tên rate phải khớp participantServices của zone trên Shopify (adapt=false),
+ * đổi tên ở hai-muc-giao.ts thì phải cập nhật participant. Lỗi → trả {rates:[]}
+ * (Shopify ẩn carrier service đó, KHÔNG chặn checkout).
  */
 interface ShopifyRateRequest {
   rate?: {
@@ -62,9 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         remoteCountry: country,
         remotePostcodes: [dest?.postal_code],
       });
-      // Tên hiển thị ở checkout — ngắn gọn theo carrier, không kèm năm/biến thể.
-      const displayName = a.key === 'fedex' ? 'FedEx International Priority' : a.key === 'dhl' ? 'DHL Express' : a.name;
-      if (snapshot) carriers.push({ serviceCode: a.key ?? a.id, serviceName: displayName, snapshot });
+      if (snapshot) carriers.push({ carrierKey: a.key ?? a.id, snapshot });
     }
 
     const rates = computeCheckoutRates({

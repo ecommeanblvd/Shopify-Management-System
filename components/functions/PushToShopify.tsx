@@ -16,11 +16,11 @@ interface Props {
 
 interface ProgressState { storeId: string; phase: string; current: number; total: number }
 
+// D-071: chỉ còn nguồn engine. Rate flat thủ công (bảng theo bậc cân) không đẩy
+// nữa vì hiện cạnh rate engine và sinh lựa chọn ship trùng ở checkout.
 const SOURCES: { key: PushSource; label: string }[] = [
-  { key: 'fedex_engine', label: 'FedEx engine' },
-  { key: 'dhl_engine', label: 'DHL engine' },
-  { key: 'manual_fedex', label: 'Manual FedEx (Standard shipping)' },
-  { key: 'manual_dhl', label: 'Manual DHL (Express shipping)' },
+  { key: 'fedex_engine', label: 'Engine — FedEx làm giá gốc' },
+  { key: 'dhl_engine', label: 'Engine — DHL dự phòng (nước FedEx không tới)' },
 ];
 
 /** 1 nút đẩy giá ship lên Shopify: chọn NHIỀU store + tick 4 nguồn rate →
@@ -126,7 +126,7 @@ export function PushToShopify({ stores, onPushStep }: Props) {
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Chọn engine → tự đăng ký CarrierService. Tên rate giữ nguyên.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Tự đăng ký CarrierService và gắn vào từng zone. Khách thấy đúng hai mức “Standard Shipping” / “Express Shipping”, không thấy tên hãng.</p>
           </div>
 
           <div className="flex items-center gap-2">

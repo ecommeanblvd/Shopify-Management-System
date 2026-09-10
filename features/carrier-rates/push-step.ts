@@ -43,6 +43,17 @@ interface ZoneCreate {
   methodDefinitionsToCreate: unknown[];
 }
 
+/**
+ * D-071 (10/09/2026): checkout chỉ còn hai mức Standard / Express do engine trả
+ * về. Đẩy rate flat thủ công (bảng FedEx IP / DHL theo bậc cân) sẽ hiện cạnh rate
+ * engine và tái tạo lựa chọn ship trùng — Shopify không có rate "dự phòng ẩn".
+ */
+function chanRateThuCong(manualSourcePrefixes: string[]): void {
+  if (manualSourcePrefixes.length > 0) {
+    throw new Error('Rate thủ công đã ngừng dùng ở checkout (D-071): chỉ còn hai mức Standard / Express từ engine. Chọn nguồn engine.');
+  }
+}
+
 export async function pushShippingStep(
   input: { storeId: string; sources: PushSource[]; dryRun: boolean },
   cursor: PushCursor | null,
@@ -50,6 +61,7 @@ export async function pushShippingStep(
   const userId = await requireApplyPermission();
   const { storeId } = input;
   const plan = planPush(input.sources);
+  chanRateThuCong(plan.manualSourcePrefixes);
   const store = await loadStore(storeId);
   const token = await getStoreToken(store.id);
   const profiles = await readProfiles(store);
@@ -319,7 +331,7 @@ export async function pushShippingStep(
     const lgId2 = lg.locationGroup.id;
     const conn = lg.locationGroupZones;
     let engineZones = 0;
-    const participant = buildParticipant(csId, plan.engineCarriers);
+    const participant = buildParticipant(csId);
 
     for (const e of conn.edges) {
       const z = e.node;

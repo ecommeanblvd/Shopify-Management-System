@@ -9,13 +9,12 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { recordAudit } from '@/lib/logging/audit';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { registerCarrierService } from '@/features/carrier-rates/carrier-service-actions';
-import { buildParticipant, isVnZone, standardBackupDefs, type RateInput } from './plan';
+import { buildParticipant, isVnZone } from './plan';
 import { engineParticipantIdsToReplace } from './participant-ids';
 
 export interface PushCarrierInput {
   storeId: string;
-  carriers: string[];      // ['fedex','dhl'] | ['fedex'] | ['dhl']
-  withBackup: boolean;     // kèm Standard shipping flat
+  carriers: string[];      // ['fedex','dhl'] | ['fedex'] | ['dhl'] — chỉ để ghi audit; khách thấy 2 mức dịch vụ, không thấy hãng (D-071)
   dryRun: boolean;
 }
 export interface PushCarrierResult {
@@ -23,7 +22,6 @@ export interface PushCarrierResult {
   carriers: string[];
   zonesTargeted: number;   // zone quốc tế sẽ/đã đẩy
   zonesSkippedVn: number;
-  backupZones: number;     // zone có matrix → có Standard backup
   applied: boolean;
 }
 
@@ -40,8 +38,8 @@ const MUT = `mutation($id:ID!,$p:DeliveryProfileInput!){deliveryProfileUpdate(id
 
 /**
  * Đẩy giá carrier engine lên 1 store (né bug VN-origin bằng cách attach
- * DeliveryParticipant qua API). Chọn carrier nào hiện ở checkout; tuỳ chọn kèm
- * Standard shipping flat backup. Bỏ qua zone VN (free). dryRun = chỉ đếm.
+ * DeliveryParticipant qua API). Participant bật đúng hai mức "Standard Shipping"
+ * / "Express Shipping" (D-071). Bỏ qua zone VN (free). dryRun = chỉ đếm.
  */
 export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCarrierResult> {
   const userId = await requirePerm();
@@ -49,14 +47,6 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
 
   const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, input.storeId)).limit(1);
   if (!store) throw new Error('Store không tồn tại.');
-
-  // Matrix FedEx theo zone (cho Standard backup), gộp mọi market override.
-  const ovs = await db.select().from(schema.marketStoreOverrides).where(eq(schema.marketStoreOverrides.storeId, input.storeId));
-  const matrixZones: Record<string, Record<string, RateInput>> = {};
-  for (const o of ovs) {
-    const sh = o.shipping as { zones?: Record<string, { rates?: Record<string, RateInput> }> } | null;
-    if (sh?.zones) for (const [zn, z] of Object.entries(sh.zones)) if (z.rates) matrixZones[zn] = z.rates as Record<string, RateInput>;
-  }
 
   const token = await getStoreToken(store.id);
   const call = (query: string, variables?: Record<string, unknown>) =>
@@ -70,7 +60,7 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
   const pRes = await call(`query{deliveryProfiles(first:20){edges{node{id}}}}`);
   const profileIds: string[] = ((pRes.data as { deliveryProfiles?: { edges?: Array<{ node: { id: string } }> } })?.deliveryProfiles?.edges ?? []).map((e) => e.node.id);
 
-  let zonesTargeted = 0, zonesSkippedVn = 0, backupZones = 0;
+  let zonesTargeted = 0, zonesSkippedVn = 0;
 
   for (const profileId of profileIds) {
     let cursor: string | null = null, more = true;
@@ -84,9 +74,6 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
         const countries = z.zone.countries.map((c) => c.code);
         if (isVnZone(countries)) { zonesSkippedVn++; continue; }
         zonesTargeted++;
-        const matrix = matrixZones[z.zone.name];
-        const backup = input.withBackup && matrix ? standardBackupDefs(matrix) : [];
-        if (backup.length) backupZones++;
         if (input.dryRun || !lgId) continue;
 
         // Chỉ xoá participant carrier-calculated cũ (engine) → giữ NGUYÊN flat
@@ -94,15 +81,10 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
         // union: __typename === 'DeliveryParticipant' = carrier-calc, còn
         // 'DeliveryRateDefinition' = flat manual (không đụng).
         const oldIds = engineParticipantIdsToReplace(z.methodDefinitions.edges);
-        const participant = buildParticipant(carrierServiceId, input.carriers);
-        // Lượt 1: xoá cũ + tạo participant.
+        const participant = buildParticipant(carrierServiceId);
         const e1 = await call(MUT, { id: profileId, p: { methodDefinitionsToDelete: oldIds, locationGroupsToUpdate: [{ id: lgId, zonesToUpdate: [{ id: z.zone.id, methodDefinitionsToCreate: [{ name: 'Engine Carrier Rates', active: true, participant }] }] }] } });
         const er1 = (e1.data as { deliveryProfileUpdate?: { userErrors?: Array<{ message: string }> } })?.deliveryProfileUpdate?.userErrors;
         if (er1?.length) throw new Error(`${z.zone.name}: ${er1.map((x) => x.message).join('; ')}`);
-        // Lượt 2..: tạo Standard backup theo lô.
-        for (let i = 0; i < backup.length; i += 40) {
-          await call(MUT, { id: profileId, p: { locationGroupsToUpdate: [{ id: lgId, zonesToUpdate: [{ id: z.zone.id, methodDefinitionsToCreate: backup.slice(i, i + 40) }] }] } });
-        }
       }
       more = conn?.pageInfo?.hasNextPage ?? false;
       cursor = conn?.pageInfo?.endCursor ?? null;
@@ -110,9 +92,9 @@ export async function pushCarrierRates(input: PushCarrierInput): Promise<PushCar
   }
 
   if (!input.dryRun) {
-    await recordAudit({ userId, storeId: store.id, action: 'carrier_rates.push', target: input.carriers.join('+'), requestSummary: `zones=${zonesTargeted} backup=${backupZones}`, result: 'success' });
+    await recordAudit({ userId, storeId: store.id, action: 'carrier_rates.push', target: input.carriers.join('+'), requestSummary: `zones=${zonesTargeted}`, result: 'success' });
   }
-  return { storeName: store.name, carriers: input.carriers, zonesTargeted, zonesSkippedVn, backupZones, applied: !input.dryRun };
+  return { storeName: store.name, carriers: input.carriers, zonesTargeted, zonesSkippedVn, applied: !input.dryRun };
 }
 
 /** Danh sách store cho UI chọn. */
