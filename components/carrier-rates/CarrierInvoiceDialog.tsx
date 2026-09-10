@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FilePlus2, Upload, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { FilePlus2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { FileDrop } from '@/components/ui/file-drop';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import type { InvoicePreview, InvoiceImportResult } from '@/features/carrier-rates/ap/invoice-upload';
@@ -34,8 +35,7 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
     setResults(null);
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(e.target.files ?? []);
+  function handleFileChange(picked: File[]) {
     setFiles(picked);
     setPreview(null);
     setPreviewErr(null);
@@ -102,21 +102,14 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* File drop / input */}
-          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 space-y-2">
-            <label className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground cursor-pointer">
-              <Upload className="size-3.5" />
-              <span>Chọn hoặc kéo file</span>
-            </label>
-            <input
-              type="file"
-              multiple
-              accept=".csv,.xml,.xlsx,.xls,.pdf"
-              className="block w-full text-sm file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-1 file:text-xs"
-              onChange={handleFileChange}
-            />
-            <p className="text-[11px] text-muted-foreground">{goiYDinhDang}</p>
-          </div>
+          {/* Vùng kéo thả — thả cả loạt file một lần, hoặc bấm để chọn như cũ. */}
+          <FileDrop
+            accept=".csv,.xml,.xlsx,.xls,.pdf"
+            disabled={pending}
+            onFiles={handleFileChange}
+            tieuDe="Kéo thả hoá đơn cước kỳ vào đây"
+            goiY={<>Hoặc bấm để chọn · nhiều file một lần được<br />{goiYDinhDang}</>}
+          />
 
           {/* Pending indicator */}
           {pending && (
