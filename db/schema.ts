@@ -2498,3 +2498,44 @@ export const kpiLogisticsThang = pgTable('kpi_logistics_thang', {
   updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+/**
+ * Credit note carrier (hoá đơn điều chỉnh giảm). CEO 10/09/2026: MỘT hoá đơn VAT là một credit note; tiền thu hồi của
+ * KPI Pillar 3 cộng theo `ngay` (ngày hoá đơn), không theo ngày ops bấm ghi nhận. `tongCong` giữ nguyên dấu ÂM.
+ */
+export const creditNotes = pgTable('credit_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  soHoaDon: text('so_hoa_don').notNull(),
+  kyHieu: text('ky_hieu').notNull(),
+  ngay: date('ngay').notNull(),
+  carrierKey: text('carrier_key'),
+  truocThue: numeric('truoc_thue', { precision: 16, scale: 2 }).notNull().default('0'),
+  tienThue: numeric('tien_thue', { precision: 16, scale: 2 }).notNull().default('0'),
+  tongCong: numeric('tong_cong', { precision: 16, scale: 2 }).notNull(),
+  /** Mã tham chiếu carrier bóc từ nội dung hoá đơn (DHL: HANR…). */
+  maThamChieu: jsonb('ma_tham_chieu').notNull().default(sql`'[]'::jsonb`),
+  noiDung: text('noi_dung'),
+  tenFile: text('ten_file'),
+  importedBy: text('imported_by').references(() => user.id, { onDelete: 'set null' }),
+  importedAt: timestamp('imported_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('credit_notes_so_ky_unique').on(t.kyHieu, t.soHoaDon),
+  index('credit_notes_ngay_idx').on(t.ngay),
+]);
+
+/** Chi tiết kiện trong ĐỢT điều chỉnh (CSV carrier) — để truy đơn nào được hoàn; KHÔNG dùng cộng tiền. */
+export const creditNoteLines = pgTable('credit_note_lines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  creditNoteId: uuid('credit_note_id').references(() => creditNotes.id, { onDelete: 'cascade' }).notNull(),
+  trackingNumber: text('tracking_number'),
+  orderNumber: text('order_number'),
+  shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'set null' }),
+  originalInvoice: text('original_invoice'),
+  invoiceNumber: text('invoice_number'),
+  shipDate: date('ship_date'),
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  totalInclVat: numeric('total_incl_vat', { precision: 16, scale: 2 }).notNull().default('0'),
+}, (t) => [
+  index('credit_note_lines_note_idx').on(t.creditNoteId),
+  index('credit_note_lines_shipment_idx').on(t.shipmentId),
+]);

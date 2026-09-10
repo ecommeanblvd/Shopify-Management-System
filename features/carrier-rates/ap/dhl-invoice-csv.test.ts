@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDhlInvoiceCsv, dhlShipmentToBillLine } from './dhl-invoice-csv';
+import { parseDhlInvoiceCsv, dhlShipmentToBillLine, tachTheoHoaDon} from './dhl-invoice-csv';
 
 const HEADER = 'Line Type;Invoice Number;Invoice Date;Currency;Total amount (excl. VAT);Total amount (incl. VAT);Shipment Number;Shipment Date;Shipment Reference 1';
 
@@ -105,5 +105,28 @@ describe('parseDhlInvoiceCsv', () => {
     expect(parseDhlInvoiceCsv('')).toBeNull();
     expect(parseDhlInvoiceCsv(HEADER)).toBeNull();
     expect(parseDhlInvoiceCsv([HEADER, 'S;X;20250213;VND;1;1;A;20250101;#R'].join('\n'))).toBeNull();
+  });
+});
+
+describe('tachTheoHoaDon', () => {
+  const H = '"Line Type","Invoice Number","Invoice Date","Total amount (incl. VAT)"';
+  it('file gộp nhiều hoá đơn dưới một header → tách theo cột Invoice Number', () => {
+    const txt = [
+      H,
+      '"I","HANR000284295","20260827","-197841673.00"',
+      '"S","HANR000284295","20260827","-3587226.00"',
+      '"I","HANR000284299","20260827","148028326.00"',
+      '"S","HANR000284299","20260827","2900000.00"',
+    ].join('\n');
+    const khoi = tachTheoHoaDon(txt);
+    expect(khoi).toHaveLength(2);
+    expect(khoi[0].split('\n')).toHaveLength(3); // header + I + S
+    expect(khoi[0]).toContain('HANR000284295');
+    expect(khoi[0]).not.toContain('HANR000284299');
+    expect(khoi[1]).toContain('HANR000284299');
+  });
+  it('file rỗng hoặc không có cột Invoice Number thì trả nguyên', () => {
+    expect(tachTheoHoaDon('')).toEqual([]);
+    expect(tachTheoHoaDon('a;b\n1;2')).toEqual(['a;b\n1;2']);
   });
 });

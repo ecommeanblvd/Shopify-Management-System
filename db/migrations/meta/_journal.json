@@ -939,6 +939,13 @@
       "when": 1787838000000,
       "tag": "0132_shipments-ly-do-cham",
       "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1787841600000,
+      "tag": "0133_credit-notes",
+      "breakpoints": true
     }
   ]
 }

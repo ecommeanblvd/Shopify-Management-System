@@ -174,7 +174,7 @@ export function KpiTab({ ky, tu, den, auto, nhap }: {
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}.`],
-                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} / thuộc diện ${vnd(auto.thuocDienKhieuNaiVnd)} = ${pct(auto.thuocDienKhieuNaiVnd > 0 ? auto.thuHoiVnd / auto.thuocDienKhieuNaiVnd : null)}`, 'Tiền credit note đã ghi nhận trong kỳ trên tổng tiền đã xác định hãng sai.'],
+                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} / thuộc diện ${vnd(auto.thuocDienKhieuNaiVnd)} = ${pct(auto.thuocDienKhieuNaiVnd > 0 ? auto.thuHoiVnd / auto.thuocDienKhieuNaiVnd : null)}`, `Tổng ${auto.soCreditNote} credit note có NGÀY HOÁ ĐƠN trong kỳ (tải tệp ở trang Đối soát phí ship). Cộng theo ngày ops bấm ghi nhận thì ra ${vnd(auto.thuHoiTheoNgayGhiNhan)} — chỉ để đối chiếu.`],
               ].map(([a, b, c]) => (
                 <tr key={a} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left font-medium">{a}</td>

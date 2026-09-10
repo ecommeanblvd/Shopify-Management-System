@@ -186,3 +186,24 @@ export function dhlShipmentToBillLine(s: DhlShipment): DhlBillLineInput {
     charges: s.charges,
   };
 }
+
+/**
+ * File "concatenated" của DHL gộp NHIỀU hoá đơn dưới MỘT dòng header (một đợt điều chỉnh gồm hoá đơn đảo huỷ và hoá
+ * đơn xuất lại). Tách theo cột "Invoice Number" để đọc riêng từng hoá đơn, mỗi khối kèm lại dòng header.
+ */
+export function tachTheoHoaDon(text: string): string[] {
+  const lines = (text ?? '').split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const delim = splitCsvLine(lines[0], ';').length >= splitCsvLine(lines[0], ',').length ? ';' : ',';
+  const header = splitCsvLine(lines[0], delim).map((h) => h.trim());
+  const iInv = header.indexOf('Invoice Number');
+  if (iInv < 0) return [text];
+  const theoSo = new Map<string, string[]>();
+  for (const l of lines.slice(1)) {
+    const so = (splitCsvLine(l, delim)[iInv] ?? '').trim();
+    const arr = theoSo.get(so) ?? [];
+    arr.push(l);
+    theoSo.set(so, arr);
+  }
+  return [...theoSo.values()].map((rows) => [lines[0], ...rows].join('\n'));
+}

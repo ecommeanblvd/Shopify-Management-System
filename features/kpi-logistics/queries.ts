@@ -36,14 +36,17 @@ export interface SoLieuTuDong {
   kienDaPhanDinh: number;
   kienTonDong: number;
   gateDat: boolean;
-  /** 3C — tiền thu hồi và tổng thuộc diện khiếu nại (chốt theo ngày duyệt đối soát). */
+  /** 3C — tiền thu hồi = tổng credit note có NGÀY HOÁ ĐƠN trong kỳ (CEO 10/09/2026), lấy trị tuyệt đối. */
   thuHoiVnd: number;
+  soCreditNote: number;
+  /** Số cũ: cộng theo ngày ops bấm ghi nhận — giữ để đối chiếu khi số lệch. */
+  thuHoiTheoNgayGhiNhan: number;
   thuocDienKhieuNaiVnd: number;
   tyLeThuHoi: number | null;
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
-  const [amCuoc, chungTu, shipHo, gate, thuHoi, kienGiao, canRows] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienGiao, canRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null }>(sql`
       WITH b AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -71,6 +74,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
         LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
        WHERE s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+    db.execute<{ tong: string | null; n: string }>(sql`
+      SELECT SUM(ABS(tong_cong::numeric))::text AS tong, COUNT(*)::text AS n
+        FROM credit_notes WHERE ngay >= ${tu}::date AND ngay <= ${den}::date;`),
     db.execute<{ thu: string | null; dien: string | null }>(sql`
       SELECT SUM(COALESCE(recovered_vnd::numeric, 0))::text AS thu,
              -- Thuộc diện khiếu nại = mọi dòng ta xác định HÃNG SAI: đang đòi, đã có credit note, hoặc mới flag.
@@ -100,8 +106,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   const can = Number(gate.rows[0]?.can ?? 0);
   const da = Number(gate.rows[0]?.da ?? 0);
   const ton = Number(gate.rows[0]?.ton ?? 0);
-  const thu = Number(thuHoi.rows[0]?.thu ?? 0);
+  const thuCu = Number(thuHoi.rows[0]?.thu ?? 0);
   const dien = Number(thuHoi.rows[0]?.dien ?? 0);
+  const thu = Number(creditNote.rows[0]?.tong ?? 0);
 
   return {
     tu, den,
@@ -121,6 +128,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     kienTonDong: ton,
     gateDat: ton === 0,
     thuHoiVnd: Math.round(thu),
+    soCreditNote: Number(creditNote.rows[0]?.n ?? 0),
+    thuHoiTheoNgayGhiNhan: Math.round(thuCu),
     thuocDienKhieuNaiVnd: Math.round(dien),
     tyLeThuHoi: dien > 0 ? thu / dien : null,
   };
