@@ -2466,3 +2466,29 @@ export const customerOrderRequests = pgTable('customer_order_requests', {
   index('customer_order_requests_order_idx').on(t.orderId),
   index('customer_order_requests_customer_idx').on(t.storeId, t.shopifyCustomerId),
 ]);
+
+/**
+ * Số liệu NHẬP TAY cho bảng KPI Logistics Operations Specialist (Quy chế bản 1.2) — phần hệ thống không tự biết:
+ * quy trách nhiệm đơn âm cước, audit size thùng của Kho, hai hạng mục 3B, clawback, số thực thu Kế toán xác nhận.
+ * Một dòng / kỳ (tháng lịch 'YYYY-MM'). Mọi số còn lại tính tự động từ hệ thống (features/kpi-logistics/queries.ts).
+ */
+export const kpiLogisticsThang = pgTable('kpi_logistics_thang', {
+  ky: text('ky').primaryKey(),
+  /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí (quản lý chốt từ danh sách hệ thống flag). */
+  soDonAmCuocLoi: integer('so_don_am_cuoc_loi').notNull().default(0),
+  /** 1.4 — tỉ lệ đơn Kho đóng đúng size thùng (0..1); null = chưa audit. */
+  tyLeSizeThung: numeric('ty_le_size_thung', { precision: 5, scale: 4 }),
+  roRiGiam: boolean('ro_ri_giam').notNull().default(false),
+  khacPhucGoc: boolean('khac_phuc_goc').notNull().default(false),
+  /** Ghi đè kết quả Gate khi tồn đọng là do lịch sử trước khi áp quy chế; null = dùng số tự động. */
+  gateOverride: boolean('gate_override'),
+  gateGhiChu: text('gate_ghi_chu'),
+  /** Số thực thu do Kế toán xác nhận; null = dùng số hệ thống. */
+  thuHoiKeToanVnd: numeric('thu_hoi_ke_toan_vnd', { precision: 16, scale: 2 }),
+  clawbackVnd: numeric('clawback_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
+  /** Nguồn SLA dùng chấm 1.2: 'sop' (bảng cam kết nội bộ D-067) hoặc 'quy_che' (chuẩn cố định trong văn bản). */
+  nguonSla: text('nguon_sla').notNull().default('sop'),
+  ghiChu: text('ghi_chu'),
+  updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});

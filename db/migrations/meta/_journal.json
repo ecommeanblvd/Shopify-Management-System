@@ -925,6 +925,13 @@
       "when": 1787748000000,
       "tag": "0130_carrier-remote-postcodes-idx",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1787834400000,
+      "tag": "0131_kpi-logistics-thang",
+      "breakpoints": true
     }
   ]
 }

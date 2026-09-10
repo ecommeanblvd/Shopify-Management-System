@@ -1,0 +1,190 @@
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
+import Link from 'next/link';
+import { auth } from '@/lib/auth/auth';
+import { getRole } from '@/lib/auth/role';
+import { Card, CardContent } from '@/components/ui/card';
+import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
+import { docNhapKpi } from '@/features/kpi-logistics/actions';
+import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
+import { LUONG_CO_BAN, PHU_CAP_TRACH_NHIEM, tinhBangLuong } from '@/features/kpi-logistics/quy-che';
+
+export const dynamic = 'force-dynamic';
+
+const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
+const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
+/** 12 kỳ gần nhất tính từ tháng hiện tại (giờ kinh doanh +07). */
+function cacKy(homNay: Date): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < 12; i += 1) out.push(new Date(Date.UTC(homNay.getUTCFullYear(), homNay.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+  return out;
+}
+const bienKy = (ky: string): [string, string] => {
+  const [y, m] = ky.split('-').map(Number);
+  return [`${ky}-01`, new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)];
+};
+
+export default async function KpiLogisticsPage({ searchParams }: { searchParams: Promise<{ ky?: string }> }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect('/sign-in');
+  const role = await getRole(session.user.id);
+  if (role !== 'admin') {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+        <h1 className="text-2xl font-semibold">Forbidden</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Bảng KPI gắn với lương nên chỉ tài khoản admin xem được.</p>
+      </div>
+    );
+  }
+
+  const sp = await searchParams;
+  // eslint-disable-next-line react-hooks/purity
+  const homNay = new Date(Date.now() + 7 * 3600_000);
+  const ds = cacKy(homNay);
+  const ky = sp.ky && ds.includes(sp.ky) ? sp.ky : ds[1] ?? ds[0]; // mặc định tháng trước (kỳ đã chốt)
+  const [tu, den] = bienKy(ky);
+
+  const [auto, nhap] = await Promise.all([docSoLieuKpi(tu, den), docNhapKpi(ky)]);
+
+  const nguonSla = (nhap?.nguonSla === 'quy_che' ? 'quy_che' : 'sop') as 'sop' | 'quy_che';
+  const sla = nguonSla === 'quy_che' ? auto.slaQuyChe : auto.slaTong;
+  const gateDat = nhap?.gateOverride ?? auto.gateDat;
+  const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
+  const tyLeThuHoi = auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null;
+
+  const bang = tinhBangLuong({
+    soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
+    tyLeSla: sla.tyLe,
+    tyLeLoiChungTu: auto.tyLeLoiChungTu,
+    tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),
+    soDonShipHo: auto.soDonShipHo,
+    gateDat,
+    roRiGiam: nhap?.roRiGiam ?? false,
+    khacPhucGoc: nhap?.khacPhucGoc ?? false,
+    thuHoiVnd: thuHoi,
+    tyLeThuHoi,
+    clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
+  });
+
+  const the = [
+    { nhan: 'Tổng thu nhập gross', so: vnd(bang.tong), chinh: true },
+    { nhan: 'Lương cứng', so: vnd(LUONG_CO_BAN + PHU_CAP_TRACH_NHIEM) },
+    { nhan: 'Pillar 1 — KPI vận hành', so: `${vnd(bang.p1)} / 1.200.000đ` },
+    { nhan: 'Pillar 2 — Ship hộ', so: vnd(bang.p2) },
+    { nhan: 'Pillar 3 — Đối soát', so: gateDat ? vnd(bang.p3) : 'Trượt Gate' },
+  ];
+
+  return (
+    <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">KPI Logistics Operations Specialist</h1>
+          <p className="text-sm text-muted-foreground">
+            Bảng lương KPI theo Quy chế bản 1.2. Số liệu lấy thẳng từ hệ thống và hoá đơn carrier; phần hệ thống không tự
+            biết thì nhập ở cuối trang. Kỳ chấm là tháng lịch, lọc theo ngày gửi hàng.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1 text-sm">
+          {ds.slice(0, 6).map((k) => (
+            <Link key={k} href={`/f/kpi-logistics?ky=${k}`}
+              className={`rounded px-2.5 py-1 ${ky === k ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+              {k}
+            </Link>
+          ))}
+          <a href={`/f/kpi-logistics/bang-kpi.csv?ky=${ky}`} className="ml-2 rounded border border-border px-2.5 py-1 hover:bg-muted">Xuất CSV</a>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
+        {the.map((t) => (
+          <div key={t.nhan} className="space-y-1 bg-card p-4">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t.nhan}</div>
+            <div className={`tabular-nums font-semibold ${t.chinh ? 'text-2xl text-emerald-600 dark:text-emerald-400' : 'text-lg'}`}>{t.so}</div>
+          </div>
+        ))}
+      </div>
+
+      <Card><CardContent className="p-0">
+        <div className="border-b border-border px-4 py-3 text-sm font-semibold">Bảng tính kỳ {ky} ({tu} → {den})</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                <th className="text-left">Khoản mục</th><th className="text-left">Số liệu trong kỳ</th><th className="text-right">Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {bang.dong.map((d) => (
+                <tr key={d.ma} className={`border-t border-border/60 [&>td]:px-3 [&>td]:py-2 ${d.ma === 'luong-cung' ? 'font-medium' : ''}`}>
+                  <td className="text-left">{d.ten}</td>
+                  <td className="text-left text-muted-foreground">{d.soLieu}</td>
+                  <td className={`text-right font-medium ${d.tien < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{d.tien === 0 ? '0đ' : vnd(d.tien)}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-border bg-muted/30 font-semibold [&>td]:px-3 [&>td]:py-2.5">
+                <td className="text-left">TỔNG THU NHẬP THỰC NHẬN (gross)</td><td />
+                <td className="text-right text-emerald-600 dark:text-emerald-400">{vnd(bang.tong)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+          Gross — chưa trừ thuế thu nhập cá nhân và phần người lao động đóng bảo hiểm xã hội.
+        </p>
+      </CardContent></Card>
+
+      <Card><CardContent className="p-0">
+        <div className="border-b border-border px-4 py-3 text-sm font-semibold">Số liệu hệ thống tự tính</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
+            <tbody>
+              {[
+                ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, 'Cước carrier thực trả vượt cước thu của khách. Cần quản lý quy trách nhiệm trước khi trừ KPI.'],
+                ['SLA theo SOP nội bộ', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, 'Cam kết theo từng nước và từng hãng (bảng SOP trong Báo cáo ship).'],
+                ['SLA theo chuẩn cố định trong quy chế', `${auto.slaQuyChe.dungHan}/${auto.slaQuyChe.n} = ${pct(auto.slaQuyChe.tyLe)}`, 'Văn bản chỉ khai Mỹ ≤2 ngày và Saudi ≤5 ngày; chỉ tính được trên hai tuyến này.'],
+                ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
+                ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
+                ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}.`],
+                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} / thuộc diện ${vnd(auto.thuocDienKhieuNaiVnd)} = ${pct(auto.thuocDienKhieuNaiVnd > 0 ? auto.thuHoiVnd / auto.thuocDienKhieuNaiVnd : null)}`, 'Tiền credit note đã ghi nhận trong kỳ trên tổng tiền đã xác định hãng sai.'],
+              ].map(([a, b, c]) => (
+                <tr key={a} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
+                  <td className="text-left font-medium">{a}</td>
+                  <td className="text-right whitespace-nowrap">{b}</td>
+                  <td className="text-left text-[11px] text-muted-foreground">{c}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent></Card>
+
+      <Card><CardContent className="space-y-4 p-4">
+        <div>
+          <div className="text-sm font-semibold">Nhập phần hệ thống không tự biết — kỳ {ky}</div>
+          <p className="text-[11px] text-muted-foreground">
+            Lưu theo kỳ, lần sau mở lại không phải nhập lại.
+            {nhap?.updatedAt ? ` Cập nhật lần cuối ${new Date(nhap.updatedAt).toLocaleString('vi-VN')}.` : ' Kỳ này chưa nhập gì.'}
+          </p>
+        </div>
+        <NhapKpiForm
+          ky={ky}
+          soDonAmCuocGoiY={auto.soDonAmCuoc}
+          gateTuDong={auto.gateDat}
+          banDau={{
+            ky,
+            soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
+            tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),
+            roRiGiam: nhap?.roRiGiam ?? false,
+            khacPhucGoc: nhap?.khacPhucGoc ?? false,
+            gateOverride: nhap?.gateOverride ?? null,
+            gateGhiChu: nhap?.gateGhiChu ?? null,
+            thuHoiKeToanVnd: nhap?.thuHoiKeToanVnd == null ? null : Number(nhap.thuHoiKeToanVnd),
+            clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
+            nguonSla,
+            ghiChu: nhap?.ghiChu ?? null,
+          }}
+        />
+      </CardContent></Card>
+    </div>
+  );
+}
