@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import Link from 'next/link';
@@ -10,6 +11,10 @@ import { loadShipReport } from '@/features/ship-report/queries';
 import { pnlByMonth, pnlBreakdown } from '@/features/ship-report/pnl';
 import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/features/ship-report/surcharges';
 import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/features/shipments/transit-stats';
+import {
+  NHAN_PHAM_VI, NGUONG_DU_LIEU, PHAM_VI, chuanDeXuat, chuanHoaPhamVi, doPhu, docTieuChuanGiao, gomTheoNuoc,
+  type DongTieuChuan,
+} from '@/features/shipments/tieu-chuan-giao';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +24,16 @@ const flag = (cc: string) => /^[A-Z]{2}$/.test(cc) ? cc.replace(/./g, (ch) => St
 const REGION_VI = new Intl.DisplayNames(['vi'], { type: 'region' });
 const countryName = (cc: string) => { try { return REGION_VI.of(cc) ?? cc; } catch { return cc; } };
 const SEG_LABEL: Record<string, string> = { total: 'Tổng', shopify: 'Shopify', ship_ho: 'Ship hộ' };
+/** Số ngày hiển thị gọn: 6 thay vì 6.0; null → '—'. */
+const soNgay = (v: number | null) => (v == null ? '—' : (Number.isInteger(v) ? String(v) : v.toFixed(1)));
+const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
+/** Ô cột Chuẩn: "n ngày" hoặc "ít dữ liệu" khi mẫu chưa đủ. */
+const oChuan = (r: DongTieuChuan) => {
+  const c = chuanDeXuat(r);
+  return c == null ? <span className="text-[11px] font-normal text-muted-foreground">ít dữ liệu</span> : <>{c} ngày</>;
+};
 
-type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string };
+type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string; pv?: string };
 
 export default async function ShipReportPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -31,7 +44,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   }
 
   const sp = await searchParams;
-  const tab = sp.tab === 'surcharge' ? 'surcharge' : sp.tab === 'transit' ? 'transit' : 'pnl';
+  const tab = sp.tab === 'surcharge' ? 'surcharge' : sp.tab === 'transit' ? 'transit' : sp.tab === 'chuan' ? 'chuan' : 'pnl';
   const monthsBack = [3, 6, 12].includes(Number(sp.months)) ? Number(sp.months) : 6;
 
   const raw = await loadShipReport(monthsBack);
@@ -45,12 +58,17 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const transit = tab === 'transit' ? await getTransitStats(transitDays) : null;
   const transitMatrix = transit ? pivotRoutesByCountry(transit.routes) : null;
 
+  // Tab Tiêu chuẩn giao: toàn bộ lịch sử (mặc định), tách theo line ship × quốc gia (CEO 10/09/2026).
+  const phamVi = chuanHoaPhamVi(sp.pv);
+  const chuan = tab === 'chuan' ? await docTieuChuanGiao(phamVi) : null;
+  const chuanTheoNuoc = chuan ? gomTheoNuoc(chuan.theoNuoc, chuan.theoLineNuoc) : [];
+
   const surRows = surchargeSummary(raw.surchargeItems, raw.totalShipments);
   const pickedSur = sp.sur && surRows.some((r) => r.type === sp.sur) ? sp.sur : surRows[0]?.type ?? null;
   const topRoutes = pickedSur ? surchargeTopRoutes(raw.surchargeItems, pickedSur) : [];
 
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
+    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), pv: phamVi, ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
     return `/f/ship-report?${p.toString()}`;
   };
 
@@ -75,7 +93,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border text-sm">
-        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao']] as const).map(([key, label]) => (
+        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao'], ['chuan', 'Tiêu chuẩn giao']] as const).map(([key, label]) => (
           <Link key={key} href={qs({ tab: key })}
             className={`-mb-px border-b-2 px-3 py-2 font-medium ${tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
             {label}
@@ -83,7 +101,141 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
         ))}
       </div>
 
-      {tab === 'transit' && transit && transitMatrix ? (
+      {tab === 'chuan' && chuan ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1 text-sm">
+            {PHAM_VI.map((pv) => (
+              <Link key={pv} href={qs({ pv })}
+                className={`rounded px-2.5 py-1 ${phamVi === pv ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+                {NHAN_PHAM_VI[pv]}
+              </Link>
+            ))}
+            <span className="ml-2 text-xs text-muted-foreground">
+              Lọc theo NGÀY GỬI · kiện gửi {chuan.guiTu ?? '—'} → {chuan.guiDen ?? '—'} · ngày giao mới nhất {chuan.giaoMoiNhat ?? '—'}
+            </span>
+          </div>
+
+          {/* Chuẩn chung — con số để cam kết với khách. */}
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
+            {[
+              { nhan: 'Chuẩn cam kết', so: soNgay(chuanDeXuat(chuan.tong)), phu: '9/10 kiện giao trong ngần này (P90)', dam: true },
+              { nhan: 'Thường gặp', so: soNgay(chuan.tong.p50), phu: 'một nửa số kiện nhanh hơn (P50)' },
+              { nhan: 'Trung bình', so: soNgay(chuan.tong.tbNgay), phu: 'bị vài kiện kẹt kéo lệch lên' },
+              { nhan: 'Kiện đã giao', so: chuan.tong.soDaGiao.toLocaleString('vi-VN'), phu: `trên ${chuan.tong.soDaGui.toLocaleString('vi-VN')} kiện đã gửi · phủ ${pct(doPhu(chuan.tong))}` },
+              { nhan: 'Chậm nhất', so: soNgay(chuan.tong.maxNgay), phu: 'kiện kẹt lâu nhất trong dữ liệu' },
+            ].map((t) => (
+              <div key={t.nhan} className="space-y-1 bg-card p-4">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t.nhan}</div>
+                <div className={`text-2xl font-semibold tabular-nums ${t.dam ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>{t.so}</div>
+                <div className="text-[11px] leading-snug text-muted-foreground">{t.phu}</div>
+              </div>
+            ))}
+          </div>
+
+          <Card><CardContent className="p-0">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Theo line ship</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                    <th className="text-left">Line</th><th className="text-right">Đã gửi</th><th className="text-right">Đã giao</th>
+                    <th className="text-right" title="Tỉ lệ kiện đã có ngày giao — phần còn lại ops chưa ghi nhận">Phủ</th>
+                    <th className="text-right">TB</th><th className="text-right" title="Một nửa số kiện nhanh hơn mức này">P50</th>
+                    <th className="text-right">P75</th><th className="text-right" title="9/10 kiện giao trong mức này">P90</th>
+                    <th className="text-right">Chậm nhất</th>
+                    <th className="text-right" title="P90 làm tròn lên — mức nên cam kết với khách">Chuẩn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chuan.theoLine.filter((l) => l.soDaGiao > 0).map((l) => (
+                    <tr key={l.line} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2">
+                      <td className="text-left font-medium uppercase">{l.line}</td>
+                      <td className="text-right">{l.soDaGui}</td>
+                      <td className="text-right">{l.soDaGiao}</td>
+                      <td className="text-right text-muted-foreground">{pct(doPhu(l))}</td>
+                      <td className="text-right">{soNgay(l.tbNgay)}</td>
+                      <td className="text-right">{soNgay(l.p50)}</td>
+                      <td className="text-right">{soNgay(l.p75)}</td>
+                      <td className="text-right">{soNgay(l.p90)}</td>
+                      <td className="text-right text-muted-foreground">{soNgay(l.maxNgay)}</td>
+                      <td className="text-right font-semibold">{oChuan(l)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+              Line “?” là kiện chưa gán carrier. Mẫu dưới {NGUONG_DU_LIEU} kiện giao không chốt chuẩn (hiện “ít dữ liệu”).
+            </p>
+          </CardContent></Card>
+
+          <Card><CardContent className="p-0">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">
+              Theo quốc gia × line ship <span className="font-normal text-muted-foreground">({chuanTheoNuoc.length} nước có kiện đã giao)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                    <th className="text-left">Quốc gia / line</th><th className="text-right">Đã giao</th>
+                    <th className="text-right">TB</th><th className="text-right">P50</th><th className="text-right">P90</th>
+                    <th className="text-right">Chậm nhất</th><th className="text-right">Chuẩn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chuanTheoNuoc.map((n) => (
+                    <Fragment key={n.tong.country}>
+                      <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
+                        <td className="text-left">
+                          <span className="inline-flex items-center gap-2">
+                            <CountryFlag code={n.tong.country} className="!h-4 !w-6" />
+                            <span>{countryName(n.tong.country)}</span>
+                            <span className="text-[11px] font-normal text-muted-foreground">{n.tong.country}</span>
+                          </span>
+                        </td>
+                        <td className="text-right">{n.tong.soDaGiao}</td>
+                        <td className="text-right">{soNgay(n.tong.tbNgay)}</td>
+                        <td className="text-right">{soNgay(n.tong.p50)}</td>
+                        <td className="text-right">{soNgay(n.tong.p90)}</td>
+                        <td className="text-right text-muted-foreground">{soNgay(n.tong.maxNgay)}</td>
+                        <td className="text-right font-semibold text-emerald-600 dark:text-emerald-400">{oChuan(n.tong)}</td>
+                      </tr>
+                      {n.lines.map((l) => (
+                        <tr key={`${n.tong.country}-${l.line}`} className="border-t border-border/40 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
+                          <td className="pl-10 text-left uppercase text-xs">{l.line}</td>
+                          <td className="text-right">{l.soDaGiao}</td>
+                          <td className="text-right">{soNgay(l.tbNgay)}</td>
+                          <td className="text-right">{soNgay(l.p50)}</td>
+                          <td className="text-right">{soNgay(l.p90)}</td>
+                          <td className="text-right">{soNgay(l.maxNgay)}</td>
+                          <td className="text-right">{oChuan(l)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent></Card>
+
+          <Card><CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
+            <div className="text-sm font-semibold text-foreground">Đọc số này cần biết</div>
+            <p>
+              Số ngày = từ ngày tạo vận đơn (ngày gửi) đến ngày khách nhận. Ngày giao lấy từ Lark (ops nhập), POD trên bill
+              carrier và tracking — kiện chưa ai ghi nhận giao thì không vào thống kê.
+            </p>
+            <p>
+              Độ phủ ghi nhận giao theo năm gửi:{' '}
+              {chuan.doPhuTheoNam.map((n) => `${n.nam}: ${n.soDaGiao}/${n.soDaGui} kiện (${pct(n.soDaGui ? n.soDaGiao / n.soDaGui : null)})`).join(' · ')}.
+              {chuan.doPhuTheoNam.some((n) => n.soDaGui > 0 && n.soDaGiao / n.soDaGui < 0.5) && ' Năm phủ thấp chỉ còn lại kiện có người nhập tay (thường là kiện có vấn đề) nên kéo trung bình lên — nhìn P50/P90 thay vì trung bình.'}
+            </p>
+            <p>
+              Kiện kẹt rất lâu (hàng trăm ngày) phần lớn là ops đánh dấu giao hàng loạt cùng một ngày, không phải thời gian
+              giao thật. Vì vậy chuẩn lấy theo P90 chứ không theo trung bình hay số chậm nhất.
+            </p>
+          </CardContent></Card>
+        </>
+      ) : tab === 'transit' && transit && transitMatrix ? (
         <>
           <div className="flex items-center gap-1 text-sm">
             {[7, 14, 30, 90].map((d) => (
