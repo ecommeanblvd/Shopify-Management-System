@@ -24,10 +24,12 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap }: {
+export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
+  /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
+  suaDuoc: boolean;
 }) {
   const sla = auto.slaTong;
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
@@ -187,6 +189,7 @@ export function KpiTab({ ky, tu, den, auto, nhap }: {
         </div>
       </CardContent></Card>
 
+      {suaDuoc ? (
       <Card><CardContent className="space-y-4 p-4">
         <div>
           <div className="text-sm font-semibold">Nhập phần hệ thống không tự biết — kỳ {ky}</div>
@@ -215,6 +218,14 @@ export function KpiTab({ ky, tu, den, auto, nhap }: {
           }}
         />
       </CardContent></Card>
-        </>
+      ) : (
+        <Card><CardContent className="p-4 text-[11px] text-muted-foreground">
+          Một số tiêu chí cần quản lý xác nhận thủ công (quy trách nhiệm đơn âm cước, miễn trừ size thùng, hai hạng mục
+          3B, clawback). Bạn chỉ xem kết quả; muốn khiếu nại thì phản hồi bằng văn bản trong 3 ngày làm việc theo mục XI
+          của quy chế.
+        </CardContent></Card>
+      )}
+
+    </>
   );
 }

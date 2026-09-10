@@ -5,14 +5,26 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
+import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 
-/** Bảng KPI gắn với lương nên chỉ admin xem/sửa. */
+/** SỬA số liệu KPI: chỉ quản lý — người bị chấm không được tự sửa đầu vào của mình. */
 async function requireAdmin(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Chưa đăng nhập');
   const role = await getRole(session.user.id);
-  if (role !== 'admin') throw new Error('Chỉ admin được xem và sửa bảng KPI lương');
+  if (role !== 'admin') throw new Error('Chỉ quản lý được sửa số liệu KPI');
+  return session.user.id;
+}
+
+/** XEM bảng KPI: quản lý, hoặc chính nhân sự phụ trách logistics (CEO 10/09/2026). */
+async function requireXem(): Promise<string> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('Chưa đăng nhập');
+  const role = await getRole(session.user.id);
+  if (role !== 'admin' && !(role && hasPermission(role, 'view_kpi_logistics'))) {
+    throw new Error('Không có quyền xem bảng KPI logistics');
+  }
   return session.user.id;
 }
 
@@ -54,9 +66,9 @@ export async function luuNhapKpi(input: NhapKpiInput): Promise<{ ok: true }> {
   return { ok: true };
 }
 
-/** Số liệu nhập tay đã lưu của một kỳ (null khi chưa nhập). */
+/** Số liệu nhập tay đã lưu của một kỳ (null khi chưa nhập). Chỉ đọc — người xem cũng cần thấy để hiểu điểm của mình. */
 export async function docNhapKpi(ky: string): Promise<typeof schema.kpiLogisticsThang.$inferSelect | null> {
-  await requireAdmin();
+  await requireXem();
   const [row] = await db.select().from(schema.kpiLogisticsThang).where(eq(schema.kpiLogisticsThang.ky, ky));
   return row ?? null;
 }

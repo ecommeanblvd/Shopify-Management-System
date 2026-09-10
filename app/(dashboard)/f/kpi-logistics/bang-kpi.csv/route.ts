@@ -2,6 +2,7 @@
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
+import { hasPermission } from '@/lib/auth/rbac';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
@@ -12,7 +13,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request): Promise<Response> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return new Response('Unauthorized', { status: 401 });
-  if ((await getRole(session.user.id)) !== 'admin') return new Response('Forbidden', { status: 403 });
+  const role = await getRole(session.user.id);
+  // Xem/xuất: quản lý hoặc chính nhân sự logistics. Sửa số liệu vẫn chỉ quản lý (xem features/kpi-logistics/actions.ts).
+  if (role !== 'admin' && !(role && hasPermission(role, 'view_kpi_logistics'))) return new Response('Forbidden', { status: 403 });
 
   const ky = new URL(req.url).searchParams.get('ky') ?? '';
   if (!/^\d{4}-\d{2}$/.test(ky)) return new Response('Thiếu tham số ky=YYYY-MM', { status: 400 });

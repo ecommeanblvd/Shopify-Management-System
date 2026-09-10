@@ -39,7 +39,9 @@ export type Permission =
   | 'view_ship_ho'
   | 'manage_ship_ho'
   | 'view_cogs'
-  | 'manage_cogs';
+  | 'manage_cogs'
+  /** Xem bảng điểm KPI của vị trí logistics (chính nhân sự đó xem được kết quả của mình). */
+  | 'view_kpi_logistics';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -54,7 +56,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products', 'manage_mmp_products',
     'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
-    'view_cogs', 'manage_cogs',
+    'view_cogs', 'manage_cogs', 'view_kpi_logistics',
   ],
   operator: [
     'view', 'run_feature',

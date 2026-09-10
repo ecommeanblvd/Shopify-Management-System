@@ -63,8 +63,9 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const TABS = ['pnl', 'surcharge', 'transit', 'chuan', 'sop', 'kpi'] as const;
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '') ? (sp.tab as (typeof TABS)[number]) : 'pnl';
-  // Tab KPI là dữ liệu nhân sự → chỉ admin.
+  // Tab KPI: chính nhân sự logistics xem được bảng điểm của mình (chỉ ĐỌC); mọi ô nhập vẫn chỉ admin (CEO 10/09/2026).
   const laAdmin = role === 'admin';
+  const xemDuocKpi = laAdmin || hasPermission(role, 'view_kpi_logistics');
   const monthsBack = [3, 6, 12].includes(Number(sp.months)) ? Number(sp.months) : 6;
 
   const raw = await loadShipReport(monthsBack);
@@ -84,7 +85,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const dsKy = cacKy(homNay);
   const kyKpi = sp.ky && dsKy.includes(sp.ky) ? sp.ky : dsKy[1] ?? dsKy[0]; // mặc định tháng trước (kỳ đã chốt)
   const [tuKpi, denKpi] = bienKy(kyKpi);
-  const [autoKpi, nhapKpi] = tab === 'kpi' && laAdmin
+  const [autoKpi, nhapKpi] = tab === 'kpi' && xemDuocKpi
     ? await Promise.all([docSoLieuKpi(tuKpi, denKpi), docNhapKpi(kyKpi)])
     : [null, null];
 
@@ -124,7 +125,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border text-sm">
-        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao'], ['chuan', 'Tiêu chuẩn giao'], ['sop', 'SOP giao hàng'], ...(laAdmin ? [['kpi', 'KPI Logistics'] as const] : [])] as const).map(([key, label]) => (
+        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao'], ['chuan', 'Tiêu chuẩn giao'], ['sop', 'SOP giao hàng'], ...(xemDuocKpi ? [['kpi', 'KPI Logistics'] as const] : [])] as const).map(([key, label]) => (
           <Link key={key} href={qs({ tab: key })}
             className={`-mb-px border-b-2 px-3 py-2 font-medium ${tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
             {label}
@@ -133,9 +134,9 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
       </div>
 
       {tab === 'kpi' ? (
-        !laAdmin ? (
+        !xemDuocKpi ? (
           <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">
-            Bảng KPI là dữ liệu nhân sự — chỉ tài khoản admin xem được.
+            Bảng KPI là dữ liệu nhân sự — chỉ quản lý và chính nhân sự phụ trách logistics xem được.
           </CardContent></Card>
         ) : autoKpi ? (
           <>
@@ -151,7 +152,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                 Kỳ chấm theo NGÀY GỬI {tuKpi} → {denKpi}. Hoá đơn carrier về trễ nên kỳ vừa kết thúc chốt được từ đầu tháng sau.
               </span>
             </div>
-            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} />
+            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin} />
           </>
         ) : null
       ) : tab === 'sop' ? (

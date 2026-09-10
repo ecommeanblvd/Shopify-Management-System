@@ -28,6 +28,9 @@ export const CATALOG: ScopeDef[] = [
   { key: 'carrier_rates', label: 'Carrier rates', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'carrier_rates.invoices', label: 'Hoá đơn nhà cung cấp', actions: ['view', 'create', 'edit'] },
   { key: 'shipping_reconcile', label: 'Đối soát phí ship', actions: ['view', 'edit'] },
+  // Bảng điểm KPI của vị trí logistics: chính nhân sự đó xem kết quả của mình; SỬA số liệu vẫn chỉ quản lý (kiểm
+  // trong features/kpi-logistics/actions.ts), nên ở đây chỉ mở action 'view'.
+  { key: 'kpi.logistics', label: 'KPI vị trí Logistics', actions: ['view'] },
   { key: 'mmp_products', label: 'Sản phẩm MMP', actions: ['view', 'create', 'edit', 'delete', 'push'] },
   { key: 'functions', label: 'Functions', actions: ['view', 'edit'] },
   { key: 'markets', label: 'Markets', actions: ['view', 'edit', 'apply'] },

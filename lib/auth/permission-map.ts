@@ -36,6 +36,9 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   manage_qc: ['warehouse.qc:view', 'warehouse.qc:create', 'warehouse.qc:edit'],
   view_pack_check: ['fulfillment.pack_check:view'],
   check_packed: ['fulfillment.pack_check:view', 'fulfillment.pack_check:create'],
+  // KPI logistics: quyền RIÊNG, không dùng chung 'fulfillment.logistics:view' — role OC cũng có quyền đó nhưng không
+  // phải người bị chấm KPI này. Chỉ ĐỌC; mọi ô nhập vẫn chỉ admin.
+  view_kpi_logistics: ['kpi.logistics:view'],
   view_ship_ho: ['ship_ho:view'],
   manage_ship_ho: ['ship_ho:view', 'ship_ho:create', 'ship_ho:edit'],
   view_cogs: ['orders.cogs:view'],
