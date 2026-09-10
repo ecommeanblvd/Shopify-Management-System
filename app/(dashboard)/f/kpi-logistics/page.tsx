@@ -7,12 +7,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
-import { LUONG_CO_BAN, PHU_CAP_TRACH_NHIEM, tinhBangLuong } from '@/features/kpi-logistics/quy-che';
+import { bangDiemKpi, type DongDiem } from '@/features/kpi-logistics/quy-che';
 
 export const dynamic = 'force-dynamic';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
+/** Nhãn kết quả từ mức đạt: đủ / một phần / mất / chưa chấm được. */
+function ketQua(m: number | null): { chu: string; mau: string } {
+  if (m == null) return { chu: 'Chưa chấm được', mau: 'text-muted-foreground' };
+  if (m >= 1) return { chu: 'Đạt đủ', mau: 'text-emerald-600 dark:text-emerald-400' };
+  if (m > 0) return { chu: `Đạt ${Math.round(m * 100)}%`, mau: 'text-amber-600 dark:text-amber-400' };
+  return { chu: 'Không đạt', mau: 'text-red-600 dark:text-red-400' };
+}
 /** 12 kỳ gần nhất tính từ tháng hiện tại (giờ kinh doanh +07). */
 function cacKy(homNay: Date): string[] {
   const out: string[] = [];
@@ -52,7 +59,7 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   const tyLeThuHoi = auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null;
 
-  const bang = tinhBangLuong({
+  const diem = bangDiemKpi({
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
@@ -66,13 +73,47 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
   });
 
+  const soTieuChiDat = diem.p1.filter((d) => (d.mucDat ?? 0) >= 1).length;
   const the = [
-    { nhan: 'Tổng thu nhập gross', so: vnd(bang.tong), chinh: true },
-    { nhan: 'Lương cứng', so: vnd(LUONG_CO_BAN + PHU_CAP_TRACH_NHIEM) },
-    { nhan: 'Pillar 1 — KPI vận hành', so: `${vnd(bang.p1)} / 1.200.000đ` },
-    { nhan: 'Pillar 2 — Ship hộ', so: vnd(bang.p2) },
-    { nhan: 'Pillar 3 — Đối soát', so: gateDat ? vnd(bang.p3) : 'Trượt Gate' },
+    { nhan: 'Điểm KPI vận hành (Pillar 1)', so: pct(diem.diemP1), chinh: true },
+    { nhan: 'Tiêu chí Pillar 1 đạt đủ', so: `${soTieuChiDat}/4` },
+    { nhan: 'Ship hộ (Pillar 2)', so: `${auto.soDonShipHo} đơn` },
+    { nhan: 'Gate đối soát (Pillar 3)', so: gateDat ? 'Đạt' : 'Chưa đạt' },
+    { nhan: 'Thu hồi công nợ', so: vnd(thuHoi) },
   ];
+
+  const bangTieuChi = (tieuDe: string, dong: DongDiem[], coTrongSo: boolean) => (
+    <Card><CardContent className="p-0">
+      <div className="border-b border-border px-4 py-3 text-sm font-semibold">{tieuDe}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+              <th className="text-left">Tiêu chí</th>
+              {coTrongSo && <th className="text-right">Trọng số</th>}
+              <th className="text-left">Kết quả trong kỳ</th>
+              <th className="text-left">Ngưỡng quy chế</th>
+              <th className="text-right">Mức đạt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dong.map((d) => {
+              const k = ketQua(d.mucDat);
+              return (
+                <tr key={d.ma} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
+                  <td className="text-left font-medium whitespace-nowrap">{d.ma} · {d.ten}</td>
+                  {coTrongSo && <td className="text-right tabular-nums text-muted-foreground">{Math.round((d.trongSo ?? 0) * 100)}%</td>}
+                  <td className="text-left">{d.soLieu}</td>
+                  <td className="text-left text-[11px] text-muted-foreground">{d.nguong}</td>
+                  <td className={`text-right font-semibold whitespace-nowrap ${k.mau}`}>{k.chu}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </CardContent></Card>
+  );
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -80,8 +121,8 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">KPI Logistics Operations Specialist</h1>
           <p className="text-sm text-muted-foreground">
-            Bảng lương KPI theo Quy chế bản 1.2. Số liệu lấy thẳng từ hệ thống và hoá đơn carrier; phần hệ thống không tự
-            biết thì nhập ở cuối trang. Kỳ chấm là tháng lịch, lọc theo ngày gửi hàng.
+            Kết quả KPI theo Quy chế bản 1.2. Số liệu lấy thẳng từ hệ thống và hoá đơn carrier; phần hệ thống không tự biết
+            thì nhập ở cuối trang. Kỳ chấm là tháng lịch, lọc theo ngày gửi hàng.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1 text-sm">
@@ -104,34 +145,13 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
         ))}
       </div>
 
-      <Card><CardContent className="p-0">
-        <div className="border-b border-border px-4 py-3 text-sm font-semibold">Bảng tính kỳ {ky} ({tu} → {den})</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                <th className="text-left">Khoản mục</th><th className="text-left">Số liệu trong kỳ</th><th className="text-right">Thành tiền</th>
-              </tr>
-            </thead>
-            <tbody className="tabular-nums">
-              {bang.dong.map((d) => (
-                <tr key={d.ma} className={`border-t border-border/60 [&>td]:px-3 [&>td]:py-2 ${d.ma === 'luong-cung' ? 'font-medium' : ''}`}>
-                  <td className="text-left">{d.ten}</td>
-                  <td className="text-left text-muted-foreground">{d.soLieu}</td>
-                  <td className={`text-right font-medium ${d.tien < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>{d.tien === 0 ? '0đ' : vnd(d.tien)}</td>
-                </tr>
-              ))}
-              <tr className="border-t-2 border-border bg-muted/30 font-semibold [&>td]:px-3 [&>td]:py-2.5">
-                <td className="text-left">TỔNG THU NHẬP THỰC NHẬN (gross)</td><td />
-                <td className="text-right text-emerald-600 dark:text-emerald-400">{vnd(bang.tong)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-          Gross — chưa trừ thuế thu nhập cá nhân và phần người lao động đóng bảo hiểm xã hội.
-        </p>
-      </CardContent></Card>
+      <div className="text-xs text-muted-foreground">
+        Kỳ {ky} ({tu} → {den}). Report này chỉ đo KẾT QUẢ KPI; quy ra tiền thưởng theo quy chế là phần của HR.
+      </div>
+
+      {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
+      {bangTieuChi('Pillar 2 — Ship hộ (sản lượng)', diem.p2, false)}
+      {bangTieuChi('Pillar 3 — Đối soát & thu hồi công nợ', diem.p3, false)}
 
       <Card><CardContent className="p-0">
         <div className="border-b border-border px-4 py-3 text-sm font-semibold">Số liệu hệ thống tự tính</div>

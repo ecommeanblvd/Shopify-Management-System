@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  LUONG_CUNG, QUY_P1_TONG, diemBienCuoc, diemDonHoanHao, diemSizeThung, diemSla, heSoK, thuongShipHo,
-  thuongTheoNac, thuongThuHoi, tinhBangLuong, type DauVaoKpi,
+  LUONG_CUNG, QUY_P1_TONG, TRONG_SO_P1, bangDiemKpi, diemBienCuoc, diemDonHoanHao, diemSizeThung, diemSla, heSoK,
+  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, type DauVaoKpi,
 } from './quy-che';
 
 describe('quy-che KPI logistics', () => {
@@ -59,6 +59,26 @@ describe('quy-che KPI logistics', () => {
     };
     expect(tinhBangLuong(v).p3).toBe(0);
     expect(tinhBangLuong({ ...v, gateDat: true }).p3).toBe(1_800_000);
+  });
+  it('bảng điểm KPI: trọng số 30/30/30/10, điểm P1 = Σ trọng số × mức đạt', () => {
+    expect(TRONG_SO_P1.bienCuoc + TRONG_SO_P1.sla + TRONG_SO_P1.hoanHao + TRONG_SO_P1.sizeThung).toBeCloseTo(1, 10);
+    // Ví dụ tháng 7 trong quy chế: 1 đơn âm cước (90 %), SLA 96 % (100 %), lỗi 1,5 % (100 %), size 97 % (50 %).
+    const b = bangDiemKpi({
+      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, soDonShipHo: 80,
+      gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
+    });
+    expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
+    expect(b.diemP1).toBeCloseTo(0.3 * 0.9 + 0.3 + 0.3 + 0.1 * 0.5, 10); // = 0,92
+    expect(b.p3.every((d) => d.mucDat === 1)).toBe(true);
+  });
+  it('bảng điểm: tiêu chí chưa có dữ liệu để mức đạt null và tính 0 điểm; trượt Gate thì Pillar 3 về 0', () => {
+    const b = bangDiemKpi({
+      soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, soDonShipHo: 0,
+      gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 90_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
+    });
+    expect(b.p1.map((d) => d.mucDat)).toEqual([1, null, null, null]);
+    expect(b.diemP1).toBeCloseTo(0.3, 10); // chỉ 1.1 đạt
+    expect(b.p3.map((d) => d.mucDat)).toEqual([0, 0, 0, 0]);
   });
   it('dựng lại đúng ví dụ tháng 7/2026 trong quy chế: 13.404.000đ', () => {
     const { p1, p2, p3, tong } = tinhBangLuong({

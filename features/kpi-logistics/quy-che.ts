@@ -164,3 +164,107 @@ export function tinhBangLuong(v: DauVaoKpi): { dong: DongBangLuong[]; p1: number
   const p3 = roRi + khacPhuc + tien3C;
   return { dong, p1, p2, p3, tong: dong.reduce((s, d) => s + d.tien, 0) };
 }
+
+/* ───────── BẢNG ĐIỂM KPI (không tiền) ─────────
+ * CEO 10/09/2026: report cho nhân sự chỉ cần KẾT QUẢ KPI — đạt bao nhiêu phần trăm từng tiêu chí; quy ra tiền là việc
+ * của HR. Các hàm tiền ở trên vẫn giữ để HR/kế toán đối chiếu khi cần, nhưng trang report không dùng.
+ */
+
+/** Trọng số Pillar 1 theo quy chế (mục III). */
+export const TRONG_SO_P1 = { bienCuoc: 0.30, sla: 0.30, hoanHao: 0.30, sizeThung: 0.10 } as const;
+
+export interface DongDiem {
+  ma: string;
+  ten: string;
+  /** Trọng số trong Pillar 1; null với dòng không thuộc Pillar 1. */
+  trongSo: number | null;
+  /** Số đo thực tế trong kỳ. */
+  soLieu: string;
+  /** Ngưỡng quy chế để đối chiếu. */
+  nguong: string;
+  /** Mức đạt 0..1 (theo bậc quy chế); null = chưa có dữ liệu để chấm. */
+  mucDat: number | null;
+}
+
+export interface BangDiemKpi {
+  p1: DongDiem[];
+  /** Điểm Pillar 1 = Σ(trọng số × mức đạt), 0..1. Tiêu chí chưa có dữ liệu tính 0. */
+  diemP1: number;
+  p2: DongDiem[];
+  p3: DongDiem[];
+  gateDat: boolean;
+}
+
+/** Bảng điểm KPI một kỳ — chỉ kết quả, không quy ra tiền. */
+export function bangDiemKpi(v: DauVaoKpi): BangDiemKpi {
+  const bienCuoc = diemBienCuoc(v.soDonAmCuocLoi);
+  const sla = diemSla(v.tyLeSla);
+  const hoanHao = diemDonHoanHao(v.tyLeLoiChungTu);
+  const size = diemSizeThung(v.tyLeSizeThung);
+  const thuHoi = thuongThuHoi(v.thuHoiVnd, v.tyLeThuHoi);
+  const tien = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
+
+  const p1: DongDiem[] = [
+    {
+      ma: '1.1', ten: 'Bảo toàn biên cước', trongSo: TRONG_SO_P1.bienCuoc,
+      soLieu: `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm`,
+      nguong: '0 đơn — mỗi đơn trừ 10 % tiêu chí, trần trừ 50 %',
+      mucDat: bienCuoc.mucNhan,
+    },
+    {
+      ma: '1.2', ten: 'Đảm bảo SLA thời gian giao hàng', trongSo: TRONG_SO_P1.sla,
+      soLieu: v.tyLeSla == null ? 'Chưa có kiện nào ghi nhận giao' : `${Math.round(v.tyLeSla * 1000) / 10}% kiện đạt SLA`,
+      nguong: '≥95 % đủ · 90–95 % còn 75 % · 85–90 % còn 50 % · <85 % mất',
+      mucDat: v.tyLeSla == null ? null : sla.mucNhan,
+    },
+    {
+      ma: '1.3', ten: 'Đơn giao hoàn hảo', trongSo: TRONG_SO_P1.hoanHao,
+      soLieu: v.tyLeLoiChungTu == null ? 'Chưa có hoá đơn trong kỳ' : `${Math.round(v.tyLeLoiChungTu * 1000) / 10}% kiện phát sinh phí do chứng từ/địa chỉ`,
+      nguong: '≤2 % đủ · >2–5 % còn 70 % · >5 % mất',
+      mucDat: v.tyLeLoiChungTu == null ? null : hoanHao.mucNhan,
+    },
+    {
+      ma: '1.4', ten: 'Tuân thủ bảng tra size thùng', trongSo: TRONG_SO_P1.sizeThung,
+      soLieu: v.tyLeSizeThung == null ? 'Chưa có kết quả audit Kho' : `${Math.round(v.tyLeSizeThung * 1000) / 10}% đơn đóng đúng size`,
+      nguong: '≥98 % đủ · 95–98 % còn 50 % · <95 % mất',
+      mucDat: v.tyLeSizeThung == null ? null : size.mucNhan,
+    },
+  ];
+  const diemP1 = p1.reduce((s, d) => s + (d.trongSo ?? 0) * (d.mucDat ?? 0), 0);
+
+  const p2: DongDiem[] = [{
+    ma: '2', ten: 'Sản lượng ship hộ thành công', trongSo: null,
+    soLieu: `${v.soDonShipHo} đơn`,
+    nguong: `Mốc lũy tiến tại đơn thứ ${SHIP_HO_MOC}`,
+    mucDat: null,
+  }];
+
+  const p3: DongDiem[] = [
+    {
+      ma: '3A', ten: 'Gate — đối chiếu & phân định đúng hạn', trongSo: null,
+      soLieu: v.gateDat ? 'Đạt' : 'Chưa đạt',
+      nguong: '100 % hoá đơn đối chiếu và 100 % đơn flag được phân định',
+      mucDat: v.gateDat ? 1 : 0,
+    },
+    {
+      ma: '3B-1', ten: 'Giảm rò rỉ dưới ngưỡng', trongSo: null,
+      soLieu: v.gateDat ? (v.roRiGiam ? 'Đạt' : 'Chưa đạt') : 'Không xét (trượt Gate)',
+      nguong: 'Tỉ lệ kg chênh không đòi được giảm so với baseline',
+      mucDat: v.gateDat && v.roRiGiam ? 1 : 0,
+    },
+    {
+      ma: '3B-2', ten: 'Khắc phục gốc lỗi "ta sai"', trongSo: null,
+      soLieu: v.gateDat ? (v.khacPhucGoc ? 'Đạt' : 'Chưa đạt') : 'Không xét (trượt Gate)',
+      nguong: '100 % lỗi nhóm "ta sai" được khắc phục, không tái diễn',
+      mucDat: v.gateDat && v.khacPhucGoc ? 1 : 0,
+    },
+    {
+      ma: '3C', ten: 'Thu hồi công nợ carrier', trongSo: null,
+      soLieu: `Thu hồi ${tien(v.thuHoiVnd)}${v.tyLeThuHoi == null ? '' : ` · thực thu ${Math.round(v.tyLeThuHoi * 100)}% số thuộc diện khiếu nại (hệ số K ${heSoK(v.tyLeThuHoi).toFixed(1)})`}`,
+      nguong: `Sàn nghĩa vụ ${tien(SAN_THU_HOI)}/tháng, vượt sàn mới tính thưởng`,
+      mucDat: v.gateDat ? (thuHoi.tien > 0 ? 1 : 0) : 0,
+    },
+  ];
+
+  return { p1, diemP1, p2, p3, gateDat: v.gateDat };
+}

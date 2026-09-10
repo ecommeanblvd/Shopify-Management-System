@@ -5,7 +5,7 @@ import { getRole } from '@/lib/auth/role';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
-import { tinhBangLuong } from '@/features/kpi-logistics/quy-che';
+import { bangDiemKpi } from '@/features/kpi-logistics/quy-che';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ export async function GET(req: Request): Promise<Response> {
   const sla = (nhap?.nguonSla === 'quy_che' ? auto.slaQuyChe : auto.slaTong);
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
-  const bang = tinhBangLuong({
+  const diem = bangDiemKpi({
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
@@ -38,22 +38,25 @@ export async function GET(req: Request): Promise<Response> {
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
   });
 
+  const dong = (nhom: string, d: { ma: string; ten: string; trongSo: number | null; soLieu: string; nguong: string; mucDat: number | null }): CsvValue[] =>
+    [nhom, `${d.ma} · ${d.ten}`, d.trongSo, d.soLieu, d.nguong, d.mucDat];
+
   const rows: CsvValue[][] = [
-    ...bang.dong.map((d) => [d.ten, d.soLieu, d.tien] as CsvValue[]),
-    ['TỔNG THU NHẬP THỰC NHẬN (gross)', '', bang.tong],
-    ['', '', ''],
-    ['— Số liệu hệ thống —', '', ''],
-    ['Đơn âm cước hệ thống flag', `${auto.soDonAmCuoc} đơn`, auto.amCuocVnd],
-    ['SLA theo SOP nội bộ', `${auto.slaTong.dungHan}/${auto.slaTong.n}`, auto.slaTong.tyLe],
-    ['SLA theo chuẩn cố định quy chế', `${auto.slaQuyChe.dungHan}/${auto.slaQuyChe.n}`, auto.slaQuyChe.tyLe],
-    ['Kiện phát sinh phí địa chỉ/chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill}`, auto.tyLeLoiChungTu],
-    ['Đơn ship hộ', `${auto.soDonShipHo} đơn`, ''],
-    ['Tồn đọng chưa phân định', `${auto.kienTonDong} kiện`, ''],
-    ['Thu hồi công nợ', `thuộc diện ${auto.thuocDienKhieuNaiVnd}`, thuHoi],
-    ['Ghi chú kỳ', nhap?.ghiChu ?? '', ''],
+    ...diem.p1.map((d) => dong('Pillar 1', d)),
+    ['Pillar 1', 'ĐIỂM PILLAR 1 (Σ trọng số × mức đạt)', '', '', '', diem.diemP1],
+    ...diem.p2.map((d) => dong('Pillar 2', d)),
+    ...diem.p3.map((d) => dong('Pillar 3', d)),
+    ['', '', '', '', '', ''],
+    ['Số liệu hệ thống', 'Đơn âm cước hệ thống flag', '', `${auto.soDonAmCuoc} đơn · chênh ${auto.amCuocVnd}đ`, '', ''],
+    ['Số liệu hệ thống', 'SLA theo SOP nội bộ', '', `${auto.slaTong.dungHan}/${auto.slaTong.n}`, '', auto.slaTong.tyLe],
+    ['Số liệu hệ thống', 'SLA theo chuẩn cố định quy chế', '', `${auto.slaQuyChe.dungHan}/${auto.slaQuyChe.n}`, '', auto.slaQuyChe.tyLe],
+    ['Số liệu hệ thống', 'Kiện phát sinh phí địa chỉ/chứng từ', '', `${auto.kienLoiChungTu}/${auto.kienCoBill}`, '', auto.tyLeLoiChungTu],
+    ['Số liệu hệ thống', 'Tồn đọng chưa phân định', '', `${auto.kienTonDong} kiện`, '', ''],
+    ['Số liệu hệ thống', 'Thu hồi công nợ', '', `${thuHoi}đ / thuộc diện ${auto.thuocDienKhieuNaiVnd}đ`, '', auto.tyLeThuHoi],
+    ['Ghi chú kỳ', nhap?.ghiChu ?? '', '', '', '', ''],
   ];
 
-  const body = '﻿' + csvBody(['Khoản mục', 'Số liệu trong kỳ', 'Giá trị'], rows);
+  const body = '﻿' + csvBody(['Nhóm', 'Tiêu chí', 'Trọng số', 'Kết quả trong kỳ', 'Ngưỡng quy chế', 'Mức đạt'], rows);
   return new Response(body, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
