@@ -195,10 +195,10 @@ export interface BangDiemKpi {
   gateDat: boolean;
 }
 
-/** Bảng điểm KPI một kỳ — chỉ kết quả, không quy ra tiền. */
-export function bangDiemKpi(v: DauVaoKpi): BangDiemKpi {
+/** Bảng điểm KPI một kỳ — chỉ kết quả, không quy ra tiền. `ngayKy` (ISO, đầu kỳ) quyết định ngưỡng đạt của tiêu chí 1.2. */
+export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
   const bienCuoc = diemBienCuoc(v.soDonAmCuocLoi);
-  const sla = diemSla(v.tyLeSla);
+  const sla = diemSlaTheoKy(v.tyLeSla, ngayKy);
   const hoanHao = diemDonHoanHao(v.tyLeLoiChungTu);
   const size = diemSizeThung(v.tyLeSizeThung);
   const thuHoi = thuongThuHoi(v.thuHoiVnd, v.tyLeThuHoi);
@@ -213,8 +213,8 @@ export function bangDiemKpi(v: DauVaoKpi): BangDiemKpi {
     },
     {
       ma: '1.2', ten: 'Đảm bảo SLA thời gian giao hàng', trongSo: TRONG_SO_P1.sla,
-      soLieu: v.tyLeSla == null ? 'Chưa có kiện nào ghi nhận giao' : `${Math.round(v.tyLeSla * 1000) / 10}% kiện đạt SLA`,
-      nguong: '≥95 % đủ · 90–95 % còn 75 % · 85–90 % còn 50 % · <85 % mất',
+      soLieu: v.tyLeSla == null ? 'Chưa có kiện nào ghi nhận giao' : `${Math.round(v.tyLeSla * 1000) / 10}% kiện giao đúng cam kết từng nước`,
+      nguong: `Ngưỡng kỳ ${Math.round(nguongDatKy(ngayKy) * 1000) / 10}% đủ · thiếu ≤5 điểm còn 75 % · thiếu ≤10 điểm còn 50 %`,
       mucDat: v.tyLeSla == null ? null : sla.mucNhan,
     },
     {
@@ -267,4 +267,33 @@ export function bangDiemKpi(v: DauVaoKpi): BangDiemKpi {
   ];
 
   return { p1, diemP1, p2, p3, gateDat: v.gateDat };
+}
+
+/* ───────── SLA 1.2 THEO SOP THẬT (thay phần mẫu trong văn bản) ─────────
+ * CEO 10/09/2026: "SLA trên file chỉ là mẫu" → tiêu chí 1.2 chấm theo bảng SOP thật (D-067: cam kết từng nước, thước
+ * riêng từng hãng), và BẬC CHẤM cũng phải đi theo lộ trình siết lỗi của SOP thay vì cố định 95/90/85 — nếu giữ bậc cũ
+ * thì cam kết ngắn kiểu express sẽ luôn cho 0 điểm dù đội làm tốt.
+ *
+ * Ngưỡng đạt của kỳ = 100 % − tỉ lệ lỗi cho phép của kỳ (LO_TRINH_LOI). Bậc dưới nới thêm 5 và 10 điểm phần trăm.
+ */
+import { loiToiDaTaiNgay } from '@/features/shipments/sop-giao-hang';
+
+export const NOI_BAC_75 = 0.05;
+export const NOI_BAC_50 = 0.10;
+
+/** Ngưỡng % đúng hạn phải đạt trong kỳ để tiêu chí 1.2 được tính đủ. */
+export function nguongDatKy(ngayKy: string): number {
+  return 1 - loiToiDaTaiNgay(ngayKy).loiToiDa;
+}
+
+/** 1.2 chấm theo ngưỡng của kỳ: đạt ngưỡng = đủ; thiếu ≤5 điểm = 75 %; thiếu ≤10 điểm = 50 %; thấp hơn = 0. */
+export function diemSlaTheoKy(tyLeDat: number | null, ngayKy: string): MucDat {
+  if (tyLeDat == null) return { tien: 0, mucNhan: 0, dienGiai: 'Chưa có kiện nào ghi nhận giao trong kỳ' };
+  const nguong = nguongDatKy(ngayKy);
+  const p = `${Math.round(tyLeDat * 1000) / 10} %`;
+  const n = `${Math.round(nguong * 1000) / 10} %`;
+  if (tyLeDat >= nguong) return { tien: QUY_P1.sla, mucNhan: 1, dienGiai: `${p} ≥ ngưỡng kỳ ${n}` };
+  if (tyLeDat >= nguong - NOI_BAC_75) return { tien: QUY_P1.sla * 0.75, mucNhan: 0.75, dienGiai: `${p} — thiếu ≤5 điểm so với ngưỡng ${n}` };
+  if (tyLeDat >= nguong - NOI_BAC_50) return { tien: QUY_P1.sla * 0.5, mucNhan: 0.5, dienGiai: `${p} — thiếu ≤10 điểm so với ngưỡng ${n}` };
+  return { tien: 0, mucNhan: 0, dienGiai: `${p} — thấp hơn ngưỡng kỳ ${n} quá 10 điểm` };
 }

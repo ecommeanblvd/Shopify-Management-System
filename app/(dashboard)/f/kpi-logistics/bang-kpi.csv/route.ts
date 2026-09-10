@@ -21,7 +21,7 @@ export async function GET(req: Request): Promise<Response> {
   const den = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 
   const [auto, nhap] = await Promise.all([docSoLieuKpi(tu, den), docNhapKpi(ky)]);
-  const sla = (nhap?.nguonSla === 'quy_che' ? auto.slaQuyChe : auto.slaTong);
+  const sla = auto.slaTong;
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   const diem = bangDiemKpi({
@@ -36,7 +36,7 @@ export async function GET(req: Request): Promise<Response> {
     thuHoiVnd: thuHoi,
     tyLeThuHoi: auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null,
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
-  });
+  }, tu);
 
   const dong = (nhom: string, d: { ma: string; ten: string; trongSo: number | null; soLieu: string; nguong: string; mucDat: number | null }): CsvValue[] =>
     [nhom, `${d.ma} · ${d.ten}`, d.trongSo, d.soLieu, d.nguong, d.mucDat];
@@ -48,8 +48,8 @@ export async function GET(req: Request): Promise<Response> {
     ...diem.p3.map((d) => dong('Pillar 3', d)),
     ['', '', '', '', '', ''],
     ['Số liệu hệ thống', 'Đơn âm cước hệ thống flag', '', `${auto.soDonAmCuoc} đơn · chênh ${auto.amCuocVnd}đ`, '', ''],
-    ['Số liệu hệ thống', 'SLA theo SOP nội bộ', '', `${auto.slaTong.dungHan}/${auto.slaTong.n}`, '', auto.slaTong.tyLe],
-    ['Số liệu hệ thống', 'SLA theo chuẩn cố định quy chế', '', `${auto.slaQuyChe.dungHan}/${auto.slaQuyChe.n}`, '', auto.slaQuyChe.tyLe],
+    ['Số liệu hệ thống', 'SLA giao hàng (bảng SOP từng nước)', '', `${auto.slaTong.dungHan}/${auto.slaTong.n}`, '', auto.slaTong.tyLe],
+    ...auto.slaTheoNuoc.map((d): CsvValue[] => ['SLA từng nước', d.country, `${d.slaNgay} ngày`, `${d.dungHan}/${d.n}`, '', d.tyLeDungHan]),
     ['Số liệu hệ thống', 'Kiện phát sinh phí địa chỉ/chứng từ', '', `${auto.kienLoiChungTu}/${auto.kienCoBill}`, '', auto.tyLeLoiChungTu],
     ['Số liệu hệ thống', 'Tồn đọng chưa phân định', '', `${auto.kienTonDong} kiện`, '', ''],
     ['Số liệu hệ thống', 'Thu hồi công nợ', '', `${thuHoi}đ / thuộc diện ${auto.thuocDienKhieuNaiVnd}đ`, '', auto.tyLeThuHoi],

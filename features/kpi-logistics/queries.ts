@@ -7,17 +7,17 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
-import { chamKpi, tongKpi } from '@/features/shipments/sop-giao-hang';
+import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 
 export interface SoLieuTuDong {
   tu: string; den: string;
   /** 1.1 — đơn có cước carrier THỰC TRẢ vượt cước thu của khách (chưa quy trách nhiệm). */
   soDonAmCuoc: number;
   amCuocVnd: number;
-  /** 1.2 — theo SOP nội bộ (D-067). */
+  /** 1.2 — theo bảng SOP cam kết từng nước (D-067). SLA trong văn bản quy chế chỉ là mẫu, không dùng. */
   slaTong: { n: number; dungHan: number; tyLe: number | null };
-  /** 1.2 — theo chuẩn cố định ghi trong quy chế (Mỹ ≤2, Saudi ≤5 ngày). */
-  slaQuyChe: { n: number; dungHan: number; tyLe: number | null };
+  /** 1.2 — chi tiết từng nước để nhân sự biết tuyến nào kéo điểm xuống. */
+  slaTheoNuoc: DongKpiNuoc[];
   /** 1.3 — kiện phát sinh phí sửa địa chỉ / xử lý chứng từ trên bill. */
   kienCoBill: number;
   kienLoiChungTu: number;
@@ -34,9 +34,6 @@ export interface SoLieuTuDong {
   thuocDienKhieuNaiVnd: number;
   tyLeThuHoi: number | null;
 }
-
-/** Chuẩn cố định trong quy chế (mục 1.2) — chỉ khai 2 tuyến, dùng để đối chiếu với SOP nội bộ. */
-const SLA_QUY_CHE: Record<string, number> = { US: 2, SA: 5 };
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
   const [amCuoc, chungTu, shipHo, gate, thuHoi, kienGiao] = await Promise.all([
@@ -76,9 +73,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     docKienGiao(tu, den),
   ]);
 
-  const sop = tongKpi(chamKpi(kienGiao, tu), tu);
-  const theoQuyChe = kienGiao.filter((k) => k.country in SLA_QUY_CHE);
-  const datQuyChe = theoQuyChe.filter((k) => k.soNgay <= SLA_QUY_CHE[k.country]).length;
+  const theoNuoc = chamKpi(kienGiao, tu);
+  const sop = tongKpi(theoNuoc, tu);
 
   const soKienBill = Number(chungTu.rows[0]?.tong ?? 0);
   const kienLoi = Number(chungTu.rows[0]?.loi ?? 0);
@@ -93,7 +89,7 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     soDonAmCuoc: Number(amCuoc.rows[0]?.n ?? 0),
     amCuocVnd: Math.round(Number(amCuoc.rows[0]?.tong ?? 0)),
     slaTong: { n: sop.n, dungHan: sop.dungHan, tyLe: sop.tyLeDungHan },
-    slaQuyChe: { n: theoQuyChe.length, dungHan: datQuyChe, tyLe: theoQuyChe.length ? datQuyChe / theoQuyChe.length : null },
+    slaTheoNuoc: theoNuoc,
     kienCoBill: soKienBill,
     kienLoiChungTu: kienLoi,
     tyLeLoiChungTu: soKienBill > 0 ? kienLoi / soKienBill : null,

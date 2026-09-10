@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -7,7 +8,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
-import { bangDiemKpi, type DongDiem } from '@/features/kpi-logistics/quy-che';
+import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
+import { LO_TRINH_LOI } from '@/features/shipments/sop-giao-hang';
+import { CountryFlag } from '@/components/ui/country-flag';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,8 +56,7 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
 
   const [auto, nhap] = await Promise.all([docSoLieuKpi(tu, den), docNhapKpi(ky)]);
 
-  const nguonSla = (nhap?.nguonSla === 'quy_che' ? 'quy_che' : 'sop') as 'sop' | 'quy_che';
-  const sla = nguonSla === 'quy_che' ? auto.slaQuyChe : auto.slaTong;
+  const sla = auto.slaTong;
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   const tyLeThuHoi = auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null;
@@ -71,7 +73,7 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
     thuHoiVnd: thuHoi,
     tyLeThuHoi,
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
-  });
+  }, tu);
 
   const soTieuChiDat = diem.p1.filter((d) => (d.mucDat ?? 0) >= 1).length;
   const the = [
@@ -150,6 +152,56 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
       </div>
 
       {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
+      <Card><CardContent className="p-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
+          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng nước</span>
+          <span className="text-[11px] text-muted-foreground">
+            Ngưỡng kỳ này {Math.round(nguongDatKy(tu) * 1000) / 10}% · lộ trình {LO_TRINH_LOI.map((m) => `${m.nhan} ${Math.round((1 - m.loiToiDa) * 100)}%`).join(' → ')}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm tabular-nums">
+            <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                <th className="text-left">Nước / hãng</th><th className="text-right">Cam kết</th>
+                <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th><th className="text-right">% đúng hạn</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auto.slaTheoNuoc.length === 0 && (
+                <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Chưa có kiện nào ghi nhận giao trong kỳ.</td></tr>
+              )}
+              {auto.slaTheoNuoc.map((d) => (
+                <Fragment key={d.country}>
+                  <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
+                    <td className="text-left">
+                      <span className="inline-flex items-center gap-2"><CountryFlag code={d.country} className="!h-4 !w-6" />{d.country}</span>
+                    </td>
+                    <td className="text-right">{d.slaNgay} ngày</td>
+                    <td className="text-right">{d.n}</td>
+                    <td className="text-right">{d.dungHan}</td>
+                    <td className={`text-right font-semibold ${(d.tyLeDungHan ?? 0) >= nguongDatKy(tu) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{pct(d.tyLeDungHan)}</td>
+                  </tr>
+                  {d.theoLine.map((l) => (
+                    <tr key={`${d.country}-${l.line}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
+                      <td className="pl-10 text-left text-xs uppercase">{l.line}</td>
+                      <td className="text-right">{l.slaNgay} ngày</td>
+                      <td className="text-right">{l.n}</td>
+                      <td className="text-right">{l.dungHan}</td>
+                      <td className="text-right">{pct(l.tyLeDungHan)}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+          Cam kết lấy từ bảng SOP trong Báo cáo ship — theo từng nước, hãng nhanh hơn có thước riêng. Ngưỡng đạt siết dần
+          theo lộ trình ở trên nên cùng một kết quả sẽ khó đạt hơn ở các quý sau.
+        </p>
+      </CardContent></Card>
+
       {bangTieuChi('Pillar 2 — Ship hộ (sản lượng)', diem.p2, false)}
       {bangTieuChi('Pillar 3 — Đối soát & thu hồi công nợ', diem.p3, false)}
 
@@ -160,8 +212,7 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
             <tbody>
               {[
                 ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, 'Cước carrier thực trả vượt cước thu của khách. Cần quản lý quy trách nhiệm trước khi trừ KPI.'],
-                ['SLA theo SOP nội bộ', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, 'Cam kết theo từng nước và từng hãng (bảng SOP trong Báo cáo ship).'],
-                ['SLA theo chuẩn cố định trong quy chế', `${auto.slaQuyChe.dungHan}/${auto.slaQuyChe.n} = ${pct(auto.slaQuyChe.tyLe)}`, 'Văn bản chỉ khai Mỹ ≤2 ngày và Saudi ≤5 ngày; chỉ tính được trên hai tuyến này.'],
+                ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, 'Chấm theo bảng SOP cam kết từng nước và từng hãng (Báo cáo ship → SOP & KPI).'],
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}.`],
@@ -200,7 +251,7 @@ export default async function KpiLogisticsPage({ searchParams }: { searchParams:
             gateGhiChu: nhap?.gateGhiChu ?? null,
             thuHoiKeToanVnd: nhap?.thuHoiKeToanVnd == null ? null : Number(nhap.thuHoiKeToanVnd),
             clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
-            nguonSla,
+            nguonSla: 'sop',
             ghiChu: nhap?.ghiChu ?? null,
           }}
         />

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   LUONG_CUNG, QUY_P1_TONG, TRONG_SO_P1, bangDiemKpi, diemBienCuoc, diemDonHoanHao, diemSizeThung, diemSla, heSoK,
-  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, type DauVaoKpi,
+  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, diemSlaTheoKy, nguongDatKy, type DauVaoKpi,
 } from './quy-che';
+
+const KY_2026 = '2026-09-01'; // lộ trình khởi động: lỗi ≤35 % → ngưỡng đạt 65 %
 
 describe('quy-che KPI logistics', () => {
   it('lương cứng và quỹ Pillar 1 đúng quy chế', () => {
@@ -66,7 +68,7 @@ describe('quy-che KPI logistics', () => {
     const b = bangDiemKpi({
       soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
-    });
+    }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
     expect(b.diemP1).toBeCloseTo(0.3 * 0.9 + 0.3 + 0.3 + 0.1 * 0.5, 10); // = 0,92
     expect(b.p3.every((d) => d.mucDat === 1)).toBe(true);
@@ -75,10 +77,22 @@ describe('quy-che KPI logistics', () => {
     const b = bangDiemKpi({
       soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, soDonShipHo: 0,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 90_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
-    });
+    }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([1, null, null, null]);
     expect(b.diemP1).toBeCloseTo(0.3, 10); // chỉ 1.1 đạt
     expect(b.p3.map((d) => d.mucDat)).toEqual([0, 0, 0, 0]);
+  });
+  it('1.2 chấm theo NGƯỠNG CỦA KỲ, siết dần cùng lộ trình SOP (SLA trong văn bản chỉ là mẫu)', () => {
+    expect(nguongDatKy('2026-09-01')).toBeCloseTo(0.65, 10); // lỗi ≤35 %
+    expect(nguongDatKy('2027-02-01')).toBeCloseTo(0.72, 10);
+    expect(nguongDatKy('2027-11-01')).toBeCloseTo(0.90, 10);
+    // Kỳ khởi động: 84 % vượt ngưỡng 65 % → đủ; cùng con số đó ở Q4/2027 (ngưỡng 90 %) chỉ còn 50 %.
+    expect(diemSlaTheoKy(0.84, '2026-09-01').mucNhan).toBe(1);
+    expect(diemSlaTheoKy(0.84, '2027-11-01').mucNhan).toBe(0.5);
+    expect(diemSlaTheoKy(0.62, '2026-09-01').mucNhan).toBe(0.75); // thiếu 3 điểm
+    expect(diemSlaTheoKy(0.56, '2026-09-01').mucNhan).toBe(0.5);  // thiếu 9 điểm
+    expect(diemSlaTheoKy(0.50, '2026-09-01').mucNhan).toBe(0);
+    expect(diemSlaTheoKy(null, '2026-09-01').mucNhan).toBe(0);
   });
   it('dựng lại đúng ví dụ tháng 7/2026 trong quy chế: 13.404.000đ', () => {
     const { p1, p2, p3, tong } = tinhBangLuong({

@@ -60,16 +60,6 @@ export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, gateTuDong }: {
         </label>
 
         <label className="space-y-1 text-sm">
-          <div className="font-medium">Nguồn chấm SLA (P1.2)</div>
-          <select className={`${o} w-full`} value={v.nguonSla}
-            onChange={(e) => setV({ ...v, nguonSla: e.target.value === 'quy_che' ? 'quy_che' : 'sop' })}>
-            <option value="sop">SOP nội bộ theo nước và hãng</option>
-            <option value="quy_che">Chuẩn cố định trong quy chế (Mỹ ≤2, Saudi ≤5)</option>
-          </select>
-          <div className="text-[11px] text-muted-foreground">Chuẩn trong văn bản chỉ khai 2 tuyến và Mỹ ≤2 ngày là mức tuyến VN đi Mỹ chưa từng đạt.</div>
-        </label>
-
-        <label className="space-y-1 text-sm">
           <div className="font-medium">Ghi chú kỳ</div>
           <input type="text" className={`${o} w-full`} value={v.ghiChu ?? ''} placeholder="Lý do điều chỉnh, biên bản liên quan…"
             onChange={(e) => setV({ ...v, ghiChu: e.target.value })} />
