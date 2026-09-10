@@ -80,6 +80,9 @@ export interface OrderMetrics {
   shippingCostReason: ShippingCostReason | null;
   skuCost: number;
   skuCostCoverage: number;
+  /** Mọi dòng của đơn đều có giá vốn (thực hoặc dự tính). Đơn thiếu → Revenue/Margin của đơn là số dương giả (SKU cost tính 0),
+   *  KPI gộp và bảng không dùng số đó (CEO 10/09/2026). */
+  duCogs: boolean;
   /** Margin SP (gross margin hàng) = Net sales hàng (Net sales − Ship rev) − SKU cost. Cặp với Margin ship = Ship rev − Ship cost;
    *  Revenue = Margin SP + Margin ship − phí. CEO 09/09/2026. */
   marginSp: number;
@@ -132,6 +135,7 @@ export function computeOrderMetrics(input: ComputeInput): OrderMetrics {
     shippingCostReason: input.shippingCost.reason ?? null,
     skuCost,
     skuCostCoverage: coverage,
+    duCogs: knownCostLines === input.skuCosts.length,
     marginSp,
     tax: input.totalTax,
     revenue,

@@ -516,6 +516,7 @@ function emptyAgg(): AggregateMetrics {
     subtotal: 0, gmv: 0, refundedAmount: 0, netGmv: 0, netSales: 0, discount: 0,
     shippingRevenue: 0, shippingCost: 0, skuCost: 0, marginSp: 0, tax: 0,
     revenue: 0, margin: 0, skuCostCoverage: 0,
+    soDonDuCogs: 0, revenueDuCogs: 0, netSalesDuCogs: 0, soDonThieuCogs: 0, netSalesThieuCogs: 0,
   };
 }
 

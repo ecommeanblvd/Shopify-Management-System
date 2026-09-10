@@ -318,8 +318,8 @@ export function OrdersTable({
                     )}
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {o.skuCostCoverage === 0 ? (
-                      <span className="text-amber-600 dark:text-amber-400" title="Chưa có giá vốn (dự tính lẫn thực) → chưa tính được Margin SP">—</span>
+                    {o.skuCostCoverage < 1 ? (
+                      <span className="text-amber-600 dark:text-amber-400 text-xs" title={`${Math.round(o.skuCostCoverage * o.lineCount)}/${o.lineCount} dòng có giá vốn (thực hoặc dự tính) → chưa tính được Margin SP; đơn này không tính vào KPI Revenue/Margin %`}>thiếu COGS</span>
                     ) : (
                       <span
                         className={o.marginSp < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}
@@ -332,10 +332,19 @@ export function OrdersTable({
                       </span>
                     )}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono tabular-nums font-bold whitespace-nowrap ${o.revenue < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{fmt(o.revenue, o.currency)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                    {o.netSales > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
-                  </td>
+                  {o.skuCostCoverage < 1 ? (
+                    <>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap text-xs text-amber-600 dark:text-amber-400" title={`Chưa đủ giá vốn nên Revenue chưa tính được (nếu coi SKU cost thiếu = 0 sẽ ra ${fmt(o.revenue, o.currency)} — số giả). Net sales ${fmt(o.netSales, o.currency)}.`}>thiếu COGS</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap text-amber-600 dark:text-amber-400">—</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className={`px-3 py-2 text-right font-mono tabular-nums font-bold whitespace-nowrap ${o.revenue < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{fmt(o.revenue, o.currency)}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
+                        {o.netSales > 0 ? `${(o.margin * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </>
+                  )}
                   <td className="px-3 py-2 text-xs"><FulfillmentCell o={o} /></td>
                   <td className="px-3 py-2 text-xs"><PaymentCell o={o} /></td>
                   {canEdit && (

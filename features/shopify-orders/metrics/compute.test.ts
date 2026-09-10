@@ -54,6 +54,7 @@ describe('computeOrderMetrics', () => {
     expect(m.shippingCostSource).toBe('invoice');
     expect(m.skuCost).toBe(30);
     expect(m.skuCostCoverage).toBe(1);
+    expect(m.duCogs).toBe(true);
     expect(m.revenue).toBe(72);
     expect(m.margin).toBeCloseTo(72 / 110, 4);
     expect(m.marginSp).toBe(70); // net sales hàng 100 − SKU cost 30
@@ -82,6 +83,7 @@ describe('computeOrderMetrics', () => {
     }));
     expect(m.skuCost).toBe(30);
     expect(m.skuCostCoverage).toBe(0.5);
+    expect(m.duCogs).toBe(false);
   });
 
   it('reports engine_estimate when no shipping invoice exists', () => {

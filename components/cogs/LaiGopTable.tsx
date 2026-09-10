@@ -55,7 +55,8 @@ export function LaiGopTable({ rows, querySuffix, chiTietPeriod, chiTiet }: LaiGo
               <TableHead className="text-right">Doanh thu thuần</TableHead>
               <TableHead className="text-right">Phí ship</TableHead>
               <TableHead className="text-right">Giá vốn</TableHead>
-              <TableHead className="text-right">Lãi gộp</TableHead>
+              <TableHead className="text-right" title="Doanh thu thuần − phí ship − giá vốn. Chỉ hiện khi 100 % dòng đã có giá vốn; thiếu dòng nào thì số này là dương giả (COGS thiếu tính 0) nên thay bằng nhãn 'thiếu COGS'.">Lãi gộp</TableHead>
+              <TableHead className="text-right" title="Margin SP trên phần đã đối soát = doanh thu (line) của đúng các dòng đã có giá vốn − giá vốn. Luôn có nghĩa dù độ phủ chưa đủ.">Margin SP dòng có COGS</TableHead>
               <TableHead className="text-right">Chi brand ngoài Shopify</TableHead>
               <TableHead className="text-right">Độ phủ line / doanh thu</TableHead>
               <TableHead className="text-right">Thuộc đơn tháng trước</TableHead>
@@ -66,7 +67,7 @@ export function LaiGopTable({ rows, querySuffix, chiTietPeriod, chiTiet }: LaiGo
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
+                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
                   Không có dữ liệu trong khoảng đã chọn.
                 </TableCell>
               </TableRow>
@@ -90,7 +91,12 @@ export function LaiGopTable({ rows, querySuffix, chiTietPeriod, chiTiet }: LaiGo
                   <TableCell className="text-right">{anSo ? '—' : tien(r.doanhThuThuan)}</TableCell>
                   <TableCell className="text-right">{anSo ? '—' : tien(r.phiShip)}</TableCell>
                   <TableCell className="text-right">{tien(r.cogs)}</TableCell>
-                  <TableCell className={`text-right font-medium ${laiGopMau ?? ''}`}>{anSo ? '—' : tien(r.laiGop)}</TableCell>
+                  <TableCell className={`text-right font-medium ${laiGopMau ?? ''}`}>
+                    {anSo ? '—' : r.phuLine < 1
+                      ? <span className="text-xs" title={`Mới ${phanTram(r.phuLine)} dòng có giá vốn → chưa tính được lãi gộp tháng (nếu coi COGS thiếu = 0 sẽ ra ${tien(r.laiGop)} — số giả). Xem cột Margin SP dòng có COGS.`}>thiếu COGS {phanTram(1 - r.phuLine)}</span>
+                      : tien(r.laiGop)}
+                  </TableCell>
+                  <TableCell className="text-right">{anSo ? '—' : tien(r.marginSpCoCogs)}</TableCell>
                   <TableCell className="text-right">{tien(r.offline)}</TableCell>
                   <TableCell className="text-right">{phanTram(r.phuLine)} / {phanTram(r.phuDoanhThu)}</TableCell>
                   <TableCell className="text-right">{tien(r.thuocThangTruoc)}</TableCell>

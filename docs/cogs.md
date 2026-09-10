@@ -244,6 +244,10 @@ Trang Orders (`/f/orders/[storeId]`, panel P&L của từng đơn) trước đâ
 - **Danh sách đơn + KPI** (`dashboard-actions.ts`, cột "SKU cost", Revenue, Margin %, "cost coverage"): từng dòng lấy override tay → giá vốn THỰC (`order_line_cogs`, quy VND → đồng đơn qua FX store, chia số lượng) → `sku_costs`. Cột SKU cost gắn nhãn "thực" (đủ dòng) hoặc "n/m thực" (một phần); không nhãn = dự tính. Thẻ "đơn thiếu giá vốn" bỏ dòng đã có giá thực.
 - **Margin SP và Tổng chi dùng giá THỰC khi mọi dòng đã có**, không thì dự tính (`giaVon.dung = 'thuc' | 'du_tinh' | 'thieu'`). Panel hiện cả hai dòng "vốn dự tính" và "vốn thực (bảng kê đã chốt) n/m dòng"; bảng line items thêm cột "Giá vốn thực" kèm nhãn nguồn (bảng kê / PO / MMP).
 
+## KPI / bảng Orders / lãi gộp tháng: chỉ tính margin trên đơn ĐỦ giá vốn (CEO 10/09/2026, D-063)
+
+Dòng thiếu giá vốn (không thực, không dự tính) làm Revenue của đơn dương giả (SKU cost = 0). Từ 10/09: `OrderMetrics.duCogs`; KPI Revenue/Margin % chỉ gộp đơn đủ COGS (`aggregate.ts`: `soDonDuCogs`, `revenueDuCogs`, `netSalesDuCogs`, `netSalesThieuCogs`), tile ghi "N/M đơn đủ COGS" + dòng hổ phách phần chưa tính; bảng Orders hiện "thiếu COGS" thay số ở Revenue / Margin SP / Margin %; báo cáo lãi gộp tháng: Lãi gộp chỉ hiện khi độ phủ line 100 %, thêm cột **Margin SP dòng có COGS** (`marginSpCoCogs` = doanh thu line có COGS quy VND − COGS), CSV cùng luật.
+
 ## Giá vốn DỰ TÍNH cho SKU chưa có bảng giá (CEO 09/09/2026)
 
 CEO mở đơn thấy "Default cost: no cost" mọi dòng → không biết sản phẩm nào thiếu giá, đơn chưa đối soát không ra Revenue dự tính. `sku_costs` gần như trống (4 dòng), MMP `cost_price` trống, và **giá MMP bằng USD là giá bán global của MEAN, không phải giá nội địa brand** (Lamai $191 × 26.000 = 4,97 tr trong khi brand charge 1,46 tr) → không dùng được. Chỉ 824 sản phẩm MMP niêm yết VND (portal brand) là giá nội địa.

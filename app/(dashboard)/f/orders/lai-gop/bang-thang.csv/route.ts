@@ -17,7 +17,7 @@ import { thangHopLe, thangTruoc, danhSachThang } from '@/features/cogs/thang';
 export const dynamic = 'force-dynamic';
 
 const HEADER = [
-  'Tháng', 'Doanh thu thuần', 'Phí ship', 'Giá vốn', 'Lãi gộp', 'Chi brand ngoài Shopify',
+  'Tháng', 'Doanh thu thuần', 'Phí ship', 'Giá vốn', 'Lãi gộp (chỉ khi đủ COGS)', 'Margin SP dòng có COGS', 'Chi brand ngoài Shopify',
   'Độ phủ line', 'Độ phủ doanh thu', 'Thuộc đơn tháng trước', 'Tỉ giá tạm', 'Thiếu tỉ giá',
 ];
 
@@ -53,7 +53,9 @@ export async function GET(req: Request): Promise<Response> {
     r.thieuTiGia ? null : r.doanhThuThuan,
     r.thieuTiGia ? null : r.phiShip,
     r.cogs,
-    r.thieuTiGia ? null : r.laiGop,
+    // Lãi gộp chỉ khi 100 % dòng có COGS — thiếu thì để trống, không xuất số dương giả (CEO 10/09/2026).
+    r.thieuTiGia || r.phuLine < 1 ? null : r.laiGop,
+    r.thieuTiGia ? null : r.marginSpCoCogs,
     r.offline,
     r.phuLine,
     r.phuDoanhThu,

@@ -10,7 +10,7 @@ describe('tinhBaoCao', () => {
       offline: [{ period: '2026-08', brandSlug: 'denio', amount: 5_000_000 }],
       rates,
     });
-    expect(r).toEqual([{ period: '2026-08', doanhThuThuan: 26_000_000, phiShip: 2_600_000, cogs: 12_000_000, laiGop: 11_400_000, offline: 5_000_000, phuLine: 0.75, phuDoanhThu: 0.8, thuocThangTruoc: 2_000_000, tiGiaTam: true, thieuTiGia: false }]);
+    expect(r).toEqual([{ period: '2026-08', doanhThuThuan: 26_000_000, phiShip: 2_600_000, cogs: 12_000_000, laiGop: 11_400_000, marginSpCoCogs: 8_800_000, offline: 5_000_000, phuLine: 0.75, phuDoanhThu: 0.8, thuocThangTruoc: 2_000_000, tiGiaTam: true, thieuTiGia: false }]);
   });
   it('không có tỉ giá nào trước đó → thiếu tỉ giá, doanh thu 0, không nổ', () => {
     const r = tinhBaoCao({ thang: ['2026-05'], doanhThu: [{ period: '2026-05', storeId: 's1', currency: 'USD', doanhThuThuan: 10, phiShip: 1, soDon: 1, soLine: 1, soLineCoCogs: 0, doanhThuLineCoCogs: 0, doanhThuLineTong: 10 }], cogs: [], offline: [], rates });
