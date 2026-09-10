@@ -7,11 +7,14 @@ import { giaVonThucTheoDong } from './gia-von-thuc';
 import { aggregateMetrics, type AggregateMetrics } from './metrics/aggregate';
 import { createBatchShippingEstimator } from './sync/batch-shipping-estimator';
 import { mocUtcNaive } from '@/lib/timezone-bind';
+import type { MocLoc } from './loc-ngay';
 
 export interface GetStoreMetricsArgs {
   storeId: string;
   dateFrom: Date;
   dateTo: Date;
+  /** Mốc lọc khoảng ngày: 'order' = ngày phát sinh đơn (mặc định), 'ship' = ngày gửi hàng (shipments.label_created_at sớm nhất). */
+  moc?: MocLoc;
   vendorFilter?: string[];
 }
 
@@ -19,6 +22,8 @@ export interface GetStoreMetricsArgs {
 export interface OrderRow extends OrderMetrics {
   shopifyOrderNumber: string;
   processedAt: Date;
+  /** Ngày gửi hàng = pack sớm nhất có `shipments.label_created_at` (Excel LOG / đối soát carrier); null khi chưa gửi. */
+  shippedAt: Date | null;
   lineCount: number;
   hasOverrides: boolean;
   /** Trạng thái Shopify (thô) để hiển thị badge trạng thái đơn. */
@@ -61,8 +66,7 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
     .from(schema.shopifyOrders)
     .where(and(
       eq(schema.shopifyOrders.storeId, args.storeId),
-      sql`${schema.shopifyOrders.processedAtShopify} >= ${mocUtcNaive(args.dateFrom)}::timestamp`,
-      sql`${schema.shopifyOrders.processedAtShopify} <= ${mocUtcNaive(args.dateTo)}::timestamp`,
+      dieuKienKhoangNgay(args.dateFrom, args.dateTo, args.moc ?? 'order'),
     ));
   if (orders.length === 0) return { total: emptyAgg(), orders: [] };
   const { rows, total } = await buildOrderRows(args.storeId, orders, args.vendorFilter);
@@ -76,6 +80,18 @@ export async function getStoreMetrics(args: GetStoreMetricsArgs): Promise<GetSto
  * (`getStoreOrdersPage`) so the cost / margin / ship formulas live in exactly
  * one place. Preserves the input order — the caller decides sorting.
  */
+/** Điều kiện khoảng ngày theo mốc. Mốc 'ship' lọc qua bảng shipments (label_created_at, UTC-naive như processed_at). */
+function dieuKienKhoangNgay(dateFrom: Date, dateTo: Date, moc: MocLoc) {
+  const tu = mocUtcNaive(dateFrom); const den = mocUtcNaive(dateTo);
+  if (moc === 'ship') {
+    return sql`${schema.shopifyOrders.id} IN (SELECT s.order_id FROM shipments s WHERE s.label_created_at >= ${tu}::timestamp AND s.label_created_at <= ${den}::timestamp)`;
+  }
+  return and(
+    sql`${schema.shopifyOrders.processedAtShopify} >= ${tu}::timestamp`,
+    sql`${schema.shopifyOrders.processedAtShopify} <= ${den}::timestamp`,
+  );
+}
+
 async function buildOrderRows(
   storeId: string,
   orders: (typeof schema.shopifyOrders.$inferSelect)[],
@@ -83,6 +99,14 @@ async function buildOrderRows(
 ): Promise<{ rows: OrderRow[]; total: AggregateMetrics }> {
   if (orders.length === 0) return { rows: [], total: emptyAgg() };
   const orderIds = orders.map((o) => o.id);
+
+  // Ngày gửi hàng: pack sớm nhất có label_created_at (cùng nguồn với modal đơn, order-actions.ts).
+  const shipRows = await db
+    .select({ orderId: schema.shipments.orderId, ngay: sql<Date | null>`min(${schema.shipments.labelCreatedAt})` })
+    .from(schema.shipments)
+    .where(and(inArray(schema.shipments.orderId, orderIds), sql`${schema.shipments.labelCreatedAt} IS NOT NULL`))
+    .groupBy(schema.shipments.orderId);
+  const ngayGui = new Map<string, Date>(shipRows.filter((r) => r.ngay != null).map((r) => [r.orderId, new Date(r.ngay as unknown as string)]));
 
   // Per-store cost FX — used to convert COGs that were entered in a brand
   // currency (e.g. Mirer's VND) into the order currency (USD) before the
@@ -399,6 +423,7 @@ async function buildOrderRows(
       ...m,
       shopifyOrderNumber: o.shopifyOrderNumber,
       processedAt: o.processedAtShopify,
+      shippedAt: ngayGui.get(o.id) ?? null,
       lineCount: filteredLines.length,
       hasOverrides,
       financialStatus: o.financialStatus,
@@ -427,9 +452,13 @@ export interface GetStoreOrdersPageArgs {
   page: number;
   /** Rows per page (25 | 50 | 100 | 250 from the UI). */
   pageSize: number;
-  /** Matches order number OR recipient name (ILIKE), leading '#' stripped. */
+  /** Matches order number OR recipient name (ILIKE), leading '#' stripped. Có chữ tìm → tìm TOÀN BỘ lịch sử, bỏ lọc ngày. */
   search?: string;
   sort?: 'newest' | 'oldest';
+  /** Khoảng ngày (ISO YYYY-MM-DD, bao trọn ngày) + mốc — bảng theo cùng bộ lọc với KPI (CEO 10/09/2026). Bỏ trống = toàn bộ. */
+  dateFromISO?: string;
+  dateToISO?: string;
+  moc?: MocLoc;
 }
 
 export interface GetStoreOrdersPageResult {
@@ -449,7 +478,12 @@ export async function getStoreOrdersPage(
         ilike(schema.shopifyOrders.shipName, `%${q}%`),
       )
     : undefined;
-  const where = and(eq(schema.shopifyOrders.storeId, storeId), searchCond);
+  // Lọc ngày chỉ khi không tìm chữ: gõ mã đơn là muốn tìm đúng đơn đó bất kể ngày.
+  const coKhoang = !q && !!args.dateFromISO && !!args.dateToISO && /^\d{4}-\d{2}-\d{2}$/.test(args.dateFromISO) && /^\d{4}-\d{2}-\d{2}$/.test(args.dateToISO);
+  const dateCond = coKhoang
+    ? dieuKienKhoangNgay(new Date(`${args.dateFromISO}T00:00:00`), new Date(`${args.dateToISO}T23:59:59.999`), args.moc ?? 'order')
+    : undefined;
+  const where = and(eq(schema.shopifyOrders.storeId, storeId), searchCond, dateCond);
 
   const [countRow] = await db
     .select({ count: sql<number>`count(*)::int` })

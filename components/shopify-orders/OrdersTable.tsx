@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -14,6 +14,7 @@ import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 import { OrderPnlPanel } from './OrderPnlPanel';
 
 import { hienNgay } from '@/lib/timezone';
+import type { MocLoc } from '@/features/shopify-orders/loc-ngay';
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
 type PageSize = typeof PAGE_SIZE_OPTIONS[number];
 
@@ -31,7 +32,14 @@ interface OrdersTableProps {
     pageSize: number;
     search: string;
     sort: 'newest' | 'oldest';
+    dateFromISO?: string;
+    dateToISO?: string;
+    moc?: MocLoc;
   }) => Promise<{ rows: OrderRow[]; totalCount: number }>;
+  /** Khoảng ngày + mốc đang lọc (cùng KPI). Đổi → tải lại trang 0. */
+  fromISO: string;
+  toISO: string;
+  moc: MocLoc;
   canEdit: boolean;
   /** Currency the operator enters COGs/shipping overrides in (e.g. 'VND'
    *  for Mirer). Falls back to the order currency when not set. */
@@ -52,7 +60,7 @@ interface OrdersTableProps {
 }
 
 export function OrdersTable({
-  storeId, initialRows, initialTotalCount, fetchPageAction,
+  storeId, initialRows, initialTotalCount, fetchPageAction, fromISO, toISO, moc,
   canEdit, costCurrency, fxRate, getDetailAction, saveAction,
 }: OrdersTableProps) {
   // The Ship cost column flips into "cost currency" mode whenever both the
@@ -85,11 +93,27 @@ export function OrdersTable({
         pageSize: next.pageSize,
         search: next.search,
         sort: 'newest',
+        dateFromISO: fromISO,
+        dateToISO: toISO,
+        moc,
       });
       setRows(res.rows);
       setTotalCount(res.totalCount);
     });
   };
+
+  // Bộ lọc ngày / mốc đổi (từ thanh KPI) → bảng về trang 0 theo khoảng mới. Bỏ qua lần mount: trang đầu đã render từ server
+  // đúng bộ lọc. Khi đang tìm chữ thì server bỏ lọc ngày nên không cần tải lại.
+  const khoaLoc = `${fromISO}|${toISO}|${moc}`;
+  const khoaLocDau = useRef(khoaLoc);
+  useEffect(() => {
+    if (khoaLocDau.current === khoaLoc) return;
+    khoaLocDau.current = khoaLoc;
+    if (search) return;
+    setPage(0);
+    load({ page: 0, pageSize, search: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [khoaLoc]);
 
   const goPage = (p: number): void => {
     setPage(p);
@@ -171,8 +195,9 @@ export function OrdersTable({
           <div className="text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap inline-flex items-center gap-1.5">
             {pending && <Loader2 className="size-3 animate-spin" />}
             {totalCount === 0
-              ? (search ? 'Không có đơn khớp' : 'Chưa có đơn')
+              ? (search ? 'Không có đơn khớp' : 'Không có đơn trong khoảng')
               : `${(startIdx + 1).toLocaleString()}–${endIdx.toLocaleString()} / ${totalCount.toLocaleString()}`}
+            {search && <span className="text-amber-600 dark:text-amber-400 font-sans">· tìm toàn bộ lịch sử</span>}
           </div>
           <div className="ml-auto flex items-center gap-2 text-xs">
             <span className="text-muted-foreground uppercase tracking-wider">Rows</span>
@@ -287,7 +312,10 @@ export function OrdersTable({
                   className={`border-b border-border/40 ${canEdit ? 'cursor-pointer hover:bg-muted/30' : ''}`}
                 >
                   <td className="px-3 py-2 font-mono">{o.shopifyOrderNumber}</td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">{hienNgay(o.processedAt)}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {hienNgay(o.processedAt)}
+                    {o.shippedAt && <div className="text-[10px] text-muted-foreground leading-tight" title="Ngày gửi hàng (label pack sớm nhất)">gửi {hienNgay(o.shippedAt)}</div>}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums hidden xl:table-cell">{o.lineCount}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums hidden xl:table-cell whitespace-nowrap">{fmt(o.subtotal, o.currency)}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-destructive hidden xl:table-cell whitespace-nowrap">

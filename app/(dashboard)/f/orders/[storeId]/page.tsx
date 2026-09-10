@@ -8,6 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { getStoreMetrics, getStoreOrdersPage } from '@/features/shopify-orders/dashboard-actions';
+import { laMocLoc, type MocLoc } from '@/features/shopify-orders/loc-ngay';
 import { getOrderDetail, updateOrderOverrides } from '@/features/shopify-orders/order-actions';
 import { startBackfill } from '@/features/shopify-orders/backfill/actions';
 import { updateStoreCostFx } from '@/features/shopify-orders/cost-fx-actions';
@@ -40,7 +41,7 @@ export default async function StoreOrders({
   searchParams,
 }: {
   params: Promise<{ storeId: string }>;
-  searchParams: Promise<{ from?: string; to?: string; vendor?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; vendor?: string; moc?: string }>;
 }) {
   const { storeId } = await params;
   const sp = await searchParams;
@@ -66,6 +67,8 @@ export default async function StoreOrders({
     ? new Date(sp.from)
     : new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
   const vendorFilter = sp.vendor?.split(',').filter(Boolean);
+  // Mốc lọc ngày: ngày đặt (mặc định) hay ngày gửi hàng — áp cho cả KPI và bảng (CEO 10/09/2026).
+  const moc: MocLoc = laMocLoc(sp.moc) ? sp.moc : 'order';
 
   // Cache window: the broader of (CACHE_DAYS, user-requested). Loading
   // the wider window lets the client flip between 7d / 30d / 90d preset
@@ -88,6 +91,7 @@ export default async function StoreOrders({
       storeId,
       dateFrom,
       dateTo,
+      moc,
       vendorFilter: showVendor ? vendorFilter : undefined,
     }),
     db.select().from(schema.shopifySyncState).where(eq(schema.shopifySyncState.storeId, storeId)),
@@ -102,7 +106,7 @@ export default async function StoreOrders({
     `),
     // First page of the all-time orders table (SSR for instant paint; the
     // client fetches later pages via getStoreOrdersPage as an action).
-    getStoreOrdersPage({ storeId, page: 0, pageSize: 25, sort: 'newest' }),
+    getStoreOrdersPage({ storeId, page: 0, pageSize: 25, sort: 'newest', dateFromISO: userFrom.toISOString().slice(0, 10), dateToISO: dateTo.toISOString().slice(0, 10), moc }),
   ]);
 
   const { orders: orderList } = metricsRes;
@@ -229,6 +233,7 @@ export default async function StoreOrders({
         initialFromISO={isoDate(userFrom)}
         initialToISO={isoDate(dateTo)}
         initialVendor={vendorFilter ?? []}
+        initialMoc={moc}
         showVendor={showVendor}
         availableVendors={vendors}
         canEdit={hasPermission(role, 'manage_sku_costs')}

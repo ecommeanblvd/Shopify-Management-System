@@ -2,12 +2,15 @@
 
 import { Zap, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { NHAN_MOC, type MocLoc } from '@/features/shopify-orders/loc-ngay';
 
 interface MetricsFiltersProps {
   /** Current filter window. Controlled by the parent (`OrdersBoard`). */
   from: string;
   to: string;
   vendor: string[];
+  /** Mốc lọc ngày: ngày đặt hàng / ngày gửi hàng. */
+  moc: MocLoc;
 
   showVendor: boolean;
   availableVendors: string[];
@@ -21,7 +24,7 @@ interface MetricsFiltersProps {
    *  controls so the operator can't queue up conflicting refetches. */
   pending: boolean;
 
-  onChange: (patch: { from?: string; to?: string; vendor?: string[] }) => void;
+  onChange: (patch: { from?: string; to?: string; vendor?: string[]; moc?: MocLoc }) => void;
 }
 
 const PRESETS: Array<{ label: string; days: number }> = [
@@ -51,6 +54,7 @@ export function MetricsFilters({
   from,
   to,
   vendor,
+  moc,
   showVendor,
   availableVendors,
   cacheFromISO,
@@ -125,6 +129,25 @@ export function MetricsFilters({
           className="h-7 border border-input bg-input/30 rounded-md px-2 text-xs"
         />
       </label>
+
+      <div className="flex items-center gap-1" role="radiogroup" aria-label="Mốc lọc ngày">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground mr-0.5">Theo</span>
+        {(['order', 'ship'] as MocLoc[]).map((m) => (
+          <Button
+            key={m}
+            size="sm"
+            variant={moc === m ? 'default' : 'outline'}
+            disabled={pending}
+            onClick={() => moc !== m && onChange({ moc: m })}
+            className="h-7 px-2 text-xs"
+            role="radio"
+            aria-checked={moc === m}
+            title={m === 'ship' ? 'Ngày gửi hàng = ngày tạo label của pack sớm nhất (Excel LOG / đối soát carrier). Đơn chưa gửi không hiện.' : 'Ngày phát sinh đơn trên Shopify (processed_at).'}
+          >
+            {NHAN_MOC[m]}
+          </Button>
+        ))}
+      </div>
 
       {showVendor && availableVendors.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">

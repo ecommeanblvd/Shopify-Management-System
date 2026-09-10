@@ -8,6 +8,7 @@ import { OrdersTable } from './OrdersTable';
 import { aggregateMetrics } from '@/features/shopify-orders/metrics/aggregate';
 import type { OrderRow } from '@/features/shopify-orders/dashboard-actions';
 import type { OrderDetail } from '@/features/shopify-orders/order-actions';
+import { NHAN_MOC, trongKhoang, type MocLoc } from '@/features/shopify-orders/loc-ngay';
 
 interface OrdersBoardProps {
   storeId: string;
@@ -31,12 +32,17 @@ interface OrdersBoardProps {
     pageSize: number;
     search: string;
     sort: 'newest' | 'oldest';
+    dateFromISO?: string;
+    dateToISO?: string;
+    moc?: MocLoc;
   }) => Promise<{ rows: OrderRow[]; totalCount: number }>;
 
   /** Active filter from the URL on first render (YYYY-MM-DD). */
   initialFromISO: string;
   initialToISO: string;
   initialVendor: string[];
+  /** Mốc lọc ngày (ngày đặt / ngày gửi) từ URL. */
+  initialMoc: MocLoc;
 
   showVendor: boolean;
   availableVendors: string[];
@@ -76,6 +82,7 @@ export function OrdersBoard({
   initialFromISO,
   initialToISO,
   initialVendor,
+  initialMoc,
   showVendor,
   availableVendors,
   canEdit,
@@ -89,36 +96,37 @@ export function OrdersBoard({
   const [from, setFrom] = useState(initialFromISO);
   const [to, setTo] = useState(initialToISO);
   const [vendor, setVendor] = useState(initialVendor);
+  const [moc, setMoc] = useState<MocLoc>(initialMoc);
   const [pending, startTransition] = useTransition();
 
-  // Filter the cache to the active window. Inclusive on both ends —
-  // the server already does this for the initial render.
-  const visibleOrders = useMemo(() => {
-    const fromMs = new Date(`${from}T00:00:00`).getTime();
-    const toMs = new Date(`${to}T23:59:59.999`).getTime();
-    return cachedOrders.filter((o) => {
-      const t = new Date(o.processedAt).getTime();
-      return t >= fromMs && t <= toMs;
-    });
-  }, [cachedOrders, from, to]);
+  // Filter the cache to the active window (theo mốc ngày đặt / ngày gửi). Inclusive on both ends —
+  // the server already does this for the initial render (cache nạp theo cùng mốc).
+  const visibleOrders = useMemo(
+    () => cachedOrders.filter((o) => trongKhoang(o, from, to, moc)),
+    [cachedOrders, from, to, moc],
+  );
 
   const aggregate = useMemo(() => aggregateMetrics(visibleOrders), [visibleOrders]);
 
-  const onChange = (patch: { from?: string; to?: string; vendor?: string[] }): void => {
+  const onChange = (patch: { from?: string; to?: string; vendor?: string[]; moc?: MocLoc }): void => {
     const nextFrom = patch.from ?? from;
     const nextTo = patch.to ?? to;
     const nextVendor = patch.vendor ?? vendor;
+    const nextMoc = patch.moc ?? moc;
 
     const dateInsideCache = nextFrom >= cacheFromISO && nextTo <= cacheToISO;
     const vendorChanged = !arraysEqual(nextVendor, vendor);
+    // Đổi mốc → cache đang nạp theo mốc cũ không dùng lại được → đi server.
+    const mocChanged = nextMoc !== moc;
 
     // Build the URL params once so both branches sync the URL identically.
     const params = new URLSearchParams();
     params.set('from', nextFrom);
     params.set('to', nextTo);
     if (nextVendor.length > 0) params.set('vendor', nextVendor.join(','));
+    if (nextMoc !== 'order') params.set('moc', nextMoc);
 
-    if (dateInsideCache && !vendorChanged) {
+    if (dateInsideCache && !vendorChanged && !mocChanged) {
       // Instant: pure client-side filter. Sync the URL without a
       // re-render so a bookmarked / shared link still reflects the
       // active window. window.history.replaceState() is the escape
@@ -134,6 +142,7 @@ export function OrdersBoard({
       setFrom(nextFrom);
       setTo(nextTo);
       setVendor(nextVendor);
+      setMoc(nextMoc);
       startTransition(() => router.replace(`${pathname}?${params.toString()}`));
     }
   };
@@ -144,6 +153,7 @@ export function OrdersBoard({
         from={from}
         to={to}
         vendor={vendor}
+        moc={moc}
         showVendor={showVendor}
         availableVendors={availableVendors}
         cacheFromISO={cacheFromISO}
@@ -157,12 +167,12 @@ export function OrdersBoard({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Orders{' '}
             <span className="text-muted-foreground/60 font-mono tabular-nums normal-case tracking-normal">
-              ({initialOrderTotalCount.toLocaleString()} đơn · toàn bộ lịch sử)
+              ({NHAN_MOC[moc].toLowerCase()} {from} → {to})
             </span>
           </h2>
           <p className="text-xs text-muted-foreground">
-            Tìm theo mã đơn / tên người nhận, hoặc bấm 1 dòng để sửa giá vốn / ship.
-            Bảng hiển thị TẤT CẢ đơn (phân trang) — bộ lọc ngày chỉ ảnh hưởng KPI phía trên.
+            Bảng theo cùng bộ lọc ngày với KPI ({NHAN_MOC[moc].toLowerCase()}; theo ngày gửi thì đơn chưa gửi không hiện).
+            Gõ mã đơn / tên người nhận để tìm trên TOÀN BỘ lịch sử (bỏ lọc ngày); bấm 1 dòng để xem P&L / sửa ship.
           </p>
         </div>
         <OrdersTable
@@ -170,6 +180,9 @@ export function OrdersBoard({
           initialRows={initialOrderRows}
           initialTotalCount={initialOrderTotalCount}
           fetchPageAction={fetchOrdersPageAction}
+          fromISO={from}
+          toISO={to}
+          moc={moc}
           canEdit={canEdit}
           costCurrency={costCurrency}
           fxRate={fxRate}
