@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docHoaDonXml, maThamChieu, phanLoaiHoaDon } from './hoa-don-xml';
+import { bamHoaDon, docHoaDonXml, maThamChieu, phanLoaiHoaDon } from './hoa-don-xml';
 
 // Rút gọn từ file thật DHL gửi 04/09/2026 (hoá đơn 465 ký hiệu 1K26THA, credit note −3.453.840đ).
 const XML = `<?xml version="1.0" encoding="UTF-8"?><HDon><DLHDon><TTChung>
@@ -39,5 +39,18 @@ describe('hoa-don-xml', () => {
     expect(docHoaDonXml('<root/>')).toBeNull();
     expect(docHoaDonXml('<HDon><SHDon>1</SHDon><NLap>rác</NLap></HDon>')).toBeNull();
     expect(docHoaDonXml('')).toBeNull();
+  });
+});
+
+describe('bamHoaDon — vân tay chặn tải trùng', () => {
+  const goc = { kyHieu: '1K26THA', soHoaDon: '465', ngay: '2026-08-27', truocThue: -3_198_000, tienThue: -255_840, tongCong: -3_453_840, noiDung: 'Điều chỉnh giảm cho hoá đơn 21237' };
+  it('cùng nội dung → cùng vân tay, kể cả khi khoảng trắng khác nhau', () => {
+    expect(bamHoaDon(goc)).toBe(bamHoaDon({ ...goc, noiDung: 'Điều chỉnh giảm   cho hoá đơn\n21237' }));
+    expect(bamHoaDon(goc)).toBe(bamHoaDon({ ...goc, kyHieu: '1k26tha' })); // ký hiệu không phân biệt hoa thường
+  });
+  it('lệch bất kỳ trường tiền hay ngày nào → vân tay khác', () => {
+    expect(bamHoaDon({ ...goc, tongCong: -3_453_841 })).not.toBe(bamHoaDon(goc));
+    expect(bamHoaDon({ ...goc, ngay: '2026-08-28' })).not.toBe(bamHoaDon(goc));
+    expect(bamHoaDon({ ...goc, soHoaDon: '466' })).not.toBe(bamHoaDon(goc));
   });
 });

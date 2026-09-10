@@ -18,7 +18,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { bocTep } from './boc-tep';
-import { docHoaDonXml, maThamChieu, phanLoaiHoaDon, type HoaDonDienTu, type LoaiChungTu } from './hoa-don-xml';
+import { bamHoaDon, docHoaDonXml, maThamChieu, phanLoaiHoaDon, type HoaDonDienTu, type LoaiChungTu } from './hoa-don-xml';
 import { parseDhlInvoiceCsv, tachTheoHoaDon, type DhlShipment } from './dhl-invoice-csv';
 
 export interface KetQuaNhapCreditNote {
@@ -27,8 +27,10 @@ export interface KetQuaNhapCreditNote {
   hoaDon: HoaDonDienTu | null;
   /** Hệ thống tự phân loại: credit note (thu hồi), billing note (trả thêm) hay hoá đơn cước kỳ (không nhận ở đây). */
   loai: LoaiChungTu | null;
-  /** Đã ghi vào hệ thống chưa — hoá đơn cước kỳ thì KHÔNG ghi, chỉ báo để tải đúng chỗ. */
+  /** Đã ghi vào hệ thống chưa — hoá đơn cước kỳ hoặc hoá đơn TRÙNG thì KHÔNG ghi. */
   daGhi: boolean;
+  /** Trùng với hoá đơn đã có: 'y_het' (cùng nội dung) | 'lech_noi_dung' (cùng số nhưng nội dung khác) | null. */
+  trungLap: 'y_het' | 'lech_noi_dung' | null;
   canCuPhanLoai: string | null;
   /** Đã có sẵn trong hệ thống (nhập lại thì cập nhật, không tạo trùng). */
   daCo: boolean;
@@ -55,7 +57,7 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     if (h) { hoaDon = h; break; }
   }
   if (!hoaDon) {
-    return { tenFile, hoaDon: null, loai: null, canCuPhanLoai: null, daGhi: false, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
+    return { tenFile, hoaDon: null, loai: null, canCuPhanLoai: null, daGhi: false, trungLap: null, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
       canhBao: ['Không tìm thấy hoá đơn điện tử (.xml) trong tệp — gửi nguyên email .msg hoặc file zip hoá đơn.'] };
   }
   const { loai, canCu } = phanLoaiHoaDon(hoaDon);
@@ -63,12 +65,33 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     // Hoá đơn cước kỳ thuộc luồng CÔNG NỢ (carrier_bills) — có preview, gắn account, đối soát từng kiện.
     // Ghi vào đây sẽ lệch cả công nợ lẫn KPI, nên từ chối và chỉ đúng chỗ.
     return {
-      tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: false, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
+      tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: false, trungLap: null, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
       canhBao: ['Đây là HOÁ ĐƠN CƯỚC KỲ, không phải chứng từ điều chỉnh — tải bằng nút "Thêm hoá đơn cước kỳ" để vào công nợ và đối soát.'],
     };
   }
 
-  // 2) Chi tiết từng kiện (CSV) — chỉ để truy đơn, không cộng tiền.
+  // 2) CHẶN TRÙNG theo NỘI DUNG hoá đơn (không theo tên tệp): cùng ký hiệu + số là cùng một chứng từ.
+  const hash = bamHoaDon(hoaDon);
+  const [daCoRow] = await db
+    .select({
+      id: schema.creditNotes.id, hash: schema.creditNotes.noiDungHash, tenFile: schema.creditNotes.tenFile,
+      importedAt: schema.creditNotes.importedAt, tongCong: schema.creditNotes.tongCong,
+    })
+    .from(schema.creditNotes)
+    .where(and(eq(schema.creditNotes.kyHieu, hoaDon.kyHieu), eq(schema.creditNotes.soHoaDon, hoaDon.soHoaDon)));
+  if (daCoRow) {
+    const yHet = daCoRow.hash === hash;
+    const luc = daCoRow.importedAt ? new Date(daCoRow.importedAt).toLocaleString('vi-VN') : '';
+    return {
+      tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: false, trungLap: yHet ? 'y_het' : 'lech_noi_dung',
+      daCo: true, soDongChiTiet: 0, soDongKhopKien: 0,
+      canhBao: [yHet
+        ? `Hoá đơn ${hoaDon.kyHieu}-${hoaDon.soHoaDon} đã có trong hệ thống (tải lúc ${luc} từ tệp "${daCoRow.tenFile ?? '—'}") — không ghi lại.`
+        : `Đã có hoá đơn ${hoaDon.kyHieu}-${hoaDon.soHoaDon} nhưng NỘI DUNG KHÁC (bản cũ ${Number(daCoRow.tongCong).toLocaleString('vi-VN')}đ, bản này ${hoaDon.tongCong.toLocaleString('vi-VN')}đ). Không ghi đè — kiểm tra lại với carrier rồi xoá bản cũ nếu cần thay.`],
+    };
+  }
+
+  // 3) Chi tiết từng kiện (CSV) — chỉ để truy đơn, không cộng tiền.
   const chiTiet: DhlShipment[] = [];
   let maHoaDonCsv: string[] = [];
   for (const [ten, buf] of files) {
@@ -82,7 +105,7 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
   }
   maHoaDonCsv = [...new Set(maHoaDonCsv)];
 
-  // 3) Khớp kiện theo mã vận đơn.
+  // 4) Khớp kiện theo mã vận đơn.
   const tracking = [...new Set(chiTiet.map((s) => s.shipmentNumber).filter(Boolean))];
   const kien = tracking.length
     ? await db.select({ id: schema.shipments.id, tracking: schema.shipments.trackingNumber })
@@ -100,21 +123,15 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     tongCong: String(hoaDon.tongCong),
     maThamChieu: [...new Set([...maThamChieu(hoaDon.noiDung), ...maHoaDonCsv])],
     noiDung: hoaDon.noiDung.slice(0, 2000),
+    noiDungHash: hash,
     tenFile,
     importedBy: session.user.id,
     importedAt: new Date(),
   };
 
-  const [cu] = await db.select({ id: schema.creditNotes.id }).from(schema.creditNotes)
-    .where(and(eq(schema.creditNotes.kyHieu, hoaDon.kyHieu), eq(schema.creditNotes.soHoaDon, hoaDon.soHoaDon)));
-
-  const [ghi] = cu
-    ? await db.update(schema.creditNotes).set(gt).where(eq(schema.creditNotes.id, cu.id)).returning({ id: schema.creditNotes.id })
-    : await db.insert(schema.creditNotes).values({ soHoaDon: hoaDon.soHoaDon, kyHieu: hoaDon.kyHieu, ...gt })
-        .returning({ id: schema.creditNotes.id });
-
-  // Ghi lại chi tiết: xoá cũ rồi chèn mới để nhập lại không nhân đôi.
-  await db.delete(schema.creditNoteLines).where(eq(schema.creditNoteLines.creditNoteId, ghi.id));
+  const [ghi] = await db.insert(schema.creditNotes)
+    .values({ soHoaDon: hoaDon.soHoaDon, kyHieu: hoaDon.kyHieu, ...gt })
+    .returning({ id: schema.creditNotes.id });
   let khop = 0;
   if (chiTiet.length) {
     const rows = chiTiet.map((s) => {
@@ -140,5 +157,5 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
 
   revalidatePath('/f/shipping-reconcile');
   revalidatePath('/f/ship-report');
-  return { tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: true, daCo: !!cu, soDongChiTiet: chiTiet.length, soDongKhopKien: khop, canhBao };
+  return { tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: true, trungLap: null, daCo: false, soDongChiTiet: chiTiet.length, soDongKhopKien: khop, canhBao };
 }

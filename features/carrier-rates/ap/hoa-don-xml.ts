@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * THUẦN: đọc hoá đơn điện tử Việt Nam (chuẩn TT78/NĐ123, thẻ <HDon><DLHDon><TTChung>) → số, ngày, tiền.
  *
@@ -89,3 +91,18 @@ export const NHAN_LOAI: Record<LoaiChungTu, string> = {
   debit: 'Billing note (trả thêm)',
   cuoc_ky: 'Hoá đơn cước kỳ',
 };
+
+/**
+ * Vân tay NỘI DUNG hoá đơn — dùng chặn tải trùng. Cố tình KHÔNG lấy tên tệp: cùng một hoá đơn lưu dưới tên khác vẫn
+ * phải nhận ra là trùng. Mô tả được chuẩn hoá khoảng trắng để khác biệt do xuống dòng không tạo vân tay mới.
+ */
+export function bamHoaDon(h: Pick<HoaDonDienTu, 'kyHieu' | 'soHoaDon' | 'ngay' | 'truocThue' | 'tienThue' | 'tongCong' | 'noiDung'>): string {
+  const chuoi = [
+    h.kyHieu.trim().toUpperCase(),
+    h.soHoaDon.trim(),
+    h.ngay,
+    h.truocThue, h.tienThue, h.tongCong,
+    (h.noiDung ?? '').replace(/\s+/g, ' ').trim(),
+  ].join('|');
+  return createHash('sha256').update(chuoi, 'utf8').digest('hex');
+}

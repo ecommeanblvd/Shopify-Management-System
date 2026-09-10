@@ -2517,6 +2517,8 @@ export const creditNotes = pgTable('credit_notes', {
   /** Mã tham chiếu carrier bóc từ nội dung hoá đơn (DHL: HANR…). */
   maThamChieu: jsonb('ma_tham_chieu').notNull().default(sql`'[]'::jsonb`),
   noiDung: text('noi_dung'),
+  /** Vân tay NỘI DUNG hoá đơn (ký hiệu + số + ngày + tiền + mô tả) — chặn tải trùng dù tệp đổi tên. */
+  noiDungHash: text('noi_dung_hash'),
   tenFile: text('ten_file'),
   importedBy: text('imported_by').references(() => user.id, { onDelete: 'set null' }),
   importedAt: timestamp('imported_at').notNull().defaultNow(),
@@ -2524,6 +2526,7 @@ export const creditNotes = pgTable('credit_notes', {
   uniqueIndex('credit_notes_so_ky_unique').on(t.kyHieu, t.soHoaDon),
   index('credit_notes_ngay_idx').on(t.ngay),
   index('credit_notes_loai_ngay_idx').on(t.loai, t.ngay),
+  index('credit_notes_hash_idx').on(t.noiDungHash),
 ]);
 
 /** Chi tiết kiện trong ĐỢT điều chỉnh (CSV carrier) — để truy đơn nào được hoàn; KHÔNG dùng cộng tiền. */

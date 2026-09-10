@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Upload, Loader2, CheckCircle2, AlertTriangle, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { FileDrop } from '@/components/ui/file-drop';
@@ -40,6 +40,8 @@ export function CreditNoteUpload() {
 
   const xong = dong.filter((d) => d.trangThai === 'xong');
   const daGhi = xong.filter((d) => d.daGhi).length;
+  const boQua = xong.filter((d) => d.trungLap === 'y_het').length;
+  const canXem = xong.filter((d) => d.trungLap === 'lech_noi_dung').length;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setDong([]); }}>
@@ -60,7 +62,8 @@ export function CreditNoteUpload() {
             goiY={<>
               Nhận thẳng email <b>.msg</b> của carrier (đọc luôn XML và CSV bên trong), hoặc .zip / .xml / .csv rời.
               Bấm để chọn cũng được. Hệ thống tự tách credit note (carrier trả lại) và billing note (mình trả thêm);
-              lỡ thả hoá đơn cước kỳ vào thì báo lại chứ không ghi sai chỗ.
+              lỡ thả hoá đơn cước kỳ vào thì báo lại chứ không ghi sai chỗ. Hoá đơn đã có sẵn sẽ bị bỏ qua — nhận diện
+              theo ký hiệu, số và nội dung bên trong, đổi tên tệp cũng không tải lại được.
             </>}
           />
 
@@ -68,7 +71,11 @@ export function CreditNoteUpload() {
             <>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {pending && <span className="inline-flex items-center gap-1.5"><Loader2 className="size-3.5 animate-spin" /> Đang đọc…</span>}
-                <span>{xong.length}/{dong.length} tệp xử lý xong · đã ghi {daGhi}</span>
+                <span>
+                  {xong.length}/{dong.length} tệp xử lý xong · đã ghi {daGhi}
+                  {boQua > 0 && ` · bỏ qua ${boQua} tệp trùng`}
+                  {canXem > 0 && ` · ${canXem} tệp trùng số nhưng khác nội dung`}
+                </span>
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-border">
@@ -97,8 +104,10 @@ export function CreditNoteUpload() {
                           {r.trangThai === 'loi' && <span className="inline-flex items-start gap-1 text-red-600 dark:text-red-400"><AlertTriangle className="mt-0.5 size-3 shrink-0" />{r.loiText}</span>}
                           {r.trangThai === 'xong' && (
                             r.daGhi
-                              ? <span className="inline-flex items-start gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="mt-0.5 size-3 shrink-0" />{r.daCo ? 'Đã có, cập nhật lại' : 'Đã ghi'}{r.soDongChiTiet ? ` · ${r.soDongKhopKien}/${r.soDongChiTiet} khớp kiện` : ''}</span>
-                              : <span className="inline-flex items-start gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 size-3 shrink-0" />{(r.canhBao ?? []).join(' ')}</span>
+                              ? <span className="inline-flex items-start gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="mt-0.5 size-3 shrink-0" />Đã ghi{r.soDongChiTiet ? ` · ${r.soDongKhopKien}/${r.soDongChiTiet} khớp kiện` : ''}</span>
+                              : r.trungLap
+                                ? <span className={`inline-flex items-start gap-1 ${r.trungLap === 'y_het' ? 'text-muted-foreground' : 'text-red-600 dark:text-red-400'}`}><Ban className="mt-0.5 size-3 shrink-0" />{(r.canhBao ?? []).join(' ')}</span>
+                                : <span className="inline-flex items-start gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 size-3 shrink-0" />{(r.canhBao ?? []).join(' ')}</span>
                           )}
                         </td>
                       </tr>
