@@ -13,8 +13,11 @@ import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/featur
 import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/features/shipments/transit-stats';
 import {
   NHAN_PHAM_VI, NGUONG_DU_LIEU, NGUONG_NGOAI_LE, PHAM_VI, chuanDeXuat, chuanHoaNguong, chuanHoaPhamVi, doPhu,
-  docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
+  docKienGiao, docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
 } from '@/features/shipments/tieu-chuan-giao';
+import {
+  NGUONG_NGOAI_LE_SOP, NHOM_SOP, NUOC_LOAI_TRU, chamKpi, tongKpi,
+} from '@/features/shipments/sop-giao-hang';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +36,7 @@ const oChuan = (r: DongTieuChuan) => {
   return c == null ? <span className="text-[11px] font-normal text-muted-foreground">ít dữ liệu</span> : <>{c} ngày</>;
 };
 
-type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string; pv?: string; nn?: string };
+type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string; pv?: string; nn?: string; ky?: string };
 
 export default async function ShipReportPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -44,7 +47,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   }
 
   const sp = await searchParams;
-  const tab = sp.tab === 'surcharge' ? 'surcharge' : sp.tab === 'transit' ? 'transit' : sp.tab === 'chuan' ? 'chuan' : 'pnl';
+  const tab = sp.tab === 'surcharge' ? 'surcharge' : sp.tab === 'transit' ? 'transit' : sp.tab === 'chuan' ? 'chuan' : sp.tab === 'sop' ? 'sop' : 'pnl';
   const monthsBack = [3, 6, 12].includes(Number(sp.months)) ? Number(sp.months) : 6;
 
   const raw = await loadShipReport(monthsBack);
@@ -58,6 +61,20 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const transit = tab === 'transit' ? await getTransitStats(transitDays) : null;
   const transitMatrix = transit ? pivotRoutesByCountry(transit.routes) : null;
 
+  // Tab SOP & KPI: chấm KPI đội logistics theo bảng cam kết, lọc theo NGÀY GỬI (CEO 10/09/2026).
+  const KY_SOP: Array<{ ma: string; nhan: string; tu: (h: Date) => string; den: (h: Date) => string }> = [
+    { ma: 'thang-nay', nhan: 'Tháng này', tu: (h) => `${h.toISOString().slice(0, 7)}-01`, den: (h) => h.toISOString().slice(0, 10) },
+    { ma: 'thang-truoc', nhan: 'Tháng trước', tu: (h) => new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() - 1, 1)).toISOString().slice(0, 10), den: (h) => new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth(), 0)).toISOString().slice(0, 10) },
+    { ma: '3-thang', nhan: '3 tháng gần nhất', tu: (h) => new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() - 2, 1)).toISOString().slice(0, 10), den: (h) => h.toISOString().slice(0, 10) },
+    { ma: 'tu-2026', nhan: 'Từ đầu 2026', tu: () => '2026-01-01', den: (h) => h.toISOString().slice(0, 10) },
+  ];
+  // eslint-disable-next-line react-hooks/purity
+  const homNay = new Date(Date.now() + 7 * 3600_000); // ngày theo giờ kinh doanh (+07)
+  const kySop = KY_SOP.find((x) => x.ma === sp.ky) ?? KY_SOP[3];
+  const [tuSop, denSop] = [kySop.tu(homNay), kySop.den(homNay)];
+  const kpi = tab === 'sop' ? chamKpi(await docKienGiao(tuSop, denSop)) : null;
+  const kpiTong = kpi ? tongKpi(kpi) : null;
+
   // Tab Tiêu chuẩn giao: toàn bộ lịch sử (mặc định), tách theo line ship × quốc gia (CEO 10/09/2026).
   const phamVi = chuanHoaPhamVi(sp.pv);
   const nguong = chuanHoaNguong(sp.nn);
@@ -69,7 +86,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const topRoutes = pickedSur ? surchargeTopRoutes(raw.surchargeItems, pickedSur) : [];
 
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), pv: phamVi, nn: nguong == null ? 'tat-ca' : String(nguong), ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
+    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), pv: phamVi, nn: nguong == null ? 'tat-ca' : String(nguong), ky: kySop.ma, ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
     return `/f/ship-report?${p.toString()}`;
   };
 
@@ -94,7 +111,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border text-sm">
-        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao'], ['chuan', 'Tiêu chuẩn giao']] as const).map(([key, label]) => (
+        {([['pnl', 'P&L theo tháng'], ['surcharge', 'Phụ phí'], ['transit', 'Tốc độ giao'], ['chuan', 'Tiêu chuẩn giao'], ['sop', 'SOP & KPI']] as const).map(([key, label]) => (
           <Link key={key} href={qs({ tab: key })}
             className={`-mb-px border-b-2 px-3 py-2 font-medium ${tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
             {label}
@@ -102,7 +119,112 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
         ))}
       </div>
 
-      {tab === 'chuan' && chuan ? (
+      {tab === 'sop' && kpi && kpiTong ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1 text-sm">
+            {KY_SOP.map((x) => (
+              <Link key={x.ma} href={qs({ ky: x.ma })}
+                className={`rounded px-2.5 py-1 ${kySop.ma === x.ma ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+                {x.nhan}
+              </Link>
+            ))}
+            <span className="ml-2 text-xs text-muted-foreground">Kỳ chấm theo NGÀY GỬI {tuSop} → {denSop}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
+            {[
+              { nhan: 'Đúng hạn', so: pct(kpiTong.tyLeDungHan), phu: `${kpiTong.dungHan}/${kpiTong.n} kiện giao trong cam kết`, mau: kpiTong.dat === false ? 'xau' : 'tot' },
+              { nhan: 'Trễ vận chuyển', so: String(kpiTong.treVanChuyen), phu: `quá cam kết nhưng ≤ ${NGUONG_NGOAI_LE_SOP} ngày — line + ops` },
+              { nhan: 'Ngoại lệ', so: String(kpiTong.ngoaiLe), phu: `quá ${NGUONG_NGOAI_LE_SOP} ngày — không liên hệ được khách / thông quan` },
+              { nhan: 'Nhóm đạt', so: `${kpiTong.soNhomDat}/${kpi.filter((d) => d.dat !== null).length}`, phu: `${kpiTong.soNhomCham} nhóm chưa đạt`, mau: kpiTong.soNhomCham > 0 ? 'xau' : 'tot' },
+              { nhan: 'Kiện chấm', so: kpiTong.n.toLocaleString('vi-VN'), phu: 'kiện đã ghi nhận giao trong kỳ' },
+            ].map((t) => (
+              <div key={t.nhan} className="space-y-1 bg-card p-4">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t.nhan}</div>
+                <div className={`text-2xl font-semibold tabular-nums ${t.mau === 'tot' ? 'text-emerald-600 dark:text-emerald-400' : t.mau === 'xau' ? 'text-red-600 dark:text-red-400' : ''}`}>{t.so}</div>
+                <div className="text-[11px] leading-snug text-muted-foreground">{t.phu}</div>
+              </div>
+            ))}
+          </div>
+
+          <Card><CardContent className="p-0">
+            <div className="border-b border-border px-4 py-3 text-sm font-semibold">Bảng cam kết (SOP) và kết quả kỳ này</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                    <th className="text-left">Nhóm tuyến / nước</th>
+                    <th className="text-right" title="Giao trong ngần này ngày kể từ ngày gửi là ĐÚNG HẠN">Ngày cam kết</th>
+                    <th className="text-right" title="Tỉ lệ trễ tối đa còn được coi là đạt">Lỗi tối đa</th>
+                    <th className="text-right" title="Mức ngày phải siết xuống ở quý sau">Mục tiêu</th>
+                    <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th>
+                    <th className="text-right">Trễ VC</th><th className="text-right">Ngoại lệ</th>
+                    <th className="text-right">% đúng hạn</th><th className="text-right">Kết quả</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kpi.map((d) => (
+                    <Fragment key={d.nhom.ma}>
+                      <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
+                        <td className="text-left">{d.nhom.ten}</td>
+                        <td className="text-right">{d.nhom.slaNgay} ngày</td>
+                        <td className="text-right text-muted-foreground">{Math.round(d.nhom.loiToiDa * 100)}%</td>
+                        <td className="text-right text-muted-foreground">{d.nhom.mucTieuNgay} ngày</td>
+                        <td className="text-right">{d.n || '—'}</td>
+                        <td className="text-right">{d.n ? d.dungHan : '—'}</td>
+                        <td className="text-right">{d.n ? d.treVanChuyen : '—'}</td>
+                        <td className="text-right text-amber-600 dark:text-amber-400">{d.n ? d.ngoaiLe : '—'}</td>
+                        <td className="text-right">{pct(d.tyLeDungHan)}</td>
+                        <td className={`text-right font-semibold ${d.dat === true ? 'text-emerald-600 dark:text-emerald-400' : d.dat === false ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                          {d.dat === true ? 'Đạt' : d.dat === false ? 'Chưa đạt' : '—'}
+                        </td>
+                      </tr>
+                      <tr className="border-t border-border/40 text-[11px] text-muted-foreground">
+                        <td colSpan={10} className="px-3 pb-1 pt-0 leading-snug">Căn cứ: {d.nhom.canCu}. Nước: {d.nhom.nuoc.length ? d.nhom.nuoc.join(', ') : 'mọi nước chưa xếp nhóm'}</td>
+                      </tr>
+                      {d.theoNuoc.map((c) => (
+                        <tr key={`${d.nhom.ma}-${c.country}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
+                          <td className="pl-10 text-left">
+                            <span className="inline-flex items-center gap-2"><CountryFlag code={c.country} className="!h-3.5 !w-5" />{countryName(c.country)}</span>
+                          </td>
+                          <td colSpan={3} />
+                          <td className="text-right">{c.n}</td>
+                          <td className="text-right">{c.dungHan}</td>
+                          <td className="text-right">{c.treVanChuyen}</td>
+                          <td className="text-right">{c.ngoaiLe}</td>
+                          <td className="text-right">{pct(c.tyLeDungHan)}</td>
+                          <td className={`text-right ${c.dat === false ? 'text-red-600 dark:text-red-400' : ''}`}>{c.dat === false ? 'Chưa đạt' : c.dat === true ? 'Đạt' : '—'}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent></Card>
+
+          <Card><CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
+            <div className="text-sm font-semibold text-foreground">Cách chấm</div>
+            <p>
+              Đúng hạn = kiện giao trong số ngày cam kết, tính từ ngày tạo vận đơn đến ngày khách nhận. Kỳ chấm lọc theo
+              NGÀY GỬI nên một kiện luôn được chấm vào tháng nó rời kho, không bị đẩy sang tháng sau.
+            </p>
+            <p>
+              Nhóm đạt KPI khi tỉ lệ trễ ≤ mức lỗi tối đa. Trễ gồm cả hai loại: trễ vận chuyển và ngoại lệ. Ngoại lệ tách
+              riêng để quy nguyên nhân chứ KHÔNG được miễn trừ, vì phần lớn vẫn xử lý được bằng cách gọi khách sớm và
+              chuẩn bị giấy tờ thông quan trước.
+            </p>
+            <p>
+              Kiện chưa ai ghi nhận ngày giao thì không vào KPI. Vì vậy đội phải nhập ngày giao đầy đủ trên Lark, thiếu
+              nhập là mất mẫu chứ không phải được bỏ qua. {Object.entries(NUOC_LOAI_TRU).map(([cc, ly]) => `${cc} không tính: ${ly.toLowerCase()}`).join(' · ')}.
+            </p>
+            <p>
+              Mức cam kết lấy từ dữ liệu 2026 ở tab “Tiêu chuẩn giao”, đặt tại mức đội đang đạt khoảng 90 %. Cột “mục tiêu”
+              là mức quý sau phải siết xuống — khi một nhóm giữ được 3 tháng liên tiếp trên mức cam kết thì hạ SLA xuống mục tiêu.
+            </p>
+          </CardContent></Card>
+        </>
+      ) : tab === 'chuan' && chuan ? (
         <>
           <div className="flex flex-wrap items-center gap-1 text-sm">
             {PHAM_VI.map((pv) => (

@@ -208,3 +208,19 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
     giaoMoiNhat: moc.rows[0]?.giao ?? null,
   };
 }
+
+/**
+ * Kiện đã ghi nhận giao trong khoảng NGÀY GỬI [tu, den] (ISO date, bao trọn ngày) — đầu vào cho chấm KPI SOP.
+ * Chỉ lấy kiện có đủ hai mốc và ngày giao không sớm hơn ngày gửi.
+ */
+export async function docKienGiao(tu: string, den: string): Promise<Array<{ country: string; soNgay: number }>> {
+  const { rows } = await db.execute<{ cc: string | null; ngay: string }>(sql`
+    SELECT COALESCE(o.ship_country, '?') AS cc,
+           (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay
+      FROM shipments s JOIN shopify_orders o ON o.id = s.order_id
+     WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
+       AND s.delivered_at::timestamp >= s.label_created_at
+       AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp
+       AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`);
+  return rows.map((r) => ({ country: r.cc ?? '?', soNgay: Number(r.ngay) }));
+}
