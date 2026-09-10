@@ -12,8 +12,8 @@ import { pnlByMonth, pnlBreakdown } from '@/features/ship-report/pnl';
 import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/features/ship-report/surcharges';
 import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/features/shipments/transit-stats';
 import {
-  NHAN_PHAM_VI, NGUONG_DU_LIEU, PHAM_VI, chuanDeXuat, chuanHoaPhamVi, doPhu, docTieuChuanGiao, gomTheoNuoc,
-  type DongTieuChuan,
+  NHAN_PHAM_VI, NGUONG_DU_LIEU, NGUONG_NGOAI_LE, PHAM_VI, chuanDeXuat, chuanHoaNguong, chuanHoaPhamVi, doPhu,
+  docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
 } from '@/features/shipments/tieu-chuan-giao';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +33,7 @@ const oChuan = (r: DongTieuChuan) => {
   return c == null ? <span className="text-[11px] font-normal text-muted-foreground">ít dữ liệu</span> : <>{c} ngày</>;
 };
 
-type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string; pv?: string };
+type SP = { tab?: string; months?: string; month?: string; sur?: string; days?: string; pv?: string; nn?: string };
 
 export default async function ShipReportPage({ searchParams }: { searchParams: Promise<SP> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -60,7 +60,8 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
 
   // Tab Tiêu chuẩn giao: toàn bộ lịch sử (mặc định), tách theo line ship × quốc gia (CEO 10/09/2026).
   const phamVi = chuanHoaPhamVi(sp.pv);
-  const chuan = tab === 'chuan' ? await docTieuChuanGiao(phamVi) : null;
+  const nguong = chuanHoaNguong(sp.nn);
+  const chuan = tab === 'chuan' ? await docTieuChuanGiao(phamVi, nguong) : null;
   const chuanTheoNuoc = chuan ? gomTheoNuoc(chuan.theoNuoc, chuan.theoLineNuoc) : [];
 
   const surRows = surchargeSummary(raw.surchargeItems, raw.totalShipments);
@@ -68,7 +69,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const topRoutes = pickedSur ? surchargeTopRoutes(raw.surchargeItems, pickedSur) : [];
 
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), pv: phamVi, ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
+    const p = new URLSearchParams({ tab, months: String(monthsBack), days: String(transitDays), pv: phamVi, nn: nguong == null ? 'tat-ca' : String(nguong), ...(sp.month ? { month: sp.month } : {}), ...(sp.sur ? { sur: sp.sur } : {}), ...patch });
     return `/f/ship-report?${p.toString()}`;
   };
 
@@ -115,14 +116,37 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
             </span>
           </div>
 
+          <div className="flex flex-wrap items-center gap-1 text-sm">
+            <span className="mr-1 text-xs uppercase tracking-wider text-muted-foreground">Tách ngoại lệ khi quá</span>
+            {NGUONG_NGOAI_LE.map((n) => (
+              <Link key={n} href={qs({ nn: String(n) })}
+                className={`rounded px-2.5 py-1 ${nguong === n ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+                {n} ngày
+              </Link>
+            ))}
+            <Link href={qs({ nn: 'tat-ca' })}
+              className={`rounded px-2.5 py-1 ${nguong == null ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+              Không tách
+            </Link>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Kiện quá ngưỡng gần như luôn là hàng đã tới nơi nhưng không liên hệ được khách, hoặc kẹt thủ tục thông quan — không phải tốc độ của line.
+            </span>
+          </div>
+
           {/* Chuẩn chung — con số để cam kết với khách. */}
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
             {[
               { nhan: 'Chuẩn cam kết', so: soNgay(chuanDeXuat(chuan.tong)), phu: '9/10 kiện giao trong ngần này (P90)', dam: true },
               { nhan: 'Thường gặp', so: soNgay(chuan.tong.p50), phu: 'một nửa số kiện nhanh hơn (P50)' },
               { nhan: 'Trung bình', so: soNgay(chuan.tong.tbNgay), phu: 'bị vài kiện kẹt kéo lệch lên' },
-              { nhan: 'Kiện đã giao', so: chuan.tong.soDaGiao.toLocaleString('vi-VN'), phu: `trên ${chuan.tong.soDaGui.toLocaleString('vi-VN')} kiện đã gửi · phủ ${pct(doPhu(chuan.tong))}` },
-              { nhan: 'Chậm nhất', so: soNgay(chuan.tong.maxNgay), phu: 'kiện kẹt lâu nhất trong dữ liệu' },
+              { nhan: 'Kiện tính chuẩn', so: chuan.tong.soTinhChuan.toLocaleString('vi-VN'), phu: `trên ${chuan.tong.soDaGiao.toLocaleString('vi-VN')} kiện đã giao · ${chuan.tong.soDaGui.toLocaleString('vi-VN')} đã gửi (phủ ${pct(doPhu(chuan.tong))})` },
+              {
+                nhan: 'Ngoại lệ',
+                so: nguong == null ? '—' : `${pct(tyLeNgoaiLe(chuan.tong))}`,
+                phu: nguong == null
+                  ? 'đang không tách — số trên gồm cả kiện kẹt'
+                  : `${chuan.tong.soNgoaiLe} kiện quá ${nguong} ngày · chậm nhất ${soNgay(chuan.tong.maxNgoaiLe)} ngày`,
+              },
             ].map((t) => (
               <div key={t.nhan} className="space-y-1 bg-card p-4">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t.nhan}</div>
@@ -140,9 +164,10 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                   <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
                     <th className="text-left">Line</th><th className="text-right">Đã gửi</th><th className="text-right">Đã giao</th>
                     <th className="text-right" title="Tỉ lệ kiện đã có ngày giao — phần còn lại ops chưa ghi nhận">Phủ</th>
+                    <th className="text-right" title="Kiện quá ngưỡng, đã tách khỏi phần tính chuẩn">Ngoại lệ</th>
                     <th className="text-right">TB</th><th className="text-right" title="Một nửa số kiện nhanh hơn mức này">P50</th>
                     <th className="text-right">P75</th><th className="text-right" title="9/10 kiện giao trong mức này">P90</th>
-                    <th className="text-right">Chậm nhất</th>
+                    <th className="text-right" title="Chậm nhất trong nhóm giao bình thường (đã trừ ngoại lệ)">Chậm nhất</th>
                     <th className="text-right" title="P90 làm tròn lên — mức nên cam kết với khách">Chuẩn</th>
                   </tr>
                 </thead>
@@ -153,6 +178,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                       <td className="text-right">{l.soDaGui}</td>
                       <td className="text-right">{l.soDaGiao}</td>
                       <td className="text-right text-muted-foreground">{pct(doPhu(l))}</td>
+                      <td className="text-right text-amber-600 dark:text-amber-400">{l.soNgoaiLe === 0 ? '—' : `${l.soNgoaiLe} · ${pct(tyLeNgoaiLe(l))}`}</td>
                       <td className="text-right">{soNgay(l.tbNgay)}</td>
                       <td className="text-right">{soNgay(l.p50)}</td>
                       <td className="text-right">{soNgay(l.p75)}</td>
@@ -178,6 +204,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                 <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
                     <th className="text-left">Quốc gia / line</th><th className="text-right">Đã giao</th>
+                    <th className="text-right" title="Kiện quá ngưỡng, đã tách khỏi phần tính chuẩn">Ngoại lệ</th>
                     <th className="text-right">TB</th><th className="text-right">P50</th><th className="text-right">P90</th>
                     <th className="text-right">Chậm nhất</th><th className="text-right">Chuẩn</th>
                   </tr>
@@ -194,6 +221,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                           </span>
                         </td>
                         <td className="text-right">{n.tong.soDaGiao}</td>
+                        <td className="text-right text-amber-600 dark:text-amber-400">{n.tong.soNgoaiLe === 0 ? '—' : n.tong.soNgoaiLe}</td>
                         <td className="text-right">{soNgay(n.tong.tbNgay)}</td>
                         <td className="text-right">{soNgay(n.tong.p50)}</td>
                         <td className="text-right">{soNgay(n.tong.p90)}</td>
@@ -204,6 +232,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                         <tr key={`${n.tong.country}-${l.line}`} className="border-t border-border/40 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
                           <td className="pl-10 text-left uppercase text-xs">{l.line}</td>
                           <td className="text-right">{l.soDaGiao}</td>
+                          <td className="text-right">{l.soNgoaiLe === 0 ? '—' : l.soNgoaiLe}</td>
                           <td className="text-right">{soNgay(l.tbNgay)}</td>
                           <td className="text-right">{soNgay(l.p50)}</td>
                           <td className="text-right">{soNgay(l.p90)}</td>
@@ -218,6 +247,40 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
             </div>
           </CardContent></Card>
 
+          {chuan.dsNgoaiLe.length > 0 && (
+            <Card><CardContent className="p-0">
+              <div className="border-b border-border px-4 py-3 text-sm font-semibold">
+                Kiện ngoại lệ chậm nhất <span className="font-normal text-muted-foreground">({chuan.dsNgoaiLe.length} kiện đầu · quá {nguong} ngày)</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm tabular-nums">
+                  <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
+                      <th className="text-left">Đơn</th><th className="text-left">Nước</th><th className="text-left">Line</th>
+                      <th className="text-right">Ngày gửi</th><th className="text-right">Ngày giao</th><th className="text-right">Số ngày</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chuan.dsNgoaiLe.map((k, i) => (
+                      <tr key={`${k.maDon}-${i}`} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-1.5">
+                        <td className="text-left font-mono text-xs">{k.maDon}</td>
+                        <td className="text-left text-xs">{k.country}</td>
+                        <td className="text-left text-xs uppercase">{k.line}</td>
+                        <td className="text-right text-xs text-muted-foreground">{k.ngayGui}</td>
+                        <td className="text-right text-xs text-muted-foreground">{k.ngayGiao}</td>
+                        <td className="text-right font-medium text-amber-600 dark:text-amber-400">{soNgay(k.soNgay)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                Hệ thống CHƯA lưu nguyên nhân chậm. Muốn tách được “không liên hệ được khách” với “kẹt thông quan” thì cần
+                thêm một cột lý do trong bảng Lark rồi đồng bộ về đây.
+              </p>
+            </CardContent></Card>
+          )}
+
           <Card><CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
             <div className="text-sm font-semibold text-foreground">Đọc số này cần biết</div>
             <p>
@@ -230,8 +293,13 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
               {chuan.doPhuTheoNam.some((n) => n.soDaGui > 0 && n.soDaGiao / n.soDaGui < 0.5) && ' Năm phủ thấp chỉ còn lại kiện có người nhập tay (thường là kiện có vấn đề) nên kéo trung bình lên — nhìn P50/P90 thay vì trung bình.'}
             </p>
             <p>
-              Kiện kẹt rất lâu (hàng trăm ngày) phần lớn là ops đánh dấu giao hàng loạt cùng một ngày, không phải thời gian
-              giao thật. Vì vậy chuẩn lấy theo P90 chứ không theo trung bình hay số chậm nhất.
+              {nguong == null
+                ? 'Đang KHÔNG tách ngoại lệ nên các số trên gồm cả kiện đã tới nơi mà không giao được — trung bình sẽ dài hơn thực tế.'
+                : `Kiện quá ${nguong} ngày được tách riêng: đó gần như luôn là hàng đã tới nơi nhưng không liên hệ được khách để giao, hoặc kẹt thông quan vì thiếu giấy tờ. Đây là việc của ops và của khách, không phải tốc độ line ship, nên không tính vào chuẩn — nhưng tỉ lệ ngoại lệ vẫn phải theo dõi.`}
+            </p>
+            <p>
+              Một phần kiện kẹt hàng trăm ngày là ops đánh dấu giao hàng loạt cùng một ngày, không phải thời gian giao thật.
+              Chuẩn lấy theo P90 chứ không theo trung bình hay số chậm nhất.
             </p>
           </CardContent></Card>
         </>
