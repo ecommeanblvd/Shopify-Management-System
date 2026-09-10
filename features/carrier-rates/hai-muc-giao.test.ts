@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { giaExpress, taoHaiMucRate, moTaMuc, loTenHang, TEN_MUC, PHU_PHI_EXPRESS_PHAN_TRAM } from './hai-muc-giao';
+import { giaExpress, taoHaiMucRate, moTaMuc, ngayGiaoMuc, loTenHang, TEN_MUC, PHU_PHI_EXPRESS_PHAN_TRAM } from './hai-muc-giao';
 
 describe('giaExpress', () => {
   it('cộng phụ phí % rồi làm tròn LÊN theo bước 0,5', () => {
@@ -32,10 +32,20 @@ describe('taoHaiMucRate', () => {
       expect(loTenHang(r.description ?? '')).toBe(false);
     }
   });
-  it('mô tả lấy số ngày từ SOP theo nước (Mỹ 5 ngày, Hong Kong 3 ngày, nước lạ 10 ngày)', () => {
-    expect(moTaMuc('standard', 'US')).toBe('Standard handling · about 5 days in transit');
-    expect(moTaMuc('express', 'HK')).toBe('Priority handling, dispatched first · about 3 days in transit');
-    expect(moTaMuc('standard', 'ZZ')).toContain('about 10 days');
+  it('Express hứa đúng mức SOP của nước, Standard là khoảng chậm hơn 2–5 ngày', () => {
+    expect(moTaMuc('express', 'US')).toBe('Priority handling, dispatched first · delivery in about 5 days');
+    expect(moTaMuc('standard', 'US')).toBe('Standard handling · delivery in about 7–10 days');
+    expect(moTaMuc('express', 'HK')).toBe('Priority handling, dispatched first · delivery in about 3 days');
+    expect(moTaMuc('standard', 'HK')).toBe('Standard handling · delivery in about 5–8 days');
+    expect(moTaMuc('standard', 'ZZ')).toBe('Standard handling · delivery in about 12–15 days');
+  });
+
+  it('hai mô tả KHÔNG được giống nhau ở bất kỳ nước nào — giống thì khách không có lý do chọn Express', () => {
+    for (const cc of ['US', 'HK', 'SA', 'DE', 'JP', 'AU', 'ZZ']) {
+      expect(moTaMuc('standard', cc)).not.toBe(moTaMuc('express', cc));
+      const st = ngayGiaoMuc('standard', cc); const ex = ngayGiaoMuc('express', cc);
+      expect(st.tu).toBeGreaterThan(ex.den);   // ngày sớm nhất của Standard vẫn muộn hơn ngày muộn nhất của Express
+    }
   });
 });
 

@@ -37,16 +37,34 @@ export function giaExpress(giaStandard: number, phanTram = PHU_PHI_EXPRESS_PHAN_
   return gia > giaStandard ? gia : Math.round((giaStandard + BUOC_LAM_TRON) * 100) / 100;
 }
 
+/** Standard chậm hơn Express bao nhiêu ngày (khoảng hiện ở checkout). Express giữ
+ *  ĐÚNG mức cam kết SOP của nước; Standard = SOP + 2 → SOP + 5 ngày, vì đơn Standard
+ *  chờ sau khi đội logistics đã gửi hết đơn Express trong ngày. */
+export const NGAY_THEM_STANDARD_TU = 2;
+export const NGAY_THEM_STANDARD_DEN = 5;
+
+/** Số ngày hứa với khách của từng mức: Express = cam kết SOP theo nước, Standard = khoảng chậm hơn. */
+export function ngayGiaoMuc(ma: MaMuc, nuoc: string): { tu: number; den: number } {
+  const sla = slaCuaNuoc(nuoc);
+  return ma === 'express'
+    ? { tu: sla, den: sla }
+    : { tu: sla + NGAY_THEM_STANDARD_TU, den: sla + NGAY_THEM_STANDARD_DEN };
+}
+
 /**
- * Mô tả hiện dưới tên rate ở checkout. Số ngày lấy từ bảng cam kết SOP theo nước
+ * Mô tả hiện dưới tên rate ở checkout. Mốc ngày lấy từ bảng cam kết SOP theo nước
  * (`sop-giao-hang.ts`) — cùng con số đội logistics bị chấm KPI, không hứa riêng.
- * Khác biệt giữa hai mức là ƯU TIÊN XỬ LÝ (Express đóng và gửi trước), không hứa
- * thời gian bay khác nhau vì cùng một tuyến.
+ * Hai mức PHẢI khác nhau cả về chữ lẫn số: mô tả giống hệt thì khách không có lý do
+ * chọn Express (CEO 10/09/2026). Khác biệt có thật là thứ tự gửi — Express đóng và
+ * gửi trước trong ngày, Standard chờ sau — nên chênh lệch nằm ở khâu xử lý, không
+ * phải ở thời gian bay (cùng một tuyến).
  */
 export function moTaMuc(ma: MaMuc, nuoc: string): string {
-  const ngay = slaCuaNuoc(nuoc);
-  const bay = `about ${ngay} days in transit`;
-  return ma === 'express' ? `Priority handling, dispatched first · ${bay}` : `Standard handling · ${bay}`;
+  const { tu, den } = ngayGiaoMuc(ma, nuoc);
+  const ngay = tu === den ? `about ${tu} days` : `about ${tu}–${den} days`;
+  return ma === 'express'
+    ? `Priority handling, dispatched first · delivery in ${ngay}`
+    : `Standard handling · delivery in ${ngay}`;
 }
 
 /** Dựng ĐÚNG hai rate từ một giá Standard (giá engine ở đơn vị hiển thị). */
