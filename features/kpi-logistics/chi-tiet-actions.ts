@@ -15,7 +15,7 @@ import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU } from '@/features/shipments/sop-
 import { loaiTruKhoiKpi, layLyDo } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
 import {
-  CACH_DO, xepLoaiSla,
+  CACH_DO, xepLoaiSla, chenhSauThuHoi,
   type ChiTietKpi, type MaTieuChi, type DongAmCuoc, type DongSla, type DongChungTu, type DongSizeThung,
 } from './chi-tiet';
 
@@ -38,26 +38,40 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
   const goc: ChiTietKpi = { ma, tu, den, cachDo: CACH_DO[ma] };
 
   if (ma === '1.1') {
-    const { rows } = await db.execute<{ don: string | null; cc: string | null; ngay: string | null; thu: string | null; bill: string; phan: string | null }>(sql`
-      WITH b AS (
-        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed, MIN(s.label_created_at)::text AS ngay_gui,
-               string_agg(DISTINCT r.status::text, ', ') AS phan_dinh
-          FROM shipment_charges c
-          JOIN shipments s ON s.id = c.shipment_id
-          LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
+    // Bill và thu hồi gộp ở HAI subquery riêng: gộp chung một JOIN sẽ nhân đôi số
+    // tiền khi một kiện có nhiều dòng phí hoặc nhiều kiện cùng đơn.
+    const { rows } = await db.execute<{ don: string | null; cc: string | null; ngay: string | null; thu: string | null; bill: string; thu_hoi: string | null; phan: string | null; so_cn: string | null }>(sql`
+      WITH bill AS (
+        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed, MIN(s.label_created_at)::text AS ngay_gui
+          FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
+         WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
+         GROUP BY 1),
+      thu AS (
+        SELECT s.order_id, SUM(COALESCE(r.recovered_vnd::numeric, 0)) AS thu_hoi,
+               string_agg(DISTINCT r.status::text, ', ') AS phan_dinh,
+               string_agg(DISTINCT r.credit_note_number, ', ') AS so_cn
+          FROM shipments s JOIN shipment_reconcile_status r ON r.shipment_id = s.id
          WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
          GROUP BY 1)
-      SELECT o.shopify_order_number AS don, o.ship_country AS cc, b.ngay_gui AS ngay,
+      SELECT o.shopify_order_number AS don, o.ship_country AS cc, bill.ngay_gui AS ngay,
              (o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))::text AS thu,
-             b.billed::text AS bill, b.phan_dinh AS phan
-        FROM b JOIN shopify_orders o ON o.id = b.order_id JOIN stores st ON st.id = o.store_id
-       WHERE b.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1)
-       ORDER BY (b.billed - o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1)) DESC;`);
-    const amCuoc: DongAmCuoc[] = rows.map((r) => {
-      const thu = Number(r.thu ?? 0);
-      const carrier = Number(r.bill);
-      return { maDon: r.don, nuoc: r.cc, ngayGui: ngay(r.ngay), thuKhachVnd: Math.round(thu), carrierVnd: Math.round(carrier), chenhVnd: Math.round(carrier - thu), phanDinh: r.phan };
-    });
+             bill.billed::text AS bill, thu.thu_hoi::text AS thu_hoi, thu.phan_dinh AS phan, thu.so_cn AS so_cn
+        FROM bill
+        JOIN shopify_orders o ON o.id = bill.order_id
+        JOIN stores st ON st.id = o.store_id
+        LEFT JOIN thu ON thu.order_id = bill.order_id
+       WHERE bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`);
+    const amCuoc: DongAmCuoc[] = [];
+    for (const r of rows) {
+      const thuKhachVnd = Math.round(Number(r.thu ?? 0));
+      const carrierVnd = Math.round(Number(r.bill));
+      const thuHoiVnd = Math.round(Number(r.thu_hoi ?? 0));
+      const { carrierRongVnd, chenhVnd, conAm } = chenhSauThuHoi(carrierVnd, thuHoiVnd, thuKhachVnd);
+      // Đơn đã đòi lại đủ tiền thì KHÔNG còn là đơn âm cước — rời danh sách.
+      if (!conAm) continue;
+      amCuoc.push({ maDon: r.don, nuoc: r.cc, ngayGui: ngay(r.ngay), thuKhachVnd, carrierVnd, thuHoiVnd, carrierRongVnd, chenhVnd, phanDinh: r.phan, soCreditNote: r.so_cn });
+    }
+    amCuoc.sort((a, b) => b.chenhVnd - a.chenhVnd);
     return { ...goc, amCuoc };
   }
 

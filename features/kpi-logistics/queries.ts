@@ -13,7 +13,7 @@ import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/
 
 export interface SoLieuTuDong {
   tu: string; den: string;
-  /** 1.1 — đơn có cước carrier THỰC TRẢ vượt cước thu của khách (chưa quy trách nhiệm). */
+  /** 1.1 — đơn có cước carrier RÒNG (đã trừ tiền đòi lại được) vẫn vượt cước thu của khách. */
   soDonAmCuoc: number;
   amCuocVnd: number;
   /** 1.1 — trong số đó, bao nhiêu đơn ĐÃ được đối soát chốt là LỖI NỘI BỘ (`internal_error`).
@@ -22,6 +22,10 @@ export interface SoLieuTuDong {
   soDonAmCuocLoiNoiBo: number;
   /** 1.1 — đơn âm cước chưa ai phân định đúng/sai. Còn tồn nghĩa là chưa đủ căn cứ chấm 1.1. */
   soDonAmCuocChuaXet: number;
+  /** 1.1 — đơn từng âm cước nhưng đã HẾT âm sau khi trừ tiền carrier trả lại. */
+  soDonHetAmNhoThuHoi: number;
+  /** 1.1 — tổng tiền carrier đã trả lại cho các đơn từng âm cước trong kỳ. */
+  thuHoiTruVaoCuocVnd: number;
   /** 1.2 — theo bảng SOP cam kết từng nước (D-067). SLA trong văn bản quy chế chỉ là mẫu, không dùng. */
   slaTong: { n: number; dungHan: number; tyLe: number | null };
   /** 1.2 — chi tiết từng nước để nhân sự biết tuyến nào kéo điểm xuống. */
@@ -53,19 +57,33 @@ export interface SoLieuTuDong {
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
   const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienGiao, canRows] = await Promise.all([
-    db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string }>(sql`
-      WITH b AS (
-        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed,
-               string_agg(DISTINCT r.status::text, ',') AS phan_dinh
+    db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
+      WITH bill AS (
+        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
           FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
-          LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
          WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp
-         GROUP BY 1)
-      SELECT COUNT(*)::text AS n, SUM(b.billed - o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))::text AS tong,
-             COUNT(*) FILTER (WHERE b.phan_dinh LIKE '%internal_error%')::text AS loi_noi_bo,
-             COUNT(*) FILTER (WHERE b.phan_dinh IS NULL)::text AS chua_xet
-        FROM b JOIN shopify_orders o ON o.id = b.order_id JOIN stores st ON st.id = o.store_id
-       WHERE b.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`),
+         GROUP BY 1),
+      thu AS (
+        SELECT s.order_id, SUM(COALESCE(r.recovered_vnd::numeric, 0)) AS thu_hoi,
+               string_agg(DISTINCT r.status::text, ',') AS phan_dinh
+          FROM shipments s JOIN shipment_reconcile_status r ON r.shipment_id = s.id
+         WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp
+         GROUP BY 1),
+      am AS (
+        SELECT bill.billed - COALESCE(thu.thu_hoi, 0) AS rong,
+               COALESCE(thu.thu_hoi, 0) AS thu_hoi,
+               o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1) AS khach_tra,
+               thu.phan_dinh
+          FROM bill JOIN shopify_orders o ON o.id = bill.order_id JOIN stores st ON st.id = o.store_id
+          LEFT JOIN thu ON thu.order_id = bill.order_id
+         WHERE bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))
+      SELECT COUNT(*) FILTER (WHERE rong > khach_tra)::text AS n,
+             COALESCE(SUM(rong - khach_tra) FILTER (WHERE rong > khach_tra), 0)::text AS tong,
+             COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh LIKE '%internal_error%')::text AS loi_noi_bo,
+             COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh IS NULL)::text AS chua_xet,
+             COUNT(*) FILTER (WHERE rong <= khach_tra)::text AS da_cuu,
+             COALESCE(SUM(thu_hoi), 0)::text AS thu_hoi
+        FROM am;`),
     db.execute<{ tong: string; loi: string }>(sql`
       SELECT COUNT(*)::text AS tong,
              (COUNT(*) FILTER (WHERE COALESCE(c.address_correction::numeric, 0) > 0))::text AS loi
@@ -126,6 +144,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     amCuocVnd: Math.round(Number(amCuoc.rows[0]?.tong ?? 0)),
     soDonAmCuocLoiNoiBo: Number(amCuoc.rows[0]?.loi_noi_bo ?? 0),
     soDonAmCuocChuaXet: Number(amCuoc.rows[0]?.chua_xet ?? 0),
+    soDonHetAmNhoThuHoi: Number(amCuoc.rows[0]?.da_cuu ?? 0),
+    thuHoiTruVaoCuocVnd: Math.round(Number(amCuoc.rows[0]?.thu_hoi ?? 0)),
     slaTong: { n: sop.n, dungHan: sop.dungHan, tyLe: sop.tyLeDungHan },
     slaTheoNuoc: theoNuoc,
     slaLoaiTru: kienGiao.length - tinhKpi.length,

@@ -44,12 +44,29 @@ export interface DongAmCuoc {
   ngayGui: string | null;
   /** Cước KHÁCH trả, quy về VND. */
   thuKhachVnd: number;
-  /** Cước carrier bill thật, VND. */
+  /** Cước carrier bill thật, VND — số GỐC trên hoá đơn. */
   carrierVnd: number;
-  /** carrierVnd − thuKhachVnd, luôn > 0 trong danh sách này. */
+  /** Tiền carrier đã trả lại cho kiện của đơn này (credit note đã ghi nhận). */
+  thuHoiVnd: number;
+  /** carrierVnd − thuHoiVnd: giá vốn THẬT sau giảm trừ. */
+  carrierRongVnd: number;
+  /** carrierRongVnd − thuKhachVnd. Dương = vẫn còn âm cước sau khi trừ credit. */
   chenhVnd: number;
   /** Kết luận đối soát đã chốt (nếu có): ai sai. */
   phanDinh: string | null;
+  /** Số credit note đã ghi cho kiện của đơn, nếu có. */
+  soCreditNote: string | null;
+}
+
+/**
+ * Giá vốn thật của một đơn sau khi trừ tiền carrier đã trả lại, và phần còn âm.
+ * Đơn đã được credit phải tính trên số RÒNG — nếu không, một đơn đã đòi lại được
+ * gần hết tiền vẫn bị đếm là âm cước và bị quy trách nhiệm oan (CEO 11/09/2026).
+ */
+export function chenhSauThuHoi(carrierVnd: number, thuHoiVnd: number, thuKhachVnd: number): { carrierRongVnd: number; chenhVnd: number; conAm: boolean } {
+  const carrierRongVnd = Math.round(carrierVnd - thuHoiVnd);
+  const chenhVnd = Math.round(carrierRongVnd - thuKhachVnd);
+  return { carrierRongVnd, chenhVnd, conAm: chenhVnd > 0 };
 }
 
 export interface DongSla {
@@ -104,7 +121,7 @@ export interface ChiTietKpi {
 }
 
 export const CACH_DO: Record<MaTieuChi, string> = {
-  '1.1': 'Đơn có tổng cước carrier bill về LỚN HƠN cước thu của khách, tính theo kiện gửi trong kỳ. Cột "Phân định" là kết luận đối soát đã chốt; chỉ đơn được chốt là LỖI NỘI BỘ mới bị trừ KPI, đơn do hãng sai hoặc chưa xét thì không.',
+  '1.1': 'Đơn có cước carrier RÒNG (bill trừ tiền đã đòi lại được bằng credit note) vẫn lớn hơn cước thu của khách, tính theo kiện gửi trong kỳ. Đơn đã được carrier trả lại đủ tiền sẽ tự rời danh sách. Cột Phân định là kết luận đối soát đã chốt; chỉ đơn được chốt là lỗi nội bộ mới bị trừ KPI, đơn do hãng sai hoặc chưa xét thì không.',
   '1.2': 'Mọi kiện GỬI trong kỳ và ĐÃ giao xong. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII.',
   '1.3': 'Kiện phát sinh phí sửa địa chỉ trên hoá đơn carrier — dấu hiệu nhập sai hoặc thiếu thông tin người nhận. Mẫu số là toàn bộ kiện có hoá đơn trong kỳ.',
   '1.4': 'So cân mình tự tính (lớn hơn giữa cân thực và cân quy đổi kích thước) với cân carrier thật sự charge. Lệch từ 0,5 kg trở lên coi là chọn sai thùng, vì thùng chật phồng ra làm tăng cân quy đổi.',

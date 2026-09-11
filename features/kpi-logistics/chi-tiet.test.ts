@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { xepLoaiSla, demKetQuaSla, TEN_TIEU_CHI, CACH_DO, type DongSla } from './chi-tiet';
+import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, TEN_TIEU_CHI, CACH_DO, type DongSla } from './chi-tiet';
 
 const kien = (soNgay: number, slaNgay: number, biLoaiTru = false): DongSla => ({
   maDon: null, tracking: null, nuoc: 'US', line: 'fedex', ngayGui: '2026-08-01', ngayGiao: '2026-08-06',
@@ -49,5 +49,23 @@ describe('nhãn tiêu chí', () => {
       expect(TEN_TIEU_CHI[ma]).toBeTruthy();
       expect(CACH_DO[ma].length).toBeGreaterThan(40);
     }
+  });
+});
+
+describe('chenhSauThuHoi', () => {
+  it('trừ tiền carrier đã trả lại rồi mới so với cước thu khách', () => {
+    // #MBLVD29751: bill 11.268.313đ, đã đòi lại 9.419.518đ, khách trả 2.000.000đ.
+    expect(chenhSauThuHoi(11_268_313, 9_419_518, 2_000_000)).toEqual({
+      carrierRongVnd: 1_848_795, chenhVnd: -151_205, conAm: false,
+    });
+  });
+  it('chưa thu hồi được gì thì giữ nguyên số gốc', () => {
+    expect(chenhSauThuHoi(3_000_000, 0, 1_000_000)).toEqual({ carrierRongVnd: 3_000_000, chenhVnd: 2_000_000, conAm: true });
+  });
+  it('thu hồi một phần, vẫn còn âm', () => {
+    expect(chenhSauThuHoi(5_000_000, 1_000_000, 2_000_000)).toMatchObject({ carrierRongVnd: 4_000_000, chenhVnd: 2_000_000, conAm: true });
+  });
+  it('hoà đúng bằng 0 KHÔNG tính là còn âm', () => {
+    expect(chenhSauThuHoi(3_000_000, 1_000_000, 2_000_000).conAm).toBe(false);
   });
 });

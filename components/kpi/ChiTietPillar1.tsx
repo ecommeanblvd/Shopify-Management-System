@@ -104,29 +104,34 @@ const TH = 'sticky top-0 z-10 bg-muted/90 px-2.5 py-1.5 text-[10px] font-medium 
 function BangAmCuoc({ rows, ky }: { rows: NonNullable<ChiTietKpi['amCuoc']>; ky: string }) {
   const tong = rows.reduce((s, r) => s + r.chenhVnd, 0);
   const daChot = rows.filter((r) => r.phanDinh?.includes('internal_error')).length;
+  const chuaXet = rows.filter((r) => !r.phanDinh).length;
+  const daThuHoi = rows.reduce((s, r) => s + r.thuHoiVnd, 0);
   return (
     <Khung
-      tomTat={<><b>{rows.length}</b> đơn cước carrier vượt cước thu khách · tổng chênh <b>{vnd(tong)}</b> · đã chốt là lỗi nội bộ: <b>{daChot}</b></>}
+      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> trên các đơn này · đã chốt lỗi nội bộ <b>{daChot}</b> · chưa ai xét <b>{chuaXet}</b></>}
       onCsv={() => taiCsv(`kpi-${ky}-1.1-am-cuoc.csv`,
-        ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Chênh (VND)', 'Phân định'],
-        rows.map((r) => [r.maDon, r.nuoc, r.ngayGui, r.thuKhachVnd, r.carrierVnd, r.chenhVnd, r.phanDinh]))}
+        ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Đã đòi lại (VND)', 'Giá vốn ròng (VND)', 'Chênh (VND)', 'Phân định', 'Số credit note'],
+        rows.map((r) => [r.maDon, r.nuoc, r.ngayGui, r.thuKhachVnd, r.carrierVnd, r.thuHoiVnd, r.carrierRongVnd, r.chenhVnd, r.phanDinh, r.soCreditNote]))}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Nước</th><th className={`${TH} text-left`}>Ngày gửi</th>
         <th className={`${TH} text-right`}>Khách trả</th><th className={`${TH} text-right`}>Carrier bill</th>
+        <th className={`${TH} text-right`}>Đã đòi lại</th><th className={`${TH} text-right`}>Giá vốn ròng</th>
         <th className={`${TH} text-right`}>Chênh</th><th className={`${TH} text-left`}>Phân định</th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Không có đơn nào âm cước trong kỳ.</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Không đơn nào còn âm cước sau giảm trừ.</td></tr>}
         {rows.map((r, i) => (
           <tr key={i} className="border-t border-border/50">
             <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left">{r.nuoc ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left">{r.ngayGui ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-right">{vnd(r.thuKhachVnd)}</td>
-            <td className="px-2.5 py-1.5 text-right">{vnd(r.carrierVnd)}</td>
+            <td className="px-2.5 py-1.5 text-right text-muted-foreground">{vnd(r.carrierVnd)}</td>
+            <td className="px-2.5 py-1.5 text-right text-emerald-600 dark:text-emerald-400">{r.thuHoiVnd > 0 ? `−${vnd(r.thuHoiVnd)}` : '—'}</td>
+            <td className="px-2.5 py-1.5 text-right">{vnd(r.carrierRongVnd)}</td>
             <td className="px-2.5 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{vnd(r.chenhVnd)}</td>
-            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.phanDinh ?? 'chưa phân định'}</td>
+            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.phanDinh ?? 'chưa phân định'}{r.soCreditNote ? ` · ${r.soCreditNote}` : ''}</td>
           </tr>
         ))}
       </tbody>
