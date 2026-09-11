@@ -20,6 +20,9 @@ const STATUS_BY_CODE: Record<string, DeliveryStatus> = {
   IT: 'in_transit', IN: 'in_transit', AR: 'in_transit', DP: 'in_transit', PU: 'in_transit',
   AF: 'in_transit', AP: 'in_transit', FD: 'in_transit', OC: 'in_transit',
   DY: 'in_transit', DD: 'in_transit',
+  // Thấy trên hàng THẬT khi quét 125 kiện ngày 11/09/2026: thông quan và trung
+  // chuyển. Trước đó ba mã này rơi vào 'unknown' (CP 17 kiện, CC 3, SF 1).
+  CP: 'in_transit', CC: 'in_transit', SF: 'in_transit',
   // Cần người xử lý.
   DE: 'exception', SE: 'exception', CA: 'exception', RS: 'exception', HL: 'exception',
 };
@@ -67,7 +70,13 @@ export function parseFedexTrack(raw: unknown): FedexTrackResult {
   const code = tr?.latestStatusDetail?.code ?? null;
   const description = tr?.latestStatusDetail?.statusByLocale ?? tr?.latestStatusDetail?.description ?? null;
   const delISO = tr?.dateAndTimes?.find((d) => d.type === 'ACTUAL_DELIVERY')?.dateTime ?? null;
-  return { statusCode: code, status: mapFedexStatus(code), description, deliveredAt: docMocFedex(delISO) };
+  const deliveredAt = docMocFedex(delISO);
+  // Lưới an toàn cho mã lạ về sau: FedEx chỉ đặt ACTUAL_DELIVERY khi hàng ĐÃ giao,
+  // nên có mốc đó thì coi là đã giao dù bảng mã chưa biết mã trạng thái. Kiểm trên
+  // 125 kiện thật: đúng 85 kiện có mốc này và cả 85 đều mang mã DL, nên luật này
+  // hiện KHÔNG đổi kết quả nào — nó chỉ đỡ cho tương lai.
+  const status = deliveredAt ? 'delivered' : mapFedexStatus(code);
+  return { statusCode: code, status, description, deliveredAt };
 }
 
 /** FedEx trả mô tả theo ngôn ngữ; không ép locale thì sandbox trả tiếng Tây Ban Nha

@@ -14,6 +14,11 @@ describe('mapFedexStatus', () => {
     expect(mapFedexStatus('DY')).toBe('in_transit');
     expect(mapFedexStatus('DD')).toBe('in_transit');
   });
+  it('mã thông quan và trung chuyển gặp trên hàng thật', () => {
+    expect(mapFedexStatus('CP')).toBe('in_transit');
+    expect(mapFedexStatus('CC')).toBe('in_transit');
+    expect(mapFedexStatus('SF')).toBe('in_transit');
+  });
   it('không phân biệt hoa thường; mã lạ hoặc rỗng → unknown', () => {
     expect(mapFedexStatus('dl')).toBe('delivered');
     expect(mapFedexStatus('ZZ')).toBe('unknown');
@@ -54,6 +59,14 @@ describe('parseFedexTrack', () => {
     const p = parseFedexTrack({ output: { completeTrackResults: [{ trackResults: [{ latestStatusDetail: { code: 'AR' }, dateAndTimes: [] }] }] } });
     expect(p.status).toBe('in_transit');
     expect(p.deliveredAt).toBeNull();
+  });
+  it('có mốc ACTUAL_DELIVERY thì là ĐÃ GIAO, kể cả khi mã trạng thái chưa có trong bảng', () => {
+    const p = parseFedexTrack({ output: { completeTrackResults: [{ trackResults: [{
+      latestStatusDetail: { code: 'ZZ' },
+      dateAndTimes: [{ type: 'ACTUAL_DELIVERY', dateTime: '2026-09-01T09:00:00' }],
+    }] }] } });
+    expect(p.statusCode).toBe('ZZ');
+    expect(p.status).toBe('delivered');
   });
   it('phản hồi rỗng hoặc rác → unknown, không nổ', () => {
     expect(parseFedexTrack({}).status).toBe('unknown');
