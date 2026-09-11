@@ -28,6 +28,8 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
   const [lark, setLark] = useState<{ ok: boolean; daGhi: number; ten?: string; error?: string } | null>(null);
 
   const load = () => startLoad(async () => setData(await getOrderCarrierComparison(orderId)));
+  /** Bấm BẤT KỲ chỗ nào trên dòng để mở/đóng cách tính giá (CEO 11/09/2026). */
+  const doiChiTiet = (accountId: string) => setMoChiTiet((x) => (x === accountId ? null : accountId));
   const choose = (key: string) => {
     setPendingKey(key);
     setLark(null);
@@ -118,7 +120,14 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                 return (
                   <Fragment key={r.accountId}>
                   <tr
-                    className={`border-t border-border/60 ${isCheap ? 'bg-emerald-500/[0.06]' : ''} ${isSel ? 'ring-1 ring-inset ring-emerald-500/40' : ''}`}>
+                    role="button" tabIndex={0}
+                    aria-expanded={dangMo} aria-controls={`chi-tiet-${r.accountId}`}
+                    title="Bấm vào dòng để xem cách tính giá"
+                    onClick={() => doiChiTiet(r.accountId)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doiChiTiet(r.accountId); }
+                    }}
+                    className={`group cursor-pointer border-t border-border/60 transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/60 ${isCheap ? 'bg-emerald-500/[0.06]' : ''} ${isSel ? 'ring-1 ring-inset ring-emerald-500/40' : ''}`}>
                     <td className="px-3 py-3 align-top">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold">{r.carrierKey}</span>
@@ -132,25 +141,19 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                     <td className="px-3 py-3 text-right">{surchg > 0 ? num(surchg) : <span className="text-muted-foreground">—</span>}</td>
                     <td className="px-3 py-3 text-right">{b.vatPercent ? <>{num(b.vat * k)}<span className="ml-1 text-[10px] text-muted-foreground">{b.vatPercent}%</span></> : <span className="text-muted-foreground">—</span>}</td>
                     <td className="px-3 py-3 text-right">
-                      <button type="button"
-                        onClick={() => setMoChiTiet((x) => (x === r.accountId ? null : r.accountId))}
-                        aria-expanded={dangMo} aria-controls={`chi-tiet-${r.accountId}`}
-                        title="Xem chi tiết từng khoản phí carrier tính cho địa chỉ này"
-                        className="group -my-1 -mr-1 rounded-md px-1.5 py-1 text-right transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60">
-                        <span className={`flex items-center justify-end gap-1 font-semibold ${isCheap ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
-                          {vnd(r.vndCost)}
-                          <span aria-hidden className={`text-[9px] text-muted-foreground transition-transform ${dangMo ? 'rotate-90' : ''}`}>▶</span>
-                        </span>
-                        {delta > 0 && <span className="block text-[10px] text-muted-foreground">+{num(delta)}₫</span>}
-                        <span className="block text-[10px] leading-tight text-muted-foreground opacity-0 transition group-hover:opacity-100">
-                          {dangMo ? 'thu gọn' : 'xem chi tiết'}
-                        </span>
-                      </button>
+                      <div className={`flex items-center justify-end gap-1 font-semibold ${isCheap ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+                        {vnd(r.vndCost)}
+                        <span aria-hidden className={`text-[9px] text-muted-foreground transition-transform ${dangMo ? 'rotate-90' : ''}`}>▶</span>
+                      </div>
+                      {delta > 0 && <div className="text-[10px] text-muted-foreground">+{num(delta)}₫</div>}
+                      <div className={`text-[10px] leading-tight text-muted-foreground transition ${dangMo ? '' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'}`}>
+                        {dangMo ? 'thu gọn' : 'xem cách tính'}
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-left text-xs whitespace-nowrap text-muted-foreground">{r.zone}{r.tierUpperKg ? ` · ≤${r.tierUpperKg}kg` : ''}</td>
                     <td className="px-3 py-3 text-right">
                       {!selectable ? (
-                        <div className="flex flex-col items-end gap-0.5">
+                        <div className="flex flex-col items-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                           <button type="button" disabled title={reasonText}
                             className="cursor-not-allowed rounded-md border border-border px-3 py-1 text-xs font-medium text-muted-foreground opacity-50">
                             Tạm ngưng
@@ -158,7 +161,8 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                           <span className="max-w-[150px] text-right text-[10px] leading-tight text-muted-foreground">{reasonText}</span>
                         </div>
                       ) : (
-                        <button type="button" disabled={assigning || isSel} onClick={() => choose(r.carrierKey)}
+                        <button type="button" disabled={assigning || isSel}
+                          onClick={(e) => { e.stopPropagation(); choose(r.carrierKey); }}
                           className={`rounded-md border px-3 py-1 text-xs font-medium transition disabled:opacity-60 ${isSel ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-border hover:bg-muted'}`}>
                           {isSel ? '✓ Đã chọn' : pendingKey === r.carrierKey ? '…' : 'Chọn'}
                         </button>
