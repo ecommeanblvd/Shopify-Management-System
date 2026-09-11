@@ -3,6 +3,7 @@ import { db, schema } from '@/db/client';
 import { type DeliveryStatus } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 import { emitShipHoEvent } from './mmp-events';
+import { gomLoi, coiLaHong, type TomTatTrack } from './track-tom-tat';
 import { deliveryStatusToEvent } from './mmp-events-map';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -65,7 +66,7 @@ const DHL_MAX_PER_RUN = Number(process.env.DHL_MAX_PER_RUN ?? 30);
  *  nhịp + cap/lượt; thiếu key/429 → bỏ nhánh DHL, FedEx vẫn chạy. */
 export async function trackPendingShipHo(
   opts?: { limit?: number },
-): Promise<{ tracked: number; delivered: number; failed: number; skippedDhl: number }> {
+): Promise<TomTatTrack> {
   const limit = opts?.limit ?? 100;
   const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
   const rows = await db
@@ -80,7 +81,8 @@ export async function trackPendingShipHo(
     .orderBy(sql`${schema.shipHoOrders.lastTrackedAt} asc nulls first`)
     .limit(limit);
 
-  const summary = { tracked: 0, delivered: 0, failed: 0, skippedDhl: 0 };
+  const summary: TomTatTrack = { tracked: 0, delivered: 0, failed: 0, skippedDhl: 0 };
+  const loi: string[] = [];
   let skipDhl = false;
   let dhlDone = 0;
   for (const r of rows) {
@@ -97,8 +99,14 @@ export async function trackPendingShipHo(
       skipDhl = true;
     } else if (res.error !== 'no tracking' && res.error !== 'unsupported carrier') {
       summary.failed++;
+      // GIỮ lý do: trước đây chỉ đếm số lỗi nên job hỏng 100 % vẫn im lặng.
+      if (res.error) loi.push(res.error);
     }
     await sleep(isDhl ? DHL_DELAY_MS : FEDEX_DELAY_MS);
   }
+  summary.loi = gomLoi(loi);
   return summary;
 }
+
+/** Có việc để tra mà không tra nổi kiện nào → lượt chạy phải bị đánh dấu HỎNG. */
+export const luotTrackHong = coiLaHong;

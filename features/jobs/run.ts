@@ -15,15 +15,25 @@ import { batDauJob, ketThucJob } from './record';
  * Chạy MỘT tác vụ, ghi nhật ký, KHÔNG thoát tiến trình. Dùng cho bộ chạy nhóm.
  * Trả về true nếu xong xuôi. Lỗi được nuốt và ghi lại — một tác vụ hỏng không
  * được kéo cả nhóm chết theo.
+ *
+ * `kiemTra` cho tác vụ tự nói "tôi chạy xong nhưng KHÔNG làm được gì": trả về câu
+ * lý do thì lượt chạy bị ghi là HỎNG mà vẫn giữ nguyên summary. Không có nó thì
+ * một tác vụ hỏng 100 % vẫn báo xanh — đúng cách `track-ship-ho` chết âm thầm
+ * suốt 141 lượt (phát hiện 11/09/2026).
  */
-export async function chayMotJob(jobKey: string, fn: () => Promise<unknown>): Promise<boolean> {
+export async function chayMotJob(
+  jobKey: string,
+  fn: () => Promise<unknown>,
+  kiemTra?: (summary: unknown) => string | null,
+): Promise<boolean> {
   const batDau = Date.now();
   const id = await batDauJob(jobKey);
   try {
     const summary = await fn();
-    await ketThucJob(id, { ok: true, summary, batDau });
-    process.stdout.write(`  ✓ ${jobKey} (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary).slice(0, 120) : ''}\n`);
-    return true;
+    const loi = kiemTra?.(summary) ?? null;
+    await ketThucJob(id, { ok: loi == null, summary, batDau, error: loi ?? undefined });
+    process.stdout.write(`  ${loi == null ? '✓' : '✗'} ${jobKey} (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary).slice(0, 160) : ''}${loi ? ` — ${loi}` : ''}\n`);
+    return loi == null;
   } catch (err) {
     const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
     await ketThucJob(id, { ok: false, error: msg.slice(0, 2000), batDau });

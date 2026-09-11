@@ -16,7 +16,7 @@
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
-import { trackPendingShipHo } from '@/features/ship-ho/track';
+import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
@@ -24,7 +24,7 @@ import { applyReturnLinks } from '@/features/shipments/return-bill';
 import { chayMotJob } from '@/features/jobs/run';
 
 /** Thứ tự có ý nghĩa: nạp đơn trước, các việc ăn theo dữ liệu đơn sau. */
-const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
+const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary: unknown) => string | null }> = [
   { key: 'sync-orders', fn: async () => {
     const r = await runHourlySync();
     const loi = r.filter((x) => x.error);
@@ -37,7 +37,17 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
   // đúng những đợt dọn tồn như vậy.
   { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
   { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
-  { key: 'track-ship-ho', fn: () => trackPendingShipHo({ limit: 50 }) },
+  {
+    key: 'track-ship-ho',
+    fn: () => trackPendingShipHo({ limit: 50 }),
+    // Tra được 0 kiện mà có lỗi = hỏng, dù script không ném exception.
+    kiemTra: (s: unknown) => {
+      const t = s as { tracked?: number; failed?: number; loi?: Record<string, number> };
+      return luotTrackHong({ tracked: t.tracked ?? 0, failed: t.failed ?? 0 })
+        ? `không tra được kiện nào (${t.failed} lỗi): ${JSON.stringify(t.loi ?? {})}`
+        : null;
+    },
+  },
   { key: 'ship-ho-tiers', fn: () => refreshShipHoTiers() },
   { key: 'apply-pod', fn: () => applyPodDeliveries() },
   { key: 'return-links', fn: () => applyReturnLinks() },
@@ -46,7 +56,7 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown> }> = [
 
 async function main(): Promise<void> {
   let hong = 0;
-  for (const v of VIEC) if (!(await chayMotJob(v.key, v.fn))) hong++;
+  for (const v of VIEC) if (!(await chayMotJob(v.key, v.fn, v.kiemTra))) hong++;
   process.stdout.write(`xong: ${VIEC.length - hong}/${VIEC.length} việc ok\n`);
   if (hong > 0) process.exitCode = 1;
 }
