@@ -2225,6 +2225,12 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   smsMeasuredBy: text('sms_measured_by'),
   // Bill (P3)
   statementId: uuid('statement_id').references(() => shipHoStatements.id),
+  // Đồng bộ từ bảng Lark của đội logistics (migration 0137). Khoá ghép giữa hai bên là
+  // MÃ VẬN ĐƠN — mã đơn hai bên đánh số độc lập nên không bao giờ khớp. `larkRecordId`
+  // giữ để lần sau nhận lại đúng dòng cũ kể cả khi mã vận đơn được sửa.
+  larkRecordId: text('lark_record_id'),
+  larkOrderNumber: text('lark_order_number'),
+  larkSyncedAt: timestamp('lark_synced_at'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),

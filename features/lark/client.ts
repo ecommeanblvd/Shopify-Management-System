@@ -24,6 +24,11 @@ function logTableId(): string {
 const BRAND_RECV_APP_TOKEN = process.env.LARK_BRAND_RECV_APP_TOKEN ?? 'HxfAw0iRViHiNgkSlbBltpVkg3f';
 const BRAND_RECV_TABLE_ID = process.env.LARK_BRAND_RECV_TABLE_ID ?? 'tblFtdIn8H7ftfBL';
 
+// Bảng Lark "đơn ship hộ" đội logistics dùng để lên đơn cho khách (CEO 11/09/2026).
+// app_token lấy thẳng từ link wiki; không phải secret nên để hằng số, env override được.
+const SHIP_HO_APP_TOKEN = process.env.LARK_SHIP_HO_APP_TOKEN ?? 'HmG6wtdeoiAPflkereXl8pNXgzL';
+const SHIP_HO_TABLE_ID = process.env.LARK_SHIP_HO_TABLE_ID ?? 'tblJQXEuCBxVPRek';
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getTenantToken(): Promise<string> {
@@ -167,4 +172,9 @@ const WH_VIEW_ID = process.env.LARK_WH_VIEW_ID ?? 'vewFAl8NQG';
 /** Đọc TẤT CẢ record view tồn kho tổng hợp (mỗi dòng = 1 đơn vị). Phân trang 500/lần. */
 export async function listWarehouseStockRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(WH_TABLE_ID, { view_id: WH_VIEW_ID, page_size: 500 });
+}
+
+/** Mọi dòng bảng đơn ship hộ của đội logistics. */
+export async function listShipHoDonRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(SHIP_HO_TABLE_ID, { automatic_fields: true, page_size: 500 }, SHIP_HO_APP_TOKEN);
 }

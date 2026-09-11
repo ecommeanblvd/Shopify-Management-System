@@ -21,7 +21,8 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // push-nhan-hang chạy LỒNG trong script sync-lark.ts (qua chayMotJob), không
   // qua run-group — khai chung nhóm để không "chưa xếp nhóm" (test canh việc
   // này), dù thực thi là cùng một tiến trình với sync-lark.
-  'sync-lark': ['sync-lark', 'push-nhan-hang'],
+  // sync-lark-ship-ho cũng chạy LỒNG trong script sync-lark.ts như push-nhan-hang.
+  'sync-lark': ['sync-lark', 'push-nhan-hang', 'sync-lark-ship-ho'],
   'sync-orders': ['sync-orders'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.

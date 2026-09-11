@@ -38,6 +38,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Không biết đơn đã giao hay chưa' },
   { key: 'track-ship-ho', ten: 'Tra trạng thái giao (ship hộ)', chuKyPhut: 6 * GIO,
     hauQua: 'Đối tác không thấy đơn đã giao' },
+  { key: 'sync-lark-ship-ho', ten: 'Đồng bộ đơn ship hộ từ Lark', chuKyPhut: 1 * GIO,
+    hauQua: 'Đơn Đức lên trên Lark không hiện trong hệ thống, ngày gửi bị lệch về ngày nhập' },
   { key: 'refresh-fuel', ten: 'Cập nhật phụ phí xăng dầu', chuKyPhut: 1 * NGAY,
     hauQua: 'Báo giá dùng mức xăng dầu tuần cũ' },
   { key: 'refresh-surcharges', ten: 'Cập nhật phụ phí hãng', chuKyPhut: 1 * NGAY,
