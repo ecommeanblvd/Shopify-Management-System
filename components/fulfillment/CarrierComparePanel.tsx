@@ -1,9 +1,14 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 import { getOrderCarrierComparison, assignOrderCarrier, type OrderCarrierComparison } from '@/features/shopify-orders/carrier-select-actions';
+import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
+import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 
 const num = (n: number) => Math.round(n).toLocaleString('vi-VN');
+/** Để ở MODULE, không trong thân component: đọc đồng hồ khi render là hàm không
+ *  thuần (react-hooks/purity) và React có thể render lại bất cứ lúc nào. */
+const conChonDuoc = (r: { suspendedAt?: string | null }) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > Date.now();
 const vnd = (n?: number | null) => (typeof n === 'number' ? num(n) + '₫' : '—');
 
 /**
@@ -16,6 +21,8 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
   const [loading, startLoad] = useTransition();
   const [assigning, startAssign] = useTransition();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  // Dòng đang mở chi tiết phí (theo accountId). Bấm vào TỔNG CƯỚC để mở/đóng.
+  const [moChiTiet, setMoChiTiet] = useState<string | null>(null);
   // Kết quả đẩy sang Lark của lần chọn gần nhất — staff cần biết bên đóng hàng
   // đã thấy hãng chưa, hay phải điền tay.
   const [lark, setLark] = useState<{ ok: boolean; daGhi: number; ten?: string; error?: string } | null>(null);
@@ -32,11 +39,9 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
     });
   };
 
-  const now = Date.now();
-  const canSelect = (r: { suspendedAt?: string | null }) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > now;
   const okRows = data?.rows.filter((r) => r.ok) ?? [];
   // "Rẻ nhất" = rẻ nhất trong nhóm CHỌN được (carrier tạm ngưng không tính dù giá thấp).
-  const cheapest = okRows.find(canSelect) ?? okRows[0];
+  const cheapest = okRows.find(conChonDuoc) ?? okRows[0];
   const cheapestKey = cheapest?.carrierKey;
   const cheapestCost = cheapest?.vndCost ?? 0;
 
@@ -106,11 +111,13 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                 const k = r.costCurrency !== 'VND' && b.carrierCost ? (r.vndCost ?? 0) / b.carrierCost : 1;
                 const surchg = (b.remote + b.residential + b.demand + b.countryFixed + b.peak + b.addons + b.perStep + b.perKg) * k;
                 const delta = (r.vndCost ?? 0) - cheapestCost;
-                const selectable = canSelect(r);
+                const selectable = conChonDuoc(r);
+                const dangMo = moChiTiet === r.accountId;
                 const suspFrom = r.suspendedAt ? new Date(r.suspendedAt).toLocaleDateString('vi-VN') : null;
                 const reasonText = `${r.suspendReason || 'Tạm ngưng'}${suspFrom ? ` · từ ${suspFrom}` : ''}`;
                 return (
-                  <tr key={r.accountId}
+                  <Fragment key={r.accountId}>
+                  <tr
                     className={`border-t border-border/60 ${isCheap ? 'bg-emerald-500/[0.06]' : ''} ${isSel ? 'ring-1 ring-inset ring-emerald-500/40' : ''}`}>
                     <td className="px-3 py-3 align-top">
                       <div className="flex items-center gap-1.5">
@@ -125,8 +132,20 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                     <td className="px-3 py-3 text-right">{surchg > 0 ? num(surchg) : <span className="text-muted-foreground">—</span>}</td>
                     <td className="px-3 py-3 text-right">{b.vatPercent ? <>{num(b.vat * k)}<span className="ml-1 text-[10px] text-muted-foreground">{b.vatPercent}%</span></> : <span className="text-muted-foreground">—</span>}</td>
                     <td className="px-3 py-3 text-right">
-                      <div className={`font-semibold ${isCheap ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>{vnd(r.vndCost)}</div>
-                      {delta > 0 && <div className="text-[10px] text-muted-foreground">+{num(delta)}₫</div>}
+                      <button type="button"
+                        onClick={() => setMoChiTiet((x) => (x === r.accountId ? null : r.accountId))}
+                        aria-expanded={dangMo} aria-controls={`chi-tiet-${r.accountId}`}
+                        title="Xem chi tiết từng khoản phí carrier tính cho địa chỉ này"
+                        className="group -my-1 -mr-1 rounded-md px-1.5 py-1 text-right transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60">
+                        <span className={`flex items-center justify-end gap-1 font-semibold ${isCheap ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+                          {vnd(r.vndCost)}
+                          <span aria-hidden className={`text-[9px] text-muted-foreground transition-transform ${dangMo ? 'rotate-90' : ''}`}>▶</span>
+                        </span>
+                        {delta > 0 && <span className="block text-[10px] text-muted-foreground">+{num(delta)}₫</span>}
+                        <span className="block text-[10px] leading-tight text-muted-foreground opacity-0 transition group-hover:opacity-100">
+                          {dangMo ? 'thu gọn' : 'xem chi tiết'}
+                        </span>
+                      </button>
                     </td>
                     <td className="px-3 py-3 text-left text-xs whitespace-nowrap text-muted-foreground">{r.zone}{r.tierUpperKg ? ` · ≤${r.tierUpperKg}kg` : ''}</td>
                     <td className="px-3 py-3 text-right">
@@ -146,6 +165,8 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
                       )}
                     </td>
                   </tr>
+                  {dangMo && <ChiTietPhi row={r} heSo={k} id={`chi-tiet-${r.accountId}`} />}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -153,5 +174,80 @@ export function CarrierComparePanel({ orderId }: { orderId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Chi tiết từng khoản carrier tính cho ĐÚNG địa chỉ của đơn: cước gốc, các phụ phí
+ * (vùng sâu, nhà dân, xử lý hàng nhập, ký nhận…), nhiên liệu và thuế. Tổng khớp
+ * đúng cột "Tổng cước" của dòng — đây là tiền TRẢ CARRIER, chưa gồm đóng gói và
+ * markup của shop (những khoản đó chỉ có trong giá thu khách).
+ */
+function ChiTietPhi({ row, heSo, id }: { row: CarrierQuoteRow; heSo: number; id: string }) {
+  if (!row.breakdown) return null;
+  const ct = chiTietCuoc(row.breakdown, heSo);
+  const kg = (v: number) => `${Number(v.toFixed(3))}kg`;
+  return (
+    <tr id={id} className="border-t border-border/40 bg-muted/30">
+      <td colSpan={8} className="px-3 py-3">
+        <div className="mx-auto max-w-2xl space-y-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">{row.carrierName}</span>
+            <span>Zone {row.zone}{row.tierUpperKg ? ` · bậc ≤${row.tierUpperKg}kg` : ''}</span>
+            <span>
+              Cân tính cước {kg(ct.canNang.tinhCuoc)}
+              {ct.canNang.dungQuyDoi ? ` (quy đổi kích thước ${kg(ct.canNang.quyDoi)} > cân thực ${kg(ct.canNang.thuc)})` : ''}
+            </span>
+            {row.costCurrency !== 'VND' && <span>quy đổi từ {row.costCurrency}</span>}
+          </div>
+
+          <dl className="divide-y divide-border/60 rounded-md border border-border/60 bg-background/60">
+            {ct.dong.map((d) => (
+              <div key={d.ma} className="flex items-baseline justify-between gap-3 px-3 py-1.5">
+                <dt className="text-xs">
+                  {d.nhan}
+                  {d.ghiChu && <span className="ml-1.5 text-[10px] text-muted-foreground">{d.ghiChu}</span>}
+                </dt>
+                <dd className={`shrink-0 text-xs tabular-nums ${d.giaTri < 0 ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+                  {d.giaTri < 0 ? '−' : ''}{num(Math.abs(d.giaTri))}₫
+                </dd>
+              </div>
+            ))}
+            <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+              <dt className="text-xs font-semibold">Cước trả carrier</dt>
+              <dd className="shrink-0 text-sm font-semibold tabular-nums">{num(ct.tong)}₫</dd>
+            </div>
+          </dl>
+
+          {!ct.khop && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              Tổng các dòng lệch so với cước engine trả về — engine có thể vừa thêm khoản phí mới mà bảng chi tiết chưa cập nhật. Lấy số ở cột Tổng cước làm chuẩn.
+            </p>
+          )}
+
+          {ct.thamChieu.length > 0 && (
+            <div className="space-y-0.5">
+              {ct.thamChieu.map((d) => (
+                <p key={d.ma} className="text-[11px] text-muted-foreground">
+                  {d.nhan}: {num(d.giaTri)}₫{d.ghiChu ? ` · ${d.ghiChu}` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {(row.notes ?? []).length > 0 && (
+            <ul className="space-y-0.5">
+              {(row.notes ?? []).map((n, i) => (
+                <li key={i} className="text-[11px] text-muted-foreground">· {dichGhiChu(n)}</li>
+              ))}
+            </ul>
+          )}
+
+          <p className="text-[11px] text-muted-foreground">
+            Đây là tiền trả cho carrier. Phí đóng gói và markup của shop không nằm trong bảng này.
+          </p>
+        </div>
+      </td>
+    </tr>
   );
 }

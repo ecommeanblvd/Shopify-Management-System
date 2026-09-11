@@ -42,6 +42,9 @@ export interface CarrierQuoteRow {
   breakdown?: QuoteBreakdown;
   zone?: string;
   tierUpperKg?: number;
+  /** Ghi chú chẩn đoán của engine (vùng sâu khớp theo gì, cân quy đổi, vượt bậc…).
+   *  Bảng so sánh hiện ở phần chi tiết để staff hiểu vì sao ra con số đó. */
+  notes?: string[];
   /** Tạm ngưng CHỌN từ ngày này (ISO). null = chọn được. Vẫn báo giá. */
   suspendedAt?: string | null;
   suspendReason?: string | null;
@@ -89,7 +92,7 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
     };
     if (q.ok) {
       const vndCost = toVnd(e.snap.costCurrency, e.snap.displayCurrency, q.breakdown.carrierCost, q.breakdown.carrierCostDisplay);
-      return { ...common, ok: true, carrierCostDisplay: q.breakdown.carrierCostDisplay, vndCost, breakdown: q.breakdown, zone: q.zone, tierUpperKg: q.tier.upperKg };
+      return { ...common, ok: true, carrierCostDisplay: q.breakdown.carrierCostDisplay, vndCost, breakdown: q.breakdown, zone: q.zone, tierUpperKg: q.tier.upperKg, notes: q.notes };
     }
     return { ...common, ok: false, error: q.code };
   });
