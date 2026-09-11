@@ -3,7 +3,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
+import { ChiTietPillar2 } from '@/components/kpi/ChiTietPillar2';
 import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
+import { docChiTietPillar2, luuSuCo, xoaSuCo } from '@/features/ship-ho/pillar2-actions';
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { kpiLogisticsThang } from '@/db/schema';
 import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
@@ -23,7 +25,7 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
@@ -31,6 +33,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc }: {
   suaDuoc: boolean;
   /** Nhân sự logistics (quyền đối soát phí ship) gán được lý do chậm trên bảng 1.2. */
   ganLyDoDuoc: boolean;
+  /** Quyền ghi sự cố ship hộ (manage_ship_ho hoặc admin). */
+  ghiSuCoDuoc: boolean;
 }) {
   const sla = auto.slaTong;
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
@@ -166,6 +170,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc }: {
       </CardContent></Card>
 
       {bangTieuChi('Pillar 2 — Ship hộ (sản lượng)', diem.p2, false)}
+
+      <ChiTietPillar2 ky={ky} tu={tu} den={den} tai={docChiTietPillar2} luu={luuSuCo} xoa={xoaSuCo} suaDuoc={ghiSuCoDuoc} />
       {bangTieuChi('Pillar 3 — Đối soát & thu hồi công nợ', diem.p3, false)}
 
       <Card><CardContent className="p-0">

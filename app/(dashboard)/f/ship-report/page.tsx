@@ -151,7 +151,8 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
               </span>
             </div>
             <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
-              ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')} />
+              ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')}
+              ghiSuCoDuoc={laAdmin || hasPermission(role, 'manage_ship_ho')} />
           </>
         ) : null
       ) : tab === 'sop' ? (

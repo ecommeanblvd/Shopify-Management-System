@@ -2230,6 +2230,31 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   createdBy: text('created_by'),
 });
 
+/**
+ * Sự cố / lỗi phạt của một đơn ship hộ (migration 0136). Một sự cố kéo theo nhiều
+ * khoản tiền — ví dụ giao sai địa chỉ thì có cước hoàn hàng, tiền mua lại món hàng
+ * brand phải sản xuất lại, rồi cước ship lần hai — nên `chiPhi` là danh sách khoản
+ * và `tongChiPhiVnd` là tổng đã cộng sẵn để truy vấn nhanh.
+ */
+export const shipHoSuCo = pgTable('ship_ho_su_co', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').references(() => shipHoOrders.id, { onDelete: 'cascade' }).notNull(),
+  loai: text('loai').notNull(),
+  /** noi_bo | brand | khach | hang_van_chuyen | khac — chỉ 'noi_bo' tính là lỗi phạt của vị trí. */
+  thuocVe: text('thuoc_ve').notNull(),
+  ngay: date('ngay').notNull(),
+  moTa: text('mo_ta'),
+  chiPhi: jsonb('chi_phi').notNull().default([]),
+  tongChiPhiVnd: numeric('tong_chi_phi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
+  daThuHoiVnd: numeric('da_thu_hoi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('ship_ho_su_co_order_idx').on(t.orderId),
+  index('ship_ho_su_co_ngay_idx').on(t.ngay),
+]);
+
 export const shipHoEventStatusEnum = pgEnum('ship_ho_event_status', ['pending', 'delivered', 'failed']);
 
 /**
