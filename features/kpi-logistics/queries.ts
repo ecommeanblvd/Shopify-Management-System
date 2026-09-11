@@ -16,6 +16,12 @@ export interface SoLieuTuDong {
   /** 1.1 — đơn có cước carrier THỰC TRẢ vượt cước thu của khách (chưa quy trách nhiệm). */
   soDonAmCuoc: number;
   amCuocVnd: number;
+  /** 1.1 — trong số đó, bao nhiêu đơn ĐÃ được đối soát chốt là LỖI NỘI BỘ (`internal_error`).
+   *  Đây mới là con số đúng để điền vào ô "quy trách nhiệm"; số tổng ở trên gồm cả lỗi hãng
+   *  và đơn chưa ai xét. */
+  soDonAmCuocLoiNoiBo: number;
+  /** 1.1 — đơn âm cước chưa ai phân định đúng/sai. Còn tồn nghĩa là chưa đủ căn cứ chấm 1.1. */
+  soDonAmCuocChuaXet: number;
   /** 1.2 — theo bảng SOP cam kết từng nước (D-067). SLA trong văn bản quy chế chỉ là mẫu, không dùng. */
   slaTong: { n: number; dungHan: number; tyLe: number | null };
   /** 1.2 — chi tiết từng nước để nhân sự biết tuyến nào kéo điểm xuống. */
@@ -47,13 +53,17 @@ export interface SoLieuTuDong {
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
   const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienGiao, canRows] = await Promise.all([
-    db.execute<{ n: string; tong: string | null }>(sql`
+    db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string }>(sql`
       WITH b AS (
-        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
+        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed,
+               string_agg(DISTINCT r.status::text, ',') AS phan_dinh
           FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
+          LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
          WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp
          GROUP BY 1)
-      SELECT COUNT(*)::text AS n, SUM(b.billed - o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))::text AS tong
+      SELECT COUNT(*)::text AS n, SUM(b.billed - o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))::text AS tong,
+             COUNT(*) FILTER (WHERE b.phan_dinh LIKE '%internal_error%')::text AS loi_noi_bo,
+             COUNT(*) FILTER (WHERE b.phan_dinh IS NULL)::text AS chua_xet
         FROM b JOIN shopify_orders o ON o.id = b.order_id JOIN stores st ON st.id = o.store_id
        WHERE b.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`),
     db.execute<{ tong: string; loi: string }>(sql`
@@ -114,6 +124,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     tu, den,
     soDonAmCuoc: Number(amCuoc.rows[0]?.n ?? 0),
     amCuocVnd: Math.round(Number(amCuoc.rows[0]?.tong ?? 0)),
+    soDonAmCuocLoiNoiBo: Number(amCuoc.rows[0]?.loi_noi_bo ?? 0),
+    soDonAmCuocChuaXet: Number(amCuoc.rows[0]?.chua_xet ?? 0),
     slaTong: { n: sop.n, dungHan: sop.dungHan, tyLe: sop.tyLeDungHan },
     slaTheoNuoc: theoNuoc,
     slaLoaiTru: kienGiao.length - tinhKpi.length,

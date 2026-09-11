@@ -7,11 +7,15 @@ import { luuNhapKpi, type NhapKpiInput } from '@/features/kpi-logistics/actions'
 const so = (v: string): number => Number(v.replace(/[^\d.-]/g, '')) || 0;
 
 /** Form nhập phần hệ thống không tự biết của một kỳ KPI. Chỉ admin thấy trang này. */
-export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, gateTuDong }: {
+export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, soDonLoiNoiBo, soDonChuaXet, gateTuDong }: {
   ky: string;
   banDau: NhapKpiInput;
-  /** Số đơn âm cước hệ thống flag — gợi ý cho ô "quy trách nhiệm". */
+  /** Số đơn âm cước hệ thống flag — bối cảnh, KHÔNG phải số điền vào ô. */
   soDonAmCuocGoiY: number;
+  /** Đơn âm cước đã đối soát chốt là lỗi nội bộ — đây mới là số nên điền. */
+  soDonLoiNoiBo: number;
+  /** Đơn âm cước chưa ai phân định — còn tồn thì chưa đủ căn cứ chấm 1.1. */
+  soDonChuaXet: number;
   gateTuDong: boolean;
 }) {
   const [v, setV] = useState<NhapKpiInput>(banDau);
@@ -33,7 +37,18 @@ export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, gateTuDong }: {
           <div className="font-medium">P1.1 · Số đơn âm cước do lỗi trách nhiệm</div>
           <input type="number" min={0} className={`${o} w-full`} value={v.soDonAmCuocLoi}
             onChange={(e) => setV({ ...v, soDonAmCuocLoi: so(e.target.value) })} />
-          <div className="text-[11px] text-muted-foreground">Hệ thống thấy {soDonAmCuocGoiY} đơn âm cước trong kỳ. Chỉ điền số đơn do sai bảng giá web hoặc phân sai luồng carrier.</div>
+          <div className="space-y-1 text-[11px] text-muted-foreground">
+            <div>
+              Hệ thống thấy <b>{soDonAmCuocGoiY}</b> đơn âm cước trong kỳ; đối soát đã chốt <b>{soDonLoiNoiBo}</b> đơn là lỗi nội bộ
+              và còn <b>{soDonChuaXet}</b> đơn chưa ai xét. Chỉ điền số đơn do sai bảng giá web hoặc phân sai luồng carrier.
+            </div>
+            {soDonLoiNoiBo !== banDau.soDonAmCuocLoi && (
+              <button type="button" onClick={() => setV((x) => ({ ...x, soDonAmCuocLoi: soDonLoiNoiBo }))}
+                className="rounded border border-border px-2 py-0.5 font-medium hover:bg-muted">
+                Điền {soDonLoiNoiBo} theo kết quả đối soát
+              </button>
+            )}
+          </div>
         </label>
 
         <label className="space-y-1 text-sm">

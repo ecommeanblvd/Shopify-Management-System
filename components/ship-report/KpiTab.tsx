@@ -1,8 +1,9 @@
-import Link from 'next/link';
 import { Fragment } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
+import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
+import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { kpiLogisticsThang } from '@/db/schema';
 import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
@@ -10,8 +11,6 @@ import { LO_TRINH_LOI } from '@/features/shipments/sop-giao-hang';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
-const REGION_VI = new Intl.DisplayNames(['vi'], { type: 'region' });
-const countryName = (cc: string) => { try { return REGION_VI.of(cc) ?? cc; } catch { return cc; } };
 /** Nhãn kết quả từ mức đạt: đủ / một phần / mất / chưa chấm được. */
 function ketQua(m: number | null): { chu: string; mau: string } {
   if (m == null) return { chu: 'Chưa chấm được', mau: 'text-muted-foreground' };
@@ -111,6 +110,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
       </div>
 
       {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
+
+      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} />
+
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
           <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng nước</span>
@@ -170,7 +172,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
           <table className="w-full text-sm tabular-nums">
             <tbody>
               {[
-                ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, 'Cước carrier thực trả vượt cước thu của khách. Cần quản lý quy trách nhiệm trước khi trừ KPI.'],
+                ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, `Cước carrier thực trả vượt cước thu của khách. Con số này CHƯA trừ KPI: tiêu chí 1.1 chỉ đếm đơn đã được quản lý chốt là LỖI NỘI BỘ, hiện là ${nhap?.soDonAmCuocLoi ?? 0} đơn. Bấm tiêu chí 1.1 ở report chi tiết để xem từng đơn và trạng thái phân định. Trong kỳ này đối soát đã chốt ${auto.soDonAmCuocLoiNoiBo} đơn là lỗi nội bộ, còn ${auto.soDonAmCuocChuaXet} đơn chưa ai xét.`],
                 ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, `Chấm theo bảng SOP cam kết từng nước và từng hãng. Đã loại ${auto.slaLoaiTru} kiện chậm vì lý do ngoài tầm kiểm soát (Quy chế mục VII).`],
                 ['Đóng đúng size thùng', `${auto.sizeThung.dung + auto.sizeThung.nheHon}/${auto.sizeThung.n} = ${pct(auto.sizeThung.tyLeDung)}`, `Đo bằng lệch giữa cân tính cước của mình và cân carrier charge: lệch từ 0,5 kg là chọn sai thùng (thùng chật, phồng ra). Kỳ này ${auto.sizeThung.saiThung} kiện sai, dôi ${auto.sizeThung.kgDoiRa} kg phải trả thêm.`],
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
@@ -201,6 +203,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
         <NhapKpiForm
           ky={ky}
           soDonAmCuocGoiY={auto.soDonAmCuoc}
+          soDonLoiNoiBo={auto.soDonAmCuocLoiNoiBo}
+          soDonChuaXet={auto.soDonAmCuocChuaXet}
           gateTuDong={auto.gateDat}
           banDau={{
             ky,
