@@ -106,6 +106,17 @@ async function maDonTrong(goc: string): Promise<string> {
   return `${goc}-${Date.now()}`;
 }
 
+/** Account carrier để hệ thống báo giá được; Lark chỉ nói tên hãng. */
+async function accountCuaHang(carrierKey: string | null): Promise<string | null> {
+  if (!carrierKey) return null;
+  const [r] = await db.select({ id: schema.carrierAccounts.id })
+    .from(schema.carrierAccounts)
+    .innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
+    .where(and(eq(schema.carriers.key, carrierKey), eq(schema.carrierAccounts.enabled, true)))
+    .limit(1);
+  return r?.id ?? null;
+}
+
 async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
   const code = await maDonTrong(d.maLark ?? `LARK-${d.recordId}`);
   await db.insert(schema.shipHoOrders).values({
@@ -122,10 +133,13 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     weightKg: String(d.canKg),
     source: 'lark',
     carrierKey: d.carrierKey,
+    carrierAccountId: await accountCuaHang(d.carrierKey),
     trackingNumber: d.trackingNumber,
     shippedAt: d.ngayGui,
-    chargedVnd: d.thuBrandVnd == null ? null : String(Math.round(d.thuBrandVnd)),
-    carrierCostVnd: d.vonVnd == null ? null : String(Math.round(d.vonVnd)),
+    // KHÔNG ghi tiền từ Lark: giá chi lấy từ hoá đơn FedEx (cron đối soát), giá thu do
+    // hệ thống báo theo bảng giá brand + markup theo bậc.
+    chargedVnd: null,
+    carrierCostVnd: null,
     larkRecordId: d.recordId,
     larkOrderNumber: d.maLark,
     larkSyncedAt: new Date(),

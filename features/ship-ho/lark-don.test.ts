@@ -72,20 +72,28 @@ describe('docDongLark', () => {
   it('bóc đúng các trường cốt lõi, mã vận đơn bỏ khoảng trắng', () => {
     expect(d).toMatchObject({
       recordId: 'rec1', maLark: '26-INSLG-SV-0751', trackingNumber: '882555646320',
-      carrierKey: 'fedex', ngayGui: '2025-07-01', brandText: 'Kalisa', nuoc: 'Qatar',
-      canKg: 1.1, thuBrandVnd: 1575177.875, vonVnd: 896136,
+      carrierKey: 'fedex', ngayGui: '2025-07-01', brandText: 'Kalisa', nuoc: 'QA',
+      canKg: 1.1, thuBrandThamKhaoVnd: 1575177.875, vonThamKhaoVnd: 896136,
     });
+  });
+  it('đổi TÊN NƯỚC của Lark sang mã ISO — engine báo giá chỉ hiểu mã', () => {
+    expect(docDongLark('r', { [COT.nuoc]: 'United States' }).nuoc).toBe('US');
+    expect(docDongLark('r', { [COT.nuoc]: 'Saudi Arabia' }).nuoc).toBe('SA');
+    expect(docDongLark('r', { [COT.nuoc]: 'SA' }).nuoc).toBe('SA');
+    expect(docDongLark('r', { [COT.nuoc]: 'Nước Không Có Thật' }).nuoc).toBeNull();
+  });
+  it('viết tắt riêng của Lark: UAE và China (Mainland)', () => {
+    expect(docDongLark('r', { [COT.nuoc]: 'UAE' }).nuoc).toBe('AE');
+    expect(docDongLark('r', { [COT.nuoc]: 'China (Mainland)' }).nuoc).toBe('CN');
+    // Gõ sai chính tả thì vẫn KHÔNG đoán.
+    expect(docDongLark('r', { [COT.nuoc]: 'United Arab Aramex' }).nuoc).toBeNull();
   });
   it('gộp đường và khu thành một dòng địa chỉ', () => {
     expect(d.diaChi).toBe('street 201, Al Khaleej');
   });
-  it('Lark CHƯA báo giá (cột Cước tính trống) → không lấy giá, để trống', () => {
+  it('tiền trên Lark chỉ để THAM KHẢO, chưa báo giá thì để trống', () => {
     const chua = docDongLark('r', { ...f, [COT.cuocTinhBrand]: '', [COT.thuBrand]: 0 });
-    expect(chua.thuBrandVnd).toBeNull();
-  });
-  it('Lark đã báo giá → lấy tổng thu', () => {
-    const roi = docDongLark('r', { ...f, [COT.cuocTinhBrand]: 979527 });
-    expect(roi.thuBrandVnd).toBe(1575177.875);
+    expect(chua.thuBrandThamKhaoVnd).toBeNull();
   });
   it('hãng lạ → carrierKey null chứ không bịa', () => {
     expect(docDongLark('r', { [COT.carrier]: 'Hãng Nào Đó' }).carrierKey).toBeNull();
@@ -95,12 +103,13 @@ describe('docDongLark', () => {
 describe('duDeTao', () => {
   const day = { recordId: 'r', maLark: 'x', trackingNumber: '123', carrierKey: 'fedex', ngayGui: '2026-08-01',
     brandText: 'Kalisa', nuoc: 'QA', thanhPho: null, maBuuChinh: null, diaChi: null, soNha: null,
-    nguoiNhan: null, dienThoai: null, email: null, canKg: 1, moTaHang: null, thuBrandVnd: null, vonVnd: null, trangThaiGiao: null };
+    nguoiNhan: null, dienThoai: null, email: null, canKg: 1, moTaHang: null,
+    thuBrandThamKhaoVnd: null, vonThamKhaoVnd: null, trangThaiGiao: null };
   it('đủ dữ liệu → null (được tạo)', () => { expect(duDeTao(day, 'kalisa')).toBeNull(); });
   it('thiếu thứ nào báo đúng thứ đó, không tạo đơn rác', () => {
     expect(duDeTao({ ...day, trackingNumber: null }, 'kalisa')).toBe('chưa có mã vận đơn');
     expect(duDeTao(day, null)).toContain('chưa ghép được brand');
-    expect(duDeTao({ ...day, nuoc: null }, 'kalisa')).toBe('thiếu nước nhận');
+    expect(duDeTao({ ...day, nuoc: null }, 'kalisa')).toBe('không đổi được tên nước sang mã ISO');
     expect(duDeTao({ ...day, canKg: 0 }, 'kalisa')).toBe('thiếu cân');
     expect(duDeTao({ ...day, ngayGui: null }, 'kalisa')).toBe('thiếu ngày gửi');
   });

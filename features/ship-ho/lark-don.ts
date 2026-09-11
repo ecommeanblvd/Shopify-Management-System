@@ -9,7 +9,14 @@
  * Khoá ghép là MÃ VẬN ĐƠN, không phải mã đơn: hai bên đánh số độc lập (Lark
  * 26-INSLG-SV-0434…0973, hệ thống 26-INSLG-SV-0001…0104) nên mã đơn không bao giờ khớp,
  * trong khi 99/100 mã vận đơn trùng khít.
+ *
+ * KHÔNG lấy TIỀN từ Lark (CEO 11/09/2026). Giá CHI lấy từ hoá đơn FedEx, giá THU do hệ
+ * thống tự báo theo bảng giá đã deal với từng brand cộng markup theo bậc (D-057). Bản
+ * đầu lấy hai cột tiền của Lark và đã vẽ ra lỗ ảo 6,2 triệu, vì cột "Brand | Tổng Thu"
+ * là công thức cộng từ "Brand | Cước tính" mà ô đó đội báo giá sau nên còn trống.
  */
+import { countryNameToIso } from '@/features/shipments/country-name-to-iso';
+
 export interface DongLarkDon {
   recordId: string;
   /** Mã đơn theo cách đánh số của Lark — lưu để đối chiếu, KHÔNG dùng làm khoá ghép. */
@@ -19,6 +26,7 @@ export interface DongLarkDon {
   /** Ngày brand yêu cầu gửi — dùng làm ngày gửi vì sát ngày đi hàng thật nhất. */
   ngayGui: string | null;
   brandText: string | null;
+  /** ISO-2. Lark ghi tên đầy đủ ("United States") nhưng engine báo giá chỉ hiểu mã. */
   nuoc: string | null;
   thanhPho: string | null;
   maBuuChinh: string | null;
@@ -29,12 +37,10 @@ export interface DongLarkDon {
   email: string | null;
   canKg: number | null;
   moTaHang: string | null;
-  /** Tiền THU brand — chỉ có khi Lark ĐÃ báo giá (cột "Brand | Cước tính" có số).
-   *  Cột "Brand | Tổng Thu" là công thức cộng từ cước tính; chưa báo giá thì nó chỉ
-   *  còn phí xử lý 25.000đ, lấy con số đó làm doanh thu sẽ vẽ ra lỗ ảo. */
-  thuBrandVnd: number | null;
-  /** Cước mình trả hãng — cột "INS | Giá tổng". */
-  vonVnd: number | null;
+  /** CHỈ để đối chiếu bằng mắt — KHÔNG ghi vào đơn. Giá thu thật do hệ thống báo. */
+  thuBrandThamKhaoVnd: number | null;
+  /** CHỈ để đối chiếu — KHÔNG ghi vào đơn. Giá chi thật lấy từ hoá đơn FedEx. */
+  vonThamKhaoVnd: number | null;
   trangThaiGiao: string | null;
 }
 
@@ -100,6 +106,24 @@ export function ghepBrand(
   return ungVien.length === 1 ? ungVien[0].slug : null;
 }
 
+/**
+ * Viết tắt và biến thể CHỈ gặp trên bảng Lark. Cố ý để riêng, không nhét vào
+ * `countryNameToIso` dùng chung: module đó có luật đã chốt là mã 3 chữ như "UAE"
+ * phải trả null để bộ nhập Excel tự soi lại (có test canh).
+ */
+const NUOC_LARK: Record<string, string> = {
+  uae: 'AE',
+  'china (mainland)': 'CN',
+  'mainland china': 'CN',
+};
+
+/** Tên nước trên Lark → ISO-2. Thử bảng riêng của Lark trước, rồi tới bảng chung. */
+export function nuocLarkSangIso(ten: string | null): string | null {
+  if (!ten) return null;
+  const k = ten.trim().toLowerCase().replace(/\s+/g, ' ');
+  return NUOC_LARK[k] ?? countryNameToIso(ten);
+}
+
 export const COT = {
   maLark: 'Order Number',
   tracking: 'Tracking Number',
@@ -136,7 +160,7 @@ export function docDongLark(recordId: string, f: Record<string, unknown>): DongL
     carrierKey: carrierText ? KHOA_CARRIER[chuanHoaTen(carrierText)] ?? null : null,
     ngayGui: ngayISO(f[COT.ngayGui]),
     brandText: chuoi(f[COT.brand]),
-    nuoc: chuoi(f[COT.nuoc]),
+    nuoc: nuocLarkSangIso(chuoi(f[COT.nuoc])),
     thanhPho: chuoi(f[COT.thanhPho]),
     maBuuChinh: chuoi(f[COT.maBuuChinh]),
     diaChi: [duong, khu].filter(Boolean).join(', ') || null,
@@ -146,9 +170,8 @@ export function docDongLark(recordId: string, f: Record<string, unknown>): DongL
     email: chuoi(f[COT.email]),
     canKg: so(f[COT.can]),
     moTaHang: chuoi(f[COT.moTa]),
-    // Chưa điền cước tính = chưa báo giá cho brand → để TRỐNG, không đoán bằng 0.
-    thuBrandVnd: so(f[COT.cuocTinhBrand]) ? so(f[COT.thuBrand]) : null,
-    vonVnd: so(f[COT.von]),
+    thuBrandThamKhaoVnd: so(f[COT.cuocTinhBrand]) ? so(f[COT.thuBrand]) : null,
+    vonThamKhaoVnd: so(f[COT.von]),
     trangThaiGiao: chuoi(f[COT.trangThai]),
   };
 }
@@ -157,7 +180,7 @@ export function docDongLark(recordId: string, f: Record<string, unknown>): DongL
 export function duDeTao(d: DongLarkDon, brandSlug: string | null): string | null {
   if (!d.trackingNumber) return 'chưa có mã vận đơn';
   if (!brandSlug) return `chưa ghép được brand "${d.brandText ?? ''}"`;
-  if (!d.nuoc) return 'thiếu nước nhận';
+  if (!d.nuoc) return 'không đổi được tên nước sang mã ISO';
   if (d.canKg == null || d.canKg <= 0) return 'thiếu cân';
   if (!d.ngayGui) return 'thiếu ngày gửi';
   return null;
