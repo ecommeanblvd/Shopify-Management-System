@@ -100,12 +100,17 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
          AND COALESCE(delivered_at, created_at) <= ${`${den} 23:59:59`}::timestamp;`),
     // Gate đo TỒN ĐỌNG chứ không đo kiện trong kỳ: hoá đơn carrier về trễ (quy chế chi trả gối 1 kỳ), nên kiện vừa gửi
     // trong tháng chưa thể phân định xong. Đếm kiện có bill mà NGÀY GỬI trước đầu kỳ chấm và vẫn chưa ai phân định.
+    // Cùng PHẠM VI với Pillar 1 (D-072): chỉ kiện của store MEAN BLVD. Kiện brand khác
+    // đối soát ở luồng ship hộ, để lẫn vào đây thì Gate của nhân sự MEAN bị treo vì
+    // tồn đọng của brand mà họ không phụ trách.
     db.execute<{ can: string; da: string; ton: string }>(sql`
       SELECT COUNT(*)::text AS can, (COUNT(r.id))::text AS da,
              (COUNT(*) FILTER (WHERE r.id IS NULL AND s.label_created_at < ${`${tu} 00:00:00`}::timestamp))::text AS ton
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
+        JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
         LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
-       WHERE s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
     db.execute<{ tong: string | null; n: string }>(sql`
       SELECT SUM(ABS(tong_cong::numeric))::text AS tong, COUNT(*)::text AS n
         FROM credit_notes WHERE loai = 'credit' AND ngay >= ${tu}::date AND ngay <= ${den}::date;`),
