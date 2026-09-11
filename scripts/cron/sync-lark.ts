@@ -24,6 +24,13 @@ import { backfillCourierLark } from '@/features/lark/courier-backfill';
 import { backfillNhanHangLark } from '@/features/lark/nhan-hang-backfill';
 import { syncLarkDonShipHo } from '@/features/ship-ho/sync-lark-don';
 async function main(): Promise<void> {
+  // ĐẶT ĐẦU TIÊN, không phải cuối: `syncLarkPacks` gọi trực tiếp (không qua chayMotJob)
+  // nên nó ném lỗi là cả script dừng, mọi việc phía sau không chạy. Việc này lại độc lập
+  // và chỉ mất vài giây, trong khi sync-lark có lượt kéo dài 70 phút.
+  // Bảng đơn ship hộ của đội logistics: Đức lên đơn trên Lark trước, hệ thống nhập sau nên
+  // ngày gửi trên hệ thống là ngày ngồi nhập (CEO 11/09/2026).
+  await chayMotJob('sync-lark-ship-ho', () => syncLarkDonShipHo());
+
   const s = await syncLarkPacks();
   process.stdout.write(
     `sync-lark: tạo ${s.created}, cập nhật ${s.updated}, không khớp ${s.unmatched.length}, skip ${s.skipped}, warning ${s.warnings.length}\n`,
@@ -60,11 +67,6 @@ async function main(): Promise<void> {
   // LARK_NHAN_HANG_PUSH tới khi ops tạo cột "Mã món". Nhật ký riêng để trang
   // giám sát thấy nó chạy hay không.
   await chayMotJob('push-nhan-hang', backfillNhanHangLark);
-
-  // Bảng đơn ship hộ của đội logistics: Đức lên đơn trên Lark trước, hệ thống nhập sau
-  // nên ngày gửi trên hệ thống là ngày ngồi nhập. Kéo về để ngày gửi đúng và để đơn mới
-  // trên Lark tự hiện trong UI (CEO 11/09/2026).
-  await chayMotJob('sync-lark-ship-ho', () => syncLarkDonShipHo());
 }
 
 chayCron('sync-lark', main);
