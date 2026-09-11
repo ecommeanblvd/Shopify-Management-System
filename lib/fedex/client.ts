@@ -72,18 +72,33 @@ interface FedexConfig {
   account: string | undefined;
 }
 
-function fedexConfig(): FedexConfig {
+/**
+ * Bộ khoá FedEx. 'mac_dinh' là dự án đang chạy Address Validation / Rates / Ship.
+ * 'track' là dự án RIÊNG có quyền Basic Integrated Visibility (CEO tạo 11/09/2026):
+ * dự án cũ không được cấp quyền tra vận đơn, mà dự án mới lại chưa chắc có đủ các
+ * API kia — nên KHÔNG thay khoá cũ, mà để hai bộ chạy song song. Thiếu khoá 'track'
+ * thì tự rơi về khoá mặc định, tức không đặt gì thì hành vi y như trước.
+ */
+export type BoKhoaFedex = 'mac_dinh' | 'track';
+
+function fedexConfig(bo: BoKhoaFedex = 'mac_dinh'): FedexConfig {
   const base = process.env.FEDEX_API_BASE || DEFAULT_BASE;
-  const clientId = process.env.FEDEX_CLIENT_ID;
-  const clientSecret = process.env.FEDEX_CLIENT_SECRET;
+  const riengTrack = bo === 'track' && process.env.FEDEX_TRACK_CLIENT_ID && process.env.FEDEX_TRACK_CLIENT_SECRET;
+  const clientId = riengTrack ? process.env.FEDEX_TRACK_CLIENT_ID : process.env.FEDEX_CLIENT_ID;
+  const clientSecret = riengTrack ? process.env.FEDEX_TRACK_CLIENT_SECRET : process.env.FEDEX_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     throw new Error('Thiếu FEDEX_CLIENT_ID / FEDEX_CLIENT_SECRET — đặt trên Railway env.');
   }
   return { base, clientId, clientSecret, account: process.env.FEDEX_ACCOUNT_NUMBER };
 }
 
-async function realFetchToken(): Promise<FedexTokenResponse> {
-  const { base, clientId, clientSecret } = fedexConfig();
+/** Đang dùng bộ khoá riêng cho tra vận đơn hay dùng chung khoá mặc định. */
+export function dungKhoaTrackRieng(): boolean {
+  return Boolean(process.env.FEDEX_TRACK_CLIENT_ID && process.env.FEDEX_TRACK_CLIENT_SECRET);
+}
+
+async function layToken(bo: BoKhoaFedex): Promise<FedexTokenResponse> {
+  const { base, clientId, clientSecret } = fedexConfig(bo);
   const res = await fetch(`${base}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -97,7 +112,12 @@ async function realFetchToken(): Promise<FedexTokenResponse> {
   return (await res.json()) as FedexTokenResponse;
 }
 
-const getAccessToken = createTokenManager({ fetchToken: realFetchToken });
+// Mỗi bộ khoá một token cache riêng — dùng chung cache sẽ gửi token của dự án này
+// sang dự án kia và nhận 403 khó hiểu.
+const TOKEN: Record<BoKhoaFedex, () => Promise<string>> = {
+  mac_dinh: createTokenManager({ fetchToken: () => layToken('mac_dinh') }),
+  track: createTokenManager({ fetchToken: () => layToken('track') }),
+};
 
 /** Số tài khoản FedEx — bắt buộc cho giá negotiated + tạo nhãn. */
 export function getFedexAccountNumber(): string {
@@ -109,11 +129,13 @@ export function getFedexAccountNumber(): string {
 /** Gọi 1 endpoint FedEx (đã tự gắn bearer token). `json` để gửi body JSON. */
 export async function fedexFetch<T>(
   path: string,
-  init: Omit<RequestInit, 'body'> & { json?: unknown; body?: BodyInit } = {},
+  init: Omit<RequestInit, 'body'> & { json?: unknown; body?: BodyInit; boKhoa?: BoKhoaFedex } = {},
 ): Promise<T> {
-  const { base } = fedexConfig();
-  const token = await getAccessToken();
+  const bo = init.boKhoa ?? 'mac_dinh';
+  const { base } = fedexConfig(bo);
+  const token = await TOKEN[bo]();
   const { json, headers, ...rest } = init;
+  delete (rest as { boKhoa?: unknown }).boKhoa;
   const res = await fetch(`${base}${path}`, {
     ...rest,
     headers: {

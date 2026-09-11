@@ -82,6 +82,7 @@ export async function trackFedex(trackingNumber: string): Promise<FedexTrackResu
   const raw = await fedexFetch<unknown>('/track/v1/trackingnumbers', {
     method: 'POST',
     headers: HEADER_LOCALE,
+    boKhoa: 'track',
     json: { includeDetailedScans: false, trackingInfo: [{ trackingNumberInfo: { trackingNumber } }] },
   });
   return parseFedexTrack(raw);
@@ -116,6 +117,7 @@ export async function trackFedexBatch(trackingNumbers: readonly string[]): Promi
   const raw = await fedexFetch<unknown>('/track/v1/trackingnumbers', {
     method: 'POST',
     headers: HEADER_LOCALE,
+    boKhoa: 'track',
     json: { includeDetailedScans: false, trackingInfo: ds.map((trackingNumber) => ({ trackingNumberInfo: { trackingNumber } })) },
   });
   return parseFedexTrackBatch(raw);
