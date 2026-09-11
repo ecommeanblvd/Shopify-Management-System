@@ -12,7 +12,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db } from '@/db/client';
 import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU } from '@/features/shipments/sop-giao-hang';
-import { loaiTruKhoiKpi, layLyDo } from '@/features/shipments/ly-do-cham';
+import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
 import { STORE_VAN_HANH } from './pham-vi';
 import {
@@ -78,8 +78,8 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
   }
 
   if (ma === '1.2') {
-    const { rows } = await db.execute<{ don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; ngay: string; ly_do: string | null }>(sql`
-      SELECT o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
+    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; ngay: string; ly_do: string | null }>(sql`
+      SELECT s.id AS id, o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
              (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay,
              s.ly_do_cham AS ly_do
@@ -101,10 +101,10 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       // phạm vi chấm (VN nội địa) — khớp đúng bộ lọc của `chamKpi`.
       const biLoaiTru = loaiTruKhoiKpi(r.ly_do) || nuoc in NUOC_LOAI_TRU;
       return {
-        maDon: r.don, tracking: r.tk, nuoc, line,
+        shipmentId: r.id, maDon: r.don, tracking: r.tk, nuoc, line,
         ngayGui: ngay(r.gui) ?? '', ngayGiao: ngay(r.giao) ?? '',
         soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru),
-        lyDoCham: r.ly_do ? (layLyDo(r.ly_do)?.ten ?? r.ly_do) : null,
+        lyDoCham: r.ly_do,
       };
     });
     return { ...goc, sla: slaRows };

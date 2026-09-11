@@ -23,12 +23,14 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
   /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
   suaDuoc: boolean;
+  /** Nhân sự logistics (quyền đối soát phí ship) gán được lý do chậm trên bảng 1.2. */
+  ganLyDoDuoc: boolean;
 }) {
   const sla = auto.slaTong;
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
@@ -111,7 +113,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc }: {
 
       {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
 
-      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} />
+      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} />
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">

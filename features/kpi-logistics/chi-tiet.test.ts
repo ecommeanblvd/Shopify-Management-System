@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, TEN_TIEU_CHI, CACH_DO, type DongSla } from './chi-tiet';
 
 const kien = (soNgay: number, slaNgay: number, biLoaiTru = false): DongSla => ({
-  maDon: null, tracking: null, nuoc: 'US', line: 'fedex', ngayGui: '2026-08-01', ngayGiao: '2026-08-06',
+  shipmentId: 'x', maDon: null, tracking: null, nuoc: 'US', line: 'fedex', ngayGui: '2026-08-01', ngayGiao: '2026-08-06',
   soNgay, slaNgay, slaLineNgay: slaNgay, ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru), lyDoCham: null,
 });
 

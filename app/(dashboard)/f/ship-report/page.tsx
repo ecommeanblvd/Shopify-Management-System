@@ -15,7 +15,7 @@ import { surchargeSummary, surchargeTopRoutes, SURCHARGE_LABELS } from '@/featur
 import { getTransitStats, normalizeTransitRange, pivotRoutesByCountry } from '@/features/shipments/transit-stats';
 import {
   NHAN_PHAM_VI, NGUONG_DU_LIEU, NGUONG_NGOAI_LE, PHAM_VI, chuanDeXuat, chuanHoaNguong, chuanHoaPhamVi, doPhu,
-  docKienGiao, docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
+  docTieuChuanGiao, gomTheoNuoc, tyLeNgoaiLe, type DongTieuChuan,
 } from '@/features/shipments/tieu-chuan-giao';
 import { SopTab } from '@/components/ship-report/SopTab';
 import { KpiTab } from '@/components/ship-report/KpiTab';
@@ -25,8 +25,6 @@ import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
 export const dynamic = 'force-dynamic';
 
 const vnd = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('vi-VN'));
-/** ISO-2 → emoji quốc kỳ (regional indicator). */
-const flag = (cc: string) => /^[A-Z]{2}$/.test(cc) ? cc.replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0))) : '🏳️';
 const REGION_VI = new Intl.DisplayNames(['vi'], { type: 'region' });
 const countryName = (cc: string) => { try { return REGION_VI.of(cc) ?? cc; } catch { return cc; } };
 const SEG_LABEL: Record<string, string> = { total: 'Tổng', shopify: 'Shopify', ship_ho: 'Ship hộ' };
@@ -152,7 +150,8 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                 Kỳ chấm theo NGÀY GỬI {tuKpi} → {denKpi}. Hoá đơn carrier về trễ nên kỳ vừa kết thúc chốt được từ đầu tháng sau.
               </span>
             </div>
-            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin} />
+            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
+              ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')} />
           </>
         ) : null
       ) : tab === 'sop' ? (

@@ -5,7 +5,12 @@ import { LY_DO_CHAM } from '@/features/shipments/ly-do-cham';
 import { datLyDoCham } from '@/features/shipments/ly-do-actions';
 
 /** Ô chọn lý do giao chậm cho một kiện — lưu ngay khi chọn. */
-export function LyDoChamSelect({ shipmentId, banDau }: { shipmentId: string; banDau: string | null }) {
+export function LyDoChamSelect({ shipmentId, banDau, sauKhiLuu }: {
+  shipmentId: string;
+  banDau: string | null;
+  /** Gọi sau khi lưu xong — bảng KPI dùng để nạp lại vì đổi lý do có thể đổi cả kết quả chấm. */
+  sauKhiLuu?: () => void;
+}) {
   const [ma, setMa] = useState(banDau ?? '');
   const [pending, start] = useTransition();
   const [loi, setLoi] = useState(false);
@@ -13,7 +18,7 @@ export function LyDoChamSelect({ shipmentId, banDau }: { shipmentId: string; ban
   const doi = (v: string) => {
     setMa(v); setLoi(false);
     start(async () => {
-      try { await datLyDoCham({ shipmentId, lyDo: v || null }); }
+      try { await datLyDoCham({ shipmentId, lyDo: v || null }); sauKhiLuu?.(); }
       catch { setLoi(true); setMa(banDau ?? ''); }
     });
   };

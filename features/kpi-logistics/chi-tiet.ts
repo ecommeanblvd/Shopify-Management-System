@@ -70,6 +70,8 @@ export function chenhSauThuHoi(carrierVnd: number, thuHoiVnd: number, thuKhachVn
 }
 
 export interface DongSla {
+  /** Cần cho ô chọn lý do chậm ngay trên bảng. */
+  shipmentId: string;
   maDon: string | null;
   tracking: string | null;
   nuoc: string;
@@ -83,6 +85,7 @@ export interface DongSla {
    *  không dùng chấm điểm — nếu dùng sẽ ra số khác bảng KPI. */
   slaLineNgay: number;
   ketQua: KetQuaSla;
+  /** MÃ lý do (không phải nhãn) — ô chọn cần mã, nhãn tra từ `layLyDo`. */
   lyDoCham: string | null;
 }
 

@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
+import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
+import { layLyDo } from '@/features/shipments/ly-do-cham';
 import {
   TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI, demKetQuaSla,
   type ChiTietKpi, type MaTieuChi,
@@ -24,9 +26,11 @@ function taiCsv(ten: string, header: string[], rows: CsvValue[][]) {
  * Report chi tiết từng tiêu chí Pillar 1: liệt kê ĐÚNG các đơn/kiện tạo nên con số
  * KPI (CEO 11/09/2026). Nạp lười — chọn tiêu chí nào mới truy vấn tiêu chí đó.
  */
-export function ChiTietPillar1({ tu, den, ky, tai }: {
+export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
   tu: string; den: string; ky: string;
   tai: (ma: MaTieuChi, tu: string, den: string) => Promise<ChiTietKpi>;
+  /** Nhân sự có quyền đối soát phí ship mới gán được lý do chậm ngay trên bảng. */
+  ganLyDoDuoc: boolean;
 }) {
   const [ma, setMa] = useState<MaTieuChi | null>(null);
   const [kho, setKho] = useState<Partial<Record<MaTieuChi, ChiTietKpi>>>({});
@@ -46,6 +50,16 @@ export function ChiTietPillar1({ tu, den, ky, tai }: {
       }
     });
   };
+
+  /** Nạp lại một tiêu chí sau khi đổi dữ liệu (gán lý do chậm có thể đổi cả kết quả chấm). */
+  const taiLai = (m: MaTieuChi) => start(async () => {
+    try {
+      const d = await tai(m, tu, den);
+      setKho((k) => ({ ...k, [m]: d }));
+    } catch (e) {
+      setLoi(String((e as Error).message ?? e));
+    }
+  });
 
   const data = ma ? kho[ma] : undefined;
 
@@ -74,7 +88,7 @@ export function ChiTietPillar1({ tu, den, ky, tai }: {
         <div className="space-y-3 p-4">
           <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI}</p>
           {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} />}
-          {data.sla && <BangSla rows={data.sla} ky={ky} />}
+          {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.2')} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}
           {data.sizeThung && <BangSize rows={data.sizeThung} ky={ky} />}
         </div>
@@ -139,7 +153,9 @@ function BangAmCuoc({ rows, ky }: { rows: NonNullable<ChiTietKpi['amCuoc']>; ky:
   );
 }
 
-function BangSla({ rows, ky }: { rows: NonNullable<ChiTietKpi['sla']>; ky: string }) {
+function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
+  rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; sauKhiLuu: () => void;
+}) {
   const d = demKetQuaSla(rows);
   const mau: Record<string, string> = {
     dat: 'text-emerald-600 dark:text-emerald-400',
@@ -149,10 +165,10 @@ function BangSla({ rows, ky }: { rows: NonNullable<ChiTietKpi['sla']>; ky: strin
   };
   return (
     <Khung
-      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.</>}
+      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
         ['Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
-        rows.map((r) => [r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham]))}
+        rows.map((r) => [r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Tracking</th>
@@ -175,7 +191,11 @@ function BangSla({ rows, ky }: { rows: NonNullable<ChiTietKpi['sla']>; ky: strin
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaNgay}</td>
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaLineNgay}{r.slaLineNgay < r.slaNgay && r.soNgay > r.slaLineNgay ? ' ⚑' : ''}</td>
             <td className={`px-2.5 py-1.5 text-left font-medium ${mau[r.ketQua]}`}>{NHAN_KET_QUA_SLA[r.ketQua]}</td>
-            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.lyDoCham ?? '—'}</td>
+            <td className="px-2.5 py-1.5 text-left">
+              {ganLyDoDuoc
+                ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} sauKhiLuu={sauKhiLuu} />
+                : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
+            </td>
           </tr>
         ))}
       </tbody>
