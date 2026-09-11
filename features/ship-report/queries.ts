@@ -27,7 +27,13 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
       to_char(s.label_created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month,
       s.carrier_key AS carrier,
       o.ship_country AS country,
-      CASE WHEN o.currency = COALESCE(st.cost_currency, o.currency) THEN o.total_shipping::float8
+      -- Store brand riêng (TINH Atelier, Mirer): doanh thu là tiền THU BRAND khi đối
+      -- soát, không phải tiền khách cuối trả — brand chạy free ship thì khách trả 0đ
+      -- nhưng mình vẫn tính tiền brand (CEO 11/09/2026). Chưa định giá → NULL, và
+      -- pnl.ts loại kiện chưa có giá khỏi phép cộng chứ không coi là doanh thu 0.
+      CASE WHEN st.shop_domain IN ('tinhatelier.myshopify.com', 'mirermirer-official.myshopify.com')
+             THEN s.brand_charge_vnd::float8
+           WHEN o.currency = COALESCE(st.cost_currency, o.currency) THEN o.total_shipping::float8
            WHEN st.fx_cost_per_order_currency IS NOT NULL THEN o.total_shipping::float8 * st.fx_cost_per_order_currency::float8
            ELSE NULL END AS revenue_vnd,
       -- Chi phí = bill chiều đi + cước HÀNG HOÀN đã gắn về đơn (return_of_order_id).

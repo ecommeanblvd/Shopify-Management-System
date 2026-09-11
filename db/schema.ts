@@ -1059,6 +1059,12 @@ export const shipments = pgTable('shipments', {
   deliveryStatus: text('delivery_status'),
   deliverySource: text('delivery_source'), // 'lark' | 'fedex' | null — nguồn delivery_status
   deliveredAt: timestamp('delivered_at'),
+  // Giá THU BRAND cho kiện của store brand (TINH Atelier, Mirer) — migration 0138.
+  // Các store này chạy khuyến mãi free ship cho khách cuối, nhưng khi đối soát mình vẫn
+  // tính tiền brand; nên tiền KHÁCH trả không phải doanh thu mảng ship của những store đó.
+  brandChargeVnd: numeric('brand_charge_vnd', { precision: 16, scale: 2 }),
+  brandChargeAt: timestamp('brand_charge_at'),
+  brandChargeNote: text('brand_charge_note'),
   lastTrackedAt: timestamp('last_tracked_at'),
   trackDetail: text('track_detail'),
   /** Operator-side internal pack code (Excel col AS `Log Unique code`,

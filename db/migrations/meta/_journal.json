@@ -974,6 +974,13 @@
       "when": 1787952000000,
       "tag": "0137_ship-ho-lark",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1787962800000,
+      "tag": "0138_shipments-gia-thu-brand",
+      "breakpoints": true
     }
   ]
 }
