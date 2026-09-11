@@ -10,7 +10,8 @@ export interface BrandOwnedStore {
   vendor: string;
   brandSlug: string;
   /** Gửi MMP CHI PHÍ SHIP thực của đơn (cước carrier từ bill, VND) cộng phí
-   *  đóng gói/xử lý INS ($/đơn) — CEO 03/08, hiện chỉ TA. Vắng = không gửi. */
+   *  đóng gói/xử lý INS ($/đơn) — CEO 03/08 cho TA, mở rộng cho Mirer 11/09.
+   *  Vắng = không gửi. */
   shipCost?: { insHandlingUsd: number; fxVndPerUsd: number };
 }
 
@@ -19,7 +20,11 @@ export const BRAND_OWNED_STORES: Record<string, BrandOwnedStore> = {
     vendor: 'TINH Atelier', brandSlug: 'tinh', // slug MMP đổi 18/06 (tinh-atelier cũ archived)
     shipCost: { insHandlingUsd: 5, fxVndPerUsd: 26_000 }, // fx khớp account FedEx (cost VND ↔ display USD)
   },
-  'mirermirer-official': { vendor: 'Mirer', brandSlug: 'mirer' },
+  'mirermirer-official': {
+    vendor: 'Mirer', brandSlug: 'mirer',
+    // CEO 11/09: Mirer tính y như TA — cước bill + 5 USD/đơn.
+    shipCost: { insHandlingUsd: 5, fxVndPerUsd: 26_000 },
+  },
 };
 
 export function brandOwnedStore(storeName: string | null | undefined) {

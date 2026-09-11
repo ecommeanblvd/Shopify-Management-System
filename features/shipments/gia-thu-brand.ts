@@ -6,9 +6,16 @@
  * soát mình VẪN tính tiền brand. Trước đây báo cáo lấy tiền KHÁCH trả làm doanh thu nên
  * T8/2026 store TINH hiện lỗ 26,4 triệu: khách trả 325.260đ trong khi cước 26.727.031đ.
  *
- * Công thức đúng bằng ca TA1420 CEO đã duyệt 04/09/2026: tính theo bảng giá NGÀY GỬI,
- * gồm cước gốc + xăng dầu tuần đó + phụ phí + VAT. Dựng lại đúng 1.149.852đ.
- * KHÔNG cộng phí đóng gói và KHÔNG cộng markup — đó là mức "thu đúng chi phí".
+ * Công thức (CEO chốt 03/08 cho TA, mở rộng cho Mirer 11/09): **cước carrier trên BILL
+ * cộng một khoản cố định 5 USD mỗi ĐƠN** (quy 130.000đ theo tỉ giá 26.000 khớp account
+ * FedEx). Đây đúng là con số đang gửi sang MMP ở `features/mmp/order-outbound.ts`, nên
+ * báo cáo và đối soát nói cùng một số.
+ *
+ * Khoản cố định tính MỖI ĐƠN, không phải mỗi kiện: đơn nhiều kiện chỉ cộng một lần.
+ *
+ * Đo trên toàn bộ lịch sử: cách này thu đủ bù cước và có biên, khác hẳn cách tính theo
+ * báo giá ngày gửi (thiếu 56,7tr) hay theo tiền khách cuối trả (âm 543tr vì brand chạy
+ * free ship).
  */
 export const STORE_THU_BRAND: Record<string, string> = {
   'tinhatelier.myshopify.com': 'tinh',
@@ -20,21 +27,25 @@ export const laStoreThuBrand = (shopDomain: string | null | undefined): boolean 
 
 export const brandCuaStore = (shopDomain: string): string | null => STORE_THU_BRAND[shopDomain] ?? null;
 
-export interface PhanGiaKien {
-  /** Cước gốc + phụ phí + xăng dầu + VAT, theo bảng giá NGÀY GỬI. */
-  carrierCost: number;
-  /** Markup của bảng giá, chỉ để tham chiếu — KHÔNG cộng vào giá thu brand. */
-  markup?: number;
-  packaging?: number;
+/** Khoản cố định cộng vào mỗi ĐƠN của store brand: 5 USD. */
+export const PHI_XU_LY_USD = 5;
+export const FX_VND_MOI_USD = 26_000;
+export const PHI_XU_LY_VND = PHI_XU_LY_USD * FX_VND_MOI_USD;
+
+export interface KienStoreBrand {
+  /** Cước carrier THỰC trên bill của kiện này (VND). */
+  cuocBillVnd: number | null;
+  /** Kiện này có phải kiện ĐẦU của đơn không — chỉ kiện đầu chịu phí xử lý. */
+  laKienDauCuaDon: boolean;
 }
 
 /**
- * Giá thu brand cho một kiện. `phanTramThem` cho phép cộng thêm % nếu sau này CEO
- * muốn có biên; mặc định 0 = thu đúng chi phí, khớp ca TA1420.
+ * Giá thu brand cho một kiện. Chưa có bill → null (chưa định giá được), KHÔNG quy về 0
+ * rồi tính thành lỗ.
  */
-export function giaThuBrand(b: PhanGiaKien, phanTramThem = 0): number {
-  const goc = Math.max(0, Math.round(b.carrierCost));
-  return Math.round(goc * (1 + Math.max(0, phanTramThem) / 100));
+export function giaThuBrand(k: KienStoreBrand, phiXuLyVnd = PHI_XU_LY_VND): number | null {
+  if (k.cuocBillVnd == null || k.cuocBillVnd <= 0) return null;
+  return Math.round(k.cuocBillVnd) + (k.laKienDauCuaDon ? Math.round(phiXuLyVnd) : 0);
 }
 
 /** Lãi của kiện store brand = giá thu brand − cước carrier thực trả. */

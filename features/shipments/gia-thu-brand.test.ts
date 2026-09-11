@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { laStoreThuBrand, brandCuaStore, giaThuBrand, laiKienStoreBrand, STORE_THU_BRAND } from './gia-thu-brand';
+import { laStoreThuBrand, brandCuaStore, giaThuBrand, laiKienStoreBrand, STORE_THU_BRAND, PHI_XU_LY_VND } from './gia-thu-brand';
 
 describe('store thu brand', () => {
   it('chỉ TINH Atelier và Mirer, không phải MEAN BLVD hay Cici', () => {
@@ -18,18 +18,21 @@ describe('store thu brand', () => {
 });
 
 describe('giaThuBrand', () => {
-  it('dựng lại đúng ca TA1420 CEO đã duyệt: 745.629 + 226.349 + 92.700 + VAT 85.174', () => {
-    expect(giaThuBrand({ carrierCost: 1_149_852 })).toBe(1_149_852);
+  it('cước bill cộng 5 USD (130.000đ) cho kiện đầu của đơn — đúng số đang gửi MMP', () => {
+    expect(giaThuBrand({ cuocBillVnd: 1_100_000, laKienDauCuaDon: true })).toBe(1_230_000);
   });
-  it('KHÔNG cộng phí đóng gói và markup của bảng giá', () => {
-    expect(giaThuBrand({ carrierCost: 1_149_852, markup: 191_978, packaging: 130_000 })).toBe(1_149_852);
+  it('đơn nhiều kiện chỉ cộng phí xử lý MỘT lần', () => {
+    expect(giaThuBrand({ cuocBillVnd: 900_000, laKienDauCuaDon: false })).toBe(900_000);
   });
-  it('cộng thêm % khi CEO muốn có biên', () => {
-    expect(giaThuBrand({ carrierCost: 1_000_000 }, 10)).toBe(1_100_000);
-    expect(giaThuBrand({ carrierCost: 1_000_000 }, -5)).toBe(1_000_000);
+  it('chưa có bill → null, không quy về 0 rồi thành lỗ', () => {
+    expect(giaThuBrand({ cuocBillVnd: null, laKienDauCuaDon: true })).toBeNull();
+    expect(giaThuBrand({ cuocBillVnd: 0, laKienDauCuaDon: true })).toBeNull();
   });
-  it('cước âm hoặc 0 → 0, không ra số âm', () => {
-    expect(giaThuBrand({ carrierCost: -5 })).toBe(0);
+  it('đổi được mức phí xử lý khi cần', () => {
+    expect(giaThuBrand({ cuocBillVnd: 1_000_000, laKienDauCuaDon: true }, 0)).toBe(1_000_000);
+  });
+  it('hằng số khớp cấu hình gửi MMP: 5 USD × 26.000', () => {
+    expect(PHI_XU_LY_VND).toBe(130_000);
   });
 });
 
