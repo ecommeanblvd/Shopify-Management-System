@@ -14,6 +14,7 @@ import { db } from '@/db/client';
 import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU } from '@/features/shipments/sop-giao-hang';
 import { loaiTruKhoiKpi, layLyDo } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
+import { STORE_VAN_HANH } from './pham-vi';
 import {
   CACH_DO, xepLoaiSla, chenhSauThuHoi,
   type ChiTietKpi, type MaTieuChi, type DongAmCuoc, type DongSla, type DongChungTu, type DongSizeThung,
@@ -60,7 +61,8 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         JOIN shopify_orders o ON o.id = bill.order_id
         JOIN stores st ON st.id = o.store_id
         LEFT JOIN thu ON thu.order_id = bill.order_id
-       WHERE bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`);
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`);
     const amCuoc: DongAmCuoc[] = [];
     for (const r of rows) {
       const thuKhachVnd = Math.round(Number(r.thu ?? 0));
@@ -81,8 +83,9 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
              (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay,
              s.ly_do_cham AS ly_do
-        FROM shipments s JOIN shopify_orders o ON o.id = s.order_id
-       WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
+        FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
          AND s.delivered_at::timestamp >= s.label_created_at
          AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
        ORDER BY (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400) DESC;`);
@@ -112,8 +115,9 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       SELECT o.shopify_order_number AS don, s.tracking_number AS tk, o.ship_country AS cc,
              s.label_created_at::text AS ngay, c.address_correction::text AS phi, c.total_amount::text AS tong
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
-        JOIN shopify_orders o ON o.id = s.order_id
-       WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
+        JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
          AND COALESCE(c.address_correction::numeric, 0) > 0
        ORDER BY c.address_correction::numeric DESC;`);
     const chungTu: DongChungTu[] = rows.map((r) => ({
@@ -128,8 +132,9 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
            s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
            s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed
       FROM shipments s JOIN shipment_charges ch ON ch.shipment_id = s.id
-      JOIN shopify_orders o ON o.id = s.order_id
-     WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp;`);
+      JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+     WHERE st.shop_domain = ${STORE_VAN_HANH}
+       AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp;`);
   const sizeThung: DongSizeThung[] = rows.map((r) => {
     const kien = { thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed) };
     const { loai, lech } = phanLoaiKien(kien);

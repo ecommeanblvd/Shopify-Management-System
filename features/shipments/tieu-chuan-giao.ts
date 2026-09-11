@@ -216,14 +216,21 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
  * Kiện đã ghi nhận giao trong khoảng NGÀY GỬI [tu, den] (ISO date, bao trọn ngày) — đầu vào cho chấm KPI SOP.
  * Chỉ lấy kiện có đủ hai mốc và ngày giao không sớm hơn ngày gửi.
  */
-export async function docKienGiao(tu: string, den: string): Promise<Array<{ country: string; line: string; soNgay: number; lyDoCham: string | null }>> {
+export async function docKienGiao(tu: string, den: string, storeDomain?: string | null): Promise<Array<{ country: string; line: string; soNgay: number; lyDoCham: string | null }>> {
+  // storeDomain != null → chỉ lấy kiện của đúng store đó (KPI vận hành MEAN chỉ
+  // chấm đơn MEAN BLVD). Bỏ trống = mọi store, dùng cho báo cáo SOP đo trải
+  // nghiệm khách của toàn bộ hàng đi.
+  const loc = storeDomain ?? null;
   const { rows } = await db.execute<{ cc: string | null; line: string | null; ngay: string; ly_do: string | null }>(sql`
     SELECT COALESCE(o.ship_country, '?') AS cc, COALESCE(s.carrier_key, '?') AS line, s.ly_do_cham AS ly_do,
            (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay
-      FROM shipments s JOIN shopify_orders o ON o.id = s.order_id
+      FROM shipments s
+      JOIN shopify_orders o ON o.id = s.order_id
+      JOIN stores st ON st.id = o.store_id
      WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
        AND s.delivered_at::timestamp >= s.label_created_at
        AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp
-       AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`);
+       AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp
+       AND (${loc}::text IS NULL OR st.shop_domain = ${loc});`);
   return rows.map((r) => ({ country: r.cc ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay), lyDoCham: r.ly_do }));
 }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import {
-  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, demKetQuaSla,
+  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI, demKetQuaSla,
   type ChiTietKpi, type MaTieuChi,
 } from '@/features/kpi-logistics/chi-tiet';
 
@@ -54,7 +54,7 @@ export function ChiTietPillar1({ tu, den, ky, tai }: {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <div className="text-sm font-semibold">Report chi tiết từng tiêu chí Pillar 1</div>
-          <p className="text-[11px] text-muted-foreground">Bấm một tiêu chí để xem đúng những đơn và kiện làm nên con số ở bảng trên.</p>
+          <p className="text-[11px] text-muted-foreground">Bấm một tiêu chí để xem đúng những đơn và kiện làm nên con số ở bảng trên. {PHAM_VI}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {MA_LIST.map((m) => (
@@ -72,7 +72,7 @@ export function ChiTietPillar1({ tu, den, ky, tai }: {
 
       {ma && data && !dangTai && (
         <div className="space-y-3 p-4">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo}</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI}</p>
           {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} />}
           {data.sla && <BangSla rows={data.sla} ky={ky} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}

@@ -120,6 +120,9 @@ export interface ChiTietKpi {
   sizeThung?: DongSizeThung[];
 }
 
+/** Câu nhắc phạm vi, gắn vào mọi tiêu chí để không ai hiểu nhầm là gồm cả brand khác. */
+export const PHAM_VI = 'Chỉ tính đơn của MEAN BLVD. Đơn brand khác (Tinh Atelier) đi luồng ship hộ và được đối chiếu tiền bill với tiền thu ở phần ship hộ.';
+
 export const CACH_DO: Record<MaTieuChi, string> = {
   '1.1': 'Đơn có cước carrier RÒNG (bill trừ tiền đã đòi lại được bằng credit note) vẫn lớn hơn cước thu của khách, tính theo kiện gửi trong kỳ. Đơn đã được carrier trả lại đủ tiền sẽ tự rời danh sách. Cột Phân định là kết luận đối soát đã chốt; chỉ đơn được chốt là lỗi nội bộ mới bị trừ KPI, đơn do hãng sai hoặc chưa xét thì không.',
   '1.2': 'Mọi kiện GỬI trong kỳ và ĐÃ giao xong. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII.',

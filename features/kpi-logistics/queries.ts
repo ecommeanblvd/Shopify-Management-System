@@ -7,6 +7,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
+import { STORE_VAN_HANH } from './pham-vi';
 import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
 import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
@@ -76,7 +77,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
                thu.phan_dinh
           FROM bill JOIN shopify_orders o ON o.id = bill.order_id JOIN stores st ON st.id = o.store_id
           LEFT JOIN thu ON thu.order_id = bill.order_id
-         WHERE bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))
+         WHERE st.shop_domain = ${STORE_VAN_HANH}
+           AND bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))
       SELECT COUNT(*) FILTER (WHERE rong > khach_tra)::text AS n,
              COALESCE(SUM(rong - khach_tra) FILTER (WHERE rong > khach_tra), 0)::text AS tong,
              COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh LIKE '%internal_error%')::text AS loi_noi_bo,
@@ -88,7 +90,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
       SELECT COUNT(*)::text AS tong,
              (COUNT(*) FILTER (WHERE COALESCE(c.address_correction::numeric, 0) > 0))::text AS loi
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
-       WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+        JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
     db.execute<{ n: string }>(sql`
       SELECT COUNT(*)::text AS n FROM ship_ho_orders
        WHERE status IN ('delivered', 'billed', 'settled')
@@ -111,12 +115,14 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
              SUM(ABS(COALESCE(delta_vnd_at_review::numeric, 0))) FILTER (WHERE status IN ('carrier_error', 'disputing', 'credited'))::text AS dien
         FROM shipment_reconcile_status
        WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
-    docKienGiao(tu, den),
+    docKienGiao(tu, den, STORE_VAN_HANH),
     db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
       SELECT s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
              s.dim_height_cm::text AS c, c.billing_weight_kg::text AS billed
         FROM shipments s JOIN shipment_charges c ON c.shipment_id = s.id
-       WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+        JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+       WHERE st.shop_domain = ${STORE_VAN_HANH}
+         AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
   ]);
 
   // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
