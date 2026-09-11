@@ -458,6 +458,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                     <th className="text-right">Đơn</th><th className="text-right">Thu</th><th className="text-right">Chi</th>
                     <th className="text-right">Margin</th><th className="text-right">Margin %</th>
                     <th className="text-right" title="% đơn có chi phí từ bill thực">Phủ bill</th>
+                    <th className="text-right" title="Đơn chưa báo giá cho brand — không tính vào Thu / Chi / Margin">Chưa có giá</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -480,6 +481,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                       </td>
                       <td className="text-right">{r.marginPct == null ? '—' : `${r.marginPct}%`}</td>
                       <td className="text-right">{r.billedPct}%</td>
+                      <td className="text-right">{r.donChuaCoGia > 0 ? <span className="text-amber-600 dark:text-amber-400" title="Đơn chưa báo giá cho brand — không tính vào doanh thu, chi phí và lãi ở dòng này">{r.donChuaCoGia}</span> : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

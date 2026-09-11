@@ -4,6 +4,11 @@
  *        (actualCharged ?? charged).
  *   Chi: Shopify = billed từ bill carrier; Ship hộ = cước bill thực ?? dự tính.
  * billedPct cho biết bao nhiêu % đơn đã có bill (phần còn lại chi phí dự tính/thiếu).
+ *
+ * Đơn CHƯA CÓ GIÁ THU (revenueVnd null) bị loại khỏi mọi phép cộng và đếm riêng ở
+ * `donChuaCoGia`. Trước đây null được cộng như 0 nên đơn mới nhập, chưa kịp báo giá
+ * cho brand, hiện thành lỗ đúng bằng tiền cước — tháng 9/2026 vẽ ra khoản lỗ ảo
+ * 6,2 triệu (phát hiện 11/09/2026).
  */
 
 export interface ShipPnlItem {
@@ -27,19 +32,25 @@ export interface PnlRow {
   marginPct: number | null;
   /** % đơn có chi phí từ bill thực. */
   billedPct: number;
+  /** Đơn chưa có giá thu — không nằm trong doanh thu/chi phí/lãi ở trên. */
+  donChuaCoGia: number;
 }
 
 const pct = (num: number, den: number): number | null => (den > 0 ? Math.round((num / den) * 1000) / 10 : null);
 
 function rowOf(month: string, segment: PnlRow['segment'], items: ShipPnlItem[]): PnlRow {
-  const revenueVnd = items.reduce((s, i) => s + (i.revenueVnd ?? 0), 0);
-  const costVnd = items.reduce((s, i) => s + (i.costVnd ?? 0), 0);
+  // Chỉ cộng đơn ĐÃ có giá thu. Cộng cả đơn chưa báo giá thì chi phí có mà doanh thu
+  // không, ra lỗ ảo.
+  const coGia = items.filter((i) => i.revenueVnd != null);
+  const revenueVnd = coGia.reduce((s, i) => s + (i.revenueVnd ?? 0), 0);
+  const costVnd = coGia.reduce((s, i) => s + (i.costVnd ?? 0), 0);
   const billed = items.filter((i) => i.billed).length;
   const marginVnd = revenueVnd - costVnd;
   return {
     month, segment, orders: items.length, revenueVnd, costVnd, marginVnd,
     marginPct: pct(marginVnd, revenueVnd),
     billedPct: items.length > 0 ? Math.round((billed / items.length) * 1000) / 10 : 0,
+    donChuaCoGia: items.length - coGia.length,
   };
 }
 

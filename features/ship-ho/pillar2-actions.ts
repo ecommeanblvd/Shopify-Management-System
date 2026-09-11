@@ -43,9 +43,11 @@ export interface DongDonShipHo {
   nuoc: string;
   ngayGui: string | null;
   canKg: number | null;
-  thuVnd: number;
+  /** Giá thu brand: ưu tiên số tính LẠI trên cân thực, chưa báo giá thì null. */
+  thuVnd: number | null;
   vonVnd: number;
-  laiVnd: number;
+  /** null khi chưa có giá thu — không được coi là lỗ. */
+  laiVnd: number | null;
   /** Vốn lấy từ hoá đơn carrier thật hay mới là báo giá. */
   vonThat: boolean;
   trangThai: string;
@@ -96,7 +98,7 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
     db.execute<{ id: string; code: string; brand: string; cc: string; gui: string | null; giao: string | null; can: string | null; thu: string | null; von_that: string | null; von_bao: string | null; st: string; dst: string | null }>(sql`
       SELECT o.id, o.code, o.partner_brand_slug AS brand, o.country AS cc,
              o.shipped_at::text AS gui, o.delivered_at::text AS giao, o.weight_kg::text AS can,
-             o.charged_vnd::text AS thu, o.actual_carrier_cost_vnd::text AS von_that,
+             COALESCE(o.actual_charged_vnd, o.charged_vnd)::text AS thu, o.actual_carrier_cost_vnd::text AS von_that,
              o.carrier_cost_vnd::text AS von_bao, o.status::text AS st, o.delivery_status AS dst
         FROM ship_ho_orders o
        WHERE o.shipped_at IS NOT NULL AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
@@ -110,14 +112,15 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
   ]);
 
   const donHang: DongDonShipHo[] = donRows.rows.map((r) => {
-    const thu = so(r.thu);
+    // Chưa báo giá cho brand → để TRỐNG, không quy về 0 rồi tính thành lỗ.
+    const thu = r.thu == null ? null : Math.round(so(r.thu));
     const vonThat = r.von_that != null;
-    const von = vonThat ? so(r.von_that) : so(r.von_bao);
+    const von = Math.round(vonThat ? so(r.von_that) : so(r.von_bao));
     return {
       id: r.id, ma: r.code, brand: r.brand, nuoc: r.cc,
       ngayGui: r.gui ? r.gui.slice(0, 10) : null,
       canKg: r.can == null ? null : Number(r.can),
-      thuVnd: Math.round(thu), vonVnd: Math.round(von), laiVnd: Math.round(thu - von),
+      thuVnd: thu, vonVnd: von, laiVnd: thu == null ? null : thu - von,
       vonThat, trangThai: r.st,
     };
   });

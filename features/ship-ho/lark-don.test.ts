@@ -64,6 +64,7 @@ describe('docDongLark', () => {
     [COT.duong]: [{ text: 'street 201' }],
     [COT.khu]: [{ text: 'Al Khaleej' }],
     [COT.can]: 1.1,
+    [COT.cuocTinhBrand]: 979527,
     [COT.thuBrand]: { type: 2, value: [1575177.875] },
     [COT.von]: 896136,
   };
@@ -77,6 +78,14 @@ describe('docDongLark', () => {
   });
   it('gộp đường và khu thành một dòng địa chỉ', () => {
     expect(d.diaChi).toBe('street 201, Al Khaleej');
+  });
+  it('Lark CHƯA báo giá (cột Cước tính trống) → không lấy giá, để trống', () => {
+    const chua = docDongLark('r', { ...f, [COT.cuocTinhBrand]: '', [COT.thuBrand]: 0 });
+    expect(chua.thuBrandVnd).toBeNull();
+  });
+  it('Lark đã báo giá → lấy tổng thu', () => {
+    const roi = docDongLark('r', { ...f, [COT.cuocTinhBrand]: 979527 });
+    expect(roi.thuBrandVnd).toBe(1575177.875);
   });
   it('hãng lạ → carrierKey null chứ không bịa', () => {
     expect(docDongLark('r', { [COT.carrier]: 'Hãng Nào Đó' }).carrierKey).toBeNull();

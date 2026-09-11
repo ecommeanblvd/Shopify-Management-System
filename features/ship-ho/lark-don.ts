@@ -29,7 +29,9 @@ export interface DongLarkDon {
   email: string | null;
   canKg: number | null;
   moTaHang: string | null;
-  /** Tiền THU brand (đã gồm mọi phụ phí) — cột "Brand | Tổng Thu (đ)". */
+  /** Tiền THU brand — chỉ có khi Lark ĐÃ báo giá (cột "Brand | Cước tính" có số).
+   *  Cột "Brand | Tổng Thu" là công thức cộng từ cước tính; chưa báo giá thì nó chỉ
+   *  còn phí xử lý 25.000đ, lấy con số đó làm doanh thu sẽ vẽ ra lỗ ảo. */
   thuBrandVnd: number | null;
   /** Cước mình trả hãng — cột "INS | Giá tổng". */
   vonVnd: number | null;
@@ -116,6 +118,7 @@ export const COT = {
   can: 'Weights',
   moTa: 'Mô tả Sản phẩm',
   thuBrand: 'Brand | Tổng Thu (đ)',
+  cuocTinhBrand: 'Brand | Cước tính',
   von: 'INS | Giá tổng',
   trangThai: 'LOG-EP-Dispatch Status',
 } as const;
@@ -143,7 +146,8 @@ export function docDongLark(recordId: string, f: Record<string, unknown>): DongL
     email: chuoi(f[COT.email]),
     canKg: so(f[COT.can]),
     moTaHang: chuoi(f[COT.moTa]),
-    thuBrandVnd: so(f[COT.thuBrand]),
+    // Chưa điền cước tính = chưa báo giá cho brand → để TRỐNG, không đoán bằng 0.
+    thuBrandVnd: so(f[COT.cuocTinhBrand]) ? so(f[COT.thuBrand]) : null,
     vonVnd: so(f[COT.von]),
     trangThaiGiao: chuoi(f[COT.trangThai]),
   };

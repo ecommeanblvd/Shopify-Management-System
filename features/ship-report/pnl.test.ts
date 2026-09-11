@@ -75,3 +75,25 @@ describe('surchargeTopRoutes', () => {
     expect(rows).toHaveLength(2);
   });
 });
+
+describe('đơn chưa có giá thu', () => {
+  it('KHÔNG bị cộng như doanh thu 0 — nếu không sẽ ra lỗ ảo đúng bằng tiền cước', () => {
+    const rows = pnlByMonth([
+      item({ month: '2026-09', segment: 'ship_ho', revenueVnd: 2_000_000, costVnd: 1_500_000 }),
+      item({ month: '2026-09', segment: 'ship_ho', revenueVnd: null, costVnd: 1_900_000 }),
+    ]);
+    const shipHo = rows.find((r) => r.segment === 'ship_ho')!;
+    expect(shipHo.orders).toBe(2);
+    expect(shipHo.donChuaCoGia).toBe(1);
+    expect(shipHo.revenueVnd).toBe(2_000_000);
+    expect(shipHo.costVnd).toBe(1_500_000);
+    expect(shipHo.marginVnd).toBe(500_000);
+  });
+  it('mọi đơn đều chưa có giá → doanh thu, chi phí và lãi đều bằng 0, không âm', () => {
+    const rows = pnlByMonth([item({ month: '2026-09', segment: 'ship_ho', revenueVnd: null, costVnd: 900_000 })]);
+    const r = rows.find((x) => x.segment === 'ship_ho')!;
+    expect(r.marginVnd).toBe(0);
+    expect(r.donChuaCoGia).toBe(1);
+    expect(r.marginPct).toBeNull();
+  });
+});
