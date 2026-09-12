@@ -70,8 +70,12 @@ export function chenhSauThuHoi(carrierVnd: number, thuHoiVnd: number, thuKhachVn
 }
 
 export interface DongSla {
-  /** Cần cho ô chọn lý do chậm ngay trên bảng. */
-  shipmentId: string;
+  /** Cần cho ô chọn lý do chậm ngay trên bảng. null = kiện ship hộ lên từ Lark, chưa có chỗ lưu lý do. */
+  shipmentId: string | null;
+  /** Kiện đến từ đâu — quyết định có gán được lý do chậm hay không. */
+  nguon: 'shopify' | 'ship_ho';
+  /** Kiện này của ai (store hoặc brand ship hộ), để nhìn ra nhóm nào đang kéo điểm. */
+  thuocVe: string;
   maDon: string | null;
   tracking: string | null;
   nuoc: string;
@@ -90,6 +94,8 @@ export interface DongSla {
 }
 
 export interface DongChungTu {
+  nguon: 'shopify' | 'ship_ho';
+  thuocVe: string;
   maDon: string | null;
   tracking: string | null;
   nuoc: string | null;
@@ -123,13 +129,18 @@ export interface ChiTietKpi {
   sizeThung?: DongSizeThung[];
 }
 
-/** Câu nhắc phạm vi, gắn vào mọi tiêu chí để không ai hiểu nhầm là gồm cả brand khác. */
-export const PHAM_VI = 'Chỉ tính đơn của MEAN BLVD. Đơn brand khác (Tinh Atelier) đi luồng ship hộ và được đối chiếu tiền bill với tiền thu ở phần ship hộ.';
+/** Câu nhắc phạm vi — KHÁC NHAU theo tiêu chí, xem `pham-vi.ts`. */
+export const PHAM_VI_THEO_MA: Record<MaTieuChi, string> = {
+  '1.1': 'Chỉ tính đơn của MEAN BLVD: tiêu chí này so bill với cước KHÁCH trả ở checkout, đơn brand khác trả theo bảng giá deal nên đối chiếu ở phần ship hộ.',
+  '1.2': 'Tính MỌI kiện mình chạy, gồm cả ship hộ — store brand retail và đơn lên từ Lark. Cột Thuộc cho biết kiện của nhóm nào.',
+  '1.3': 'Tính MỌI kiện có hoá đơn carrier, gồm cả ship hộ. Cột Thuộc cho biết kiện của nhóm nào.',
+  '1.4': 'Chỉ tính đơn của MEAN BLVD: kiện brand retail mình kiểm hàng và đo cân, đo kích thước nhưng thùng là của brand.',
+};
 
 export const CACH_DO: Record<MaTieuChi, string> = {
   '1.1': 'Đơn có cước carrier RÒNG (bill trừ tiền đã đòi lại được bằng credit note) vẫn lớn hơn cước thu của khách, tính theo kiện gửi trong kỳ. Đơn đã được carrier trả lại đủ tiền sẽ tự rời danh sách. Cột Phân định là kết luận đối soát đã chốt; chỉ đơn được chốt là lỗi nội bộ mới bị trừ KPI, đơn do hãng sai hoặc chưa xét thì không.',
-  '1.2': 'Mọi kiện GỬI trong kỳ và ĐÃ giao xong. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII.',
-  '1.3': 'Kiện phát sinh phí sửa địa chỉ trên hoá đơn carrier — dấu hiệu nhập sai hoặc thiếu thông tin người nhận. Mẫu số là toàn bộ kiện có hoá đơn trong kỳ.',
+  '1.2': 'Mọi kiện GỬI trong kỳ và ĐÃ giao xong, gồm cả kiện ship hộ. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận; kiện ship hộ lên từ Lark chỉ có NGÀY gửi nên tính từ đầu ngày đó. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII — kiện Lark chưa có chỗ lưu lý do nên không kiện nào được loại.',
+  '1.3': 'Kiện phát sinh phí sửa địa chỉ trên hoá đơn carrier — dấu hiệu nhập sai hoặc thiếu thông tin người nhận. Mẫu số là toàn bộ kiện có hoá đơn trong kỳ, gồm cả kiện ship hộ (phí lấy từ khoản addressCorrection trên hoá đơn thật).',
   '1.4': 'So cân mình tự tính (lớn hơn giữa cân thực và cân quy đổi kích thước) với cân carrier thật sự charge. Lệch từ 0,5 kg trở lên coi là chọn sai thùng, vì thùng chật phồng ra làm tăng cân quy đổi.',
 };
 

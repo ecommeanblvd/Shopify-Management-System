@@ -7,6 +7,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
+import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
 import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
@@ -57,7 +58,7 @@ export interface SoLieuTuDong {
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
-  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienGiao, canRows] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienShopify, kienShipHo, chungTuShipHo, canRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -86,13 +87,13 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
              COUNT(*) FILTER (WHERE rong <= khach_tra)::text AS da_cuu,
              COALESCE(SUM(thu_hoi), 0)::text AS thu_hoi
         FROM am;`),
+    // 1.3 chấm MỌI kiện có hoá đơn, gồm cả ship hộ (CEO 12/09/2026) → không lọc store.
     db.execute<{ tong: string; loi: string }>(sql`
       SELECT COUNT(*)::text AS tong,
              (COUNT(*) FILTER (WHERE COALESCE(c.address_correction::numeric, 0) > 0))::text AS loi
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
-       WHERE st.shop_domain = ${STORE_VAN_HANH}
-         AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+       WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
     db.execute<{ n: string }>(sql`
       SELECT COUNT(*)::text AS n FROM ship_ho_orders
        WHERE status IN ('delivered', 'billed', 'settled')
@@ -120,7 +121,10 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
              SUM(ABS(COALESCE(delta_vnd_at_review::numeric, 0))) FILTER (WHERE status IN ('carrier_error', 'disputing', 'credited'))::text AS dien
         FROM shipment_reconcile_status
        WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
-    docKienGiao(tu, den, STORE_VAN_HANH),
+    // 1.2 cũng chấm mọi kiện: null = không lọc store; kiện ship hộ từ Lark cộng thêm ngay dưới.
+    docKienGiao(tu, den, null),
+    docKienGiaoShipHo(tu, den),
+    docChungTuShipHo(tu, den),
     db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
       SELECT s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
              s.dim_height_cm::text AS c, c.billing_weight_kg::text AS billed
@@ -132,6 +136,7 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
 
   // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
   // (SOP đo trải nghiệm khách thì vẫn tính mọi kiện — xem tab Tiêu chuẩn giao.)
+  const kienGiao = [...kienShopify, ...kienShipHo];
   const tinhKpi = kienGiao.filter((k) => !loaiTruKhoiKpi(k.lyDoCham));
   const theoNuoc = chamKpi(tinhKpi, tu);
   const sop = tongKpi(theoNuoc, tu);
@@ -140,8 +145,8 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed),
   })));
 
-  const soKienBill = Number(chungTu.rows[0]?.tong ?? 0);
-  const kienLoi = Number(chungTu.rows[0]?.loi ?? 0);
+  const soKienBill = Number(chungTu.rows[0]?.tong ?? 0) + chungTuShipHo.kienCoBill;
+  const kienLoi = Number(chungTu.rows[0]?.loi ?? 0) + chungTuShipHo.kienLoi;
   const can = Number(gate.rows[0]?.can ?? 0);
   const da = Number(gate.rows[0]?.da ?? 0);
   const ton = Number(gate.rows[0]?.ton ?? 0);

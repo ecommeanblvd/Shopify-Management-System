@@ -5,7 +5,7 @@ import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { layLyDo } from '@/features/shipments/ly-do-cham';
 import {
-  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI, demKetQuaSla,
+  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla,
   type ChiTietKpi, type MaTieuChi,
 } from '@/features/kpi-logistics/chi-tiet';
 
@@ -68,7 +68,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <div className="text-sm font-semibold">Report chi tiết từng tiêu chí Pillar 1</div>
-          <p className="text-[11px] text-muted-foreground">Bấm một tiêu chí để xem đúng những đơn và kiện làm nên con số ở bảng trên. {PHAM_VI}</p>
+          <p className="text-[11px] text-muted-foreground">Bấm một tiêu chí để xem đúng những đơn và kiện làm nên con số ở bảng trên. Phạm vi chấm khác nhau theo tiêu chí — chọn tiêu chí để xem.</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {MA_LIST.map((m) => (
@@ -86,7 +86,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
 
       {ma && data && !dangTai && (
         <div className="space-y-3 p-4">
-          <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI}</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI_THEO_MA[ma]}</p>
           {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} />}
           {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.2')} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}
@@ -167,10 +167,11 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
     <Khung
       tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
-        ['Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
-        rows.map((r) => [r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
+        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
+        rows.map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
     >
       <thead><tr>
+        <th className={`${TH} text-left`}>Thuộc</th>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Tracking</th>
         <th className={`${TH} text-left`}>Nước</th><th className={`${TH} text-left`}>Hãng</th>
         <th className={`${TH} text-left`}>Gửi</th><th className={`${TH} text-left`}>Giao</th>
@@ -178,9 +179,10 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
         <th className={`${TH} text-left`}>Kết quả</th><th className={`${TH} text-left`}>Lý do chậm</th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={11} className="p-6 text-center text-muted-foreground">Chưa có kiện nào giao xong trong kỳ.</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">Chưa có kiện nào giao xong trong kỳ.</td></tr>}
         {rows.map((r, i) => (
           <tr key={i} className="border-t border-border/50">
+            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.thuocVe}</td>
             <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left font-mono text-[10px]">{r.tracking ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left">{r.nuoc}</td>
@@ -192,9 +194,9 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaLineNgay}{r.slaLineNgay < r.slaNgay && r.soNgay > r.slaLineNgay ? ' ⚑' : ''}</td>
             <td className={`px-2.5 py-1.5 text-left font-medium ${mau[r.ketQua]}`}>{NHAN_KET_QUA_SLA[r.ketQua]}</td>
             <td className="px-2.5 py-1.5 text-left">
-              {ganLyDoDuoc
+              {ganLyDoDuoc && r.shipmentId
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} sauKhiLuu={sauKhiLuu} />
-                : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
+                : <span className="text-muted-foreground" title={r.shipmentId ? undefined : 'Đơn ship hộ lên từ Lark — chưa có chỗ lưu lý do chậm'}>{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
             </td>
           </tr>
         ))}
@@ -209,18 +211,20 @@ function BangChungTu({ rows, ky }: { rows: NonNullable<ChiTietKpi['chungTu']>; k
     <Khung
       tomTat={<><b>{rows.length}</b> kiện phát sinh phí sửa địa chỉ · tổng <b>{vnd(tong)}</b></>}
       onCsv={() => taiCsv(`kpi-${ky}-1.3-don-hoan-hao.csv`,
-        ['Đơn', 'Tracking', 'Nước', 'Ngày gửi', 'Phí sửa địa chỉ (VND)', 'Tổng bill kiện (VND)'],
-        rows.map((r) => [r.maDon, r.tracking, r.nuoc, r.ngayGui, r.phiSuaDiaChiVnd, r.tongBillVnd]))}
+        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Ngày gửi', 'Phí sửa địa chỉ (VND)', 'Tổng bill kiện (VND)'],
+        rows.map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.ngayGui, r.phiSuaDiaChiVnd, r.tongBillVnd]))}
     >
       <thead><tr>
+        <th className={`${TH} text-left`}>Thuộc</th>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Tracking</th>
         <th className={`${TH} text-left`}>Nước</th><th className={`${TH} text-left`}>Ngày gửi</th>
         <th className={`${TH} text-right`}>Phí sửa địa chỉ</th><th className={`${TH} text-right`}>Tổng bill kiện</th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Không kiện nào phát sinh phí sửa địa chỉ — tiêu chí này đạt tuyệt đối.</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Không kiện nào phát sinh phí sửa địa chỉ — tiêu chí này đạt tuyệt đối.</td></tr>}
         {rows.map((r, i) => (
           <tr key={i} className="border-t border-border/50">
+            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.thuocVe}</td>
             <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left font-mono text-[10px]">{r.tracking ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left">{r.nuoc ?? '—'}</td>

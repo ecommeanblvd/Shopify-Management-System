@@ -14,7 +14,8 @@ import { db } from '@/db/client';
 import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU } from '@/features/shipments/sop-giao-hang';
 import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
-import { STORE_VAN_HANH } from './pham-vi';
+import { STORE_VAN_HANH, nhanThuocVe } from './pham-vi';
+import { docSlaShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import {
   CACH_DO, xepLoaiSla, chenhSauThuHoi,
   type ChiTietKpi, type MaTieuChi, type DongAmCuoc, type DongSla, type DongChungTu, type DongSizeThung,
@@ -78,14 +79,14 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
   }
 
   if (ma === '1.2') {
-    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; ngay: string; ly_do: string | null }>(sql`
+    // 1.2 chấm MỌI kiện mình chạy nên KHÔNG lọc store; kiện ship hộ lên từ Lark cộng thêm ở dưới.
+    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; ngay: string; ly_do: string | null; dom: string }>(sql`
       SELECT s.id AS id, o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
              (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay,
-             s.ly_do_cham AS ly_do
+             s.ly_do_cham AS ly_do, st.shop_domain AS dom
         FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
-       WHERE st.shop_domain = ${STORE_VAN_HANH}
-         AND s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
+       WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
          AND s.delivered_at::timestamp >= s.label_created_at
          AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
        ORDER BY (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400) DESC;`);
@@ -101,29 +102,36 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       // phạm vi chấm (VN nội địa) — khớp đúng bộ lọc của `chamKpi`.
       const biLoaiTru = loaiTruKhoiKpi(r.ly_do) || nuoc in NUOC_LOAI_TRU;
       return {
-        shipmentId: r.id, maDon: r.don, tracking: r.tk, nuoc, line,
+        shipmentId: r.id, nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
+        maDon: r.don, tracking: r.tk, nuoc, line,
         ngayGui: ngay(r.gui) ?? '', ngayGiao: ngay(r.giao) ?? '',
         soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru),
         lyDoCham: r.ly_do,
       };
     });
-    return { ...goc, sla: slaRows };
+    const shipHo = await docSlaShipHo(tu, den);
+    const sla = [...slaRows, ...shipHo].sort((a, b) => b.soNgay - a.soNgay);
+    return { ...goc, sla };
   }
 
   if (ma === '1.3') {
-    const { rows } = await db.execute<{ don: string | null; tk: string | null; cc: string | null; ngay: string | null; phi: string; tong: string | null }>(sql`
+    // Như 1.2: không lọc store, và cộng thêm kiện ship hộ từ Lark.
+    const { rows } = await db.execute<{ don: string | null; tk: string | null; cc: string | null; ngay: string | null; phi: string; tong: string | null; dom: string }>(sql`
       SELECT o.shopify_order_number AS don, s.tracking_number AS tk, o.ship_country AS cc,
-             s.label_created_at::text AS ngay, c.address_correction::text AS phi, c.total_amount::text AS tong
+             s.label_created_at::text AS ngay, c.address_correction::text AS phi, c.total_amount::text AS tong,
+             st.shop_domain AS dom
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
-       WHERE st.shop_domain = ${STORE_VAN_HANH}
-         AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
-         AND COALESCE(c.address_correction::numeric, 0) > 0
-       ORDER BY c.address_correction::numeric DESC;`);
+       WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
+         AND COALESCE(c.address_correction::numeric, 0) > 0;`);
     const chungTu: DongChungTu[] = rows.map((r) => ({
+      nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
       maDon: r.don, tracking: r.tk, nuoc: r.cc, ngayGui: ngay(r.ngay),
       phiSuaDiaChiVnd: Math.round(Number(r.phi)), tongBillVnd: Math.round(Number(r.tong ?? 0)),
     }));
+    const shipHo = await docChungTuShipHo(tu, den);
+    chungTu.push(...shipHo.dong);
+    chungTu.sort((a, b) => b.phiSuaDiaChiVnd - a.phiSuaDiaChiVnd);
     return { ...goc, chungTu };
   }
 
