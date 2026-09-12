@@ -2237,6 +2237,9 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   larkRecordId: text('lark_record_id'),
   larkOrderNumber: text('lark_order_number'),
   larkSyncedAt: timestamp('lark_synced_at'),
+  // MÃ CỦA BRAND trên Lark (cột "Brand Reference", ví dụ #KLS2053). Đây là mã anh em vận hành
+  // và brand dùng khi nói chuyện, còn `code` là mã nội bộ — tra theo mã này mới nhanh.
+  brandReference: text('brand_reference'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),
@@ -2256,8 +2259,12 @@ export const shipHoSuCo = pgTable('ship_ho_su_co', {
   thuocVe: text('thuoc_ve').notNull(),
   ngay: date('ngay').notNull(),
   moTa: text('mo_ta'),
+  /** Mã các diễn biến đã tick (xem DIEN_BIEN trong features/ship-ho/su-co.ts) — để khỏi phải gõ. */
+  dienBien: jsonb('dien_bien').notNull().default([]),
   chiPhi: jsonb('chi_phi').notNull().default([]),
   tongChiPhiVnd: numeric('tong_chi_phi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
+  /** false = khai báo trước, tiền chốt sau. Cho phép ghi sự cố trong 7 ngày dù chưa biết thiệt hại. */
+  daChotTien: boolean('da_chot_tien').notNull().default(false),
   daThuHoiVnd: numeric('da_thu_hoi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
   createdBy: text('created_by'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

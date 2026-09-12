@@ -49,6 +49,7 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
     id: schema.shipHoOrders.id, code: schema.shipHoOrders.code,
     tracking: schema.shipHoOrders.trackingNumber, shippedAt: schema.shipHoOrders.shippedAt,
     larkRecordId: schema.shipHoOrders.larkRecordId,
+    brandReference: schema.shipHoOrders.brandReference,
   }).from(schema.shipHoOrders);
 
   const theoTracking = new Map<string, (typeof hienCo)[number]>();
@@ -69,7 +70,8 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
       // Đã có đơn: chỉ sửa ngày gửi (và gắn liên kết Lark), KHÔNG đụng tiền hay trạng thái —
       // những thứ đó hệ thống đã có nguồn riêng là hoá đơn carrier.
       const doiNgay = d.ngayGui != null && d.ngayGui !== co.shippedAt;
-      if (!doiNgay && co.larkRecordId === d.recordId) { boQua('đã khớp, không có gì đổi'); continue; }
+      const doiMaBrand = d.brandReference != null && d.brandReference !== co.brandReference;
+      if (!doiNgay && !doiMaBrand && co.larkRecordId === d.recordId) { boQua('đã khớp, không có gì đổi'); continue; }
       if (doiNgay) {
         kq.suaNgayGui += 1;
         if (kq.viDu.length < 10) kq.viDu.push(`${co.code}: ${co.shippedAt ?? '—'} → ${d.ngayGui} (Lark ${d.maLark ?? '?'})`);
@@ -77,6 +79,7 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
       if (!dryRun) {
         await db.update(schema.shipHoOrders).set({
           ...(doiNgay ? { shippedAt: d.ngayGui } : {}),
+          ...(doiMaBrand ? { brandReference: d.brandReference } : {}),
           larkRecordId: d.recordId,
           larkOrderNumber: d.maLark,
           larkSyncedAt: new Date(),
@@ -142,6 +145,7 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     carrierCostVnd: null,
     larkRecordId: d.recordId,
     larkOrderNumber: d.maLark,
+    brandReference: d.brandReference,
     larkSyncedAt: new Date(),
     // Có mã vận đơn nghĩa là hàng đã đi — 'shipped' là trạng thái đúng nhất mà không
     // giả định gì thêm về tiền hay việc đã giao.

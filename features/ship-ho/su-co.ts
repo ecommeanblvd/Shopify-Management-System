@@ -45,6 +45,34 @@ export const LOAI_SU_CO: LoaiSuCo[] = [
   { ma: 'khac', ten: 'Khác (ghi rõ trong mô tả)', macDinhThuocVe: 'khac', khoanGoiY: [] },
 ];
 
+/**
+ * DIỄN BIẾN để TICK thay vì gõ (CEO 12/09/2026: "chọn các option và có note trong trường hợp
+ * muốn ghi nhiều thêm"). Mục tiêu là khai báo trong 7 ngày mà không phải viết gì — ô mô tả chỉ
+ * dùng khi có chuyện ngoài danh mục.
+ *
+ * `goiYCho` = tick sẵn cho loại sự cố đó, người nhập bỏ tick được.
+ */
+export interface DienBien { ma: string; ten: string; goiYCho?: string[] }
+
+export const DIEN_BIEN: DienBien[] = [
+  { ma: 'dang_hoan_ve', ten: 'Đang hoàn hàng về', goiYCho: ['sai_dia_chi_giao', 'thieu_chung_tu', 'brand_sai_thong_tin', 'khach_tu_choi'] },
+  { ma: 'da_hoan_ve', ten: 'Hàng đã về tới kho' },
+  { ma: 'brand_lam_lai_hang', ten: 'Brand phải làm lại hàng', goiYCho: ['sai_dia_chi_giao', 'dong_goi_hong'] },
+  { ma: 'da_mua_lai_hang', ten: 'Mình đã mua lại hàng cho khách' },
+  { ma: 'da_ship_lai', ten: 'Đã gửi lại kiện mới cho khách' },
+  { ma: 'dang_doi_boi_thuong', ten: 'Đang đòi hãng bồi thường', goiYCho: ['hang_lam_mat', 'hang_lam_hong', 'hang_giao_cham'] },
+  { ma: 'da_bao_brand', ten: 'Đã thông báo cho brand' },
+  { ma: 'da_bao_khach', ten: 'Đã thông báo cho khách nhận' },
+  { ma: 'cho_tien_bill', ten: 'Chờ hoá đơn carrier để chốt tiền' },
+];
+
+const DIEN_BIEN_THEO_MA = new Map(DIEN_BIEN.map((d) => [d.ma, d]));
+export const nhanDienBien = (ma: string): string => DIEN_BIEN_THEO_MA.get(ma)?.ten ?? ma;
+
+/** Diễn biến tick sẵn cho một loại sự cố — để mở form là đã gần đủ, chỉ sửa cái khác. */
+export const dienBienGoiY = (maLoai: string): string[] =>
+  DIEN_BIEN.filter((d) => d.goiYCho?.includes(maLoai)).map((d) => d.ma);
+
 const THEO_MA = new Map(LOAI_SU_CO.map((l) => [l.ma, l]));
 export const layLoaiSuCo = (ma: string | null | undefined): LoaiSuCo | null => (ma ? THEO_MA.get(ma) ?? null : null);
 
@@ -99,6 +127,8 @@ export interface SuCoTomTat {
   nGhiTre: number;
   /** Số sự cố còn để 'khac' tức chưa quy được trách nhiệm — cũng là điều kiện Gate. */
   nChuaQuyTrachNhiem: number;
+  /** Số sự cố đã khai báo nhưng chưa chốt tiền — còn phải quay lại điền. */
+  nChuaChotTien: number;
 }
 
 export interface DongSuCoTomTat {
@@ -106,6 +136,8 @@ export interface DongSuCoTomTat {
   thuocVe: string;
   tongChiPhiVnd: number;
   daThuHoiVnd: number;
+  /** false = mới khai báo, chưa chốt tiền. Thiệt hại chưa vào hệ số cho tới khi chốt. */
+  daChotTien?: boolean;
   /** Ngày sự cố xảy ra và ngày ghi vào hệ thống (ISO). Thiếu thì không tính là ghi trễ. */
   ngay?: string | null;
   ngayGhi?: string | null;
@@ -113,7 +145,7 @@ export interface DongSuCoTomTat {
 
 /** Gộp danh sách sự cố thành các số hiện trên thẻ KPI. */
 export function tomTatSuCo(dong: ReadonlyArray<DongSuCoTomTat>): SuCoTomTat {
-  let tong = 0, rong = 0, noiBo = 0, chamDiem = 0, nNoiBo = 0, nGhiTre = 0, nChua = 0;
+  let tong = 0, rong = 0, noiBo = 0, chamDiem = 0, nNoiBo = 0, nGhiTre = 0, nChua = 0, nChuaTien = 0;
   for (const d of dong) {
     const r = thietHaiRong(d.tongChiPhiVnd, d.daThuHoiVnd);
     tong += Math.max(0, Math.round(d.tongChiPhiVnd));
@@ -124,11 +156,12 @@ export function tomTatSuCo(dong: ReadonlyArray<DongSuCoTomTat>): SuCoTomTat {
       nNoiBo += 1;
     }
     if (d.thuocVe === 'khac') nChua += 1;
+    if (d.daChotTien === false) nChuaTien += 1;
     if (d.ngay && d.ngayGhi && soNgayGhiTre(d.ngay, d.ngayGhi) > HAN_GHI_SU_CO_NGAY) nGhiTre += 1;
   }
   return {
     n: dong.length, nNoiBo, tongChiPhiVnd: tong, thietHaiRongVnd: rong,
     thietHaiNoiBoVnd: noiBo, thietHaiChamDiemVnd: chamDiem,
-    nGhiTre, nChuaQuyTrachNhiem: nChua,
+    nGhiTre, nChuaQuyTrachNhiem: nChua, nChuaChotTien: nChuaTien,
   };
 }

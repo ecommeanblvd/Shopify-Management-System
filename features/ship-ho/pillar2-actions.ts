@@ -14,7 +14,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { slaCuaNuoc } from '@/features/shipments/sop-giao-hang';
 import { xepLoaiSla, type KetQuaSla } from '@/features/kpi-logistics/chi-tiet';
-import { layLoaiSuCo, tongChiPhi, thietHaiRong, type KhoanChiPhi } from './su-co';
+import { layLoaiSuCo, tongChiPhi, thietHaiRong, DIEN_BIEN, type KhoanChiPhi } from './su-co';
 
 async function requireXem(): Promise<void> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -77,6 +77,10 @@ export interface DongSuCo {
   ngay: string;
   /** Ngày GHI vào hệ thống — quá hạn 7 ngày so với `ngay` là điều kiện trượt Gate Pillar 3. */
   ngayGhi: string;
+  /** Mã diễn biến đã tick. */
+  dienBien: string[];
+  /** false = khai báo trước, tiền chốt sau. */
+  daChotTien: boolean;
   moTa: string | null;
   chiPhi: KhoanChiPhi[];
   tongChiPhiVnd: number;
@@ -105,9 +109,9 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
         FROM ship_ho_orders o
        WHERE o.shipped_at IS NOT NULL AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
        ORDER BY o.shipped_at, o.code;`),
-    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; ghi: string; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
+    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; ghi: string; dien_bien: unknown; da_chot_tien: boolean; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
       SELECT s.id, s.order_id, o.code AS ma, o.partner_brand_slug AS brand, s.loai, s.thuoc_ve, s.ngay::text AS ngay,
-             s.created_at::text AS ghi,
+             s.created_at::text AS ghi, s.dien_bien, s.da_chot_tien,
              s.mo_ta, s.chi_phi, s.tong_chi_phi_vnd::text AS tong, s.da_thu_hoi_vnd::text AS thu_hoi
         FROM ship_ho_su_co s JOIN ship_ho_orders o ON o.id = s.order_id
        WHERE s.ngay >= ${tu}::date AND s.ngay <= ${den}::date
@@ -155,6 +159,8 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
       id: r.id, orderId: r.order_id, maDon: r.ma, brand: r.brand,
       loai: r.loai, tenLoai: layLoaiSuCo(r.loai)?.ten ?? r.loai,
       thuocVe: r.thuoc_ve, ngay: r.ngay, ngayGhi: r.ghi, moTa: r.mo_ta,
+      dienBien: Array.isArray(r.dien_bien) ? (r.dien_bien as string[]) : [],
+      daChotTien: r.da_chot_tien,
       chiPhi: Array.isArray(r.chi_phi) ? (r.chi_phi as KhoanChiPhi[]) : [],
       tongChiPhiVnd: tong, daThuHoiVnd: thuHoi, thietHaiRongVnd: thietHaiRong(tong, thuHoi),
     };
@@ -170,25 +176,38 @@ export interface LuuSuCoInput {
   thuocVe: string;
   ngay: string;
   moTa: string | null;
+  /** Mã diễn biến đã tick — thay cho việc gõ mô tả. */
+  dienBien?: string[];
   chiPhi: KhoanChiPhi[];
   daThuHoiVnd: number;
+  /** true = đã chốt tiền. Bỏ trống thì suy từ việc có khoản tiền nào hay chưa. */
+  daChotTien?: boolean;
 }
 
-/** Thêm hoặc sửa một sự cố. Tổng tiền LUÔN tính lại từ danh sách khoản, không nhận số gửi lên. */
+/**
+ * Thêm hoặc sửa một sự cố. Tổng tiền LUÔN tính lại từ danh sách khoản, không nhận số gửi lên.
+ *
+ * CHO PHÉP LƯU KHI CHƯA CÓ TIỀN (CEO 12/09/2026): hạn ghi sự cố là 7 ngày nhưng thiệt hại thật
+ * thường chỉ biết sau khi hàng hoàn về và hoá đơn carrier tới. Bắt phải có tiền mới lưu được thì
+ * Đức buộc phải ghi muộn, tức chính quy định làm trượt Gate.
+ */
 export async function luuSuCo(input: LuuSuCoInput): Promise<{ ok: true; id: string }> {
   const userId = await requireSua();
   if (!layLoaiSuCo(input.loai)) throw new Error('Loại sự cố không hợp lệ');
   const khoan = input.chiPhi.filter((k) => k.khoan.trim() && Number.isFinite(k.tienVnd) && k.tienVnd > 0);
   const tong = tongChiPhi(khoan);
   const thuHoi = Math.max(0, Math.round(input.daThuHoiVnd));
+  const maDienBien = (input.dienBien ?? []).filter((m) => DIEN_BIEN.some((d) => d.ma === m));
   const gia = {
     orderId: input.orderId,
     loai: input.loai,
     thuocVe: input.thuocVe,
     ngay: input.ngay,
     moTa: input.moTa?.trim() || null,
+    dienBien: maDienBien,
     chiPhi: khoan,
     tongChiPhiVnd: String(tong),
+    daChotTien: input.daChotTien ?? tong > 0,
     daThuHoiVnd: String(thuHoi),
     updatedAt: new Date(),
   };
@@ -220,4 +239,32 @@ export async function dsDonShipHo(tu: string, den: string): Promise<Array<{ id: 
     .where(and(gte(schema.shipHoOrders.shippedAt, tu), lte(schema.shipHoOrders.shippedAt, den)))
     .orderBy(schema.shipHoOrders.code);
   return rows;
+}
+
+export interface DonTimDuoc { id: string; ma: string; maBrand: string | null; brand: string; nuoc: string; tracking: string | null; ngayGui: string | null }
+
+/**
+ * Tìm đơn ship hộ để ghi sự cố — theo MÃ BRAND (#KLS2053), mã đơn nội bộ, hoặc mã vận đơn.
+ *
+ * Tìm trên TOÀN BỘ đơn chứ không chỉ đơn trong kỳ đang xem: sự cố hôm nay thường thuộc đơn gửi
+ * từ tháng trước (ca KLS2053 gửi 24/08, phát hiện sang tháng 9), mà danh sách theo kỳ thì không
+ * có đơn đó nên không ai ghi được.
+ */
+export async function timDonShipHo(tuKhoa: string): Promise<DonTimDuoc[]> {
+  await requireXem();
+  const q = tuKhoa.trim().replace(/^#/, '');
+  if (q.length < 2) return [];
+  const like = `%${q}%`;
+  const { rows } = await db.execute<{ id: string; ma: string; ma_brand: string | null; brand: string; nuoc: string; tk: string | null; gui: string | null }>(sql`
+    SELECT id, code AS ma, brand_reference AS ma_brand, partner_brand_slug AS brand,
+           COALESCE(country, '?') AS nuoc, tracking_number AS tk, shipped_at::text AS gui
+      FROM ship_ho_orders
+     WHERE brand_reference ILIKE ${like} OR code ILIKE ${like} OR tracking_number ILIKE ${like}
+            OR lark_order_number ILIKE ${like}
+     ORDER BY shipped_at DESC NULLS LAST
+     LIMIT 20;`);
+  return rows.map((r) => ({
+    id: r.id, ma: r.ma, maBrand: r.ma_brand, brand: r.brand, nuoc: r.nuoc,
+    tracking: r.tk, ngayGui: r.gui ? r.gui.slice(0, 10) : null,
+  }));
 }

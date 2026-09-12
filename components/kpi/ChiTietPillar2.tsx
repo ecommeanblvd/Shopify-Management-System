@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { NHAN_KET_QUA_SLA } from '@/features/kpi-logistics/chi-tiet';
-import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
-import type { ChiTietPillar2, LuuSuCoInput } from '@/features/ship-ho/pillar2-actions';
+import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, DIEN_BIEN, dienBienGoiY, nhanDienBien, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
+import type { ChiTietPillar2, LuuSuCoInput, DonTimDuoc } from '@/features/ship-ho/pillar2-actions';
 
 type Tab = 'tien' | 'sla' | 'su-co';
 const TABS: Array<{ key: Tab; nhan: string }> = [
@@ -27,11 +27,13 @@ function taiCsv(ten: string, header: string[], rows: CsvValue[][]) {
  * Report chi tiết Pillar 2 — ship hộ. Ba mặt của cùng một tập đơn: tiền, tiến độ, sự cố.
  * Nạp lười; chỉ người có quyền quản lý ship hộ mới ghi được sự cố.
  */
-export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, suaDuoc }: {
+export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, timDon, suaDuoc }: {
   ky: string; tu: string; den: string;
   tai: (tu: string, den: string) => Promise<ChiTietPillar2>;
   luu: (input: LuuSuCoInput) => Promise<{ ok: true; id: string }>;
   xoa: (id: string) => Promise<{ ok: true }>;
+  /** Tìm đơn theo mã brand / mã đơn / mã vận đơn — trên toàn bộ đơn, không chỉ trong kỳ. */
+  timDon: (tuKhoa: string) => Promise<DonTimDuoc[]>;
   suaDuoc: boolean;
 }) {
   const [tab, setTab] = useState<Tab | null>(null);
@@ -78,7 +80,7 @@ export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, suaDuoc }: {
           {tab === 'sla' && <BangSlaShipHo rows={data.sla} ky={ky} />}
           {tab === 'su-co' && (
             <BangSuCo rows={data.suCo} donHang={data.donHang} ky={ky} suaDuoc={suaDuoc}
-              luu={luu} xoa={xoa} sauKhiLuu={() => nap(true)} />
+              luu={luu} xoa={xoa} timDon={timDon} sauKhiLuu={() => nap(true)} />
           )}
         </div>
       )}
@@ -184,13 +186,14 @@ function BangSlaShipHo({ rows, ky }: { rows: ChiTietPillar2['sla']; ky: string }
   );
 }
 
-function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, sauKhiLuu }: {
+function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, timDon, sauKhiLuu }: {
   rows: ChiTietPillar2['suCo'];
   donHang: ChiTietPillar2['donHang'];
   ky: string;
   suaDuoc: boolean;
   luu: (input: LuuSuCoInput) => Promise<{ ok: true; id: string }>;
   xoa: (id: string) => Promise<{ ok: true }>;
+  timDon: (tuKhoa: string) => Promise<DonTimDuoc[]>;
   sauKhiLuu: () => void;
 }) {
   const [mo, setMo] = useState(false);
@@ -201,11 +204,14 @@ function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, sauKhiLuu }: {
         tomTat={<><b>{t.n}</b> sự cố · tổng chi phí <b>{vnd(t.tongChiPhiVnd)}</b> · thiệt hại ròng <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiRongVnd)}</b> · trong đó lỗi nội bộ <b>{t.nNoiBo}</b> vụ <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiNoiBoVnd)}</b>
           {t.thietHaiChamDiemVnd !== t.thietHaiNoiBoVnd && <> · quy ra điểm <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiChamDiemVnd)}</b> (lỗi sai địa chỉ nhân 2, không phải tiền thật)</>}
           {t.nGhiTre > 0 && <> · <b className="text-red-600 dark:text-red-400">{t.nGhiTre}</b> vụ ghi muộn quá {HAN_GHI_SU_CO_NGAY} ngày → trượt Gate Pillar 3</>}
-          {t.nChuaQuyTrachNhiem > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaQuyTrachNhiem}</b> vụ chưa quy trách nhiệm → trượt Gate Pillar 3</>}</>}
+          {t.nChuaQuyTrachNhiem > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaQuyTrachNhiem}</b> vụ chưa quy trách nhiệm → trượt Gate Pillar 3</>}
+          {t.nChuaChotTien > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaChotTien}</b> vụ chưa chốt tiền, thiệt hại chưa vào hệ số</>}</>}
         onCsv={() => taiCsv(`kpi-${ky}-p2-su-co.csv`,
-          ['Ngày', 'Mã đơn', 'Brand', 'Loại sự cố', 'Thuộc về', 'Chi phí (VND)', 'Đã đòi lại (VND)', 'Thiệt hại ròng (VND)', 'Các khoản', 'Mô tả'],
+          ['Ngày', 'Mã đơn', 'Brand', 'Loại sự cố', 'Thuộc về', 'Đã chốt tiền', 'Chi phí (VND)', 'Đã đòi lại (VND)', 'Thiệt hại ròng (VND)', 'Diễn biến', 'Các khoản', 'Ghi thêm'],
           rows.map((r) => [r.ngay, r.maDon, r.brand, r.tenLoai, NHAN_THUOC_VE[r.thuocVe as ThuocVe] ?? r.thuocVe,
+            r.daChotTien ? 'Đã chốt' : 'Chưa chốt',
             r.tongChiPhiVnd, r.daThuHoiVnd, r.thietHaiRongVnd,
+            r.dienBien.map(nhanDienBien).join(' | '),
             r.chiPhi.map((k) => `${k.khoan}: ${k.tienVnd}`).join(' | '), r.moTa]))}
       >
         <thead><tr>
@@ -223,10 +229,15 @@ function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, sauKhiLuu }: {
               <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon}<div className="text-[10px] text-muted-foreground">{r.brand}</div></td>
               <td className="px-2.5 py-1.5 text-left">{r.tenLoai}</td>
               <td className={`px-2.5 py-1.5 text-left ${r.thuocVe === 'noi_bo' ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>{NHAN_THUOC_VE[r.thuocVe as ThuocVe] ?? r.thuocVe}</td>
-              <td className="px-2.5 py-1.5 text-right">{vnd(r.tongChiPhiVnd)}</td>
+              <td className="px-2.5 py-1.5 text-right">
+                {r.daChotTien
+                  ? vnd(r.tongChiPhiVnd)
+                  : <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">chưa chốt tiền</span>}
+              </td>
               <td className="px-2.5 py-1.5 text-right text-emerald-600 dark:text-emerald-400">{r.daThuHoiVnd > 0 ? `−${vnd(r.daThuHoiVnd)}` : '—'}</td>
               <td className="px-2.5 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{vnd(r.thietHaiRongVnd)}</td>
               <td className="px-2.5 py-1.5 text-left text-muted-foreground">
+                {r.dienBien.length > 0 && <div>{r.dienBien.map(nhanDienBien).join(' · ')}</div>}
                 {r.chiPhi.map((k, i) => <div key={i}>{k.khoan}: {vnd(k.tienVnd)}</div>)}
                 {r.moTa && <div className="italic">{r.moTa}</div>}
               </td>
@@ -243,26 +254,42 @@ function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, sauKhiLuu }: {
 
       {suaDuoc && (
         mo
-          ? <FormSuCo donHang={donHang} luu={luu} xong={() => { setMo(false); sauKhiLuu(); }} huy={() => setMo(false)} />
+          ? <FormSuCo donHang={donHang} timDon={timDon} luu={luu} xong={() => { setMo(false); sauKhiLuu(); }} huy={() => setMo(false)} />
           : <button type="button" onClick={() => setMo(true)} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">+ Ghi sự cố</button>
       )}
     </div>
   );
 }
 
-function FormSuCo({ donHang, luu, xong, huy }: {
+/**
+ * Form khai báo sự cố — thiết kế để TICK, không gõ (CEO 12/09/2026).
+ *
+ * Ba chỗ từng bắt gõ nhiều, nay bỏ:
+ *   - tìm đơn: gõ mã brand quen dùng (#KLS2053) thay vì lần trong danh sách dài, và tìm trên
+ *     TOÀN BỘ đơn vì sự cố hôm nay thường thuộc đơn gửi tháng trước;
+ *   - diễn biến: tick từ danh mục, loại sự cố tự tick sẵn phần hay gặp;
+ *   - tiền: tên khoản điền sẵn theo loại, và LƯU ĐƯỢC KHI CHƯA CÓ TIỀN để kịp hạn 7 ngày.
+ * Ô ghi thêm chỉ dùng khi có chuyện ngoài danh mục.
+ */
+function FormSuCo({ donHang, timDon, luu, xong, huy }: {
   donHang: ChiTietPillar2['donHang'];
+  timDon: (tuKhoa: string) => Promise<DonTimDuoc[]>;
   luu: (input: LuuSuCoInput) => Promise<{ ok: true; id: string }>;
   xong: () => void;
   huy: () => void;
 }) {
-  const [orderId, setOrderId] = useState(donHang[0]?.id ?? '');
+  const [orderId, setOrderId] = useState('');
+  const [tuKhoa, setTuKhoa] = useState('');
+  const [ketQua, setKetQua] = useState<DonTimDuoc[] | null>(null);
+  const [dangTim, startTim] = useTransition();
   const [loai, setLoai] = useState(LOAI_SU_CO[0].ma);
   const [thuocVe, setThuocVe] = useState<ThuocVe>(LOAI_SU_CO[0].macDinhThuocVe);
   const [ngay, setNgay] = useState(new Date().toISOString().slice(0, 10));
+  const [dienBien, setDienBien] = useState<string[]>(dienBienGoiY(LOAI_SU_CO[0].ma));
   const [moTa, setMoTa] = useState('');
   const [thuHoi, setThuHoi] = useState('0');
-  const [khoan, setKhoan] = useState<KhoanChiPhi[]>([{ khoan: '', tienVnd: 0 }]);
+  const [khoan, setKhoan] = useState<KhoanChiPhi[]>(
+    LOAI_SU_CO[0].khoanGoiY.length ? LOAI_SU_CO[0].khoanGoiY.map((k) => ({ khoan: k, tienVnd: 0 })) : [{ khoan: '', tienVnd: 0 }]);
   const [loi, setLoi] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -271,20 +298,54 @@ function FormSuCo({ donHang, luu, xong, huy }: {
     const l = layLoaiSuCo(ma);
     if (l) {
       setThuocVe(l.macDinhThuocVe);
+      setDienBien(dienBienGoiY(ma));
       if (l.khoanGoiY.length) setKhoan(l.khoanGoiY.map((k) => ({ khoan: k, tienVnd: 0 })));
     }
   };
+  const tim = () => startTim(async () => {
+    try { setKetQua(await timDon(tuKhoa)); setLoi(null); }
+    catch (e) { setLoi(String((e as Error).message ?? e)); }
+  });
+  const tick = (ma: string) => setDienBien(dienBien.includes(ma) ? dienBien.filter((x) => x !== ma) : [...dienBien, ma]);
+  // Đơn đang chọn: ưu tiên kết quả tìm, sau đó danh sách đơn trong kỳ.
+  const donDangChon = ketQua?.find((d) => d.id === orderId)
+    ?? donHang.find((d) => d.id === orderId);
   const o = 'h-8 rounded-md border border-input bg-input/30 px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40';
   const tong = tongChiPhi(khoan);
 
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="space-y-1 text-xs"><div className="font-medium">Đơn ship hộ</div>
-          <select className={`${o} w-full`} value={orderId} onChange={(e) => setOrderId(e.target.value)}>
-            {donHang.map((d) => <option key={d.id} value={d.id}>{d.ma} · {d.brand} · {d.nuoc}</option>)}
-          </select>
-        </label>
+        <div className="space-y-1 text-xs sm:col-span-2">
+          <div className="font-medium">Đơn ship hộ — tìm theo mã brand, mã đơn hoặc mã vận đơn</div>
+          <div className="flex gap-2">
+            <input className={`${o} flex-1`} placeholder="Ví dụ KLS2053" value={tuKhoa}
+              onChange={(e) => setTuKhoa(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); tim(); } }} />
+            <button type="button" disabled={dangTim || tuKhoa.trim().length < 2}
+              className="rounded-md border border-border px-3 text-xs font-medium hover:bg-muted disabled:opacity-50"
+              onClick={tim}>{dangTim ? 'Đang tìm…' : 'Tìm'}</button>
+          </div>
+          {ketQua != null && (
+            ketQua.length === 0
+              ? <p className="text-[11px] text-muted-foreground">Không có đơn nào khớp. Thử mã vận đơn hoặc mã đơn nội bộ.</p>
+              : <select className={`${o} w-full`} value={orderId} onChange={(e) => setOrderId(e.target.value)}>
+                  <option value="">— chọn đơn —</option>
+                  {ketQua.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.maBrand ? `${d.maBrand} · ` : ''}{d.ma} · {d.brand} · {d.nuoc}{d.ngayGui ? ` · gửi ${d.ngayGui}` : ''}
+                    </option>
+                  ))}
+                </select>
+          )}
+          {ketQua == null && (
+            <select className={`${o} w-full`} value={orderId} onChange={(e) => setOrderId(e.target.value)}>
+              <option value="">— hoặc chọn trong {donHang.length} đơn của kỳ này —</option>
+              {donHang.map((d) => <option key={d.id} value={d.id}>{d.ma} · {d.brand} · {d.nuoc}</option>)}
+            </select>
+          )}
+          {donDangChon && <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Đã chọn {donDangChon.ma}</p>}
+        </div>
         <label className="space-y-1 text-xs"><div className="font-medium">Loại sự cố</div>
           <select className={`${o} w-full`} value={loai} onChange={(e) => doiLoai(e.target.value)}>
             {LOAI_SU_CO.map((l) => <option key={l.ma} value={l.ma}>{l.ten}</option>)}
@@ -301,7 +362,19 @@ function FormSuCo({ donHang, luu, xong, huy }: {
       </div>
 
       <div className="space-y-1.5">
-        <div className="text-xs font-medium">Các khoản tiền</div>
+        <div className="text-xs font-medium">Diễn biến — tick cái nào đúng, khỏi phải gõ</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {DIEN_BIEN.map((d) => (
+            <label key={d.ma} className="flex items-center gap-1.5 text-xs">
+              <input type="checkbox" className="size-3.5 accent-primary" checked={dienBien.includes(d.ma)} onChange={() => tick(d.ma)} />
+              {d.ten}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="text-xs font-medium">Các khoản tiền — chưa biết thì để trống, lưu trước rồi quay lại điền</div>
         {khoan.map((k, i) => (
           <div key={i} className="flex gap-2">
             <input className={`${o} flex-1`} placeholder="Tên khoản, ví dụ Cước hoàn hàng về" value={k.khoan}
@@ -320,21 +393,25 @@ function FormSuCo({ donHang, luu, xong, huy }: {
         <label className="space-y-1 text-xs"><div className="font-medium">Đã đòi lại được (VND)</div>
           <input type="number" min={0} className={`${o} w-full text-right`} value={thuHoi} onChange={(e) => setThuHoi(e.target.value)} />
         </label>
-        <label className="space-y-1 text-xs"><div className="font-medium">Mô tả</div>
-          <input className={`${o} w-full`} placeholder="Diễn biến, ai xử lý, kết quả" value={moTa} onChange={(e) => setMoTa(e.target.value)} />
+        <label className="space-y-1 text-xs"><div className="font-medium">Ghi thêm (không bắt buộc)</div>
+          <input className={`${o} w-full`} placeholder="Chỉ ghi khi có chuyện ngoài danh mục trên" value={moTa} onChange={(e) => setMoTa(e.target.value)} />
         </label>
       </div>
 
       {loi && <p className="text-xs text-red-600 dark:text-red-400">{loi}</p>}
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-muted-foreground">Tổng chi phí <b className="text-foreground">{vnd(tong)}</b> · thiệt hại ròng <b className="text-foreground">{vnd(Math.max(0, tong - (Number(thuHoi) || 0)))}</b></div>
+        <div className="text-xs text-muted-foreground">
+          {tong > 0
+            ? <>Tổng chi phí <b className="text-foreground">{vnd(tong)}</b> · thiệt hại ròng <b className="text-foreground">{vnd(Math.max(0, tong - (Number(thuHoi) || 0)))}</b></>
+            : <>Chưa có tiền — lưu vẫn được, vụ này sẽ hiện là <b className="text-foreground">chưa chốt tiền</b> để quay lại điền. Hạn ghi sự cố là {HAN_GHI_SU_CO_NGAY} ngày.</>}
+        </div>
         <div className="flex gap-2">
           <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted" onClick={huy}>Huỷ</button>
-          <button type="button" disabled={pending || !orderId || tong <= 0}
+          <button type="button" disabled={pending || !orderId}
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
             onClick={() => start(async () => {
               try {
-                await luu({ orderId, loai, thuocVe, ngay, moTa: moTa || null, chiPhi: khoan, daThuHoiVnd: Number(thuHoi) || 0 });
+                await luu({ orderId, loai, thuocVe, ngay, moTa: moTa || null, dienBien, chiPhi: khoan, daThuHoiVnd: Number(thuHoi) || 0 });
                 xong();
               } catch (e) { setLoi(String((e as Error).message ?? e)); }
             })}>

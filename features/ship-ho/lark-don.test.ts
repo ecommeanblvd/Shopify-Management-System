@@ -101,7 +101,7 @@ describe('docDongLark', () => {
 });
 
 describe('duDeTao', () => {
-  const day = { recordId: 'r', maLark: 'x', trackingNumber: '123', carrierKey: 'fedex', ngayGui: '2026-08-01',
+  const day = { recordId: 'r', maLark: 'x', brandReference: '#KLS2053', trackingNumber: '123', carrierKey: 'fedex', ngayGui: '2026-08-01',
     brandText: 'Kalisa', nuoc: 'QA', thanhPho: null, maBuuChinh: null, diaChi: null, soNha: null,
     nguoiNhan: null, dienThoai: null, email: null, canKg: 1, moTaHang: null,
     thuBrandThamKhaoVnd: null, vonThamKhaoVnd: null, trangThaiGiao: null };
@@ -112,5 +112,14 @@ describe('duDeTao', () => {
     expect(duDeTao({ ...day, nuoc: null }, 'kalisa')).toBe('không đổi được tên nước sang mã ISO');
     expect(duDeTao({ ...day, canKg: 0 }, 'kalisa')).toBe('thiếu cân');
     expect(duDeTao({ ...day, ngayGui: null }, 'kalisa')).toBe('thiếu ngày gửi');
+  });
+});
+
+describe('Brand Reference — mã của brand trên Lark', () => {
+  it('đọc được mã brand để tra đơn theo mã anh em vẫn dùng', () => {
+    expect(docDongLark('r', { [COT.brandReference]: '#KLS2053' }).brandReference).toBe('#KLS2053');
+  });
+  it('dòng chưa có mã brand thì để null, không bịa', () => {
+    expect(docDongLark('r', {}).brandReference).toBeNull();
   });
 });

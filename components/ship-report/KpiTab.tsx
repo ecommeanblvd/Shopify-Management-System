@@ -5,7 +5,7 @@ import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
 import { ChiTietPillar2 } from '@/components/kpi/ChiTietPillar2';
 import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
-import { docChiTietPillar2, luuSuCo, xoaSuCo } from '@/features/ship-ho/pillar2-actions';
+import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/ship-ho/pillar2-actions';
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { kpiLogisticsThang } from '@/db/schema';
 import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
@@ -172,7 +172,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
 
       {bangTieuChi('Pillar 2 — Ship hộ (sản lượng và chất lượng)', diem.p2, false)}
 
-      <ChiTietPillar2 ky={ky} tu={tu} den={den} tai={docChiTietPillar2} luu={luuSuCo} xoa={xoaSuCo} suaDuoc={ghiSuCoDuoc} />
+      <ChiTietPillar2 ky={ky} tu={tu} den={den} tai={docChiTietPillar2} luu={luuSuCo} xoa={xoaSuCo} timDon={timDonShipHo} suaDuoc={ghiSuCoDuoc} />
       {bangTieuChi('Pillar 3 — Đối soát & thu hồi công nợ', diem.p3, false)}
 
       <Card><CardContent className="p-0">

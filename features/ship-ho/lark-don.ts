@@ -21,6 +21,9 @@ export interface DongLarkDon {
   recordId: string;
   /** Mã đơn theo cách đánh số của Lark — lưu để đối chiếu, KHÔNG dùng làm khoá ghép. */
   maLark: string | null;
+  /** Mã của BRAND (cột "Brand Reference", ví dụ #KLS2053) — mã anh em vận hành và brand dùng
+   *  khi nói chuyện, nên phải tra được theo nó. 137/191 dòng Lark có mã này. */
+  brandReference: string | null;
   trackingNumber: string | null;
   carrierKey: string | null;
   /** Ngày brand yêu cầu gửi — dùng làm ngày gửi vì sát ngày đi hàng thật nhất. */
@@ -126,6 +129,7 @@ export function nuocLarkSangIso(ten: string | null): string | null {
 
 export const COT = {
   maLark: 'Order Number',
+  brandReference: 'Brand Reference',
   tracking: 'Tracking Number',
   carrier: 'Couriers',
   ngayGui: 'Ngày tạo Request',
@@ -156,6 +160,7 @@ export function docDongLark(recordId: string, f: Record<string, unknown>): DongL
   return {
     recordId,
     maLark: chuoi(f[COT.maLark]),
+    brandReference: chuoi(f[COT.brandReference]),
     trackingNumber: chuoi(f[COT.tracking])?.replace(/\s+/g, '') ?? null,
     carrierKey: carrierText ? KHOA_CARRIER[chuanHoaTen(carrierText)] ?? null : null,
     ngayGui: ngayISO(f[COT.ngayGui]),
