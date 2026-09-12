@@ -14,7 +14,7 @@
  * cần nhanh) và track-shipments (6 giờ/lần). Để lại đây nữa là chạy trùng.
  */
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
-import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
+import { pushUnsentBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
 import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
@@ -36,6 +36,9 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
   // đó hàng đợi rỗng và việc này còn 0,1 giây. Đặt cửa sổ ngày ở đây sẽ chặn mất
   // đúng những đợt dọn tồn như vậy.
   { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
+  // Store riêng của brand (TINH, Mirer): quét cả đơn đã gửi để MMP nhận chi phí ship
+  // cập nhật khi hoá đơn carrier về muộn. Không force — đơn không đổi tự bị bỏ qua.
+  { key: 'refresh-owned-store', fn: () => pushOwnedStoreOrders({ refresh: true }) },
   { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
   {
     key: 'track-ship-ho',

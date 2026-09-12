@@ -107,13 +107,21 @@ export async function pushUnsentBrandOrders(opts?: { limit?: number; sinceDays?:
  *  - `force`=true: gửi lại tất cả kể cả đã sent (refresh status; MMP dedupe backstop).
  *  - `dryRun`=true: CHỈ đếm số đơn sẽ gửi, KHÔNG POST (read-only, để xác nhận trước).
  */
+/**
+ * `refresh`: quét MỌI đơn store riêng kể cả đã 'sent', nhưng đẩy KHÔNG force nên
+ * `pushOrderToMmp` tự bỏ qua đơn payload không đổi. Dùng để MMP luôn có chi phí ship
+ * mới nhất: hoá đơn carrier thường về SAU lần đẩy đầu, mà chế độ thường chỉ quét đơn
+ * chưa 'sent' nên số cũ nằm lại bên MMP mãi (đo 11/09/2026: 14/20 đơn TA mẫu có
+ * payload đã đổi mà chưa được gửi).
+ */
 export async function pushOwnedStoreOrders(opts?: {
   limit?: number;
   force?: boolean;
+  refresh?: boolean;
   dryRun?: boolean;
   onProgress?: (done: number, total: number, pushed: number, failed: number) => void;
 }): Promise<BackfillResult> {
-  const cond = opts?.force
+  const cond = opts?.force || opts?.refresh
     ? inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES))
     : and(
         inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)),
