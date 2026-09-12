@@ -81,6 +81,8 @@ export interface DongSuCo {
   dienBien: string[];
   /** false = khai báo trước, tiền chốt sau. */
   daChotTien: boolean;
+  /** true = tiền hàng đã có số thật từ đối soát, không ước bằng hệ số. */
+  coTienHang: boolean;
   moTa: string | null;
   chiPhi: KhoanChiPhi[];
   tongChiPhiVnd: number;
@@ -109,9 +111,9 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
         FROM ship_ho_orders o
        WHERE o.shipped_at IS NOT NULL AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
        ORDER BY o.shipped_at, o.code;`),
-    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; ghi: string; dien_bien: unknown; da_chot_tien: boolean; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
+    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; ghi: string; dien_bien: unknown; da_chot_tien: boolean; co_tien_hang: boolean; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
       SELECT s.id, s.order_id, o.code AS ma, o.partner_brand_slug AS brand, s.loai, s.thuoc_ve, s.ngay::text AS ngay,
-             s.created_at::text AS ghi, s.dien_bien, s.da_chot_tien,
+             s.created_at::text AS ghi, s.dien_bien, s.da_chot_tien, s.co_tien_hang,
              s.mo_ta, s.chi_phi, s.tong_chi_phi_vnd::text AS tong, s.da_thu_hoi_vnd::text AS thu_hoi
         FROM ship_ho_su_co s JOIN ship_ho_orders o ON o.id = s.order_id
        WHERE s.ngay >= ${tu}::date AND s.ngay <= ${den}::date
@@ -161,6 +163,7 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
       thuocVe: r.thuoc_ve, ngay: r.ngay, ngayGhi: r.ghi, moTa: r.mo_ta,
       dienBien: Array.isArray(r.dien_bien) ? (r.dien_bien as string[]) : [],
       daChotTien: r.da_chot_tien,
+      coTienHang: r.co_tien_hang,
       chiPhi: Array.isArray(r.chi_phi) ? (r.chi_phi as KhoanChiPhi[]) : [],
       tongChiPhiVnd: tong, daThuHoiVnd: thuHoi, thietHaiRongVnd: thietHaiRong(tong, thuHoi),
     };
@@ -182,6 +185,8 @@ export interface LuuSuCoInput {
   daThuHoiVnd: number;
   /** true = đã chốt tiền. Bỏ trống thì suy từ việc có khoản tiền nào hay chưa. */
   daChotTien?: boolean;
+  /** true = tiền hàng đã có số thật từ đối soát → tắt hệ số hàng hoá. */
+  coTienHang?: boolean;
 }
 
 /**
@@ -208,6 +213,7 @@ export async function luuSuCo(input: LuuSuCoInput): Promise<{ ok: true; id: stri
     chiPhi: khoan,
     tongChiPhiVnd: String(tong),
     daChotTien: input.daChotTien ?? tong > 0,
+    coTienHang: input.coTienHang ?? false,
     daThuHoiVnd: String(thuHoi),
     updatedAt: new Date(),
   };

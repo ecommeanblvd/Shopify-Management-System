@@ -96,10 +96,43 @@ export const heSoNghiemTrong = (ma: string | null | undefined): number =>
 /** Hạn phải GHI sự cố vào hệ thống, tính từ ngày sự cố. Quá hạn → trượt Gate Pillar 3. */
 export const HAN_GHI_SU_CO_NGAY = 7;
 
+/**
+ * Ngày quy định hạn ghi bắt đầu có hiệu lực. Sự cố xảy ra TRƯỚC mốc này được tính hạn từ mốc,
+ * không tính từ ngày sự cố — nếu không thì mọi ca cũ đều thành "ghi trễ" và trượt Gate vì một
+ * quy định chưa tồn tại lúc đó. Ca KLS2053 (sự cố 25/08, quy định có 12/09) là ví dụ.
+ */
+export const NGAY_AP_DUNG_HAN_GHI = '2026-09-12';
+
 /** Số ngày từ lúc sự cố xảy ra tới lúc ghi vào hệ thống. Âm (ghi trước ngày sự cố) coi là 0. */
-export function soNgayGhiTre(ngaySuCo: string, ngayGhi: string): number {
-  const ms = new Date(ngayGhi).getTime() - new Date(`${ngaySuCo.slice(0, 10)}T00:00:00Z`).getTime();
+export function soNgayGhiTre(ngaySuCo: string, ngayGhi: string, ngayApDung = NGAY_AP_DUNG_HAN_GHI): number {
+  const moc = ngaySuCo.slice(0, 10) < ngayApDung ? ngayApDung : ngaySuCo.slice(0, 10);
+  const ms = new Date(ngayGhi).getTime() - new Date(`${moc}T00:00:00Z`).getTime();
   return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+/**
+ * HỆ SỐ HÀNG HOÁ (CEO 12/09/2026).
+ *
+ * Vấn đề: khi phải sản xuất lại và gửi lại đồ thì giá trị hàng hoá nằm NGOÀI hệ thống, và CEO
+ * không muốn nhập tay con số đó — nhập tay thì mỗi lần một kiểu, không ai kiểm được. Thay vào
+ * đó lấy phần chi phí hệ thống ĐO ĐƯỢC (cước ship) rồi nhân một tỉ lệ để đại diện cho tiền hàng.
+ *
+ * Mức 2,0 nghĩa là tiền hàng coi như xấp xỉ bằng tiền cước. Căn cứ: đúng ca KLS2053 — CEO ước
+ * tiền đồ khoảng 5tr và tiền nhập lại, gửi lại khoảng 5tr. Chỉ có MỘT ca để hiệu chỉnh nên khi
+ * có ca thứ hai, ba thì phải xem lại mức này.
+ *
+ * TẮT hệ số khi đã có số tiền hàng THẬT: brand báo thu lại và mình lấy được qua đối soát thì ghi
+ * thẳng khoản đó, không cần ước nữa.
+ */
+export const HE_SO_HANG_HOA = 2;
+
+/** Diễn biến cho biết có hàng hoá phải làm lại / mua lại — tức phát sinh tiền ngoài hệ thống. */
+export const DIEN_BIEN_HANG_HOA = ['brand_lam_lai_hang', 'da_mua_lai_hang'] as const;
+
+export function heSoHangHoa(dienBien: readonly string[] | null | undefined, coTienHangThat = false): number {
+  if (coTienHangThat) return 1;
+  const co = (dienBien ?? []).some((m) => (DIEN_BIEN_HANG_HOA as readonly string[]).includes(m));
+  return co ? HE_SO_HANG_HOA : 1;
 }
 
 export interface KhoanChiPhi { khoan: string; tienVnd: number }
@@ -121,7 +154,9 @@ export interface SuCoTomTat {
   thietHaiRongVnd: number;
   /** Chỉ phần quy về lỗi nội bộ — TIỀN THẬT, dùng cho kế toán. */
   thietHaiNoiBoVnd: number;
-  /** Cùng phần đó nhưng đã nhân hệ số nghiêm trọng — CHỈ để chấm điểm, không phải tiền. */
+  /** Tiền thật + phần hàng hoá ước bằng hệ số. Đây là ƯỚC TỔNG THIỆT HẠI, không phải tiền sổ sách. */
+  thietHaiQuyDoiVnd: number;
+  /** Ước tổng trên, nhân thêm hệ số nghiêm trọng — CHỈ để chấm điểm. */
   thietHaiChamDiemVnd: number;
   /** Số sự cố ghi vào hệ thống muộn quá hạn — điều kiện Gate Pillar 3. */
   nGhiTre: number;
@@ -138,6 +173,10 @@ export interface DongSuCoTomTat {
   daThuHoiVnd: number;
   /** false = mới khai báo, chưa chốt tiền. Thiệt hại chưa vào hệ số cho tới khi chốt. */
   daChotTien?: boolean;
+  /** Diễn biến đã tick — quyết định có áp hệ số hàng hoá hay không. */
+  dienBien?: readonly string[] | null;
+  /** true = đã có số tiền hàng THẬT từ đối soát, không cần ước bằng hệ số. */
+  coTienHangThat?: boolean;
   /** Ngày sự cố xảy ra và ngày ghi vào hệ thống (ISO). Thiếu thì không tính là ghi trễ. */
   ngay?: string | null;
   ngayGhi?: string | null;
@@ -145,14 +184,17 @@ export interface DongSuCoTomTat {
 
 /** Gộp danh sách sự cố thành các số hiện trên thẻ KPI. */
 export function tomTatSuCo(dong: ReadonlyArray<DongSuCoTomTat>): SuCoTomTat {
-  let tong = 0, rong = 0, noiBo = 0, chamDiem = 0, nNoiBo = 0, nGhiTre = 0, nChua = 0, nChuaTien = 0;
+  let tong = 0, rong = 0, noiBo = 0, quyDoi = 0, chamDiem = 0, nNoiBo = 0, nGhiTre = 0, nChua = 0, nChuaTien = 0;
   for (const d of dong) {
     const r = thietHaiRong(d.tongChiPhiVnd, d.daThuHoiVnd);
     tong += Math.max(0, Math.round(d.tongChiPhiVnd));
     rong += r;
     if (d.thuocVe === 'noi_bo') {
+      // Ba tầng, cố ý tách rời: tiền thật → ước tổng (cộng hàng hoá) → số chấm điểm.
+      const uoc = Math.round(r * heSoHangHoa(d.dienBien, d.coTienHangThat));
       noiBo += r;
-      chamDiem += Math.round(r * heSoNghiemTrong(d.loai));
+      quyDoi += uoc;
+      chamDiem += Math.round(uoc * heSoNghiemTrong(d.loai));
       nNoiBo += 1;
     }
     if (d.thuocVe === 'khac') nChua += 1;
@@ -161,7 +203,7 @@ export function tomTatSuCo(dong: ReadonlyArray<DongSuCoTomTat>): SuCoTomTat {
   }
   return {
     n: dong.length, nNoiBo, tongChiPhiVnd: tong, thietHaiRongVnd: rong,
-    thietHaiNoiBoVnd: noiBo, thietHaiChamDiemVnd: chamDiem,
+    thietHaiNoiBoVnd: noiBo, thietHaiQuyDoiVnd: quyDoi, thietHaiChamDiemVnd: chamDiem,
     nGhiTre, nChuaQuyTrachNhiem: nChua, nChuaChotTien: nChuaTien,
   };
 }

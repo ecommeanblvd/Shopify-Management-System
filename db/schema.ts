@@ -2265,6 +2265,8 @@ export const shipHoSuCo = pgTable('ship_ho_su_co', {
   tongChiPhiVnd: numeric('tong_chi_phi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
   /** false = khai báo trước, tiền chốt sau. Cho phép ghi sự cố trong 7 ngày dù chưa biết thiệt hại. */
   daChotTien: boolean('da_chot_tien').notNull().default(false),
+  /** true = đã có số tiền HÀNG HOÁ thật (brand báo thu lại, lấy qua đối soát) → không ước bằng hệ số. */
+  coTienHang: boolean('co_tien_hang').notNull().default(false),
   daThuHoiVnd: numeric('da_thu_hoi_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
   createdBy: text('created_by'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -29,15 +29,23 @@ type RowGiao = { id: string; code: string; brand: string | null; tk: string | nu
  * `su_co_noi_bo` > 0 nghĩa là đơn có sự cố quy về lỗi nội bộ → kiện bị KHOÁ THÀNH TRỄ dù số
  * ngày nằm trong cam kết (CEO 12/09/2026). Ca ship sai địa chỉ thường kết thúc bằng kiện gửi
  * lại giao đúng hạn; chấm theo kiện đó thì lỗi biến mất khỏi tỉ lệ.
+ *
+ * Kiện có sự cố nội bộ vào mẫu số KỂ CẢ KHI CHƯA GIAO. Kiện bình thường chưa giao thì chưa chấm
+ * được nên phải loại, nhưng kiện đi sai địa chỉ rồi hoàn về thì KHÔNG BAO GIỜ có ngày giao — nếu
+ * vẫn đòi `delivered_at` thì đúng ca hỏng nặng nhất lại vô hình với tiêu chí 1.2. Kiện như vậy
+ * lấy ngày hôm nay làm mốc để ra số ngày, và luôn bị tính trễ.
  */
 async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
   const { rows } = await db.execute<RowGiao>(sql`
     SELECT o.id, o.code, o.partner_brand_slug AS brand, o.tracking_number AS tk,
            COALESCE(o.country, '?') AS cc, COALESCE(o.carrier_key, '?') AS line,
-           o.shipped_at::text AS gui, o.delivered_at::text AS giao,
+           o.shipped_at::text AS gui,
+           COALESCE(o.delivered_at::text, now()::text) AS giao,
            (SELECT COUNT(*) FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo')::int AS su_co_noi_bo
       FROM ship_ho_orders o
-     WHERE o.shipped_at IS NOT NULL AND o.delivered_at IS NOT NULL
+     WHERE o.shipped_at IS NOT NULL
+       AND (o.delivered_at IS NOT NULL
+            OR EXISTS (SELECT 1 FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo'))
        AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
      ORDER BY o.shipped_at, o.code;`);
   return rows;

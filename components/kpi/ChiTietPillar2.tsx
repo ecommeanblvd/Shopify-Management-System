@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { NHAN_KET_QUA_SLA } from '@/features/kpi-logistics/chi-tiet';
-import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, DIEN_BIEN, dienBienGoiY, nhanDienBien, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
+import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, HE_SO_HANG_HOA, DIEN_BIEN, DIEN_BIEN_HANG_HOA, dienBienGoiY, nhanDienBien, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
 import type { ChiTietPillar2, LuuSuCoInput, DonTimDuoc } from '@/features/ship-ho/pillar2-actions';
 
 type Tab = 'tien' | 'sla' | 'su-co';
@@ -197,12 +197,14 @@ function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, timDon, sauKhiLuu }: {
   sauKhiLuu: () => void;
 }) {
   const [mo, setMo] = useState(false);
-  const t = tomTatSuCo(rows);
+  const t = tomTatSuCo(rows.map((r) => ({ ...r, coTienHangThat: r.coTienHang })));
   return (
     <div className="space-y-3">
       <Khung
         tomTat={<><b>{t.n}</b> sự cố · tổng chi phí <b>{vnd(t.tongChiPhiVnd)}</b> · thiệt hại ròng <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiRongVnd)}</b> · trong đó lỗi nội bộ <b>{t.nNoiBo}</b> vụ <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiNoiBoVnd)}</b>
-          {t.thietHaiChamDiemVnd !== t.thietHaiNoiBoVnd && <> · quy ra điểm <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiChamDiemVnd)}</b> (lỗi sai địa chỉ nhân 2, không phải tiền thật)</>}
+          {t.thietHaiQuyDoiVnd !== t.thietHaiNoiBoVnd && <> · ước cả tiền hàng <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiQuyDoiVnd)}</b></>}
+          {t.thietHaiChamDiemVnd !== t.thietHaiQuyDoiVnd && <> · quy ra điểm <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiChamDiemVnd)}</b> (lỗi sai địa chỉ nhân 2)</>}
+          {t.thietHaiChamDiemVnd !== t.thietHaiNoiBoVnd && <> <span className="text-[11px]">— hai số sau là ƯỚC để chấm điểm, không phải tiền sổ sách</span></>}
           {t.nGhiTre > 0 && <> · <b className="text-red-600 dark:text-red-400">{t.nGhiTre}</b> vụ ghi muộn quá {HAN_GHI_SU_CO_NGAY} ngày → trượt Gate Pillar 3</>}
           {t.nChuaQuyTrachNhiem > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaQuyTrachNhiem}</b> vụ chưa quy trách nhiệm → trượt Gate Pillar 3</>}
           {t.nChuaChotTien > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaChotTien}</b> vụ chưa chốt tiền, thiệt hại chưa vào hệ số</>}</>}
@@ -288,6 +290,7 @@ function FormSuCo({ donHang, timDon, luu, xong, huy }: {
   const [dienBien, setDienBien] = useState<string[]>(dienBienGoiY(LOAI_SU_CO[0].ma));
   const [moTa, setMoTa] = useState('');
   const [thuHoi, setThuHoi] = useState('0');
+  const [coTienHang, setCoTienHang] = useState(false);
   const [khoan, setKhoan] = useState<KhoanChiPhi[]>(
     LOAI_SU_CO[0].khoanGoiY.length ? LOAI_SU_CO[0].khoanGoiY.map((k) => ({ khoan: k, tienVnd: 0 })) : [{ khoan: '', tienVnd: 0 }]);
   const [loi, setLoi] = useState<string | null>(null);
@@ -389,6 +392,19 @@ function FormSuCo({ donHang, timDon, luu, xong, huy }: {
           onClick={() => setKhoan([...khoan, { khoan: '', tienVnd: 0 }])}>+ thêm khoản</button>
       </div>
 
+      {dienBien.some((m) => (DIEN_BIEN_HANG_HOA as readonly string[]).includes(m)) && (
+        <label className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+          <input type="checkbox" className="mt-0.5 size-3.5 accent-primary" checked={coTienHang} onChange={(e) => setCoTienHang(e.target.checked)} />
+          <span>
+            Đã có số tiền hàng THẬT từ đối soát — brand đã báo thu lại và mình ghi khoản đó ở trên.
+            <span className="block text-[11px] text-muted-foreground">
+              Bỏ trống nếu chưa có: hệ thống sẽ ước phần hàng hoá bằng cách nhân {HE_SO_HANG_HOA} lần chi phí đo được,
+              vì giá trị hàng nằm ngoài dữ liệu hệ thống. Ước này chỉ dùng để chấm điểm, không phải tiền sổ sách.
+            </span>
+          </span>
+        </label>
+      )}
+
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="space-y-1 text-xs"><div className="font-medium">Đã đòi lại được (VND)</div>
           <input type="number" min={0} className={`${o} w-full text-right`} value={thuHoi} onChange={(e) => setThuHoi(e.target.value)} />
@@ -411,7 +427,7 @@ function FormSuCo({ donHang, timDon, luu, xong, huy }: {
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
             onClick={() => start(async () => {
               try {
-                await luu({ orderId, loai, thuocVe, ngay, moTa: moTa || null, dienBien, chiPhi: khoan, daThuHoiVnd: Number(thuHoi) || 0 });
+                await luu({ orderId, loai, thuocVe, ngay, moTa: moTa || null, dienBien, chiPhi: khoan, daThuHoiVnd: Number(thuHoi) || 0, coTienHang });
                 xong();
               } catch (e) { setLoi(String((e as Error).message ?? e)); }
             })}>

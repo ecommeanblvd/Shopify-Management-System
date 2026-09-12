@@ -125,9 +125,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
              SUM(ABS(COALESCE(delta_vnd_at_review::numeric, 0))) FILTER (WHERE status IN ('carrier_error', 'disputing', 'credited'))::text AS dien
         FROM shipment_reconcile_status
        WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
-    db.execute<{ loai: string; thuoc_ve: string; tong: string; thu_hoi: string; ngay: string; ghi: string }>(sql`
+    db.execute<{ loai: string; thuoc_ve: string; tong: string; thu_hoi: string; ngay: string; ghi: string; dien_bien: unknown; co_tien_hang: boolean; da_chot_tien: boolean }>(sql`
       SELECT loai, thuoc_ve, tong_chi_phi_vnd::text AS tong, da_thu_hoi_vnd::text AS thu_hoi,
-             ngay::text AS ngay, created_at::text AS ghi
+             ngay::text AS ngay, created_at::text AS ghi, dien_bien, co_tien_hang, da_chot_tien
         FROM ship_ho_su_co
        WHERE ngay >= ${tu}::date AND ngay <= ${den}::date;`),
     // 1.2 cũng chấm mọi kiện: null = không lọc store; kiện ship hộ từ Lark cộng thêm ngay dưới.
@@ -158,6 +158,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     loai: r.loai, thuocVe: r.thuoc_ve,
     tongChiPhiVnd: Number(r.tong), daThuHoiVnd: Number(r.thu_hoi),
     ngay: r.ngay, ngayGhi: r.ghi,
+    dienBien: Array.isArray(r.dien_bien) ? (r.dien_bien as string[]) : [],
+    coTienHangThat: r.co_tien_hang,
+    daChotTien: r.da_chot_tien,
   })));
   const soKienBill = Number(chungTu.rows[0]?.tong ?? 0) + chungTuShipHo.kienCoBill;
   const kienLoi = Number(chungTu.rows[0]?.loi ?? 0) + chungTuShipHo.kienLoi;
