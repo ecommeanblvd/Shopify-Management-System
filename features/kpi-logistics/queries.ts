@@ -9,6 +9,7 @@ import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
+import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
 import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
 import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
@@ -43,7 +44,10 @@ export interface SoLieuTuDong {
   tyLeLoiChungTu: number | null;
   /** P2 — đơn ship hộ đã giao/đã chốt cước trong kỳ. */
   soDonShipHo: number;
-  /** P3 Gate — kiện có bill của các kỳ ĐÃ QUA (bill về đủ lâu) mà vẫn chưa phân định đúng/sai. Tồn = 0 thì Gate đạt. */
+  /** P2 — sự cố ship hộ trong kỳ: tiền thật, tiền quy điểm, và hai điều kiện Gate. */
+  suCo: SuCoTomTat;
+  /** P3 Gate — kiện có bill của các kỳ ĐÃ QUA (bill về đủ lâu) mà vẫn chưa phân định đúng/sai. Tồn = 0 thì Gate đạt.
+   *  Từ 12/09/2026 Gate còn đòi: mọi sự cố trong kỳ phải được GHI đúng hạn và quy được trách nhiệm. */
   kienCanPhanDinh: number;
   kienDaPhanDinh: number;
   kienTonDong: number;
@@ -58,7 +62,7 @@ export interface SoLieuTuDong {
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
-  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, kienShopify, kienShipHo, chungTuShipHo, canRows] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, chungTuShipHo, canRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -121,6 +125,11 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
              SUM(ABS(COALESCE(delta_vnd_at_review::numeric, 0))) FILTER (WHERE status IN ('carrier_error', 'disputing', 'credited'))::text AS dien
         FROM shipment_reconcile_status
        WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
+    db.execute<{ loai: string; thuoc_ve: string; tong: string; thu_hoi: string; ngay: string; ghi: string }>(sql`
+      SELECT loai, thuoc_ve, tong_chi_phi_vnd::text AS tong, da_thu_hoi_vnd::text AS thu_hoi,
+             ngay::text AS ngay, created_at::text AS ghi
+        FROM ship_ho_su_co
+       WHERE ngay >= ${tu}::date AND ngay <= ${den}::date;`),
     // 1.2 cũng chấm mọi kiện: null = không lọc store; kiện ship hộ từ Lark cộng thêm ngay dưới.
     docKienGiao(tu, den, null),
     docKienGiaoShipHo(tu, den),
@@ -145,6 +154,11 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed),
   })));
 
+  const suCo = tomTatSuCo(suCoRows.rows.map((r) => ({
+    loai: r.loai, thuocVe: r.thuoc_ve,
+    tongChiPhiVnd: Number(r.tong), daThuHoiVnd: Number(r.thu_hoi),
+    ngay: r.ngay, ngayGhi: r.ghi,
+  })));
   const soKienBill = Number(chungTu.rows[0]?.tong ?? 0) + chungTuShipHo.kienCoBill;
   const kienLoi = Number(chungTu.rows[0]?.loi ?? 0) + chungTuShipHo.kienLoi;
   const can = Number(gate.rows[0]?.can ?? 0);
@@ -171,10 +185,14 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     kienLoiChungTu: kienLoi,
     tyLeLoiChungTu: soKienBill > 0 ? kienLoi / soKienBill : null,
     soDonShipHo: Number(shipHo.rows[0]?.n ?? 0),
+    suCo,
     kienCanPhanDinh: can,
     kienDaPhanDinh: da,
     kienTonDong: ton,
-    gateDat: ton === 0,
+    // Gate đòi CẢ BA: hết tồn đọng đối soát, mọi sự cố ghi đúng hạn, và mọi sự cố đã quy được
+    // trách nhiệm. Giấu hoặc ghi muộn một sự cố thì mất toàn bộ Pillar 3 — nếu không, không ai
+    // có động cơ ghi sự cố của chính mình (CEO 12/09/2026).
+    gateDat: ton === 0 && suCo.nGhiTre === 0 && suCo.nChuaQuyTrachNhiem === 0,
     thuHoiVnd: Math.round(thu),
     soCreditNote: Number(creditNote.rows[0]?.n ?? 0),
     thuHoiTheoNgayGhiNhan: Math.round(thuCu),

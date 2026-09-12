@@ -33,6 +33,7 @@ export async function GET(req: Request): Promise<Response> {
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),
     soDonShipHo: auto.soDonShipHo,
+    thietHaiChamDiemVnd: auto.suCo.thietHaiChamDiemVnd,
     gateDat,
     roRiGiam: nhap?.roRiGiam ?? false,
     khacPhucGoc: nhap?.khacPhucGoc ?? false,

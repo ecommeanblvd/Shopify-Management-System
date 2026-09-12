@@ -75,6 +75,8 @@ export interface DongSuCo {
   tenLoai: string;
   thuocVe: string;
   ngay: string;
+  /** Ngày GHI vào hệ thống — quá hạn 7 ngày so với `ngay` là điều kiện trượt Gate Pillar 3. */
+  ngayGhi: string;
   moTa: string | null;
   chiPhi: KhoanChiPhi[];
   tongChiPhiVnd: number;
@@ -103,8 +105,9 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
         FROM ship_ho_orders o
        WHERE o.shipped_at IS NOT NULL AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
        ORDER BY o.shipped_at, o.code;`),
-    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
+    db.execute<{ id: string; order_id: string; ma: string; brand: string; loai: string; thuoc_ve: string; ngay: string; ghi: string; mo_ta: string | null; chi_phi: unknown; tong: string; thu_hoi: string }>(sql`
       SELECT s.id, s.order_id, o.code AS ma, o.partner_brand_slug AS brand, s.loai, s.thuoc_ve, s.ngay::text AS ngay,
+             s.created_at::text AS ghi,
              s.mo_ta, s.chi_phi, s.tong_chi_phi_vnd::text AS tong, s.da_thu_hoi_vnd::text AS thu_hoi
         FROM ship_ho_su_co s JOIN ship_ho_orders o ON o.id = s.order_id
        WHERE s.ngay >= ${tu}::date AND s.ngay <= ${den}::date
@@ -151,7 +154,7 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
     return {
       id: r.id, orderId: r.order_id, maDon: r.ma, brand: r.brand,
       loai: r.loai, tenLoai: layLoaiSuCo(r.loai)?.ten ?? r.loai,
-      thuocVe: r.thuoc_ve, ngay: r.ngay, moTa: r.mo_ta,
+      thuocVe: r.thuoc_ve, ngay: r.ngay, ngayGhi: r.ghi, moTa: r.mo_ta,
       chiPhi: Array.isArray(r.chi_phi) ? (r.chi_phi as KhoanChiPhi[]) : [],
       tongChiPhiVnd: tong, daThuHoiVnd: thuHoi, thietHaiRongVnd: thietHaiRong(tong, thuHoi),
     };

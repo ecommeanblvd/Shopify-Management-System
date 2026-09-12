@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LOAI_SU_CO, layLoaiSuCo, tongChiPhi, thietHaiRong, tomTatSuCo, NHAN_THUOC_VE } from './su-co';
+import { LOAI_SU_CO, layLoaiSuCo, tongChiPhi, thietHaiRong, tomTatSuCo, soNgayGhiTre, NHAN_THUOC_VE } from './su-co';
 
 describe('danh mục sự cố', () => {
   it('mã không trùng và mọi loại đều có mặc định thuộc về hợp lệ', () => {
@@ -47,9 +47,44 @@ describe('tomTatSuCo', () => {
       { thuocVe: 'hang_van_chuyen', tongChiPhiVnd: 3_000_000, daThuHoiVnd: 2_500_000 },
       { thuocVe: 'khach', tongChiPhiVnd: 1_000_000, daThuHoiVnd: 0 },
     ]);
-    expect(t).toEqual({ n: 3, nNoiBo: 1, tongChiPhiVnd: 12_150_000, thietHaiRongVnd: 9_650_000, thietHaiNoiBoVnd: 8_150_000 });
+    expect(t).toEqual({ n: 3, nNoiBo: 1, tongChiPhiVnd: 12_150_000, thietHaiRongVnd: 9_650_000, thietHaiNoiBoVnd: 8_150_000, thietHaiChamDiemVnd: 8_150_000, nGhiTre: 0, nChuaQuyTrachNhiem: 0 });
   });
   it('không có sự cố nào → mọi số bằng 0', () => {
-    expect(tomTatSuCo([])).toEqual({ n: 0, nNoiBo: 0, tongChiPhiVnd: 0, thietHaiRongVnd: 0, thietHaiNoiBoVnd: 0 });
+    expect(tomTatSuCo([])).toEqual({ n: 0, nNoiBo: 0, tongChiPhiVnd: 0, thietHaiRongVnd: 0, thietHaiNoiBoVnd: 0, thietHaiChamDiemVnd: 0, nGhiTre: 0, nChuaQuyTrachNhiem: 0 });
+  });
+});
+
+describe('hệ số nghiêm trọng và hạn ghi sự cố (CEO 12/09/2026)', () => {
+  it('ship sai địa chỉ nhân đôi khi quy ra điểm, tiền thật giữ nguyên', () => {
+    const t = tomTatSuCo([{ loai: 'sai_dia_chi_giao', thuocVe: 'noi_bo', tongChiPhiVnd: 10_000_000, daThuHoiVnd: 0 }]);
+    expect(t.thietHaiNoiBoVnd).toBe(10_000_000);
+    expect(t.thietHaiChamDiemVnd).toBe(20_000_000);
+  });
+
+  it('loại khác giữ hệ số 1,0', () => {
+    const t = tomTatSuCo([{ loai: 'gui_tre', thuocVe: 'noi_bo', tongChiPhiVnd: 4_000_000, daThuHoiVnd: 0 }]);
+    expect(t.thietHaiChamDiemVnd).toBe(4_000_000);
+  });
+
+  it('nhân hệ số trên thiệt hại RÒNG, đòi lại được thì nhẹ theo', () => {
+    const t = tomTatSuCo([{ loai: 'sai_dia_chi_giao', thuocVe: 'noi_bo', tongChiPhiVnd: 10_000_000, daThuHoiVnd: 7_000_000 }]);
+    expect(t.thietHaiChamDiemVnd).toBe(6_000_000);
+  });
+
+  it('chỉ lỗi nội bộ vào số chấm điểm, lỗi hãng thì không', () => {
+    const t = tomTatSuCo([{ loai: 'sai_dia_chi_giao', thuocVe: 'hang_van_chuyen', tongChiPhiVnd: 10_000_000, daThuHoiVnd: 0 }]);
+    expect(t.thietHaiChamDiemVnd).toBe(0);
+  });
+
+  it('ghi quá 7 ngày là ghi trễ; đúng 7 ngày vẫn trong hạn', () => {
+    expect(soNgayGhiTre('2026-08-01', '2026-08-08T10:00:00Z')).toBe(7);
+    const dung = tomTatSuCo([{ thuocVe: 'noi_bo', tongChiPhiVnd: 0, daThuHoiVnd: 0, ngay: '2026-08-01', ngayGhi: '2026-08-08T10:00:00Z' }]);
+    expect(dung.nGhiTre).toBe(0);
+    const tre = tomTatSuCo([{ thuocVe: 'noi_bo', tongChiPhiVnd: 0, daThuHoiVnd: 0, ngay: '2026-08-01', ngayGhi: '2026-08-09T00:00:00Z' }]);
+    expect(tre.nGhiTre).toBe(1);
+  });
+
+  it('sự cố còn để "khác" tính là chưa quy được trách nhiệm', () => {
+    expect(tomTatSuCo([{ thuocVe: 'khac', tongChiPhiVnd: 500_000, daThuHoiVnd: 0 }]).nChuaQuyTrachNhiem).toBe(1);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   LUONG_CUNG, QUY_P1_TONG, TRONG_SO_P1, bangDiemKpi, diemBienCuoc, diemDonHoanHao, diemSizeThung, diemSla, heSoK,
-  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, diemSlaTheoKy, nguongDatKy, type DauVaoKpi,
+  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, diemSlaTheoKy, nguongDatKy, heSoChatLuongP2, type DauVaoKpi,
 } from './quy-che';
 
 const KY_2026 = '2026-09-01'; // lộ trình khởi động: lỗi ≤35 % → ngưỡng đạt 65 %
@@ -56,7 +56,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('trượt Gate thì mất toàn bộ Pillar 3', () => {
     const v: DauVaoKpi = {
-      soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, soDonShipHo: 10,
+      soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, thietHaiChamDiemVnd: 0, soDonShipHo: 10,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 100_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     };
     expect(tinhBangLuong(v).p3).toBe(0);
@@ -66,7 +66,7 @@ describe('quy-che KPI logistics', () => {
     expect(TRONG_SO_P1.bienCuoc + TRONG_SO_P1.sla + TRONG_SO_P1.hoanHao + TRONG_SO_P1.sizeThung).toBeCloseTo(1, 10);
     // Ví dụ tháng 7 trong quy chế: 1 đơn âm cước (90 %), SLA 96 % (100 %), lỗi 1,5 % (100 %), size 97 % (50 %).
     const b = bangDiemKpi({
-      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, soDonShipHo: 80,
+      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
@@ -75,7 +75,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('bảng điểm: tiêu chí chưa có dữ liệu để mức đạt null và tính 0 điểm; trượt Gate thì Pillar 3 về 0', () => {
     const b = bangDiemKpi({
-      soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, soDonShipHo: 0,
+      soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, thietHaiChamDiemVnd: 0, soDonShipHo: 0,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 90_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([1, null, null, null]);
@@ -84,10 +84,12 @@ describe('quy-che KPI logistics', () => {
   });
   it('1.2 chấm theo NGƯỠNG CỦA KỲ, siết dần cùng lộ trình SOP (SLA trong văn bản chỉ là mẫu)', () => {
     expect(nguongDatKy('2026-09-01')).toBeCloseTo(0.65, 10); // lỗi ≤35 %
-    expect(nguongDatKy('2027-02-01')).toBeCloseTo(0.72, 10);
+    expect(nguongDatKy('2027-02-01')).toBeCloseTo(0.85, 10);
     expect(nguongDatKy('2027-11-01')).toBeCloseTo(0.90, 10);
-    // Kỳ khởi động: 84 % vượt ngưỡng 65 % → đủ; cùng con số đó ở Q4/2027 (ngưỡng 90 %) chỉ còn 50 %.
+    // Kỳ khởi động: 84 % vượt ngưỡng 65 % → đủ; cùng con số đó ở Q1/2027 (ngưỡng 85 %) còn 75 %,
+    // và ở Q4/2027 (ngưỡng 90 %) chỉ còn 50 %.
     expect(diemSlaTheoKy(0.84, '2026-09-01').mucNhan).toBe(1);
+    expect(diemSlaTheoKy(0.84, '2027-02-01').mucNhan).toBe(0.75);
     expect(diemSlaTheoKy(0.84, '2027-11-01').mucNhan).toBe(0.5);
     expect(diemSlaTheoKy(0.62, '2026-09-01').mucNhan).toBe(0.75); // thiếu 3 điểm
     expect(diemSlaTheoKy(0.56, '2026-09-01').mucNhan).toBe(0.5);  // thiếu 9 điểm
@@ -96,12 +98,43 @@ describe('quy-che KPI logistics', () => {
   });
   it('dựng lại đúng ví dụ tháng 7/2026 trong quy chế: 13.404.000đ', () => {
     const { p1, p2, p3, tong } = tinhBangLuong({
-      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, soDonShipHo: 80,
+      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     });
     expect(p1).toBe(1_104_000);
     expect(p2).toBe(1_200_000);
     expect(p3).toBe(600_000);
     expect(tong).toBe(13_404_000);
+  });
+});
+
+describe('hệ số chất lượng Pillar 2 (CEO 12/09/2026)', () => {
+  it('không sự cố thì giữ nguyên thưởng sản lượng', () => {
+    expect(heSoChatLuongP2(0).heSo).toBe(1);
+    expect(thuongShipHo(59).tien).toBe(885_000);
+    expect(thuongShipHo(59, 0).tien).toBe(885_000);
+  });
+
+  it('bốn bậc theo thiệt hại quy điểm', () => {
+    expect(heSoChatLuongP2(500_000).heSo).toBe(0.8);
+    expect(heSoChatLuongP2(1_000_000).heSo).toBe(0.5);
+    expect(heSoChatLuongP2(3_000_000).heSo).toBe(0.25);
+    expect(heSoChatLuongP2(5_000_000).heSo).toBe(0);
+    expect(heSoChatLuongP2(20_000_000).heSo).toBe(0);
+  });
+
+  it('vụ ship sai địa chỉ T8: 59 đơn mất sạch 885.000đ', () => {
+    // Thiệt hại thật 10tr, loại sai địa chỉ nhân 2 → 20tr, rơi bậc trên 5tr.
+    expect(thuongShipHo(59, 20_000_000).tien).toBe(0);
+    expect(thuongShipHo(59, 20_000_000).mucNhan).toBe(0);
+  });
+
+  it('hệ số chỉ nhân XUỐNG, làm nhiều đơn không được thưởng hai lần', () => {
+    expect(thuongShipHo(200, 0).tien).toBe(150 * 15_000 + 50 * 18_000);
+    expect(thuongShipHo(200, 0).mucNhan).toBeLessThanOrEqual(1);
+  });
+
+  it('sự cố nhỏ vẫn giữ phần lớn thưởng — không đánh sập vì lỗi con', () => {
+    expect(thuongShipHo(59, 300_000).tien).toBe(708_000);
   });
 });

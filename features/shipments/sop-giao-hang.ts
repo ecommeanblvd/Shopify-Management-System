@@ -20,13 +20,18 @@ export const NUOC_LOAI_TRU: Record<string, string> = {
   VN: 'Tuyến nội địa, dữ liệu ngày giao chưa tin được (ops đánh dấu hàng loạt)',
 };
 
-/** Lộ trình siết tỉ lệ lỗi: rộng lúc khởi động rồi giảm dần theo quý. Áp theo NGÀY BẮT ĐẦU kỳ chấm. */
+/**
+ * Lộ trình siết tỉ lệ lỗi: rộng lúc khởi động rồi giảm dần. Áp theo NGÀY BẮT ĐẦU kỳ chấm.
+ *
+ * CEO 12/09/2026 kéo mốc lên: lộ trình cũ cho ngưỡng 85 % tới Q3/2027, nhưng đo thật sau khi
+ * gộp cả kiện ship hộ thì T7 đã 87,1 %, T8 83,6 %, T9 96,6 % — tức suốt nửa đầu 2027 tiêu chí
+ * 1.2 vẫn cho điểm không. Bỏ hai bậc 72 % và 78 %, vào thẳng 85 % từ Q1/2027 (mức ngay sát
+ * kết quả đang đạt, phải cải thiện nhẹ mới qua), rồi 90 % từ Q3/2027.
+ */
 export const LO_TRINH_LOI: Array<{ tu: string; loiToiDa: number; nhan: string }> = [
   { tu: '2026-01-01', loiToiDa: 0.35, nhan: 'Khởi động — hết Q4/2026' },
-  { tu: '2027-01-01', loiToiDa: 0.28, nhan: 'Q1/2027' },
-  { tu: '2027-04-01', loiToiDa: 0.22, nhan: 'Q2/2027' },
-  { tu: '2027-07-01', loiToiDa: 0.15, nhan: 'Q3/2027' },
-  { tu: '2027-10-01', loiToiDa: 0.10, nhan: 'Từ Q4/2027' },
+  { tu: '2027-01-01', loiToiDa: 0.15, nhan: 'Từ Q1/2027' },
+  { tu: '2027-07-01', loiToiDa: 0.10, nhan: 'Từ Q3/2027' },
 ];
 
 /** Mức lỗi tối đa áp cho một ngày (ISO). Trước mốc đầu tiên thì dùng chính mốc đầu. */
@@ -96,7 +101,17 @@ export function slaCuaLine(cc: string, line: string): number {
   return CAM_KET_NUOC[k]?.theoLine?.[line.trim().toLowerCase()] ?? slaCuaNuoc(k);
 }
 
-export interface KienGiao { country: string; line: string; soNgay: number }
+export interface KienGiao {
+  country: string;
+  line: string;
+  soNgay: number;
+  /**
+   * KHOÁ THÀNH TRỄ: kiện có sự cố quy về lỗi nội bộ luôn tính là trễ, kể cả khi số ngày nằm
+   * trong cam kết (CEO 12/09/2026). Cần vì ca ship sai địa chỉ thường kết thúc bằng MỘT kiện
+   * mới giao đúng hạn — nếu chấm theo kiện đó thì lỗi biến mất khỏi tỉ lệ.
+   */
+  buocTre?: boolean;
+}
 
 export interface DiemKpi {
   n: number; dungHan: number; treVanChuyen: number; ngoaiLe: number;
@@ -109,7 +124,7 @@ function cham(kien: readonly KienGiao[], sla: number, loiToiDa: number, nguong: 
   const n = kien.length;
   let dungHan = 0, treVanChuyen = 0, ngoaiLe = 0;
   for (const k of kien) {
-    if (k.soNgay <= sla) dungHan += 1;
+    if (!k.buocTre && k.soNgay <= sla) dungHan += 1;
     else if (k.soNgay <= nguong) treVanChuyen += 1;
     else ngoaiLe += 1;
   }

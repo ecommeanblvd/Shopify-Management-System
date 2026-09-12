@@ -62,17 +62,46 @@ export const SHIP_HO_MOC = 150;
 export const SHIP_HO_DON_GIA = 15_000;
 export const SHIP_HO_DON_GIA_VUOT = 18_000;
 
-/** Pillar 2 — thưởng ship hộ theo sản lượng, lũy tiến từ đơn 151. */
-export function thuongShipHo(soDon: number): MucDat {
+/**
+ * HỆ SỐ CHẤT LƯỢNG Pillar 2 (CEO 12/09/2026).
+ *
+ * Sản lượng và chất lượng là HAI việc: sản lượng quyết định số tiền (lũy tiến theo đơn),
+ * chất lượng nhân vào số tiền đó. Hệ số KHÔNG BAO GIỜ vượt 1,0 — làm nhiều đơn đã được
+ * thưởng bằng đơn giá rồi, không thưởng hai lần.
+ *
+ * Đầu vào là thiệt hại nội bộ ĐÃ NHÂN hệ số nghiêm trọng (`tomTatSuCo().thietHaiChamDiemVnd`),
+ * nên một vụ ship sai địa chỉ 5tr vào bậc như một vụ 10tr loại thường.
+ */
+export const BAC_CHAT_LUONG_P2: Array<{ tu: number; heSo: number }> = [
+  { tu: 5_000_000, heSo: 0 },
+  { tu: 3_000_000, heSo: 0.25 },
+  { tu: 1_000_000, heSo: 0.5 },
+  { tu: 1, heSo: 0.8 },
+];
+
+export function heSoChatLuongP2(thietHaiChamDiemVnd: number): { heSo: number; dienGiai: string } {
+  const v = Math.max(0, Math.round(thietHaiChamDiemVnd));
+  const tien = `${v.toLocaleString('vi-VN')}đ`;
+  if (v === 0) return { heSo: 1, dienGiai: 'Không có sự cố lỗi nội bộ trong kỳ' };
+  const bac = BAC_CHAT_LUONG_P2.find((b) => v >= b.tu);
+  const heSo = bac?.heSo ?? 1;
+  return { heSo, dienGiai: `Thiệt hại nội bộ quy điểm ${tien} — còn ${Math.round(heSo * 100)} % thưởng ship hộ` };
+}
+
+/**
+ * Pillar 2 — thưởng ship hộ theo sản lượng, lũy tiến từ đơn 151, rồi nhân hệ số chất lượng.
+ * `thietHaiChamDiemVnd` bỏ trống = không có sự cố, giữ nguyên 100 %.
+ */
+export function thuongShipHo(soDon: number, thietHaiChamDiemVnd = 0): MucDat {
   const n = Math.max(0, Math.floor(soDon));
   const trong = Math.min(n, SHIP_HO_MOC);
   const vuot = Math.max(0, n - SHIP_HO_MOC);
-  const tien = trong * SHIP_HO_DON_GIA + vuot * SHIP_HO_DON_GIA_VUOT;
+  const goc = trong * SHIP_HO_DON_GIA + vuot * SHIP_HO_DON_GIA_VUOT;
+  const { heSo, dienGiai } = heSoChatLuongP2(thietHaiChamDiemVnd);
+  const sanLuong = vuot > 0 ? `${trong} đơn × 15.000 + ${vuot} đơn × 18.000` : `${trong} đơn × 15.000`;
   return {
-    tien, mucNhan: 1,
-    dienGiai: vuot > 0
-      ? `${trong} đơn × 15.000 + ${vuot} đơn × 18.000`
-      : `${trong} đơn × 15.000`,
+    tien: Math.floor(goc * heSo), mucNhan: heSo,
+    dienGiai: heSo === 1 ? sanLuong : `${sanLuong} × hệ số ${heSo} — ${dienGiai}`,
   };
 }
 
@@ -120,6 +149,8 @@ export interface DauVaoKpi {
   tyLeSizeThung: number | null;
   /** P2 — số đơn ship hộ thành công. */
   soDonShipHo: number;
+  /** P2 — thiệt hại lỗi nội bộ đã nhân hệ số nghiêm trọng, dùng cho hệ số chất lượng. */
+  thietHaiChamDiemVnd: number;
   /** P3 Gate — đạt cả hai nghĩa vụ đối soát? Không đạt → mất toàn bộ Pillar 3. */
   gateDat: boolean;
   /** 3B — hai hạng mục 150.000đ. */
@@ -140,7 +171,7 @@ export function tinhBangLuong(v: DauVaoKpi): { dong: DongBangLuong[]; p1: number
   const sla = diemSla(v.tyLeSla);
   const hoanHao = diemDonHoanHao(v.tyLeLoiChungTu);
   const size = diemSizeThung(v.tyLeSizeThung);
-  const shipHo = thuongShipHo(v.soDonShipHo);
+  const shipHo = thuongShipHo(v.soDonShipHo, v.thietHaiChamDiemVnd);
   const thuHoi = thuongThuHoi(v.thuHoiVnd, v.tyLeThuHoi);
   const roRi = v.gateDat && v.roRiGiam ? QUY_P3B.roRi : 0;
   const khacPhuc = v.gateDat && v.khacPhucGoc ? QUY_P3B.khacPhucGoc : 0;
@@ -232,12 +263,21 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
   ];
   const diemP1 = p1.reduce((s, d) => s + (d.trongSo ?? 0) * (d.mucDat ?? 0), 0);
 
-  const p2: DongDiem[] = [{
-    ma: '2', ten: 'Sản lượng ship hộ thành công', trongSo: null,
-    soLieu: `${v.soDonShipHo} đơn`,
-    nguong: `Mốc lũy tiến tại đơn thứ ${SHIP_HO_MOC}`,
-    mucDat: null,
-  }];
+  const chatLuong = heSoChatLuongP2(v.thietHaiChamDiemVnd);
+  const p2: DongDiem[] = [
+    {
+      ma: '2A', ten: 'Sản lượng ship hộ thành công', trongSo: null,
+      soLieu: `${v.soDonShipHo} đơn`,
+      nguong: `Mốc lũy tiến tại đơn thứ ${SHIP_HO_MOC}`,
+      mucDat: null,
+    },
+    {
+      ma: '2B', ten: 'Chất lượng ship hộ (sự cố lỗi nội bộ)', trongSo: null,
+      soLieu: chatLuong.dienGiai,
+      nguong: 'Không sự cố = đủ · dưới 1tr còn 80 % · 1–3tr còn 50 % · 3–5tr còn 25 % · trên 5tr mất toàn bộ thưởng ship hộ',
+      mucDat: chatLuong.heSo,
+    },
+  ];
 
   const p3: DongDiem[] = [
     {

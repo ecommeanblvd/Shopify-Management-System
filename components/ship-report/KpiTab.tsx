@@ -47,6 +47,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),
     soDonShipHo: auto.soDonShipHo,
+    thietHaiChamDiemVnd: auto.suCo.thietHaiChamDiemVnd,
     gateDat,
     roRiGiam: nhap?.roRiGiam ?? false,
     khacPhucGoc: nhap?.khacPhucGoc ?? false,
@@ -169,7 +170,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
         </p>
       </CardContent></Card>
 
-      {bangTieuChi('Pillar 2 — Ship hộ (sản lượng)', diem.p2, false)}
+      {bangTieuChi('Pillar 2 — Ship hộ (sản lượng và chất lượng)', diem.p2, false)}
 
       <ChiTietPillar2 ky={ky} tu={tu} den={den} tai={docChiTietPillar2} luu={luuSuCo} xoa={xoaSuCo} suaDuoc={ghiSuCoDuoc} />
       {bangTieuChi('Pillar 3 — Đối soát & thu hồi công nợ', diem.p3, false)}

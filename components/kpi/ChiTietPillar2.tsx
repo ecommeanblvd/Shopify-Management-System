@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { NHAN_KET_QUA_SLA } from '@/features/kpi-logistics/chi-tiet';
-import { LOAI_SU_CO, NHAN_THUOC_VE, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
+import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
 import type { ChiTietPillar2, LuuSuCoInput } from '@/features/ship-ho/pillar2-actions';
 
 type Tab = 'tien' | 'sla' | 'su-co';
@@ -198,7 +198,10 @@ function BangSuCo({ rows, donHang, ky, suaDuoc, luu, xoa, sauKhiLuu }: {
   return (
     <div className="space-y-3">
       <Khung
-        tomTat={<><b>{t.n}</b> sự cố · tổng chi phí <b>{vnd(t.tongChiPhiVnd)}</b> · thiệt hại ròng <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiRongVnd)}</b> · trong đó lỗi nội bộ <b>{t.nNoiBo}</b> vụ <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiNoiBoVnd)}</b></>}
+        tomTat={<><b>{t.n}</b> sự cố · tổng chi phí <b>{vnd(t.tongChiPhiVnd)}</b> · thiệt hại ròng <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiRongVnd)}</b> · trong đó lỗi nội bộ <b>{t.nNoiBo}</b> vụ <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiNoiBoVnd)}</b>
+          {t.thietHaiChamDiemVnd !== t.thietHaiNoiBoVnd && <> · quy ra điểm <b className="text-red-600 dark:text-red-400">{vnd(t.thietHaiChamDiemVnd)}</b> (lỗi sai địa chỉ nhân 2, không phải tiền thật)</>}
+          {t.nGhiTre > 0 && <> · <b className="text-red-600 dark:text-red-400">{t.nGhiTre}</b> vụ ghi muộn quá {HAN_GHI_SU_CO_NGAY} ngày → trượt Gate Pillar 3</>}
+          {t.nChuaQuyTrachNhiem > 0 && <> · <b className="text-amber-600 dark:text-amber-400">{t.nChuaQuyTrachNhiem}</b> vụ chưa quy trách nhiệm → trượt Gate Pillar 3</>}</>}
         onCsv={() => taiCsv(`kpi-${ky}-p2-su-co.csv`,
           ['Ngày', 'Mã đơn', 'Brand', 'Loại sự cố', 'Thuộc về', 'Chi phí (VND)', 'Đã đòi lại (VND)', 'Thiệt hại ròng (VND)', 'Các khoản', 'Mô tả'],
           rows.map((r) => [r.ngay, r.maDon, r.brand, r.tenLoai, NHAN_THUOC_VE[r.thuocVe as ThuocVe] ?? r.thuocVe,

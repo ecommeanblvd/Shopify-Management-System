@@ -31,8 +31,10 @@ describe('sop-giao-hang', () => {
   it('loiToiDaTaiNgay: siết dần theo lộ trình, trước mốc đầu dùng mốc đầu', () => {
     expect(loiToiDaTaiNgay('2026-09-01').loiToiDa).toBe(0.35);
     expect(loiToiDaTaiNgay('2025-05-01').loiToiDa).toBe(0.35);
-    expect(loiToiDaTaiNgay('2027-01-01').loiToiDa).toBe(0.28);
-    expect(loiToiDaTaiNgay('2027-08-15').loiToiDa).toBe(0.15);
+    // CEO 12/09/2026 kéo mốc lên: vào thẳng 85 % từ Q1/2027, 90 % từ Q3/2027.
+    expect(loiToiDaTaiNgay('2027-01-01').loiToiDa).toBe(0.15);
+    expect(loiToiDaTaiNgay('2027-06-30').loiToiDa).toBe(0.15);
+    expect(loiToiDaTaiNgay('2027-08-15').loiToiDa).toBe(0.10);
     expect(loiToiDaTaiNgay('2028-03-01').loiToiDa).toBe(0.10);
     expect(LO_TRINH_LOI.map((m) => m.loiToiDa)).toEqual([...LO_TRINH_LOI.map((m) => m.loiToiDa)].sort((a, b) => b - a));
   });
