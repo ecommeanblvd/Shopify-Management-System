@@ -162,10 +162,11 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
     tre: 'text-amber-600 dark:text-amber-400',
     ngoai_le: 'text-red-600 dark:text-red-400',
     loai_tru: 'text-muted-foreground',
+    chua_den_han: 'text-muted-foreground',
   };
   return (
     <Khung
-      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
+      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
         ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
         rows.map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
@@ -188,7 +189,7 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
             <td className="px-2.5 py-1.5 text-left">{r.nuoc}</td>
             <td className="px-2.5 py-1.5 text-left uppercase">{r.line}</td>
             <td className="px-2.5 py-1.5 text-left">{r.ngayGui}</td>
-            <td className="px-2.5 py-1.5 text-left">{r.ngayGiao}</td>
+            <td className="px-2.5 py-1.5 text-left">{r.ngayGiao || <span className="text-muted-foreground">chưa giao</span>}</td>
             <td className="px-2.5 py-1.5 text-right font-semibold">{r.soNgay}</td>
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaNgay}</td>
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaLineNgay}{r.slaLineNgay < r.slaNgay && r.soNgay > r.slaLineNgay ? ' ⚑' : ''}</td>

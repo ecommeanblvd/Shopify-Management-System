@@ -69,3 +69,39 @@ describe('chenhSauThuHoi', () => {
     expect(chenhSauThuHoi(3_000_000, 1_000_000, 2_000_000).conAm).toBe(false);
   });
 });
+
+describe('kiện CHƯA GIAO tại thời điểm chấm (CEO 13/09/2026)', () => {
+  it('chưa giao mà còn trong cam kết → chưa tới hạn, đứng ngoài mẫu số', () => {
+    expect(xepLoaiSla(3, 5, false, undefined, true)).toBe('chua_den_han');
+    expect(xepLoaiSla(5, 5, false, undefined, true)).toBe('chua_den_han');
+  });
+
+  it('chưa giao mà ĐÃ quá cam kết → trễ chắc chắn, không chờ nó tới mới chấm', () => {
+    expect(xepLoaiSla(6, 5, false, undefined, true)).toBe('tre');
+    expect(xepLoaiSla(25, 5, false, undefined, true)).toBe('ngoai_le');
+  });
+
+  it('đã giao thì giữ nguyên cách chấm cũ', () => {
+    expect(xepLoaiSla(5, 5, false, undefined, false)).toBe('dat');
+    expect(xepLoaiSla(6, 5, false, undefined, false)).toBe('tre');
+  });
+
+  it('kiện bị loại trừ vẫn loại, bất kể đã giao hay chưa', () => {
+    expect(xepLoaiSla(30, 5, true, undefined, true)).toBe('loai_tru');
+  });
+
+  it('chưa tới hạn KHÔNG vào mẫu số nên không kéo tỉ lệ xuống', () => {
+    const k = (soNgay: number, chuaGiao: boolean) => ({
+      shipmentId: null, nguon: 'ship_ho' as const, thuocVe: 'Ship hộ · kalisa',
+      maDon: null, tracking: null, nuoc: 'US', line: 'fedex',
+      ngayGui: '2026-09-01', ngayGiao: '', soNgay, slaNgay: 5, slaLineNgay: 5,
+      ketQua: xepLoaiSla(soNgay, 5, false, undefined, chuaGiao), lyDoCham: null, chuaGiao,
+    });
+    const d = demKetQuaSla([k(4, false), k(3, true), k(9, true)]);
+    expect(d.dat).toBe(1);
+    expect(d.chua_den_han).toBe(1);
+    expect(d.tre).toBe(1);
+    expect(d.tinhKpi).toBe(2);      // kiện chưa tới hạn đứng ngoài
+    expect(d.tyLeDat).toBe(0.5);
+  });
+});

@@ -12,7 +12,7 @@ export type ShipHoTone = 'muted' | 'info' | 'ok' | 'warn' | 'bad';
 export interface ShipHoStageInput {
   status: string; // draft | quoted | shipped | delivered | billed | settled
   trackingNumber: string | null;
-  deliveryStatus: string | null; // in_transit | out_for_delivery | delivered | exception | unknown
+  deliveryStatus: string | null; // in_transit | out_for_delivery | delivered | returning | exception | unknown
   reconcileStatus: string | null;
   marginVnd: number | null;
 }
@@ -36,6 +36,7 @@ export function deriveShipHoStage(i: ShipHoStageInput): ShipHoStage {
   if (i.status === 'settled') return { label: 'Đã thanh toán', tone: 'ok', warnings };
   if (i.status === 'billed') return { label: 'Đã lên bảng kê', tone: 'info', warnings };
   if (delivered) return { label: 'Đã giao', tone: 'ok', warnings };
+  if (i.deliveryStatus === 'returning') return { label: 'Đang hoàn về', tone: 'bad', warnings };
   if (i.deliveryStatus === 'exception') return { label: 'Sự cố vận chuyển', tone: 'bad', warnings };
   if (i.trackingNumber) {
     if (i.deliveryStatus === 'out_for_delivery') return { label: 'Đang giao', tone: 'info', warnings };

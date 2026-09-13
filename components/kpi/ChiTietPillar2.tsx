@@ -145,20 +145,23 @@ function BangTien({ rows, ky }: { rows: ChiTietPillar2['donHang']; ky: string })
 }
 
 function BangSlaShipHo({ rows, ky }: { rows: ChiTietPillar2['sla']; ky: string }) {
-  const daGiao = rows.filter((r) => r.ketQua != null);
+  // Mẫu số = kiện đã chấm được: bỏ kiện chưa tới hạn và kiện chưa có ngày gửi.
+  const daGiao = rows.filter((r) => r.ketQua != null && r.ketQua !== 'chua_den_han');
+  const chuaDenHan = rows.filter((r) => r.ketQua === 'chua_den_han').length;
   const dat = daGiao.filter((r) => r.ketQua === 'dat').length;
   const mau: Record<string, string> = {
     dat: 'text-emerald-600 dark:text-emerald-400',
     tre: 'text-amber-600 dark:text-amber-400',
     ngoai_le: 'text-red-600 dark:text-red-400',
     loai_tru: 'text-muted-foreground',
+    chua_den_han: 'text-muted-foreground',
   };
   return (
     <Khung
-      tomTat={<><b>{daGiao.length}</b>/{rows.length} đơn đã có ngày giao · đạt cam kết <b>{dat}</b> ({daGiao.length > 0 ? `${Math.round((dat / daGiao.length) * 1000) / 10}%` : '—'}) · <b>{rows.length - daGiao.length}</b> đơn chưa có ngày giao nên chưa chấm được</>}
+      tomTat={<>Chấm <b>{daGiao.length}</b>/{rows.length} đơn · đạt cam kết <b>{dat}</b> ({daGiao.length > 0 ? `${Math.round((dat / daGiao.length) * 1000) / 10}%` : '—'}) · <b>{chuaDenHan}</b> đơn chưa giao nhưng còn trong cam kết nên đứng ngoài mẫu số. Đơn chưa giao mà ĐÃ quá cam kết vẫn tính trễ — không chờ nó tới mới chấm, vì chờ thì kiện mãi không tới sẽ vô hình.</>}
       onCsv={() => taiCsv(`kpi-${ky}-p2-sla.csv`,
         ['Mã đơn', 'Brand', 'Nước', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết', 'Kết quả', 'Trạng thái giao'],
-        rows.map((r) => [r.ma, r.brand, r.nuoc, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.ketQua ? NHAN_KET_QUA_SLA[r.ketQua] : 'Chưa giao xong', r.trangThaiGiao]))}
+        rows.map((r) => [r.ma, r.brand, r.nuoc, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.ketQua ? NHAN_KET_QUA_SLA[r.ketQua] : 'Chưa có ngày gửi', r.trangThaiGiao]))}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Mã đơn</th><th className={`${TH} text-left`}>Brand</th><th className={`${TH} text-left`}>Nước</th>
@@ -177,7 +180,7 @@ function BangSlaShipHo({ rows, ky }: { rows: ChiTietPillar2['sla']; ky: string }
             <td className="px-2.5 py-1.5 text-right font-semibold">{r.soNgay ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaNgay}</td>
             <td className={`px-2.5 py-1.5 text-left font-medium ${r.ketQua ? mau[r.ketQua] : 'text-muted-foreground'}`}>
-              {r.ketQua ? NHAN_KET_QUA_SLA[r.ketQua] : `Chưa giao xong${r.trangThaiGiao ? ` · ${r.trangThaiGiao}` : ''}`}
+              {r.ketQua ? NHAN_KET_QUA_SLA[r.ketQua] : 'Chưa có ngày gửi'}{r.trangThaiGiao && r.ketQua !== 'dat' ? <span className="text-[10px] text-muted-foreground"> · {r.trangThaiGiao}</span> : null}
             </td>
           </tr>
         ))}

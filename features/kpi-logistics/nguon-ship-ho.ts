@@ -13,7 +13,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU, type KienGiao } from '@/features/shipments/sop-giao-hang';
+import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU, NGUONG_NGOAI_LE_SOP, type KienGiao } from '@/features/shipments/sop-giao-hang';
 import { xepLoaiSla, type DongSla, type DongChungTu } from './chi-tiet';
 import { nhanShipHo } from './pham-vi';
 
@@ -23,7 +23,7 @@ export function soNgayShipHo(ngayGui: string, mocGiao: string): number {
   return Math.max(0, Math.round((ms / 86_400_000) * 10) / 10);
 }
 
-type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; su_co_noi_bo: number };
+type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; su_co_noi_bo: number };
 
 /**
  * `su_co_noi_bo` > 0 nghĩa là đơn có sự cố quy về lỗi nội bộ → kiện bị KHOÁ THÀNH TRỄ dù số
@@ -41,11 +41,11 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
            COALESCE(o.country, '?') AS cc, COALESCE(o.carrier_key, '?') AS line,
            o.shipped_at::text AS gui,
            COALESCE(o.delivered_at::text, now()::text) AS giao,
+           (o.delivered_at IS NULL) AS chua_giao,
+           (o.delivery_status = 'returning') AS dang_hoan,
            (SELECT COUNT(*) FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo')::int AS su_co_noi_bo
       FROM ship_ho_orders o
      WHERE o.shipped_at IS NOT NULL
-       AND (o.delivered_at IS NOT NULL
-            OR EXISTS (SELECT 1 FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo'))
        AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
      ORDER BY o.shipped_at, o.code;`);
   return rows;
@@ -62,7 +62,9 @@ export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<
     country: (r.cc ?? '?').trim().toUpperCase(),
     line: (r.line ?? '?').trim().toLowerCase(),
     soNgay: soNgayShipHo(r.gui, r.giao),
-    buocTre: r.su_co_noi_bo > 0,
+    // Kiện đang hoàn về sẽ KHÔNG BAO GIỜ tới tay khách — trễ chắc chắn, không chờ hết hạn.
+    buocTre: r.su_co_noi_bo > 0 || r.dang_hoan,
+    chuaGiao: r.chua_giao,
     lyDoCham: null,
   }));
 }
@@ -78,15 +80,18 @@ export async function docSlaShipHo(tu: string, den: string): Promise<DongSla[]> 
     // mới loại. Đây là hạn chế có ý thức: chưa có chỗ lưu thì không được âm thầm loại kiện.
     // Kiện có sự cố lỗi nội bộ thì KHÔNG được loại dù nước nằm trong danh sách loại trừ —
     // lỗi của mình phải ở lại mẫu số.
-    const coSuCo = r.su_co_noi_bo > 0;
-    const biLoaiTru = !coSuCo && nuoc in NUOC_LOAI_TRU;
+    const buocTre = r.su_co_noi_bo > 0 || r.dang_hoan;
+    const biLoaiTru = !buocTre && nuoc in NUOC_LOAI_TRU;
     const slaNgay = slaCuaNuoc(nuoc);
-    const ketQua = coSuCo && !biLoaiTru && soNgay <= slaNgay ? 'tre' as const : xepLoaiSla(soNgay, slaNgay, biLoaiTru);
+    const ketQua = buocTre && !biLoaiTru
+      ? (soNgay <= NGUONG_NGOAI_LE_SOP ? 'tre' as const : 'ngoai_le' as const)
+      : xepLoaiSla(soNgay, slaNgay, biLoaiTru, NGUONG_NGOAI_LE_SOP, r.chua_giao);
     return {
       shipmentId: null, nguon: 'ship_ho' as const, thuocVe: nhanShipHo(r.brand),
       maDon: r.code, tracking: r.tk, nuoc, line,
-      ngayGui: r.gui.slice(0, 10), ngayGiao: r.giao.slice(0, 10),
+      ngayGui: r.gui.slice(0, 10), ngayGiao: r.chua_giao ? '' : r.giao.slice(0, 10),
       soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua, lyDoCham: null,
+      chuaGiao: r.chua_giao,
     };
   });
 }

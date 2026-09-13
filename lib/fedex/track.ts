@@ -1,6 +1,6 @@
 import { fedexFetch } from './client';
 
-export type DeliveryStatus = 'in_transit' | 'out_for_delivery' | 'delivered' | 'exception' | 'unknown';
+export type DeliveryStatus = 'in_transit' | 'out_for_delivery' | 'delivered' | 'returning' | 'exception' | 'unknown';
 
 /**
  * Mã trạng thái FedEx → trạng thái hệ thống. Danh sách lấy từ bộ ca kiểm thử chính
@@ -24,7 +24,11 @@ const STATUS_BY_CODE: Record<string, DeliveryStatus> = {
   // chuyển. Trước đó ba mã này rơi vào 'unknown' (CP 17 kiện, CC 3, SF 1).
   CP: 'in_transit', CC: 'in_transit', SF: 'in_transit',
   // Cần người xử lý.
-  DE: 'exception', SE: 'exception', CA: 'exception', RS: 'exception', HL: 'exception',
+  DE: 'exception', SE: 'exception', CA: 'exception', HL: 'exception',
+  // RS = Return to Shipper. Tách khỏi 'exception' vì đây KHÔNG phải chuyện chờ xử lý mà là một
+  // kết cục: kiện đang quay về và sẽ KHÔNG BAO GIỜ có ngày giao. Gộp vào exception thì kiện hỏng
+  // nặng nhất lại nằm chung rổ với kiện chỉ đang chờ khách gọi lại (CEO 13/09/2026).
+  RS: 'returning',
 };
 
 export function mapFedexStatus(code: string | null | undefined): DeliveryStatus {

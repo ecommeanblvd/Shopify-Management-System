@@ -11,6 +11,7 @@ const TRACK_URL: Record<string, (tn: string) => string> = {
 const STATUS_OPTIONS: Array<{ value: ManualDeliveryStatus; label: string }> = [
   { value: 'in_transit', label: 'Đang vận chuyển' },
   { value: 'out_for_delivery', label: 'Đang giao' },
+  { value: 'returning', label: 'Đang hoàn về' },
   { value: 'delivered', label: 'Đã giao (hôm nay)' },
   { value: 'exception', label: 'Sự cố' },
 ];

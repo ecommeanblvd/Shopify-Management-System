@@ -12,7 +12,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
-import { slaCuaNuoc } from '@/features/shipments/sop-giao-hang';
+import { slaCuaNuoc, NGUONG_NGOAI_LE_SOP } from '@/features/shipments/sop-giao-hang';
 import { xepLoaiSla, type KetQuaSla } from '@/features/kpi-logistics/chi-tiet';
 import { layLoaiSuCo, tongChiPhi, thietHaiRong, DIEN_BIEN, type KhoanChiPhi } from './su-co';
 
@@ -134,22 +134,32 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
     };
   });
 
+  // Kiện CHƯA GIAO cũng phải chấm (CEO 13/09/2026): đo số ngày đã trôi qua tới giờ. Quá cam kết
+  // rồi thì trễ chắc chắn; còn trong hạn thì 'chua_den_han', đứng ngoài mẫu số. Trước đây kiện
+  // chưa giao để `ketQua = null` và biến mất khỏi tỉ lệ, nên tỉ lệ đúng hạn luôn đẹp hơn thực tế.
+  const bayGio = Date.now();
   const sla: DongSlaShipHo[] = donRows.rows.map((r) => {
     const nuoc = (r.cc ?? '?').trim().toUpperCase();
     const slaNgay = slaCuaNuoc(nuoc);
+    const chuaGiao = r.giao == null;
     let soNgay: number | null = null;
-    if (r.gui && r.giao) {
-      const ms = new Date(r.giao).getTime() - new Date(`${r.gui.slice(0, 10)}T00:00:00Z`).getTime();
+    if (r.gui) {
+      const den = r.giao ? new Date(r.giao).getTime() : bayGio;
+      const ms = den - new Date(`${r.gui.slice(0, 10)}T00:00:00Z`).getTime();
       // Kẹp về 0: `shipped_at` là NGÀY còn `delivered_at` là mốc thời gian, giao ngay
       // trong ngày gửi sẽ ra số âm vì lệch múi giờ — âm không có nghĩa là giao trước khi gửi.
       soNgay = Math.max(0, Math.round((ms / 86_400_000) * 10) / 10);
     }
+    // Kiện đang hoàn về không bao giờ tới tay khách → trễ chắc chắn, không chờ hết hạn.
+    const dangHoan = r.dst === 'returning';
     return {
       ma: r.code, brand: r.brand, nuoc,
       ngayGui: r.gui ? r.gui.slice(0, 10) : null,
       ngayGiao: r.giao ? r.giao.slice(0, 10) : null,
       soNgay, slaNgay,
-      ketQua: soNgay == null ? null : xepLoaiSla(soNgay, slaNgay, false),
+      ketQua: soNgay == null ? null
+        : dangHoan ? (soNgay <= NGUONG_NGOAI_LE_SOP ? 'tre' : 'ngoai_le')
+        : xepLoaiSla(soNgay, slaNgay, false, NGUONG_NGOAI_LE_SOP, chuaGiao),
       trangThaiGiao: r.dst,
     };
   });

@@ -80,16 +80,16 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
 
   if (ma === '1.2') {
     // 1.2 chấm MỌI kiện mình chạy nên KHÔNG lọc store; kiện ship hộ lên từ Lark cộng thêm ở dưới.
-    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; ngay: string; ly_do: string | null; dom: string }>(sql`
+    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string | null; ngay: string; ly_do: string | null; dom: string; chua_giao: boolean }>(sql`
       SELECT s.id AS id, o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
-             (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400)::text AS ngay,
-             s.ly_do_cham AS ly_do, st.shop_domain AS dom
+             (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400)::text AS ngay,
+             s.ly_do_cham AS ly_do, st.shop_domain AS dom, (s.delivered_at IS NULL) AS chua_giao
         FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
-       WHERE s.label_created_at IS NOT NULL AND s.delivered_at IS NOT NULL
-         AND s.delivered_at::timestamp >= s.label_created_at
+       WHERE s.label_created_at IS NOT NULL
+         AND (s.delivered_at IS NULL OR s.delivered_at::timestamp >= s.label_created_at)
          AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
-       ORDER BY (EXTRACT(EPOCH FROM (s.delivered_at::timestamp - s.label_created_at)) / 86400) DESC;`);
+       ORDER BY (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400) DESC;`);
     const slaRows: DongSla[] = rows.map((r) => {
       const nuoc = (r.cc ?? '?').trim().toUpperCase();
       const line = (r.line ?? '?').trim().toLowerCase();
@@ -105,8 +105,9 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         shipmentId: r.id, nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
         maDon: r.don, tracking: r.tk, nuoc, line,
         ngayGui: ngay(r.gui) ?? '', ngayGiao: ngay(r.giao) ?? '',
-        soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru),
-        lyDoCham: r.ly_do,
+        soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line),
+        ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru, undefined, r.chua_giao),
+        lyDoCham: r.ly_do, chuaGiao: r.chua_giao,
       };
     });
     const shipHo = await docSlaShipHo(tu, den);

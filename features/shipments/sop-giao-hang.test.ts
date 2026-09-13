@@ -73,3 +73,33 @@ describe('sop-giao-hang', () => {
     expect(tongKpi(rows, '2027-05-01').dat).toBe(false); // cùng số liệu, kỳ siết 22 % → trượt
   });
 });
+
+describe('kiện chưa giao trong chamKpi (CEO 13/09/2026)', () => {
+  const k = (soNgay: number, extra: Record<string, unknown> = {}) =>
+    ({ country: 'US', line: 'fedex', soNgay, ...extra });
+
+  it('kiện chưa giao còn trong hạn không vào mẫu số', () => {
+    const r = chamKpi([k(4), k(3, { chuaGiao: true })], '2026-09-01');
+    expect(r[0].n).toBe(1);
+    expect(r[0].dungHan).toBe(1);
+  });
+
+  it('kiện chưa giao đã quá hạn vào mẫu số và tính TRỄ', () => {
+    const r = chamKpi([k(4), k(9, { chuaGiao: true })], '2026-09-01');
+    expect(r[0].n).toBe(2);
+    expect(r[0].dungHan).toBe(1);
+    expect(r[0].treVanChuyen).toBe(1);
+  });
+
+  it('kiện chưa giao quá 20 ngày là trễ nặng', () => {
+    const r = chamKpi([k(25, { chuaGiao: true })], '2026-09-01');
+    expect(r[0].ngoaiLe).toBe(1);
+  });
+
+  it('kiện bị khoá trễ vẫn vào mẫu số dù chưa giao và còn trong hạn', () => {
+    const r = chamKpi([k(2, { chuaGiao: true, buocTre: true })], '2026-09-01');
+    expect(r[0].n).toBe(1);
+    expect(r[0].dungHan).toBe(0);
+    expect(r[0].treVanChuyen).toBe(1);
+  });
+});

@@ -4,6 +4,7 @@ const DELIVERY_LABEL: Record<string, { label: string; cls: string }> = {
   in_transit: { label: 'Đang vận chuyển', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
   out_for_delivery: { label: 'Đang giao', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
   delivered: { label: 'Đã giao', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },
+  returning: { label: 'Đang hoàn về', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-400' },
   exception: { label: 'Sự cố', cls: 'bg-red-500/15 text-red-700 dark:text-red-400' },
   unknown: { label: 'Chưa rõ', cls: 'bg-muted text-muted-foreground' },
 };

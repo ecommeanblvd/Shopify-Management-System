@@ -17,12 +17,13 @@ export const TEN_TIEU_CHI: Record<MaTieuChi, string> = {
 };
 
 /** 1.2 — mỗi kiện rơi vào đúng MỘT nhóm, khớp hàm `cham()` của SOP. */
-export type KetQuaSla = 'dat' | 'tre' | 'ngoai_le' | 'loai_tru';
+export type KetQuaSla = 'dat' | 'tre' | 'ngoai_le' | 'loai_tru' | 'chua_den_han';
 export const NHAN_KET_QUA_SLA: Record<KetQuaSla, string> = {
   dat: 'Đạt',
   tre: 'Trễ',
   ngoai_le: 'Trễ nặng (> 20 ngày)',
   loai_tru: 'Loại khỏi KPI',
+  chua_den_han: 'Chưa tới hạn',
 };
 
 /**
@@ -32,8 +33,12 @@ export const NHAN_KET_QUA_SLA: Record<KetQuaSla, string> = {
  */
 export function xepLoaiSla(
   soNgay: number, slaNgay: number, biLoaiTru: boolean, nguong = NGUONG_NGOAI_LE_SOP,
+  chuaGiao = false,
 ): KetQuaSla {
   if (biLoaiTru) return 'loai_tru';
+  // Kiện CHƯA GIAO: còn trong hạn thì chưa biết gì, đứng ngoài cả tử số lẫn mẫu số; quá hạn rồi
+  // thì chắc chắn trễ, không cứu được nữa (CEO 13/09/2026).
+  if (chuaGiao) return soNgay <= slaNgay ? 'chua_den_han' : (soNgay <= nguong ? 'tre' : 'ngoai_le');
   if (soNgay <= slaNgay) return 'dat';
   return soNgay <= nguong ? 'tre' : 'ngoai_le';
 }
@@ -91,6 +96,8 @@ export interface DongSla {
   ketQua: KetQuaSla;
   /** MÃ lý do (không phải nhãn) — ô chọn cần mã, nhãn tra từ `layLyDo`. */
   lyDoCham: string | null;
+  /** true = chưa giao; `soNgay` là số ngày ĐÃ TRÔI QUA, `ngayGiao` để trống. */
+  chuaGiao?: boolean;
 }
 
 export interface DongChungTu {
@@ -139,14 +146,14 @@ export const PHAM_VI_THEO_MA: Record<MaTieuChi, string> = {
 
 export const CACH_DO: Record<MaTieuChi, string> = {
   '1.1': 'Đơn có cước carrier RÒNG (bill trừ tiền đã đòi lại được bằng credit note) vẫn lớn hơn cước thu của khách, tính theo kiện gửi trong kỳ. Đơn đã được carrier trả lại đủ tiền sẽ tự rời danh sách. Cột Phân định là kết luận đối soát đã chốt; chỉ đơn được chốt là lỗi nội bộ mới bị trừ KPI, đơn do hãng sai hoặc chưa xét thì không.',
-  '1.2': 'Mọi kiện GỬI trong kỳ và ĐÃ giao xong, gồm cả kiện ship hộ. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận; kiện ship hộ lên từ Lark chỉ có NGÀY gửi nên tính từ đầu ngày đó. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII — kiện Lark chưa có chỗ lưu lý do nên không kiện nào được loại.',
+  '1.2': 'Mọi kiện GỬI trong kỳ, gồm cả kiện ship hộ và cả kiện CHƯA giao. Kiện chưa giao mà đã quá cam kết thì tính TRỄ vì không còn cứu được; còn trong hạn thì đứng ngoài cả tử số lẫn mẫu số. Không làm vậy thì kiện gửi rồi mãi không tới sẽ vô hình và tỉ lệ đúng hạn luôn đẹp hơn thực tế. Số ngày tính từ lúc tạo vận đơn tới lúc khách nhận; kiện ship hộ lên từ Lark chỉ có NGÀY gửi nên tính từ đầu ngày đó. Cam kết lấy theo nước, hãng nào có thước riêng thì theo hãng. Kiện có lý do chậm ngoài tầm kiểm soát bị loại khỏi mẫu số theo mục VII — kiện Lark chưa có chỗ lưu lý do nên không kiện nào được loại.',
   '1.3': 'Kiện phát sinh phí sửa địa chỉ trên hoá đơn carrier — dấu hiệu nhập sai hoặc thiếu thông tin người nhận. Mẫu số là toàn bộ kiện có hoá đơn trong kỳ, gồm cả kiện ship hộ (phí lấy từ khoản addressCorrection trên hoá đơn thật).',
   '1.4': 'So cân mình tự tính (lớn hơn giữa cân thực và cân quy đổi kích thước) với cân carrier thật sự charge. Lệch từ 0,5 kg trở lên coi là chọn sai thùng, vì thùng chật phồng ra làm tăng cân quy đổi.',
 };
 
 /** Đếm theo kết quả để hiện dòng tóm tắt trên đầu bảng chi tiết. */
 export function demKetQuaSla(dong: readonly DongSla[]): Record<KetQuaSla, number> & { tinhKpi: number; tyLeDat: number | null } {
-  const d = { dat: 0, tre: 0, ngoai_le: 0, loai_tru: 0 } as Record<KetQuaSla, number>;
+  const d = { dat: 0, tre: 0, ngoai_le: 0, loai_tru: 0, chua_den_han: 0 } as Record<KetQuaSla, number>;
   for (const x of dong) d[x.ketQua] += 1;
   const tinhKpi = d.dat + d.tre + d.ngoai_le;
   return { ...d, tinhKpi, tyLeDat: tinhKpi > 0 ? d.dat / tinhKpi : null };

@@ -84,7 +84,7 @@ export async function setShipHoTracking(
   return { ok: true };
 }
 
-const MANUAL_STATUSES = ['in_transit', 'out_for_delivery', 'delivered', 'exception'] as const;
+const MANUAL_STATUSES = ['in_transit', 'out_for_delivery', 'delivered', 'returning', 'exception'] as const;
 export type ManualDeliveryStatus = (typeof MANUAL_STATUSES)[number];
 
 /**

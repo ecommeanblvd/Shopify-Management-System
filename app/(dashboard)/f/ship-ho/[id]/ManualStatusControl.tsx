@@ -37,6 +37,7 @@ export function ManualStatusControl({ orderId, current }: {
         <option value="">— chọn trạng thái —</option>
         <option value="in_transit">Đang vận chuyển</option>
         <option value="out_for_delivery">Đang giao</option>
+        <option value="returning">Đang hoàn về</option>
         <option value="delivered">Đã giao</option>
         <option value="exception">Sự cố</option>
       </select>

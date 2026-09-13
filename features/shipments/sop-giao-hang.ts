@@ -111,7 +111,22 @@ export interface KienGiao {
    * mới giao đúng hạn — nếu chấm theo kiện đó thì lỗi biến mất khỏi tỉ lệ.
    */
   buocTre?: boolean;
+  /**
+   * CHƯA GIAO tại thời điểm chấm; `soNgay` là số ngày đã trôi qua, không phải thời gian giao.
+   * Kiện như vậy chỉ vào mẫu số khi ĐÃ QUÁ cam kết — lúc đó nó chắc chắn trễ, không cứu được.
+   * Còn trong hạn thì chưa biết gì nên đứng ngoài cả tử số lẫn mẫu số (CEO 13/09/2026).
+   */
+  chuaGiao?: boolean;
 }
+
+/**
+ * Kiện chưa giao mà vẫn trong hạn thì chưa có thông tin để chấm — loại khỏi mẫu số.
+ *
+ * Vì sao quan trọng: trước đây chỉ kiện ĐÃ GIAO mới vào mẫu số, nên kiện gửi rồi mãi không tới
+ * hoàn toàn vô hình. Đó là thiên lệch một chiều — kiện tệ nhất bị bỏ ra, tỉ lệ đúng hạn luôn
+ * đẹp hơn thực tế.
+ */
+export const chuaDenHan = (k: KienGiao, sla: number): boolean => k.chuaGiao === true && !k.buocTre && k.soNgay <= sla;
 
 export interface DiemKpi {
   n: number; dungHan: number; treVanChuyen: number; ngoaiLe: number;
@@ -120,11 +135,13 @@ export interface DiemKpi {
 export interface DongKpiLine extends DiemKpi { line: string; slaNgay: number }
 export interface DongKpiNuoc extends DiemKpi { country: string; slaNgay: number; canCu: string | null; theoLine: DongKpiLine[] }
 
-function cham(kien: readonly KienGiao[], sla: number, loiToiDa: number, nguong: number): DiemKpi {
+function cham(tatCa: readonly KienGiao[], sla: number, loiToiDa: number, nguong: number): DiemKpi {
+  const kien = tatCa.filter((k) => !chuaDenHan(k, sla));
   const n = kien.length;
   let dungHan = 0, treVanChuyen = 0, ngoaiLe = 0;
   for (const k of kien) {
-    if (!k.buocTre && k.soNgay <= sla) dungHan += 1;
+    // Kiện chưa giao lọt tới đây là đã quá cam kết → không thể còn đúng hạn.
+    if (!k.buocTre && !k.chuaGiao && k.soNgay <= sla) dungHan += 1;
     else if (k.soNgay <= nguong) treVanChuyen += 1;
     else ngoaiLe += 1;
   }
