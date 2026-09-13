@@ -20,3 +20,17 @@ describe('parseReturnRef', () => {
     expect(parseReturnRef('')).toBeNull();
   });
 });
+
+describe('parseReturnRef với đơn ship hộ', () => {
+  it('mã đơn nội bộ có hậu tố _R', () => {
+    expect(parseReturnRef('26-INSLG-SV-0923_R')).toEqual({ kind: 'order', orderNumber: '26-INSLG-SV-0923' });
+  });
+
+  it('mã của brand có dấu # và hậu tố _R', () => {
+    expect(parseReturnRef('#KLS2053_R')).toEqual({ kind: 'order', orderNumber: 'KLS2053' });
+  });
+
+  it('RETURN OF theo mã vận đơn chiều đi', () => {
+    expect(parseReturnRef('RETURN OF 876231531883')).toEqual({ kind: 'tracking', trackingNumber: '876231531883' });
+  });
+})

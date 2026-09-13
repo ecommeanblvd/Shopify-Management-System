@@ -700,6 +700,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   podName: text('pod_name'),
   // Dòng bill là cước HÀNG HOÀN → FK về đơn gốc (nhận diện từ orderRef "_R"/"RETURN OF").
   returnOfOrderId: uuid('return_of_order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  // Cùng việc đó nhưng cho đơn SHIP HỘ. Phải là cột riêng vì `return_of_order_id` đã khoá ngoại
+  // sang `shopify_orders` — nhét id ship hộ vào đó thì cơ sở dữ liệu chặn.
+  returnOfShipHoOrderId: uuid('return_of_ship_ho_order_id').references(() => shipHoOrders.id, { onDelete: 'set null' }),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
@@ -710,6 +713,7 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   index('carrier_bill_lines_tracking_idx').on(table.trackingNumber),
   index('carrier_bill_lines_order_number_idx').on(table.orderNumber),
   index('carrier_bill_lines_return_of_idx').on(table.returnOfOrderId),
+  index('carrier_bill_lines_return_of_ship_ho_idx').on(table.returnOfShipHoOrderId),
 ]);
 
 // Link table: which carrier account serves which market.

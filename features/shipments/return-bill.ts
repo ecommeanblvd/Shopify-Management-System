@@ -26,9 +26,33 @@ export function parseReturnRef(orderRef: string | null | undefined): ReturnRef |
   return null;
 }
 
-export interface ApplyReturnSummary { linked: number; unresolved: number }
+export interface ApplyReturnSummary { linked: number; unresolved: number; linkedShipHo: number }
 
-/** Quét dòng bill chưa gắn: orderRef khớp pattern hoàn → set return_of_order_id. */
+/** Tìm đơn SHIP HỘ khớp tham chiếu hoàn. Ship hộ có tới ba cách gọi tên nên thử cả ba. */
+async function timDonShipHo(ref: ReturnRef): Promise<string | null> {
+  const res = ref.kind === 'order'
+    ? await db.execute(sql`
+        SELECT id FROM ship_ho_orders
+         WHERE code = ${ref.orderNumber}
+            OR lark_order_number = ${ref.orderNumber}
+            OR REPLACE(COALESCE(brand_reference, ''), '#', '') = ${ref.orderNumber}
+         LIMIT 1`)
+    : await db.execute(sql`
+        SELECT id FROM ship_ho_orders WHERE tracking_number = ${ref.trackingNumber} LIMIT 1`);
+  return (res.rows[0] as { id?: string } | undefined)?.id ?? null;
+}
+
+/**
+ * Quét dòng bill chưa gắn: orderRef khớp pattern hoàn → gắn về đơn gốc.
+ *
+ * Tìm ở CẢ HAI luồng. Trước đây chỉ tra `shopify_orders`/`shipments`, nên cước hoàn của đơn ship
+ * hộ không bao giờ gắn được về đâu và rơi vào khoảng không — đúng lúc cần nhất, vì ca ship sai
+ * địa chỉ là ca sinh ra cước hoàn (13/09/2026).
+ *
+ * Đo trên 21 dòng cước hoàn đang có: 21/21 chân hoàn dùng MÃ VẬN ĐƠN RIÊNG, không dòng nào dùng
+ * lại mã đi. Vì vậy không thể tra chân hoàn bằng mã đi, và cũng không thể ghép bằng tracking của
+ * chính dòng bill — chỉ ghép được qua orderRef.
+ */
 export async function applyReturnLinks(): Promise<ApplyReturnSummary> {
   const rows = await db.select({
       id: schema.carrierBillLines.id,
@@ -37,10 +61,11 @@ export async function applyReturnLinks(): Promise<ApplyReturnSummary> {
     .from(schema.carrierBillLines)
     .where(and(
       isNull(schema.carrierBillLines.returnOfOrderId),
+      isNull(schema.carrierBillLines.returnOfShipHoOrderId),
       isNotNull(schema.carrierBillLines.orderNumber),
     ));
 
-  let linked = 0, unresolved = 0;
+  let linked = 0, unresolved = 0, linkedShipHo = 0;
   for (const r of rows) {
     const ref = parseReturnRef(r.orderNumber);
     if (!ref) continue;
@@ -57,9 +82,15 @@ export async function applyReturnLinks(): Promise<ApplyReturnSummary> {
     if (orderId) {
       await db.execute(sql`UPDATE carrier_bill_lines SET return_of_order_id = ${orderId} WHERE id = ${r.id}`);
       linked += 1;
+      continue;
+    }
+    const shipHoId = await timDonShipHo(ref);
+    if (shipHoId) {
+      await db.execute(sql`UPDATE carrier_bill_lines SET return_of_ship_ho_order_id = ${shipHoId} WHERE id = ${r.id}`);
+      linkedShipHo += 1;
     } else {
       unresolved += 1;
     }
   }
-  return { linked, unresolved };
+  return { linked, unresolved, linkedShipHo };
 }
