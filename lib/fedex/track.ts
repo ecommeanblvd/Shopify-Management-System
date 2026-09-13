@@ -135,3 +135,18 @@ export async function trackFedexBatch(trackingNumbers: readonly string[]): Promi
   });
   return parseFedexTrackBatch(raw);
 }
+
+/**
+ * Trạng thái giữ lại sau một lượt track tự động.
+ *
+ * 'returning' (đang hoàn về) là kết luận VẬN HÀNH, thường do người biết việc đặt tay, và hãng
+ * KHÔNG phải lúc nào cũng nói ra: kiểm 13/09/2026 trên ca #KLS2053 thì FedEx vẫn trả IT
+ * "Delivery updated" cho mã đi, vì chân hoàn về chạy dưới mã vận đơn khác. Để auto-tracker ghi
+ * đè thì trạng thái người ta vừa đặt biến mất sau đúng một giờ.
+ *
+ * Chỉ có MỘT tin đủ mạnh để lật lại: hãng báo đã giao. Còn lại giữ nguyên 'returning'.
+ */
+export function trangThaiSauKhiTrack(hienTai: string | null | undefined, moi: DeliveryStatus): DeliveryStatus | null {
+  if (hienTai === 'returning' && moi !== 'delivered') return null; // null = đừng đụng vào
+  return moi;
+}

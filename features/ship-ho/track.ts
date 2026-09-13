@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { type DeliveryStatus } from '@/lib/fedex/track';
+import { trangThaiSauKhiTrack, type DeliveryStatus } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 import { emitShipHoEvent } from './mmp-events';
 import { gomLoi, coiLaHong, type TomTatTrack } from './track-tom-tat';
@@ -38,13 +38,15 @@ export async function trackAndStoreShipHo(
   if (!o.tracking) return { ok: false, error: 'no tracking' };
   try {
     const r = await trackAny(o.carrier, o.tracking);
+    // null = giữ nguyên trạng thái đang có (đơn 'returning' không bị hãng ghi đè).
+    const giu = trangThaiSauKhiTrack(o.deliveryStatus, r.status);
     await db.update(schema.shipHoOrders).set({
-      deliveryStatus: r.status,
+      ...(giu == null ? {} : { deliveryStatus: giu }),
       deliveredAt: r.deliveredAt ?? undefined,
       lastTrackedAt: new Date(),
-      status: orderStatusAfterTrack(o.status, r.status) as typeof o.status,
+      status: giu == null ? o.status : (orderStatusAfterTrack(o.status, giu) as typeof o.status),
     }).where(eq(schema.shipHoOrders.id, orderId));
-    if (r.status !== o.deliveryStatus) {
+    if (giu != null && r.status !== o.deliveryStatus) {
       const evt = deliveryStatusToEvent(r.status);
       await emitShipHoEvent(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },

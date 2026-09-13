@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { type DeliveryStatus } from '@/lib/fedex/track';
+import { trangThaiSauKhiTrack, type DeliveryStatus } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -12,13 +12,21 @@ export async function trackAndStoreShipment(
   shipmentId: string,
 ): Promise<{ ok: boolean; status?: DeliveryStatus; error?: string }> {
   const [s] = await db
-    .select({ tracking: schema.shipments.trackingNumber, carrier: schema.shipments.carrierKey })
+    .select({ tracking: schema.shipments.trackingNumber, carrier: schema.shipments.carrierKey,
+              deliveryStatus: schema.shipments.deliveryStatus })
     .from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
   if (!s) return { ok: false, error: 'shipment not found' };
   if (!isTrackable(s.carrier)) return { ok: false, error: 'unsupported carrier' };
   if (!s.tracking) return { ok: false, error: 'no tracking' };
   try {
     const r = await trackAny(s.carrier, s.tracking);
+    const giu = trangThaiSauKhiTrack(s.deliveryStatus, r.status);
+    if (giu == null) {
+      // Kiện đang hoàn về: chỉ đóng dấu đã tra, không để hãng kéo ngược trạng thái.
+      await db.update(schema.shipments).set({ lastTrackedAt: new Date(), updatedAt: sql`now()` })
+        .where(eq(schema.shipments.id, shipmentId));
+      return { ok: true, status: 'returning' };
+    }
     await db.update(schema.shipments).set({
       deliveryStatus: r.status,
       deliverySource: r.source === 'trackingmore' ? 'trackingmore' : s.carrier,

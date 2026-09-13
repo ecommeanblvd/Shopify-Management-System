@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, docMocFedex, TOI_DA_MOI_LO } from './track';
+import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, docMocFedex, trangThaiSauKhiTrack, TOI_DA_MOI_LO } from './track';
 
 describe('mapFedexStatus', () => {
   it('các mã đã đối chiếu thật trên sandbox FedEx', () => {
@@ -101,4 +101,28 @@ describe('parseFedexTrackBatch', () => {
 
 describe('giới hạn lô', () => {
   it('đúng 30 theo đặc tả Basic Integrated Visibility', () => { expect(TOI_DA_MOI_LO).toBe(30); });
+});
+
+describe('trangThaiSauKhiTrack — giữ trạng thái đang hoàn về', () => {
+  it('đơn đang hoàn về KHÔNG bị hãng kéo về in_transit', () => {
+    expect(trangThaiSauKhiTrack('returning', 'in_transit')).toBeNull();
+    expect(trangThaiSauKhiTrack('returning', 'out_for_delivery')).toBeNull();
+    expect(trangThaiSauKhiTrack('returning', 'exception')).toBeNull();
+    expect(trangThaiSauKhiTrack('returning', 'unknown')).toBeNull();
+  });
+
+  it('hãng báo ĐÃ GIAO thì lật lại được — đó là tin đủ mạnh', () => {
+    expect(trangThaiSauKhiTrack('returning', 'delivered')).toBe('delivered');
+  });
+
+  it('đơn bình thường thì lấy nguyên trạng thái hãng trả về', () => {
+    expect(trangThaiSauKhiTrack('in_transit', 'out_for_delivery')).toBe('out_for_delivery');
+    expect(trangThaiSauKhiTrack(null, 'in_transit')).toBe('in_transit');
+    expect(trangThaiSauKhiTrack(undefined, 'delivered')).toBe('delivered');
+  });
+
+  it('mã RS của FedEx map sang returning, không lẫn vào exception', () => {
+    expect(mapFedexStatus('RS')).toBe('returning');
+    expect(mapFedexStatus('HL')).toBe('exception');
+  });
 });
