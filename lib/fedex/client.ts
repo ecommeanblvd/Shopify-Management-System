@@ -147,6 +147,15 @@ export async function fedexFetch<T>(
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`FedEx ${path} ${res.status}: ${text}`);
+  if (!res.ok) {
+    // 403 khi tra vận đơn mà KHÔNG có bộ khoá Track riêng gần như luôn là thiếu env chứ không
+    // phải mất quyền: `fedexConfig` lặng lẽ lùi về khoá mặc định, mà khoá mặc định không có
+    // Track API nên FedEx trả FORBIDDEN. Nói thẳng ra đây, đừng để người sau đi soi quyền trên
+    // cổng FedEx — đúng cái đã làm `track-ship-ho` chết âm thầm 8 ngày (13/09/2026).
+    const thieuKhoa = res.status === 403 && bo === 'track' && !dungKhoaTrackRieng();
+    throw new Error(`FedEx ${path} ${res.status}: ${text}${thieuKhoa
+      ? ' — THIẾU FEDEX_TRACK_CLIENT_ID/FEDEX_TRACK_CLIENT_SECRET trên service đang chạy, đang dùng tạm khoá mặc định vốn không có quyền Track'
+      : ''}`);
+  }
   return (text ? JSON.parse(text) : null) as T;
 }
