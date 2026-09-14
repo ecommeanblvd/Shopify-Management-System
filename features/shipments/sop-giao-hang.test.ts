@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CAM_KET_NUOC, LO_TRINH_LOI, chamKpi, gomTuyenItKien, loiToiDaTaiNgay, mienCuaNuoc, slaCuaLine, slaCuaNuoc, tongKpi,
+  CAM_KET_NUOC, LO_TRINH_LOI, chamKpi, cuaSoNhinTuyen, gomTuyenItKien, loiToiDaTaiNgay, mienCuaNuoc, slaCuaLine, slaCuaNuoc, tongKpi,
   type DongKpiNuoc, type KienGiao,
 } from './sop-giao-hang';
 
@@ -129,5 +129,25 @@ describe('gomTuyenItKien — cắt nhiễu bảng theo nước', () => {
     const r = gomTuyenItKien(ds);
     const tong = r.hien.reduce((s, d) => s + d.n, 0) + (r.gop?.n ?? 0);
     expect(tong).toBe(25);
+  });
+});
+
+describe('cuaSoNhinTuyen — bảng tuyến nhìn 3 tháng', () => {
+  it('kỳ tháng 9 nhìn từ 01/07 tới hết 30/09', () => {
+    expect(cuaSoNhinTuyen('2026-09-01')).toEqual({ tu: '2026-07-01', den: '2026-09-30' });
+  });
+
+  it('bắc qua năm: kỳ tháng 1 nhìn về tháng 11 năm trước', () => {
+    expect(cuaSoNhinTuyen('2026-01-01')).toEqual({ tu: '2025-11-01', den: '2026-01-31' });
+  });
+
+  it('tháng 2 lấy đúng ngày cuối tháng, kể cả năm nhuận', () => {
+    expect(cuaSoNhinTuyen('2026-02-01').den).toBe('2026-02-28');
+    expect(cuaSoNhinTuyen('2028-02-01').den).toBe('2028-02-29');
+  });
+
+  it('đổi số tháng thì cửa sổ đổi theo', () => {
+    expect(cuaSoNhinTuyen('2026-09-01', 1)).toEqual({ tu: '2026-09-01', den: '2026-09-30' });
+    expect(cuaSoNhinTuyen('2026-09-15', 6).tu).toBe('2026-04-01');
   });
 });

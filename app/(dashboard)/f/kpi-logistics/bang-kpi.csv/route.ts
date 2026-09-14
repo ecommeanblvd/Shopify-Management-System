@@ -54,7 +54,8 @@ export async function GET(req: Request): Promise<Response> {
     ['', '', '', '', '', ''],
     ['Số liệu hệ thống', 'Đơn âm cước hệ thống flag', '', `${auto.soDonAmCuoc} đơn · chênh ${auto.amCuocVnd}đ`, '', ''],
     ['Số liệu hệ thống', 'SLA giao hàng (bảng SOP từng nước)', '', `${auto.slaTong.dungHan}/${auto.slaTong.n}`, '', auto.slaTong.tyLe],
-    ...auto.slaTheoNuoc.map((d): CsvValue[] => ['SLA từng nước', d.country, `${d.slaNgay} ngày`, `${d.dungHan}/${d.n}`, '', d.tyLeDungHan]),
+    // Bảng tuyến nhìn cửa sổ rộng hơn kỳ chấm — ghi rõ khoảng để người đọc CSV không cộng nhầm vào tổng của kỳ.
+    ...auto.slaTheoNuoc.map((d): CsvValue[] => [`SLA từng tuyến (${auto.cuaSoTuyen.tu} → ${auto.cuaSoTuyen.den})`, d.country, `${d.slaNgay} ngày`, `${d.dungHan}/${d.n}`, '', d.tyLeDungHan]),
     ['Số liệu hệ thống', 'Kiện phát sinh phí địa chỉ/chứng từ', '', `${auto.kienLoiChungTu}/${auto.kienCoBill}`, '', auto.tyLeLoiChungTu],
     ['Số liệu hệ thống', 'Tồn đọng chưa phân định', '', `${auto.kienTonDong} kiện`, '', ''],
     ['Số liệu hệ thống', 'Thu hồi công nợ', '', `${thuHoi}đ / thuộc diện ${auto.thuocDienKhieuNaiVnd}đ`, '', auto.tyLeThuHoi],

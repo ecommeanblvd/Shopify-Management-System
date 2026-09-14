@@ -10,7 +10,7 @@ import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
-import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
+import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, cuaSoNhinTuyen, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
 import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
 
@@ -31,8 +31,14 @@ export interface SoLieuTuDong {
   thuHoiTruVaoCuocVnd: number;
   /** 1.2 — theo bảng SOP cam kết từng nước (D-067). SLA trong văn bản quy chế chỉ là mẫu, không dùng. */
   slaTong: { n: number; dungHan: number; tyLe: number | null };
-  /** 1.2 — chi tiết từng nước để nhân sự biết tuyến nào kéo điểm xuống. */
+  /**
+   * 1.2 — chi tiết từng TUYẾN để biết nước nào kéo điểm. Nhìn CỬA SỔ 3 THÁNG kết thúc ở kỳ này,
+   * không phải riêng tháng chấm điểm: một tháng cho mỗi tuyến quá ít kiện để kết luận
+   * (CEO 14/09/2026 — xem `cuaSoNhinTuyen`). Điểm số vẫn chấm theo tháng ở `slaTong`.
+   */
   slaTheoNuoc: DongKpiNuoc[];
+  /** Khoảng thời gian thực sự dùng cho `slaTheoNuoc`, để hiện lên bảng cho khỏi hiểu nhầm. */
+  cuaSoTuyen: { tu: string; den: string };
   /** 1.2 — kiện bị loại khỏi KPI theo Quy chế mục VII (lý do ngoài tầm kiểm soát), kèm phân loại lý do. */
   slaLoaiTru: number;
   lyDoCham: DemLyDo[];
@@ -62,7 +68,8 @@ export interface SoLieuTuDong {
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
-  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, chungTuShipHo, canRows] = await Promise.all([
+  const cuaSoTuyen = cuaSoNhinTuyen(tu);
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, kienRongShopify, kienRongShipHo, chungTuShipHo, canRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -133,6 +140,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     // 1.2 cũng chấm mọi kiện: null = không lọc store; kiện ship hộ từ Lark cộng thêm ngay dưới.
     docKienGiao(tu, den, null),
     docKienGiaoShipHo(tu, den),
+    // Cửa sổ rộng CHỈ cho bảng tuyến — đọc riêng, không đụng vào mẫu số chấm điểm.
+    docKienGiao(cuaSoTuyen.tu, cuaSoTuyen.den, null),
+    docKienGiaoShipHo(cuaSoTuyen.tu, cuaSoTuyen.den),
     docChungTuShipHo(tu, den),
     db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
       SELECT s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
@@ -149,8 +159,11 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   // Lý do ngoài tầm kiểm soát chỉ gỡ được kiện ĐANG TRỄ. Kiện đạt cam kết mà lỡ bị gán lý do
   // vẫn ở lại mẫu số — xem `loaiTruDuoc`.
   const tinhKpi = kienGiao.filter((k) => !(loaiTruKhoiKpi(k.lyDoCham) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
-  const theoNuoc = chamKpi(tinhKpi, tu);
-  const sop = tongKpi(theoNuoc, tu);
+  const sop = tongKpi(chamKpi(tinhKpi, tu), tu);
+  // Bảng tuyến chấm trên cửa sổ rộng, dùng cùng luật lọc lý do.
+  const kienRong = [...kienRongShopify, ...kienRongShipHo]
+    .filter((k) => !(loaiTruKhoiKpi(k.lyDoCham) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
+  const theoNuoc = chamKpi(kienRong, tu);
   const so = (v: string | null) => (v == null ? null : Number(v));
   const sizeThung = chamSizeThung(canRows.rows.map((r) => ({
     thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed),
@@ -183,6 +196,7 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     thuHoiTruVaoCuocVnd: Math.round(Number(amCuoc.rows[0]?.thu_hoi ?? 0)),
     slaTong: { n: sop.n, dungHan: sop.dungHan, tyLe: sop.tyLeDungHan },
     slaTheoNuoc: theoNuoc,
+    cuaSoTuyen,
     slaLoaiTru: kienGiao.length - tinhKpi.length,
     lyDoCham: demTheoLyDo(kienGiao.filter((k) => k.lyDoCham != null || k.soNgay > 20).map((k) => k.lyDoCham)),
     sizeThung,

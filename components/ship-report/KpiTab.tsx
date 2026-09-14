@@ -9,7 +9,7 @@ import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/sh
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { kpiLogisticsThang } from '@/db/schema';
 import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
-import { LO_TRINH_LOI, NGUONG_HIEN_TUYEN, gomTuyenItKien } from '@/features/shipments/sop-giao-hang';
+import { LO_TRINH_LOI, NGUONG_HIEN_TUYEN, SO_THANG_NHIN_TUYEN, gomTuyenItKien } from '@/features/shipments/sop-giao-hang';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -126,9 +126,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng tuyến</span>
+          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng tuyến, {SO_THANG_NHIN_TUYEN} tháng gần nhất</span>
           <span className="text-[11px] text-muted-foreground">
-            Ngưỡng kỳ này {Math.round(nguongDatKy(tu) * 1000) / 10}% · lộ trình {LO_TRINH_LOI.map((m) => `${m.nhan} ${Math.round((1 - m.loiToiDa) * 100)}%`).join(' → ')}
+            {auto.cuaSoTuyen.tu} → {auto.cuaSoTuyen.den} · ngưỡng {Math.round(nguongDatKy(tu) * 1000) / 10}% · lộ trình {LO_TRINH_LOI.map((m) => `${m.nhan} ${Math.round((1 - m.loiToiDa) * 100)}%`).join(' → ')}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -178,6 +178,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
           </table>
         </div>
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+          Bảng này nhìn {SO_THANG_NHIN_TUYEN} tháng chứ không riêng kỳ chấm: một tháng cho mỗi tuyến quá ít kiện để kết luận —
+          T9/2026 tuyến AU có đúng 10 kiện, thêm một kiện trễ là tụt 10 điểm. ĐIỂM SỐ vẫn chấm theo tháng ở bảng tiêu chí phía trên.
           Cam kết lấy từ bảng SOP trong Báo cáo ship — theo từng nước, hãng nhanh hơn có thước riêng. Ngưỡng đạt siết dần
           theo lộ trình ở trên nên cùng một kết quả sẽ khó đạt hơn ở các quý sau.
           {tuyen.gop && ` Nước dưới ${NGUONG_HIEN_TUYEN} kiện gộp thành một dòng: vài kiện lẻ không đủ để kết luận một tuyến có vấn đề — chính SOP cũng lấy mốc ${NGUONG_HIEN_TUYEN} kiện mới đặt cam kết riêng cho một nước. Kiện của các nước đó vẫn nằm trong tổng, và bản CSV vẫn có đủ từng nước.`}

@@ -228,3 +228,22 @@ export function gomTuyenItKien(
   const dungHan = it.reduce((s, d) => s + d.dungHan, 0);
   return { hien, gop: { soNuoc: it.length, n, dungHan, tyLeDungHan: n > 0 ? dungHan / n : null } };
 }
+
+/**
+ * Cửa sổ nhìn TUYẾN: 3 tháng kết thúc ở kỳ đang xem (CEO 14/09/2026).
+ *
+ * Vì sao không dùng chính tháng chấm điểm: một tháng cho mỗi tuyến quá ít kiện để kết luận.
+ * Đo T9/2026 — AU đúng 10 kiện, 6 đạt, ra 60%; thêm một kiện trễ là 50%, bớt một là 70%.
+ * Nhìn rộng ra 3 tháng thì AU là 44/55 = 80%, ngang GB và không có vấn đề gì. Chấm ĐIỂM vẫn
+ * theo tháng trên tổng số kiện — chỗ đó mẫu đủ lớn; chỉ bảng soi TUYẾN mới cần cửa sổ rộng.
+ */
+export const SO_THANG_NHIN_TUYEN = 3;
+
+export function cuaSoNhinTuyen(tuKy: string, soThang = SO_THANG_NHIN_TUYEN): { tu: string; den: string } {
+  const [nam, thang] = tuKy.slice(0, 7).split('-').map(Number);
+  // Lùi (soThang − 1) tháng từ đầu kỳ; dùng Date.UTC để không lệch theo múi giờ máy chạy.
+  const dau = new Date(Date.UTC(nam, thang - 1 - (soThang - 1), 1));
+  // Ngày cuối của tháng kỳ: ngày 0 của tháng kế tiếp.
+  const cuoi = new Date(Date.UTC(nam, thang, 0));
+  return { tu: dau.toISOString().slice(0, 10), den: cuoi.toISOString().slice(0, 10) };
+}
