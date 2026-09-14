@@ -5,7 +5,7 @@ import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { layLyDo } from '@/features/shipments/ly-do-cham';
 import {
-  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla,
+  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv,
   type ChiTietKpi, type MaTieuChi,
 } from '@/features/kpi-logistics/chi-tiet';
 
@@ -97,19 +97,35 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
   );
 }
 
-function Khung({ tomTat, onCsv, children }: { tomTat: React.ReactNode; onCsv: () => void; children: React.ReactNode }) {
+function Khung({ tomTat, onCsv, nut, children }: {
+  tomTat: React.ReactNode; onCsv: () => void; nut?: React.ReactNode; children: React.ReactNode;
+}) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs">{tomTat}</div>
-        <button type="button" onClick={onCsv} className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted">
-          Tải CSV
-        </button>
+        <div className="flex items-center gap-1.5">
+          {nut}
+          <button type="button" onClick={onCsv} className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted">
+            Tải CSV
+          </button>
+        </div>
       </div>
       <div className="max-h-[26rem] overflow-auto rounded-md border border-border">
         <table className="w-full text-xs tabular-nums">{children}</table>
       </div>
     </div>
+  );
+}
+
+/** Nút bật/tắt xem cả kiện đạt. Nói rõ đang giấu bao nhiêu dòng để không ai tưởng bảng chỉ có thế. */
+function NutHienHet({ hienHet, doi, an }: { hienHet: boolean; doi: () => void; an: number }) {
+  if (an <= 0 && !hienHet) return null;
+  return (
+    <button type="button" onClick={doi}
+      className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted">
+      {hienHet ? 'Chỉ hiện đơn có vấn đề' : `Hiện cả ${an} đơn đạt`}
+    </button>
   );
 }
 
@@ -157,6 +173,9 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
   rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; sauKhiLuu: () => void;
 }) {
   const d = demKetQuaSla(rows);
+  // Màn hình để XỬ LÝ nên mặc định chỉ hiện kiện có vấn đề; CSV vẫn đầy đủ (CEO 14/09/2026).
+  const [hienHet, setHienHet] = useState(false);
+  const hien = hienHet ? rows : rows.filter((r) => laCoVanDe(r.ketQua));
   const mau: Record<string, string> = {
     dat: 'text-emerald-600 dark:text-emerald-400',
     tre: 'text-amber-600 dark:text-amber-400',
@@ -169,7 +188,8 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
       tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
         ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
-        rows.map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
+        xepChoCsv(rows).map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
+      nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} />}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Thuộc</th>
@@ -180,8 +200,8 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
         <th className={`${TH} text-left`}>Kết quả</th><th className={`${TH} text-left`}>Lý do chậm</th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">Chưa có kiện nào giao xong trong kỳ.</td></tr>}
-        {rows.map((r, i) => (
+        {hien.length === 0 && <tr><td colSpan={12} className="p-6 text-center text-muted-foreground">{rows.length === 0 ? 'Chưa có kiện nào trong kỳ.' : 'Không kiện nào có vấn đề — mọi kiện đều đạt cam kết.'}</td></tr>}
+        {hien.map((r, i) => (
           <tr key={i} className="border-t border-border/50">
             <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.thuocVe}</td>
             <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
@@ -252,12 +272,18 @@ function BangSize({ rows, ky }: { rows: NonNullable<ChiTietKpi['sizeThung']>; ky
     nhe_hon: 'text-emerald-600 dark:text-emerald-400',
     thieu_du_lieu: 'text-muted-foreground',
   };
+  const [hienHet, setHienHet] = useState(false);
+  const hien = hienHet ? rows : rows.filter((r) => laSizeCoVanDe(r.phanLoai));
+  // CSV: kiện đúng lên đầu, rồi tới kiện cần soi, trong nhóm xếp theo lệch cân giảm dần.
+  const thuTu: Record<string, number> = { dung: 0, nhe_hon: 1, thieu_du_lieu: 2, sai_thung: 3 };
+  const choCsv = [...rows].sort((a, b) => thuTu[a.phanLoai] - thuTu[b.phanLoai] || (b.lechKg ?? -Infinity) - (a.lechKg ?? -Infinity));
   return (
     <Khung
       tomTat={<><b>{sai.length}</b> kiện sai thùng trên {rows.length - thieu} kiện chấm được · dôi <b>{doiRa} kg</b> phải trả thêm{thieu > 0 ? ` · ${thieu} kiện thiếu dữ liệu cân` : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.4-size-thung.csv`,
         ['Đơn', 'Tracking', 'Ngày gửi', 'Cân thực (kg)', 'Cân quy đổi (kg)', 'Cân mình tính (kg)', 'Cân carrier bill (kg)', 'Lệch (kg)', 'Kết quả'],
-        rows.map((r) => [r.maDon, r.tracking, r.ngayGui, r.canThucKg, r.canQuyDoiKg, r.canTinhCuocKg, r.canBillKg, r.lechKg, nhan[r.phanLoai]]))}
+        choCsv.map((r) => [r.maDon, r.tracking, r.ngayGui, r.canThucKg, r.canQuyDoiKg, r.canTinhCuocKg, r.canBillKg, r.lechKg, nhan[r.phanLoai]]))}
+      nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} />}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Tracking</th><th className={`${TH} text-left`}>Ngày gửi</th>
@@ -266,8 +292,8 @@ function BangSize({ rows, ky }: { rows: NonNullable<ChiTietKpi['sizeThung']>; ky
         <th className={`${TH} text-right`}>Lệch</th><th className={`${TH} text-left`}>Kết quả</th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Chưa có kiện nào có hoá đơn trong kỳ.</td></tr>}
-        {rows.map((r, i) => (
+        {hien.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">{rows.length === 0 ? 'Chưa có kiện nào có hoá đơn trong kỳ.' : 'Không kiện nào sai thùng — mọi kiện đóng đúng size.'}</td></tr>}
+        {hien.map((r, i) => (
           <tr key={i} className="border-t border-border/50">
             <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-left font-mono text-[10px]">{r.tracking ?? '—'}</td>

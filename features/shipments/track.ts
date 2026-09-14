@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { trangThaiSauKhiTrack, type DeliveryStatus } from '@/lib/fedex/track';
+import { trangThaiSauKhiTrack, type DeliveryStatus, CUA_SO_TRACK_NGAY } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,7 +57,7 @@ const DHL_DELAY_MS = Number(process.env.DHL_TRACK_DELAY_MS ?? 5000);
 const DHL_MAX_PER_RUN = Number(process.env.DHL_MAX_PER_RUN ?? 30);
 
 /**
- * Poll các shipment CHƯA giao của hãng track được (FedEx + DHL), label/tạo ≤45
+ * Poll các shipment CHƯA giao của hãng track được (FedEx + DHL), label/tạo trong cửa sổ
  * ngày, ưu tiên đơn lâu chưa track nhất. FedEx 300ms; DHL giãn 5s + cap/lượt cho
  * hợp tier free. Thiếu DHL key → bỏ qua đơn DHL (không lỗi); FedEx vẫn chạy.
  * 429 DHL → ngừng nhánh DHL lượt này.
@@ -66,7 +66,7 @@ export async function trackPendingShipments(
   opts?: { limit?: number },
 ): Promise<TrackPendingSummary> {
   const limit = opts?.limit ?? 100;
-  const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - CUA_SO_TRACK_NGAY * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({ id: schema.shipments.id, carrier: schema.shipments.carrierKey })
     .from(schema.shipments)

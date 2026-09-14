@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, TEN_TIEU_CHI, CACH_DO, type DongSla } from './chi-tiet';
+import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, laCoVanDe, laSizeCoVanDe, xepChoCsv, TEN_TIEU_CHI, CACH_DO, type DongSla, type KetQuaSla } from './chi-tiet';
 
 const kien = (soNgay: number, slaNgay: number, biLoaiTru = false): DongSla => ({
   shipmentId: 'x', nguon: 'shopify', thuocVe: 'MEAN BLVD', maDon: null, tracking: null, nuoc: 'US', line: 'fedex', ngayGui: '2026-08-01', ngayGiao: '2026-08-06',
@@ -103,5 +103,35 @@ describe('kiện CHƯA GIAO tại thời điểm chấm (CEO 13/09/2026)', () =>
     expect(d.tre).toBe(1);
     expect(d.tinhKpi).toBe(2);      // kiện chưa tới hạn đứng ngoài
     expect(d.tyLeDat).toBe(0.5);
+  });
+});
+
+describe('lọc hiển thị và thứ tự CSV (CEO 14/09/2026)', () => {
+  it('kiện đạt và kiện chưa tới hạn KHÔNG phải việc phải xử lý', () => {
+    expect(laCoVanDe('dat')).toBe(false);
+    expect(laCoVanDe('chua_den_han')).toBe(false);
+  });
+
+  it('trễ, trễ nặng và loại trừ đều cần người soi', () => {
+    expect(laCoVanDe('tre')).toBe(true);
+    expect(laCoVanDe('ngoai_le')).toBe(true);
+    expect(laCoVanDe('loai_tru')).toBe(true);
+  });
+
+  it('CSV xếp đơn đạt lên đầu, trong nhóm thì kiện lâu ngày nhất trước', () => {
+    const k = (ketQua: KetQuaSla, soNgay: number): DongSla => ({
+      shipmentId: null, nguon: 'ship_ho', thuocVe: 'x', maDon: String(soNgay), tracking: null,
+      nuoc: 'US', line: 'fedex', ngayGui: '2026-09-01', ngayGiao: '', soNgay,
+      slaNgay: 5, slaLineNgay: 5, ketQua, lyDoCham: null,
+    });
+    const r = xepChoCsv([k('ngoai_le', 30), k('dat', 3), k('tre', 9), k('dat', 4), k('chua_den_han', 2)]);
+    expect(r.map((x) => x.ketQua)).toEqual(['dat', 'dat', 'chua_den_han', 'tre', 'ngoai_le']);
+    expect(r.slice(0, 2).map((x) => x.soNgay)).toEqual([4, 3]);
+  });
+
+  it('1.4: chỉ kiện KHÔNG đúng size mới phải soi', () => {
+    expect(laSizeCoVanDe('dung')).toBe(false);
+    expect(laSizeCoVanDe('sai_thung')).toBe(true);
+    expect(laSizeCoVanDe('thieu_du_lieu')).toBe(true);
   });
 });

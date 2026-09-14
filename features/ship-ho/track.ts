@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, or, gte, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { trangThaiSauKhiTrack, type DeliveryStatus } from '@/lib/fedex/track';
+import { trangThaiSauKhiTrack, type DeliveryStatus, CUA_SO_TRACK_NGAY } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 import { emitShipHoEvent } from './mmp-events';
 import { gomLoi, coiLaHong, type TomTatTrack } from './track-tom-tat';
@@ -64,13 +64,13 @@ const FEDEX_DELAY_MS = 300;
 const DHL_DELAY_MS = Number(process.env.DHL_TRACK_DELAY_MS ?? 5000);
 const DHL_MAX_PER_RUN = Number(process.env.DHL_MAX_PER_RUN ?? 30);
 
-/** Poll đơn ship hộ chưa giao (fedex/dhl, có tracking, tạo ≤45 ngày). DHL giãn
+/** Poll đơn ship hộ chưa giao (fedex/dhl, có tracking, trong cửa sổ `CUA_SO_TRACK_NGAY`). DHL giãn
  *  nhịp + cap/lượt; thiếu key/429 → bỏ nhánh DHL, FedEx vẫn chạy. */
 export async function trackPendingShipHo(
   opts?: { limit?: number },
 ): Promise<TomTatTrack> {
   const limit = opts?.limit ?? 100;
-  const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - CUA_SO_TRACK_NGAY * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({ id: schema.shipHoOrders.id, carrier: schema.shipHoOrders.carrierKey })
     .from(schema.shipHoOrders)

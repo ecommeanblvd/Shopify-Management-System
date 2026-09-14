@@ -90,6 +90,19 @@ const HEADER_LOCALE = { 'x-locale': 'en_US' };
 /** Số mã tối đa FedEx nhận trong MỘT lần gọi (đặc tả Basic Integrated Visibility). */
 export const TOI_DA_MOI_LO = 30;
 
+/**
+ * Cửa sổ còn tra vận đơn, tính từ ngày tạo kiện.
+ *
+ * Trước là 45 ngày — quá ngắn: kiện chưa giao tới ngày 45 bị BỎ LẠI và đóng băng vĩnh viễn ở
+ * trạng thái chưa giao. Đo 14/09/2026: 18 kiện ship hộ gửi 14–23/07 có `last_tracked_at` đứng
+ * yên từ 21–23/07, không ai tra nữa, và từ khi 1.2 đếm cả kiện chưa tới (D-078) thì chúng tính
+ * TRỄ NẶNG mãi mãi mà không có đường kết thúc.
+ *
+ * 90 ngày vì đó là mức FedEx còn giữ dữ liệu tra cứu — quá mốc này API cũng không trả lời được
+ * nữa, phải đóng bằng tay.
+ */
+export const CUA_SO_TRACK_NGAY = 90;
+
 /** Gọi FedEx Track API cho 1 tracking number. */
 export async function trackFedex(trackingNumber: string): Promise<FedexTrackResult> {
   const raw = await fedexFetch<unknown>('/track/v1/trackingnumbers', {

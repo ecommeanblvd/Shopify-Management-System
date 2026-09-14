@@ -158,3 +158,22 @@ export function demKetQuaSla(dong: readonly DongSla[]): Record<KetQuaSla, number
   const tinhKpi = d.dat + d.tre + d.ngoai_le;
   return { ...d, tinhKpi, tyLeDat: tinhKpi > 0 ? d.dat / tinhKpi : null };
 }
+
+/* ───────── LỌC HIỂN THỊ (CEO 14/09/2026) ─────────
+ * Trên màn hình chỉ hiện đơn CÓ VẤN ĐỀ — người xem mở bảng này để xử lý, không phải để đọc
+ * hết. Bản CSV thì đầy đủ cả đạt lẫn không đạt, vì đó mới là hồ sơ đối chiếu con số.
+ *
+ * `chua_den_han` KHÔNG tính là có vấn đề: kiện đang bay đúng hạn, chưa có gì để làm.
+ */
+export const laCoVanDe = (k: KetQuaSla): boolean => k !== 'dat' && k !== 'chua_den_han';
+
+/** Thứ tự trong CSV: đạt lên đầu để soát nhanh khối lớn, rồi tới các nhóm cần xử lý. */
+const THU_TU_CSV: Record<KetQuaSla, number> = { dat: 0, chua_den_han: 1, loai_tru: 2, tre: 3, ngoai_le: 4 };
+
+export function xepChoCsv(dong: readonly DongSla[]): DongSla[] {
+  return [...dong].sort((a, b) =>
+    THU_TU_CSV[a.ketQua] - THU_TU_CSV[b.ketQua] || b.soNgay - a.soNgay);
+}
+
+/** 1.4 — kiện có vấn đề là kiện KHÔNG đóng đúng size. */
+export const laSizeCoVanDe = (p: DongSizeThung['phanLoai']): boolean => p !== 'dung';
