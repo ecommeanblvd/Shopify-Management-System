@@ -100,7 +100,8 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       const slaNgay = slaCuaNuoc(nuoc);
       // Bị loại vì lý do ngoài tầm kiểm soát (mục VII) HOẶC nước không nằm trong
       // phạm vi chấm (VN nội địa) — khớp đúng bộ lọc của `chamKpi`.
-      const biLoaiTru = loaiTruKhoiKpi(r.ly_do) || nuoc in NUOC_LOAI_TRU;
+      // Lý do chỉ gỡ được kiện ĐANG TRỄ: gỡ một kiện đạt là rút mất kiện tốt khỏi mẫu số.
+      const biLoaiTru = (loaiTruKhoiKpi(r.ly_do) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU;
       return {
         shipmentId: r.id, nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
         maDon: r.don, tracking: r.tk, nuoc, line,

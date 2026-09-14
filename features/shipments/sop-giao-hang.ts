@@ -128,6 +128,17 @@ export interface KienGiao {
  */
 export const chuaDenHan = (k: KienGiao, sla: number): boolean => k.chuaGiao === true && !k.buocTre && k.soNgay <= sla;
 
+/**
+ * Lý do chậm CHỈ loại trừ được kiện thực sự trễ.
+ *
+ * Vì sao cần chốt ở đây chứ không chỉ giấu ô chọn trên giao diện: loại một kiện ĐẠT khỏi mẫu số
+ * là rút mất một kiện tốt, làm tỉ lệ đúng hạn TỤT chứ không tăng. Một lần bấm nhầm của người
+ * nhập sẽ âm thầm hạ điểm của chính họ, và không ai lần ra được vì con số vẫn "có lý do"
+ * (CEO 14/09/2026). Giấu ô chọn là lịch sự; chốt ở đây mới là an toàn.
+ */
+export const loaiTruDuoc = (k: KienGiao, sla: number): boolean =>
+  Boolean(k.buocTre) || k.soNgay > sla;
+
 export interface DiemKpi {
   n: number; dungHan: number; treVanChuyen: number; ngoaiLe: number;
   tyLeDungHan: number | null; tyLeTre: number | null; dat: boolean | null;

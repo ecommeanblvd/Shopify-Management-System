@@ -56,7 +56,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('trượt Gate thì mất toàn bộ Pillar 3', () => {
     const v: DauVaoKpi = {
-      soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, thietHaiChamDiemVnd: 0, soDonShipHo: 10,
+      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, thietHaiChamDiemVnd: 0, soDonShipHo: 10,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 100_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     };
     expect(tinhBangLuong(v).p3).toBe(0);
@@ -66,7 +66,7 @@ describe('quy-che KPI logistics', () => {
     expect(TRONG_SO_P1.bienCuoc + TRONG_SO_P1.sla + TRONG_SO_P1.hoanHao + TRONG_SO_P1.sizeThung).toBeCloseTo(1, 10);
     // Ví dụ tháng 7 trong quy chế: 1 đơn âm cước (90 %), SLA 96 % (100 %), lỗi 1,5 % (100 %), size 97 % (50 %).
     const b = bangDiemKpi({
-      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
+      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
@@ -75,7 +75,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('bảng điểm: tiêu chí chưa có dữ liệu để mức đạt null và tính 0 điểm; trượt Gate thì Pillar 3 về 0', () => {
     const b = bangDiemKpi({
-      soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, thietHaiChamDiemVnd: 0, soDonShipHo: 0,
+      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, thietHaiChamDiemVnd: 0, soDonShipHo: 0,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 90_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([1, null, null, null]);
@@ -98,7 +98,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('dựng lại đúng ví dụ tháng 7/2026 trong quy chế: 13.404.000đ', () => {
     const { p1, p2, p3, tong } = tinhBangLuong({
-      soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
+      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     });
     expect(p1).toBe(1_104_000);
@@ -136,5 +136,30 @@ describe('hệ số chất lượng Pillar 2 (CEO 12/09/2026)', () => {
 
   it('sự cố nhỏ vẫn giữ phần lớn thưởng — không đánh sập vì lỗi con', () => {
     expect(thuongShipHo(59, 300_000).tien).toBe(708_000);
+  });
+});
+
+describe('1.1 chưa phân định xong thì CHƯA CHẤM (CEO 14/09/2026)', () => {
+  const day = (over: Partial<DauVaoKpi> = {}): DauVaoKpi => ({
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 1, tyLeLoiChungTu: 0, tyLeSizeThung: 1,
+    soDonShipHo: 0, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
+    thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0, ...over,
+  });
+
+  it('còn đơn chưa phân định → mức đạt để TRỐNG, không cho điểm tuyệt đối', () => {
+    const b = bangDiemKpi(day({ soDonAmCuocChuaXet: 48 }), KY_2026);
+    expect(b.p1[0].mucDat).toBeNull();
+    expect(b.p1[0].soLieu).toContain('CÒN 48 đơn chưa phân định');
+  });
+
+  it('phân định hết rồi mới chấm, và chấm theo số đơn lỗi nội bộ', () => {
+    expect(bangDiemKpi(day(), KY_2026).p1[0].mucDat).toBe(1);
+    expect(bangDiemKpi(day({ soDonAmCuocLoi: 2 }), KY_2026).p1[0].mucDat).toBeCloseTo(0.8, 10);
+  });
+
+  it('tiêu chí chưa chấm được thì không cộng điểm P1 — không chứng nhận sạch cho phần chưa kiểm', () => {
+    const chuaXet = bangDiemKpi(day({ soDonAmCuocChuaXet: 48 }), KY_2026);
+    const daXet = bangDiemKpi(day(), KY_2026);
+    expect(daXet.diemP1 - chuaXet.diemP1).toBeCloseTo(TRONG_SO_P1.bienCuoc, 10);
   });
 });

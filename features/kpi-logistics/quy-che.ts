@@ -141,6 +141,8 @@ export function thuongThuHoi(thuHoiVnd: number, tyLeThuHoi: number | null): MucD
 export interface DauVaoKpi {
   /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí (quản lý chốt). */
   soDonAmCuocLoi: number;
+  /** 1.1 — số đơn âm cước CHƯA ai phân định đúng/sai. Còn tồn thì chưa chấm được tiêu chí này. */
+  soDonAmCuocChuaXet: number;
   /** 1.2 — tỉ lệ kiện đạt SLA (0..1). */
   tyLeSla: number | null;
   /** 1.3 — tỉ lệ kiện phát sinh phí do lỗi chứng từ/địa chỉ (0..1). */
@@ -237,10 +239,16 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
 
   const p1: DongDiem[] = [
     {
+      // CHƯA PHÂN ĐỊNH XONG THÌ CHƯA CHẤM ĐƯỢC (CEO 14/09/2026). Trước đây ô này luôn hiện
+      // "0 đơn lỗi" và cho điểm tuyệt đối, trong khi T8 có 52 đơn âm cước mà 48 đơn chưa ai
+      // xét — tức đang chứng nhận sạch cho phần việc chưa hề kiểm. Để trống như các tiêu chí
+      // khác khi thiếu dữ liệu, và nói rõ còn tồn bao nhiêu đơn.
       ma: '1.1', ten: 'Bảo toàn biên cước', trongSo: TRONG_SO_P1.bienCuoc,
-      soLieu: `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm`,
-      nguong: '0 đơn — mỗi đơn trừ 10 % tiêu chí, trần trừ 50 %',
-      mucDat: bienCuoc.mucNhan,
+      soLieu: v.soDonAmCuocChuaXet > 0
+        ? `${v.soDonAmCuocLoi} đơn đã chốt lỗi nội bộ · CÒN ${v.soDonAmCuocChuaXet} đơn chưa phân định`
+        : `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm`,
+      nguong: '0 đơn — mỗi đơn trừ 10 % tiêu chí, trần trừ 50 %. Phải phân định hết đơn âm cước mới chấm được.',
+      mucDat: v.soDonAmCuocChuaXet > 0 ? null : bienCuoc.mucNhan,
     },
     {
       ma: '1.2', ten: 'Đảm bảo SLA thời gian giao hàng', trongSo: TRONG_SO_P1.sla,

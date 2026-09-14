@@ -28,7 +28,8 @@ export async function GET(req: Request): Promise<Response> {
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   const diem = bangDiemKpi({
-    soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
+    soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo,
+    soDonAmCuocChuaXet: auto.soDonAmCuocChuaXet,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),

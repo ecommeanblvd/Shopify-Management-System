@@ -195,7 +195,9 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
             <td className="px-2.5 py-1.5 text-right text-muted-foreground">{r.slaLineNgay}{r.slaLineNgay < r.slaNgay && r.soNgay > r.slaLineNgay ? ' ⚑' : ''}</td>
             <td className={`px-2.5 py-1.5 text-left font-medium ${mau[r.ketQua]}`}>{NHAN_KET_QUA_SLA[r.ketQua]}</td>
             <td className="px-2.5 py-1.5 text-left">
-              {ganLyDoDuoc && r.shipmentId
+              {/* Kiện ĐẠT cam kết thì không có gì để giải thích — hiện ô chọn ở đó chỉ mời người
+                  ta bấm nhầm, mà bấm nhầm là rút một kiện tốt khỏi mẫu số. */}
+              {ganLyDoDuoc && r.shipmentId && r.ketQua !== 'dat' && r.ketQua !== 'chua_den_han'
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} sauKhiLuu={sauKhiLuu} />
                 : <span className="text-muted-foreground" title={r.shipmentId ? undefined : 'Đơn ship hộ lên từ Lark — chưa có chỗ lưu lý do chậm'}>{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
             </td>

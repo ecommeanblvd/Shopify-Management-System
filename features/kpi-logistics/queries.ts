@@ -10,7 +10,7 @@ import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
-import { chamKpi, tongKpi, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
+import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
 import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
 
@@ -146,7 +146,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
   // (SOP đo trải nghiệm khách thì vẫn tính mọi kiện — xem tab Tiêu chuẩn giao.)
   const kienGiao = [...kienShopify, ...kienShipHo];
-  const tinhKpi = kienGiao.filter((k) => !loaiTruKhoiKpi(k.lyDoCham));
+  // Lý do ngoài tầm kiểm soát chỉ gỡ được kiện ĐANG TRỄ. Kiện đạt cam kết mà lỡ bị gán lý do
+  // vẫn ở lại mẫu số — xem `loaiTruDuoc`.
+  const tinhKpi = kienGiao.filter((k) => !(loaiTruKhoiKpi(k.lyDoCham) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
   const theoNuoc = chamKpi(tinhKpi, tu);
   const sop = tongKpi(theoNuoc, tu);
   const so = (v: string | null) => (v == null ? null : Number(v));
