@@ -9,7 +9,7 @@ import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/sh
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { kpiLogisticsThang } from '@/db/schema';
 import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
-import { LO_TRINH_LOI } from '@/features/shipments/sop-giao-hang';
+import { LO_TRINH_LOI, NGUONG_HIEN_TUYEN, gomTuyenItKien } from '@/features/shipments/sop-giao-hang';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -37,6 +37,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
   ghiSuCoDuoc: boolean;
 }) {
   const sla = auto.slaTong;
+  // Cắt nhiễu: tuyến ít kiện gộp một dòng, xem `gomTuyenItKien` (CEO 14/09/2026).
+  const tuyen = gomTuyenItKien(auto.slaTheoNuoc);
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   const tyLeThuHoi = auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null;
@@ -124,7 +126,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng nước</span>
+          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng tuyến</span>
           <span className="text-[11px] text-muted-foreground">
             Ngưỡng kỳ này {Math.round(nguongDatKy(tu) * 1000) / 10}% · lộ trình {LO_TRINH_LOI.map((m) => `${m.nhan} ${Math.round((1 - m.loiToiDa) * 100)}%`).join(' → ')}
           </span>
@@ -141,7 +143,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
               {auto.slaTheoNuoc.length === 0 && (
                 <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Chưa có kiện nào ghi nhận giao trong kỳ.</td></tr>
               )}
-              {auto.slaTheoNuoc.map((d) => (
+              {tuyen.hien.map((d) => (
                 <Fragment key={d.country}>
                   <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
                     <td className="text-left">
@@ -163,12 +165,22 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
                   ))}
                 </Fragment>
               ))}
+              {tuyen.gop && (
+                <tr className="border-t border-border text-muted-foreground [&>td]:px-3 [&>td]:py-2">
+                  <td className="text-left italic">{tuyen.gop.soNuoc} nước dưới {NGUONG_HIEN_TUYEN} kiện</td>
+                  <td className="text-right">—</td>
+                  <td className="text-right">{tuyen.gop.n}</td>
+                  <td className="text-right">{tuyen.gop.dungHan}</td>
+                  <td className="text-right">{pct(tuyen.gop.tyLeDungHan)}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
         <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
           Cam kết lấy từ bảng SOP trong Báo cáo ship — theo từng nước, hãng nhanh hơn có thước riêng. Ngưỡng đạt siết dần
           theo lộ trình ở trên nên cùng một kết quả sẽ khó đạt hơn ở các quý sau.
+          {tuyen.gop && ` Nước dưới ${NGUONG_HIEN_TUYEN} kiện gộp thành một dòng: vài kiện lẻ không đủ để kết luận một tuyến có vấn đề — chính SOP cũng lấy mốc ${NGUONG_HIEN_TUYEN} kiện mới đặt cam kết riêng cho một nước. Kiện của các nước đó vẫn nằm trong tổng, và bản CSV vẫn có đủ từng nước.`}
         </p>
       </CardContent></Card>
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CAM_KET_NUOC, LO_TRINH_LOI, chamKpi, loiToiDaTaiNgay, mienCuaNuoc, slaCuaLine, slaCuaNuoc, tongKpi, type KienGiao,
+  CAM_KET_NUOC, LO_TRINH_LOI, chamKpi, gomTuyenItKien, loiToiDaTaiNgay, mienCuaNuoc, slaCuaLine, slaCuaNuoc, tongKpi,
+  type DongKpiNuoc, type KienGiao,
 } from './sop-giao-hang';
 
 const k = (country: string, line: string, soNgay: number): KienGiao => ({ country, line, soNgay });
@@ -101,5 +102,32 @@ describe('kiện chưa giao trong chamKpi (CEO 13/09/2026)', () => {
     expect(r[0].n).toBe(1);
     expect(r[0].dungHan).toBe(0);
     expect(r[0].treVanChuyen).toBe(1);
+  });
+});
+
+describe('gomTuyenItKien — cắt nhiễu bảng theo nước', () => {
+  const nuoc = (country: string, n: number, dungHan: number): DongKpiNuoc =>
+    ({ country, slaNgay: 5, canCu: null, theoLine: [], n, dungHan, treVanChuyen: n - dungHan,
+       ngoaiLe: 0, tyLeDungHan: n ? dungHan / n : null, tyLeTre: null, dat: null });
+
+  it('giữ tuyến đủ 10 kiện, gộp phần còn lại thành một dòng', () => {
+    const r = gomTuyenItKien([nuoc('US', 171, 140), nuoc('IE', 2, 0), nuoc('AT', 1, 0)]);
+    expect(r.hien.map((d) => d.country)).toEqual(['US']);
+    expect(r.gop).toEqual({ soNuoc: 2, n: 3, dungHan: 0, tyLeDungHan: 0 });
+  });
+
+  it('đúng 10 kiện là được hiện — ngưỡng tính cả mốc', () => {
+    expect(gomTuyenItKien([nuoc('GB', 10, 6)]).hien).toHaveLength(1);
+  });
+
+  it('không tuyến nào ít kiện thì không có dòng gộp', () => {
+    expect(gomTuyenItKien([nuoc('US', 50, 40)]).gop).toBeNull();
+  });
+
+  it('kiện bị gộp KHÔNG mất khỏi phép tính — tổng vẫn đủ', () => {
+    const ds = [nuoc('US', 20, 18), nuoc('IE', 2, 1), nuoc('AT', 3, 0)];
+    const r = gomTuyenItKien(ds);
+    const tong = r.hien.reduce((s, d) => s + d.n, 0) + (r.gop?.n ?? 0);
+    expect(tong).toBe(25);
   });
 });

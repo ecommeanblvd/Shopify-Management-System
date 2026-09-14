@@ -204,3 +204,27 @@ export function tongKpi(dong: readonly DongKpiNuoc[], ngayKy: string): DiemKpi &
     loiToiDa,
   };
 }
+
+/* ───────── LỌC NHIỄU BẢNG THEO NƯỚC (CEO 14/09/2026) ─────────
+ * Bảng "1.2 từng nước" T8 có 42 nước, trong đó 26 nước chỉ 1–2 kiện. Dòng kiểu "IE 0/2 = 0%"
+ * không nói tuyến Ireland có vấn đề, nó chỉ nói hai kiện bị trễ — nhiễu chiếm hơn nửa bảng và
+ * đẩy ba tuyến thật sự yếu (US, AU, GB) lẫn vào đám đông.
+ *
+ * Ngưỡng 10 kiện lấy đúng mức mà SOP dùng để đặt cam kết riêng cho một nước: dưới mức đó thì
+ * chính SOP cũng không coi là đủ dữ liệu để kết luận, nên bảng chấm cũng không nên.
+ * Các nước bị gộp KHÔNG biến mất khỏi phép tính — chúng vẫn nằm trong tổng và trong CSV.
+ */
+export const NGUONG_HIEN_TUYEN = 10;
+
+export interface TuyenGop { soNuoc: number; n: number; dungHan: number; tyLeDungHan: number | null }
+
+export function gomTuyenItKien(
+  dong: readonly DongKpiNuoc[], nguong = NGUONG_HIEN_TUYEN,
+): { hien: DongKpiNuoc[]; gop: TuyenGop | null } {
+  const hien = dong.filter((d) => d.n >= nguong);
+  const it = dong.filter((d) => d.n > 0 && d.n < nguong);
+  if (it.length === 0) return { hien, gop: null };
+  const n = it.reduce((s, d) => s + d.n, 0);
+  const dungHan = it.reduce((s, d) => s + d.dungHan, 0);
+  return { hien, gop: { soNuoc: it.length, n, dungHan, tyLeDungHan: n > 0 ? dungHan / n : null } };
+}
