@@ -163,9 +163,15 @@ export function demKetQuaSla(dong: readonly DongSla[]): Record<KetQuaSla, number
  * Trên màn hình chỉ hiện đơn CÓ VẤN ĐỀ — người xem mở bảng này để xử lý, không phải để đọc
  * hết. Bản CSV thì đầy đủ cả đạt lẫn không đạt, vì đó mới là hồ sơ đối chiếu con số.
  *
- * `chua_den_han` KHÔNG tính là có vấn đề: kiện đang bay đúng hạn, chưa có gì để làm.
+ * CHỈ 'tre' và 'ngoai_le' là việc phải xử lý. Ba nhóm còn lại đều KHÔNG:
+ *   - 'dat'          — xong rồi;
+ *   - 'chua_den_han' — kiện đang bay đúng hạn, chưa có gì để làm;
+ *   - 'loai_tru'     — đã đứng ngoài mẫu số, chấm điểm không đụng tới nó nữa. Hiện ra chỉ làm
+ *                      dài danh sách việc bằng thứ không phải việc (CEO 14/09/2026: "sao lại
+ *                      có các đơn loại khỏi KPI mà vẫn hiện"). Số lượng vẫn nằm ở dòng tóm tắt
+ *                      và toàn bộ dòng vẫn có trong CSV.
  */
-export const laCoVanDe = (k: KetQuaSla): boolean => k !== 'dat' && k !== 'chua_den_han';
+export const laCoVanDe = (k: KetQuaSla): boolean => k === 'tre' || k === 'ngoai_le';
 
 /** Thứ tự trong CSV: đạt lên đầu để soát nhanh khối lớn, rồi tới các nhóm cần xử lý. */
 const THU_TU_CSV: Record<KetQuaSla, number> = { dat: 0, chua_den_han: 1, loai_tru: 2, tre: 3, ngoai_le: 4 };

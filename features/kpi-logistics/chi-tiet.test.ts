@@ -112,10 +112,13 @@ describe('lọc hiển thị và thứ tự CSV (CEO 14/09/2026)', () => {
     expect(laCoVanDe('chua_den_han')).toBe(false);
   });
 
-  it('trễ, trễ nặng và loại trừ đều cần người soi', () => {
+  it('chỉ trễ và trễ nặng mới là việc phải xử lý', () => {
     expect(laCoVanDe('tre')).toBe(true);
     expect(laCoVanDe('ngoai_le')).toBe(true);
-    expect(laCoVanDe('loai_tru')).toBe(true);
+  });
+
+  it('kiện đã loại khỏi KPI không phải việc — nó đứng ngoài mẫu số rồi', () => {
+    expect(laCoVanDe('loai_tru')).toBe(false);
   });
 
   it('CSV xếp đơn đạt lên đầu, trong nhóm thì kiện lâu ngày nhất trước', () => {

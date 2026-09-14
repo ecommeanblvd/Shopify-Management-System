@@ -216,8 +216,13 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
             <td className={`px-2.5 py-1.5 text-left font-medium ${mau[r.ketQua]}`}>{NHAN_KET_QUA_SLA[r.ketQua]}</td>
             <td className="px-2.5 py-1.5 text-left">
               {/* Kiện ĐẠT cam kết thì không có gì để giải thích — hiện ô chọn ở đó chỉ mời người
-                  ta bấm nhầm, mà bấm nhầm là rút một kiện tốt khỏi mẫu số. */}
-              {ganLyDoDuoc && r.shipmentId && r.ketQua !== 'dat' && r.ketQua !== 'chua_den_han'
+                  ta bấm nhầm, mà bấm nhầm là rút một kiện tốt khỏi mẫu số.
+                  Kiện bị loại vì NƯỚC (VN nội địa) cũng không cần: gán lý do gì nó cũng đã
+                  đứng ngoài mẫu số. Nhưng kiện bị loại vì CHÍNH LÝ DO đã gán thì vẫn cho sửa,
+                  nếu không thì gán nhầm một lần là kẹt luôn, không gỡ ra được. */}
+              {ganLyDoDuoc && r.shipmentId
+                && r.ketQua !== 'dat' && r.ketQua !== 'chua_den_han'
+                && !(r.ketQua === 'loai_tru' && r.lyDoCham == null)
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} nguon={r.nguon} sauKhiLuu={sauKhiLuu} />
                 : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
             </td>
