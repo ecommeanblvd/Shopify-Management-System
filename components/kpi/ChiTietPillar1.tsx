@@ -198,8 +198,8 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
               {/* Kiện ĐẠT cam kết thì không có gì để giải thích — hiện ô chọn ở đó chỉ mời người
                   ta bấm nhầm, mà bấm nhầm là rút một kiện tốt khỏi mẫu số. */}
               {ganLyDoDuoc && r.shipmentId && r.ketQua !== 'dat' && r.ketQua !== 'chua_den_han'
-                ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} sauKhiLuu={sauKhiLuu} />
-                : <span className="text-muted-foreground" title={r.shipmentId ? undefined : 'Đơn ship hộ lên từ Lark — chưa có chỗ lưu lý do chậm'}>{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
+                ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} nguon={r.nguon} sauKhiLuu={sauKhiLuu} />
+                : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
             </td>
           </tr>
         ))}

@@ -2244,6 +2244,13 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   // MÃ CỦA BRAND trên Lark (cột "Brand Reference", ví dụ #KLS2053). Đây là mã anh em vận hành
   // và brand dùng khi nói chuyện, còn `code` là mã nội bộ — tra theo mã này mới nhanh.
   brandReference: text('brand_reference'),
+  // Lý do giao chậm — SONG SONG với `shipments.ly_do_cham`. Từ khi tiêu chí 1.2 chấm cả kiện
+  // ship hộ (D-075), thiếu cột này nghĩa là kiện ship hộ bị chấm trễ mà không có đường giải
+  // trình, trong khi kiện MEAN BLVD thì có. Bất công một chiều (CEO 14/09/2026).
+  lyDoCham: text('ly_do_cham'),
+  lyDoChamGhiChu: text('ly_do_cham_ghi_chu'),
+  lyDoChamBy: text('ly_do_cham_by').references(() => user.id, { onDelete: 'set null' }),
+  lyDoChamAt: timestamp('ly_do_cham_at'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),

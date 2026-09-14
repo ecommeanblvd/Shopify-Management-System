@@ -10,10 +10,14 @@
  *
  * Số ngày kẹp về 0: `shipped_at` là ngày còn `delivered_at` là mốc giờ, kiện giao ngay trong
  * ngày gửi sẽ ra số âm vì lệch múi giờ — âm không có nghĩa là giao trước khi gửi.
+ *
+ * `shipmentId` trên dòng bảng chi tiết mang id của ĐƠN SHIP HỘ, không phải id `shipments`;
+ * đi kèm `nguon: 'ship_ho'` để ô chọn lý do ghi đúng bảng.
  */
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU, NGUONG_NGOAI_LE_SOP, type KienGiao } from '@/features/shipments/sop-giao-hang';
+import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import { xepLoaiSla, type DongSla, type DongChungTu } from './chi-tiet';
 import { nhanShipHo } from './pham-vi';
 
@@ -23,7 +27,7 @@ export function soNgayShipHo(ngayGui: string, mocGiao: string): number {
   return Math.max(0, Math.round((ms / 86_400_000) * 10) / 10);
 }
 
-type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; su_co_noi_bo: number };
+type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; ly_do: string | null; su_co_noi_bo: number };
 
 /**
  * `su_co_noi_bo` > 0 nghĩa là đơn có sự cố quy về lỗi nội bộ → kiện bị KHOÁ THÀNH TRỄ dù số
@@ -43,6 +47,7 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
            COALESCE(o.delivered_at::text, now()::text) AS giao,
            (o.delivered_at IS NULL) AS chua_giao,
            (o.delivery_status = 'returning') AS dang_hoan,
+           o.ly_do_cham AS ly_do,
            (SELECT COUNT(*) FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo')::int AS su_co_noi_bo
       FROM ship_ho_orders o
      WHERE o.shipped_at IS NOT NULL
@@ -53,8 +58,8 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
 
 /**
  * 1.2 — kiện ship hộ đã giao xong, dạng dùng cho `chamKpi`/`tongKpi`, cùng hình dạng với
- * `docKienGiao` để cộng thẳng vào cùng một mảng. `lyDoCham` luôn null vì `ship_ho_orders`
- * chưa có cột lý do — nghĩa là chưa kiện ship hộ nào được loại khỏi mẫu số.
+ * `docKienGiao` để cộng thẳng vào cùng một mảng, gồm cả `lyDoCham` để bộ lọc mẫu số dùng
+ * chung một luật cho cả hai luồng.
  */
 export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<KienGiao & { lyDoCham: string | null }>> {
   const rows = await docGiao(tu, den);
@@ -65,7 +70,7 @@ export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<
     // Kiện đang hoàn về sẽ KHÔNG BAO GIỜ tới tay khách — trễ chắc chắn, không chờ hết hạn.
     buocTre: r.su_co_noi_bo > 0 || r.dang_hoan,
     chuaGiao: r.chua_giao,
-    lyDoCham: null,
+    lyDoCham: r.ly_do,
   }));
 }
 
@@ -76,21 +81,20 @@ export async function docSlaShipHo(tu: string, den: string): Promise<DongSla[]> 
     const nuoc = (r.cc ?? '?').trim().toUpperCase();
     const line = (r.line ?? '?').trim().toLowerCase();
     const soNgay = soNgayShipHo(r.gui, r.giao);
-    // Đơn Lark chưa có cột lý do chậm nên KHÔNG kiện nào bị loại vì lý do; chỉ nước loại trừ
-    // mới loại. Đây là hạn chế có ý thức: chưa có chỗ lưu thì không được âm thầm loại kiện.
-    // Kiện có sự cố lỗi nội bộ thì KHÔNG được loại dù nước nằm trong danh sách loại trừ —
-    // lỗi của mình phải ở lại mẫu số.
+    // Kiện có sự cố lỗi nội bộ hoặc đang hoàn về thì KHÔNG được loại, dù có lý do hay nước nằm
+    // trong danh sách loại trừ — lỗi của mình phải ở lại mẫu số.
     const buocTre = r.su_co_noi_bo > 0 || r.dang_hoan;
-    const biLoaiTru = !buocTre && nuoc in NUOC_LOAI_TRU;
     const slaNgay = slaCuaNuoc(nuoc);
+    // Lý do chỉ gỡ được kiện ĐANG TRỄ, giống hệt luật bên kiện Shopify.
+    const biLoaiTru = !buocTre && ((loaiTruKhoiKpi(r.ly_do) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU);
     const ketQua = buocTre && !biLoaiTru
       ? (soNgay <= NGUONG_NGOAI_LE_SOP ? 'tre' as const : 'ngoai_le' as const)
       : xepLoaiSla(soNgay, slaNgay, biLoaiTru, NGUONG_NGOAI_LE_SOP, r.chua_giao);
     return {
-      shipmentId: null, nguon: 'ship_ho' as const, thuocVe: nhanShipHo(r.brand),
+      shipmentId: r.id, nguon: 'ship_ho' as const, thuocVe: nhanShipHo(r.brand),
       maDon: r.code, tracking: r.tk, nuoc, line,
       ngayGui: r.gui.slice(0, 10), ngayGiao: r.chua_giao ? '' : r.giao.slice(0, 10),
-      soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua, lyDoCham: null,
+      soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua, lyDoCham: r.ly_do,
       chuaGiao: r.chua_giao,
     };
   });
