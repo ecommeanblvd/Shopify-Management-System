@@ -16,7 +16,7 @@ export function getShopify(): ReturnType<typeof shopifyApi> {
     _shopify = shopifyApi({
       apiKey: env.SHOPIFY_API_KEY,
       apiSecretKey: env.SHOPIFY_API_SECRET,
-      scopes: env.SHOPIFY_SCOPES.split(','),
+      scopes: env.SHOPIFY_SCOPES.split(',').map((x) => x.trim()).filter(Boolean),
       hostName: new URL(env.SHOPIFY_APP_URL).host,
       apiVersion: env.SHOPIFY_API_VERSION as ApiVersion,
       isEmbeddedApp: false,

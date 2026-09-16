@@ -93,7 +93,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // Step 7: Encrypt the token; derive scopes from env.
     const encryptedToken = encryptToken(tokenData.access_token);
-    const scopes = env.SHOPIFY_SCOPES.split(',');
+    const scopes = env.SHOPIFY_SCOPES.split(',').map((x) => x.trim()).filter(Boolean);
 
     // Step 8: Upsert the store row, capturing the id either way so we can
     // chain webhook registration + auto-backfill against it.

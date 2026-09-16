@@ -146,7 +146,7 @@ function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
   const choCsv = [...rows].sort((a, b) => Number(canGiaiTrinh(a)) - Number(canGiaiTrinh(b)) || b.chenhVnd - a.chenhVnd);
   return (
     <Khung
-      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> · đã chốt lỗi nội bộ <b>{daChot}</b> · <span className={conPhai.length ? 'text-amber-600 dark:text-amber-400' : ''}>còn phải giải trình <b>{conPhai.length}</b></span>. Đơn đang khiếu nại hãng thì xử lý ở Đối soát phí ship.</>}
+      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> · đã chốt lỗi nội bộ <b>{daChot}</b> · <span className={conPhai.length ? 'text-amber-600 dark:text-amber-400' : ''}>còn phải giải trình <b>{conPhai.length}</b></span>. Đơn đang khiếu nại hãng thì xử lý ở Đối soát phí ship. Đơn âm vì cân web thấp → <a href="/f/can-san-pham" className="underline">Sửa cân sản phẩm</a>.</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.1-am-cuoc.csv`,
         ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Đã đòi lại (VND)', 'Giá vốn ròng (VND)', 'Chênh (VND)',
           'Phân định đối soát', 'Số credit note', 'Dấu hiệu hệ thống', 'Hệ thống gợi ý', 'Nguyên nhân giải trình', 'Trách nhiệm',

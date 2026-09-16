@@ -2263,6 +2263,27 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
  * và `tongChiPhiVnd` là tổng đã cộng sẵn để truy vấn nhanh.
  */
 /**
+ * Nhật ký DUYỆT cân sản phẩm (CEO 16/09/2026): mỗi lần duyệt đẩy hoặc bỏ qua một đề xuất cân.
+ * 'bo_qua' ẩn đúng đề xuất đó; đề xuất đổi mức cân thì hiện lại. Sau khi đẩy thành công, cân
+ * trên `shopify_variants` được cập nhật nên SKU tự rời danh sách.
+ */
+export const canSanPhamQuyetDinh = pgTable('can_san_pham_quyet_dinh', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }).notNull(),
+  sku: text('sku').notNull(),
+  canCuG: numeric('can_cu_g', { precision: 12, scale: 3 }),
+  canMoiG: numeric('can_moi_g', { precision: 12, scale: 3 }).notNull(),
+  /** 'day' | 'bo_qua' */
+  quyetDinh: text('quyet_dinh').notNull(),
+  /** 'ok' | 'loi' khi đã đẩy; null khi bỏ qua. */
+  ketQua: text('ket_qua'),
+  loi: text('loi'),
+  variantIds: text('variant_ids').array().notNull().default([]),
+  quyetBy: text('quyet_by'),
+  quyetAt: timestamp('quyet_at').defaultNow().notNull(),
+}, (t) => [index('can_san_pham_quyet_dinh_sku_idx').on(t.storeId, t.sku)]);
+
+/**
  * Giải trình đơn âm cước cho tiêu chí 1.1 KPI Logistics — một dòng mỗi đơn (CEO 16/09/2026).
  * `thuoc_ve` do hệ thống quy từ lý do + dữ kiện (`quyTrachNhiem`), người giải trình không tự chọn.
  */

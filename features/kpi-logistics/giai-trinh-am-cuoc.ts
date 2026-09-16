@@ -20,6 +20,7 @@ export type ThuocVeAmCuoc = 'noi_bo' | 'hang' | 'du_lieu_web' | 'bang_gia' | 'kh
 export const NHAN_THUOC_VE_AM_CUOC: Record<ThuocVeAmCuoc, string> = {
   noi_bo: 'Lỗi nội bộ (trừ KPI)',
   hang: 'Hãng tính sai — đòi lại',
+  /** Không còn dùng từ 16/09/2026 — sai cân web là lỗi nội bộ. Giữ nhãn để đọc bản ghi cũ. */
   du_lieu_web: 'Cân nặng sản phẩm trên web',
   bang_gia: 'Bảng giá / phụ phí checkout',
   khach: 'Do khách',
@@ -89,7 +90,10 @@ export const layLyDoAmCuoc = (ma: string | null | undefined): LyDoAmCuoc | null 
  */
 export function quyTrachNhiem(ma: MaLyDoAmCuoc, ct: ChiTietGiaiTrinh = {}): ThuocVeAmCuoc {
   switch (ma) {
-    case 'can_quy_doi_web': return 'du_lieu_web';
+    // CEO 16/09/2026: "Lỗi sai cân vẫn là lỗi nội bộ và là việc Đức phải notice và báo cho anh
+    // để sửa mỗi tháng." Cân web thấp làm checkout báo cước thiếu — phát hiện và báo là việc của
+    // vị trí logistics, nên trừ KPI. Sửa cân thì làm ở trang Sửa cân sản phẩm.
+    case 'can_quy_doi_web': return 'noi_bo';
     case 'hang_tinh_sai_can': return 'hang';
     case 'phi_vung_sau_xa': return 'bang_gia';
     case 'bang_gia_thap': return 'bang_gia';

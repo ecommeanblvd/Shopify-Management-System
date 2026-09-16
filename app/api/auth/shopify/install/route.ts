@@ -50,7 +50,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const authorizeUrl = new URL(`https://${shop}/admin/oauth/authorize`);
   authorizeUrl.searchParams.set('client_id', env.SHOPIFY_API_KEY);
-  authorizeUrl.searchParams.set('scope', env.SHOPIFY_SCOPES);
+  // Cắt khoảng trắng: biến trên Railway từng có ", read_all_orders" và Shopify nhận nguyên dấu cách.
+  authorizeUrl.searchParams.set('scope', env.SHOPIFY_SCOPES.split(',').map((x) => x.trim()).filter(Boolean).join(','));
   authorizeUrl.searchParams.set('redirect_uri', callbackUrl);
   authorizeUrl.searchParams.set('state', nonce);
   // Empty grant_options[] signals an offline (permanent) token.

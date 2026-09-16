@@ -56,8 +56,10 @@ describe('dauHieu', () => {
 });
 
 describe('quyTrachNhiem — người giải trình không tự phân xử', () => {
+  it('sai cân web là lỗi nội bộ (CEO 16/09/2026)', () => {
+    expect(quyTrachNhiem('can_quy_doi_web')).toBe('noi_bo');
+  });
   it('chỉ lý do nội bộ rõ ràng mới thành lỗi nội bộ', () => {
-    expect(quyTrachNhiem('can_quy_doi_web')).toBe('du_lieu_web');
     expect(quyTrachNhiem('hang_tinh_sai_can')).toBe('hang');
     expect(quyTrachNhiem('tach_kien', { lyDoTach: 'thieu_hang' })).toBe('noi_bo');
     expect(quyTrachNhiem('phi_sua_dia_chi', { nguonSaiDiaChi: 'noi_bo' })).toBe('noi_bo');
@@ -67,7 +69,7 @@ describe('quyTrachNhiem — người giải trình không tự phân xử', () =
     expect(quyTrachNhiem('tach_kien')).toBe('chua_ro');
     expect(quyTrachNhiem('khac')).toBe('chua_ro');
     expect(daPhanDinh('chua_ro')).toBe(false);
-    expect(daPhanDinh('du_lieu_web')).toBe(true);
+    expect(daPhanDinh('hang')).toBe(true);
   });
   it('mọi lý do trong danh mục đều quy được', () => {
     for (const l of LY_DO_AM_CUOC) expect(quyTrachNhiem(l.ma)).toBeTruthy();
