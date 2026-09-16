@@ -31,11 +31,22 @@ export const NHAN_THUOC_VE_AM_CUOC: Record<ThuocVeAmCuoc, string> = {
 export type NguonSaiDiaChi = 'khach' | 'noi_bo' | 'chua_ro';
 export type LyDoTachKien = 'thieu_hang' | 'khach_yeu_cau' | 'do_kich_thuoc' | 'chua_ro';
 
+/** Một món bị khai sai cân, kèm cân ĐÚNG người giải trình nhập (gram). */
+export interface SanPhamSaiCan { sku: string; canMoiG: number }
+
 export interface ChiTietGiaiTrinh {
   /** Số món đồ trong đơn. */
   soDo?: number | null;
-  /** SKU cần sửa cân nặng trên web, mỗi dòng một SKU. */
+  /**
+   * @deprecated 16/09/2026 — ô chữ tự do, không nói được MÓN NÀO sai trong đơn nhiều món. Chỉ còn
+   * để đọc bản nạp từ Excel; nhập mới dùng `sanPhamSai`.
+   */
   skuCanSua?: string | null;
+  /**
+   * Món nào sai cân và cân đúng là bao nhiêu (CEO 16/09/2026: "không thể tù mù được"). Bắt buộc
+   * với lý do cân web; trang Sửa cân sản phẩm đẩy đúng các con số này, không tự chia nữa.
+   */
+  sanPhamSai?: SanPhamSaiCan[] | null;
   /** Số tiền phụ phí liên quan (vùng sâu xa / sửa địa chỉ). */
   phiVnd?: number | null;
   nguonSaiDiaChi?: NguonSaiDiaChi | null;
@@ -50,7 +61,7 @@ export type MaLyDoAmCuoc =
   | 'can_quy_doi_web' | 'hang_tinh_sai_can' | 'phi_vung_sau_xa' | 'phi_sua_dia_chi'
   | 'tach_kien' | 'bang_gia_thap' | 'rule_thung_brand' | 'khac';
 
-export type TruongNhap = 'soDo' | 'skuCanSua' | 'phiVnd' | 'nguonSaiDiaChi' | 'lyDoTach' | 'soTienDoiVnd';
+export type TruongNhap = 'sanPhamSai' | 'phiVnd' | 'nguonSaiDiaChi' | 'lyDoTach' | 'soTienDoiVnd';
 
 export interface LyDoAmCuoc {
   ma: MaLyDoAmCuoc;
@@ -63,7 +74,7 @@ export interface LyDoAmCuoc {
 
 export const LY_DO_AM_CUOC: LyDoAmCuoc[] = [
   { ma: 'can_quy_doi_web', ten: 'Cân quy đổi thùng cao hơn cân khai trên web',
-    huongXuLy: 'Sửa cân nặng các SKU trên web theo cân quy đổi của thùng thực tế', truong: ['soDo', 'skuCanSua'] },
+    huongXuLy: 'Chọn đúng món khai sai cân và nhập cân đúng — quản lý duyệt ở trang Sửa cân sản phẩm', truong: ['sanPhamSai'] },
   { ma: 'hang_tinh_sai_can', ten: 'Hãng tính cân / kích thước sai',
     huongXuLy: 'Mở khiếu nại ở Đối soát phí ship', truong: ['soTienDoiVnd'] },
   { ma: 'phi_vung_sau_xa', ten: 'Phí vùng sâu xa chưa thu ở checkout',
@@ -75,7 +86,7 @@ export const LY_DO_AM_CUOC: LyDoAmCuoc[] = [
   { ma: 'bang_gia_thap', ten: 'Không phát sinh phụ phí, cước checkout thấp hơn bill',
     huongXuLy: 'Rà lại bảng giá checkout của tuyến này', truong: [] },
   { ma: 'rule_thung_brand', ten: 'Brand quy định dùng thùng lớn hơn cần',
-    huongXuLy: 'Tính cân tối thiểu theo quy định của brand vào cân sản phẩm trên web', truong: ['soDo', 'skuCanSua'] },
+    huongXuLy: 'Chọn món chịu quy định thùng của brand và nhập cân tối thiểu theo quy định', truong: ['sanPhamSai'] },
   { ma: 'khac', ten: 'Khác — ghi rõ ở ghi chú',
     huongXuLy: 'Quản lý đọc ghi chú và chốt trách nhiệm', truong: [] },
 ];
@@ -106,6 +117,37 @@ export function quyTrachNhiem(ma: MaLyDoAmCuoc, ct: ChiTietGiaiTrinh = {}): Thuo
         : ct.lyDoTach === 'do_kich_thuoc' ? 'bang_gia' : 'chua_ro';
     default: return 'chua_ro';
   }
+}
+
+/** Lý do này có bắt chọn món sai cân không. */
+export const canChonSanPham = (ma: string | null | undefined): boolean =>
+  layLyDoAmCuoc(ma)?.truong.includes('sanPhamSai') ?? false;
+
+/** Giải trình cân web mà chưa chỉ ra món nào sai — trách nhiệm đã rõ nhưng CHƯA sửa được gì. */
+export const thieuSanPham = (ma: string | null | undefined, ct: ChiTietGiaiTrinh | null | undefined): boolean =>
+  canChonSanPham(ma) && !(ct?.sanPhamSai?.length);
+
+/**
+ * Kiểm danh sách món sai cân trước khi lưu. `dongDon` là các món thật trong đơn kèm cân hiện tại.
+ * Trả về câu lỗi cho người nhập, hoặc null nếu hợp lệ.
+ */
+export function kiemSanPhamSai(
+  chon: readonly SanPhamSaiCan[] | null | undefined,
+  dongDon: ReadonlyArray<{ sku: string; canHienTaiG: number | null }>,
+): string | null {
+  if (!chon || chon.length === 0) return 'Chọn ít nhất một món bị khai sai cân';
+  const theoSku = new Map(dongDon.map((d) => [d.sku, d]));
+  const daGap = new Set<string>();
+  for (const c of chon) {
+    const d = theoSku.get(c.sku);
+    if (!d) return `${c.sku} không nằm trong đơn này`;
+    if (daGap.has(c.sku)) return `${c.sku} bị chọn hai lần`;
+    daGap.add(c.sku);
+    if (!Number.isFinite(c.canMoiG) || c.canMoiG <= 0) return `Nhập cân đúng cho ${c.sku}`;
+    if (c.canMoiG > 30_000) return `Cân ${c.sku} quá lớn — kiểm lại đơn vị (nhập theo kg)`;
+    if (d.canHienTaiG != null && c.canMoiG <= d.canHienTaiG) return `Cân mới của ${c.sku} phải cao hơn cân đang khai (${d.canHienTaiG / 1000}kg)`;
+  }
+  return null;
 }
 
 /** Đã phân định xong chưa — 'chua_ro' vẫn tính là chưa. */

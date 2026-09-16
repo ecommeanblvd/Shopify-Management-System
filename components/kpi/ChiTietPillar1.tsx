@@ -4,10 +4,10 @@ import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
-import { dauHieu, layLyDoAmCuoc, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
+import { dauHieu, layLyDoAmCuoc, thieuSanPham, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
 import { layLyDo } from '@/features/shipments/ly-do-cham';
 import {
-  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, laLoiNoiBo,
+  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, conViec, laLoiNoiBo,
   type ChiTietKpi, type MaTieuChi,
 } from '@/features/kpi-logistics/chi-tiet';
 
@@ -139,25 +139,28 @@ function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
   const tong = rows.reduce((s, r) => s + r.chenhVnd, 0);
   const daChot = rows.filter(laLoiNoiBo).length;
   const conPhai = rows.filter(canGiaiTrinh);
+  // Lỗi cân web đã rõ trách nhiệm nhưng chưa chỉ ra MÓN nào sai — chưa sửa được cân.
+  const thieuMon = rows.filter((r) => !r.phanDinh && thieuSanPham(r.giaiTrinh?.lyDo, r.giaiTrinh?.chiTiet));
   const daThuHoi = rows.reduce((s, r) => s + r.thuHoiVnd, 0);
-  // Màn hình để XỬ LÝ: mặc định chỉ đơn còn phải giải trình; CSV luôn đủ (nguyên tắc 14/09/2026).
+  // Màn hình để XỬ LÝ: mặc định chỉ đơn còn việc; CSV luôn đủ (nguyên tắc 14/09/2026).
   const [hienHet, setHienHet] = useState(false);
-  const hien = hienHet ? rows : conPhai;
+  const hien = hienHet ? rows : rows.filter(conViec);
   const choCsv = [...rows].sort((a, b) => Number(canGiaiTrinh(a)) - Number(canGiaiTrinh(b)) || b.chenhVnd - a.chenhVnd);
   return (
     <Khung
-      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> · đã chốt lỗi nội bộ <b>{daChot}</b> · <span className={conPhai.length ? 'text-amber-600 dark:text-amber-400' : ''}>còn phải giải trình <b>{conPhai.length}</b></span>. Đơn đang khiếu nại hãng thì xử lý ở Đối soát phí ship. Đơn âm vì cân web thấp → <a href="/f/can-san-pham" className="underline">Sửa cân sản phẩm</a>.</>}
+      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> · đã chốt lỗi nội bộ <b>{daChot}</b> · <span className={conPhai.length ? 'text-amber-600 dark:text-amber-400' : ''}>còn phải giải trình <b>{conPhai.length}</b></span>{thieuMon.length > 0 && <> · <span className="text-amber-600 dark:text-amber-400">lỗi cân web chưa chọn món sai <b>{thieuMon.length}</b></span></>}. Đơn đang khiếu nại hãng thì xử lý ở Đối soát phí ship. Đơn âm vì cân web thấp → <a href="/f/can-san-pham" className="underline">Sửa cân sản phẩm</a>.</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.1-am-cuoc.csv`,
         ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Đã đòi lại (VND)', 'Giá vốn ròng (VND)', 'Chênh (VND)',
           'Phân định đối soát', 'Số credit note', 'Dấu hiệu hệ thống', 'Hệ thống gợi ý', 'Nguyên nhân giải trình', 'Trách nhiệm',
-          'Số đồ', 'SKU cần sửa cân', 'Phụ phí (VND)', 'Line HNC', 'Ghi chú'],
+          'Số món trong đơn', 'Món sai cân = cân đúng', 'Phụ phí (VND)', 'Line HNC', 'Ghi chú'],
         choCsv.map((r) => {
           const g = r.giaiTrinh;
+          const monSai = g?.chiTiet.sanPhamSai?.map((x) => `${x.sku}=${x.canMoiG / 1000}kg`).join(' | ') ?? g?.chiTiet.skuCanSua ?? null;
           return [r.maDon, r.nuoc, r.ngayGui, r.thuKhachVnd, r.carrierVnd, r.thuHoiVnd, r.carrierRongVnd, r.chenhVnd,
             r.phanDinh, r.soCreditNote, dauHieu(r.tinHieu).join(' | '), layLyDoAmCuoc(r.goiY)?.ten ?? r.goiY,
             g ? (layLyDoAmCuoc(g.lyDo)?.ten ?? g.lyDo) : null,
             g ? (NHAN_THUOC_VE_AM_CUOC[g.thuocVe as keyof typeof NHAN_THUOC_VE_AM_CUOC] ?? g.thuocVe) : null,
-            g?.chiTiet.soDo ?? null, g?.chiTiet.skuCanSua ?? null, g?.chiTiet.phiVnd ?? null,
+            g?.chiTiet.soDo ?? null, monSai, g?.chiTiet.phiVnd ?? null,
             g?.chiTiet.lineHnc ? 'Có' : null, g?.ghiChu ?? null];
         }))}
       nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} nhanAn="đơn đã phân định" />}
@@ -185,7 +188,14 @@ function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
                 {r.phanDinh
                   ? <span className="text-muted-foreground">{r.phanDinh}{r.soCreditNote ? ` · ${r.soCreditNote}` : ''}</span>
                   : g
-                    ? <span className="space-y-0.5"><span className="block text-xs">{layLyDoAmCuoc(g.lyDo)?.ten ?? g.lyDo}</span><NhanTrachNhiem thuocVe={g.thuocVe} /></span>
+                    ? <span className="space-y-0.5">
+                        <span className="block text-xs">{layLyDoAmCuoc(g.lyDo)?.ten ?? g.lyDo}</span>
+                        <NhanTrachNhiem thuocVe={g.thuocVe} />
+                        {g.chiTiet.sanPhamSai?.map((x) => (
+                          <span key={x.sku} className="block font-mono text-[10px] text-muted-foreground">{x.sku} → {x.canMoiG / 1000}kg</span>
+                        ))}
+                        {thieuSanPham(g.lyDo, g.chiTiet) && <span className="block text-[10px] font-medium text-amber-600 dark:text-amber-400">chưa chọn món sai cân</span>}
+                      </span>
                     : <span className="text-amber-600 dark:text-amber-400">chưa phân định</span>}
               </td>
               <td className="px-2.5 py-1.5 text-right">

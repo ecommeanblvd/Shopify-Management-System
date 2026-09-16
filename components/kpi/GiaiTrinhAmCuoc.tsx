@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  LY_DO_AM_CUOC, NHAN_THUOC_VE_AM_CUOC, danhGiaKien, dauHieu, layLyDoAmCuoc, quyTrachNhiem, tongBilledKg,
-  type ChiTietGiaiTrinh, type MaLyDoAmCuoc, type ThuocVeAmCuoc,
+  LY_DO_AM_CUOC, NHAN_THUOC_VE_AM_CUOC, canChonSanPham, danhGiaKien, dauHieu, layLyDoAmCuoc, quyTrachNhiem, thieuSanPham, tongBilledKg,
+  type ChiTietGiaiTrinh, type MaLyDoAmCuoc, type SanPhamSaiCan, type ThuocVeAmCuoc,
 } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
 import { luuGiaiTrinhAmCuoc, xoaGiaiTrinhAmCuoc } from '@/features/kpi-logistics/giai-trinh-actions';
-import type { DongAmCuoc } from '@/features/kpi-logistics/chi-tiet';
+import type { DongAmCuoc, MonTrongDon } from '@/features/kpi-logistics/chi-tiet';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const kg = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100) / 100}kg`);
@@ -34,11 +34,12 @@ export function NhanTrachNhiem({ thuocVe }: { thuocVe: string }) {
 export function NutGiaiTrinh({ dong, sauKhiLuu }: { dong: DongAmCuoc; sauKhiLuu: () => void }) {
   const [mo, setMo] = useState(false);
   const cu = dong.giaiTrinh;
+  const thieu = !!cu && thieuSanPham(cu.lyDo, cu.chiTiet);
   return (
     <>
       <button type="button" onClick={() => setMo(true)}
-        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition hover:bg-muted ${cu ? 'border-border text-muted-foreground' : 'border-amber-500/50 text-amber-700 dark:text-amber-400'}`}>
-        {cu ? 'Sửa' : 'Giải trình'}
+        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition hover:bg-muted ${cu && !thieu ? 'border-border text-muted-foreground' : 'border-amber-500/50 text-amber-700 dark:text-amber-400'}`}>
+        {!cu ? 'Giải trình' : thieu ? 'Chọn món sai' : 'Sửa'}
       </button>
       {mo && <FormGiaiTrinh dong={dong} dong_lai={() => setMo(false)} xong={() => { setMo(false); sauKhiLuu(); }} />}
     </>
@@ -146,11 +147,8 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
 
         {ld.truong.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2">
-            {ld.truong.includes('soDo') && (
-              <label className="space-y-1 text-xs"><div className="font-medium">Số món đồ trong đơn</div>
-                <input type="number" min={1} className={`${o} text-right`} value={ct.soDo ?? ''}
-                  onChange={(e) => dat({ soDo: e.target.value === '' ? null : Number(e.target.value) })} />
-              </label>
+            {ld.truong.includes('sanPhamSai') && (
+              <ChonMonSaiCan mon={dong.monHang} chon={ct.sanPhamSai ?? []} doi={(x) => dat({ sanPhamSai: x })} />
             )}
             {ld.truong.includes('phiVnd') && (
               <label className="space-y-1 text-xs"><div className="font-medium">Số tiền phụ phí (VND)</div>
@@ -185,12 +183,6 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
                 </select>
               </label>
             )}
-            {ld.truong.includes('skuCanSua') && (
-              <label className="space-y-1 text-xs sm:col-span-2"><div className="font-medium">SKU cần sửa cân trên web — mỗi dòng một SKU</div>
-                <textarea rows={3} className={`${o} h-auto py-1.5 font-mono`} value={ct.skuCanSua ?? ''}
-                  onChange={(e) => dat({ skuCanSua: e.target.value })} />
-              </label>
-            )}
           </div>
         )}
 
@@ -212,7 +204,7 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
           <div className="flex gap-2">
             {cu && <button type="button" onClick={xoa} disabled={pending} className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-red-600 disabled:opacity-50">Xoá giải trình</button>}
             <button type="button" onClick={dong_lai} disabled={pending} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Huỷ</button>
-            <button type="button" onClick={luu} disabled={pending || (lyDo === 'khac' && !ghiChu.trim())}
+            <button type="button" onClick={luu} disabled={pending || (lyDo === 'khac' && !ghiChu.trim()) || (canChonSanPham(lyDo) && !ct.sanPhamSai?.length)}
               className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
               {pending ? 'Đang lưu…' : 'Lưu giải trình'}
             </button>
@@ -220,5 +212,83 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Chọn đúng món khai sai cân và nhập cân đúng (CEO 16/09/2026: "không thể tù mù được").
+ * Tick một món thì ô cân điền sẵn cân hệ thống gợi ý — sửa lại nếu biết con số chính xác hơn.
+ * Đơn một món thì tick sẵn luôn, không bắt bấm thêm.
+ */
+function ChonMonSaiCan({ mon, chon, doi }: {
+  mon: MonTrongDon[]; chon: SanPhamSaiCan[]; doi: (x: SanPhamSaiCan[]) => void;
+}) {
+  const theoSku = new Map(chon.map((c) => [c.sku, c]));
+  const [nhap, setNhap] = useState<Record<string, string>>(
+    () => Object.fromEntries(chon.map((c) => [c.sku, String(c.canMoiG / 1000)])),
+  );
+  // Đơn một món: chọn sẵn với cân gợi ý — chỉ một lần khi mở, người nhập bỏ tick được.
+  const daTuChon = useRef(false);
+  useEffect(() => {
+    if (daTuChon.current) return;
+    daTuChon.current = true;
+    const m = mon[0];
+    if (mon.length === 1 && chon.length === 0 && m.goiYG) {
+      doi([{ sku: m.sku, canMoiG: m.goiYG }]);
+      setNhap({ [m.sku]: String(m.goiYG / 1000) });
+    }
+  }, [mon, chon, doi]);
+
+  const tick = (m: MonTrongDon) => {
+    if (theoSku.has(m.sku)) { doi(chon.filter((c) => c.sku !== m.sku)); return; }
+    const g = m.goiYG ?? m.canHienTaiG ?? 0;
+    setNhap((n) => ({ ...n, [m.sku]: g ? String(g / 1000) : '' }));
+    doi([...chon, { sku: m.sku, canMoiG: g }]);
+  };
+  const doiCan = (sku: string, v: string) => {
+    setNhap((n) => ({ ...n, [sku]: v }));
+    const kgSo = Number(v.replace(',', '.'));
+    doi(chon.map((c) => (c.sku === sku ? { ...c, canMoiG: Number.isFinite(kgSo) ? Math.round(kgSo * 1000) : 0 } : c)));
+  };
+
+  return (
+    <div className="space-y-1.5 sm:col-span-2">
+      <div className="text-xs font-medium">Món nào khai sai cân? Tick món sai và nhập cân đúng (kg)</div>
+      {mon.length === 0 && <p className="text-xs text-red-600 dark:text-red-400">Đơn không có dòng hàng mang SKU — không chọn được món.</p>}
+      <div className="divide-y divide-border rounded-md border border-border">
+        {mon.map((m) => {
+          const dc = theoSku.get(m.sku);
+          const thap = dc && m.canHienTaiG != null && dc.canMoiG <= m.canHienTaiG;
+          return (
+            <div key={m.sku} className={`flex flex-wrap items-center gap-2 px-2.5 py-2 text-xs ${dc ? 'bg-muted/40' : ''}`}>
+              <input type="checkbox" className="size-3.5 accent-primary" checked={!!dc} onChange={() => tick(m)}
+                aria-label={`Chọn ${m.sku}`} />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{m.tenSanPham}{m.bienThe ? ` · ${m.bienThe}` : ''}{m.soLuong > 1 ? ` × ${m.soLuong}` : ''}</span>
+                <span className="block font-mono text-[10px] text-muted-foreground">{m.sku}</span>
+              </span>
+              <span className="text-right tabular-nums text-muted-foreground">
+                đang khai <b className="text-foreground">{kg(m.canHienTaiG)}</b>
+                {m.goiYG != null && <span className="block text-[10px]">gợi ý {kg(m.goiYG)}</span>}
+              </span>
+              {dc && (
+                <label className="flex items-center gap-1">
+                  <span className="text-muted-foreground">cân đúng</span>
+                  <input inputMode="decimal" className={`${o} w-20 text-right ${thap ? 'border-red-500' : ''}`}
+                    value={nhap[m.sku] ?? ''} onChange={(e) => doiCan(m.sku, e.target.value)} aria-label={`Cân đúng của ${m.sku}`} />
+                  <span className="text-muted-foreground">kg</span>
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {chon.some((c) => { const m = mon.find((x) => x.sku === c.sku); return m?.canHienTaiG != null && c.canMoiG <= m.canHienTaiG; }) && (
+        <p className="text-[11px] text-red-600 dark:text-red-400">Cân đúng phải cao hơn cân đang khai — nếu không thì món đó không phải món sai.</p>
+      )}
+      <p className="text-[10px] text-muted-foreground">
+        Cân đúng = cân khi đã đóng gói, vì hãng tính theo thùng. Số này sẽ lên trang Sửa cân sản phẩm để quản lý duyệt.
+      </p>
+    </div>
   );
 }

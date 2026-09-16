@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  goiYLyDo, dauHieu, quyTrachNhiem, daPhanDinh, danhGiaKien, layLyDoAmCuoc, tongBilledKg, LY_DO_AM_CUOC, type TinHieu,
+  goiYLyDo, dauHieu, quyTrachNhiem, daPhanDinh, danhGiaKien, layLyDoAmCuoc, tongBilledKg, LY_DO_AM_CUOC,
+  canChonSanPham, thieuSanPham, kiemSanPhamSai, type TinHieu,
 } from './giai-trinh-am-cuoc';
 
 const t = (kien: TinHieu['kien'], extra: Partial<TinHieu> = {}): TinHieu =>
@@ -74,5 +75,34 @@ describe('quyTrachNhiem — người giải trình không tự phân xử', () =
   it('mọi lý do trong danh mục đều quy được', () => {
     for (const l of LY_DO_AM_CUOC) expect(quyTrachNhiem(l.ma)).toBeTruthy();
     expect(layLyDoAmCuoc('khong_ton_tai')).toBeNull();
+  });
+});
+
+describe('chọn đúng món sai cân (CEO 16/09/2026)', () => {
+  const don = [{ sku: 'A', canHienTaiG: 700 }, { sku: 'B', canHienTaiG: 500 }];
+
+  it('lý do cân web và quy định thùng bắt chọn món; lý do khác thì không', () => {
+    expect(canChonSanPham('can_quy_doi_web')).toBe(true);
+    expect(canChonSanPham('rule_thung_brand')).toBe(true);
+    expect(canChonSanPham('phi_vung_sau_xa')).toBe(false);
+  });
+
+  it('chưa chọn món nào là thiếu', () => {
+    expect(thieuSanPham('can_quy_doi_web', {})).toBe(true);
+    expect(thieuSanPham('can_quy_doi_web', { sanPhamSai: [{ sku: 'A', canMoiG: 1200 }] })).toBe(false);
+    expect(thieuSanPham('phi_vung_sau_xa', {})).toBe(false);
+  });
+
+  it('hợp lệ khi chọn đúng món trong đơn và cân mới cao hơn cân đang khai', () => {
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 1200 }], don)).toBeNull();
+  });
+
+  it('chặn các trường hợp sai', () => {
+    expect(kiemSanPhamSai([], don)).toContain('ít nhất một món');
+    expect(kiemSanPhamSai([{ sku: 'X', canMoiG: 1000 }], don)).toContain('không nằm trong đơn');
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 1000 }, { sku: 'A', canMoiG: 1100 }], don)).toContain('hai lần');
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 0 }], don)).toContain('Nhập cân');
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 600 }], don)).toContain('phải cao hơn');
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 45_000 }], don)).toContain('đơn vị');
   });
 });

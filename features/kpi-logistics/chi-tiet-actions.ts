@@ -16,7 +16,8 @@ import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
 import { STORE_VAN_HANH, nhanThuocVe } from './pham-vi';
 import { docSlaShipHo, docChungTuShipHo } from './nguon-ship-ho';
-import { goiYLyDo, type TinHieu, type ChiTietGiaiTrinh } from './giai-trinh-am-cuoc';
+import { goiYLyDo, tongBilledKg, type TinHieu, type ChiTietGiaiTrinh } from './giai-trinh-am-cuoc';
+import { deXuatTuMotDon } from '@/features/can-san-pham/de-xuat';
 import {
   CACH_DO, xepLoaiSla, chenhSauThuHoi,
   type ChiTietKpi, type MaTieuChi, type DongAmCuoc, type DongSla, type DongChungTu, type DongSizeThung,
@@ -69,7 +70,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
     // Số đo từng kiện + phụ phí, và giải trình đã lưu — hai lượt đọc gom cho mọi đơn một lần.
     // Lọc theo mảng bằng IN: drizzle bung mảng thành ($1, $2, …) nên cú pháp ANY với mảng sẽ hỏng.
     const ids = rows.map((r) => r.oid);
-    const [kienRows, gtRows] = ids.length === 0 ? [{ rows: [] }, { rows: [] }] : await Promise.all([
+    const [kienRows, gtRows, monRows] = ids.length === 0 ? [{ rows: [] }, { rows: [] }, { rows: [] }] : await Promise.all([
       db.execute<{ oid: string; thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null; vsx: string | null; sdc: string | null }>(sql`
         SELECT s.order_id AS oid, s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
                s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed,
@@ -80,7 +81,18 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       db.execute<{ oid: string; ly_do: string; thuoc_ve: string; chi_tiet: unknown; ghi_chu: string | null; nguon: string; cap_nhat: string }>(sql`
         SELECT order_id AS oid, ly_do, thuoc_ve, chi_tiet, ghi_chu, nguon, updated_at::text AS cap_nhat
           FROM am_cuoc_giai_trinh WHERE order_id IN ${ids};`),
+      db.execute<{ oid: string; sku: string; ten: string; bt: string | null; sl: number; can_g: string | null }>(sql`
+        SELECT l.order_id AS oid, l.sku, l.product_title AS ten, l.variant_title AS bt, l.quantity AS sl,
+               (SELECT MAX(v.weight_grams) FROM shopify_variants v JOIN shopify_orders o ON o.id = l.order_id
+                 WHERE v.store_id = o.store_id AND v.sku = l.sku)::text AS can_g
+          FROM shopify_order_lines l
+         WHERE l.order_id IN ${ids} AND l.sku IS NOT NULL AND l.sku <> ''
+         ORDER BY l.order_id, l.product_title;`),
     ]);
+    const monTheoDon = new Map<string, Array<{ sku: string; ten: string; bt: string | null; sl: number; canG: number | null }>>();
+    for (const m of monRows.rows) {
+      monTheoDon.set(m.oid, [...(monTheoDon.get(m.oid) ?? []), { sku: m.sku, ten: m.ten, bt: m.bt, sl: Number(m.sl), canG: so(m.can_g) }]);
+    }
     const tinHieuTheoDon = new Map<string, TinHieu>();
     for (const k of kienRows.rows) {
       const t = tinHieuTheoDon.get(k.oid) ?? { soKien: 0, kien: [], phiVungSauXaVnd: 0, phiSuaDiaChiVnd: 0 };
@@ -105,8 +117,18 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         canWebKg: so(r.can_web),
       };
       const g = gtTheoDon.get(r.oid);
+      // Cân gợi ý mỗi món = phần của nó nếu cả kiện đều bị tính thiếu; người giải trình sửa được.
+      const mon = monTheoDon.get(r.oid) ?? [];
+      const billed = tongBilledKg(tinHieu);
+      const goiY = billed == null ? new Map<string, number>() : deXuatTuMotDon({
+        maDon: r.don ?? '', billedKg: billed,
+        dong: mon.map((m) => ({ sku: m.sku, soLuong: m.sl, canHienTaiG: m.canG })),
+      });
       amCuoc.push({
         orderId: r.oid, tinHieu, goiY: goiYLyDo(tinHieu),
+        monHang: mon.map((m) => ({
+          sku: m.sku, tenSanPham: m.ten, bienThe: m.bt, soLuong: m.sl, canHienTaiG: m.canG, goiYG: goiY.get(m.sku) ?? null,
+        })),
         giaiTrinh: g ? {
           lyDo: g.ly_do, thuocVe: g.thuoc_ve, chiTiet: (g.chi_tiet ?? {}) as ChiTietGiaiTrinh,
           ghiChu: g.ghi_chu, nguon: g.nguon, capNhat: g.cap_nhat,

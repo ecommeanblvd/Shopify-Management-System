@@ -6,12 +6,12 @@
  */
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
-import { layLyDoAmCuoc, quyTrachNhiem, type ChiTietGiaiTrinh, type MaLyDoAmCuoc } from './giai-trinh-am-cuoc';
+import { canChonSanPham, kiemSanPhamSai, layLyDoAmCuoc, quyTrachNhiem, type ChiTietGiaiTrinh, type MaLyDoAmCuoc } from './giai-trinh-am-cuoc';
 
 async function quyen(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -34,6 +34,11 @@ function lamSach(ct: ChiTietGiaiTrinh): ChiTietGiaiTrinh {
     lyDoTach: trongDs(ct.lyDoTach, ['thieu_hang', 'khach_yeu_cau', 'do_kich_thuoc', 'chua_ro'] as const),
     soTienDoiVnd: soDuong(ct.soTienDoiVnd),
     lineHnc: ct.lineHnc === true,
+    sanPhamSai: Array.isArray(ct.sanPhamSai)
+      ? ct.sanPhamSai
+          .filter((x) => x && typeof x.sku === 'string' && x.sku.trim())
+          .map((x) => ({ sku: x.sku.trim(), canMoiG: Math.round(Number(x.canMoiG)) }))
+      : null,
   };
 }
 
@@ -45,6 +50,19 @@ export async function luuGiaiTrinhAmCuoc(input: {
   const ghiChu = input.ghiChu?.trim() || null;
   if (input.lyDo === 'khac' && !ghiChu) throw new Error('Chọn "Khác" thì phải ghi rõ ở ghi chú');
   const chiTiet = lamSach(input.chiTiet);
+  if (canChonSanPham(input.lyDo)) {
+    // Món chọn phải có thật trong đơn, cân mới phải cao hơn cân Shopify đang khai.
+    const { rows } = await db.execute<{ sku: string; can_g: string | null }>(sql`
+      SELECT l.sku, (SELECT MAX(v.weight_grams) FROM shopify_variants v
+                      WHERE v.store_id = o.store_id AND v.sku = l.sku)::text AS can_g
+        FROM shopify_order_lines l JOIN shopify_orders o ON o.id = l.order_id
+       WHERE l.order_id = ${input.orderId} AND l.sku IS NOT NULL AND l.sku <> ''`);
+    const loi = kiemSanPhamSai(chiTiet.sanPhamSai, rows.map((r) => ({ sku: r.sku, canHienTaiG: r.can_g == null ? null : Number(r.can_g) })));
+    if (loi) throw new Error(loi);
+    chiTiet.soDo = rows.length;
+  } else {
+    chiTiet.sanPhamSai = null;
+  }
   // Trách nhiệm do hệ thống quy, không nhận từ trình duyệt.
   const thuocVe = quyTrachNhiem(input.lyDo, chiTiet);
   const gia = { lyDo: input.lyDo, thuocVe, chiTiet, ghiChu, nguon: 'tay', updatedBy: userId, updatedAt: new Date() };

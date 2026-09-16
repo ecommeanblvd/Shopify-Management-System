@@ -44,11 +44,32 @@ describe('deXuatTuMotDon', () => {
   });
 });
 
-describe('tongHopDeXuat', () => {
+const cd = (sku: string, canMoiG: number) => [{ sku, canMoiG }];
+
+describe('tongHopDeXuat — chỉ lấy món được chỉ định', () => {
+  it('đơn chưa chỉ định món sai thì KHÔNG sinh đề xuất — không đoán', () => {
+    expect(tongHopDeXuat([
+      { maDon: '#MBLVD29572', billedKg: 2, dong: [
+        { sku: 'JK032424', soLuong: 1, canHienTaiG: 800 }, { sku: 'JK042407', soLuong: 1, canHienTaiG: 800 },
+      ] },
+    ])).toEqual([]);
+  });
+
+  it('đơn nhiều món chỉ sửa đúng món được chọn, với đúng cân được nhập', () => {
+    const r = tongHopDeXuat([{ maDon: 'x', billedKg: 2, canChiDinh: cd('A', 1500), dong: [
+      { sku: 'A', soLuong: 1, canHienTaiG: 700 }, { sku: 'B', soLuong: 1, canHienTaiG: 500 },
+    ] }]);
+    expect(r.map((d) => [d.sku, d.canDeXuatG])).toEqual([['A', 1500]]);
+  });
+
+  it('cân chỉ định không cao hơn cân đang khai thì bỏ', () => {
+    expect(tongHopDeXuat([{ maDon: 'x', billedKg: 2, canChiDinh: cd('A', 700), dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] }])).toEqual([]);
+  });
+
   it('nhiều đơn cùng SKU → lấy mức cao nhất, giữ đủ bằng chứng', () => {
     const r = tongHopDeXuat([
-      { maDon: 'd1', billedKg: 2, dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
-      { maDon: 'd2', billedKg: 2.5, dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'd1', billedKg: 2, canChiDinh: cd('A', 2000), dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'd2', billedKg: 2.5, canChiDinh: cd('A', 2500), dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
     ]);
     expect(r).toHaveLength(1);
     expect(r[0].canDeXuatG).toBe(2500);
@@ -57,8 +78,8 @@ describe('tongHopDeXuat', () => {
 
   it('xếp SKU tăng nhiều nhất lên đầu', () => {
     const r = tongHopDeXuat([
-      { maDon: 'd1', billedKg: 1, dong: [{ sku: 'nho', soLuong: 1, canHienTaiG: 800 }] },
-      { maDon: 'd2', billedKg: 5, dong: [{ sku: 'lon', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'd1', billedKg: 1, canChiDinh: cd('nho', 1000), dong: [{ sku: 'nho', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'd2', billedKg: 5, canChiDinh: cd('lon', 5000), dong: [{ sku: 'lon', soLuong: 1, canHienTaiG: 800 }] },
     ]);
     expect(r.map((d) => d.sku)).toEqual(['lon', 'nho']);
   });
@@ -73,8 +94,8 @@ describe('cờ thùng quá to', () => {
   });
   it('đề xuất mang cờ theo đúng đơn đẩy mức cao nhất', () => {
     const r = tongHopDeXuat([
-      { maDon: 'thung-chuan', billedKg: 2, dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
-      { maDon: 'thung-to', billedKg: 7.3, thungQuaTo: true, dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'thung-chuan', billedKg: 2, canChiDinh: cd('A', 2000), dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
+      { maDon: 'thung-to', billedKg: 7.3, thungQuaTo: true, canChiDinh: cd('A', 7300), dong: [{ sku: 'A', soLuong: 1, canHienTaiG: 800 }] },
     ]);
     expect(r[0].canDeXuatG).toBe(7300);
     expect(r[0].nghiThungTo).toBe(true);

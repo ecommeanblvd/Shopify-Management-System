@@ -6,6 +6,7 @@
  * `lech-can.ts`, nếu không bảng chi tiết sẽ nói khác con số KPI. Có test canh.
  */
 import { NGUONG_NGOAI_LE_SOP } from '@/features/shipments/sop-giao-hang';
+import { thieuSanPham } from './giai-trinh-am-cuoc';
 
 export type MaTieuChi = '1.1' | '1.2' | '1.3' | '1.4';
 
@@ -53,9 +54,23 @@ export interface GiaiTrinhDaLuu {
   capNhat: string;
 }
 
+/** Một món trong đơn âm cước — để người giải trình chọn đúng món khai sai cân. */
+export interface MonTrongDon {
+  sku: string;
+  tenSanPham: string;
+  bienThe: string | null;
+  soLuong: number;
+  /** Cân đang khai trên Shopify (gram); null khi chưa tìm thấy biến thể. */
+  canHienTaiG: number | null;
+  /** Cân hệ thống gợi ý nếu món này là món sai — chỉ để điền sẵn, người nhập sửa được. */
+  goiYG: number | null;
+}
+
 export interface DongAmCuoc {
   /** Cần cho nút giải trình. */
   orderId: string;
+  /** Các món trong đơn. */
+  monHang: MonTrongDon[];
   /** Số đo hệ thống đã có — hiện ngay trong form để khỏi gõ lại. */
   tinHieu: import('./giai-trinh-am-cuoc').TinHieu;
   /** Lý do hệ thống đề xuất từ `tinHieu`. */
@@ -213,3 +228,11 @@ export const laLoiNoiBo = (d: DongPhanDinh): boolean =>
 /** Còn phải giải trình: đối soát chưa chốt VÀ chưa có giải trình quy được trách nhiệm. */
 export const canGiaiTrinh = (d: DongPhanDinh): boolean =>
   !d.phanDinh && (!d.giaiTrinh || d.giaiTrinh.thuocVe === 'chua_ro');
+
+/**
+ * Còn việc phải làm trên đơn này: hoặc chưa phân định, hoặc là lỗi cân web mà chưa chỉ ra món
+ * nào sai. Loại sau KHÔNG làm tụt bộ đếm KPI (trách nhiệm đã rõ) nhưng vẫn phải hiện trong danh
+ * sách việc, vì chưa chọn món thì không sửa được cân (CEO 16/09/2026).
+ */
+export const conViec = (d: DongPhanDinh): boolean =>
+  canGiaiTrinh(d) || (!d.phanDinh && thieuSanPham(d.giaiTrinh?.lyDo, d.giaiTrinh?.chiTiet));

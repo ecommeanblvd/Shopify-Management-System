@@ -29,6 +29,11 @@ export interface DonBangChung {
    * với món bên trong. Khi đó đẩy cân web lên chỉ chuyển cái sai của khâu đóng gói sang khách.
    */
   thungQuaTo?: boolean;
+  /**
+   * Món sai cân và cân đúng do NGƯỜI GIẢI TRÌNH chỉ định (gram). Trang Sửa cân CHỈ dùng số này —
+   * CEO 16/09/2026: "không thể tù mù được". Đơn chưa chỉ định thì không sinh đề xuất nào.
+   */
+  canChiDinh?: ReadonlyArray<{ sku: string; canMoiG: number }> | null;
 }
 
 /** Nhận diện thùng quá to từ số đo kiện. */
@@ -73,11 +78,16 @@ export function deXuatTuMotDon(don: DonBangChung): Map<string, number> {
   return ra;
 }
 
-/** Gộp nhiều đơn → mỗi SKU một đề xuất; chỉ giữ SKU mà cân đề xuất CAO HƠN cân hiện tại. */
+/**
+ * Gộp nhiều đơn → mỗi SKU một đề xuất; chỉ giữ SKU mà cân đề xuất CAO HƠN cân hiện tại.
+ * Chỉ lấy món được CHỈ ĐỊNH trong giải trình. `deXuatTuMotDon` (chia theo tỉ lệ) giờ chỉ dùng để
+ * điền sẵn gợi ý trong form, không bao giờ tự đẩy lên Shopify.
+ */
 export function tongHopDeXuat(dsDon: readonly DonBangChung[]): DeXuatCan[] {
   const theoSku = new Map<string, DeXuatCan>();
   for (const don of dsDon) {
-    for (const [sku, g] of deXuatTuMotDon(don)) {
+    const chiDinh = new Map((don.canChiDinh ?? []).map((c) => [c.sku, c.canMoiG]));
+    for (const [sku, g] of chiDinh) {
       const hienTai = don.dong.find((d) => d.sku === sku)?.canHienTaiG ?? null;
       const cu = theoSku.get(sku) ?? { sku, canHienTaiG: hienTai, canDeXuatG: 0, bangChung: [], nghiThungTo: false };
       const thungQuaTo = don.thungQuaTo === true;

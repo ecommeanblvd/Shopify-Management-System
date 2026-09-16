@@ -132,11 +132,11 @@ export function BangDeXuatCan({ trang }: { trang: TrangDeXuat }) {
                           <div className="mb-1 font-medium">Bằng chứng</div>
                           <ul className="space-y-0.5 tabular-nums">
                             {d.bangChung.map((b) => (
-                              <li key={b.maDon}>{b.maDon}: hãng tính cả kiện {b.billedKg}kg → món này cần {kg(b.deXuatG)}{b.thungQuaTo && <span className="text-amber-600 dark:text-amber-400"> · thùng quá to</span>}</li>
+                              <li key={b.maDon}>{b.maDon}: hãng tính cả kiện {b.billedKg}kg · giải trình chọn món này, cân đúng {kg(b.deXuatG)}{b.thungQuaTo && <span className="text-amber-600 dark:text-amber-400"> · thùng quá to</span>}</li>
                             ))}
                           </ul>
                           <p className="mt-1 text-muted-foreground">
-                            Nhiều món cùng kiện thì cân hãng tính chia theo tỉ lệ cân hiện tại; nhiều đơn thì lấy mức cao nhất.
+                            Cân đúng do người giải trình nhập cho đúng món này ở tiêu chí 1.1; nhiều đơn thì lấy mức cao nhất.
                           </p>
                         </td>
                       </tr>

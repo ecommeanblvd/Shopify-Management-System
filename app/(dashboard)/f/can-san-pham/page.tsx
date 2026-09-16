@@ -28,7 +28,8 @@ export default async function CanSanPhamPage() {
           Checkout báo cước bằng tổng cân các biến thể trên Shopify, còn hãng tính theo cân của cả thùng đã đóng.
           Web khai thấp hơn thì đơn nào cũng âm cước. Danh sách lấy từ các đơn âm cước đã giải trình là
           &ldquo;cân web thấp&rdquo; ở{' '}
-          <Link href="/f/ship-report?tab=kpi" className="underline">tiêu chí 1.1</Link>.
+          <Link href="/f/ship-report?tab=kpi" className="underline">tiêu chí 1.1</Link>, và chỉ gồm những món
+          người giải trình đã chọn đích danh kèm cân đúng — đơn nhiều món chưa chọn món thì chưa lên đây.
         </p>
       </div>
       <BangDeXuatCan trang={trang} />

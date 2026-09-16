@@ -50,14 +50,14 @@ export type Store = typeof schema.stores.$inferSelect;
 /** Phần tính đề xuất, KHÔNG kiểm quyền — chỉ gọi từ action đã kiểm quyền hoặc từ script vận hành. */
 export async function tinhDeXuat(st: Store): Promise<Omit<TrangDeXuat, 'duyetDuoc'>> {
 
-  const { rows } = await db.execute<{ oid: string; don: string; billed: string | null; thung_to: boolean; sku_muc_tieu: string | null; sku: string; sl: number; can_g: string | null }>(sql`
+  const { rows } = await db.execute<{ oid: string; don: string; billed: string | null; thung_to: boolean; san_pham_sai: unknown; sku: string; sl: number; can_g: string | null }>(sql`
     SELECT o.id AS oid, o.shopify_order_number AS don,
            (SELECT SUM(ch.billing_weight_kg) FROM shipments s JOIN shipment_charges ch ON ch.shipment_id = s.id
              WHERE s.order_id = o.id)::text AS billed,
            EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.actual_weight_kg IS NOT NULL
                      AND s.dim_length_cm * s.dim_width_cm * s.dim_height_cm / ${HE_SO_QUY_DOI} > 2
                      AND s.dim_length_cm * s.dim_width_cm * s.dim_height_cm / ${HE_SO_QUY_DOI} >= 2 * s.actual_weight_kg) AS thung_to,
-           gt.chi_tiet->>'skuCanSua' AS sku_muc_tieu,
+           gt.chi_tiet->'sanPhamSai' AS san_pham_sai,
            l.sku, l.quantity AS sl,
            (SELECT MAX(v.weight_grams) FROM shopify_variants v WHERE v.store_id = o.store_id AND v.sku = l.sku)::text AS can_g
       FROM am_cuoc_giai_trinh gt
@@ -71,7 +71,7 @@ export async function tinhDeXuat(st: Store): Promise<Omit<TrangDeXuat, 'duyetDuo
     if (r.billed == null) continue;
     const d = theoDon.get(r.oid) ?? {
       maDon: r.don, billedKg: Number(r.billed), dong: [], thungQuaTo: r.thung_to,
-      skuMucTieu: r.sku_muc_tieu ? r.sku_muc_tieu.split('\n') : null,
+      canChiDinh: Array.isArray(r.san_pham_sai) ? (r.san_pham_sai as Array<{ sku: string; canMoiG: number }>) : null,
     };
     d.dong.push({ sku: r.sku, soLuong: Number(r.sl), canHienTaiG: r.can_g == null ? null : Number(r.can_g) });
     theoDon.set(r.oid, d);
