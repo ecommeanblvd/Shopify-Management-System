@@ -121,7 +121,9 @@ export interface KetQuaDay { sku: string; ok: boolean; loi?: string }
  * Đẩy cân mới cho MỘT SKU. Không kiểm quyền — gọi từ `duyetVaDayCan` (đã kiểm admin) hoặc script
  * vận hành. `userId` null khi chạy từ script.
  */
-export async function dayMotSku(st: Store, d: DongDeXuat, userId: string | null): Promise<KetQuaDay> {
+export async function dayMotSku(
+  st: Store, d: DongDeXuat, userId: string | null, loai: 'day' | 'hoan' = 'day',
+): Promise<KetQuaDay> {
 if (d.bienThe.length === 0) return { sku: d.sku, ok: false, loi: 'Không tìm thấy biến thể trên Shopify cho SKU này' };
 
   const runId = randomUUID();
@@ -129,11 +131,11 @@ if (d.bienThe.length === 0) return { sku: d.sku, ok: false, loi: 'Không tìm th
   const ghiNhan = async (ketQua: 'ok' | 'loi', loi: string | null) => {
     await db.insert(schema.canSanPhamQuyetDinh).values({
       storeId: st.id, sku: d.sku, canCuG: d.canHienTaiG == null ? null : String(d.canHienTaiG),
-      canMoiG: String(d.canDeXuatG), quyetDinh: 'day', ketQua, loi,
+      canMoiG: String(d.canDeXuatG), quyetDinh: loai, ketQua, loi,
       variantIds: d.bienThe.map((b) => b.variantId), quyetBy: userId,
     });
     await recordAudit({
-      userId, storeId: st.id, featureKey: productWeightsManifest.key, action: 'product-weights.push',
+      userId, storeId: st.id, featureKey: productWeightsManifest.key, action: loai === 'hoan' ? 'product-weights.revert' : 'product-weights.push',
       target: d.sku, requestSummary: `${d.canHienTaiG ?? '?'}g → ${d.canDeXuatG}g (${d.bienThe.length} biến thể)`,
       result: ketQua === 'ok' ? 'success' : 'error', errorDetail: loi,
     });
@@ -191,4 +193,28 @@ if (d.bienThe.length === 0) return { sku: d.sku, ok: false, loi: 'Không tìm th
     await ghiNhan('loi', loi);
     return { sku: d.sku, ok: false, loi };
   }
+}
+
+/**
+ * Trả một SKU về cân TRƯỚC lần đẩy gần nhất, lấy từ ảnh chụp trong settings_snapshots.
+ * Đi đúng đường ghi như lúc đẩy (có ảnh chụp mới cho lần trả về). Không kiểm quyền.
+ */
+export async function hoanCanVeCu(st: Store, sku: string, userId: string | null): Promise<KetQuaDay & { canCuG?: number }> {
+  const { rows } = await db.execute<{ payload: { canCu: Array<{ sku: string; canG: number | null; variantId: string }> } }>(sql`
+    SELECT payload FROM settings_snapshots
+     WHERE store_id = ${st.id} AND domain = ${productWeightsManifest.key}
+       AND payload->'canCu' @> ${JSON.stringify([{ sku }])}::jsonb
+     ORDER BY captured_at DESC LIMIT 1`);
+  const cu = rows[0]?.payload.canCu.filter((c) => c.sku === sku) ?? [];
+  if (cu.length === 0 || cu.some((c) => c.canG == null)) return { sku, ok: false, loi: 'Không có ảnh chụp cân cũ cho SKU này' };
+  const canCuG = cu[0].canG as number;
+  const { rows: bt } = await db.execute<{ vid: string; pid: string; pt: string; vt: string | null; g: string | null }>(sql`
+    SELECT shopify_variant_id AS vid, shopify_product_id AS pid, product_title AS pt, variant_title AS vt, weight_grams::text AS g
+      FROM shopify_variants WHERE store_id = ${st.id} AND sku = ${sku}`);
+  const d: DongDeXuat = {
+    sku, canHienTaiG: bt[0]?.g == null ? null : Number(bt[0].g), canDeXuatG: canCuG, bangChung: [], nghiThungTo: false,
+    bienThe: bt.map((b) => ({ variantId: b.vid, productId: b.pid, productTitle: b.pt, variantTitle: b.vt, canG: b.g == null ? null : Number(b.g) })),
+    canLech: false, lanDayLoi: null,
+  };
+  return { ...(await dayMotSku(st, d, userId, 'hoan')), canCuG };
 }
