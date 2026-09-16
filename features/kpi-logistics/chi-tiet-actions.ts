@@ -67,6 +67,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
        WHERE st.shop_domain = ${STORE_VAN_HANH}
          AND bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`);
     // Số đo từng kiện + phụ phí, và giải trình đã lưu — hai lượt đọc gom cho mọi đơn một lần.
+    // Lọc theo mảng bằng IN: drizzle bung mảng thành ($1, $2, …) nên cú pháp ANY với mảng sẽ hỏng.
     const ids = rows.map((r) => r.oid);
     const [kienRows, gtRows] = ids.length === 0 ? [{ rows: [] }, { rows: [] }] : await Promise.all([
       db.execute<{ oid: string; thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null; vsx: string | null; sdc: string | null }>(sql`
@@ -74,11 +75,11 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
                s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed,
                ch.remote::text AS vsx, ch.address_correction::text AS sdc
           FROM shipments s LEFT JOIN shipment_charges ch ON ch.shipment_id = s.id
-         WHERE s.order_id = ANY(${ids}::uuid[])
+         WHERE s.order_id IN ${ids}
            AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp;`),
       db.execute<{ oid: string; ly_do: string; thuoc_ve: string; chi_tiet: unknown; ghi_chu: string | null; nguon: string; cap_nhat: string }>(sql`
         SELECT order_id AS oid, ly_do, thuoc_ve, chi_tiet, ghi_chu, nguon, updated_at::text AS cap_nhat
-          FROM am_cuoc_giai_trinh WHERE order_id = ANY(${ids}::uuid[]);`),
+          FROM am_cuoc_giai_trinh WHERE order_id IN ${ids};`),
     ]);
     const tinHieuTheoDon = new Map<string, TinHieu>();
     for (const k of kienRows.rows) {
