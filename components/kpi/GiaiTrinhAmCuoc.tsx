@@ -132,19 +132,20 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
           </p>
         </section>
 
-        <fieldset className="space-y-1">
-          <legend className="mb-1 text-xs font-medium">Nguyên nhân</legend>
-          {LY_DO_AM_CUOC.map((l) => (
-            <label key={l.ma} className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted ${lyDo === l.ma ? 'bg-muted' : ''}`}>
-              <input type="radio" name="ly-do" className="mt-0.5 accent-primary" checked={lyDo === l.ma} onChange={() => setLyDo(l.ma)} />
-              <span className="min-w-0">
-                <span className="font-medium">{l.ten}</span>
-                {l.ma === dong.goiY && <span className="ml-1.5 rounded bg-emerald-500/15 px-1 py-px text-[10px] text-emerald-700 dark:text-emerald-400">hệ thống gợi ý</span>}
-                {lyDo === l.ma && <span className="block text-[11px] text-muted-foreground">→ {l.huongXuLy}</span>}
-              </span>
-            </label>
-          ))}
-        </fieldset>
+        {/* Ô chọn thả xuống thay cho 8 nút tròn: chọn xong thì phần cần điền hiện ngay bên dưới,
+            không phải cuộn qua cả danh sách lý do (CEO 16/09/2026). */}
+        <label className="block space-y-1 text-xs">
+          <span className="flex items-center gap-1.5 font-medium">
+            Nguyên nhân
+            {lyDo === dong.goiY && <span className="rounded bg-emerald-500/15 px-1 py-px text-[10px] font-normal text-emerald-700 dark:text-emerald-400">hệ thống gợi ý</span>}
+          </span>
+          <select className={`${o} h-9 text-sm`} value={lyDo} onChange={(e) => setLyDo(e.target.value as MaLyDoAmCuoc)}>
+            {LY_DO_AM_CUOC.map((l) => (
+              <option key={l.ma} value={l.ma}>{l.ten}{l.ma === dong.goiY ? ' — hệ thống gợi ý' : ''}</option>
+            ))}
+          </select>
+          <span className="block text-[11px] text-muted-foreground">→ {ld.huongXuLy}</span>
+        </label>
 
         {ld.truong.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2">
