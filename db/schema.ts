@@ -1085,6 +1085,11 @@ export const shipments = pgTable('shipments', {
   lyDoChamGhiChu: text('ly_do_cham_ghi_chu'),
   lyDoChamBy: text('ly_do_cham_by').references(() => user.id, { onDelete: 'set null' }),
   lyDoChamAt: timestamp('ly_do_cham_at'),
+  // Đối chiếu lý do với lịch sử quét của hãng (CEO 16/09/2026): 'xac_nhan' | 'khong_thay' |
+  // 'khong_kiem_duoc'; null = chưa đối chiếu. Lý do chỉ loại kiện khỏi KPI khi 'xac_nhan'.
+  lyDoDoiChieu: text('ly_do_doi_chieu'),
+  lyDoBangChung: text('ly_do_bang_chung'),
+  lyDoDoiChieuAt: timestamp('ly_do_doi_chieu_at'),
   /** Operator who ran the secondary check-packed verification step. */
   checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
   /** Timestamp when the check-packed verification was completed. */
@@ -2251,6 +2256,11 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   lyDoChamGhiChu: text('ly_do_cham_ghi_chu'),
   lyDoChamBy: text('ly_do_cham_by').references(() => user.id, { onDelete: 'set null' }),
   lyDoChamAt: timestamp('ly_do_cham_at'),
+  // Đối chiếu lý do với lịch sử quét của hãng (CEO 16/09/2026): 'xac_nhan' | 'khong_thay' |
+  // 'khong_kiem_duoc'; null = chưa đối chiếu. Lý do chỉ loại kiện khỏi KPI khi 'xac_nhan'.
+  lyDoDoiChieu: text('ly_do_doi_chieu'),
+  lyDoBangChung: text('ly_do_bang_chung'),
+  lyDoDoiChieuAt: timestamp('ly_do_doi_chieu_at'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),

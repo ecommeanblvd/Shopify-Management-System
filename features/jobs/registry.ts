@@ -38,6 +38,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Không biết đơn đã giao hay chưa' },
   { key: 'track-ship-ho', ten: 'Tra trạng thái giao (ship hộ)', chuKyPhut: 6 * GIO,
     hauQua: 'Đối tác không thấy đơn đã giao' },
+  { key: 'doi-chieu-ly-do', ten: 'Đối chiếu lý do giao chậm với FedEx', chuKyPhut: 1 * GIO,
+    hauQua: 'Lý do chậm mới gán không được xác nhận, kiện vẫn nằm trong mẫu số KPI' },
   { key: 'refresh-owned-store', ten: 'Làm mới đơn store brand sang MMP', chuKyPhut: 1 * GIO,
     hauQua: 'MMP giữ chi phí ship cũ của TINH/Mirer khi hoá đơn về muộn' },
   { key: 'sync-lark-ship-ho', ten: 'Đồng bộ đơn ship hộ từ Lark', chuKyPhut: 1 * GIO,

@@ -5,7 +5,7 @@ import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
 import { dauHieu, layLyDoAmCuoc, thieuSanPham, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
-import { layLyDo } from '@/features/shipments/ly-do-cham';
+import { layLyDo, loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import {
   TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, conViec, laLoiNoiBo,
   type ChiTietKpi, type MaTieuChi,
@@ -131,6 +131,23 @@ function NutHienHet({ hienHet, doi, an, nhanAn = 'đơn đạt' }: { hienHet: bo
   );
 }
 
+const NHAN_DOI_CHIEU: Record<string, string> = {
+  xac_nhan: 'FedEx xác nhận', khong_thay: 'FedEx không có dấu hiệu', khong_kiem_duoc: 'Không kiểm được',
+};
+
+/** Kết quả đối chiếu lý do với FedEx — nói rõ kiện có được rút khỏi mẫu số không và vì sao. */
+function NhanDoiChieu({ ketQua, bangChung }: { ketQua: string | null; bangChung: string | null }) {
+  const [mau, chu] = ketQua === 'xac_nhan' ? ['text-emerald-600 dark:text-emerald-400', '✓ FedEx xác nhận — rời mẫu số']
+    : ketQua === 'khong_thay' ? ['text-red-600 dark:text-red-400', '✗ FedEx không có dấu hiệu — vẫn tính trễ']
+    : ketQua === 'khong_kiem_duoc' ? ['text-muted-foreground', '— Không kiểm được — vẫn tính trễ']
+    : ['text-muted-foreground', '⋯ Đang đối chiếu với FedEx'];
+  return (
+    <span className={`mt-0.5 block text-[10px] ${mau}`} title={bangChung ?? undefined}>
+      {chu}{bangChung && <span className="block text-muted-foreground">{bangChung}</span>}
+    </span>
+  );
+}
+
 const TH = 'sticky top-0 z-10 bg-muted/90 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur';
 
 function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
@@ -213,6 +230,13 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
   rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; sauKhiLuu: () => void;
 }) {
   const d = demKetQuaSla(rows);
+  const coLyDoLoaiTru = rows.filter((r) => r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham));
+  const dc = {
+    xacNhan: coLyDoLoaiTru.filter((r) => r.lyDoDoiChieu === 'xac_nhan').length,
+    khongThay: coLyDoLoaiTru.filter((r) => r.lyDoDoiChieu === 'khong_thay').length,
+    khongKiem: coLyDoLoaiTru.filter((r) => r.lyDoDoiChieu === 'khong_kiem_duoc').length,
+    cho: coLyDoLoaiTru.filter((r) => !r.lyDoDoiChieu).length,
+  };
   // Màn hình để XỬ LÝ nên mặc định chỉ hiện kiện có vấn đề; CSV vẫn đầy đủ (CEO 14/09/2026).
   const [hienHet, setHienHet] = useState(false);
   const hien = hienHet ? rows : rows.filter((r) => laCoVanDe(r.ketQua));
@@ -225,10 +249,11 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
   };
   return (
     <Khung
-      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối; lý do thuộc nhóm ngoài tầm kiểm soát sẽ tự rời mẫu số chấm điểm.' : ''}</>}
+      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối.' : ''} Lý do ngoài tầm kiểm soát chỉ rút kiện khỏi mẫu số khi FedEx có sự kiện xác nhận.{coLyDoLoaiTru.length > 0 && <> Đối chiếu: <b className="text-emerald-600 dark:text-emerald-400">{dc.xacNhan}</b> xác nhận · <b className="text-red-600 dark:text-red-400">{dc.khongThay}</b> FedEx không có dấu hiệu · <b>{dc.khongKiem}</b> không kiểm được{dc.cho > 0 && <> · <b>{dc.cho}</b> đang chờ</>}.</>}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
-        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm'],
-        xepChoCsv(rows).map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null]))}
+        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm', 'Đối chiếu FedEx', 'Bằng chứng'],
+        xepChoCsv(rows).map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null,
+          r.lyDoDoiChieu ? NHAN_DOI_CHIEU[r.lyDoDoiChieu] ?? r.lyDoDoiChieu : (r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) ? 'Đang chờ' : null), r.lyDoBangChung ?? null]))}
       nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} />}
     >
       <thead><tr>
@@ -265,6 +290,7 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
                 && !(r.ketQua === 'loai_tru' && r.lyDoCham == null)
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} nguon={r.nguon} sauKhiLuu={sauKhiLuu} />
                 : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
+              {r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) && <NhanDoiChieu ketQua={r.lyDoDoiChieu ?? null} bangChung={r.lyDoBangChung ?? null} />}
             </td>
           </tr>
         ))}

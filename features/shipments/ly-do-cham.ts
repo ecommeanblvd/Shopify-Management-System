@@ -42,6 +42,14 @@ export const layLyDo = (ma: string | null | undefined): LyDoCham | null => (ma ?
 /** Kiện có được loại khỏi KPI nhân sự không (chưa gán lý do → KHÔNG loại, tránh lách bằng cách bỏ trống). */
 export const loaiTruKhoiKpi = (ma: string | null | undefined): boolean => layLyDo(ma)?.loaiTruKpi ?? false;
 
+/**
+ * Lý do có ĐƯỢC loại kiện khỏi KPI không: phải là lý do ngoài tầm kiểm soát VÀ đã được hãng xác
+ * nhận bằng lịch sử quét (CEO 16/09/2026 — xem `doi-chieu-fedex.ts`). Chưa đối chiếu, không thấy
+ * bằng chứng, hay không kiểm được đều KHÔNG loại.
+ */
+export const lyDoCoHieuLuc = (ma: string | null | undefined, doiChieu: string | null | undefined): boolean =>
+  loaiTruKhoiKpi(ma) && doiChieu === 'xac_nhan';
+
 export interface DemLyDo { ma: string; ten: string; thuocVe: LyDoCham['thuocVe']; loaiTruKpi: boolean; n: number }
 
 /** Đếm kiện theo lý do, sắp giảm dần; kiện chưa gán lý do gom vào dòng "chưa gán". */

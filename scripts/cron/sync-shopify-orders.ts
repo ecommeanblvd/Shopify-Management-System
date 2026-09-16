@@ -17,6 +17,7 @@ import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
 import { pushUnsentBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
 import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
+import { doiChieuLyDoCham } from '@/features/shipments/doi-chieu-ly-do';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
@@ -49,6 +50,16 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
       return luotTrackHong({ tracked: t.tracked ?? 0, failed: t.failed ?? 0 })
         ? `không tra được kiện nào (${t.failed} lỗi): ${JSON.stringify(t.loi ?? {})}`
         : null;
+    },
+  },
+  // Đối chiếu lý do chậm với FedEx: chạy SAU track-ship-ho, ở service có khoá Track API.
+  {
+    key: 'doi-chieu-ly-do',
+    fn: () => doiChieuLyDoCham({ limit: 300 }),
+    // Có việc mà không kiểm được kiện nào vì lỗi FedEx = hỏng.
+    kiemTra: (s: unknown) => {
+      const t = s as { daKiem?: number; loi?: number; loiMau?: string };
+      return (t.loi ?? 0) > 0 && (t.daKiem ?? 0) === 0 ? `FedEx lỗi toàn bộ (${t.loi} kiện): ${t.loiMau ?? ''}` : null;
     },
   },
   { key: 'ship-ho-tiers', fn: () => refreshShipHoTiers() },

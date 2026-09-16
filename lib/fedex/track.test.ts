@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, docMocFedex, trangThaiSauKhiTrack, TOI_DA_MOI_LO } from './track';
+import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, parseLichSuQuet, docMocFedex, trangThaiSauKhiTrack, TOI_DA_MOI_LO } from './track';
 
 describe('mapFedexStatus', () => {
   it('các mã đã đối chiếu thật trên sandbox FedEx', () => {
@@ -124,5 +124,21 @@ describe('trangThaiSauKhiTrack — giữ trạng thái đang hoàn về', () => 
   it('mã RS của FedEx map sang returning, không lẫn vào exception', () => {
     expect(mapFedexStatus('RS')).toBe('returning');
     expect(mapFedexStatus('HL')).toBe('exception');
+  });
+});
+
+describe('parseLichSuQuet', () => {
+  it('ghép theo mã vận đơn, giữ sự kiện, tách mã lỗi', () => {
+    const m = parseLichSuQuet({ output: { completeTrackResults: [
+      { trackingNumber: '1Z2050VDDG23324091', trackResults: [{ error: { code: 'TRACKING.TRACKINGNUMBER.INVALID' } }] },
+      { trackingNumber: '875529338575', trackResults: [{ scanEvents: [{ eventType: 'DE', exceptionCode: '08', exceptionDescription: 'Customer not available or business closed' }] }] },
+    ] } });
+    expect(m.get('1Z2050VDDG23324091')).toEqual({ loi: 'TRACKING.TRACKINGNUMBER.INVALID' });
+    const k = m.get('875529338575');
+    expect(k && 'suKien' in k ? k.suKien[0].exceptionCode : null).toBe('08');
+  });
+  it('phản hồi rỗng hoặc hỏng → bản đồ rỗng', () => {
+    expect(parseLichSuQuet(null).size).toBe(0);
+    expect(parseLichSuQuet({}).size).toBe(0);
   });
 });

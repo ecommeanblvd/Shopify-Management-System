@@ -216,7 +216,7 @@ export async function docTieuChuanGiao(phamVi: PhamVi, nguongNgoaiLe: NguongNgoa
  * Kiện đã ghi nhận giao trong khoảng NGÀY GỬI [tu, den] (ISO date, bao trọn ngày) — đầu vào cho chấm KPI SOP.
  * Chỉ lấy kiện có đủ hai mốc và ngày giao không sớm hơn ngày gửi.
  */
-export async function docKienGiao(tu: string, den: string, storeDomain?: string | null): Promise<Array<{ country: string; line: string; soNgay: number; lyDoCham: string | null; chuaGiao?: boolean }>> {
+export async function docKienGiao(tu: string, den: string, storeDomain?: string | null): Promise<Array<{ country: string; line: string; soNgay: number; lyDoCham: string | null; lyDoDoiChieu: string | null; chuaGiao?: boolean }>> {
   // storeDomain != null → chỉ lấy kiện của đúng store đó (KPI vận hành MEAN chỉ
   // chấm đơn MEAN BLVD). Bỏ trống = mọi store, dùng cho báo cáo SOP đo trải
   // nghiệm khách của toàn bộ hàng đi.
@@ -224,8 +224,9 @@ export async function docKienGiao(tu: string, den: string, storeDomain?: string 
   // tỉ lệ đúng hạn luôn đẹp hơn thực tế, vì đúng những kiện tệ nhất bị bỏ ra. Kiện chưa giao đo
   // số ngày ĐÃ TRÔI QUA tới giờ; `chamKpi` chỉ đưa vào mẫu số khi đã quá cam kết.
   const loc = storeDomain ?? null;
-  const { rows } = await db.execute<{ cc: string | null; line: string | null; ngay: string; ly_do: string | null; chua_giao: boolean }>(sql`
+  const { rows } = await db.execute<{ cc: string | null; line: string | null; ngay: string; ly_do: string | null; doi_chieu: string | null; chua_giao: boolean }>(sql`
     SELECT COALESCE(o.ship_country, '?') AS cc, COALESCE(s.carrier_key, '?') AS line, s.ly_do_cham AS ly_do,
+           s.ly_do_doi_chieu AS doi_chieu,
            (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400)::text AS ngay,
            (s.delivered_at IS NULL) AS chua_giao
       FROM shipments s
@@ -238,6 +239,6 @@ export async function docKienGiao(tu: string, den: string, storeDomain?: string 
        AND (${loc}::text IS NULL OR st.shop_domain = ${loc});`);
   return rows.map((r) => ({
     country: r.cc ?? '?', line: r.line ?? '?', soNgay: Number(r.ngay), lyDoCham: r.ly_do,
-    chuaGiao: r.chua_giao,
+    lyDoDoiChieu: r.doi_chieu, chuaGiao: r.chua_giao,
   }));
 }

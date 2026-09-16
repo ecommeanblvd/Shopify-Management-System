@@ -130,6 +130,10 @@ export interface DongSla {
   lyDoCham: string | null;
   /** true = chưa giao; `soNgay` là số ngày ĐÃ TRÔI QUA, `ngayGiao` để trống. */
   chuaGiao?: boolean;
+  /** Kết quả đối chiếu lý do với hãng: 'xac_nhan' | 'khong_thay' | 'khong_kiem_duoc' | null (chưa kiểm). */
+  lyDoDoiChieu?: string | null;
+  /** Sự kiện của hãng làm bằng chứng, hoặc lý do không kiểm được. */
+  lyDoBangChung?: string | null;
 }
 
 export interface DongChungTu {

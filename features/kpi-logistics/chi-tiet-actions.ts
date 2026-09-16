@@ -12,7 +12,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db } from '@/db/client';
 import { slaCuaNuoc, slaCuaLine, NUOC_LOAI_TRU } from '@/features/shipments/sop-giao-hang';
-import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
+import { lyDoCoHieuLuc } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
 import { STORE_VAN_HANH, nhanThuocVe } from './pham-vi';
 import { docSlaShipHo, docChungTuShipHo } from './nguon-ship-ho';
@@ -142,11 +142,12 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
 
   if (ma === '1.2') {
     // 1.2 chấm MỌI kiện mình chạy nên KHÔNG lọc store; kiện ship hộ lên từ Lark cộng thêm ở dưới.
-    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string | null; ngay: string; ly_do: string | null; dom: string; chua_giao: boolean }>(sql`
+    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string | null; ngay: string; ly_do: string | null; doi_chieu: string | null; bang_chung: string | null; dom: string; chua_giao: boolean }>(sql`
       SELECT s.id AS id, o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
              (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400)::text AS ngay,
-             s.ly_do_cham AS ly_do, st.shop_domain AS dom, (s.delivered_at IS NULL) AS chua_giao
+             s.ly_do_cham AS ly_do, s.ly_do_doi_chieu AS doi_chieu, s.ly_do_bang_chung AS bang_chung,
+             st.shop_domain AS dom, (s.delivered_at IS NULL) AS chua_giao
         FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE s.label_created_at IS NOT NULL
          AND (s.delivered_at IS NULL OR s.delivered_at::timestamp >= s.label_created_at)
@@ -163,7 +164,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       // Bị loại vì lý do ngoài tầm kiểm soát (mục VII) HOẶC nước không nằm trong
       // phạm vi chấm (VN nội địa) — khớp đúng bộ lọc của `chamKpi`.
       // Lý do chỉ gỡ được kiện ĐANG TRỄ: gỡ một kiện đạt là rút mất kiện tốt khỏi mẫu số.
-      const biLoaiTru = (loaiTruKhoiKpi(r.ly_do) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU;
+      const biLoaiTru = (lyDoCoHieuLuc(r.ly_do, r.doi_chieu) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU;
       return {
         shipmentId: r.id, nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
         maDon: r.don, tracking: r.tk, nuoc, line,
@@ -171,6 +172,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line),
         ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru, undefined, r.chua_giao),
         lyDoCham: r.ly_do, chuaGiao: r.chua_giao,
+        lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung,
       };
     });
     const shipHo = await docSlaShipHo(tu, den);

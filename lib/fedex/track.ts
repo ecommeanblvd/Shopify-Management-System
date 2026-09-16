@@ -149,6 +149,39 @@ export async function trackFedexBatch(trackingNumbers: readonly string[]): Promi
   return parseFedexTrackBatch(raw);
 }
 
+/** Kết quả lịch sử quét của một mã: danh sách sự kiện, hoặc mã lỗi FedEx trả cho riêng mã đó. */
+export type LichSuQuet = { suKien: import('@/features/shipments/doi-chieu-fedex').SuKienQuet[] } | { loi: string };
+
+/**
+ * THUẦN: bóc lịch sử quét từ phản hồi Track API (includeDetailedScans). Ghép theo mã vận đơn,
+ * KHÔNG theo vị trí — FedEx không cam kết giữ thứ tự.
+ */
+export function parseLichSuQuet(raw: unknown): Map<string, LichSuQuet> {
+  const ra = new Map<string, LichSuQuet>();
+  const ds = (raw as { output?: { completeTrackResults?: unknown[] } })?.output?.completeTrackResults ?? [];
+  for (const c of ds as Array<{ trackingNumber?: string; trackResults?: Array<{ error?: { code?: string }; scanEvents?: unknown[] }> }>) {
+    const tk = c.trackingNumber?.trim();
+    if (!tk) continue;
+    const tr = c.trackResults?.[0];
+    if (tr?.error) { ra.set(tk, { loi: tr.error.code ?? 'LỖI KHÔNG RÕ' }); continue; }
+    ra.set(tk, { suKien: (tr?.scanEvents ?? []) as import('@/features/shipments/doi-chieu-fedex').SuKienQuet[] });
+  }
+  return ra;
+}
+
+/** Lấy lịch sử quét chi tiết cho tối đa 30 mã một lần (FedEx giữ dữ liệu 90 ngày). */
+export async function layLichSuQuet(trackingNumbers: readonly string[]): Promise<Map<string, LichSuQuet>> {
+  const ds = [...new Set(trackingNumbers.map((t) => t.trim()).filter(Boolean))].slice(0, TOI_DA_MOI_LO);
+  if (ds.length === 0) return new Map();
+  const raw = await fedexFetch<unknown>('/track/v1/trackingnumbers', {
+    method: 'POST',
+    headers: HEADER_LOCALE,
+    boKhoa: 'track',
+    json: { includeDetailedScans: true, trackingInfo: ds.map((trackingNumber) => ({ trackingNumberInfo: { trackingNumber } })) },
+  });
+  return parseLichSuQuet(raw);
+}
+
 /**
  * Trạng thái giữ lại sau một lượt track tự động.
  *

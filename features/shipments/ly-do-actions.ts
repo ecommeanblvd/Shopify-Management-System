@@ -8,6 +8,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { layLyDo } from './ly-do-cham';
+import { doiChieuLyDoCham } from './doi-chieu-ly-do';
 
 /** Kiện thuộc luồng nào — quyết định ghi vào bảng nào. */
 export type NguonKien = 'shopify' | 'ship_ho';
@@ -33,6 +34,8 @@ export async function datLyDoCham(input: {
 }): Promise<{ ok: true }> {
   const userId = await chuanBi(input.lyDo);
   const gia = {
+    // Đổi lý do là phải đối chiếu lại từ đầu — kết quả cũ thuộc về lý do cũ.
+    lyDoDoiChieu: null, lyDoBangChung: null, lyDoDoiChieuAt: null,
     lyDoCham: input.lyDo,
     lyDoChamGhiChu: input.lyDo == null ? null : (input.ghiChu?.trim() || null),
     lyDoChamBy: input.lyDo == null ? null : userId,
@@ -42,6 +45,13 @@ export async function datLyDoCham(input: {
     await db.update(schema.shipHoOrders).set(gia).where(eq(schema.shipHoOrders.id, input.shipmentId));
   } else {
     await db.update(schema.shipments).set(gia).where(eq(schema.shipments.id, input.shipmentId));
+  }
+
+  // Đối chiếu NGAY với FedEx để người gán thấy kết quả liền, không phải chờ lượt cron.
+  // Lỗi mạng / thiếu khoá thì bỏ qua — cron sẽ làm lại.
+  if (input.lyDo) {
+    try { await doiChieuLyDoCham({ chi: { nguon: input.nguon ?? 'shopify', id: input.shipmentId } }); }
+    catch (e) { console.error('[ly-do] đối chiếu ngay lỗi, để cron làm lại:', (e as Error).message); }
   }
 
   revalidatePath('/f/ship-report');

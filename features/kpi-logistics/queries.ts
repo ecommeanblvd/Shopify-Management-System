@@ -12,7 +12,7 @@ import { STORE_VAN_HANH } from './pham-vi';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
 import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, cuaSoNhinTuyen, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
-import { demTheoLyDo, loaiTruKhoiKpi, type DemLyDo } from '@/features/shipments/ly-do-cham';
+import { demTheoLyDo, lyDoCoHieuLuc, type DemLyDo } from '@/features/shipments/ly-do-cham';
 
 export interface SoLieuTuDong {
   tu: string; den: string;
@@ -163,11 +163,11 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   const kienGiao = [...kienShopify, ...kienShipHo];
   // Lý do ngoài tầm kiểm soát chỉ gỡ được kiện ĐANG TRỄ. Kiện đạt cam kết mà lỡ bị gán lý do
   // vẫn ở lại mẫu số — xem `loaiTruDuoc`.
-  const tinhKpi = kienGiao.filter((k) => !(loaiTruKhoiKpi(k.lyDoCham) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
+  const tinhKpi = kienGiao.filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
   const sop = tongKpi(chamKpi(tinhKpi, tu), tu);
   // Bảng tuyến chấm trên cửa sổ rộng, dùng cùng luật lọc lý do.
   const kienRong = [...kienRongShopify, ...kienRongShipHo]
-    .filter((k) => !(loaiTruKhoiKpi(k.lyDoCham) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
+    .filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
   const theoNuoc = chamKpi(kienRong, tu);
   const so = (v: string | null) => (v == null ? null : Number(v));
   const sizeThung = chamSizeThung(canRows.rows.map((r) => ({
