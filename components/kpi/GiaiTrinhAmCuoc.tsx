@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  LY_DO_AM_CUOC, NHAN_THUOC_VE_AM_CUOC, canChonSanPham, danhGiaKien, dauHieu, layLyDoAmCuoc, quyTrachNhiem, thieuSanPham, tongBilledKg,
+  LY_DO_AM_CUOC, NHAN_THUOC_VE_AM_CUOC, canChonSanPham, danhGiaKien, dauHieu, hienCanGram, layLyDoAmCuoc, quyTrachNhiem, thieuSanPham, tongBilledKg,
   type ChiTietGiaiTrinh, type MaLyDoAmCuoc, type SanPhamSaiCan, type ThuocVeAmCuoc,
 } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
 import { luuGiaiTrinhAmCuoc, xoaGiaiTrinhAmCuoc } from '@/features/kpi-logistics/giai-trinh-actions';
 import type { DongAmCuoc, MonTrongDon } from '@/features/kpi-logistics/chi-tiet';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
+/** Định dạng số ĐÃ LÀ kg. Cân lưu bằng gram thì dùng `hienCanGram`. */
 const kg = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100) / 100}kg`);
 const o = 'h-8 w-full rounded-md border border-input bg-input/30 px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40';
 
@@ -268,8 +269,8 @@ function ChonMonSaiCan({ mon, chon, doi }: {
                 <span className="block font-mono text-[10px] text-muted-foreground">{m.sku}</span>
               </span>
               <span className="text-right tabular-nums text-muted-foreground">
-                đang khai <b className="text-foreground">{kg(m.canHienTaiG)}</b>
-                {m.goiYG != null && <span className="block text-[10px]">gợi ý {kg(m.goiYG)}</span>}
+                đang khai <b className="text-foreground">{hienCanGram(m.canHienTaiG)}</b>
+                {m.goiYG != null && <span className="block text-[10px]">gợi ý {hienCanGram(m.goiYG)}</span>}
               </span>
               {dc && (
                 <label className="flex items-center gap-1">

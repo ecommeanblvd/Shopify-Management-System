@@ -228,3 +228,12 @@ export function dauHieu(t: TinHieu): string[] {
   if (webThapHonBill(t)) ra.push(`web khai ${t.canWebKg}kg, hãng tính ${tongBilledKg(t)}kg`);
   return ra;
 }
+
+/**
+ * Hiển thị một cân lưu bằng GRAM thành chữ kg. Cân Shopify và cân chỉ định đều lưu gram; lẫn với
+ * hàm định dạng kg từng làm 800g hiện thành "800kg" (CEO 16/09/2026).
+ */
+export function hienCanGram(g: number | null | undefined): string {
+  if (g == null || !Number.isFinite(g)) return '—';
+  return `${(Math.round(g / 10) / 100).toLocaleString('vi-VN')}kg`;
+}

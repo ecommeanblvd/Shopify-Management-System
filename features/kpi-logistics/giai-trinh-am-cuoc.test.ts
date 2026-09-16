@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   goiYLyDo, dauHieu, quyTrachNhiem, daPhanDinh, danhGiaKien, layLyDoAmCuoc, tongBilledKg, LY_DO_AM_CUOC,
-  canChonSanPham, thieuSanPham, kiemSanPhamSai, type TinHieu,
+  canChonSanPham, thieuSanPham, kiemSanPhamSai, hienCanGram, type TinHieu,
 } from './giai-trinh-am-cuoc';
 
 const t = (kien: TinHieu['kien'], extra: Partial<TinHieu> = {}): TinHieu =>
@@ -104,5 +104,16 @@ describe('chọn đúng món sai cân (CEO 16/09/2026)', () => {
     expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 0 }], don)).toContain('Nhập cân');
     expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 600 }], don)).toContain('phải cao hơn');
     expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 45_000 }], don)).toContain('đơn vị');
+  });
+});
+
+describe('hienCanGram — cân lưu gram hiện thành kg', () => {
+  it('800g là 0,8kg, không phải 800kg', () => {
+    expect(hienCanGram(800)).toBe('0,8kg');
+    expect(hienCanGram(2500)).toBe('2,5kg');
+    expect(hienCanGram(1250)).toBe('1,25kg');
+  });
+  it('chưa có số thì gạch', () => {
+    expect(hienCanGram(null)).toBe('—');
   });
 });
