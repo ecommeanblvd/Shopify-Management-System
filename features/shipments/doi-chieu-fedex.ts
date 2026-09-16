@@ -14,11 +14,13 @@
  *   DE 03 "Incorrect address"                                → địa chỉ khách sai
  *   DE 93 "Held, unable to collect payment"                  → khách không đóng thuế
  *   DE 07 "Delivery was refused by the recipient"            → khách từ chối
- *   CD R0055/R0056 yêu cầu từ NHÀ NHẬP KHẨU                  → thiếu giấy tờ đầu nhập
- *   CD / SE giữ hàng ở hải quan                              → hải quan giữ hàng
+ *   CD / SE giữ hàng ở hải quan, KHÔNG vì giấy tờ            → hải quan giữ hàng
  *   84 "may be late - local delivery restrictions", thời tiết → hạ tầng / thiên tai
- * R0142 "Description provided is insufficient to classify commodity" là lỗi chứng từ ĐẦU XUẤT
- * của mình — KHÔNG bao giờ làm bằng chứng cho lý do thông quan được loại trừ.
+ *     (CEO 16/09/2026 xác nhận 84 là hãng gặp sự cố thật nên chuyển chậm)
+ *
+ * GIẤY TỜ THÔNG QUAN THIẾU là lỗi nội bộ ở CẢ HAI ĐẦU (CEO 16/09/2026). Vì vậy mọi sự kiện hải
+ * quan đòi giấy tờ — R0055/R0056 yêu cầu từ nhà nhập khẩu, R0142 mô tả hàng không đủ, hay mô tả
+ * nhắc tới giấy tờ — KHÔNG làm bằng chứng cho "hải quan giữ hàng", và còn bật cảnh báo.
  */
 
 export interface SuKienQuet {
@@ -47,8 +49,11 @@ interface Luat {
   tru?: { ma?: string[]; moTa?: RegExp };
 }
 
-/** Mã và mô tả cho thấy lỗi chứng từ của CHÍNH MÌNH (đầu xuất). */
-const LOI_CHUNG_TU_MINH = { ma: ['R0142'], moTa: /description provided|commercial invoice|shipper/i };
+/** Hải quan giữ vì THIẾU GIẤY TỜ — ở đầu nào cũng là lỗi nội bộ. */
+const THIEU_GIAY_TO = {
+  ma: ['R0055', 'R0056', 'R0142'],
+  moTa: /description provided|commercial invoice|shipper|importer|registration|identification number|documentation|document/i,
+};
 
 const LUAT: Record<string, Luat> = {
   khach_khong_lien_he: { ma: ['08', '42'] },
@@ -56,8 +61,7 @@ const LUAT: Record<string, Luat> = {
   sai_dia_chi_khach: { ma: ['03'] },
   khach_khong_dong_thue: { ma: ['93'] },
   khach_tu_choi_nhan: { ma: ['07'] },
-  thong_quan_thieu_ct_nhap: { ma: ['R0055', 'R0056'], moTa: /importer/i, tru: LOI_CHUNG_TU_MINH },
-  thong_quan_ngoai: { eventType: ['CD', 'SE'], tru: LOI_CHUNG_TU_MINH },
+  thong_quan_ngoai: { eventType: ['CD', 'SE'], tru: THIEU_GIAY_TO },
   thien_tai_ha_tang: { ma: ['84'], moTa: /weather|natural disaster|emergency|civil unrest|restrictions/i },
 };
 
@@ -87,10 +91,10 @@ export function doiChieuFedex(maLyDo: string, suKien: readonly SuKienQuet[]): Do
   const l = LUAT[maLyDo];
   if (!l) return { ketQua: 'khong_kiem_duoc', bangChung: 'Lý do này không có luật đối chiếu' };
   const trung = suKien.find((e) => khop(l, e));
-  const loiMinh = maLyDo.startsWith('thong_quan')
-    ? suKien.find((e) => LOI_CHUNG_TU_MINH.ma.includes(ma(e)) || (ma(e) !== '' && LOI_CHUNG_TU_MINH.moTa.test(chu(e))))
+  const thieuGiayTo = maLyDo.startsWith('thong_quan')
+    ? suKien.find((e) => THIEU_GIAY_TO.ma.includes(ma(e)) || (ma(e) !== '' && THIEU_GIAY_TO.moTa.test(chu(e))))
     : undefined;
-  const canhBao = loiMinh ? `FedEx ghi nhận lỗi chứng từ đầu xuất: ${bangChungTu(loiMinh)}` : null;
+  const canhBao = thieuGiayTo ? `FedEx ghi nhận thiếu giấy tờ thông quan — lỗi nội bộ: ${bangChungTu(thieuGiayTo)}` : null;
   if (trung) return { ketQua: 'xac_nhan', bangChung: bangChungTu(trung), canhBao };
   return { ketQua: 'khong_thay', bangChung: null, canhBao };
 }

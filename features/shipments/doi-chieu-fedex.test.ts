@@ -42,17 +42,18 @@ describe('doiChieuFedex — khớp đúng ca thật', () => {
   it('từ chối nhận: DE 07', () => {
     expect(doiChieuFedex('khach_tu_choi_nhan', [TU_CHOI]).ketQua).toBe('xac_nhan');
   });
-  it('thiếu giấy tờ đầu nhập: yêu cầu từ nhà nhập khẩu R0055 xác nhận', () => {
-    expect(doiChieuFedex('thong_quan_thieu_ct_nhap', [NHA_NK]).ketQua).toBe('xac_nhan');
+  it('thiếu giấy tờ đầu nhập giờ là lỗi nội bộ — không còn luật đối chiếu, không được loại', () => {
+    expect(coLuatDoiChieu('thong_quan_thieu_ct_nhap')).toBe(false);
   });
-  it('876456183856: R0142 là lỗi mô tả hàng của MÌNH → không xác nhận, kèm cảnh báo', () => {
-    const r = doiChieuFedex('thong_quan_thieu_ct_nhap', [MO_TA_KEM, CHO_TQ]);
-    expect(r.ketQua).toBe('khong_thay');
-    expect(r.canhBao).toContain('lỗi chứng từ đầu xuất');
-  });
-  it('hải quan giữ hàng: sự kiện CD bất kỳ trừ lỗi của mình', () => {
+  it('hải quan giữ hàng: sự kiện thông quan chung thì xác nhận', () => {
     expect(doiChieuFedex('thong_quan_ngoai', [DANG_TQ]).ketQua).toBe('xac_nhan');
-    expect(doiChieuFedex('thong_quan_ngoai', [MO_TA_KEM]).ketQua).toBe('khong_thay');
+  });
+  it('hải quan giữ vì THIẾU GIẤY TỜ (đầu nhập R0055 hay đầu xuất R0142) → không xác nhận, kèm cảnh báo lỗi nội bộ', () => {
+    for (const ev of [NHA_NK, MO_TA_KEM]) {
+      const r = doiChieuFedex('thong_quan_ngoai', [ev, CHO_TQ]);
+      expect(r.ketQua).toBe('khong_thay');
+      expect(r.canhBao).toContain('lỗi nội bộ');
+    }
   });
   it('hạ tầng: mã 84 "local delivery restrictions" xác nhận; "đến trạm muộn" thì không', () => {
     expect(doiChieuFedex('thien_tai_ha_tang', [HAN_CHE]).ketQua).toBe('xac_nhan');

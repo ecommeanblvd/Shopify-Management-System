@@ -24,11 +24,13 @@ export const LY_DO_CHAM: LyDoCham[] = [
   { ma: 'sai_dia_chi_khach', ten: 'Địa chỉ khách cung cấp sai', loaiTruKpi: true, thuocVe: 'khach' },
   { ma: 'khach_khong_dong_thue', ten: 'Khách không đóng thuế / phí nhập khẩu', loaiTruKpi: true, thuocVe: 'khach' },
   { ma: 'khach_tu_choi_nhan', ten: 'Khách từ chối nhận hàng', loaiTruKpi: true, thuocVe: 'khach' },
-  // Chứng từ thông quan tách HAI ĐẦU vì ai chịu trách nhiệm là khác nhau (CEO 11/09/2026):
-  // đầu XUẤT do mình chuẩn bị nên tính vào KPI; đầu NHẬP thường là giấy tờ người nhận phải
-  // nộp (mã số thuế, giấy phép, CMND) nên được loại.
-  { ma: 'thong_quan_thieu_ct_nhap', ten: 'Thiếu giấy tờ thông quan đầu nhập (người nhận phải nộp)', loaiTruKpi: true, thuocVe: 'khach' },
-  { ma: 'thong_quan_ngoai', ten: 'Hải quan giữ hàng — không do chứng từ của mình', loaiTruKpi: true, thuocVe: 'hai_quan' },
+  // Chứng từ thông quan vẫn tách HAI ĐẦU để biết thiếu ở đâu, nhưng CẢ HAI đều là lỗi nội bộ
+  // (CEO 16/09/2026: "giấy tờ thông quan phía đầu xuất hay nhập không đủ là lỗi nội bộ chứ không
+  // phải lỗi bên khách quan") — thay quy ước 11/09 coi đầu nhập là việc của người nhận. Chuẩn bị
+  // và nhắc người nhận nộp đủ giấy tờ là việc của vị trí logistics.
+  { ma: 'thong_quan_thieu_ct_nhap', ten: 'Thiếu giấy tờ thông quan đầu nhập', loaiTruKpi: false, thuocVe: 'noi_bo' },
+  // Chỉ loại khi hải quan giữ hàng mà KHÔNG phải vì thiếu giấy tờ — xem luật đối chiếu.
+  { ma: 'thong_quan_ngoai', ten: 'Hải quan giữ hàng — không do thiếu giấy tờ', loaiTruKpi: true, thuocVe: 'hai_quan' },
   { ma: 'thien_tai_ha_tang', ten: 'Thiên tai / sự cố hạ tầng carrier', loaiTruKpi: true, thuocVe: 'hang_van_chuyen' },
   { ma: 'thong_quan_thieu_ct_xuat', ten: 'Thiếu hoặc sai giấy tờ thông quan đầu xuất (của mình)', loaiTruKpi: false, thuocVe: 'noi_bo' },
   { ma: 'sai_thong_tin_van_don', ten: 'Sai thông tin khi tạo vận đơn', loaiTruKpi: false, thuocVe: 'noi_bo' },

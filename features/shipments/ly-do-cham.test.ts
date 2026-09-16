@@ -13,10 +13,10 @@ describe('ly-do-cham', () => {
     expect(loaiTruKhoiKpi('thong_quan_thieu_ct_xuat')).toBe(false);
     expect(loaiTruKhoiKpi('sai_thong_tin_van_don')).toBe(false);
   });
-  it('chứng từ thông quan tách hai đầu: đầu nhập là việc của người nhận nên được loại, đầu xuất là của mình nên tính', () => {
-    expect(loaiTruKhoiKpi('thong_quan_thieu_ct_nhap')).toBe(true);
+  it('thiếu giấy tờ thông quan — cả đầu nhập lẫn đầu xuất — là lỗi nội bộ, không được loại (CEO 16/09/2026)', () => {
+    expect(loaiTruKhoiKpi('thong_quan_thieu_ct_nhap')).toBe(false);
     expect(loaiTruKhoiKpi('thong_quan_thieu_ct_xuat')).toBe(false);
-    expect(layLyDo('thong_quan_thieu_ct_nhap')?.thuocVe).toBe('khach');
+    expect(layLyDo('thong_quan_thieu_ct_nhap')?.thuocVe).toBe('noi_bo');
     expect(layLyDo('thong_quan_thieu_ct_xuat')?.thuocVe).toBe('noi_bo');
   });
   it('khách không đóng thuế nhập khẩu là lỗi khách, được loại khỏi KPI', () => {
