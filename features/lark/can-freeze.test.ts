@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canDongTrangThai, canLapNgay, canSuaNgay, type ShipmentHienTai } from './can-freeze';
+import { canDongTrangThai, canLapNgay, canSuaNgay, type ShipmentHienTai, chonTrangThaiChoKien } from './can-freeze';
 
 const sp = (p: Partial<ShipmentHienTai> = {}): ShipmentHienTai => ({
   deliveryStatus: null, deliveredAt: null, deliverySource: null,
@@ -53,5 +53,32 @@ describe('canSuaNgay', () => {
   });
   it('không có ngày thực → thôi', () => {
     expect(canSuaNgay([sp({ deliveryStatus: 'delivered', deliverySource: 'lark', deliveredAt: cu })], null)).toBe(false);
+  });
+});
+
+describe('chonTrangThaiChoKien — đơn tách kiện (CEO 16/09/2026)', () => {
+  const d = (ngay: string) => ({ deliveryState: 'delivered' as const, actualDeliveredAt: new Date(ngay), expectedDeliveryDate: null });
+  const theoTracking = new Map([
+    ['876026631930', d('2026-08-24')],
+    ['876817322555', d('2026-09-10')],
+  ]);
+  const cuaDon = d('2026-09-10');
+
+  it('#MBLVD29942: mỗi kiện lấy ngày giao của CHÍNH dòng Lark có mã vận đơn đó', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: '876026631930' }, 2, theoTracking, cuaDon)?.actualDeliveredAt?.toISOString().slice(0, 10)).toBe('2026-08-24');
+    expect(chonTrangThaiChoKien({ trackingNumber: '876817322555' }, 2, theoTracking, cuaDon)?.actualDeliveredAt?.toISOString().slice(0, 10)).toBe('2026-09-10');
+  });
+
+  it('đơn nhiều kiện mà kiện không có dòng Lark riêng → bỏ qua, không gán ngày của cả đơn', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: '999' }, 2, theoTracking, cuaDon)).toBeNull();
+    expect(chonTrangThaiChoKien({ trackingNumber: null }, 2, theoTracking, cuaDon)).toBeNull();
+  });
+
+  it('đơn một kiện thì vẫn dùng trạng thái cả đơn như cũ', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: null }, 1, new Map(), cuaDon)).toBe(cuaDon);
+  });
+
+  it('mã vận đơn có khoảng trắng thừa vẫn khớp', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: ' 876026631930 ' }, 2, theoTracking, cuaDon)).toBe(theoTracking.get('876026631930'));
   });
 });

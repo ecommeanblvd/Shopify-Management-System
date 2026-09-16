@@ -12,7 +12,7 @@ import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
 import { coThayDoi } from '@/lib/khong-doi';
-import { canDongTrangThai, canLapNgay, canSuaNgay, type ShipmentHienTai } from './can-freeze';
+import { canDongTrangThai, canLapNgay, canSuaNgay, chonTrangThaiChoKien, type ShipmentHienTai, type TrangThaiGiaoLark } from './can-freeze';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -99,7 +99,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     for (const sh of existing) {
       if (!sh.orderId) continue;
       const l = shipmentsByOrder.get(sh.orderId) ?? [];
-      l.push({ deliveryStatus: sh.deliveryStatus, deliveredAt: sh.deliveredAt,
+      l.push({ id: sh.id, deliveryStatus: sh.deliveryStatus, deliveredAt: sh.deliveredAt,
         deliverySource: sh.deliverySource, trackingNumber: sh.trackingNumber, labelCreatedAt: sh.labelCreatedAt });
       shipmentsByOrder.set(sh.orderId, l);
     }
@@ -187,6 +187,20 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
         };
       }
       statusByOrderId.set(orderId, acc);
+    }
+    // Trạng thái giao THEO MÃ VẬN ĐƠN — Lark ghi mỗi kiện một dòng, đơn tách kiện có nhiều dòng
+    // với ngày giao khác nhau. Khối freeze dùng bản này trước, xem `chonTrangThaiChoKien`.
+    const giaoTheoTracking = new Map<string, TrangThaiGiaoLark>();
+    for (const rec of [...records].sort((a, b) => larkCreatedTime(a) - larkCreatedTime(b))) {
+      const tk = parsePackRow(rec.fields).trackingNumber?.trim();
+      if (!tk) continue;
+      const st = parseLarkStatus(rec.fields);
+      const cu = giaoTheoTracking.get(tk);
+      giaoTheoTracking.set(tk, {
+        deliveryState: st.deliveryState === 'delivered' || cu?.deliveryState === 'delivered' ? 'delivered' : (st.deliveryState ?? cu?.deliveryState ?? null),
+        actualDeliveredAt: st.actualDeliveredAt ?? cu?.actualDeliveredAt ?? null,
+        expectedDeliveryDate: st.expectedDeliveryDate ?? cu?.expectedDeliveryDate ?? null,
+      });
     }
     // Cùng lý do như phần shipments: bỏ qua dòng trạng thái không đổi
     // (~4.040 upsert mỗi lượt trước 05/09).
@@ -284,14 +298,20 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     // Freeze trạng thái giao từ Lark vào shipments (delivered sticky). Best-effort.
     let deliveryFrozen = 0;
     try {
-      const delRows = [...statusByOrderId.entries()].filter(([, s]) => s.deliveryState != null);
-      for (const batch of chunk(delRows, APPLY_CHUNK)) {
+      // Ghi THEO TỪNG KIỆN (CEO 16/09/2026): trước đây ghi theo orderId nên đơn tách kiện bị
+      // gán cùng một ngày giao cho mọi kiện.
+      const viec: Array<{ kien: ShipmentHienTai; s: TrangThaiGiaoLark }> = [];
+      for (const [orderId, cuaDon] of statusByOrderId) {
+        const dsShip = shipmentsByOrder.get(orderId) ?? [];
+        for (const kien of dsShip) {
+          const s = chonTrangThaiChoKien(kien, dsShip.length, giaoTheoTracking, cuaDon);
+          if (s?.deliveryState != null && kien.id) viec.push({ kien, s });
+        }
+      }
+      for (const batch of chunk(viec, APPLY_CHUNK)) {
         await db.transaction(async (tx) => {
-          for (const [orderId, s] of batch) {
-            // Kiểm ĐIỀU KIỆN TRƯỚC trong bộ nhớ — cùng điều kiện với mệnh đề
-            // WHERE bên dưới, nên kết quả y hệt mà bớt hàng nghìn vòng tới DB
-            // (đo 05/09: ~10.000 lệnh chạy để đổi vỏn vẹn 51 dòng).
-            const dsShip = shipmentsByOrder.get(orderId) ?? [];
+          for (const { kien, s } of batch) {
+            const mot = [kien];
             const laDelivered = s.deliveryState === 'delivered';
             const patch: Record<string, unknown> = {
               deliveryStatus: s.deliveryState, deliverySource: 'lark', updatedAt: sql`now()`,
@@ -299,40 +319,39 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
             // Ngày giao: "Ngày giao thực tế" ops điền → "Ngày giao dự kiến" nếu đã
             // qua (row phát hiện muộn — cron chết dài ngày thì ngày sync sai cả
             // tháng) → thời điểm sync (sai số ≤1h khi cron chạy đều).
-            if (s.deliveryState === 'delivered') patch.deliveredAt = resolveDeliveredAt(s);
+            if (laDelivered) patch.deliveredAt = resolveDeliveredAt(s);
             // GUARD (29/07): pack CHƯA ship (không tracking, không label) thì không
             // thể "delivered" — cột Final|Delivery Status trên Lark từng đánh nhầm
             // cho 16 đơn Invalid Address/đang hold, làm SMS ghi delivered ảo.
-            const notYetShippedGuard = s.deliveryState === 'delivered'
+            const notYetShippedGuard = laDelivered
               ? [or(isNotNull(schema.shipments.trackingNumber), isNotNull(schema.shipments.labelCreatedAt))!]
               : [];
-            if (canDongTrangThai(dsShip, laDelivered)) {
+            if (canDongTrangThai(mot, laDelivered)) {
               const res = await tx.update(schema.shipments).set(patch).where(and(
-                eq(schema.shipments.orderId, orderId),
+                eq(schema.shipments.id, kien.id!),
                 or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
                 ...notYetShippedGuard,
               ));
               deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
             }
-            // Row ĐÃ delivered nhưng thiếu ngày (đánh dấu trước khi có fallback, hoặc
-            // ops điền ngày muộn) → lấp ngày, không đổi status.
-            if (laDelivered && canLapNgay(dsShip)) {
+            // Row ĐÃ delivered nhưng thiếu ngày → lấp ngày, không đổi status.
+            if (laDelivered && canLapNgay(mot)) {
               await tx.update(schema.shipments)
                 .set({ deliveredAt: resolveDeliveredAt(s), updatedAt: sql`now()` })
                 .where(and(
-                  eq(schema.shipments.orderId, orderId),
+                  eq(schema.shipments.id, kien.id!),
                   eq(schema.shipments.deliveryStatus, 'delivered'),
                   isNull(schema.shipments.deliveredAt),
                 ));
             }
-            // TỰ CHỮA LÀNH: ops điền "Ngày giao thực tế" MUỘN (sau khi row đã bị
-            // đóng ngày fallback) → sửa lại theo ngày thực. CHỈ đè nguồn 'lark' —
-            // POD bill carrier (D-019) và FedEx track không bị đụng.
-            if (laDelivered && s.actualDeliveredAt && canSuaNgay(dsShip, s.actualDeliveredAt)) {
+            // TỰ CHỮA LÀNH: ops điền "Ngày giao thực tế" MUỘN → sửa lại theo ngày thực. CHỈ đè
+            // nguồn 'lark' — POD bill carrier (D-019) và FedEx track không bị đụng. Cũng chính
+            // bước này sửa các kiện tách đơn đã bị gán nhầm ngày của kiện cuối.
+            if (laDelivered && s.actualDeliveredAt && canSuaNgay(mot, s.actualDeliveredAt)) {
               await tx.update(schema.shipments)
                 .set({ deliveredAt: s.actualDeliveredAt, updatedAt: sql`now()` })
                 .where(and(
-                  eq(schema.shipments.orderId, orderId),
+                  eq(schema.shipments.id, kien.id!),
                   eq(schema.shipments.deliveryStatus, 'delivered'),
                   eq(schema.shipments.deliverySource, 'lark'),
                   ne(schema.shipments.deliveredAt, s.actualDeliveredAt),
