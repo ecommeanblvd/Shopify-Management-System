@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, laCoVanDe, laSizeCoVanDe, xepChoCsv, TEN_TIEU_CHI, CACH_DO, type DongSla, type KetQuaSla } from './chi-tiet';
+import { xepLoaiSla, demKetQuaSla, chenhSauThuHoi, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, laLoiNoiBo, TEN_TIEU_CHI, CACH_DO, type DongSla, type KetQuaSla } from './chi-tiet';
 
 const kien = (soNgay: number, slaNgay: number, biLoaiTru = false): DongSla => ({
   shipmentId: 'x', nguon: 'shopify', thuocVe: 'MEAN BLVD', maDon: null, tracking: null, nuoc: 'US', line: 'fedex', ngayGui: '2026-08-01', ngayGiao: '2026-08-06',
@@ -136,5 +136,27 @@ describe('lọc hiển thị và thứ tự CSV (CEO 14/09/2026)', () => {
     expect(laSizeCoVanDe('dung')).toBe(false);
     expect(laSizeCoVanDe('sai_thung')).toBe(true);
     expect(laSizeCoVanDe('thieu_du_lieu')).toBe(true);
+  });
+});
+
+describe('1.1 — trạng thái phân định khớp với bộ đếm KPI (CEO 16/09/2026)', () => {
+  const gt = (thuocVe: string) => ({ lyDo: 'x', thuocVe, chiTiet: {}, ghiChu: null, nguon: 'tay', capNhat: '' });
+
+  it('đơn đang khiếu nại ở Đối soát thì không cần giải trình ở đây', () => {
+    expect(canGiaiTrinh({ phanDinh: 'disputing', giaiTrinh: null })).toBe(false);
+  });
+  it('chưa ai xét và chưa giải trình → phải giải trình', () => {
+    expect(canGiaiTrinh({ phanDinh: null, giaiTrinh: null })).toBe(true);
+  });
+  it('giải trình còn thiếu dữ kiện vẫn phải làm tiếp', () => {
+    expect(canGiaiTrinh({ phanDinh: null, giaiTrinh: gt('chua_ro') })).toBe(true);
+  });
+  it('giải trình đã quy được trách nhiệm thì xong', () => {
+    expect(canGiaiTrinh({ phanDinh: null, giaiTrinh: gt('du_lieu_web') })).toBe(false);
+  });
+  it('lỗi nội bộ đến từ đối soát HOẶC từ giải trình', () => {
+    expect(laLoiNoiBo({ phanDinh: 'internal_error', giaiTrinh: null })).toBe(true);
+    expect(laLoiNoiBo({ phanDinh: null, giaiTrinh: gt('noi_bo') })).toBe(true);
+    expect(laLoiNoiBo({ phanDinh: null, giaiTrinh: gt('hang') })).toBe(false);
   });
 });

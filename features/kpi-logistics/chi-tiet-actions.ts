@@ -16,6 +16,7 @@ import { loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
 import { canQuyDoi, canTinhCuoc, phanLoaiKien } from '@/features/shipments/lech-can';
 import { STORE_VAN_HANH, nhanThuocVe } from './pham-vi';
 import { docSlaShipHo, docChungTuShipHo } from './nguon-ship-ho';
+import { goiYLyDo, type TinHieu, type ChiTietGiaiTrinh } from './giai-trinh-am-cuoc';
 import {
   CACH_DO, xepLoaiSla, chenhSauThuHoi,
   type ChiTietKpi, type MaTieuChi, type DongAmCuoc, type DongSla, type DongChungTu, type DongSizeThung,
@@ -42,7 +43,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
   if (ma === '1.1') {
     // Bill và thu hồi gộp ở HAI subquery riêng: gộp chung một JOIN sẽ nhân đôi số
     // tiền khi một kiện có nhiều dòng phí hoặc nhiều kiện cùng đơn.
-    const { rows } = await db.execute<{ don: string | null; cc: string | null; ngay: string | null; thu: string | null; bill: string; thu_hoi: string | null; phan: string | null; so_cn: string | null }>(sql`
+    const { rows } = await db.execute<{ oid: string; can_web: string | null; don: string | null; cc: string | null; ngay: string | null; thu: string | null; bill: string; thu_hoi: string | null; phan: string | null; so_cn: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed, MIN(s.label_created_at)::text AS ngay_gui
           FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
@@ -55,7 +56,8 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
           FROM shipments s JOIN shipment_reconcile_status r ON r.shipment_id = s.id
          WHERE s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
          GROUP BY 1)
-      SELECT o.shopify_order_number AS don, o.ship_country AS cc, bill.ngay_gui AS ngay,
+      SELECT o.id AS oid, COALESCE(o.ship_weight_kg_override, o.ship_weight_kg)::text AS can_web,
+             o.shopify_order_number AS don, o.ship_country AS cc, bill.ngay_gui AS ngay,
              (o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))::text AS thu,
              bill.billed::text AS bill, thu.thu_hoi::text AS thu_hoi, thu.phan_dinh AS phan, thu.so_cn AS so_cn
         FROM bill
@@ -64,6 +66,31 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         LEFT JOIN thu ON thu.order_id = bill.order_id
        WHERE st.shop_domain = ${STORE_VAN_HANH}
          AND bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1);`);
+    // Số đo từng kiện + phụ phí, và giải trình đã lưu — hai lượt đọc gom cho mọi đơn một lần.
+    const ids = rows.map((r) => r.oid);
+    const [kienRows, gtRows] = ids.length === 0 ? [{ rows: [] }, { rows: [] }] : await Promise.all([
+      db.execute<{ oid: string; thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null; vsx: string | null; sdc: string | null }>(sql`
+        SELECT s.order_id AS oid, s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
+               s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed,
+               ch.remote::text AS vsx, ch.address_correction::text AS sdc
+          FROM shipments s LEFT JOIN shipment_charges ch ON ch.shipment_id = s.id
+         WHERE s.order_id = ANY(${ids}::uuid[])
+           AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp;`),
+      db.execute<{ oid: string; ly_do: string; thuoc_ve: string; chi_tiet: unknown; ghi_chu: string | null; nguon: string; cap_nhat: string }>(sql`
+        SELECT order_id AS oid, ly_do, thuoc_ve, chi_tiet, ghi_chu, nguon, updated_at::text AS cap_nhat
+          FROM am_cuoc_giai_trinh WHERE order_id = ANY(${ids}::uuid[]);`),
+    ]);
+    const tinHieuTheoDon = new Map<string, TinHieu>();
+    for (const k of kienRows.rows) {
+      const t = tinHieuTheoDon.get(k.oid) ?? { soKien: 0, kien: [], phiVungSauXaVnd: 0, phiSuaDiaChiVnd: 0 };
+      t.soKien += 1;
+      t.kien.push({ thucKg: so(k.thuc), daiCm: so(k.d), rongCm: so(k.r), caoCm: so(k.c), billedKg: so(k.billed) });
+      t.phiVungSauXaVnd += Number(k.vsx ?? 0);
+      t.phiSuaDiaChiVnd += Number(k.sdc ?? 0);
+      tinHieuTheoDon.set(k.oid, t);
+    }
+    const gtTheoDon = new Map(gtRows.rows.map((g) => [g.oid, g]));
+
     const amCuoc: DongAmCuoc[] = [];
     for (const r of rows) {
       const thuKhachVnd = Math.round(Number(r.thu ?? 0));
@@ -72,7 +99,19 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       const { carrierRongVnd, chenhVnd, conAm } = chenhSauThuHoi(carrierVnd, thuHoiVnd, thuKhachVnd);
       // Đơn đã đòi lại đủ tiền thì KHÔNG còn là đơn âm cước — rời danh sách.
       if (!conAm) continue;
-      amCuoc.push({ maDon: r.don, nuoc: r.cc, ngayGui: ngay(r.ngay), thuKhachVnd, carrierVnd, thuHoiVnd, carrierRongVnd, chenhVnd, phanDinh: r.phan, soCreditNote: r.so_cn });
+      const tinHieu: TinHieu = {
+        ...(tinHieuTheoDon.get(r.oid) ?? { soKien: 0, kien: [], phiVungSauXaVnd: 0, phiSuaDiaChiVnd: 0 }),
+        canWebKg: so(r.can_web),
+      };
+      const g = gtTheoDon.get(r.oid);
+      amCuoc.push({
+        orderId: r.oid, tinHieu, goiY: goiYLyDo(tinHieu),
+        giaiTrinh: g ? {
+          lyDo: g.ly_do, thuocVe: g.thuoc_ve, chiTiet: (g.chi_tiet ?? {}) as ChiTietGiaiTrinh,
+          ghiChu: g.ghi_chu, nguon: g.nguon, capNhat: g.cap_nhat,
+        } : null,
+        maDon: r.don, nuoc: r.cc, ngayGui: ngay(r.ngay), thuKhachVnd, carrierVnd, thuHoiVnd, carrierRongVnd, chenhVnd, phanDinh: r.phan, soCreditNote: r.so_cn,
+      });
     }
     amCuoc.sort((a, b) => b.chenhVnd - a.chenhVnd);
     return { ...goc, amCuoc };

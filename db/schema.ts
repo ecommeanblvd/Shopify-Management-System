@@ -2262,6 +2262,24 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
  * brand phải sản xuất lại, rồi cước ship lần hai — nên `chiPhi` là danh sách khoản
  * và `tongChiPhiVnd` là tổng đã cộng sẵn để truy vấn nhanh.
  */
+/**
+ * Giải trình đơn âm cước cho tiêu chí 1.1 KPI Logistics — một dòng mỗi đơn (CEO 16/09/2026).
+ * `thuoc_ve` do hệ thống quy từ lý do + dữ kiện (`quyTrachNhiem`), người giải trình không tự chọn.
+ */
+export const amCuocGiaiTrinh = pgTable('am_cuoc_giai_trinh', {
+  orderId: uuid('order_id').primaryKey().references(() => shopifyOrders.id, { onDelete: 'cascade' }),
+  lyDo: text('ly_do').notNull(),
+  thuocVe: text('thuoc_ve').notNull(),
+  chiTiet: jsonb('chi_tiet').notNull().default({}),
+  ghiChu: text('ghi_chu'),
+  /** 'tay' = nhập trên hệ thống; 'excel' = nạp từ bảng giải trình của Đức. */
+  nguon: text('nguon').notNull().default('tay'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [index('am_cuoc_giai_trinh_thuoc_ve_idx').on(t.thuocVe)]);
+
 export const shipHoSuCo = pgTable('ship_ho_su_co', {
   id: uuid('id').defaultRandom().primaryKey(),
   orderId: uuid('order_id').references(() => shipHoOrders.id, { onDelete: 'cascade' }).notNull(),

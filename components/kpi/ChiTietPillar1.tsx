@@ -3,9 +3,11 @@
 import { useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
+import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
+import { dauHieu, layLyDoAmCuoc, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
 import { layLyDo } from '@/features/shipments/ly-do-cham';
 import {
-  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv,
+  TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, laLoiNoiBo,
   type ChiTietKpi, type MaTieuChi,
 } from '@/features/kpi-logistics/chi-tiet';
 
@@ -87,7 +89,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
       {ma && data && !dangTai && (
         <div className="space-y-3 p-4">
           <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI_THEO_MA[ma]}</p>
-          {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} />}
+          {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} giaiTrinhDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.1')} />}
           {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.2')} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}
           {data.sizeThung && <BangSize rows={data.sizeThung} ky={ky} />}
@@ -119,51 +121,79 @@ function Khung({ tomTat, onCsv, nut, children }: {
 }
 
 /** Nút bật/tắt xem cả kiện đạt. Nói rõ đang giấu bao nhiêu dòng để không ai tưởng bảng chỉ có thế. */
-function NutHienHet({ hienHet, doi, an }: { hienHet: boolean; doi: () => void; an: number }) {
+function NutHienHet({ hienHet, doi, an, nhanAn = 'đơn đạt' }: { hienHet: boolean; doi: () => void; an: number; nhanAn?: string }) {
   if (an <= 0 && !hienHet) return null;
   return (
     <button type="button" onClick={doi}
       className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted">
-      {hienHet ? 'Chỉ hiện đơn có vấn đề' : `Hiện cả ${an} đơn đạt`}
+      {hienHet ? 'Chỉ hiện việc còn phải làm' : `Hiện cả ${an} ${nhanAn}`}
     </button>
   );
 }
 
 const TH = 'sticky top-0 z-10 bg-muted/90 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur';
 
-function BangAmCuoc({ rows, ky }: { rows: NonNullable<ChiTietKpi['amCuoc']>; ky: string }) {
+function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
+  rows: NonNullable<ChiTietKpi['amCuoc']>; ky: string; giaiTrinhDuoc: boolean; sauKhiLuu: () => void;
+}) {
   const tong = rows.reduce((s, r) => s + r.chenhVnd, 0);
-  const daChot = rows.filter((r) => r.phanDinh?.includes('internal_error')).length;
-  const chuaXet = rows.filter((r) => !r.phanDinh).length;
+  const daChot = rows.filter(laLoiNoiBo).length;
+  const conPhai = rows.filter(canGiaiTrinh);
   const daThuHoi = rows.reduce((s, r) => s + r.thuHoiVnd, 0);
+  // Màn hình để XỬ LÝ: mặc định chỉ đơn còn phải giải trình; CSV luôn đủ (nguyên tắc 14/09/2026).
+  const [hienHet, setHienHet] = useState(false);
+  const hien = hienHet ? rows : conPhai;
+  const choCsv = [...rows].sort((a, b) => Number(canGiaiTrinh(a)) - Number(canGiaiTrinh(b)) || b.chenhVnd - a.chenhVnd);
   return (
     <Khung
-      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> trên các đơn này · đã chốt lỗi nội bộ <b>{daChot}</b> · chưa ai xét <b>{chuaXet}</b></>}
+      tomTat={<><b>{rows.length}</b> đơn còn âm cước sau khi trừ tiền đã đòi lại · tổng chênh <b>{vnd(tong)}</b> · đã đòi lại được <b>{vnd(daThuHoi)}</b> · đã chốt lỗi nội bộ <b>{daChot}</b> · <span className={conPhai.length ? 'text-amber-600 dark:text-amber-400' : ''}>còn phải giải trình <b>{conPhai.length}</b></span>. Đơn đang khiếu nại hãng thì xử lý ở Đối soát phí ship.</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.1-am-cuoc.csv`,
-        ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Đã đòi lại (VND)', 'Giá vốn ròng (VND)', 'Chênh (VND)', 'Phân định', 'Số credit note'],
-        rows.map((r) => [r.maDon, r.nuoc, r.ngayGui, r.thuKhachVnd, r.carrierVnd, r.thuHoiVnd, r.carrierRongVnd, r.chenhVnd, r.phanDinh, r.soCreditNote]))}
+        ['Đơn', 'Nước', 'Ngày gửi', 'Khách trả (VND)', 'Carrier bill (VND)', 'Đã đòi lại (VND)', 'Giá vốn ròng (VND)', 'Chênh (VND)',
+          'Phân định đối soát', 'Số credit note', 'Dấu hiệu hệ thống', 'Hệ thống gợi ý', 'Nguyên nhân giải trình', 'Trách nhiệm',
+          'Số đồ', 'SKU cần sửa cân', 'Phụ phí (VND)', 'Line HNC', 'Ghi chú'],
+        choCsv.map((r) => {
+          const g = r.giaiTrinh;
+          return [r.maDon, r.nuoc, r.ngayGui, r.thuKhachVnd, r.carrierVnd, r.thuHoiVnd, r.carrierRongVnd, r.chenhVnd,
+            r.phanDinh, r.soCreditNote, dauHieu(r.tinHieu).join(' | '), layLyDoAmCuoc(r.goiY)?.ten ?? r.goiY,
+            g ? (layLyDoAmCuoc(g.lyDo)?.ten ?? g.lyDo) : null,
+            g ? (NHAN_THUOC_VE_AM_CUOC[g.thuocVe as keyof typeof NHAN_THUOC_VE_AM_CUOC] ?? g.thuocVe) : null,
+            g?.chiTiet.soDo ?? null, g?.chiTiet.skuCanSua ?? null, g?.chiTiet.phiVnd ?? null,
+            g?.chiTiet.lineHnc ? 'Có' : null, g?.ghiChu ?? null];
+        }))}
+      nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} nhanAn="đơn đã phân định" />}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Đơn</th><th className={`${TH} text-left`}>Nước</th><th className={`${TH} text-left`}>Ngày gửi</th>
-        <th className={`${TH} text-right`}>Khách trả</th><th className={`${TH} text-right`}>Carrier bill</th>
-        <th className={`${TH} text-right`}>Đã đòi lại</th><th className={`${TH} text-right`}>Giá vốn ròng</th>
-        <th className={`${TH} text-right`}>Chênh</th><th className={`${TH} text-left`}>Phân định</th>
+        <th className={`${TH} text-right`}>Khách trả</th><th className={`${TH} text-right`}>Giá vốn ròng</th>
+        <th className={`${TH} text-right`}>Chênh</th><th className={`${TH} text-left`}>Dấu hiệu</th>
+        <th className={`${TH} text-left`}>Phân định</th><th className={`${TH} text-right`}></th>
       </tr></thead>
       <tbody>
-        {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">Không đơn nào còn âm cước sau giảm trừ.</td></tr>}
-        {rows.map((r, i) => (
-          <tr key={i} className="border-t border-border/50">
-            <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
-            <td className="px-2.5 py-1.5 text-left">{r.nuoc ?? '—'}</td>
-            <td className="px-2.5 py-1.5 text-left">{r.ngayGui ?? '—'}</td>
-            <td className="px-2.5 py-1.5 text-right">{vnd(r.thuKhachVnd)}</td>
-            <td className="px-2.5 py-1.5 text-right text-muted-foreground">{vnd(r.carrierVnd)}</td>
-            <td className="px-2.5 py-1.5 text-right text-emerald-600 dark:text-emerald-400">{r.thuHoiVnd > 0 ? `−${vnd(r.thuHoiVnd)}` : '—'}</td>
-            <td className="px-2.5 py-1.5 text-right">{vnd(r.carrierRongVnd)}</td>
-            <td className="px-2.5 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{vnd(r.chenhVnd)}</td>
-            <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.phanDinh ?? 'chưa phân định'}{r.soCreditNote ? ` · ${r.soCreditNote}` : ''}</td>
-          </tr>
-        ))}
+        {hien.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-muted-foreground">{rows.length === 0 ? 'Không đơn nào còn âm cước sau giảm trừ.' : 'Mọi đơn âm cước đã được phân định.'}</td></tr>}
+        {hien.map((r) => {
+          const g = r.giaiTrinh;
+          return (
+            <tr key={r.orderId} className="border-t border-border/50 align-top">
+              <td className="px-2.5 py-1.5 text-left font-medium">{r.maDon ?? '—'}</td>
+              <td className="px-2.5 py-1.5 text-left">{r.nuoc ?? '—'}</td>
+              <td className="px-2.5 py-1.5 text-left">{r.ngayGui ?? '—'}</td>
+              <td className="px-2.5 py-1.5 text-right">{vnd(r.thuKhachVnd)}</td>
+              <td className="px-2.5 py-1.5 text-right">{vnd(r.carrierRongVnd)}{r.thuHoiVnd > 0 && <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">đã đòi −{vnd(r.thuHoiVnd)}</span>}</td>
+              <td className="px-2.5 py-1.5 text-right font-semibold text-red-600 dark:text-red-400">{vnd(r.chenhVnd)}</td>
+              <td className="px-2.5 py-1.5 text-left text-[11px] text-muted-foreground">{dauHieu(r.tinHieu).join(' · ') || '—'}</td>
+              <td className="px-2.5 py-1.5 text-left">
+                {r.phanDinh
+                  ? <span className="text-muted-foreground">{r.phanDinh}{r.soCreditNote ? ` · ${r.soCreditNote}` : ''}</span>
+                  : g
+                    ? <span className="space-y-0.5"><span className="block text-xs">{layLyDoAmCuoc(g.lyDo)?.ten ?? g.lyDo}</span><NhanTrachNhiem thuocVe={g.thuocVe} /></span>
+                    : <span className="text-amber-600 dark:text-amber-400">chưa phân định</span>}
+              </td>
+              <td className="px-2.5 py-1.5 text-right">
+                {giaiTrinhDuoc && !r.phanDinh && <NutGiaiTrinh dong={r} sauKhiLuu={sauKhiLuu} />}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </Khung>
   );

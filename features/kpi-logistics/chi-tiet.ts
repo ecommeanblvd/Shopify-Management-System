@@ -43,7 +43,24 @@ export function xepLoaiSla(
   return soNgay <= nguong ? 'tre' : 'ngoai_le';
 }
 
+export interface GiaiTrinhDaLuu {
+  lyDo: string;
+  thuocVe: string;
+  chiTiet: import('./giai-trinh-am-cuoc').ChiTietGiaiTrinh;
+  ghiChu: string | null;
+  /** 'tay' hoặc 'excel' (nạp từ bảng của Đức). */
+  nguon: string;
+  capNhat: string;
+}
+
 export interface DongAmCuoc {
+  /** Cần cho nút giải trình. */
+  orderId: string;
+  /** Số đo hệ thống đã có — hiện ngay trong form để khỏi gõ lại. */
+  tinHieu: import('./giai-trinh-am-cuoc').TinHieu;
+  /** Lý do hệ thống đề xuất từ `tinHieu`. */
+  goiY: import('./giai-trinh-am-cuoc').MaLyDoAmCuoc;
+  giaiTrinh: GiaiTrinhDaLuu | null;
   maDon: string | null;
   nuoc: string | null;
   ngayGui: string | null;
@@ -183,3 +200,16 @@ export function xepChoCsv(dong: readonly DongSla[]): DongSla[] {
 
 /** 1.4 — kiện có vấn đề là kiện KHÔNG đóng đúng size. */
 export const laSizeCoVanDe = (p: DongSizeThung['phanLoai']): boolean => p !== 'dung';
+
+/* ───────── 1.1: trạng thái phân định của một đơn âm cước (CEO 16/09/2026) ─────────
+ * PHẢI khớp đúng bộ đếm trong `queries.ts`: đơn đã phân định khi đối soát đã chốt trạng thái,
+ * HOẶC có giải trình quy được trách nhiệm. Lỗi nội bộ đến từ một trong hai nguồn.
+ */
+type DongPhanDinh = Pick<DongAmCuoc, 'phanDinh' | 'giaiTrinh'>;
+
+export const laLoiNoiBo = (d: DongPhanDinh): boolean =>
+  Boolean(d.phanDinh?.includes('internal_error')) || d.giaiTrinh?.thuocVe === 'noi_bo';
+
+/** Còn phải giải trình: đối soát chưa chốt VÀ chưa có giải trình quy được trách nhiệm. */
+export const canGiaiTrinh = (d: DongPhanDinh): boolean =>
+  !d.phanDinh && (!d.giaiTrinh || d.giaiTrinh.thuocVe === 'chua_ro');

@@ -86,15 +86,20 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         SELECT bill.billed - COALESCE(thu.thu_hoi, 0) AS rong,
                COALESCE(thu.thu_hoi, 0) AS thu_hoi,
                o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1) AS khach_tra,
-               thu.phan_dinh
+               thu.phan_dinh, gt.thuoc_ve AS gt_thuoc_ve
           FROM bill JOIN shopify_orders o ON o.id = bill.order_id JOIN stores st ON st.id = o.store_id
           LEFT JOIN thu ON thu.order_id = bill.order_id
+          LEFT JOIN am_cuoc_giai_trinh gt ON gt.order_id = bill.order_id
          WHERE st.shop_domain = ${STORE_VAN_HANH}
            AND bill.billed > o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1))
+      -- Một đơn được coi là ĐÃ PHÂN ĐỊNH khi đối soát đã chốt trạng thái, HOẶC đã có giải trình
+      -- quy được trách nhiệm (khác 'chua_ro'). Lỗi nội bộ đến từ một trong hai nguồn (D-083).
       SELECT COUNT(*) FILTER (WHERE rong > khach_tra)::text AS n,
              COALESCE(SUM(rong - khach_tra) FILTER (WHERE rong > khach_tra), 0)::text AS tong,
-             COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh LIKE '%internal_error%')::text AS loi_noi_bo,
-             COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh IS NULL)::text AS chua_xet,
+             COUNT(*) FILTER (WHERE rong > khach_tra
+                              AND (phan_dinh LIKE '%internal_error%' OR gt_thuoc_ve = 'noi_bo'))::text AS loi_noi_bo,
+             COUNT(*) FILTER (WHERE rong > khach_tra AND phan_dinh IS NULL
+                              AND (gt_thuoc_ve IS NULL OR gt_thuoc_ve = 'chua_ro'))::text AS chua_xet,
              COUNT(*) FILTER (WHERE rong <= khach_tra)::text AS da_cuu,
              COALESCE(SUM(thu_hoi), 0)::text AS thu_hoi
         FROM am;`),
