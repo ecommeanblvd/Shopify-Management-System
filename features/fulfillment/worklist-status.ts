@@ -42,6 +42,7 @@ export function summarizeDelivery(o: { packs: number; withTracking: number; deli
 export function formatTrackingStatus(s: string | null): Badge {
   switch (s) {
     case 'delivered': return { label: 'Đã giao', tone: 'ok' };
+    case 'label_created': return { label: 'Mới tạo nhãn', tone: 'muted' };
     case 'in_transit':
     case 'out_for_delivery': return { label: 'Đang chuyển', tone: 'info' };
     case 'exception': return { label: 'Sự cố', tone: 'bad' };

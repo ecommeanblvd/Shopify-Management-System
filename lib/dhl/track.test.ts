@@ -6,7 +6,7 @@ describe('mapDhlStatus', () => {
     expect(mapDhlStatus('delivered', null)).toBe('delivered');
     expect(mapDhlStatus('failure', null)).toBe('exception');
     expect(mapDhlStatus('transit', null)).toBe('in_transit');
-    expect(mapDhlStatus('pre-transit', null)).toBe('in_transit');
+    expect(mapDhlStatus('pre-transit', null)).toBe('label_created'); // chưa nhận hàng
     expect(mapDhlStatus('unknown', null)).toBe('unknown');
     expect(mapDhlStatus(null, null)).toBe('unknown');
     expect(mapDhlStatus('weird-code', null)).toBe('unknown');

@@ -142,3 +142,11 @@ describe('parseLichSuQuet', () => {
     expect(parseLichSuQuet({}).size).toBe(0);
   });
 });
+
+describe('mới tạo nhãn (CEO 17/09/2026)', () => {
+  it('OC "Label created" và IN không còn là đang vận chuyển', () => {
+    expect(mapFedexStatus('OC')).toBe('label_created');
+    expect(mapFedexStatus('IN')).toBe('label_created');
+    expect(mapFedexStatus('PU')).toBe('in_transit');
+  });
+});

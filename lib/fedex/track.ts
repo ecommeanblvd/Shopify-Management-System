@@ -1,6 +1,6 @@
 import { fedexFetch } from './client';
 
-export type DeliveryStatus = 'in_transit' | 'out_for_delivery' | 'delivered' | 'returning' | 'exception' | 'unknown';
+export type DeliveryStatus = 'label_created' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'returning' | 'exception' | 'unknown';
 
 /**
  * Mã trạng thái FedEx → trạng thái hệ thống. Danh sách lấy từ bộ ca kiểm thử chính
@@ -16,9 +16,13 @@ const STATUS_BY_CODE: Record<string, DeliveryStatus> = {
   DL: 'delivered',
   // Đang trên xe giao / đã tới điểm giao.
   OD: 'out_for_delivery', OF: 'out_for_delivery', ED: 'out_for_delivery', AD: 'out_for_delivery',
+  // MỚI TẠO NHÃN: FedEx đã nhận thông tin lô hàng nhưng CHƯA quét kiện lần nào (CEO 17/09/2026).
+  // Trước đây gộp vào 'in_transit' nên nhãn tạo xong rồi bỏ (đơn test, đơn huỷ) hiện mãi là
+  // "đang vận chuyển". Đo trên 875606002523: latestStatus OC "Label created", sự kiện IN.
+  OC: 'label_created', IN: 'label_created',
   // Đang đi trong mạng lưới.
-  IT: 'in_transit', IN: 'in_transit', AR: 'in_transit', DP: 'in_transit', PU: 'in_transit',
-  AF: 'in_transit', AP: 'in_transit', FD: 'in_transit', OC: 'in_transit',
+  IT: 'in_transit', AR: 'in_transit', DP: 'in_transit', PU: 'in_transit',
+  AF: 'in_transit', AP: 'in_transit', FD: 'in_transit',
   DY: 'in_transit', DD: 'in_transit',
   // Thấy trên hàng THẬT khi quét 125 kiện ngày 11/09/2026: thông quan và trung
   // chuyển. Trước đó ba mã này rơi vào 'unknown' (CP 17 kiện, CC 3, SF 1).

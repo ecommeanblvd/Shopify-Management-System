@@ -25,8 +25,9 @@ export function mapTrackingMoreStatus(s: string | null | undefined): DeliverySta
   switch ((s ?? '').toLowerCase()) {
     case 'delivered': return 'delivered';
     case 'transit':
-    case 'pickup':
-    case 'inforeceived': return 'in_transit';
+    case 'pickup': return 'in_transit';
+    // Hãng mới nhận thông tin, chưa quét kiện — cùng nghĩa với FedEx OC.
+    case 'inforeceived': return 'label_created';
     case 'undelivered':
     case 'exception': return 'exception';
     default: return 'unknown'; // pending | notfound | expired | lạ

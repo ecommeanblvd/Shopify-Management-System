@@ -111,8 +111,13 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
     db.execute<{ n: string }>(sql`
+      -- Đơn test / huỷ (nhãn chưa từng gửi, FedEx đã xác nhận) KHÔNG phải đơn ship hộ thành công,
+      -- dù trạng thái tiền có thể đã 'billed' (CEO 17/09/2026: loại đơn huỷ khỏi KPI của Đức).
       SELECT COUNT(*)::text AS n FROM ship_ho_orders
        WHERE status IN ('delivered', 'billed', 'settled')
+         -- COALESCE bắt buộc: đơn chưa gán lý do có NULL, và NOT (NULL AND NULL) là NULL → bị loại
+         -- oan. Viết thiếu COALESCE từng làm P2 T8 rơi từ 59 xuống 5 đơn (17/09/2026).
+         AND NOT (COALESCE(ly_do_cham, '') = 'khong_gui_hang' AND COALESCE(ly_do_doi_chieu, '') = 'xac_nhan')
          AND COALESCE(delivered_at, created_at) >= ${`${tu} 00:00:00`}::timestamp
          AND COALESCE(delivered_at, created_at) <= ${`${den} 23:59:59`}::timestamp;`),
     // Gate đo TỒN ĐỌNG chứ không đo kiện trong kỳ: hoá đơn carrier về trễ (quy chế chi trả gối 1 kỳ), nên kiện vừa gửi

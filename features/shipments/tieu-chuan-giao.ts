@@ -233,6 +233,8 @@ export async function docKienGiao(tu: string, den: string, storeDomain?: string 
       JOIN shopify_orders o ON o.id = s.order_id
       JOIN stores st ON st.id = o.store_id
      WHERE s.label_created_at IS NOT NULL
+       -- Đơn đã huỷ trên Shopify không có lần giao nào để đo (CEO 17/09/2026).
+       AND o.cancelled_at_shopify IS NULL
        AND (s.delivered_at IS NULL OR s.delivered_at::timestamp >= s.label_created_at)
        AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp
        AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp

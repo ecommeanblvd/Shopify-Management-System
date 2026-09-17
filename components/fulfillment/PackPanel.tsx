@@ -30,6 +30,7 @@ interface Props {
 
 const DELIVERY_BADGE: Record<string, { label: string; cls: string }> = {
   delivered:         { label: '✓ Đã giao',       cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  label_created:     { label: 'Mới tạo nhãn',      cls: 'bg-muted text-muted-foreground' },
   in_transit:        { label: '🚚 Đang chuyển',   cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
   out_for_delivery:  { label: 'Đang giao',         cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
   exception:         { label: '⚠ Sự cố',          cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },

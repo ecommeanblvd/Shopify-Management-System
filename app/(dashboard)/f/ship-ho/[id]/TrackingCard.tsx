@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 
 const DELIVERY_LABEL: Record<string, { label: string; cls: string }> = {
+  label_created: { label: 'Mới tạo nhãn', cls: 'bg-muted text-muted-foreground' },
   in_transit: { label: 'Đang vận chuyển', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
   out_for_delivery: { label: 'Đang giao', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
   delivered: { label: 'Đã giao', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' },

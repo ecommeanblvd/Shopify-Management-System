@@ -13,6 +13,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { slaCuaNuoc, NGUONG_NGOAI_LE_SOP } from '@/features/shipments/sop-giao-hang';
+import { lyDoCoHieuLuc } from '@/features/shipments/ly-do-cham';
 import { xepLoaiSla, type KetQuaSla } from '@/features/kpi-logistics/chi-tiet';
 import { layLoaiSuCo, tongChiPhi, thietHaiRong, DIEN_BIEN, type KhoanChiPhi } from './su-co';
 
@@ -103,8 +104,8 @@ const so = (v: string | null | undefined): number => (v == null ? 0 : Number(v))
 export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTietPillar2> {
   await requireXem();
   const [donRows, suCoRows] = await Promise.all([
-    db.execute<{ id: string; code: string; brand: string; cc: string; gui: string | null; giao: string | null; can: string | null; thu: string | null; von_that: string | null; von_bao: string | null; st: string; dst: string | null }>(sql`
-      SELECT o.id, o.code, o.partner_brand_slug AS brand, o.country AS cc,
+    db.execute<{ id: string; code: string; brand: string; cc: string; gui: string | null; giao: string | null; can: string | null; thu: string | null; von_that: string | null; von_bao: string | null; st: string; dst: string | null; ly_do: string | null; doi_chieu: string | null }>(sql`
+      SELECT o.id, o.code, o.partner_brand_slug AS brand, o.country AS cc, o.ly_do_cham AS ly_do, o.ly_do_doi_chieu AS doi_chieu,
              o.shipped_at::text AS gui, o.delivered_at::text AS giao, o.weight_kg::text AS can,
              COALESCE(o.actual_charged_vnd, o.charged_vnd)::text AS thu, o.actual_carrier_cost_vnd::text AS von_that,
              o.carrier_cost_vnd::text AS von_bao, o.status::text AS st, o.delivery_status AS dst
@@ -152,12 +153,16 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
     }
     // Kiện đang hoàn về không bao giờ tới tay khách → trễ chắc chắn, không chờ hết hạn.
     const dangHoan = r.dst === 'returning';
+    // Cùng luật với tiêu chí 1.2: lý do ngoài tầm kiểm soát đã được hãng xác nhận thì rời mẫu số —
+    // gồm cả đơn test / huỷ (CEO 17/09/2026).
+    const loaiTru = soNgay != null && lyDoCoHieuLuc(r.ly_do, r.doi_chieu) && (r.ly_do === 'khong_gui_hang' || soNgay > slaNgay);
     return {
       ma: r.code, brand: r.brand, nuoc,
       ngayGui: r.gui ? r.gui.slice(0, 10) : null,
       ngayGiao: r.giao ? r.giao.slice(0, 10) : null,
       soNgay, slaNgay,
       ketQua: soNgay == null ? null
+        : loaiTru ? 'loai_tru'
         : dangHoan ? (soNgay <= NGUONG_NGOAI_LE_SOP ? 'tre' : 'ngoai_le')
         : xepLoaiSla(soNgay, slaNgay, false, NGUONG_NGOAI_LE_SOP, chuaGiao),
       trangThaiGiao: r.dst,

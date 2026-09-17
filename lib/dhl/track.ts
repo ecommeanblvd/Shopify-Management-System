@@ -28,7 +28,8 @@ export function mapDhlStatus(statusCode: string | null | undefined, description:
     case 'delivered': return 'delivered';
     case 'failure': return 'exception';
     case 'transit': return description && OUT_FOR_DELIVERY_RE.test(description) ? 'out_for_delivery' : 'in_transit';
-    case 'pre-transit': return 'in_transit';
+    // DHL chưa nhận hàng — cùng nghĩa với FedEx OC.
+    case 'pre-transit': return 'label_created';
     default: return 'unknown';
   }
 }

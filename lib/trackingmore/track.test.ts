@@ -3,10 +3,10 @@ import { mapTrackingMoreStatus, TRACKINGMORE_COURIER } from './track';
 
 describe('mapTrackingMoreStatus', () => {
   it('delivered → delivered', () => expect(mapTrackingMoreStatus('delivered')).toBe('delivered'));
-  it('transit/pickup/inforeceived → in_transit', () => {
+  it('transit/pickup → in_transit; inforeceived → label_created', () => {
     expect(mapTrackingMoreStatus('transit')).toBe('in_transit');
     expect(mapTrackingMoreStatus('pickup')).toBe('in_transit');
-    expect(mapTrackingMoreStatus('inforeceived')).toBe('in_transit');
+    expect(mapTrackingMoreStatus('inforeceived')).toBe('label_created');
   });
   it('undelivered/exception → exception', () => {
     expect(mapTrackingMoreStatus('undelivered')).toBe('exception');

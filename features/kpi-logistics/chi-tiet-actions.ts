@@ -150,6 +150,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
              st.shop_domain AS dom, (s.delivered_at IS NULL) AS chua_giao
         FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE s.label_created_at IS NOT NULL
+         AND o.cancelled_at_shopify IS NULL
          AND (s.delivered_at IS NULL OR s.delivered_at::timestamp >= s.label_created_at)
          AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp
        ORDER BY (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400) DESC;`);
