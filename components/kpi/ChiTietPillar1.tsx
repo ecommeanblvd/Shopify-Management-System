@@ -132,15 +132,15 @@ function NutHienHet({ hienHet, doi, an, nhanAn = 'đơn đạt' }: { hienHet: bo
 }
 
 const NHAN_DOI_CHIEU: Record<string, string> = {
-  xac_nhan: 'FedEx xác nhận', khong_thay: 'FedEx không có dấu hiệu', khong_kiem_duoc: 'Không kiểm được',
+  xac_nhan: 'Hãng xác nhận', khong_thay: 'Hãng không có dấu hiệu', khong_kiem_duoc: 'Không kiểm được',
 };
 
-/** Kết quả đối chiếu lý do với FedEx — nói rõ kiện có được rút khỏi mẫu số không và vì sao. */
+/** Kết quả đối chiếu lý do với hãng (FedEx / UPS) — nói rõ kiện có được rút khỏi mẫu số không và vì sao. */
 function NhanDoiChieu({ ketQua, bangChung }: { ketQua: string | null; bangChung: string | null }) {
-  const [mau, chu] = ketQua === 'xac_nhan' ? ['text-emerald-600 dark:text-emerald-400', '✓ FedEx xác nhận — rời mẫu số']
-    : ketQua === 'khong_thay' ? ['text-red-600 dark:text-red-400', '✗ FedEx không có dấu hiệu — vẫn tính trễ']
+  const [mau, chu] = ketQua === 'xac_nhan' ? ['text-emerald-600 dark:text-emerald-400', '✓ Hãng xác nhận — rời mẫu số']
+    : ketQua === 'khong_thay' ? ['text-red-600 dark:text-red-400', '✗ Hãng không có dấu hiệu — vẫn tính trễ']
     : ketQua === 'khong_kiem_duoc' ? ['text-muted-foreground', '— Không kiểm được — vẫn tính trễ']
-    : ['text-muted-foreground', '⋯ Đang đối chiếu với FedEx'];
+    : ['text-muted-foreground', '⋯ Đang đối chiếu với hãng'];
   return (
     <span className={`mt-0.5 block text-[10px] ${mau}`} title={bangChung ?? undefined}>
       {chu}{bangChung && <span className="block text-muted-foreground">{bangChung}</span>}
@@ -249,9 +249,9 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
   };
   return (
     <Khung
-      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối.' : ''} Lý do ngoài tầm kiểm soát chỉ rút kiện khỏi mẫu số khi FedEx có sự kiện xác nhận.{coLyDoLoaiTru.length > 0 && <> Đối chiếu: <b className="text-emerald-600 dark:text-emerald-400">{dc.xacNhan}</b> xác nhận · <b className="text-red-600 dark:text-red-400">{dc.khongThay}</b> FedEx không có dấu hiệu · <b>{dc.khongKiem}</b> không kiểm được{dc.cho > 0 && <> · <b>{dc.cho}</b> đang chờ</>}.</>}</>}
+      tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối.' : ''} Lý do ngoài tầm kiểm soát chỉ rút kiện khỏi mẫu số khi hãng (FedEx / UPS) có sự kiện xác nhận.{coLyDoLoaiTru.length > 0 && <> Đối chiếu: <b className="text-emerald-600 dark:text-emerald-400">{dc.xacNhan}</b> xác nhận · <b className="text-red-600 dark:text-red-400">{dc.khongThay}</b> hãng không có dấu hiệu · <b>{dc.khongKiem}</b> không kiểm được{dc.cho > 0 && <> · <b>{dc.cho}</b> đang chờ</>}.</>}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
-        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm', 'Đối chiếu FedEx', 'Bằng chứng'],
+        ['Thuộc', 'Đơn', 'Tracking', 'Nước', 'Hãng', 'Ngày gửi', 'Ngày giao', 'Số ngày', 'Cam kết nước', 'Thước hãng', 'Kết quả', 'Lý do chậm', 'Đối chiếu hãng', 'Bằng chứng'],
         xepChoCsv(rows).map((r) => [r.thuocVe, r.maDon, r.tracking, r.nuoc, r.line, r.ngayGui, r.ngayGiao, r.soNgay, r.slaNgay, r.slaLineNgay, NHAN_KET_QUA_SLA[r.ketQua], r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : null,
           r.lyDoDoiChieu ? NHAN_DOI_CHIEU[r.lyDoDoiChieu] ?? r.lyDoDoiChieu : (r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) ? 'Đang chờ' : null), r.lyDoBangChung ?? null]))}
       nut={<NutHienHet hienHet={hienHet} doi={() => setHienHet(!hienHet)} an={rows.length - hien.length} />}

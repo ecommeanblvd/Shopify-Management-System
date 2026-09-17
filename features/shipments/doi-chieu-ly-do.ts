@@ -1,5 +1,5 @@
 /**
- * Đối chiếu lý do giao chậm với FedEx và ghi kết quả (CEO 16/09/2026). Dùng chung cho cron và
+ * Đối chiếu lý do giao chậm với FedEx / UPS và ghi kết quả (CEO 16/09/2026). Dùng chung cho cron và
  * cho lúc người dùng vừa gán lý do (đối chiếu ngay để thấy kết quả). Không kiểm quyền.
  *
  * Luật hiệu lực: lý do chỉ rút kiện khỏi mẫu số KPI khi `ly_do_doi_chieu = 'xac_nhan'`
@@ -9,7 +9,9 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { layLichSuQuet, TOI_DA_MOI_LO, CUA_SO_TRACK_NGAY } from '@/lib/fedex/track';
+import { layLichSuQuetUps } from '@/lib/ups/track';
 import { doiChieuFedex, coLuatDoiChieu, type DoiChieu } from './doi-chieu-fedex';
+import { doiChieuUps } from './doi-chieu-ups';
 import { LY_DO_CHAM } from './ly-do-cham';
 
 type Nguon = 'shopify' | 'ship_ho';
@@ -65,6 +67,21 @@ export async function doiChieuLyDoCham(opts: { limit?: number; chi?: { nguon: Ng
   const fedex: Viec[] = [];
   for (const r of rows) {
     const v: Viec = { nguon: r.nguon, id: r.id, lyDo: r.ly_do, hang: r.hang, tk: r.tk?.trim() || null, ngayGui: r.ngay };
+    if (v.hang === 'ups' && v.tk) {
+      // UPS tra từng mã một. Lỗi mạng / thiếu key → để nguyên, lượt sau thử lại.
+      let ls: Awaited<ReturnType<typeof layLichSuQuetUps>>;
+      try { ls = await layLichSuQuetUps(v.tk); }
+      catch (e) { kq.loi++; kq.loiMau ??= String((e as Error).message ?? e).slice(0, 200); continue; }
+      const dc: DoiChieu = 'loi' in ls
+        ? { ketQua: 'khong_kiem_duoc', bangChung: `UPS không nhận mã vận đơn (${ls.loi})` }
+        : doiChieuUps(v.lyDo, ls.suKien);
+      await ghi(v, dc);
+      kq.daKiem++;
+      if (dc.ketQua === 'xac_nhan') kq.xacNhan++;
+      else if (dc.ketQua === 'khong_thay') kq.khongThay++;
+      else kq.khongKiemDuoc++;
+      continue;
+    }
     if (v.hang !== 'fedex' || !v.tk) {
       await ghi(v, { ketQua: 'khong_kiem_duoc', bangChung: v.tk ? `Chưa có nguồn đối chiếu cho hãng ${v.hang ?? '?'}` : 'Kiện chưa có mã vận đơn' });
       kq.daKiem++; kq.khongKiemDuoc++; continue;

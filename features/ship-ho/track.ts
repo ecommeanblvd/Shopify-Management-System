@@ -6,6 +6,9 @@ import { emitShipHoEvent } from './mmp-events';
 import { gomLoi, coiLaHong, type TomTatTrack } from './track-tom-tat';
 import { deliveryStatusToEvent } from './mmp-events-map';
 
+/** UPS chỉ vào lượt poll khi đã có key — thiếu key thì kiện UPS vẫn lấy trạng thái từ Lark. */
+const hangTuTrack = (): string[] => (process.env.UPS_CLIENT_ID ? ['fedex', 'dhl', 'ups'] : ['fedex', 'dhl']);
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const isTrackable = isTrackableCarrier;
@@ -75,7 +78,7 @@ export async function trackPendingShipHo(
     .select({ id: schema.shipHoOrders.id, carrier: schema.shipHoOrders.carrierKey })
     .from(schema.shipHoOrders)
     .where(and(
-      inArray(schema.shipHoOrders.carrierKey, ['fedex', 'dhl']),
+      inArray(schema.shipHoOrders.carrierKey, hangTuTrack()),
       sql`${schema.shipHoOrders.trackingNumber} is not null`,
       or(isNull(schema.shipHoOrders.deliveryStatus), ne(schema.shipHoOrders.deliveryStatus, 'delivered')),
       gte(schema.shipHoOrders.createdAt, cutoff),

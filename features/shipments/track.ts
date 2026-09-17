@@ -3,6 +3,9 @@ import { db, schema } from '@/db/client';
 import { trangThaiSauKhiTrack, type DeliveryStatus, CUA_SO_TRACK_NGAY } from '@/lib/fedex/track';
 import { trackAny, isTrackableCarrier } from '@/lib/track-any';
 
+/** UPS chỉ vào lượt poll khi đã có key — thiếu key thì kiện UPS vẫn lấy trạng thái từ Lark. */
+const hangTuTrack = (): string[] => (process.env.UPS_CLIENT_ID ? ['fedex', 'dhl', 'ups'] : ['fedex', 'dhl']);
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** API hãng là nguồn chính; TrackingMore fallback khi hãng lỗi/giới hạn (lib/track-any). */
@@ -71,7 +74,7 @@ export async function trackPendingShipments(
     .select({ id: schema.shipments.id, carrier: schema.shipments.carrierKey })
     .from(schema.shipments)
     .where(and(
-      inArray(schema.shipments.carrierKey, ['fedex', 'dhl']),
+      inArray(schema.shipments.carrierKey, hangTuTrack()),
       sql`${schema.shipments.trackingNumber} is not null`,
       or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
       // Recency theo created_at (thời điểm tạo row — luôn set & đáng tin). KHÔNG

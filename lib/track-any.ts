@@ -5,6 +5,7 @@
  */
 import { trackFedex, type DeliveryStatus } from '@/lib/fedex/track';
 import { trackDhl } from '@/lib/dhl/track';
+import { trackUps } from '@/lib/ups/track';
 import { hasTrackingMoreKey, trackViaTrackingMore } from '@/lib/trackingmore/track';
 
 export interface AnyTrackResult {
@@ -17,6 +18,7 @@ export interface AnyTrackResult {
 const CARRIER_TRACKERS: Record<string, (tn: string) => Promise<{ status: DeliveryStatus; description: string | null; deliveredAt: Date | null }>> = {
   fedex: trackFedex,
   dhl: trackDhl,
+  ups: trackUps,
 };
 
 export function isTrackableCarrier(c: string | null): c is string {
