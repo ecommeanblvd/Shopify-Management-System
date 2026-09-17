@@ -18,6 +18,8 @@
  *   84 "may be late - local delivery restrictions", thời tiết → hạ tầng / thiên tai
  *     (CEO 16/09/2026 xác nhận 84 là hãng gặp sự cố thật nên chuyển chậm)
  *
+ *   CHỈ có sự kiện OC "Label created", không có quét nào khác → nhãn chưa từng gửi (đơn test/huỷ)
+ *
  * GIẤY TỜ THÔNG QUAN THIẾU là lỗi nội bộ ở CẢ HAI ĐẦU (CEO 16/09/2026). Vì vậy mọi sự kiện hải
  * quan đòi giấy tờ — R0055/R0056 yêu cầu từ nhà nhập khẩu, R0142 mô tả hàng không đủ, hay mô tả
  * nhắc tới giấy tờ — KHÔNG làm bằng chứng cho "hải quan giữ hàng", và còn bật cảnh báo.
@@ -65,8 +67,26 @@ const LUAT: Record<string, Luat> = {
   thien_tai_ha_tang: { ma: ['84'], moTa: /weather|natural disaster|emergency|civil unrest|restrictions/i },
 };
 
+/** Lý do đối chiếu bằng cách KHÔNG có gì xảy ra, thay vì tìm một sự kiện. */
+const LUAT_DAC_BIET = new Set(['khong_gui_hang']);
+
 /** Lý do này có luật đối chiếu FedEx không (lý do không loại trừ thì không cần đối chiếu). */
-export const coLuatDoiChieu = (maLyDo: string | null | undefined): boolean => !!maLyDo && maLyDo in LUAT;
+export const coLuatDoiChieu = (maLyDo: string | null | undefined): boolean =>
+  !!maLyDo && (maLyDo in LUAT || LUAT_DAC_BIET.has(maLyDo));
+
+/**
+ * Nhãn chưa từng gửi: có ít nhất một sự kiện OC ("Shipment information sent to FedEx" / Label
+ * created) và KHÔNG có sự kiện nào khác. Chỉ một lần quét lấy hàng thôi là hàng đã đi thật.
+ */
+function doiChieuKhongGuiHang(suKien: readonly SuKienQuet[]): DoiChieu {
+  const khac = suKien.find((e) => (e.eventType ?? '').toUpperCase() !== 'OC');
+  if (khac) {
+    return { ketQua: 'khong_thay', bangChung: null, canhBao: `FedEx đã quét kiện — hàng đã đi: ${bangChungTu(khac)}` };
+  }
+  const oc = suKien.find((e) => (e.eventType ?? '').toUpperCase() === 'OC');
+  if (!oc) return { ketQua: 'khong_thay', bangChung: null };
+  return { ketQua: 'xac_nhan', bangChung: `Chỉ có nhãn, chưa từng quét: ${bangChungTu(oc)}` };
+}
 
 const chu = (e: SuKienQuet) => (e.exceptionDescription || e.eventDescription || '').trim();
 const ma = (e: SuKienQuet) => (e.exceptionCode ?? '').trim().toUpperCase();
@@ -88,6 +108,7 @@ function khop(l: Luat, e: SuKienQuet): boolean {
 
 /** Đối chiếu một lý do với lịch sử quét của một kiện. */
 export function doiChieuFedex(maLyDo: string, suKien: readonly SuKienQuet[]): DoiChieu {
+  if (maLyDo === 'khong_gui_hang') return doiChieuKhongGuiHang(suKien);
   const l = LUAT[maLyDo];
   if (!l) return { ketQua: 'khong_kiem_duoc', bangChung: 'Lý do này không có luật đối chiếu' };
   const trung = suKien.find((e) => khop(l, e));

@@ -32,6 +32,10 @@ export const LY_DO_CHAM: LyDoCham[] = [
   // Chỉ loại khi hải quan giữ hàng mà KHÔNG phải vì thiếu giấy tờ — xem luật đối chiếu.
   { ma: 'thong_quan_ngoai', ten: 'Hải quan giữ hàng — không do thiếu giấy tờ', loaiTruKpi: true, thuocVe: 'hai_quan' },
   { ma: 'thien_tai_ha_tang', ten: 'Thiên tai / sự cố hạ tầng carrier', loaiTruKpi: true, thuocVe: 'hang_van_chuyen' },
+  // Nhãn tạo ra nhưng hàng không bao giờ đi (đơn test, đơn huỷ sau khi in nhãn) — không phải
+  // kiện thật nên rời mẫu số. Chỉ được loại khi FedEx xác nhận nhãn chưa từng được quét
+  // (CEO 17/09/2026, ví dụ 26-INSLG-SV-0064 / 875606002523: chỉ có "Label created" từ 11/08).
+  { ma: 'khong_gui_hang', ten: 'Đơn test / đơn huỷ — tạo nhãn nhưng không gửi hàng', loaiTruKpi: true, thuocVe: 'khac' },
   { ma: 'thong_quan_thieu_ct_xuat', ten: 'Thiếu hoặc sai giấy tờ thông quan đầu xuất (của mình)', loaiTruKpi: false, thuocVe: 'noi_bo' },
   { ma: 'sai_thong_tin_van_don', ten: 'Sai thông tin khi tạo vận đơn', loaiTruKpi: false, thuocVe: 'noi_bo' },
   { ma: 'gui_tre_so_voi_don', ten: 'Gửi hàng trễ so với ngày chốt đơn', loaiTruKpi: false, thuocVe: 'noi_bo' },

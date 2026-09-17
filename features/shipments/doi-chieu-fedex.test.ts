@@ -88,3 +88,25 @@ describe('laLoiTamThoi — lỗi FedEx nào được thử lại', () => {
     expect(laLoiTamThoi('TRACKING.TRACKINGNUMBER.NOTFOUND')).toBe(false);
   });
 });
+
+describe('đơn test / huỷ — nhãn chưa từng gửi (CEO 17/09/2026)', () => {
+  const OC = { eventType: 'OC', eventDescription: 'Shipment information sent to FedEx', date: '2026-08-11T05:38:58-05:00' };
+  const PU = { eventType: 'PU', eventDescription: 'Picked up', date: '2026-08-12T10:00:00-05:00' };
+
+  it('875606002523: chỉ có "Label created" → xác nhận không gửi hàng', () => {
+    const r = doiChieuFedex('khong_gui_hang', [OC]);
+    expect(r.ketQua).toBe('xac_nhan');
+    expect(r.bangChung).toContain('chưa từng quét');
+  });
+  it('đã có một lần quét lấy hàng là hàng đã đi — không xác nhận, kèm cảnh báo', () => {
+    const r = doiChieuFedex('khong_gui_hang', [OC, PU]);
+    expect(r.ketQua).toBe('khong_thay');
+    expect(r.canhBao).toContain('hàng đã đi');
+  });
+  it('không có sự kiện nào thì không kết luận được', () => {
+    expect(doiChieuFedex('khong_gui_hang', []).ketQua).toBe('khong_thay');
+  });
+  it('lý do mới có luật đối chiếu', () => {
+    expect(coLuatDoiChieu('khong_gui_hang')).toBe(true);
+  });
+});
