@@ -45,6 +45,16 @@ describe('parsePackRow', () => {
     expect(parsePackRow({ 'Order Number': '#X', 'Couriers': 'Aramex' }).carrierKey).toBe('aramex');
     expect(parsePackRow({ 'Order Number': '#Y', 'Couriers': [{ text: 'ARAMEX' }] }).carrierKey).toBe('aramex');
   });
+  it('mã 1Z… là UPS dù Couriers ghi FedEx', () => {
+    const r = parsePackRow({ 'Order Number': '#Z', 'Tracking Number': '1Z2050VDDG23324091', 'Couriers': 'FedEx' });
+    expect(r.carrierKey).toBe('ups');
+    expect(r.warnings.some((w) => w.includes('UPS'))).toBe(true);
+    expect(parsePackRow({ 'Order Number': '#Z', 'Tracking Number': '1Z2050VDD919168105' }).carrierKey).toBe('ups');
+    expect(parsePackRow({ 'Order Number': '#Z', 'Couriers': 'UPS' }).carrierKey).toBe('ups');
+  });
+  it('mã FedEx số vẫn theo cột Couriers', () => {
+    expect(parsePackRow({ 'Order Number': '#Z', 'Tracking Number': '876290724496', 'Couriers': 'FedEx' }).carrierKey).toBe('fedex');
+  });
   it('dims 2 chiều → h null', () => {
     expect(parsePackRow({ 'Dimension ( điền tay)': '28x42' }).dims).toEqual({ l: 28, w: 42, h: null });
   });
@@ -59,7 +69,7 @@ describe('parsePackRow', () => {
     expect(big.warnings.some((w) => w.includes('cân'))).toBe(true);
   });
   it('carrier lạ → null + warning', () => {
-    const r = parsePackRow({ 'Couriers': 'UPS' });
+    const r = parsePackRow({ 'Couriers': 'ViettelPost' });
     expect(r.carrierKey).toBeNull();
     expect(r.warnings.some((w) => w.toLowerCase().includes('carrier'))).toBe(true);
   });

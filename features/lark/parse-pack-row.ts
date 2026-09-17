@@ -10,7 +10,7 @@ export interface PackRow {
   weightKg: number | null;
   dims: { l: number; w: number; h: number | null } | null;
   trackingNumber: string | null;
-  carrierKey: 'fedex' | 'dhl' | 'aramex' | null;
+  carrierKey: HangPack | null;
   labelDate: Date | null;
   warnings: string[];
 }
@@ -45,9 +45,20 @@ function parseDims(raw: string | null): PackRow['dims'] {
   return { l, w, h: Number.isFinite(h) && h > 0 ? h : null };
 }
 
-function normalizeCourier(raw: string | null): 'fedex' | 'dhl' | 'aramex' | null {
+export type HangPack = 'fedex' | 'dhl' | 'aramex' | 'ups';
+
+/** Hãng nhận ra chắc chắn từ dạng mã vận đơn — thắng cột Couriers vì cột này
+ *  hay chọn nhầm. UPS: "1Z" + 16 ký tự (CEO 17/09: mã 1Z… đang bị ghi FedEx). */
+export function hangTheoMaVanDon(tn: string | null | undefined): HangPack | null {
+  if (!tn) return null;
+  if (/^1Z[0-9A-Z]{16}$/i.test(tn.replace(/\s+/g, ''))) return 'ups';
+  return null;
+}
+
+function normalizeCourier(raw: string | null): HangPack | null {
   if (!raw) return null;
   const s = raw.toLowerCase();
+  if (s.includes('ups')) return 'ups';
   if (s.includes('fedex')) return 'fedex';
   if (s.includes('dhl')) return 'dhl';
   if (s.includes('aramex')) return 'aramex';
@@ -112,8 +123,8 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
 
   // carrier
   const cRaw = larkText(fields['Couriers']);
-  const carrierKey = normalizeCourier(cRaw);
-  if (cRaw != null && carrierKey === null) warnings.push(`carrier lạ: "${cRaw}"`);
+  const theoCot = normalizeCourier(cRaw);
+  if (cRaw != null && theoCot === null) warnings.push(`carrier lạ: "${cRaw}"`);
 
   // Ngày Lark = epoch (ms, UTC) của NỬA ĐÊM GIỜ VN. Phần còn lại của hệ thống
   // (mốc fuel, rate-card, import cũ) lưu ngày dạng "giờ-treo VN" vào cột timestamp
@@ -144,5 +155,8 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     labelDate = null;
   }
 
+  const theoMa = hangTheoMaVanDon(trackingNumber);
+  if (theoMa && theoCot && theoMa !== theoCot) warnings.push(`Couriers ghi "${cRaw}" nhưng mã ${trackingNumber} là ${theoMa.toUpperCase()}`);
+  const carrierKey = theoMa ?? theoCot;
   return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, warnings };
 }
