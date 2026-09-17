@@ -34,6 +34,8 @@ export async function generateStatement(
       eq(schema.shipHoOrders.partnerBrandSlug, partnerBrandSlug),
       sql`${schema.shipHoOrders.chargedVnd} is not null`,
       isNull(schema.shipHoOrders.statementId),
+      // Chỉ tạo nhãn, không gửi hàng (FedEx xác nhận) → không thu brand (CEO 17/09).
+      sql`not (coalesce(${schema.shipHoOrders.lyDoCham}, '') = 'khong_gui_hang' and coalesce(${schema.shipHoOrders.lyDoDoiChieu}, '') = 'xac_nhan')`,
       inArray(schema.shipHoOrders.status, ['shipped', 'delivered'] as ('shipped' | 'delivered')[]),
       sql`${schema.shipHoOrders.quotedAt}::date >= ${periodStart}`,
       sql`${schema.shipHoOrders.quotedAt}::date <= ${periodEnd}`,
