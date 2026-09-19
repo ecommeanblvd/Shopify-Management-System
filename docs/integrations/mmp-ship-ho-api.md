@@ -186,7 +186,7 @@ Body (envelope): { "event": string, "mmpRef": string, "code": string, "occurredA
 | | `order.accepted` | Đã nhận xử lý |
 | | `order.needs_info` | Thiếu thông tin (địa chỉ…) — cần brand bổ sung |
 | | `order.rejected` | Không nhận (kèm lý do) |
-| | `order.cancelled` | Đã hủy |
+| | `order.cancelled` | Đã hủy. SMS gửi khi hãng xác nhận kiện CHƯA TỪNG GỬI (chỉ có sự kiện tạo nhãn). `data`: `{ reason: "khong_gui_hang", message, chargedVnd: 0, evidence? }` — brand không bị thu phí đơn này; MMP nên đóng đơn và bỏ giá đã báo. Gửi đúng một lần mỗi đơn. |
 | Giá | `order.measured` | SMS (Inecso) cân/đo lại kiện tại kho — **luôn gửi** (khớp hay lệch). MMP ghi kết quả lên đơn của brand; giá mới (nếu đổi) nằm trong `data.price`. Chi tiết payload: mục 4b. |
 | Vận chuyển | `shipment.booked` | Đã tạo/SỬA vận đơn. `data`: `{ trackingNumber, carrierKey ("fedex"\|"dhl"\|null), trackingUrl (link tra cứu public\|null), service, previousTrackingNumber? }`. Bắn lại mỗi lần tracking/carrier đổi — bản `occurredAt` mới nhất là hiện hành; `previousTrackingNumber` có mặt khi SỬA mã (MMP thay mã cũ). |
 | | `shipment.picked_up` / `in_transit` / `customs` / `out_for_delivery` | Mốc hành trình |
