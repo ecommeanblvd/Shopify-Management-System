@@ -4,7 +4,7 @@
  */
 import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listAllRecords, listAllQcRecords } from './client';
+import { listAllRecords, listAllQcRecords, type LarkRecord } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
 import { parsePackRow, larkText, type PackRow } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
@@ -46,6 +46,8 @@ export interface LarkSyncSummary {
   larkStatusUpserted: number;
   qcUpserted: number;
   deliveryFrozen: number;
+  /** Record Lark đã tải — chỉ có khi gọi với `giuRecords` (ghi ngược dùng lại, khỏi đọc thêm). */
+  records?: LarkRecord[];
 }
 
 /** Số dòng tối đa mỗi transaction khi áp update/create (tránh transaction dài
@@ -72,7 +74,7 @@ function patchFrom(row: PackRow): Record<string, unknown> {
   return p;
 }
 
-export async function syncLarkPacks(): Promise<LarkSyncSummary> {
+export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<LarkSyncSummary> {
   try {
     const records = await listAllRecords();
     const rows = records.map((r) => parsePackRow(r.fields)).filter((r) => r.orderNumber || r.logUniqueCode);
@@ -371,7 +373,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
     // `updated` nay là số dòng THẬT SỰ ghi, không phải số dòng xét — để nhật ký
     // phản ánh đúng khối lượng ghi. Thêm boQuaKhongDoi để thấy hiệu quả.
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: canUpdate.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen, boQuaKhongDoi: boQuaUpdate + boQuaStatus };
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: canUpdate.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen, boQuaKhongDoi: boQuaUpdate + boQuaStatus, ...(opts?.giuRecords ? { records } : {}) };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.
