@@ -32,7 +32,9 @@ export function khopRecordTheoCode(records: readonly LarkRecord[]): Map<string, 
 }
 
 export interface TomTatGhiNguoc {
-  cheDo: CheDoGhiNguoc; soi: number; khopLark: number; boQuaNguon: number;
+  cheDo: CheDoGhiNguoc; soi: number; khopLark: number;
+  /** Kiện có nguồn không phải hãng (trạng thái + Ngày giao thực tế không được ghi) — không loại trừ chi phí/ngày dự kiến. */
+  boQuaNguon: number;
   dongGhi: number; oGhi: { trangThai: number; ngay: number; chiPhi: number };
   lech: number; viDuLech: string[]; loi: number; loiMau?: string;
 }
@@ -96,10 +98,8 @@ export async function ghiNguocLark(records: readonly LarkRecord[]): Promise<TomT
       kq.lech += p.lech.length;
       for (const l of p.lech) if (kq.viDuLech.length < SO_VI_DU_LECH) kq.viDuLech.push(`${r.code} · ${l}`);
     }
-    if (Object.keys(p.patch).length === 0) {
-      if (!laNguonHang(kien.deliverySource)) kq.boQuaNguon++;
-      continue;
-    }
+    if (!laNguonHang(kien.deliverySource)) kq.boQuaNguon++;
+    if (Object.keys(p.patch).length === 0) continue;
     kq.oGhi.trangThai += p.nhom.trangThai; kq.oGhi.ngay += p.nhom.ngay; kq.oGhi.chiPhi += p.nhom.chiPhi;
     kq.dongGhi++;
     if (cheDo !== 'ghi') continue;

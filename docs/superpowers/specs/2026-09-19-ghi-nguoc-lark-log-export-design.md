@@ -22,7 +22,7 @@ Ops **ngừng gõ 13 ô nhóm C + D**; SMS điền thay, mỗi giờ, lên đún
 ## 3. Nguyên tắc ghi (CEO chốt 19/09/2026 — phương án 1)
 
 1. **Hãng là sự thật cho trạng thái và ngày giao thực tế.** SMS ghi đè `Dispatch Category`, `Dispatch Status`, `Ngày giao thực tế` mỗi khi hãng có tin mới, kể cả khi Ops đã gõ khác. Khớp với quyết định trước: POD trên hoá đơn ghi đè ngày Lark nhập tay.
-2. **Chỉ ghi khi nguồn phía SMS là hãng.** Kiện có `delivery_source ∈ {fedex, dhl, ups, trackingmore, carrier_bill}` mới được ghi. Kiện có nguồn `lark` hoặc trống thì **không ghi** — SMS không bao giờ lấy dữ liệu Lark ghi lại vào Lark.
+2. **Cổng "nguồn hãng" chỉ áp cho trạng thái và ngày giao thực tế.** Hai ô chọn và `Ngày giao thực tế` chỉ ghi khi `delivery_source ∈ {fedex, dhl, ups, trackingmore, carrier_bill}` — SMS không bao giờ lấy dữ liệu Lark ghi lại vào Lark. Chi phí (từ `shipment_charges`, hoá đơn hãng) và `Ngày giao dự kiến` (cam kết SOP) không thể là dữ liệu Lark dội lại nên điền ô trống bất kể nguồn trạng thái. (Sửa 19/09/2026 sau lượt dry: luật cũ chặn chi phí ở 834/864 kiện.)
 3. **Chi phí chỉ điền ô trống.** Số Ops đã gõ có thể đã được đối soát tay; lệch thì ghi nhật ký, không sửa.
 4. **`Ngày giao dự kiến` chỉ điền ô trống.** SMS không có ngày hãng hứa; SMS điền **cam kết SOP** (`label_created_at + slaCuaNuoc(nước)`) để công thức Lark `Final | Delivery Status` vẫn phân được "Đúng / Chậm / Nhanh hơn dự kiến" như KPI 1.2 đang chấm. Ops gõ ngày hãng hứa thì giữ.
 5. **Không tạo, không xoá dòng Lark** (giữ D-045). Chỉ sửa ô của dòng đã có.

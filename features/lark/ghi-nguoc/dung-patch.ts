@@ -1,9 +1,11 @@
 /**
  * THUẦN: dựng bản vá cho MỘT dòng Lark LOG-Export từ kiện SMS (spec 2026-09-19 §3, §5).
  *
- * Luật: nguồn không phải hãng → không ghi gì. Trạng thái + Ngày giao thực tế GHI ĐÈ (hãng là
- * sự thật). Ngày giao dự kiến + chi phí CHỈ ĐIỀN Ô TRỐNG. Mọi ô chỉ vào patch khi KHÁC giá trị
- * hiện có. Ô Ops gõ khác SMS được liệt kê ở `lech` để nhật ký — dù có ghi đè hay không.
+ * Luật: Trạng thái + Ngày giao thực tế GHI ĐÈ (hãng là sự thật), nhưng chỉ khi nguồn là hãng.
+ * Ngày giao dự kiến + chi phí CHỈ ĐIỀN Ô TRỐNG. Mọi ô chỉ vào patch khi KHÁC giá trị hiện có.
+ * Ô Ops gõ khác SMS được liệt kê ở `lech` để nhật ký — dù có ghi đè hay không.
+ * Cổng nguồn hãng chỉ áp cho trạng thái và ngày giao thực tế — chi phí đến từ hoá đơn hãng, ngày
+ * dự kiến là cam kết SOP, cả hai không thể là dữ liệu Lark dội lại (CEO 19/09/2026).
  */
 import { larkText } from '../parse-pack-row';
 import { laNguonHang } from '../nguon-hang';
@@ -34,26 +36,28 @@ const docSo = (v: unknown): number | null => (typeof v === 'number' && Number.is
 
 export function dungPatch(kien: KienGhiNguoc, charge: ChargeGhiNguoc | null, oLark: Record<string, unknown>): KetQuaPatch {
   const kq: KetQuaPatch = { patch: {}, lech: [], nhom: { trangThai: 0, ngay: 0, chiPhi: 0 } };
-  if (!laNguonHang(kien.deliverySource)) return kq;
+  const nguonHang = laNguonHang(kien.deliverySource);
 
-  // Trạng thái — ghi đè.
-  const tt = mapTrangThai(kien.deliveryStatus);
-  if (tt) {
-    for (const [cot, moi] of [[COT.category, tt.category], [COT.status, tt.status]] as const) {
-      const cu = larkText(oLark[cot]);
-      if (cu === moi) continue;
-      if (cu != null) kq.lech.push(`${cot}: Lark "${cu}" → hãng "${moi}"`);
-      kq.patch[cot] = moi; kq.nhom.trangThai++;
+  if (nguonHang) {
+    // Trạng thái — ghi đè.
+    const tt = mapTrangThai(kien.deliveryStatus);
+    if (tt) {
+      for (const [cot, moi] of [[COT.category, tt.category], [COT.status, tt.status]] as const) {
+        const cu = larkText(oLark[cot]);
+        if (cu === moi) continue;
+        if (cu != null) kq.lech.push(`${cot}: Lark "${cu}" → hãng "${moi}"`);
+        kq.patch[cot] = moi; kq.nhom.trangThai++;
+      }
     }
-  }
 
-  // Ngày giao thực tế — ghi đè, chỉ khi đã giao.
-  if (kien.deliveryStatus === 'delivered' && kien.deliveredAt) {
-    const moi = ngayLark(kien.deliveredAt);
-    const cu = docNgayLark(oLark[COT.ngayGiaoThucTe]);
-    if (cu !== moi) {
-      if (cu != null) kq.lech.push(`${COT.ngayGiaoThucTe}: Lark ${new Date(cu).toISOString().slice(0, 10)} → hãng ${new Date(moi).toISOString().slice(0, 10)}`);
-      kq.patch[COT.ngayGiaoThucTe] = moi; kq.nhom.ngay++;
+    // Ngày giao thực tế — ghi đè, chỉ khi đã giao.
+    if (kien.deliveryStatus === 'delivered' && kien.deliveredAt) {
+      const moi = ngayLark(kien.deliveredAt);
+      const cu = docNgayLark(oLark[COT.ngayGiaoThucTe]);
+      if (cu !== moi) {
+        if (cu != null) kq.lech.push(`${COT.ngayGiaoThucTe}: Lark ${new Date(cu).toISOString().slice(0, 10)} → hãng ${new Date(moi).toISOString().slice(0, 10)}`);
+        kq.patch[COT.ngayGiaoThucTe] = moi; kq.nhom.ngay++;
+      }
     }
   }
 

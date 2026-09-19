@@ -12,14 +12,26 @@ const charge = (p: Partial<ChargeGhiNguoc> = {}): ChargeGhiNguoc => ({
   directSignature: 92700, vat: 106552, gogreen: 0, elevatedRisk: 0, importHandling: 68300, residential: 84400, ...p,
 });
 
-describe('dungPatch — nguồn', () => {
-  it('nguồn lark → patch rỗng dù có đủ dữ liệu, kể cả chi phí', () => {
-    const r = dungPatch(kien({ deliverySource: 'lark', deliveryStatus: 'delivered', deliveredAt: new Date() }), charge(), {});
-    expect(r.patch).toEqual({});
-    expect(r.nhom).toEqual({ trangThai: 0, ngay: 0, chiPhi: 0 });
+describe('dungPatch — nguồn (cổng chỉ áp cho trạng thái + ngày giao thực tế)', () => {
+  it('nguồn lark → KHÔNG ghi ô chọn và Ngày giao thực tế, nhưng vẫn điền chi phí + ngày dự kiến trống', () => {
+    const r = dungPatch(kien({ deliverySource: 'lark', deliveryStatus: 'delivered', deliveredAt: new Date('2026-09-15T08:00:00Z') }), charge(), {});
+    expect(COT.category in r.patch).toBe(false);
+    expect(COT.status in r.patch).toBe(false);
+    expect(COT.ngayGiaoThucTe in r.patch).toBe(false);
+    expect(r.patch[COT.ngayGiaoDuKien]).toBe(ngayDuKien(new Date('2026-09-10T00:00:00Z'), 'US'));
+    expect(r.patch[COT_CHI_PHI.totalAmount]).toBe(1438453);
+    expect(r.nhom).toEqual({ trangThai: 0, ngay: 1, chiPhi: 7 });
+    expect(r.lech).toEqual([]);
   });
-  it('nguồn null → patch rỗng', () => {
-    expect(dungPatch(kien({ deliverySource: null }), charge(), {}).patch).toEqual({});
+  it('nguồn null → như nguồn lark', () => {
+    const r = dungPatch(kien({ deliverySource: null }), charge(), {});
+    expect(COT.category in r.patch).toBe(false);
+    expect(r.nhom.chiPhi).toBe(7);
+  });
+  it('nguồn lark, ô chi phí đã có số khác → vẫn ghi lệch (không ghi đè)', () => {
+    const r = dungPatch(kien({ deliverySource: 'lark' }), charge(), { [COT_CHI_PHI.totalAmount]: 1 });
+    expect(COT_CHI_PHI.totalAmount in r.patch).toBe(false);
+    expect(r.lech.filter((l) => l.includes(COT_CHI_PHI.totalAmount))).toHaveLength(1);
   });
 });
 
