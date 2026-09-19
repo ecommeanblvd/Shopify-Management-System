@@ -66,6 +66,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Sự kiện hỏng nằm kẹt vĩnh viễn, MMP không nhận được' },
   { key: 'push-nhan-hang', ten: 'Đẩy "MEAN đã nhận" + Mã món lên Lark', chuKyPhut: CHU_KY_SYNC_LARK,
     hauQua: 'QC/đóng gói trên Lark không thấy món đã về, MMP thiếu ngày nhận' },
+  { key: 'ghi-nguoc-lark', ten: 'Ghi trạng thái giao + chi phí hãng lên Lark', chuKyPhut: CHU_KY_SYNC_LARK,
+    hauQua: 'Ops phải gõ tay lại trạng thái giao, ngày giao, chi phí hãng trên LOG-Export' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
     hauQua: 'Database phình tới trần dung lượng' },
   { key: 'sync-unit-cost', ten: 'Đọc Cost per item từ Shopify', chuKyPhut: 1 * NGAY,

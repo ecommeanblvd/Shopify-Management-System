@@ -21,6 +21,7 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { backfillCourierLark } from '@/features/lark/courier-backfill';
+import { ghiNguocLark } from '@/features/lark/ghi-nguoc/ghi-nguoc';
 import { backfillNhanHangLark } from '@/features/lark/nhan-hang-backfill';
 import { syncLarkDonShipHo } from '@/features/ship-ho/sync-lark-don';
 async function main(): Promise<void> {
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
   // ngày gửi trên hệ thống là ngày ngồi nhập (CEO 11/09/2026).
   await chayMotJob('sync-lark-ship-ho', () => syncLarkDonShipHo());
 
-  const s = await syncLarkPacks();
+  const s = await syncLarkPacks({ giuRecords: true });
   process.stdout.write(
     `sync-lark: tạo ${s.created}, cập nhật ${s.updated}, không khớp ${s.unmatched.length}, skip ${s.skipped}, warning ${s.warnings.length}\n`,
   );
@@ -62,6 +63,13 @@ async function main(): Promise<void> {
   } catch (err) {
     process.stderr.write(`courier→lark: lỗi ${err instanceof Error ? err.message : String(err)}\n`);
   }
+
+  // Ghi ngược trạng thái giao, ngày giao, chi phí hãng lên LOG-Export (spec 19/09/2026). Dùng lại
+  // record vừa tải — không đọc Lark thêm lượt nào. Gác env LARK_GHI_NGUOC ('dry' → chỉ báo cáo).
+  await chayMotJob('ghi-nguoc-lark', () => ghiNguocLark(s.records ?? []), (tt) => {
+    const t = tt as { loi: number; loiMau?: string };
+    return t.loi > 0 ? `${t.loi} dòng ghi lỗi — ${t.loiMau ?? ''}` : null;
+  });
 
   // "MEAN đã nhận" từ kho quét trên SMS → bảng Lark WH (kèm Mã món). Gác env
   // LARK_NHAN_HANG_PUSH tới khi ops tạo cột "Mã món". Nhật ký riêng để trang
