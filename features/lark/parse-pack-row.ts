@@ -2,6 +2,8 @@
  * THUẦN: 1 record Lark Bitable (object `fields`) → PackRow chuẩn hoá.
  * Field Lark có thể là string, số, hoặc rich array [{text,type}] → đọc cả 3.
  */
+import { hangTheoMaVanDon } from '@/lib/ma-van-don';
+
 export const MAX_WEIGHT_KG = 100;
 
 export interface PackRow {
@@ -47,13 +49,9 @@ function parseDims(raw: string | null): PackRow['dims'] {
 
 export type HangPack = 'fedex' | 'dhl' | 'aramex' | 'ups';
 
-/** Hãng nhận ra chắc chắn từ dạng mã vận đơn — thắng cột Couriers vì cột này
- *  hay chọn nhầm. UPS: "1Z" + 16 ký tự (CEO 17/09: mã 1Z… đang bị ghi FedEx). */
-export function hangTheoMaVanDon(tn: string | null | undefined): HangPack | null {
-  if (!tn) return null;
-  if (/^1Z[0-9A-Z]{16}$/i.test(tn.replace(/\s+/g, ''))) return 'ups';
-  return null;
-}
+/** Hãng nhận ra chắc chắn từ dạng mã vận đơn — thắng cột Couriers vì cột này hay chọn nhầm
+ *  (CEO 17/09: mã 1Z… đang bị ghi FedEx). Luật ở lib/ma-van-don.ts, dùng chung với ship hộ. */
+export { hangTheoMaVanDon } from '@/lib/ma-van-don';
 
 function normalizeCourier(raw: string | null): HangPack | null {
   if (!raw) return null;

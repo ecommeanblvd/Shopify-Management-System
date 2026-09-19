@@ -8,6 +8,7 @@ import { deliveryStatusToEvent } from './mmp-events-map';
 import { orderStatusAfterTrack } from './track';
 import { requireManageShipHo } from './require-manage';
 import { resolveShippedAt } from './ship-date';
+import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 
 /** Link tra cứu public cho MMP render cạnh tracking. */
 function trackingUrl(carrierKey: string | null, tracking: string): string | null {
@@ -52,20 +53,24 @@ export async function setShipHoTracking(
   const shipped = resolveShippedAt(cur.shippedAt, input.shippedAt);
   if (!shipped.ok) return { ok: false, error: shipped.error };
 
-  const newCarrier = input.carrierKey !== undefined ? input.carrierKey : cur.carrierKey;
+  // Không chọn hãng và đơn chưa có hãng → nhận theo dạng mã (CEO 19/09): đơn không hãng thì không
+  // tra được và MMP không nhận sự kiện vận chuyển nào.
+  const suyTuMa = hangTheoMaVanDon(tracking);
+  const newCarrier = input.carrierKey !== undefined ? input.carrierKey : (cur.carrierKey ?? suyTuMa);
+  const ghiHang = input.carrierKey !== undefined || (cur.carrierKey == null && suyTuMa != null);
   // Gán tracking → coi như đã gửi, trừ khi đã ở trạng thái cao hơn.
   const bump = cur.status === 'draft' || cur.status === 'quoted';
   await db.update(schema.shipHoOrders).set({
     trackingNumber: tracking,
     shippedAt: shipped.value,
-    ...(input.carrierKey !== undefined ? { carrierKey: input.carrierKey } : {}),
+    ...(ghiHang ? { carrierKey: newCarrier } : {}),
     ...(bump ? { status: 'shipped' as const } : {}),
   }).where(eq(schema.shipHoOrders.id, orderId));
 
   // Báo MMP MỌI lần tracking/carrier thay đổi (không chỉ lần đầu) — sửa tracking
   // sau khi đã shipped cũng phải sang MMP để brand thấy mã mới. Payload kèm carrier
   // đã chọn + link tra cứu. Idempotent phía MMP theo occurredAt (bản mới nhất thắng).
-  const changed = cur.trackingNumber !== tracking || (input.carrierKey !== undefined && cur.carrierKey !== input.carrierKey);
+  const changed = cur.trackingNumber !== tracking || (ghiHang && cur.carrierKey !== newCarrier);
   if (bump || changed) {
     await emitShipHoEvent(
       { id: cur.id, code: cur.code, source: cur.source, mmpRef: cur.mmpRef },

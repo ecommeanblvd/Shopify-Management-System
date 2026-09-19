@@ -9,6 +9,7 @@
  * Một chiều Lark → hệ thống. KHÔNG ghi ngược lên Lark.
  */
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { db, schema } from '@/db/client';
 import { listShipHoDonRecords } from '@/features/lark/client';
 import { docDongLark, ghepBrand, duDeTao, type DongLarkDon } from './lark-don';
@@ -122,6 +123,8 @@ async function accountCuaHang(carrierKey: string | null): Promise<string | null>
 
 async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
   const code = await maDonTrong(d.maLark ?? `LARK-${d.recordId}`);
+  // Lark không ghi hãng → nhận theo dạng mã vận đơn (CEO 19/09).
+  const carrierKey = d.carrierKey ?? hangTheoMaVanDon(d.trackingNumber);
   await db.insert(schema.shipHoOrders).values({
     code,
     partnerBrandSlug: brandSlug,
@@ -135,8 +138,8 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     houseNumber: d.soNha,
     weightKg: String(d.canKg),
     source: 'lark',
-    carrierKey: d.carrierKey,
-    carrierAccountId: await accountCuaHang(d.carrierKey),
+    carrierKey,
+    carrierAccountId: await accountCuaHang(carrierKey),
     trackingNumber: d.trackingNumber,
     shippedAt: d.ngayGui,
     // KHÔNG ghi tiền từ Lark: giá chi lấy từ hoá đơn FedEx (cron đối soát), giá thu do

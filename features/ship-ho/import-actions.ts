@@ -1,6 +1,7 @@
 'use server';
 
 import { eq, inArray, sql } from 'drizzle-orm';
+import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
@@ -34,7 +35,7 @@ function toValues(p: ParsedShipHoImport, partnerBrandSlug: string) {
     dimWidthCm: p.dimWidthCm == null ? null : String(p.dimWidthCm),
     dimHeightCm: p.dimHeightCm == null ? null : String(p.dimHeightCm),
     packagingType: p.packagingType,
-    carrierKey: p.carrierKey,
+    carrierKey: p.carrierKey ?? hangTheoMaVanDon(p.trackingNumber),
     trackingNumber: p.trackingNumber,
     // File có tracking → ngày đi hàng mặc định = ngày nhập lên hệ thống (staff sửa sau).
     shippedAt: p.trackingNumber ? vnToday() : null,
@@ -69,6 +70,8 @@ function updateSetFor(p: ParsedShipHoImport, partnerBrandSlug: string, currentSt
     set.shippedAt = sql`COALESCE(${schema.shipHoOrders.shippedAt}, ${vnToday()})`;
   }
   if (p.carrierKey != null) set.carrierKey = p.carrierKey;
+  // File không ghi hãng → chỉ điền khi đơn CHƯA có hãng, nhận theo dạng mã (CEO 19/09).
+  else if (p.trackingNumber != null && hangTheoMaVanDon(p.trackingNumber)) set.carrierKey = sql`COALESCE(${schema.shipHoOrders.carrierKey}, ${hangTheoMaVanDon(p.trackingNumber)})`;
   return set;
 }
 
