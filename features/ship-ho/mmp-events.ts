@@ -7,6 +7,11 @@ import { lyDoBoQua } from './event-obsolete';
 export type ShipHoEmitOrder = { id: string; code: string; source: string; mmpRef: string | null };
 const MAX_ATTEMPTS = 8;
 
+/** MMP có phản hồi nhưng không phải 2xx — giữ mã HTTP để ghi vào outbox (MMP đối chiếu 19/09/2026). */
+export class LoiHttpMmp extends Error {
+  constructor(public readonly status: number) { super(`http ${status}`); }
+}
+
 /** THUẦN: dựng envelope webhook. Đơn khởi tạo từ SMS (source 'internal') không có
  *  mmpRef của MMP → dùng CODE SMS làm ref ổn định + origin:'sms' để MMP biết phải
  *  TẠO đơn khi nhận order.received (thay vì lookup). Đơn mmp giữ nguyên shape cũ. */
@@ -78,7 +83,7 @@ export async function deliverShipHoEvent(row: {
     });
     if (res.ok) {
       await db.update(schema.shipHoOrderEvents)
-        .set({ deliveryStatus: 'delivered', attempts, lastAttemptAt: new Date(), lastError: null })
+        .set({ deliveryStatus: 'delivered', attempts, lastAttemptAt: new Date(), lastError: null, lastHttpStatus: res.status })
         .where(eq(schema.shipHoOrderEvents.id, row.id));
       // Đơn ORIGIN SMS: MMP là nơi cấp số chính thức (INSLG) — response order.received
       // trả { code } → SMS nhận mã đó làm code+mmpRef; mã operator nhập (reference
@@ -122,11 +127,13 @@ export async function deliverShipHoEvent(row: {
       }
       return;
     }
-    throw new Error(`http ${res.status}`);
+    throw new LoiHttpMmp(res.status);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'fetch failed';
+    // Lỗi mạng / timeout không có mã HTTP → NULL, để MMP phân biệt "không tới nơi" với "tới nhưng bị từ chối".
+    const lastHttpStatus = e instanceof LoiHttpMmp ? e.status : null;
     await db.update(schema.shipHoOrderEvents)
-      .set({ deliveryStatus: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending', attempts, lastAttemptAt: new Date(), lastError: msg })
+      .set({ deliveryStatus: attempts >= MAX_ATTEMPTS ? 'failed' : 'pending', attempts, lastAttemptAt: new Date(), lastError: msg, lastHttpStatus })
       .where(eq(schema.shipHoOrderEvents.id, row.id));
   }
 }

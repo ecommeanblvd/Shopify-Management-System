@@ -2382,6 +2382,8 @@ export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
   attempts: integer('attempts').notNull().default(0),
   lastAttemptAt: timestamp('last_attempt_at'),
   lastError: text('last_error'),
+  /** Mã HTTP MMP trả ở lần gửi gần nhất; NULL = chưa gửi hoặc lỗi mạng không có phản hồi. */
+  lastHttpStatus: integer('last_http_status'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

@@ -22,3 +22,13 @@ describe('buildEnvelope', () => {
     expect(e.code).toBe('26-INSLG-SV-0013');
   });
 });
+
+describe('LoiHttpMmp', () => {
+  it('giữ mã HTTP và message cũ dạng "http <mã>" để last_error không đổi', async () => {
+    const { LoiHttpMmp } = await import('./mmp-events');
+    const e = new LoiHttpMmp(401);
+    expect(e.status).toBe(401);
+    expect(e.message).toBe('http 401');
+    expect(e).toBeInstanceOf(Error);
+  });
+});
