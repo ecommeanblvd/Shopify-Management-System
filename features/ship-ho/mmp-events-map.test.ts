@@ -10,6 +10,10 @@ describe('deliveryStatusToEvent', () => {
     expect(deliveryStatusToEvent('failure')).toBe('shipment.exception');
     expect(deliveryStatusToEvent('returned')).toBe('shipment.exception');
   });
+  it('mới tạo nhãn / chưa rõ → null (chưa có gì để báo brand)', () => {
+    expect(deliveryStatusToEvent('label_created')).toBeNull();
+    expect(deliveryStatusToEvent('unknown')).toBeNull();
+  });
   it('còn lại (in_transit/out_for_delivery/…) → shipment.in_transit', () => {
     expect(deliveryStatusToEvent('in_transit')).toBe('shipment.in_transit');
     expect(deliveryStatusToEvent('out_for_delivery')).toBe('shipment.in_transit');

@@ -49,8 +49,8 @@ export async function trackAndStoreShipHo(
       lastTrackedAt: new Date(),
       status: giu == null ? o.status : (orderStatusAfterTrack(o.status, giu) as typeof o.status),
     }).where(eq(schema.shipHoOrders.id, orderId));
-    if (giu != null && r.status !== o.deliveryStatus) {
-      const evt = deliveryStatusToEvent(r.status);
+    const evt = giu != null && r.status !== o.deliveryStatus ? deliveryStatusToEvent(r.status) : null;
+    if (evt) {
       await emitShipHoEvent(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
         evt,

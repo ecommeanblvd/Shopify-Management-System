@@ -12,6 +12,7 @@ import { layLichSuQuet, TOI_DA_MOI_LO, CUA_SO_TRACK_NGAY } from '@/lib/fedex/tra
 import { layLichSuQuetUps } from '@/lib/ups/track';
 import { doiChieuFedex, coLuatDoiChieu, type DoiChieu } from './doi-chieu-fedex';
 import { doiChieuUps } from './doi-chieu-ups';
+import { baoHuyDonKhongGuiHang } from '@/features/ship-ho/huy-don';
 import { LY_DO_CHAM } from './ly-do-cham';
 
 type Nguon = 'shopify' | 'ship_ho';
@@ -36,6 +37,11 @@ async function ghi(v: Viec, dc: DoiChieu): Promise<void> {
   } else {
     await db.execute(sql`UPDATE ship_ho_orders SET ly_do_doi_chieu = ${dc.ketQua}, ly_do_bang_chung = ${bangChung}, ly_do_doi_chieu_at = now()
       WHERE id = ${v.id} AND ly_do_cham = ${v.lyDo}`);
+    // Hãng xác nhận hàng chưa từng đi → báo brand đơn đã huỷ, không thu (CEO 19/09/2026).
+    if (v.lyDo === 'khong_gui_hang' && dc.ketQua === 'xac_nhan') {
+      try { await baoHuyDonKhongGuiHang(v.id, dc.bangChung); }
+      catch (e) { console.warn('[ly-do] báo huỷ MMP lỗi (outbox sẽ retry):', (e as Error).message); }
+    }
   }
 }
 

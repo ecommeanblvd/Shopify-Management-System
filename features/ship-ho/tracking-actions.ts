@@ -121,8 +121,8 @@ export async function setShipHoDeliveryStatusManual(
     status: orderStatusAfterTrack(o.status, status) as typeof o.status,
   }).where(eq(schema.shipHoOrders.id, orderId));
 
-  if (status !== o.deliveryStatus) {
-    const evt = deliveryStatusToEvent(status);
+  const evt = status !== o.deliveryStatus ? deliveryStatusToEvent(status) : null;
+  if (evt) {
     await emitShipHoEvent(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
       evt,
