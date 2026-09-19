@@ -82,3 +82,21 @@ describe('chonTrangThaiChoKien — đơn tách kiện (CEO 16/09/2026)', () => {
     expect(chonTrangThaiChoKien({ trackingNumber: ' 876026631930 ' }, 2, theoTracking, cuaDon)).toBe(theoTracking.get('876026631930'));
   });
 });
+
+describe('nguồn hãng thắng Lark (spec ghi ngược §6)', () => {
+  it('canDongTrangThai: kiện nguồn fedex → không đè dù Lark nói khác', () => {
+    expect(canDongTrangThai([sp({ deliveryStatus: 'in_transit', deliverySource: 'fedex', trackingNumber: 'x' })], true)).toBe(false);
+    expect(canDongTrangThai([sp({ deliveryStatus: 'in_transit', deliverySource: 'carrier_bill', trackingNumber: 'x' })], false)).toBe(false);
+  });
+  it('canDongTrangThai: nguồn lark / null vẫn như cũ', () => {
+    expect(canDongTrangThai([sp({ deliveryStatus: 'in_transit', deliverySource: 'lark', trackingNumber: 'x' })], true)).toBe(true);
+    expect(canDongTrangThai([sp({ deliveryStatus: 'in_transit', trackingNumber: 'x' })], true)).toBe(true);
+  });
+  it('canLapNgay: delivered nguồn ups thiếu ngày → để hãng tự điền, Lark không lấp', () => {
+    expect(canLapNgay([sp({ deliveryStatus: 'delivered', deliverySource: 'ups' })])).toBe(false);
+    expect(canLapNgay([sp({ deliveryStatus: 'delivered', deliverySource: 'lark' })])).toBe(true);
+  });
+  it('canSuaNgay vốn chỉ nguồn lark — giữ nguyên', () => {
+    expect(canSuaNgay([sp({ deliveryStatus: 'delivered', deliverySource: 'fedex', deliveredAt: new Date('2026-05-01') })], new Date('2026-05-03'))).toBe(false);
+  });
+});

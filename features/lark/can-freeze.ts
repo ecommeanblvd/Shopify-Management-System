@@ -8,6 +8,8 @@
  * kiểm cùng điều kiện đó trên dữ liệu đã nạp — kết quả y hệt, bớt hàng nghìn
  * vòng mạng.
  */
+import { laNguonHang } from './nguon-hang';
+
 export interface ShipmentHienTai {
   /** id shipment — cần để ghi ĐÚNG kiện, không ghi cả đơn. */
   id?: string;
@@ -18,18 +20,20 @@ export interface ShipmentHienTai {
   labelCreatedAt: Date | null;
 }
 
-/** Lệnh 1 — đóng trạng thái giao. WHERE: chưa 'delivered' (+ đã ship nếu đánh delivered). */
+/** Lệnh 1 — đóng trạng thái giao. WHERE: chưa 'delivered' (+ đã ship nếu đánh delivered).
+ *  Kiện đã có nguồn HÃNG thì Lark không đè (spec ghi ngược 19/09/2026 §6 — chống vòng lặp). */
 export function canDongTrangThai(dsShipment: ShipmentHienTai[], laDelivered: boolean): boolean {
   return dsShipment.some((s) => {
     if (s.deliveryStatus === 'delivered') return false;
+    if (laNguonHang(s.deliverySource)) return false;
     if (!laDelivered) return true;
     return s.trackingNumber != null || s.labelCreatedAt != null;
   });
 }
 
-/** Lệnh 2 — lấp ngày giao còn trống. WHERE: đã 'delivered' và deliveredAt NULL. */
+/** Lệnh 2 — lấp ngày giao còn trống. WHERE: đã 'delivered' và deliveredAt NULL, nguồn không phải hãng. */
 export function canLapNgay(dsShipment: ShipmentHienTai[]): boolean {
-  return dsShipment.some((s) => s.deliveryStatus === 'delivered' && s.deliveredAt == null);
+  return dsShipment.some((s) => s.deliveryStatus === 'delivered' && s.deliveredAt == null && !laNguonHang(s.deliverySource));
 }
 
 /** Lệnh 3 — sửa ngày khi ops điền muộn. WHERE: 'delivered', nguồn 'lark', ngày KHÁC. */

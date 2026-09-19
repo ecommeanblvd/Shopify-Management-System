@@ -13,6 +13,7 @@ import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
 import { coThayDoi } from '@/lib/khong-doi';
 import { canDongTrangThai, canLapNgay, canSuaNgay, chonTrangThaiChoKien, type ShipmentHienTai, type TrangThaiGiaoLark } from './can-freeze';
+import { NGUON_HANG } from './nguon-hang';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -330,6 +331,8 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
               const res = await tx.update(schema.shipments).set(patch).where(and(
                 eq(schema.shipments.id, kien.id!),
                 or(isNull(schema.shipments.deliveryStatus), ne(schema.shipments.deliveryStatus, 'delivered')),
+                // Nguồn hãng thắng Lark (spec ghi ngược §6).
+                or(isNull(schema.shipments.deliverySource), sql`${schema.shipments.deliverySource} NOT IN ${NGUON_HANG}`),
                 ...notYetShippedGuard,
               ));
               deliveryFrozen += (res as { rowCount?: number }).rowCount ?? 0;
@@ -342,6 +345,7 @@ export async function syncLarkPacks(): Promise<LarkSyncSummary> {
                   eq(schema.shipments.id, kien.id!),
                   eq(schema.shipments.deliveryStatus, 'delivered'),
                   isNull(schema.shipments.deliveredAt),
+                  or(isNull(schema.shipments.deliverySource), sql`${schema.shipments.deliverySource} NOT IN ${NGUON_HANG}`),
                 ));
             }
             // TỰ CHỮA LÀNH: ops điền "Ngày giao thực tế" MUỘN → sửa lại theo ngày thực. CHỈ đè
