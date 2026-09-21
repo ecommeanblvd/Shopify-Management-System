@@ -1,6 +1,16 @@
 # Tách thuế/phí nhập khẩu (duty) khỏi cước ship hộ; chốt luật kỳ bảng kê
 
-**Ngày:** 2026-09-21 · **Trạng thái:** thiết kế, chờ CEO soát · **Quyết định liên quan:** D-057 (markup theo bậc), D-019 (POD trên bill), D-073 (Lark không phải nguồn tiền), 08/09 (bảng kê thu theo giá thực khi đã có bill)
+**Ngày:** 2026-09-21 · **Trạng thái:** CEO đã chốt 5 quyết định §2 (phương án B với MMP); chờ soát lần cuối · **Quyết định liên quan:** D-057 (markup theo bậc), D-019 (POD trên bill), D-073 (Lark không phải nguồn tiền), 08/09 (bảng kê thu theo giá thực khi đã có bill)
+
+## 0. Ba mốc ngày của một đơn — dùng vào việc gì
+
+| Mốc | Ai kiểm soát | Dùng để |
+|---|---|---|
+| **Ngày gửi hàng** `shipped_at` | Đức ghi khi đi hàng; brand biết | **Xếp kỳ bảng kê cước** |
+| Ngày hoá đơn FedEx `issue_date` | FedEx | **Xếp kỳ bảng kê duty** |
+| Ngày bill về SMS / ngày Đức chốt đối soát | Đức | Chỉ quyết định đơn **đã sẵn sàng vào bảng kê chưa**; không quyết định kỳ |
+
+MMP hiện xếp kỳ theo `occurredAt` của `order.reconciled` = mốc thứ ba, pha hai ngày (khớp tự động ≈ ngày bill về; lệch = ngày Đức duyệt). Đó là gốc của T7 chỉ 12 đơn.
 
 ## 1. Vấn đề — bằng chứng từ đối chiếu Kalisa T7 (21/09/2026)
 
@@ -21,10 +31,11 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 
 ## 2. Quyết định (CEO chốt 21/09/2026)
 
-1. **Kỳ bảng kê CƯỚC xếp theo ngày gửi hàng** (`shipped_at`), chỉ đưa đơn **đã đối soát hoá đơn xong** (`reconcile_status = 'reconciled'`). Đơn gửi trong kỳ chưa có hoá đơn: liệt kê ở mục "Chờ hoá đơn" cuối bảng kê, **không cộng vào tổng**, tự sang kỳ sau. Bỏ mốc `quoted_at` và bỏ luật "chưa có bill thì thu giá báo" (08/09) — từ nay bảng kê chỉ thu giá thực.
-2. **Kỳ bảng kê DUTY xếp theo ngày hoá đơn FedEx** (`carrier_bills.issue_date`, thiếu thì `period_start`). Hoá đơn về kỳ nào thu kỳ đó, bất kể đơn gửi khi nào.
-3. **Không thu thêm gì trên duty.** Thu đúng số FedEx ứng hộ trên hoá đơn: không markup, không nhiên liệu, không VAT, không phí xử lý.
-4. **Hợp đồng MMP:** `finalChargedVnd` chỉ còn cước; duty đi trường riêng và sự kiện riêng; bảng kê phát hành bằng `statement.issued`. **SMS là bên duy nhất lập bảng kê; MMP ngừng tự tính kỳ.** Không có điều này thì ba bên vẫn lệch dù SMS đổi luật.
+1. **Kỳ bảng kê CƯỚC xếp theo ngày gửi hàng** (`shipped_at`). Ba mốc còn lại của một đơn — ngày hoá đơn FedEx, ngày bill về SMS, ngày Đức chốt đối soát — **không quyết định kỳ**, chỉ quyết định đơn đã sẵn sàng vào bảng kê chưa (điểm 2). Ngày gửi là ngày duy nhất brand biết và không bên nào kiểm soát được. Bỏ mốc `quoted_at`.
+2. **Điều kiện vào bảng kê = Đức đã chốt đối soát** (`reconcile_status = 'reconciled'`). Đơn khớp bill chốt tự động khi bill về; đơn **lệch tiền chờ Đức duyệt** (chấp nhận / đi claim) — lệch là chắc chắn có, và không thu brand một con số Đức chưa xác nhận. Bỏ luật "chưa có bill thì thu giá báo" (08/09): bảng kê chỉ thu giá thực. **Đơn chốt muộn** (gửi kỳ K, Đức duyệt sau khi bảng kê K đã phát hành) vào bảng kê **kỳ kế tiếp**, dòng vẫn ghi ngày gửi gốc; không sửa bảng kê đã phát hành. Đơn gửi trong kỳ chưa chốt: liệt kê ở mục "Chờ hoá đơn" cuối bảng kê, không cộng vào tổng.
+3. **Kỳ bảng kê DUTY xếp theo ngày hoá đơn FedEx** (`carrier_bills.issue_date`, thiếu thì `period_start`). Duty **không cần Đức duyệt** — thu nguyên giá, không có gì để lệch — bill duty về là ghi và bắn MMP ngay. Hoá đơn về kỳ nào thu kỳ đó, bất kể đơn gửi khi nào.
+4. **Không thu thêm gì trên duty.** Thu đúng số FedEx ứng hộ trên hoá đơn: không markup, không nhiên liệu, không VAT, không phí xử lý.
+5. **Phân vai với MMP — phương án B (CEO chốt 21/09 sau trao đổi với MMP):** **SMS là nguồn số liệu và luật kỳ; MMP là nơi phát hành bảng kê và quản công nợ cho brand.** SMS gửi kèm ngày làm mốc kỳ (`shippedAt`, `invoiceDate`) để MMP xếp kỳ theo đúng luật 1–3 thay cho `occurredAt`; `statement.issued` của SMS là **bản đối soát nội bộ**, MMP so với bảng kê của mình và báo lệch, **không phát hành bản thứ hai cho brand**. Brand chỉ thấy MMP. Điều kiện bắt buộc: MMP phải đổi mốc kỳ cước sang `shippedAt` và chỉ xếp đơn đã `reconciled` — không đổi thì ba bên vẫn lệch như T7.
 
 ## 3. Mô hình dữ liệu
 
@@ -76,19 +87,20 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 - `freight`: đơn `partner = brand`, `shipped_at ∈ [start,end]`, `reconcile_status = 'reconciled'`, `statement_id IS NULL`, `status ∈ (shipped, delivered)`, không phải `khong_gui_hang` đã xác nhận. Kèm danh sách **"Chờ hoá đơn"**: cùng điều kiện nhưng chưa reconciled — chỉ hiển thị, không gán `statement_id`.
 - `duty`: đơn `partner = brand`, có dòng `carrier_bill_lines.duty > 0` khớp mã vận đơn với hoá đơn `issue_date ∈ [start,end]`, `duty_statement_id IS NULL`. Mỗi dòng bảng kê = mã đơn + mã brand (`brand_reference`) + mã vận đơn + số hoá đơn FedEx + ngày hoá đơn + số tiền.
 - Tính lại nháp (`tinhLaiTongBangKe`) theo `type`. Bảng kê `issued`/`paid` đứng yên như cũ.
+- Đơn gửi kỳ K nhưng `reconciled` sau khi bảng kê K đã `issued`: lượt gom kỳ K+1 lấy theo `shipped_at ≤ end(K+1)` và `statement_id IS NULL` — tự nhiên rơi vào K+1, dòng giữ `shipped_at` gốc. Không có bảng kê bổ sung cho K.
 
 ## 5. Hợp đồng với MMP (sửa `docs/integrations/mmp-ship-ho-api.md`)
 
 | Sự kiện | Đổi |
 |---|---|
-| `order.reconciled` | `finalChargedVnd` = **cước** (không duty). Thêm `dutyVnd` (number, 0 nếu chưa có hoá đơn duty) và `totalWithDutyVnd = finalChargedVnd + dutyVnd` để MMP hiển thị tổng nếu muốn. `previousChargedVnd`/`deltaVnd` so trên cước. |
-| `order.duty_charged` **(mới)** | Bắn mỗi khi `actual_duty_vnd` đổi. `data: { dutyVnd (tổng hiện tại), addedVnd (khoản vừa cộng), fedexInvoiceNumber, invoiceDate, note: "Thuế/phí nhập khẩu FedEx ứng hộ, thu đúng nguyên giá, không markup/VAT" }`. Idempotent theo `fedexInvoiceNumber`. |
-| `statement.issued` **(triển khai — trước đây chỉ có trong doc)** | Bắn khi bảng kê chuyển `issued`. `data: { statementId, type: "freight"\|"duty", periodStart, periodEnd, periodBasis: "shipped_at"\|"fedex_invoice_date", orders: [{ code, mmpRef, brandReference, trackingNumber, amountVnd, fedexInvoiceNumber?, invoiceDate? }], totalVnd, orderCount, dueDate }`. `code = brandSlug`, `mmpRef = brandSlug` (theo quy ước sự kiện cấp brand). |
-| `statement.paid` | Bắn khi chuyển `paid`. `data: { statementId, type, paidAt }`. |
+| `order.reconciled` | `finalChargedVnd` = **cước** (không duty). Thêm `dutyVnd` (number, 0 nếu chưa có hoá đơn duty), `totalWithDutyVnd = finalChargedVnd + dutyVnd`, và **`shippedAt`** (date, mốc xếp kỳ cước — MMP dùng thay `occurredAt`). `previousChargedVnd`/`deltaVnd` so trên cước. Sự kiện **không có** trường `dutyVnd` là bản cũ, đã gộp duty. |
+| `order.duty_charged` **(mới)** | Bắn mỗi khi một hoá đơn duty được ghi cho đơn — **mỗi hoá đơn FedEx một event**, MMP cộng dồn. `data: { dutyVnd (tổng hiện tại của đơn), addedVnd (khoản của hoá đơn này), fedexInvoiceNumber, invoiceDate (mốc xếp kỳ duty), trackingNumber, note: "Thuế/phí nhập khẩu FedEx ứng hộ, thu đúng nguyên giá, không markup/VAT" }`. **Khoá idempotent: `(mmpRef, fedexInvoiceNumber)`** — cùng khoá gửi lại là ghi đè dòng đó (kể cả về 0), không có event rút lại riêng. Là sự kiện tài chính, **không đổi trạng thái đơn** (về sau `delivered`/`reconciled`, thậm chí sau khi MMP khoá kỳ). Không có `dutyUsd`/`fxRate`: hoá đơn FedEx VN phát hành bằng VND (137/137 dòng duty), đối chiếu bằng `fedexInvoiceNumber` + `trackingNumber`. |
+| `statement.issued` **(triển khai — trước đây chỉ có trong doc)** | Bắn khi bảng kê SMS chuyển `issued`. `data: { statementId, type: "freight"\|"duty", periodStart, periodEnd, periodBasis: "shipped_at"\|"fedex_invoice_date", orders: [{ code, mmpRef, brandReference, trackingNumber, shippedAt, amountVnd, fedexInvoiceNumber?, invoiceDate? }], totalVnd, orderCount }`. `code = brandSlug`, `mmpRef = brandSlug`. **Vai trò: bản đối soát** — MMP so với bảng kê của mình theo `(mã đơn, loại)`, lệch thì báo; MMP **không** render nó cho brand. |
+| `statement.paid` | Bắn khi bảng kê SMS chuyển `paid` (ghi nhận đối soát nội bộ). `data: { statementId, type, paidAt }`. |
 
-**Yêu cầu phía MMP:** (1) hiển thị duty là dòng riêng trên đơn, không cộng vào "cước"; (2) **ngừng tự lập bảng kê theo "ngày có chứng từ"**, render bảng kê từ `statement.issued`; (3) xử lý `order.cancelled` (đã gửi 19/09).
+**Yêu cầu phía MMP (họ đã ước ~1 ngày):** (1) thêm `dutyVnd`, `fedexInvoiceNumber`, `dutyInvoiceDate` trên đơn; nhận `order.duty_charged` ngoài thang trạng thái forward-only; (2) bảng kê hai loại dòng: **cước xếp kỳ theo `shippedAt`** (không phải ngày `order.reconciled` về) và chỉ xếp đơn đã `reconciled`; **thuế/phí xếp kỳ theo `invoiceDate`**; Excel thêm cột Loại và tổng riêng cước / thuế-phí / tổng; (3) khoá kỳ và `diffPeriod` theo `(mã đơn, loại)`; kỳ 07/08 đã khoá giữ nghĩa cũ; (4) công nợ cộng cả hai; (5) xử lý `order.cancelled` (SMS đã gửi 19/09).
 
-**Chuyển tiếp:** gác sau env `MMP_TACH_DUTY=1`. Khi bật, SMS bắn lại `order.reconciled` cho 61 đơn có duty với `finalChargedVnd` mới (giảm đúng bằng duty) kèm `dutyVnd`, và `order.duty_charged` cho từng đơn. Bật **sau khi MMP xác nhận đã nhận trường mới** — bật trước thì brand thấy giá "giảm" vô cớ. `nenBanGiaCuoi` so trên cước mới nên sẽ tự bắn khi bật.
+**Chuyển tiếp:** gác sau env `MMP_TACH_DUTY=1`, báo MMP ngày bật trước 1 ngày. Khi bật, SMS bắn lại `order.reconciled` cho **57 đơn** đã gửi MMP với duty gộp (22/07–18/09/2026) — `finalChargedVnd` mới giảm đúng bằng duty, kèm `dutyVnd` và `shippedAt` — rồi `order.duty_charged` cho từng đơn. MMP thay số cũ theo `occurredAt` mới nhất, **không cộng duty lần hai**; tổng brand phải trả không đổi, chỉ đổi phân loại — kỳ 07/08 đã khoá giữ ảnh chụp cũ, ghi chú "tách loại từ kỳ 09". Bật **sau khi MMP xác nhận đã nhận trường mới**. `nenBanGiaCuoi` so trên cước mới nên tự bắn khi bật.
 
 ## 6. Giao diện SMS
 
