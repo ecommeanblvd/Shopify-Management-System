@@ -991,7 +991,7 @@ main();
 
 - [ ] **Bước 3: Thứ tự bật (làm khi MMP xác nhận đã deploy)**
   1. `railway variables --service Shopify-Management-System --set MMP_TACH_DUTY=1` và cùng biến cho `cron-sync-orders` (cron `ship-ho-reconcile` chạy ở đó).
-  2. `MMP_TACH_DUTY=1 railway run --service Shopify-Management-System npx tsx scripts/chuyen-doi/ban-lai-tach-duty.ts --dry` → ~57 đơn; chạy thật.
+  2. `MMP_TACH_DUTY=1 railway run --service Shopify-Management-System npx tsx scripts/chuyen-doi/ban-lai-tach-duty.ts --dry` → ~57 đơn bắn lại `order.reconciled` + danh sách đơn `order.duty_charged`; chạy thật. **Script PHẢI chạy ngay sau khi bật công tắc, và nó phủ cả đơn CHƯA có `order.reconciled`**: trong lúc công tắc còn tắt, `ghiDutyChoDon` đã ghi cột duty + đánh dấu số hoá đơn vào `duty_bill_numbers` mà KHÔNG bắn event, nên cron sau đó coi là "không có hoá đơn mới" và duty của những đơn ấy sẽ không bao giờ tới MMP nếu không bắn lại ở đây (vòng 2 của script lấy MỌI đơn `actual_duty_vnd > 0`, không đòi đã reconciled).
   3. Kiểm outbox: `select event, count(*), count(*) filter (where last_http_status=200) from ship_ho_order_events where occurred_at > now() - interval '30 minutes' group by 1`.
 
 - [ ] **Bước 4: Ghi sổ** — `Decisions.md` append:
