@@ -34,13 +34,14 @@ export function tinhDutyMoi(dong: readonly DongDuty[], daCong: readonly string[]
  */
 export function quyetDinhGhiDuty(
   cu: number | null, dong: readonly DongDuty[], daCong: readonly string[],
-): { ghi: boolean; tong: number; billNumbers: string[]; canBan: DongDuty[] } {
+): { ghi: boolean; tong: number; billNumbers: string[]; canBan: DongDuty[]; soMoi: number } {
   const { tong, moi, billNumbers } = tinhDutyMoi(dong, daCong);
-  if (dong.length === 0 && cu == null) return { ghi: false, tong: 0, billNumbers: [], canBan: [] };
+  if (dong.length === 0 && cu == null) return { ghi: false, tong: 0, billNumbers: [], canBan: [], soMoi: 0 };
   const tongDoi = cu !== tong;
-  if (!tongDoi && moi.length === 0) return { ghi: false, tong, billNumbers, canBan: [] };
+  if (!tongDoi && moi.length === 0) return { ghi: false, tong, billNumbers, canBan: [], soMoi: 0 };
   const canBan = moi.length > 0 ? moi : dong.slice(-1);
-  return { ghi: true, tong, billNumbers, canBan };
+  // soMoi = số hoá đơn LẦN ĐẦU được cộng (không tính lượt "FedEx sửa số" phát lại hoá đơn cũ).
+  return { ghi: true, tong, billNumbers, canBan, soMoi: moi.length };
 }
 
 export interface DonChoDuty extends ShipHoEmitOrder {
@@ -54,7 +55,7 @@ export async function ghiDutyChoDon(o: DonChoDuty): Promise<{ daGhi: boolean; to
   const dong = await getDutyLinesByTracking(o.trackingNumber);
   const daCong = o.dutyBillNumbers ?? [];
   const cu = o.actualDutyVnd == null ? null : Math.round(Number(o.actualDutyVnd));
-  const { ghi, tong, billNumbers, canBan } = quyetDinhGhiDuty(cu, dong, daCong);
+  const { ghi, tong, billNumbers, canBan, soMoi } = quyetDinhGhiDuty(cu, dong, daCong);
   if (!ghi) return { daGhi: false, tong, moi: 0 };
 
   await db.update(schema.shipHoOrders)
@@ -69,6 +70,5 @@ export async function ghiDutyChoDon(o: DonChoDuty): Promise<{ daGhi: boolean; to
       });
     }
   }
-  // Số MỚI báo cáo (không tính lượt "FedEx sửa số" phát lại hoá đơn cũ).
-  return { daGhi: true, tong, moi: tinhDutyMoi(dong, daCong).moi.length };
+  return { daGhi: true, tong, moi: soMoi };
 }

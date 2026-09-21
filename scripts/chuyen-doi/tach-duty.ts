@@ -29,9 +29,13 @@ import { db } from '@/db/client';
 import { ghiDutyChoDon } from '@/features/ship-ho/duty';
 import { tinhLaiTongBangKe } from '@/features/ship-ho/statement-core';
 
-const XAC_NHAN = process.argv.includes('--xac-nhan');
+// `--dry` THẮNG `--xac-nhan`: truyền nhầm cả hai (copy lệnh cũ) thì phải chạy khô, không ghi.
+const CO_DRY = process.argv.includes('--dry');
+const XAC_NHAN = process.argv.includes('--xac-nhan') && !CO_DRY;
 const DRY = !XAC_NHAN;
-if (!process.argv.includes('--dry') && !XAC_NHAN) {
+if (CO_DRY && process.argv.includes('--xac-nhan')) {
+  console.log('Có cả --dry lẫn --xac-nhan → ưu tiên --dry (KHÔNG ghi gì).');
+} else if (!CO_DRY && !XAC_NHAN) {
   console.log('Chưa truyền --xac-nhan → chạy chế độ --dry (KHÔNG ghi gì). Thêm --xac-nhan để ghi thật.');
 }
 const KE_KALISA_CU = '0dcc5f5c-8653-4c75-b6ca-17df243c0135';

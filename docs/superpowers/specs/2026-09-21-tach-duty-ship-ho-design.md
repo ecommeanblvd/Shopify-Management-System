@@ -80,7 +80,7 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 ### 4.3 Giá đưa vào bảng kê
 
 - `freight`: `giaThuBangKe` → **chỉ** `actual_charged_vnd` khi `reconciled`; không còn nhánh giá báo. Đơn chưa reconciled không vào tổng.
-- `duty`: `actual_duty_vnd` của đơn có hoá đơn duty trong kỳ và `duty_statement_id IS NULL`.
+- `duty`: `actual_duty_vnd` của đơn có hoá đơn duty trong kỳ và `duty_statement_id IS NULL`. Duty tăng sau khi đơn đã vào bảng kê duty: chưa xử lý — cần báo cáo ops (mở).
 
 ### 4.4 Gom bảng kê (`generateStatement(brand, type, start, end)`)
 

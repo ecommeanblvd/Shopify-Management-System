@@ -35,7 +35,7 @@ describe('tinhDutyMoi', () => {
 describe('quyetDinhGhiDuty', () => {
   it('chưa có gì (chưa có dòng, chưa từng ghi) → không ghi', () => {
     const r = quyetDinhGhiDuty(null, [], []);
-    expect(r).toEqual({ ghi: false, tong: 0, billNumbers: [], canBan: [] });
+    expect(r).toEqual({ ghi: false, tong: 0, billNumbers: [], canBan: [], soMoi: 0 });
   });
   it('hoá đơn mới → ghi + canBan = hoá đơn mới', () => {
     const r = quyetDinhGhiDuty(null, [d('736059786', 100_000)], []);

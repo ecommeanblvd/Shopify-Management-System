@@ -8,6 +8,9 @@ import { emitShipHoEvent } from '@/features/ship-ho/mmp-events';
 const args = process.argv.slice(2); const DRY = args.includes('--dry'); const file = args.find((a) => !a.startsWith('--'));
 async function main() {
   const refs = file ? readFileSync(file, 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean) : null;
+  // File danh sách rỗng KHÔNG được hiểu thành "bắn cho mọi đơn": `IN ()` là SQL lỗi, và
+  // nếu lỡ rơi xuống nhánh không-file thì bắn nhầm cả trăm đơn. Dừng hẳn, mã thoát 1.
+  if (refs && refs.length === 0) { console.log(`Danh sách rỗng (${file}) — không có mã nào để bắn, dừng.`); return process.exit(1); }
   const { rows } = await db.execute<{ id: string; code: string; source: string; mmp_ref: string | null; shipped_at: string | null }>(refs
     ? sql`SELECT id, code, source, mmp_ref, shipped_at::text FROM ship_ho_orders WHERE COALESCE(mmp_ref, code) IN ${refs}`
     : sql`SELECT o.id, o.code, o.source, o.mmp_ref, o.shipped_at::text FROM ship_ho_orders o WHERE EXISTS (SELECT 1 FROM ship_ho_order_events e WHERE e.order_id = o.id AND e.event = 'order.reconciled' AND e.delivery_status = 'delivered')`);
