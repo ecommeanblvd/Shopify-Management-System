@@ -24,3 +24,35 @@ export function giaCuoiChoMmp(
   if (!bat) return { finalChargedVnd: cuoc + duty, shippedAt: i.shippedAt };
   return { finalChargedVnd: cuoc, dutyVnd: duty, totalWithDutyVnd: cuoc + duty, shippedAt: i.shippedAt };
 }
+
+export interface GiaCuoiVaDelta extends GiaCuoiMmp {
+  previousChargedVnd: number | null;
+  deltaVnd: number | null;
+}
+
+/**
+ * THUẦN: giá cuối gửi MMP + `deltaVnd` KHỚP ĐÚNG con số vừa gửi.
+ *
+ * Hai bẫy đã dính (review 21/09):
+ *   - Khi công tắc TẮT, `finalChargedVnd` = cước + duty nhưng delta lại tính trên cước
+ *     ⇒ MMP nhận `previous + delta ≠ final`, lệch đúng bằng duty. Delta phải so trên
+ *     CHÍNH `gia.finalChargedVnd`.
+ *   - Re-quote lỗi (`cuocThucVnd` null) thì giá cuối lùi về GIÁ BÁO — mà giá báo chưa
+ *     bao giờ gồm duty (spec §3.1) ⇒ KHÔNG được cộng duty lên nó.
+ *
+ * Trả null khi không có số nào để gửi (chưa có giá thực lẫn giá báo).
+ */
+export function giaCuoiVaDelta(
+  i: { cuocThucVnd: number | null; giaBaoVnd: number | null; dutyVnd: number | null; shippedAt: string | null },
+  bat: boolean = batTachDuty(),
+): GiaCuoiVaDelta | null {
+  const cuoc = i.cuocThucVnd ?? i.giaBaoVnd;
+  if (cuoc == null) return null;
+  const duty = i.cuocThucVnd == null ? 0 : i.dutyVnd;
+  const gia = giaCuoiChoMmp({ cuocVnd: cuoc, dutyVnd: duty, shippedAt: i.shippedAt }, bat);
+  return {
+    ...gia,
+    previousChargedVnd: i.giaBaoVnd,
+    deltaVnd: i.giaBaoVnd == null ? null : gia.finalChargedVnd - i.giaBaoVnd,
+  };
+}

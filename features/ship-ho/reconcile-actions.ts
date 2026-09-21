@@ -15,7 +15,7 @@ import { decideReconcile, donDaDongBang } from './reconcile-decision';
 import { khopOBangGia, layOBangGia } from './bill-base-check';
 import { markupKhiReBill } from './tier-pricing';
 import { ghiDutyChoDon } from './duty';
-import { giaCuoiChoMmp } from './gia-cuoi-mmp';
+import { giaCuoiVaDelta } from './gia-cuoi-mmp';
 
 export interface ReconcileSummary {
   total: number;
@@ -301,17 +301,13 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // Chống bắn trùng: so với giá ĐÃ GỬI THẬT (đọc outbox), không so với cột trên
     // đơn. Cột `actual_charged_vnd` bị ghi đè mỗi lượt chạy, còn upload lại hoá
     // đơn thì reset `reconcile_status` → cờ "lần đầu" bật lại và bắn lại y giá cũ.
-    const finalCuoc = actualChargedVnd ?? quotedCharged;
-    if (shouldEmitCharge && finalCuoc != null) {
+    // giaCuoiVaDelta lo cả hai luật: delta so trên ĐÚNG con số gửi đi (công tắc tắt →
+    // final gồm duty) và re-quote lỗi thì lùi về giá báo mà KHÔNG cộng duty lên.
+    const gia = giaCuoiVaDelta({ cuocThucVnd: actualChargedVnd, giaBaoVnd: quotedCharged, dutyVnd: duty.tong, shippedAt: o.shippedAt });
+    if (shouldEmitCharge && gia) {
       await banGiaCuoiNeuDoi(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-        {
-          ...giaCuoiChoMmp({ cuocVnd: finalCuoc, dutyVnd: duty.tong, shippedAt: o.shippedAt }),
-          previousChargedVnd: quotedCharged,
-          deltaVnd: quotedCharged == null ? null : finalCuoc - quotedCharged,
-          billedWeightKg: kgToStore,
-          scaleWeightKg: billed.weightKg,
-        },
+        { ...gia, billedWeightKg: kgToStore, scaleWeightKg: billed.weightKg },
         daGuiTheoDon.get(o.id) ?? null,
       );
     }

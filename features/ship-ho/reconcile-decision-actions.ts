@@ -6,7 +6,7 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi } from './final-charge-emit';
-import { giaCuoiChoMmp } from './gia-cuoi-mmp';
+import { giaCuoiVaDelta } from './gia-cuoi-mmp';
 
 const num = (v: string | null): number | null => {
   if (v == null) return null;
@@ -50,18 +50,16 @@ export async function acceptShipHoDiscrepancy(orderId: string): Promise<void> {
     .set({ reconcileDecision: 'accepted', reconcileDecisionAt: new Date(), reconcileDecisionBy: userId })
     .where(eq(schema.shipHoOrders.id, orderId));
 
-  const quoted = num(o.chargedVnd);
-  const finalChargedVnd = num(o.actualChargedVnd) ?? quoted;
-  if (finalChargedVnd != null) {
+  // Delta so trên ĐÚNG con số gửi MMP; re-quote lỗi → lùi về giá báo, không cộng duty.
+  const gia = giaCuoiVaDelta({
+    cuocThucVnd: num(o.actualChargedVnd), giaBaoVnd: num(o.chargedVnd),
+    dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt,
+  });
+  if (gia) {
     // Chặn bắn trùng: cùng giá VÀ cùng kết luận với lần đã gửi → bỏ.
     await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      {
-        ...giaCuoiChoMmp({ cuocVnd: finalChargedVnd, dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt }),
-        previousChargedVnd: quoted,
-        deltaVnd: quoted == null ? null : finalChargedVnd - quoted,
-        reconcileResolution: 'internal_error',
-      },
+      { ...gia, reconcileResolution: 'internal_error' },
     );
   }
   revalidatePath('/f/ship-ho/reconcile');
@@ -119,18 +117,16 @@ export async function resolveShipHoClaim(orderId: string, credited: boolean): Pr
     .set({ reconcileDecision: decision, reconcileDecisionAt: new Date(), reconcileDecisionBy: userId })
     .where(eq(schema.shipHoOrders.id, orderId));
 
-  const quoted = num(o.chargedVnd);
-  const finalChargedVnd = num(o.actualChargedVnd) ?? quoted;
-  if (finalChargedVnd != null) {
+  // Delta so trên ĐÚNG con số gửi MMP; re-quote lỗi → lùi về giá báo, không cộng duty.
+  const gia = giaCuoiVaDelta({
+    cuocThucVnd: num(o.actualChargedVnd), giaBaoVnd: num(o.chargedVnd),
+    dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt,
+  });
+  if (gia) {
     // Chặn bắn trùng: cùng giá VÀ cùng kết luận với lần đã gửi → bỏ.
     await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
-      {
-        ...giaCuoiChoMmp({ cuocVnd: finalChargedVnd, dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt }),
-        previousChargedVnd: quoted,
-        deltaVnd: quoted == null ? null : finalChargedVnd - quoted,
-        reconcileResolution: decision,
-      },
+      { ...gia, reconcileResolution: decision },
     );
   }
   revalidatePath('/f/ship-ho/reconcile');
