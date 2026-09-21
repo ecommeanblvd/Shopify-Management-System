@@ -56,19 +56,28 @@ describe('reconciledBrandCharge — duty (thuế/hải quan)', () => {
     transportSurchargesVnd: 0, customsSurchargesVnd: 0,
     fuelPercent: 38.25, vatPercent: 8, serviceLabel: 'Express Delivery',
   };
-  it('duty cộng thẳng vào tổng — KHÔNG fuel, KHÔNG VAT', () => {
+  it('duty KHÔNG cộng vào chargedVnd — dutyVnd trả riêng, KHÔNG fuel KHÔNG VAT (tách 21/09)', () => {
     const no = reconciledBrandCharge(base);
     const yes = reconciledBrandCharge({ ...base, dutyVnd: 15_531_089 });
     expect(yes.dutyVnd).toBe(15_531_089);
-    // Chênh đúng bằng duty (không nhân thêm gì)
-    expect(yes.chargedVnd - no.chargedVnd).toBe(15_531_089);
+    // chargedVnd KHÔNG đổi khi thêm duty (duty tách riêng từ 21/09)
+    expect(yes.chargedVnd).toBe(no.chargedVnd);
     // Fuel và VAT không đổi khi thêm duty
     expect(yes.fuelVnd).toBe(no.fuelVnd);
     expect(yes.vatVnd).toBe(no.vatVnd);
   });
-  it('có duty → thêm dòng "Thuế/hải quan (theo bill)"; tổng lines == chargedVnd', () => {
+  it('có duty → KHÔNG có dòng "Thuế/hải quan"; tổng lines == chargedVnd (tách 21/09)', () => {
     const r = reconciledBrandCharge({ ...base, dutyVnd: 500_000 });
-    expect(r.lines.some((l) => l.label === 'Thuế/hải quan (theo bill)')).toBe(true);
+    expect(r.lines.some((l) => l.label.includes('Thuế'))).toBe(false);
     expect(r.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(r.chargedVnd);
+  });
+
+  it('duty KHÔNG nằm trong chargedVnd, không có dòng duty; dutyVnd trả riêng (spec tách duty 21/09)', () => {
+    const khong = reconciledBrandCharge({ ...base, customsSurchargesVnd: 68_300 });
+    const co = reconciledBrandCharge({ ...base, customsSurchargesVnd: 68_300, dutyVnd: 736_241 });
+    expect(co.chargedVnd).toBe(khong.chargedVnd);
+    expect(co.dutyVnd).toBe(736_241);
+    expect(co.lines.some((l) => l.label.includes('Thuế'))).toBe(false);
+    expect(co.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(co.chargedVnd);
   });
 });

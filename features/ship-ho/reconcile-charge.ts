@@ -12,6 +12,8 @@
  *                  KHÔNG chịu fuel nhưng VẪN chịu VAT ở bước cuối (đúng như FedEx).
  *
  * Tổng lines == chargedVnd tuyệt đối (VAT là dòng residual).
+ *
+ * Duty KHÔNG nằm trong chargedVnd (tách 21/09/2026) — trả `dutyVnd` để caller ghi cột riêng.
  */
 import { ORDER_PROCESSING_FEE_VND } from './offer-pricing';
 import type { BrandChargeLine } from './brand-pricing';
@@ -56,14 +58,13 @@ export function reconciledBrandCharge(i: ReconciledChargeInput): ReconciledCharg
   const vatBase = markedBase + transport + customs + fuel + processingExVat;
   const vat = Math.round(vatBase * v);
   const duty = Math.round(i.dutyVnd ?? 0);
-  const chargedVnd = vatBase + vat + duty;
+  const chargedVnd = vatBase + vat;
 
   const lines: BrandChargeLine[] = [
     { label: `Cước cơ bản (${i.serviceLabel})`, amountVnd: markedBase },
   ];
   if (transport > 0) lines.push({ label: 'Phụ phí vận chuyển (theo bill)', amountVnd: transport });
   if (customs > 0) lines.push({ label: 'Phí xử lý hàng NK (theo bill)', amountVnd: customs });
-  if (duty > 0) lines.push({ label: 'Thuế/hải quan (theo bill)', amountVnd: duty });
   lines.push({ label: 'Phụ phí xăng dầu', amountVnd: fuel });
   lines.push({ label: 'Phí xử lý đơn hàng', amountVnd: processingExVat });
   lines.push({ label: 'VAT', amountVnd: vat });
