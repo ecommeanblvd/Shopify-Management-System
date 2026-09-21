@@ -177,3 +177,33 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
     normalizeBilledLine({ ...r, residentialRaw: i === resIdx ? r.residentialRaw : null }, factor, r.billNumber));
   return aggregateBilledLines(normalized);
 }
+
+export interface DongDuty { billNumber: string; issueDate: string; dutyVnd: number }
+
+/** Dòng DUTY (thuế/phí NK FedEx ứng hộ) của một mã vận đơn, kèm số + ngày hoá đơn — nguồn
+ *  cho cột actual_duty_vnd và bảng kê duty (spec 21/09/2026). Ngày hoá đơn: issue_date, thiếu
+ *  thì period_start. Quy về VND cùng cách với cước. */
+export async function getDutyLinesByTracking(trackingNumber: string): Promise<DongDuty[]> {
+  if (!trackingNumber) return [];
+  const rows = await db
+    .select({
+      duty: schema.carrierBillLines.duty,
+      billNumber: schema.carrierBills.billNumber,
+      issueDate: sql<string>`coalesce(${schema.carrierBills.issueDate}, ${schema.carrierBills.periodStart})::text`,
+      costCurrency: schema.carrierAccounts.costCurrency,
+      displayCurrency: schema.carrierAccounts.displayCurrency,
+      fx: schema.carrierAccounts.fxCostPerDisplay,
+    })
+    .from(schema.carrierBillLines)
+    .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))
+    .innerJoin(schema.carrierAccounts, eq(schema.carrierAccounts.id, schema.carrierBills.carrierAccountId))
+    .where(and(eq(schema.carrierBillLines.trackingNumber, trackingNumber), sql`${schema.carrierBillLines.duty} > 0`))
+    .orderBy(schema.carrierBills.periodStart);
+  const out: DongDuty[] = [];
+  for (const r of rows) {
+    const factor = costToVndFactor(r.costCurrency, r.displayCurrency, Number(r.fx));
+    if (factor == null || !r.billNumber) continue;
+    out.push({ billNumber: r.billNumber, issueDate: r.issueDate, dutyVnd: Math.round(Number(r.duty) * factor) });
+  }
+  return out;
+}
