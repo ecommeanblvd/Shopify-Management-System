@@ -4,7 +4,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement } from './statement-logic';
+import { summarizeStatement, QUYET_DINH_DA_CHOT } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
 import { tinhLaiTongBangKe } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
@@ -28,9 +28,17 @@ export async function generateStatement(
     // cho (chờ hoá đơn) = CHƯA CÓ GIÁ THỰC dùng được — chưa reconciled, HOẶC đã reconciled nhưng
     // actual_charged_vnd vẫn null (re-quote lỗi) — nếu không đơn này biến mất khỏi cả bill lẫn danh
     // sách chờ (Important-2, review 21/09).
+    // Đơn lệch tiền còn chờ Đức duyệt ('pending_review'/'claiming') KHÔNG được thu (spec §2.2:
+    // chỉ thu số Đức đã chốt) → rơi sang "Chờ hoá đơn"; hai vế `gia`/`cho` là phần bù CHÍNH XÁC
+    // của nhau qua cùng một danh sách QUYET_DINH_DA_CHOT nên không đơn nào rơi ra ngoài cả hai.
     const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
-      SELECT id, CASE WHEN reconcile_status = 'reconciled' THEN actual_charged_vnd END AS gia,
-             ((actual_charged_vnd IS NULL OR reconcile_status IS DISTINCT FROM 'reconciled') AND shipped_at >= ${periodStart}) AS cho
+      SELECT id,
+             CASE WHEN reconcile_status = 'reconciled'
+                   AND (reconcile_decision IS NULL OR reconcile_decision IN ${QUYET_DINH_DA_CHOT})
+                  THEN actual_charged_vnd END AS gia,
+             ((actual_charged_vnd IS NULL OR reconcile_status IS DISTINCT FROM 'reconciled'
+               OR (reconcile_decision IS NOT NULL AND reconcile_decision NOT IN ${QUYET_DINH_DA_CHOT}))
+              AND shipped_at >= ${periodStart}) AS cho
         FROM ship_ho_orders
        WHERE partner_brand_slug = ${partnerBrandSlug} AND statement_id IS NULL
          AND status IN ('shipped','delivered') AND shipped_at IS NOT NULL AND shipped_at <= ${periodEnd}

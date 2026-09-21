@@ -16,7 +16,12 @@ export async function tinhLaiTongBangKe(id: string): Promise<{ ok: boolean; erro
   if (st.status !== 'draft') return { ok: false, error: 'Bảng kê đã gửi/đã thu — không tính lại', orderCount: 0, totalChargedVnd: 0 };
   const tien: number[] = [];
   if (st.type === 'freight') {
-    const orders = await db.select({ actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus })
+    const orders = await db.select({
+      actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      reconcileStatus: schema.shipHoOrders.reconcileStatus,
+      // Đơn còn 'pending_review'/'claiming' không được tính vào tổng (spec §2.2).
+      reconcileDecision: schema.shipHoOrders.reconcileDecision,
+    })
       .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id));
     for (const o of orders) { const g = giaThuBangKe(o); if (g != null) tien.push(g); }
   } else {

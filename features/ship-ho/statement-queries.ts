@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { giaThuBangKe } from './statement-logic';
+import { giaThuBangKe, QUYET_DINH_DA_CHOT } from './statement-logic';
 
 export async function listShipHoStatements() {
   return db
@@ -53,15 +53,18 @@ export async function getShipHoStatement(id: string) {
       code: schema.shipHoOrders.code, mmpRef: schema.shipHoOrders.mmpRef, brandReference: schema.shipHoOrders.brandReference, trackingNumber: schema.shipHoOrders.trackingNumber,
       shippedAt: schema.shipHoOrders.shippedAt, country: schema.shipHoOrders.country,
       chargedVnd: schema.shipHoOrders.chargedVnd, actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus,
+      reconcileDecision: schema.shipHoOrders.reconcileDecision,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd, marginVnd: schema.shipHoOrders.marginVnd, actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
     }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id)).orderBy(schema.shipHoOrders.shippedAt);
-  // Chờ hoá đơn: gửi trong kỳ, CHƯA CÓ GIÁ THỰC ĐÃ CHỐT (chưa reconciled HOẶC reconciled nhưng
-  // actual_charged_vnd null — re-quote lỗi, xem Important-2 review 21/09), chưa vào kê nào, cùng
+  // Chờ hoá đơn: gửi trong kỳ, CHƯA CÓ GIÁ THỰC ĐÃ CHỐT (chưa reconciled; reconciled nhưng
+  // actual_charged_vnd null — re-quote lỗi, xem Important-2 review 21/09; hoặc còn
+  // 'pending_review'/'claiming' — số Đức chưa xác nhận, spec §2.2), chưa vào kê nào, cùng
   // luật loại trừ "không gửi hàng, xác nhận" như generateStatement để count/list khớp nhau.
   const choHoaDon = await db.select({ code: schema.shipHoOrders.code, brandReference: schema.shipHoOrders.brandReference, shippedAt: schema.shipHoOrders.shippedAt, chargedVnd: schema.shipHoOrders.chargedVnd })
     .from(schema.shipHoOrders)
     .where(and(eq(schema.shipHoOrders.partnerBrandSlug, st.partnerBrandSlug), isNull(schema.shipHoOrders.statementId),
-      sql`(${schema.shipHoOrders.actualChargedVnd} IS NULL OR ${schema.shipHoOrders.reconcileStatus} IS DISTINCT FROM 'reconciled')`,
+      sql`(${schema.shipHoOrders.actualChargedVnd} IS NULL OR ${schema.shipHoOrders.reconcileStatus} IS DISTINCT FROM 'reconciled'
+           OR (${schema.shipHoOrders.reconcileDecision} IS NOT NULL AND ${schema.shipHoOrders.reconcileDecision} NOT IN ${QUYET_DINH_DA_CHOT}))`,
       sql`${schema.shipHoOrders.shippedAt} BETWEEN ${st.periodStart} AND ${st.periodEnd}`,
       inArray(schema.shipHoOrders.status, ['shipped', 'delivered'] as const),
       sql`NOT (COALESCE(${schema.shipHoOrders.lyDoCham}, '') = 'khong_gui_hang' AND COALESCE(${schema.shipHoOrders.lyDoDoiChieu}, '') = 'xac_nhan')`));
