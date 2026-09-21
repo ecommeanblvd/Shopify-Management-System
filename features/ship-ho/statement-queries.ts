@@ -42,11 +42,22 @@ export async function getShipHoStatement(id: string) {
   const [st] = await db.select().from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
   if (!st) return null;
   if (st.type === 'duty') {
+    // Số + ngày hoá đơn phải là của CHÍNH KỲ NÀY: `duty_bill_numbers` là toàn bộ hoá đơn
+    // duty từng cộng cho đơn (gồm cả hoá đơn kỳ trước) và max(issue_date) không lọc kỳ →
+    // bảng kê/payload MMP hiện sai chứng từ, đối soát theo (mã đơn, loại) lệch. Lọc đúng
+    // dòng duty có ngày hoá đơn rơi trong kỳ của bảng kê (spec §2.3, §4.4).
     const { rows } = await db.execute<{ code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; dutyVnd: string; billNumber: string | null; issueDate: string | null }>(sql`
       SELECT o.code, o.mmp_ref AS "mmpRef", o.brand_reference AS "brandReference", o.tracking_number AS "trackingNumber", o.shipped_at::text AS "shippedAt", o.actual_duty_vnd AS "dutyVnd",
-             array_to_string(o.duty_bill_numbers, ' + ') AS "billNumber",
-             (SELECT max(COALESCE(b.issue_date, b.period_start))::text FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id WHERE l.tracking_number = o.tracking_number AND l.duty > 0) AS "issueDate"
-        FROM ship_ho_orders o WHERE o.duty_statement_id = ${id} ORDER BY o.shipped_at`);
+             k."billNumber", k."issueDate"
+        FROM ship_ho_orders o
+        LEFT JOIN LATERAL (
+          SELECT string_agg(DISTINCT b.bill_number, ' + ' ORDER BY b.bill_number) AS "billNumber",
+                 max(COALESCE(b.issue_date, b.period_start))::text AS "issueDate"
+            FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id
+           WHERE l.tracking_number = o.tracking_number AND l.duty > 0
+             AND COALESCE(b.issue_date, b.period_start) BETWEEN ${st.periodStart} AND ${st.periodEnd}
+        ) k ON TRUE
+       WHERE o.duty_statement_id = ${id} ORDER BY o.shipped_at`);
     return { statement: st, orders: rows.map((r) => ({ ...r, giaThuVnd: Number(r.dutyVnd) })), choHoaDon: [] };
   }
   const orders = await db.select({
