@@ -251,12 +251,15 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                 {price.rows.map((r) => {
                   const cost = r.costVnd ?? 0, bill = r.billVnd ?? 0, quote = r.quoteChargeVnd ?? 0, charge = r.chargeVnd ?? 0;
                   const lechChi = hasBill && (r.billVnd != null || r.costVnd != null) ? bill - cost : null;
-                  const lechThu = hasBill && (r.chargeVnd != null || r.quoteChargeVnd != null) ? charge - quote : null;
-                  const margin = hasBill ? charge - bill : quote - cost;
+                  // r.quoteChargeVnd / r.billVnd null nghĩa là KHÔNG áp dụng cho dòng này (ví dụ
+                  // dòng tổng hợp "Tổng brand phải trả" hoặc "Phí xử lý đơn hàng" không có bill
+                  // riêng) — không được coi null = 0, kẻo Lệch thu/Margin hiện số ảo (N1, review).
+                  const lechThu = hasBill && r.quoteChargeVnd != null ? charge - quote : null;
+                  const margin = hasBill ? (r.billVnd == null ? null : charge - bill) : quote - cost;
                   const so = (v: number | null, dau = false) => v == null || v === 0 ? '—' : (dau && v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
                   const mauLechChi = lechChi == null || lechChi === 0 ? 'text-muted-foreground' : lechChi > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400';
                   const mauLechThu = lechThu == null || lechThu === 0 ? 'text-muted-foreground' : lechThu > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-                  const mauMargin = margin === 0 ? 'text-muted-foreground' : margin > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                  const mauMargin = margin == null || margin === 0 ? 'text-muted-foreground' : margin > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
                   const laKhop = r.label === 'Điều chỉnh khớp số đã ghi';
                   return (
                     <tr key={r.label} className={`border-t border-border/60 [&>td]:py-2 ${laKhop ? 'text-muted-foreground italic' : ''}`}>
