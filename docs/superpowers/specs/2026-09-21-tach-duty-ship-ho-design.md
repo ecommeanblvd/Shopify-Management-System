@@ -84,7 +84,7 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 
 ### 4.4 Gom bảng kê (`generateStatement(brand, type, start, end)`)
 
-- `freight`: đơn `partner = brand`, `shipped_at ∈ [start,end]`, `reconcile_status = 'reconciled'`, `statement_id IS NULL`, `status ∈ (shipped, delivered)`, không phải `khong_gui_hang` đã xác nhận. Kèm danh sách **"Chờ hoá đơn"**: cùng điều kiện nhưng chưa reconciled — chỉ hiển thị, không gán `statement_id`.
+- `freight`: đơn `partner = brand`, **`shipped_at ≤ end`** (không chặn `start` — để đơn kỳ trước chốt muộn rơi vào kỳ này), `reconcile_status = 'reconciled'`, `statement_id IS NULL`, `status ∈ (shipped, delivered)`, không phải `khong_gui_hang` đã xác nhận. Kèm danh sách **"Chờ hoá đơn"**: `shipped_at ∈ [start,end]`, chưa reconciled — chỉ hiển thị, không gán `statement_id`. `period_start`/`period_end` của bảng kê là kỳ danh nghĩa; dòng nào cũng mang `shipped_at` riêng để brand thấy đơn kỳ trước.
 - `duty`: đơn `partner = brand`, có dòng `carrier_bill_lines.duty > 0` khớp mã vận đơn với hoá đơn `issue_date ∈ [start,end]`, `duty_statement_id IS NULL`. Mỗi dòng bảng kê = mã đơn + mã brand (`brand_reference`) + mã vận đơn + số hoá đơn FedEx + ngày hoá đơn + số tiền.
 - Tính lại nháp (`tinhLaiTongBangKe`) theo `type`. Bảng kê `issued`/`paid` đứng yên như cũ.
 - Đơn gửi kỳ K nhưng `reconciled` sau khi bảng kê K đã `issued`: lượt gom kỳ K+1 lấy theo `shipped_at ≤ end(K+1)` và `statement_id IS NULL` — tự nhiên rơi vào K+1, dòng giữ `shipped_at` gốc. Không có bảng kê bổ sung cho K.
