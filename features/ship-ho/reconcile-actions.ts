@@ -261,8 +261,16 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
 
     const quotedCharged = o.chargedVnd == null ? null : Number(o.chargedVnd);
     const estCost = o.carrierCostVnd == null ? null : Number(o.carrierCostVnd);
-    const margin = displayMargin(quotedCharged, actualChargedVnd, estCost, billed.totalVnd);
-    const deltaVnd = estCost == null ? null : Math.round(billed.totalVnd - estCost);
+    // CHỈ CƯỚC để so margin/delta: `billed.totalVnd` là tổng GỘP mọi dòng bill khớp
+    // tracking — gồm cả dòng duty của bill thuế 736xxx (aggregateBilledLines) — trong
+    // khi `actualChargedVnd` từ 21/09/2026 chỉ còn CƯỚC (duty tách sang actual_duty_vnd).
+    // So thẳng hai số đó thì margin hụt đúng bằng duty, còn delta (vs cước dự tính
+    // `carrier_cost_vnd`, vốn chưa bao giờ có duty) phình lên đúng bằng duty và đẩy đơn
+    // sang 'pending_review' oan. Cột `actual_carrier_cost_vnd` vẫn ghi TỔNG gồm duty —
+    // đó là số tiền thật phải trả FedEx.
+    const cuocBillVnd = Math.round(billed.totalVnd - billed.surcharges.duty);
+    const margin = displayMargin(quotedCharged, actualChargedVnd, estCost, cuocBillVnd);
+    const deltaVnd = estCost == null ? null : Math.round(cuocBillVnd - estCost);
 
     // actualWeightKg = CÂN TÍNH CƯỚC carrier dùng (chargeable) — thứ mọi chỗ hiển
     // thị gọi là "cân bill"; cân thực trên cân giữ ở breakdown (scaleWeightKg).
@@ -315,6 +323,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       await emitShipHoEvent(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
         'order.reconcile_pending',
+        // `billedCostVnd` = TỔNG hoá đơn FedEx (gồm duty) — số tiền thật phải trả;
+        // `deltaVnd` chỉ so phần CƯỚC (xem ghi chú cuocBillVnd ở trên), nên hai số
+        // này lệch nhau đúng bằng duty ở đơn đã có bill thuế. Cố ý: sai lệch cần
+        // operator duyệt là sai lệch CƯỚC, duty thu nguyên giá không có gì để lệch.
         { estimatedCostVnd: estCost, billedCostVnd: Math.round(billed.totalVnd), deltaVnd },
       );
     }
