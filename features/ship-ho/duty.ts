@@ -23,6 +23,26 @@ export function tinhDutyMoi(dong: readonly DongDuty[], daCong: readonly string[]
   return { tong, moi, billNumbers: [...new Set(co.map((d) => d.billNumber))] };
 }
 
+/**
+ * THUẦN: quyết định có ghi/bắn lại duty hay không, dựa trên tổng CŨ đã lưu (`cu`), toàn bộ
+ * dòng duty hiện có (`dong`) và các số hoá đơn đã cộng trước đó (`daCong`).
+ *   - Không có dòng nào và chưa từng ghi (`cu == null`) → không ghi.
+ *   - Tổng đổi (kể cả FedEx sửa số trên CÙNG hoá đơn) hoặc có hoá đơn MỚI → ghi.
+ *   - Không đổi & không có hoá đơn mới → không ghi.
+ *   - `canBan` (event bắn MMP): hoá đơn MỚI nếu có; nếu tổng đổi mà không có hoá đơn mới
+ *     (FedEx sửa số) → bắn lại DÒNG CUỐI hiện có (rỗng nếu toàn bộ dòng đã bị xoá).
+ */
+export function quyetDinhGhiDuty(
+  cu: number | null, dong: readonly DongDuty[], daCong: readonly string[],
+): { ghi: boolean; tong: number; billNumbers: string[]; canBan: DongDuty[] } {
+  const { tong, moi, billNumbers } = tinhDutyMoi(dong, daCong);
+  if (dong.length === 0 && cu == null) return { ghi: false, tong: 0, billNumbers: [], canBan: [] };
+  const tongDoi = cu !== tong;
+  if (!tongDoi && moi.length === 0) return { ghi: false, tong, billNumbers, canBan: [] };
+  const canBan = moi.length > 0 ? moi : dong.slice(-1);
+  return { ghi: true, tong, billNumbers, canBan };
+}
+
 export interface DonChoDuty extends ShipHoEmitOrder {
   trackingNumber: string | null; shippedAt: string | null;
   actualDutyVnd: string | null; dutyBillNumbers: string[] | null;
@@ -32,19 +52,16 @@ export interface DonChoDuty extends ShipHoEmitOrder {
 export async function ghiDutyChoDon(o: DonChoDuty): Promise<{ daGhi: boolean; tong: number; moi: number }> {
   if (!o.trackingNumber) return { daGhi: false, tong: 0, moi: 0 };
   const dong = await getDutyLinesByTracking(o.trackingNumber);
-  const { tong, moi, billNumbers } = tinhDutyMoi(dong, o.dutyBillNumbers ?? []);
+  const daCong = o.dutyBillNumbers ?? [];
   const cu = o.actualDutyVnd == null ? null : Math.round(Number(o.actualDutyVnd));
-  if (dong.length === 0 && cu == null) return { daGhi: false, tong: 0, moi: 0 };
-  const tongDoi = cu !== tong;
-  if (!tongDoi && moi.length === 0) return { daGhi: false, tong, moi: 0 };
+  const { ghi, tong, billNumbers, canBan } = quyetDinhGhiDuty(cu, dong, daCong);
+  if (!ghi) return { daGhi: false, tong, moi: 0 };
 
   await db.update(schema.shipHoOrders)
     .set({ actualDutyVnd: String(tong), dutyBillNumbers: billNumbers })
     .where(eq(schema.shipHoOrders.id, o.id));
 
-  // Bắn từng hoá đơn MỚI; tổng đổi mà không có hoá đơn mới (FedEx sửa số) → bắn lại hoá đơn cuối.
   if (batTachDuty()) {
-    const canBan = moi.length > 0 ? moi : dong.slice(-1);
     for (const d of canBan) {
       await emitShipHoEvent(o, 'order.duty_charged', {
         dutyVnd: tong, addedVnd: d.dutyVnd, fedexInvoiceNumber: d.billNumber, invoiceDate: d.issueDate,
@@ -52,5 +69,6 @@ export async function ghiDutyChoDon(o: DonChoDuty): Promise<{ daGhi: boolean; to
       });
     }
   }
-  return { daGhi: true, tong, moi: moi.length };
+  // Số MỚI báo cáo (không tính lượt "FedEx sửa số" phát lại hoá đơn cũ).
+  return { daGhi: true, tong, moi: tinhDutyMoi(dong, daCong).moi.length };
 }

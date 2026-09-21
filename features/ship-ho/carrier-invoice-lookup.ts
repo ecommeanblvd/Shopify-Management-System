@@ -188,6 +188,7 @@ export async function getDutyLinesByTracking(trackingNumber: string): Promise<Do
   const rows = await db
     .select({
       duty: schema.carrierBillLines.duty,
+      billId: schema.carrierBills.id,
       billNumber: schema.carrierBills.billNumber,
       issueDate: sql<string>`coalesce(${schema.carrierBills.issueDate}, ${schema.carrierBills.periodStart})::text`,
       costCurrency: schema.carrierAccounts.costCurrency,
@@ -202,8 +203,15 @@ export async function getDutyLinesByTracking(trackingNumber: string): Promise<Do
   const out: DongDuty[] = [];
   for (const r of rows) {
     const factor = costToVndFactor(r.costCurrency, r.displayCurrency, Number(r.fx));
-    if (factor == null || !r.billNumber) continue;
-    out.push({ billNumber: r.billNumber, issueDate: r.issueDate, dutyVnd: Math.round(Number(r.duty) * factor) });
+    // Bill KHÔNG có billNumber (bucket '∅' của groupFboIntoBills — chưa map được số hoá
+    // đơn FedEx) VẪN phải cộng vào tổng (spec: tổng = Σ mọi dòng duty khớp tracking).
+    // Chỉ bỏ khi không quy được VND (cấu hình tiền tệ hỏng) — đó mới là lỗi dữ liệu thật.
+    if (factor == null) {
+      console.warn('[ship-ho] getDutyLinesByTracking: bỏ dòng duty không quy được VND', trackingNumber, r.billId);
+      continue;
+    }
+    const billNumber = r.billNumber ?? `bill:${r.billId}`;
+    out.push({ billNumber, issueDate: r.issueDate, dutyVnd: Math.round(Number(r.duty) * factor) });
   }
   return out;
 }
