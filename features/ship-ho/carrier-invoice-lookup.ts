@@ -6,6 +6,9 @@
  */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { gomDongDutyTheoHoaDon, type DongDuty } from './duty-gom';
+
+export type { DongDuty };
 
 export interface BilledSurcharges {
   base: number; discount: number; fuel: number; remote: number;
@@ -178,11 +181,10 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
   return aggregateBilledLines(normalized);
 }
 
-export interface DongDuty { billNumber: string; issueDate: string; dutyVnd: number }
-
-/** Dòng DUTY (thuế/phí NK FedEx ứng hộ) của một mã vận đơn, kèm số + ngày hoá đơn — nguồn
- *  cho cột actual_duty_vnd và bảng kê duty (spec 21/09/2026). Ngày hoá đơn: issue_date, thiếu
- *  thì period_start. Quy về VND cùng cách với cước. */
+/** Dòng DUTY (thuế/phí NK FedEx ứng hộ) của một mã vận đơn, GOM THEO SỐ HOÁ ĐƠN (khoá
+ *  idempotent của order.duty_charged là (mmpRef, fedexInvoiceNumber) — xem duty-gom.ts),
+ *  kèm số + ngày hoá đơn — nguồn cho cột actual_duty_vnd và bảng kê duty (spec 21/09/2026).
+ *  Ngày hoá đơn: issue_date, thiếu thì period_start. Quy về VND cùng cách với cước. */
 export async function getDutyLinesByTracking(trackingNumber: string): Promise<DongDuty[]> {
   if (!trackingNumber) return [];
   const rows = await db
@@ -213,5 +215,5 @@ export async function getDutyLinesByTracking(trackingNumber: string): Promise<Do
     const billNumber = r.billNumber ?? `bill:${r.billId}`;
     out.push({ billNumber, issueDate: r.issueDate, dutyVnd: Math.round(Number(r.duty) * factor) });
   }
-  return out;
+  return gomDongDutyTheoHoaDon(out);
 }
