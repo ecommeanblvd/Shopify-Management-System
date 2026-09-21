@@ -2091,6 +2091,7 @@ export const shipHoOrderStatusEnum = pgEnum('ship_ho_order_status', [
   'draft', 'quoted', 'shipped', 'delivered', 'billed', 'settled',
 ]);
 export const shipHoStatementStatusEnum = pgEnum('ship_ho_statement_status', ['draft', 'issued', 'paid']);
+export const shipHoStatementTypeEnum = pgEnum('ship_ho_statement_type', ['freight', 'duty']);
 
 /** Bật dịch vụ ship hộ cho 1 brand (mmp_brands). 1 config / brand. */
 export const shipHoPartners = pgTable('ship_ho_partners', {
@@ -2154,6 +2155,8 @@ export const shipHoStatements = pgTable('ship_ho_statements', {
   orderCount: integer('order_count').notNull().default(0),
   totalChargedVnd: numeric('total_charged_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
   status: shipHoStatementStatusEnum('status').notNull().default('draft'),
+  /** freight = cước (kỳ theo ngày gửi); duty = thuế/phí NK thu hộ (kỳ theo ngày hoá đơn FedEx). Spec 21/09/2026. */
+  type: shipHoStatementTypeEnum('type').notNull().default('freight'),
   issuedAt: timestamp('issued_at'),
   paidAt: timestamp('paid_at'),
   fileKey: text('file_key'),
@@ -2240,6 +2243,12 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   smsMeasuredBy: text('sms_measured_by'),
   // Bill (P3)
   statementId: uuid('statement_id').references(() => shipHoStatements.id),
+  /** Duty FedEx ứng hộ, cộng dồn từ carrier_bill_lines.duty theo mã vận đơn. NULL = chưa có hoá đơn duty. Không nằm trong actual_charged_vnd. */
+  actualDutyVnd: numeric('actual_duty_vnd', { precision: 14, scale: 2 }),
+  /** Số hoá đơn FedEx đã cộng vào actual_duty_vnd — hoá đơn mới về mới cộng thêm. */
+  dutyBillNumbers: text('duty_bill_numbers').array(),
+  /** Bảng kê duty đơn thuộc về (khác statement_id = bảng kê cước). */
+  dutyStatementId: uuid('duty_statement_id').references(() => shipHoStatements.id),
   // Đồng bộ từ bảng Lark của đội logistics (migration 0137). Khoá ghép giữa hai bên là
   // MÃ VẬN ĐƠN — mã đơn hai bên đánh số độc lập nên không bao giờ khớp. `larkRecordId`
   // giữ để lần sau nhận lại đúng dòng cũ kể cả khi mã vận đơn được sửa.
