@@ -14,6 +14,8 @@ import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile, donDaDongBang } from './reconcile-decision';
 import { khopOBangGia, layOBangGia } from './bill-base-check';
 import { markupKhiReBill } from './tier-pricing';
+import { ghiDutyChoDon } from './duty';
+import { giaCuoiChoMmp } from './gia-cuoi-mmp';
 
 export interface ReconcileSummary {
   total: number;
@@ -91,6 +93,8 @@ export interface RebillSummary {
   dutyOnly: number;
   /** Đã đối soát và bill không đổi → GIỮ NGUYÊN giá đã chốt, không tính lại (CEO 08/09). */
   frozen: number;
+  /** Số đơn ghi được duty (mới hoặc tổng đổi) trong lượt chạy — độc lập với cước. */
+  dutyGhi?: number;
   /** Cước net FedEx trên bill KHÔNG trùng ô nào của bảng giá cố định → ops soi rate card / dòng bill. */
   baseLech: Array<{ code: string; netVnd: number; lechVnd: number | null; ganNhat: string | null }>;
   errors: Array<{ code: string; reason: string }>;
@@ -143,6 +147,8 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       smsDimLengthCm: schema.shipHoOrders.smsDimLengthCm,
       smsDimWidthCm: schema.shipHoOrders.smsDimWidthCm,
       smsDimHeightCm: schema.shipHoOrders.smsDimHeightCm,
+      actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
+      dutyBillNumbers: schema.shipHoOrders.dutyBillNumbers,
     })
     .from(schema.shipHoOrders)
     .where(isNotNull(schema.shipHoOrders.trackingNumber));
@@ -152,6 +158,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
 
   for (const o of orders) {
     const billed = await getBilledByTracking(o.trackingNumber ?? '');
+    // Duty độc lập với cước (spec 21/09): ghi kể cả khi bill cước chưa về hay đơn đã đóng băng.
+    const duty = await ghiDutyChoDon({ id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef,
+      trackingNumber: o.trackingNumber, shippedAt: o.shippedAt, actualDutyVnd: o.actualDutyVnd, dutyBillNumbers: o.dutyBillNumbers });
+    if (duty.daGhi) summary.dutyGhi = (summary.dutyGhi ?? 0) + 1;
     if (!billed) { summary.unmatched += 1; continue; }
     // Mới CHỈ có bill duty (bill CƯỚC chưa về) → chưa đủ để re-bill: bỏ qua như
     // chưa có bill, tránh actualCarrierCost = mỗi duty → margin ảo (03/08).
@@ -283,14 +293,14 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // Chống bắn trùng: so với giá ĐÃ GỬI THẬT (đọc outbox), không so với cột trên
     // đơn. Cột `actual_charged_vnd` bị ghi đè mỗi lượt chạy, còn upload lại hoá
     // đơn thì reset `reconcile_status` → cờ "lần đầu" bật lại và bắn lại y giá cũ.
-    const finalChargedVnd = actualChargedVnd ?? quotedCharged;
-    if (shouldEmitCharge && finalChargedVnd != null) {
+    const finalCuoc = actualChargedVnd ?? quotedCharged;
+    if (shouldEmitCharge && finalCuoc != null) {
       await banGiaCuoiNeuDoi(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
         {
-          finalChargedVnd,
+          ...giaCuoiChoMmp({ cuocVnd: finalCuoc, dutyVnd: duty.tong, shippedAt: o.shippedAt }),
           previousChargedVnd: quotedCharged,
-          deltaVnd: quotedCharged == null ? null : finalChargedVnd - quotedCharged,
+          deltaVnd: quotedCharged == null ? null : finalCuoc - quotedCharged,
           billedWeightKg: kgToStore,
           scaleWeightKg: billed.weightKg,
         },

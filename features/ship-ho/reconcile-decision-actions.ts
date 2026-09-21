@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi } from './final-charge-emit';
+import { giaCuoiChoMmp } from './gia-cuoi-mmp';
 
 const num = (v: string | null): number | null => {
   if (v == null) return null;
@@ -25,6 +26,8 @@ async function loadOrderForDecision(orderId: string) {
       deltaVnd: schema.shipHoOrders.deltaVnd,
       reconcileStatus: schema.shipHoOrders.reconcileStatus,
       reconcileDecision: schema.shipHoOrders.reconcileDecision,
+      actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
+      shippedAt: schema.shipHoOrders.shippedAt,
     })
     .from(schema.shipHoOrders)
     .where(eq(schema.shipHoOrders.id, orderId))
@@ -54,7 +57,7 @@ export async function acceptShipHoDiscrepancy(orderId: string): Promise<void> {
     await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
       {
-        finalChargedVnd,
+        ...giaCuoiChoMmp({ cuocVnd: finalChargedVnd, dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt }),
         previousChargedVnd: quoted,
         deltaVnd: quoted == null ? null : finalChargedVnd - quoted,
         reconcileResolution: 'internal_error',
@@ -123,7 +126,7 @@ export async function resolveShipHoClaim(orderId: string, credited: boolean): Pr
     await banGiaCuoiNeuDoi(
       { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
       {
-        finalChargedVnd,
+        ...giaCuoiChoMmp({ cuocVnd: finalChargedVnd, dutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd), shippedAt: o.shippedAt }),
         previousChargedVnd: quoted,
         deltaVnd: quoted == null ? null : finalChargedVnd - quoted,
         reconcileResolution: decision,
