@@ -87,18 +87,25 @@ export async function recomputeDraftStatement(id: string): Promise<{ ok: boolean
 
 /** issued: đánh dấu đã gửi partner + bắn `statement.issued` (bản đối soát) cho MMP.
  *  paid: đã thu + bắn `statement.paid`; loại freight đơn trong kê chuyển 'settled', loại duty không đổi status đơn.
- *  Push MMP best-effort — lỗi không chặn đổi trạng thái (CEO 21/09/2026). */
+ *  Push MMP best-effort — lỗi không chặn đổi trạng thái (CEO 21/09/2026) NHƯNG trả kết quả
+ *  `mmp` (ok + detail) để UI nói rõ MMP có nhận hay không, thay vì im lặng. */
 export async function setStatementStatus(
   id: string,
   status: 'issued' | 'paid',
-): Promise<{ ok: boolean; error?: string; mmp?: string }> {
+): Promise<{ ok: boolean; error?: string; mmp?: { ok: boolean; detail: string } }> {
   try {
     await requireManageShipHo();
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-  let mmp: string | undefined;
+  let mmp: { ok: boolean; detail: string } | undefined;
   if (status === 'issued') {
+    // Đã phát hành rồi thì KHÔNG đổi trạng thái và KHÔNG bắn lại: bản đối soát gửi hai
+    // lần làm MMP thấy hai ảnh chụp khác nhau của cùng bảng kê (issuedAt bị dời).
+    const [ht] = await db.select({ status: schema.shipHoStatements.status })
+      .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
+    if (!ht) return { ok: false, error: 'Không tìm thấy bảng kê' };
+    if (ht.status === 'issued') return { ok: false, error: 'Bảng kê đã phát hành — không gửi lại' };
     await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
     const data = await getShipHoStatement(id);
     if (data) {
@@ -118,8 +125,7 @@ export async function setStatementStatus(
           ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
         });
       }
-      const push = await pushStatementEvent('statement.issued', data.statement.partnerBrandSlug, payloadStatementIssued(data.statement, dong));
-      mmp = push.detail;
+      mmp = await pushStatementEvent('statement.issued', data.statement.partnerBrandSlug, payloadStatementIssued(data.statement, dong));
     }
   } else {
     const [st] = await db.select({ type: schema.shipHoStatements.type, partnerBrandSlug: schema.shipHoStatements.partnerBrandSlug })
@@ -130,8 +136,7 @@ export async function setStatementStatus(
       await db.update(schema.shipHoOrders).set({ status: 'settled' }).where(eq(schema.shipHoOrders.statementId, id));
     }
     if (st) {
-      const push = await pushStatementEvent('statement.paid', st.partnerBrandSlug, { statementId: id, type: st.type, paidAt: paidAt.toISOString() });
-      mmp = push.detail;
+      mmp = await pushStatementEvent('statement.paid', st.partnerBrandSlug, { statementId: id, type: st.type, paidAt: paidAt.toISOString() });
     }
   }
   revalidatePath('/f/ship-ho/statements');

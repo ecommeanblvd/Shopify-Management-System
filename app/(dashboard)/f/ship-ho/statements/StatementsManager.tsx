@@ -41,7 +41,13 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
     start(async () => {
       setMsg(null);
       const r = await setStatementStatus(id, status);
-      if (!r.ok) setMsg(r.error ?? 'Lỗi cập nhật trạng thái');
+      if (!r.ok) { setMsg(r.error ?? 'Lỗi cập nhật trạng thái'); return; }
+      // Push MMP là best-effort nên trạng thái vẫn đổi khi push hỏng — phải NÓI RA,
+      // không thì bảng kê nằm 'issued' mà MMP chưa hề nhận bản đối soát.
+      const nhan = status === 'issued' ? 'Đã đánh dấu đã gửi' : 'Đã đánh dấu đã thu';
+      if (!r.mmp) setMsg(`${nhan} nhưng KHÔNG gửi được MMP: không đọc được dữ liệu bảng kê.`);
+      else if (r.mmp.ok) setMsg(`${nhan} · đã gửi MMP: ${r.mmp.detail}`);
+      else setMsg(`${nhan} nhưng MMP KHÔNG nhận: ${r.mmp.detail} — báo MMP đối soát tay.`);
     });
 
   const tinhLai = (id: string) =>
