@@ -19,4 +19,11 @@ describe('payloadStatementIssued', () => {
     expect(p.periodBasis).toBe('fedex_invoice_date');
     expect((p.orders as Array<{ fedexInvoiceNumber: string }>)[0].fedexInvoiceNumber).toBe('736059786');
   });
+  it('có mmpRef khác code → giữ nguyên mmpRef, KHÔNG bị thay bằng code', () => {
+    const st = { id: 's3', type: 'freight' as const, periodStart: '2026-07-01', periodEnd: '2026-07-31', partnerBrandSlug: 'kalisa' };
+    const p = payloadStatementIssued(st, [
+      { code: '26-INSLG-SV-0002', mmpRef: 'MMP-REF-9999', brandReference: '#KLS1990', trackingNumber: '873968744599', shippedAt: '2026-07-06', amountVnd: 1_567_050 },
+    ]);
+    expect((p.orders as Array<{ mmpRef: string }>)[0].mmpRef).toBe('MMP-REF-9999');
+  });
 });

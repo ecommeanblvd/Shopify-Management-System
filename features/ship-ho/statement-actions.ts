@@ -22,12 +22,15 @@ export async function generateStatement(
   if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', ...rong };
   if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', ...rong };
 
-  let ids: string[] = []; let tien: number[] = []; let choHoaDon = 0;
+  const ids: string[] = []; const tien: number[] = []; let choHoaDon = 0;
   if (type === 'freight') {
     // Kỳ theo NGÀY GỬI; vào kê khi Đức đã chốt đối soát. shipped_at ≤ end (không chặn start) để đơn kỳ trước chốt muộn rơi vào kỳ này.
+    // cho (chờ hoá đơn) = CHƯA CÓ GIÁ THỰC dùng được — chưa reconciled, HOẶC đã reconciled nhưng
+    // actual_charged_vnd vẫn null (re-quote lỗi) — nếu không đơn này biến mất khỏi cả bill lẫn danh
+    // sách chờ (Important-2, review 21/09).
     const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
       SELECT id, CASE WHEN reconcile_status = 'reconciled' THEN actual_charged_vnd END AS gia,
-             (reconcile_status IS DISTINCT FROM 'reconciled' AND shipped_at >= ${periodStart}) AS cho
+             ((actual_charged_vnd IS NULL OR reconcile_status IS DISTINCT FROM 'reconciled') AND shipped_at >= ${periodStart}) AS cho
         FROM ship_ho_orders
        WHERE partner_brand_slug = ${partnerBrandSlug} AND statement_id IS NULL
          AND status IN ('shipped','delivered') AND shipped_at IS NOT NULL AND shipped_at <= ${periodEnd}
@@ -91,14 +94,22 @@ export async function setStatementStatus(
     await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
     const data = await getShipHoStatement(id);
     if (data) {
-      const dong: DongBangKeMmp[] = data.orders.map((o) => {
-        const r = o as { code: string; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
-        return {
-          code: r.code, mmpRef: null, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
-          shippedAt: r.shippedAt, amountVnd: r.giaThuVnd ?? 0,
+      const dong: DongBangKeMmp[] = [];
+      for (const o of data.orders) {
+        const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
+        // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd
+        // — null ở đây là bất thường (dữ liệu đổi giữa lúc gom kê và lúc gửi); bỏ khỏi payload MMP
+        // thay vì báo lệch giả bằng 0, chỉ log cảnh báo.
+        if (r.giaThuVnd == null) {
+          console.warn(`[statement-push] bỏ đơn ${r.code} khỏi statement.issued ${id}: giaThuVnd null`);
+          continue;
+        }
+        dong.push({
+          code: r.code, mmpRef: r.mmpRef, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
+          shippedAt: r.shippedAt, amountVnd: r.giaThuVnd,
           ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
-        };
-      });
+        });
+      }
       const push = await pushStatementEvent('statement.issued', data.statement.partnerBrandSlug, payloadStatementIssued(data.statement, dong));
       mmp = push.detail;
     }

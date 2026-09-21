@@ -42,26 +42,29 @@ export async function getShipHoStatement(id: string) {
   const [st] = await db.select().from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
   if (!st) return null;
   if (st.type === 'duty') {
-    const { rows } = await db.execute<{ code: string; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; dutyVnd: string; billNumber: string | null; issueDate: string | null }>(sql`
-      SELECT o.code, o.brand_reference AS "brandReference", o.tracking_number AS "trackingNumber", o.shipped_at::text AS "shippedAt", o.actual_duty_vnd AS "dutyVnd",
-             (SELECT string_agg(b.bill_number, ' + ') FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id WHERE l.tracking_number = o.tracking_number AND l.duty > 0) AS "billNumber",
+    const { rows } = await db.execute<{ code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; dutyVnd: string; billNumber: string | null; issueDate: string | null }>(sql`
+      SELECT o.code, o.mmp_ref AS "mmpRef", o.brand_reference AS "brandReference", o.tracking_number AS "trackingNumber", o.shipped_at::text AS "shippedAt", o.actual_duty_vnd AS "dutyVnd",
+             array_to_string(o.duty_bill_numbers, ' + ') AS "billNumber",
              (SELECT max(COALESCE(b.issue_date, b.period_start))::text FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id WHERE l.tracking_number = o.tracking_number AND l.duty > 0) AS "issueDate"
         FROM ship_ho_orders o WHERE o.duty_statement_id = ${id} ORDER BY o.shipped_at`);
     return { statement: st, orders: rows.map((r) => ({ ...r, giaThuVnd: Number(r.dutyVnd) })), choHoaDon: [] };
   }
   const orders = await db.select({
-      code: schema.shipHoOrders.code, brandReference: schema.shipHoOrders.brandReference, trackingNumber: schema.shipHoOrders.trackingNumber,
+      code: schema.shipHoOrders.code, mmpRef: schema.shipHoOrders.mmpRef, brandReference: schema.shipHoOrders.brandReference, trackingNumber: schema.shipHoOrders.trackingNumber,
       shippedAt: schema.shipHoOrders.shippedAt, country: schema.shipHoOrders.country,
       chargedVnd: schema.shipHoOrders.chargedVnd, actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd, marginVnd: schema.shipHoOrders.marginVnd, actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
     }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id)).orderBy(schema.shipHoOrders.shippedAt);
-  // Chờ hoá đơn: gửi trong kỳ, chưa chốt, chưa vào kê nào — chỉ hiển thị.
+  // Chờ hoá đơn: gửi trong kỳ, CHƯA CÓ GIÁ THỰC ĐÃ CHỐT (chưa reconciled HOẶC reconciled nhưng
+  // actual_charged_vnd null — re-quote lỗi, xem Important-2 review 21/09), chưa vào kê nào, cùng
+  // luật loại trừ "không gửi hàng, xác nhận" như generateStatement để count/list khớp nhau.
   const choHoaDon = await db.select({ code: schema.shipHoOrders.code, brandReference: schema.shipHoOrders.brandReference, shippedAt: schema.shipHoOrders.shippedAt, chargedVnd: schema.shipHoOrders.chargedVnd })
     .from(schema.shipHoOrders)
     .where(and(eq(schema.shipHoOrders.partnerBrandSlug, st.partnerBrandSlug), isNull(schema.shipHoOrders.statementId),
-      sql`${schema.shipHoOrders.reconcileStatus} IS DISTINCT FROM 'reconciled'`,
+      sql`(${schema.shipHoOrders.actualChargedVnd} IS NULL OR ${schema.shipHoOrders.reconcileStatus} IS DISTINCT FROM 'reconciled')`,
       sql`${schema.shipHoOrders.shippedAt} BETWEEN ${st.periodStart} AND ${st.periodEnd}`,
-      inArray(schema.shipHoOrders.status, ['shipped', 'delivered'] as const)));
+      inArray(schema.shipHoOrders.status, ['shipped', 'delivered'] as const),
+      sql`NOT (COALESCE(${schema.shipHoOrders.lyDoCham}, '') = 'khong_gui_hang' AND COALESCE(${schema.shipHoOrders.lyDoDoiChieu}, '') = 'xac_nhan')`));
   return { statement: st, orders: orders.map((o) => ({ ...o, giaThuVnd: giaThuBangKe(o), theoBill: true })), choHoaDon };
 }
 
