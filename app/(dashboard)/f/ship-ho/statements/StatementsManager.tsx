@@ -55,7 +55,8 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
       setMsg(null);
       const r = await recomputeDraftStatement(id);
       if (!r.ok) { setMsg(r.error ?? 'Lỗi tính lại'); return; }
-      setMsg(`Đã tính lại: ${r.orderCount} đơn · ${(r.truoc ?? 0).toLocaleString('vi-VN')} → ${r.totalChargedVnd.toLocaleString('vi-VN')} ₫ (đơn đã có bill thu theo giá thực)`);
+      const go = r.daGo && r.daGo > 0 ? ` · gỡ ${r.daGo} đơn chưa chốt ra khỏi kê: ${(r.daGoMa ?? []).join(', ')}` : '';
+      setMsg(`Đã tính lại: ${r.orderCount} đơn · ${(r.truoc ?? 0).toLocaleString('vi-VN')} → ${r.totalChargedVnd.toLocaleString('vi-VN')} ₫ (đơn đã có bill thu theo giá thực)${go}`);
     });
 
   const exportXlsx = (id: string, label: string) =>

@@ -30,3 +30,28 @@ export function giaThuBangKe(o: {
   const v = Number(o.actualChargedVnd);
   return Number.isFinite(v) ? v : null;
 }
+
+export interface DonTrongKe {
+  id: string;
+  actualChargedVnd: string | number | null;
+  reconcileStatus: string | null;
+  reconcileDecision: string | null;
+}
+
+/**
+ * THUẦN: chia đơn đang gán vào một bảng kê CƯỚC draft thành hai nhóm —
+ * `thu` (giá đưa vào tổng, qua `giaThuBangKe`) và `go` (id đơn phải GỠ khỏi kê vì
+ * chưa chốt được giá — ví dụ mới rơi về 'pending_review'/'claiming' sau khi đã gán
+ * vào kê, hoặc actual_charged_vnd lại null). Dùng bởi `tinhLaiTongBangKe` (N2, review
+ * 21/09/2026) để đơn "go" không bị kẹt trong kê draft mãi mãi — `generateStatement`
+ * kỳ sau mới nhặt lại được vì statement_id đã gỡ.
+ */
+export function chiaDonTrongKe(orders: readonly DonTrongKe[]): { thu: number[]; go: string[] } {
+  const thu: number[] = [];
+  const go: string[] = [];
+  for (const o of orders) {
+    const g = giaThuBangKe(o);
+    if (g != null) thu.push(g); else go.push(o.id);
+  }
+  return { thu, go };
+}

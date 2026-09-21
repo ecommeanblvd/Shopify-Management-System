@@ -4,7 +4,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement, QUYET_DINH_DA_CHOT } from './statement-logic';
+import { summarizeStatement, QUYET_DINH_DA_CHOT, giaThuBangKe } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
 import { tinhLaiTongBangKe } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
@@ -74,7 +74,7 @@ export async function generateStatement(
 }
 
 /** Tính lại tổng bảng kê NHÁP theo giá thực của các đơn đã có bill (bill về sau khi tạo kê). */
-export async function recomputeDraftStatement(id: string): Promise<{ ok: boolean; error?: string; orderCount: number; totalChargedVnd: number; truoc?: number }> {
+export async function recomputeDraftStatement(id: string): Promise<{ ok: boolean; error?: string; orderCount: number; totalChargedVnd: number; truoc?: number; daGo?: number; daGoMa?: string[] }> {
   try {
     await requireManageShipHo();
   } catch (e) {
@@ -102,10 +102,24 @@ export async function setStatementStatus(
   if (status === 'issued') {
     // Đã phát hành rồi thì KHÔNG đổi trạng thái và KHÔNG bắn lại: bản đối soát gửi hai
     // lần làm MMP thấy hai ảnh chụp khác nhau của cùng bảng kê (issuedAt bị dời).
-    const [ht] = await db.select({ status: schema.shipHoStatements.status })
+    const [ht] = await db.select({ status: schema.shipHoStatements.status, type: schema.shipHoStatements.type })
       .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
     if (!ht) return { ok: false, error: 'Không tìm thấy bảng kê' };
     if (ht.status === 'issued') return { ok: false, error: 'Bảng kê đã phát hành — không gửi lại' };
+    // Chặn phát hành kê còn đơn CHƯA CHỐT được giá (N2, review 21/09/2026): đơn có
+    // thể rơi về 'pending_review'/'claiming' hoặc mất actual_charged_vnd SAU khi đã
+    // gán vào kê mà operator quên bấm "Tính lại" — phát hành lúc đó gửi thiếu tiền
+    // (đơn không có trong payload MMP — xem vòng lặp bên dưới) mà bảng kê vẫn coi
+    // như đã gửi đủ.
+    if (ht.type === 'freight') {
+      const dangKe = await db.select({
+        actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+        reconcileStatus: schema.shipHoOrders.reconcileStatus,
+        reconcileDecision: schema.shipHoOrders.reconcileDecision,
+      }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id));
+      const chuaChot = dangKe.filter((o) => giaThuBangKe(o) == null).length;
+      if (chuaChot > 0) return { ok: false, error: `Bảng kê còn ${chuaChot} đơn chưa chốt — bấm Tính lại trước` };
+    }
     await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
     const data = await getShipHoStatement(id);
     if (data) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeStatement, giaThuBangKe, QUYET_DINH_DA_CHOT } from './statement-logic';
+import { summarizeStatement, giaThuBangKe, QUYET_DINH_DA_CHOT, chiaDonTrongKe } from './statement-logic';
 
 describe('summarizeStatement', () => {
   it('tổng chargedVnd + đếm đơn', () => {
@@ -38,5 +38,31 @@ describe('giaThuBangKe — bảng kê CHỈ thu giá thực đã chốt (CEO 21/
   }
   it('QUYET_DINH_DA_CHOT khớp đúng 3 trạng thái đã có giá cuối', () => {
     expect([...QUYET_DINH_DA_CHOT]).toEqual(['accepted', 'claim_credited', 'claim_rejected']);
+  });
+});
+
+describe('chiaDonTrongKe — chia đơn trong kê draft thành thu/gỡ (N2, review 21/09)', () => {
+  it('tất cả đã chốt giá → toàn bộ vào thu, không đơn nào gỡ', () => {
+    const r = chiaDonTrongKe([
+      { id: 'a', actualChargedVnd: '100000', reconcileStatus: 'reconciled', reconcileDecision: null },
+      { id: 'b', actualChargedVnd: '200000', reconcileStatus: 'reconciled', reconcileDecision: 'accepted' },
+    ]);
+    expect(r).toEqual({ thu: [100000, 200000], go: [] });
+  });
+
+  it('một đơn rơi về pending_review → gỡ khỏi kê, còn lại vẫn thu', () => {
+    const r = chiaDonTrongKe([
+      { id: 'a', actualChargedVnd: '100000', reconcileStatus: 'reconciled', reconcileDecision: null },
+      { id: 'b', actualChargedVnd: '200000', reconcileStatus: 'reconciled', reconcileDecision: 'pending_review' },
+    ]);
+    expect(r).toEqual({ thu: [100000], go: ['b'] });
+  });
+
+  it('một đơn mất actual_charged_vnd (re-quote lỗi) → gỡ khỏi kê', () => {
+    const r = chiaDonTrongKe([
+      { id: 'a', actualChargedVnd: '100000', reconcileStatus: 'reconciled', reconcileDecision: null },
+      { id: 'b', actualChargedVnd: null, reconcileStatus: 'reconciled', reconcileDecision: null },
+    ]);
+    expect(r).toEqual({ thu: [100000], go: ['b'] });
   });
 });
