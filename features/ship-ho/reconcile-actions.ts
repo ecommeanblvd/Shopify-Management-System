@@ -319,11 +319,12 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       await emitShipHoEvent(
         { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
         'order.reconcile_pending',
-        // `billedCostVnd` = TỔNG hoá đơn FedEx (gồm duty) — số tiền thật phải trả;
-        // `deltaVnd` chỉ so phần CƯỚC (xem ghi chú cuocBillVnd ở trên), nên hai số
-        // này lệch nhau đúng bằng duty ở đơn đã có bill thuế. Cố ý: sai lệch cần
-        // operator duyệt là sai lệch CƯỚC, duty thu nguyên giá không có gì để lệch.
-        { estimatedCostVnd: estCost, billedCostVnd: Math.round(billed.totalVnd), deltaVnd },
+        // `billedCostVnd` = CƯỚC thực từ bill, KHÔNG gồm duty (khớp `deltaVnd`, cũng
+        // chỉ so phần cước — xem ghi chú cuocBillVnd ở trên); sai lệch cần operator
+        // duyệt là sai lệch CƯỚC, duty thu nguyên giá không có gì để lệch. `dutyVnd`
+        // đi kèm riêng để MMP vẫn thấy tổng thật phải trả FedEx = billedCostVnd + dutyVnd
+        // (N3, review 21/09/2026 — trước đây billedCostVnd gộp cả duty, không khớp deltaVnd).
+        { estimatedCostVnd: estCost, billedCostVnd: cuocBillVnd, dutyVnd: duty.tong, deltaVnd },
       );
     }
   }

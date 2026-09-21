@@ -85,13 +85,21 @@ export async function claimShipHoWithCarrier(orderId: string, reason?: string): 
     })
     .where(eq(schema.shipHoOrders.id, orderId));
 
+  // `actual_carrier_cost_vnd` lưu TỔNG hoá đơn carrier (gồm duty — xem ghi chú cùng
+  // tên ở reconcile-actions.ts); billedCostVnd ở đây phải là CƯỚC thực (khớp deltaVnd,
+  // vốn chỉ so phần cước), nên trừ actual_duty_vnd ra — kèm dutyVnd riêng để MMP vẫn
+  // thấy tổng thật phải trả FedEx (N3, review 21/09/2026).
+  const dutyVnd = num(o.actualDutyVnd) ?? 0;
+  const actualCarrierTotal = num(o.actualCarrierCostVnd);
+  const billedCostVnd = actualCarrierTotal == null ? null : actualCarrierTotal - dutyVnd;
   await emitShipHoEvent(
     { id: o.id, code: o.code, source: o.source, mmpRef: o.mmpRef },
     'order.claim_pending',
     {
       deltaVnd: num(o.deltaVnd),
       estimatedCostVnd: num(o.carrierCostVnd),
-      billedCostVnd: num(o.actualCarrierCostVnd),
+      billedCostVnd,
+      dutyVnd,
       reason: trimmed,
     },
   );
