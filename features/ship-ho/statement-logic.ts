@@ -4,10 +4,11 @@ export function summarizeStatement(chargedVndList: number[]): { orderCount: numb
   return { orderCount: chargedVndList.length, totalChargedVnd: Math.round(total) };
 }
 
-/** THUẦN: giá đưa vào bảng kê của một đơn — đơn ĐÃ CÓ BILL (reconciled, có giá thực)
- *  thu theo giá thực; chưa có bill thu theo giá báo (CEO 08/09). */
-export function giaThuBangKe(o: { chargedVnd: string | number | null; actualChargedVnd: string | number | null; reconcileStatus: string | null }): number | null {
-  const thuc = o.reconcileStatus === 'reconciled' && o.actualChargedVnd != null ? Number(o.actualChargedVnd) : NaN;
-  if (Number.isFinite(thuc)) return thuc;
-  return o.chargedVnd == null ? null : Number(o.chargedVnd);
+export type LoaiBangKe = 'freight' | 'duty';
+
+/** THUẦN: giá đưa vào bảng kê CƯỚC — chỉ giá thực đã chốt đối soát (CEO 21/09/2026). Chưa chốt → null → đơn ở mục "Chờ hoá đơn". */
+export function giaThuBangKe(o: { actualChargedVnd: string | number | null; reconcileStatus: string | null }): number | null {
+  if (o.reconcileStatus !== 'reconciled' || o.actualChargedVnd == null) return null;
+  const v = Number(o.actualChargedVnd);
+  return Number.isFinite(v) ? v : null;
 }

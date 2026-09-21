@@ -1,67 +1,65 @@
 'use server';
 
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement, giaThuBangKe } from './statement-logic';
+import { summarizeStatement } from './statement-logic';
+import type { LoaiBangKe } from './statement-logic';
 import { tinhLaiTongBangKe } from './statement-core';
+import { getShipHoStatement } from './statement-queries';
+import { payloadStatementIssued, pushStatementEvent } from './statement-push';
+import type { DongBangKeMmp } from './statement-push';
 
-/** Gom đơn đủ điều kiện bill của partner trong kỳ (có chargedVnd, chưa vào kê,
- *  đã gửi/giao, quotedAt trong [start,end]) → tạo ship_ho_statements + gán. */
+/** Gom đơn theo LOẠI bảng kê: cước (freight, kỳ theo ngày gửi, chỉ đơn đã chốt đối
+ *  soát) hoặc duty (kỳ theo ngày hoá đơn FedEx). CEO 21/09/2026. */
 export async function generateStatement(
-  partnerBrandSlug: string,
-  periodStart: string,
-  periodEnd: string,
-  opts?: { dryRun?: boolean },
-): Promise<{ ok: boolean; error?: string; statementId?: string; orderCount: number; totalChargedVnd: number; dryRun: boolean }> {
-  try {
-    await requireManageShipHo();
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e), orderCount: 0, totalChargedVnd: 0, dryRun: opts?.dryRun ?? false };
-  }
+  partnerBrandSlug: string, type: LoaiBangKe, periodStart: string, periodEnd: string, opts?: { dryRun?: boolean },
+): Promise<{ ok: boolean; error?: string; statementId?: string; orderCount: number; totalChargedVnd: number; dryRun: boolean; choHoaDon: number }> {
   const dryRun = opts?.dryRun ?? false;
-  if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', orderCount: 0, totalChargedVnd: 0, dryRun };
-  if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', orderCount: 0, totalChargedVnd: 0, dryRun };
+  const rong = { orderCount: 0, totalChargedVnd: 0, dryRun, choHoaDon: 0 };
+  try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...rong }; }
+  if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', ...rong };
+  if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', ...rong };
 
-  const orders = await db
-    .select({
-      id: schema.shipHoOrders.id, chargedVnd: schema.shipHoOrders.chargedVnd,
-      actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus,
-    })
-    .from(schema.shipHoOrders)
-    .where(and(
-      eq(schema.shipHoOrders.partnerBrandSlug, partnerBrandSlug),
-      sql`${schema.shipHoOrders.chargedVnd} is not null`,
-      isNull(schema.shipHoOrders.statementId),
-      // Chỉ tạo nhãn, không gửi hàng (FedEx xác nhận) → không thu brand (CEO 17/09).
-      sql`not (coalesce(${schema.shipHoOrders.lyDoCham}, '') = 'khong_gui_hang' and coalesce(${schema.shipHoOrders.lyDoDoiChieu}, '') = 'xac_nhan')`,
-      inArray(schema.shipHoOrders.status, ['shipped', 'delivered'] as ('shipped' | 'delivered')[]),
-      sql`${schema.shipHoOrders.quotedAt}::date >= ${periodStart}`,
-      sql`${schema.shipHoOrders.quotedAt}::date <= ${periodEnd}`,
-    ));
-
-  // Đơn đã có bill → giá thực; chưa có bill → giá báo (CEO 08/09).
-  const sums = summarizeStatement(orders.map((o) => giaThuBangKe(o)).filter((v): v is number => v != null));
-  if (dryRun || orders.length === 0) {
-    return { ok: true, orderCount: sums.orderCount, totalChargedVnd: sums.totalChargedVnd, dryRun };
+  let ids: string[] = []; let tien: number[] = []; let choHoaDon = 0;
+  if (type === 'freight') {
+    // Kỳ theo NGÀY GỬI; vào kê khi Đức đã chốt đối soát. shipped_at ≤ end (không chặn start) để đơn kỳ trước chốt muộn rơi vào kỳ này.
+    const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
+      SELECT id, CASE WHEN reconcile_status = 'reconciled' THEN actual_charged_vnd END AS gia,
+             (reconcile_status IS DISTINCT FROM 'reconciled' AND shipped_at >= ${periodStart}) AS cho
+        FROM ship_ho_orders
+       WHERE partner_brand_slug = ${partnerBrandSlug} AND statement_id IS NULL
+         AND status IN ('shipped','delivered') AND shipped_at IS NOT NULL AND shipped_at <= ${periodEnd}
+         AND NOT (COALESCE(ly_do_cham,'') = 'khong_gui_hang' AND COALESCE(ly_do_doi_chieu,'') = 'xac_nhan')`);
+    for (const r of rows.rows) {
+      if (r.gia != null) { ids.push(r.id); tien.push(Number(r.gia)); }
+      else if (r.cho) choHoaDon++;
+    }
+  } else {
+    // Kỳ theo NGÀY HOÁ ĐƠN FedEx: đơn có dòng duty của hoá đơn trong kỳ, chưa vào kê duty.
+    const rows = await db.execute<{ id: string; gia: string }>(sql`
+      SELECT o.id, o.actual_duty_vnd AS gia
+        FROM ship_ho_orders o
+       WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.duty_statement_id IS NULL AND o.actual_duty_vnd > 0
+         AND EXISTS (SELECT 1 FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id
+                      WHERE l.tracking_number = o.tracking_number AND l.duty > 0
+                        AND COALESCE(b.issue_date, b.period_start) BETWEEN ${periodStart} AND ${periodEnd})`);
+    for (const r of rows.rows) { ids.push(r.id); tien.push(Number(r.gia)); }
   }
+  const sums = summarizeStatement(tien);
+  if (dryRun || ids.length === 0) return { ok: true, ...sums, dryRun, choHoaDon };
 
   const [st] = await db.insert(schema.shipHoStatements).values({
-    partnerBrandSlug,
-    periodStart,
-    periodEnd,
-    orderCount: sums.orderCount,
-    totalChargedVnd: String(sums.totalChargedVnd),
-    status: 'draft',
+    partnerBrandSlug, type, periodStart, periodEnd, orderCount: sums.orderCount, totalChargedVnd: String(sums.totalChargedVnd), status: 'draft',
   }).returning({ id: schema.shipHoStatements.id });
-
-  await db.update(schema.shipHoOrders)
-    .set({ statementId: st.id, status: 'billed' })
-    .where(inArray(schema.shipHoOrders.id, orders.map((o) => o.id)));
-
+  if (type === 'freight') {
+    await db.update(schema.shipHoOrders).set({ statementId: st.id, status: 'billed' }).where(inArray(schema.shipHoOrders.id, ids));
+  } else {
+    await db.update(schema.shipHoOrders).set({ dutyStatementId: st.id }).where(inArray(schema.shipHoOrders.id, ids));
+  }
   revalidatePath('/f/ship-ho/statements');
-  return { ok: true, statementId: st.id, orderCount: sums.orderCount, totalChargedVnd: sums.totalChargedVnd, dryRun };
+  return { ok: true, statementId: st.id, ...sums, dryRun, choHoaDon };
 }
 
 /** Tính lại tổng bảng kê NHÁP theo giá thực của các đơn đã có bill (bill về sau khi tạo kê). */
@@ -76,22 +74,47 @@ export async function recomputeDraftStatement(id: string): Promise<{ ok: boolean
   return r;
 }
 
-/** issued: đánh dấu đã gửi partner. paid: đã thu → đơn trong kê chuyển 'settled'. */
+/** issued: đánh dấu đã gửi partner + bắn `statement.issued` (bản đối soát) cho MMP.
+ *  paid: đã thu + bắn `statement.paid`; loại freight đơn trong kê chuyển 'settled', loại duty không đổi status đơn.
+ *  Push MMP best-effort — lỗi không chặn đổi trạng thái (CEO 21/09/2026). */
 export async function setStatementStatus(
   id: string,
   status: 'issued' | 'paid',
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; mmp?: string }> {
   try {
     await requireManageShipHo();
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+  let mmp: string | undefined;
   if (status === 'issued') {
     await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
+    const data = await getShipHoStatement(id);
+    if (data) {
+      const dong: DongBangKeMmp[] = data.orders.map((o) => {
+        const r = o as { code: string; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
+        return {
+          code: r.code, mmpRef: null, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
+          shippedAt: r.shippedAt, amountVnd: r.giaThuVnd ?? 0,
+          ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
+        };
+      });
+      const push = await pushStatementEvent('statement.issued', data.statement.partnerBrandSlug, payloadStatementIssued(data.statement, dong));
+      mmp = push.detail;
+    }
   } else {
-    await db.update(schema.shipHoStatements).set({ status: 'paid', paidAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
-    await db.update(schema.shipHoOrders).set({ status: 'settled' }).where(eq(schema.shipHoOrders.statementId, id));
+    const [st] = await db.select({ type: schema.shipHoStatements.type, partnerBrandSlug: schema.shipHoStatements.partnerBrandSlug })
+      .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
+    const paidAt = new Date();
+    await db.update(schema.shipHoStatements).set({ status: 'paid', paidAt }).where(eq(schema.shipHoStatements.id, id));
+    if (st?.type === 'freight') {
+      await db.update(schema.shipHoOrders).set({ status: 'settled' }).where(eq(schema.shipHoOrders.statementId, id));
+    }
+    if (st) {
+      const push = await pushStatementEvent('statement.paid', st.partnerBrandSlug, { statementId: id, type: st.type, paidAt: paidAt.toISOString() });
+      mmp = push.detail;
+    }
   }
   revalidatePath('/f/ship-ho/statements');
-  return { ok: true };
+  return { ok: true, mmp };
 }

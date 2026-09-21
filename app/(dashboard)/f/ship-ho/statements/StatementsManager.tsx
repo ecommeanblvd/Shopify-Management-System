@@ -30,7 +30,8 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
   const gen = (dryRun: boolean) =>
     start(async () => {
       setMsg(null);
-      const r = await generateStatement(partner, from, to, { dryRun });
+      // TODO(Task 6): UI chưa có chọn loại bảng kê (freight/duty) — tạm cứng 'freight'.
+      const r = await generateStatement(partner, 'freight', from, to, { dryRun });
       if (!r.ok) { setMsg(r.error ?? 'Lỗi'); return; }
       setMsg(`${dryRun ? 'Xem trước' : 'Đã tạo bảng kê'}: ${r.orderCount} đơn · ${Number(r.totalChargedVnd).toLocaleString('vi-VN')} ₫`);
     });
@@ -54,14 +55,19 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
     start(async () => {
       const data = await fetchStatementForExport(id);
       if (!data) return;
-      const rows = data.orders.map((o) => ({
-        'Mã đơn': o.code, 'Nước': o.country,
-        'Giá thu (VND)': o.giaThuVnd == null ? '' : o.giaThuVnd, // giá thực nếu đã có bill, không thì giá báo
-        'Giá báo (VND)': o.chargedVnd == null ? '' : Number(o.chargedVnd),
-        'Theo bill': o.theoBill ? 'x' : '',
-        'Cước thực (VND)': o.actualCarrierCostVnd == null ? '' : Number(o.actualCarrierCostVnd),
-        'Margin (VND)': o.marginVnd == null ? '' : Number(o.marginVnd),
-      }));
+      // TODO(Task 6): xuất xlsx chưa tách cột theo loại bảng kê (freight/duty) —
+      // orders đây là union freight|duty nên đọc lỏng qua Record; Task 6 làm bảng riêng cho duty.
+      const rows = data.orders.map((o) => {
+        const r = o as unknown as Record<string, unknown>;
+        return {
+          'Mã đơn': r.code, 'Nước': r.country ?? '',
+          'Giá thu (VND)': r.giaThuVnd == null ? '' : r.giaThuVnd,
+          'Giá báo (VND)': r.chargedVnd == null ? '' : Number(r.chargedVnd as string | number),
+          'Theo bill': r.theoBill ? 'x' : '',
+          'Cước thực (VND)': r.actualCarrierCostVnd == null ? '' : Number(r.actualCarrierCostVnd as string | number),
+          'Margin (VND)': r.marginVnd == null ? '' : Number(r.marginVnd as string | number),
+        };
+      });
       const ws = utils.json_to_sheet(rows);
       const wb = utils.book_new();
       utils.book_append_sheet(wb, ws, 'Bảng kê');

@@ -13,17 +13,14 @@ describe('summarizeStatement', () => {
   });
 });
 
-describe('giaThuBangKe — đơn đã có bill thu theo giá thực, chưa có bill thu giá báo (CEO 08/09)', () => {
-  it('reconciled + có giá thực → giá thực (kể cả thấp hơn giá báo)', () => {
-    expect(giaThuBangKe({ chargedVnd: '3205386', actualChargedVnd: '3021319', reconcileStatus: 'reconciled' })).toBe(3021319);
+describe('giaThuBangKe — bảng kê CHỈ thu giá thực đã chốt (CEO 21/09, bỏ luật 08/09)', () => {
+  it('reconciled + có giá thực → giá thực', () => {
+    expect(giaThuBangKe({ actualChargedVnd: '3021319', reconcileStatus: 'reconciled' })).toBe(3021319);
   });
-  it('chưa reconciled → giá báo, dù có actualChargedVnd sót', () => {
-    expect(giaThuBangKe({ chargedVnd: '3205386', actualChargedVnd: '3021319', reconcileStatus: null })).toBe(3205386);
+  it('chưa reconciled → null dù có actualChargedVnd sót', () => {
+    expect(giaThuBangKe({ actualChargedVnd: '3021319', reconcileStatus: null })).toBeNull();
   });
-  it('reconciled nhưng chưa tính được giá thực (re-quote lỗi) → giá báo', () => {
-    expect(giaThuBangKe({ chargedVnd: '3205386', actualChargedVnd: null, reconcileStatus: 'reconciled' })).toBe(3205386);
-  });
-  it('chưa báo giá → null', () => {
-    expect(giaThuBangKe({ chargedVnd: null, actualChargedVnd: null, reconcileStatus: null })).toBeNull();
+  it('reconciled nhưng chưa tính được giá thực → null (không lấy giá báo)', () => {
+    expect(giaThuBangKe({ actualChargedVnd: null, reconcileStatus: 'reconciled' })).toBeNull();
   });
 });
