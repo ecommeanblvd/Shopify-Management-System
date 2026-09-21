@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { utils, writeFile } from 'xlsx';
 import { generateStatement, setStatementStatus, recomputeDraftStatement } from '@/features/ship-ho/statement-actions';
-import { fetchStatementForExport, isDutyStatementExport } from '@/features/ship-ho/statement-export-action';
+import { fetchStatementForExport } from '@/features/ship-ho/statement-export-action';
+import { isDutyStatementExport } from '@/features/ship-ho/statement-export-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
