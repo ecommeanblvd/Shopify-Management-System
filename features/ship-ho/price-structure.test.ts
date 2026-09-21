@@ -194,4 +194,45 @@ describe('shipHoPriceStructure', () => {
     expect(s.weights).toEqual({ quoteKg: 2, billKg: 2.5 });
     expect(s.billNumber).toBe('HANR000265761');
   });
+  it('duty: NGOÀI cước — không vào tổng cước, không đẻ dòng điều chỉnh ảo, có dòng tổng brand phải trả', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 0,
+        vat: 190_000, other: 0, importHandling: 0, duty: 736_241,
+        billNumber: '734110283 + 736059786', shipDate: '2026-07-02',
+        sell: {
+          baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0, resSignVnd: 0, residentialVnd: 0, signatureVnd: 0,
+          importHandlingVnd: 0, dutyVnd: 736_241, otherVnd: 0,
+          fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_891_882,
+        },
+      },
+      totalVnd: 2_208_941, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    // sell.chargedVnd CHỈ còn cước → tổng cước không gồm duty.
+    expect(s.chargeTotal).toBe(1_891_882);
+    expect(s.dutyChargeVnd).toBe(736_241);
+    expect(s.chargeWithDutyTotal).toBe(1_891_882 + 736_241);
+    // Duty vẫn hiện thành dòng riêng, đánh dấu ngoài cước.
+    const dongDuty = s.rows.find((r) => r.label.startsWith('Thuế / hải quan (duty)'))!;
+    expect(dongDuty.label).toContain('ngoài cước');
+    expect(dongDuty.chargeVnd).toBe(736_241);
+    expect(dongDuty.billVnd).toBe(736_241);
+    // KHÔNG còn dòng điều chỉnh ảo −duty ở cột giá thu thực.
+    expect(s.rows.find((r) => r.label === 'Điều chỉnh khớp số đã ghi')?.chargeVnd ?? null).toBeNull();
+    // Cột giá thu thực (trừ dòng duty + dòng tổng) cộng lại = tổng CƯỚC.
+    const tongPhu = ['Thuế / hải quan (duty) — ngoài cước, thu hộ', 'Tổng brand phải trả = cước + thuế/phí NK thu hộ'];
+    expect(s.rows.filter((r) => !tongPhu.includes(r.label)).reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_891_882);
+    // Dòng tổng cuối cùng = cước + duty.
+    const cuoi = s.rows[s.rows.length - 1];
+    expect(cuoi.label).toBe('Tổng brand phải trả = cước + thuế/phí NK thu hộ');
+    expect(cuoi.chargeVnd).toBe(2_628_123);
+  });
+
+  it('không có duty → không thêm dòng tổng brand phải trả', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    expect(s.dutyChargeVnd).toBe(0);
+    expect(s.chargeWithDutyTotal).toBe(s.chargeTotal);
+    expect(s.rows.some((r) => r.label.startsWith('Tổng brand phải trả'))).toBe(false);
+  });
 });

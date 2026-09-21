@@ -311,14 +311,28 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
 
             {/* Kết quả đối soát cuối — gộp cùng card, ngay dưới bảng */}
             {hasBill ? (
-              <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-4">
+              <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-3">
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
                   <div className="text-[11px] text-muted-foreground">Cân thực (bill)</div>
                   <div className="font-medium tabular-nums">{o.actualWeightKg ? `${Number(o.actualWeightKg)} kg` : '—'}</div>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">Giá thu thực (re-bill cân thực)</div>
+                  <div className="text-[11px] text-muted-foreground">Cước thu thực (re-bill cân thực)</div>
                   <div className="font-medium tabular-nums">{vnd(o.actualChargedVnd)}</div>
+                </div>
+                {/* Thuế/phí NK là khoản THU HỘ, NGOÀI cước (spec 21/09 §4.1) — hiện riêng và
+                    cộng thành tổng brand phải trả để không ai đọc nhầm cước là tổng. */}
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Thuế/phí NK thu hộ (FedEx ứng hộ)</div>
+                  <div className="font-medium tabular-nums">{vnd(o.actualDutyVnd)}</div>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">Tổng brand phải trả (cước + thuế/phí)</div>
+                  <div className="font-medium tabular-nums">
+                    {o.actualChargedVnd == null && o.actualDutyVnd == null
+                      ? '—'
+                      : vnd(String(Number(o.actualChargedVnd ?? 0) + Number(o.actualDutyVnd ?? 0)))}
+                  </div>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
                   <div className="text-[11px] text-muted-foreground">Lệch bill vs dự tính</div>

@@ -27,8 +27,12 @@ export interface ShipHoPriceStructure {
   costTotal: number;
   /** Tổng giá thu DỰ TÍNH (quote gốc lúc khách tạo vận đơn). */
   quoteChargeTotal: number;
-  /** Tổng giá thu THỰC (tính lại theo bill; = dự tính khi chưa có bill). */
+  /** Tổng giá thu THỰC — CHỈ CƯỚC (tính lại theo bill; = dự tính khi chưa có bill). */
   chargeTotal: number;
+  /** Thuế/phí NK FedEx ứng hộ trên bill (thu hộ, ngoài cước). 0 = chưa có bill thuế. */
+  dutyChargeVnd: number;
+  /** Tổng brand phải trả = cước + thuế/phí NK thu hộ (spec §6). */
+  chargeWithDutyTotal: number;
   /** Tổng cước bill thực (actualCarrierCostVnd). null khi chưa đối soát. */
   billTotal: number | null;
   /** Cân tính phí từng công thức: quote (chargeable) vs bill (billed weight). */
@@ -150,13 +154,16 @@ export function shipHoPriceStructure(input: {
   const qImport = R(b.countryFixed); // engine dự tính phí NK qua countryFixed (vd US 68.300)
   const qOtherSur = R(b.perKg) + R(b.perStep) + R(b.peak);
   const chImport = sell ? S(sell.importHandlingVnd ?? sell.customsSurVnd) : qImport;
+  // Duty KHÔNG còn nằm trong `sell.chargedVnd` (spec 21/09 §4.1: thuế/phí NK là khoản THU
+  // HỘ, ngoài cước, ghi riêng ở actual_duty_vnd). Cộng nó vào chargeSum thì dòng "Điều
+  // chỉnh khớp số đã ghi" hiện một khoản ẢO đúng bằng −duty. Vẫn giữ DÒNG duty để đối
+  // chiếu ba phía, nhưng nằm ngoài tổng cước; tổng brand phải trả có dòng riêng cuối bảng.
   const chDuty = sell ? S(sell.dutyVnd ?? 0) : 0;
   const chOther = sell ? S(sell.otherVnd ?? 0) : qOtherSur;
-  const chCustoms = chImport + chDuty + chOther; // tổng nhóm (giữ cho chargeSum)
   // Phí sửa địa chỉ: quote không dự tính được (chỉ phát sinh khi địa chỉ sai).
   const chAc = sell ? S(sell.acVnd ?? 0) : 0;
   const chargeTotalFinal = sell ? S(sell.chargedVnd) : quoteTotal;
-  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chAc + chImport + chDuty + chOther + chargeFuel + chargeProcessing + chargeVat;
+  const chargeSum = chargeBase + chRemote + chDemand + chResidential + chSignature + chAc + chImport + chOther + chargeFuel + chargeProcessing + chargeVat;
   const adjustCharge = Math.round(chargeTotalFinal - chargeSum);
 
   // ── Tách phụ phí thành TỪNG KHOẢN. Gộp theo cột bill có sẵn (remote/demand/
@@ -191,7 +198,7 @@ export function shipHoPriceStructure(input: {
       quoteChargeVnd: qImport, chargeVnd: chImport,
     },
     {
-      label: 'Thuế / hải quan (duty)',
+      label: 'Thuế / hải quan (duty) — ngoài cước, thu hộ',
       costVnd: null, // không dự tính được — pass-through thuần, không VAT
       billVnd: hasBill ? Math.round(num(ab!.duty)) : null,
       quoteChargeVnd: 0, chargeVnd: chDuty,
@@ -220,12 +227,24 @@ export function shipHoPriceStructure(input: {
       chargeVnd: adjustCharge || null,
     });
   }
+  // Dòng TỔNG BRAND PHẢI TRẢ — chỉ khi có duty. Cột "giá thu thực" của các dòng trên cộng
+  // lại bằng `chargeTotal` (CƯỚC); dòng này là tổng của HAI khoản (cước + thuế/phí thu hộ),
+  // nên KHÔNG thuộc phép cộng cột — đặt cuối cùng như một dòng tổng hợp.
+  if (chDuty !== 0) {
+    rows.push({
+      label: 'Tổng brand phải trả = cước + thuế/phí NK thu hộ',
+      costVnd: null, billVnd: null, quoteChargeVnd: null,
+      chargeVnd: chargeTotalFinal + chDuty,
+    });
+  }
 
   return {
     rows,
     costTotal: input.carrierCostVnd,
     quoteChargeTotal: quoteTotal,
     chargeTotal: chargeTotalFinal,
+    dutyChargeVnd: chDuty,
+    chargeWithDutyTotal: chargeTotalFinal + chDuty,
     billTotal,
     weights: {
       quoteKg: numOrNull(b.chargeableWeightKg),
