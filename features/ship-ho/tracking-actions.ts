@@ -12,16 +12,23 @@ import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 
 /** Link tra cứu public cho MMP render cạnh tracking. */
 function trackingUrl(carrierKey: string | null, tracking: string): string | null {
-  if (carrierKey === 'fedex') return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(tracking)}`;
-  if (carrierKey === 'dhl') return `https://www.dhl.com/vn-en/home/tracking.html?tracking-id=${encodeURIComponent(tracking)}`;
-  return null;
+  const t = encodeURIComponent(tracking);
+  switch (carrierKey) {
+    case 'fedex': return `https://www.fedex.com/fedextrack/?trknbr=${t}`;
+    case 'dhl': return `https://www.dhl.com/vn-en/home/tracking.html?tracking-id=${t}`;
+    case 'ups': return `https://www.ups.com/track?tracknum=${t}`;
+    case 'aramex': return `https://www.aramex.com/us/en/track/results?ShipmentNumber=${t}`;
+    case 'sf-express': return `https://www.sf-express.com/we/ow/chn/sc/waybill/waybill-detail/${t}`;
+    default: return null;
+  }
 }
 
 export async function setShipHoTracking(
   orderId: string,
   input: {
     trackingNumber: string;
-    carrierKey?: 'fedex' | 'dhl' | null;
+    /** Khoá hãng trong bảng `carriers` (fedex/dhl/ups/aramex/sf-express…) — mọi hãng đang có account (CEO 22/09). */
+    carrierKey?: string | null;
     /** Ngày đi hàng 'YYYY-MM-DD' (Logistic staff chọn). Bỏ trống → giữ ngày đã
      *  có, đơn chưa có → mặc định hôm nay (ngày nhập tracking, giờ VN). */
     shippedAt?: string | null;

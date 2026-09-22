@@ -2,16 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { setShipHoTracking } from '@/features/ship-ho/tracking-actions';
+import { hangTheoMaVanDon } from '@/lib/ma-van-don';
+
+export interface HangChon { key: string; name: string }
 
 /**
  * Action chính của đơn: gắn/sửa tracking — button nổi bật (màu riêng) trên header,
  * mở modal nhập carrier + tracking. Card "Vận đơn & giao hàng" bên dưới CHỈ hiển thị.
  */
-export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shippedAt }: {
+export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shippedAt, carriers }: {
   orderId: string;
   trackingNumber: string | null;
   carrierKey: string | null;
   shippedAt: string | null;
+  /** Mọi hãng hệ thống đang có account (CEO 22/09: không chỉ FedEx/DHL). */
+  carriers: HangChon[];
 }) {
   const [open, setOpen] = useState(false);
   const [tn, setTn] = useState(trackingNumber ?? '');
@@ -25,7 +30,7 @@ export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shipped
     setErr(null);
     const r = await setShipHoTracking(orderId, {
       trackingNumber: tn,
-      carrierKey: carrier === 'fedex' || carrier === 'dhl' ? carrier : null,
+      carrierKey: carrier || null,
       shippedAt: shipDate || null,
     });
     if (!r.ok) { setErr(r.error ?? 'Lỗi'); return; }
@@ -52,13 +57,17 @@ export function AddTrackingButton({ orderId, trackingNumber, carrierKey, shipped
                 <select className="mt-1 w-full rounded border border-border bg-background px-2.5 py-1.5 text-sm"
                   value={carrier} onChange={(e) => setCarrier(e.target.value)}>
                   <option value="">— chọn carrier —</option>
-                  <option value="fedex">FedEx</option>
-                  <option value="dhl">DHL</option>
+                  {carriers.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
                 </select>
               </label>
               <label className="block text-xs text-muted-foreground">Tracking number
                 <input className="mt-1 w-full rounded border border-border bg-background px-2.5 py-1.5 font-mono text-sm"
-                  autoFocus value={tn} onChange={(e) => setTn(e.target.value)} placeholder="771234567890" />
+                  autoFocus value={tn} placeholder="771234567890"
+                  onChange={(e) => {
+                    setTn(e.target.value);
+                    // Nhận hãng theo dạng mã (FedEx 12 số, DHL 10, Aramex 11, UPS 1Z…) khi chưa chọn.
+                    if (!carrier) { const h = hangTheoMaVanDon(e.target.value); if (h && carriers.some((c) => c.key === h)) setCarrier(h); }
+                  }} />
               </label>
               <label className="block text-xs text-muted-foreground">Ngày đi hàng
                 <input type="date" className="mt-1 w-full rounded border border-border bg-background px-2.5 py-1.5 text-sm"

@@ -36,6 +36,12 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
     return <div className="max-w-3xl mx-auto px-6 py-16 text-center"><h1 className="text-2xl font-semibold">Forbidden</h1></div>;
   }
   const o = await getShipHoOrder(id);
+  // Mọi hãng đang có account bật — cho ô chọn carrier khi gắn tracking (CEO 22/09: không chỉ FedEx/DHL).
+  const hangCoAccount = await db.selectDistinct({ key: schema.carriers.key, name: schema.carriers.name })
+    .from(schema.carriers)
+    .innerJoin(schema.carrierAccounts, eq(schema.carrierAccounts.carrierId, schema.carriers.id))
+    .where(eq(schema.carrierAccounts.enabled, true))
+    .orderBy(schema.carriers.name);
   if (!o) notFound();
 
   const price = (o.quoteBreakdown && o.carrierCostVnd && o.chargedVnd)
@@ -113,7 +119,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Thao tác kho</span>
             {canManage && <MeasureButton orderId={o.id} declared={declared} sms={smsMeasured} />}
             {canManage && <ShipHoCarrierPanel orderId={o.id} currentKey={o.carrierKey} canManage={canManage} />}
-            {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} shippedAt={o.shippedAt} />}
+            {canManage && <AddTrackingButton orderId={o.id} trackingNumber={o.trackingNumber} carrierKey={o.carrierKey} shippedAt={o.shippedAt} carriers={hangCoAccount} />}
             {canManage && o.trackingNumber && (
               <>
                 <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
