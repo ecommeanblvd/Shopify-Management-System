@@ -65,7 +65,7 @@ export function BangDongHang({
   const [, batDauBao] = useTransition();
   const [, batDauChon] = useTransition();
 
-  const loiBaoGia = (): BaoGiaKien => ({ rows: [], reNhatKey: null, thoiGian: {}, error: 'Không báo giá được, thử lại', luc: new Date().toISOString() });
+  const loiBaoGia = (): BaoGiaKien => ({ rows: [], reNhatKey: null, thoiGian: {}, theoDuKien: false, error: 'Không báo giá được, thử lại', luc: new Date().toISOString() });
 
   const soCuoc = (shipmentId: string) => {
     setDangBao((s) => new Set(s).add(shipmentId));
@@ -128,7 +128,7 @@ export function BangDongHang({
         <span className="text-xs text-muted-foreground">{kien.length} kiện</span>
         {loc === 'cho_chon_line' && soKienChuaCan > 0 && (
           <span className="text-xs text-muted-foreground">
-            · {soKienChuaCan} kiện Lark chưa nhập cân (chưa đóng xong) — xem ở “Tất cả”
+            · {soKienChuaCan} kiện chưa đóng — đang so cước theo cân dự kiến Shopify
           </span>
         )}
       </div>
@@ -261,6 +261,8 @@ function DongKien({
   const daChon = chonCucBo ?? k.selectedCarrierKey;
   const tt = trangThaiKien({ ...k, selectedCarrierKey: daChon });
   const can = canQuyDoi(k.weightKg, k.dims);
+  // Chưa cân thì cước tạm tính theo cân dự kiến Shopify (chọn line trước, đóng gói sau).
+  const canDuKienTinhCuoc = canQuyDoi(k.canDuKienKg, null).tinhCuoc ?? 0;
 
   return (
     <tr className="border-t border-border/60 align-top">
@@ -276,10 +278,20 @@ function DongKien({
       </td>
 
       <td className="px-3 py-3">
-        <div className={can.theo === 'thuc' ? 'font-semibold' : 'text-muted-foreground'}>
-          {k.weightKg != null ? `${soKg(k.weightKg)} kg` : '—'}
-        </div>
-        {can.theo === 'thuc' && can.tinhCuoc != null && <ChipTinhCuoc kg={can.tinhCuoc} />}
+        {k.weightKg != null ? (
+          <>
+            <div className={can.theo === 'thuc' ? 'font-semibold' : 'text-muted-foreground'}>{soKg(k.weightKg)} kg</div>
+            {can.theo === 'thuc' && can.tinhCuoc != null && <ChipTinhCuoc kg={can.tinhCuoc} />}
+          </>
+        ) : k.canDuKienKg != null ? (
+          <>
+            <div className="font-semibold">{soKg(k.canDuKienKg)} kg</div>
+            <div className="text-[11px] leading-tight text-muted-foreground">dự kiến · chưa đóng</div>
+            <ChipTinhCuoc kg={canDuKienTinhCuoc} />
+          </>
+        ) : (
+          <div className="text-muted-foreground">—</div>
+        )}
       </td>
 
       <td className="px-3 py-3">
@@ -424,7 +436,7 @@ function ModalSoCuoc({
           <DialogDescription>
             {[
               coNuoc(k.country),
-              k.weightKg != null ? `${soKg(k.weightKg)} kg` : null,
+              k.weightKg != null ? `${soKg(k.weightKg)} kg` : k.canDuKienKg != null ? `${soKg(k.canDuKienKg)} kg (dự kiến)` : null,
               k.dims ? `${k.dims.l}×${k.dims.w}${k.dims.h != null ? `×${k.dims.h}` : ''}` : null,
               can.quyDoi != null ? `quy đổi ${soKg(can.quyDoi)} kg` : null,
               can.tinhCuoc != null ? `tính cước ${soKg(can.tinhCuoc)} kg (theo ${can.theo === 'quy_doi' ? 'kích thước' : 'cân thực'})` : null,
@@ -444,6 +456,12 @@ function ModalSoCuoc({
               Thử lại
             </button>
           </div>
+        )}
+
+        {!dangBao && bao?.theoDuKien && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            Kiện chưa đóng — cước tính theo cân dự kiến của Shopify, đóng xong cân lại có thể lệch.
+          </p>
         )}
 
         {!dangBao && bao && !bao.error && (

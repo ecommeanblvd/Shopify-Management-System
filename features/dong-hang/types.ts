@@ -3,7 +3,10 @@ export type BoLocDongHang = 'cho_chon_line' | 'hom_nay' | 'du_kien_di' | '7_ngay
 export const BO_LOC: readonly BoLocDongHang[] = ['cho_chon_line', 'hom_nay', 'du_kien_di', '7_ngay', 'tat_ca'];
 export interface KienDongHang {
   shipmentId: string; orderId: string; orderNumber: string; storeName: string; country: string | null;
-  weightKg: number | null; dims: { l: number; w: number; h: number | null } | null;
+  /** Cân THỰC đã cân khi đóng gói. NULL = chưa đóng. */
+  weightKg: number | null;
+  /** Cân dự kiến theo Shopify — dùng so cước khi chưa cân thực. */
+  canDuKienKg: number | null; dims: { l: number; w: number; h: number | null } | null;
   /** Kho xuất SG | HN (cột Lark "Base") — nhóm phụ trong mỗi ngày, giống view Lark của Đức. */
   base: string | null;
   /** Ngày nhóm lấy từ ngày Lark hẹn đi (không phải ngày kiện về SMS). */
@@ -30,6 +33,8 @@ export interface BaoGiaKien {
   reNhatKey: string | null;
   /** Thời gian giao trung bình 30 ngày theo hãng — để cân giá với tốc độ. */
   thoiGian: Record<string, { ngayTb: number; soKien: number; phamVi: 'nuoc' | 'chung' }>;
+  /** Báo giá dựa trên cân DỰ KIẾN của Shopify vì kiện chưa cân thực. */
+  theoDuKien: boolean;
   error?: string;
   luc: string;
 }
