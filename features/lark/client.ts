@@ -264,6 +264,37 @@ export async function searchWhInventoryByDon(orderNumber: string): Promise<LarkR
   });
 }
 
+/** Một cột của bảng Lark. Cột CHỌN có sẵn danh sách lựa chọn ở property.options. */
+export interface LarkField {
+  field_name: string;
+  type?: number;
+  property?: { options?: { name?: string }[] } | null;
+}
+
+/**
+ * Danh sách cột của bảng kho, kèm lựa chọn của các cột CHỌN.
+ *
+ * Dùng để chặn việc ghi một giá trị lạ vào cột chọn: Lark sẽ đẻ thêm lựa chọn mới và làm hỏng
+ * bộ lọc/báo cáo của cả đội (spec §5). Chỉ ĐỌC, không sửa gì.
+ */
+export async function listWhInventoryFields(): Promise<LarkField[]> {
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const out: LarkField[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${WH_INVENTORY_TABLE_ID}/fields`);
+    url.searchParams.set('page_size', '100');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+    const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkField[]; page_token?: string; has_more?: boolean } };
+    if (j.code !== 0) throw new Error(`[lark] fields fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
+
 /** Tạo MỘT dòng bảng kho. Trả record id. */
 export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);

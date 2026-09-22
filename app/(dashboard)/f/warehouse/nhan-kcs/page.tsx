@@ -17,7 +17,10 @@ export default async function NhanKcsPage({ searchParams }: { searchParams: Prom
   }
   const sp = await searchParams;
   const don = typeof sp.don === 'string' ? sp.don : '';
-  const [mon, homNay] = await Promise.all([don ? timMonCuaDon(don) : Promise.resolve([]), listDaXuLyHomNay()]);
+  const [kq, homNay] = await Promise.all([
+    don ? timMonCuaDon(don) : Promise.resolve({ mon: [], loiLark: null }),
+    listDaXuLyHomNay(),
+  ]);
 
   return (
     <div className="space-y-5 p-6">
@@ -27,7 +30,7 @@ export default async function NhanKcsPage({ searchParams }: { searchParams: Prom
           Gõ hoặc quét mã đơn, nhập số lượng, cân và kết quả kiểm cho từng món. SMS ghi thẳng sang bảng kho trên Lark.
         </p>
       </div>
-      <BangNhanKcs don={don} mon={mon} homNay={homNay} coQuyenNhap={hasPermission(role, 'manage_qc')} />
+      <BangNhanKcs don={don} mon={kq.mon} loiLark={kq.loiLark} homNay={homNay} coQuyenNhap={hasPermission(role, 'manage_qc')} />
     </div>
   );
 }

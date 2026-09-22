@@ -23,9 +23,11 @@ const laKho = (v: string | null): v is Warehouse => !!v && (WAREHOUSE as readonl
 const O_NHAP = 'h-9 w-full rounded-md border border-input bg-input/30 px-2.5 text-sm outline-none focus:border-amber-500/60 disabled:opacity-50';
 const NUT_CHINH = 'h-9 rounded-lg bg-amber-500 px-5 text-[13px] font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50';
 
-export function BangNhanKcs({ don, mon, homNay, coQuyenNhap }: {
+export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   don: string;
   mon: MonCuaDon[];
+  /** Đọc bảng kho Lark hỏng — vẫn nhập được nhưng kho phải biết là màn KHÔNG thấy kết quả cũ. */
+  loiLark: string | null;
   homNay: DongHomNay[];
   coQuyenNhap: boolean;
 }) {
@@ -64,6 +66,13 @@ export function BangNhanKcs({ don, mon, homNay, coQuyenNhap }: {
         </p>
       )}
 
+      {loiLark && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          Chưa đọc được bảng kho trên Lark ({loiLark}) — màn này KHÔNG thấy kết quả đã ghi sẵn trên Lark.
+          Mở bảng Lark xem trước khi lưu, kẻo ghi đè kết quả người khác vừa làm.
+        </p>
+      )}
+
       {donTran && mon.length === 0 && (
         <p className="rounded-lg border border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
           Không thấy món nào của đơn {don}. Kiểm lại mã đơn hoặc chờ Lark đồng bộ.
@@ -94,14 +103,23 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
   doiKho: (w: Warehouse) => void;
   coQuyenNhap: boolean;
 }) {
-  // Món đã nhận thì nhập tiếp là SỬA dòng cũ, nên điền sẵn cái đã ghi: không điền sẵn thì
-  // người sửa mỗi ô cân sẽ vô tình hạ số lượng về 1.
-  const [soLuong, setSoLuong] = useState(String(m.daNhan?.soLuong ?? 1));
-  const [canKg, setCanKg] = useState(m.daNhan?.canKg != null ? String(m.daNhan.canKg) : '');
-  const [qc, setQc] = useState<QcCheck>(laQc(m.daNhan?.qcCheck) ? m.daNhan.qcCheck as QcCheck : 'QC Pass');
-  const [action, setAction] = useState<WhAction>(
-    laAction(m.daNhan?.whAction) ? m.daNhan.whAction as WhAction : actionMacDinh(laQc(m.daNhan?.qcCheck) ? m.daNhan.qcCheck as QcCheck : 'QC Pass'),
-  );
+  // Điền sẵn theo thứ tự: việc SMS đã ghi → dòng đang có trên Lark → mặc định trắng.
+  // Bỏ qua dòng Lark là bấm Lưu một cái ghi đè kết quả kho đã làm bằng SL 1 / QC Pass.
+  const qcCu = laQc(m.daNhan?.qcCheck) ? m.daNhan.qcCheck as QcCheck
+    : laQc(m.larkCu?.qcCheck ?? undefined) ? m.larkCu!.qcCheck as QcCheck : 'QC Pass';
+  const actionCu = laAction(m.daNhan?.whAction) ? m.daNhan.whAction as WhAction
+    : laAction(m.larkCu?.whAction ?? undefined) ? m.larkCu!.whAction as WhAction : actionMacDinh(qcCu);
+  const soLuongCu = m.daNhan?.soLuong ?? m.larkCu?.soLuong ?? 1;
+  const canCu = m.daNhan?.canKg ?? m.larkCu?.canKg ?? null;
+  // Ảnh lỗi chỉ SMS mới giữ (spec §3: Lark chỉ nhận lý do bằng chữ), nên dòng Lark có lý do
+  // KHÔNG có nghĩa là đã có ảnh.
+  const coAnhCu = !!m.daNhan?.anhKey;
+
+  const [soLuong, setSoLuong] = useState(String(soLuongCu));
+  const [canKg, setCanKg] = useState(canCu != null ? String(canCu) : '');
+  const [qc, setQc] = useState<QcCheck>(qcCu);
+  const [action, setAction] = useState<WhAction>(actionCu);
+  const [lyDo, setLyDo] = useState(m.daNhan?.lyDoFail ?? m.larkCu?.lyDoFail ?? '');
   const [ketQua, setKetQua] = useState<KetQuaGhi | null>(null);
   const [dangGui, batDauGui] = useTransition();
 
@@ -164,6 +182,17 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
         </p>
       )}
 
+      {m.larkCu && (
+        <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+          Trên Lark món này ĐÃ có dòng kho: {m.larkCu.qcCheck ?? 'chưa kiểm'}
+          {m.larkCu.whAction ? ` · ${m.larkCu.whAction}` : ''}
+          {m.larkCu.soLuong != null ? ` · SL ${m.larkCu.soLuong}` : ''}
+          {m.larkCu.canKg != null ? ` · ${m.larkCu.canKg} kg` : ''}
+          {m.larkCu.lyDoFail ? ` · lý do: ${m.larkCu.lyDoFail}` : ''}
+          {' '}— bấm Lưu là GHI ĐÈ dòng đó.
+        </p>
+      )}
+
       <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         <Nhan chu="Số lượng">
           <input
@@ -197,10 +226,15 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
       {qc === 'QC Failed' && (
         <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <Nhan chu="Lý do không đạt">
-            <input name="lyDoFail" required disabled={khoa} placeholder="Hỏng chỗ nào, sai gì" className={O_NHAP} />
+            <input
+              name="lyDoFail" required disabled={khoa} placeholder="Hỏng chỗ nào, sai gì"
+              value={lyDo} onChange={(e) => setLyDo(e.target.value)} className={O_NHAP}
+            />
           </Nhan>
-          <Nhan chu="Ảnh lỗi">
-            <input name="anh" type="file" accept="image/*" required disabled={khoa} className={`${O_NHAP} py-1.5 text-xs file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs`} />
+          <Nhan chu={coAnhCu ? 'Ảnh lỗi (đã có — chọn ảnh mới nếu muốn thay)' : 'Ảnh lỗi'}>
+            {/* Đã có ảnh cũ thì KHÔNG bắt buộc: sửa lại một món đã ghi hỏng (vd gõ nhầm cân)
+                mà bắt chụp lại là hành người — máy chủ tự dùng ảnh đang lưu. */}
+            <input name="anh" type="file" accept="image/*" required={!coAnhCu} disabled={khoa} className={`${O_NHAP} py-1.5 text-xs file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs`} />
           </Nhan>
         </div>
       )}
@@ -217,6 +251,10 @@ function KetQuaMon({ kq }: { kq: KetQuaGhi }) {
   if (!kq.ok) return <span className="text-[13px] text-red-600 dark:text-red-400">{kq.loi ?? 'Không lưu được.'}</span>;
   // Lưu được ở SMS nhưng Lark trượt: việc không mất, cron đẩy lại — báo vàng chứ không báo đỏ.
   if (kq.loi) return <span className="text-[13px] text-amber-700 dark:text-amber-400">{kq.loi}</span>;
+  // Chạy thử thì CHƯA gửi gì sang Lark — nói thẳng, đừng khoe đã tạo dòng.
+  if (kq.dry) {
+    return <span className="text-[13px] text-amber-700 dark:text-amber-400">Đã lưu ở SMS (chế độ chạy thử — chưa gửi Lark)</span>;
+  }
   return (
     <span className="text-[13px] text-emerald-700 dark:text-emerald-400">
       {kq.tao ? 'Đã tạo dòng kho trên Lark' : 'Đã cập nhật dòng kho trên Lark'}

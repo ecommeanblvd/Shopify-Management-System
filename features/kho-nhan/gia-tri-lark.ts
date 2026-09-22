@@ -57,16 +57,23 @@ export function cotTaoDong(v: ViecNhanKcs, ngay: Date): Record<string, unknown> 
   return c;
 }
 
-/** THUẦN: bộ cột CẬP NHẬT dòng có sẵn — chỉ kết quả kho vừa nhập, không đụng định danh. */
-export function cotCapNhat(v: ViecNhanKcs): Record<string, unknown> {
+/**
+ * THUẦN: bộ cột CẬP NHẬT dòng có sẵn — chỉ kết quả kho vừa nhập, không đụng định danh.
+ *
+ * `xoaLyDo`: chỉ bật khi món THẬT SỰ rời khỏi "QC Failed" (người gọi biết giá trị cũ trên
+ * Lark). Xoá vô điều kiện thì mỗi lần sửa cân cũng thổi bay lý do hỏng người khác đã ghi —
+ * 8.858/9.007 dòng Lark đã có kết quả nên đó là trường hợp THƯỜNG, không phải hiếm.
+ */
+export function cotCapNhat(v: ViecNhanKcs, xoaLyDo: boolean): Record<string, unknown> {
   const c: Record<string, unknown> = {
     'Quantity tiếp nhận trước QC': v.soLuong,
     'QC Check': v.qcCheck,
     'WH - Action': v.whAction,
-    // Kiểm lại thành đạt thì phải XOÁ lý do hỏng cũ, không để nguyên trên Lark cho người
-    // sau đọc nhầm là món vẫn lỗi.
-    'Lý do QC failed': v.lyDoFail ?? '',
   };
   if (v.canKg != null) c['Weight (kg)'] = v.canKg;
+  // Kiểm lại thành đạt thì XOÁ lý do hỏng cũ, không để nguyên trên Lark cho người sau đọc
+  // nhầm là món vẫn lỗi. Ngoài hai trường hợp này thì KHÔNG gửi cột lý do.
+  if (v.lyDoFail) c['Lý do QC failed'] = v.lyDoFail;
+  else if (xoaLyDo) c['Lý do QC failed'] = '';
   return c;
 }

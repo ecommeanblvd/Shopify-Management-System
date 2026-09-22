@@ -12,7 +12,7 @@ import { dayMotDong } from './day-lark';
  * Kho lưu việc nhận + kiểm MỘT món. Ghi vào SMS trước rồi mới đẩy Lark: Lark hỏng thì việc
  * vẫn còn, cron đẩy lại sau (spec §5).
  */
-export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi?: string; larkRecordId?: string; tao?: boolean }> {
+export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi?: string; larkRecordId?: string; dry?: boolean; tao?: boolean }> {
   const userId = await requirePerm('manage_qc');
 
   const monDinhDanh = String(formData.get('monDinhDanh') ?? '');
@@ -62,7 +62,9 @@ export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi
   if (!day.ok) return { ok: true, loi: `Đã lưu ở SMS nhưng chưa ghi được lên Lark: ${day.loi}` };
   const [sau] = await db.select({ larkRecordId: schema.whNhanKcs.larkRecordId })
     .from(schema.whNhanKcs).where(eq(schema.whNhanKcs.id, id)).limit(1);
-  return { ok: true, larkRecordId: sau?.larkRecordId ?? undefined, tao: !cu };
+  // tao/dry lấy từ chính lượt đẩy: dòng SMS đã có hay chưa KHÔNG nói lên dòng trên Lark có
+  // sẵn hay không (kho đã có 8.858 dòng có kết quả mà SMS chưa từng thấy).
+  return { ok: true, larkRecordId: sau?.larkRecordId ?? undefined, dry: day.dry, tao: day.tao };
 }
 
 /** Bấm thử lại một dòng đang lỗi. */

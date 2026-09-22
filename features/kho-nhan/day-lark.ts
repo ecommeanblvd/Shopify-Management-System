@@ -12,14 +12,22 @@ export function laDry(env: string | undefined): boolean {
   return (env ?? '').trim().toLowerCase() === 'dry';
 }
 
-export async function dayMotDong(id: string): Promise<{ ok: boolean; loi?: string }> {
+/**
+ * `dry` = chạy thử, KHÔNG gửi gì sang Lark; `tao` = thật sự vừa tạo dòng mới (khác với "vừa
+ * cập nhật dòng có sẵn"). Màn hình đọc đúng hai cờ này để không khoe "đã tạo dòng trên Lark"
+ * khi chưa gửi gì cả.
+ */
+export interface KetQuaDay { ok: boolean; dry?: boolean; tao?: boolean; loi?: string }
+
+export async function dayMotDong(id: string): Promise<KetQuaDay> {
   const [d] = await db.select().from(schema.whNhanKcs).where(eq(schema.whNhanKcs.id, id)).limit(1);
   if (!d) return { ok: false, loi: 'không thấy dòng' };
-  if (d.trangThaiDay === 'da_day') return { ok: true };
+  // Đã đẩy rồi thì dòng trên Lark có sẵn, lần này không tạo thêm.
+  if (d.trangThaiDay === 'da_day') return { ok: true, tao: false };
 
   if (laDry(process.env.WH_GHI_LARK)) {
     console.log('[kho-nhan] DRY — không gửi Lark:', { don: d.orderNumber, sku: d.sku, qc: d.qcCheck });
-    return { ok: true };
+    return { ok: true, dry: true };
   }
 
   const viec: ViecNhanKcs = {
@@ -40,7 +48,7 @@ export async function dayMotDong(id: string): Promise<{ ok: boolean; loi?: strin
     await db.update(schema.whNhanKcs)
       .set({ trangThaiDay: 'da_day', larkRecordId: r.larkRecordId, loi: null, lanDayCuoi: new Date() })
       .where(eq(schema.whNhanKcs.id, id));
-    return { ok: true };
+    return { ok: true, tao: r.tao };
   } catch (e) {
     const loi = e instanceof Error ? e.message : String(e);
     await db.update(schema.whNhanKcs)

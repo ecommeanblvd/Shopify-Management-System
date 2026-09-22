@@ -40,13 +40,26 @@ describe('cotTaoDong', () => {
 });
 
 describe('cotCapNhat', () => {
-  it('CHỈ 5 cột, không đụng cột định danh của dòng cũ', () => {
-    expect(Object.keys(cotCapNhat(viec)).sort()).toEqual(
+  it('CHỈ những cột kết quả, không đụng cột định danh của dòng cũ', () => {
+    expect(Object.keys(cotCapNhat({ ...viec, qcCheck: 'QC Failed', lyDoFail: 'bẩn' }, false)).sort()).toEqual(
       ['Lý do QC failed', 'QC Check', 'Quantity tiếp nhận trước QC', 'WH - Action', 'Weight (kg)'].sort(),
     );
-    // Kiểm lại thành đạt → lý do hỏng cũ bị xoá khỏi Lark.
-    expect(cotCapNhat(viec)['Lý do QC failed']).toBe('');
-    expect(cotCapNhat({ ...viec, qcCheck: 'QC Failed', lyDoFail: 'bẩn' })['Lý do QC failed']).toBe('bẩn');
+  });
+
+  it('món RỜI khỏi QC Failed → xoá lý do hỏng cũ trên Lark', () => {
+    expect(cotCapNhat(viec, true)['Lý do QC failed']).toBe('');
+  });
+
+  it('món KHÔNG rời QC Failed → không đụng cột lý do (giữ nguyên cái Lark đang có)', () => {
+    // Đây là trường hợp THƯỜNG: 8.858/9.007 dòng Lark đã có kết quả, kho chỉ sửa cân/số lượng.
+    const c = cotCapNhat(viec, false);
+    expect('Lý do QC failed' in c).toBe(false);
+  });
+
+  it('vẫn không đạt → ghi lý do mới, không quan tâm cờ xoá', () => {
+    const v = { ...viec, qcCheck: 'QC Failed' as const, lyDoFail: 'bẩn' };
+    expect(cotCapNhat(v, false)['Lý do QC failed']).toBe('bẩn');
+    expect(cotCapNhat(v, true)['Lý do QC failed']).toBe('bẩn');
   });
 });
 
