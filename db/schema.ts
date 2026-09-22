@@ -1107,7 +1107,10 @@ export const shipments = pgTable('shipments', {
 }, (t) => [
   uniqueIndex('shipments_tracking_idx').on(t.trackingNumber),
   index('shipments_order_idx').on(t.orderId),
-  index('shipments_log_unique_code_idx').on(t.logUniqueCode),
+  // UNIQUE (một phần): webhook /api/lark/pack và cron sync-lark là hai tiến trình
+  // riêng — map đối chiếu của cron nạp ở T0 không thấy kiện webhook tạo ở T1, nên
+  // chỉ ràng buộc ở tầng DB mới chặn được hai kiện cùng Log Unique code.
+  uniqueIndex('shipments_log_unique_code_idx').on(t.logUniqueCode).where(sql`${t.logUniqueCode} IS NOT NULL`),
 ]);
 
 /**

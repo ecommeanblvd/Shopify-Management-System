@@ -123,18 +123,26 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
         }
       });
     }
+    // Mã THẬT SỰ tạo được (insert onConflictDoNothing có thể không ghi gì) — dùng
+    // để gỡ dòng chờ khớp, không gỡ theo mã chỉ mới "định tạo".
+    const maVuaTao: string[] = [];
     for (const batch of chunk(cls.create, APPLY_CHUNK)) {
       await db.transaction(async (tx) => {
         for (const c of batch) {
-          await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId)).onConflictDoNothing();
+          const ins = await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId))
+            .onConflictDoNothing().returning({ logUniqueCode: schema.shipments.logUniqueCode });
+          for (const r of ins) if (r.logUniqueCode) maVuaTao.push(r.logUniqueCode);
         }
       });
     }
 
-    // Kiện từng nằm ở "chờ khớp" (webhook /api/lark/pack) nay cron tạo được → gỡ khỏi màn Đóng hàng.
-    const maVuaTao = cls.create.map((c) => c.row.logUniqueCode).filter((x): x is string => !!x);
-    if (maVuaTao.length > 0) {
-      await db.delete(schema.larkPackChoKhop).where(inArray(schema.larkPackChoKhop.logUniqueCode, maVuaTao));
+    // Kiện từng nằm ở "chờ khớp" (webhook /api/lark/pack) nay đã có kiện trong SMS —
+    // cron vừa tạo, hoặc kiện đã tồn tại sẵn (nhánh update) → gỡ khỏi màn Đóng hàng.
+    const maDaKhop = [...maVuaTao, ...cls.update.map((u) => u.row.logUniqueCode).filter((x): x is string => !!x)];
+    for (const batch of chunk(maDaKhop, APPLY_CHUNK)) {
+      if (batch.length > 0) {
+        await db.delete(schema.larkPackChoKhop).where(inArray(schema.larkPackChoKhop.logUniqueCode, batch));
+      }
     }
 
     // Phần B: snapshot status Lark theo orderId (ghi đè CÓ ĐIỀU KIỆN — record sau
