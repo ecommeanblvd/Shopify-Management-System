@@ -5,13 +5,25 @@ import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-ord
 describe('canQuyDoi', () => {
   it('thể tích/5000, làm tròn 0,1 rồi trần 0,5 (luật FedEx)', () => {
     // 40×30×20 = 24000 / 5000 = 4.8 → 5.0; cân thực 1.2 → tính cước 5.0
-    expect(canQuyDoi(1.2, { l: 40, w: 30, h: 20 })).toEqual({ quyDoi: 4.8, tinhCuoc: 5 });
+    expect(canQuyDoi(1.2, { l: 40, w: 30, h: 20 })).toEqual({ quyDoi: 4.8, tinhCuoc: 5, theo: 'quy_doi' });
     // 2.355 → 2.4 → 2.5
-    expect(canQuyDoi(2.355, null)).toEqual({ quyDoi: null, tinhCuoc: 2.5 });
+    expect(canQuyDoi(2.355, null)).toEqual({ quyDoi: null, tinhCuoc: 2.5, theo: 'thuc' });
   });
   it('thiếu chiều cao → không quy đổi; thiếu cân → null', () => {
-    expect(canQuyDoi(1, { l: 40, w: 30, h: null })).toEqual({ quyDoi: null, tinhCuoc: 1 });
-    expect(canQuyDoi(null, null)).toEqual({ quyDoi: null, tinhCuoc: null });
+    expect(canQuyDoi(1, { l: 40, w: 30, h: null })).toEqual({ quyDoi: null, tinhCuoc: 1, theo: 'thuc' });
+    expect(canQuyDoi(null, null)).toEqual({ quyDoi: null, tinhCuoc: null, theo: null });
+  });
+});
+
+describe('cân nào quyết định cước', () => {
+  it('kiện to nhẹ → cân quy đổi thắng', () => {
+    expect(canQuyDoi(0.4, { l: 40, w: 31, h: 2 }).theo).toBe('quy_doi');
+  });
+  it('kiện nhỏ nặng → cân thực thắng', () => {
+    expect(canQuyDoi(3.6, { l: 30, w: 20, h: 10 }).theo).toBe('thuc');
+  });
+  it('bằng nhau → tính là cân thực, không báo quy đổi vượt', () => {
+    expect(canQuyDoi(5, { l: 50, w: 50, h: 10 }).theo).toBe('thuc');
   });
 });
 

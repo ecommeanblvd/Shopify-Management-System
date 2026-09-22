@@ -164,7 +164,8 @@ export function BangDongHang({
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
                 <th scope="col">Đơn</th>
-                <th scope="col">Cân</th>
+                <th scope="col">Cân thực</th>
+                <th scope="col">Cân quy đổi</th>
                 <th scope="col">Hộp / SKU</th>
                 <th scope="col">Khách trả</th>
                 <th scope="col">Line ship</th>
@@ -174,7 +175,7 @@ export function BangDongHang({
             {nhom.map((g) => (
               <tbody key={g.ngay}>
                 <tr className="border-y border-border bg-muted/60">
-                  <th scope="colgroup" colSpan={6} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th scope="colgroup" colSpan={7} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
                     {laNgayTuongLai(g.ngay) && (
                       <span className="ml-2 rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium normal-case tracking-normal text-sky-700 dark:text-sky-400">
@@ -186,7 +187,7 @@ export function BangDongHang({
                 {g.theoBase.map((b) => (
                   <Fragment key={b.base ?? 'khong-ro'}>
                     <tr className="border-b border-border/60 bg-muted/25">
-                      <th scope="rowgroup" colSpan={6} className="px-3 py-1 text-left font-normal">
+                      <th scope="rowgroup" colSpan={7} className="px-3 py-1 text-left font-normal">
                         <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
                         <span className="ml-2 text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
                       </th>
@@ -256,17 +257,23 @@ function DongKien({
       </td>
 
       <td className="px-3 py-3">
-        <div>{k.weightKg != null ? `${soKg(k.weightKg)} kg` : '—'}</div>
+        <div className={can.theo === 'thuc' ? 'font-semibold' : 'text-muted-foreground'}>
+          {k.weightKg != null ? `${soKg(k.weightKg)} kg` : '—'}
+        </div>
+        {can.theo === 'thuc' && can.tinhCuoc != null && <ChipTinhCuoc kg={can.tinhCuoc} />}
+      </td>
+
+      <td className="px-3 py-3">
+        <div className={can.theo === 'quy_doi' ? 'font-semibold' : 'text-muted-foreground'}>
+          {can.quyDoi != null ? `${soKg(can.quyDoi)} kg` : '—'}
+        </div>
         {k.dims && (
           <div className="text-[11px] leading-tight text-muted-foreground">
             {k.dims.l}×{k.dims.w}{k.dims.h != null ? `×${k.dims.h}` : ''}
+            {k.dims.h == null && ' · thiếu chiều cao'}
           </div>
         )}
-        {can.quyDoi != null && (
-          <div className="text-[11px] leading-tight text-muted-foreground">
-            quy đổi {soKg(can.quyDoi)} → tính cước {can.tinhCuoc != null ? soKg(can.tinhCuoc) : '—'}
-          </div>
-        )}
+        {can.theo === 'quy_doi' && can.tinhCuoc != null && <ChipTinhCuoc kg={can.tinhCuoc} />}
       </td>
 
       <td className="px-3 py-3">
@@ -347,6 +354,15 @@ function DongKien({
   );
 }
 
+/** Nhãn cho biết cột cân nào đang quyết định cước (bậc cân sau làm tròn của hãng). */
+function ChipTinhCuoc({ kg }: { kg: number }) {
+  return (
+    <span className="mt-0.5 inline-block rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:text-sky-400">
+      tính cước {soKg(kg)} kg
+    </span>
+  );
+}
+
 /**
  * Modal so cước một kiện: giá của từng hãng ĐẶT CẠNH thời gian giao trung bình 30 ngày,
  * vì rẻ nhất chưa chắc là lựa chọn đúng khi hãng đó giao chậm hơn hai ngày (CEO 22/09/2026).
@@ -391,7 +407,8 @@ function ModalSoCuoc({
               coNuoc(k.country),
               k.weightKg != null ? `${soKg(k.weightKg)} kg` : null,
               k.dims ? `${k.dims.l}×${k.dims.w}${k.dims.h != null ? `×${k.dims.h}` : ''}` : null,
-              can.tinhCuoc != null ? `tính cước ${soKg(can.tinhCuoc)} kg` : null,
+              can.quyDoi != null ? `quy đổi ${soKg(can.quyDoi)} kg` : null,
+              can.tinhCuoc != null ? `tính cước ${soKg(can.tinhCuoc)} kg (theo ${can.theo === 'quy_doi' ? 'kích thước' : 'cân thực'})` : null,
               k.hop,
               k.soKienCungDon > 1 ? `đơn có ${k.soKienCungDon} kiện — chọn một lần áp cho cả đơn` : null,
             ].filter(Boolean).join(' · ')}

@@ -6,12 +6,17 @@ const DIM_DIVISOR = 5000;
 
 /** Cân quy đổi (D×R×C/5000) và cân tính cước = max(thực, quy đổi) làm tròn 0,1 rồi trần 0,5 —
  *  đúng luật FedEx trong engine. CHỈ để hiển thị, cước vẫn lấy từ engine. */
-export function canQuyDoi(weightKg: number | null, dims: { l: number; w: number; h: number | null } | null): { quyDoi: number | null; tinhCuoc: number | null } {
+export function canQuyDoi(weightKg: number | null, dims: { l: number; w: number; h: number | null } | null): {
+  quyDoi: number | null;
+  tinhCuoc: number | null;
+  /** Bên nào quyết định cước: cân cân được, hay cân quy đổi từ kích thước. */
+  theo: 'thuc' | 'quy_doi' | null;
+} {
   const quyDoi = dims && dims.h != null ? Math.round((dims.l * dims.w * dims.h / DIM_DIVISOR) * 1000) / 1000 : null;
-  if (weightKg == null) return { quyDoi, tinhCuoc: null };
+  if (weightKg == null) return { quyDoi, tinhCuoc: null, theo: null };
   const raw = Math.max(weightKg, quyDoi ?? 0);
   const tinhCuoc = Math.ceil((Math.round(raw * 10) / 10 - 1e-9) / 0.5) * 0.5;
-  return { quyDoi, tinhCuoc: Math.round(tinhCuoc * 1000) / 1000 };
+  return { quyDoi, tinhCuoc: Math.round(tinhCuoc * 1000) / 1000, theo: (quyDoi ?? 0) > weightKg ? 'quy_doi' : 'thuc' };
 }
 
 export function trangThaiKien(k: { trackingNumber: string | null; selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null }): TrangThaiKien {
