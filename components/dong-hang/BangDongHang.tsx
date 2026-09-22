@@ -3,7 +3,7 @@
 import { Fragment, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { baoGiaKien, chonHangChoDon } from '@/features/dong-hang/actions';
-import { canQuyDoi, conChonDuoc, nhomTheoNgay, trangThaiKien } from '@/features/dong-hang/logic';
+import { canQuyDoi, conChonDuoc, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
@@ -139,7 +139,7 @@ export function BangDongHang({
 
   const doiChiTiet = (khoa: string) => setMoChiTiet((x) => (x === khoa ? null : khoa));
   const quaTran = kien.length > TRAN_SO_CA_TRANG;
-  const nhom = nhomTheoNgay(kien);
+  const nhom = nhomTheoNgayVaBase(kien);
 
   return (
     <div className="space-y-4">
@@ -214,9 +214,14 @@ export function BangDongHang({
         nhom.map((g) => (
           <section key={g.ngay} className="rounded-lg border border-border">
             <header className="border-b border-border px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {hienNgayNhom(g.ngay)} · {g.kien.length} kiện
+              {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
             </header>
-            <div className="overflow-x-auto">
+            {g.theoBase.map((b) => (
+            <div key={b.base ?? 'khong-ro'} className="overflow-x-auto">
+              <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-1.5">
+                <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
+                <span className="text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
+              </div>
               <table className="w-full min-w-[980px] text-sm tabular-nums">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
@@ -230,7 +235,7 @@ export function BangDongHang({
                   </tr>
                 </thead>
                 <tbody>
-                  {g.kien.map((k) => (
+                  {b.kien.map((k) => (
                     <DongKien
                       key={k.shipmentId}
                       k={k}
@@ -249,6 +254,7 @@ export function BangDongHang({
                 </tbody>
               </table>
             </div>
+            ))}
           </section>
         ))
       )}

@@ -32,6 +32,19 @@ export function nhomTheoNgay<T extends { ngayDong: string }>(rows: T[]): Array<{
   return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([ngay, kien]) => ({ ngay, kien }));
 }
 
+/** Trong mỗi ngày, gom tiếp theo kho xuất (SG/HN) đúng như view Lark Đức đang nhìn.
+ *  Kho có tên đứng trước, kiện chưa biết kho xuống cuối. */
+export function nhomTheoNgayVaBase<T extends { ngayDong: string; base: string | null }>(rows: T[]): Array<{ ngay: string; theoBase: Array<{ base: string | null; kien: T[] }> }> {
+  return nhomTheoNgay(rows).map(({ ngay, kien }) => {
+    const m = new Map<string, T[]>();
+    for (const k of kien) { const b = k.base ?? ''; m.set(b, [...(m.get(b) ?? []), k]); }
+    const theoBase = [...m.entries()]
+      .sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0])))
+      .map(([b, ds]) => ({ base: b === '' ? null : b, kien: ds }));
+    return { ngay, theoBase };
+  });
+}
+
 export const conChonDuoc = (r: { suspendedAt?: string | null }, now = Date.now()) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > now;
 
 /** ok trước theo cước tăng dần, lỗi cuối. Rẻ nhất = rẻ nhất trong nhóm CHỌN được. */

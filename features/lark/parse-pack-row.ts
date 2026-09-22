@@ -14,6 +14,8 @@ export interface PackRow {
   trackingNumber: string | null;
   carrierKey: HangPack | null;
   labelDate: Date | null;
+  /** Kho xuất (cột Lark "Base"): SG | HN. Màn Đóng hàng nhóm theo ngày rồi tới base, giống view Lark. */
+  base: string | null;
   hop: string | null;
   skuText: string | null;
   pieces: number | null;
@@ -162,10 +164,12 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
 
   // Hộp đóng gói / SKU / số món — màn "Đóng hàng" (spec 22/09) cần để Đức nhìn
   // kiện mà không mở Lark. Lark select trả string; số món có thể là số hoặc text.
+  const baseRaw = larkText(fields['Base']);
+  const base = baseRaw ? baseRaw.trim().toUpperCase() : null;
   const hop = larkText(fields['Select VTĐG1']);
   const skuText = larkText(fields['SKU(s)']);
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, hop, skuText, pieces, warnings };
+  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, hop, skuText, pieces, warnings };
 }

@@ -22,7 +22,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   const rows = await db.select({
     shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, storeName: st.name, country: o.shipCountry,
     weightKg: s.actualWeightKg, l: s.dimLengthCm, w: s.dimWidthCm, h: s.dimHeightCm,
-    hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
+    base: s.originHub, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
     hangKhachTra: o.shippingCarrierKey, selectedCarrierKey: o.selectedCarrierKey, selectedCarrierBy: o.selectedCarrierBy, selectedCarrierAt: o.selectedCarrierAt,
     ngayDong,
     soKienCungDon: sql<number>`(select count(*)::int from shipments s2 where s2.order_id = ${o.id} and s2.log_unique_code is not null)`,
@@ -33,7 +33,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     shipmentId: r.shipmentId, orderId: r.orderId, orderNumber: r.orderNumber, storeName: r.storeName, country: r.country,
     weightKg: r.weightKg != null ? Number(r.weightKg) : null,
     dims: r.l != null && r.w != null ? { l: Number(r.l), w: Number(r.w), h: r.h != null ? Number(r.h) : null } : null,
-    hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
+    base: r.base, hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
     selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: r.selectedCarrierBy,
     selectedCarrierAt: r.selectedCarrierAt ? r.selectedCarrierAt.toISOString() : null,
     ngayDong: new Date(r.ngayDong).toISOString(), soKienCungDon: Number(r.soKienCungDon),

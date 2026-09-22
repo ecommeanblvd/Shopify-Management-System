@@ -16,6 +16,7 @@ export function patchFrom(row: PackRow): Record<string, unknown> {
   if (row.trackingNumber) p.trackingNumber = row.trackingNumber;
   if (row.carrierKey) p.carrierKey = row.carrierKey;
   if (row.labelDate) p.labelCreatedAt = row.labelDate;
+  if (row.base) p.originHub = row.base;
   if (row.hop) p.larkHop = row.hop;
   if (row.skuText) p.skuText = row.skuText;
   if (row.pieces != null) p.pieces = row.pieces;
@@ -34,6 +35,7 @@ export function giaTriTaoKien(row: PackRow, orderId: string): typeof schema.ship
     dimWidthCm: row.dims ? String(row.dims.w) : null,
     dimHeightCm: row.dims?.h != null ? String(row.dims.h) : null,
     labelCreatedAt: row.labelDate,
+    originHub: row.base,
     larkHop: row.hop,
     skuText: row.skuText,
     pieces: row.pieces,

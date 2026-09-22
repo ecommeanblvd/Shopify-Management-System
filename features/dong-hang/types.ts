@@ -4,6 +4,8 @@ export const BO_LOC: readonly BoLocDongHang[] = ['chua_tracking', 'hom_nay', '7_
 export interface KienDongHang {
   shipmentId: string; orderId: string; orderNumber: string; storeName: string; country: string | null;
   weightKg: number | null; dims: { l: number; w: number; h: number | null } | null;
+  /** Kho xuất SG | HN (cột Lark "Base") — nhóm phụ trong mỗi ngày, giống view Lark của Đức. */
+  base: string | null;
   hop: string | null; skuText: string | null; pieces: number | null;
   trackingNumber: string | null; hangKhachTra: string | null;
   selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null;

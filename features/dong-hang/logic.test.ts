@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canQuyDoi, trangThaiKien, nhomTheoNgay, xepQuote } from './logic';
+import { canQuyDoi, trangThaiKien, nhomTheoNgay, nhomTheoNgayVaBase, xepQuote } from './logic';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 
 describe('canQuyDoi', () => {
@@ -47,5 +47,20 @@ describe('xepQuote', () => {
     ]);
     expect(r.rows.map((x) => x.carrierKey)).toEqual(['aramex', 'ups', 'fedex', 'dhl']);
     expect(r.reNhatKey).toBe('ups');
+  });
+});
+
+describe('nhomTheoNgayVaBase', () => {
+  it('trong mỗi ngày gom tiếp theo kho xuất, kho không rõ xuống cuối', () => {
+    const r = nhomTheoNgayVaBase([
+      { id: 'a', ngayDong: '2026-09-22T03:00:00Z', base: 'SG' },
+      { id: 'b', ngayDong: '2026-09-22T04:00:00Z', base: null },
+      { id: 'c', ngayDong: '2026-09-22T05:00:00Z', base: 'HN' },
+      { id: 'd', ngayDong: '2026-09-22T06:00:00Z', base: 'SG' },
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].theoBase.map((g) => [g.base, g.kien.map((k) => k.id)])).toEqual([
+      ['HN', ['c']], ['SG', ['a', 'd']], [null, ['b']],
+    ]);
   });
 });

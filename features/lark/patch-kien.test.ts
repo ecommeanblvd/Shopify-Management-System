@@ -4,7 +4,7 @@ import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
   orderNumber: '#MBLVD1', logUniqueCode: 'PK-1', weightKg: null, dims: null, trackingNumber: null,
-  carrierKey: null, labelDate: null, hop: null, skuText: null, pieces: null, warnings: [], ...o,
+  carrierKey: null, labelDate: null, base: null, hop: null, skuText: null, pieces: null, warnings: [], ...o,
 });
 
 describe('patchFrom', () => {
@@ -25,7 +25,7 @@ describe('giaTriTaoKien', () => {
     expect(v).toEqual({
       orderId: 'order-1', logUniqueCode: 'PK-1', trackingNumber: 'T1', carrierKey: 'ups',
       actualWeightKg: '0.5', dimLengthCm: '10', dimWidthCm: '10', dimHeightCm: null,
-      labelCreatedAt: null, larkHop: 'Bag', skuText: null, pieces: 1,
+      labelCreatedAt: null, originHub: null, larkHop: 'Bag', skuText: null, pieces: 1,
     });
   });
 });
