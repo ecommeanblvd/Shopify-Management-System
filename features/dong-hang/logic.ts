@@ -63,6 +63,18 @@ export function nhomTheoNgayVaBase<T extends { ngayDong: string; base: string | 
   });
 }
 
+/**
+ * THUẦN: tên người để hiển thị. Ưu tiên tên thật đã lưu ở tài khoản; chưa có thì lấy phần
+ * trước @ của email — "bduc13922@gmail.com · 18:01" đọc khó hơn hẳn "Bá Đức · 18:01".
+ */
+export function tenNguoiDung(ten: string | null | undefined, email: string | null | undefined): string | null {
+  const t = ten?.trim();
+  if (t) return t;
+  const e = email?.trim();
+  if (!e) return null;
+  return e.includes('@') ? e.slice(0, e.indexOf('@')) : e;
+}
+
 export const conChonDuoc = (r: { suspendedAt?: string | null }, now = Date.now()) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > now;
 
 /** ok trước theo cước tăng dần, lỗi cuối. Rẻ nhất = rẻ nhất trong nhóm CHỌN được. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canQuyDoi, trangThaiKien, laNgayTuongLai, nhomTheoNgay, nhomTheoNgayVaBase, xepQuote } from './logic';
+import { canQuyDoi, trangThaiKien, laNgayTuongLai, nhomTheoNgay, nhomTheoNgayVaBase, tenNguoiDung, xepQuote } from './logic';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 
 describe('canQuyDoi', () => {
@@ -97,5 +97,19 @@ describe('laNgayTuongLai', () => {
   it('hôm nay và ngày cũ → sai', () => {
     expect(laNgayTuongLai('2026-09-22', now)).toBe(false);
     expect(laNgayTuongLai('2026-09-21', now)).toBe(false);
+  });
+});
+
+describe('tenNguoiDung', () => {
+  it('có tên thật thì dùng tên', () => {
+    expect(tenNguoiDung('Bá Đức', 'bduc13922@gmail.com')).toBe('Bá Đức');
+  });
+  it('chưa có tên thì lấy phần trước @', () => {
+    expect(tenNguoiDung(null, 'bduc13922@gmail.com')).toBe('bduc13922');
+    expect(tenNguoiDung('   ', 'lmtiep@gmail.com')).toBe('lmtiep');
+  });
+  it('không có gì → null; chuỗi không phải email giữ nguyên', () => {
+    expect(tenNguoiDung(null, null)).toBeNull();
+    expect(tenNguoiDung(null, 'he-thong')).toBe('he-thong');
   });
 });

@@ -3,6 +3,7 @@ import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
+import { tenNguoiDung } from './logic';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 
 /** Số kiện tối đa một lượt tải — UI báo "chỉ hiện 500 đầu" khi chạm trần để không cắt âm thầm. */
@@ -11,7 +12,7 @@ export const GIOI_HAN_KIEN = 500;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<KienDongHang[]> {
-  const s = schema.shipments, o = schema.shopifyOrders, st = schema.stores;
+  const s = schema.shipments, o = schema.shopifyOrders, st = schema.stores, u = schema.user;
   // Ngày hiển thị: Lark đang hẹn đi ngày nào thì theo ngày đó (hold sang ngày khác vẫn đúng),
   // chưa hẹn thì lấy ngày lên nhãn, cuối cùng mới tới ngày kiện về SMS.
   const ngayDong = sql<Date>`coalesce(${s.ngayDiDuKien}, ${s.labelCreatedAt}, ${s.createdAt})`;
@@ -42,10 +43,12 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, storeName: st.name, country: o.shipCountry,
     weightKg: s.actualWeightKg, canDuKien: sql<string | null>`coalesce(${o.shipWeightKgOverride}, ${o.shipWeightKg})`, l: s.dimLengthCm, w: s.dimWidthCm, h: s.dimHeightCm,
     base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, cacDonTrongKien: s.cacDonTrongKien, larkMatDongLuc: s.larkMatDongLuc, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
-    hangKhachTra: o.shippingCarrierKey, selectedCarrierKey: o.selectedCarrierKey, selectedCarrierBy: o.selectedCarrierBy, selectedCarrierAt: o.selectedCarrierAt,
+    hangKhachTra: o.shippingCarrierKey, selectedCarrierKey: o.selectedCarrierKey, selectedCarrierBy: o.selectedCarrierBy, tenNguoiChon: u.name, selectedCarrierAt: o.selectedCarrierAt,
     ngayDong,
     soKienCungDon: sql<number>`(select count(*)::int from shipments s2 where s2.order_id = ${o.id} and s2.log_unique_code is not null)`,
   }).from(s).innerJoin(o, eq(o.id, s.orderId)).innerJoin(st, eq(st.id, o.storeId))
+    // Tên người chọn line: tài khoản lưu email, người đọc cần TÊN (CEO 22/09/2026).
+    .leftJoin(u, eq(u.email, o.selectedCarrierBy))
     .where(and(...dk)).orderBy(desc(ngayDong), desc(s.createdAt)).limit(GIOI_HAN_KIEN);
 
   // Món đã huỷ của ĐÚNG những đơn đang hiện — kiện đã đóng vẫn có thể bị huỷ sau đó.
@@ -69,7 +72,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     base: r.base, theoHenLark: r.ngayDiDuKien != null, donDiChung: (r.cacDonTrongKien ?? []).filter((d) => d.replace(/^#/, '') !== r.orderNumber.replace(/^#/, '')), hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
     larkMatDong: r.larkMatDongLuc != null,
     huy: tinhTrangHuyKien(r.skuText, monTheoDon.get(r.orderNumber.replace(/^#/, '')) ?? []),
-    selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: r.selectedCarrierBy,
+    selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: tenNguoiDung(r.tenNguoiChon, r.selectedCarrierBy),
     selectedCarrierAt: r.selectedCarrierAt ? r.selectedCarrierAt.toISOString() : null,
     ngayDong: new Date(r.ngayDong).toISOString(), soKienCungDon: Number(r.soKienCungDon),
   }));
