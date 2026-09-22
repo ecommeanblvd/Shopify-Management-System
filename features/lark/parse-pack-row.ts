@@ -14,6 +14,9 @@ export interface PackRow {
   trackingNumber: string | null;
   carrierKey: HangPack | null;
   labelDate: Date | null;
+  hop: string | null;
+  skuText: string | null;
+  pieces: number | null;
   warnings: string[];
 }
 
@@ -156,5 +159,13 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const theoMa = hangTheoMaVanDon(trackingNumber);
   if (theoMa && theoCot && theoMa !== theoCot) warnings.push(`Couriers ghi "${cRaw}" nhưng mã ${trackingNumber} là ${theoMa.toUpperCase()}`);
   const carrierKey = theoMa ?? theoCot;
-  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, warnings };
+
+  // Hộp đóng gói / SKU / số món — màn "Đóng hàng" (spec 22/09) cần để Đức nhìn
+  // kiện mà không mở Lark. Lark select trả string; số món có thể là số hoặc text.
+  const hop = larkText(fields['Select VTĐG1']);
+  const skuText = larkText(fields['SKU(s)']);
+  const piecesRaw = larkText(fields['Total pieces per pack']);
+  const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
+  const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
+  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, hop, skuText, pieces, warnings };
 }

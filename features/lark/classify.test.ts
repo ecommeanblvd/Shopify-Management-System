@@ -4,7 +4,8 @@ import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
   orderNumber: '', logUniqueCode: null, weightKg: null, dims: null,
-  trackingNumber: null, carrierKey: null, labelDate: null, warnings: [], ...o,
+  trackingNumber: null, carrierKey: null, labelDate: null,
+  hop: null, skuText: null, pieces: null, warnings: [], ...o,
 });
 const emptyMaps = () => ({ shipmentByLogCode: new Map(), shipmentByTracking: new Map(), orderIdByNumber: new Map() });
 

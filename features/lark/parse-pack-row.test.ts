@@ -80,4 +80,18 @@ describe('parsePackRow', () => {
     expect(r.dims).toBeNull();
     expect(r.carrierKey).toBeNull();
   });
+  it('đọc hộp (Select VTĐG1), SKU(s), Total pieces per pack', () => {
+    const r = parsePackRow({
+      'Order Number': '#MBLVD1', 'Log Unique code': 'PK-1',
+      'Select VTĐG1': 'Box 25x20x10', 'SKU(s)': 'ABC-1 x2, DEF-2', 'Total pieces per pack': 3,
+    });
+    expect(r.hop).toBe('Box 25x20x10');
+    expect(r.skuText).toBe('ABC-1 x2, DEF-2');
+    expect(r.pieces).toBe(3);
+  });
+  it('pieces không phải số nguyên dương → null', () => {
+    expect(parsePackRow({ 'Total pieces per pack': 'abc' }).pieces).toBeNull();
+    expect(parsePackRow({ 'Total pieces per pack': 0 }).pieces).toBeNull();
+    expect(parsePackRow({}).hop).toBeNull();
+  });
 });
