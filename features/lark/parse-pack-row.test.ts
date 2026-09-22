@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePackRow, maLienKetDauTien } from './parse-pack-row';
+import { parsePackRow, maLienKetDauTien, tenHopGon, larkDanhSach } from './parse-pack-row';
 
 describe('parsePackRow', () => {
   it('field string cơ bản → map đầy đủ', () => {
@@ -110,5 +110,26 @@ describe('maLienKetDauTien', () => {
     const r = parsePackRow({ 'Select VTĐG1': { link_record_ids: ['recBox1'] } });
     expect(r.hopRecordId).toBe('recBox1');
     expect(r.hop).toBeNull();
+  });
+});
+
+describe('tenHopGon', () => {
+  it('bỏ đuôi định danh kho', () => {
+    expect(tenHopGon('MEAN-BOX-40x25x25-CAR-VTĐG1-WH-8870')).toBe('MEAN-BOX-40x25x25-CAR');
+    expect(tenHopGon('MEAN-CAR-39x28x9-VTĐG1-WH-32085')).toBe('MEAN-CAR-39x28x9');
+  });
+  it('tên không có đuôi giữ nguyên; rỗng → null', () => {
+    expect(tenHopGon('MEAN-BOX-42x30x10-CAR-02')).toBe('MEAN-BOX-42x30x10-CAR-02');
+    expect(tenHopGon(null)).toBeNull();
+  });
+});
+
+describe('larkDanhSach', () => {
+  it('nhiều SKU trong một kiện nối bằng dấu phẩy, bỏ trùng', () => {
+    expect(larkDanhSach([{ text: 'A-1' }, { text: 'B-2' }])).toBe('A-1, B-2');
+    expect(larkDanhSach([{ text: 'A-1' }, { text: 'A-1' }])).toBe('A-1');
+  });
+  it('parsePackRow tách SKU của kiện nhiều món', () => {
+    expect(parsePackRow({ 'SKU(s)': [{ text: 'Eegen-ED153' }, { text: 'TomFried-TS2619' }] }).skuText).toBe('Eegen-ED153, TomFried-TS2619');
   });
 });

@@ -9,7 +9,7 @@
 import { eq, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getLogRecordById, getTenHopVtdg } from './client';
-import { parsePackRow } from './parse-pack-row';
+import { parsePackRow, tenHopGon } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps, type ClassifyResult } from './classify';
 import { patchFrom, giaTriTaoKien } from './patch-kien';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
@@ -73,7 +73,7 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   const row = parsePackRow(rec.fields);
   // Tên hộp nằm ở bảng kho, cột "Select VTĐG1" chỉ có mã liên kết. Best-effort: hỏng thì
   // kiện vẫn về, chỉ thiếu tên hộp (ô chỉ để Đức nhìn, không dùng để tính cước).
-  if (!row.hop && row.hopRecordId) row.hop = await getTenHopVtdg(row.hopRecordId);
+  if (!row.hop && row.hopRecordId) row.hop = tenHopGon(await getTenHopVtdg(row.hopRecordId));
   if (!row.logUniqueCode) return boQua(null, 'dòng chưa có Log Unique code');
   if (!row.orderNumber) return boQua(row.logUniqueCode, 'dòng chưa có Order Number');
 

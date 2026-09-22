@@ -106,6 +106,23 @@ export function plausiblePastLarkDate(d: Date | null, now: Date = new Date()): D
   return p.getTime() <= now.getTime() + FUTURE_SLACK_MS ? p : null;
 }
 
+/** THUẦN: nhiều đoạn rich-text của một ô Lark → nối bằng ", ".
+ *  larkText nối liền không dấu, nên 2 SKU trong một kiện dính thành một chuỗi khó đọc. */
+export function larkDanhSach(v: unknown): string | null {
+  if (Array.isArray(v)) {
+    const ds = v.map((x) => (x && typeof x === 'object' && 'text' in x ? String((x as { text: unknown }).text ?? '').trim() : '')).filter(Boolean);
+    return ds.length ? [...new Set(ds)].join(', ') : null;
+  }
+  return larkText(v);
+}
+
+/** THUẦN: tên hộp bỏ đuôi định danh kho ("…-VTĐG1-WH-8870") cho dễ đọc. */
+export function tenHopGon(s: string | null): string | null {
+  if (!s) return null;
+  const g = s.replace(/-VT[ĐD]G\d*-WH-\d+$/i, '').replace(/-VT[ĐD]G\d*$/i, '').trim();
+  return g || null;
+}
+
 /** THUẦN: mã record đầu tiên của một cột liên kết Lark ({link_record_ids} hoặc mảng chuỗi). */
 export function maLienKetDauTien(v: unknown): string | null {
   if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : null;
@@ -181,7 +198,7 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   // "Select VTĐG1" là cột LIÊN KẾT: Lark trả {link_record_ids:[...]}, không có tên hộp.
   const hop = larkText(fields['Select VTĐG1']);
   const hopRecordId = maLienKetDauTien(fields['Select VTĐG1']);
-  const skuText = larkText(fields['SKU(s)']);
+  const skuText = larkDanhSach(fields['SKU(s)']);
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
