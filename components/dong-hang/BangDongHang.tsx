@@ -161,71 +161,72 @@ export function BangDongHang({
           Không có kiện nào theo bộ lọc này.
         </p>
       ) : (
-        /* MỘT bảng cho cả trang: ngày và kho là hàng phân nhóm, nhờ vậy mọi cột thẳng
-           hàng từ trên xuống — tách mỗi kho một bảng riêng thì mỗi bảng tự căn cột. */
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[880px] text-sm tabular-nums">
-            <thead className="sticky top-0 z-10 bg-background">
-              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-                <th scope="col">Đơn</th>
-                <th scope="col">Cân thực</th>
-                <th scope="col">Cân quy đổi</th>
-                <th scope="col">Hộp / SKU</th>
-                <th scope="col">Khách trả</th>
-                <th scope="col">Line ship</th>
-                <th scope="col">Trạng thái</th>
-              </tr>
-            </thead>
-            {nhom.map((g, iNgay) => (
-              <tbody key={g.ngay}>
-                {/* Khoảng trắng tách hẳn ngày này với ngày phía trên — vẫn trong một bảng
-                    nên các cột không bị lệch. */}
-                {iNgay > 0 && (
-                  <tr aria-hidden>
-                    <td colSpan={7} className="h-6 bg-background" />
-                  </tr>
+        <div className="space-y-5">
+          {nhom.map((g) => (
+            <section key={g.ngay} className="overflow-hidden rounded-lg border border-border">
+              <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border bg-muted px-4 py-3">
+                <h2 className="text-base font-bold tracking-tight text-foreground">
+                  {thuTrongTuan(g.ngay)}, {hienNgayNhom(g.ngay)}
+                </h2>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
+                </span>
+                {laNgayTuongLai(g.ngay) && (
+                  <span className="rounded bg-sky-500/15 px-1.5 py-px text-[11px] font-medium text-sky-700 dark:text-sky-400">
+                    Lark hẹn đi ngày này
+                  </span>
                 )}
-                <tr className="border-y-2 border-border bg-muted">
-                  <th scope="colgroup" colSpan={7} className="px-3 py-3 text-left">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="text-base font-bold tracking-tight text-foreground">
-                        {thuTrongTuan(g.ngay)}, {hienNgayNhom(g.ngay)}
-                      </span>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
-                      </span>
-                      {laNgayTuongLai(g.ngay) && (
-                        <span className="rounded bg-sky-500/15 px-1.5 py-px text-[11px] font-medium text-sky-700 dark:text-sky-400">
-                          Lark hẹn đi ngày này
-                        </span>
-                      )}
-                    </div>
-                  </th>
-                </tr>
-                {g.theoBase.map((b) => (
-                  <Fragment key={b.base ?? 'khong-ro'}>
-                    <tr className="border-b border-border/60 bg-muted/25">
-                      <th scope="rowgroup" colSpan={7} className="px-3 py-1 text-left font-normal">
-                        <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
-                        <span className="ml-2 text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
-                      </th>
+              </header>
+
+              <div className="overflow-x-auto">
+                {/* table-fixed + colgroup: mỗi ngày là một bảng RIÊNG nhưng cột rộng như nhau
+                    nên nhìn dọc xuống vẫn thẳng hàng (trước đây mỗi bảng tự căn nên lệch). */}
+                <table className="w-full min-w-[980px] table-fixed text-sm tabular-nums">
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[18%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
+                      <th scope="col">Đơn</th>
+                      <th scope="col">Cân thực</th>
+                      <th scope="col">Cân quy đổi</th>
+                      <th scope="col">Hộp / SKU</th>
+                      <th scope="col">Khách trả</th>
+                      <th scope="col">Line ship</th>
+                      <th scope="col">Trạng thái</th>
                     </tr>
-                    {b.kien.map((k) => (
-                      <DongKien
-                        key={k.shipmentId}
-                        k={k}
-                        coQuyenChon={coQuyenChon}
-                        chonCucBo={chonCucBo.get(k.orderId)}
-                        ketQua={ketQua.get(k.orderId)}
-                        dangChonHang={dangChon.get(k.orderId)}
-                        moSoCuoc={() => setKienMo(k)}
-                      />
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            ))}
-          </table>
+                  </thead>
+                  {g.theoBase.map((b) => (
+                    <tbody key={b.base ?? 'khong-ro'}>
+                      <tr className="border-b border-border/60 bg-muted/25">
+                        <th scope="rowgroup" colSpan={7} className="px-3 py-1 text-left font-normal">
+                          <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
+                          <span className="ml-2 text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
+                        </th>
+                      </tr>
+                      {b.kien.map((k) => (
+                        <DongKien
+                          key={k.shipmentId}
+                          k={k}
+                          coQuyenChon={coQuyenChon}
+                          chonCucBo={chonCucBo.get(k.orderId)}
+                          ketQua={ketQua.get(k.orderId)}
+                          dangChonHang={dangChon.get(k.orderId)}
+                          moSoCuoc={() => setKienMo(k)}
+                        />
+                      ))}
+                    </tbody>
+                  ))}
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -264,13 +265,13 @@ function DongKien({
   return (
     <tr className="border-t border-border/60 align-top">
       <td className="px-3 py-3">
-        <div className="font-medium">{k.orderNumber}</div>
+        <div className="truncate font-medium" title={k.orderNumber}>{k.orderNumber}</div>
         {k.donDiChung.length > 0 && (
           <div className="text-[11px] leading-tight text-sky-700 dark:text-sky-400" title="Lark gộp các đơn này vào cùng một kiện">
             đi chung: {k.donDiChung.join(', ')}
           </div>
         )}
-        <div className="text-[11px] leading-tight text-muted-foreground">{k.storeName}</div>
+        <div className="truncate text-[11px] leading-tight text-muted-foreground">{k.storeName}</div>
         <div className="text-[11px] leading-tight text-muted-foreground">{coNuoc(k.country)}</div>
       </td>
 
@@ -295,8 +296,8 @@ function DongKien({
       </td>
 
       <td className="px-3 py-3">
-        <div>{k.hop ?? '—'}</div>
-        {k.skuText && <div className="max-w-[220px] truncate text-[11px] leading-tight text-muted-foreground" title={k.skuText}>{k.skuText}</div>}
+        <div className="truncate" title={k.hop ?? undefined}>{k.hop ?? '—'}</div>
+        {k.skuText && <div className="truncate text-[11px] leading-tight text-muted-foreground" title={k.skuText}>{k.skuText}</div>}
         {k.pieces != null && <div className="text-[11px] leading-tight text-muted-foreground">{k.pieces} món</div>}
       </td>
 
