@@ -198,7 +198,10 @@ export function BangDongHang({
           Không có kiện nào theo bộ lọc này.
         </p>
       ) : (
-        <div className="space-y-4 overflow-x-auto">
+        /* KHÔNG bọc overflow-x ở đây: mọi phần tử overflow đều thành khung cuộn riêng và
+           hàng tiêu đề sticky sẽ bám theo khung đó thay vì theo trang. Nội dung rộng hơn màn
+           thì <main> của khung ứng dụng tự cuộn ngang. */
+        <div className="space-y-4">
           {/* Hàng tiêu đề đứng yên khi cuộn — luôn biết cột nào là cột nào. */}
           <div className={`sticky top-0 z-20 min-w-[980px] rounded-lg border border-border bg-muted/90 px-[18px] py-2.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground backdrop-blur ${LUOI}`}>
             <span className="pr-4">Đơn</span>
@@ -210,8 +213,9 @@ export function BangDongHang({
           </div>
 
           {nhom.map((g) => (
-            <section key={g.ngay} className="min-w-[980px] overflow-hidden rounded-xl border border-border">
-              <header className="flex flex-wrap items-baseline gap-3 border-b border-border bg-muted/60 px-[18px] py-3.5">
+            /* KHÔNG overflow-hidden: thanh ngày bên trong phải sticky được. */
+            <section key={g.ngay} className="min-w-[980px] rounded-xl border border-border">
+              <header className="sticky top-[42px] z-10 flex flex-wrap items-baseline gap-3 rounded-t-xl border-b border-border bg-muted px-[18px] py-3.5">
                 <span className="text-base font-semibold tracking-tight">
                   {thuTrongTuan(g.ngay)}, {hienNgayNhom(g.ngay)}
                 </span>
