@@ -24,6 +24,10 @@ const gioVn = (iso: string) =>
 /** 'YYYY-MM-DD' (đã theo giờ VN từ nhomTheoNgay) → 'dd/mm/yyyy'. */
 const hienNgayNhom = (ngay: string) => ngay.split('-').reverse().join('/');
 
+const THU = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+/** Thứ trong tuần của một ngày-lịch VN — đọc nhanh hơn dãy số ngày tháng. */
+const thuTrongTuan = (ngay: string) => THU[new Date(`${ngay}T00:00:00Z`).getUTCDay()];
+
 const NHAN_LOC: Record<BoLocDongHang, string> = {
   cho_chon_line: 'Chờ chọn line',
   hom_nay: 'Hôm nay',
@@ -172,16 +176,30 @@ export function BangDongHang({
                 <th scope="col">Trạng thái</th>
               </tr>
             </thead>
-            {nhom.map((g) => (
+            {nhom.map((g, iNgay) => (
               <tbody key={g.ngay}>
-                <tr className="border-y border-border bg-muted/60">
-                  <th scope="colgroup" colSpan={7} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
-                    {laNgayTuongLai(g.ngay) && (
-                      <span className="ml-2 rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium normal-case tracking-normal text-sky-700 dark:text-sky-400">
-                        Lark hẹn đi ngày này
+                {/* Khoảng trắng tách hẳn ngày này với ngày phía trên — vẫn trong một bảng
+                    nên các cột không bị lệch. */}
+                {iNgay > 0 && (
+                  <tr aria-hidden>
+                    <td colSpan={7} className="h-6 bg-background" />
+                  </tr>
+                )}
+                <tr className="border-y-2 border-border bg-muted">
+                  <th scope="colgroup" colSpan={7} className="px-3 py-3 text-left">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-base font-bold tracking-tight text-foreground">
+                        {thuTrongTuan(g.ngay)}, {hienNgayNhom(g.ngay)}
                       </span>
-                    )}
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
+                      </span>
+                      {laNgayTuongLai(g.ngay) && (
+                        <span className="rounded bg-sky-500/15 px-1.5 py-px text-[11px] font-medium text-sky-700 dark:text-sky-400">
+                          Lark hẹn đi ngày này
+                        </span>
+                      )}
+                    </div>
                   </th>
                 </tr>
                 {g.theoBase.map((b) => (
