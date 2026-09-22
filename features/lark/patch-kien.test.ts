@@ -3,7 +3,7 @@ import { patchFrom, giaTriTaoKien } from './patch-kien';
 import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
-  orderNumber: '#MBLVD1', logUniqueCode: 'PK-1', weightKg: null, dims: null, trackingNumber: null,
+  orderNumber: '#MBLVD1', orderNumbers: ['#MBLVD1'], logUniqueCode: 'PK-1', weightKg: null, dims: null, trackingNumber: null,
   carrierKey: null, labelDate: null, base: null, ngayDiDuKien: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [], ...o,
 });
 
@@ -15,7 +15,7 @@ describe('patchFrom', () => {
     expect(p.updatedAt).toBeInstanceOf(Date);
   });
   it('dòng trống → chỉ có updatedAt và ngày đi dự kiến (đồng bộ hẳn theo Lark, kể cả xoá)', () => {
-    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien']);
+    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien', 'donDiChung']);
     expect(patchFrom(mk({})).ngayDiDuKien).toBeNull();
   });
 
@@ -33,7 +33,18 @@ describe('giaTriTaoKien', () => {
     expect(v).toEqual({
       orderId: 'order-1', logUniqueCode: 'PK-1', trackingNumber: 'T1', carrierKey: 'ups',
       actualWeightKg: '0.5', dimLengthCm: '10', dimWidthCm: '10', dimHeightCm: null,
-      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, larkHop: 'Bag', skuText: null, pieces: 1,
+      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, donDiChung: null, larkHop: 'Bag', skuText: null, pieces: 1,
     });
+  });
+});
+
+describe('kiện gộp nhiều đơn', () => {
+  it('đơn thứ hai trở đi lưu ở donDiChung, đơn đầu là đơn chính', () => {
+    const row = mk({ orderNumber: '#MBLVD30321', orderNumbers: ['#MBLVD30321', '#MBLVD30322'] });
+    expect(patchFrom(row).donDiChung).toEqual(['#MBLVD30322']);
+    expect(giaTriTaoKien(row, 'o1').donDiChung).toEqual(['#MBLVD30322']);
+  });
+  it('kiện một đơn → donDiChung null (gộp rồi tách lại thì mất đi)', () => {
+    expect(patchFrom(mk({ orderNumbers: ['#MBLVD1'] })).donDiChung).toBeNull();
   });
 });

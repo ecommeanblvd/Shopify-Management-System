@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePackRow, maLienKetDauTien, tenHopGon, larkDanhSach } from './parse-pack-row';
+import { parsePackRow, maLienKetDauTien, tenHopGon, larkDanhSach, tachMaDon } from './parse-pack-row';
 
 describe('parsePackRow', () => {
   it('field string cơ bản → map đầy đủ', () => {
@@ -131,5 +131,27 @@ describe('larkDanhSach', () => {
   });
   it('parsePackRow tách SKU của kiện nhiều món', () => {
     expect(parsePackRow({ 'SKU(s)': [{ text: 'Eegen-ED153' }, { text: 'TomFried-TS2619' }] }).skuText).toBe('Eegen-ED153, TomFried-TS2619');
+  });
+});
+
+describe('tachMaDon (kiện gộp nhiều đơn)', () => {
+  it('cột look-up có dấu phẩy → tách theo dấu phẩy', () => {
+    expect(tachMaDon('#MBLVD30321#MBLVD30322', '#MBLVD30321,#MBLVD30322')).toEqual(['#MBLVD30321', '#MBLVD30322']);
+  });
+  it('chỉ có cột Order Number dính liền → tách theo dấu #', () => {
+    expect(tachMaDon('#MXHS1524#MXHS1525#MXHS1526', null)).toEqual(['#MXHS1524', '#MXHS1525', '#MXHS1526']);
+  });
+  it('đơn đơn lẻ giữ nguyên, kể cả mã không có #', () => {
+    expect(tachMaDon('#MBLVD30508', '#MBLVD30508')).toEqual(['#MBLVD30508']);
+    expect(tachMaDon('TA2328', null)).toEqual(['TA2328']);
+  });
+  it('trống → mảng rỗng; trùng mã → bỏ trùng', () => {
+    expect(tachMaDon(null, null)).toEqual([]);
+    expect(tachMaDon('#A1#A1', null)).toEqual(['#A1']);
+  });
+  it('parsePackRow lấy đơn đầu làm đơn chính và giữ đủ danh sách', () => {
+    const r = parsePackRow({ 'Order Number': '#MBLVD30321#MBLVD30322', 'Order number (look up)': '#MBLVD30321,#MBLVD30322' });
+    expect(r.orderNumber).toBe('#MBLVD30321');
+    expect(r.orderNumbers).toEqual(['#MBLVD30321', '#MBLVD30322']);
   });
 });

@@ -64,7 +64,13 @@ export function buildOrderNumberSearchBody(orderNumber: string): Record<string, 
   return {
     filter: {
       conjunction: 'or',
-      conditions: forms.map((v) => ({ field_name: 'Order Number', operator: 'is', value: [v] })),
+      conditions: [
+        ...forms.map((v) => ({ field_name: 'Order Number', operator: 'is', value: [v] })),
+        // Kiện GỘP nhiều đơn dính liền trong một ô ("#MBLVD30321#MBLVD30322") nên phép so
+        // bằng trượt hết. 'contains' bắt được, còn việc lọc chính xác thì caller làm bằng
+        // tachMaDon — 'contains' có thể bắt nhầm mã ngắn hơn (CEO 22/09/2026).
+        { field_name: 'Order Number', operator: 'contains', value: [`#${bare}`] },
+      ],
     },
     automatic_fields: true,
     page_size: 500,

@@ -42,7 +42,9 @@ export function classifyPackRows(rows: PackRow[], maps: ClassifyMaps): ClassifyR
     if (look.kind === 'no_prefix') { out.skipped.push({ orderNumber: row.orderNumber, reason: 'không nhận prefix store' }); continue; }
     if (!look.info.connected) { out.skipped.push({ orderNumber: row.orderNumber, reason: `store chưa kết nối (${look.info.displayName})` }); continue; }
 
-    const orderId = maps.orderIdByNumber.get(bare(row.orderNumber));
+    // Kiện GỘP nhiều đơn: gắn vào đơn đầu tiên khớp được, các đơn còn lại lưu ở don_di_chung.
+    const dsDon = row.orderNumbers.length ? row.orderNumbers : [row.orderNumber];
+    const orderId = dsDon.map((n) => maps.orderIdByNumber.get(bare(n))).find(Boolean);
     if (!orderId) { out.unmatched.push({ orderNumber: row.orderNumber, reason: 'order chưa có trong hệ thống' }); continue; }
     if (row.logUniqueCode && createdLogCodes.has(row.logUniqueCode)) {
       out.skipped.push({ orderNumber: row.orderNumber, reason: `trùng logUniqueCode trong batch (${row.logUniqueCode})` });

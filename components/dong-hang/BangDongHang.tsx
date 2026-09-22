@@ -246,6 +246,11 @@ function DongKien({
     <tr className="border-t border-border/60 align-top">
       <td className="px-3 py-3">
         <div className="font-medium">{k.orderNumber}</div>
+        {k.donDiChung.length > 0 && (
+          <div className="text-[11px] leading-tight text-sky-700 dark:text-sky-400" title="Lark gộp các đơn này vào cùng một kiện">
+            đi chung: {k.donDiChung.join(', ')}
+          </div>
+        )}
         <div className="text-[11px] leading-tight text-muted-foreground">{k.storeName}</div>
         <div className="text-[11px] leading-tight text-muted-foreground">{coNuoc(k.country)}</div>
       </td>

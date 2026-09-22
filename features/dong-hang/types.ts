@@ -11,6 +11,8 @@ export interface KienDongHang {
   hop: string | null; skuText: string | null; pieces: number | null;
   trackingNumber: string | null; hangKhachTra: string | null;
   /** Món trong kiện có bị huỷ không (Lark "WH-Điều phối đơn" = Cancel packing…). */
+  /** Mã các đơn khác đi chung kiện này (Lark gộp đơn). */
+  donDiChung: string[];
   huy: { loai: 'khong' | 'mot_phan' | 'toan_bo'; soHuy: number; tong: number; lyDo: string | null };
   selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null;
   /** ISO — coalesce(label_created_at, created_at). */

@@ -1,4 +1,5 @@
 import { searchRecordsByOrderNumber, updateLogRecordFields } from './client';
+import { tachMaDon, larkText } from './parse-pack-row';
 import { tenCourierLark } from './courier-name';
 
 /** Tên cột trên bảng logistics. Đổi tên cột bên Lark là hỏng — nên để một chỗ. */
@@ -32,7 +33,10 @@ export async function dayCourierLenLark(
   if (!orderNumber?.trim()) return { ok: false, daGhi: 0, error: 'Đơn không có mã đơn hàng để tìm trên Lark' };
 
   try {
-    const recs = await searchRecordsByOrderNumber(orderNumber);
+    const timDuoc = await searchRecordsByOrderNumber(orderNumber);
+    // Lọc lại phía SMS: 'contains' trong truy vấn Lark có thể bắt nhầm mã ngắn hơn, nên
+    // chỉ giữ dòng THỰC SỰ chứa đúng mã đơn này trong danh sách đơn của nó.
+    const recs = timDuoc.filter((r) => coDonNay(r.fields, orderNumber));
     if (recs.length === 0) return { ok: false, daGhi: 0, error: `Không tìm thấy dòng Lark nào cho đơn ${orderNumber}` };
 
     let daGhi = 0;
@@ -52,6 +56,13 @@ export async function dayCourierLenLark(
   } catch (e) {
     return { ok: false, daGhi: 0, error: e instanceof Error ? e.message : 'Lỗi gọi Lark' };
   }
+}
+
+/** THUẦN: dòng Lark này có chứa ĐÚNG mã đơn cần tìm không (kiện gộp có nhiều mã trong một ô). */
+export function coDonNay(fields: Record<string, unknown>, orderNumber: string): boolean {
+  const can = orderNumber.trim().replace(/^#/, '').toUpperCase();
+  const ds = tachMaDon(larkText(fields['Order Number']), larkText(fields['Order number (look up)']));
+  return ds.some((x) => x.replace(/^#/, '').toUpperCase() === can);
 }
 
 /** Lấy "Order Number" từ record Lark (trường có thể là text hoặc mảng rich-text). */

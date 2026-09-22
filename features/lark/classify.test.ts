@@ -3,7 +3,7 @@ import { classifyPackRows } from './classify';
 import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
-  orderNumber: '', logUniqueCode: null, weightKg: null, dims: null,
+  orderNumber: '', orderNumbers: [], logUniqueCode: null, weightKg: null, dims: null,
   trackingNumber: null, carrierKey: null, labelDate: null,
   base: null, ngayDiDuKien: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [], ...o,
 });
@@ -42,8 +42,8 @@ describe('classifyPackRows', () => {
   it('2 row trùng logUniqueCode (cùng batch, chưa có shipment) → chỉ tạo 1, dòng sau skip', () => {
     const maps = emptyMaps(); maps.orderIdByNumber.set('MBLVD1', 'order-1');
     const r = classifyPackRows([
-      mk({ orderNumber: '#MBLVD1', logUniqueCode: 'PK-dup', trackingNumber: null }),
-      mk({ orderNumber: '#MBLVD1', logUniqueCode: 'PK-dup', trackingNumber: null }),
+      mk({ orderNumber: '#MBLVD1', orderNumbers: ['#MBLVD1'], logUniqueCode: 'PK-dup', trackingNumber: null }),
+      mk({ orderNumber: '#MBLVD1', orderNumbers: ['#MBLVD1'], logUniqueCode: 'PK-dup', trackingNumber: null }),
     ], maps);
     expect(r.create).toHaveLength(1);
     expect(r.skipped).toHaveLength(1);

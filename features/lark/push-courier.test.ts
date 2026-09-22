@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { dongBoCourierLark, soDonTuRecord, COT_COURIER } from './push-courier';
+import { coDonNay, dongBoCourierLark, soDonTuRecord, COT_COURIER } from './push-courier';
 
 const rec = (id: string, so: string, couriers?: unknown) => ({
   record_id: id,
@@ -86,5 +86,22 @@ describe('dongBoCourierLark', () => {
     );
     expect(kq.daDien).toBe(1);
     expect(kq.loi).toHaveLength(1);
+  });
+});
+
+describe('coDonNay (kiện gộp nhiều đơn)', () => {
+  it('nhận dòng gộp chứa đúng mã đơn', () => {
+    const f = { 'Order Number': '#MBLVD30321#MBLVD30322', 'Order number (look up)': '#MBLVD30321,#MBLVD30322' };
+    expect(coDonNay(f, '#MBLVD30321')).toBe(true);
+    expect(coDonNay(f, 'MBLVD30322')).toBe(true);
+  });
+  it('KHÔNG nhận mã ngắn hơn lọt qua contains', () => {
+    const f = { 'Order Number': '#MBLVD30321#MBLVD30322' };
+    expect(coDonNay(f, '#MBLVD3032')).toBe(false);
+    expect(coDonNay(f, '#MBLVD303')).toBe(false);
+  });
+  it('dòng một đơn bình thường', () => {
+    expect(coDonNay({ 'Order Number': '#MBLVD30508' }, '#MBLVD30508')).toBe(true);
+    expect(coDonNay({ 'Order Number': '#MBLVD30508' }, '#MBLVD30509')).toBe(false);
   });
 });

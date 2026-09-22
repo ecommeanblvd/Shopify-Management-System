@@ -7,7 +7,10 @@ import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 export const MAX_WEIGHT_KG = 100;
 
 export interface PackRow {
+  /** Đơn CHÍNH của kiện (đơn đầu tiên khi Lark gộp nhiều đơn đi chung). */
   orderNumber: string;
+  /** Mọi đơn Lark ghi trên dòng này — gộp đơn thì có từ 2 mã trở lên. */
+  orderNumbers: string[];
   logUniqueCode: string | null;
   weightKg: number | null;
   dims: { l: number; w: number; h: number | null } | null;
@@ -135,9 +138,24 @@ export function maLienKetDauTien(v: unknown): string | null {
   return null;
 }
 
+/**
+ * THUẦN: tách danh sách mã đơn của một dòng Lark.
+ *
+ * Ops gộp nhiều đơn vào một kiện thì cột "Order Number" dính liền không dấu phân cách
+ * ("#MBLVD30321#MBLVD30322"), còn cột look-up có dấu phẩy. Không tách thì SMS coi cả chuỗi
+ * là một mã lạ và kiện không khớp được đơn nào (CEO 22/09/2026).
+ */
+export function tachMaDon(orderNumber: string | null, lookUp: string | null): string[] {
+  const nguon = (lookUp ?? '').includes(',') ? lookUp! : orderNumber ?? '';
+  const tho = /[,;]/.test(nguon) ? nguon.split(/[,;]/) : nguon.split(/(?=#)/);
+  const ds = tho.map((x) => x.trim()).filter(Boolean);
+  return [...new Set(ds)];
+}
+
 export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const warnings: string[] = [];
-  const orderNumber = larkText(fields['Order Number']) ?? '';
+  const orderNumbers = tachMaDon(larkText(fields['Order Number']), larkText(fields['Order number (look up)']));
+  const orderNumber = orderNumbers[0] ?? '';
   const logUniqueCode = larkText(fields['Log Unique code']);
   const trackingNumber = larkText(fields['Tracking Number']);
 
@@ -208,5 +226,5 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, hop, hopRecordId, skuText, pieces, warnings };
+  return { orderNumber, orderNumbers, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, hop, hopRecordId, skuText, pieces, warnings };
 }

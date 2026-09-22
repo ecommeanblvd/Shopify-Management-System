@@ -11,7 +11,9 @@ describe('buildOrderNumberSearchBody', () => {
     const vals = body.filter.conditions.flatMap((c) => c.value);
     expect(vals).toContain('MBLVD28907');
     expect(vals).toContain('#MBLVD28907');
-    expect(body.filter.conditions.every((c) => c.field_name === 'Order Number' && c.operator === 'is')).toBe(true);
+    expect(body.filter.conditions.every((c) => c.field_name === 'Order Number')).toBe(true);
+    // Thêm nhánh 'contains' để bắt kiện GỘP nhiều đơn dính liền trong một ô.
+    expect(body.filter.conditions.some((c) => c.operator === 'contains' && c.value.includes('#MBLVD28907'))).toBe(true);
     expect(body.page_size).toBe(500);
   });
 

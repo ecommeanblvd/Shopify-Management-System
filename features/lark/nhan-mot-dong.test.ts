@@ -3,7 +3,7 @@ import { docKetQuaPhanLoai } from './nhan-mot-dong';
 import type { ClassifyResult } from './classify';
 import type { PackRow } from './parse-pack-row';
 
-const row: PackRow = { orderNumber: '#MBLVD1', logUniqueCode: 'PK-1', weightKg: 1, dims: null, trackingNumber: null,
+const row: PackRow = { orderNumber: '#MBLVD1', orderNumbers: ['#MBLVD1'], logUniqueCode: 'PK-1', weightKg: 1, dims: null, trackingNumber: null,
   carrierKey: null, labelDate: null, base: null, ngayDiDuKien: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [] };
 const trong = (): ClassifyResult => ({ update: [], create: [], unmatched: [], skipped: [] });
 
