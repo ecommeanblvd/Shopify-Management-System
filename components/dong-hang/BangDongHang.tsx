@@ -17,6 +17,8 @@ const TRAN_SO_CA_TRANG = 50;
  *  thấy lỗi và bấm lại được, không để dòng treo mãi ở "…". */
 const loiBaoGia = (): BaoGiaKien => ({ rows: [], reNhatKey: null, error: 'Không báo giá được, thử lại', luc: new Date().toISOString() });
 
+/** Cân nặng kiểu Việt: dấu phẩy thập phân, tối đa 3 số lẻ (1,966 kg). */
+const soKg = (n: number) => n.toLocaleString('vi-VN', { maximumFractionDigits: 3 });
 const num = (n: number) => Math.round(n).toLocaleString('vi-VN');
 const vnd = (n?: number | null) => (typeof n === 'number' ? num(n) + '₫' : '—');
 
@@ -211,52 +213,58 @@ export function BangDongHang({
           Không có kiện nào theo bộ lọc này.
         </p>
       ) : (
-        nhom.map((g) => (
-          <section key={g.ngay} className="rounded-lg border border-border">
-            <header className="border-b border-border px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
-            </header>
-            {g.theoBase.map((b) => (
-            <div key={b.base ?? 'khong-ro'} className="overflow-x-auto">
-              <div className="flex items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-1.5">
-                <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
-                <span className="text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
-              </div>
-              <table className="w-full min-w-[980px] text-sm tabular-nums">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-                    <th scope="col">Đơn</th>
-                    <th scope="col">Cân</th>
-                    <th scope="col">Hộp / SKU</th>
-                    <th scope="col">Khách trả</th>
-                    <th scope="col">So cước</th>
-                    <th scope="col">Chọn</th>
-                    <th scope="col">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {b.kien.map((k) => (
-                    <DongKien
-                      key={k.shipmentId}
-                      k={k}
-                      bao={bao.get(k.shipmentId)}
-                      dangBao={dangBao.has(k.shipmentId)}
-                      moChiTiet={moChiTiet}
-                      doiChiTiet={doiChiTiet}
-                      soCuoc={soCuoc}
-                      coQuyenChon={coQuyenChon}
-                      chonCucBo={chonCucBo.get(k.orderId)}
-                      ketQua={ketQua.get(k.orderId)}
-                      dangChon={dangChon}
-                      chonHang={chonHang}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        /* MỘT bảng cho cả trang: ngày và kho là hàng phân nhóm, nhờ vậy mọi cột thẳng
+           hàng từ trên xuống — tách mỗi kho một bảng riêng thì mỗi bảng tự căn cột. */
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[980px] text-sm tabular-nums">
+            <thead className="sticky top-0 z-10 bg-background">
+              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
+                <th scope="col">Đơn</th>
+                <th scope="col">Cân</th>
+                <th scope="col">Hộp / SKU</th>
+                <th scope="col">Khách trả</th>
+                <th scope="col">So cước</th>
+                <th scope="col">Chọn</th>
+                <th scope="col">Trạng thái</th>
+              </tr>
+            </thead>
+            {nhom.map((g) => (
+              <tbody key={g.ngay}>
+                <tr className="border-y border-border bg-muted/60">
+                  <th scope="colgroup" colSpan={7} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
+                  </th>
+                </tr>
+                {g.theoBase.map((b) => (
+                  <Fragment key={b.base ?? 'khong-ro'}>
+                    <tr className="border-b border-border/60 bg-muted/25">
+                      <th scope="rowgroup" colSpan={7} className="px-3 py-1 text-left font-normal">
+                        <span className="rounded bg-amber-500/15 px-1.5 py-px text-[11px] font-semibold text-amber-700 dark:text-amber-400">{b.base ?? 'chưa rõ kho'}</span>
+                        <span className="ml-2 text-[11px] text-muted-foreground">{b.kien.length} kiện</span>
+                      </th>
+                    </tr>
+                    {b.kien.map((k) => (
+                      <DongKien
+                        key={k.shipmentId}
+                        k={k}
+                        bao={bao.get(k.shipmentId)}
+                        dangBao={dangBao.has(k.shipmentId)}
+                        moChiTiet={moChiTiet}
+                        doiChiTiet={doiChiTiet}
+                        soCuoc={soCuoc}
+                        coQuyenChon={coQuyenChon}
+                        chonCucBo={chonCucBo.get(k.orderId)}
+                        ketQua={ketQua.get(k.orderId)}
+                        dangChon={dangChon}
+                        chonHang={chonHang}
+                      />
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
             ))}
-          </section>
-        ))
+          </table>
+        </div>
       )}
     </div>
   );
@@ -296,7 +304,7 @@ function DongKien({
         </td>
 
         <td className="px-3 py-3">
-          <div>{k.weightKg != null ? `${k.weightKg} kg` : '—'}</div>
+          <div>{k.weightKg != null ? `${soKg(k.weightKg)} kg` : '—'}</div>
           {k.dims && (
             <div className="text-[11px] leading-tight text-muted-foreground">
               {k.dims.l}×{k.dims.w}{k.dims.h != null ? `×${k.dims.h}` : ''}
@@ -304,7 +312,7 @@ function DongKien({
           )}
           {can.quyDoi != null && (
             <div className="text-[11px] leading-tight text-muted-foreground">
-              quy đổi {can.quyDoi} → tính cước {can.tinhCuoc ?? '—'}
+              quy đổi {soKg(can.quyDoi)} → tính cước {can.tinhCuoc != null ? soKg(can.tinhCuoc) : '—'}
             </div>
           )}
         </td>
