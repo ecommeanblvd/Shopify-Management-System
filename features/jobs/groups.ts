@@ -35,6 +35,10 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   'theo-don': ['push-unsent-brand', 'refresh-owned-store', 'addr-verify', 'apply-pod', 'return-links', 'ship-ho-reconcile', 'doi-chieu-ly-do'],
   'hang-ngay': ['ship-ho-tiers', 'refresh-fuel', 'refresh-surcharges', 'sync-unit-cost', 'apply-own-cogs'],
   'hang-tuan': ['prune-logs'],
+
+  // Không phải cron: Lark Automation gọi /api/lark/pack, mỗi request một dòng job_runs.
+  // Khai nhóm để test "mọi tác vụ đều có nhóm" không kêu; run-group sẽ báo "chưa nối" nếu ai chạy nhầm.
+  'tu-lark': ['lark-pack-webhook'],
 };
 
 export const TEN_NHOM = Object.keys(NHOM_JOB);
