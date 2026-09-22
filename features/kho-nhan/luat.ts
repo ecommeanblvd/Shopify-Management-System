@@ -10,7 +10,7 @@ export function actionMacDinh(qc: QcCheck): WhAction {
   return 'Tạm nhập (đi đơn)';
 }
 
-export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean }): { ok: true; viec: ViecNhanKcs } | { ok: false; loi: string } {
+export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean; daFailTruoc?: boolean }): { ok: true; viec: ViecNhanKcs } | { ok: false; loi: string } {
   if (!v.orderNumber?.trim()) return { ok: false, loi: 'Thiếu mã đơn' };
   if (!v.monDinhDanh?.trim()) return { ok: false, loi: 'Thiếu món' };
   if (!QC_CHECK.includes(v.qcCheck as QcCheck)) return { ok: false, loi: 'Kết quả kiểm không hợp lệ' };
@@ -21,7 +21,10 @@ export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean }): { ok: t
   if (v.canKg != null && (!(v.canKg > 0) || v.canKg > CAN_TOI_DA)) return { ok: false, loi: 'Cân không hợp lệ' };
   if (v.qcCheck === 'QC Failed') {
     if (!v.lyDoFail?.trim()) return { ok: false, loi: 'Không đạt thì phải ghi lý do' };
-    if (!v.coAnh) return { ok: false, loi: 'Không đạt thì phải có ảnh lỗi' };
+    // Ảnh chỉ bắt buộc khi món CHUYỂN sang không đạt. Món trên Lark vốn đã không đạt từ
+    // trước (8.858/9.007 dòng có kết quả) thì bắt chụp lại ảnh lỗi cũ là điều không làm được —
+    // sửa mỗi cái cân sẽ thành bế tắc.
+    if (!v.coAnh && !v.daFailTruoc) return { ok: false, loi: 'Không đạt thì phải có ảnh lỗi' };
   }
   return {
     ok: true,

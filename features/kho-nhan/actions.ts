@@ -43,6 +43,8 @@ export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi
     lyDoFail: String(formData.get('lyDoFail') ?? '') || null,
     warehouse: String(formData.get('warehouse') ?? '') as never,
     coAnh: !!anhKey,
+    // Dòng Lark vốn đã "QC Failed" thì ảnh lỗi nằm ở Lark/giấy tờ cũ, không bắt chụp lại.
+    daFailTruoc: String(formData.get('larkQcCu') ?? '') === 'QC Failed',
   });
   if (!v.ok) return { ok: false, loi: v.loi };
 

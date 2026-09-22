@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { dayLaiDongLoi, ghiNhanKcs } from '@/features/kho-nhan/actions';
 import { QC_CHECK, WAREHOUSE, WH_ACTION, type QcCheck, type WhAction, type Warehouse } from '@/features/kho-nhan/gia-tri-lark';
 import { actionMacDinh } from '@/features/kho-nhan/luat';
@@ -31,13 +31,16 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   homNay: DongHomNay[];
   coQuyenNhap: boolean;
 }) {
-  const [kho, setKho] = useState<Warehouse>(WAREHOUSE[0]);
-  useEffect(() => {
+  // Đọc kho đã chọn lần trước NGAY khi dựng state (không setState trong effect — gây render
+  // dây chuyền). Lần dựng đầu trên máy chủ không có localStorage nên trả kho mặc định.
+  const [kho, setKho] = useState<Warehouse>(() => {
     try {
-      const luu = localStorage.getItem(KHOA_KHO);
-      if (laKho(luu)) setKho(luu);
-    } catch { /* trình duyệt chặn localStorage thì dùng kho mặc định */ }
-  }, []);
+      const luu = typeof window === 'undefined' ? null : localStorage.getItem(KHOA_KHO);
+      return laKho(luu) ? luu : WAREHOUSE[0];
+    } catch {
+      return WAREHOUSE[0];
+    }
+  });
   const doiKho = (w: Warehouse) => {
     setKho(w);
     try { localStorage.setItem(KHOA_KHO, w); } catch { /* không lưu được thì thôi */ }
@@ -109,11 +112,17 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
     : laQc(m.larkCu?.qcCheck ?? undefined) ? m.larkCu!.qcCheck as QcCheck : 'QC Pass';
   const actionCu = laAction(m.daNhan?.whAction) ? m.daNhan.whAction as WhAction
     : laAction(m.larkCu?.whAction ?? undefined) ? m.larkCu!.whAction as WhAction : actionMacDinh(qcCu);
-  const soLuongCu = m.daNhan?.soLuong ?? m.larkCu?.soLuong ?? 1;
-  const canCu = m.daNhan?.canKg ?? m.larkCu?.canKg ?? null;
+  // Số trên Lark có thể là 0 hoặc quá lớn (dòng cũ nhập tay). Điền sẵn một giá trị mà máy chủ
+  // sẽ từ chối thì kho bấm Lưu là kẹt, nên chỉ nhận số hợp lệ, còn lại về mặc định.
+  const slHopLe = (n: number | null | undefined) => (typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null);
+  const canHopLe = (n: number | null | undefined) => (typeof n === 'number' && n > 0 && n <= 100 ? n : null);
+  const soLuongCu = slHopLe(m.daNhan?.soLuong) ?? slHopLe(m.larkCu?.soLuong) ?? 1;
+  const canCu = canHopLe(m.daNhan?.canKg) ?? canHopLe(m.larkCu?.canKg) ?? null;
+  // Món trên Lark vốn đã không đạt → ảnh lỗi đã có từ lần kiểm trước, không bắt chụp lại.
+  const larkQcCu = m.larkCu?.qcCheck === 'QC Failed' ? 'QC Failed' : '';
   // Ảnh lỗi chỉ SMS mới giữ (spec §3: Lark chỉ nhận lý do bằng chữ), nên dòng Lark có lý do
   // KHÔNG có nghĩa là đã có ảnh.
-  const coAnhCu = !!m.daNhan?.anhKey;
+  const coAnhCu = !!m.daNhan?.anhKey || larkQcCu === 'QC Failed';
 
   const [soLuong, setSoLuong] = useState(String(soLuongCu));
   const [canKg, setCanKg] = useState(canCu != null ? String(canCu) : '');
@@ -172,6 +181,7 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
       <input type="hidden" name="monRecordId" value={m.recordId ?? ''} />
       <input type="hidden" name="orderNumber" value={donTran} />
       <input type="hidden" name="sku" value={m.sku ?? ''} />
+      <input type="hidden" name="larkQcCu" value={larkQcCu} />
 
       {tieuDe}
 

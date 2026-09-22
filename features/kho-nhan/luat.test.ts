@@ -45,3 +45,18 @@ describe('actionMacDinh', () => {
     expect(actionMacDinh('Gửi dư')).toBe('Lưu kho');
   });
 });
+
+describe('ảnh lỗi khi sửa món vốn đã không đạt trên Lark', () => {
+  const fail = { ...co, qcCheck: 'QC Failed' as const, whAction: 'Gửi trả Vendor (QC fail)' as const, lyDoFail: 'bẩn' };
+  it('món Lark vốn đã không đạt → sửa cân không cần chụp lại ảnh', () => {
+    expect(kiemViec({ ...fail, coAnh: false, daFailTruoc: true }).ok).toBe(true);
+  });
+  it('món mới CHUYỂN sang không đạt → vẫn bắt buộc ảnh', () => {
+    expect(kiemViec({ ...fail, coAnh: false, daFailTruoc: false }))
+      .toEqual({ ok: false, loi: 'Không đạt thì phải có ảnh lỗi' });
+  });
+  it('dù đã không đạt từ trước vẫn phải có lý do', () => {
+    expect(kiemViec({ ...fail, lyDoFail: null, coAnh: false, daFailTruoc: true }))
+      .toEqual({ ok: false, loi: 'Không đạt thì phải ghi lý do' });
+  });
+});
