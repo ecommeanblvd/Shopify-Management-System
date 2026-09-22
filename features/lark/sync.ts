@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, desc, and, or, isNull, isNotNull, ne, sql, inArray } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords, type LarkRecord } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
@@ -123,27 +123,18 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
         }
       });
     }
-    // Mã THẬT SỰ tạo được (insert onConflictDoNothing có thể không ghi gì) — dùng
-    // để gỡ dòng chờ khớp, không gỡ theo mã chỉ mới "định tạo".
-    const maVuaTao: string[] = [];
     for (const batch of chunk(cls.create, APPLY_CHUNK)) {
       await db.transaction(async (tx) => {
         for (const c of batch) {
-          const ins = await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId))
-            .onConflictDoNothing().returning({ logUniqueCode: schema.shipments.logUniqueCode });
-          for (const r of ins) if (r.logUniqueCode) maVuaTao.push(r.logUniqueCode);
+          await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId)).onConflictDoNothing();
         }
       });
     }
 
-    // Kiện từng nằm ở "chờ khớp" (webhook /api/lark/pack) nay đã có kiện trong SMS —
-    // cron vừa tạo, hoặc kiện đã tồn tại sẵn (nhánh update) → gỡ khỏi màn Đóng hàng.
-    const maDaKhop = [...maVuaTao, ...cls.update.map((u) => u.row.logUniqueCode).filter((x): x is string => !!x)];
-    for (const batch of chunk(maDaKhop, APPLY_CHUNK)) {
-      if (batch.length > 0) {
-        await db.delete(schema.larkPackChoKhop).where(inArray(schema.larkPackChoKhop.logUniqueCode, batch));
-      }
-    }
+    // Kiện từng nằm ở "chờ khớp" (webhook /api/lark/pack) nay đã có kiện trong SMS
+    // (cron vừa tạo, hoặc đã tồn tại sẵn) → gỡ khỏi màn Đóng hàng. MỘT lệnh, không
+    // lặp theo lô: bảng chờ khớp gần như luôn rỗng, còn cls.update có ~11k mã.
+    await db.execute(sql`DELETE FROM lark_pack_cho_khop WHERE log_unique_code IN (SELECT log_unique_code FROM shipments WHERE log_unique_code IS NOT NULL)`);
 
     // Phần B: snapshot status Lark theo orderId (ghi đè CÓ ĐIỀU KIỆN — record sau
     // bù field record trước thiếu; đơn nhiều kiện vẫn ra 1 dòng/đơn).

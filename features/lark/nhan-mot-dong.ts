@@ -63,11 +63,16 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   let rec: Awaited<ReturnType<typeof getLogRecordById>>;
   try { rec = await getLogRecordById(recordId); }
   catch (e) { throw new LoiLarkApi(e instanceof Error ? e.message : String(e)); }
-  if (!rec) return { ketQua: 'bo_qua', logUniqueCode: null, lyDo: 'record không còn trên Lark' };
+  // bo_qua thì cũng gỡ dòng chờ khớp cũ của record này (Ops xoá record / xoá Order Number).
+  const boQua = async (logUniqueCode: string | null, lyDo: string): Promise<KetQuaNhanDong> => {
+    if (!dry) await db.delete(schema.larkPackChoKhop).where(eq(schema.larkPackChoKhop.recordId, recordId));
+    return { ketQua: 'bo_qua', logUniqueCode, lyDo };
+  };
+  if (!rec) return boQua(null, 'record không còn trên Lark');
 
   const row = parsePackRow(rec.fields);
-  if (!row.logUniqueCode) return { ketQua: 'bo_qua', logUniqueCode: null, lyDo: 'dòng chưa có Log Unique code' };
-  if (!row.orderNumber) return { ketQua: 'bo_qua', logUniqueCode: row.logUniqueCode, lyDo: 'dòng chưa có Order Number' };
+  if (!row.logUniqueCode) return boQua(null, 'dòng chưa có Log Unique code');
+  if (!row.orderNumber) return boQua(row.logUniqueCode, 'dòng chưa có Order Number');
 
   // Map đối chiếu chỉ cho dòng này (cron nạp cả bảng; ở đây 1 dòng → 2 truy vấn nhỏ).
   const dieuKien = row.trackingNumber

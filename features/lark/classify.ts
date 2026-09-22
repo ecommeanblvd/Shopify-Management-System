@@ -24,9 +24,9 @@ const bare = (n: string) => n.trim().replace(/^#/, '');
 
 export function classifyPackRows(rows: PackRow[], maps: ClassifyMaps): ClassifyResult {
   const out: ClassifyResult = { update: [], create: [], unmatched: [], skipped: [] };
-  // logUniqueCode đã được route sang CREATE trong batch này — chặn 2 dòng Lark
-  // trùng logUniqueCode (không tracking) cùng tạo 2 shipment (onConflictDoNothing
-  // không phủ vì log_unique_code không phải unique index).
+  // logUniqueCode đã được route sang CREATE trong batch này — hai dòng Lark trùng
+  // logUniqueCode thì dòng sau bị skipped (có lý do) thay vì im lặng rơi vào
+  // onConflictDoNothing của unique index log_unique_code (migration 0149).
   const createdLogCodes = new Set<string>();
   for (const row of rows) {
     // 1. shipment đã tồn tại?

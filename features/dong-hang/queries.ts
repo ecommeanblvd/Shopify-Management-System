@@ -42,7 +42,8 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
 
 export async function listKienChoKhop(): Promise<KienChoKhop[]> {
   const t = schema.larkPackChoKhop;
-  const rows = await db.select().from(t).orderBy(desc(t.nhanLuc)).limit(200);
+  // Chỉ 14 ngày gần nhất: dòng Lark ghi sai mã đơn không được treo đỏ mãi trên màn.
+  const rows = await db.select().from(t).where(sql`${t.nhanLuc} >= now() - interval '14 days'`).orderBy(desc(t.nhanLuc)).limit(200);
   return rows.map((r) => ({
     recordId: r.recordId, logUniqueCode: r.logUniqueCode, orderNumber: r.orderNumber,
     weightKg: r.weightKg != null ? Number(r.weightKg) : null, dims: r.dims, hop: r.hop, skuText: r.skuText, pieces: r.pieces,

@@ -345,11 +345,39 @@ export async function importLogExport(
       continue;
     }
 
+    // Kiện có thể ĐÃ tồn tại theo Log Unique code mà chưa có tracking (webhook
+    // /api/lark/pack tạo lúc đóng hàng, migration 0149 làm log_unique_code unique).
+    // Khi đó gắn tracking vào kiện đó thay vì insert (insert sẽ vi phạm unique).
+    let logCodeChoInsert = parsed.logUniqueCode;
+    let kienTheoLogCode: string | undefined;
+    if (parsed.logUniqueCode) {
+      const [byCode] = await db.select({ id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber })
+        .from(schema.shipments).where(eq(schema.shipments.logUniqueCode, parsed.logUniqueCode)).limit(1);
+      if (byCode && byCode.trackingNumber !== parsed.trackingNumber) {
+        if (byCode.trackingNumber == null) {
+          try {
+            await db.update(schema.shipments).set({
+              trackingNumber: parsed.trackingNumber, carrierKey: parsed.carrier,
+              ...(parsed.labelCreatedAt ? { labelCreatedAt: parsed.labelCreatedAt } : {}),
+              updatedAt: new Date(),
+            }).where(eq(schema.shipments.id, byCode.id));
+            kienTheoLogCode = byCode.id;
+          } catch (e) {
+            summary.warnings.errors.push({ rowIndex, reason: `không gắn tracking vào kiện ${parsed.logUniqueCode}: ${e instanceof Error ? e.message : String(e)}` });
+            continue;
+          }
+        } else {
+          summary.warnings.errors.push({ rowIndex, reason: `Log code ${parsed.logUniqueCode} đã thuộc kiện ${byCode.trackingNumber} — tạo kiện không log code` });
+          logCodeChoInsert = null;
+        }
+      }
+    }
+
     // Upsert shipment by tracking_number. Conflict updates only the
     // fields that may have changed from a re-export — the operator's
     // physical pack data (weight/dim/packaging) shouldn't change
     // post-ship, but label_created_at sometimes does.
-    const shipmentRow = await db
+    const shipmentRow = kienTheoLogCode ? [{ id: kienTheoLogCode }] : await db
       .insert(schema.shipments)
       .values({
         orderId,
@@ -361,7 +389,7 @@ export async function importLogExport(
         actualWeightKg: parsed.actualWeightKg?.toString() ?? null,
         packagingType: parsed.packagingType,
         labelCreatedAt: parsed.labelCreatedAt,
-        logUniqueCode: parsed.logUniqueCode,
+        logUniqueCode: logCodeChoInsert,
         originHub: parsed.originHub,
       })
       .onConflictDoUpdate({
