@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { listKienDongHang, listKienChoKhop, GIOI_HAN_KIEN } from '@/features/dong-hang/queries';
+import { listKienDongHang, listKienChoKhop, demKienChuaCan, GIOI_HAN_KIEN } from '@/features/dong-hang/queries';
 import { BO_LOC, type BoLocDongHang } from '@/features/dong-hang/types';
 import { BangDongHang } from '@/components/dong-hang/BangDongHang';
 
@@ -21,10 +21,10 @@ export default async function DongHangPage({
 
   const sp = await searchParams;
   const locRaw = typeof sp.loc === 'string' ? sp.loc : '';
-  const loc: BoLocDongHang = (BO_LOC as readonly string[]).includes(locRaw) ? (locRaw as BoLocDongHang) : 'chua_tracking';
+  const loc: BoLocDongHang = (BO_LOC as readonly string[]).includes(locRaw) ? (locRaw as BoLocDongHang) : 'cho_chon_line';
   const q = typeof sp.q === 'string' ? sp.q : '';
 
-  const [kien, choKhop] = await Promise.all([listKienDongHang(loc, q), listKienChoKhop()]);
+  const [kien, choKhop, soKienChuaCan] = await Promise.all([listKienDongHang(loc, q), listKienChoKhop(), demKienChuaCan()]);
 
   return (
     <div className="space-y-4 p-6">
@@ -41,6 +41,7 @@ export default async function DongHangPage({
         q={q}
         coQuyenChon={hasPermission(role, 'chon_line_ship')}
         gioiHan={GIOI_HAN_KIEN}
+        soKienChuaCan={soKienChuaCan}
       />
     </div>
   );

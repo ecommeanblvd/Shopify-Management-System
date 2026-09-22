@@ -14,7 +14,10 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   // chưa hẹn thì lấy ngày lên nhãn, cuối cùng mới tới ngày kiện về SMS.
   const ngayDong = sql<Date>`coalesce(${s.ngayDiDuKien}, ${s.labelCreatedAt}, ${s.createdAt})`;
   const dk = [isNotNull(s.logUniqueCode)];
-  if (loc === 'chua_tracking') dk.push(isNull(s.trackingNumber));
+  // Chờ chọn line = kiện ĐÃ ĐÓNG XONG (có cân) mà chưa lên nhãn. Dòng Lark tạo sẵn từ lúc
+  // lên đơn nhưng chưa đóng thì KHÔNG phải việc của màn này — kiện chưa cân cũng không so
+  // cước được (CEO hỏi về #MBLVD29309, dòng tạo 07/07 chưa từng cân).
+  if (loc === 'cho_chon_line') { dk.push(isNull(s.trackingNumber)); dk.push(isNotNull(s.actualWeightKg)); }
   // Ngày VN = UTC+7; so theo ngày-lịch VN của mốc đóng.
   if (loc === 'hom_nay') dk.push(sql`(${ngayDong} + interval '7 hours')::date = (now() + interval '7 hours')::date`);
   // Dự kiến đi: Lark hẹn ngày đi ở TƯƠNG LAI (kiện hold sang ngày khác) và chưa lên nhãn.
@@ -45,6 +48,14 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     selectedCarrierAt: r.selectedCarrierAt ? r.selectedCarrierAt.toISOString() : null,
     ngayDong: new Date(r.ngayDong).toISOString(), soKienCungDon: Number(r.soKienCungDon),
   }));
+}
+
+/** Số kiện Lark chưa lên nhãn mà CHƯA CÓ CÂN — chưa đóng xong nên không nằm ở "Chờ chọn line". */
+export async function demKienChuaCan(): Promise<number> {
+  const s = schema.shipments;
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(s)
+    .where(and(isNotNull(s.logUniqueCode), isNull(s.trackingNumber), isNull(s.actualWeightKg)));
+  return Number(r?.n ?? 0);
 }
 
 export async function listKienChoKhop(): Promise<KienChoKhop[]> {

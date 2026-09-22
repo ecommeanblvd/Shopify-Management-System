@@ -25,7 +25,7 @@ const gioVn = (iso: string) =>
 const hienNgayNhom = (ngay: string) => ngay.split('-').reverse().join('/');
 
 const NHAN_LOC: Record<BoLocDongHang, string> = {
-  chua_tracking: 'Chưa có tracking',
+  cho_chon_line: 'Chờ chọn line',
   hom_nay: 'Hôm nay',
   du_kien_di: 'Dự kiến đi',
   '7_ngay': '7 ngày',
@@ -41,7 +41,7 @@ const coNuoc = (iso: string | null) => {
 };
 
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, gioiHan,
+  kien, choKhop, loc, q, coQuyenChon, gioiHan, soKienChuaCan,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
@@ -49,6 +49,7 @@ export function BangDongHang({
   q: string;
   coQuyenChon: boolean;
   gioiHan: number;
+  soKienChuaCan: number;
 }) {
   const [bao, setBao] = useState<Map<string, BaoGiaKien>>(new Map());
   const [dangBao, setDangBao] = useState<Set<string>>(new Set());
@@ -121,6 +122,11 @@ export function BangDongHang({
           </button>
         </form>
         <span className="text-xs text-muted-foreground">{kien.length} kiện</span>
+        {loc === 'cho_chon_line' && soKienChuaCan > 0 && (
+          <span className="text-xs text-muted-foreground">
+            · {soKienChuaCan} kiện Lark chưa nhập cân (chưa đóng xong) — xem ở “Tất cả”
+          </span>
+        )}
       </div>
 
       {choKhop.length > 0 && (
