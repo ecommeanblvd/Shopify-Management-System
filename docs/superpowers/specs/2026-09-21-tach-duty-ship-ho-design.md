@@ -31,7 +31,12 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 
 ## 2. Quyết định (CEO chốt 21/09/2026; sửa mốc kỳ 22/09/2026)
 
-> **Sửa 22/09/2026 (CEO):** MMP chốt kỳ theo **ngày đơn được push sang MMP** (lần push đầu tiên thành công của `order.reconciled` / `order.duty_charged`). SMS xếp kỳ bảng kê **cùng mốc** để bản đối soát khớp từng dòng với MMP. Ngày gửi, ngày hoá đơn FedEx, ngày bill về, ngày Đức chốt là việc nội bộ của SMS (SLA, KPI, lãi) — hiển thị trên dòng để tra cứu, không dùng xếp kỳ. Điểm 1 và 3 dưới đây đọc theo ghi chú này; điều kiện vào kê (điểm 2) và "không thu thêm trên duty" (điểm 4) giữ nguyên. Hệ quả: bảng kê duty chỉ có dữ liệu sau khi bật `MMP_TACH_DUTY` (khi MMP bắt đầu nhận `order.duty_charged`).
+>> **Sửa 22/09/2026 (CEO), lần 2 — luật kỳ cuối cùng:** "Số tại thời điểm chốt kỳ; thay đổi sau khi khoá kỳ thành dòng điều chỉnh ở kỳ sau."
+> - Kỳ của một đơn = tháng của **lần push gần nhất tính đến lúc phát hành bảng kê** (`order.reconciled` cho cước, `order.duty_charged` cho duty). Mỗi dòng bảng kê **lưu số đã kê** tại lúc phát hành (bảng dòng `ship_ho_statement_lines`: đơn, bảng kê, loại, số tiền, `dieu_chinh_cho_statement_id`).
+> - Bảng kê đã phát hành **không bao giờ sửa**. Đơn đổi số sau đó (duty về, claim kết luận, Đức sửa) → hệ thống tạo **dòng điều chỉnh** (+/−, = số mới − số đã kê) trong bảng kê nháp kỳ kế tiếp, dẫn chiếu bảng kê gốc. Bảng kê một kỳ gồm: đơn mới + dòng điều chỉnh + tổng. Khớp Nghị định 123/2020 Đ.19 (hoá đơn điều chỉnh dẫn chiếu hoá đơn gốc); kê khai thuế theo hướng dẫn kế toán (CV 2121/TCT-CS 2023: bổ sung vào kỳ gốc).
+> - Cùng cơ chế cho cước và duty → thay thế thiết kế "kê duty phát sinh sau" (§4.3 mục mở) — hai loại dùng chung bảng dòng.
+> - T7/T8 Kalisa MMP đã khoá theo "nguyên đơn theo push mới nhất": giữ nguyên; luật này áp từ T9. Ngày gửi / ngày hoá đơn FedEx / ngày Đức chốt: số liệu nội bộ, hiển thị trên dòng, không xếp kỳ.
+> - Ghi chú 22/09 lần 1 ("lần push đầu tiên") bị thay bằng đoạn này; bản code `dc8fd613` (min occurred_at) là bước trung gian, sẽ đổi khi có bảng dòng.
 
 1. **Kỳ bảng kê CƯỚC xếp theo ngày gửi hàng** (`shipped_at`). Ba mốc còn lại của một đơn — ngày hoá đơn FedEx, ngày bill về SMS, ngày Đức chốt đối soát — **không quyết định kỳ**, chỉ quyết định đơn đã sẵn sàng vào bảng kê chưa (điểm 2). Ngày gửi là ngày duy nhất brand biết và không bên nào kiểm soát được. Bỏ mốc `quoted_at`.
 2. **Điều kiện vào bảng kê = Đức đã chốt đối soát** (`reconcile_status = 'reconciled'`). Đơn khớp bill chốt tự động khi bill về; đơn **lệch tiền chờ Đức duyệt** (chấp nhận / đi claim) — lệch là chắc chắn có, và không thu brand một con số Đức chưa xác nhận. Bỏ luật "chưa có bill thì thu giá báo" (08/09): bảng kê chỉ thu giá thực. **Đơn chốt muộn** (gửi kỳ K, Đức duyệt sau khi bảng kê K đã phát hành) vào bảng kê **kỳ kế tiếp**, dòng vẫn ghi ngày gửi gốc; không sửa bảng kê đã phát hành. Đơn gửi trong kỳ chưa chốt: liệt kê ở mục "Chờ hoá đơn" cuối bảng kê, không cộng vào tổng.
@@ -89,7 +94,7 @@ Gốc của cả hai: **duty đến trên hoá đơn FedEx riêng, 3–6 tuần 
 - `freight`: đơn `partner = brand`, **`shipped_at ≤ end`** (không chặn `start` — để đơn kỳ trước chốt muộn rơi vào kỳ này), `reconcile_status = 'reconciled'`, `statement_id IS NULL`, `status ∈ (shipped, delivered)`, không phải `khong_gui_hang` đã xác nhận. Kèm danh sách **"Chờ hoá đơn"**: `shipped_at ∈ [start,end]`, chưa reconciled — chỉ hiển thị, không gán `statement_id`. `period_start`/`period_end` của bảng kê là kỳ danh nghĩa; dòng nào cũng mang `shipped_at` riêng để brand thấy đơn kỳ trước.
 - `duty`: đơn `partner = brand`, có dòng `carrier_bill_lines.duty > 0` khớp mã vận đơn với hoá đơn `issue_date ∈ [start,end]`, `duty_statement_id IS NULL`. Mỗi dòng bảng kê = mã đơn + mã brand (`brand_reference`) + mã vận đơn + số hoá đơn FedEx + ngày hoá đơn + số tiền.
 - Tính lại nháp (`tinhLaiTongBangKe`) theo `type`. Bảng kê `issued`/`paid` đứng yên như cũ.
-- Đơn gửi kỳ K nhưng `reconciled` sau khi bảng kê K đã `issued`: lượt gom kỳ K+1 lấy theo `shipped_at ≤ end(K+1)` và `statement_id IS NULL` — tự nhiên rơi vào K+1, dòng giữ `shipped_at` gốc. Không có bảng kê bổ sung cho K.
+- Đơn `reconciled` sau khi bảng kê K đã `issued`: vào kỳ K+1 như đơn mới. Đơn ĐÃ kê ở K mà số đổi: dòng điều chỉnh ở K+1 (xem ghi chú 22/09 lần 2).
 
 ## 5. Hợp đồng với MMP (sửa `docs/integrations/mmp-ship-ho-api.md`)
 
