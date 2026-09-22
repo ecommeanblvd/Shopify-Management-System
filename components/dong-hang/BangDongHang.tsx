@@ -273,7 +273,9 @@ function DongKien({
       <td className="px-3 py-3 text-xs">{k.hangKhachTra ?? '—'}</td>
 
       <td className="px-3 py-3">
-        {tt.ma === 'da_len_nhan' ? (
+        {k.huy.loai === 'toan_bo' ? (
+          <span className="text-xs text-red-600 dark:text-red-400">Không đi hàng</span>
+        ) : tt.ma === 'da_len_nhan' ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           <div className="flex flex-col items-start gap-1">
@@ -302,7 +304,21 @@ function DongKien({
       </td>
 
       <td className="px-3 py-3">
-        {tt.ma === 'cho_chon' && (
+        {k.huy.loai === 'toan_bo' && (
+          <span className="rounded bg-red-500/15 px-1.5 py-px text-[10px] font-medium text-red-700 dark:text-red-400"
+            title={k.huy.lyDo ?? undefined}>
+            Đã huỷ{k.huy.lyDo ? ` · ${k.huy.lyDo}` : ''}
+          </span>
+        )}
+        {k.huy.loai === 'mot_phan' && (
+          <div className="mb-1">
+            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-400"
+              title={k.huy.lyDo ?? undefined}>
+              Đơn huỷ {k.huy.soHuy}/{k.huy.tong} món — kiểm lại hàng trong kiện
+            </span>
+          </div>
+        )}
+        {k.huy.loai !== 'toan_bo' && tt.ma === 'cho_chon' && (
           <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-400">Chờ chọn line</span>
         )}
         {tt.ma === 'da_chon' && (

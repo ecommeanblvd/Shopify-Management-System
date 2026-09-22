@@ -9,8 +9,9 @@ import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listBrandReceivedRecords } from './client';
 import { parseBrandReceivedRow } from './parse-brand-received';
+import { docMonLark } from './huy-mon';
 
-export interface BrandReceivedSyncResult { fetched: number; inserted: number }
+export interface BrandReceivedSyncResult { fetched: number; inserted: number; monHuy?: number }
 
 const CHUNK = 500;
 
@@ -44,5 +45,33 @@ export async function syncBrandReceived(): Promise<BrandReceivedSyncResult> {
       .returning({ id: schema.mmpLineReceived.id });
     inserted += ins.length;
   }
-  return { fetched: records.length, inserted };
+  const monHuy = await luuMonDon(records);
+  return { fetched: records.length, inserted, monHuy };
+}
+
+/**
+ * Lưu TỪNG MÓN của đơn kèm cờ huỷ, để màn Đóng hàng không cho đi kiện đã huỷ.
+ * Best-effort: hỏng thì chỉ log — ngày nhận hàng (việc chính của hàm trên) đã ghi xong rồi.
+ */
+async function luuMonDon(records: Array<{ fields: Record<string, unknown> }>): Promise<number> {
+  try {
+    const mon = records.map((r) => docMonLark(r.fields)).filter((m): m is NonNullable<typeof m> => m != null);
+    // Lark có thể trả 2 dòng cùng "Định danh" (sửa tay) — giữ dòng cuối để insert không đụng khoá.
+    const theoDinhDanh = new Map(mon.map((m) => [m.dinhDanh, m]));
+    const rows = [...theoDinhDanh.values()];
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.insert(schema.larkMonDon)
+        .values(rows.slice(i, i + CHUNK).map((m) => ({
+          dinhDanh: m.dinhDanh, orderNumber: m.orderNumber, sku: m.sku, huy: m.huy, lyDo: m.lyDo, capNhatLuc: new Date(),
+        })))
+        .onConflictDoUpdate({
+          target: schema.larkMonDon.dinhDanh,
+          set: { orderNumber: sql`excluded.order_number`, sku: sql`excluded.sku`, huy: sql`excluded.huy`, lyDo: sql`excluded.ly_do`, capNhatLuc: new Date() },
+        });
+    }
+    return rows.filter((m) => m.huy).length;
+  } catch (e) {
+    console.error('[lark] lưu món huỷ thất bại (không chặn sync ngày nhận):', e instanceof Error ? e.message : e);
+    return 0;
+  }
 }

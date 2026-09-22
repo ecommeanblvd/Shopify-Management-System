@@ -2080,6 +2080,17 @@ export const larkSyncRuns = pgTable('lark_sync_runs', {
   error: text('error'),
 });
 
+/** Món của đơn theo bảng Lark "WH ngày MEAN nhận hàng" + cờ huỷ — màn Đóng hàng dùng để
+ *  chặn kiện đã huỷ khỏi việc chọn line (xem features/lark/huy-mon.ts). */
+export const larkMonDon = pgTable('lark_mon_don', {
+  dinhDanh: text('dinh_danh').primaryKey(),
+  orderNumber: text('order_number').notNull(),
+  sku: text('sku'),
+  huy: boolean('huy').notNull().default(false),
+  lyDo: text('ly_do'),
+  capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+}, (t) => [index('lark_mon_don_order_idx').on(t.orderNumber)]);
+
 /** Dòng Lark đóng xong (webhook /api/lark/pack) mà SMS chưa khớp được đơn. Xoá khi khớp. */
 export const larkPackChoKhop = pgTable('lark_pack_cho_khop', {
   recordId: text('record_id').primaryKey(),

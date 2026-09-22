@@ -1,6 +1,8 @@
 /** Truy vấn màn "Đóng hàng": mỗi dòng một kiện Lark (shipments có log_unique_code). */
 import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { inArray } from 'drizzle-orm';
+import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 
 /** Số kiện tối đa một lượt tải — UI báo "chỉ hiện 500 đầu" khi chạm trần để không cắt âm thầm. */
@@ -39,11 +41,25 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   }).from(s).innerJoin(o, eq(o.id, s.orderId)).innerJoin(st, eq(st.id, o.storeId))
     .where(and(...dk)).orderBy(desc(ngayDong), desc(s.createdAt)).limit(GIOI_HAN_KIEN);
 
+  // Món đã huỷ của ĐÚNG những đơn đang hiện — kiện đã đóng vẫn có thể bị huỷ sau đó.
+  const soDon = [...new Set(rows.map((r) => r.orderNumber.replace(/^#/, '')))];
+  const monTheoDon = new Map<string, MonLark[]>();
+  if (soDon.length > 0) {
+    const m = schema.larkMonDon;
+    const mon = await db.select().from(m).where(inArray(m.orderNumber, soDon));
+    for (const x of mon) {
+      const l = monTheoDon.get(x.orderNumber) ?? [];
+      l.push({ dinhDanh: x.dinhDanh, orderNumber: x.orderNumber, sku: x.sku, huy: x.huy, lyDo: x.lyDo });
+      monTheoDon.set(x.orderNumber, l);
+    }
+  }
+
   return rows.map((r) => ({
     shipmentId: r.shipmentId, orderId: r.orderId, orderNumber: r.orderNumber, storeName: r.storeName, country: r.country,
     weightKg: r.weightKg != null ? Number(r.weightKg) : null,
     dims: r.l != null && r.w != null ? { l: Number(r.l), w: Number(r.w), h: r.h != null ? Number(r.h) : null } : null,
     base: r.base, theoHenLark: r.ngayDiDuKien != null, hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
+    huy: tinhTrangHuyKien(r.skuText, monTheoDon.get(r.orderNumber.replace(/^#/, '')) ?? []),
     selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: r.selectedCarrierBy,
     selectedCarrierAt: r.selectedCarrierAt ? r.selectedCarrierAt.toISOString() : null,
     ngayDong: new Date(r.ngayDong).toISOString(), soKienCungDon: Number(r.soKienCungDon),
