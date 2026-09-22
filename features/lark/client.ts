@@ -29,6 +29,11 @@ const BRAND_RECV_TABLE_ID = process.env.LARK_BRAND_RECV_TABLE_ID ?? 'tblFtdIn8H7
 const SHIP_HO_APP_TOKEN = process.env.LARK_SHIP_HO_APP_TOKEN ?? 'HmG6wtdeoiAPflkereXl8pNXgzL';
 const SHIP_HO_TABLE_ID = process.env.LARK_SHIP_HO_TABLE_ID ?? 'tblJQXEuCBxVPRek';
 
+// Bảng "WH - Inventory (Nhập, QC, Pack)" — cột "Select VTĐG1" của LOG-Export link tới đây;
+// tên hộp nằm ở cột "Lineitem SKU final" (vd MEAN-BOX-42x30x10-CAR-02). Không phải secret.
+const WH_INVENTORY_TABLE_ID = process.env.LARK_WH_INVENTORY_TABLE_ID ?? 'tblfnOiEwzcXmemM';
+const COT_TEN_HOP = 'Lineitem SKU final';
+
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getTenantToken(): Promise<string> {
@@ -194,4 +199,36 @@ export async function listWarehouseStockRecords(): Promise<LarkRecord[]> {
 /** Mọi dòng bảng đơn ship hộ của đội logistics. */
 export async function listShipHoDonRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(SHIP_HO_TABLE_ID, { automatic_fields: true, page_size: 500 }, SHIP_HO_APP_TOKEN);
+}
+
+// Tên hộp theo record kho — mỗi kiện link tới MỘT dòng kho riêng nên cache chỉ giúp khi
+// webhook bắn lại cùng dòng; giới hạn để không phình bộ nhớ tiến trình web.
+const tenHopCache = new Map<string, string | null>();
+
+/**
+ * Tên hộp đóng gói (vd "MEAN-BOX-42x30x10-CAR-02") theo record kho mà cột "Select VTĐG1"
+ * của dòng LOG-Export trỏ tới. Lark chỉ trả mã liên kết ở cột đó, không trả tên.
+ *
+ * BEST-EFFORT: lỗi mạng/không tìm thấy → null. Tên hộp chỉ để Đức nhìn, không được phép
+ * làm hỏng việc ghi kiện.
+ */
+export async function getTenHopVtdg(recordId: string): Promise<string | null> {
+  const daCo = tenHopCache.get(recordId);
+  if (daCo !== undefined) return daCo;
+  try {
+    const token = await getTenantToken();
+    const url = `${DOMAIN}/open-apis/bitable/v1/apps/${env('LARK_BASE_APP_TOKEN')}/tables/${WH_INVENTORY_TABLE_ID}/records/${encodeURIComponent(recordId)}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
+    const j = (await res.json()) as { code: number; data?: { record?: { fields?: Record<string, unknown> } } };
+    const v = j.code === 0 ? j.data?.record?.fields?.[COT_TEN_HOP] : null;
+    const ten = typeof v === 'string' ? v.trim()
+      : Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' && 'text' in x ? String((x as { text: unknown }).text) : '')).join('').trim()
+      : null;
+    const kq = ten || null;
+    if (tenHopCache.size > 2000) tenHopCache.clear();
+    tenHopCache.set(recordId, kq);
+    return kq;
+  } catch {
+    return null;
+  }
 }

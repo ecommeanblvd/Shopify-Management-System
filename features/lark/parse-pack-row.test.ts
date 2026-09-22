@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePackRow } from './parse-pack-row';
+import { parsePackRow, maLienKetDauTien } from './parse-pack-row';
 
 describe('parsePackRow', () => {
   it('field string cơ bản → map đầy đủ', () => {
@@ -93,5 +93,22 @@ describe('parsePackRow', () => {
     expect(parsePackRow({ 'Total pieces per pack': 'abc' }).pieces).toBeNull();
     expect(parsePackRow({ 'Total pieces per pack': 0 }).pieces).toBeNull();
     expect(parsePackRow({}).hop).toBeNull();
+  });
+});
+
+describe('maLienKetDauTien', () => {
+  it('cột liên kết Lark {link_record_ids} → mã đầu tiên', () => {
+    expect(maLienKetDauTien({ link_record_ids: ['recA', 'recB'] })).toBe('recA');
+    expect(maLienKetDauTien(['recC'])).toBe('recC');
+  });
+  it('rỗng / dạng lạ → null', () => {
+    expect(maLienKetDauTien({ link_record_ids: [] })).toBeNull();
+    expect(maLienKetDauTien(null)).toBeNull();
+    expect(maLienKetDauTien('recX')).toBeNull();
+  });
+  it('parsePackRow lấy mã liên kết của Select VTĐG1', () => {
+    const r = parsePackRow({ 'Select VTĐG1': { link_record_ids: ['recBox1'] } });
+    expect(r.hopRecordId).toBe('recBox1');
+    expect(r.hop).toBeNull();
   });
 });

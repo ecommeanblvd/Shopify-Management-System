@@ -17,6 +17,8 @@ export interface PackRow {
   /** Kho xuất (cột Lark "Base"): SG | HN. Màn Đóng hàng nhóm theo ngày rồi tới base, giống view Lark. */
   base: string | null;
   hop: string | null;
+  /** Mã record kho mà cột "Select VTĐG1" trỏ tới — tra tên hộp qua getTenHopVtdg. */
+  hopRecordId: string | null;
   skuText: string | null;
   pieces: number | null;
   warnings: string[];
@@ -104,6 +106,16 @@ export function plausiblePastLarkDate(d: Date | null, now: Date = new Date()): D
   return p.getTime() <= now.getTime() + FUTURE_SLACK_MS ? p : null;
 }
 
+/** THUẦN: mã record đầu tiên của một cột liên kết Lark ({link_record_ids} hoặc mảng chuỗi). */
+export function maLienKetDauTien(v: unknown): string | null {
+  if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : null;
+  if (v && typeof v === 'object') {
+    const ids = (v as { link_record_ids?: unknown }).link_record_ids;
+    if (Array.isArray(ids) && typeof ids[0] === 'string') return ids[0];
+  }
+  return null;
+}
+
 export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const warnings: string[] = [];
   const orderNumber = larkText(fields['Order Number']) ?? '';
@@ -166,10 +178,12 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   // kiện mà không mở Lark. Lark select trả string; số món có thể là số hoặc text.
   const baseRaw = larkText(fields['Base']);
   const base = baseRaw ? baseRaw.trim().toUpperCase() : null;
+  // "Select VTĐG1" là cột LIÊN KẾT: Lark trả {link_record_ids:[...]}, không có tên hộp.
   const hop = larkText(fields['Select VTĐG1']);
+  const hopRecordId = maLienKetDauTien(fields['Select VTĐG1']);
   const skuText = larkText(fields['SKU(s)']);
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, hop, skuText, pieces, warnings };
+  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, hop, hopRecordId, skuText, pieces, warnings };
 }
