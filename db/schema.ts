@@ -1079,6 +1079,10 @@ export const shipments = pgTable('shipments', {
   originHub: text('origin_hub'),
   /** Free-text note for one-off context. */
   note: text('note'),
+  /** Cột Lark LOG-Export cho màn "Đóng hàng" (22/09/2026): hộp `Select VTĐG1`, `SKU(s)`, `Total pieces per pack`. */
+  skuText: text('sku_text'),
+  pieces: integer('pieces'),
+  larkHop: text('lark_hop'),
   /** Lý do giao chậm (mã trong features/shipments/ly-do-cham.ts) — ops gán cho kiện vượt ngưỡng. NULL = chưa gán,
    *  và chưa gán thì KHÔNG được loại khỏi KPI nhân sự. */
   lyDoCham: text('ly_do_cham'),
@@ -2068,6 +2072,20 @@ export const larkSyncRuns = pgTable('lark_sync_runs', {
   /** [{ orderNumber, reason }] — đơn Lark không tạo được shipment. */
   unmatched: jsonb('unmatched').notNull().default(sql`'[]'::jsonb`),
   error: text('error'),
+});
+
+/** Dòng Lark đóng xong (webhook /api/lark/pack) mà SMS chưa khớp được đơn. Xoá khi khớp. */
+export const larkPackChoKhop = pgTable('lark_pack_cho_khop', {
+  recordId: text('record_id').primaryKey(),
+  logUniqueCode: text('log_unique_code'),
+  orderNumber: text('order_number'),
+  weightKg: numeric('weight_kg', { precision: 10, scale: 3 }),
+  dims: text('dims'),
+  hop: text('hop'),
+  skuText: text('sku_text'),
+  pieces: integer('pieces'),
+  lyDo: text('ly_do').notNull(),
+  nhanLuc: timestamp('nhan_luc').notNull().defaultNow(),
 });
 
 /** Snapshot status Lark/đơn (Phần B). Cron sync upsert; worklist LEFT JOIN để

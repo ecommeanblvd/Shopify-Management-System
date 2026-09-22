@@ -6,8 +6,9 @@ import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords, type LarkRecord } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
-import { parsePackRow, larkText, type PackRow } from './parse-pack-row';
+import { parsePackRow, larkText } from './parse-pack-row';
 import { classifyPackRows, type ClassifyMaps } from './classify';
+import { patchFrom, giaTriTaoKien } from './patch-kien';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { parseLarkStatus, resolveDeliveredAt } from './parse-status-row';
 import { larkCreatedTime } from './record-select';
@@ -60,20 +61,6 @@ function chunk<T>(arr: T[], n: number): T[][] {
   return out;
 }
 
-/** Patch shipment từ PackRow — chỉ field Lark có giá trị (ghi đè có điều kiện). */
-function patchFrom(row: PackRow): Record<string, unknown> {
-  const p: Record<string, unknown> = { updatedAt: new Date() };
-  if (row.weightKg != null) p.actualWeightKg = String(row.weightKg);
-  if (row.dims) {
-    p.dimLengthCm = String(row.dims.l); p.dimWidthCm = String(row.dims.w);
-    if (row.dims.h != null) p.dimHeightCm = String(row.dims.h);
-  }
-  if (row.trackingNumber) p.trackingNumber = row.trackingNumber;
-  if (row.carrierKey) p.carrierKey = row.carrierKey;
-  if (row.labelDate) p.labelCreatedAt = row.labelDate;
-  return p;
-}
-
 export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<LarkSyncSummary> {
   try {
     const records = await listAllRecords();
@@ -94,6 +81,7 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
         orderId: schema.shipments.orderId,
         deliveryStatus: schema.shipments.deliveryStatus, deliveredAt: schema.shipments.deliveredAt,
         deliverySource: schema.shipments.deliverySource,
+        skuText: schema.shipments.skuText, pieces: schema.shipments.pieces, larkHop: schema.shipments.larkHop,
       })
       .from(schema.shipments);
     const shipmentById = new Map(existing.map((s) => [s.id, s as Record<string, unknown>]));
@@ -138,17 +126,7 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
     for (const batch of chunk(cls.create, APPLY_CHUNK)) {
       await db.transaction(async (tx) => {
         for (const c of batch) {
-          await tx.insert(schema.shipments).values({
-            orderId: c.orderId,
-            logUniqueCode: c.row.logUniqueCode,
-            trackingNumber: c.row.trackingNumber,
-            carrierKey: c.row.carrierKey,
-            actualWeightKg: c.row.weightKg != null ? String(c.row.weightKg) : null,
-            dimLengthCm: c.row.dims ? String(c.row.dims.l) : null,
-            dimWidthCm: c.row.dims ? String(c.row.dims.w) : null,
-            dimHeightCm: c.row.dims?.h != null ? String(c.row.dims.h) : null,
-            labelCreatedAt: c.row.labelDate,
-          }).onConflictDoNothing();
+          await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId)).onConflictDoNothing();
         }
       });
     }

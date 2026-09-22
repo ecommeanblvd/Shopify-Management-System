@@ -1,0 +1,31 @@
+import { describe, it, expect } from 'vitest';
+import { patchFrom, giaTriTaoKien } from './patch-kien';
+import type { PackRow } from './parse-pack-row';
+
+const mk = (o: Partial<PackRow>): PackRow => ({
+  orderNumber: '#MBLVD1', logUniqueCode: 'PK-1', weightKg: null, dims: null, trackingNumber: null,
+  carrierKey: null, labelDate: null, hop: null, skuText: null, pieces: null, warnings: [], ...o,
+});
+
+describe('patchFrom', () => {
+  it('chỉ ghi trường Lark có giá trị; cân/kích thước thành chuỗi numeric', () => {
+    const p = patchFrom(mk({ weightKg: 1.6, dims: { l: 40, w: 30, h: 2 }, hop: 'Box A', skuText: 'X x1', pieces: 2 }));
+    expect(p).toMatchObject({ actualWeightKg: '1.6', dimLengthCm: '40', dimWidthCm: '30', dimHeightCm: '2', larkHop: 'Box A', skuText: 'X x1', pieces: 2 });
+    expect(p.trackingNumber).toBeUndefined();
+    expect(p.updatedAt).toBeInstanceOf(Date);
+  });
+  it('dòng trống → chỉ có updatedAt', () => {
+    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt']);
+  });
+});
+
+describe('giaTriTaoKien', () => {
+  it('đủ cột cron đang insert + 3 cột mới', () => {
+    const v = giaTriTaoKien(mk({ weightKg: 0.5, dims: { l: 10, w: 10, h: null }, trackingNumber: 'T1', carrierKey: 'ups', hop: 'Bag', pieces: 1 }), 'order-1');
+    expect(v).toEqual({
+      orderId: 'order-1', logUniqueCode: 'PK-1', trackingNumber: 'T1', carrierKey: 'ups',
+      actualWeightKg: '0.5', dimLengthCm: '10', dimWidthCm: '10', dimHeightCm: null,
+      labelCreatedAt: null, larkHop: 'Bag', skuText: null, pieces: 1,
+    });
+  });
+});
