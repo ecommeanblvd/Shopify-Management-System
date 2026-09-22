@@ -5,7 +5,7 @@
  * Mã HTTP theo "Lark có nên thử lại không": 200 mọi kết quả nghiệp vụ, 502 khi Lark API lỗi.
  */
 import { NextResponse } from 'next/server';
-import { kiemTraSecret, docBodyPack } from '@/features/lark/pack-webhook/xac-thuc';
+import { kiemTraSecret, docBodyPack, GIOI_HAN_BODY } from '@/features/lark/pack-webhook/xac-thuc';
 import { nhanMotDongLark, LoiLarkApi } from '@/features/lark/nhan-mot-dong';
 import { batDauJob, ketThucJob } from '@/features/jobs/record';
 
@@ -15,6 +15,8 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   const xt = kiemTraSecret(req.headers.get('x-lark-pack-secret'), process.env.LARK_PACK_WEBHOOK_SECRET);
   if (!xt.ok) return NextResponse.json({ error: xt.error }, { status: xt.status });
+  // Chặn theo Content-Length TRƯỚC khi đọc body — không đệm cả request lớn vào RAM rồi mới từ chối.
+  if (Number(req.headers.get('content-length') ?? 0) > GIOI_HAN_BODY) return NextResponse.json({ error: 'body quá 4KB' }, { status: 413 });
   const body = docBodyPack(await req.text());
   if (!body.ok) return NextResponse.json({ error: body.error }, { status: body.status });
 
@@ -29,7 +31,9 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await ketThucJob(jobId, { ok: false, error: `${body.recordId}: ${msg}`.slice(0, 2000), batDau });
-    const status = e instanceof LoiLarkApi ? 502 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    // Chi tiết lỗi nằm ở job_runs; ra ngoài chỉ nói Lark có nên thử lại không (không lộ thông tin nội bộ).
+    return e instanceof LoiLarkApi
+      ? NextResponse.json({ error: 'Lark API lỗi, hãy thử lại' }, { status: 502 })
+      : NextResponse.json({ error: 'lỗi hệ thống, xem job_runs lark-pack-webhook' }, { status: 500 });
   }
 }
