@@ -398,9 +398,8 @@ async function danhDauKienMatDong(logCodeTrenLark: string[]): Promise<{ danhDau:
       logCodeTrenLark,
       kien.map((k) => ({ logUniqueCode: k.logUniqueCode!, daDanhDau: k.luc != null })),
     );
-    if (kq.boQua) {
-      console.warn(`[lark] bỏ soát dòng bị xoá: Lark chỉ trả ${logCodeTrenLark.length} dòng cho ${kien.length} kiện`);
-      return { danhDau: 0, goDanhDau: 0 };
+    if (kq.boQua && kq.canGoDanhDau.length === 0) {
+      console.warn(`[lark] bỏ soát dòng bị xoá: ${kq.soPhatHien} kiện mất dòng cùng lúc (Lark trả ${logCodeTrenLark.length} dòng) — nghi Lark trả thiếu`);
     }
     for (const batch of chunk(kq.canDanhDau, APPLY_CHUNK)) {
       await db.update(schema.shipments).set({ larkMatDongLuc: new Date(), updatedAt: new Date() })
