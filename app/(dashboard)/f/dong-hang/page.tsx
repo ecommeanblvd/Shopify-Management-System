@@ -41,6 +41,7 @@ export default async function DongHangPage({
         q={q}
         coQuyenChon={hasPermission(role, 'manage_fulfillment')}
         chamTran={kien.length >= GIOI_HAN_KIEN}
+        gioiHan={GIOI_HAN_KIEN}
       />
     </div>
   );

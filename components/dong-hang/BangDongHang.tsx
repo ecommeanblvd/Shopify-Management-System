@@ -9,9 +9,13 @@ import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-ti
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
 
-/** Bấm "So cước cả trang" chỉ báo giá tối đa ngần này kiện — quá thì quá nhiều
- *  lượt gọi engine một lúc, bắt người dùng thu hẹp bộ lọc. */
+/** Bấm "So cước cả trang" chỉ báo giá ngần này kiện đầu — nhiều hơn thì quá
+ *  nhiều lượt gọi engine một lúc; phần còn lại bấm "So cước" từng dòng. */
 const TRAN_SO_CA_TRANG = 50;
+
+/** Server action văng (mất mạng, deploy giữa chừng…) — vẫn phải cho người dùng
+ *  thấy lỗi và bấm lại được, không để dòng treo mãi ở "…". */
+const loiBaoGia = (): BaoGiaKien => ({ rows: [], reNhatKey: null, error: 'Không báo giá được, thử lại', luc: new Date().toISOString() });
 
 const num = (n: number) => Math.round(n).toLocaleString('vi-VN');
 const vnd = (n?: number | null) => (typeof n === 'number' ? num(n) + '₫' : '—');
@@ -56,7 +60,7 @@ interface KetQuaChon { ok: boolean; error?: string; lark?: { ok: boolean; daGhi:
  * rồi chọn line ship — hãng chọn áp cho cả ĐƠN nên mọi kiện cùng đơn đổi theo.
  */
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, chamTran,
+  kien, choKhop, loc, q, coQuyenChon, chamTran, gioiHan,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
@@ -64,9 +68,14 @@ export function BangDongHang({
   q: string;
   coQuyenChon: boolean;
   chamTran: boolean;
+  /** Trần số kiện một lượt tải (GIOI_HAN_KIEN) — chỉ để hiện đúng con số trong câu báo. */
+  gioiHan: number;
 }) {
   const [bao, setBao] = useState<Map<string, BaoGiaKien>>(new Map());
   const [dangBao, setDangBao] = useState<Set<string>>(new Set());
+  // Riêng cho nút "So cước cả trang": nút đó chỉ mờ khi CHÍNH nó đang chạy,
+  // không mờ theo vì có một dòng lẻ nào đó đang báo giá.
+  const [dangCaTrang, setDangCaTrang] = useState(false);
   const [, batDauBao] = useTransition();
   // Dòng chi tiết phí đang mở, khoá `${shipmentId}|${accountId}`.
   const [moChiTiet, setMoChiTiet] = useState<string | null>(null);
@@ -75,39 +84,60 @@ export function BangDongHang({
   const [chonCucBo, setChonCucBo] = useState<Map<string, string>>(new Map());
   const [ketQua, setKetQua] = useState<Map<string, KetQuaChon>>(new Map());
   const [dangChon, setDangChon] = useState<string | null>(null);
-  const [dangGan, batDauChon] = useTransition();
+  const [, batDauChon] = useTransition();
 
   const soCuoc = (shipmentId: string) => {
     setDangBao((s) => new Set(s).add(shipmentId));
     batDauBao(async () => {
-      const r = await baoGiaKien(shipmentId);
-      setBao((m) => new Map(m).set(shipmentId, r));
-      setDangBao((s) => { const n = new Set(s); n.delete(shipmentId); return n; });
+      try {
+        const r = await baoGiaKien(shipmentId);
+        setBao((m) => new Map(m).set(shipmentId, r));
+      } catch {
+        setBao((m) => new Map(m).set(shipmentId, loiBaoGia()));
+      } finally {
+        setDangBao((s) => { const n = new Set(s); n.delete(shipmentId); return n; });
+      }
     });
   };
 
   const soCuocCaTrang = () => {
     const ids = kien.slice(0, TRAN_SO_CA_TRANG).map((k) => k.shipmentId);
+    if (ids.length === 0) return;
+    setDangCaTrang(true);
     setDangBao((s) => new Set([...s, ...ids]));
     batDauBao(async () => {
-      const kq = await Promise.all(ids.map(async (id) => [id, await baoGiaKien(id)] as const));
-      setBao((m) => { const n = new Map(m); for (const [id, r] of kq) n.set(id, r); return n; });
-      setDangBao((s) => { const n = new Set(s); for (const id of ids) n.delete(id); return n; });
+      try {
+        // allSettled: MỘT kiện lỗi không được kéo đổ báo giá của những kiện còn lại.
+        const kq = await Promise.allSettled(ids.map((id) => baoGiaKien(id)));
+        setBao((m) => {
+          const n = new Map(m);
+          kq.forEach((r, i) => n.set(ids[i], r.status === 'fulfilled' ? r.value : loiBaoGia()));
+          return n;
+        });
+      } finally {
+        setDangCaTrang(false);
+        setDangBao((s) => { const n = new Set(s); for (const id of ids) n.delete(id); return n; });
+      }
     });
   };
 
   const chonHang = (orderId: string, carrierKey: string) => {
     setDangChon(`${orderId}|${carrierKey}`);
     batDauChon(async () => {
-      const r = await chonHangChoDon(orderId, carrierKey);
-      if (r.ok) setChonCucBo((m) => new Map(m).set(orderId, carrierKey));
-      setKetQua((m) => new Map(m).set(orderId, r));
-      setDangChon(null);
+      try {
+        const r = await chonHangChoDon(orderId, carrierKey);
+        if (r.ok) setChonCucBo((m) => new Map(m).set(orderId, carrierKey));
+        setKetQua((m) => new Map(m).set(orderId, r));
+      } catch {
+        setKetQua((m) => new Map(m).set(orderId, { ok: false, error: 'Không chọn được hãng, thử lại' }));
+      } finally {
+        setDangChon(null);
+      }
     });
   };
 
   const doiChiTiet = (khoa: string) => setMoChiTiet((x) => (x === khoa ? null : khoa));
-  const dangSoCaTrang = kien.some((k) => dangBao.has(k.shipmentId));
+  const quaTran = kien.length > TRAN_SO_CA_TRANG;
   const nhom = nhomTheoNgay(kien);
 
   return (
@@ -143,18 +173,18 @@ export function BangDongHang({
           </form>
           <button
             type="button" onClick={soCuocCaTrang}
-            disabled={dangSoCaTrang || kien.length > TRAN_SO_CA_TRANG || kien.length === 0}
-            title={kien.length > TRAN_SO_CA_TRANG ? `Quá ${TRAN_SO_CA_TRANG} kiện — thu hẹp bộ lọc rồi bấm lại` : undefined}
+            disabled={dangCaTrang || kien.length === 0}
+            title={quaTran ? `Chỉ báo giá ${TRAN_SO_CA_TRANG} kiện đầu — những kiện sau bấm “So cước” từng dòng, hoặc thu hẹp bộ lọc.` : undefined}
             className="rounded-md border border-border px-3 py-1 text-xs font-medium transition hover:bg-muted disabled:opacity-50"
           >
-            {dangSoCaTrang ? 'Đang so cước…' : 'So cước cả trang'}
+            {dangCaTrang ? 'Đang so cước…' : quaTran ? `So cước ${TRAN_SO_CA_TRANG} kiện đầu` : 'So cước cả trang'}
           </button>
         </div>
       </div>
 
       {chamTran && (
         <p className="text-xs text-muted-foreground">
-          Chỉ hiện 500 kiện mới nhất — thu hẹp bộ lọc hoặc tìm theo mã đơn.
+          Chỉ hiện {gioiHan} kiện mới nhất — thu hẹp bộ lọc hoặc tìm theo mã đơn.
         </p>
       )}
 
@@ -189,13 +219,13 @@ export function BangDongHang({
               <table className="w-full min-w-[980px] text-sm tabular-nums">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-muted-foreground [&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-                    <th>Đơn</th>
-                    <th>Cân</th>
-                    <th>Hộp / SKU</th>
-                    <th>Khách trả</th>
-                    <th>So cước</th>
-                    <th>Chọn</th>
-                    <th>Trạng thái</th>
+                    <th scope="col">Đơn</th>
+                    <th scope="col">Cân</th>
+                    <th scope="col">Hộp / SKU</th>
+                    <th scope="col">Khách trả</th>
+                    <th scope="col">So cước</th>
+                    <th scope="col">Chọn</th>
+                    <th scope="col">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,7 +242,6 @@ export function BangDongHang({
                       chonCucBo={chonCucBo.get(k.orderId)}
                       ketQua={ketQua.get(k.orderId)}
                       dangChon={dangChon}
-                      dangGan={dangGan}
                       chonHang={chonHang}
                     />
                   ))}
@@ -227,7 +256,7 @@ export function BangDongHang({
 }
 
 function DongKien({
-  k, bao, dangBao, moChiTiet, doiChiTiet, soCuoc, coQuyenChon, chonCucBo, ketQua, dangChon, dangGan, chonHang,
+  k, bao, dangBao, moChiTiet, doiChiTiet, soCuoc, coQuyenChon, chonCucBo, ketQua, dangChon, chonHang,
 }: {
   k: KienDongHang;
   bao: BaoGiaKien | undefined;
@@ -239,7 +268,6 @@ function DongKien({
   chonCucBo: string | undefined;
   ketQua: KetQuaChon | undefined;
   dangChon: string | null;
-  dangGan: boolean;
   chonHang: (orderId: string, carrierKey: string) => void;
 }) {
   const daChon = chonCucBo ?? k.selectedCarrierKey;
@@ -248,6 +276,8 @@ function DongKien({
   const rows = bao?.rows ?? [];
   const moRow = rows.find((r) => moChiTiet === `${k.shipmentId}|${r.accountId}`);
   const chonDuocRows = rows.filter((r) => r.ok && conChonDuoc(r));
+  // Chỉ khoá nút khi CHÍNH đơn này đang được gán hãng — đơn khác vẫn bấm được.
+  const donDangChon = dangChon?.startsWith(`${k.orderId}|`) ?? false;
 
   return (
     <Fragment>
@@ -280,7 +310,7 @@ function DongKien({
 
         <td className="px-3 py-3 text-xs">{k.hangKhachTra ?? '—'}</td>
 
-        <td className="px-3 py-3">
+        <td className="px-3 py-3" aria-busy={dangBao || undefined}>
           {dangBao ? (
             <span className="text-xs text-muted-foreground">…</span>
           ) : !bao ? (
@@ -289,7 +319,13 @@ function DongKien({
               So cước
             </button>
           ) : bao.error ? (
-            <span className="text-[11px] text-amber-600 dark:text-amber-400">{bao.error}</span>
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-[11px] text-amber-600 dark:text-amber-400">{bao.error}</span>
+              <button type="button" onClick={() => soCuoc(k.shipmentId)}
+                className="rounded-md border border-border px-2 py-1 text-[11px] font-medium transition hover:bg-muted">
+                Thử lại
+              </button>
+            </div>
           ) : (
             <div className="flex max-w-[320px] flex-wrap items-center gap-1">
               {rows.map((r) => {
@@ -304,11 +340,15 @@ function DongKien({
                 const reNhat = r.carrierKey === bao.reNhatKey;
                 const chonDuoc = conChonDuoc(r);
                 const khoa = `${k.shipmentId}|${r.accountId}`;
-                const lyDoNgung = `${r.suspendReason || 'Tạm ngưng'}${r.suspendedAt ? ` · từ ${new Date(r.suspendedAt).toLocaleDateString('vi-VN')}` : ''}`;
+                const ngayNgung = r.suspendedAt
+                  ? new Date(r.suspendedAt).toLocaleDateString('vi-VN', { timeZone: MUI_GIO_KINH_DOANH })
+                  : null;
+                const lyDoNgung = `${r.suspendReason || 'Tạm ngưng'}${ngayNgung ? ` · từ ${ngayNgung}` : ''}`;
                 return (
                   <button
                     key={r.accountId} type="button"
                     aria-expanded={moChiTiet === khoa}
+                    aria-controls={`chi-tiet-${k.shipmentId}-${r.accountId}`}
                     title={chonDuoc ? 'Bấm để xem cách tính giá' : lyDoNgung}
                     onClick={() => doiChiTiet(khoa)}
                     className={`rounded px-1.5 py-px text-[10px] transition ${
@@ -338,7 +378,7 @@ function DongKien({
                 {chonDuocRows.map((r) => (
                   <button
                     key={r.accountId} type="button"
-                    disabled={dangGan || daChon === r.carrierKey}
+                    disabled={donDangChon || daChon === r.carrierKey}
                     onClick={() => chonHang(k.orderId, r.carrierKey)}
                     className={`rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-60 ${
                       daChon === r.carrierKey
