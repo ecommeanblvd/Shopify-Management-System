@@ -83,7 +83,8 @@ export function BangDongHang({
   // không đợi tải lại trang.
   const [chonCucBo, setChonCucBo] = useState<Map<string, string>>(new Map());
   const [ketQua, setKetQua] = useState<Map<string, KetQuaChon>>(new Map());
-  const [dangChon, setDangChon] = useState<string | null>(null);
+  // Cặp `orderId|carrierKey` đang gửi — Map để nhiều đơn chọn song song không xoá cờ của nhau.
+  const [dangChon, setDangChon] = useState<Map<string, string>>(new Map());
   const [, batDauChon] = useTransition();
 
   const soCuoc = (shipmentId: string) => {
@@ -122,7 +123,7 @@ export function BangDongHang({
   };
 
   const chonHang = (orderId: string, carrierKey: string) => {
-    setDangChon(`${orderId}|${carrierKey}`);
+    setDangChon((m) => new Map(m).set(orderId, carrierKey));
     batDauChon(async () => {
       try {
         const r = await chonHangChoDon(orderId, carrierKey);
@@ -131,7 +132,7 @@ export function BangDongHang({
       } catch {
         setKetQua((m) => new Map(m).set(orderId, { ok: false, error: 'Không chọn được hãng, thử lại' }));
       } finally {
-        setDangChon(null);
+        setDangChon((m) => { const n = new Map(m); n.delete(orderId); return n; });
       }
     });
   };
@@ -267,7 +268,7 @@ function DongKien({
   coQuyenChon: boolean;
   chonCucBo: string | undefined;
   ketQua: KetQuaChon | undefined;
-  dangChon: string | null;
+  dangChon: Map<string, string>;
   chonHang: (orderId: string, carrierKey: string) => void;
 }) {
   const daChon = chonCucBo ?? k.selectedCarrierKey;
@@ -277,7 +278,7 @@ function DongKien({
   const moRow = rows.find((r) => moChiTiet === `${k.shipmentId}|${r.accountId}`);
   const chonDuocRows = rows.filter((r) => r.ok && conChonDuoc(r));
   // Chỉ khoá nút khi CHÍNH đơn này đang được gán hãng — đơn khác vẫn bấm được.
-  const donDangChon = dangChon?.startsWith(`${k.orderId}|`) ?? false;
+  const donDangChon = dangChon.has(k.orderId);
 
   return (
     <Fragment>
@@ -386,7 +387,7 @@ function DongKien({
                         : 'border-border hover:bg-muted'
                     }`}
                   >
-                    {daChon === r.carrierKey ? `✓ ${r.carrierKey}` : dangChon === `${k.orderId}|${r.carrierKey}` ? '…' : `Chọn ${r.carrierKey}`}
+                    {daChon === r.carrierKey ? `✓ ${r.carrierKey}` : dangChon.get(k.orderId) === r.carrierKey ? '…' : `Chọn ${r.carrierKey}`}
                   </button>
                 ))}
               </div>
