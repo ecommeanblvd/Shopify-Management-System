@@ -19,8 +19,11 @@ export function locDongTheoMon(recs: readonly LarkRecord[], monRecordId: string)
 
 /**
  * Tạo dòng mới hoặc cập nhật dòng có sẵn của món. Tìm theo LIÊN KẾT MÓN (không theo mã đơn —
- * một đơn có nhiều món), nên hai người cùng nhận một món thì người sau rơi vào nhánh cập nhật
- * chứ không đẻ dòng thứ hai.
+ * một đơn có nhiều món).
+ *
+ * Tìm rồi tạo là HAI lượt gọi mạng, tự nó không chống được chạy đua. Chỗ chặn thật nằm ở SMS:
+ * bảng wh_nhan_kcs có unique index theo món, nên hai người cùng nhận một món vẫn chỉ ra một
+ * dòng việc và một lần đẩy sang đây.
  */
 export async function ghiDongKho(v: ViecNhanKcs, ngay: Date = new Date()): Promise<{ larkRecordId: string; tao: boolean }> {
   const dsDon = await searchWhInventoryByDon(v.orderNumber);

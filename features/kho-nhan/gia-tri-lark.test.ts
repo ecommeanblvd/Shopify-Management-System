@@ -19,7 +19,8 @@ describe('cotTaoDong', () => {
       'Vendor final': 'TRACY STUDIO',
       Warehouse: 'HN | GVM',
       'Import - Inventory type': 'Retail',
-      'Ngày Import - tiếp nhận đồ tại kho': Date.UTC(2026, 8, 22),
+      // epoch của nửa đêm 22/09 GIỜ VN = 21/09 17:00 UTC (ghi-nguoc/ngay-lark.ts)
+      'Ngày Import - tiếp nhận đồ tại kho': Date.UTC(2026, 8, 22) - 7 * 60 * 60 * 1000,
       'Quantity tiếp nhận trước QC': 1,
       'Weight (kg)': 1.5,
       'QC Check': 'QC Pass',
@@ -41,8 +42,10 @@ describe('cotTaoDong', () => {
 describe('cotCapNhat', () => {
   it('CHỈ 5 cột, không đụng cột định danh của dòng cũ', () => {
     expect(Object.keys(cotCapNhat(viec)).sort()).toEqual(
-      ['QC Check', 'Quantity tiếp nhận trước QC', 'WH - Action', 'Weight (kg)'].sort(),
+      ['Lý do QC failed', 'QC Check', 'Quantity tiếp nhận trước QC', 'WH - Action', 'Weight (kg)'].sort(),
     );
+    // Kiểm lại thành đạt → lý do hỏng cũ bị xoá khỏi Lark.
+    expect(cotCapNhat(viec)['Lý do QC failed']).toBe('');
     expect(cotCapNhat({ ...viec, qcCheck: 'QC Failed', lyDoFail: 'bẩn' })['Lý do QC failed']).toBe('bẩn');
   });
 });
@@ -53,5 +56,11 @@ describe('danh sách giá trị', () => {
     expect(WH_ACTION[0]).toBe('Tạm nhập (đi đơn)');
     expect(WH_ACTION).toContain('Gửi trả Vendor (QC fail)');
     expect(WAREHOUSE).toContain('HN | GVM');
+  });
+});
+
+describe('cột trống thì bỏ hẳn, không gửi chuỗi rỗng', () => {
+  it('món chưa có mã hàng → không gửi cột SKU', () => {
+    expect('Lineitem SKU final' in cotTaoDong({ ...viec, sku: null }, new Date())).toBe(false);
   });
 });

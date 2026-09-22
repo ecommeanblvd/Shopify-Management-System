@@ -15,6 +15,8 @@ export type QcCheck = typeof QC_CHECK[number];
 export type WhAction = typeof WH_ACTION[number];
 export type Warehouse = typeof WAREHOUSE[number];
 
+import { ngayLark } from '@/features/lark/ghi-nguoc/ngay-lark';
+
 export interface ViecNhanKcs {
   monDinhDanh: string;
   monRecordId: string | null;
@@ -31,26 +33,21 @@ export interface ViecNhanKcs {
   warehouse: Warehouse;
 }
 
-const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-/** Epoch của NỬA ĐÊM NGÀY-LỊCH VN — Lark lưu ngày kiểu này (xem parse-pack-row.ts). */
-function nuaDemVn(d: Date): number {
-  const vn = new Date(d.getTime() + VN_OFFSET_MS);
-  return Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate());
-}
-
 /** THUẦN: bộ cột TẠO dòng kho mới — đúng những cột kho đang tự điền tay. */
 export function cotTaoDong(v: ViecNhanKcs, ngay: Date): Record<string, unknown> {
   const c: Record<string, unknown> = {
-    'Lineitem SKU final': v.sku ?? '',
     'Order Number final': v.orderNumber,
     Warehouse: v.warehouse,
     'Import - Inventory type': 'Retail',
-    'Ngày Import - tiếp nhận đồ tại kho': nuaDemVn(ngay),
+    // Dùng ĐÚNG hàm chiều-ghi của repo (ghi-nguoc/ngay-lark.ts) để ngày trên Lark trùng nếp
+    // với mọi chỗ khác SMS đang ghi, thay vì tự tính một kiểu riêng.
+    'Ngày Import - tiếp nhận đồ tại kho': ngayLark(ngay),
     'Quantity tiếp nhận trước QC': v.soLuong,
     'QC Check': v.qcCheck,
     'WH - Action': v.whAction,
   };
   // Cột trống thì BỎ HẲN, không gửi chuỗi rỗng: Lark coi '' là một lựa chọn mới ở cột chọn.
+  if (v.sku) c['Lineitem SKU final'] = v.sku;
   if (v.monRecordId) c['Import (select order)'] = [v.monRecordId];
   if (v.lineitemName) c['Lineitem Name'] = v.lineitemName;
   if (v.store) c['Store final'] = v.store;
@@ -66,8 +63,10 @@ export function cotCapNhat(v: ViecNhanKcs): Record<string, unknown> {
     'Quantity tiếp nhận trước QC': v.soLuong,
     'QC Check': v.qcCheck,
     'WH - Action': v.whAction,
+    // Kiểm lại thành đạt thì phải XOÁ lý do hỏng cũ, không để nguyên trên Lark cho người
+    // sau đọc nhầm là món vẫn lỗi.
+    'Lý do QC failed': v.lyDoFail ?? '',
   };
   if (v.canKg != null) c['Weight (kg)'] = v.canKg;
-  if (v.lyDoFail) c['Lý do QC failed'] = v.lyDoFail;
   return c;
 }

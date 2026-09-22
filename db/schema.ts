@@ -2124,7 +2124,12 @@ export const whNhanKcs = pgTable('wh_nhan_kcs', {
   trangThaiDay: text('trang_thai_day').notNull().default('cho'),
   loi: text('loi'),
   lanDayCuoi: timestamp('lan_day_cuoi'),
-}, (t) => [index('wh_nhan_kcs_don_idx').on(t.orderNumber), index('wh_nhan_kcs_trang_thai_idx').on(t.trangThaiDay)]);
+}, (t) => [
+  index('wh_nhan_kcs_don_idx').on(t.orderNumber),
+  index('wh_nhan_kcs_trang_thai_idx').on(t.trangThaiDay),
+  // Một món một dòng: chặn hai người cùng nhận một món tạo hai dòng rồi đẩy Lark hai lần.
+  uniqueIndex('wh_nhan_kcs_mon_uniq').on(t.monDinhDanh),
+]);
 
 /** Dòng Lark đóng xong (webhook /api/lark/pack) mà SMS chưa khớp được đơn. Xoá khi khớp. */
 export const larkPackChoKhop = pgTable('lark_pack_cho_khop', {
