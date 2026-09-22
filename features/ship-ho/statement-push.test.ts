@@ -10,13 +10,13 @@ describe('payloadStatementIssued', () => {
     ]);
     expect(p.totalVnd).toBe(3_271_520);
     expect(p.orderCount).toBe(2);
-    expect(p.periodBasis).toBe('shipped_at');
+    expect(p.periodBasis).toBe('first_push_at');
     expect((p.orders as Array<{ mmpRef: string }>)[1].mmpRef).toBe('26-INSLG-SV-0003'); // thiếu mmpRef → dùng code
   });
-  it('duty → periodBasis fedex_invoice_date, dòng kèm hoá đơn', () => {
+  it('duty → periodBasis first_push_at, dòng kèm hoá đơn', () => {
     const p = payloadStatementIssued({ id: 's2', type: 'duty', periodStart: '2026-09-01', periodEnd: '2026-09-30', partnerBrandSlug: 'kalisa' },
       [{ code: 'x', mmpRef: 'x', brandReference: null, trackingNumber: 't', shippedAt: '2026-07-20', amountVnd: 682_298, fedexInvoiceNumber: '736059786', invoiceDate: '2026-08-20' }]);
-    expect(p.periodBasis).toBe('fedex_invoice_date');
+    expect(p.periodBasis).toBe('first_push_at');
     expect((p.orders as Array<{ fedexInvoiceNumber: string }>)[0].fedexInvoiceNumber).toBe('736059786');
   });
   it('có mmpRef khác code → giữ nguyên mmpRef, KHÔNG bị thay bằng code', () => {

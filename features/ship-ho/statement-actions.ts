@@ -24,38 +24,47 @@ export async function generateStatement(
 
   const ids: string[] = []; const tien: number[] = []; let choHoaDon = 0;
   if (type === 'freight') {
-    // Kỳ theo NGÀY GỬI; vào kê khi Đức đã chốt đối soát. shipped_at ≤ end (không chặn start) để đơn kỳ trước chốt muộn rơi vào kỳ này.
-    // cho (chờ hoá đơn) = CHƯA CÓ GIÁ THỰC dùng được — chưa reconciled, HOẶC đã reconciled nhưng
-    // actual_charged_vnd vẫn null (re-quote lỗi) — nếu không đơn này biến mất khỏi cả bill lẫn danh
-    // sách chờ (Important-2, review 21/09).
-    // Đơn lệch tiền còn chờ Đức duyệt ('pending_review'/'claiming') KHÔNG được thu (spec §2.2:
-    // chỉ thu số Đức đã chốt) → rơi sang "Chờ hoá đơn"; hai vế `gia`/`cho` là phần bù CHÍNH XÁC
-    // của nhau qua cùng một danh sách QUYET_DINH_DA_CHOT nên không đơn nào rơi ra ngoài cả hai.
+    // MỐC KỲ = ngày LẦN PUSH ĐẦU TIÊN thành công của `order.reconciled` sang MMP (CEO 22/09/2026):
+    // MMP chốt kỳ theo đơn Đức đã đối soát và đẩy sang họ; bản đối soát của SMS phải khớp từng
+    // dòng nên dùng cùng mốc. Lấy lần ĐẦU (không phải lần gần nhất) để bắn lại khi tách duty
+    // không kéo đơn kỳ 07/08 đã khoá sang kỳ mới. Ngày gửi / ngày bill / ngày Đức chốt chỉ dùng
+    // cho báo cáo nội bộ. Điều kiện vào kê không đổi: đã đối soát và Đức đã chốt.
+    // cho (chờ hoá đơn) = đơn GỬI trong kỳ mà chưa có giá thực dùng được — chưa reconciled, giá
+    // null (re-quote lỗi), hay còn chờ Đức duyệt/claim — hiển thị để Ops biết còn gì treo.
     const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
-      SELECT id,
-             CASE WHEN reconcile_status = 'reconciled'
-                   AND (reconcile_decision IS NULL OR reconcile_decision IN ${QUYET_DINH_DA_CHOT})
-                  THEN actual_charged_vnd END AS gia,
-             ((actual_charged_vnd IS NULL OR reconcile_status IS DISTINCT FROM 'reconciled'
-               OR (reconcile_decision IS NOT NULL AND reconcile_decision NOT IN ${QUYET_DINH_DA_CHOT}))
-              AND shipped_at >= ${periodStart}) AS cho
-        FROM ship_ho_orders
-       WHERE partner_brand_slug = ${partnerBrandSlug} AND statement_id IS NULL
-         AND status IN ('shipped','delivered') AND shipped_at IS NOT NULL AND shipped_at <= ${periodEnd}
-         AND NOT (COALESCE(ly_do_cham,'') = 'khong_gui_hang' AND COALESCE(ly_do_doi_chieu,'') = 'xac_nhan')`);
+      SELECT o.id,
+             CASE WHEN o.reconcile_status = 'reconciled'
+                   AND (o.reconcile_decision IS NULL OR o.reconcile_decision IN ${QUYET_DINH_DA_CHOT})
+                   AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}
+                  THEN o.actual_charged_vnd END AS gia,
+             ((o.actual_charged_vnd IS NULL OR o.reconcile_status IS DISTINCT FROM 'reconciled'
+               OR (o.reconcile_decision IS NOT NULL AND o.reconcile_decision NOT IN ${QUYET_DINH_DA_CHOT}))
+              AND o.shipped_at BETWEEN ${periodStart} AND ${periodEnd}) AS cho
+        FROM ship_ho_orders o
+        LEFT JOIN LATERAL (
+          SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
+           WHERE e.order_id = o.id AND e.event = 'order.reconciled' AND e.delivery_status = 'delivered'
+        ) p ON TRUE
+       WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.statement_id IS NULL
+         AND o.status IN ('shipped','delivered')
+         AND NOT (COALESCE(o.ly_do_cham,'') = 'khong_gui_hang' AND COALESCE(o.ly_do_doi_chieu,'') = 'xac_nhan')`);
     for (const r of rows.rows) {
       if (r.gia != null) { ids.push(r.id); tien.push(Number(r.gia)); }
       else if (r.cho) choHoaDon++;
     }
   } else {
-    // Kỳ theo NGÀY HOÁ ĐƠN FedEx: đơn có dòng duty của hoá đơn trong kỳ, chưa vào kê duty.
+    // MỐC KỲ DUTY = ngày lần push đầu tiên thành công của `order.duty_charged` (CEO 22/09/2026) —
+    // trước khi bật MMP_TACH_DUTY chưa có sự kiện nào nên bảng kê duty rỗng; đúng ý: MMP là nơi
+    // phát hành, chưa nhận duty thì chưa có kỳ để đối soát.
     const rows = await db.execute<{ id: string; gia: string }>(sql`
       SELECT o.id, o.actual_duty_vnd AS gia
         FROM ship_ho_orders o
+        LEFT JOIN LATERAL (
+          SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
+           WHERE e.order_id = o.id AND e.event = 'order.duty_charged' AND e.delivery_status = 'delivered'
+        ) p ON TRUE
        WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.duty_statement_id IS NULL AND o.actual_duty_vnd > 0
-         AND EXISTS (SELECT 1 FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id
-                      WHERE l.tracking_number = o.tracking_number AND l.duty > 0
-                        AND COALESCE(b.issue_date, b.period_start) BETWEEN ${periodStart} AND ${periodEnd})`);
+         AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}`);
     for (const r of rows.rows) { ids.push(r.id); tien.push(Number(r.gia)); }
   }
   const sums = summarizeStatement(tien);

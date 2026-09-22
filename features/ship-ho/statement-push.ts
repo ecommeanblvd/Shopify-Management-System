@@ -20,7 +20,8 @@ export function payloadStatementIssued(st: BangKeMmp, dong: readonly DongBangKeM
   }));
   return {
     statementId: st.id, type: st.type, periodStart: st.periodStart, periodEnd: st.periodEnd,
-    periodBasis: st.type === 'freight' ? 'shipped_at' : 'fedex_invoice_date',
+    // Kỳ theo ngày lần push đầu tiên sang MMP (CEO 22/09/2026) — cả hai loại.
+    periodBasis: 'first_push_at',
     orders, orderCount: orders.length, totalVnd: orders.reduce((s, o) => s + o.amountVnd, 0),
   };
 }
