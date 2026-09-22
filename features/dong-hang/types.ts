@@ -1,6 +1,6 @@
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
-export type BoLocDongHang = 'chua_tracking' | 'hom_nay' | '7_ngay' | 'tat_ca';
-export const BO_LOC: readonly BoLocDongHang[] = ['chua_tracking', 'hom_nay', '7_ngay', 'tat_ca'];
+export type BoLocDongHang = 'chua_tracking' | 'hom_nay' | 'du_kien_di' | '7_ngay' | 'tat_ca';
+export const BO_LOC: readonly BoLocDongHang[] = ['chua_tracking', 'hom_nay', 'du_kien_di', '7_ngay', 'tat_ca'];
 export interface KienDongHang {
   shipmentId: string; orderId: string; orderNumber: string; storeName: string; country: string | null;
   weightKg: number | null; dims: { l: number; w: number; h: number | null } | null;

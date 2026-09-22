@@ -30,17 +30,25 @@ export function laNgayTuongLai(ngay: string, now = Date.now()): boolean {
   return ngay > ngayVn(new Date(now).toISOString());
 }
 
-/** Nhóm theo ngày-lịch VN, ngày mới trước; trong nhóm giữ thứ tự đầu vào. */
-export function nhomTheoNgay<T extends { ngayDong: string }>(rows: T[]): Array<{ ngay: string; kien: T[] }> {
+/**
+ * Nhóm theo ngày-lịch VN. Ngày ĐÃ QUA và hôm nay lên trước (mới nhất trên cùng), ngày Lark
+ * hẹn đi trong TƯƠNG LAI dồn xuống cuối (gần nhất trước) — màn này để chọn line cho kiện
+ * vừa đóng, không để kiện giữ chỗ 31/12 che mất việc hôm nay (CEO 22/09/2026).
+ */
+export function nhomTheoNgay<T extends { ngayDong: string }>(rows: T[], now = Date.now()): Array<{ ngay: string; kien: T[] }> {
   const m = new Map<string, T[]>();
   for (const r of rows) { const d = ngayVn(r.ngayDong); m.set(d, [...(m.get(d) ?? []), r]); }
-  return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([ngay, kien]) => ({ ngay, kien }));
+  const daQua: string[] = [], sapToi: string[] = [];
+  for (const ngay of m.keys()) (laNgayTuongLai(ngay, now) ? sapToi : daQua).push(ngay);
+  daQua.sort((a, b) => (a < b ? 1 : -1));
+  sapToi.sort();
+  return [...daQua, ...sapToi].map((ngay) => ({ ngay, kien: m.get(ngay)! }));
 }
 
 /** Trong mỗi ngày, gom tiếp theo kho xuất (SG/HN) đúng như view Lark Đức đang nhìn.
  *  Kho có tên đứng trước, kiện chưa biết kho xuống cuối. */
-export function nhomTheoNgayVaBase<T extends { ngayDong: string; base: string | null }>(rows: T[]): Array<{ ngay: string; theoBase: Array<{ base: string | null; kien: T[] }> }> {
-  return nhomTheoNgay(rows).map(({ ngay, kien }) => {
+export function nhomTheoNgayVaBase<T extends { ngayDong: string; base: string | null }>(rows: T[], now = Date.now()): Array<{ ngay: string; theoBase: Array<{ base: string | null; kien: T[] }> }> {
+  return nhomTheoNgay(rows, now).map(({ ngay, kien }) => {
     const m = new Map<string, T[]>();
     for (const k of kien) { const b = k.base ?? ''; m.set(b, [...(m.get(b) ?? []), k]); }
     const theoBase = [...m.entries()]

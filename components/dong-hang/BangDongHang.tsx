@@ -27,6 +27,7 @@ const hienNgayNhom = (ngay: string) => ngay.split('-').reverse().join('/');
 const NHAN_LOC: Record<BoLocDongHang, string> = {
   chua_tracking: 'Chưa có tracking',
   hom_nay: 'Hôm nay',
+  du_kien_di: 'Dự kiến đi',
   '7_ngay': '7 ngày',
   tat_ca: 'Tất cả',
 };

@@ -17,6 +17,11 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   if (loc === 'chua_tracking') dk.push(isNull(s.trackingNumber));
   // Ngày VN = UTC+7; so theo ngày-lịch VN của mốc đóng.
   if (loc === 'hom_nay') dk.push(sql`(${ngayDong} + interval '7 hours')::date = (now() + interval '7 hours')::date`);
+  // Dự kiến đi: Lark hẹn ngày đi ở TƯƠNG LAI (kiện hold sang ngày khác) và chưa lên nhãn.
+  if (loc === 'du_kien_di') {
+    dk.push(sql`(${s.ngayDiDuKien} + interval '7 hours')::date > (now() + interval '7 hours')::date`);
+    dk.push(isNull(s.trackingNumber));
+  }
   if (loc === '7_ngay') dk.push(sql`${ngayDong} >= now() - interval '7 days'`);
   const tim = q?.trim();
   if (tim) dk.push(or(ilike(o.shopifyOrderNumber, `%${escapeLike(tim)}%`), ilike(s.logUniqueCode, `%${escapeLike(tim)}%`))!);
