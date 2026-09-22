@@ -6,6 +6,8 @@ export interface KienDongHang {
   weightKg: number | null; dims: { l: number; w: number; h: number | null } | null;
   /** Kho xuất SG | HN (cột Lark "Base") — nhóm phụ trong mỗi ngày, giống view Lark của Đức. */
   base: string | null;
+  /** Ngày nhóm lấy từ ngày Lark hẹn đi (không phải ngày kiện về SMS). */
+  theoHenLark: boolean;
   hop: string | null; skuText: string | null; pieces: number | null;
   trackingNumber: string | null; hangKhachTra: string | null;
   selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null;

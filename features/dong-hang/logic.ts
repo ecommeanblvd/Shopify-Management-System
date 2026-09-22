@@ -25,6 +25,11 @@ export function ngayVn(iso: string): string {
   return new Date(new Date(iso).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** THUẦN: ngày nhóm có ở TƯƠNG LAI không (theo lịch VN) — kiện Lark hẹn đi ngày khác. */
+export function laNgayTuongLai(ngay: string, now = Date.now()): boolean {
+  return ngay > ngayVn(new Date(now).toISOString());
+}
+
 /** Nhóm theo ngày-lịch VN, ngày mới trước; trong nhóm giữ thứ tự đầu vào. */
 export function nhomTheoNgay<T extends { ngayDong: string }>(rows: T[]): Array<{ ngay: string; kien: T[] }> {
   const m = new Map<string, T[]>();

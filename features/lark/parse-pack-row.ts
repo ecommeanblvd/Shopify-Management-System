@@ -16,6 +16,8 @@ export interface PackRow {
   labelDate: Date | null;
   /** Kho xuất (cột Lark "Base"): SG | HN. Màn Đóng hàng nhóm theo ngày rồi tới base, giống view Lark. */
   base: string | null;
+  /** Ngày Lark đang ghi ở "Label Created Date", GIỮ cả ngày tương lai (kiện hold sang ngày khác). */
+  ngayDiDuKien: Date | null;
   hop: string | null;
   /** Mã record kho mà cột "Select VTĐG1" trỏ tới — tra tên hộp qua getTenHopVtdg. */
   hopRecordId: string | null;
@@ -171,6 +173,10 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
+  // Ngày Lark đang ghi, chỉ loại rác quá cũ: hold sang ngày mai là NGÀY ĐI DỰ KIẾN hợp lệ,
+  // màn Đóng hàng phải bám theo nó (CEO 22/09/2026).
+  const ngayDiDuKien = plausibleLarkDate(labelDate);
+
   // Loại ngày quá cũ (epoch hỏng → 1997…) VÀ ngày tương lai (ops gõ nhầm năm /
   // placeholder cho đơn chưa ship): label là mốc ĐÃ xảy ra, không thể ở tương lai.
   const labelPlausible = plausibleLarkDate(labelDate);
@@ -202,5 +208,5 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, hop, hopRecordId, skuText, pieces, warnings };
+  return { orderNumber, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, hop, hopRecordId, skuText, pieces, warnings };
 }

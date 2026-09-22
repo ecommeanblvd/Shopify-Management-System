@@ -61,7 +61,7 @@ export async function chonHangChoDon(orderId: string, carrierKey: string): Promi
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
-  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, error: 'Không có quyền chọn hãng' };
+  if (!hasPermission(role, 'chon_line_ship')) return { ok: false, error: 'Không có quyền chọn line ship' };
   const r = await assignOrderCarrier(orderId, carrierKey);
   revalidatePath('/f/dong-hang');
   return r;

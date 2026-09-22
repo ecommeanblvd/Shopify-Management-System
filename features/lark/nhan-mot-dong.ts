@@ -89,7 +89,7 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
     dimLengthCm: schema.shipments.dimLengthCm, dimWidthCm: schema.shipments.dimWidthCm,
     dimHeightCm: schema.shipments.dimHeightCm,
     carrierKey: schema.shipments.carrierKey, labelCreatedAt: schema.shipments.labelCreatedAt,
-    larkHop: schema.shipments.larkHop, originHub: schema.shipments.originHub, skuText: schema.shipments.skuText, pieces: schema.shipments.pieces,
+    larkHop: schema.shipments.larkHop, originHub: schema.shipments.originHub, ngayDiDuKien: schema.shipments.ngayDiDuKien, skuText: schema.shipments.skuText, pieces: schema.shipments.pieces,
   }).from(schema.shipments).where(dieuKien);
   const kienTheoId = new Map<string, Record<string, unknown>>(daCo.map((s) => [s.id, s as Record<string, unknown>]));
   const maps: ClassifyMaps = { shipmentByLogCode: new Map(), shipmentByTracking: new Map(), orderIdByNumber: await resolveOrderIds([row.orderNumber]) };

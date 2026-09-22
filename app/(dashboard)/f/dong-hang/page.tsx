@@ -39,7 +39,7 @@ export default async function DongHangPage({
         choKhop={choKhop}
         loc={loc}
         q={q}
-        coQuyenChon={hasPermission(role, 'manage_fulfillment')}
+        coQuyenChon={hasPermission(role, 'chon_line_ship')}
         gioiHan={GIOI_HAN_KIEN}
       />
     </div>

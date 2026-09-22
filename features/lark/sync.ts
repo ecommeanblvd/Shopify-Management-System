@@ -82,7 +82,7 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
         deliveryStatus: schema.shipments.deliveryStatus, deliveredAt: schema.shipments.deliveredAt,
         deliverySource: schema.shipments.deliverySource,
         skuText: schema.shipments.skuText, pieces: schema.shipments.pieces, larkHop: schema.shipments.larkHop,
-        originHub: schema.shipments.originHub,
+        originHub: schema.shipments.originHub, ngayDiDuKien: schema.shipments.ngayDiDuKien,
       })
       .from(schema.shipments);
     const shipmentById = new Map(existing.map((s) => [s.id, s as Record<string, unknown>]));

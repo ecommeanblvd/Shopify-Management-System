@@ -16,6 +16,9 @@ export function patchFrom(row: PackRow): Record<string, unknown> {
   if (row.trackingNumber) p.trackingNumber = row.trackingNumber;
   if (row.carrierKey) p.carrierKey = row.carrierKey;
   if (row.labelDate) p.labelCreatedAt = row.labelDate;
+  // Ngày đi dự kiến ĐỒNG BỘ HẲN theo Lark, kể cả khi Lark xoá ngày (ghi null): Ops hold kiện
+  // rồi đổi/bỏ ngày thì màn Đóng hàng phải theo, không được giữ ngày cũ.
+  p.ngayDiDuKien = row.ngayDiDuKien;
   if (row.base) p.originHub = row.base;
   if (row.hop) p.larkHop = row.hop;
   if (row.skuText) p.skuText = row.skuText;
@@ -36,6 +39,7 @@ export function giaTriTaoKien(row: PackRow, orderId: string): typeof schema.ship
     dimHeightCm: row.dims?.h != null ? String(row.dims.h) : null,
     labelCreatedAt: row.labelDate,
     originHub: row.base,
+    ngayDiDuKien: row.ngayDiDuKien,
     larkHop: row.hop,
     skuText: row.skuText,
     pieces: row.pieces,

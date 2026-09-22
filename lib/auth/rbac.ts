@@ -29,6 +29,8 @@ export type Permission =
   | 'manage_mmp_products'
   | 'view_fulfillment'
   | 'manage_fulfillment'
+  /** Chọn line ship cho kiện đã đóng (màn Đóng hàng) — đội logistics. */
+  | 'chon_line_ship'
   | 'manage_warehouse'
   | 'view_receiving'
   | 'manage_receiving'
@@ -54,7 +56,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
     'view_mmp_products', 'manage_mmp_products',
-    'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
+    'view_fulfillment', 'manage_fulfillment', 'chon_line_ship', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
     'view_cogs', 'manage_cogs', 'view_kpi_logistics',
   ],
@@ -66,7 +68,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_orders', 'manage_sku_costs', 'manage_shipping_invoices',
     'manage_functions', 'view_functions',
     'view_mmp_products', 'manage_mmp_products',
-    'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
+    'view_fulfillment', 'manage_fulfillment', 'chon_line_ship', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
   ],
   viewer: [

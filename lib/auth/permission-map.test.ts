@@ -110,3 +110,15 @@ describe('SYSTEM_ROLE_SEEDS', () => {
     for (const k of SYSTEM_ROLE_SEEDS.viewer.keys) expect(k.endsWith(':view')).toBe(true);
   });
 });
+
+describe('chọn line ship (màn Đóng hàng)', () => {
+  it('map sang quyền sửa của đội logistics, KHÔNG đòi quyền brand requests', () => {
+    expect(OLD_TO_NEW['chon_line_ship']).toEqual(['fulfillment.logistics:edit']);
+  });
+
+  it('vai trò logistics có đủ quyền chọn line, nhưng không có manage_fulfillment', () => {
+    const logistics = new Set(SYSTEM_ROLE_SEEDS['logistics'].keys);
+    expect(OLD_TO_NEW['chon_line_ship'].every((k) => logistics.has(k))).toBe(true);
+    expect(OLD_TO_NEW['manage_fulfillment'].every((k) => logistics.has(k))).toBe(false);
+  });
+});

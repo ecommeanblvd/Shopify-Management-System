@@ -28,6 +28,10 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   view_mmp_products: ['mmp_products:view'],
   manage_mmp_products: ['mmp_products:create', 'mmp_products:edit', 'mmp_products:delete', 'mmp_products:push'],
   view_fulfillment: ['fulfillment.operations:view'],
+  // Chọn line ship trên màn Đóng hàng là việc của đội logistics, KHÔNG phải của OC:
+  // manage_fulfillment còn đòi 'fulfillment.brand_requests:edit' nên vai trò logistics
+  // (Đức) không bấm chọn được — CEO báo 22/09/2026.
+  chon_line_ship: ['fulfillment.logistics:edit'],
   manage_fulfillment: ['fulfillment.operations:edit', 'fulfillment.brand_requests:edit'],
   manage_warehouse: ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
   view_receiving: ['warehouse.receiving:view'],

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { baoGiaKien, chonHangChoDon } from '@/features/dong-hang/actions';
-import { canQuyDoi, conChonDuoc, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
+import { canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
@@ -169,6 +169,11 @@ export function BangDongHang({
                 <tr className="border-y border-border bg-muted/60">
                   <th scope="colgroup" colSpan={6} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {hienNgayNhom(g.ngay)} · {g.theoBase.reduce((n, b) => n + b.kien.length, 0)} kiện
+                    {laNgayTuongLai(g.ngay) && (
+                      <span className="ml-2 rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-medium normal-case tracking-normal text-sky-700 dark:text-sky-400">
+                        Lark hẹn đi ngày này
+                      </span>
+                    )}
                   </th>
                 </tr>
                 {g.theoBase.map((b) => (

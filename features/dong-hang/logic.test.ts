@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canQuyDoi, trangThaiKien, nhomTheoNgay, nhomTheoNgayVaBase, xepQuote } from './logic';
+import { canQuyDoi, trangThaiKien, laNgayTuongLai, nhomTheoNgay, nhomTheoNgayVaBase, xepQuote } from './logic';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 
 describe('canQuyDoi', () => {
@@ -62,5 +62,17 @@ describe('nhomTheoNgayVaBase', () => {
     expect(r[0].theoBase.map((g) => [g.base, g.kien.map((k) => k.id)])).toEqual([
       ['HN', ['c']], ['SG', ['a', 'd']], [null, ['b']],
     ]);
+  });
+});
+
+describe('laNgayTuongLai', () => {
+  const now = Date.parse('2026-09-22T05:00:00Z'); // 12:00 22/09 giờ VN
+  it('ngày sau hôm nay (theo lịch VN) → đúng', () => {
+    expect(laNgayTuongLai('2026-09-23', now)).toBe(true);
+    expect(laNgayTuongLai('2026-12-31', now)).toBe(true);
+  });
+  it('hôm nay và ngày cũ → sai', () => {
+    expect(laNgayTuongLai('2026-09-22', now)).toBe(false);
+    expect(laNgayTuongLai('2026-09-21', now)).toBe(false);
   });
 });
