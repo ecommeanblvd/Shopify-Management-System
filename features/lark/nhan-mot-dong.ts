@@ -8,8 +8,10 @@
  */
 import { eq, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { getLogRecordById, getTenHopVtdg } from './client';
+import { getLogRecordById, getTenHopVtdg, searchRecordsByLogCode, searchRecordsByOrderNumber } from './client';
 import { parsePackRow, tenHopGon } from './parse-pack-row';
+import { coDonNay } from './push-courier';
+import type { CachNhanDien } from './pack-webhook/xac-thuc';
 import { classifyPackRows, type ClassifyMaps, type ClassifyResult } from './classify';
 import { patchFrom, giaTriTaoKien } from './patch-kien';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
@@ -143,4 +145,29 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   }
   await db.delete(schema.larkPackChoKhop).where(eq(schema.larkPackChoKhop.recordId, recordId));
   return { ketQua, shipmentId, logUniqueCode: row.logUniqueCode };
+}
+
+/**
+ * Nhận dòng Lark theo cách Lark gửi được: record_id, mã kiện, hoặc MÃ ĐƠN.
+ *
+ * Một mã đơn có thể ứng với nhiều dòng (đơn tách nhiều kiện) nên trả về mảng kết quả.
+ * Rule Lark chỉ chắc chắn chèn được giá trị các cột, không phải lúc nào cũng có record_id.
+ */
+export async function nhanTheoNhanDien(nd: CachNhanDien, opts?: { dry?: boolean }): Promise<KetQuaNhanDong[]> {
+  if (nd.kieu === 'record') return [await nhanMotDongLark(nd.giaTri, opts)];
+
+  let recs;
+  try {
+    recs = nd.kieu === 'log_code'
+      ? await searchRecordsByLogCode(nd.giaTri)
+      : (await searchRecordsByOrderNumber(nd.giaTri)).filter((r) => coDonNay(r.fields, nd.giaTri));
+  } catch (e) {
+    throw new LoiLarkApi(e instanceof Error ? e.message : String(e));
+  }
+  if (recs.length === 0) {
+    return [{ ketQua: 'bo_qua', logUniqueCode: null, lyDo: `không thấy dòng Lark nào cho ${nd.kieu === 'don' ? 'đơn' : 'mã kiện'} ${nd.giaTri}` }];
+  }
+  const out: KetQuaNhanDong[] = [];
+  for (const r of recs) out.push(await nhanMotDongLark(r.record_id, opts));
+  return out;
 }

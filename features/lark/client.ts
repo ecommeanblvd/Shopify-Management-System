@@ -172,6 +172,15 @@ export async function getLogRecordById(recordId: string): Promise<LarkRecord | n
   return j.data?.record ?? null;
 }
 
+/** Tìm record Lark theo "Log Unique code" (PK-…). Read-only. */
+export async function searchRecordsByLogCode(logCode: string): Promise<LarkRecord[]> {
+  if (!logCode.trim()) return [];
+  return searchAllRecords(logTableId(), {
+    filter: { conjunction: 'and', conditions: [{ field_name: 'Log Unique code', operator: 'is', value: [logCode.trim()] }] },
+    automatic_fields: true, page_size: 500,
+  });
+}
+
 /** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
 export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
   if (!orderNumber.trim()) return [];

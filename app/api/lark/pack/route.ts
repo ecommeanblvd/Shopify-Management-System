@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { kiemTraSecret, docBodyPack, GIOI_HAN_BODY } from '@/features/lark/pack-webhook/xac-thuc';
-import { nhanMotDongLark, LoiLarkApi } from '@/features/lark/nhan-mot-dong';
+import { nhanTheoNhanDien, LoiLarkApi } from '@/features/lark/nhan-mot-dong';
 import { batDauJob, ketThucJob } from '@/features/jobs/record';
 
 export const dynamic = 'force-dynamic';
@@ -24,13 +24,15 @@ export async function POST(req: Request) {
   const batDau = Date.now();
   const jobId = await batDauJob('lark-pack-webhook');
   try {
-    const kq = await nhanMotDongLark(body.recordId, { dry });
+    const ds = await nhanTheoNhanDien(body.nhanDien, { dry });
     const ms = Date.now() - batDau;
-    await ketThucJob(jobId, { ok: true, summary: { recordId: body.recordId, logCodeTuLark: body.logUniqueCode, ...kq, dry, ms }, batDau });
-    return NextResponse.json({ ...kq, dry, ms });
+    const chung = { nhanDien: body.nhanDien, soDong: ds.length, dry, ms };
+    await ketThucJob(jobId, { ok: true, summary: { ...chung, ketQua: ds }, batDau });
+    // Một dòng thì trả thẳng cho dễ đọc; nhiều dòng (đơn tách kiện) thì trả cả mảng.
+    return NextResponse.json(ds.length === 1 ? { ...ds[0], ...chung } : { ...chung, ketQua: ds });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await ketThucJob(jobId, { ok: false, error: `${body.recordId}: ${msg}`.slice(0, 2000), batDau });
+    await ketThucJob(jobId, { ok: false, error: `${body.nhanDien.kieu}=${body.nhanDien.giaTri}: ${msg}`.slice(0, 2000), batDau });
     // Chi tiết lỗi nằm ở job_runs; ra ngoài chỉ nói Lark có nên thử lại không (không lộ thông tin nội bộ).
     return e instanceof LoiLarkApi
       ? NextResponse.json({ error: 'Lark API lỗi, hãy thử lại' }, { status: 502 })
