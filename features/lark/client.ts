@@ -144,6 +144,23 @@ export async function listAllRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(logTableId(), { automatic_fields: true, page_size: 500 });
 }
 
+/** Mã lỗi Lark khi record_id không tồn tại (đã xoá) — coi là "không có", không phải lỗi API. */
+const LARK_RECORD_NOT_FOUND = 1254043;
+
+/**
+ * Đọc MỘT record bảng logistics theo record_id (webhook /api/lark/pack). Trả null nếu
+ * record không còn. Lỗi mạng/API khác → throw (caller trả 502 để Lark thử lại).
+ */
+export async function getLogRecordById(recordId: string): Promise<LarkRecord | null> {
+  const token = await getTenantToken();
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${env('LARK_BASE_APP_TOKEN')}/tables/${logTableId()}/records/${encodeURIComponent(recordId)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+  const j = (await res.json()) as { code: number; msg: string; data?: { record?: LarkRecord } };
+  if (j.code === LARK_RECORD_NOT_FOUND) return null;
+  if (j.code !== 0) throw new Error(`[lark] get record fail: code=${j.code} msg=${j.msg}`);
+  return j.data?.record ?? null;
+}
+
 /** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
 export async function searchRecordsByOrderNumber(orderNumber: string): Promise<LarkRecord[]> {
   if (!orderNumber.trim()) return [];

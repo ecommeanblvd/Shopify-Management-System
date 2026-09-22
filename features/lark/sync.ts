@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, ne, sql, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords, type LarkRecord } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
@@ -129,6 +129,12 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
           await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId)).onConflictDoNothing();
         }
       });
+    }
+
+    // Kiện từng nằm ở "chờ khớp" (webhook /api/lark/pack) nay cron tạo được → gỡ khỏi màn Đóng hàng.
+    const maVuaTao = cls.create.map((c) => c.row.logUniqueCode).filter((x): x is string => !!x);
+    if (maVuaTao.length > 0) {
+      await db.delete(schema.larkPackChoKhop).where(inArray(schema.larkPackChoKhop.logUniqueCode, maVuaTao));
     }
 
     // Phần B: snapshot status Lark theo orderId (ghi đè CÓ ĐIỀU KIỆN — record sau
