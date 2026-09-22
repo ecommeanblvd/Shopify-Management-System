@@ -247,3 +247,29 @@ export async function getTenHopVtdg(recordId: string): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Dòng bảng kho của MỘT đơn. Lọc theo mã đơn (cột text) chứ không đọc cả bảng 9.000 dòng —
+ * lọc theo liên kết món thì Lark không hỗ trợ, nên SMS lọc tiếp phía mình (locDongTheoMon).
+ */
+export async function searchWhInventoryByDon(orderNumber: string): Promise<LarkRecord[]> {
+  const bare = orderNumber.replace(/^#/, '');
+  if (!bare) return [];
+  return searchAllRecords(WH_INVENTORY_TABLE_ID, {
+    filter: {
+      conjunction: 'or',
+      conditions: [bare, `#${bare}`].map((v) => ({ field_name: 'Order Number final', operator: 'is', value: [v] })),
+    },
+    automatic_fields: true, page_size: 500,
+  });
+}
+
+/** Tạo MỘT dòng bảng kho. Trả record id. */
+export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
+  return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);
+}
+
+/** Sửa vài cột của MỘT dòng bảng kho. KHÔNG có hàm xoá — cố ý. */
+export async function updateWhInventoryRecord(recordId: string, fields: Record<string, unknown>): Promise<void> {
+  return putRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, recordId, fields);
+}
