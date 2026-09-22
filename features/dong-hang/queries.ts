@@ -59,7 +59,10 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     const mon = await db.select().from(m).where(inArray(m.orderNumber, soDon));
     for (const x of mon) {
       const l = monTheoDon.get(x.orderNumber) ?? [];
-      l.push({ dinhDanh: x.dinhDanh, orderNumber: x.orderNumber, sku: x.sku, huy: x.huy, lyDo: x.lyDo });
+      l.push({
+        dinhDanh: x.dinhDanh, recordId: x.recordId ?? '', orderNumber: x.orderNumber, sku: x.sku,
+        lineitemName: x.lineitemName, store: x.store, vendor: x.vendor, huy: x.huy, lyDo: x.lyDo,
+      });
       monTheoDon.set(x.orderNumber, l);
     }
   }

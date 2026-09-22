@@ -2095,7 +2095,36 @@ export const larkMonDon = pgTable('lark_mon_don', {
   huy: boolean('huy').notNull().default(false),
   lyDo: text('ly_do'),
   capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+  /** Record id của món trên bảng Lark — để nối link "Import (select order)" khi tạo dòng kho. */
+  recordId: text('record_id'),
+  lineitemName: text('lineitem_name'),
+  store: text('store'),
+  vendor: text('vendor'),
 }, (t) => [index('lark_mon_don_order_idx').on(t.orderNumber)]);
+
+/** Việc kho nhận + kiểm một món, ghi ở SMS trước rồi đẩy sang bảng kho Lark. */
+export const whNhanKcs = pgTable('wh_nhan_kcs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  monDinhDanh: text('mon_dinh_danh').notNull(),
+  monRecordId: text('mon_record_id'),
+  orderNumber: text('order_number').notNull(),
+  sku: text('sku'),
+  soLuong: integer('so_luong').notNull(),
+  canKg: numeric('can_kg', { precision: 10, scale: 3 }),
+  qcCheck: text('qc_check').notNull(),
+  whAction: text('wh_action').notNull(),
+  lyDoFail: text('ly_do_fail'),
+  anhKey: text('anh_key'),
+  warehouse: text('warehouse').notNull(),
+  nguoiLam: text('nguoi_lam'),
+  luc: timestamp('luc').notNull().defaultNow(),
+  /** Record id dòng kho trên Lark sau khi đẩy thành công. */
+  larkRecordId: text('lark_record_id'),
+  /** 'cho' | 'da_day' | 'loi'. */
+  trangThaiDay: text('trang_thai_day').notNull().default('cho'),
+  loi: text('loi'),
+  lanDayCuoi: timestamp('lan_day_cuoi'),
+}, (t) => [index('wh_nhan_kcs_don_idx').on(t.orderNumber), index('wh_nhan_kcs_trang_thai_idx').on(t.trangThaiDay)]);
 
 /** Dòng Lark đóng xong (webhook /api/lark/pack) mà SMS chưa khớp được đơn. Xoá khi khớp. */
 export const larkPackChoKhop = pgTable('lark_pack_cho_khop', {

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { docMonLark, laGiaTriHuy, tinhTrangHuyKien, type MonLark } from './huy-mon';
 
-const mon = (o: Partial<MonLark>): MonLark => ({ dinhDanh: 'dd', orderNumber: 'MBLVD1', sku: null, huy: false, lyDo: null, ...o });
+const mon = (o: Partial<MonLark>): MonLark => ({
+  dinhDanh: 'dd', recordId: 'rec', orderNumber: 'MBLVD1', sku: null, lineitemName: null, store: null, vendor: null, huy: false, lyDo: null, ...o,
+});
 
 describe('laGiaTriHuy', () => {
   it('nhận mọi giá trị chứa cancel, không phân biệt hoa thường', () => {
@@ -20,25 +22,52 @@ describe('docMonLark', () => {
       'Lineitem SKU': 'Larmes-LAR1612-L-RED',
       'WH-Điều phối đơn': 'Cancel packing',
       'PROCU - Final Order Stt': 'MEAN đã báo Brand',
-    });
+    }, 'rec29309');
     expect(m).toEqual({
       dinhDanh: '#MBLVD29309-Larmes-LAR1612-L-RED-PDL-21184',
+      recordId: 'rec29309',
       orderNumber: 'MBLVD29309',
       sku: 'Larmes-LAR1612-L-RED',
+      lineitemName: null,
+      store: null,
+      vendor: null,
       huy: true,
       lyDo: 'Cancel packing',
     });
   });
 
   it('huỷ từ mua hàng cũng tính', () => {
-    const m = docMonLark({ 'Định danh': 'x', order_number: 'TA1', 'PROCU - Final Order Stt': 'Cancel - SOLD OUT by Vendor' });
+    const m = docMonLark({ 'Định danh': 'x', order_number: 'TA1', 'PROCU - Final Order Stt': 'Cancel - SOLD OUT by Vendor' }, 'rec1');
     expect(m?.huy).toBe(true);
     expect(m?.lyDo).toBe('Cancel - SOLD OUT by Vendor');
   });
 
   it('món bình thường và dòng thiếu định danh', () => {
-    expect(docMonLark({ 'Định danh': 'x', order_number: 'TA1', 'WH-Điều phối đơn': 'Packed' })?.huy).toBe(false);
-    expect(docMonLark({ order_number: 'TA1' })).toBeNull();
+    expect(docMonLark({ 'Định danh': 'x', order_number: 'TA1', 'WH-Điều phối đơn': 'Packed' }, 'rec1')?.huy).toBe(false);
+    expect(docMonLark({ order_number: 'TA1' }, 'rec1')).toBeNull();
+  });
+});
+
+describe('docMonLark mang đủ thông tin tạo dòng kho', () => {
+  it('đọc record id, tên hàng, store, vendor', () => {
+    const m = docMonLark({
+      'Định danh': '#MBLVD30426-Tracy-V1416-XS-WBRM-PLA-PDL-1',
+      order_number: '#MBLVD30426',
+      'Lineitem SKU': 'Tracy-V1416-XS-WBRM-PLA',
+      'Lineitem name': 'Vianne Straight Across Maxi Dress - Buttercream',
+      Store: '#MBLVD',
+      vendor: 'TRACY STUDIO',
+    }, 'recABC');
+    expect(m).toMatchObject({
+      recordId: 'recABC',
+      lineitemName: 'Vianne Straight Across Maxi Dress - Buttercream',
+      store: '#MBLVD',
+      vendor: 'TRACY STUDIO',
+    });
+  });
+  it('thiếu record id vẫn đọc được (dòng cũ), chỉ không tạo link được', () => {
+    const m = docMonLark({ 'Định danh': 'x', order_number: 'TA1' }, '');
+    expect(m?.recordId).toBe('');
   });
 });
 

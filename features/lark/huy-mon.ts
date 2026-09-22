@@ -15,8 +15,13 @@ import { larkText } from './parse-pack-row';
 export interface MonLark {
   /** "Định danh" của Lark — khoá ổn định: '#MBLVD29309-Larmes-LAR1612-L-RED-PDL-21184'. */
   dinhDanh: string;
+  /** Record id của món trên bảng Lark — để nối link "Import (select order)" khi tạo dòng kho. */
+  recordId: string;
   orderNumber: string;
   sku: string | null;
+  lineitemName: string | null;
+  store: string | null;
+  vendor: string | null;
   huy: boolean;
   /** Giá trị cột đã làm nên quyết định huỷ, để người đọc biết vì sao. */
   lyDo: string | null;
@@ -28,14 +33,21 @@ export function laGiaTriHuy(v: string | null | undefined): boolean {
 }
 
 /** THUẦN: 1 record bảng brand-received → món, kèm cờ huỷ. Thiếu định danh/đơn → null. */
-export function docMonLark(fields: Record<string, unknown>): MonLark | null {
+export function docMonLark(fields: Record<string, unknown>, recordId: string): MonLark | null {
   const dinhDanh = larkText(fields['Định danh']);
   const orderNumber = larkText(fields['order_number'])?.replace(/^#/, '') ?? null;
   if (!dinhDanh || !orderNumber) return null;
   const dieuPhoi = larkText(fields['WH-Điều phối đơn']);
   const procu = larkText(fields['PROCU - Final Order Stt']);
   const lyDo = laGiaTriHuy(dieuPhoi) ? dieuPhoi : laGiaTriHuy(procu) ? procu : null;
-  return { dinhDanh, orderNumber, sku: larkText(fields['Lineitem SKU']), huy: lyDo != null, lyDo };
+  return {
+    dinhDanh, recordId, orderNumber,
+    sku: larkText(fields['Lineitem SKU']),
+    lineitemName: larkText(fields['Lineitem name']),
+    store: larkText(fields['Store']),
+    vendor: larkText(fields['vendor']),
+    huy: lyDo != null, lyDo,
+  };
 }
 
 export type LoaiHuyKien = 'khong' | 'mot_phan' | 'toan_bo';

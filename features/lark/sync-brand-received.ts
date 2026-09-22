@@ -53,9 +53,9 @@ export async function syncBrandReceived(): Promise<BrandReceivedSyncResult> {
  * Lưu TỪNG MÓN của đơn kèm cờ huỷ, để màn Đóng hàng không cho đi kiện đã huỷ.
  * Best-effort: hỏng thì chỉ log — ngày nhận hàng (việc chính của hàm trên) đã ghi xong rồi.
  */
-async function luuMonDon(records: Array<{ fields: Record<string, unknown> }>): Promise<number> {
+async function luuMonDon(records: Array<{ fields: Record<string, unknown>; record_id: string }>): Promise<number> {
   try {
-    const mon = records.map((r) => docMonLark(r.fields)).filter((m): m is NonNullable<typeof m> => m != null);
+    const mon = records.map((r) => docMonLark(r.fields, r.record_id)).filter((m): m is NonNullable<typeof m> => m != null);
     // Lark có thể trả 2 dòng cùng "Định danh" (sửa tay) — giữ dòng cuối để insert không đụng khoá.
     const theoDinhDanh = new Map(mon.map((m) => [m.dinhDanh, m]));
     const rows = [...theoDinhDanh.values()];
@@ -63,10 +63,14 @@ async function luuMonDon(records: Array<{ fields: Record<string, unknown> }>): P
       await db.insert(schema.larkMonDon)
         .values(rows.slice(i, i + CHUNK).map((m) => ({
           dinhDanh: m.dinhDanh, orderNumber: m.orderNumber, sku: m.sku, huy: m.huy, lyDo: m.lyDo, capNhatLuc: new Date(),
+          recordId: m.recordId, lineitemName: m.lineitemName, store: m.store, vendor: m.vendor,
         })))
         .onConflictDoUpdate({
           target: schema.larkMonDon.dinhDanh,
-          set: { orderNumber: sql`excluded.order_number`, sku: sql`excluded.sku`, huy: sql`excluded.huy`, lyDo: sql`excluded.ly_do`, capNhatLuc: new Date() },
+          set: {
+            orderNumber: sql`excluded.order_number`, sku: sql`excluded.sku`, huy: sql`excluded.huy`, lyDo: sql`excluded.ly_do`, capNhatLuc: new Date(),
+            recordId: sql`excluded.record_id`, lineitemName: sql`excluded.lineitem_name`, store: sql`excluded.store`, vendor: sql`excluded.vendor`,
+          },
         });
     }
     return rows.filter((m) => m.huy).length;
