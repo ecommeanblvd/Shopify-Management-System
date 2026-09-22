@@ -46,6 +46,8 @@ export async function baoGiaKien(shipmentId: string): Promise<BaoGiaKien> {
   });
   const xep = xepQuote(rows);
   const kq: BaoGiaKien = { rows: xep.rows, reNhatKey: xep.reNhatKey, luc };
+  // Không để Map phình vô hạn: quá 1.000 khoá thì xoá hết (cache chỉ là tiện, không phải nguồn sự thật).
+  if (cache.size > 1000) cache.clear();
   cache.set(key, kq);
   return kq;
 }
