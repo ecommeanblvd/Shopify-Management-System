@@ -17,7 +17,14 @@ export interface KienChoKhop {
   recordId: string; logUniqueCode: string | null; orderNumber: string | null; weightKg: number | null;
   dims: string | null; hop: string | null; skuText: string | null; pieces: number | null; lyDo: string; nhanLuc: string;
 }
-export interface BaoGiaKien { rows: CarrierQuoteRow[]; reNhatKey: string | null; error?: string; luc: string }
+export interface BaoGiaKien {
+  rows: CarrierQuoteRow[];
+  reNhatKey: string | null;
+  /** Thời gian giao trung bình 30 ngày theo hãng — để cân giá với tốc độ. */
+  thoiGian: Record<string, { ngayTb: number; soKien: number; phamVi: 'nuoc' | 'chung' }>;
+  error?: string;
+  luc: string;
+}
 export type TrangThaiKien =
   | { ma: 'cho_chon' }
   | { ma: 'da_chon'; hang: string; nguoi: string | null; luc: string | null }
