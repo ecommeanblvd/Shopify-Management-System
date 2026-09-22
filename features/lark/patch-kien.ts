@@ -20,8 +20,8 @@ export function patchFrom(row: PackRow): Record<string, unknown> {
   // rồi đổi/bỏ ngày thì màn Đóng hàng phải theo, không được giữ ngày cũ.
   p.ngayDiDuKien = row.ngayDiDuKien;
   if (row.base) p.originHub = row.base;
-  // Đơn đi chung đồng bộ hẳn theo Lark (gộp rồi lại tách thì phải mất đi).
-  p.donDiChung = row.orderNumbers.length > 1 ? row.orderNumbers.slice(1) : null;
+  // Mọi đơn trong kiện, đồng bộ hẳn theo Lark (gộp rồi lại tách thì phải mất đi).
+  p.cacDonTrongKien = row.orderNumbers.length > 1 ? row.orderNumbers : null;
   if (row.hop) p.larkHop = row.hop;
   if (row.skuText) p.skuText = row.skuText;
   if (row.pieces != null) p.pieces = row.pieces;
@@ -42,7 +42,7 @@ export function giaTriTaoKien(row: PackRow, orderId: string): typeof schema.ship
     labelCreatedAt: row.labelDate,
     originHub: row.base,
     ngayDiDuKien: row.ngayDiDuKien,
-    donDiChung: row.orderNumbers.length > 1 ? row.orderNumbers.slice(1) : null,
+    cacDonTrongKien: row.orderNumbers.length > 1 ? row.orderNumbers : null,
     larkHop: row.hop,
     skuText: row.skuText,
     pieces: row.pieces,

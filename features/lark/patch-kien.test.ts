@@ -15,7 +15,7 @@ describe('patchFrom', () => {
     expect(p.updatedAt).toBeInstanceOf(Date);
   });
   it('dòng trống → chỉ có updatedAt và ngày đi dự kiến (đồng bộ hẳn theo Lark, kể cả xoá)', () => {
-    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien', 'donDiChung']);
+    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien', 'cacDonTrongKien']);
     expect(patchFrom(mk({})).ngayDiDuKien).toBeNull();
   });
 
@@ -33,18 +33,18 @@ describe('giaTriTaoKien', () => {
     expect(v).toEqual({
       orderId: 'order-1', logUniqueCode: 'PK-1', trackingNumber: 'T1', carrierKey: 'ups',
       actualWeightKg: '0.5', dimLengthCm: '10', dimWidthCm: '10', dimHeightCm: null,
-      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, donDiChung: null, larkHop: 'Bag', skuText: null, pieces: 1,
+      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, cacDonTrongKien: null, larkHop: 'Bag', skuText: null, pieces: 1,
     });
   });
 });
 
 describe('kiện gộp nhiều đơn', () => {
-  it('đơn thứ hai trở đi lưu ở donDiChung, đơn đầu là đơn chính', () => {
+  it('lưu ĐỦ mọi đơn của kiện (nơi hiển thị tự lọc đơn chính)', () => {
     const row = mk({ orderNumber: '#MBLVD30321', orderNumbers: ['#MBLVD30321', '#MBLVD30322'] });
-    expect(patchFrom(row).donDiChung).toEqual(['#MBLVD30322']);
-    expect(giaTriTaoKien(row, 'o1').donDiChung).toEqual(['#MBLVD30322']);
+    expect(patchFrom(row).cacDonTrongKien).toEqual(['#MBLVD30321', '#MBLVD30322']);
+    expect(giaTriTaoKien(row, 'o1').cacDonTrongKien).toEqual(['#MBLVD30321', '#MBLVD30322']);
   });
-  it('kiện một đơn → donDiChung null (gộp rồi tách lại thì mất đi)', () => {
-    expect(patchFrom(mk({ orderNumbers: ['#MBLVD1'] })).donDiChung).toBeNull();
+  it('kiện một đơn → null (gộp rồi tách lại thì mất đi)', () => {
+    expect(patchFrom(mk({ orderNumbers: ['#MBLVD1'] })).cacDonTrongKien).toBeNull();
   });
 });

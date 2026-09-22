@@ -1086,8 +1086,9 @@ export const shipments = pgTable('shipments', {
   /** Ngày đi hàng Lark đang ghi, kể cả ngày tương lai khi kiện bị hold sang ngày khác.
    *  Màn Đóng hàng nhóm theo cột này; label_created_at vẫn là mốc ship thực cho tính cước. */
   ngayDiDuKien: timestamp('ngay_di_du_kien'),
-  /** Mã các đơn KHÁC đi chung kiện này (Lark gộp đơn). NULL = kiện của một đơn. */
-  donDiChung: text('don_di_chung').array(),
+  /** MỌI mã đơn Lark ghi trên kiện này (gộp đơn). NULL = kiện của một đơn duy nhất.
+   *  Lưu đủ cả đơn chính vì kiện có thể được gắn vào đơn thứ hai; nơi hiển thị tự lọc. */
+  cacDonTrongKien: text('cac_don_trong_kien').array(),
   /** Lý do giao chậm (mã trong features/shipments/ly-do-cham.ts) — ops gán cho kiện vượt ngưỡng. NULL = chưa gán,
    *  và chưa gán thì KHÔNG được loại khỏi KPI nhân sự. */
   lyDoCham: text('ly_do_cham'),
