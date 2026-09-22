@@ -17,6 +17,7 @@ import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
 import { pruneOldLogs } from '@/features/db-maintenance/prune-logs';
 import { trackPendingShipments } from '@/features/shipments/track';
+import { dayLaiDongCho } from '@/features/kho-nhan/day-lark';
 
 /** Tác vụ nào chạy bằng hàm nào. Khoá phải khớp sổ đăng ký. */
 const CHAY: Record<string, () => Promise<unknown>> = {
@@ -25,6 +26,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
     moi: await pushUnsentBrandOrders({ sinceDays: 90 }),
   }),
   'retry-ship-ho-events': () => retryPendingShipHoEvents(),
+  'day-nhan-kcs-lark': () => dayLaiDongCho(),
   'prune-logs': () => pruneOldLogs(),
   'track-shipments': () => trackPendingShipments({ limit: 200 }),
 };

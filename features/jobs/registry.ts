@@ -68,6 +68,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'QC/đóng gói trên Lark không thấy món đã về, MMP thiếu ngày nhận' },
   { key: 'ghi-nguoc-lark', ten: 'Ghi trạng thái giao + chi phí hãng lên Lark', chuKyPhut: CHU_KY_SYNC_LARK,
     hauQua: 'Ops phải gõ tay lại trạng thái giao, ngày giao, chi phí hãng trên LOG-Export' },
+  { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark', chuKyPhut: 15 * PHUT,
+    hauQua: 'Việc kho đã làm trên SMS không lên bảng kho Lark' },
   { key: 'lark-pack-webhook', ten: 'Nhận kiện đóng xong từ Lark (webhook)', chuKyPhut: 1 * NGAY,
     hauQua: 'Kiện đóng xong không về SMS tức thì — Đức phải chọn line trên Lark' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
