@@ -2,7 +2,7 @@
  * Orchestrate sync Lark → shipments. Một lõi cho cả nút thủ công + cron.
  * One-way. Ghi đè field shipment chỉ khi Lark có giá trị. Idempotent.
  */
-import { eq, desc, and, or, isNull, isNotNull, ne, sql } from 'drizzle-orm';
+import { eq, desc, and, or, isNull, isNotNull, ne, sql, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { listAllRecords, listAllQcRecords, type LarkRecord } from './client';
 import { parseQcRow, mapQcCheck, latestQcCheck } from './parse-qc-row';
@@ -15,6 +15,7 @@ import { larkCreatedTime } from './record-select';
 import { coThayDoi } from '@/lib/khong-doi';
 import { canDongTrangThai, canLapNgay, canSuaNgay, chonTrangThaiChoKien, type ShipmentHienTai, type TrangThaiGiaoLark } from './can-freeze';
 import { NGUON_HANG } from './nguon-hang';
+import { soatMatDong } from './mat-dong';
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -45,6 +46,8 @@ export interface LarkSyncSummary {
   unmatched: Array<{ orderNumber: string; reason: string }>;
   skipped: number; warnings: string[];
   larkStatusUpserted: number;
+  /** Kiện vừa bị đánh dấu "dòng Lark không còn" / vừa được gỡ đánh dấu. */
+  matDong?: { danhDau: number; goDanhDau: number };
   qcUpserted: number;
   deliveryFrozen: number;
   /** Record Lark đã tải — chỉ có khi gọi với `giuRecords` (ghi ngược dùng lại, khỏi đọc thêm). */
@@ -354,10 +357,13 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
       console.error('[lark] freeze delivery lỗi (bỏ qua, không chặn logistics):', e instanceof Error ? e.message : e);
     }
 
+    // Dòng Lark bị Ops xoá: đánh dấu kiện để nó rời khỏi việc "chờ chọn line", KHÔNG xoá.
+    const matDong = await danhDauKienMatDong(rows.map((r) => r.logUniqueCode).filter((c): c is string => !!c));
+
     const warnings = rows.flatMap((r) => r.warnings.map((w) => `${r.orderNumber || r.logUniqueCode}: ${w}`));
     // `updated` nay là số dòng THẬT SỰ ghi, không phải số dòng xét — để nhật ký
     // phản ánh đúng khối lượng ghi. Thêm boQuaKhongDoi để thấy hiệu quả.
-    const summary: LarkSyncSummary = { created: cls.create.length, updated: canUpdate.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen, boQuaKhongDoi: boQuaUpdate + boQuaStatus, ...(opts?.giuRecords ? { records } : {}) };
+    const summary: LarkSyncSummary = { created: cls.create.length, updated: canUpdate.length, unmatched: cls.unmatched, skipped: cls.skipped.length, warnings, larkStatusUpserted, qcUpserted, deliveryFrozen, boQuaKhongDoi: boQuaUpdate + boQuaStatus, matDong, ...(opts?.giuRecords ? { records } : {}) };
 
     // Ghi nhật ký ngoài transaction (chỉ để theo dõi). Nếu lỗi → log, KHÔNG
     // nuốt im: thay đổi đã áp xong, nhưng ta cần biết audit-row rớt.
@@ -375,5 +381,38 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
     const msg = e instanceof Error ? e.message : String(e);
     await db.insert(schema.larkSyncRuns).values({ error: msg }).catch(() => {});
     throw e;
+  }
+}
+
+/**
+ * Đánh dấu kiện có log code mà Lark không còn dòng, và gỡ dấu khi dòng quay lại.
+ * Best-effort: hỏng thì chỉ log — phần đồng bộ chính đã xong rồi.
+ */
+async function danhDauKienMatDong(logCodeTrenLark: string[]): Promise<{ danhDau: number; goDanhDau: number }> {
+  try {
+    const kien = await db
+      .select({ logUniqueCode: schema.shipments.logUniqueCode, luc: schema.shipments.larkMatDongLuc })
+      .from(schema.shipments)
+      .where(isNotNull(schema.shipments.logUniqueCode));
+    const kq = soatMatDong(
+      logCodeTrenLark,
+      kien.map((k) => ({ logUniqueCode: k.logUniqueCode!, daDanhDau: k.luc != null })),
+    );
+    if (kq.boQua) {
+      console.warn(`[lark] bỏ soát dòng bị xoá: Lark chỉ trả ${logCodeTrenLark.length} dòng cho ${kien.length} kiện`);
+      return { danhDau: 0, goDanhDau: 0 };
+    }
+    for (const batch of chunk(kq.canDanhDau, APPLY_CHUNK)) {
+      await db.update(schema.shipments).set({ larkMatDongLuc: new Date(), updatedAt: new Date() })
+        .where(inArray(schema.shipments.logUniqueCode, batch));
+    }
+    for (const batch of chunk(kq.canGoDanhDau, APPLY_CHUNK)) {
+      await db.update(schema.shipments).set({ larkMatDongLuc: null, updatedAt: new Date() })
+        .where(inArray(schema.shipments.logUniqueCode, batch));
+    }
+    return { danhDau: kq.canDanhDau.length, goDanhDau: kq.canGoDanhDau.length };
+  } catch (e) {
+    console.error('[lark] soát dòng bị xoá lỗi (bỏ qua):', e instanceof Error ? e.message : e);
+    return { danhDau: 0, goDanhDau: 0 };
   }
 }

@@ -13,6 +13,8 @@ export interface KienDongHang {
   /** Món trong kiện có bị huỷ không (Lark "WH-Điều phối đơn" = Cancel packing…). */
   /** Mã các đơn khác đi chung kiện này (Lark gộp đơn). */
   donDiChung: string[];
+  /** Dòng Lark của kiện đã bị Ops xoá — kiện không còn là việc phải làm. */
+  larkMatDong: boolean;
   huy: { loai: 'khong' | 'mot_phan' | 'toan_bo'; soHuy: number; tong: number; lyDo: string | null };
   selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null;
   /** ISO — coalesce(label_created_at, created_at). */

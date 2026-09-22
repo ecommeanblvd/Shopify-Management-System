@@ -1089,6 +1089,9 @@ export const shipments = pgTable('shipments', {
   /** MỌI mã đơn Lark ghi trên kiện này (gộp đơn). NULL = kiện của một đơn duy nhất.
    *  Lưu đủ cả đơn chính vì kiện có thể được gắn vào đơn thứ hai; nơi hiển thị tự lọc. */
   cacDonTrongKien: text('cac_don_trong_kien').array(),
+  /** Lúc phát hiện dòng Lark của kiện này không còn (Ops xoá). NULL = dòng vẫn còn.
+   *  Kiện bị đánh dấu không nằm trong việc "chờ chọn line" nữa nhưng KHÔNG bị xoá. */
+  larkMatDongLuc: timestamp('lark_mat_dong_luc'),
   /** Lý do giao chậm (mã trong features/shipments/ly-do-cham.ts) — ops gán cho kiện vượt ngưỡng. NULL = chưa gán,
    *  và chưa gán thì KHÔNG được loại khỏi KPI nhân sự. */
   lyDoCham: text('ly_do_cham'),

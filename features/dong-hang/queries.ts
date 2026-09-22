@@ -19,7 +19,12 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   // Chờ chọn line = kiện ĐÃ ĐÓNG XONG (có cân) mà chưa lên nhãn. Dòng Lark tạo sẵn từ lúc
   // lên đơn nhưng chưa đóng thì KHÔNG phải việc của màn này — kiện chưa cân cũng không so
   // cước được (CEO hỏi về #MBLVD29309, dòng tạo 07/07 chưa từng cân).
-  if (loc === 'cho_chon_line') { dk.push(isNull(s.trackingNumber)); dk.push(isNotNull(s.actualWeightKg)); }
+  if (loc === 'cho_chon_line') {
+    dk.push(isNull(s.trackingNumber));
+    dk.push(isNotNull(s.actualWeightKg));
+    // Dòng Lark đã bị Ops xoá → không còn là việc phải làm (vẫn xem được ở "Tất cả").
+    dk.push(isNull(s.larkMatDongLuc));
+  }
   // Ngày VN = UTC+7; so theo ngày-lịch VN của mốc đóng.
   if (loc === 'hom_nay') dk.push(sql`(${ngayDong} + interval '7 hours')::date = (now() + interval '7 hours')::date`);
   // Dự kiến đi: Lark hẹn ngày đi ở TƯƠNG LAI (kiện hold sang ngày khác) và chưa lên nhãn.
@@ -34,7 +39,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   const rows = await db.select({
     shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, storeName: st.name, country: o.shipCountry,
     weightKg: s.actualWeightKg, l: s.dimLengthCm, w: s.dimWidthCm, h: s.dimHeightCm,
-    base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, cacDonTrongKien: s.cacDonTrongKien, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
+    base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, cacDonTrongKien: s.cacDonTrongKien, larkMatDongLuc: s.larkMatDongLuc, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
     hangKhachTra: o.shippingCarrierKey, selectedCarrierKey: o.selectedCarrierKey, selectedCarrierBy: o.selectedCarrierBy, selectedCarrierAt: o.selectedCarrierAt,
     ngayDong,
     soKienCungDon: sql<number>`(select count(*)::int from shipments s2 where s2.order_id = ${o.id} and s2.log_unique_code is not null)`,
@@ -59,6 +64,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     weightKg: r.weightKg != null ? Number(r.weightKg) : null,
     dims: r.l != null && r.w != null ? { l: Number(r.l), w: Number(r.w), h: r.h != null ? Number(r.h) : null } : null,
     base: r.base, theoHenLark: r.ngayDiDuKien != null, donDiChung: (r.cacDonTrongKien ?? []).filter((d) => d.replace(/^#/, '') !== r.orderNumber.replace(/^#/, '')), hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
+    larkMatDong: r.larkMatDongLuc != null,
     huy: tinhTrangHuyKien(r.skuText, monTheoDon.get(r.orderNumber.replace(/^#/, '')) ?? []),
     selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: r.selectedCarrierBy,
     selectedCarrierAt: r.selectedCarrierAt ? r.selectedCarrierAt.toISOString() : null,

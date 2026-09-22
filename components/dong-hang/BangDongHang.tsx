@@ -280,6 +280,8 @@ function DongKien({
       <td className="px-3 py-3">
         {k.huy.loai === 'toan_bo' ? (
           <span className="text-xs text-red-600 dark:text-red-400">Không đi hàng</span>
+        ) : k.larkMatDong ? (
+          <span className="text-xs text-muted-foreground">—</span>
         ) : tt.ma === 'da_len_nhan' ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
@@ -309,6 +311,12 @@ function DongKien({
       </td>
 
       <td className="px-3 py-3">
+        {k.larkMatDong && (
+          <span className="rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground"
+            title="Dòng LOG-Export trên Lark đã bị xoá — kiện giữ lại để tra cứu">
+            Lark đã xoá dòng
+          </span>
+        )}
         {k.huy.loai === 'toan_bo' && (
           <span className="rounded bg-red-500/15 px-1.5 py-px text-[10px] font-medium text-red-700 dark:text-red-400"
             title={k.huy.lyDo ?? undefined}>
