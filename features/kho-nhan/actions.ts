@@ -15,18 +15,24 @@ import { dayMotDong } from './day-lark';
 export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi?: string; larkRecordId?: string; tao?: boolean }> {
   const userId = await requirePerm('manage_qc');
 
+  const monDinhDanh = String(formData.get('monDinhDanh') ?? '');
+  // Một món một dòng: nhập lại là SỬA dòng cũ, không đẻ dòng hai (khớp cách Lark làm).
+  const [cu] = await db.select({ id: schema.whNhanKcs.id, anhKey: schema.whNhanKcs.anhKey })
+    .from(schema.whNhanKcs).where(eq(schema.whNhanKcs.monDinhDanh, monDinhDanh)).limit(1);
+
   const anh = formData.get('anh');
-  let anhKey: string | null = null;
+  // Sửa lại một món đã ghi hỏng (vd gõ nhầm cân) thì GIỮ ảnh cũ — bắt chụp lại là hành người.
+  let anhKey: string | null = cu?.anhKey ?? null;
   if (anh instanceof File && anh.size > 0) {
     const fd = new FormData();
     fd.set('file', anh);
-    fd.set('scope', String(formData.get('monDinhDanh') ?? 'kho'));
+    fd.set('scope', monDinhDanh || 'kho');
     anhKey = await uploadReceiptImage(fd);
   }
 
   const soRaw = formData.get('canKg');
   const v = kiemViec({
-    monDinhDanh: String(formData.get('monDinhDanh') ?? ''),
+    monDinhDanh,
     monRecordId: String(formData.get('monRecordId') ?? '') || null,
     orderNumber: String(formData.get('orderNumber') ?? ''),
     sku: String(formData.get('sku') ?? '') || null,
@@ -39,10 +45,6 @@ export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi
     coAnh: !!anhKey,
   });
   if (!v.ok) return { ok: false, loi: v.loi };
-
-  // Một món một dòng: nhập lại là SỬA dòng cũ, không đẻ dòng hai (khớp cách Lark làm).
-  const [cu] = await db.select({ id: schema.whNhanKcs.id })
-    .from(schema.whNhanKcs).where(eq(schema.whNhanKcs.monDinhDanh, v.viec.monDinhDanh)).limit(1);
 
   const giaTri = {
     monDinhDanh: v.viec.monDinhDanh, monRecordId: v.viec.monRecordId, orderNumber: v.viec.orderNumber,
