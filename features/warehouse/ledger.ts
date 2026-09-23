@@ -13,7 +13,7 @@ export interface MovementDraft {
   deltaReserved: number;
   reason: 'receipt_po' | 'receipt_consignment' | 'receipt_return' | 'auto_allocate'
     | 'release_allocation' | 'pick' | 'manual_adjust' | 'transfer_in' | 'transfer_out' | 'migration';
-  refType?: 'receipt_item' | 'fulfillment_line' | 'order' | 'transfer' | 'item';
+  refType?: 'receipt_item' | 'fulfillment_line' | 'order' | 'transfer' | 'item' | 'kol_dong_don';
   /** UUID của bản ghi tham chiếu (cột DB là uuid — KHÔNG truyền GID/chuỗi thường). */
   refId?: string | null;
   note?: string | null;
