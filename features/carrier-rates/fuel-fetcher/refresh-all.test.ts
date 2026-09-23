@@ -27,17 +27,17 @@ describe('loiRefreshFuel', () => {
 
   it('hãng chạy xong nhưng giá quá cũ vẫn thành lỗi — nguồn tự chết là im lặng nhất', () => {
     const loi = loiRefreshFuel(kq({
-      quaHan: ['[sf-express] SF Express (ShunFeng) — VN Export: tuần mới nhất đã 79 ngày tuổi'],
+      quaHan: ['[dhl] DHL Express Vietnam: tuần mới nhất đã 79 ngày tuổi'],
     }));
     expect(loi).not.toBeNull();
-    expect(loi).toContain('sf-express');
+    expect(loi).toContain('dhl');
     expect(loi).toContain('79 ngày');
   });
 
   it('gộp cả hai loại lỗi vào một câu', () => {
-    const loi = loiRefreshFuel(kq({ hong: ['[ups] A: x'], quaHan: ['[sf-express] B: y'] }));
+    const loi = loiRefreshFuel(kq({ hong: ['[ups] A: x'], quaHan: ['[dhl] B: y'] }));
     expect(loi).toContain('ups');
-    expect(loi).toContain('sf-express');
+    expect(loi).toContain('dhl');
   });
 });
 

@@ -360,6 +360,12 @@ export async function refreshUpsFuel(args: {
  * ⚠ The CHN page trails the VN page's newest week by a few days, so a manually
  * seeded newer open week (e.g. current week from the VN screenshot) is left
  * intact — planWeeklyFuelActions only touches weeks the CHN page publishes.
+ *
+ * ⚠ 23/09/2026: 'sf-express' KHÔNG còn trong `AUTO_FUEL_CARRIER_KEYS` nên cron
+ * `refresh-fuel` không gọi hàm này nữa — trang CHN ngừng đăng tuần mới từ
+ * 29/06/2026 (tạm gửi chỗ chờ nguồn khác, không phải đã sửa; lý do đầy đủ ghi
+ * tại chính hằng số ấy). Hàm vẫn giữ nguyên cho nút bấm tay, và để bật lại chỉ
+ * cần thêm khoá vào hằng số.
  */
 export async function refreshSfFuel(args: {
   carrierAccountId: string;

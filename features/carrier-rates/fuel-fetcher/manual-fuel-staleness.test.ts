@@ -42,11 +42,25 @@ describe('findStaleManualFuel', () => {
     expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
   });
 
-  it('ignores sf-express accounts (auto-fetched from sf-express.com/chn) even when stale', () => {
+  /**
+   * Đổi chiều 23/09/2026: SF Express bị gỡ khỏi `AUTO_FUEL_CARRIER_KEYS` vì
+   * nguồn CHN ngừng đăng tuần mới từ 29/06/2026. Gỡ khỏi auto thì nó PHẢI rơi
+   * vào đường nhập tay như Aramex — nếu không, giá SF cũ đi sẽ không còn hiện ở
+   * đâu cả, tức đổi một lỗi ồn lấy một lỗi câm.
+   */
+  it('SF Express nay đi đường nhập tay: fuel cũ PHẢI bị nêu, không được bỏ qua', () => {
     const rows = [
-      row({ carrierKey: 'sf-express', fuelPercent: 0, updatedAt: new Date('2026-01-01T00:00:00.000Z') }),
+      row({ carrierKey: 'sf-express', fuelPercent: 25, updatedAt: new Date('2026-07-06T00:00:00.000Z') }),
     ];
-    expect(findStaleManualFuel(rows, NOW, 7)).toEqual([]);
+    const result = findStaleManualFuel(rows, new Date('2026-09-23T00:00:00.000Z'), 7);
+    expect(result).toHaveLength(1);
+    expect(result[0].reason).toBe('stale');
+    expect(result[0].daysSince).toBe(79);
+  });
+
+  it('SF Express không còn nằm trong danh sách auto', () => {
+    expect(AUTO_FUEL_CARRIER_KEYS).not.toContain('sf-express');
+    expect(AUTO_FUEL_CARRIER_KEYS).toEqual(['fedex', 'dhl', 'ups']);
   });
 
   it('flags manual-carrier fuel=0 as unset', () => {

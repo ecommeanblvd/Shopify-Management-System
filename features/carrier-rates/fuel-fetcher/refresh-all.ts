@@ -23,9 +23,13 @@
  * Hai lớp canh, cả hai đều làm lượt chạy ĐỎ và GỌI TÊN hãng:
  *   1. Hãng fetch lỗi (404, đổi markup, parse hỏng) → `hong`.
  *   2. Hãng fetch "thành công" nhưng tuần mới nhất đang lưu vẫn quá cũ →
- *      `quaHan`. Đây là lớp bắt được ca nguồn dữ liệu tự nó chết (trang CHN của
- *      SF Express không đăng tuần mới nào từ 29/06/2026): fetch trả 200, parse
- *      ra 15 tuần, 0 thay đổi — xanh lè mà giá vẫn lạc hậu.
+ *      `quaHan`. Lớp này bắt ca nguồn dữ liệu tự nó chết mà fetcher không hề
+ *      biết: trả 200, parse ra đủ tuần, 0 thay đổi — xanh lè mà giá lạc hậu.
+ *      Đã gặp thật ở SF Express (trang CHN ngừng đăng từ 29/06/2026).
+ *
+ * Hãng nào được quét: xem `AUTO_FUEL_CARRIER_KEYS`. SF Express đã được gỡ khỏi
+ * đó ngày 23/09/2026 (tạm gửi chỗ chờ nguồn khác — lý do đầy đủ ghi tại chính
+ * hằng số ấy), nên "xanh" ở đây nghĩa là FedEx, DHL và UPS đều tươi.
  */
 
 import { and, desc, eq, inArray } from 'drizzle-orm';

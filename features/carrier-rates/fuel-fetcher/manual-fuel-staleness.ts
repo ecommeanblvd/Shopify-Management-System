@@ -1,7 +1,8 @@
 /**
- * Pure staleness check for carriers WITHOUT an auto-fetcher (FedEx/DHL/UPS
- * all have fetchers wired into `apply.ts` — `fedex.ts` / `dhl.ts` /
- * `ups.ts` — so today this guards future manual-fuel carriers).
+ * Pure staleness check for carriers WITHOUT an auto-fetcher. FedEx/DHL/UPS có
+ * fetcher chạy tự động trong `apply.ts` (`fedex.ts` / `dhl.ts` / `ups.ts`) nên
+ * được `findStaleAutoFuel` canh; mọi hãng còn lại — Aramex, và SF Express kể từ
+ * 23/09/2026 (xem ghi chú ở `AUTO_FUEL_CARRIER_KEYS`) — đi đường này.
  *
  * These carriers' `fuel_percent` surcharge is entered by hand at
  * `/f/carrier-rates/[id]/surcharges`. Nothing keeps it fresh automatically,
@@ -23,7 +24,30 @@
  *  sách. Chép lại chính là lỗi đã xảy ra: route `/api/cron/refresh-fuel` giữ
  *  ['fedex','dhl'] từ 02/06/2026, nên khi thêm UPS + SF ngày 06/07 vào script
  *  thì hai hãng đó KHÔNG BAO GIỜ được gọi — mà tác vụ vẫn báo xanh 11 tuần. */
-export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl', 'ups', 'sf-express'] as const;
+export const AUTO_FUEL_CARRIER_KEYS = ['fedex', 'dhl', 'ups'] as const;
+
+// ⚠ SF Express ĐÃ BỊ GỠ khỏi danh sách trên — TẠM GỬI CHỖ, KHÔNG PHẢI ĐÃ SỬA.
+//
+// Lý do (xác minh 23/09/2026): trang nguồn bên Trung Quốc
+// `sf-express.com/chn/en/support-more/international_fuel_surcharge_introduction`
+// KHÔNG đăng thêm tuần nào sau 29/06/2026 — rà toàn trang không có một nhãn
+// tháng 7, 8 hay 9 nào. Fetcher `sf.ts` vẫn chạy tốt: trả HTTP 200, parse ra 15
+// tuần, 0 thay đổi. Tức bản thân MÃ không hỏng, NGUỒN DỮ LIỆU tự nó đã chết.
+//
+// Vì sao gỡ thay vì để `findStaleAutoFuel` kêu: để trong danh sách auto thì
+// `refresh-fuel` sẽ ĐỎ mỗi ngày vì SF, mãi mãi, cho tới khi có nguồn khác. Một
+// tác vụ lúc nào cũng đỏ sẽ tập cho người ta quen bỏ qua, rồi hỏng thật cũng
+// không ai thấy — đúng cái bẫy mà bản sửa này sinh ra để tránh. CEO chốt
+// 23/09/2026: giữ xanh có nghĩa, và "xanh" nghĩa là FedEx + DHL + UPS đều tươi.
+//
+// SF KHÔNG biến mất khỏi tầm mắt: nằm ngoài danh sách auto thì nó rơi vào
+// `findStaleManualFuel` y như Aramex, nên trang
+// `/f/carrier-rates/<id>/surcharges` của SF hiện băng cảnh báo "Fuel nhập tay
+// chưa cập nhật — N ngày" (hôm nay: 25,00% từ 06/07, đã 79 ngày).
+//
+// `refreshSfFuel` + nhánh 'sf-express' trong dispatcher `apply.ts` vẫn giữ
+// nguyên: nút bấm tay vẫn dùng được, và ngày nào SF có nguồn đăng đều đặn trở
+// lại thì chỉ cần thêm 'sf-express' vào mảng trên là xong.
 
 export interface ManualFuelRow {
   accountId: string;
@@ -55,9 +79,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  *     `now` → 'stale'.
  *   - row exists, value > 0, updated within `staleDays` → not flagged.
  *
- * Rows for auto-fetch carriers (fedex/dhl) are always skipped — those are
- * kept fresh by the cron-driven scraper in `apply.ts`, so nagging about them
- * here would just be noise.
+ * Hãng nằm trong `AUTO_FUEL_CARRIER_KEYS` luôn bị bỏ qua ở đây — cron giữ tươi
+ * giúp rồi, và `findStaleAutoFuel` bên dưới mới là chỗ canh chúng. Kêu ở cả hai
+ * nơi chỉ tổ ồn.
  */
 export function findStaleManualFuel(
   rows: ManualFuelRow[],
