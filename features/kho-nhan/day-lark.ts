@@ -10,19 +10,34 @@ import type { ViecNhanKcs, QcCheck, WhAction, Warehouse } from './gia-tri-lark';
 export type CheDoGhi = { kieu: 'dry' } | { kieu: 'that' } | { kieu: 'chon'; dinhDanhs: string[] };
 
 /**
- * THUẦN: đọc env ra chế độ ghi Lark.
+ * Chuỗi DUY NHẤT bật ghi thật cho MỌI món — cố ý dài, lạ, không giống chữ ai gõ nhầm tay
+ * (CEO 23/09/2026, sau khi review chỉ ra bản đầu "không nhận ra thì ghi thật" là bẫy: máy
+ * mới chưa cấu hình biến, hay gõ nhầm "chọn:" có dấu thành thứ khác, đều lẽ ra phải AN TOÀN).
+ */
+export const GHI_THAT_TOAN_BO = 'ghi-that-toan-bo';
+
+/**
+ * THUẦN: đọc env ra chế độ ghi Lark. AN TOÀN LÀ MẶC ĐỊNH: bất cứ chuỗi nào không phải đúng
+ * `GHI_THAT_TOAN_BO`, và không đúng dạng `chon:`/`chọn:` có ít nhất một định danh, đều là
+ * chạy thử — kể cả biến trống, chưa đặt, hay gõ sai. Không có đường nào để một lỗi gõ vô
+ * tình biến thành ghi hàng loạt lên bảng 9.007 dòng của kho.
  *
- * 'chon:<định danh>,<định danh>' là chế độ nằm GIỮA chạy thử và chạy thật (CEO 23/09/2026):
- * kiểm từng bản ghi một mà không sợ lỡ tay ghi hàng loạt lên bảng 9.007 dòng của kho.
+ * 'chon:<định danh>,<định danh>' (hoặc 'chọn:' có dấu — CEO gõ tay, cả hai cách đều nhận)
+ * là chế độ nằm GIỮA chạy thử và chạy thật: chỉ những món khai tên mới ghi thật, còn lại vẫn
+ * chỉ lưu trong SMS. Nhờ vậy kiểm từng bản ghi một mà không sợ lỡ tay ghi hàng loạt.
  */
 export function docCheDoGhi(env: string | undefined): CheDoGhi {
   const s = (env ?? '').trim();
-  if (!s) return { kieu: 'that' };
-  if (s.toLowerCase() === 'dry') return { kieu: 'dry' };
-  if (s.toLowerCase().startsWith('chon:')) {
-    return { kieu: 'chon', dinhDanhs: s.slice(5).split(',').map((x) => x.trim()).filter(Boolean) };
+  const sl = s.toLowerCase();
+  if (sl === GHI_THAT_TOAN_BO) return { kieu: 'that' };
+  if (sl.startsWith('chon:') || sl.startsWith('chọn:')) {
+    const dinhDanhs = s.slice(s.indexOf(':') + 1).split(',').map((x) => x.trim()).filter(Boolean);
+    // Khai tiền tố nhưng không có định danh nào dùng được — KHÔNG có nghĩa "ghi hết", vẫn
+    // chạy thử để không lỡ ghi tràn khi ai đó gõ dở dang.
+    if (dinhDanhs.length === 0) return { kieu: 'dry' };
+    return { kieu: 'chon', dinhDanhs };
   }
-  return { kieu: 'that' };
+  return { kieu: 'dry' };
 }
 
 /** Món này có được ghi thật lên Lark không. */
