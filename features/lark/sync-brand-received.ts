@@ -78,7 +78,7 @@ async function noiLineIdCoGhiNhatKy(): Promise<NonNullable<BrandReceivedSyncResu
     const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
     await ketThucJob(id, { ok: false, error: msg.slice(0, 2000), batDau });
     console.error('[kho-nhan] nối line id lỗi:', e instanceof Error ? e.message : e);
-    return { xet: 0, noiDuoc: 0, loi: msg.split('\n')[0] };
+    return { xet: 0, noiDuoc: 0, boSot: 0, loi: msg.split('\n')[0] };
   }
 }
 

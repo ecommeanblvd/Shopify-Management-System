@@ -8,10 +8,16 @@
  *    (đọc snapshot cũ rồi gán vẫn có thể trùng dù có khoá lỏng lẻo hơn) — xem `boQua`.
  *  - Unique index MỘT PHẦN `lark_mon_don_line_uniq` (migration 0158) là lưới an toàn tầng DB,
  *    phòng khi khoá bị bỏ qua vì lý do nào đó (review 23/09/2026, Finding 1).
+ *  - Ứng viên dòng đơn được lọc trùng theo `shopifyLineId` trước khi chọn (`locTrungTheoLineId`)
+ *    VÀ mỗi lần ghi một món chạy trong SAVEPOINT riêng (`tx.transaction` lồng — Drizzle 0.45 +
+ *    node-postgres ánh xạ sang `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` thật, xem
+ *    node_modules/drizzle-orm/node-postgres/session.js): một món đụng unique index (hoặc lỗi bất
+ *    kỳ) chỉ rollback riêng món đó, không kéo sập cả lượt lên tới 2000 món đã ghi đúng trước nó
+ *    (review 23/09/2026 vòng 2, Finding "một dòng xấu chặn đứng cả việc nối vĩnh viễn").
  */
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { chonDongChoMon, type DongDonToiThieu } from './noi-mon-dong-don';
+import { chonDongChoMon, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
 
 const MOI_LUOT = 2000;
 
@@ -22,6 +28,11 @@ const KHOA_NOI_LINE_ID = 875_302_114;
 export interface KetQuaNoiLine {
   xet: number;
   noiDuoc: number;
+  /** Số món bị BỎ QUA vì ghi lỗi (vd đụng unique index `lark_mon_don_line_uniq`) — không làm mất
+   *  các món khác trong cùng lượt (xem SAVEPOINT trong `noiTrongKhoa`). Không im lặng nuốt lỗi:
+   *  luôn có mặt trong kết quả để `job_runs` (qua `ketThucJob(..., { summary: r })`) hiện "nối N,
+   *  bỏ qua M" thay vì im lặng. */
+  boSot: number;
   /** true = tiến trình khác đang nối cùng lúc, lượt này bỏ qua (không đọc snapshot cũ để gán). */
   boQua?: boolean;
 }
@@ -35,7 +46,7 @@ export async function noiLineIdChoMon(): Promise<KetQuaNoiLine> {
     );
     if (!khoa.rows[0]?.locked) {
       // Tiến trình khác đang chạy — bỏ lượt này thay vì đọc snapshot cũ rồi gán trùng dòng.
-      return { xet: 0, noiDuoc: 0, boQua: true };
+      return { xet: 0, noiDuoc: 0, boSot: 0, boQua: true };
     }
     return noiTrongKhoa(tx);
   });
@@ -48,7 +59,7 @@ async function noiTrongKhoa(tx: Parameters<Parameters<typeof db.transaction>[0]>
     .from(schema.larkMonDon)
     .where(isNull(schema.larkMonDon.shopifyLineId))
     .limit(MOI_LUOT);
-  if (chua.length === 0) return { xet: 0, noiDuoc: 0 };
+  if (chua.length === 0) return { xet: 0, noiDuoc: 0, boSot: 0 };
 
   const donSo = [...new Set(chua.map((m) => m.orderNumber))];
 
@@ -92,21 +103,39 @@ async function noiTrongKhoa(tx: Parameters<Parameters<typeof db.transaction>[0]>
   for (const m of chua) theoDonMon.set(m.orderNumber, [...(theoDonMon.get(m.orderNumber) ?? []), m]);
 
   let noiDuoc = 0;
+  let boSot = 0;
   for (const [don, dsMon] of theoDonMon) {
     const dong = theoDonDong.get(don);
     if (!dong || dong.length === 0) continue;
 
     const dungSan = theoDonDaGan.get(don) ?? new Set<string>();
-    const ds: DongDonToiThieu[] = dong.map((x) => ({ shopifyLineId: x.shopifyLineId, sku: x.sku, daDung: dungSan.has(x.shopifyLineId) }));
+    // Lọc trùng theo shopifyLineId TRƯỚC khi gán daDung: nếu shopify_order_lines lỡ có hai dòng
+    // cùng id (lỗi đồng bộ), chỉ giữ một ứng viên — không để hai món trong cùng lượt cùng "thấy"
+    // một id "chưa ai dùng" rồi cùng chọn nó.
+    const dongDaLoc = locTrungTheoLineId(dong);
+    const ds: DongDonToiThieu[] = dongDaLoc.map((x) => ({ shopifyLineId: x.shopifyLineId, sku: x.sku, daDung: dungSan.has(x.shopifyLineId) }));
 
     for (const m of dsMon) {
       const lineId = chonDongChoMon(m.sku, ds);
       if (!lineId) continue;
-      await tx.update(schema.larkMonDon).set({ shopifyLineId: lineId }).where(eq(schema.larkMonDon.dinhDanh, m.dinhDanh));
+      try {
+        // SAVEPOINT riêng cho từng món: `tx.transaction` lồng bên trong `tx.transaction` ngoài
+        // cùng (đã giữ khoá advisory) ánh xạ sang SAVEPOINT thật ở driver node-postgres — lỗi ở
+        // đây (vd đụng unique index lark_mon_don_line_uniq) chỉ ROLLBACK TO SAVEPOINT riêng món
+        // này, transaction ngoài cùng và mọi UPDATE đã commit trước đó trong vòng lặp không bị
+        // ảnh hưởng. try/catch KHÔNG lồng tx.transaction sẽ đầu độc cả transaction ngoài cùng.
+        await tx.transaction(async (tx2) => {
+          await tx2.update(schema.larkMonDon).set({ shopifyLineId: lineId }).where(eq(schema.larkMonDon.dinhDanh, m.dinhDanh));
+        });
+      } catch (e) {
+        boSot++;
+        console.error(`[kho-nhan] nối line id: bỏ qua món ${m.dinhDanh} (đơn ${don}, dòng ${lineId}) do lỗi ghi:`, e instanceof Error ? e.message : e);
+        continue;
+      }
       const d = ds.find((x) => x.shopifyLineId === lineId);
       if (d) d.daDung = true;
       noiDuoc++;
     }
   }
-  return { xet: chua.length, noiDuoc };
+  return { xet: chua.length, noiDuoc, boSot };
 }

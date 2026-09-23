@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chonDongChoMon, maTemChoMon, type DongDonToiThieu } from './noi-mon-dong-don';
+import { chonDongChoMon, maTemChoMon, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
 
 const d = (id: string, sku: string | null, daDung = false): DongDonToiThieu => ({ shopifyLineId: id, sku, daDung });
 
@@ -16,6 +16,20 @@ describe('chonDongChoMon', () => {
   it('món không có mã hàng hoặc đơn không có dòng khớp → null', () => {
     expect(chonDongChoMon(null, [d('L1', 'A-1')])).toBeNull();
     expect(chonDongChoMon('X-9', [d('L1', 'A-1')])).toBeNull();
+  });
+});
+
+describe('locTrungTheoLineId', () => {
+  it('hai ứng viên trùng cùng một shopifyLineId → gộp còn một, giữ bản gặp trước', () => {
+    const ket = locTrungTheoLineId([d('L1', 'A-1'), d('L1', 'A-1')]);
+    expect(ket).toHaveLength(1);
+    expect(ket[0]?.shopifyLineId).toBe('L1');
+  });
+  it('id khác nhau → giữ nguyên cả hai, không đổi thứ tự', () => {
+    expect(locTrungTheoLineId([d('L1', 'A-1'), d('L2', 'B-2')])).toEqual([d('L1', 'A-1'), d('L2', 'B-2')]);
+  });
+  it('danh sách rỗng → rỗng', () => {
+    expect(locTrungTheoLineId([])).toEqual([]);
   });
 });
 
