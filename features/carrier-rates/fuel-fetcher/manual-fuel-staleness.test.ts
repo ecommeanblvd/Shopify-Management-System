@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { findStaleManualFuel, type ManualFuelRow } from './manual-fuel-staleness';
+import {
+  AUTO_FUEL_CARRIER_KEYS,
+  findStaleAutoFuel,
+  findStaleManualFuel,
+  type AutoFuelRow,
+  type ManualFuelRow,
+} from './manual-fuel-staleness';
 
 const NOW = new Date('2026-07-06T00:00:00.000Z');
 
@@ -78,5 +84,63 @@ describe('findStaleManualFuel', () => {
     expect(result).toHaveLength(1);
     expect(result[0].reason).toBe('unset');
     expect(result[0].daysSince).toBeNull();
+  });
+});
+
+/**
+ * Điểm mù đã khiến UPS + SF Express đứng im 11 tuần: `findStaleManualFuel` cố ý
+ * bỏ qua hãng auto vì tin rằng "đã có cron lo", mà cron thì không bao giờ gọi
+ * tới hai hãng đó. `findStaleAutoFuel` bịt đúng lỗ này.
+ */
+describe('findStaleAutoFuel', () => {
+  const HOM_NAY = new Date('2026-09-23T00:00:00.000Z');
+
+  function auto(over: Partial<AutoFuelRow>): AutoFuelRow {
+    return {
+      accountId: 'acc-ups',
+      accountName: 'UPS Worldwide Expedited',
+      carrierKey: 'ups',
+      newestWeekStart: new Date('2026-09-21T00:00:00.000Z'),
+      ...over,
+    };
+  }
+
+  it('không kêu khi tuần mới nhất vừa cập nhật', () => {
+    expect(findStaleAutoFuel([auto({})], HOM_NAY, 14)).toEqual([]);
+  });
+
+  it('kêu khi hãng auto đứng im 11 tuần (đúng ca UPS 06/07 → 23/09/2026)', () => {
+    const result = findStaleAutoFuel(
+      [auto({ newestWeekStart: new Date('2026-07-06T00:00:00.000Z') })],
+      HOM_NAY,
+      14,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].reason).toBe('stale');
+    expect(result[0].daysSince).toBe(79);
+    expect(result[0].carrierKey).toBe('ups');
+  });
+
+  it('kêu khi hãng auto chưa có dòng fuel_percent nào', () => {
+    const result = findStaleAutoFuel([auto({ newestWeekStart: null })], HOM_NAY, 14);
+    expect(result).toHaveLength(1);
+    expect(result[0].reason).toBe('unset');
+    expect(result[0].daysSince).toBeNull();
+  });
+
+  it('không đụng hãng nhập tay — đó là việc của findStaleManualFuel', () => {
+    const result = findStaleAutoFuel(
+      [auto({ carrierKey: 'aramex', newestWeekStart: new Date('2026-01-01T00:00:00.000Z') })],
+      HOM_NAY,
+      14,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('canh MỌI hãng auto, không riêng UPS', () => {
+    const cu = new Date('2026-06-29T00:00:00.000Z');
+    const rows = AUTO_FUEL_CARRIER_KEYS.map((k) =>
+      auto({ accountId: `acc-${k}`, accountName: `TK ${k}`, carrierKey: k, newestWeekStart: cu }));
+    expect(findStaleAutoFuel(rows, HOM_NAY, 14)).toHaveLength(AUTO_FUEL_CARRIER_KEYS.length);
   });
 });

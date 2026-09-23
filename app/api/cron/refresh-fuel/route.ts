@@ -1,16 +1,12 @@
 /**
- * HTTP endpoint that refreshes the FedEx fuel-surcharge percentage for every
- * enabled FedEx carrier account.
+ * HTTP endpoint làm mới phụ phí xăng dầu cho MỌI hãng có auto-fetch.
  *
- * Primary cron path on Railway uses the standalone script at
- * `scripts/cron/refresh-fedex-fuel.ts` (run via `npm run cron:refresh-fuel`
- * on a separate Railway cron service that shares DATABASE_URL with the
- * main app). This HTTP route is kept for two cases:
- *
- *   1. External cron providers that prefer HTTPS pings over running a
- *      Node process (cron-job.org, EasyCron, GitHub Actions schedule).
- *   2. Manual force-refresh from outside the UI ("just hit the URL with
- *      curl + the bearer token").
+ * ĐÂY LÀ ĐƯỜNG CHẠY THẬT hằng ngày: `.github/workflows/refresh-fuel.yml` gọi
+ * endpoint này lúc 01:20 UTC. Railway cron service chạy
+ * `scripts/cron/refresh-fedex-fuel.ts` là đường dự phòng. Cả hai đi CHUNG một
+ * bộ chạy `features/carrier-rates/fuel-fetcher/refresh-all.ts` — trước
+ * 23/09/2026 route này giữ danh sách hãng riêng ['fedex','dhl'] nên UPS và
+ * SF Express không bao giờ được gọi, đứng im 11 tuần mà vẫn báo `ok: true`.
  *
  * Authentication
  * --------------
@@ -19,30 +15,24 @@
  *
  * Response shape
  * --------------
- *   { ok: true, ran: number, results: [{ accountId, accountName, previousPercent,
- *                                         newPercent, changed }, ...] }
- *   { ok: false, error: string }                  // 401/500
+ *   200 { ok: true,  ran, results: [...] }
+ *   500 { ok: false, error: "<gọi tên hãng hỏng/quá hạn>", ran, results: [...] }
+ *
+ * `ok: false` + 500 là CÓ CHỦ Ý: workflow phải đỏ khi một hãng hỏng. Trước đây
+ * route luôn trả `ok: true` kể cả khi mọi hãng đều lỗi, nên không gì báo động.
  */
 
 import { NextResponse } from 'next/server';
-import { eq, and, inArray } from 'drizzle-orm';
-import { db, schema } from '@/db/client';
-import { refreshCarrierFuel } from '@/features/carrier-rates/fuel-fetcher/apply';
+import {
+  chayRefreshFuel,
+  loiRefreshFuel,
+  type KetQuaRefreshFuel,
+} from '@/features/carrier-rates/fuel-fetcher/refresh-all';
 
 import { chayJobApi } from '@/features/jobs/api-run';
 // Don't pre-render or cache.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-interface PerAccountResult {
-  accountId: string;
-  accountName: string;
-  carrierKey: string;
-  previousPercent: number | null;
-  newPercent: number | null;
-  changed: boolean;
-  error?: string;
-}
 
 export async function GET(request: Request): Promise<Response> {
   const expected = process.env.CRON_SECRET;
@@ -57,54 +47,19 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
-  // Every enabled account whose carrier has an auto-fetcher (FedEx + DHL).
-  // The dispatcher (refreshCarrierFuel) throws on carriers without a
-  // fetcher, so we keep this filter narrow up-front to avoid noise in
-  // the result.
-  const accounts = await db
-    .select({
-      id: schema.carrierAccounts.id,
-      name: schema.carrierAccounts.name,
-      carrierKey: schema.carriers.key,
-    })
-    .from(schema.carrierAccounts)
-    .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
-    .where(
-      and(
-        inArray(schema.carriers.key, ['fedex', 'dhl']),
-        eq(schema.carrierAccounts.enabled, true),
-      ),
-    );
+  // Cron không phải người dùng — để `updatedBy` nguyên.
+  const kq: KetQuaRefreshFuel = await chayJobApi(
+    'refresh-fuel',
+    () => chayRefreshFuel({ triggeredBy: null }),
+    (summary) => loiRefreshFuel(summary),
+  );
 
-  const results: PerAccountResult[] = [];
-  for (const account of accounts) {
-    try {
-      const applied = await chayJobApi('refresh-fuel', () => refreshCarrierFuel({
-        carrierAccountId: account.id,
-        triggeredBy: null, // Cron isn't a user — leave updatedBy untouched.
-      }));
-      results.push({
-        accountId: account.id,
-        accountName: account.name,
-        carrierKey: applied.carrierKey,
-        previousPercent: applied.previousPercent,
-        newPercent: applied.newPercent,
-        changed: applied.changed,
-      });
-    } catch (err) {
-      // One account failure shouldn't stop the rest of the batch — keep
-      // going and surface the error in the response so we can debug.
-      results.push({
-        accountId: account.id,
-        accountName: account.name,
-        carrierKey: account.carrierKey ?? 'unknown',
-        previousPercent: null,
-        newPercent: null,
-        changed: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  return NextResponse.json({ ok: true, ran: results.length, results });
+  const loi = loiRefreshFuel(kq);
+  const body = {
+    ok: loi == null,
+    ran: kq.tong,
+    results: kq.ketQua,
+    ...(loi ? { error: loi } : {}),
+  };
+  return NextResponse.json(body, { status: loi == null ? 200 : 500 });
 }

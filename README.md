@@ -43,7 +43,13 @@ Authorization: Bearer <CRON_SECRET>
 
 Set `CRON_SECRET` (generate with `openssl rand -hex 32`) in the Railway service env.
 
-Both paths share the same core logic in `features/carrier-rates/fuel-fetcher/apply.ts`. The "Refresh from FedEx" button on the Surcharges page also calls the same function, so manual + scheduled refreshes are consistent.
+Both paths share the same runner in `features/carrier-rates/fuel-fetcher/refresh-all.ts` (which dispatches per carrier through `apply.ts`). The "Refresh from FedEx" button on the Surcharges page also calls the same function, so manual + scheduled refreshes are consistent.
+
+Danh sách hãng được quét nằm DUY NHẤT ở `AUTO_FUEL_CARRIER_KEYS`
+(`features/carrier-rates/fuel-fetcher/manual-fuel-staleness.ts`) — đừng chép lại
+vào script hay route; có test canh việc này. Một hãng fetch lỗi, hoặc một hãng
+tuy chạy xong nhưng tuần mới nhất đã quá 14 ngày tuổi, sẽ làm lượt chạy `refresh-fuel`
+ĐỎ trên `/f/jobs` (và trả HTTP 500 cho đường HTTPS) kèm tên hãng trong thông báo lỗi.
 
 **Orders safety-net** (in addition to FedEx fuel):
 

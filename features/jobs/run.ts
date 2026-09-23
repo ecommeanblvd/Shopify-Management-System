@@ -42,7 +42,17 @@ export async function chayMotJob(
   }
 }
 
-export function chayCron(jobKey: string, fn: () => Promise<unknown>): void {
+/**
+ * `kiemTra` giống hệt `chayMotJob`: cho tác vụ tự nói "tôi chạy xong nhưng MỘT
+ * PHẦN hỏng". Trả về câu lý do thì lượt chạy bị ghi là HỎNG mà vẫn giữ summary,
+ * và câu lý do đó PHẢI gọi tên thứ hỏng (hãng nào, đơn nào) — exit code trần
+ * chỉ nói "có lỗi" chứ không nói lỗi ở đâu, nên không ai biết mà sửa.
+ */
+export function chayCron(
+  jobKey: string,
+  fn: () => Promise<unknown>,
+  kiemTra?: (summary: unknown) => string | null,
+): void {
   const batDau = Date.now();
   void (async () => {
     const id = await batDauJob(jobKey);
@@ -51,10 +61,14 @@ export function chayCron(jobKey: string, fn: () => Promise<unknown>): void {
       // Script tự đặt process.exitCode khi có lỗi CỤC BỘ (vài đơn hỏng nhưng
       // batch vẫn chạy hết) — vẫn phải tính là lỗi, không thì trang giám sát
       // báo xanh trong khi tác vụ đang hỏng một phần.
-      const loiCucBo = Number(process.exitCode ?? 0) !== 0;
+      const loiKiemTra = kiemTra?.(summary) ?? null;
+      const loiCucBo = loiKiemTra != null || Number(process.exitCode ?? 0) !== 0;
+      if (loiKiemTra != null) process.exitCode = 1;
       await ketThucJob(id, {
         ok: !loiCucBo, summary, batDau,
-        error: loiCucBo ? 'tác vụ tự báo lỗi (exit code khác 0)' : undefined,
+        error: loiCucBo
+          ? (loiKiemTra ?? 'tác vụ tự báo lỗi (exit code khác 0)')
+          : undefined,
       });
       process.stdout.write(`${jobKey}: xong (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary) : ''}\n`);
     } catch (err) {
