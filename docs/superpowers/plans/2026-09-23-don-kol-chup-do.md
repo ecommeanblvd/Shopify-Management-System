@@ -1139,8 +1139,15 @@ export async function danhDauDaGui(fd: FormData): Promise<{ ok: boolean; loi?: s
           costPerUnit: schema.skuCosts.costPerUnit,
           currency: schema.skuCosts.currency,
           effectiveFrom: schema.skuCosts.effectiveFrom,
+          storeId: schema.skuCosts.storeId,
         }).from(schema.skuCosts).where(eq(schema.skuCosts.sku, d.sku));
-        const g = chonGiaVon(ds, ngayGui);
+        // sku_costs khoá theo (store_id, sku, effective_from) — MỘT mã hàng có thể
+        // có giá ở nhiều cửa hàng. Đo 23/09/2026: hiện 0 mã nào như vậy, nhưng đã
+        // có HAI cửa hàng cùng ghi giá (meanblvd 4.109 dòng, tinhatelier 6 dòng).
+        // Nhập nhằng thì ĐỂ NULL cho người dùng gõ tay, không bốc giá của cửa hàng
+        // khác gán vào hàng của mình — đúng cách đã xử lý ở việc mã vạch.
+        const soStore = new Set(ds.map((x) => x.storeId)).size;
+        const g = soStore > 1 ? null : chonGiaVon(ds, ngayGui);
         // Không tra được thì ĐỂ NULL. Báo cáo sẽ đếm dòng này là "chưa có giá",
         // còn hơn bịa một con số rồi nó nằm trong chi phí marketing mãi mãi.
         if (g) {
