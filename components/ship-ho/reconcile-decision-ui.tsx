@@ -6,7 +6,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { reconcileCellState } from '@/features/ship-ho/reconcile-decision';
-import type { ShipHoPriceStructure } from '@/features/ship-ho/price-structure';
+import {
+  shipHoFreightAndDutyRows, shipHoFreightSubtotal, shipHoFinalTotal,
+  type ShipHoPriceStructure, type PriceStructureRow,
+} from '@/features/ship-ho/price-structure';
 
 /** Dữ liệu tối thiểu cho ô "Đối soát" + modal (dùng chung: table chính + trang reconcile). */
 export interface ReconcileModalData {
@@ -172,8 +175,64 @@ export function DecisionModal({ row, onClose, actions }: {
   );
 }
 
-/** Bảng con: từng khoản charge 3 phía + lệch bill (dùng ở modal + inline expand). */
+/**
+ * Bảng con: từng khoản charge 3 phía + lệch bill (dùng ở modal + inline expand,
+ * cả trang danh sách lẫn trang đối soát — chỉ MỘT bản dựng bảng, dùng chung).
+ * Reading order (CEO 23/09, khớp trang chi tiết): freight rows → "Tổng cước"
+ * (subtotal, KHÔNG gồm duty) → dòng duty riêng → "Tổng cuối" (cước + duty).
+ * 6 cột, KHÔNG có cột margin (bảng rút gọn cho modal — xem trang chi tiết nếu
+ * cần margin từng dòng).
+ */
 export function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
+  const { freightRows, dutyRow } = shipHoFreightAndDutyRows(s);
+  const freightSubtotal = shipHoFreightSubtotal(s);
+  const finalTotal = shipHoFinalTotal(s);
+
+  const renderRow = (row: PriceStructureRow) => {
+    const delta = row.quoteChargeVnd != null && row.chargeVnd != null ? row.chargeVnd - row.quoteChargeVnd : null;
+    return (
+      <tr key={row.label} className="border-t border-border/40 [&>td]:py-1.5 [&>td]:pr-4">
+        <td className="text-left">{row.label}</td>
+        <td className="text-right text-muted-foreground">
+          {vnd(row.costVnd)}
+          {/* % QUOTE (rate khoá lúc báo giá) cạnh cột chi phí dự tính. */}
+          {row.percent != null && <span className="ml-1 text-[10px] text-muted-foreground/70">({row.percent}%)</span>}
+        </td>
+        <td className="text-right text-muted-foreground">
+          {vnd(row.billVnd)}
+          {/* % HIỆU LỰC trên bill (Change 1, 23/09) — chỉ hiện khi suy được đáng
+              tin (xem `billPercent` trong price-structure.ts); rate đổi hàng
+              tuần nên thường khác % quote bên trái, để so trực tiếp. */}
+          {row.billPercent != null && <span className="ml-1 text-[10px] text-muted-foreground/70">({row.billPercent}%)</span>}
+        </td>
+        <td className="text-right">{vnd(row.quoteChargeVnd)}</td>
+        <td className="text-right font-medium">{vnd(row.chargeVnd)}</td>
+        <td className={`text-right ${delta == null || delta === 0 ? 'text-muted-foreground' : delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+          {delta == null ? '—' : delta === 0 ? '0' : signed(delta)}
+        </td>
+      </tr>
+    );
+  };
+
+  const renderTotalRow = (label: string, t: { costVnd: number; billVnd: number | null; quoteChargeVnd: number; chargeVnd: number }, billLabel?: string | null) => {
+    const delta = t.chargeVnd - t.quoteChargeVnd;
+    return (
+      <tr className="border-t border-border font-semibold [&>td]:py-1.5 [&>td]:pr-4">
+        <td className="text-left">{label}</td>
+        <td className="text-right text-muted-foreground">{vnd(t.costVnd)}</td>
+        <td className="text-right text-muted-foreground">
+          {billLabel && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({billLabel})</span>}
+          {vnd(t.billVnd)}
+        </td>
+        <td className="text-right">{vnd(t.quoteChargeVnd)}</td>
+        <td className="text-right">{vnd(t.chargeVnd)}</td>
+        <td className={`text-right ${delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : delta < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+          {signed(delta)}
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <table className="w-full text-xs tabular-nums">
       <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -195,37 +254,10 @@ export function StructureDetail({ s }: { s: ShipHoPriceStructure }) {
           <td className="text-right">{s.weights.billKg ?? s.weights.quoteKg ?? '—'}</td>
           <td className="text-right">—</td>
         </tr>
-        {s.rows.map((row) => {
-          const delta = row.quoteChargeVnd != null && row.chargeVnd != null ? row.chargeVnd - row.quoteChargeVnd : null;
-          return (
-            <tr key={row.label} className="border-t border-border/40 [&>td]:py-1.5 [&>td]:pr-4">
-              <td className="text-left">
-                {row.label}
-                {row.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{row.percent}%</span>}
-              </td>
-              <td className="text-right text-muted-foreground">{vnd(row.costVnd)}</td>
-              <td className="text-right text-muted-foreground">{vnd(row.billVnd)}</td>
-              <td className="text-right">{vnd(row.quoteChargeVnd)}</td>
-              <td className="text-right font-medium">{vnd(row.chargeVnd)}</td>
-              <td className={`text-right ${delta == null || delta === 0 ? 'text-muted-foreground' : delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {delta == null ? '—' : delta === 0 ? '0' : signed(delta)}
-              </td>
-            </tr>
-          );
-        })}
-        <tr className="border-t border-border font-semibold [&>td]:py-1.5 [&>td]:pr-4">
-          <td className="text-left">Tổng</td>
-          <td className="text-right text-muted-foreground">{vnd(s.costTotal)}</td>
-          <td className="text-right text-muted-foreground">
-            {s.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({s.billNumber})</span>}
-            {vnd(s.billTotal)}
-          </td>
-          <td className="text-right">{vnd(s.quoteChargeTotal)}</td>
-          <td className="text-right">{vnd(s.chargeTotal)}</td>
-          <td className={`text-right ${s.chargeTotal - s.quoteChargeTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : s.chargeTotal - s.quoteChargeTotal < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-            {signed(s.chargeTotal - s.quoteChargeTotal)}
-          </td>
-        </tr>
+        {freightRows.map(renderRow)}
+        {renderTotalRow(freightSubtotal.label, freightSubtotal)}
+        {dutyRow && renderRow(dutyRow)}
+        {renderTotalRow(finalTotal.label, finalTotal, s.billNumber)}
       </tbody>
     </table>
   );

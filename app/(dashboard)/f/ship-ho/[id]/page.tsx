@@ -239,10 +239,23 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
               <tr key={r.label} className={`border-t border-border/60 [&>td]:py-2 ${laKhop ? 'text-muted-foreground italic' : ''}`}>
                 <td className="text-left" title={laKhop ? 'Đơn tạo trước 08/09: giá đã báo brand khác tổng các dòng tách theo công thức hiện tại — dòng này bù cho khớp. Đơn mới không còn dòng này.' : undefined}>
                   {r.label}
-                  {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
                 </td>
-                <td className="text-right text-sky-700 dark:text-sky-400">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
-                {hasBill && <td className="text-right text-sky-700 dark:text-sky-400">{r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}</td>}
+                {/* % xăng dầu (Change 1, 23/09): rate QUOTE (lock lúc báo giá) đặt cạnh cột
+                    Chi phí dự tính, rate HIỆU LỰC trên bill đặt cạnh cột Chi phí Bill — hai
+                    rate khác nhau (fuel đổi hàng tuần) nên tách cột để so được, không gộp
+                    chung một % gây hiểu nhầm "cùng một số, khác tiền". Bill không có % khi
+                    không suy được đáng tin (xem `billPercent` trong price-structure.ts) —
+                    để trống, không bịa số. */}
+                <td className="text-right text-sky-700 dark:text-sky-400">
+                  {r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}
+                  {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">({r.percent}%)</span>}
+                </td>
+                {hasBill && (
+                  <td className="text-right text-sky-700 dark:text-sky-400">
+                    {r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}
+                    {r.billPercent != null && <span className="ml-1 text-[10px] text-muted-foreground">({r.billPercent}%)</span>}
+                  </td>
+                )}
                 {hasBill && <td className={`text-right ${mauLech(lechChi, 'chi')}`}>{so(lechChi, true)}</td>}
                 <td className="text-right text-emerald-700 dark:text-emerald-400">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
                 {hasBill && <td className="text-right font-medium text-emerald-700 dark:text-emerald-400">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
@@ -344,7 +357,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Giá thu = cước carrier (pass-through toàn bộ) + cước cơ bản × markup + phí xử lý 50.000 (có VAT). Xăng dầu, VAT, phụ phí, ký nhận, phí NK là chi phí carrier chuyển thẳng, không markup.
-              {hasBill ? ' Lệch chi: đỏ = carrier tính cao hơn dự tính. Lệch thu: xanh = thu brand thêm. Margin = thu thực − bill. Thuế/hải quan (duty) thu hộ đúng giá vốn, tách riêng khỏi Tổng cước — Tổng cuối gộp lại nên margin hai dòng bằng nhau.' : ' Chưa có bill: Margin = thu dự tính − chi dự tính.'}
+              {hasBill ? ' Lệch chi: đỏ = carrier tính cao hơn dự tính. Lệch thu: xanh = thu brand thêm. Margin = thu thực − bill. Thuế/hải quan (duty) thu hộ đúng giá vốn, tách riêng khỏi Tổng cước — Tổng cuối gộp lại nên margin hai dòng bằng nhau. Dòng xăng dầu: % cạnh cột dự tính là rate khoá lúc báo giá, % cạnh cột bill là rate carrier áp thực tế lúc giao — hai rate đổi hàng tuần nên thường khác nhau dù cùng nhãn "xăng dầu"; bill không hiện % khi không suy được đáng tin.' : ' Chưa có bill: Margin = thu dự tính − chi dự tính.'}
               {price.factor !== 1 ? ' Chi phí gốc theo ngoại tệ đã quy về VND.' : ''}
             </p>
 

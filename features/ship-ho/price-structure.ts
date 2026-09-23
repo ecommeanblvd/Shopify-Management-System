@@ -18,8 +18,22 @@ export interface PriceStructureRow {
   quoteChargeVnd: number | null;
   /** Giá thu khách THỰC — tính lại theo bill (VND). Chưa có bill = null hoặc = dự tính. */
   chargeVnd: number | null;
-  /** % cho dòng fuel/VAT (hiển thị phụ). */
+  /** % QUOTE cho dòng fuel/VAT (hiển thị phụ) — rate lock lúc báo giá. */
   percent?: number | null;
+  /**
+   * % HIỆU LỰC carrier áp trên BILL (Change 1, CEO 23/09) — CHỈ dòng "Phụ phí
+   * xăng dầu". Khác `percent` (rate lock lúc quote) vì fuel rate đổi hàng tuần:
+   * quote khoá rate lúc báo giá, carrier bill theo rate của TUẦN GIAO HÀNG.
+   * Suy từ `ab.fuel / billFuelBase` (base = cước cơ bản bill NET + phụ phí cùng
+   * đợt — remote/demand/residential/signature; KHÔNG gồm VAT/duty/phí NK/AC vì
+   * carrier không tính fuel trên các khoản pass-through này), làm tròn 3 chữ số
+   * thập phân (carrier công bố rate kiểu "46.500%"). Đã kiểm read-only trên TOÀN
+   * BỘ đơn reconciled ở production (23/09/2026) — công thức này tái tạo đúng
+   * `ab.fuel` ở 127/127 đơn; các base khác (chỉ net cước, hoặc lấy thẳng `ab.base`
+   * thô) tái tạo được ít hơn hẳn. null = chưa có bill, hoặc base suy ra ≤ 0 —
+   * KHÔNG BAO GIỜ bịa % khi không suy được đáng tin.
+   */
+  billPercent?: number | null;
 }
 
 export interface ShipHoPriceStructure {
@@ -45,9 +59,8 @@ export interface ShipHoPriceStructure {
   billNumber: string | null;
 }
 
-/** Nhãn dòng duty + dòng tổng hợp — dùng chung giữa nơi dựng `rows` và các hàm tách/tổng bên dưới. */
+/** Nhãn dòng duty — dùng chung giữa nơi dựng `rows` và các hàm tách/tổng bên dưới. */
 const NHAN_DUTY = 'Thuế / hải quan (duty) — ngoài cước, thu hộ';
-const NHAN_TONG_BRAND = 'Tổng brand phải trả = cước + thuế/phí NK thu hộ';
 
 const num = (v: unknown): number => {
   const n = typeof v === 'string' ? Number(v) : (v as number);
@@ -217,10 +230,22 @@ export function shipHoPriceStructure(input: {
     },
   ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.quoteChargeVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
 
+  // % xăng dầu HIỆU LỰC trên bill (Change 1, CEO 23/09) — xem doc-comment
+  // `PriceStructureRow.billPercent`. base = cước cơ bản bill NET + phụ phí cùng
+  // đợt (remote/demand/residential/signature); base ≤ 0 → null, không bịa %.
+  const fuelBillPercent = hasBill && fuelBill != null
+    ? (() => {
+        const base = Math.round((baseBill ?? 0) + num(ab!.remote) + num(ab!.demand) + num(ab!.residential) + num(ab!.signature));
+        if (!(base > 0)) return null;
+        const pct = Math.round((fuelBill / base) * 100 * 1000) / 1000;
+        return Number.isFinite(pct) ? pct : null;
+      })()
+    : null;
+
   const rows: PriceStructureRow[] = [
     { label: 'Cước cơ bản', costVnd: baseCost, billVnd: baseBill, quoteChargeVnd: qBase, chargeVnd: chargeBase },
     ...surItems,
-    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, quoteChargeVnd: qFuel, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null },
+    { label: 'Phụ phí xăng dầu', costVnd: fuelCost, billVnd: fuelBill, quoteChargeVnd: qFuel, chargeVnd: chargeFuel, percent: num(b.fuelPercent) || null, billPercent: fuelBillPercent },
     { label: 'Phí xử lý đơn hàng', costVnd: null, billVnd: null, quoteChargeVnd: qProcessing, chargeVnd: chargeProcessing },
     { label: 'VAT', costVnd: vatCost, billVnd: vatBill, quoteChargeVnd: qVat, chargeVnd: chargeVat, percent: num(b.vatPercent) || null },
   ];
@@ -233,16 +258,12 @@ export function shipHoPriceStructure(input: {
       chargeVnd: adjustCharge || null,
     });
   }
-  // Dòng TỔNG BRAND PHẢI TRẢ — chỉ khi có duty. Cột "giá thu thực" của các dòng trên cộng
-  // lại bằng `chargeTotal` (CƯỚC); dòng này là tổng của HAI khoản (cước + thuế/phí thu hộ),
-  // nên KHÔNG thuộc phép cộng cột — đặt cuối cùng như một dòng tổng hợp.
-  if (chDuty !== 0) {
-    rows.push({
-      label: NHAN_TONG_BRAND,
-      costVnd: null, billVnd: null, quoteChargeVnd: null,
-      chargeVnd: chargeTotalFinal + chDuty,
-    });
-  }
+  // Dòng tổng hợp "Tổng brand phải trả = cước + thuế/phí NK thu hộ" ĐÃ GỠ (Change 2,
+  // CEO 23/09) — cả 3 nơi hiển thị bảng giá (trang chi tiết, modal đối soát dùng chung
+  // `StructureDetail`, trang danh sách qua cùng modal) giờ tự dựng "Tổng cuối" bằng
+  // `shipHoFinalTotal(s)` (= `chargeWithDutyTotal` bên dưới), nên dòng này chỉ còn là
+  // dữ liệu trùng lặp trong `rows` — đã rà mọi consumer (grep toàn repo) trước khi gỡ,
+  // không còn ai đọc theo `label` cũ nữa.
 
   return {
     rows,
@@ -319,15 +340,14 @@ export function shipHoFinalTotal(s: ShipHoPriceStructure): ShipHoPriceTotalRow {
 /**
  * Tách `rows` thành khối cước (freight, để render các dòng freight KHÔNG đổi)
  * và dòng duty riêng (render dưới subtotal "Tổng cước", trước "Tổng cuối").
- * Dòng tổng hợp cũ `NHAN_TONG_BRAND` cũng bị lọc khỏi freightRows — nó lặp lại
- * đúng ý "Tổng cuối" nên không còn cần hiện ở màn nào đã có dòng Tổng cuối
- * (page vẫn còn dùng dòng này ở nơi chưa dựng lại bảng — xem ghi chú ở page).
+ * `rows` không còn dòng tổng hợp cũ (gỡ ở Change 2 — xem ghi chú trong
+ * `shipHoPriceStructure`) nên filter ở đây chỉ còn cần tách đúng dòng duty.
  */
 export function shipHoFreightAndDutyRows(
   s: ShipHoPriceStructure,
 ): { freightRows: PriceStructureRow[]; dutyRow: PriceStructureRow | null } {
   const dutyRow = s.rows.find((r) => r.label === NHAN_DUTY) ?? null;
-  const freightRows = s.rows.filter((r) => r.label !== NHAN_DUTY && r.label !== NHAN_TONG_BRAND);
+  const freightRows = s.rows.filter((r) => r.label !== NHAN_DUTY);
   return { freightRows, dutyRow };
 }
 

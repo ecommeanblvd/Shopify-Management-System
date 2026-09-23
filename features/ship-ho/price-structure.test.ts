@@ -194,7 +194,7 @@ describe('shipHoPriceStructure', () => {
     expect(s.weights).toEqual({ quoteKg: 2, billKg: 2.5 });
     expect(s.billNumber).toBe('HANR000265761');
   });
-  it('duty: NGOÀI cước — không vào tổng cước, không đẻ dòng điều chỉnh ảo, có dòng tổng brand phải trả', () => {
+  it('duty: NGOÀI cước — không vào tổng cước, không đẻ dòng điều chỉnh ảo', () => {
     const actualBill = {
       breakdown: {
         base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 0,
@@ -220,20 +220,118 @@ describe('shipHoPriceStructure', () => {
     expect(dongDuty.billVnd).toBe(736_241);
     // KHÔNG còn dòng điều chỉnh ảo −duty ở cột giá thu thực.
     expect(s.rows.find((r) => r.label === 'Điều chỉnh khớp số đã ghi')?.chargeVnd ?? null).toBeNull();
-    // Cột giá thu thực (trừ dòng duty + dòng tổng) cộng lại = tổng CƯỚC.
-    const tongPhu = ['Thuế / hải quan (duty) — ngoài cước, thu hộ', 'Tổng brand phải trả = cước + thuế/phí NK thu hộ'];
+    // Cột giá thu thực (trừ dòng duty) cộng lại = tổng CƯỚC.
+    const tongPhu = ['Thuế / hải quan (duty) — ngoài cước, thu hộ'];
     expect(s.rows.filter((r) => !tongPhu.includes(r.label)).reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(1_891_882);
-    // Dòng tổng cuối cùng = cước + duty.
-    const cuoi = s.rows[s.rows.length - 1];
-    expect(cuoi.label).toBe('Tổng brand phải trả = cước + thuế/phí NK thu hộ');
-    expect(cuoi.chargeVnd).toBe(2_628_123);
+    // Tổng cước + duty (không còn dòng tổng hợp riêng trong `rows` — dùng shipHoFinalTotal, xem describe riêng).
+    expect(s.chargeWithDutyTotal).toBe(2_628_123);
   });
 
-  it('không có duty → không thêm dòng tổng brand phải trả', () => {
+  it('không có duty → dutyChargeVnd = 0, chargeWithDutyTotal = chargeTotal', () => {
     const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
     expect(s.dutyChargeVnd).toBe(0);
     expect(s.chargeWithDutyTotal).toBe(s.chargeTotal);
+  });
+
+  // Change 2 (CEO 23/09): dòng tổng hợp cũ "Tổng brand phải trả = cước + thuế/phí NK
+  // thu hộ" bị GỠ HẲN khỏi `rows` — cả 3 nơi hiển thị (trang chi tiết, modal đối
+  // soát dùng chung StructureDetail, trang danh sách qua cùng modal đó) giờ đều tự
+  // dựng "Tổng cuối" bằng `shipHoFinalTotal`, nên dòng này chỉ còn là dữ liệu chết
+  // trong `rows` — đã rà mọi consumer (grep toàn repo) trước khi gỡ.
+  it('rows KHÔNG còn chứa dòng tổng hợp "Tổng brand phải trả" dù có duty — dùng shipHoFinalTotal thay thế', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 0,
+        vat: 190_000, other: 0, importHandling: 0, duty: 736_241,
+        billNumber: '734110283', shipDate: '2026-07-02',
+        sell: {
+          baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0, resSignVnd: 0, residentialVnd: 0, signatureVnd: 0,
+          importHandlingVnd: 0, dutyVnd: 736_241, otherVnd: 0,
+          fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_891_882,
+        },
+      },
+      totalVnd: 2_208_941, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
     expect(s.rows.some((r) => r.label.startsWith('Tổng brand phải trả'))).toBe(false);
+    // Dòng duty vẫn có mặt trong rows (chỉ dòng TỔNG HỢP cũ mới bị gỡ).
+    expect(s.rows.some((r) => r.label.startsWith('Thuế / hải quan (duty)'))).toBe(true);
+    expect(shipHoFinalTotal(s).chargeVnd).toBe(2_628_123);
+  });
+});
+
+// ── Change 1 (CEO 23/09): % xăng dầu HIỆU LỰC trên bill, tách khỏi % quote —
+// fuel rate carrier bill và fuel rate quote lock khác nhau (rate đổi hàng tuần).
+// Công thức base ĐÃ kiểm read-only trên TOÀN BỘ 127 đơn reconciled ở production
+// (23/09/2026, script throwaway scripts/tmp-verify-fuel-rate.ts, đã xoá):
+//   billFuelBase = cước cơ bản bill NET (ab.base + ab.discount)
+//                + remote + demand + residential + signature (bill, cùng đợt)
+// tái tạo đúng ab.fuel (làm tròn rate 3 chữ số %, sai số ≤ 2đ do làm tròn tiền tệ
+// nhiều bước) ở 127/127 đơn — các base khác thử qua (chỉ net cước: 63/127; +residential
+// nhưng thiếu remote/demand: 97/127; ab.base thô chưa trừ discount: 14/127) đều KHÔNG
+// đáng tin. base ≤ 0 (dữ liệu thiếu) → để null, KHÔNG bịa %.
+describe('fuel: billPercent (% hiệu lực trên bill, tách khỏi % quote)', () => {
+  it('đơn thực 26-INSLG-SV-0094 (23/09): base = cước cơ bản net + ký nhận → 46.5%', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_038_168, discount: 0, fuel: 525_854, remote: 0, demand: 0, residential: 0,
+        signature: 92_700, vat: 0, other: 0, billNumber: 'X-0094', shipDate: '2026-08-26',
+      },
+      totalVnd: 1_038_168 + 92_700 + 525_854, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const fuelRow = s.rows.find((r) => r.label === 'Phụ phí xăng dầu')!;
+    expect(fuelRow.billPercent).toBe(46.5);
+    // % quote (breakdown.fuelPercent = 30 trong fixture) KHÔNG đổi theo Change 1 — vẫn
+    // là % lock lúc quote, độc lập với % hiệu lực trên bill.
+    expect(fuelRow.percent).toBe(30);
+  });
+
+  it('phụ phí vùng xa/nhu cầu/giao nhà dân trên bill cũng nằm trong base tính %', () => {
+    // base = (1.050.000−80.000) + remote 60.000 + demand 20.000 + residential 30.000 + signature 40.000 = 1.120.000
+    // chọn fuel = 1.120.000 × 45% = 504.000 → rate suy ra phải đúng 45%.
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 504_000, remote: 60_000, demand: 20_000,
+        residential: 30_000, signature: 40_000, vat: 0, other: 0, billNumber: 'X2', shipDate: '2026-08-26',
+      },
+      totalVnd: 2_000_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const fuelRow = s.rows.find((r) => r.label === 'Phụ phí xăng dầu')!;
+    expect(fuelRow.billPercent).toBe(45);
+  });
+
+  it('chưa có bill → billPercent null (không bịa %)', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    const fuelRow = s.rows.find((r) => r.label === 'Phụ phí xăng dầu')!;
+    expect(fuelRow.billPercent ?? null).toBeNull();
+  });
+
+  it('có bill nhưng base suy ra ≤ 0 (dữ liệu hỏng) → billPercent null, không NaN/Infinity', () => {
+    const actualBill = {
+      breakdown: {
+        base: 0, discount: 0, fuel: 100_000, remote: 0, demand: 0, residential: 0, signature: 0,
+        vat: 0, other: 0, billNumber: 'X3', shipDate: '2026-08-26',
+      },
+      totalVnd: 100_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const fuelRow = s.rows.find((r) => r.label === 'Phụ phí xăng dầu')!;
+    expect(fuelRow.billPercent ?? null).toBeNull();
+  });
+
+  it('dòng khác (VAT) KHÔNG có billPercent — chỉ dòng fuel mới có', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_038_168, discount: 0, fuel: 525_854, remote: 0, demand: 0, residential: 0,
+        signature: 92_700, vat: 190_000, other: 0, billNumber: 'X-0094', shipDate: '2026-08-26',
+      },
+      totalVnd: 1_038_168 + 92_700 + 525_854 + 190_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const vatRow = s.rows.find((r) => r.label === 'VAT')!;
+    expect(vatRow.billPercent ?? null).toBeNull();
   });
 });
 
