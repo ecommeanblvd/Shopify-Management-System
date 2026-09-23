@@ -42,13 +42,20 @@ export default async function DanhSachKolPage({
     tiGiaThang(),
   ]);
   const thangHienTai = thangKinhDoanh(new Date())!;
-  // Headline chỉ tính hàng ĐÃ GỬI (guiLuc khác null) — dòng chưa gửi (nháp/đã
-  // chốt) chưa hề rời kho, số lượng mượn của nó luôn đổ nguyên vào cột "đang
-  // treo" như thể đang ở nhà KOL, dù thật ra nó nằm nguyên trên kệ dưới diện
-  // giữ chỗ. Trộn hai thứ vào một con số đầu trang thì người đọc không còn
-  // cách nào phân biệt "cần đi đòi" với "chưa cần đòi gì cả". Bảng chi tiết
-  // theo tháng bên dưới vẫn nhận `dongBaoCao` KHÔNG lọc, để khoá 'chua_gui'
-  // của gomTheoThang còn đường hiện ra (có nhãn "Chưa gửi" rõ ràng ở đó).
+  // Headline VÀ bảng "Theo KOL" chỉ tính hàng ĐÃ GỬI (guiLuc khác null) —
+  // dòng chưa gửi (nháp/đã chốt) chưa hề rời kho, số lượng mượn của nó luôn
+  // đổ nguyên vào "đang treo" như thể đang ở nhà KOL, dù thật ra nó nằm
+  // nguyên trên kệ dưới diện giữ chỗ.
+  //
+  // Bảng "Theo KOL" đặc biệt nguy hiểm nếu lọt dữ liệu chưa gửi vào: nó gắn
+  // số đó với MỘT NGƯỜI CỤ THỂ theo tên, không có "khoá chưa gửi" nào để dán
+  // nhãn tách biệt như bảng theo tháng có — người đọc thấy dòng "Chưa gửi"
+  // dưới tên một KOL thì hiểu là người đó đang giữ hàng, rồi nhắn tin đòi lại
+  // thứ chưa từng được gửi. Filter round 2 (fix round 2).
+  //
+  // Bảng "Theo tháng" bên dưới vẫn nhận `dongBaoCao` KHÔNG lọc — đây là nơi
+  // DUY NHẤT còn cho hàng chưa gửi lộ diện, và nó có nhãn "Chưa gửi" rõ ràng
+  // để không ai hiểu nhầm là "đang ở nhà KOL".
   const daGui = dongBaoCao.filter((d) => d.guiLuc !== null);
 
   return (
@@ -70,7 +77,7 @@ export default async function DanhSachKolPage({
       </div>
       <TomTatChiPhi
         theoThang={gomTheoThang(dongBaoCao)}
-        theoNguoiNhan={gomTheoNguoiNhan(dongBaoCao)}
+        theoNguoiNhan={gomTheoNguoiNhan(daGui)}
         tongTatCa={tongChiPhi(daGui)}
         rates={rates}
         thangHienTai={thangHienTai}

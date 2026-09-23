@@ -43,16 +43,22 @@ function quyHang(r: DongBaoCao, nhan: string, period: string, rates: TiGiaThang[
 /**
  * Khối tóm tắt chi phí marketing KOL — đặt đầu trang danh sách đơn.
  *
- * Bốn số đầu (`tongTatCa`, do trang gọi truyền vào) chỉ tính hàng ĐÃ GỬI —
- * caller (`app/(dashboard)/f/kol/page.tsx`) đã lọc `guiLuc !== null` trước khi
- * gọi `tongChiPhi`. Cố tình KHÔNG dùng toàn bộ `dongBaoCao`: một dòng mượn
- * thuộc đơn còn nháp/đã chốt (chưa rời kho) vẫn có `soLuongDaTra = 0`, cộng
- * nguyên số lượng vào "đang treo" y hệt một món thật sự đang ở nhà KOL quá
- * hạn — hai tình huống khác hẳn nhau (một cái cần đi đòi, một cái nằm trên kệ
- * kho chờ xuất) mà gộp vào một con số đầu trang thì người đọc không còn cách
- * nào phân biệt. `theoThang`/`theoNguoiNhan` thì NGƯỢC LẠI — nhận trọn
- * `dongBaoCao` không lọc, để khoá 'chua_gui' của `gomTheoThang` còn đường hiện
- * ra ở bảng chi tiết (có nhãn "Chưa gửi" riêng, không lẫn với các tháng thật).
+ * Bốn số đầu (`tongTatCa`) VÀ bảng "Theo KOL" (`theoNguoiNhan`) chỉ tính hàng
+ * ĐÃ GỬI — caller (`app/(dashboard)/f/kol/page.tsx`) đã lọc `guiLuc !== null`
+ * trước khi gọi `tongChiPhi`/`gomTheoNguoiNhan`. Cố tình KHÔNG dùng toàn bộ
+ * `dongBaoCao` ở hai chỗ này: một dòng mượn thuộc đơn còn nháp/đã chốt (chưa
+ * rời kho) vẫn có `soLuongDaTra = 0`, cộng nguyên số lượng vào "đang treo" y
+ * hệt một món thật sự đang ở nhà KOL quá hạn.
+ *
+ * Bảng "Theo KOL" còn nguy hiểm hơn headline nếu lọt hàng chưa gửi vào: nó
+ * gắn con số sai đó với MỘT NGƯỜI CỤ THỂ theo tên — không có "khoá chưa gửi"
+ * để tách riêng như bảng theo tháng có, nên người đọc dễ hiểu nhầm một KOL cụ
+ * thể đang giữ hàng chưa từng được gửi tới họ, rồi nhắn tin đòi nhầm.
+ *
+ * `theoThang` thì NGƯỢC LẠI — nhận trọn `dongBaoCao` không lọc, để khoá
+ * 'chua_gui' của `gomTheoThang` còn đường hiện ra. Đây là nơi DUY NHẤT trong
+ * cả ba mặt báo cáo (headline / theo tháng / theo KOL) còn cho hàng chưa gửi
+ * lộ diện — và nó có nhãn "Chưa gửi" rõ ràng, không lẫn với tháng thật.
  *
  * Quy VND theo tỷ giá THÁNG HIỆN TẠI cho headline (con số "tại thời điểm xem
  * báo cáo"). Bảng bên dưới cho xem chi tiết theo tháng gửi hoặc theo từng
