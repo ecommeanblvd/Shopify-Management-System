@@ -10,8 +10,9 @@ import { db, schema } from '@/db/client';
 import { listBrandReceivedRecords } from './client';
 import { parseBrandReceivedRow } from './parse-brand-received';
 import { docMonLark } from './huy-mon';
+import { noiLineIdChoMon } from '@/features/kho-nhan/sync-line-id';
 
-export interface BrandReceivedSyncResult { fetched: number; inserted: number; monHuy?: number }
+export interface BrandReceivedSyncResult { fetched: number; inserted: number; monHuy?: number; noiLine?: { xet: number; noiDuoc: number } }
 
 const CHUNK = 500;
 
@@ -46,7 +47,11 @@ export async function syncBrandReceived(): Promise<BrandReceivedSyncResult> {
     inserted += ins.length;
   }
   const monHuy = await luuMonDon(records);
-  return { fetched: records.length, inserted, monHuy };
+  // Nối món sang dòng đơn Shopify để tem mang mã dòng đơn (best-effort, không chặn sync).
+  let noiLine = { xet: 0, noiDuoc: 0 };
+  try { noiLine = await noiLineIdChoMon(); }
+  catch (e) { console.error('[kho-nhan] nối line id lỗi (bỏ qua):', e instanceof Error ? e.message : e); }
+  return { fetched: records.length, inserted, monHuy, noiLine };
 }
 
 /**
