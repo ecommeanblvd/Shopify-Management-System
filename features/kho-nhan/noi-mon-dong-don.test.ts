@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chonDongChoMon, maTemChoMon, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
+import { chonDongChoMon, maTemChoMon, locTrungTheoLineId, laLoiHeThong, NGUONG_BO_SOT_HE_THONG, type DongDonToiThieu } from './noi-mon-dong-don';
 
 const d = (id: string, sku: string | null, daDung = false): DongDonToiThieu => ({ shopifyLineId: id, sku, daDung });
 
@@ -30,6 +30,22 @@ describe('locTrungTheoLineId', () => {
   });
   it('danh sách rỗng → rỗng', () => {
     expect(locTrungTheoLineId([])).toEqual([]);
+  });
+});
+
+describe('laLoiHeThong', () => {
+  it('bỏ qua dưới ngưỡng, dù không nối được món nào → chưa phải lỗi hệ thống', () => {
+    expect(laLoiHeThong(0, NGUONG_BO_SOT_HE_THONG - 1)).toBe(false);
+  });
+  it('bỏ qua đạt/vượt ngưỡng VÀ không nối được món nào → lỗi hệ thống', () => {
+    expect(laLoiHeThong(0, NGUONG_BO_SOT_HE_THONG)).toBe(true);
+    expect(laLoiHeThong(0, NGUONG_BO_SOT_HE_THONG + 100)).toBe(true);
+  });
+  it('đã nối được ít nhất một món, dù bỏ qua rất nhiều → không phải lỗi hệ thống (nhiễu hàng-dòng)', () => {
+    expect(laLoiHeThong(1, NGUONG_BO_SOT_HE_THONG + 500)).toBe(false);
+  });
+  it('không bỏ qua món nào → không phải lỗi hệ thống', () => {
+    expect(laLoiHeThong(0, 0)).toBe(false);
   });
 });
 

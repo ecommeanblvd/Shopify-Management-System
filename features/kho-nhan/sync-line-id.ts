@@ -11,13 +11,19 @@
  *  - Ứng viên dòng đơn được lọc trùng theo `shopifyLineId` trước khi chọn (`locTrungTheoLineId`)
  *    VÀ mỗi lần ghi một món chạy trong SAVEPOINT riêng (`tx.transaction` lồng — Drizzle 0.45 +
  *    node-postgres ánh xạ sang `SAVEPOINT`/`ROLLBACK TO SAVEPOINT` thật, xem
- *    node_modules/drizzle-orm/node-postgres/session.js): một món đụng unique index (hoặc lỗi bất
- *    kỳ) chỉ rollback riêng món đó, không kéo sập cả lượt lên tới 2000 món đã ghi đúng trước nó
- *    (review 23/09/2026 vòng 2, Finding "một dòng xấu chặn đứng cả việc nối vĩnh viễn").
+ *    node_modules/drizzle-orm/node-postgres/session.js): một món CHỈ đụng unique index (mã lỗi
+ *    Postgres `23505`) thì chỉ rollback riêng món đó, không kéo sập cả lượt lên tới 2000 món đã
+ *    ghi đúng trước nó (review 23/09/2026 vòng 2, Finding "một dòng xấu chặn đứng cả việc nối
+ *    vĩnh viễn"). Lỗi KHÁC 23505 bị NÉM LẠI, làm sập cả lượt và ghi job là lỗi — một lỗi không
+ *    phải unique-violation (statement_timeout, mất kết nối, ràng buộc khác...) là TÍN HIỆU cần
+ *    biết, không phải nhiễu hàng-dòng an toàn để nuốt. Và nếu unique-violation TỰ NÓ trở thành
+ *    nội bộ toàn phần (bỏ qua rất nhiều món mà không nối được món nào), `laLoiHeThong` bắt cả
+ *    trường hợp đó thành lỗi luôn — vì nếu không, một lượt hỏng toàn phần vẫn được ghi 'ok' xanh
+ *    giả trong `job_runs` (review 23/09/2026 vòng 3).
  */
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { chonDongChoMon, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
+import { chonDongChoMon, laLoiHeThong, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
 
 const MOI_LUOT = 2000;
 
@@ -121,21 +127,36 @@ async function noiTrongKhoa(tx: Parameters<Parameters<typeof db.transaction>[0]>
       try {
         // SAVEPOINT riêng cho từng món: `tx.transaction` lồng bên trong `tx.transaction` ngoài
         // cùng (đã giữ khoá advisory) ánh xạ sang SAVEPOINT thật ở driver node-postgres — lỗi ở
-        // đây (vd đụng unique index lark_mon_don_line_uniq) chỉ ROLLBACK TO SAVEPOINT riêng món
-        // này, transaction ngoài cùng và mọi UPDATE đã commit trước đó trong vòng lặp không bị
-        // ảnh hưởng. try/catch KHÔNG lồng tx.transaction sẽ đầu độc cả transaction ngoài cùng.
+        // đây chỉ ROLLBACK TO SAVEPOINT riêng món này, transaction ngoài cùng và mọi UPDATE đã
+        // ghi trước đó trong vòng lặp không bị ảnh hưởng. try/catch KHÔNG lồng tx.transaction sẽ
+        // đầu độc cả transaction ngoài cùng.
         await tx.transaction(async (tx2) => {
           await tx2.update(schema.larkMonDon).set({ shopifyLineId: lineId }).where(eq(schema.larkMonDon.dinhDanh, m.dinhDanh));
         });
       } catch (e) {
+        // CHỈ nuốt unique-violation (23505, đụng lark_mon_don_line_uniq) — đây là lỗi THẬT SỰ
+        // theo từng dòng, an toàn bỏ qua nhờ savepoint. Mọi mã lỗi khác (statement_timeout, mất
+        // kết nối, ràng buộc khác...) là TÍN HIỆU của việc gì đó hỏng ở tầng rộng hơn một dòng —
+        // ném lại để sập cả lượt, `job_runs` ghi lỗi thay vì âm thầm đếm vào `boSot` (review
+        // 23/09/2026 vòng 3: bắt-mọi-lỗi khiến một lượt hỏng toàn phần vẫn báo 'ok' xanh giả).
+        const maLoi = (e as { code?: unknown } | null)?.code;
+        if (maLoi !== '23505') throw e;
         boSot++;
-        console.error(`[kho-nhan] nối line id: bỏ qua món ${m.dinhDanh} (đơn ${don}, dòng ${lineId}) do lỗi ghi:`, e instanceof Error ? e.message : e);
+        console.error(`[kho-nhan] nối line id: bỏ qua món ${m.dinhDanh} (đơn ${don}, dòng ${lineId}) do đụng unique index lark_mon_don_line_uniq:`, e instanceof Error ? e.message : e);
         continue;
       }
       const d = ds.find((x) => x.shopifyLineId === lineId);
       if (d) d.daDung = true;
       noiDuoc++;
     }
+  }
+  // Unique-violation TỰ NÓ trở thành nội bộ toàn phần (statement_timeout quá thấp, khoá tranh
+  // chấp lark_mon_don...) vẫn có thể chạy hết cả lượt "sạch sẽ" nhờ savepoint cô lập từng dòng —
+  // ném lỗi ở đây để job_runs ghi 'error' thay vì 'ok' kèm boSot cao ngất mà không ai để ý.
+  if (laLoiHeThong(noiDuoc, boSot)) {
+    throw new Error(
+      `nối line id: bỏ qua ${boSot}/${chua.length} món do đụng unique index lark_mon_don_line_uniq mà không nối được món nào — nghi lỗi hệ thống (statement_timeout, khoá tranh chấp lark_mon_don...), không phải vài dòng xấu rời rạc`,
+    );
   }
   return { xet: chua.length, noiDuoc, boSot };
 }
