@@ -91,12 +91,19 @@ const CAC_CET_DONG_DON = {
   soLuongNhapLai: schema.kolDongDon.soLuongNhapLai,
 } as const;
 
+const TRANG_THAI_HOP_LE: readonly TrangThaiDon[] = ['nhap', 'da_chot', 'da_gui', 'huy'];
+
 /** Danh sách đơn, mới nhất trước, tối đa 500 dòng. Lọc tuỳ chọn theo trạng thái / người nhận. */
 export async function danhSachDon(
   loc: { trangThai?: string; nguoiNhanId?: string } = {},
 ): Promise<DonTomTat[]> {
   const dk = [];
-  if (loc.trangThai) dk.push(eq(schema.kolDon.trangThai, loc.trangThai as TrangThaiDon));
+  // Giá trị lọc đến từ query string trên URL, có thể là rác gõ tay. Ép thẳng vào
+  // cột enum thì Postgres ném lỗi thay vì trả danh sách rỗng — kiểm whitelist
+  // trước, không khớp thì coi như không lọc theo trạng thái.
+  if (loc.trangThai && TRANG_THAI_HOP_LE.includes(loc.trangThai as TrangThaiDon)) {
+    dk.push(eq(schema.kolDon.trangThai, loc.trangThai as TrangThaiDon));
+  }
   if (loc.nguoiNhanId) dk.push(eq(schema.kolDon.nguoiNhanId, loc.nguoiNhanId));
 
   const rows = await db
