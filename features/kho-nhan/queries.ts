@@ -26,6 +26,8 @@ export interface MonCuaDon {
   daNhan: {
     luc: string; qcCheck: string; whAction: string; soLuong: number; canKg: number | null;
     trangThaiDay: string; lyDoFail: string | null; anhKey: string | null;
+    /** Kho món này ĐÃ nhận thật — nguồn duy nhất đáng tin để in lên tem (review 23/09/2026 Critical). */
+    warehouse: string;
   } | null;
   /**
    * Dòng kho ĐANG có trên Lark của món này. 8.858/9.007 dòng Lark đã có kết quả nên phần lớn
@@ -68,7 +70,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
     dinhDanh: m.dinhDanh, recordId: m.recordId, sku: m.sku, lineitemName: m.lineitemName,
     store: m.store, vendor: m.vendor, huy: m.huy, lyDoHuy: m.lyDo,
     wLuc: w.luc, wQc: w.qcCheck, wAction: w.whAction, wSl: w.soLuong, wCan: w.canKg,
-    wTrangThai: w.trangThaiDay, wLyDo: w.lyDoFail, wAnh: w.anhKey,
+    wTrangThai: w.trangThaiDay, wLyDo: w.lyDoFail, wAnh: w.anhKey, wKho: w.warehouse,
     shopifyLineId: m.shopifyLineId,
     shopifyVariantId: schema.shopifyOrderLines.shopifyVariantId,
     temInLuc: w.temInLuc,
@@ -116,7 +118,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
         ? {
           luc: r.wLuc.toISOString(), qcCheck: r.wQc!, whAction: r.wAction!, soLuong: r.wSl!,
           canKg: r.wCan != null ? Number(r.wCan) : null, trangThaiDay: r.wTrangThai!,
-          lyDoFail: r.wLyDo ?? null, anhKey: r.wAnh ?? null,
+          lyDoFail: r.wLyDo ?? null, anhKey: r.wAnh ?? null, warehouse: r.wKho!,
         }
         : null,
       larkCu: dong ? docDongKho(dong) : null,

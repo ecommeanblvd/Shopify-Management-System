@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { timMonCuaDon } from '@/features/kho-nhan/queries';
+import { WAREHOUSE } from '@/features/kho-nhan/gia-tri-lark';
 import { TemMon } from '@/components/kho-nhan/TemMon';
 
 export const dynamic = 'force-dynamic';
@@ -25,9 +26,14 @@ export default async function TemNhanKcsPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const donRaw = typeof sp.don === 'string' ? sp.don : '';
   const dsMon = tachMon(sp.mon);
-  // Kho không có chỗ lưu theo món (spec §5 không đòi cột mới) — lấy đúng kho đang chọn trên
-  // màn Nhận & KCS lúc bấm In tem (BangNhanKcs truyền qua ?kho=), không tự suy đoán.
-  const kho = typeof sp.kho === 'string' && sp.kho.trim() ? sp.kho.trim() : '—';
+  // ?kho= là chuỗi TỰ DO trên URL — tab cũ, link chép lại, hay sửa tay đều gõ được bất cứ gì.
+  // Chỉ nhận khi khớp NGUYÊN VĂN danh sách kho hợp lệ (WAREHOUSE) dùng chung toàn hệ thống;
+  // sai thì coi như KHÔNG có, chứ không in một chuỗi rác lên tem dán vào hàng thật (review
+  // 23/09/2026 Important). Đây chỉ là phương án DỰ PHÒNG cho món CHƯA có dòng wh_nhan_kcs —
+  // món đã nhận thì lấy thẳng kho đã ghi (xem monChuaHuy.map bên dưới), không dùng param này.
+  const khoThamSoHopLe = typeof sp.kho === 'string' && (WAREHOUSE as readonly string[]).includes(sp.kho.trim())
+    ? sp.kho.trim()
+    : null;
 
   if (!donRaw.trim()) {
     return <p className="p-6 text-sm text-muted-foreground">Thiếu mã đơn. Dùng ?don=&lt;mã đơn&gt;.</p>;
@@ -57,9 +63,13 @@ export default async function TemNhanKcsPage({ searchParams }: { searchParams: P
       </div>
       <TemMon
         donTran={orderNumber}
-        kho={kho}
         soHuyBoQua={soHuyBoQua}
-        mon={monChuaHuy.map((m) => ({ dinhDanh: m.dinhDanh, maTem: m.maTem, sku: m.sku, ten: m.lineitemName }))}
+        mon={monChuaHuy.map((m) => ({
+          dinhDanh: m.dinhDanh, maTem: m.maTem, sku: m.sku, ten: m.lineitemName,
+          // Kho THẬT đã nhận (wh_nhan_kcs.warehouse) mới đáng tin để in — chỉ rơi về tham số
+          // URL đã kiểm hợp lệ khi món CHƯA có dòng nhận nào; không có cả hai thì để trống.
+          kho: m.daNhan?.warehouse ?? khoThamSoHopLe,
+        }))}
       />
     </div>
   );

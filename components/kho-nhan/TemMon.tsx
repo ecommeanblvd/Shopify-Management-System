@@ -16,6 +16,13 @@ export interface MonTem {
   maTem: string | null;
   sku: string | null;
   ten: string | null;
+  /**
+   * Kho in lên tem — ĐÃ được page.tsx chốt: ưu tiên `wh_nhan_kcs.warehouse` (kho món này THẬT
+   * SỰ đã nhận), chỉ dùng `?kho=` trên URL khi món chưa có dòng nhận và giá trị đó khớp đúng
+   * danh sách kho hợp lệ. null khi không có nguồn nào đáng tin — in dấu gạch ngang, KHÔNG được
+   * đoán, vì dán nhầm kho lên một kiện thật còn tệ hơn để trống (review 23/09/2026 Important).
+   */
+  kho: string | null;
 }
 
 type MonInDuoc = MonTem & { maTem: string };
@@ -25,11 +32,9 @@ type MonInDuoc = MonTem & { maTem: string };
  * trình duyệt — trang in không gọi API) + phần chữ người đọc được, để mã mờ hay mất mạng thì
  * mắt người vẫn đọc ra đúng món. `.khong-in` ẩn mọi thứ ngoài tem khi in (window.print()).
  */
-export function TemMon({ donTran, kho, mon, soHuyBoQua }: {
+export function TemMon({ donTran, mon, soHuyBoQua }: {
   /** Mã đơn người đọc (không có '#'), in đậm trên mỗi tem. */
   donTran: string;
-  /** Kho đang chọn trên màn Nhận & KCS lúc mở trang in — không có nguồn nào khác lưu theo món. */
-  kho: string;
   mon: MonTem[];
   /** Số món đã huỷ bị loại khỏi lượt in (đã huỷ thì không nhận vào kho, không cần tem). */
   soHuyBoQua: number;
@@ -37,8 +42,17 @@ export function TemMon({ donTran, kho, mon, soHuyBoQua }: {
   const inDuoc = mon.filter((m): m is MonInDuoc => !!m.maTem);
   const khongMa = mon.filter((m) => !m.maTem);
 
+  // Chặn bấm "Xong" khi chưa từng bấm "In" ở lần tải trang này (review 23/09/2026 Critical):
+  // window.print() bị huỷ (hết giấy/máy in tắt) vẫn kích 'afterprint' giống in thành công, nên
+  // KHÔNG thể phát hiện đáng tin việc huỷ — chặn ở mức tối thiểu "đã từng bấm In" thay vì đoán.
+  const [daBamIn, setDaBamIn] = useState(false);
   const [dangGui, batDau] = useTransition();
   const [ketQua, setKetQua] = useState<{ da: number } | { loi: string } | null>(null);
+
+  function bamIn() {
+    setDaBamIn(true);
+    window.print();
+  }
 
   function danhDauDaXong() {
     setKetQua(null);
@@ -76,17 +90,21 @@ export function TemMon({ donTran, kho, mon, soHuyBoQua }: {
 
       <div className="khong-in flex flex-wrap items-center gap-3 p-4">
         <button
-          type="button" onClick={() => window.print()} disabled={inDuoc.length === 0}
+          type="button" onClick={bamIn} disabled={inDuoc.length === 0}
           className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-40"
         >
           In {inDuoc.length} tem
         </button>
         <button
-          type="button" onClick={danhDauDaXong} disabled={dangGui || inDuoc.length === 0}
+          type="button" onClick={danhDauDaXong} disabled={!daBamIn || dangGui || inDuoc.length === 0}
+          title={!daBamIn ? 'Phải bấm "In" ít nhất một lần trước — chưa in thì chưa có gì để đánh dấu.' : undefined}
           className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-40"
         >
           {dangGui ? 'Đang đánh dấu…' : 'Xong — đã dán tem'}
         </button>
+        {!daBamIn && (
+          <span className="text-sm text-muted-foreground">Bấm &quot;In&quot; trước — chỉ đánh dấu được sau khi đã in.</span>
+        )}
         {ketQua && 'da' in ketQua && (
           <span className="text-sm text-emerald-700 dark:text-emerald-400">Đã đánh dấu {ketQua.da} món là đã in tem.</span>
         )}
@@ -109,13 +127,13 @@ export function TemMon({ donTran, kho, mon, soHuyBoQua }: {
       )}
 
       <div className="tem-grid">
-        {inDuoc.map((m) => <MotTem key={m.dinhDanh} m={m} donTran={donTran} kho={kho} />)}
+        {inDuoc.map((m) => <MotTem key={m.dinhDanh} m={m} donTran={donTran} />)}
       </div>
     </div>
   );
 }
 
-function MotTem({ m, donTran, kho }: { m: MonInDuoc; donTran: string; kho: string }) {
+function MotTem({ m, donTran }: { m: MonInDuoc; donTran: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -132,7 +150,7 @@ function MotTem({ m, donTran, kho }: { m: MonInDuoc; donTran: string; kho: strin
         <div className="don">#{donTran}</div>
         <div className="sku">{m.sku ?? '—'}</div>
         <div className="ten">{m.ten ?? '—'}</div>
-        <div className="kho">{kho}</div>
+        <div className="kho">{m.kho ?? '—'}</div>
       </div>
     </div>
   );
