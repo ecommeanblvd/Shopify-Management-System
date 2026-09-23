@@ -856,6 +856,9 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   id: uuid('id').defaultRandom().primaryKey(),
   orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
   shopifyLineId: text('shopify_line_id').notNull(),
+  /** gid biến thể/sản phẩm Shopify — khoá để quét mã vạch và nối món kho (23/09/2026). */
+  shopifyVariantId: text('shopify_variant_id'),
+  shopifyProductId: text('shopify_product_id'),
   sku: text('sku'),
   vendor: text('vendor'),
   productTitle: text('product_title').notNull(),
@@ -873,6 +876,7 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   index('shopify_order_lines_order_idx').on(t.orderId),
   index('shopify_order_lines_sku_idx').on(t.sku),
   index('shopify_order_lines_vendor_idx').on(t.vendor),
+  index('shopify_order_lines_variant_idx').on(t.shopifyVariantId),
 ]);
 
 /**
@@ -2100,7 +2104,12 @@ export const larkMonDon = pgTable('lark_mon_don', {
   lineitemName: text('lineitem_name'),
   store: text('store'),
   vendor: text('vendor'),
-}, (t) => [index('lark_mon_don_order_idx').on(t.orderNumber)]);
+  /** Nối sang shopify_order_lines.shopify_line_id — tem mang mã dòng đơn nên phải biết dòng nào (23/09/2026). */
+  shopifyLineId: text('shopify_line_id'),
+}, (t) => [
+  index('lark_mon_don_order_idx').on(t.orderNumber),
+  index('lark_mon_don_line_idx').on(t.shopifyLineId),
+]);
 
 /** Việc kho nhận + kiểm một món, ghi ở SMS trước rồi đẩy sang bảng kho Lark. */
 export const whNhanKcs = pgTable('wh_nhan_kcs', {
@@ -2124,6 +2133,8 @@ export const whNhanKcs = pgTable('wh_nhan_kcs', {
   trangThaiDay: text('trang_thai_day').notNull().default('cho'),
   loi: text('loi'),
   lanDayCuoi: timestamp('lan_day_cuoi'),
+  /** Lúc dán tem mã vạch cho món này (23/09/2026). */
+  temInLuc: timestamp('tem_in_luc'),
 }, (t) => [
   index('wh_nhan_kcs_don_idx').on(t.orderNumber),
   index('wh_nhan_kcs_trang_thai_idx').on(t.trangThaiDay),

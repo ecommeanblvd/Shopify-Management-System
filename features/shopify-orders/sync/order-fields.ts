@@ -25,6 +25,7 @@ export const ORDER_NODE_FIELDS = `
   lineItems(first: 250) {
     nodes {
       id sku vendor title variantTitle quantity
+      variant { id product { id } }
       originalUnitPriceSet { shopMoney { amount currencyCode } }
       discountAllocations { allocatedAmountSet { shopMoney { amount currencyCode } } }
     }

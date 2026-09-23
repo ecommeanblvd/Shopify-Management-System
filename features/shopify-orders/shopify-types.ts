@@ -29,6 +29,8 @@ export interface ShopifyLineItem {
   discountAllocations: Array<{
     allocatedAmountSet: ShopifyMoneyBag;
   }>;
+  /** Hàng tuỳ biến (customize) không gắn biến thể → null. */
+  variant?: { id: string; product?: { id: string } | null } | null;
 }
 
 export interface ShopifyRefundLineItem {

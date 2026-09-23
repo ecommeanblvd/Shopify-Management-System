@@ -184,3 +184,30 @@ describe('mapShopifyOrder', () => {
     expect(m.order.shipPostcode).toBeNull();
   });
 });
+
+describe('mapLine lấy mã biến thể và sản phẩm', () => {
+  const node = {
+    id: 'gid://shopify/LineItem/111', sku: 'A-1', vendor: 'V', title: 'Áo', variantTitle: 'M',
+    quantity: 1,
+    originalUnitPriceSet: { shopMoney: { amount: '10.00', currencyCode: 'USD' } },
+    discountAllocations: [],
+    variant: { id: 'gid://shopify/ProductVariant/222', product: { id: 'gid://shopify/Product/333' } },
+  };
+
+  it('đọc id biến thể và id sản phẩm', () => {
+    const p = { ...fixture('order-simple'), lineItems: { nodes: [node] } } as unknown as ShopifyOrderPayload;
+    const l = mapShopifyOrder(p, 'store-1').lines[0];
+    expect(l.shopifyVariantId).toBe('gid://shopify/ProductVariant/222');
+    expect(l.shopifyProductId).toBe('gid://shopify/Product/333');
+  });
+
+  it('hàng tuỳ biến không có biến thể → null, KHÔNG nổ', () => {
+    const p = {
+      ...fixture('order-simple'),
+      lineItems: { nodes: [{ ...node, variant: null }] },
+    } as unknown as ShopifyOrderPayload;
+    const l = mapShopifyOrder(p, 'store-1').lines[0];
+    expect(l.shopifyVariantId).toBeNull();
+    expect(l.shopifyProductId).toBeNull();
+  });
+});

@@ -28,6 +28,7 @@ const ORDERS_QUERY = `
       totalWeight
       lineItems { edges { node {
         id sku vendor title variantTitle quantity
+        variant { id product { id } }
         originalUnitPriceSet { shopMoney { amount currencyCode } }
         discountAllocations { allocatedAmountSet { shopMoney { amount currencyCode } } }
       } } }

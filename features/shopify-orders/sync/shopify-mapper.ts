@@ -49,6 +49,9 @@ export interface MappedOrder {
   };
   lines: Array<{
     shopifyLineId: string;
+    /** gid biến thể/sản phẩm Shopify — null khi hàng tuỳ biến không gắn biến thể (23/09/2026). */
+    shopifyVariantId: string | null;
+    shopifyProductId: string | null;
     sku: string | null;
     vendor: string | null;
     productTitle: string;
@@ -173,6 +176,8 @@ function mapLine(node: ShopifyLineItem): MappedOrder['lines'][number] {
   const total = (Number(unitPrice) * node.quantity - Number(discountAlloc)).toFixed(2);
   return {
     shopifyLineId: node.id,
+    shopifyVariantId: node.variant?.id ?? null,
+    shopifyProductId: node.variant?.product?.id ?? null,
     sku: node.sku,
     vendor: node.vendor,
     productTitle: node.title,
