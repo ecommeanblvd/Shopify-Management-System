@@ -1,12 +1,29 @@
+import { thangKinhDoanh } from '@/lib/timezone';
+
 /**
  * THUẦN: dựng mã đơn KOL từ số sequence.
  *
  * Sequence chạy LIÊN TỤC, cố ý không reset theo tháng: đơn cuối tháng 9 là
  * KOL-2609-0007 thì đơn đầu tháng 10 là KOL-2610-0008. Nhờ vậy mã không bao
  * giờ trùng kể cả khi ai đó sửa giờ hệ thống.
+ *
+ * Năm-tháng quy theo giờ kinh doanh (Asia/Bangkok), không UTC, để đơn tạo lúc
+ * 00:30 ngày 1 tháng 10 VN được ghi tháng 10, không tháng 9.
  */
 export function maDonKol(soSeq: number, luc: Date): string {
-  const nam = String(luc.getUTCFullYear()).slice(-2);
-  const thang = String(luc.getUTCMonth() + 1).padStart(2, '0');
-  return `KOL-${nam}${thang}-${String(soSeq).padStart(4, '0')}`;
+  // Kiểm tra soSeq phải là số nguyên dương
+  if (!Number.isInteger(soSeq) || soSeq <= 0) {
+    throw new Error(`Số thứ tự đơn phải là số nguyên dương, nhận được: ${soSeq}`);
+  }
+
+  // Lấy năm-tháng theo giờ kinh doanh: "2026-10"
+  const thang = thangKinhDoanh(luc);
+  if (!thang) {
+    throw new Error(`Không thể lấy tháng kinh doanh từ: ${luc}`);
+  }
+
+  // Cắt lấy 2 chữ số cuối của năm (26) và 2 chữ số tháng (10): "2610"
+  const namThang = thang.replace('-', '').slice(-4);
+
+  return `KOL-${namThang}-${String(soSeq).padStart(4, '0')}`;
 }
