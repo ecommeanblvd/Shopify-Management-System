@@ -70,6 +70,29 @@ export function laLoiHeThong(noiDuoc: number, boSot: number): boolean {
 }
 
 /**
+ * THUẦN: biến thể dùng cho MỘT món — cho cả tem `V:` lẫn việc khớp lúc quét (hai chỗ bắt buộc
+ * cùng một giá trị, lệch nhau thì tem in ra quét lại không chọn được món).
+ *
+ * Luật: món ĐÃ có dòng đơn thì biến thể CHỈ được lấy từ dòng đơn ấy — tuyệt đối không mượn biến
+ * thể suy từ SKU. Vì sao phải viết thành luật riêng có test: `shopify_order_lines.shopify_variant_id`
+ * hiện 0/15828 dòng có giá trị, nên một phép `?? theoSku` viết gọn sẽ lặng lẽ áp tầng SKU lên MỌI
+ * món. Hai món cùng SKU trong một đơn khi ấy mang CHUNG một biến thể, và món đang đeo tem `L:`
+ * trở thành ứng viên cho tem `V:` của món kia → quét `V:` chọn nhầm dòng, mà hai dòng cùng SKU
+ * cùng tên nên màn hình không lộ gì, kho cân kiện này ghi vào dòng kia (review N1 23/09/2026).
+ * Món đã có tem `L:` vốn đã định danh chính xác một dòng, không cần tầng SKU.
+ */
+export function bienTheChoMon(x: {
+  shopifyLineId: string | null;
+  /** Biến thể lấy qua dòng đơn Shopify (join theo `shopify_line_id`). */
+  bienTheTheoDongDon: string | null;
+  /** Biến thể tra từ `shopify_variants` theo SKU — CHỈ dùng khi món chưa nối được dòng đơn. */
+  bienTheTheoSku: string | null;
+}): string | null {
+  if (x.shopifyLineId) return x.bienTheTheoDongDon;
+  return x.bienTheTheoDongDon ?? x.bienTheTheoSku;
+}
+
+/**
  * THUẦN: mã in vào tem — dòng đơn trước, rồi biến thể, cuối cùng mã kho tự cấp.
  *
  * Tầng `unitCode` (`WH-…`) hiện CHƯA có caller nào truyền vào: mã kho tự cấp chỉ tồn tại ở màn

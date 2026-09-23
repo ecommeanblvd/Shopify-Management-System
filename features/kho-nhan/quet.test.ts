@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { xuLyQuet, type MonDeQuet } from './quet';
-import { maTemChoMon } from './noi-mon-dong-don';
+import { maTemChoMon, bienTheChoMon } from './noi-mon-dong-don';
 
 /**
  * Id phía DỮ LIỆU phải là GID ĐẦY ĐỦ, y như DB lưu — đo 23/09/2026:
@@ -102,6 +102,47 @@ describe('xuLyQuet', () => {
       ];
       expect(xuLyQuet(`V:${VAR_SO}`, ds)).toEqual({ loai: 'chon_mon', dinhDanh: 'dd1' });
     });
+    /**
+     * Hình dạng THẬT đã làm hỏng vòng trước (đơn TA1962, review N1): một đơn có hai món CÙNG SKU
+     * CÙNG TÊN, một món đã nối được dòng đơn (đeo tem `L:`), món kia chưa (đeo tem `V:`). Nếu
+     * tầng biến thể-theo-SKU rò sang món đã có dòng đơn thì CẢ HAI cùng mang một biến thể, quét
+     * `V:` trả về món đeo tem `L:` — kho cân kiện này mà ghi vào dòng kia, màn hình không lộ gì
+     * vì hai dòng hiển thị y hệt nhau. Không bộ test nào trước đây dựng hình dạng này.
+     */
+    it('món ĐÃ có dòng đơn nằm cạnh anh em CÙNG SKU chưa nối → quét V: phải chọn món CHƯA nối', () => {
+      // Dựng đúng như `timMonCuaDon` dựng: biến thể theo dòng đơn hiện 0/15828 dòng có giá trị.
+      const coDongDon = {
+        shopifyLineId: LINE_GID, bienTheTheoDongDon: null, bienTheTheoSku: VAR_GID,
+      };
+      const chuaNoi = {
+        shopifyLineId: null, bienTheTheoDongDon: null, bienTheTheoSku: VAR_GID,
+      };
+      // Món đã có dòng đơn KHÔNG được mượn biến thể suy từ SKU…
+      expect(bienTheChoMon(coDongDon)).toBeNull();
+      expect(maTemChoMon({ shopifyLineId: coDongDon.shopifyLineId, shopifyVariantId: bienTheChoMon(coDongDon) }))
+        .toBe(`L:${LINE_SO}`);
+      // …còn món chưa nối thì phải có, nếu không nó vĩnh viễn không tem.
+      expect(bienTheChoMon(chuaNoi)).toBe(VAR_GID);
+      expect(maTemChoMon({ shopifyLineId: null, shopifyVariantId: bienTheChoMon(chuaNoi) }))
+        .toBe(`V:${VAR_SO}`);
+
+      const ds = [
+        m('da_noi', { shopifyLineId: LINE_GID, shopifyVariantId: bienTheChoMon(coDongDon) }),
+        m('chua_noi', { shopifyLineId: null, shopifyVariantId: bienTheChoMon(chuaNoi) }),
+      ];
+      // Quét tem V: → đúng món chưa nối, KHÔNG BAO GIỜ là món đang đeo tem L:.
+      expect(xuLyQuet(`V:${VAR_SO}`, ds)).toEqual({ loai: 'chon_mon', dinhDanh: 'chua_noi' });
+      // Quét tem L: → đúng món đã nối.
+      expect(xuLyQuet(`L:${LINE_SO}`, ds)).toEqual({ loai: 'chon_mon', dinhDanh: 'da_noi' });
+    });
+
+    it('biến thể ĐÃ có từ dòng đơn (sau backfill) thì dùng nó, không rơi xuống tầng SKU', () => {
+      expect(bienTheChoMon({ shopifyLineId: LINE_GID, bienTheTheoDongDon: VAR_GID, bienTheTheoSku: 'khac' }))
+        .toBe(VAR_GID);
+      expect(bienTheChoMon({ shopifyLineId: null, bienTheTheoDongDon: VAR_GID, bienTheTheoSku: 'khac' }))
+        .toBe(VAR_GID);
+    });
+
     it('hai món cùng biến thể nhưng KHÁC dòng đơn → tem L: chọn đúng dòng, không nhầm sang cái kia', () => {
       const ds = [
         m('dd1', { shopifyLineId: LINE_GID, shopifyVariantId: VAR_GID }),

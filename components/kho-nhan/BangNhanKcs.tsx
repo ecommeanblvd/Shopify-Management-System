@@ -172,7 +172,10 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
               <div className="flex flex-wrap gap-1.5">
                 {dsBienThe.slice(0, 5).map((d) => (
                   <button
-                    key={d.orderNumber}
+                    // Một đơn có thể xuất hiện nhiều lần với SKU khác nhau (danh sách chỉ bỏ
+                    // trùng theo đơn+SKU), nên khoá React phải gồm cả SKU — lấy mỗi orderNumber
+                    // là trùng khoá, React bỏ mất nút.
+                    key={`${d.orderNumber} ${d.sku ?? ''}`}
                     type="button"
                     onClick={() => { router.push(`/f/warehouse/nhan-kcs?don=${encodeURIComponent(d.orderNumber)}`); setDsBienThe(null); }}
                     className="rounded-md border border-border bg-card px-2 py-1 font-medium hover:bg-muted"
@@ -181,6 +184,12 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
                   </button>
                 ))}
               </div>
+              {dsBienThe.length > 5 && (
+                // Cắt còn 5 nút mà không nói gì thì kho tưởng chỉ có 5 đơn đang chờ hàng này.
+                <p className="text-muted-foreground">
+                  … và {dsBienThe.length - 5} đơn nữa — gõ mã đơn vào ô bên dưới nếu không thấy đơn cần tìm.
+                </p>
+              )}
             </>
           )}
         </div>

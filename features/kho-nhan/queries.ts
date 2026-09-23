@@ -3,7 +3,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { searchWhInventoryByDon } from '@/features/lark/client';
 import { timDongTheoMon, docDongKho, type KetQuaKhoTrenLark } from '@/features/lark/wh-inventory';
-import { maTemChoMon } from '@/features/kho-nhan/noi-mon-dong-don';
+import { maTemChoMon, bienTheChoMon } from '@/features/kho-nhan/noi-mon-dong-don';
 
 export interface MonCuaDon {
   dinhDanh: string;
@@ -17,10 +17,13 @@ export interface MonCuaDon {
   /** Dòng đơn Shopify tương ứng (nối theo SKU khi đẩy Lark — xem noi-mon-dong-don.ts). null khi chưa nối được. */
   shopifyLineId: string | null;
   /**
-   * Mã biến thể Shopify của món: lấy qua dòng đơn khi đã nối được, KHÔNG nối được thì tra
-   * `shopify_variants` theo SKU (xem `BIEN_THE_THEO_SKU` bên dưới). Dùng cho CẢ tem lẫn việc
-   * khớp lúc quét — hai chỗ phải cùng một giá trị, nếu không thì tem `V:` in ra rồi quét lại
-   * không chọn được món.
+   * Mã biến thể Shopify của món. CÓ line id → lấy qua dòng đơn và CHỈ qua dòng đơn (hiện luôn
+   * null vì `shopify_order_lines.shopify_variant_id` chưa backfill — 0/15828 dòng có giá trị).
+   * KHÔNG có line id → tra `shopify_variants` theo SKU (xem `bienTheTheoSku` trong
+   * `timMonCuaDon`). Hai nhánh tách bạch, không trộn: xem lý do ở chỗ tính giá trị này.
+   *
+   * Dùng cho CẢ tem lẫn việc khớp lúc quét — hai chỗ phải cùng một giá trị, nếu không thì tem
+   * `V:` in ra rồi quét lại không chọn được món.
    */
   shopifyVariantId: string | null;
   /**
@@ -86,8 +89,17 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
    *
    * `having count(distinct …) = 1`: chỉ nhận khi SKU ra ĐÚNG MỘT biến thể. SKU trùng ở hai biến
    * thể khác nhau (đo được: 1 món) thì chọn bừa là dán mã hàng SAI lên kiện thật — thà để null
-   * rồi liệt kê ra ở màn in tem. Không lọc theo store: `lark_mon_don.store` là tên tự do phía
-   * Lark chứ không phải khoá sang `stores`; ràng buộc "đúng một biến thể" đã đủ chặt.
+   * rồi liệt kê ra ở màn in tem.
+   *
+   * KHÔNG lọc theo store, và đây là chỗ MONG MANH phải nói thẳng: `shopify_variants` hiện chỉ
+   * chứa DUY NHẤT một store (đo 23/09/2026: `count(distinct store_id) = 1`, 120.817 dòng), nên
+   * ràng buộc "đúng một biến thể" ở trên KHÔNG THỂ phát hiện SKU trùng giữa hai store — không có
+   * ứng viên thứ hai để mà đụng nhau. Trong 799 món được vá có 411 món mang `store` khác
+   * (#MTB, #HC, #MCN, MER Request, #MOS, #MXHS, #TINH, #DISCN) nhưng vẫn nhận biến thể của store
+   * duy nhất đang có. Hôm nay vô hại vì chỉ có một store; NGÀY store thứ hai được đồng bộ vào
+   * `shopify_variants` thì hàng rào này thủng và phải lọc theo store trước khi tin kết quả.
+   * Chưa lọc được ngay: `lark_mon_don.store` là tên tự do phía Lark ("#MBLVD", "MER Request"),
+   * không phải khoá sang `stores`, nên cần một bảng ánh xạ mà vòng này không được phép dựng.
    *
    * Để RIÊNG một biểu thức con thay vì thêm `leftJoin` theo SKU: `shopify_variants.sku` KHÔNG
    * unique nên join sẽ nhân dòng của món có SKU trùng — đúng cái bẫy đã phải vá ở `rowsMotLan`.
@@ -140,9 +152,13 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
 
   const mon = rowsMotLan.map((r) => {
     const dong = r.recordId ? timDongTheoMon(dsLark, r.recordId) : null;
-    // MỘT giá trị biến thể duy nhất cho cả tem lẫn khớp quét: dòng đơn trước, thiếu thì tra
-    // theo SKU. Tính một lần ở đây để tem `V:` in ra và ô quét luôn nói về cùng một biến thể.
-    const shopifyVariantId = r.shopifyVariantId ?? r.bienTheTheoSku;
+    // MỘT giá trị biến thể duy nhất cho cả tem lẫn khớp quét. Luật (kèm lý do và test) nằm ở
+    // `bienTheChoMon` — đừng viết lại `?? bienTheTheoSku` ở đây, đó chính là bug N1.
+    const shopifyVariantId = bienTheChoMon({
+      shopifyLineId: r.shopifyLineId,
+      bienTheTheoDongDon: r.shopifyVariantId,
+      bienTheTheoSku: r.bienTheTheoSku,
+    });
     return {
       dinhDanh: r.dinhDanh, recordId: r.recordId, sku: r.sku, lineitemName: r.lineitemName,
       store: r.store, vendor: r.vendor, huy: r.huy, lyDoHuy: r.lyDoHuy,

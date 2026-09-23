@@ -77,11 +77,14 @@ describe('soIdShopify — nguồn rút số DUY NHẤT để so id DB với kho�
     expect(soIdShopify('14593977155752')).toBe('14593977155752');
     expect(soIdShopify(soIdShopify('gid://shopify/LineItem/14593977155752')!)).toBe('14593977155752');
   });
-  it('gid và số trần của CÙNG một id rút ra bằng nhau — đây là bất biến cả hệ dựa vào', () => {
-    const gid: string = 'gid://shopify/LineItem/14593977155752';
-    const soTren: string = '14593977155752';
-    expect(gid === soTren).toBe(false); // so thẳng thì SAI
-    expect(soIdShopify(gid)).toBe(soIdShopify(soTren)); // rút rồi mới đúng
+  it('id DB (gid) và khoá đọc từ tem (số trần) rút ra bằng nhau — bất biến cả hệ dựa vào', () => {
+    // Đi trọn vòng thật: id trong DB → chuỗi in lên tem → đọc lại từ tem → rút số của id DB.
+    const idTrongDb = 'gid://shopify/LineItem/14593977155752';
+    const maTem = maTemDong(idTrongDb);
+    expect(maTem).toBe('L:14593977155752');
+    const doc = docMaTem(maTem!);
+    expect(doc).toEqual({ loai: 'dong', shopifyLineId: '14593977155752' });
+    expect(soIdShopify(idTrongDb)).toBe(doc && 'shopifyLineId' in doc ? doc.shopifyLineId : null);
   });
   it('id không chứa chữ số → null, KHÔNG bịa', () => {
     expect(soIdShopify('abc')).toBeNull();
