@@ -3,6 +3,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { searchWhInventoryByDon } from '@/features/lark/client';
 import { timDongTheoMon, docDongKho, type KetQuaKhoTrenLark } from '@/features/lark/wh-inventory';
+import { maTemChoMon } from '@/features/kho-nhan/noi-mon-dong-don';
 
 export interface MonCuaDon {
   dinhDanh: string;
@@ -13,6 +14,14 @@ export interface MonCuaDon {
   vendor: string | null;
   huy: boolean;
   lyDoHuy: string | null;
+  /** Dòng đơn Shopify tương ứng (nối theo SKU khi đẩy Lark — xem noi-mon-dong-don.ts). null khi chưa nối được. */
+  shopifyLineId: string | null;
+  /** Mã biến thể Shopify của dòng đơn trên — lấy qua join, không tự suy ra khi thiếu dòng đơn. */
+  shopifyVariantId: string | null;
+  /** Mã in tem cho món này — dòng đơn trước, rồi biến thể; null khi cả hai đều thiếu (xem AGENTS/task-5 report). */
+  maTem: string | null;
+  /** Lúc dán tem mã vạch cho món này (ISO), null nếu chưa in. */
+  temInLuc: string | null;
   /** Kết quả kho đã ghi cho món này trong SMS (nếu có) — nhập tiếp là SỬA, không tạo dòng hai. */
   daNhan: {
     luc: string; qcCheck: string; whAction: string; soLuong: number; canKg: number | null;
@@ -32,8 +41,18 @@ export interface MonCuaDonKetQua {
   loiLark: string | null;
 }
 
-export async function timMonCuaDon(orderNumber: string): Promise<MonCuaDonKetQua> {
-  const bare = orderNumber.trim().replace(/^#/, '');
+export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: string }): Promise<MonCuaDonKetQua> {
+  let bare = orderNumber.trim().replace(/^#/, '');
+  // Quét mã tem ĐƠN (O:<shopifyOrderId>) không cho mã đơn dạng người đọc — tra ngược
+  // sang shopify_orders để lấy shopifyOrderNumber rồi mở đơn như quét tay bình thường.
+  if (opts?.theoOrderId) {
+    const [don] = await db.select({ shopifyOrderNumber: schema.shopifyOrders.shopifyOrderNumber })
+      .from(schema.shopifyOrders)
+      .where(sql`regexp_replace(${schema.shopifyOrders.shopifyOrderId}, '^.*/', '') = ${opts.theoOrderId}`)
+      .limit(1);
+    if (!don) return { mon: [], loiLark: null };
+    bare = don.shopifyOrderNumber.trim().replace(/^#/, '');
+  }
   if (!bare) return { mon: [], loiLark: null };
   const m = schema.larkMonDon, w = schema.whNhanKcs;
   const rows = await db.select({
@@ -41,8 +60,12 @@ export async function timMonCuaDon(orderNumber: string): Promise<MonCuaDonKetQua
     store: m.store, vendor: m.vendor, huy: m.huy, lyDoHuy: m.lyDo,
     wLuc: w.luc, wQc: w.qcCheck, wAction: w.whAction, wSl: w.soLuong, wCan: w.canKg,
     wTrangThai: w.trangThaiDay, wLyDo: w.lyDoFail, wAnh: w.anhKey,
+    shopifyLineId: m.shopifyLineId,
+    shopifyVariantId: schema.shopifyOrderLines.shopifyVariantId,
+    temInLuc: w.temInLuc,
   }).from(m)
     .leftJoin(w, eq(w.monDinhDanh, m.dinhDanh))
+    .leftJoin(schema.shopifyOrderLines, eq(schema.shopifyOrderLines.shopifyLineId, m.shopifyLineId))
     .where(eq(m.orderNumber, bare))
     .orderBy(m.sku);
 
@@ -62,6 +85,10 @@ export async function timMonCuaDon(orderNumber: string): Promise<MonCuaDonKetQua
     return {
       dinhDanh: r.dinhDanh, recordId: r.recordId, sku: r.sku, lineitemName: r.lineitemName,
       store: r.store, vendor: r.vendor, huy: r.huy, lyDoHuy: r.lyDoHuy,
+      shopifyLineId: r.shopifyLineId,
+      shopifyVariantId: r.shopifyVariantId,
+      maTem: maTemChoMon({ shopifyLineId: r.shopifyLineId, shopifyVariantId: r.shopifyVariantId }),
+      temInLuc: r.temInLuc ? r.temInLuc.toISOString() : null,
       daNhan: r.wLuc
         ? {
           luc: r.wLuc.toISOString(), qcCheck: r.wQc!, whAction: r.wAction!, soLuong: r.wSl!,
