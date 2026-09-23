@@ -1,156 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-
-declare global {
-  interface Window {
-    BarcodeDetector?: new (o: { formats: string[] }) => { detect(src: CanvasImageSource): Promise<Array<{ rawValue: string }>> };
-  }
-}
+import { ScanInput } from '@/components/ui/scan-input';
 
 /**
  * Ô quét đứng đầu màn "Nhận & kiểm hàng" (spec §5). Luôn giữ con trỏ: máy quét cầm tay gõ
  * chuỗi rồi Enter y như bàn phím nên không cần bấm nút gì thêm. Trên điện thoại có thêm nút
  * mở camera, dùng `BarcodeDetector` của trình duyệt (Chrome Android có sẵn) — KHÔNG cài thêm
  * thư viện; máy không hỗ trợ thì nút này không hiện, kho gõ tay hoặc dùng máy quét cầm tay.
+ *
+ * Chỉ còn là LỚP MỎNG bọc `components/ui/scan-input.tsx` (nơi cài đặt duy nhất của hành vi
+ * quét — hand-scanner+Enter, camera+`BarcodeDetector`, dọn stream) — rút ra để màn tạo đơn
+ * KOL dùng lại ĐÚNG một chỗ thay vì một bản sao có thể trôi lệch dần. Giữ nguyên id, placeholder
+ * và mọi className cũ (h-11, không `cursor-pointer`) để HTML render ra giống hệt trước khi
+ * tách, và giữ nguyên autoFocus mặc định `true` — hành vi "không cướp focus của ô đang gõ dở"
+ * đến từ việc component chỉ `autoFocus` lúc MOUNT (`BangNhanKcs` không remount ô này giữa các
+ * lần render), không phải từ bất kỳ logic nào ở đây.
  */
 export function OQuet({ onQuet }: { onQuet: (raw: string) => void }) {
-  const [gia, setGia] = useState('');
-  const [dangQuetCamera, setDangQuetCamera] = useState(false);
-  const [loiCamera, setLoiCamera] = useState<string | null>(null);
-  // App Router vẫn server-render component 'use client' này cho HTML ban đầu — server KHÔNG có
-  // `window` nên luôn coi như không hỗ trợ, còn Chrome (kể cả bản Desktop) lúc hydrate THÌ CÓ
-  // BarcodeDetector, khiến nút "Quét bằng camera" biến mất/xuất hiện giữa hai lần render — lệch
-  // HÌNH DẠNG cây (có nút hay không), không phải lệch giá trị bên trong một control có sẵn như
-  // ô chọn `kho` (localStorage) — nên KHÔNG được tính trực tiếp trong thân render hay dùng lazy
-  // initializer (cả hai đều chạy lại y hệt lúc hydrate, không cứu được gì). Chuẩn đúng: bắt đầu
-  // `false` (khớp HTML server render), rồi bật lại SAU khi đã gắn xong vào DOM, trong effect
-  // (review 23/09/2026 Important 3).
-  const [hoTroCamera, setHoTroCamera] = useState(false);
-  useEffect(() => {
-    // Đây đúng là ngoại lệ hợp lệ mà rule này nhắm tới tránh (không phải phát hiện được nhờ
-    // đồng bộ với hệ ngoài) — nhưng phát hiện tính năng của TRÌNH DUYỆT sau khi đã lên DOM
-    // (kỹ thuật "mounted flag" chuẩn cho hydration) không có cách nào khác an toàn hơn: tính
-    // trong thân render/useState lazy đều chạy lại y hệt lúc hydrate trên client, không tránh
-    // được lệch cây so với HTML server render (xem comment ở khai báo state).
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- phát hiện BarcodeDetector chỉ có sau khi mount, không tính được lúc render để tránh lệch hydrate
-    setHoTroCamera(typeof window !== 'undefined' && 'BarcodeDetector' in window);
-  }, []);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  function dungCamera() {
-    if (intervalRef.current != null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setDangQuetCamera(false);
-  }
-
-  // Rời màn giữa chừng (chuyển route sau khi mở đơn) mà không dừng thì camera sáng mãi.
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current != null) clearInterval(intervalRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  async function moCamera() {
-    setLoiCamera(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      streamRef.current = stream;
-      setDangQuetCamera(true);
-    } catch {
-      // Người dùng từ chối quyền camera, hoặc máy không có camera — không nổ, chỉ báo và cho gõ tay.
-      setLoiCamera('Không mở được camera, gõ tay hoặc dùng máy quét');
-    }
-  }
-
-  // <video> chỉ tồn tại trong DOM sau khi dangQuetCamera bật — gắn stream + bắt đầu quét ở đây.
-  useEffect(() => {
-    if (!dangQuetCamera) return;
-    const BarcodeDetectorCtor = window.BarcodeDetector;
-    if (!streamRef.current || !videoRef.current || !BarcodeDetectorCtor) return;
-    const video = videoRef.current;
-    video.srcObject = streamRef.current;
-    void video.play().catch(() => { /* một số trình duyệt cần tương tác người dùng — bấm nút đã tính là tương tác */ });
-
-    const detector = new BarcodeDetectorCtor({ formats: ['qr_code', 'code_128', 'ean_13'] });
-    let dangDoc = false;
-    const id = setInterval(() => {
-      if (dangDoc || !videoRef.current) return;
-      dangDoc = true;
-      detector.detect(videoRef.current)
-        .then((ketQua) => {
-          if (ketQua.length > 0) {
-            dungCamera();
-            onQuet(ketQua[0].rawValue);
-          }
-        })
-        .catch(() => { /* khung hình lỗi thoáng qua — thử lại lượt sau */ })
-        .finally(() => { dangDoc = false; });
-    }, 300);
-    intervalRef.current = id;
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onQuet đổi tham chiếu không cần khởi động lại camera
-  }, [dangQuetCamera]);
-
-  function guiTay(v: string) {
-    const trimmed = v.trim();
-    if (!trimmed) return;
-    onQuet(trimmed);
-    setGia('');
-  }
-
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          // id cố định — sau khi Lưu một món xong, BangNhanKcs trả con trỏ về đây bằng
-          // getElementById để sẵn sàng cho lượt quét VẬT LÝ tiếp theo (spec §5 "sang món kế",
-          // không rời tay khỏi bàn phím — review 23/09/2026 Critical 1).
-          id="o-quet"
-          ref={inputRef}
-          value={gia}
-          onChange={(e) => setGia(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return;
-            guiTay(gia);
-          }}
-          autoFocus
-          autoComplete="off"
-          placeholder="Quét mã đơn hoặc tem món…"
-          className="h-11 min-w-[240px] flex-1 rounded-md border border-amber-500/50 bg-input/30 px-3 text-sm outline-none focus:border-amber-500"
-        />
-        {hoTroCamera && !dangQuetCamera && (
-          <button
-            type="button"
-            onClick={moCamera}
-            className="h-11 rounded-lg border border-border px-4 text-sm font-medium hover:bg-muted"
-          >
-            Quét bằng camera
-          </button>
-        )}
-        {dangQuetCamera && (
-          <button
-            type="button"
-            onClick={dungCamera}
-            className="h-11 rounded-lg border border-red-500/50 px-4 text-sm font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-          >
-            Dừng camera
-          </button>
-        )}
-      </div>
-      {loiCamera && <p className="text-[13px] text-red-600 dark:text-red-400">{loiCamera}</p>}
-      {dangQuetCamera && (
-        <video ref={videoRef} muted playsInline className="aspect-video w-full max-w-sm rounded-lg bg-black object-cover" />
-      )}
-    </div>
+    <ScanInput
+      id="o-quet"
+      onQuet={onQuet}
+      placeholder="Quét mã đơn hoặc tem món…"
+      inputClassName="h-11 min-w-[240px] flex-1 rounded-md border border-amber-500/50 bg-input/30 px-3 text-sm outline-none focus:border-amber-500"
+      cameraButtonClassName="h-11 rounded-lg border border-border px-4 text-sm font-medium hover:bg-muted"
+      stopButtonClassName="h-11 rounded-lg border border-red-500/50 px-4 text-sm font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+    />
   );
 }

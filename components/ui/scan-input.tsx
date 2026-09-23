@@ -8,26 +8,50 @@ declare global {
   }
 }
 
+const O_NHAP_MAC_DINH = 'h-9 min-w-[200px] flex-1 rounded-md border border-amber-500/50 bg-input/30 px-3 text-sm outline-none focus:border-amber-500';
+const NUT_CAMERA_MAC_DINH = 'h-9 cursor-pointer rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted';
+const NUT_DUNG_MAC_DINH = 'h-9 cursor-pointer rounded-lg border border-red-500/50 px-3 text-sm font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30';
+const VIDEO_MAC_DINH = 'aspect-video w-full max-w-sm rounded-lg bg-black object-cover';
+
 /**
- * Ô quét dùng chung: máy quét cầm tay gõ chuỗi rồi Enter y như bàn phím, không
- * cần bấm nút gì thêm; trên điện thoại có thêm nút mở camera, dùng
- * `BarcodeDetector` của trình duyệt (Chrome Android có sẵn) — KHÔNG cài thêm
- * thư viện, máy không hỗ trợ thì nút này không hiện.
+ * Ô quét DÙNG CHUNG cho mọi màn cần quét mã (kho nhận & kiểm hàng, tạo đơn
+ * KOL, …) — NƠI DUY NHẤT cài đặt hành vi quét. Máy quét cầm tay gõ chuỗi rồi
+ * Enter y như bàn phím, không cần bấm nút gì thêm; trên điện thoại có thêm nút
+ * mở camera, dùng `BarcodeDetector` của trình duyệt (Chrome Android có sẵn) —
+ * KHÔNG cài thêm thư viện, máy không hỗ trợ thì nút này không hiện.
  *
- * Rút từ `components/kho-nhan/OQuet.tsx` (màn "Nhận & kiểm hàng") thành mảnh
- * dùng chung KHÔNG phụ thuộc nghiệp vụ kho — nơi gọi tự lo việc diễn giải
- * chuỗi quét ra (SKU/mã tem/biến thể/...). `components/kho-nhan/OQuet.tsx`
- * chủ ý KHÔNG bị sửa lại để dùng mảnh này (ngoài phạm vi luồng KOL) — hai nơi
- * hiện trùng logic camera/hydration, chấp nhận được vì bản gốc là code đã có
- * sẵn và ổn định.
+ * `components/kho-nhan/OQuet.tsx` (màn "Nhận & kiểm hàng") giờ chỉ là một lớp
+ * mỏng bọc component này, truyền đúng id/placeholder/className đã có để
+ * KHÔNG đổi hành vi hay hình dạng đã được review: không cướp focus của một ô
+ * đang gõ dở (component này chỉ `autoFocus` lúc MOUNT, những màn dùng nó y hệt
+ * cách cũ — không remount trên mỗi lần render thì không tự nhảy focus lại);
+ * quyết định "mã thuộc đơn khác thì hỏi trước khi nhảy" và "không đoán mã lạ"
+ * nằm ở TẦNG GỌI (`BangNhanKcs.tsx`/`giaiMaQuetTaoDon`), không phải ở đây —
+ * component này chỉ có một việc: đưa nguyên văn chuỗi vừa quét/gõ ra qua
+ * `onQuet`, không tự diễn giải, không tự lọc.
+ *
+ * className cho từng phần có thể ghi đè (mặc định khớp bản KOL, h-9) — `OQuet`
+ * truyền lại đúng các class cũ (h-11, không `cursor-pointer`) để HTML render ra
+ * giống hệt trước khi tách, không có gì thay đổi trên màn kho.
  */
 export function ScanInput({
-  onQuet, placeholder = 'Quét mã hoặc gõ tay rồi Enter…', autoFocus = true, id,
+  onQuet,
+  placeholder = 'Quét mã hoặc gõ tay rồi Enter…',
+  autoFocus = true,
+  id,
+  inputClassName = O_NHAP_MAC_DINH,
+  cameraButtonClassName = NUT_CAMERA_MAC_DINH,
+  stopButtonClassName = NUT_DUNG_MAC_DINH,
+  videoClassName = VIDEO_MAC_DINH,
 }: {
   onQuet: (raw: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
   id?: string;
+  inputClassName?: string;
+  cameraButtonClassName?: string;
+  stopButtonClassName?: string;
+  videoClassName?: string;
 }) {
   const [gia, setGia] = useState('');
   const [dangQuetCamera, setDangQuetCamera] = useState(false);
@@ -128,13 +152,13 @@ export function ScanInput({
           autoFocus={autoFocus}
           autoComplete="off"
           placeholder={placeholder}
-          className="h-9 min-w-[200px] flex-1 rounded-md border border-amber-500/50 bg-input/30 px-3 text-sm outline-none focus:border-amber-500"
+          className={inputClassName}
         />
         {hoTroCamera && !dangQuetCamera && (
           <button
             type="button"
             onClick={moCamera}
-            className="h-9 cursor-pointer rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
+            className={cameraButtonClassName}
           >
             Quét bằng camera
           </button>
@@ -143,7 +167,7 @@ export function ScanInput({
           <button
             type="button"
             onClick={dungCamera}
-            className="h-9 cursor-pointer rounded-lg border border-red-500/50 px-3 text-sm font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+            className={stopButtonClassName}
           >
             Dừng camera
           </button>
@@ -151,7 +175,7 @@ export function ScanInput({
       </div>
       {loiCamera && <p className="text-[13px] text-red-600 dark:text-red-400">{loiCamera}</p>}
       {dangQuetCamera && (
-        <video ref={videoRef} muted playsInline className="aspect-video w-full max-w-sm rounded-lg bg-black object-cover" />
+        <video ref={videoRef} muted playsInline className={videoClassName} />
       )}
     </div>
   );
