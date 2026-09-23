@@ -17,8 +17,11 @@ export default async function NhanKcsPage({ searchParams }: { searchParams: Prom
   }
   const sp = await searchParams;
   const don = typeof sp.don === 'string' ? sp.don : '';
+  // Quét mã tem ĐƠN (O:<shopifyOrderId>) đưa thẳng shopifyOrderId qua URL — tra ngược sang
+  // mã đơn người đọc trong timMonCuaDon (xem noteopts.theoOrderId), không phải gõ tay.
+  const donId = typeof sp.donId === 'string' ? sp.donId : '';
   const [kq, homNay] = await Promise.all([
-    don ? timMonCuaDon(don) : Promise.resolve({ mon: [], loiLark: null }),
+    donId ? timMonCuaDon('', { theoOrderId: donId }) : don ? timMonCuaDon(don) : Promise.resolve({ mon: [], loiLark: null }),
     listDaXuLyHomNay(),
   ]);
 

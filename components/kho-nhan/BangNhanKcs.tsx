@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { dayLaiDongLoi, ghiNhanKcs } from '@/features/kho-nhan/actions';
 import { QC_CHECK, WAREHOUSE, WH_ACTION, type QcCheck, type WhAction, type Warehouse } from '@/features/kho-nhan/gia-tri-lark';
 import { actionMacDinh } from '@/features/kho-nhan/luat';
 import type { MonCuaDon, listDaXuLyHomNay } from '@/features/kho-nhan/queries';
+import { xuLyQuet, type MonDeQuet } from '@/features/kho-nhan/quet';
+import { traDonCuaDong, traDonCoBienThe } from '@/features/kho-nhan/quet-actions';
+import { docMaTem } from '@/features/receiving/ma-tem';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
+import { OQuet } from './OQuet';
 
 type DongHomNay = Awaited<ReturnType<typeof listDaXuLyHomNay>>[number];
 type KetQuaGhi = Awaited<ReturnType<typeof ghiNhanKcs>>;
@@ -21,7 +26,11 @@ const laAction = (v: string | undefined): v is WhAction => !!v && (WH_ACTION as 
 const laKho = (v: string | null): v is Warehouse => !!v && (WAREHOUSE as readonly string[]).includes(v);
 
 const O_NHAP = 'h-9 w-full rounded-md border border-input bg-input/30 px-2.5 text-sm outline-none focus:border-amber-500/60 disabled:opacity-50';
+/** Bản điện thoại của O_NHAP — ô to hơn cho ngón tay (spec §5 "ô nhập lớn"). */
+const O_NHAP_LON = 'h-11 w-full rounded-md border border-input bg-input/30 px-3 text-base outline-none focus:border-amber-500/60 disabled:opacity-50';
 const NUT_CHINH = 'h-9 rounded-lg bg-amber-500 px-5 text-[13px] font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50';
+/** Bản điện thoại của NUT_CHINH — chạy hết chiều ngang (spec §5 "nút Lưu w-full py-3"). */
+const NUT_CHINH_LON = 'w-full rounded-lg bg-amber-500 py-3 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50';
 
 export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   don: string;
@@ -49,13 +58,138 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   // Bảng món trong SMS lưu mã đơn KHÔNG có '#', gửi Lark cũng phải cùng nếp đó.
   const donTran = don.trim().replace(/^#/, '');
 
+  const router = useRouter();
+  /** Món vừa được quét chọn — tô sáng 3 giây rồi tự tắt. */
+  const [monSang, setMonSang] = useState<string | null>(null);
+  /** Mã quét không nhận ra — dải đỏ tự tắt sau 4 giây. */
+  const [khongHieu, setKhongHieu] = useState<string | null>(null);
+  /** Mã dòng đơn thuộc đơn KHÁC đơn đang mở — hỏi trước khi nhảy, không tự chuyển. */
+  const [hoiChuyenDon, setHoiChuyenDon] = useState<{ orderNumber: string } | null>(null);
+  /** Quét mã biến thể khi chưa mở đơn nào — danh sách đơn đang chờ có hàng này (rỗng = không thấy). */
+  const [dsBienThe, setDsBienThe] = useState<Array<{ orderNumber: string; sku: string | null }> | null>(null);
+  const [, batDauTraCuuQuet] = useTransition();
+
+  const xuLyQuetManHinh = useCallback((raw: string) => {
+    setKhongHieu(null);
+    setHoiChuyenDon(null);
+    setDsBienThe(null);
+    const ds: MonDeQuet[] = mon.map((m) => ({
+      dinhDanh: m.dinhDanh,
+      sku: m.sku,
+      shopifyLineId: m.shopifyLineId,
+      shopifyVariantId: m.shopifyVariantId,
+      daXuLy: m.daNhan != null,
+    }));
+    const ket = xuLyQuet(raw, ds);
+    switch (ket.loai) {
+      case 'mo_don': {
+        router.push(`/f/warehouse/nhan-kcs?donId=${encodeURIComponent(ket.shopifyOrderId)}`);
+        return;
+      }
+      case 'chon_mon': {
+        const dinhDanh = ket.dinhDanh;
+        setMonSang(dinhDanh);
+        document.getElementById(`mon-${dinhDanh}`)?.scrollIntoView({ block: 'center' });
+        // Trên máy tính, sau khi quét con trỏ nhảy thẳng vào ô cân — gõ số, Enter là lưu và
+        // sang món kế, không rời tay khỏi bàn phím (spec §5). Đợi một nhịp cho scrollIntoView.
+        setTimeout(() => (document.getElementById(`can-${dinhDanh}`) as HTMLInputElement | null)?.focus(), 300);
+        setTimeout(() => setMonSang((cur) => (cur === dinhDanh ? null : cur)), 3000);
+        return;
+      }
+      case 'don_khac': {
+        // xuLyQuet không mang theo shopifyLineId gốc trong kết quả 'don_khac' — đọc lại từ raw.
+        const ma = docMaTem(raw);
+        if (!ma || ma.loai !== 'dong') {
+          const r = raw;
+          setKhongHieu(r);
+          setTimeout(() => setKhongHieu((cur) => (cur === r ? null : cur)), 4000);
+          return;
+        }
+        const shopifyLineId = ma.shopifyLineId;
+        batDauTraCuuQuet(async () => {
+          const donCuaDong = await traDonCuaDong(shopifyLineId);
+          if (donCuaDong) {
+            setHoiChuyenDon(donCuaDong);
+          } else {
+            setKhongHieu(raw);
+            setTimeout(() => setKhongHieu((cur) => (cur === raw ? null : cur)), 4000);
+          }
+        });
+        return;
+      }
+      case 'tim_bien_the': {
+        batDauTraCuuQuet(async () => {
+          const ds2 = await traDonCoBienThe(ket.shopifyVariantId);
+          setDsBienThe(ds2);
+        });
+        return;
+      }
+      case 'khong_hieu': {
+        const r = ket.raw;
+        setKhongHieu(r);
+        setTimeout(() => setKhongHieu((cur) => (cur === r ? null : cur)), 4000);
+        return;
+      }
+    }
+  }, [mon, router]);
+
   return (
     <div className="space-y-5">
+      <OQuet onQuet={xuLyQuetManHinh} />
+
+      {khongHieu && (
+        <p className="rounded-md border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+          Không nhận ra mã: {khongHieu}
+        </p>
+      )}
+
+      {hoiChuyenDon && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>Mã này thuộc đơn #{hoiChuyenDon.orderNumber} — chuyển sang đơn đó?</span>
+          <button
+            type="button"
+            onClick={() => { router.push(`/f/warehouse/nhan-kcs?don=${encodeURIComponent(hoiChuyenDon.orderNumber)}`); setHoiChuyenDon(null); }}
+            className="rounded-md border border-amber-500 bg-amber-500/10 px-2 py-0.5 font-medium hover:bg-amber-500/20"
+          >
+            Chuyển
+          </button>
+          <button
+            type="button"
+            onClick={() => setHoiChuyenDon(null)}
+            className="rounded-md border border-border px-2 py-0.5 hover:bg-muted"
+          >
+            Bỏ qua
+          </button>
+        </div>
+      )}
+
+      {dsBienThe && (
+        <div className="space-y-1.5 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+          {dsBienThe.length === 0 && <p className="text-muted-foreground">Không thấy đơn nào đang chờ có hàng này.</p>}
+          {dsBienThe.length > 0 && (
+            <>
+              <p className="text-muted-foreground">Các đơn đang chờ có hàng này:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {dsBienThe.slice(0, 5).map((d) => (
+                  <button
+                    key={d.orderNumber}
+                    type="button"
+                    onClick={() => { router.push(`/f/warehouse/nhan-kcs?don=${encodeURIComponent(d.orderNumber)}`); setDsBienThe(null); }}
+                    className="rounded-md border border-border bg-card px-2 py-1 font-medium hover:bg-muted"
+                  >
+                    #{d.orderNumber}{d.sku ? ` · ${d.sku}` : ''}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <form action="/f/warehouse/nhan-kcs" className="flex flex-wrap items-center gap-2">
         <input
           name="don"
           defaultValue={don}
-          autoFocus
           autoComplete="off"
           placeholder="Mã đơn — gõ hoặc quét"
           className="h-9 w-72 rounded-md border border-input bg-input/30 px-3 text-sm outline-none focus:border-amber-500/60"
@@ -88,7 +222,7 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
             ĐƠN {donTran} · {mon.length} MÓN
           </div>
           {mon.map((m) => (
-            <KhoiMon key={m.dinhDanh} m={m} donTran={donTran} kho={kho} doiKho={doiKho} coQuyenNhap={coQuyenNhap} />
+            <KhoiMon key={m.dinhDanh} m={m} donTran={donTran} kho={kho} doiKho={doiKho} coQuyenNhap={coQuyenNhap} sang={monSang === m.dinhDanh} />
           ))}
         </div>
       )}
@@ -99,12 +233,14 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
 }
 
 /** Một món = một khối nhập = một dòng kho trên Lark. Lỗi của món này không đụng món khác. */
-function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
+function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
   m: MonCuaDon;
   donTran: string;
   kho: Warehouse;
   doiKho: (w: Warehouse) => void;
   coQuyenNhap: boolean;
+  /** Vừa được ô quét chọn tới — tô viền 3 giây (BangNhanKcs tự tắt lại). */
+  sang: boolean;
 }) {
   // Điền sẵn theo thứ tự: việc SMS đã ghi → dòng đang có trên Lark → mặc định trắng.
   // Bỏ qua dòng Lark là bấm Lưu một cái ghi đè kết quả kho đã làm bằng SL 1 / QC Pass.
@@ -164,7 +300,7 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
 
   if (m.huy) {
     return (
-      <div className="rounded-xl border border-red-500/35 bg-red-500/5 px-4 py-3">
+      <div id={`mon-${m.dinhDanh}`} className={`rounded-xl border border-red-500/35 bg-red-500/5 px-4 py-3 ${sang ? 'ring-2 ring-amber-500' : ''}`}>
         {tieuDe}
         <p className="mt-1.5 text-[13px] text-red-700 dark:text-red-400">
           Đã huỷ{m.lyDoHuy ? ` (${m.lyDoHuy})` : ''} — không nhận vào kho.
@@ -175,8 +311,57 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
 
   const khoa = !coQuyenNhap || dangGui;
 
+  // Hai bộ ô nhập CÙNG state, CÙNG name — chỉ khác cỡ chữ/khoảng cách theo khổ màn. Nhờ
+  // 'hidden'/'md:hidden' (display:none) mà trình duyệt tự loại bộ đang ẩn khỏi kiểm tra
+  // required (constraint validation chỉ xét phần tử đang HIỂN THỊ), nên không đụng nhau lúc
+  // bấm Lưu. Ô ảnh lỗi (type=file) KHÔNG được nhân đôi kiểu này — file chọn ở input này không
+  // tự có ở input kia, nhân đôi sẽ khiến FormData lấy nhầm ô rỗng — nên khối "Lý do không đạt +
+  // Ảnh lỗi" bên dưới giữ NGUYÊN VẸN một bộ dùng chung cho cả hai khổ màn.
+  const truong = (lon: boolean) => {
+    const cls = lon ? O_NHAP_LON : O_NHAP;
+    return (
+      <>
+        <Nhan chu="Số lượng">
+          <input
+            name="soLuong" type="number" min={1} step={1} required disabled={khoa}
+            value={soLuong} onChange={(e) => setSoLuong(e.target.value)} className={cls}
+          />
+        </Nhan>
+        <Nhan chu="Cân (kg)">
+          <input
+            // id chỉ gắn ở bộ máy tính — sau khi quét chọn món, con trỏ nhảy thẳng vào đây
+            // (spec §5 "bàn phím cho máy tính"). Gắn cả hai bộ sẽ trùng id, getElementById
+            // vớ ngay bộ đang ẩn trên điện thoại.
+            {...(!lon ? { id: `can-${m.dinhDanh}` } : {})}
+            name="canKg" type="number" min={0} step={0.01} disabled={khoa}
+            value={canKg} onChange={(e) => setCanKg(e.target.value)} placeholder="—" className={cls}
+          />
+        </Nhan>
+        <Nhan chu="Kết quả kiểm">
+          <select name="qcCheck" value={qc} disabled={khoa} onChange={(e) => doiQc(e.target.value as QcCheck)} className={cls}>
+            {QC_CHECK.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Nhan>
+        <Nhan chu="Hướng xử lý">
+          <select name="whAction" value={action} disabled={khoa} onChange={(e) => setAction(e.target.value as WhAction)} className={cls}>
+            {WH_ACTION.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Nhan>
+        <Nhan chu="Kho">
+          <select name="warehouse" value={kho} disabled={khoa} onChange={(e) => doiKho(e.target.value as Warehouse)} className={cls}>
+            {WAREHOUSE.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </Nhan>
+      </>
+    );
+  };
+
   return (
-    <form onSubmit={luu} className="rounded-xl border border-border bg-card px-4 py-3">
+    <form
+      id={`mon-${m.dinhDanh}`}
+      onSubmit={luu}
+      className={`rounded-xl border border-border bg-card px-4 py-3 ${sang ? 'ring-2 ring-amber-500' : ''}`}
+    >
       <input type="hidden" name="monDinhDanh" value={m.dinhDanh} />
       <input type="hidden" name="monRecordId" value={m.recordId ?? ''} />
       <input type="hidden" name="orderNumber" value={donTran} />
@@ -203,34 +388,16 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
         </p>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        <Nhan chu="Số lượng">
-          <input
-            name="soLuong" type="number" min={1} step={1} required disabled={khoa}
-            value={soLuong} onChange={(e) => setSoLuong(e.target.value)} className={O_NHAP}
-          />
-        </Nhan>
-        <Nhan chu="Cân (kg)">
-          <input
-            name="canKg" type="number" min={0} step={0.01} disabled={khoa}
-            value={canKg} onChange={(e) => setCanKg(e.target.value)} placeholder="—" className={O_NHAP}
-          />
-        </Nhan>
-        <Nhan chu="Kết quả kiểm">
-          <select name="qcCheck" value={qc} disabled={khoa} onChange={(e) => doiQc(e.target.value as QcCheck)} className={O_NHAP}>
-            {QC_CHECK.map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </Nhan>
-        <Nhan chu="Hướng xử lý">
-          <select name="whAction" value={action} disabled={khoa} onChange={(e) => setAction(e.target.value as WhAction)} className={O_NHAP}>
-            {WH_ACTION.map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </Nhan>
-        <Nhan chu="Kho">
-          <select name="warehouse" value={kho} disabled={khoa} onChange={(e) => doiKho(e.target.value as Warehouse)} className={O_NHAP}>
-            {WAREHOUSE.map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </Nhan>
+      {/* Máy tính: lưới nhiều cột — bảng đang có. */}
+      <div className="hidden md:block">
+        <div className="mt-3 grid grid-cols-3 gap-2.5 lg:grid-cols-5">
+          {truong(false)}
+        </div>
+      </div>
+
+      {/* Điện thoại: thẻ dọc, ô nhập lớn hơn cho ngón tay (spec §5). */}
+      <div className="mt-3 space-y-2.5 md:hidden">
+        {truong(true)}
       </div>
 
       {qc === 'QC Failed' && (
@@ -249,8 +416,12 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap }: {
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-3 hidden flex-wrap items-center gap-3 md:flex">
         <button type="submit" disabled={khoa} className={NUT_CHINH}>{dangGui ? 'Đang lưu…' : 'Lưu'}</button>
+        {ketQua && <KetQuaMon kq={ketQua} />}
+      </div>
+      <div className="mt-3 space-y-2 md:hidden">
+        <button type="submit" disabled={khoa} className={NUT_CHINH_LON}>{dangGui ? 'Đang lưu…' : 'Lưu'}</button>
         {ketQua && <KetQuaMon kq={ketQua} />}
       </div>
     </form>
