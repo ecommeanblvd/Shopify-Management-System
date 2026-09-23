@@ -7,9 +7,29 @@ import { db, schema } from '@/db/client';
 import { ghiDongKho } from '@/features/lark/wh-inventory';
 import type { ViecNhanKcs, QcCheck, WhAction, Warehouse } from './gia-tri-lark';
 
-/** THUẦN: env có bật chế độ thử không (ghi log, không gọi Lark). */
-export function laDry(env: string | undefined): boolean {
-  return (env ?? '').trim().toLowerCase() === 'dry';
+export type CheDoGhi = { kieu: 'dry' } | { kieu: 'that' } | { kieu: 'chon'; dinhDanhs: string[] };
+
+/**
+ * THUẦN: đọc env ra chế độ ghi Lark.
+ *
+ * 'chon:<định danh>,<định danh>' là chế độ nằm GIỮA chạy thử và chạy thật (CEO 23/09/2026):
+ * kiểm từng bản ghi một mà không sợ lỡ tay ghi hàng loạt lên bảng 9.007 dòng của kho.
+ */
+export function docCheDoGhi(env: string | undefined): CheDoGhi {
+  const s = (env ?? '').trim();
+  if (!s) return { kieu: 'that' };
+  if (s.toLowerCase() === 'dry') return { kieu: 'dry' };
+  if (s.toLowerCase().startsWith('chon:')) {
+    return { kieu: 'chon', dinhDanhs: s.slice(5).split(',').map((x) => x.trim()).filter(Boolean) };
+  }
+  return { kieu: 'that' };
+}
+
+/** Món này có được ghi thật lên Lark không. */
+export function duocGhi(cheDo: CheDoGhi, monDinhDanh: string): boolean {
+  if (cheDo.kieu === 'that') return true;
+  if (cheDo.kieu === 'dry') return false;
+  return cheDo.dinhDanhs.includes(monDinhDanh);
 }
 
 /**
@@ -25,8 +45,9 @@ export async function dayMotDong(id: string): Promise<KetQuaDay> {
   // Đã đẩy rồi thì dòng trên Lark có sẵn, lần này không tạo thêm.
   if (d.trangThaiDay === 'da_day') return { ok: true, tao: false };
 
-  if (laDry(process.env.WH_GHI_LARK)) {
-    console.log('[kho-nhan] DRY — không gửi Lark:', { don: d.orderNumber, sku: d.sku, qc: d.qcCheck });
+  const cheDo = docCheDoGhi(process.env.WH_GHI_LARK);
+  if (!duocGhi(cheDo, d.monDinhDanh)) {
+    console.log('[kho-nhan] KHÔNG gửi Lark (chế độ %s):', cheDo.kieu, { don: d.orderNumber, sku: d.sku, mon: d.monDinhDanh });
     return { ok: true, dry: true };
   }
 
