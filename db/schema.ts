@@ -2751,3 +2751,89 @@ export const creditNoteLines = pgTable('credit_note_lines', {
   index('credit_note_lines_note_idx').on(t.creditNoteId),
   index('credit_note_lines_shipment_idx').on(t.shipmentId),
 ]);
+
+/** ── Luồng đơn KOL & chụp đồ (spec 2026-09-23) ──────────────────────────────
+ *  Bảng ĐỘC LẬP, không dẫn xuất từ shopify_orders: đơn nội bộ không được lẫn
+ *  vào số liệu bán hàng. Khuôn theo shipHoOrders (địa chỉ là cột phẳng, ảnh
+ *  chụp giá trị bất biến), khác ở chỗ đơn KOL CÓ dòng hàng và CÓ trừ tồn. */
+export const kolMucDichEnum = pgEnum('kol_muc_dich', ['kol', 'chup_do', 'khac']);
+export const kolDonTrangThaiEnum = pgEnum('kol_don_trang_thai', ['nhap', 'da_chot', 'da_gui', 'huy']);
+export const kolHinhThucEnum = pgEnum('kol_hinh_thuc', ['tang', 'muon']);
+
+export const kolNguoiNhan = pgTable('kol_nguoi_nhan', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ten: text('ten').notNull(),
+  kenh: text('kenh'),
+  dienThoai: text('dien_thoai'),
+  email: text('email'),
+  quocGia: text('quoc_gia').notNull().default('VN'),
+  diaChi: text('dia_chi'),
+  thanhPho: text('thanh_pho'),
+  ghiChu: text('ghi_chu'),
+  /** Ẩn khỏi ô chọn mà KHÔNG xoá, để đơn cũ vẫn tra ngược được người nhận. */
+  ngungDung: boolean('ngung_dung').notNull().default(false),
+  taoLuc: timestamp('tao_luc').notNull().defaultNow(),
+  taoBoi: text('tao_boi'),
+  suaLuc: timestamp('sua_luc').notNull().defaultNow(),
+  suaBoi: text('sua_boi'),
+}, (t) => [index('kol_nguoi_nhan_ten_idx').on(t.ten)]);
+
+export const kolDon = pgTable('kol_don', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ma: text('ma').notNull().unique(),
+  nguoiNhanId: uuid('nguoi_nhan_id').references(() => kolNguoiNhan.id).notNull(),
+  mucDich: kolMucDichEnum('muc_dich').notNull(),
+  trangThai: kolDonTrangThaiEnum('trang_thai').notNull().default('nhap'),
+  /** Ảnh chụp từ sổ lúc tạo đơn: sửa sổ về sau KHÔNG đổi đơn cũ. */
+  tenNhan: text('ten_nhan').notNull(),
+  dienThoaiNhan: text('dien_thoai_nhan'),
+  /** 'VN' là nội địa, khác là quốc tế — SUY RA, không có cột riêng để khỏi lệch. */
+  quocGia: text('quoc_gia').notNull().default('VN'),
+  thanhPho: text('thanh_pho'),
+  diaChi: text('dia_chi'),
+  hangVanChuyen: text('hang_van_chuyen'),
+  maVanDon: text('ma_van_don'),
+  guiLuc: timestamp('gui_luc'),
+  daNhanLuc: timestamp('da_nhan_luc'),
+  ghiChu: text('ghi_chu'),
+  taoLuc: timestamp('tao_luc').notNull().defaultNow(),
+  taoBoi: text('tao_boi'),
+  suaLuc: timestamp('sua_luc').notNull().defaultNow(),
+  suaBoi: text('sua_boi'),
+}, (t) => [
+  index('kol_don_trang_thai_idx').on(t.trangThai, t.taoLuc),
+  index('kol_don_nguoi_nhan_idx').on(t.nguoiNhanId),
+]);
+
+export const kolDongDon = pgTable('kol_dong_don', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  donId: uuid('don_id').references(() => kolDon.id, { onDelete: 'cascade' }).notNull(),
+  sku: text('sku').notNull(),
+  tenHang: text('ten_hang'),
+  kho: text('kho').notNull(),
+  soLuong: integer('so_luong').notNull(),
+  hinhThuc: kolHinhThucEnum('hinh_thuc').notNull(),
+  hanTra: date('han_tra'),
+  /** Đông cứng khi chuyển sang 'da_gui'. numeric → Drizzle trả về STRING. */
+  giaVon: numeric('gia_von', { precision: 14, scale: 4 }),
+  giaVonTienTe: text('gia_von_tien_te'),
+  /** 'sku_costs' khi hệ thống điền, 'tay' khi người dùng gõ. */
+  giaVonNguon: text('gia_von_nguon'),
+  soLuongDaTra: integer('so_luong_da_tra').notNull().default(0),
+  soLuongNhapLai: integer('so_luong_nhap_lai').notNull().default(0),
+}, (t) => [
+  index('kol_dong_don_don_idx').on(t.donId),
+  index('kol_dong_don_muon_idx').on(t.hinhThuc, t.hanTra),
+]);
+
+export const kolTraVe = pgTable('kol_tra_ve', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  dongDonId: uuid('dong_don_id').references(() => kolDongDon.id, { onDelete: 'cascade' }).notNull(),
+  soLuong: integer('so_luong').notNull(),
+  /** false thì KHÔNG cộng tồn: hàng mượn về hỏng không được bán tiếp. */
+  nhapLaiKho: boolean('nhap_lai_kho').notNull(),
+  lyDoKhongNhap: text('ly_do_khong_nhap'),
+  traLuc: timestamp('tra_luc').notNull().defaultNow(),
+  ghiChu: text('ghi_chu'),
+  taoBoi: text('tao_boi').notNull(),
+}, (t) => [index('kol_tra_ve_dong_idx').on(t.dongDonId)]);
