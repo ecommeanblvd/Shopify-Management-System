@@ -15,17 +15,24 @@ export interface ChiPhiDong {
 /**
  * THUẦN: chi phí của MỘT dòng hàng.
  *
- * Luật (spec §7.3): chi phí = giá vốn của hàng KHÔNG quay lại kho bán được.
- * Hàng tặng luôn tính. Hàng mượn trả về và nhập lại kho thì không tính, vì nó
- * vẫn bán được. Hàng mượn trả về mà hỏng không nhập lại thì có tính. Hàng mượn
- * chưa trả nằm ở cột "đang treo" riêng.
+ * Luật (spec §7.3): chi phí = giá vốn của hàng KHÔNG quay lại kho bán được,
+ * KHI KẾT QUẢ ĐÃ BIẾT. Hàng tặng luôn tính. Hàng mượn trả về và nhập lại kho
+ * thì không tính, vì nó vẫn bán được. Hàng mượn trả về mà hỏng không nhập lại
+ * thì có tính. Hàng mượn chưa trả nằm ở cột "đang treo" riêng, KHÔNG bao giờ
+ * trộn vào chi phí đã tiêu, vì chúng có thể quay lại nguyên vẹn.
  */
 export function chiPhiMotDong(d: DongDon): ChiPhiDong {
-  const daTieu = d.hinhThuc === 'muon' ? d.soLuong - d.soLuongNhapLai : d.soLuong;
+  const daTieu = d.hinhThuc === 'muon' ? d.soLuongDaTra - d.soLuongNhapLai : d.soLuong;
   const dangTreo = d.hinhThuc === 'muon' ? d.soLuong - d.soLuongDaTra : 0;
-  const thieuGiaVon = d.giaVon == null || d.giaVon.trim() === '';
-  const tienChiPhi = thieuGiaVon ? null : daTieu * Number(d.giaVon);
-  const tienTe = thieuGiaVon ? null : (d.giaVonTienTe ?? 'VND');
+
+  // Thiếu giá vốn nếu: giá là null/trống, tiền tệ là null/trống, hoặc giá không phải số hữu hạn.
+  const giaVonNum = d.giaVon ? Number(d.giaVon) : NaN;
+  const thieuGiaVon = (d.giaVon == null || d.giaVon.trim() === '') ||
+                      (d.giaVonTienTe == null || d.giaVonTienTe.trim() === '') ||
+                      !Number.isFinite(giaVonNum);
+
+  const tienChiPhi = thieuGiaVon ? null : daTieu * giaVonNum;
+  const tienTe = thieuGiaVon ? null : d.giaVonTienTe;
   return { daTieu, dangTreo, tienChiPhi, tienTe, thieuGiaVon };
 }
 

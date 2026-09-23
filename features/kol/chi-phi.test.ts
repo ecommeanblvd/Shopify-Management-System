@@ -28,17 +28,34 @@ describe('chiPhiMotDong', () => {
   it('hàng mượn chưa trả thì nằm ở cột đang treo, không trộn vào chi phí', () => {
     const r = chiPhiMotDong(d({ hinhThuc: 'muon', soLuong: 3, soLuongDaTra: 0, giaVon: '100' }));
     expect(r.dangTreo).toBe(3);
-    expect(r.daTieu).toBe(3);
+    expect(r.daTieu).toBe(0);
   });
-  it('trả một phần: gửi 3 về 2 nhập lại 2 → tiêu 1, treo 1', () => {
+  it('trả một phần: gửi 3 về 2 nhập lại 2 → tiêu 0, treo 1', () => {
     const r = chiPhiMotDong(d({ hinhThuc: 'muon', soLuong: 3, soLuongDaTra: 2, soLuongNhapLai: 2, giaVon: '100' }));
-    expect(r).toEqual({ daTieu: 1, dangTreo: 1, tienChiPhi: 100, tienTe: 'VND', thieuGiaVon: false });
+    expect(r).toEqual({ daTieu: 0, dangTreo: 1, tienChiPhi: 0, tienTe: 'VND', thieuGiaVon: false });
   });
   it('thiếu giá vốn thì báo thiếu, KHÔNG coi là 0 đồng', () => {
     const r = chiPhiMotDong(d({ giaVon: null, soLuong: 2 }));
     expect(r.tienChiPhi).toBeNull();
     expect(r.thieuGiaVon).toBe(true);
     expect(r.daTieu).toBe(2);
+  });
+  it('thiếu tiền tệ thì báo thiếu, không mặc định về VND', () => {
+    const r = chiPhiMotDong(d({ giaVon: '100', giaVonTienTe: null }));
+    expect(r.tienChiPhi).toBeNull();
+    expect(r.tienTe).toBeNull();
+    expect(r.thieuGiaVon).toBe(true);
+  });
+  it('tiền tệ trống thì báo thiếu, không mặc định về VND', () => {
+    const r = chiPhiMotDong(d({ giaVon: '100', giaVonTienTe: '' }));
+    expect(r.tienChiPhi).toBeNull();
+    expect(r.tienTe).toBeNull();
+    expect(r.thieuGiaVon).toBe(true);
+  });
+  it('giá không phải số thì báo thiếu', () => {
+    const r = chiPhiMotDong(d({ giaVon: 'abc', giaVonTienTe: 'VND' }));
+    expect(r.tienChiPhi).toBeNull();
+    expect(r.thieuGiaVon).toBe(true);
   });
 });
 
@@ -48,7 +65,7 @@ describe('tongChiPhi', () => {
       d({ hinhThuc: 'tang', soLuong: 2, giaVon: '50' }),
       d({ hinhThuc: 'muon', soLuong: 1, soLuongDaTra: 0, giaVon: null }),
       d({ hinhThuc: 'muon', soLuong: 4, soLuongDaTra: 4, soLuongNhapLai: 4, giaVon: '10' }),
-    ])).toEqual({ theoTienTe: { VND: 100 }, soMonDaTieu: 3, soMonDangTreo: 1, soDongThieuGiaVon: 1 });
+    ])).toEqual({ theoTienTe: { VND: 100 }, soMonDaTieu: 2, soMonDangTreo: 1, soDongThieuGiaVon: 1 });
   });
   it('KHÔNG cộng thẳng hai loại tiền vào một số', () => {
     expect(tongChiPhi([
