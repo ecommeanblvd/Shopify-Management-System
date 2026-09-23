@@ -32,6 +32,7 @@ describe('mã biến thể và mã đơn', () => {
   });
   it('O:<số> → mã đơn', () => {
     expect(docMaTem('O:555666777')).toEqual({ loai: 'don', shopifyOrderId: '555666777' });
+    expect(docMaTem('o:555666777')).toEqual({ loai: 'don', shopifyOrderId: '555666777' });
   });
   it('gid Shopify đầy đủ cũng đọc được (dán từ Shopify ra)', () => {
     expect(docMaTem('V:gid://shopify/ProductVariant/222')).toEqual({ loai: 'bien_the', shopifyVariantId: '222' });
@@ -43,9 +44,24 @@ describe('mã biến thể và mã đơn', () => {
     expect(docMaTem('V:abc')).toBeNull();
     expect(docMaTem('X:123')).toBeNull();
   });
+  it('gid tự mâu thuẫn với tiền tố → null, không đoán', () => {
+    // gid nói rõ đây là Order nhưng tiền tố là V: — copy/paste nhầm loại, không được suy đoán.
+    expect(docMaTem('V:gid://shopify/Order/123')).toBeNull();
+    // gid nói rõ đây là Product (không phải LineItem) nhưng tiền tố là L:.
+    expect(docMaTem('L:gid://shopify/Product/9')).toBeNull();
+  });
   it('sinh mã in vào tem', () => {
     expect(maTemBienThe('gid://shopify/ProductVariant/222')).toBe('V:222');
     expect(maTemDon('gid://shopify/Order/999')).toBe('O:999');
     expect(maTemDong('gid://shopify/LineItem/111')).toBe('L:111');
+  });
+  it('sinh mã từ số trần (không chỉ gid)', () => {
+    expect(maTemBienThe('222333444')).toBe('V:222333444');
+    expect(maTemDon('555666777')).toBe('O:555666777');
+  });
+  it('id không có chữ số → không sinh được mã đọc lại được, trả về null', () => {
+    expect(maTemDong('abc')).toBeNull();
+    expect(maTemBienThe('abc')).toBeNull();
+    expect(maTemDon('abc')).toBeNull();
   });
 });

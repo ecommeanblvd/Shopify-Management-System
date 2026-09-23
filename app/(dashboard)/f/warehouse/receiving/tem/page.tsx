@@ -65,11 +65,17 @@ async function temDong(lineIds: string[]): Promise<Tem[]> {
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
     .leftJoin(schema.shopifyOrderLines, and(eq(schema.shopifyOrderLines.orderId, schema.orderFulfillment.orderId), eq(schema.shopifyOrderLines.shopifyLineId, schema.orderFulfillmentLines.shopifyLineId)))
     .where(inArray(schema.orderFulfillmentLines.id, lineIds));
-  return rows.map((r) => ({
-    qr: maTemDong(r.shopifyLineId),
-    chu: chuTemDong({ orderNumber: r.orderNumber, thuTuDong: r.thuTuDong, productTitle: r.productTitle, variantTitle: r.variantTitle, qty: r.qty }),
-    phu: maTemDong(r.shopifyLineId),
-  }));
+  // maTemDong trả null khi shopifyLineId không có chữ số (không thể xảy ra với id thật từ
+  // DB) — bỏ qua dòng đó thay vì in tem không đọc lại được, chứ không ép kiểu.
+  return rows.flatMap((r) => {
+    const qr = maTemDong(r.shopifyLineId);
+    if (!qr) return [];
+    return [{
+      qr,
+      chu: chuTemDong({ orderNumber: r.orderNumber, thuTuDong: r.thuTuDong, productTitle: r.productTitle, variantTitle: r.variantTitle, qty: r.qty }),
+      phu: qr,
+    }];
+  });
 }
 
 export default async function TemPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
