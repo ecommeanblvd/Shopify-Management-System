@@ -33,8 +33,10 @@ export interface ShipHoPriceStructure {
   dutyChargeVnd: number;
   /** Tổng brand phải trả = cước + thuế/phí NK thu hộ (spec §6). */
   chargeWithDutyTotal: number;
-  /** Tổng cước bill thực (actualCarrierCostVnd). null khi chưa đối soát. */
+  /** Tổng cước bill thực (actualCarrierCostVnd). GỘP duty (cả hoá đơn carrier). null khi chưa đối soát. */
   billTotal: number | null;
+  /** Thuế/hải quan trên bill thực (billVnd của dòng duty). null khi chưa có bill; 0 khi có bill nhưng không có duty. */
+  dutyBillVnd: number | null;
   /** Cân tính phí từng công thức: quote (chargeable) vs bill (billed weight). */
   weights: { quoteKg: number | null; billKg: number | null };
   /** Hệ số quy cost-currency → VND (carrierCostVnd / breakdown.carrierCost). */
@@ -42,6 +44,10 @@ export interface ShipHoPriceStructure {
   /** Số hoá đơn carrier (nếu đã đối soát). */
   billNumber: string | null;
 }
+
+/** Nhãn dòng duty + dòng tổng hợp — dùng chung giữa nơi dựng `rows` và các hàm tách/tổng bên dưới. */
+const NHAN_DUTY = 'Thuế / hải quan (duty) — ngoài cước, thu hộ';
+const NHAN_TONG_BRAND = 'Tổng brand phải trả = cước + thuế/phí NK thu hộ';
 
 const num = (v: unknown): number => {
   const n = typeof v === 'string' ? Number(v) : (v as number);
@@ -198,7 +204,7 @@ export function shipHoPriceStructure(input: {
       quoteChargeVnd: qImport, chargeVnd: chImport,
     },
     {
-      label: 'Thuế / hải quan (duty) — ngoài cước, thu hộ',
+      label: NHAN_DUTY,
       costVnd: null, // không dự tính được — pass-through thuần, không VAT
       billVnd: hasBill ? Math.round(num(ab!.duty)) : null,
       quoteChargeVnd: 0, chargeVnd: chDuty,
@@ -232,7 +238,7 @@ export function shipHoPriceStructure(input: {
   // nên KHÔNG thuộc phép cộng cột — đặt cuối cùng như một dòng tổng hợp.
   if (chDuty !== 0) {
     rows.push({
-      label: 'Tổng brand phải trả = cước + thuế/phí NK thu hộ',
+      label: NHAN_TONG_BRAND,
       costVnd: null, billVnd: null, quoteChargeVnd: null,
       chargeVnd: chargeTotalFinal + chDuty,
     });
@@ -246,6 +252,7 @@ export function shipHoPriceStructure(input: {
     dutyChargeVnd: chDuty,
     chargeWithDutyTotal: chargeTotalFinal + chDuty,
     billTotal,
+    dutyBillVnd: hasBill ? Math.round(num(ab!.duty)) : null,
     weights: {
       quoteKg: numOrNull(b.chargeableWeightKg),
       billKg: input.actualBill?.weightKg ?? null,
@@ -253,4 +260,94 @@ export function shipHoPriceStructure(input: {
     factor,
     billNumber: ab && typeof ab.billNumber === 'string' ? ab.billNumber : null,
   };
+}
+
+/** Một dòng tổng hợp (subtotal/total) của bảng cấu trúc giá — đủ 4 cột + margin. */
+export interface ShipHoPriceTotalRow {
+  label: string;
+  costVnd: number;
+  billVnd: number | null;
+  quoteChargeVnd: number;
+  chargeVnd: number;
+  /** Margin = giá thu − giá chi (ưu tiên bill thực, dự tính khi chưa có bill). */
+  marginVnd: number;
+}
+
+/**
+ * "Tổng cước" — subtotal CHỈ CƯỚC, KHÔNG gồm thuế/hải quan (duty) thu hộ.
+ * Cột chi/thu tái dùng nguyên costTotal/quoteChargeTotal/chargeTotal (đã đúng
+ * nghĩa "chỉ cước" — xem doc-comment `chargeTotal`); cột bill phải TRỪ phần
+ * duty ra khỏi `billTotal`, vì `billTotal` là CẢ hoá đơn carrier (gộp duty) —
+ * đây chính là root cause bug cũ (margin tổng trừ nhầm bill có duty vào cước
+ * không có duty). Chưa có bill (`billTotal` null) → margin dùng chi phí dự tính.
+ */
+export function shipHoFreightSubtotal(s: ShipHoPriceStructure): ShipHoPriceTotalRow {
+  const billVnd = s.billTotal == null ? null : s.billTotal - (s.dutyBillVnd ?? 0);
+  return {
+    label: 'Tổng cước',
+    costVnd: s.costTotal,
+    billVnd,
+    quoteChargeVnd: s.quoteChargeTotal,
+    chargeVnd: s.chargeTotal,
+    marginVnd: s.chargeTotal - (billVnd ?? s.costTotal),
+  };
+}
+
+/**
+ * "Tổng cuối" — Tổng cước + Thuế/hải quan (duty) thu hộ, ở CẢ hai cột chi lẫn
+ * thu (bill đã gồm sẵn duty; charge dùng `chargeWithDutyTotal`).
+ *
+ * Vì duty được thu ĐÚNG GIÁ VỐN (không markup — `dutyChargeVnd` phải bằng
+ * `dutyBillVnd`, cùng lấy từ một số trên hoá đơn), duty cộng như nhau vào cả
+ * tử số (thu) lẫn mẫu số (chi) nên KHÔNG đổi margin so với `shipHoFreightSubtotal`.
+ * Đây là điểm cốt lõi của layout: gộp duty vào phải giữ nguyên margin, để người
+ * đọc thấy ngay duty đi qua sổ sách sạch sẽ. Nếu hai margin lệch nhau, có nghĩa
+ * `sell.dutyVnd` (ghi lúc đối soát) khác số duty thực trên bill — báo lại, đừng
+ * tự vá ở đây.
+ */
+export function shipHoFinalTotal(s: ShipHoPriceStructure): ShipHoPriceTotalRow {
+  return {
+    label: 'Tổng cuối',
+    costVnd: s.costTotal,
+    billVnd: s.billTotal,
+    quoteChargeVnd: s.quoteChargeTotal,
+    chargeVnd: s.chargeWithDutyTotal,
+    marginVnd: s.chargeWithDutyTotal - (s.billTotal ?? s.costTotal),
+  };
+}
+
+/**
+ * Tách `rows` thành khối cước (freight, để render các dòng freight KHÔNG đổi)
+ * và dòng duty riêng (render dưới subtotal "Tổng cước", trước "Tổng cuối").
+ * Dòng tổng hợp cũ `NHAN_TONG_BRAND` cũng bị lọc khỏi freightRows — nó lặp lại
+ * đúng ý "Tổng cuối" nên không còn cần hiện ở màn nào đã có dòng Tổng cuối
+ * (page vẫn còn dùng dòng này ở nơi chưa dựng lại bảng — xem ghi chú ở page).
+ */
+export function shipHoFreightAndDutyRows(
+  s: ShipHoPriceStructure,
+): { freightRows: PriceStructureRow[]; dutyRow: PriceStructureRow | null } {
+  const dutyRow = s.rows.find((r) => r.label === NHAN_DUTY) ?? null;
+  const freightRows = s.rows.filter((r) => r.label !== NHAN_DUTY && r.label !== NHAN_TONG_BRAND);
+  return { freightRows, dutyRow };
+}
+
+/**
+ * Margin của MỘT dòng trong bảng = thu − chi (chargeVnd/quoteChargeVnd và
+ * billVnd/costVnd đều coi thiếu = 0, giống cách các cột số khác trong bảng vẫn
+ * hiện — ví dụ dòng "Điều chỉnh khớp số đã ghi" chỉ có billVnd, không có
+ * chargeVnd, vẫn phải tính margin = 0 − billVnd, không phải bỏ trắng).
+ *
+ * Sửa bug: dòng KHÔNG có khái niệm chi phí/bill carrier nào cả (costVnd VÀ
+ * billVnd đều null — ví dụ "Phí xử lý đơn hàng", phí riêng của MEAN không qua
+ * carrier) phải có margin = TOÀN BỘ khoản thu, không phải "—" (trước đây
+ * `billVnd == null` bị hiểu nhầm thành "chưa biết" thay vì "không áp dụng").
+ * `billVnd == null` chỉ có nghĩa "không áp dụng chi phí" khi `costVnd` cũng
+ * null; nếu dòng có `costVnd` nhưng bill riêng dòng đó chưa có, rơi về dùng
+ * cost dự tính thay vì bỏ trắng.
+ */
+export function shipHoRowMarginVnd(row: PriceStructureRow, hasBill: boolean): number | null {
+  if (!hasBill) return (row.quoteChargeVnd ?? 0) - (row.costVnd ?? 0);
+  const charge = row.chargeVnd ?? 0;
+  if (row.billVnd == null && row.costVnd == null) return charge;
+  return charge - (row.billVnd ?? row.costVnd ?? 0);
 }

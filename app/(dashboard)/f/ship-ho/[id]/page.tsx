@@ -5,7 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { getShipHoOrder } from '@/features/ship-ho/queries';
-import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
+import { shipHoPriceStructure, shipHoFreightAndDutyRows, shipHoFreightSubtotal, shipHoFinalTotal, shipHoRowMarginVnd, type PriceStructureRow } from '@/features/ship-ho/price-structure';
 import { resolveTier } from '@/features/ship-ho/tier-pricing';
 import { khopOBangGia, layOBangGia, type KetQuaKhopO } from '@/features/ship-ho/bill-base-check';
 import { db, schema } from '@/db/client';
@@ -60,7 +60,6 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           : null,
       })
     : null;
-  const marginVnd = price ? price.chargeTotal - price.costTotal : null;
   const hasBill = price?.billTotal != null;
   // Bậc chiết khấu + sản lượng tháng trước của đối tác — giải thích vì sao markup khác nhau giữa brand.
   const [partner] = await db.select({
@@ -213,7 +212,46 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             {!o.quotedAt && <p className="text-amber-600 text-xs">Chưa tính được giá — kiểm tra carrier account / rate card.</p>}
             {o.quotedAt && <p className="text-muted-foreground text-xs">Đơn cũ chưa lưu breakdown chi tiết — chỉ có tổng.</p>}
           </div>
-        ) : (
+        ) : (() => {
+          // Bảng tách khối cước (freight, KHÔNG đổi) khỏi duty (CEO 23/09): "Tổng cước"
+          // subtotal chỉ cước → dòng duty riêng (thu hộ, đúng giá vốn) → "Tổng cuối" =
+          // cước + duty. Margin "Tổng cước" và "Tổng cuối" PHẢI bằng nhau (duty tự
+          // triệt tiêu ở cả hai vế) — đó là điểm của layout, xem price-structure.ts.
+          const { freightRows, dutyRow } = shipHoFreightAndDutyRows(price);
+          const freightSubtotal = shipHoFreightSubtotal(price);
+          const finalTotal = shipHoFinalTotal(price);
+          const so = (v: number | null, dau = false) => v == null || v === 0 ? '—' : (dau && v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
+          // 'chi': dương (carrier tính cao hơn dự tính) = đỏ. 'thu': dương (thu brand thêm) = xanh.
+          const mauLech = (v: number | null, tot: 'chi' | 'thu') => v == null || v === 0 ? 'text-muted-foreground'
+            : v > 0 === (tot === 'thu') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+          const mauMargin = (v: number | null) => v == null || v === 0 ? 'text-muted-foreground' : v > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+          // Một dòng khoản (dùng chung cho freight rows lẫn dòng duty riêng, để duty giữ
+          // đúng cách hiển thị cũ khi còn nằm lẫn trong khối cước — chỉ ĐỔI VỊ TRÍ).
+          const renderRow = (r: PriceStructureRow) => {
+            const cost = r.costVnd ?? 0, bill = r.billVnd ?? 0, quote = r.quoteChargeVnd ?? 0;
+            const lechChi = hasBill && (r.billVnd != null || r.costVnd != null) ? bill - cost : null;
+            // r.quoteChargeVnd null nghĩa là KHÔNG áp dụng cho dòng này — không được coi
+            // null = 0, kẻo Lệch thu hiện số ảo (N1, review).
+            const lechThu = hasBill && r.quoteChargeVnd != null && r.chargeVnd != null ? r.chargeVnd - quote : null;
+            const margin = shipHoRowMarginVnd(r, hasBill);
+            const laKhop = r.label === 'Điều chỉnh khớp số đã ghi';
+            return (
+              <tr key={r.label} className={`border-t border-border/60 [&>td]:py-2 ${laKhop ? 'text-muted-foreground italic' : ''}`}>
+                <td className="text-left" title={laKhop ? 'Đơn tạo trước 08/09: giá đã báo brand khác tổng các dòng tách theo công thức hiện tại — dòng này bù cho khớp. Đơn mới không còn dòng này.' : undefined}>
+                  {r.label}
+                  {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
+                </td>
+                <td className="text-right text-sky-700 dark:text-sky-400">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
+                {hasBill && <td className="text-right text-sky-700 dark:text-sky-400">{r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}</td>}
+                {hasBill && <td className={`text-right ${mauLech(lechChi, 'chi')}`}>{so(lechChi, true)}</td>}
+                <td className="text-right text-emerald-700 dark:text-emerald-400">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
+                {hasBill && <td className="text-right font-medium text-emerald-700 dark:text-emerald-400">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
+                {hasBill && <td className={`text-right ${mauLech(lechThu, 'thu')}`}>{so(lechThu, true)}</td>}
+                <td className={`text-right ${mauMargin(margin)}`}>{so(margin, true)}</td>
+              </tr>
+            );
+          };
+          return (
           <div className="overflow-x-auto">
             {/* Hai khối tách bạch (CEO 08/09): CHI PHÍ = MEAN trả carrier (xanh lam) · THU = brand trả MEAN (xanh lục).
                 Mỗi khối có Dự tính / Thực / Lệch; cột Margin = thu − chi của từng khoản. */}
@@ -254,59 +292,51 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
                   {hasBill && <td className="text-right text-muted-foreground">—</td>}
                   <td className="text-right text-muted-foreground">—</td>
                 </tr>
-                {price.rows.map((r) => {
-                  const cost = r.costVnd ?? 0, bill = r.billVnd ?? 0, quote = r.quoteChargeVnd ?? 0, charge = r.chargeVnd ?? 0;
-                  const lechChi = hasBill && (r.billVnd != null || r.costVnd != null) ? bill - cost : null;
-                  // r.quoteChargeVnd / r.billVnd null nghĩa là KHÔNG áp dụng cho dòng này (ví dụ
-                  // dòng tổng hợp "Tổng brand phải trả" hoặc "Phí xử lý đơn hàng" không có bill
-                  // riêng) — không được coi null = 0, kẻo Lệch thu/Margin hiện số ảo (N1, review).
-                  const lechThu = hasBill && r.quoteChargeVnd != null ? charge - quote : null;
-                  const margin = hasBill ? (r.billVnd == null ? null : charge - bill) : quote - cost;
-                  const so = (v: number | null, dau = false) => v == null || v === 0 ? '—' : (dau && v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
-                  const mauLechChi = lechChi == null || lechChi === 0 ? 'text-muted-foreground' : lechChi > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400';
-                  const mauLechThu = lechThu == null || lechThu === 0 ? 'text-muted-foreground' : lechThu > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-                  const mauMargin = margin == null || margin === 0 ? 'text-muted-foreground' : margin > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-                  const laKhop = r.label === 'Điều chỉnh khớp số đã ghi';
+                {freightRows.map(renderRow)}
+                {(() => {
+                  // "Tổng cước" — subtotal CHỈ CƯỚC (không gồm duty). Cột bill đã trừ
+                  // đúng phần duty ra khỏi cả hoá đơn (fix bug: trước đây dòng Tổng lấy
+                  // nguyên billTotal — GỘM duty — trừ vào giá thu freight-only, margin
+                  // tổng ra âm ảo dù margin thực dương).
+                  const lechChi = hasBill ? freightSubtotal.billVnd! - freightSubtotal.costVnd : null;
+                  const lechThu = hasBill ? freightSubtotal.chargeVnd - freightSubtotal.quoteChargeVnd : null;
                   return (
-                    <tr key={r.label} className={`border-t border-border/60 [&>td]:py-2 ${laKhop ? 'text-muted-foreground italic' : ''}`}>
-                      <td className="text-left" title={laKhop ? 'Đơn tạo trước 08/09: giá đã báo brand khác tổng các dòng tách theo công thức hiện tại — dòng này bù cho khớp. Đơn mới không còn dòng này.' : undefined}>
-                        {r.label}
-                        {r.percent != null && <span className="ml-1 text-[10px] text-muted-foreground">{r.percent}%</span>}
-                      </td>
-                      <td className="text-right text-sky-700 dark:text-sky-400">{r.costVnd == null ? <span className="text-muted-foreground">—</span> : r.costVnd.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right text-sky-700 dark:text-sky-400">{r.billVnd == null ? <span className="text-muted-foreground">—</span> : r.billVnd.toLocaleString('vi-VN')}</td>}
-                      {hasBill && <td className={`text-right ${mauLechChi}`}>{so(lechChi, true)}</td>}
-                      <td className="text-right text-emerald-700 dark:text-emerald-400">{r.quoteChargeVnd == null ? <span className="text-muted-foreground">—</span> : r.quoteChargeVnd.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right font-medium text-emerald-700 dark:text-emerald-400">{r.chargeVnd == null ? <span className="text-muted-foreground">—</span> : r.chargeVnd.toLocaleString('vi-VN')}</td>}
-                      {hasBill && <td className={`text-right ${mauLechThu}`}>{so(lechThu, true)}</td>}
-                      <td className={`text-right ${mauMargin}`}>{so(margin, true)}</td>
+                    <tr className="border-t-2 border-border/70 font-semibold [&>td]:py-2">
+                      <td className="text-left">{freightSubtotal.label}</td>
+                      <td className="text-right text-sky-700 dark:text-sky-400">{freightSubtotal.costVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-sky-700 dark:text-sky-400">{freightSubtotal.billVnd!.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mauLech(lechChi, 'chi')}`}>{so(lechChi, true)}</td>}
+                      <td className="text-right text-emerald-700 dark:text-emerald-400">{freightSubtotal.quoteChargeVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-emerald-700 dark:text-emerald-400">{freightSubtotal.chargeVnd.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mauLech(lechThu, 'thu')}`}>{so(lechThu, true)}</td>}
+                      <td className={`text-right ${mauMargin(freightSubtotal.marginVnd)}`}>{so(freightSubtotal.marginVnd, true)}</td>
                     </tr>
                   );
-                })}
+                })()}
+                {dutyRow && renderRow(dutyRow)}
               </tbody>
               <tfoot>
                 {(() => {
-                  const lechChiTong = hasBill ? price.billTotal! - price.costTotal : null;
-                  const lechThuTong = hasBill ? price.chargeTotal - price.quoteChargeTotal : null;
-                  const marginTong = hasBill ? price.chargeTotal - price.billTotal! : (marginVnd ?? 0);
-                  const mau = (v: number | null, tot: 'chi' | 'thu' | 'margin') => v == null || v === 0 ? 'text-muted-foreground'
-                    : (tot === 'chi' ? v < 0 : v > 0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-                  const so = (v: number | null) => v == null ? '—' : (v > 0 ? '+' : '') + v.toLocaleString('vi-VN');
+                  // "Tổng cuối" = Tổng cước + duty (cả hai cột chi lẫn thu) — margin PHẢI
+                  // khớp "Tổng cước" ở trên (xem shipHoFinalTotal); nếu lệch, dutyChargeVnd
+                  // ghi lúc đối soát khác số duty thực trên bill, cần báo lại chứ không vá.
+                  const lechChi = hasBill ? finalTotal.billVnd! - finalTotal.costVnd : null;
+                  const lechThu = hasBill ? finalTotal.chargeVnd - finalTotal.quoteChargeVnd : null;
                   return (
                     <tr className="border-t-2 border-border font-semibold [&>td]:py-2">
-                      <td className="text-left">Tổng</td>
-                      <td className="text-right text-sky-700 dark:text-sky-400">{price.costTotal.toLocaleString('vi-VN')}</td>
+                      <td className="text-left">{finalTotal.label}</td>
+                      <td className="text-right text-sky-700 dark:text-sky-400">{finalTotal.costVnd.toLocaleString('vi-VN')}</td>
                       {hasBill && (
                         <td className="text-right text-sky-700 dark:text-sky-400">
                           {price.billNumber && <span className="mr-1 text-[9px] font-normal text-muted-foreground/70">({price.billNumber})</span>}
-                          {price.billTotal!.toLocaleString('vi-VN')}
+                          {finalTotal.billVnd!.toLocaleString('vi-VN')}
                         </td>
                       )}
-                      {hasBill && <td className={`text-right ${mau(lechChiTong, 'chi')}`}>{so(lechChiTong)}</td>}
-                      <td className="text-right text-emerald-700 dark:text-emerald-400">{price.quoteChargeTotal.toLocaleString('vi-VN')}</td>
-                      {hasBill && <td className="text-right text-emerald-700 dark:text-emerald-400">{price.chargeTotal.toLocaleString('vi-VN')}</td>}
-                      {hasBill && <td className={`text-right ${mau(lechThuTong, 'thu')}`}>{so(lechThuTong)}</td>}
-                      <td className={`text-right ${mau(marginTong, 'margin')}`}>{so(marginTong)}</td>
+                      {hasBill && <td className={`text-right ${mauLech(lechChi, 'chi')}`}>{so(lechChi, true)}</td>}
+                      <td className="text-right text-emerald-700 dark:text-emerald-400">{finalTotal.quoteChargeVnd.toLocaleString('vi-VN')}</td>
+                      {hasBill && <td className="text-right text-emerald-700 dark:text-emerald-400">{finalTotal.chargeVnd.toLocaleString('vi-VN')}</td>}
+                      {hasBill && <td className={`text-right ${mauLech(lechThu, 'thu')}`}>{so(lechThu, true)}</td>}
+                      <td className={`text-right ${mauMargin(finalTotal.marginVnd)}`}>{so(finalTotal.marginVnd, true)}</td>
                     </tr>
                   );
                 })()}
@@ -314,7 +344,7 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Giá thu = cước carrier (pass-through toàn bộ) + cước cơ bản × markup + phí xử lý 50.000 (có VAT). Xăng dầu, VAT, phụ phí, ký nhận, phí NK là chi phí carrier chuyển thẳng, không markup.
-              {hasBill ? ' Lệch chi: đỏ = carrier tính cao hơn dự tính. Lệch thu: xanh = thu brand thêm. Margin = thu thực − bill.' : ' Chưa có bill: Margin = thu dự tính − chi dự tính.'}
+              {hasBill ? ' Lệch chi: đỏ = carrier tính cao hơn dự tính. Lệch thu: xanh = thu brand thêm. Margin = thu thực − bill. Thuế/hải quan (duty) thu hộ đúng giá vốn, tách riêng khỏi Tổng cước — Tổng cuối gộp lại nên margin hai dòng bằng nhau.' : ' Chưa có bill: Margin = thu dự tính − chi dự tính.'}
               {price.factor !== 1 ? ' Chi phí gốc theo ngoại tệ đã quy về VND.' : ''}
             </p>
 
@@ -356,7 +386,8 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
               <p className="mt-2 text-[11px] text-muted-foreground">Chưa đối soát cước thực — bấm “Đối soát từ hóa đơn carrier” ở danh sách đơn khi bill về.</p>
             )}
           </div>
-        )}
+          );
+        })()}
       </CardContent></Card>
 
       <TrackingCard

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shipHoPriceStructure } from './price-structure';
+import { shipHoPriceStructure, shipHoFreightSubtotal, shipHoFinalTotal, shipHoFreightAndDutyRows, shipHoRowMarginVnd } from './price-structure';
 import { computeBrandCharge } from './brand-pricing';
 
 // Breakdown giả lập (cost currency = VND, factor 1): base+phụ phí+fuel+vat = carrierCost.
@@ -234,5 +234,143 @@ describe('shipHoPriceStructure', () => {
     expect(s.dutyChargeVnd).toBe(0);
     expect(s.chargeWithDutyTotal).toBe(s.chargeTotal);
     expect(s.rows.some((r) => r.label.startsWith('Tổng brand phải trả'))).toBe(false);
+  });
+});
+
+// ── Bảng cấu trúc giá tái cấu trúc (CEO 23/09): Tổng cước (subtotal, KHÔNG gồm
+// duty) → dòng duty riêng → Tổng cuối (cước + duty). Vì duty thu đúng giá vốn
+// (không markup), margin "Tổng cước" PHẢI bằng margin "Tổng cuối".
+describe('shipHoFreightSubtotal / shipHoFinalTotal', () => {
+  const actualBillWithDuty = {
+    breakdown: {
+      base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 0,
+      vat: 190_000, other: 0, importHandling: 0, duty: 736_241,
+      billNumber: '734110283 + 736059786', shipDate: '2026-07-02',
+      sell: {
+        baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0, resSignVnd: 0, residentialVnd: 0, signatureVnd: 0,
+        importHandlingVnd: 0, dutyVnd: 736_241, otherVnd: 0,
+        fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_891_882,
+      },
+    },
+    totalVnd: 2_208_941, weightKg: 2.5,
+  };
+
+  it('đơn CÓ duty: Tổng cước không gồm duty (bill trừ phần duty), Tổng cuối = Tổng cước + duty, margin hai dòng BẰNG NHAU', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill: actualBillWithDuty })!;
+    const freight = shipHoFreightSubtotal(s);
+    const final = shipHoFinalTotal(s);
+
+    // Tổng cước: cột chi/thu KHÔNG đổi so với costTotal/quoteChargeTotal/chargeTotal
+    // đã có (đúng nghĩa "CHỈ CƯỚC"); cột bill = billTotal (cả hoá đơn, GỘP duty)
+    // trừ đúng phần duty trên hoá đơn → còn lại thuần cước.
+    expect(freight.costVnd).toBe(s.costTotal);
+    expect(freight.quoteChargeVnd).toBe(s.quoteChargeTotal);
+    expect(freight.chargeVnd).toBe(s.chargeTotal);
+    expect(freight.billVnd).toBe(1_472_700); // 2.208.941 − 736.241
+
+    // Tổng cuối: cước + duty ở CẢ hai bên chi lẫn thu.
+    expect(final.billVnd).toBe(s.billTotal);
+    expect(final.chargeVnd).toBe(s.chargeWithDutyTotal);
+    expect(final.chargeVnd).toBe(1_891_882 + 736_241);
+
+    // Điểm mấu chốt của layout: margin không đổi khi gộp duty vào.
+    expect(freight.marginVnd).toBe(final.marginVnd);
+    expect(freight.marginVnd).toBe(419_182); // 1.891.882 − 1.472.700
+    expect(final.marginVnd).toBe(419_182); // 2.628.123 − 2.208.941
+
+    // Yêu cầu CEO: margin "Tổng cuối" PHẢI bằng tổng margin từng dòng (freight rows
+    // + dòng duty riêng) SAU KHI sửa bug 2 (revenue-only row không còn margin null).
+    const { freightRows, dutyRow } = shipHoFreightAndDutyRows(s);
+    const tongMarginTungDong = [...freightRows, ...(dutyRow ? [dutyRow] : [])]
+      .reduce((t, r) => t + (shipHoRowMarginVnd(r, true) ?? 0), 0);
+    expect(tongMarginTungDong).toBe(final.marginVnd);
+  });
+
+  it('đơn KHÔNG có duty (có bill): Tổng cước = Tổng cuối y hệt, không lệch một đồng', () => {
+    const actualBillNoDuty = {
+      breakdown: { base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 60_000, demand: 0, signature: 0, vat: 190_000, other: 10_000, billNumber: 'HANR000265761', shipDate: '2026-07-02' },
+      totalVnd: 1_550_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill: actualBillNoDuty })!;
+    expect(s.dutyChargeVnd).toBe(0);
+    const freight = shipHoFreightSubtotal(s);
+    const final = shipHoFinalTotal(s);
+    expect({ ...freight, label: '' }).toEqual({ ...final, label: '' });
+    expect(freight.billVnd).toBe(s.billTotal);
+    expect(freight.marginVnd).toBe(s.chargeTotal - s.billTotal!);
+  });
+
+  it('đơn CHƯA có bill (chỉ dự tính): Tổng cước = Tổng cuối, billVnd null, margin = thu dự tính − chi dự tính', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    const freight = shipHoFreightSubtotal(s);
+    const final = shipHoFinalTotal(s);
+    expect({ ...freight, label: '' }).toEqual({ ...final, label: '' });
+    expect(freight.billVnd).toBeNull();
+    expect(freight.marginVnd).toBe(s.chargeTotal - s.costTotal);
+  });
+});
+
+describe('shipHoFreightAndDutyRows', () => {
+  it('tách dòng duty + dòng "Tổng brand phải trả" ra khỏi khối cước', () => {
+    const actualBill = {
+      breakdown: {
+        base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 0, demand: 0, signature: 0,
+        vat: 190_000, other: 0, importHandling: 0, duty: 736_241,
+        billNumber: '734110283', shipDate: '2026-07-02',
+        sell: {
+          baseVnd: 1_200_000, remoteVnd: 0, demandVnd: 0, resSignVnd: 0, residentialVnd: 0, signatureVnd: 0,
+          importHandlingVnd: 0, dutyVnd: 736_241, otherVnd: 0,
+          fuelVnd: 494_950, processingExVatVnd: 50_000, vatVnd: 146_932, chargedVnd: 1_891_882,
+        },
+      },
+      totalVnd: 2_208_941, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const { freightRows, dutyRow } = shipHoFreightAndDutyRows(s);
+    expect(dutyRow?.label).toContain('Thuế / hải quan (duty)');
+    expect(dutyRow?.chargeVnd).toBe(736_241);
+    expect(freightRows.some((r) => r.label.startsWith('Thuế / hải quan'))).toBe(false);
+    expect(freightRows.some((r) => r.label.startsWith('Tổng brand phải trả'))).toBe(false);
+    // Freight rows vẫn cộng đúng costTotal/chargeTotal như trước (không mất dòng nào khác).
+    expect(freightRows.reduce((t, r) => t + (r.costVnd ?? 0), 0)).toBe(s.costTotal);
+    expect(freightRows.reduce((t, r) => t + (r.chargeVnd ?? 0), 0)).toBe(s.chargeTotal);
+  });
+
+  it('không có duty → dutyRow null, freightRows = toàn bộ rows', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    const { freightRows, dutyRow } = shipHoFreightAndDutyRows(s);
+    expect(dutyRow).toBeNull();
+    expect(freightRows).toEqual(s.rows);
+  });
+});
+
+describe('shipHoRowMarginVnd (bug: dòng chỉ có bên thu — vd Phí xử lý đơn hàng — margin không được là null)', () => {
+  it('dòng revenue-only (costVnd = billVnd = null) có bill khác: margin = toàn bộ giá thu, không phải "—"', () => {
+    const actualBill = {
+      breakdown: { base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 60_000, demand: 0, signature: 0, vat: 190_000, other: 10_000, billNumber: 'HANR000265761', shipDate: '2026-07-02' },
+      totalVnd: 1_550_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const row = s.rows.find((r) => r.label === 'Phí xử lý đơn hàng')!;
+    expect(row.costVnd).toBeNull();
+    expect(row.billVnd).toBeNull();
+    expect(row.chargeVnd).toBeGreaterThan(0);
+    expect(shipHoRowMarginVnd(row, true)).toBe(row.chargeVnd);
+  });
+
+  it('dòng bình thường có bill: margin = charge − bill (không đổi so với trước)', () => {
+    const actualBill = {
+      breakdown: { base: 1_050_000, discount: -80_000, fuel: 320_000, remote: 60_000, demand: 0, signature: 0, vat: 190_000, other: 10_000, billNumber: 'HANR000265761', shipDate: '2026-07-02' },
+      totalVnd: 1_550_000, weightKg: 2.5,
+    };
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25, actualBill })!;
+    const row = s.rows.find((r) => r.label === 'Cước cơ bản')!;
+    expect(shipHoRowMarginVnd(row, true)).toBe(row.chargeVnd! - row.billVnd!);
+  });
+
+  it('chưa có bill: margin = charge − cost (dự tính)', () => {
+    const s = shipHoPriceStructure({ breakdown, carrierCostVnd: 1_534_236, chargedVnd: expectedCharged(25), markupPercent: 25 })!;
+    const row = s.rows.find((r) => r.label === 'Cước cơ bản')!;
+    expect(shipHoRowMarginVnd(row, false)).toBe(row.quoteChargeVnd! - row.costVnd!);
   });
 });
