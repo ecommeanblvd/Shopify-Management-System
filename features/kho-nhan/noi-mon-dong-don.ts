@@ -69,7 +69,13 @@ export function laLoiHeThong(noiDuoc: number, boSot: number): boolean {
   return noiDuoc === 0 && boSot >= NGUONG_BO_SOT_HE_THONG;
 }
 
-/** THUẦN: mã in vào tem — dòng đơn trước, rồi biến thể, cuối cùng mã kho tự cấp. */
+/**
+ * THUẦN: mã in vào tem — dòng đơn trước, rồi biến thể, cuối cùng mã kho tự cấp.
+ *
+ * Tầng `unitCode` (`WH-…`) hiện CHƯA có caller nào truyền vào: mã kho tự cấp chỉ tồn tại ở màn
+ * phiếu nhận nhanh (`goods_receipt_items.unit_code`), chưa nối sang món Lark. Giữ lại vì đó là
+ * tầng cuối theo spec §2.2, nhưng đừng tưởng nó đang chạy.
+ */
 export function maTemChoMon(x: { shopifyLineId?: string | null; shopifyVariantId?: string | null; unitCode?: string | null }): string | null {
   if (x.shopifyLineId) return maTemDong(x.shopifyLineId);
   if (x.shopifyVariantId) return maTemBienThe(x.shopifyVariantId);

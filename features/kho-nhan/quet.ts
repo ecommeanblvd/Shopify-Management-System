@@ -15,7 +15,7 @@
  * INDEX trên `shopify_line_id`, nên một shopifyLineId chỉ có thể khớp tối đa một món — `find`
  * ở nhánh 'dong' không bao giờ gặp nhiều hơn một kết quả.
  */
-import { docMaTem } from '@/features/receiving/ma-tem';
+import { docMaTem, soIdShopify } from '@/features/receiving/ma-tem';
 
 export interface MonDeQuet {
   dinhDanh: string;
@@ -33,6 +33,20 @@ export type KetQuaQuet =
   | { loai: 'tim_bien_the'; shopifyVariantId: string }
   | { loai: 'khong_hieu'; raw: string };
 
+/**
+ * So một id LẤY TỪ DB với khoá ĐỌC TỪ TEM. Hai bên KHÔNG cùng dạng: DB lưu gid đầy đủ
+ * ("gid://shopify/LineItem/14593977155752" — đo 23/09/2026: 6225/6225 dòng `lark_mon_don`,
+ * 15828/15828 dòng `order_fulfillment_lines`), còn tem chỉ mang số trần ("14593977155752").
+ * So thẳng `===` luôn ra false: kho quét đúng cái tem mà chính màn này vừa in ra cũng không
+ * chọn được món (review cuối 23/09/2026 Critical 1). Rút số cả hai bên bằng `soIdShopify` —
+ * nguồn rút số DUY NHẤT của hệ (features/receiving/ma-tem.ts) — rồi mới so.
+ */
+function khopId(idTrongDb: string | null, soTrenTem: string): boolean {
+  if (!idTrongDb) return false;
+  const so = soIdShopify(idTrongDb);
+  return so != null && so === soTrenTem;
+}
+
 export function xuLyQuet(raw: string, mon: readonly MonDeQuet[]): KetQuaQuet {
   const ma = docMaTem(raw);
   if (!ma || ma.loai === 'mon') return { loai: 'khong_hieu', raw };
@@ -40,13 +54,13 @@ export function xuLyQuet(raw: string, mon: readonly MonDeQuet[]): KetQuaQuet {
   if (ma.loai === 'don') return { loai: 'mo_don', shopifyOrderId: ma.shopifyOrderId };
 
   if (ma.loai === 'dong') {
-    const m = mon.find((x) => x.shopifyLineId === ma.shopifyLineId);
+    const m = mon.find((x) => khopId(x.shopifyLineId, ma.shopifyLineId));
     if (m) return { loai: 'chon_mon', dinhDanh: m.dinhDanh };
     // Biết là tem hợp lệ nhưng không thuộc đơn đang mở — màn tra đơn của dòng này rồi hỏi.
     return { loai: 'don_khac', shopifyOrderId: '' };
   }
 
-  const khopBienThe = mon.filter((x) => x.shopifyVariantId === ma.shopifyVariantId);
+  const khopBienThe = mon.filter((x) => khopId(x.shopifyVariantId, ma.shopifyVariantId));
   if (khopBienThe.length > 0) {
     // Nhiều món cùng biến thể (mua 2 cái giống hệt) → ưu tiên món chưa xử lý, để lần quét
     // sau chạm được món thứ hai thay vì cứ dính mãi vào món đầu tiên đã xong.

@@ -70,9 +70,21 @@ export async function listDongCho(brandSlug: string): Promise<DongCho[]> {
     .orderBy(schema.brandOrderRequests.expectedDeliveryDate, schema.shopifyOrders.shopifyOrderNumber);
 }
 
-/** Quét tem brand `L:<id>` → dòng đơn (KHÔNG lọc đang chờ: dòng đã nhận xong vẫn trả về để UI báo "đã nhận rồi"). */
+/**
+ * Quét tem brand `L:<id>` → dòng đơn (KHÔNG lọc đang chờ: dòng đã nhận xong vẫn trả về để UI
+ * báo "đã nhận rồi").
+ *
+ * `shopifyLineId` vào đây là SỐ TRẦN do `docMaTem` đọc từ tem, còn cột
+ * `order_fulfillment_lines.shopify_line_id` lưu GID ĐẦY ĐỦ (đo 23/09/2026: 15828/15828 dòng)
+ * — so thẳng bằng `eq` thì không bao giờ khớp, màn quét nhanh báo "Không có dòng đơn nào mang
+ * Line ID …" với chính tem hợp lệ (review cuối 23/09/2026 Important 4). Rút số bên cột trước
+ * khi so, cùng phép rút với `soIdShopify` ở phía TS và với `quet-queries.ts` ở phía SQL. Phép
+ * rút làm mất index trên cột, chấp nhận được vì bảng chỉ ~16k dòng và mỗi lượt quét gọi một lần.
+ */
 export async function getDongTheoShopifyLineId(shopifyLineId: string): Promise<DongCho | null> {
-  const [r] = await chonDong().where(eq(schema.orderFulfillmentLines.shopifyLineId, shopifyLineId)).limit(1);
+  const [r] = await chonDong()
+    .where(sql`regexp_replace(${schema.orderFulfillmentLines.shopifyLineId}, '^.*/', '') = ${shopifyLineId}`)
+    .limit(1);
   return r ?? null;
 }
 

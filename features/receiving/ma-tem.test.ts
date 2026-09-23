@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docMaTem, maTemDong, maTemBienThe, maTemDon } from './ma-tem';
+import { docMaTem, maTemDong, maTemBienThe, maTemDon, soIdShopify } from './ma-tem';
 
 describe('docMaTem', () => {
   it('WH-8 số → tem món, chuẩn hoá chữ hoa và bỏ khoảng trắng', () => {
@@ -63,5 +63,28 @@ describe('mã biến thể và mã đơn', () => {
     expect(maTemDong('abc')).toBeNull();
     expect(maTemBienThe('abc')).toBeNull();
     expect(maTemDon('abc')).toBeNull();
+  });
+});
+
+describe('soIdShopify — nguồn rút số DUY NHẤT để so id DB với khoá trên tem', () => {
+  it('rút số cuối của gid đầy đủ như DB đang lưu', () => {
+    // Dạng thật trong DB (đo 23/09/2026: 6225/6225 dòng lark_mon_don là gid).
+    expect(soIdShopify('gid://shopify/LineItem/14593977155752')).toBe('14593977155752');
+    expect(soIdShopify('gid://shopify/ProductVariant/45163940544678')).toBe('45163940544678');
+    expect(soIdShopify('gid://shopify/Order/6789012345678')).toBe('6789012345678');
+  });
+  it('số trần giữ nguyên — rút hai lần vẫn ra cùng kết quả', () => {
+    expect(soIdShopify('14593977155752')).toBe('14593977155752');
+    expect(soIdShopify(soIdShopify('gid://shopify/LineItem/14593977155752')!)).toBe('14593977155752');
+  });
+  it('gid và số trần của CÙNG một id rút ra bằng nhau — đây là bất biến cả hệ dựa vào', () => {
+    const gid: string = 'gid://shopify/LineItem/14593977155752';
+    const soTren: string = '14593977155752';
+    expect(gid === soTren).toBe(false); // so thẳng thì SAI
+    expect(soIdShopify(gid)).toBe(soIdShopify(soTren)); // rút rồi mới đúng
+  });
+  it('id không chứa chữ số → null, KHÔNG bịa', () => {
+    expect(soIdShopify('abc')).toBeNull();
+    expect(soIdShopify('')).toBeNull();
   });
 });

@@ -48,26 +48,37 @@ export function docMaTem(raw: string): MaTem | null {
   }
 }
 
-/** Số cuối của một gid Shopify ("gid://shopify/Order/999" → "999"); số trần giữ nguyên. Không có chữ số → null. */
-function soCuoi(id: string): string | null {
+/**
+ * Số cuối của một gid Shopify ("gid://shopify/Order/999" → "999"); số trần giữ nguyên. Không có
+ * chữ số → null.
+ *
+ * ĐÂY LÀ NƠI DUY NHẤT rút số của một id Shopify trong hệ này — đừng viết regex thứ hai. Tem chỉ
+ * mang SỐ TRẦN (`docMaTem` trả về số trần), còn MỌI cột id trong DB đều lưu GID ĐẦY ĐỦ (đo
+ * 23/09/2026: `lark_mon_don.shopify_line_id` 6225/6225 gid, `order_fulfillment_lines.shopify_line_id`
+ * 15828/15828 gid). So thẳng hai bên là luôn sai (`'gid://…/14593977155752' === '14593977155752'`
+ * là false) nên bên nào cầm id từ DB PHẢI rút số qua hàm này trước khi so với khoá đọc từ tem.
+ * Phía SQL thì dùng `regexp_replace` cắt mọi thứ tới dấu gạch chéo cuối — cùng một phép rút,
+ * chỉ khác nơi chạy.
+ */
+export function soIdShopify(id: string): string | null {
   const m = /(\d{1,20})$/.exec(id.trim());
   return m ? m[1] : null;
 }
 
 /** Chuỗi in vào mã vạch tem dòng đơn. Id không chứa chữ số (đọc lại được) → null. */
 export function maTemDong(shopifyLineId: string): string | null {
-  const so = soCuoi(shopifyLineId);
+  const so = soIdShopify(shopifyLineId);
   return so ? `L:${so}` : null;
 }
 
 /** Chuỗi in vào mã vạch tem hàng lưu kho (một loại hàng, không gắn đơn). Id không chứa chữ số → null. */
 export function maTemBienThe(shopifyVariantId: string): string | null {
-  const so = soCuoi(shopifyVariantId);
+  const so = soIdShopify(shopifyVariantId);
   return so ? `V:${so}` : null;
 }
 
 /** Chuỗi mã vạch của cả đơn — quét để mở đơn trên màn. Id không chứa chữ số → null. */
 export function maTemDon(shopifyOrderId: string): string | null {
-  const so = soCuoi(shopifyOrderId);
+  const so = soIdShopify(shopifyOrderId);
   return so ? `O:${so}` : null;
 }

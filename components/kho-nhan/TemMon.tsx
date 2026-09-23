@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 // Subpath 'bwip-js/browser' (không phải '.') — export gốc chỉ khai 'types' dưới điều kiện
 // 'browser', mà tsc không tự bật điều kiện đó nên "." không tra được kiểu (build 23/09/2026).
 import bwipjs from 'bwip-js/browser';
-import { danhDauDaInTem } from '@/features/kho-nhan/tem-actions';
+import { danhDauDaInTem, type KetQuaDanhDauTem } from '@/features/kho-nhan/tem-actions';
 
 export interface MonTem {
   dinhDanh: string;
@@ -47,7 +47,7 @@ export function TemMon({ donTran, mon, soHuyBoQua }: {
   // KHÔNG thể phát hiện đáng tin việc huỷ — chặn ở mức tối thiểu "đã từng bấm In" thay vì đoán.
   const [daBamIn, setDaBamIn] = useState(false);
   const [dangGui, batDau] = useTransition();
-  const [ketQua, setKetQua] = useState<{ da: number } | { loi: string } | null>(null);
+  const [ketQua, setKetQua] = useState<KetQuaDanhDauTem | { loi: string } | null>(null);
 
   function bamIn() {
     setDaBamIn(true);
@@ -105,9 +105,7 @@ export function TemMon({ donTran, mon, soHuyBoQua }: {
         {!daBamIn && (
           <span className="text-sm text-muted-foreground">Bấm &quot;In&quot; trước — chỉ đánh dấu được sau khi đã in.</span>
         )}
-        {ketQua && 'da' in ketQua && (
-          <span className="text-sm text-emerald-700 dark:text-emerald-400">Đã đánh dấu {ketQua.da} món là đã in tem.</span>
-        )}
+        {ketQua && 'da' in ketQua && <BaoKetQua ketQua={ketQua} mon={inDuoc} />}
         {ketQua && 'loi' in ketQua && <span className="text-sm text-red-600 dark:text-red-400">{ketQua.loi}</span>}
       </div>
 
@@ -129,6 +127,42 @@ export function TemMon({ donTran, mon, soHuyBoQua }: {
       <div className="tem-grid">
         {inDuoc.map((m) => <MotTem key={m.dinhDanh} m={m} donTran={donTran} />)}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Báo kết quả bấm "Xong — đã dán tem" ĐÚNG SỰ THẬT.
+ *
+ * Mốc "đã in tem" ghi vào dòng `wh_nhan_kcs` của món, mà dòng đó chỉ có sau khi món đã được lưu
+ * kết quả nhận. Vào bằng "In tem cả đơn" (kiện vừa về, chưa cân kiểm món nào) thì KHÔNG món nào
+ * ghi được — bản cũ vẫn hiện chữ xanh "Đã đánh dấu 0 món", tức khoe thành công cho việc không hề
+ * xảy ra (review cuối 23/09/2026 I3). Ba trạng thái tách bạch: ghi hết (xanh), ghi một phần
+ * (vàng, nói rõ món nào chưa), không ghi được gì (vàng, KHÔNG phải xanh).
+ */
+function BaoKetQua({ ketQua, mon }: { ketQua: KetQuaDanhDauTem; mon: MonInDuoc[] }) {
+  const { da, chuaNhan } = ketQua;
+  if (chuaNhan.length === 0) {
+    return <span className="text-sm text-emerald-700 dark:text-emerald-400">Đã đánh dấu {da} món là đã in tem.</span>;
+  }
+  const ten = (dinhDanh: string) => {
+    const m = mon.find((x) => x.dinhDanh === dinhDanh);
+    return `${m?.sku ?? '—'} — ${m?.ten ?? '—'}`;
+  };
+  return (
+    <div className="w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+      <p className="font-medium">
+        {da > 0
+          ? `Đã đánh dấu ${da} món; còn ${chuaNhan.length} món CHƯA ghi được.`
+          : `CHƯA ghi được món nào (${chuaNhan.length} món) — tem đã in nhưng hệ thống chưa lưu mốc nào.`}
+      </p>
+      <p className="mt-1">
+        Lý do: mốc &quot;đã in tem&quot; chỉ ghi được lên món ĐÃ có kết quả nhận trong hệ thống. Cân &amp; kiểm
+        rồi Lưu những món dưới đây ở màn &quot;Nhận &amp; kiểm hàng&quot;, sau đó quay lại bấm &quot;Xong&quot; một lần nữa.
+      </p>
+      <ul className="ml-4 mt-1 list-disc">
+        {chuaNhan.map((d) => <li key={d}>{ten(d)}</li>)}
+      </ul>
     </div>
   );
 }

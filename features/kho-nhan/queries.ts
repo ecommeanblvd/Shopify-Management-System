@@ -16,9 +16,17 @@ export interface MonCuaDon {
   lyDoHuy: string | null;
   /** Dòng đơn Shopify tương ứng (nối theo SKU khi đẩy Lark — xem noi-mon-dong-don.ts). null khi chưa nối được. */
   shopifyLineId: string | null;
-  /** Mã biến thể Shopify của dòng đơn trên — lấy qua join, không tự suy ra khi thiếu dòng đơn. */
+  /**
+   * Mã biến thể Shopify của món: lấy qua dòng đơn khi đã nối được, KHÔNG nối được thì tra
+   * `shopify_variants` theo SKU (xem `BIEN_THE_THEO_SKU` bên dưới). Dùng cho CẢ tem lẫn việc
+   * khớp lúc quét — hai chỗ phải cùng một giá trị, nếu không thì tem `V:` in ra rồi quét lại
+   * không chọn được món.
+   */
   shopifyVariantId: string | null;
-  /** Mã in tem cho món này — dòng đơn trước, rồi biến thể; null khi cả hai đều thiếu (xem AGENTS/task-5 report). */
+  /**
+   * Mã in tem cho món này — dòng đơn (`L:`) trước, rồi biến thể (`V:`); null khi cả hai đều
+   * thiếu. KHÔNG bịa mã: món null được liệt kê rõ ở màn in tem chứ không im lặng bỏ qua.
+   */
   maTem: string | null;
   /** Lúc dán tem mã vạch cho món này (ISO), null nếu chưa in. */
   temInLuc: string | null;
@@ -66,6 +74,30 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
   }
   if (!bare) return { mon: [], loiLark: null, orderNumber: '' };
   const m = schema.larkMonDon, w = schema.whNhanKcs;
+
+  /**
+   * Tầng DỰ PHÒNG lấy mã biến thể cho món CHƯA nối được dòng đơn — tra `shopify_variants` theo SKU.
+   *
+   * Vì sao phải có: `shopifyVariantId` chỉ đến qua join theo `shopify_line_id`, nên món KHÔNG có
+   * line id thì biến thể null THEO CẤU TRÚC, và `maTemChoMon` không bao giờ chạm tới tầng `V:`.
+   * Thành ra "có tem <=> có line id", mà đo trên dữ liệu thật 23/09/2026: 1.500/7.725 món không
+   * có line id → một phần năm hàng hoá vĩnh viễn không tem, trái luật spec §3 "không món nào bị
+   * bỏ lại không tem". Tra theo SKU vá được 800 món trong số đó (review cuối 23/09/2026 I2).
+   *
+   * `having count(distinct …) = 1`: chỉ nhận khi SKU ra ĐÚNG MỘT biến thể. SKU trùng ở hai biến
+   * thể khác nhau (đo được: 1 món) thì chọn bừa là dán mã hàng SAI lên kiện thật — thà để null
+   * rồi liệt kê ra ở màn in tem. Không lọc theo store: `lark_mon_don.store` là tên tự do phía
+   * Lark chứ không phải khoá sang `stores`; ràng buộc "đúng một biến thể" đã đủ chặt.
+   *
+   * Để RIÊNG một biểu thức con thay vì thêm `leftJoin` theo SKU: `shopify_variants.sku` KHÔNG
+   * unique nên join sẽ nhân dòng của món có SKU trùng — đúng cái bẫy đã phải vá ở `rowsMotLan`.
+   */
+  const bienTheTheoSku = sql<string | null>`(
+    select max(v.shopify_variant_id) from shopify_variants v
+    where btrim(${m.sku}) <> '' and v.sku = btrim(${m.sku})
+    having count(distinct v.shopify_variant_id) = 1
+  )`;
+
   const rows = await db.select({
     dinhDanh: m.dinhDanh, recordId: m.recordId, sku: m.sku, lineitemName: m.lineitemName,
     store: m.store, vendor: m.vendor, huy: m.huy, lyDoHuy: m.lyDo,
@@ -73,6 +105,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
     wTrangThai: w.trangThaiDay, wLyDo: w.lyDoFail, wAnh: w.anhKey, wKho: w.warehouse,
     shopifyLineId: m.shopifyLineId,
     shopifyVariantId: schema.shopifyOrderLines.shopifyVariantId,
+    bienTheTheoSku,
     temInLuc: w.temInLuc,
   }).from(m)
     .leftJoin(w, eq(w.monDinhDanh, m.dinhDanh))
@@ -107,12 +140,15 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
 
   const mon = rowsMotLan.map((r) => {
     const dong = r.recordId ? timDongTheoMon(dsLark, r.recordId) : null;
+    // MỘT giá trị biến thể duy nhất cho cả tem lẫn khớp quét: dòng đơn trước, thiếu thì tra
+    // theo SKU. Tính một lần ở đây để tem `V:` in ra và ô quét luôn nói về cùng một biến thể.
+    const shopifyVariantId = r.shopifyVariantId ?? r.bienTheTheoSku;
     return {
       dinhDanh: r.dinhDanh, recordId: r.recordId, sku: r.sku, lineitemName: r.lineitemName,
       store: r.store, vendor: r.vendor, huy: r.huy, lyDoHuy: r.lyDoHuy,
       shopifyLineId: r.shopifyLineId,
-      shopifyVariantId: r.shopifyVariantId,
-      maTem: maTemChoMon({ shopifyLineId: r.shopifyLineId, shopifyVariantId: r.shopifyVariantId }),
+      shopifyVariantId,
+      maTem: maTemChoMon({ shopifyLineId: r.shopifyLineId, shopifyVariantId }),
       temInLuc: r.temInLuc ? r.temInLuc.toISOString() : null,
       daNhan: r.wLuc
         ? {
