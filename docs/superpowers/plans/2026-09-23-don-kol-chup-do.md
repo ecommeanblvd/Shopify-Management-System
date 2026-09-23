@@ -1066,7 +1066,7 @@ export function chonGiaVon(ds: readonly DongGiaVon[], ngay: string): DongGiaVon 
 
 Mở đầu file bằng `'use server';`. **Chỉ export hàm async** — hằng số, kiểu, hàm thuần phải để ở file khác, vì chỉ `next build` bắt được vi phạm này.
 
-Mỗi hàm bắt đầu bằng `const actor = await requireQuanLyKol();`. Sau mỗi thao tác ghi thành công gọi `revalidatePath('/f/kol')` và `revalidatePath(\`/f/kol/${ma}\`)`.
+Mỗi hàm bắt đầu bằng `const actor = await requireQuanLyKol();`. **Mọi phép quy timestamp về ngày hay tháng phải đi qua `ngayKinhDoanh` / `thangKinhDoanh` của `lib/timezone.ts`, KHÔNG dùng `toISOString()` hay `getUTC*`** — đo thật trên dữ liệu công ty: quy theo UTC thì 36,6% đơn lệch ngày và 91 đơn lệch hẳn tháng. Sau mỗi thao tác ghi thành công gọi `revalidatePath('/f/kol')` và `revalidatePath(\`/f/kol/${ma}\`)`.
 
 **`chotDon` — giữ chỗ tồn. Đây là hàm dễ viết sai nhất, viết đúng như sau:**
 
@@ -1128,7 +1128,10 @@ export async function danhDauDaGui(fd: FormData): Promise<{ ok: boolean; loi?: s
   }
   const dong = await db.select().from(schema.kolDongDon).where(eq(schema.kolDongDon.donId, donId));
   const luc = new Date();
-  const ngayGui = luc.toISOString().slice(0, 10);
+  // Giờ NGHIỆP VỤ, không phải UTC. lib/timezone.ts ghi số đo thật: quy theo UTC thì
+  // 36,6% đơn lệch ngày và 91 đơn lệch hẳn THÁNG. Chọn sai ngày ở đây là chọn sai
+  // dòng giá vốn, rồi con số đó đông cứng vĩnh viễn vào chi phí marketing.
+  const ngayGui = ngayKinhDoanh(luc)!;
 
   await db.transaction(async (tx) => {
     for (const d of dong) {
@@ -1392,6 +1395,7 @@ Expected: FAIL — không tìm thấy module.
 - [ ] **Bước 3: Viết `features/kol/bao-cao.ts`**
 
 ```ts
+import { thangKinhDoanh } from '@/lib/timezone';
 import { doiTienTheoThang, type TiGiaThang } from '@/features/cogs/tien';
 import { tongChiPhi } from './chi-phi';
 import type { DongDon } from './types';
@@ -1421,7 +1425,7 @@ function gom<T extends DongDon>(ds: readonly T[], khoaCua: (d: T) => string): Do
  * phải thấy có hàng đang nằm ngoài mọi tháng.
  */
 export function gomTheoThang(ds: readonly (DongDon & { guiLuc: string | null })[]): DongBaoCao[] {
-  return gom(ds, (d) => d.guiLuc ? d.guiLuc.slice(0, 7) : 'chua_gui')
+  return gom(ds, (d) => thangKinhDoanh(d.guiLuc) ?? 'chua_gui')
     .sort((a, b) => b.khoa.localeCompare(a.khoa));
 }
 
