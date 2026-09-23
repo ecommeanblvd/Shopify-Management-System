@@ -4,10 +4,10 @@ import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { chotDon, luiVeNhap, danhDauDaGui, huyDon, nhanTraVe, suaGiaVon } from '@/features/kol/actions';
-import { chuyenDuoc, suaDongDuoc, suaGiaVonDuoc } from '@/features/kol/trang-thai';
+import { chuyenDuoc, suaDongDuoc, ghiGiaVonDuoc } from '@/features/kol/trang-thai';
 import { soNgayTre } from '@/features/kol/chi-phi';
 import { conNo } from '@/features/kol/tra-ve';
-import { ngayKinhDoanh } from '@/lib/timezone';
+import { ngayKinhDoanh, hienNgayGio } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MoneyInput } from '@/components/ui/money-input';
@@ -17,12 +17,11 @@ import type { DongDon } from '@/features/kol/types';
 
 const NHAN_HINH_THUC: Record<'tang' | 'muon', string> = { tang: 'Tặng', muon: 'Mượn' };
 
-function formatDate(d: Date | string | null): string {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('vi-VN');
-}
-
-/** Ô giá vốn — hiện số nếu có, cho sửa tại chỗ khi `suaGiaVonDuoc` cho phép. */
+/**
+ * Ô giá vốn — hiện số nếu có, cho ghi tại chỗ khi `ghiGiaVonDuoc` cho phép.
+ * `suaDuoc` tính theo TỪNG DÒNG, không theo cả đơn: đơn đã gửi vẫn mở ô cho
+ * dòng còn TRỐNG giá, nhưng khoá chặt dòng đã có số.
+ */
 function OGiaVon({ d, suaDuoc, onSaved }: { d: DongDon; suaDuoc: boolean; onSaved: () => void }) {
   const [dangSua, setDangSua] = useState(false);
   const [gia, setGia] = useState(d.giaVon ?? '');
@@ -141,7 +140,6 @@ export function ChiTietDon({ don, dong, canManage }: { don: DonDayDu; dong: Dong
   const coTheLuiVeNhap = canManage && chuyenDuoc(tt, 'nhap');
   const coTheHuy = canManage && chuyenDuoc(tt, 'huy');
   const suaDongDuocO = suaDongDuoc(tt);
-  const suaGiaVonDuocO = canManage && suaGiaVonDuoc(tt);
 
   function doChot() {
     start(async () => { setErr(null); const r = await chotDon(don.id); if (!r.ok) setErr(r.loi ?? 'Lỗi'); else lam_moi(); });
@@ -172,7 +170,7 @@ export function ChiTietDon({ don, dong, canManage }: { don: DonDayDu; dong: Dong
           </Link>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">{don.ma}</h1>
           <p className="text-sm text-muted-foreground">
-            {NHAN_MUC_DICH[don.mucDich]} · {don.quocGia === 'VN' ? 'Nội địa' : 'Quốc tế'} · Tạo lúc {formatDate(don.taoLuc)}
+            {NHAN_MUC_DICH[don.mucDich]} · {don.quocGia === 'VN' ? 'Nội địa' : 'Quốc tế'} · Tạo lúc {hienNgayGio(don.taoLuc)}
           </p>
         </div>
         <span className="inline-block rounded px-2.5 py-1 text-sm font-medium bg-muted">{NHAN_TRANG_THAI[tt]}</span>
@@ -212,7 +210,7 @@ export function ChiTietDon({ don, dong, canManage }: { don: DonDayDu; dong: Dong
             ) : (
               <>
                 <p>{don.hangVanChuyen ?? '—'} {don.maVanDon ? `· ${don.maVanDon}` : ''}</p>
-                <p className="text-muted-foreground">Gửi lúc: {formatDate(don.guiLuc)}</p>
+                <p className="text-muted-foreground">Gửi lúc: {hienNgayGio(don.guiLuc)}</p>
               </>
             )}
           </CardContent>
@@ -265,7 +263,7 @@ export function ChiTietDon({ don, dong, canManage }: { don: DonDayDu; dong: Dong
                         <td className="text-right tabular-nums">{d.soLuong}</td>
                         <td>{NHAN_HINH_THUC[d.hinhThuc]}</td>
                         <td>{d.hanTra ?? '—'}</td>
-                        <td><OGiaVon d={d} suaDuoc={suaGiaVonDuocO} onSaved={lam_moi} /></td>
+                        <td><OGiaVon d={d} suaDuoc={canManage && ghiGiaVonDuoc(tt, d.giaVon)} onSaved={lam_moi} /></td>
                         <td>
                           {d.hinhThuc === 'muon' ? (
                             no > 0 ? (

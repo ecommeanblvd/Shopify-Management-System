@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { taoNguoiNhan, suaNguoiNhan, doiNgungDung } from '@/features/kol/actions';
+import { hienNgay } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { NHAN_MUC_DICH } from './BangDonKol';
@@ -143,11 +144,6 @@ function FormSua({ hoSo, onSaved, onClose }: { hoSo: NguoiNhan; onSaved: () => v
       </CardContent>
     </Card>
   );
-}
-
-function formatDate(d: Date | string | null): string {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('vi-VN');
 }
 
 interface ChiTiet {
@@ -334,7 +330,7 @@ export function SoKol({
                           <td><Link href={`/f/kol/${d.ma}`} className="underline-offset-2 hover:underline">{d.ma}</Link></td>
                           <td>{NHAN_MUC_DICH[d.mucDich]}</td>
                           <td className="text-right tabular-nums">{d.soDong}</td>
-                          <td className="text-muted-foreground">{formatDate(d.guiLuc)}</td>
+                          <td className="text-muted-foreground">{hienNgay(d.guiLuc)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -35,16 +35,58 @@ describe('gomTheoThang', () => {
 });
 
 describe('gomTheoNguoiNhan', () => {
-  it('cộng dồn theo tên và đếm riêng dòng thiếu giá vốn', () => {
+  it('cộng dồn theo NGƯỜI (id) và đếm riêng dòng thiếu giá vốn', () => {
     const r = gomTheoNguoiNhan([
-      { ...base, tenNhan: 'Mai', soLuong: 2 },
-      { ...base, tenNhan: 'Mai', giaVon: null },
-      { ...base, tenNhan: 'Lan', soLuong: 1 },
+      { ...base, nguoiNhanId: 'id-mai', tenNhan: 'Mai', tenNhanHienTai: 'Mai', soLuong: 2 },
+      { ...base, nguoiNhanId: 'id-mai', tenNhan: 'Mai', tenNhanHienTai: 'Mai', giaVon: null },
+      { ...base, nguoiNhanId: 'id-lan', tenNhan: 'Lan', tenNhanHienTai: 'Lan', soLuong: 1 },
     ]);
-    const mai = r.find((x) => x.khoa === 'Mai')!;
+    const mai = r.find((x) => x.khoa === 'id-mai')!;
+    expect(mai.nhan).toBe('Mai');
     expect(mai.theoTienTe).toEqual({ VND: 200 });
     expect(mai.soDongThieuGiaVon).toBe(1);
-    expect(r.find((x) => x.khoa === 'Lan')!.theoTienTe).toEqual({ VND: 100 });
+    expect(r.find((x) => x.khoa === 'id-lan')!.theoTienTe).toEqual({ VND: 100 });
+  });
+
+  it('HAI người TRÙNG TÊN không bị gộp thành một dòng', () => {
+    // Sổ KOL không có ràng buộc duy nhất trên tên. Gom theo tên thì hai người
+    // khác nhau tên "Mai Anh" hoà làm một, và không có gì báo cho người đọc.
+    const r = gomTheoNguoiNhan([
+      { ...base, nguoiNhanId: 'id-1', tenNhan: 'Mai Anh', tenNhanHienTai: 'Mai Anh', soLuong: 2 },
+      { ...base, nguoiNhanId: 'id-2', tenNhan: 'Mai Anh', tenNhanHienTai: 'Mai Anh', soLuong: 5 },
+    ]);
+    expect(r).toHaveLength(2);
+    expect(r.map((x) => x.khoa).sort()).toEqual(['id-1', 'id-2']);
+    expect(r.find((x) => x.khoa === 'id-1')!.theoTienTe).toEqual({ VND: 200 });
+    expect(r.find((x) => x.khoa === 'id-2')!.theoTienTe).toEqual({ VND: 500 });
+  });
+
+  it('MỘT người ĐỔI TÊN vẫn là một dòng, hiện tên HIỆN TẠI', () => {
+    // `tenNhan` là ảnh chụp lúc tạo đơn (cố ý, để đơn cũ đọc đúng lịch sử) nên
+    // đổi tên trong sổ làm cùng một người tách thành hai dòng nửa vời.
+    const r = gomTheoNguoiNhan([
+      { ...base, nguoiNhanId: 'id-1', tenNhan: 'Mai (cũ)', tenNhanHienTai: 'Mai Nguyễn', soLuong: 2 },
+      { ...base, nguoiNhanId: 'id-1', tenNhan: 'Mai Nguyễn', tenNhanHienTai: 'Mai Nguyễn', soLuong: 3 },
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].khoa).toBe('id-1');
+    expect(r[0].nhan).toBe('Mai Nguyễn');
+    expect(r[0].theoTienTe).toEqual({ VND: 500 });
+  });
+
+  it('không tra được tên hiện tại thì rớt về ảnh chụp trên đơn, không hiện id trần', () => {
+    const r = gomTheoNguoiNhan([
+      { ...base, nguoiNhanId: 'id-1', tenNhan: 'Mai', tenNhanHienTai: null },
+    ]);
+    expect(r[0].nhan).toBe('Mai');
+  });
+
+  it('vẫn xếp theo VND giảm dần', () => {
+    const r = gomTheoNguoiNhan([
+      { ...base, nguoiNhanId: 'id-it', tenNhan: 'Ít', tenNhanHienTai: 'Ít', soLuong: 1 },
+      { ...base, nguoiNhanId: 'id-nhieu', tenNhan: 'Nhiều', tenNhanHienTai: 'Nhiều', soLuong: 9 },
+    ]);
+    expect(r.map((x) => x.khoa)).toEqual(['id-nhieu', 'id-it']);
   });
 });
 

@@ -5,6 +5,11 @@ import type { DongDon } from './types';
 
 export interface DongBaoCao {
   khoa: string;
+  /**
+   * Nhãn hiển thị khi khoá gom KHÔNG phải thứ đọc được (ví dụ gom theo id người
+   * nhận). Không có thì tầng hiển thị tự suy ra từ `khoa` như cũ.
+   */
+  nhan?: string;
   theoTienTe: Record<string, number>;
   soMonDaTieu: number;
   soMonDangTreo: number;
@@ -41,9 +46,30 @@ export function gomTheoThang(ds: readonly (DongDon & { guiLuc: string | null })[
     });
 }
 
-/** THUẦN: gom chi phí theo tên người nhận, nhiều tiền nhất lên trước (quy ước: theo VND). */
-export function gomTheoNguoiNhan(ds: readonly (DongDon & { tenNhan: string })[]): DongBaoCao[] {
-  return gom(ds, (d) => d.tenNhan)
+/**
+ * THUẦN: gom chi phí theo NGƯỜI NHẬN, nhiều tiền nhất lên trước (quy ước: theo VND).
+ *
+ * Gom theo `nguoiNhanId` chứ KHÔNG theo tên. Tên trên đơn (`tenNhan`) là ảnh
+ * chụp lúc tạo đơn — cố ý giữ nguyên để đơn cũ đọc đúng lịch sử — còn sổ KOL
+ * không có ràng buộc duy nhất trên tên và cho sửa tên bất cứ lúc nào. Gom theo
+ * chuỗi tên thì hỏng hai chiều, cả hai đều IM LẶNG: hai người trùng tên nhập
+ * làm một dòng, và một người đổi tên tách thành hai dòng nửa vời.
+ *
+ * Hiển thị thì ngược lại: lấy tên HIỆN TẠI trong sổ (`tenNhanHienTai`), để
+ * người đọc thấy đúng người họ biết hôm nay. Không tra được (hồ sơ đã mất) thì
+ * rớt về ảnh chụp trên đơn, không bao giờ phơi id trần ra màn hình.
+ */
+export function gomTheoNguoiNhan(
+  ds: readonly (DongDon & { nguoiNhanId: string; tenNhan: string; tenNhanHienTai?: string | null })[],
+): DongBaoCao[] {
+  const nhanTheoId = new Map<string, string>();
+  for (const d of ds) {
+    if (!nhanTheoId.has(d.nguoiNhanId)) {
+      nhanTheoId.set(d.nguoiNhanId, d.tenNhanHienTai?.trim() || d.tenNhan);
+    }
+  }
+  return gom(ds, (d) => d.nguoiNhanId)
+    .map((r) => ({ ...r, nhan: nhanTheoId.get(r.khoa) ?? r.khoa }))
     .sort((a, b) => (b.theoTienTe.VND ?? 0) - (a.theoTienTe.VND ?? 0));
 }
 

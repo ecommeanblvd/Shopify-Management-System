@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { hienNgay } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import type { DonTomTat } from '@/features/kol/queries';
 import type { TrangThaiDon, MucDich } from '@/features/kol/types';
@@ -115,7 +116,7 @@ export function BangDonKol({
                     {d.hangVanChuyen ? <>{d.hangVanChuyen}<br />{d.maVanDon}</> : '—'}
                   </td>
                   <td className="text-xs text-muted-foreground">
-                    {d.guiLuc ? new Date(d.guiLuc).toLocaleDateString('vi-VN') : '—'}
+                    {hienNgay(d.guiLuc)}
                   </td>
                 </tr>
               ))}

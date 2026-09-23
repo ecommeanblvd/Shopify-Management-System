@@ -90,8 +90,12 @@ export function TomTatChiPhi({
     () => theoThang.map((r) => quyHang(r, nhanKhoaThang(r.khoa), periodCuaKhoa(r.khoa, thangHienTai), rates)),
     [theoThang, thangHienTai, rates],
   );
+  // Khoá của bảng "Theo KOL" là ID người nhận, không phải tên — hai người trùng
+  // tên không được gộp, một người đổi tên không được tách. Nhãn hiển thị lấy từ
+  // `nhan` (tên HIỆN TẠI trong sổ); rớt về khoá chỉ là lưới an toàn, không nên
+  // xảy ra.
   const hangNguoiNhan = useMemo(
-    () => theoNguoiNhan.map((r) => quyHang(r, r.khoa, thangHienTai, rates)),
+    () => theoNguoiNhan.map((r) => quyHang(r, r.nhan ?? r.khoa, thangHienTai, rates)),
     [theoNguoiNhan, thangHienTai, rates],
   );
 

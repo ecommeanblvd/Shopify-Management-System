@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { danhSachDon, danhSachNguoiNhan, dongBaoCaoChiPhi } from '@/features/kol/queries';
+import { dangUuid } from '@/features/kol/uuid';
 import { tiGiaThang } from '@/features/cogs/queries';
 import { gomTheoThang, gomTheoNguoiNhan } from '@/features/kol/bao-cao';
 import { tongChiPhi } from '@/features/kol/chi-phi';
@@ -33,7 +34,11 @@ export default async function DanhSachKolPage({
   const sp = await searchParams;
   const trangThaiRaw = typeof sp['trangThai'] === 'string' ? sp['trangThai'] : undefined;
   const trangThai = TRANG_THAI_HOP_LE.includes(trangThaiRaw as TrangThaiDon) ? trangThaiRaw : undefined;
-  const nguoiNhanId = typeof sp['nguoiNhanId'] === 'string' && sp['nguoiNhanId'] ? sp['nguoiNhanId'] : undefined;
+  // Cùng lý do với whitelist trạng thái ngay trên: giá trị tới từ query string
+  // nên có thể là rác gõ tay. Một chuỗi không phải uuid ép vào cột uuid làm
+  // Postgres ném 22P02 và HỎNG CẢ TRANG — coi như không lọc thì an toàn hơn.
+  const nguoiNhanIdRaw = typeof sp['nguoiNhanId'] === 'string' ? sp['nguoiNhanId'] : undefined;
+  const nguoiNhanId = dangUuid(nguoiNhanIdRaw) ? nguoiNhanIdRaw : undefined;
 
   const [dons, nguoiNhanOptions, dongBaoCao, rates] = await Promise.all([
     danhSachDon({ trangThai, nguoiNhanId }),

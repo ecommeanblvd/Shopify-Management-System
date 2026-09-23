@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { danhSachNguoiNhan, danhSachDon, monDangGiuCuaNguoiNhan, layNguoiNhan } from '@/features/kol/queries';
+import { dangUuid } from '@/features/kol/uuid';
 import { SoKol } from '@/components/kol/SoKol';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,10 @@ export default async function SoKolPage({
 
   const sp = await searchParams;
   const q = typeof sp['q'] === 'string' ? sp['q'].trim() : '';
-  const id = typeof sp['id'] === 'string' && sp['id'] ? sp['id'] : undefined;
+  // Id tới từ query string — không đúng hình dạng uuid thì coi như không chọn
+  // ai, thay vì ném 22P02 ra giữa lúc render và làm trắng cả trang sổ KOL.
+  const idRaw = typeof sp['id'] === 'string' ? sp['id'] : undefined;
+  const id = dangUuid(idRaw) ? idRaw : undefined;
 
   // Quản lý được cả hồ sơ đã ngừng dùng — người xem cần thấy để có thể bật lại.
   const tatCa = await danhSachNguoiNhan(true);

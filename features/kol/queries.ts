@@ -2,6 +2,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { soNgayTre } from './chi-phi';
 import { conNo } from './tra-ve';
+import { dangUuid } from './uuid';
 import type { DongDon, TrangThaiDon, HinhThuc, MucDich } from './types';
 
 /** Một dòng trong bảng danh sách đơn — kèm số dòng hàng, không cần tải cả dòng. */
@@ -105,7 +106,11 @@ export async function danhSachDon(
   if (loc.trangThai && TRANG_THAI_HOP_LE.includes(loc.trangThai as TrangThaiDon)) {
     dk.push(eq(schema.kolDon.trangThai, loc.trangThai as TrangThaiDon));
   }
-  if (loc.nguoiNhanId) dk.push(eq(schema.kolDon.nguoiNhanId, loc.nguoiNhanId));
+  // Cùng lý do với whitelist trạng thái ngay trên, chỉ khác kiểu cột: một chuỗi
+  // không phải uuid ép vào cột uuid làm Postgres ném 22P02 và hỏng cả trang.
+  if (loc.nguoiNhanId && dangUuid(loc.nguoiNhanId)) {
+    dk.push(eq(schema.kolDon.nguoiNhanId, loc.nguoiNhanId));
+  }
 
   const rows = await db
     .select({
@@ -166,10 +171,19 @@ export async function danhSachNguoiNhan(gomCaNgung = false): Promise<NguoiNhan[]
 }
 
 /**
- * Mọi dòng hàng mượn còn chưa trả đủ, quá hạn xếp trên cùng (`han_tra` tăng
- * dần, `NULLS LAST`). `homNay` là ngày hiện tại theo GIỜ KINH DOANH — gọi nơi
- * dùng `ngayKinhDoanh(new Date())`, hàm này không tự suy ra để giữ thuần khiết
- * cho phần tính (soNgayTre).
+ * Mọi dòng hàng mượn còn chưa trả đủ CỦA ĐƠN ĐÃ GỬI, quá hạn xếp trên cùng
+ * (`han_tra` tăng dần, `NULLS LAST`). `homNay` là ngày hiện tại theo GIỜ KINH
+ * DOANH — gọi nơi dùng `ngayKinhDoanh(new Date())`, hàm này không tự suy ra để
+ * giữ thuần khiết cho phần tính (soNgayTre).
+ *
+ * BẮT BUỘC lọc `trang_thai = 'da_gui'` (vá 23/09/2026). Thiếu nó thì màn "Đang
+ * mượn" đếm cả hàng vẫn nằm trên kệ: một đơn nháp/đã chốt chưa hề rời kho, và
+ * một đơn ĐÃ HUỶ thì đã trả lại chỗ tồn — cả hai vẫn có `so_luong_da_tra = 0`
+ * mãi mãi, nên dòng mượn của chúng hiện "còn nợ N, trễ X ngày" màu đỏ như hàng
+ * thật đang ở nhà KOL. Cùng một số lượng vừa nằm trong kho vừa được báo là đang
+ * ở ngoài. Tệ hơn nữa là KHÔNG BAO GIỜ dọn được: `nhanTraVe` (đúng đắn) chỉ
+ * nhận đơn `da_gui`, nên bộ đếm đã trả không thể tăng lên để dòng ma đó biến
+ * mất. Cùng lớp lỗi đã vá hai lần ở headline chi phí và bảng "Theo KOL".
  */
 export async function dangMuon(homNay: string): Promise<MonDangMuon[]> {
   const rows = await db
@@ -188,6 +202,7 @@ export async function dangMuon(homNay: string): Promise<MonDangMuon[]> {
     .from(schema.kolDongDon)
     .innerJoin(schema.kolDon, eq(schema.kolDon.id, schema.kolDongDon.donId))
     .where(and(
+      eq(schema.kolDon.trangThai, 'da_gui' as TrangThaiDon),
       eq(schema.kolDongDon.hinhThuc, 'muon' as HinhThuc),
       sql`${schema.kolDongDon.soLuongDaTra} < ${schema.kolDongDon.soLuong}`,
     ))
@@ -248,9 +263,15 @@ export interface MonDangGiu {
 }
 
 /**
- * Món đang mượn còn nợ của MỘT người nhận — hồ sơ sổ KOL mở ra phải thấy ngay
- * họ đang giữ gì của công ty. Lọc `conNo > 0` bằng chính hàm thuần `conNo`
- * (Task 4), không viết lại phép trừ lần hai ở tầng truy vấn.
+ * Món đang mượn còn nợ của MỘT người nhận, CHỈ TÍNH ĐƠN ĐÃ GỬI — hồ sơ sổ KOL
+ * mở ra phải thấy ngay họ đang giữ gì của công ty. Lọc `conNo > 0` bằng chính
+ * hàm thuần `conNo` (Task 4), không viết lại phép trừ lần hai ở tầng truy vấn.
+ *
+ * Lọc `trang_thai = 'da_gui'` cùng lý do với `dangMuon` (vá 23/09/2026): hàng
+ * của đơn nháp / đã chốt / đã huỷ chưa bao giờ tới tay người nhận, đưa vào đây
+ * là nói người ta đang giữ thứ họ chưa từng nhận. Trang hồ sơ này còn tự mâu
+ * thuẫn trước khi vá: danh sách đơn ngay bên cạnh đã lọc `da_gui`, nên hai khối
+ * trên CÙNG MỘT MÀN in ra hai con số khác nhau cho cùng một ý niệm.
  */
 export async function monDangGiuCuaNguoiNhan(nguoiNhanId: string): Promise<MonDangGiu[]> {
   const rows = await db
@@ -273,6 +294,7 @@ export async function monDangGiuCuaNguoiNhan(nguoiNhanId: string): Promise<MonDa
     .innerJoin(schema.kolDon, eq(schema.kolDon.id, schema.kolDongDon.donId))
     .where(and(
       eq(schema.kolDon.nguoiNhanId, nguoiNhanId),
+      eq(schema.kolDon.trangThai, 'da_gui' as TrangThaiDon),
       eq(schema.kolDongDon.hinhThuc, 'muon' as HinhThuc),
       sql`${schema.kolDongDon.soLuongDaTra} < ${schema.kolDongDon.soLuong}`,
     ))
@@ -290,7 +312,12 @@ export interface DongBaoCaoChiPhi extends DongDon {
   donId: string;
   maDon: string;
   guiLuc: string | null;
+  /** Danh tính THẬT của người nhận — khoá gom báo cáo theo KOL. */
+  nguoiNhanId: string;
+  /** Ảnh chụp tên lúc tạo đơn. Giữ nguyên để đọc đúng lịch sử, KHÔNG dùng để gom. */
   tenNhan: string;
+  /** Tên hiện tại trong sổ KOL — dùng để HIỂN THỊ. null khi không còn hồ sơ. */
+  tenNhanHienTai: string | null;
 }
 
 /**
@@ -311,10 +338,16 @@ export async function dongBaoCaoChiPhi(): Promise<DongBaoCaoChiPhi[]> {
       donId: schema.kolDon.id,
       maDon: schema.kolDon.ma,
       guiLuc: schema.kolDon.guiLuc,
+      nguoiNhanId: schema.kolDon.nguoiNhanId,
       tenNhan: schema.kolDon.tenNhan,
+      tenNhanHienTai: schema.kolNguoiNhan.ten,
     })
     .from(schema.kolDongDon)
     .innerJoin(schema.kolDon, eq(schema.kolDon.id, schema.kolDongDon.donId))
+    // LEFT join: hồ sơ sổ KOL không xoá được khi còn đơn (FK NO ACTION), nhưng
+    // báo cáo không được biến mất dòng nào chỉ vì một hồ sơ vắng mặt — thiếu
+    // thì `gomTheoNguoiNhan` rớt về ảnh chụp tên trên đơn.
+    .leftJoin(schema.kolNguoiNhan, eq(schema.kolNguoiNhan.id, schema.kolDon.nguoiNhanId))
     .where(ne(schema.kolDon.trangThai, 'huy' as TrangThaiDon));
 
   return rows.map((r) => ({ ...r, guiLuc: r.guiLuc ? r.guiLuc.toISOString() : null }));

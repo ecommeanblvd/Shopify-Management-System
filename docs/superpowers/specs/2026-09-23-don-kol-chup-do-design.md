@@ -91,7 +91,7 @@ Index: `kol_don_trang_thai_idx` trên `(trang_thai, tao_luc)`, `kol_don_nguoi_nh
 | `so_luong` | integer NOT NULL CHECK > 0 | |
 | `hinh_thuc` | enum `kol_hinh_thuc` NOT NULL | `'tang'` \| `'muon'` |
 | `han_tra` | date | bắt buộc khi `hinh_thuc = 'muon'`, NULL khi `'tang'` |
-| `gia_von` | numeric(14,4) | sửa được khi đơn còn `nhap` hoặc `da_chot`; **đông cứng khi chuyển sang `da_gui`**, NULL nếu chưa có giá |
+| `gia_von` | numeric(14,4) | sửa được khi đơn còn `nhap` hoặc `da_chot`; **đông cứng khi chuyển sang `da_gui`** — trừ ngoại lệ **điền một lần** cho ô còn TRỐNG (§7.2); NULL nếu chưa có giá |
 | `gia_von_tien_te` | text | `'VND'` hoặc `'USD'`, đi kèm `gia_von` |
 | `gia_von_nguon` | text | `'sku_costs'` khi hệ thống điền, `'tay'` khi người dùng gõ |
 | `so_luong_da_tra` | integer NOT NULL default 0 | cộng dồn từ `kol_tra_ve` |
@@ -152,7 +152,9 @@ Cần thêm index cho việc lọc: `inventory_movements_ref_idx` trên `(ref_ty
 
 Dòng `muon` bắt buộc có `han_tra`. Dòng `tang` không có.
 
-**Màn Đang mượn** liệt kê mọi dòng `muon` còn `so_luong_da_tra < so_luong`, quá hạn xếp trên cùng kèm số ngày trễ và tên KOL.
+**Màn Đang mượn** liệt kê mọi dòng `muon` **của đơn `da_gui`** còn `so_luong_da_tra < so_luong`, quá hạn xếp trên cùng kèm số ngày trễ và tên KOL.
+
+> **Sửa 23/09/2026.** Điều kiện `trang_thai = 'da_gui'` là BẮT BUỘC, không phải trang trí. Đơn nháp / đã chốt chưa hề rời kho, đơn đã huỷ thì đã trả lại chỗ tồn — cả ba vẫn giữ `so_luong_da_tra = 0` mãi mãi, nên nếu không lọc thì cùng một số lượng vừa nằm trong kho vừa được báo là "còn nợ, đã trễ" ở nhà KOL. Và dòng ma đó **không bao giờ dọn được**, vì `nhanTraVe` (đúng đắn) chỉ nhận đơn `da_gui` nên bộ đếm đã trả không thể tăng. Áp cùng điều kiện cho khối "đang giữ hàng" trong hồ sơ sổ KOL.
 
 **Không có nhắc tự động ở đợt này.** Nhắc KOL là việc của người làm marketing. Hệ thống không tự gửi thư cho người ngoài khi chưa ai duyệt nội dung.
 
@@ -187,6 +189,24 @@ Nguồn điền sẵn: dòng `sku_costs` của mã hàng đó có `effective_fro
 
 `gia_von` ghi vào dòng đơn **khi chuyển sang `da_gui`**, không tra lại về sau. Giống cách `shipHoOrders` chốt `quoteBreakdown` tại thời điểm báo giá. Lý do: giá vốn đổi theo tháng, tra động thì báo cáo tháng trước tự đổi số mỗi lần mở ra xem.
 
+#### Ngoại lệ: ĐIỀN MỘT LẦN cho ô còn trống (thêm 23/09/2026)
+
+Lúc gửi, giá vốn **cố ý để `NULL`** khi không phân giải được cửa hàng của mã hàng (xem §7.1 và `storeCuaSku`) — thà để trống còn hơn đóng băng giá của một brand khác. Đo 23/09/2026: **110 trên 2.911** mã có giá vốn rơi vào diện này.
+
+Nếu "đông cứng" hiểu theo đúng trạng thái đơn thì những dòng ấy **vô giá vĩnh viễn**: không màn nào mở ô nhập, action cũng chặn lại, nên tiền của chúng không bao giờ vào chi phí marketing — đúng thứ mà action sửa giá vốn sinh ra để tránh.
+
+Luật chính xác, phân biệt **ĐIỀN** với **ĐỔI**:
+
+| Trạng thái đơn | Ô giá vốn đang trống | Ô giá vốn đã có số |
+|---|---|---|
+| `nhap`, `da_chot` | Ghi được | Ghi được (sửa tự do) |
+| `da_gui` | **Ghi được — điền một lần** | **KHÔNG**, đã đông cứng |
+| `huy` | Không | Không |
+
+Hệ quả: mọi con số **thật sự** đã được đông cứng lúc gửi thì không ai đổi được nữa — báo cáo tháng cũ vẫn không tự đổi số. Chỉ những dòng **chưa từng có số nào** mới còn đường điền.
+
+Thể hiện bằng một luật thuần RIÊNG, `ghiGiaVonDuoc(trangThai, giaVonHienTai)` trong `features/kol/trang-thai.ts`, **không nới lỏng** `suaGiaVonDuoc(trangThai)` — luật cũ vẫn nói nguyên văn "đã gửi thì không sửa được giá" và vẫn đúng như vậy. Server action `suaGiaVon` đọc lại giá hiện tại **sau khi đã khoá đơn** rồi mới xét luật này, nên không có khe hở với `danhDauDaGui`.
+
 ### 7.3 Luật tính
 
 Chi phí = giá vốn của hàng **không quay lại kho bán được**.
@@ -208,6 +228,8 @@ Công thức cho một dòng:
 > Luật đúng: **chỉ tính chi phí khi đã biết kết cục.** Hàng chưa trả vẫn có thể về nguyên nên chưa phải tiền đã tiêu, nó nằm ở cột "đang treo". Đánh đổi CEO đã biết và chấp nhận: con số tháng thấp hơn thực tế cho tới khi KOL trả xong, và hàng mất hẳn sẽ nằm mãi ở cột đang treo nếu không ai chốt. Cột "đang treo" chính là chỗ để nhìn ra việc phải đi đòi.
 
 Báo cáo xem theo tháng (`gui_luc`), theo KOL, theo `muc_dich`.
+
+**Gom theo KOL khoá trên `nguoi_nhan_id`, không trên tên** (sửa 23/09/2026). `ten_nhan` trên đơn là ảnh chụp lúc tạo — giữ nguyên có chủ đích để đơn cũ đọc đúng lịch sử — còn sổ KOL không có ràng buộc duy nhất trên tên và cho sửa tên bất cứ lúc nào. Gom theo chuỗi tên hỏng cả hai chiều mà không có gì báo: hai người trùng tên nhập làm một dòng, một người đổi tên tách thành hai dòng nửa vời. Nhãn hiển thị vẫn lấy **tên hiện tại** trong sổ để người đọc thấy đúng người họ biết hôm nay.
 
 ### 7.4 Tiền tệ
 
