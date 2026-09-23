@@ -69,10 +69,24 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
     .where(eq(m.orderNumber, bare))
     .orderBy(m.sku);
 
+  // shopify_order_lines KHÔNG có ràng buộc unique trên shopify_line_id (đơn được ghi lại bằng
+  // xoá-rồi-chèn mỗi lần sync — features/shopify-orders/sync/upsert-order.ts — mà cron giờ chỉ
+  // khoá advisory theo STORE, webhook thì không khoá gì) nên có lúc tạm thời tồn tại hai dòng
+  // cùng line id, và join phía trên nhân đôi món Lark tương ứng. m.dinhDanh là khoá chính của
+  // lark_mon_don nên chỉ giữ bản gặp đầu tiên mỗi dinhDanh là đủ để một món Lark ra đúng một
+  // dòng (review 23/09/2026 Finding 2) — KHÔNG đụng tới bảng/khoá của shopify_order_lines, đó
+  // là việc của task khác.
+  const dinhDanhDaGap = new Set<string>();
+  const rowsMotLan = rows.filter((r) => {
+    if (dinhDanhDaGap.has(r.dinhDanh)) return false;
+    dinhDanhDaGap.add(r.dinhDanh);
+    return true;
+  });
+
   // Một lượt gọi Lark cho cả đơn; lọc tiếp theo liên kết món ở phía SMS.
   let dsLark: Awaited<ReturnType<typeof searchWhInventoryByDon>> = [];
   let loiLark: string | null = null;
-  if (rows.some((r) => r.recordId)) {
+  if (rowsMotLan.some((r) => r.recordId)) {
     try {
       dsLark = await searchWhInventoryByDon(bare);
     } catch (e) {
@@ -80,7 +94,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
     }
   }
 
-  const mon = rows.map((r) => {
+  const mon = rowsMotLan.map((r) => {
     const dong = r.recordId ? timDongTheoMon(dsLark, r.recordId) : null;
     return {
       dinhDanh: r.dinhDanh, recordId: r.recordId, sku: r.sku, lineitemName: r.lineitemName,
