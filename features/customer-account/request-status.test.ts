@@ -64,4 +64,11 @@ describe('pgErrorCode', () => {
     expect(pgErrorCode({})).toBeUndefined();
     expect(pgErrorCode({ message: 'error' })).toBeUndefined();
   });
+  it('trả undefined với null/undefined, không ném lỗi', () => {
+    expect(pgErrorCode(null)).toBeUndefined();
+    expect(pgErrorCode(undefined)).toBeUndefined();
+  });
+  it('tìm được code khi bị bọc nhiều lớp .cause', () => {
+    expect(pgErrorCode({ cause: { cause: { code: '23505' } } })).toBe('23505');
+  });
 });

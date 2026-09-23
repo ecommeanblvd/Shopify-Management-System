@@ -39,8 +39,19 @@ export function validateClaimInput(reasonCodes: string[], photoKeys: string[]):
   return { ok: true, reasons };
 }
 
-/** Extract PG error code từ DrizzleQueryError (wrap pg error ở .cause). */
+/** THUẦN: lấy mã lỗi Postgres (SQLSTATE) từ lỗi driver thô HOẶC lỗi đã bị bọc.
+ *  `DrizzleQueryError` (drizzle-orm/errors) chỉ đặt `.query`/`.params`/`.cause` — KHÔNG chép `.code`,
+ *  nên mã thật nằm ở `.cause.code`. Đi dọc chuỗi `.cause` (giới hạn độ sâu, phòng lỗi bọc nhiều lớp
+ *  hoặc chuỗi cause vòng tròn), ưu tiên `.code` ở lớp ngoài nhất có mã. */
+const SAU_TOI_DA_CAUSE = 8;
+
 export function pgErrorCode(e: unknown): string | undefined {
-  return (e as { code?: string; cause?: { code?: string } })?.code
-    ?? (e as { cause?: { code?: string } })?.cause?.code;
+  let hienTai: unknown = e;
+  for (let i = 0; i < SAU_TOI_DA_CAUSE; i++) {
+    if (hienTai === null || typeof hienTai !== 'object') return undefined;
+    const ma = (hienTai as { code?: unknown }).code;
+    if (typeof ma === 'string') return ma;
+    hienTai = (hienTai as { cause?: unknown }).cause;
+  }
+  return undefined;
 }

@@ -23,9 +23,21 @@
  */
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { pgErrorCode } from '@/features/customer-account/request-status';
 import { chonDongChoMon, laLoiHeThong, locTrungTheoLineId, type DongDonToiThieu } from './noi-mon-dong-don';
 
 const MOI_LUOT = 2000;
+
+/** Mã lỗi Postgres của unique_violation — ở đây là index `lark_mon_don_line_uniq` (migration 0158). */
+const MA_LOI_TRUNG = '23505';
+
+/** THUẦN: lỗi này có phải unique-violation theo TỪNG DÒNG (an toàn bỏ qua nhờ savepoint) không?
+ *  Bắt buộc dùng `pgErrorCode`: Drizzle bọc mọi lỗi truy vấn trong `DrizzleQueryError`, lớp này chỉ
+ *  đặt `.query`/`.params`/`.cause` mà KHÔNG chép `.code` — đọc thẳng `e.code` luôn ra `undefined`,
+ *  khiến mọi unique-violation bị coi là lỗi hệ thống và kéo sập cả lượt (review vòng 4). */
+export function laLoiTrungDongDon(e: unknown): boolean {
+  return pgErrorCode(e) === MA_LOI_TRUNG;
+}
 
 /** Khoá cố định cho việc nối line id — chỉ cần khác các khoá advisory khác đang dùng trong repo
  *  (xem features/shopify-orders/cron/hourly-sync.ts, khoá theo hash cửa hàng, không đụng số này). */
@@ -139,8 +151,7 @@ async function noiTrongKhoa(tx: Parameters<Parameters<typeof db.transaction>[0]>
         // kết nối, ràng buộc khác...) là TÍN HIỆU của việc gì đó hỏng ở tầng rộng hơn một dòng —
         // ném lại để sập cả lượt, `job_runs` ghi lỗi thay vì âm thầm đếm vào `boSot` (review
         // 23/09/2026 vòng 3: bắt-mọi-lỗi khiến một lượt hỏng toàn phần vẫn báo 'ok' xanh giả).
-        const maLoi = (e as { code?: unknown } | null)?.code;
-        if (maLoi !== '23505') throw e;
+        if (!laLoiTrungDongDon(e)) throw e;
         boSot++;
         console.error(`[kho-nhan] nối line id: bỏ qua món ${m.dinhDanh} (đơn ${don}, dòng ${lineId}) do đụng unique index lark_mon_don_line_uniq:`, e instanceof Error ? e.message : e);
         continue;
