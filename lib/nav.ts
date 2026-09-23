@@ -1,5 +1,6 @@
 import {
   Activity,
+  Camera,
   ChartColumnBig,
   ClipboardList,
   Eye,
@@ -52,6 +53,7 @@ export const NAV: NavItem[] = [
   { href: '/f/warehouse',     label: 'Kho hàng',      icon: Warehouse,       requires: ['view_fulfillment', 'view_receiving'] },
   { href: '/f/carrier-rates', label: 'Carrier rates', icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/f/ship-ho',       label: 'Ship hộ',       icon: Ship,            requires: 'view_ship_ho' },
+  { href: '/f/kol',           label: 'Đơn KOL',       icon: Camera,          requires: 'view_kol' },
   { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/ship-report',   label: 'Báo cáo ship',  icon: ChartColumnBig,  requires: 'view_carrier_rates' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },

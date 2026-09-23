@@ -40,6 +40,8 @@ export type Permission =
   | 'check_packed'
   | 'view_ship_ho'
   | 'manage_ship_ho'
+  | 'view_kol'
+  | 'manage_kol'
   | 'view_cogs'
   | 'manage_cogs'
   /** Xem bảng điểm KPI của vị trí logistics (chính nhân sự đó xem được kết quả của mình). */
@@ -58,6 +60,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products', 'manage_mmp_products',
     'view_fulfillment', 'manage_fulfillment', 'chon_line_ship', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
+    'view_kol', 'manage_kol',
     'view_cogs', 'manage_cogs', 'view_kpi_logistics',
   ],
   operator: [
@@ -70,6 +73,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products', 'manage_mmp_products',
     'view_fulfillment', 'manage_fulfillment', 'chon_line_ship', 'manage_warehouse',
     'view_ship_ho', 'manage_ship_ho',
+    'view_kol', 'manage_kol',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',

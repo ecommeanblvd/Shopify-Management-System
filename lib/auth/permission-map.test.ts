@@ -111,6 +111,29 @@ describe('SYSTEM_ROLE_SEEDS', () => {
   });
 });
 
+describe('quyền KOL', () => {
+  it('view_kol chỉ mở quyền xem', () => {
+    expect(OLD_TO_NEW.view_kol).toEqual(['kol:view']);
+  });
+  it('manage_kol mở đủ xem/tạo/sửa', () => {
+    expect(OLD_TO_NEW.manage_kol).toEqual(['kol:view', 'kol:create', 'kol:edit']);
+  });
+  it('admin và operator có đủ quyền KOL, viewer thì KHÔNG', () => {
+    const adminKeys = new Set(SYSTEM_ROLE_SEEDS.admin.keys);
+    const opKeys = new Set(SYSTEM_ROLE_SEEDS.operator.keys);
+    const viewerKeys = new Set(SYSTEM_ROLE_SEEDS.viewer.keys);
+    expect(adminKeys.has('kol:view')).toBe(true);
+    expect(adminKeys.has('kol:create')).toBe(true);
+    expect(adminKeys.has('kol:edit')).toBe(true);
+    expect(opKeys.has('kol:view')).toBe(true);
+    expect(opKeys.has('kol:create')).toBe(true);
+    expect(opKeys.has('kol:edit')).toBe(true);
+    expect(viewerKeys.has('kol:view')).toBe(false);
+    expect(viewerKeys.has('kol:create')).toBe(false);
+    expect(viewerKeys.has('kol:edit')).toBe(false);
+  });
+});
+
 describe('chọn line ship (màn Đóng hàng)', () => {
   it('map sang quyền sửa của đội logistics, KHÔNG đòi quyền brand requests', () => {
     expect(OLD_TO_NEW['chon_line_ship']).toEqual(['fulfillment.logistics:edit']);

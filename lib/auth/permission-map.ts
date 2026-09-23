@@ -45,6 +45,8 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   view_kpi_logistics: ['kpi.logistics:view'],
   view_ship_ho: ['ship_ho:view'],
   manage_ship_ho: ['ship_ho:view', 'ship_ho:create', 'ship_ho:edit'],
+  view_kol: ['kol:view'],
+  manage_kol: ['kol:view', 'kol:create', 'kol:edit'],
   view_cogs: ['orders.cogs:view'],
   manage_cogs: ['orders.cogs:view', 'orders.cogs:edit'],
 };
@@ -57,6 +59,7 @@ const OPERATOR_OLD = [
   'view_receiving', 'manage_receiving', 'view_qc', 'manage_qc',
   'view_pack_check', 'check_packed',
   'view_ship_ho', 'manage_ship_ho',
+  'view_kol', 'manage_kol',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
