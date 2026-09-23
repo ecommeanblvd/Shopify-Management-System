@@ -17,6 +17,36 @@ import type { HinhThuc, MucDich } from './types';
 const MUC_DICH_HOP_LE: readonly MucDich[] = ['kol', 'chup_do', 'khac'];
 
 /**
+ * Tiền tệ hợp lệ cho giá vốn — đúng tập mà phần còn lại của luồng (sku_costs,
+ * chonGiaVon, chi-phí) thật sự dùng. Đo 23/09/2026: sku_costs chỉ có VND và USD
+ * (4.105 dòng VND, 10 dòng USD). Cột `gia_von_tien_te` là `text`, không có CHECK
+ * ở CSDL — chặn ở đây, không thì chuỗi bất kỳ (kể cả rỗng-nhưng-không-rỗng-sau-
+ * trim, kiểu gõ nhầm) lọt thẳng vào cột.
+ */
+const TIEN_TE_HOP_LE = ['VND', 'USD'] as const;
+
+/**
+ * Cột `gia_von` là `numeric(14, 4)` — tối đa 10 chữ số phần nguyên. Postgres
+ * ném "numeric field overflow" khi vượt ngưỡng này (đã xác nhận với
+ * `'1e30'::numeric(14,4)`), một lỗi hạ tầng thoát ra ngoài server action nếu
+ * không chặn ở tầng ứng dụng trước.
+ */
+const GIA_VON_TOI_DA = 10 ** 10;
+
+/**
+ * Hình dạng UUID tối thiểu. `donId`/`dongId` từ FormData không có gì đảm bảo
+ * đúng khuôn — một id rỗng hay gõ/dán nhầm đưa thẳng vào so sánh uuid ở CSDL
+ * thì Postgres ném "invalid input syntax for type uuid", rơi vào nhánh lỗi hạ
+ * tầng chung thay vì thông báo nghiệp vụ "không tìm thấy đơn/dòng hàng".
+ */
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** THUẦN: có phải hình dạng uuid hợp lệ không — dùng để chặn sớm id rỗng/gõ nhầm từ FormData. */
+function dangUuid(s: string): boolean {
+  return RE_UUID.test(s);
+}
+
+/**
  * Lỗi NGHIỆP VỤ có thể trả thẳng ra người dùng nguyên văn `message` (không tìm
  * thấy, sai trạng thái, thiếu dữ liệu...). KHÔNG export — chỉ dùng nội bộ để
  * phân biệt với lỗi hạ tầng (mất kết nối, deadlock, applyMovement ném vì thiếu
@@ -363,9 +393,10 @@ export async function luiVeNhap(donId: string): Promise<{ ok: boolean; loi?: str
  */
 export async function danhDauDaGui(fd: FormData): Promise<{ ok: boolean; loi?: string }> {
   const actor = await requireQuanLyKol();
-  const donId = String(fd.get('donId') ?? '');
+  const donId = String(fd.get('donId') ?? '').trim();
   const hang = String(fd.get('hangVanChuyen') ?? '').trim();
   const maVanDon = String(fd.get('maVanDon') ?? '').trim();
+  if (!dangUuid(donId)) return { ok: false, loi: 'Không tìm thấy đơn.' };
   if (!hang || !maVanDon) return { ok: false, loi: 'Phải có tên hãng và mã vận đơn trước khi đánh dấu đã gửi.' };
 
   const luc = new Date();
@@ -386,9 +417,17 @@ export async function danhDauDaGui(fd: FormData): Promise<{ ok: boolean; loi?: s
         throw new LoiNghiepVu(`Đơn đang ở trạng thái ${don.trangThai}, không gửi được.`);
       }
       maDon = don.ma;
-      // Khoá luôn các dòng hàng: `suaGiaVon` được phép sửa giá vốn khi đơn còn
-      // 'da_chot' (suaGiaVonDuoc), nên nếu không khoá thì một sửa giá tay có thể
-      // chen vào giữa lúc đọc và lúc đông cứng ở dưới.
+      // Khoá luôn các dòng hàng: chặn race NGAY TRONG transaction này giữa lúc
+      // đọc `d.giaVon` và lúc ghi giá đông cứng ở dưới. Đây KHÔNG phải thứ chặn
+      // `suaGiaVon` — khoá dòng một mình chỉ biến một UPDATE đọc-cũ của
+      // `suaGiaVon` thành một UPDATE ghi-đè-SAU-KHI-commit (nó vẫn chạy tiếp khi
+      // khoá dòng ở đây nhả ra, rồi đè lên giá vừa đông cứng trên một đơn giờ đã
+      // 'da_gui') — đổi hình dạng của race chứ không triệt tiêu. Race với
+      // `suaGiaVon` được chặn Ở TRÊN, tại khoá đơn (`.for('update')` trên `don`):
+      // `suaGiaVon` giờ cũng khoá đơn làm việc đầu tiên rồi mới soi lại
+      // `suaGiaVonDuoc` trên trạng thái ĐÃ khoá, nên hai bên xếp hàng qua đúng
+      // một khoá đó và bên chạy sau luôn thấy trạng thái MỚI. (Fix round 2,
+      // 2026-09-23 — bug NEW-1.)
       const dong = await tx.select().from(schema.kolDongDon).where(eq(schema.kolDongDon.donId, donId)).for('update');
 
       for (const d of dong) {
@@ -478,10 +517,11 @@ export async function huyDon(donId: string): Promise<{ ok: boolean; loi?: string
 /** Nhận hàng mượn về: ghi lần trả, cộng dồn số đã trả, cộng tồn nếu nhập lại kho. */
 export async function nhanTraVe(fd: FormData): Promise<{ ok: boolean; loi?: string }> {
   const actor = await requireQuanLyKol();
-  const dongId = String(fd.get('dongId') ?? '');
+  const dongId = String(fd.get('dongId') ?? '').trim();
   const soLuong = Number(fd.get('soLuong') ?? 0);
   const nhapLaiKho = fd.get('nhapLaiKho') === '1';
   const lyDo = (fd.get('lyDoKhongNhap') as string | null) ?? null;
+  if (!dangUuid(dongId)) return { ok: false, loi: 'Không tìm thấy dòng hàng.' };
 
   let maDon = '';
   try {
@@ -545,29 +585,68 @@ export async function nhanTraVe(fd: FormData): Promise<{ ok: boolean; loi?: stri
  * trống, không bịa số" — nhưng người dùng phải có chỗ để điền vào SAU đó).
  * Gác đúng như các action ghi khác: `requireQuanLyKol` + kiểm `suaGiaVonDuoc`
  * (nới tới 'da_chot' vì giá vốn không đụng tồn kho).
+ *
+ * Khoá đơn (không phải dòng) rồi mới soi lại `suaGiaVonDuoc`, giống hệt bài
+ * `chotDon`/`danhDauDaGui`: đọc-rồi-ghi không khoá gì từng cho phép một sửa giá
+ * tay đã qua guard lúc đơn còn 'da_chot' bị BLOCK trên khoá dòng của
+ * `danhDauDaGui`, rồi khi khoá đó nhả ra thì UPDATE này tiếp tục chạy và ĐÈ lên
+ * giá vốn vừa đông cứng lúc gửi — trên một đơn giờ đã 'da_gui', trạng thái mà
+ * guard lẽ ra phải cấm. Khoá dòng của `danhDauDaGui` chỉ đổi UPDATE này từ "đọc
+ * cũ" thành "ghi đè sau khi đã commit" — không hề triệt tiêu race, chỉ đổi
+ * hình dạng của nó. Khoá đơn ở đây mới là thứ thật sự chặn: `danhDauDaGui`
+ * cũng khoá đơn làm việc đầu tiên, nên hai bên phải xếp hàng qua cùng một khoá
+ * và bên sau luôn đọc lại trạng thái MỚI trước khi quyết định.
  */
 export async function suaGiaVon(fd: FormData): Promise<{ ok: boolean; loi?: string }> {
-  await requireQuanLyKol();
+  const actor = await requireQuanLyKol();
   const dongId = String(fd.get('dongId') ?? '').trim();
   const giaVonTho = String(fd.get('giaVon') ?? '').trim();
   const giaVonTienTeTho = String(fd.get('giaVonTienTe') ?? '').trim();
 
-  const [d] = await db.select().from(schema.kolDongDon).where(eq(schema.kolDongDon.id, dongId));
-  if (!d) return { ok: false, loi: 'Không tìm thấy dòng hàng.' };
-  const [don] = await db.select().from(schema.kolDon).where(eq(schema.kolDon.id, d.donId));
-  if (!don) return { ok: false, loi: 'Không tìm thấy đơn.' };
-  if (!suaGiaVonDuoc(don.trangThai)) {
-    return { ok: false, loi: `Đơn đang ở trạng thái ${don.trangThai}, không sửa giá vốn được.` };
-  }
+  if (!dangUuid(dongId)) return { ok: false, loi: 'Không tìm thấy dòng hàng.' };
   if (!giaVonTho) return { ok: false, loi: 'Giá vốn không được để trống.' };
   const so = Number(giaVonTho);
-  if (!Number.isFinite(so) || so < 0) return { ok: false, loi: 'Giá vốn phải là một số không âm.' };
+  // Cột là numeric(14,4): tối đa 10 chữ số phần nguyên. Số vượt ngưỡng khiến
+  // Postgres ném lỗi hạ tầng (numeric field overflow) thay vì trả về kết quả
+  // NGHIỆP VỤ đã hứa — chặn ở đây trước khi chạm CSDL.
+  if (!Number.isFinite(so) || so < 0 || so >= GIA_VON_TOI_DA) {
+    return { ok: false, loi: `Giá vốn phải là một số không âm và nhỏ hơn ${GIA_VON_TOI_DA.toLocaleString('vi-VN')}.` };
+  }
+  const tienTe = giaVonTienTeTho || 'VND';
+  if (!TIEN_TE_HOP_LE.includes(tienTe as (typeof TIEN_TE_HOP_LE)[number])) {
+    return { ok: false, loi: `Đơn vị tiền tệ không hợp lệ. Chỉ nhận: ${TIEN_TE_HOP_LE.join(', ')}.` };
+  }
 
-  await db.update(schema.kolDongDon)
-    .set({ giaVon: giaVonTho, giaVonTienTe: giaVonTienTeTho || 'VND', giaVonNguon: 'tay' })
-    .where(eq(schema.kolDongDon.id, dongId));
+  let maDon = '';
+  try {
+    await db.transaction(async (tx) => {
+      // Chỉ lấy donId để biết khoá đơn nào — dong_don.don_id không bao giờ đổi
+      // sau khi tạo dòng (không action nào trong file này UPDATE nó), nên đọc
+      // không khoá ở bước này không mở lại race nào cả.
+      const [dRaw] = await tx.select({ donId: schema.kolDongDon.donId })
+        .from(schema.kolDongDon).where(eq(schema.kolDongDon.id, dongId));
+      if (!dRaw) throw new LoiNghiepVu('Không tìm thấy dòng hàng.');
+
+      // Khoá đơn: xem giải thích ở đầu hàm — đây là bước chặn race với
+      // `danhDauDaGui` (và các action đổi trạng thái khác), không phải khoá dòng.
+      const [don] = await tx.select().from(schema.kolDon).where(eq(schema.kolDon.id, dRaw.donId)).for('update');
+      if (!don) throw new LoiNghiepVu('Không tìm thấy đơn.');
+      if (!suaGiaVonDuoc(don.trangThai)) {
+        throw new LoiNghiepVu(`Đơn đang ở trạng thái ${don.trangThai}, không sửa giá vốn được.`);
+      }
+      maDon = don.ma;
+
+      await tx.update(schema.kolDongDon)
+        .set({ giaVon: giaVonTho, giaVonTienTe: tienTe, giaVonNguon: 'tay' })
+        .where(eq(schema.kolDongDon.id, dongId));
+    });
+  } catch (e) {
+    if (e instanceof LoiNghiepVu) return { ok: false, loi: e.message };
+    console.error('[kol] suaGiaVon lỗi:', e);
+    return { ok: false, loi: 'Sửa giá vốn thất bại, thử lại.' };
+  }
 
   revalidatePath('/f/kol');
-  revalidatePath(`/f/kol/${don.ma}`);
+  revalidatePath(`/f/kol/${maDon}`);
   return { ok: true };
 }
