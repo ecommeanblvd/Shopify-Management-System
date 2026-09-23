@@ -27,7 +27,11 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   'sync-orders': ['sync-orders'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.
-  'moi-15-phut': ['retry-mmp-orders', 'retry-ship-ho-events', 'day-nhan-kcs-lark'],
+  'moi-15-phut': ['retry-mmp-orders', 'retry-ship-ho-events'],
+  // CHƯA NỐI SERVICE — cố ý. CEO 23/09/2026: dựng xong màn Nhận hàng & KCS rồi mới kiểm từng
+  // bản ghi lên Lark một, nên việc đẩy tự động phải nằm ngoài mọi nhóm đang chạy. Khi nào bật
+  // thì chuyển khoá này vào 'moi-15-phut'.
+  'chua-bat': ['day-nhan-kcs-lark'],
   'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho'],
   // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
