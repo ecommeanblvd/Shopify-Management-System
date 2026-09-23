@@ -26,7 +26,8 @@ export async function layDongTheoMaQuet(maQuet: string): Promise<{ ok: true; don
   await requirePerm('view_receiving');
   const ma = docMaTem(maQuet);
   if (!ma) return { ok: false, loi: 'Mã không đúng dạng tem (WH-… hoặc L:…)' };
-  if (ma.loai === 'mon') return { ok: false, loi: 'Đây là tem món — quét ở bước xác nhận' };
+  // Bước này chỉ nhận tem dòng đơn (L:); tem món/biến thể/đơn không dùng ở đây.
+  if (ma.loai !== 'dong') return { ok: false, loi: 'Đây không phải tem dòng đơn (L:…) — quét sai bước' };
   const dong = await getDongTheoShopifyLineId(ma.shopifyLineId);
   if (!dong) return { ok: false, loi: `Không có dòng đơn nào mang Line ID ${ma.shopifyLineId}` };
   return { ok: true, dong };
