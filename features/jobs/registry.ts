@@ -68,6 +68,10 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'QC/đóng gói trên Lark không thấy món đã về, MMP thiếu ngày nhận' },
   { key: 'ghi-nguoc-lark', ten: 'Ghi trạng thái giao + chi phí hãng lên Lark', chuKyPhut: CHU_KY_SYNC_LARK,
     hauQua: 'Ops phải gõ tay lại trạng thái giao, ngày giao, chi phí hãng trên LOG-Export' },
+  // Nối LỒNG trong syncBrandReceived (chạy nghiệp trong cả sync-lark.ts lẫn route HTTP) —
+  // chu kỳ phải khớp CHU_KY_SYNC_LARK (review 23/09/2026, task-3 Finding 2).
+  { key: 'noi-line-id-mon', ten: 'Nối món Lark với dòng đơn Shopify (mã tem)', chuKyPhut: CHU_KY_SYNC_LARK,
+    hauQua: 'Tem in mã kho tự cấp thay vì mã dòng đơn/biến thể, hoặc món không nối được để dán tem' },
   // CHƯA BẬT (CEO 23/09/2026): kiểm từng bản ghi lên Lark một rồi mới cho chạy tự động.
   // Chu kỳ để 1 NGÀY nên trang giám sát không báo đỏ trong lúc chờ.
   { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark (chưa bật)', chuKyPhut: 1 * NGAY,

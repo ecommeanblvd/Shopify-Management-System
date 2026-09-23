@@ -10,9 +10,15 @@ import { db, schema } from '@/db/client';
 import { listBrandReceivedRecords } from './client';
 import { parseBrandReceivedRow } from './parse-brand-received';
 import { docMonLark } from './huy-mon';
-import { noiLineIdChoMon } from '@/features/kho-nhan/sync-line-id';
+import { noiLineIdChoMon, type KetQuaNoiLine } from '@/features/kho-nhan/sync-line-id';
+import { batDauJob, ketThucJob } from '@/features/jobs/record';
 
-export interface BrandReceivedSyncResult { fetched: number; inserted: number; monHuy?: number; noiLine?: { xet: number; noiDuoc: number } }
+export interface BrandReceivedSyncResult {
+  fetched: number;
+  inserted: number;
+  monHuy?: number;
+  noiLine?: KetQuaNoiLine & { loi?: string };
+}
 
 const CHUNK = 500;
 
@@ -48,10 +54,32 @@ export async function syncBrandReceived(): Promise<BrandReceivedSyncResult> {
   }
   const monHuy = await luuMonDon(records);
   // Nối món sang dòng đơn Shopify để tem mang mã dòng đơn (best-effort, không chặn sync).
-  let noiLine = { xet: 0, noiDuoc: 0 };
-  try { noiLine = await noiLineIdChoMon(); }
-  catch (e) { console.error('[kho-nhan] nối line id lỗi (bỏ qua):', e instanceof Error ? e.message : e); }
+  const noiLine = await noiLineIdCoGhiNhatKy();
   return { fetched: records.length, inserted, monHuy, noiLine };
+}
+
+/**
+ * Bọc `noiLineIdChoMon` qua `batDauJob`/`ketThucJob` (cùng nhật ký `job_runs` mà trang giám
+ * sát đọc — xem features/jobs/registry.ts khoá 'noi-line-id-mon'), KHÔNG chỉ log ra stdout.
+ *
+ * Trước đây lỗi chỉ vào console.error: nếu bước này hỏng vĩnh viễn thì mọi lượt đều trả về
+ * { xet: 0, noiDuoc: 0 } — giống hệt "không còn gì để nối", trang giám sát không phát hiện
+ * được (review 23/09/2026, Finding 2). Giờ lỗi ghi vào job_runs (status 'error') và kết quả trả
+ * về kèm `loi` để phân biệt hai trường hợp.
+ */
+async function noiLineIdCoGhiNhatKy(): Promise<NonNullable<BrandReceivedSyncResult['noiLine']>> {
+  const batDau = Date.now();
+  const id = await batDauJob('noi-line-id-mon');
+  try {
+    const r = await noiLineIdChoMon();
+    await ketThucJob(id, { ok: true, summary: r, batDau });
+    return r;
+  } catch (e) {
+    const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    await ketThucJob(id, { ok: false, error: msg.slice(0, 2000), batDau });
+    console.error('[kho-nhan] nối line id lỗi:', e instanceof Error ? e.message : e);
+    return { xet: 0, noiDuoc: 0, loi: msg.split('\n')[0] };
+  }
 }
 
 /**

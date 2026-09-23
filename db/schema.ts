@@ -2109,6 +2109,9 @@ export const larkMonDon = pgTable('lark_mon_don', {
 }, (t) => [
   index('lark_mon_don_order_idx').on(t.orderNumber),
   index('lark_mon_don_line_idx').on(t.shopifyLineId),
+  // UNIQUE (một phần): hai đường cron (script Railway + route HTTP) có thể chạy chồng — chỉ
+  // ràng buộc DB mới chặn được hai món cùng nhận một dòng đơn Shopify (review 23/09/2026).
+  uniqueIndex('lark_mon_don_line_uniq').on(t.shopifyLineId).where(sql`${t.shopifyLineId} IS NOT NULL`),
 ]);
 
 /** Việc kho nhận + kiểm một món, ghi ở SMS trước rồi đẩy sang bảng kho Lark. */
