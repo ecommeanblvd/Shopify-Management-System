@@ -218,8 +218,18 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
 
       {mon.length > 0 && (
         <div className="space-y-3">
-          <div className="text-[11px] tracking-[0.12em] text-muted-foreground">
-            ĐƠN {donTran} · {mon.length} MÓN
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] tracking-[0.12em] text-muted-foreground">
+              ĐƠN {donTran} · {mon.length} MÓN
+            </div>
+            <a
+              href={`/f/warehouse/nhan-kcs/tem?don=${encodeURIComponent(donTran)}&kho=${encodeURIComponent(kho)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted"
+            >
+              In tem cả đơn
+            </a>
           </div>
           {mon.map((m) => (
             <KhoiMon key={m.dinhDanh} m={m} donTran={donTran} kho={kho} doiKho={doiKho} coQuyenNhap={coQuyenNhap} sang={monSang === m.dinhDanh} />
@@ -318,6 +328,8 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
   }
 
   const khoa = !coQuyenNhap || dangGui;
+  // Đã lưu (từ trước hoặc vừa lưu trong phiên này) — có dòng ở SMS nên mới có việc để in tem.
+  const daLuu = m.daNhan != null || !!ketQua?.ok;
 
   // Hai bộ ô nhập CÙNG state, CÙNG name — chỉ khác cỡ chữ/khoảng cách theo khổ màn. Nhờ
   // 'hidden'/'md:hidden' (display:none) mà trình duyệt tự loại bộ đang ẩn khỏi kiểm tra
@@ -426,13 +438,33 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
 
       <div className="mt-3 hidden flex-wrap items-center gap-3 md:flex">
         <button type="submit" disabled={khoa} className={NUT_CHINH}>{dangGui ? 'Đang lưu…' : 'Lưu'}</button>
+        {daLuu && <NutInTem donTran={donTran} dinhDanh={m.dinhDanh} kho={kho} />}
         {ketQua && <KetQuaMon kq={ketQua} />}
+        {m.temInLuc && <span className="text-[11px] text-muted-foreground">đã in tem {gioVn(m.temInLuc)}</span>}
       </div>
       <div className="mt-3 space-y-2 md:hidden">
         <button type="submit" disabled={khoa} className={NUT_CHINH_LON}>{dangGui ? 'Đang lưu…' : 'Lưu'}</button>
+        {daLuu && <NutInTem donTran={donTran} dinhDanh={m.dinhDanh} kho={kho} lon />}
         {ketQua && <KetQuaMon kq={ketQua} />}
+        {m.temInLuc && <p className="text-[11px] text-muted-foreground">đã in tem {gioVn(m.temInLuc)}</p>}
       </div>
     </form>
+  );
+}
+
+/** Sau khi lưu một món (phiên này hoặc từ trước) — mở trang in tem cho đúng món đó ở tab mới (spec §5). */
+function NutInTem({ donTran, dinhDanh, kho, lon }: { donTran: string; dinhDanh: string; kho: Warehouse; lon?: boolean }) {
+  return (
+    <a
+      href={`/f/warehouse/nhan-kcs/tem?don=${encodeURIComponent(donTran)}&mon=${encodeURIComponent(dinhDanh)}&kho=${encodeURIComponent(kho)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={lon
+        ? 'block w-full rounded-lg border border-border py-2.5 text-center text-sm font-medium hover:bg-muted'
+        : 'rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-muted'}
+    >
+      In tem
+    </a>
   );
 }
 

@@ -49,6 +49,7 @@
     "@zxing/browser": "0.2.1",
     "adm-zip": "^0.5.18",
     "better-auth": "^1.6.11",
+    "bwip-js": "^4.11.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
