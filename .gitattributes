@@ -1,0 +1,15 @@
+# Mã nguồn TypeScript LUÔN được diff như VĂN BẢN.
+#
+# Vì sao cần: git tự đoán "nhị phân" khi thấy byte NUL trong ~8000 byte đầu của file. Một byte
+# NUL lọt vào source (ví dụ ai đó lấy ký tự U+0000 làm dấu phân cách khoá) là đủ để `git diff`
+# in "Binary files differ" thay vì diff đọc được — đã xảy ra thật ngày 23/09/2026: file rủi ro
+# nhất trong một commit đi tới tay người review dưới dạng một dòng "Bin 3514 -> 7888 bytes",
+# không ai đọc được nó. `grep` cũng lặng lẽ bỏ qua file như vậy.
+#
+# Thuộc tính `diff` (KHÔNG phải `text`) chỉ ép cách HIỂN THỊ diff, không bật chuẩn hoá xuống
+# dòng nên không gây churn CRLF/LF trên cây làm việc. Đây là lưới an toàn, không thay cho việc
+# không viết byte NUL vào source ngay từ đầu.
+*.ts diff
+*.tsx diff
+*.mts diff
+*.cts diff

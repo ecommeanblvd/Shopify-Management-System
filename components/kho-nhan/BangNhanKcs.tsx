@@ -8,6 +8,7 @@ import { actionMacDinh } from '@/features/kho-nhan/luat';
 import type { MonCuaDon, listDaXuLyHomNay } from '@/features/kho-nhan/queries';
 import { xuLyQuet, type MonDeQuet } from '@/features/kho-nhan/quet';
 import { traDonCuaDong, traDonCoBienThe } from '@/features/kho-nhan/quet-actions';
+import type { KetQuaDonCoBienThe } from '@/features/kho-nhan/quet-queries';
 import { docMaTem } from '@/features/receiving/ma-tem';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
 import { OQuet } from './OQuet';
@@ -31,6 +32,17 @@ const O_NHAP_LON = 'h-11 w-full rounded-md border border-input bg-input/30 px-3 
 const NUT_CHINH = 'h-9 rounded-lg bg-amber-500 px-5 text-[13px] font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50';
 /** Bản điện thoại của NUT_CHINH — chạy hết chiều ngang (spec §5 "nút Lưu w-full py-3"). */
 const NUT_CHINH_LON = 'w-full rounded-lg bg-amber-500 py-3 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50';
+
+/**
+ * Số nút đơn hiện ra; phần còn lại được ĐẾM và nói rõ chứ không cắt im lặng.
+ *
+ * = 20, đúng bằng số dòng truy vấn trả về, tức hiện HẾT những gì lấy được. Trước đây cắt còn 5:
+ * đo trên 703 món mang tem `V:` thật (23/09/2026), "đơn của chính món vừa quét" chỉ lọt vào 5
+ * nút ở 73,0% số lượt, trong khi lọt vào 20 dòng trả về ở 78,7% — giấu 15 dòng đã lấy về sau một
+ * câu chữ là tự bỏ đi gần 6% số lần kho tìm thấy đúng đơn của mình. Nút nhỏ và tự xuống dòng nên
+ * 20 cái vẫn gọn.
+ */
+const HIEN_MAY_NUT = 20;
 
 export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   don: string;
@@ -66,7 +78,7 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
   /** Mã dòng đơn thuộc đơn KHÁC đơn đang mở — hỏi trước khi nhảy, không tự chuyển. */
   const [hoiChuyenDon, setHoiChuyenDon] = useState<{ orderNumber: string } | null>(null);
   /** Quét mã biến thể khi chưa mở đơn nào — danh sách đơn đang chờ có hàng này (rỗng = không thấy). */
-  const [dsBienThe, setDsBienThe] = useState<Array<{ orderNumber: string; sku: string | null }> | null>(null);
+  const [dsBienThe, setDsBienThe] = useState<KetQuaDonCoBienThe | null>(null);
   const [, batDauTraCuuQuet] = useTransition();
 
   const xuLyQuetManHinh = useCallback((raw: string) => {
@@ -165,17 +177,18 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
 
       {dsBienThe && (
         <div className="space-y-1.5 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
-          {dsBienThe.length === 0 && <p className="text-muted-foreground">Không thấy đơn nào đang chờ có hàng này.</p>}
-          {dsBienThe.length > 0 && (
+          {dsBienThe.tong === 0 && <p className="text-muted-foreground">Không thấy đơn nào đang chờ có hàng này.</p>}
+          {dsBienThe.tong > 0 && (
             <>
               <p className="text-muted-foreground">Các đơn đang chờ có hàng này:</p>
               <div className="flex flex-wrap gap-1.5">
-                {dsBienThe.slice(0, 5).map((d) => (
+                {dsBienThe.ds.slice(0, HIEN_MAY_NUT).map((d) => (
                   <button
                     // Một đơn có thể xuất hiện nhiều lần với SKU khác nhau (danh sách chỉ bỏ
                     // trùng theo đơn+SKU), nên khoá React phải gồm cả SKU — lấy mỗi orderNumber
-                    // là trùng khoá, React bỏ mất nút.
-                    key={`${d.orderNumber} ${d.sku ?? ''}`}
+                    // là trùng khoá, React bỏ mất nút. Ghép bằng JSON.stringify để không phải
+                    // chọn một ký tự phân cách rồi tự thuyết phục mình là nó không thể xuất hiện.
+                    key={JSON.stringify([d.orderNumber, d.sku ?? ''])}
                     type="button"
                     onClick={() => { router.push(`/f/warehouse/nhan-kcs?don=${encodeURIComponent(d.orderNumber)}`); setDsBienThe(null); }}
                     className="rounded-md border border-border bg-card px-2 py-1 font-medium hover:bg-muted"
@@ -184,10 +197,13 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
                   </button>
                 ))}
               </div>
-              {dsBienThe.length > 5 && (
-                // Cắt còn 5 nút mà không nói gì thì kho tưởng chỉ có 5 đơn đang chờ hàng này.
+              {dsBienThe.tong > HIEN_MAY_NUT && (
+                // Con số lấy từ `tong` (tổng THẬT sau khi gộp + bỏ trùng), KHÔNG phải từ `ds` đã
+                // bị cắt — tính từ danh sách đã cắt thì ra một con số tự tin mà sai, còn tệ hơn
+                // cắt im lặng (review vòng 3, FIX 3). `conNua` = đã chạm trần lấy về, khi ấy
+                // `tong` chỉ là "ít nhất bấy nhiêu" nên phải nói "hơn".
                 <p className="text-muted-foreground">
-                  … và {dsBienThe.length - 5} đơn nữa — gõ mã đơn vào ô bên dưới nếu không thấy đơn cần tìm.
+                  … và {dsBienThe.conNua ? 'hơn ' : ''}{dsBienThe.tong - HIEN_MAY_NUT} đơn nữa — gõ mã đơn vào ô bên dưới nếu không thấy đơn cần tìm.
                 </p>
               )}
             </>

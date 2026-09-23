@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { xuLyQuet, type MonDeQuet } from './quet';
+import { xuLyQuet, xenKeHaiNguon, type MonDeQuet } from './quet';
 import { maTemChoMon, bienTheChoMon } from './noi-mon-dong-don';
 
 /**
@@ -151,5 +151,60 @@ describe('xuLyQuet', () => {
       expect(xuLyQuet(`L:${LINE_SO_2}`, ds)).toEqual({ loai: 'chon_mon', dinhDanh: 'dd2' });
       expect(xuLyQuet(`L:${LINE_SO}`, ds)).toEqual({ loai: 'chon_mon', dinhDanh: 'dd1' });
     });
+  });
+});
+
+describe('xenKeHaiNguon — không nguồn nào được bỏ đói', () => {
+  const khoa = (x: string) => x;
+
+  it('nguồn 1 dài hơn hạn mức KHÔNG được nuốt sạch chỗ của nguồn 2', () => {
+    // Hình dạng thật: quét V:44089420153000 có nguồn 1 trả 38 đơn, nguồn 2 chỉ có MOS10024 —
+    // đơn DUY NHẤT thật sự đang đeo cái tem vừa quét. Nối đuôi rồi cắt 20 là mất hẳn nó.
+    const n1 = Array.from({ length: 38 }, (_, i) => `SHOP${i}`);
+    const n2 = ['MOS10024'];
+    const noiDuoi = [...n1, ...n2].slice(0, 20);
+    expect(noiDuoi).not.toContain('MOS10024'); // cách CŨ: mất
+    const xen = xenKeHaiNguon(n1, n2, khoa, 2);
+    expect(xen.slice(0, 20)).toContain('MOS10024'); // cách MỚI: còn
+    expect(xen[0]).toBe('MOS10024'); // và đứng ngay đầu
+  });
+
+  it('nguồn 2 dài cũng KHÔNG được bỏ đói nguồn 1', () => {
+    const n1 = ['SHOP-A', 'SHOP-B'];
+    const n2 = Array.from({ length: 50 }, (_, i) => `LARK${i}`);
+    const top20 = xenKeHaiNguon(n1, n2, khoa, 2).slice(0, 20);
+    expect(top20).toContain('SHOP-A');
+    expect(top20).toContain('SHOP-B');
+  });
+
+  it('nhịp 1:2 — cứ hai dòng nguồn 2 thì một dòng nguồn 1', () => {
+    const xen = xenKeHaiNguon(['a1', 'a2', 'a3'], ['b1', 'b2', 'b3', 'b4'], khoa, 2);
+    expect(xen).toEqual(['b1', 'b2', 'a1', 'b3', 'b4', 'a2', 'a3']);
+  });
+
+  it('bỏ trùng theo khoá, giữ lần gặp ĐẦU tiên (mỗi vòng nguồn 2 đi trước)', () => {
+    // Vòng 1: n2 'X' vào; n1 'X' trùng nên bỏ. Vòng 2: n2 'Z' vào; n1 'Y' vào.
+    const xen = xenKeHaiNguon(['X', 'Y'], ['X', 'Z'], khoa, 1);
+    expect(xen).toEqual(['X', 'Z', 'Y']);
+    expect(new Set(xen).size).toBe(xen.length);
+  });
+
+  it('một nguồn rỗng thì nguồn kia ra đủ, đúng thứ tự', () => {
+    expect(xenKeHaiNguon(['a', 'b'], [], khoa, 2)).toEqual(['a', 'b']);
+    expect(xenKeHaiNguon([], ['x', 'y'], khoa, 2)).toEqual(['x', 'y']);
+    expect(xenKeHaiNguon([], [], khoa, 2)).toEqual([]);
+  });
+
+  it('khoá ghép là VĂN BẢN THƯỜNG, không byte NUL — và không đụng nhau', () => {
+    // Giá trị chứa dấu phân cách "ngây thơ" (dấu cách, gạch) vẫn phải phân biệt được.
+    type D = { don: string; sku: string };
+    const k = (d: D) => JSON.stringify([d.don, d.sku]);
+    const ds = xenKeHaiNguon<D>(
+      [{ don: 'A B', sku: 'C' }, { don: 'A', sku: 'B C' }],
+      [],
+      k,
+    );
+    expect(ds).toHaveLength(2);
+    expect(ds.map(k).every((x) => !x.includes('\u0000'))).toBe(true);
   });
 });

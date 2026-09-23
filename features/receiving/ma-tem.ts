@@ -65,6 +65,22 @@ export function soIdShopify(id: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * HAI dạng mà một id Shopify có thể nằm trong DB: gid đầy đủ và số trần.
+ *
+ * Dùng để SO KHỚP trong SQL mà KHÔNG mất index. Cách viết `regexp_replace(cột, …) = $1` tuy đúng
+ * nhưng không sargable: Postgres phải quét sạch bảng rồi mới lọc — đo 23/09/2026 trên
+ * `shopify_variants` (120.817 dòng) là 227ms mỗi lượt, chiếm ~95% chi phí một lần quét tem `V:`.
+ * So bằng `inArray(cột, cacDangIdShopify(so, 'ProductVariant'))` cho ra hai literal, dùng được
+ * index sẵn có, đọc 2.164 buffer thay vì 27.718. Chỉ đổi ở nơi ĐÃ ĐO; chỗ nào bảng nhỏ thì
+ * `regexp_replace` vẫn đủ và dễ đọc hơn.
+ *
+ * Đây cũng là nơi DUY NHẤT ráp chuỗi gid — đừng nối `'gid://shopify/…/' + id` ở chỗ khác.
+ */
+export function cacDangIdShopify(so: string, loai: 'LineItem' | 'ProductVariant' | 'Order'): string[] {
+  return [`gid://shopify/${loai}/${so}`, so];
+}
+
 /** Chuỗi in vào mã vạch tem dòng đơn. Id không chứa chữ số (đọc lại được) → null. */
 export function maTemDong(shopifyLineId: string): string | null {
   const so = soIdShopify(shopifyLineId);

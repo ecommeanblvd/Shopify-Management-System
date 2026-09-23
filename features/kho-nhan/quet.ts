@@ -69,3 +69,41 @@ export function xuLyQuet(raw: string, mon: readonly MonDeQuet[]): KetQuaQuet {
   }
   return { loai: 'tim_bien_the', shopifyVariantId: ma.shopifyVariantId };
 }
+
+/**
+ * THUẦN: gộp danh sách "đơn đang chờ có hàng này" từ HAI nguồn thành một danh sách hiển thị.
+ *
+ * Vì sao KHÔNG nối đuôi rồi cắt: nguồn nào đứng trước mà đủ dài là nguồn sau bị vứt SẠCH. Đo
+ * 23/09/2026 — quét `V:44089420153000` (SKU TINH-SU23-11-Nude-S-NUD) có nguồn 1 trả 38 đơn,
+ * nuốt trọn hạn mức 20, và `MOS10024` — đơn Lark DUY NHẤT thật sự đang đeo đúng cái tem vừa
+ * quét — biến mất khỏi danh sách (review vòng 3, FIX 2).
+ *
+ * `nhipN2` = lấy mấy phần tử nguồn 2 cho mỗi một phần tử nguồn 1. Nguồn 2 (`lark_mon_don`, món
+ * chưa nối dòng đơn) mới là nơi tem `V:` THỰC SỰ được in ra, nên nó được ưu tiên; nguồn 1 vẫn
+ * luôn giữ được phần của mình chứ không bị bỏ đói. Nguồn nào cạn trước thì nguồn kia lấp nốt.
+ *
+ * Bỏ trùng bằng `khoa(...)` trả về CHUỖI VĂN BẢN THƯỜNG. Tuyệt đối không dùng ký tự phân cách
+ * "chắc chắn không xuất hiện" kiểu U+0000: byte NUL làm git coi cả file là nhị phân (diff hiện
+ * "Binary files differ", người review không đọc được gì) và làm `grep` lặng lẽ bỏ qua file.
+ */
+export function xenKeHaiNguon<T>(
+  nguon1: readonly T[],
+  nguon2: readonly T[],
+  khoa: (x: T) => string,
+  nhipN2 = 1,
+): T[] {
+  const daGap = new Set<string>();
+  const ket: T[] = [];
+  const them = (x: T) => {
+    const k = khoa(x);
+    if (daGap.has(k)) return;
+    daGap.add(k);
+    ket.push(x);
+  };
+  let i1 = 0, i2 = 0;
+  while (i1 < nguon1.length || i2 < nguon2.length) {
+    for (let c = 0; c < Math.max(1, nhipN2) && i2 < nguon2.length; c++) them(nguon2[i2++]);
+    if (i1 < nguon1.length) them(nguon1[i1++]);
+  }
+  return ket;
+}
