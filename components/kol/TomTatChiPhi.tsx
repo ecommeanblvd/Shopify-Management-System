@@ -43,10 +43,21 @@ function quyHang(r: DongBaoCao, nhan: string, period: string, rates: TiGiaThang[
 /**
  * Khối tóm tắt chi phí marketing KOL — đặt đầu trang danh sách đơn.
  *
- * Bốn số đầu là TỔNG toàn bộ dữ liệu (đơn chưa huỷ), quy VND theo tỷ giá
- * THÁNG HIỆN TẠI (con số "tại thời điểm xem báo cáo"). Bảng bên dưới cho xem
- * chi tiết theo tháng gửi hoặc theo từng KOL — mỗi dòng đó quy đổi bằng tỷ giá
- * ĐÚNG THÁNG của nó khi có thể (tháng gửi thật), còn lại dùng tháng hiện tại.
+ * Bốn số đầu (`tongTatCa`, do trang gọi truyền vào) chỉ tính hàng ĐÃ GỬI —
+ * caller (`app/(dashboard)/f/kol/page.tsx`) đã lọc `guiLuc !== null` trước khi
+ * gọi `tongChiPhi`. Cố tình KHÔNG dùng toàn bộ `dongBaoCao`: một dòng mượn
+ * thuộc đơn còn nháp/đã chốt (chưa rời kho) vẫn có `soLuongDaTra = 0`, cộng
+ * nguyên số lượng vào "đang treo" y hệt một món thật sự đang ở nhà KOL quá
+ * hạn — hai tình huống khác hẳn nhau (một cái cần đi đòi, một cái nằm trên kệ
+ * kho chờ xuất) mà gộp vào một con số đầu trang thì người đọc không còn cách
+ * nào phân biệt. `theoThang`/`theoNguoiNhan` thì NGƯỢC LẠI — nhận trọn
+ * `dongBaoCao` không lọc, để khoá 'chua_gui' của `gomTheoThang` còn đường hiện
+ * ra ở bảng chi tiết (có nhãn "Chưa gửi" riêng, không lẫn với các tháng thật).
+ *
+ * Quy VND theo tỷ giá THÁNG HIỆN TẠI cho headline (con số "tại thời điểm xem
+ * báo cáo"). Bảng bên dưới cho xem chi tiết theo tháng gửi hoặc theo từng
+ * KOL — mỗi dòng đó quy đổi bằng tỷ giá ĐÚNG THÁNG của nó khi có thể (tháng
+ * gửi thật), còn lại dùng tháng hiện tại.
  *
  * `soDongThieuGiaVon` LUÔN hiện, kể cả bằng 0 — người đọc phải biết báo cáo
  * đang phủ được bao nhiêu, không được ngầm hiểu "không thấy số nghĩa là không

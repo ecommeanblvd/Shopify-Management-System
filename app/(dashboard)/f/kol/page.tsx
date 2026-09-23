@@ -42,6 +42,14 @@ export default async function DanhSachKolPage({
     tiGiaThang(),
   ]);
   const thangHienTai = thangKinhDoanh(new Date())!;
+  // Headline chỉ tính hàng ĐÃ GỬI (guiLuc khác null) — dòng chưa gửi (nháp/đã
+  // chốt) chưa hề rời kho, số lượng mượn của nó luôn đổ nguyên vào cột "đang
+  // treo" như thể đang ở nhà KOL, dù thật ra nó nằm nguyên trên kệ dưới diện
+  // giữ chỗ. Trộn hai thứ vào một con số đầu trang thì người đọc không còn
+  // cách nào phân biệt "cần đi đòi" với "chưa cần đòi gì cả". Bảng chi tiết
+  // theo tháng bên dưới vẫn nhận `dongBaoCao` KHÔNG lọc, để khoá 'chua_gui'
+  // của gomTheoThang còn đường hiện ra (có nhãn "Chưa gửi" rõ ràng ở đó).
+  const daGui = dongBaoCao.filter((d) => d.guiLuc !== null);
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -63,7 +71,7 @@ export default async function DanhSachKolPage({
       <TomTatChiPhi
         theoThang={gomTheoThang(dongBaoCao)}
         theoNguoiNhan={gomTheoNguoiNhan(dongBaoCao)}
-        tongTatCa={tongChiPhi(dongBaoCao)}
+        tongTatCa={tongChiPhi(daGui)}
         rates={rates}
         thangHienTai={thangHienTai}
       />

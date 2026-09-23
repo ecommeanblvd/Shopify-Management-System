@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { taoNguoiNhan } from '@/features/kol/actions';
+import { taoNguoiNhan, suaNguoiNhan, doiNgungDung } from '@/features/kol/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { NHAN_MUC_DICH } from './BangDonKol';
@@ -106,29 +106,40 @@ function FormThem({ onClose }: { onClose: () => void }) {
   );
 }
 
-/**
- * Form "Sửa hồ sơ" / nút "Ngừng dùng" — dựng sẵn giao diện nhưng KHÔNG gửi được.
- *
- * `features/kol/actions.ts` hiện chỉ có `taoNguoiNhan` (tạo mới), không có
- * action sửa hay đổi cờ `ngungDung`. Task 8 brief nói rõ: nếu thiếu action thì
- * báo lại thay vì tự thêm vào file đó (agent khác đang sửa nó). Vẫn dựng đủ
- * giao diện để sẵn sàng nối dây ngay khi action xuất hiện, nhưng khoá nút Lưu
- * lại — im lặng cho submit rơi vào hư không còn tệ hơn không có nút.
- */
-function FormSua({ hoSo, onClose }: { hoSo: NguoiNhan; onClose: () => void }) {
+/** Form "Sửa hồ sơ" — gọi `suaNguoiNhan` (Fix round 1: action đã có, mở khoá form). */
+function FormSua({ hoSo, onSaved, onClose }: { hoSo: NguoiNhan; onSaved: () => void; onClose: () => void }) {
   const [v, setV] = useState<HoSoTho>(hoSoTuNguoiNhan(hoSo));
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
   const set = (patch: Partial<HoSoTho>) => setV((prev) => ({ ...prev, ...patch }));
+
+  const submit = () =>
+    start(async () => {
+      setErr(null);
+      if (!v.ten.trim()) { setErr('Tên là bắt buộc.'); return; }
+      const fd = new FormData();
+      fd.set('id', hoSo.id);
+      fd.set('ten', v.ten); fd.set('kenh', v.kenh); fd.set('dienThoai', v.dienThoai);
+      fd.set('email', v.email); fd.set('quocGia', v.quocGia); fd.set('thanhPho', v.thanhPho);
+      fd.set('diaChi', v.diaChi); fd.set('ghiChu', v.ghiChu);
+      const r = await suaNguoiNhan(fd);
+      if (!r.ok) { setErr(r.loi ?? 'Có lỗi xảy ra.'); return; }
+      onSaved();
+      onClose();
+    });
 
   return (
     <Card>
       <CardContent className="space-y-3">
         <h2 className="text-sm font-semibold">Sửa hồ sơ</h2>
         <CacO v={v} set={set} />
-        <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-          Chưa lưu được: hệ thống còn thiếu thao tác sửa hồ sơ ở tầng máy chủ.
-          Form này sẵn sàng để nối dây ngay khi thao tác đó có.
-        </p>
-        <Button type="button" size="sm" variant="outline" onClick={onClose}>Đóng</Button>
+        {err && <p className="text-xs font-medium text-red-600">{err}</p>}
+        <div className="flex gap-2">
+          <Button type="button" size="sm" disabled={pending} onClick={submit}>
+            {pending ? 'Đang lưu…' : 'Lưu thay đổi'}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={onClose}>Huỷ</Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -154,8 +165,24 @@ export function SoKol({
   chiTiet: ChiTiet | null;
   canManage: boolean;
 }) {
+  const router = useRouter();
   const [dangThem, setDangThem] = useState(false);
   const [dangSua, setDangSua] = useState(false);
+  const [dangDoiCoNgung, startDoiCoNgung] = useTransition();
+  const [loiDoiCoNgung, setLoiDoiCoNgung] = useState<string | null>(null);
+
+  const lamMoi = () => router.refresh();
+
+  function doiCoNgung() {
+    if (!chiTiet) return;
+    const idDangSua = chiTiet.hoSo.id;
+    const dichNgungDung = !chiTiet.hoSo.ngungDung;
+    startDoiCoNgung(async () => {
+      setLoiDoiCoNgung(null);
+      const r = await doiNgungDung(idDangSua, dichNgungDung);
+      if (!r.ok) setLoiDoiCoNgung(r.loi ?? 'Có lỗi xảy ra.'); else lamMoi();
+    });
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
@@ -228,21 +255,24 @@ export function SoKol({
                 </p>
               </div>
               {canManage && (
-                <div className="flex shrink-0 gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => setDangSua((s) => !s)}>
-                    Sửa hồ sơ
-                  </Button>
-                  <Button
-                    type="button" size="sm" variant="outline" disabled
-                    title="Hệ thống chưa có thao tác đổi trạng thái ngừng dùng ở tầng máy chủ."
-                  >
-                    {chiTiet.hoSo.ngungDung ? 'Bật lại dùng' : 'Ngừng dùng'}
-                  </Button>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setDangSua((s) => !s)}>
+                      Sửa hồ sơ
+                    </Button>
+                    <Button
+                      type="button" size="sm" variant="outline" disabled={dangDoiCoNgung}
+                      onClick={doiCoNgung}
+                    >
+                      {dangDoiCoNgung ? 'Đang lưu…' : chiTiet.hoSo.ngungDung ? 'Bật lại dùng' : 'Ngừng dùng'}
+                    </Button>
+                  </div>
+                  {loiDoiCoNgung && <p className="text-xs font-medium text-red-600">{loiDoiCoNgung}</p>}
                 </div>
               )}
             </div>
 
-            {dangSua && <FormSua hoSo={chiTiet.hoSo} onClose={() => setDangSua(false)} />}
+            {dangSua && <FormSua hoSo={chiTiet.hoSo} onSaved={lamMoi} onClose={() => setDangSua(false)} />}
 
             <Card>
               <CardContent className="space-y-1 text-sm">

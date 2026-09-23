@@ -215,6 +215,73 @@ export async function taoNguoiNhan(fd: FormData): Promise<{ ok: boolean; loi?: s
 }
 
 /**
+ * Sửa hồ sơ sổ KOL đã có. Cùng luật với `taoNguoiNhan` — chỉ `ten` bắt buộc.
+ * KHÔNG đụng cờ `ngungDung` ở đây: tách riêng sang `doiNgungDung` để một lần
+ * sửa thông tin liên hệ không thể vô tình bật/tắt một người đang dùng (hai
+ * form khác nhau trên UI, hai chủ đích khác nhau, không nên chung một action
+ * mà lỡ tay đè lẫn nhau).
+ */
+export async function suaNguoiNhan(fd: FormData): Promise<{ ok: boolean; loi?: string }> {
+  const actor = await requireQuanLyKol();
+  const id = String(fd.get('id') ?? '').trim();
+  if (!dangUuid(id)) return { ok: false, loi: 'Không tìm thấy hồ sơ.' };
+  const ten = String(fd.get('ten') ?? '').trim();
+  if (!ten) return { ok: false, loi: 'Tên người nhận là bắt buộc.' };
+
+  const chuoi = (khoa: string) => (String(fd.get(khoa) ?? '').trim() || null);
+
+  try {
+    const ket = await db.update(schema.kolNguoiNhan).set({
+      ten,
+      kenh: chuoi('kenh'),
+      dienThoai: chuoi('dienThoai'),
+      email: chuoi('email'),
+      quocGia: chuoi('quocGia') ?? 'VN',
+      diaChi: chuoi('diaChi'),
+      thanhPho: chuoi('thanhPho'),
+      ghiChu: chuoi('ghiChu'),
+      suaLuc: new Date(),
+      suaBoi: actor,
+    }).where(eq(schema.kolNguoiNhan.id, id)).returning({ id: schema.kolNguoiNhan.id });
+    if (ket.length === 0) return { ok: false, loi: 'Không tìm thấy hồ sơ.' };
+  } catch (e) {
+    console.error('[kol] suaNguoiNhan lỗi:', e);
+    return { ok: false, loi: 'Sửa hồ sơ thất bại, thử lại.' };
+  }
+
+  revalidatePath('/f/kol');
+  revalidatePath('/f/kol/nguoi-nhan');
+  return { ok: true };
+}
+
+/**
+ * Bật/tắt cờ ngừng dùng của một hồ sơ sổ KOL. KHÔNG xoá hồ sơ: đơn cũ đang
+ * tham chiếu `nguoi_nhan_id` vẫn phải tra ngược được người nhận (xem chú
+ * thích cột `ngungDung` ở db/schema.ts — "ẩn khỏi ô chọn mà KHÔNG xoá").
+ * Ngừng dùng chỉ ẩn hồ sơ khỏi ô chọn lúc TẠO đơn mới (`danhSachNguoiNhan()`
+ * mặc định lọc `ngungDung = false`), không ảnh hưởng đơn đã có.
+ */
+export async function doiNgungDung(id: string, ngungDung: boolean): Promise<{ ok: boolean; loi?: string }> {
+  const actor = await requireQuanLyKol();
+  if (!dangUuid(id)) return { ok: false, loi: 'Không tìm thấy hồ sơ.' };
+
+  try {
+    const ket = await db.update(schema.kolNguoiNhan)
+      .set({ ngungDung, suaLuc: new Date(), suaBoi: actor })
+      .where(eq(schema.kolNguoiNhan.id, id))
+      .returning({ id: schema.kolNguoiNhan.id });
+    if (ket.length === 0) return { ok: false, loi: 'Không tìm thấy hồ sơ.' };
+  } catch (e) {
+    console.error('[kol] doiNgungDung lỗi:', e);
+    return { ok: false, loi: 'Đổi trạng thái ngừng dùng thất bại, thử lại.' };
+  }
+
+  revalidatePath('/f/kol');
+  revalidatePath('/f/kol/nguoi-nhan');
+  return { ok: true };
+}
+
+/**
  * Tạo đơn ở trạng thái `nhap`, KHÔNG đụng tồn kho. Chụp ảnh thông tin nhận từ
  * sổ KOL sang đơn tại thời điểm này — sửa sổ về sau không đổi đơn cũ.
  */

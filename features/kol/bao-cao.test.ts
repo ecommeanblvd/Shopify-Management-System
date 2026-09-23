@@ -22,6 +22,16 @@ describe('gomTheoThang', () => {
     const r = gomTheoThang([{ ...base, guiLuc: null }]);
     expect(r.map((x) => x.khoa)).toEqual(['chua_gui']);
   });
+  it('"chua_gui" luôn xếp CUỐI, không nhảy lên trên tháng mới nhất', () => {
+    // So sánh chuỗi ngây thơ xếp 'chua_gui' > mọi 'YYYY-MM' (chữ 'c' > chữ số) —
+    // bug đã sửa ở fix round 1. Test này khoá lại hành vi đúng.
+    const r = gomTheoThang([
+      { ...base, guiLuc: null },
+      { ...base, guiLuc: '2026-08-05T00:00:00Z' },
+      { ...base, guiLuc: '2026-09-10T00:00:00Z' },
+    ]);
+    expect(r.map((x) => x.khoa)).toEqual(['2026-09', '2026-08', 'chua_gui']);
+  });
 });
 
 describe('gomTheoNguoiNhan', () => {

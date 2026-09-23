@@ -24,12 +24,21 @@ function gom<T extends DongDon>(ds: readonly T[], khoaCua: (d: T) => string): Do
 
 /**
  * THUẦN: gom chi phí theo tháng của NGÀY GỬI.
+ *
  * Dòng chưa gửi vào khoá 'chua_gui' chứ không bị bỏ im lặng — người đọc báo cáo
- * phải thấy có hàng đang nằm ngoài mọi tháng.
+ * phải thấy có hàng đang nằm ngoài mọi tháng. Khoá đó KHÔNG phải một tháng nên
+ * không tham gia so sánh chuỗi ngày cùng các khoá khác — so bằng
+ * `localeCompare` thì 'chua_gui' (bắt đầu bằng 'c') lại lớn hơn mọi 'YYYY-MM'
+ * (bắt đầu bằng chữ số), nhảy lên đầu bảng dù không phải tháng mới nhất. Xếp
+ * riêng: luôn ở CUỐI, các tháng thật vẫn mới nhất trước như nhau.
  */
 export function gomTheoThang(ds: readonly (DongDon & { guiLuc: string | null })[]): DongBaoCao[] {
   return gom(ds, (d) => thangKinhDoanh(d.guiLuc) ?? 'chua_gui')
-    .sort((a, b) => b.khoa.localeCompare(a.khoa));
+    .sort((a, b) => {
+      if (a.khoa === 'chua_gui') return 1;
+      if (b.khoa === 'chua_gui') return -1;
+      return b.khoa.localeCompare(a.khoa);
+    });
 }
 
 /** THUẦN: gom chi phí theo tên người nhận, nhiều tiền nhất lên trước (quy ước: theo VND). */
