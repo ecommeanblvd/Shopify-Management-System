@@ -1,6 +1,7 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { soNgayTre } from './chi-phi';
+import { conNo } from './tra-ve';
 import type { DongDon, TrangThaiDon, HinhThuc, MucDich } from './types';
 
 /** Một dòng trong bảng danh sách đơn — kèm số dòng hàng, không cần tải cả dòng. */
@@ -208,4 +209,113 @@ export async function tonKhaDung(sku: string, kho: string): Promise<number> {
     .limit(1);
   if (!row) return 0;
   return row.qtyOnHand - row.qtyReserved;
+}
+
+/** Một hồ sơ sổ KOL theo id. Trả `null` gọn gàng khi không có, không ném lỗi. */
+export async function layNguoiNhan(id: string): Promise<NguoiNhan | null> {
+  const [row] = await db
+    .select({
+      id: schema.kolNguoiNhan.id,
+      ten: schema.kolNguoiNhan.ten,
+      kenh: schema.kolNguoiNhan.kenh,
+      dienThoai: schema.kolNguoiNhan.dienThoai,
+      email: schema.kolNguoiNhan.email,
+      quocGia: schema.kolNguoiNhan.quocGia,
+      diaChi: schema.kolNguoiNhan.diaChi,
+      thanhPho: schema.kolNguoiNhan.thanhPho,
+      ghiChu: schema.kolNguoiNhan.ghiChu,
+      ngungDung: schema.kolNguoiNhan.ngungDung,
+    })
+    .from(schema.kolNguoiNhan)
+    .where(eq(schema.kolNguoiNhan.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Một dòng hàng mượn còn nợ của MỘT người nhận cụ thể — dùng ở hồ sơ sổ KOL. */
+export interface MonDangGiu {
+  dongDonId: string;
+  donId: string;
+  ma: string;
+  sku: string;
+  tenHang: string | null;
+  kho: string;
+  soLuong: number;
+  soLuongDaTra: number;
+  /** Tính bằng hàm thuần `conNo` (Task 4) — không tính tay lần thứ hai ở đây. */
+  conNo: number;
+  hanTra: string | null;
+}
+
+/**
+ * Món đang mượn còn nợ của MỘT người nhận — hồ sơ sổ KOL mở ra phải thấy ngay
+ * họ đang giữ gì của công ty. Lọc `conNo > 0` bằng chính hàm thuần `conNo`
+ * (Task 4), không viết lại phép trừ lần hai ở tầng truy vấn.
+ */
+export async function monDangGiuCuaNguoiNhan(nguoiNhanId: string): Promise<MonDangGiu[]> {
+  const rows = await db
+    .select({
+      dongDonId: schema.kolDongDon.id,
+      donId: schema.kolDon.id,
+      ma: schema.kolDon.ma,
+      sku: schema.kolDongDon.sku,
+      tenHang: schema.kolDongDon.tenHang,
+      kho: schema.kolDongDon.kho,
+      soLuong: schema.kolDongDon.soLuong,
+      hinhThuc: schema.kolDongDon.hinhThuc,
+      hanTra: schema.kolDongDon.hanTra,
+      giaVon: schema.kolDongDon.giaVon,
+      giaVonTienTe: schema.kolDongDon.giaVonTienTe,
+      soLuongDaTra: schema.kolDongDon.soLuongDaTra,
+      soLuongNhapLai: schema.kolDongDon.soLuongNhapLai,
+    })
+    .from(schema.kolDongDon)
+    .innerJoin(schema.kolDon, eq(schema.kolDon.id, schema.kolDongDon.donId))
+    .where(and(
+      eq(schema.kolDon.nguoiNhanId, nguoiNhanId),
+      eq(schema.kolDongDon.hinhThuc, 'muon' as HinhThuc),
+      sql`${schema.kolDongDon.soLuongDaTra} < ${schema.kolDongDon.soLuong}`,
+    ))
+    .orderBy(sql`${schema.kolDongDon.hanTra} ASC NULLS LAST`);
+
+  return rows.map((r) => ({
+    dongDonId: r.dongDonId, donId: r.donId, ma: r.ma, sku: r.sku, tenHang: r.tenHang,
+    kho: r.kho, soLuong: r.soLuong, soLuongDaTra: r.soLuongDaTra, hanTra: r.hanTra,
+    conNo: conNo({ ...r, id: r.dongDonId }),
+  }));
+}
+
+/** Một dòng hàng nguồn cho báo cáo chi phí — đủ trường của `DongDon` cộng ngày gửi và tên người nhận. */
+export interface DongBaoCaoChiPhi extends DongDon {
+  donId: string;
+  maDon: string;
+  guiLuc: string | null;
+  tenNhan: string;
+}
+
+/**
+ * Dữ liệu nguồn cho báo cáo chi phí marketing (`features/kol/bao-cao.ts`):
+ * MỌI dòng hàng của đơn CHƯA HUỶ, kể cả đơn chưa gửi.
+ *
+ * Cố tình KHÔNG lọc theo trạng thái gửi: dòng chưa gửi vẫn phải có mặt để
+ * `gomTheoThang` xếp vào khoá "chua_gui" — đó là hàng đã cam kết (tặng/mượn)
+ * nhưng chưa rời kho, người đọc báo cáo cần thấy khoản này thay vì nó biến
+ * mất khỏi mọi con số. Đơn ĐÃ HUỶ thì loại hẳn: hàng đó chắc chắn không bao
+ * giờ rời kho, đưa vào sẽ bị hiểu nhầm thành "chưa gửi" (tức là còn có thể
+ * gửi), làm sai bức tranh chi phí.
+ */
+export async function dongBaoCaoChiPhi(): Promise<DongBaoCaoChiPhi[]> {
+  const rows = await db
+    .select({
+      ...CAC_CET_DONG_DON,
+      donId: schema.kolDon.id,
+      maDon: schema.kolDon.ma,
+      guiLuc: schema.kolDon.guiLuc,
+      tenNhan: schema.kolDon.tenNhan,
+    })
+    .from(schema.kolDongDon)
+    .innerJoin(schema.kolDon, eq(schema.kolDon.id, schema.kolDongDon.donId))
+    .where(ne(schema.kolDon.trangThai, 'huy' as TrangThaiDon));
+
+  return rows.map((r) => ({ ...r, guiLuc: r.guiLuc ? r.guiLuc.toISOString() : null }));
 }

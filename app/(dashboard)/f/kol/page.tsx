@@ -4,8 +4,13 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { danhSachDon, danhSachNguoiNhan } from '@/features/kol/queries';
+import { danhSachDon, danhSachNguoiNhan, dongBaoCaoChiPhi } from '@/features/kol/queries';
+import { tiGiaThang } from '@/features/cogs/queries';
+import { gomTheoThang, gomTheoNguoiNhan } from '@/features/kol/bao-cao';
+import { tongChiPhi } from '@/features/kol/chi-phi';
+import { thangKinhDoanh } from '@/lib/timezone';
 import { BangDonKol } from '@/components/kol/BangDonKol';
+import { TomTatChiPhi } from '@/components/kol/TomTatChiPhi';
 import { buttonVariants } from '@/components/ui/button';
 import type { TrangThaiDon } from '@/features/kol/types';
 
@@ -30,10 +35,13 @@ export default async function DanhSachKolPage({
   const trangThai = TRANG_THAI_HOP_LE.includes(trangThaiRaw as TrangThaiDon) ? trangThaiRaw : undefined;
   const nguoiNhanId = typeof sp['nguoiNhanId'] === 'string' && sp['nguoiNhanId'] ? sp['nguoiNhanId'] : undefined;
 
-  const [dons, nguoiNhanOptions] = await Promise.all([
+  const [dons, nguoiNhanOptions, dongBaoCao, rates] = await Promise.all([
     danhSachDon({ trangThai, nguoiNhanId }),
     danhSachNguoiNhan(true),
+    dongBaoCaoChiPhi(),
+    tiGiaThang(),
   ]);
+  const thangHienTai = thangKinhDoanh(new Date())!;
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
@@ -43,11 +51,22 @@ export default async function DanhSachKolPage({
           <p className="text-sm text-muted-foreground">
             Hàng gửi KOL / dùng chụp đồ — tách khỏi đơn bán, không đụng số liệu Shopify.
           </p>
+          <div className="mt-1 flex gap-3 text-sm">
+            <Link href="/f/kol/nguoi-nhan" className="text-primary underline-offset-2 hover:underline">Sổ KOL</Link>
+            <Link href="/f/kol/dang-muon" className="text-primary underline-offset-2 hover:underline">Đang mượn</Link>
+          </div>
         </div>
         {canManage && (
           <Link href="/f/kol/moi" className={buttonVariants({})}>+ Tạo đơn</Link>
         )}
       </div>
+      <TomTatChiPhi
+        theoThang={gomTheoThang(dongBaoCao)}
+        theoNguoiNhan={gomTheoNguoiNhan(dongBaoCao)}
+        tongTatCa={tongChiPhi(dongBaoCao)}
+        rates={rates}
+        thangHienTai={thangHienTai}
+      />
       <BangDonKol
         dons={dons}
         nguoiNhanOptions={nguoiNhanOptions}
