@@ -51,6 +51,9 @@ export default async function ReceivingPage() {
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
+      <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+        QUY TRÌNH CŨ — kho đang làm ở tab <b>Nhận &amp; kiểm hàng</b> (bám bảng Lark). Màn này giữ lại để tra cứu phiếu cũ.
+      </p>
       <header className="space-y-2">
         <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <PackageCheck className="size-3.5" /> Vận hành đơn
