@@ -44,3 +44,54 @@ export function displayMargin(
   if (charged.vnd == null || cost.vnd == null) return { vnd: null, estimated: actualCostVnd == null };
   return { vnd: Math.round(charged.vnd - cost.vnd), estimated: actualCostVnd == null };
 }
+
+/**
+ * Giá thu GỘP DUTY — CHỈ để HIỂN THỊ bảng đơn ship hộ, không dùng để ghi DB.
+ *
+ * Từ 21/09/2026 duty được tách khỏi cước (xem duty.ts): `actualChargedVnd` chỉ còn
+ * cước thu của brand, còn `actualCarrierCostVnd` (cột "Cước gốc"/"Giá Bill") vẫn
+ * ghi TỔNG gồm cả duty — số thật SMS trả FedEx. Nếu đem `actualChargedVnd` (không
+ * duty) so thẳng với `actualCarrierCostVnd` (có duty) thì margin hụt oan đúng bằng
+ * duty. Duty thu hộ brand ĐÚNG NGUYÊN GIÁ, không markup (GHI_CHU_DUTY trong
+ * duty.ts) — cộng nó vào vế thu để hai vế cùng "có duty hay không có duty" như
+ * nhau, margin ra đúng, KHÔNG đổi vì duty tự triệt tiêu ở tử số lẫn mẫu số.
+ *
+ * Chỉ cộng duty khi đang hiển thị số THỰC (actualChargedVnd != null) — đơn chưa
+ * đối soát chỉ có dự tính (quote), dự tính không có duty nên không gộp gì cả.
+ * `dutyVnd` trả về (null nếu không có/không gộp) để UI vẽ dòng phụ "cước + duty".
+ */
+export function displayChargedWithDuty(
+  quotedChargedVnd: number | null,
+  actualChargedVnd: number | null,
+  actualDutyVnd: number | null,
+): { vnd: number | null; actual: boolean; dutyVnd: number | null } {
+  const charged = displayCharged(quotedChargedVnd, actualChargedVnd);
+  if (!charged.actual || charged.vnd == null) return { vnd: charged.vnd, actual: charged.actual, dutyVnd: null };
+  const duty = actualDutyVnd != null && actualDutyVnd > 0 ? actualDutyVnd : null;
+  if (duty == null) return { vnd: charged.vnd, actual: true, dutyVnd: null };
+  return { vnd: Math.round(charged.vnd + duty), actual: true, dutyVnd: duty };
+}
+
+/**
+ * Margin dùng giá thu GỘP DUTY (displayChargedWithDuty) thay vì displayCharged, để
+ * so đúng với `actualCostVnd` (đã gồm duty — xem doc-comment displayChargedWithDuty
+ * ở trên). Vì duty cộng CẢ HAI vế, kết quả bằng đúng `margin_vnd` đã lưu (tính từ
+ * cước freight-only, xem reconcile-actions.ts) — không phải một công thức margin
+ * mới, chỉ là cách khác để ra cùng một con số mà không phải trừ nhầm duty.
+ *
+ * CHỈ để HIỂN THỊ bảng — KHÔNG thay thế `displayMargin`, nơi
+ * reconcile-actions.ts vẫn truyền cước freight-only (đúng hợp đồng cũ) để tính số
+ * ghi vào `margin_vnd`.
+ */
+export function displayMarginWithDuty(
+  quotedChargedVnd: number | null,
+  actualChargedVnd: number | null,
+  actualDutyVnd: number | null,
+  estimatedCostVnd: number | null,
+  actualCostVnd: number | null,
+): { vnd: number | null; estimated: boolean } {
+  const charged = displayChargedWithDuty(quotedChargedVnd, actualChargedVnd, actualDutyVnd);
+  const cost = displayCarrierCost(estimatedCostVnd, actualCostVnd);
+  if (charged.vnd == null || cost.vnd == null) return { vnd: null, estimated: actualCostVnd == null };
+  return { vnd: Math.round(charged.vnd - cost.vnd), estimated: actualCostVnd == null };
+}

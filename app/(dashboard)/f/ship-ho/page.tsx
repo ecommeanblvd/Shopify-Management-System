@@ -9,7 +9,7 @@ import { db, schema } from '@/db/client';
 import { listShipHoOrders, layDanhSachBrandShipHo } from '@/features/ship-ho/queries';
 import { filterShipHoOrders, docMucDoiSoat } from '@/features/ship-ho/filter-orders';
 import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
-import { displayCharged, displayMargin } from '@/features/ship-ho/pnl';
+import { displayCharged, displayChargedWithDuty, displayMarginWithDuty } from '@/features/ship-ho/pnl';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
@@ -166,8 +166,13 @@ export default async function ShipHoListPage({
                 const num = (s: string | null) => (s == null ? null : Number(s));
                 const billVnd = num(o.actualCarrierCostVnd);
                 const estVnd = num(o.carrierCostVnd);
+                // charged: cước thu THUẦN (không duty) — dùng để so với quote gốc (cũng không duty).
                 const charged = displayCharged(num(o.chargedVnd), num(o.actualChargedVnd));
-                const margin = displayMargin(num(o.chargedVnd), num(o.actualChargedVnd), estVnd, billVnd);
+                const dutyVnd = num(o.actualDutyVnd);
+                // chargedGopDuty/margin: GỘP duty thu hộ vào giá thu để so đúng với billVnd (đã gồm
+                // duty — số thật trả FedEx); margin ra bằng đúng margin_vnd đã lưu (xem pnl.ts).
+                const chargedGopDuty = displayChargedWithDuty(num(o.chargedVnd), num(o.actualChargedVnd), dutyVnd);
+                const margin = displayMarginWithDuty(num(o.chargedVnd), num(o.actualChargedVnd), dutyVnd, estVnd, billVnd);
                 const actualW = o.actualWeightKg == null ? null : Number(o.actualWeightKg);
                 const stage = deriveShipHoStage({
                   status: o.status, trackingNumber: o.trackingNumber, deliveryStatus: o.deliveryStatus,
@@ -219,18 +224,24 @@ export default async function ShipHoListPage({
                     )}
                   </td>
                   <td className="text-right tabular-nums whitespace-nowrap align-top">
-                    {charged.vnd == null ? <span className="text-muted-foreground">—</span> : charged.actual ? (
+                    {chargedGopDuty.vnd == null ? <span className="text-muted-foreground">—</span> : chargedGopDuty.actual ? (
                       <>
-                        {/* Giá thu THỰC = tính lại theo cân bill (không phải số bill) */}
-                        <div className="font-medium">{charged.vnd.toLocaleString('vi-VN')}</div>
+                        {/* Giá thu THỰC = tính lại theo cân bill (không phải số bill), GỘP duty thu
+                            hộ (đúng nguyên giá, không markup — xem duty.ts) nếu đơn có duty */}
+                        <div className="font-medium">{chargedGopDuty.vnd.toLocaleString('vi-VN')}</div>
                         <div className="text-[10px] leading-tight text-emerald-600 dark:text-emerald-400" title="Tính lại theo cân nặng carrier bill">thực · theo cân bill</div>
+                        {chargedGopDuty.dutyVnd != null && charged.vnd != null && (
+                          <div className="text-[10px] leading-tight text-muted-foreground" title="Duty (thuế/phí nhập khẩu) FedEx ứng hộ, thu đúng nguyên giá không markup — không đổi margin">
+                            cước {charged.vnd.toLocaleString('vi-VN')} + duty {chargedGopDuty.dutyVnd.toLocaleString('vi-VN')}
+                          </div>
+                        )}
                         {num(o.chargedVnd) != null && num(o.chargedVnd) !== charged.vnd && (
                           <div className="text-[10px] leading-tight text-muted-foreground line-through">{Number(o.chargedVnd).toLocaleString('vi-VN')}</div>
                         )}
                       </>
                     ) : (
                       <>
-                        <div className="font-medium">{charged.vnd.toLocaleString('vi-VN')}</div>
+                        <div className="font-medium">{chargedGopDuty.vnd.toLocaleString('vi-VN')}</div>
                         <div className="text-[10px] leading-tight text-muted-foreground">dự kiến</div>
                       </>
                     )}

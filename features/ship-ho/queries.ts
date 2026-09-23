@@ -16,6 +16,8 @@ export interface ShipHoOrderRow {
   actualWeightKg: string | null;
   chargedVnd: string | null;
   actualChargedVnd: string | null;
+  /** Duty (thuế/phí nhập khẩu) thu hộ brand đúng nguyên giá, không markup — xem duty.ts. */
+  actualDutyVnd: string | null;
   marginVnd: string | null;
   status: string;
   source: string;
@@ -51,6 +53,7 @@ export async function listShipHoOrders(filter?: {
       actualWeightKg: schema.shipHoOrders.actualWeightKg,
       chargedVnd: schema.shipHoOrders.chargedVnd,
       actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
+      actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
       marginVnd: schema.shipHoOrders.marginVnd,
       status: schema.shipHoOrders.status,
       source: schema.shipHoOrders.source,
