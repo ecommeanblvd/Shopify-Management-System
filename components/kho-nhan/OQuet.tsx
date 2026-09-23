@@ -18,15 +18,29 @@ export function OQuet({ onQuet }: { onQuet: (raw: string) => void }) {
   const [gia, setGia] = useState('');
   const [dangQuetCamera, setDangQuetCamera] = useState(false);
   const [loiCamera, setLoiCamera] = useState<string | null>(null);
+  // App Router vẫn server-render component 'use client' này cho HTML ban đầu — server KHÔNG có
+  // `window` nên luôn coi như không hỗ trợ, còn Chrome (kể cả bản Desktop) lúc hydrate THÌ CÓ
+  // BarcodeDetector, khiến nút "Quét bằng camera" biến mất/xuất hiện giữa hai lần render — lệch
+  // HÌNH DẠNG cây (có nút hay không), không phải lệch giá trị bên trong một control có sẵn như
+  // ô chọn `kho` (localStorage) — nên KHÔNG được tính trực tiếp trong thân render hay dùng lazy
+  // initializer (cả hai đều chạy lại y hệt lúc hydrate, không cứu được gì). Chuẩn đúng: bắt đầu
+  // `false` (khớp HTML server render), rồi bật lại SAU khi đã gắn xong vào DOM, trong effect
+  // (review 23/09/2026 Important 3).
+  const [hoTroCamera, setHoTroCamera] = useState(false);
+  useEffect(() => {
+    // Đây đúng là ngoại lệ hợp lệ mà rule này nhắm tới tránh (không phải phát hiện được nhờ
+    // đồng bộ với hệ ngoài) — nhưng phát hiện tính năng của TRÌNH DUYỆT sau khi đã lên DOM
+    // (kỹ thuật "mounted flag" chuẩn cho hydration) không có cách nào khác an toàn hơn: tính
+    // trong thân render/useState lazy đều chạy lại y hệt lúc hydrate trên client, không tránh
+    // được lệch cây so với HTML server render (xem comment ở khai báo state).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- phát hiện BarcodeDetector chỉ có sau khi mount, không tính được lúc render để tránh lệch hydrate
+    setHoTroCamera(typeof window !== 'undefined' && 'BarcodeDetector' in window);
+  }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Tính trực tiếp mỗi lần render — component này đã 'use client' và chỉ hiện nút khi trình
-  // duyệt thật sự có BarcodeDetector, không cần giữ trong state.
-  const hoTroCamera = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 
   function dungCamera() {
     if (intervalRef.current != null) {
@@ -98,6 +112,10 @@ export function OQuet({ onQuet }: { onQuet: (raw: string) => void }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
+          // id cố định — sau khi Lưu một món xong, BangNhanKcs trả con trỏ về đây bằng
+          // getElementById để sẵn sàng cho lượt quét VẬT LÝ tiếp theo (spec §5 "sang món kế",
+          // không rời tay khỏi bàn phím — review 23/09/2026 Critical 1).
+          id="o-quet"
           ref={inputRef}
           value={gia}
           onChange={(e) => setGia(e.target.value)}

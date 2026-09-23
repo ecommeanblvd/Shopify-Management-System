@@ -280,7 +280,15 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
     setKetQua(null);
     batDauGui(async () => {
       try {
-        setKetQua(await ghiNhanKcs(fd));
+        const r = await ghiNhanKcs(fd);
+        setKetQua(r);
+        // Lưu xong (kể cả chạy thử/Lark trượt — việc trong SMS vẫn đã ghi) trả con trỏ về ô
+        // quét: máy quét cầm tay lập tức gõ được mã món KẾ TIẾP mà không cần bấm chuột trở lại.
+        // Không nhảy tới ô cân của món khác trong danh sách — món kế thực sự là món kho CẦM
+        // TRÊN TAY tiếp theo, chỉ biết được sau khi quét, không phải món tiếp theo trong bảng
+        // (review 23/09/2026 Critical 1: Enter lưu xong bỏ quên con trỏ trong ô cân vừa lưu,
+        // lượt quét vật lý sau đó gõ nhầm vào input số và bị trình duyệt nuốt/biến dạng).
+        if (r.ok) document.getElementById('o-quet')?.focus();
       } catch {
         setKetQua({ ok: false, loi: 'Không gửi được lên máy chủ — kiểm mạng rồi bấm Lưu lại.' });
       }

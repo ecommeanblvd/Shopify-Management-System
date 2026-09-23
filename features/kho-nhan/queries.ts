@@ -39,6 +39,15 @@ export interface MonCuaDonKetQua {
   mon: MonCuaDon[];
   /** Đọc Lark hỏng thì màn VẪN chạy (larkCu = null) nhưng phải nói rõ cho kho biết. */
   loiLark: string | null;
+  /**
+   * Mã đơn NGƯỜI ĐỌC đã tra ra (không có '#'), rỗng khi không tìm được đơn nào. Bắt buộc phải
+   * trả về — kể cả khi caller gọi bằng `theoOrderId` (quét mã tem ĐƠN `O:<shopifyOrderId>`, một
+   * mã KHÔNG PHẢI mã đơn người đọc) — vì màn cần mã này để điền vào ô "Mã đơn"/tiêu đề VÀ để
+   * gửi lên `orderNumber` khi Lưu: `kiemViec` (features/kho-nhan/luat.ts) từ chối mọi lượt lưu
+   * có `orderNumber` rỗng ("Thiếu mã đơn") — thiếu trường này thì luồng quét mã đơn mở được
+   * đơn nhưng KHÔNG lưu được món nào (review 23/09/2026 Critical 2).
+   */
+  orderNumber: string;
 }
 
 export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: string }): Promise<MonCuaDonKetQua> {
@@ -50,10 +59,10 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
       .from(schema.shopifyOrders)
       .where(sql`regexp_replace(${schema.shopifyOrders.shopifyOrderId}, '^.*/', '') = ${opts.theoOrderId}`)
       .limit(1);
-    if (!don) return { mon: [], loiLark: null };
+    if (!don) return { mon: [], loiLark: null, orderNumber: '' };
     bare = don.shopifyOrderNumber.trim().replace(/^#/, '');
   }
-  if (!bare) return { mon: [], loiLark: null };
+  if (!bare) return { mon: [], loiLark: null, orderNumber: '' };
   const m = schema.larkMonDon, w = schema.whNhanKcs;
   const rows = await db.select({
     dinhDanh: m.dinhDanh, recordId: m.recordId, sku: m.sku, lineitemName: m.lineitemName,
@@ -113,7 +122,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
       larkCu: dong ? docDongKho(dong) : null,
     };
   });
-  return { mon, loiLark };
+  return { mon, loiLark, orderNumber: bare };
 }
 
 export async function listDaXuLyHomNay() {
