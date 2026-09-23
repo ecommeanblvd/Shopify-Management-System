@@ -751,7 +751,10 @@ export interface ChiPhiDong {
  * chưa trả nằm ở cột "đang treo" riêng.
  */
 export function chiPhiMotDong(d: DongDon): ChiPhiDong {
-  const daTieu = d.hinhThuc === 'muon' ? d.soLuong - d.soLuongNhapLai : d.soLuong;
+  // CHỈ tính chi phí khi ĐÃ BIẾT KẾT CỤC. Hàng chưa trả vẫn có thể về nguyên nên
+  // chưa phải tiền đã tiêu — nó nằm ở dangTreo. Bản đầu của spec dùng
+  // (soLuong - soLuongNhapLai), gộp cả phần chưa trả vào chi phí; CEO đã chốt sửa 23/09.
+  const daTieu = d.hinhThuc === 'muon' ? d.soLuongDaTra - d.soLuongNhapLai : d.soLuong;
   const dangTreo = d.hinhThuc === 'muon' ? d.soLuong - d.soLuongDaTra : 0;
   const thieuGiaVon = d.giaVon == null || d.giaVon.trim() === '';
   const tienChiPhi = thieuGiaVon ? null : daTieu * Number(d.giaVon);

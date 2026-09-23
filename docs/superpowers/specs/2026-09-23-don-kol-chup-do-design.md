@@ -200,9 +200,12 @@ Chi phí = giá vốn của hàng **không quay lại kho bán được**.
 
 Công thức cho một dòng:
 
-- `daTieu = so_luong - so_luong_nhap_lai` khi `hinh_thuc = 'muon'`; `= so_luong` khi `'tang'`
+- `daTieu = so_luong_da_tra - so_luong_nhap_lai` khi `hinh_thuc = 'muon'`; `= so_luong` khi `'tang'`
 - `dangTreo = so_luong - so_luong_da_tra` khi `hinh_thuc = 'muon'`; `= 0` khi `'tang'`
 - `chiPhi = daTieu × gia_von`, bỏ qua dòng `gia_von IS NULL` và **đếm riêng số dòng bị bỏ qua**
+
+> **Sửa 23/09/2026 (CEO chốt).** Bản đầu viết `daTieu = so_luong - so_luong_nhap_lai`, mâu thuẫn với chính cái bảng ngay trên: nó gộp cả phần CHƯA TRẢ vào chi phí, nên `daTieu` luôn bao trùm `dangTreo` và một dòng mượn chưa trả gì bị tính chi phí NGUYÊN số lượng ngay lúc gửi. Ví dụ gửi 3, trả 2, nhập lại 2, còn 1 chưa về: công thức cũ ra chi phí 1 món, trong khi chưa món nào thật sự mất.
+> Luật đúng: **chỉ tính chi phí khi đã biết kết cục.** Hàng chưa trả vẫn có thể về nguyên nên chưa phải tiền đã tiêu, nó nằm ở cột "đang treo". Đánh đổi CEO đã biết và chấp nhận: con số tháng thấp hơn thực tế cho tới khi KOL trả xong, và hàng mất hẳn sẽ nằm mãi ở cột đang treo nếu không ai chốt. Cột "đang treo" chính là chỗ để nhìn ra việc phải đi đòi.
 
 Báo cáo xem theo tháng (`gui_luc`), theo KOL, theo `muc_dich`.
 
