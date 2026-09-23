@@ -12,7 +12,7 @@ import { tongChiPhi } from '@/features/kol/chi-phi';
 import { thangKinhDoanh } from '@/lib/timezone';
 import { BangDonKol } from '@/components/kol/BangDonKol';
 import { TomTatChiPhi } from '@/components/kol/TomTatChiPhi';
-import { buttonVariants } from '@/components/ui/button';
+import { ModalTaoDon } from '@/components/kol/ModalTaoDon';
 import type { TrangThaiDon } from '@/features/kol/types';
 
 export const dynamic = 'force-dynamic';
@@ -76,9 +76,7 @@ export default async function DanhSachKolPage({
             <Link href="/f/kol/dang-muon" className="text-primary underline-offset-2 hover:underline">Đang mượn</Link>
           </div>
         </div>
-        {canManage && (
-          <Link href="/f/kol/moi" className={buttonVariants({})}>+ Tạo đơn</Link>
-        )}
+        {canManage && <ModalTaoDon nguoiNhan={nguoiNhanOptions} />}
       </div>
       <TomTatChiPhi
         theoThang={gomTheoThang(dongBaoCao)}
