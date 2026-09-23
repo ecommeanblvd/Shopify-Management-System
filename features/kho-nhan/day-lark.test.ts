@@ -36,4 +36,21 @@ describe('chế độ ghi Lark', () => {
     expect(docCheDoGhi('chon:')).toEqual({ kieu: 'dry' });
     expect(duocGhi(docCheDoGhi('chon:'), 'dd1')).toBe(false);
   });
+  it('chọn: dạng NFD (chữ rời + dấu tổ hợp, macOS hay gõ ra kiểu này) vẫn nhận y hệt NFC', () => {
+    // Dựng tay từ mã điểm để CHẮC CHẮN là NFD, không phải dán một ký tự không nhìn được hình
+    // thức thật — 'o' (U+006F) + dấu chấm dưới tổ hợp (U+0323) = 'ọ' dạng RỜI, khác 'ọ' NFC
+    // (U+1ECD) mã nguồn day-lark.ts đang so khớp.
+    const oNang_NFD = 'ọ'; // 'o' + combining dot below
+    const choNFD = 'ch' + oNang_NFD + 'n:dd1'; // 'chọn:dd1' dạng NFD
+    expect(choNFD.normalize('NFC')).toBe('chọn:dd1'); // xác nhận đúng là cùng chữ, khác dạng mã hoá
+    expect(docCheDoGhi(choNFD)).toEqual({ kieu: 'chon', dinhDanhs: ['dd1'] });
+  });
+  it('chuỗi chỉ toàn khoảng trắng → dry, không phải "gõ gì đó" nên không suy diễn thành ghi thật', () => {
+    expect(docCheDoGhi('   ')).toEqual({ kieu: 'dry' });
+    expect(docCheDoGhi('\n\t ')).toEqual({ kieu: 'dry' });
+  });
+  it('literal ghi thật kèm dòng mới cuối (Railway hay tự thêm) vẫn nhận; gần đúng kèm dòng mới thì KHÔNG', () => {
+    expect(docCheDoGhi(`${GHI_THAT_TOAN_BO}\n`)).toEqual({ kieu: 'that' });
+    expect(docCheDoGhi(`${GHI_THAT_TOAN_BO}!\n`)).toEqual({ kieu: 'dry' });
+  });
 });

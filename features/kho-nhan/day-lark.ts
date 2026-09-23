@@ -25,9 +25,14 @@ export const GHI_THAT_TOAN_BO = 'ghi-that-toan-bo';
  * 'chon:<định danh>,<định danh>' (hoặc 'chọn:' có dấu — CEO gõ tay, cả hai cách đều nhận)
  * là chế độ nằm GIỮA chạy thử và chạy thật: chỉ những món khai tên mới ghi thật, còn lại vẫn
  * chỉ lưu trong SMS. Nhờ vậy kiểm từng bản ghi một mà không sợ lỡ tay ghi hàng loạt.
+ *
+ * `.normalize('NFC')`: chữ có dấu gõ/dán vào ô biến môi trường có thể tới dưới dạng NFD (chữ
+ * cái rời + dấu tổ hợp riêng — macOS hay ra kiểu này) thay vì NFC (một mã điểm gộp sẵn) mà
+ * chuỗi `'chọn:'` trong mã nguồn đang dùng. Không gộp về cùng một dạng thì CEO gõ ĐÚNG "chọn:"
+ * vẫn không khớp, rơi về chạy thử mà không rõ vì sao — an toàn nhưng gây khó hiểu vô ích.
  */
 export function docCheDoGhi(env: string | undefined): CheDoGhi {
-  const s = (env ?? '').trim();
+  const s = (env ?? '').trim().normalize('NFC');
   const sl = s.toLowerCase();
   if (sl === GHI_THAT_TOAN_BO) return { kieu: 'that' };
   if (sl.startsWith('chon:') || sl.startsWith('chọn:')) {
