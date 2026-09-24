@@ -65,7 +65,9 @@ Ba trạng thái này **đã có sẵn**: enum `qc_result` (`pending|pass|fail`)
 
 ## 5. Ô tìm kiếm
 
-**Nguồn:** dòng của đơn Shopify đang `UNFULFILLED` hoặc `PARTIALLY_FULFILLED`, trừ những dòng đã có chiếc hàng ghi nhận.
+**Nguồn:** dòng của đơn Shopify đang `UNFULFILLED` hoặc `PARTIALLY_FULFILLED`.
+
+Loại một dòng khỏi gợi ý **chỉ khi đã ghi nhận đủ số lượng** (`số chiếc đã ghi nhận >= quantity`). Dòng đặt 3 chiếc mới về 1 thì **vẫn hiện**, kèm "đã nhận 1/3" — hàng về làm nhiều đợt là chuyện thường, ẩn đi là kho không nhận nốt được.
 
 **Khớp theo** (gõ tối thiểu 2 ký tự, debounce 250ms):
 - mã đơn (chuẩn hoá bỏ `#` cả hai phía)
@@ -133,7 +135,7 @@ Bấm **Không đạt** mở khối nhập lỗi. **Một chiếc có thể có 
 | `id` | uuid pk | |
 | `receipt_item_id` | uuid → `goods_receipt_items.id` on delete cascade | |
 | `ly_do` | enum `qc_ly_do_loi` | bắt buộc |
-| `anh_key` | text | khoá S3, có thể null (lỗi mô tả được bằng chữ) |
+| `anh_key` | text | khoá S3. **Bắt buộc khi kho có cấu hình storage** — CEO 24/09: "sẽ cần phải chụp ảnh chỗ không đạt". Chỉ được null khi `isStorageConfigured()` false, và khi đó màn hình phải nói rõ lý do (xem §7.3). |
 | `ghi_chu` | text | tuỳ chọn |
 | `tao_luc` | timestamp not null default now | |
 | `tao_boi` | text not null | |
@@ -156,7 +158,9 @@ Lý do chọn từ danh sách chứ không gõ tay: hiện tại không gom nhó
 
 Dùng `lib/storage/s3.ts` sẵn có: `putObject` khi tải lên, `getSignedDownloadUrl` khi xem — đúng khuôn `signed()` trong `features/receiving/queries.ts`. Khoá đặt theo `qc-loi/{receipt_item_id}/{uuid}.{ext}`.
 
-Kho chưa cấu hình storage (`isStorageConfigured()` false) → vẫn ghi được lỗi + lý do, chỉ không đính ảnh, và **nói rõ** chứ không im lặng nuốt ảnh.
+Kho chưa cấu hình storage (`isStorageConfigured()` false) → vẫn ghi được lỗi + lý do, chỉ không đính ảnh, và màn hình **nói rõ "chưa cấu hình kho ảnh nên không đính được ảnh"** chứ không im lặng nuốt ảnh người dùng vừa chụp.
+
+Có storage thì **ảnh là bắt buộc** cho mỗi chỗ lỗi: biên bản gửi brand mà không có ảnh thì không cãi được.
 
 ## 8. Biên bản trả brand
 
