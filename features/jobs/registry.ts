@@ -60,6 +60,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Cước hàng hoàn không gắn được vào đơn' },
   { key: 'ship-ho-bao-gia', ten: 'Báo giá dự tính đơn ship hộ còn trống', chuKyPhut: 1 * GIO,
     hauQua: 'Đơn về từ Lark không có giá dự tính → đối soát không tính được delta' },
+  { key: 'ship-ho-gia-thu', ten: 'Tính giá thu brand cho đơn ship hộ còn trống', chuKyPhut: 1 * GIO,
+    hauQua: 'Đơn không có giá thu → không ra được lãi/lỗ và không đối soát công nợ brand' },
   { key: 'ship-ho-reconcile', ten: 'Đối soát ship hộ từ hoá đơn', chuKyPhut: 1 * GIO,
     hauQua: 'Đơn ship hộ không được tính lại giá theo cân thực' },
   { key: 'retry-mmp-orders', ten: 'Đẩy đơn sang MMP', chuKyPhut: 1 * GIO,

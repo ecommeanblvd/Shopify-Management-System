@@ -21,7 +21,11 @@ import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { rankCarrierQuotes, type AccountSnap } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { isDefaultResidential } from '@/features/carrier-rates/residential-default';
 import { kyNhanTheoBaoGia } from './signature-from-quote';
-import { chonDauVaoBaoGia, chonDongTheoHang, type DonCanBaoGia } from './auto-quote-logic';
+import { estimateForBrand } from './brand-estimate';
+import {
+  chonDauVaoBaoGia, chonDongTheoHang, chonDonTinhGiaThu,
+  type DonCanBaoGia, type DonCanGiaThu,
+} from './auto-quote-logic';
 
 export interface KetQuaBaoGiaTuDong {
   xet: number;
@@ -52,6 +56,7 @@ export async function boSungUocTinhShipHo(opts?: { limit?: number }): Promise<Ke
     smsDimWidthCm: schema.shipHoOrders.smsDimWidthCm,
     smsDimHeightCm: schema.shipHoOrders.smsDimHeightCm,
     quoteBreakdown: schema.shipHoOrders.quoteBreakdown,
+    shippedAt: schema.shipHoOrders.shippedAt,
   })
     .from(schema.shipHoOrders)
     .where(and(isNull(schema.shipHoOrders.carrierCostVnd), isNotNull(schema.shipHoOrders.country)))
@@ -83,7 +88,7 @@ export async function boSungUocTinhShipHo(opts?: { limit?: number }): Promise<Ke
 
     // Nạp ĐÚNG một account, và chỉ dòng vùng xa của nước/mã bưu chính này —
     // nạp cả bảng là nguồn egress lớn nhất của hệ thống (D-025).
-    const snap = await loadAccountSnapshot(acc.id, new Date(), {
+    const snap = await loadAccountSnapshot(acc.id, dauVao.asOf ?? new Date(), {
       remoteCountry: dauVao.country,
       remotePostcodes: [dauVao.postcode],
     });
@@ -100,6 +105,8 @@ export async function boSungUocTinhShipHo(opts?: { limit?: number }): Promise<Ke
       dimensions: dauVao.dimensions,
       isResidential: isDefaultResidential(dauVao.country),
       directSignature: kyNhanTheoBaoGia(o.quoteBreakdown),
+      // Cùng mốc với snapshot VÀ với giá thu — xem chú thích asOf ở logic.
+      ...(dauVao.asOf ? { effectiveDate: dauVao.asOf } : {}),
     });
 
     const dong = chonDongTheoHang(rows, hang);
@@ -118,6 +125,82 @@ export async function boSungUocTinhShipHo(opts?: { limit?: number }): Promise<Ke
       .where(and(eq(schema.shipHoOrders.id, o.id), isNull(schema.shipHoOrders.carrierCostVnd)));
 
     if ((up.rowCount ?? 0) > 0) ket.daBaoGia += 1;
+    else dem('co_nguoi_ghi_truoc');
+  }
+
+  return ket;
+}
+
+/**
+ * Lấp GIÁ THU (`charged_vnd`) cho đơn ship hộ chưa có, theo BẢNG GIÁ CỦA BRAND.
+ *
+ * Khác hẳn `boSungUocTinhShipHo` ở trên: hàm kia bám hãng đã chở kiện, hàm này
+ * bám bảng giá công bố trừ bậc chiết khấu của brand (CEO 24/09). Hai nguồn khác
+ * nhau là CÓ CHỦ Ý — xem chú thích phần giá thu trong `auto-quote-logic.ts`.
+ *
+ * CẠM BẪY: `estimateForBrand` trả về cả `internal.carrierCostVnd` tính theo
+ * FedEx. Hàm này ghi DUY NHẤT `charged_vnd` + `markup_percent`. Ghi thêm
+ * `carrier_cost_vnd` / `quote_breakdown` / `carrier_account_id` sẽ xoá mất line
+ * thật mà `boSungUocTinhShipHo` vừa đặt đúng.
+ */
+export interface KetQuaGiaThuTuDong {
+  xet: number;
+  daTinh: number;
+  boQua: number;
+  lyDo: Record<string, number>;
+}
+
+export async function boSungGiaThuShipHo(opts?: { limit?: number }): Promise<KetQuaGiaThuTuDong> {
+  const limit = opts?.limit ?? MAC_DINH_LIMIT;
+
+  const don = await db.select({
+    id: schema.shipHoOrders.id,
+    partnerBrandSlug: schema.shipHoOrders.partnerBrandSlug,
+    chargedVnd: schema.shipHoOrders.chargedVnd,
+    country: schema.shipHoOrders.country,
+    weightKg: schema.shipHoOrders.weightKg,
+    smsWeightKg: schema.shipHoOrders.smsWeightKg,
+    dimLengthCm: schema.shipHoOrders.dimLengthCm,
+    dimWidthCm: schema.shipHoOrders.dimWidthCm,
+    dimHeightCm: schema.shipHoOrders.dimHeightCm,
+    smsDimLengthCm: schema.shipHoOrders.smsDimLengthCm,
+    smsDimWidthCm: schema.shipHoOrders.smsDimWidthCm,
+    smsDimHeightCm: schema.shipHoOrders.smsDimHeightCm,
+    shippedAt: schema.shipHoOrders.shippedAt,
+    packagingType: schema.shipHoOrders.packagingType,
+  })
+    .from(schema.shipHoOrders)
+    .where(and(isNull(schema.shipHoOrders.chargedVnd), isNotNull(schema.shipHoOrders.country)))
+    .limit(limit);
+
+  const ket: KetQuaGiaThuTuDong = { xet: don.length, daTinh: 0, boQua: 0, lyDo: {} };
+  const dem = (k: string) => { ket.lyDo[k] = (ket.lyDo[k] ?? 0) + 1; ket.boQua += 1; };
+
+  for (const o of don) {
+    const chon = chonDonTinhGiaThu(o as DonCanGiaThu);
+    if (!chon.ok) { dem(chon.lyDo); continue; }
+    const { dauVao } = chon;
+
+    const est = await estimateForBrand(dauVao.brandSlug, {
+      country: dauVao.country,
+      weightKg: dauVao.weightKg,
+      dimLengthCm: dauVao.dimensions?.lengthCm,
+      dimWidthCm: dauVao.dimensions?.widthCm,
+      dimHeightCm: dauVao.dimensions?.heightCm,
+      packagingType: dauVao.packagingType,
+      service: 'express',
+    }, dauVao.asOf);
+    if (!est.ok) { dem(est.code); continue; }
+
+    // CHỈ hai cột này. Xem cạm bẫy ở đầu hàm.
+    const up = await db.update(schema.shipHoOrders)
+      .set({
+        chargedVnd: String(est.estimate.chargedVnd),
+        markupPercent: String(est.internal.markupPercent),
+      })
+      .where(and(eq(schema.shipHoOrders.id, o.id), isNull(schema.shipHoOrders.chargedVnd)));
+
+    if ((up.rowCount ?? 0) > 0) ket.daTinh += 1;
     else dem('co_nguoi_ghi_truoc');
   }
 

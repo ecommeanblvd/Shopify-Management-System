@@ -6,6 +6,7 @@ const don = (o: Partial<DonCanBaoGia> = {}): DonCanBaoGia => ({
   carrierCostVnd: null, postcode: '04353', city: 'Whitefield',
   dimLengthCm: null, dimWidthCm: null, dimHeightCm: null,
   smsDimLengthCm: null, smsDimWidthCm: null, smsDimHeightCm: null,
+  shippedAt: null,
   ...o,
 });
 
@@ -78,5 +79,89 @@ describe('chonDongTheoHang', () => {
 
   it('hãng khớp nhưng thiếu cước → coi là lỗi', () => {
     expect(chonDongTheoHang([{ carrierKey: 'fedex', ok: true }], 'fedex')).toMatchObject({ ok: false, lyDo: 'hang_bao_gia_loi' });
+  });
+});
+
+import { chonDonTinhGiaThu, type DonCanGiaThu } from './auto-quote-logic';
+
+const donThu = (o: Partial<DonCanGiaThu> = {}): DonCanGiaThu => ({
+  id: 'id1', partnerBrandSlug: 'kalisa', chargedVnd: null,
+  country: 'US', weightKg: '2', smsWeightKg: null,
+  dimLengthCm: null, dimWidthCm: null, dimHeightCm: null,
+  smsDimLengthCm: null, smsDimWidthCm: null, smsDimHeightCm: null,
+  shippedAt: new Date('2026-09-01T00:00:00Z'),
+  packagingType: null,
+  ...o,
+});
+
+describe('chonDonTinhGiaThu', () => {
+  it('đơn đủ dữ liệu → tính được, mốc giá lấy theo NGÀY GỬI', () => {
+    const r = chonDonTinhGiaThu(donThu());
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.dauVao).toMatchObject({ brandSlug: 'kalisa', country: 'US', weightKg: 2 });
+      expect(r.dauVao.asOf).toEqual(new Date('2026-09-01T00:00:00Z'));
+    }
+  });
+
+  it('ĐÃ có giá thu → bỏ qua, không bao giờ ghi đè giá đã báo brand', () => {
+    expect(chonDonTinhGiaThu(donThu({ chargedVnd: '500000' }))).toEqual({ ok: false, lyDo: 'da_co_gia_thu' });
+  });
+
+  it('không có brand → bỏ qua', () => {
+    expect(chonDonTinhGiaThu(donThu({ partnerBrandSlug: null }))).toEqual({ ok: false, lyDo: 'khong_ro_brand' });
+  });
+
+  it('thiếu nước hoặc cân → bỏ qua', () => {
+    expect(chonDonTinhGiaThu(donThu({ country: 'United States' }))).toEqual({ ok: false, lyDo: 'thieu_nuoc' });
+    expect(chonDonTinhGiaThu(donThu({ weightKg: null }))).toEqual({ ok: false, lyDo: 'thieu_can' });
+  });
+
+  it('không có ngày gửi → asOf để trống (rơi về bảng giá hiện hành), vẫn tính', () => {
+    const r = chonDonTinhGiaThu(donThu({ shippedAt: null }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.dauVao.asOf).toBeUndefined();
+  });
+
+  it('cân SMS thắng cân brand khai, giống luồng giá dự tính', () => {
+    const r = chonDonTinhGiaThu(donThu({ weightKg: '2', smsWeightKg: '3.4' }));
+    expect(r.ok && r.dauVao.weightKg).toBe(3.4);
+  });
+});
+
+describe('chonDonTinhGiaThu — ngày gửi đến từ cột kiểu date (Drizzle trả CHUỖI)', () => {
+  it('chuỗi ngày → ép thành Date, không truyền chuỗi xuống engine', () => {
+    const r = chonDonTinhGiaThu(donThu({ shippedAt: '2026-09-01' as unknown as Date }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.dauVao.asOf).toBeInstanceOf(Date);
+      expect(r.dauVao.asOf?.toISOString().slice(0, 10)).toBe('2026-09-01');
+    }
+  });
+
+  it('ngày rác → bỏ asOf, KHÔNG đẻ Invalid Date', () => {
+    const r = chonDonTinhGiaThu(donThu({ shippedAt: 'không phải ngày' as unknown as Date }));
+    expect(r.ok && r.dauVao.asOf).toBeUndefined();
+  });
+});
+
+describe('chonDauVaoBaoGia — mốc tính giá', () => {
+  it('có ngày gửi → asOf = ngày gửi, KHÔNG phải hôm nay', () => {
+    const r = chonDauVaoBaoGia(don({ shippedAt: '2026-09-01' as unknown as Date }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.dauVao.asOf?.toISOString().slice(0, 10)).toBe('2026-09-01');
+  });
+
+  it('giá dự tính và giá thu của CÙNG một đơn phải ra CÙNG một mốc', () => {
+    const chung = { country: 'US', weightKg: '2', shippedAt: '2026-09-01' };
+    const dt = chonDauVaoBaoGia(don(chung as never));
+    const thu = chonDonTinhGiaThu(donThu(chung as never));
+    expect(dt.ok && thu.ok).toBe(true);
+    if (dt.ok && thu.ok) expect(dt.dauVao.asOf?.getTime()).toBe(thu.dauVao.asOf?.getTime());
+  });
+
+  it('không có ngày gửi → không đặt asOf (rơi về bảng giá hiện hành)', () => {
+    const r = chonDauVaoBaoGia(don({ shippedAt: null }));
+    expect(r.ok && r.dauVao.asOf).toBeUndefined();
   });
 });
