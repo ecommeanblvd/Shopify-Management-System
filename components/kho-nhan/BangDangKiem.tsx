@@ -101,7 +101,6 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                   <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
                   <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
                   <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
-                  <th className="px-3 py-2 text-left font-medium">Lark</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -121,36 +120,21 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                     <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
                     <td className="px-3 py-2">
-                      {c.larkRecordId ? (
-                        <span className="flex items-center gap-2">
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400">đã gửi</span>
-                          <button
-                            type="button" onClick={() => go(c)} disabled={pending}
-                            className="cursor-pointer text-xs text-muted-foreground underline hover:text-foreground disabled:cursor-not-allowed"
-                          >
-                            Gỡ
-                          </button>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">chưa gửi</span>
-                          <button
-                            type="button" onClick={() => goNham(c)} disabled={pending}
-                            className="cursor-pointer text-xs text-muted-foreground underline hover:text-foreground disabled:cursor-not-allowed"
-                          >
-                            Gỡ
-                          </button>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {/* Chỉ kiểm được SAU khi đã gửi Lark (CEO 24/09): các bộ
-                          phận khác phải thấy trạng thái "Chờ QC" trước đã. */}
-                      {c.larkRecordId ? (
-                        <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">gửi Lark trước</span>
-                      )}
+                      <div className="flex justify-end gap-2">
+                        {/* Chỉ kiểm được SAU khi đã gửi Lark (CEO 24/09): các bộ
+                            phận khác phải thấy trạng thái "Chờ QC" trước đã. */}
+                        {c.larkRecordId && (
+                          <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
+                        )}
+                        {/* Chiếc đã gửi thì phải gỡ khỏi Lark TRƯỚC rồi mới gỡ khỏi
+                            danh sách — nếu không bảng Lark còn dòng mà bên mình mất dấu. */}
+                        <Button
+                          type="button" variant="outline" size="sm" disabled={pending}
+                          onClick={() => (c.larkRecordId ? go(c) : goNham(c))}
+                        >
+                          {c.larkRecordId ? 'Gỡ khỏi Lark' : 'Gỡ'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
