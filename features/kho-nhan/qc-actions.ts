@@ -7,6 +7,7 @@ import { applyMovement } from '@/features/warehouse/ledger';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { requirePerm } from '@/features/receiving/perm';
 import { chuyenDuocQc, kiemLoQc, type DongLoiVao } from './qc-logic';
+import { danhDauQcDatTrenLark } from './day-wh-lark';
 import type { DangKiem } from './types';
 
 /**
@@ -41,6 +42,9 @@ export async function qcDat(itemId: string, kho: string): Promise<{ ok: boolean;
         actor, createIfMissing: { productTitle: it.productTitle, variantTitle: it.variantTitle },
       });
     });
+    // Đổi WH - Action trên Lark sang "Tạm nhập (đi đơn)". NGOÀI transaction và
+    // best-effort: Lark hỏng không được làm hỏng việc nhập kho đã xong.
+    await danhDauQcDatTrenLark(itemId, actor);
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
   } catch (e) {
@@ -94,6 +98,7 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     unitCode: schema.goodsReceiptItems.unitCode,
     sku: schema.goodsReceiptItems.sku,
     shopifyVariantId: schema.goodsReceiptItems.shopifyVariantId,
+    larkRecordId: schema.goodsReceiptItems.larkRecordId,
     tenSanPham: schema.goodsReceiptItems.productTitle,
     tenBienThe: schema.goodsReceiptItems.variantTitle,
     orderId: schema.goodsReceiptItems.orderId,

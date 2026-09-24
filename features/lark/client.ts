@@ -300,7 +300,51 @@ export async function createWhInventoryRecord(fields: Record<string, unknown>): 
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);
 }
 
-/** Sửa vài cột của MỘT dòng bảng kho. KHÔNG có hàm xoá — cố ý. */
+/** Sửa vài cột của MỘT dòng bảng kho. */
 export async function updateWhInventoryRecord(recordId: string, fields: Record<string, unknown>): Promise<void> {
   return putRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, recordId, fields);
+}
+
+// ── Bảng "WH - Inventory (Nhập, QC, Pack)" — luồng Nhận & Kiểm hàng ───────────
+//
+// CEO 24/09 cho phép TẠO và XOÁ trên bảng này, sửa lại D-045 (vốn cấm hẳn xoá).
+// Kèm BỐN hàng rào, ba cái đầu nằm ở tầng gọi (`features/kho-nhan/day-wh-lark.ts`):
+//   1. chỉ xoá record do CHÍNH hệ thống tạo — id lấy từ `goods_receipt_items.lark_record_id`,
+//      KHÔNG BAO GIỜ xoá theo điều kiện lọc;
+//   2. một record mỗi lượt gọi, không có xoá hàng loạt, không vòng lặp xoá;
+//   3. đọc lại và đối chiếu trước khi xoá;
+//   4. ghi nhật ký mọi lượt vào `wh_lark_nhat_ky`, kể cả lượt hỏng.
+
+/** Đọc MỘT record bảng WH - Inventory. Trả null nếu record không còn. */
+export async function getWhInventoryRecord(recordId: string): Promise<LarkRecord | null> {
+  const token = await getTenantToken();
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${env('LARK_BASE_APP_TOKEN')}/tables/${WH_INVENTORY_TABLE_ID}/records/${encodeURIComponent(recordId)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+  const j = (await res.json()) as { code: number; msg: string; data?: { record?: LarkRecord } };
+  if (j.code === LARK_RECORD_NOT_FOUND) return null;
+  if (j.code !== 0) throw new Error(`[lark] get wh record fail: code=${j.code} msg=${j.msg}`);
+  return j.data?.record ?? null;
+}
+
+/**
+ * Xoá MỘT record bảng WH - Inventory, theo record_id ĐÍCH DANH.
+ *
+ * Hàm này CỐ Ý không nhận điều kiện lọc, không nhận mảng, không có biến thể
+ * xoá-nhiều. Đó là cách duy nhất để một lỗi lập trình không thể quét sạch bảng
+ * vận hành của đội logistics (lý do gốc của D-045).
+ *
+ * Record đã biến mất → coi như xong, không ném: hai người cùng gỡ một chiếc thì
+ * người sau không được thấy lỗi đỏ.
+ */
+export async function deleteWhInventoryRecord(recordId: string): Promise<void> {
+  const token = await getTenantToken();
+  const url = `${DOMAIN}/open-apis/bitable/v1/apps/${env('LARK_BASE_APP_TOKEN')}/tables/${WH_INVENTORY_TABLE_ID}/records/${encodeURIComponent(recordId)}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string };
+  if (j.code === LARK_RECORD_NOT_FOUND) return;
+  if (j.code !== 0) throw new Error(`[lark] delete wh record fail: code=${j.code} msg=${j.msg}`);
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
+import { guiLenLark, goKhoiLark } from '@/features/kho-nhan/day-wh-lark';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
 
@@ -19,18 +20,58 @@ function gio(d: Date): string {
 export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; coStorage: boolean }) {
   const router = useRouter();
   const [chon, setChon] = useState<DangKiem | null>(null);
+  const [ketQuaGui, setKetQuaGui] = useState<string | null>(null);
+  const [loiGui, setLoiGui] = useState<string | null>(null);
+  const [pending, start] = useTransition();
 
   const lamMoi = () => router.refresh();
+
+  const chuaGui = dangKiem.filter((c) => !c.larkRecordId);
+
+  const gui = () =>
+    start(async () => {
+      setKetQuaGui(null); setLoiGui(null);
+      try {
+        const r = await guiLenLark(chuaGui.map((c) => c.id));
+        setKetQuaGui(`Đã gửi ${r.daGui} chiếc lên Lark.`);
+        if (r.boQua.length) {
+          setLoiGui(`${r.boQua.length} chiếc chưa gửi được — ` +
+            r.boQua.map((b) => `${b.unitCode}: ${b.lyDo}`).join(' · '));
+        }
+        lamMoi();
+      } catch (e) {
+        console.error('[kho-nhan] gửi Lark lỗi:', e);
+        setLoiGui('Không gọi được máy chủ để gửi. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
+      }
+    });
+
+  const go = (c: DangKiem) =>
+    start(async () => {
+      setKetQuaGui(null); setLoiGui(null);
+      const r = await goKhoiLark(c.id);
+      if (!r.ok) { setLoiGui(r.loi ?? 'Gỡ thất bại.'); return; }
+      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi Lark.`);
+      lamMoi();
+    });
 
   return (
     <div className="space-y-6">
       <OTimMonChoVe onDaNhan={lamMoi} />
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">
-          Đang kiểm{' '}
-          <span className="font-normal text-muted-foreground">({dangKiem.length} chiếc)</span>
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">
+            Đang kiểm{' '}
+            <span className="font-normal text-muted-foreground">({dangKiem.length} chiếc)</span>
+          </h2>
+          {chuaGui.length > 0 && (
+            <Button type="button" size="lg" onClick={gui} disabled={pending}>
+              {pending ? 'Đang gửi…' : `Gửi ${chuaGui.length} chiếc lên Lark`}
+            </Button>
+          )}
+        </div>
+        {ketQuaGui && <p className="text-sm text-emerald-600 dark:text-emerald-400">{ketQuaGui}</p>}
+        {loiGui && <p className="text-sm text-amber-600 dark:text-amber-400">{loiGui}</p>}
 
         {dangKiem.length === 0 ? (
           <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
@@ -46,6 +87,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                   <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
                   <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
                   <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
+                  <th className="px-3 py-2 text-left font-medium">Lark</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -64,6 +106,21 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
+                    <td className="px-3 py-2">
+                      {c.larkRecordId ? (
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400">đã gửi</span>
+                          <button
+                            type="button" onClick={() => go(c)} disabled={pending}
+                            className="cursor-pointer text-xs text-muted-foreground underline hover:text-foreground disabled:cursor-not-allowed"
+                          >
+                            Gỡ
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">chưa gửi</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
                     </td>

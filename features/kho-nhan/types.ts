@@ -20,6 +20,8 @@ export interface DangKiem {
   id: string; unitCode: string; sku: string | null;
   /** ID biến thể Shopify ghim lúc nhận (D-106). Null khi tra không ra. */
   shopifyVariantId: string | null;
+  /** record_id trên bảng Lark. Null = chưa gửi. */
+  larkRecordId: string | null;
   tenSanPham: string | null; tenBienThe: string | null;
   orderId: string | null; maDon: string | null;
   storeId: string | null; shopifyOrderId: string | null;

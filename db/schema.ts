@@ -2068,6 +2068,10 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   /** ID biến thể Shopify của ĐÚNG chiếc này, ghim lúc nhận (D-106). SKU của
    *  brand đổi liên tục; ID thì không. Null khi tra không ra. */
   shopifyVariantId: text('shopify_variant_id'),
+  /** record_id trên bảng Lark "WH - Inventory" do CHÍNH hệ thống này tạo.
+   *  Null = chưa gửi. Đây cũng là HÀNG RÀO xoá: chỉ được xoá record có id nằm
+   *  ở đây, không bao giờ xoá theo điều kiện lọc. */
+  larkRecordId: text('lark_record_id'),
   productTitle: text('product_title'),
   variantTitle: text('variant_title'),
   photoKey: text('photo_key'),
@@ -2893,3 +2897,15 @@ export const whLoiQc = pgTable('wh_loi_qc', {
   taoLuc: timestamp('tao_luc').notNull().defaultNow(),
   taoBoi: text('tao_boi').notNull(),
 }, (t) => [index('wh_loi_qc_item_idx').on(t.receiptItemId)]);
+
+/** Nhật ký MỌI lượt đụng vào bảng Lark WH - Inventory, kể cả lượt hỏng. */
+export const whLarkNhatKy = pgTable('wh_lark_nhat_ky', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  hanhDong: text('hanh_dong').notNull(),
+  larkRecordId: text('lark_record_id'),
+  receiptItemId: uuid('receipt_item_id').references(() => goodsReceiptItems.id, { onDelete: 'set null' }),
+  thanhCong: boolean('thanh_cong').notNull(),
+  chiTiet: text('chi_tiet'),
+  actor: text('actor').notNull(),
+  luc: timestamp('luc').notNull().defaultNow(),
+}, (t) => [index('wh_lark_nhat_ky_luc_idx').on(t.luc), index('wh_lark_nhat_ky_item_idx').on(t.receiptItemId)]);
