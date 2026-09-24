@@ -19,6 +19,7 @@ import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-ver
 import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
 import { doiChieuLyDoCham } from '@/features/shipments/doi-chieu-ly-do';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
+import { boSungUocTinhShipHo } from '@/features/ship-ho/auto-quote';
 import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcile-actions';
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
@@ -65,6 +66,9 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
   { key: 'ship-ho-tiers', fn: () => refreshShipHoTiers() },
   { key: 'apply-pod', fn: () => applyPodDeliveries() },
   { key: 'return-links', fn: () => applyReturnLinks() },
+  // Báo giá TRƯỚC khi đối soát: đơn vừa được lấp `carrier_cost_vnd` thì lượt
+  // đối soát ngay sau đó mới tính được delta, không phải chờ một tiếng nữa.
+  { key: 'ship-ho-bao-gia', fn: () => boSungUocTinhShipHo() },
   { key: 'ship-ho-reconcile', fn: () => reconcileShipHoFromCarrierBillsCore() },
 ];
 
