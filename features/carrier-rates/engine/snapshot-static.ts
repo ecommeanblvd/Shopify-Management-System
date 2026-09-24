@@ -21,7 +21,7 @@ import type { CarrierAccountSnapshot, ZoneSnap } from './quote';
 import { pickRateCardForDate, listRateCards } from './rate-cards';
 import { taoBoNhoDem } from './snapshot-cache';
 
-export type PhanTinhSnapshot = Omit<CarrierAccountSnapshot, 'remotePostcodes'>;
+export type PhanTinhSnapshot = Omit<CarrierAccountSnapshot, 'remotePostcodes' | 'remotePostcodeRanges'>;
 
 /** Lưới an toàn cuối, KHÔNG phải cơ chế chính: mọi lượt đều so phiên bản cấu
  *  hình nên dữ liệu đổi là nạp lại ngay, hạn dùng chỉ để mục cũ không nằm lại

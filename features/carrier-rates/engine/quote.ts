@@ -2,6 +2,8 @@
 // the DB and passes it in. Algorithm follows the spec (2026-05-25-carrier-
 // rates-design.md §5).
 
+import type { DaiMaBuuChinh } from './remote-range';
+
 export type SurchargeKind =
   | 'fuel_percent'
   | 'peak_fixed'
@@ -181,6 +183,15 @@ export interface CarrierAccountSnapshot {
    * right tier-scoped remote_fixed surcharge when a postcode matches.
    */
   remotePostcodes: Map<string, Map<string, string | null>>;
+  /**
+   * ISO-2 → danh sách DẢI mã bưu chính (phần THÊM của migration 0161).
+   *
+   * Tuỳ chọn, và để trống là đúng với mọi hãng công bố ODA theo từng mã (DHL
+   * 645.567 dòng, FedEx 388.419 dòng — không dòng dải nào). Chỉ UPS dùng, vì
+   * file EAS của UPS mô tả vùng bằng khoảng và bung ra sẽ là 16.905.756 dòng.
+   * Xem `remote-range.ts`.
+   */
+  remotePostcodeRanges?: Map<string, DaiMaBuuChinh[]>;
 }
 
 export interface QuoteInput {
@@ -654,6 +665,7 @@ export function quote(snap: CarrierAccountSnapshot, input: QuoteInput): QuoteRes
   let remote = 0;
   const { tier: matchedTier, matchedBy } = matchRemoteTier(
     snap.remotePostcodes.get(country), input.destinationPostcode, input.destinationCity,
+    snap.remotePostcodeRanges?.get(country),
   );
   if (matchedBy !== null) {
     // matchedTier may be null (no tier) or a label like 'Tier A'.

@@ -270,3 +270,26 @@ export async function importPostcodes(
   const skipped = parsed.rows.length - inserted;
   return { inserted, skipped, warnings: parsed.warnings };
 }
+
+/**
+ * Đếm dòng mã bưu chính theo TIER cho một tài khoản.
+ *
+ * Dùng cho băng cảnh báo "tier chưa có giá" ở trang surcharges
+ * (`remote-tier-price.ts`). Chỉ trả về vài dòng đếm — index
+ * `carrier_remote_postcodes_tier_idx` (migration 0161) cho phép đếm bằng
+ * index-only scan, không kéo dòng nào về: tài khoản DHL có 645.567 dòng, quét
+ * bảng thật mỗi lượt mở trang là đúng cái đã làm Supabase khoá dịch vụ (D-025).
+ */
+export async function loadRemoteTierCounts(
+  carrierAccountId: string,
+): Promise<Array<{ tier: string | null; soDong: number }>> {
+  const rows = await db
+    .select({
+      tier: schema.carrierRemotePostcodes.tier,
+      soDong: sql<number>`count(*)::int`,
+    })
+    .from(schema.carrierRemotePostcodes)
+    .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId))
+    .groupBy(schema.carrierRemotePostcodes.tier);
+  return rows.map((r) => ({ tier: r.tier, soDong: Number(r.soDong) }));
+}

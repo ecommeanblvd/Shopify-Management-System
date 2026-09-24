@@ -543,6 +543,24 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
   carrierAccountId: uuid('carrier_account_id').references(() => carrierAccounts.id, { onDelete: 'cascade' }).notNull(),
   countryCode: text('country_code').notNull(),
   postcodePattern: text('postcode_pattern').notNull(),
+  // ── Dải mã bưu chính (migration 0161) ────────────────────────────────────
+  // THÊM vào bên cạnh postcode_pattern, KHÔNG thay thế. Một dòng hoặc là mã
+  // chính xác như cũ (rangeStart = NULL — toàn bộ 1,03 triệu dòng DHL + FedEx),
+  // hoặc là một DẢI [rangeStart, rangeEnd] rộng `rangeLen` ký tự.
+  //
+  // Cần dải vì file EAS của UPS mô tả vùng phụ phí bằng khoảng: bung ra mã đơn
+  // lẻ là 16.905.756 dòng (riêng PT 6441000–7999999 = 1.559.000 mã). Với dòng
+  // dải, `postcodePattern` giữ dạng đọc được "6441000-7999999" — vừa để unique
+  // index cũ (account, country, pattern, from) vẫn chống trùng, vừa để người
+  // xem bảng hiểu ngay; engine KHÔNG tra bằng chuỗi đó.
+  //
+  // Hai đầu dải đã chuẩn hoá HOA + chỉ [A-Z0-9], cùng độ dài, và cột khai
+  // COLLATE "C" trong DB để so sánh byte trùng khít với toán tử `<` của JS.
+  rangeStart: text('range_start'),
+  rangeEnd: text('range_end'),
+  /** Bề rộng mã của dải; mã đích bị cắt còn bấy nhiêu ký tự rồi mới so
+   *  (ZIP+4 '98077-5629' → '98077' khớp dải 5 ký tự). */
+  rangeLen: integer('range_len'),
   // FedEx ODA tiers are 'Tier A' / 'Tier B' / 'Tier C'. Carrier-agnostic free
   // text so future carriers (UPS, DPD) can use their own labels.
   tier: text('tier'),
@@ -560,6 +578,13 @@ export const carrierRemotePostcodes = pgTable('carrier_remote_postcodes', {
     .on(table.carrierAccountId, table.countryCode, table.postcodePattern, table.effectiveFrom),
   // carrier_remote_postcodes_lookup_idx (carrierAccountId, countryCode) đã bị drop
   // (migration 0121) — dư thừa vì là PREFIX của unique idx phía trên.
+  // Dải: tra "dải nào chứa mã này" bằng một lần đi xuống cây, xếp theo rangeEnd
+  // (migration 0161). Partial index nên KHÔNG phình vì 1,03 triệu dòng mã chính xác.
+  index('carrier_remote_postcodes_dai_idx')
+    .on(table.carrierAccountId, table.countryCode, table.rangeLen, table.rangeEnd)
+    .where(sql`range_start is not null`),
+  // Đếm dòng theo tier cho cảnh báo "tier chưa có giá" ở trang surcharges.
+  index('carrier_remote_postcodes_tier_idx').on(table.carrierAccountId, table.tier),
 ]);
 
 /**

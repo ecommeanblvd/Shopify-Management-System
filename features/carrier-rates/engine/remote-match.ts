@@ -4,6 +4,7 @@
 
 import { hasArabicScript, arabicCityCandidates } from './arabic-city-aliases';
 import { matchRemoteCity } from './remote-city-match';
+import { khopDai, type DaiMaBuuChinh } from './remote-range';
 
 /**
  * Resolve the remote-area tier for a single destination.
@@ -14,24 +15,42 @@ import { matchRemoteCity } from './remote-city-match';
  * @param postcode   - Raw destination postcode (may be null/undefined).
  * @param city       - Raw destination city name (may be null/undefined).
  *
+ * @param ranges - Dải mã bưu chính của nước đó (`snap.remotePostcodeRanges?.get(country)`).
+ *   Bỏ trống / rỗng = không có dải nào → hành vi y hệt trước khi có dải, nên
+ *   DHL và FedEx (1,03 triệu dòng mã chính xác, 0 dòng dải) không đổi gì.
+ *
  * Priority order (mirrors the inline block in quote.ts exactly):
  *   1. Postcode: raw → alphanumeric-stripped → ZIP+4 prefix
- *   2. City:     Arabic-alias candidates + Latin-normalised key, via matchRemoteCity
- *   3. Wildcard: `'*'` key in the map
- *   4. No match → `{ tier: null, matchedBy: null }`
+ *   2. Dải mã bưu chính (`remote-range.ts`)
+ *   3. City:     Arabic-alias candidates + Latin-normalised key, via matchRemoteCity
+ *   4. Wildcard: `'*'` key in the map
+ *   5. No match → `{ tier: null, matchedBy: null }`
+ *
+ * LUẬT: mã CHÍNH XÁC thắng DẢI. Một dòng ghi đúng mã là hãng nói riêng về mã
+ * đó, còn dải là mô tả cả vùng — cái riêng thắng cái chung. Vì vậy bước 2 chỉ
+ * chạy khi bước 1 trượt, kể cả khi dòng mã chính xác cho tier RẺ hơn. Luật chọn
+ * giữa nhiều dải cùng khớp nằm trong `khopDai` (dải hẹp hơn thắng).
+ *
+ * Dải xếp TRÊN tên thành phố vì mã bưu chính vẫn cụ thể hơn tên thành phố —
+ * giữ đúng thứ tự "mã trước, tên sau" vốn có.
  */
 export function matchRemoteTier(
   perCountry: Map<string, string | null> | undefined,
   postcode: string | null | undefined,
   city: string | null | undefined,
-): { tier: string | null; matchedBy: 'postcode' | 'city' | 'country_default' | null } {
+  ranges?: readonly DaiMaBuuChinh[],
+): { tier: string | null; matchedBy: 'postcode' | 'postcode_range' | 'city' | 'country_default' | null } {
   if (!perCountry) {
+    // Vẫn còn cửa cho dải: một nước có thể chỉ được mô tả bằng dải, không có
+    // dòng mã chính xác nào, nên `remotePostcodes` không có khoá cho nước đó.
+    const chiDai = khopDai(ranges, postcode);
+    if (chiDai) return { tier: chiDai.tier, matchedBy: 'postcode_range' };
     return { tier: null, matchedBy: null };
   }
 
   const patterns = perCountry;
   let matchedTier: string | null | undefined;
-  let matchedBy: 'postcode' | 'city' | 'country_default' | null = null;
+  let matchedBy: 'postcode' | 'postcode_range' | 'city' | 'country_default' | null = null;
 
   if (postcode) {
     // Postcode formats vary between Shopify input and carrier lists:
@@ -49,6 +68,15 @@ export function matchRemoteTier(
         matchedBy = 'postcode';
         break;
       }
+    }
+  }
+
+  if (matchedBy === null) {
+    // Dải: chỉ chạy khi không có dòng mã chính xác nào khớp (xem LUẬT ở trên).
+    const dai = khopDai(ranges, postcode);
+    if (dai) {
+      matchedTier = dai.tier;
+      matchedBy = 'postcode_range';
     }
   }
 

@@ -483,6 +483,54 @@ describe('quote engine', () => {
       expect(c.ok && c.breakdown.remote).toBe(650_000);
     });
 
+    it('dải mã bưu chính kéo đúng dòng phụ phí theo tier (UPS EAS)', () => {
+      const snap = makeSnap({
+        surcharges: [
+          { kind: 'remote_fixed', value: 646_720, active: true, tier: 'Extended' },
+          { kind: 'remote_fixed', value: 721_450, active: true, tier: 'Remote' },
+        ],
+        remotePostcodes: new Map(),
+        remotePostcodeRanges: new Map([['SG', [
+          { batDau: '010000', ketThuc: '019999', doDai: 6, tier: 'Extended' },
+          { batDau: '040000', ketThuc: '049999', doDai: 6, tier: 'Remote' },
+        ]]]),
+      });
+      const a = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '018989' });
+      const b = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '04 3210' });
+      const c = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '520000' });
+      expect(a.ok && a.breakdown.remote).toBe(646_720);
+      expect(a.ok && a.notes).toContain('remote_match:postcode_range (Extended)');
+      expect(b.ok && b.breakdown.remote).toBe(721_450);
+      expect(c.ok && c.breakdown.remote).toBe(0);
+    });
+
+    it('tier có mã bưu chính nhưng CHƯA có giá thì cộng 0 — đúng lý do phải có băng cảnh báo', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 646_720, active: true, tier: 'Extended' }],
+        remotePostcodes: new Map(),
+        remotePostcodeRanges: new Map([['SG', [
+          { batDau: '010000', ketThuc: '019999', doDai: 6, tier: 'Phụ phí Khu vực Phát hàng' },
+        ]]]),
+      });
+      const r = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '018989' });
+      // Khớp vùng xa nhưng KHÔNG có dòng giá nào cùng tier → engine cộng 0 và
+      // bản báo giá trông vẫn đầy đủ. `remote-tier-price.ts` là chỗ kêu lên.
+      expect(r.ok && r.breakdown.remote).toBe(0);
+      expect(r.ok && r.notes).toContain('remote_match:postcode_range (Phụ phí Khu vực Phát hàng)');
+    });
+
+    it('KHÔNG có dải thì mọi thứ y như cũ (DHL/FedEx)', () => {
+      const snap = makeSnap({
+        surcharges: [{ kind: 'remote_fixed', value: 600_000, active: true }],
+        remotePostcodes: new Map([['SG', new Map([['018989', null]])]]),
+      });
+      expect(snap.remotePostcodeRanges).toBeUndefined();
+      const hit = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '018989' });
+      const miss = quote(snap, { weightKg: 1, destinationCountry: 'SG', destinationPostcode: '999999' });
+      expect(hit.ok && hit.breakdown.remote).toBe(600_000);
+      expect(miss.ok && miss.breakdown.remote).toBe(0);
+    });
+
     it('catch-all surcharge (no tier) applies to every match alongside tiered ones', () => {
       const snap = makeSnap({
         surcharges: [

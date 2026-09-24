@@ -24,6 +24,8 @@ import {
   findStaleManualFuel,
   type ManualFuelRow,
 } from '@/features/carrier-rates/fuel-fetcher/manual-fuel-staleness';
+import { loadRemoteTierCounts } from '@/features/carrier-rates/postcodes-actions';
+import { timTierThieuGia } from '@/features/carrier-rates/remote-tier-price';
 import { seedFedexVietnamDemand } from '@/features/carrier-rates/seed-fedex-vn-demand';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -417,6 +419,16 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
   // an extra query; pick the most-recently-updated ACTIVE row as "current".
   const staleFuel = computeManualFuelStaleness(account.carrierKey, account.name, id, surcharges);
 
+  // Băng cảnh báo "tier có mã bưu chính nhưng chưa có giá". Đọc cùng một kiểu
+  // với băng fuel phía trên: một truy vấn đếm gọn + một hàm thuần đã có test.
+  //
+  // Vì sao phải kêu: `sumRemoteFixed` trong engine lọc phụ phí theo tier rồi
+  // reduce về 0 khi không dòng nào khớp, nên một mã bưu chính rơi vào tier chưa
+  // có giá sẽ được báo giá THIẾU mà bản báo giá vẫn trông đầy đủ. Sau khi nạp
+  // danh sách EAS của UPS thì đó là tình huống có thật với ba hạng mục UPS chưa
+  // gửi giá.
+  const tierThieuGia = timTierThieuGia(await loadRemoteTierCounts(id), surcharges);
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">
       <Link
@@ -438,6 +450,27 @@ export default async function SurchargesPage({ params }: { params: Promise<{ id:
             <span className="font-mono">{staleFuel.carrierKey}.com</span>
             {' rồi cập nhật dòng fuel_percent bên dưới.'}
           </p>
+        </div>
+      )}
+
+      {tierThieuGia.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-800 dark:text-red-300">
+          <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+          <div className="text-sm space-y-1">
+            <p>
+              <span className="font-semibold">Vùng xa chưa có giá</span>
+              {` — ${tierThieuGia.length} tier có mã bưu chính nhưng không dòng remote_fixed nào khớp, nên báo giá vào những vùng này đang cộng 0 đồng.`}
+            </p>
+            <ul className="list-disc pl-5">
+              {tierThieuGia.map((t) => (
+                <li key={t.tier ?? '(không tier)'}>
+                  <span className="font-mono">{t.tier ?? '(không tier)'}</span>
+                  {` — ${t.soDong.toLocaleString('vi-VN')} dòng mã bưu chính`}
+                </li>
+              ))}
+            </ul>
+            <p>Thêm dòng <span className="font-mono">remote_fixed</span> với đúng nhãn tier bên dưới khi có bảng giá.</p>
+          </div>
         </div>
       )}
 

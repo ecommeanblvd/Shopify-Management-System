@@ -41,7 +41,7 @@ export interface CarrierGeoRow {
   carrierKey: string | null;
   zone: string | null;
   tier: string | null;
-  matchedBy: 'postcode' | 'city' | 'country_default' | null;
+  matchedBy: 'postcode' | 'postcode_range' | 'city' | 'country_default' | null;
 }
 
 export interface CarrierGeoLookup {
@@ -79,7 +79,9 @@ export async function lookupCarrierGeo(
       continue;
     }
     const zone = snap.zonesByCountry.get(cc)?.label ?? null;
-    const { tier, matchedBy } = matchRemoteTier(snap.remotePostcodes.get(cc), postcode, cityForMatch);
+    const { tier, matchedBy } = matchRemoteTier(
+      snap.remotePostcodes.get(cc), postcode, cityForMatch, snap.remotePostcodeRanges?.get(cc),
+    );
     carriers.push({
       accountId: a.id,
       accountName: a.name,

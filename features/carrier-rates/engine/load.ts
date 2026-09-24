@@ -6,6 +6,7 @@ import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
 import { quote, type CarrierAccountSnapshot, type QuoteInput, type QuoteResult } from './quote';
 import { chuanHoaDanhSachPostcode } from './remote-postcode-filter';
+import { tienToTheoDoDai, type DaiMaBuuChinh } from './remote-range';
 import { napPhanTinhSnapshot } from './snapshot-static';
 
 /**
@@ -17,6 +18,88 @@ import { napPhanTinhSnapshot } from './snapshot-static';
  * đổi một lần, còn ODA phải lọc theo đúng mã bưu chính của đơn đang tính nên
  * mỗi lượt một khác (D-027).
  */
+/** Trần số ứng viên mỗi lần đi xuống cây index. Dải trong cùng một
+ *  (account, nước, bề rộng) là RỜI NHAU — script import gộp dải chồng nhau —
+ *  nên dải ĐẦU TIÊN có `range_end >= mã` đã là ứng viên duy nhất. Lấy 8 là
+ *  biên an toàn phòng ngày dữ liệu hãng có chồng lấn, vẫn rẻ. */
+const TRAN_UNG_VIEN_DAI = 8;
+
+/**
+ * Nạp các dòng DẢI có thể chứa những mã bưu chính đang cần tra.
+ *
+ * Vì sao không nạp cả nước: đây đúng chỗ đã làm Supabase khoá dịch vụ (D-025).
+ * Riêng Mỹ có 5.121 dòng dải; một lượt tải trang Orders quote 50 đơn × 5
+ * account mà nạp cả nước thì lại về đúng vết xe cũ. Thay vào đó cắt mã thành
+ * mọi TIỀN TỐ (ZIP+4 '98077-5629' → '9','98',…,'980775629') rồi với mỗi
+ * (nước, bề rộng, tiền tố) đi xuống index `carrier_remote_postcodes_dai_idx`
+ * đúng một lần, lấy tối đa 8 dòng. Egress vì vậy tỉ lệ với SỐ ĐƠN, không phải
+ * với kích thước danh sách của hãng.
+ *
+ * Tài khoản không có dòng dải nào (DHL, FedEx) thì mỗi lần đi xuống cây trả về
+ * rỗng ngay ở nút gốc của index bộ phận — gần như không tốn gì.
+ */
+async function napDai(
+  carrierAccountId: string,
+  nuoc: string[],
+  maBuuChinh: readonly (string | null | undefined)[],
+  asOf: string,
+) {
+  const t = schema.carrierRemotePostcodes;
+  // Không biết nước → không khoanh được vùng index; bỏ qua dải thay vì quét cả
+  // bảng. Mọi luồng có truyền mã bưu chính đều có truyền nước (checkout, đối
+  // soát, ước lượng hàng loạt), nên nhánh này trên thực tế không chạy.
+  if (nuoc.length === 0) return [];
+
+  const tienTo = new Map<string, { doDai: number; khoa: string }>();
+  for (const ma of maBuuChinh) {
+    for (const p of tienToTheoDoDai(ma)) tienTo.set(`${p.doDai}:${p.khoa}`, p);
+  }
+  if (tienTo.size === 0) return [];
+
+  const bo: ReturnType<typeof sql>[] = [];
+  for (const n of nuoc) {
+    for (const p of tienTo.values()) bo.push(sql`(${n}::text, ${p.doDai}::int, ${p.khoa}::text)`);
+  }
+
+  // Hai chi tiết dưới đây KHÔNG phải tuỳ hứng — đo 24/09/2026, cùng một truy
+  // vấn, ba cách viết:
+  //
+  //   `id in (<subquery>)`                          2.827 ms, 1.719.765 buffer
+  //   `id = any (array(<subquery>))` + lọc account     14 ms,     2.015 buffer
+  //   `id = any (array(<subquery>))`, KHÔNG lọc      0,13 ms,        25 buffer
+  //
+  // (1) `= any (array(...))` ép Postgres chạy phần tìm dải ĐÚNG MỘT LẦN
+  //     (InitPlan). Với `in (...)` nó biến thành nested-loop semi join và chạy
+  //     lại phần đó cho TỪNG dòng của account — 68.711 lần.
+  // (2) KHÔNG lặp lại điều kiện `carrier_account_id` ở vòng ngoài. Nó thừa
+  //     (vòng trong đã lọc rồi) nhưng lại đủ hấp dẫn để planner bỏ khoá chính
+  //     mà đi quét toàn bộ dòng của account rồi mới lọc id.
+  //
+  // COLLATE "C" viết TƯỜNG MINH: tham số truyền vào mang collation mặc định của
+  // CSDL, còn cột khai COLLATE "C" (migration 0161). Không ép thì Postgres có
+  // thể so theo luật ngôn ngữ — khác với `<` của JS bên `remote-range.ts`, và
+  // index cũng không dùng được.
+  return db.select().from(t).where(
+    sql`${t.id} = any (array(
+      select u.id from (values ${sql.join(bo, sql`, `)}) as c(cc, ln, k)
+      cross join lateral (
+        select p.id, p.range_start
+        from ${t} p
+        where p.carrier_account_id = ${carrierAccountId}
+          and p.range_start is not null
+          and p.country_code = c.cc
+          and p.range_len = c.ln
+          and p.range_end >= c.k collate "C"
+          and p.effective_from <= ${asOf}
+          and (p.effective_to is null or p.effective_to > ${asOf})
+        order by p.range_end asc
+        limit ${TRAN_UNG_VIEN_DAI}
+      ) u
+      where u.range_start <= c.k collate "C"
+    ))`,
+  );
+}
+
 export async function loadAccountSnapshot(
   carrierAccountId: string,
   effectiveDate: Date = new Date(),
@@ -67,18 +150,23 @@ export async function loadAccountSnapshot(
       lte(t.effectiveFrom, remoteAsOf),
       or(isNull(t.effectiveTo), gt(t.effectiveTo, remoteAsOf)),
     ];
+    // Dòng DẢI (range_start IS NOT NULL) đi đường riêng bên dưới — ba nhánh
+    // mã-chính-xác này loại chúng ra để không kéo về những dòng không bao giờ
+    // khớp bằng Map.get (pattern của dòng dải là chuỗi "6441000-7999999").
+    const chiMaChinhXac = isNull(t.rangeStart);
     if (!pc.goc.length) {
       // Không có mã cụ thể → như cũ: cả nước (calculator / dựng ratecard).
       return db.select().from(t).where(and(...chung));
     }
-    const nhanhGoc = db.select().from(t).where(and(...chung, inArray(t.postcodePattern, pc.goc)));
-    const nhanhRutGon = db.select().from(t).where(and(...chung, inArray(
+    const nhanhGoc = db.select().from(t).where(and(...chung, chiMaChinhXac, inArray(t.postcodePattern, pc.goc)));
+    const nhanhRutGon = db.select().from(t).where(and(...chung, chiMaChinhXac, inArray(
       sql`upper(regexp_replace(${t.postcodePattern}, '[^A-Za-z0-9]', '', 'g'))`, pc.rutGon.length ? pc.rutGon : pc.goc)));
-    const nhanhThanhPho = db.select().from(t).where(and(...chung, sql`${t.postcodePattern} !~ '[0-9]'`));
-    const [a, b, c] = await Promise.all([nhanhGoc, nhanhRutGon, nhanhThanhPho]);
+    const nhanhThanhPho = db.select().from(t).where(and(...chung, chiMaChinhXac, sql`${t.postcodePattern} !~ '[0-9]'`));
+    const nhanhDai = napDai(carrierAccountId, nuoc, opts?.remotePostcodes ?? [], remoteAsOf);
+    const [a, b, c, d] = await Promise.all([nhanhGoc, nhanhRutGon, nhanhThanhPho, nhanhDai]);
     // Gộp, bỏ trùng theo id (một dòng có thể khớp cả (a) và (b)).
     const theoId = new Map<string, (typeof a)[number]>();
-    for (const r of [...a, ...b, ...c]) theoId.set(r.id, r);
+    for (const r of [...a, ...b, ...c, ...d]) theoId.set(r.id, r);
     return [...theoId.values()];
   })();
 
@@ -96,7 +184,16 @@ export async function loadAccountSnapshot(
 
   // Remote postcodes grouped by country, carrying tier alongside each pattern
   const remotePostcodes = new Map<string, Map<string, string | null>>();
+  // Dải đi riêng: chúng không tra được bằng Map.get, và để lẫn vào bản đồ mã
+  // chính xác thì khoá sẽ là chuỗi "6441000-7999999" — không bao giờ khớp.
+  const remotePostcodeRanges = new Map<string, DaiMaBuuChinh[]>();
   for (const p of postcodes) {
+    if (p.rangeStart !== null && p.rangeEnd !== null && p.rangeLen !== null) {
+      const ds = remotePostcodeRanges.get(p.countryCode) ?? [];
+      ds.push({ batDau: p.rangeStart, ketThuc: p.rangeEnd, doDai: p.rangeLen, tier: p.tier ?? null });
+      remotePostcodeRanges.set(p.countryCode, ds);
+      continue;
+    }
     const inner = remotePostcodes.get(p.countryCode) ?? new Map<string, string | null>();
     inner.set(p.postcodePattern, p.tier ?? null);
     // Also index the alphanumeric-stripped form so hyphen/space format
@@ -108,7 +205,7 @@ export async function loadAccountSnapshot(
     remotePostcodes.set(p.countryCode, inner);
   }
 
-  return { ...tinh, remotePostcodes };
+  return { ...tinh, remotePostcodes, remotePostcodeRanges };
 }
 
 export async function runQuote(
