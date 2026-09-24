@@ -85,7 +85,9 @@ Danh sách "Đang kiểm" — các chiếc `qc_result='pending'`, mới nhất t
 
 - **Trái — ảnh:** cao gần hết chiều cao màn hình, mũi tên trái/phải đổi ảnh, phím `←`/`→` cũng đổi. Ảnh đầu tiên là **ảnh của đúng biến thể** (màu khách đặt), sau đó tới ảnh sản phẩm. Bấm ảnh để phóng to hơn nữa.
 - **Phải — thuộc tính:** danh sách nhãn/giá trị để soi khi kiểm. Trên cùng là SKU, tên, màu, size. Dưới là thuộc tính từ Shopify.
-- **Băng cấp đơn:** `order.special_features` nếu có, ghi rõ nhãn **"Đặc điểm của cả đơn"** — vì nó gộp chung, không tách theo món (đơn `#MBLVD30517` có 6 sản phẩm / 10 đặc điểm trộn lẫn).
+- **Đặc điểm nổi bật của CHÍNH MÓN đó:** `custom.special_features` ở cấp **SẢN PHẨM** — phủ 10/18 (56%), ví dụ *"Deep scoop seam edge at the back, Attached bow at waist, Open back"*. Đây là thuộc tính sát việc kiểm hàng nhất nên **đẩy lên đầu** danh sách.
+
+  *(Sửa 24/09 khi dựng: bản đầu của spec chỉ biết `order.special_features` ở cấp ĐƠN và ghi nhận giới hạn "gộp chung, không tách theo món". Chạy thật trên Shopify mới thấy bản cấp SẢN PHẨM cũng có — giới hạn đó **đã được gỡ**. Bản cấp đơn chỉ là hợp của các sản phẩm trong đơn, nên không cần hiện nữa.)*
 - **Dưới cùng:** hai nút **Đạt** / **Không đạt**.
 
 ### 6.1 Truy vấn Shopify (một lần cho một đơn)
