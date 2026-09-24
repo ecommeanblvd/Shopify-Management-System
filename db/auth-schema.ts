@@ -12,6 +12,9 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  /** Kho người này làm việc (GVM/AP/DM). NULL thì rơi về GVM.
+   *  CEO 24/09: "người dùng làm việc ở kho nào sẽ nhập hàng ở kho đó". */
+  khoMacDinh: text("kho_mac_dinh"),
 });
 
 export const session = pgTable(

@@ -8,6 +8,13 @@ import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
 import { layIdBienThe } from './shopify-qc';
 
+/** Kho làm việc của người đang thao tác. Chưa gán thì rơi về GVM (kho chính). */
+async function khoCuaNguoiDung(userId: string): Promise<string> {
+  const [u] = await db.select({ kho: schema.user.khoMacDinh })
+    .from(schema.user).where(eq(schema.user.id, userId)).limit(1);
+  return (u?.kho ?? '').trim() || 'GVM';
+}
+
 /**
  * Ghi nhận MỘT chiếc vừa về, ở trạng thái ĐANG KIỂM.
  *
@@ -49,7 +56,8 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
     const variantId = line.variantIdDaCo
       ?? (line.sku ? await layIdBienThe(line.storeId, line.shopifyOrderId, line.sku) : null);
 
-    const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, line.vendor);
+    const kho = await khoCuaNguoiDung(actor);
+    const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, line.vendor, kho);
     let [phieu] = await db.select().from(schema.goodsReceipts)
       .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
     if (!phieu) {
@@ -57,7 +65,7 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
       // một mã phiếu. `code` là unique nên người sau đụng 23505; đọc lại thay vì hỏng.
       try {
         [phieu] = await db.insert(schema.goodsReceipts).values({
-          code: maPhieu, warehouseCode: 'GVM', sourceType: 'consignment',
+          code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
           vendor: line.vendor, receivedAt: new Date(), receivedBy: actor,
         }).returning();
       } catch {

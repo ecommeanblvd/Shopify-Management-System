@@ -49,8 +49,10 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     larkRecordId: schema.goodsReceiptItems.larkRecordId,
     maDon: schema.shopifyOrders.shopifyOrderNumber,
     taoLuc: schema.goodsReceiptItems.createdAt,
+    kho: schema.goodsReceipts.warehouseCode,
   })
     .from(schema.goodsReceiptItems)
+    .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .where(inArray(schema.goodsReceiptItems.id, itemIds));
 
@@ -59,7 +61,11 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     if (!c.maDon || !c.sku) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'thiếu mã đơn hoặc SKU' }); continue; }
 
     // Chuẩn hoá `#` cả hai phía — quên là truy vấn trả rỗng mà không báo lỗi.
-    const [mon] = await db.select({ recordId: schema.larkMonDon.recordId })
+    const [mon] = await db.select({
+      recordId: schema.larkMonDon.recordId,
+      maDon: schema.larkMonDon.orderNumber,
+      sku: schema.larkMonDon.sku,
+    })
       .from(schema.larkMonDon)
       .where(and(
         sql`regexp_replace(${schema.larkMonDon.orderNumber}, '^#', '') = regexp_replace(${c.maDon}, '^#', '')`,
@@ -71,10 +77,16 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       ket.boQua.push({ unitCode: c.unitCode, lyDo: 'món này chưa có dòng trên bảng Lark' });
       continue;
     }
+    // `sku` bên lark_mon_don cho phép rỗng; rơi về SKU của chiếc hàng để cột
+    // `Lineitem SKU final` không bao giờ trống — trống là `Định danh` cụt.
+    const skuFinal = mon.sku ?? c.sku;
 
     try {
       const recordId = await createWhInventoryRecord(
-        dungPayloadNhan({ larkMonRecordId: mon.recordId, nhanLuc: c.taoLuc }),
+        dungPayloadNhan({
+          larkMonRecordId: mon.recordId, maDon: mon.maDon, sku: skuFinal,
+          nhanLuc: c.taoLuc, kho: c.kho,
+        }),
       );
       await db.update(schema.goodsReceiptItems)
         .set({ larkRecordId: recordId, updatedAt: new Date() })

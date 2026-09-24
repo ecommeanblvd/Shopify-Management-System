@@ -22,8 +22,11 @@ export function maChiec(soSeq: number, luc: Date): string {
  *
  * Gom chiếc về một phiếu để biên bản và tra cứu đi theo lô, thay vì mỗi chiếc
  * một phiếu. Brand trống thì vẫn có phiếu riêng chứ không trộn vào phiếu brand khác.
+ *
+ * KHO nằm trong mã: hai kho cùng nhận hàng một brand trong một ngày phải là HAI
+ * phiếu, nếu không phiếu mang kho của người bấm trước và hàng kho kia ghi sai chỗ.
  */
-export function maPhieuNhan(ngayKinhDoanhStr: string, vendor: string | null): string {
+export function maPhieuNhan(ngayKinhDoanhStr: string, vendor: string | null, kho: string): string {
   const brand = (vendor ?? '').trim() || 'KHONG-BRAND';
-  return `WH-${ngayKinhDoanhStr}-${brand.replace(/\s+/g, '-').toUpperCase()}`;
+  return `WH-${kho}-${ngayKinhDoanhStr}-${brand.replace(/\s+/g, '-').toUpperCase()}`;
 }

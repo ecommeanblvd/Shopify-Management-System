@@ -19,14 +19,17 @@ describe('maChiec', () => {
 });
 
 describe('maPhieuNhan', () => {
-  it('gom theo ngày + brand', () => {
-    expect(maPhieuNhan('2026-09-24', 'HA THANH VIET')).toBe('WH-2026-09-24-HA-THANH-VIET');
+  it('gom theo kho + ngày + brand', () => {
+    expect(maPhieuNhan('2026-09-24', 'HA THANH VIET', 'GVM')).toBe('WH-GVM-2026-09-24-HA-THANH-VIET');
   });
   it('brand trống vẫn có phiếu riêng, không trộn vào brand khác', () => {
-    expect(maPhieuNhan('2026-09-24', null)).toBe('WH-2026-09-24-KHONG-BRAND');
-    expect(maPhieuNhan('2026-09-24', '   ')).toBe('WH-2026-09-24-KHONG-BRAND');
+    expect(maPhieuNhan('2026-09-24', null, 'GVM')).toBe('WH-GVM-2026-09-24-KHONG-BRAND');
+    expect(maPhieuNhan('2026-09-24', '   ', 'GVM')).toBe('WH-GVM-2026-09-24-KHONG-BRAND');
   });
-  it('cùng ngày cùng brand ra CÙNG mã — để chiếc gom về một phiếu', () => {
-    expect(maPhieuNhan('2026-09-24', 'Larmes')).toBe(maPhieuNhan('2026-09-24', 'larmes'));
+  it('cùng kho cùng ngày cùng brand ra CÙNG mã — để chiếc gom về một phiếu', () => {
+    expect(maPhieuNhan('2026-09-24', 'Larmes', 'AP')).toBe(maPhieuNhan('2026-09-24', 'larmes', 'AP'));
+  });
+  it('HAI KHO cùng nhận một brand trong một ngày ra HAI phiếu khác nhau', () => {
+    expect(maPhieuNhan('2026-09-24', 'Larmes', 'GVM')).not.toBe(maPhieuNhan('2026-09-24', 'Larmes', 'AP'));
   });
 });
