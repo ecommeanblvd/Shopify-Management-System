@@ -94,7 +94,15 @@ export async function estimateForBrand(brandSlug: string, parcel: EstimateParcel
   if (!account) return { ok: false, code: 'no_carrier', error: 'Chưa cấu hình đơn vị vận chuyển' };
   // remoteCountry: chỉ nạp ODA postcodes của nước đích — bảng full-list 2026
   // ~130k dòng/account, nạp tất cả làm reconcile nhiều đơn nghẽn/đứt kết nối.
-  const snap = await loadAccountSnapshot(account.id, asOf ?? new Date(), { remoteCountry: country });
+  // remotePostcodes: đã biết mã bưu chính thì nạp đúng dòng cần, không kéo cả
+  // nước (D-025 — riêng US là 112.589 dòng). Hàm này nay chạy trong cron mỗi giờ
+  // (job `ship-ho-gia-thu`), không còn chỉ chạy khi có người bấm.
+  // KHÔNG mất phụ phí: thiếu mã bưu chính thì engine tự rơi về nạp cả nước như
+  // cũ, và nhánh hẹp vẫn kéo đủ mã chính xác + dải + MỌI dòng ghi tên thành phố.
+  const snap = await loadAccountSnapshot(account.id, asOf ?? new Date(), {
+    remoteCountry: country,
+    remotePostcodes: [parcel.postcode],
+  });
   if (!snap) return { ok: false, code: 'no_carrier', error: 'Chưa nạp được bảng giá' };
 
   const dims = typeof parcel.dimLengthCm === 'number' && typeof parcel.dimWidthCm === 'number' && typeof parcel.dimHeightCm === 'number'
