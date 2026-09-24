@@ -1866,6 +1866,10 @@ export const fulfillmentOrderStatusEnum = pgEnum('fulfillment_order_status', [
 
 export const receiptSourceTypeEnum = pgEnum('receipt_source_type', ['retail_for_order', 'consignment', 'po']);
 export const qcResultEnum = pgEnum('qc_result', ['pending', 'pass', 'fail']);
+export const qcLyDoLoiEnum = pgEnum('qc_ly_do_loi', [
+  'ban', 'rach', 'loi_vai', 'xuoc_vai', 'hong_khoa', 'thieu_phu_kien',
+  'co_mui', 'sai_mau', 'sai_size', 'loi_duong_may', 'o_loang_mau', 'khac',
+]);
 export const receiptItemDispositionEnum = pgEnum('receipt_item_disposition', ['pending', 'allocate_to_order', 'store', 'return_to_brand']);
 export const warehouseItemStatusEnum = pgEnum('warehouse_item_status', [
   'pending', 'in_stock', 'staging', 'allocated', 'picked', 'shipped',
@@ -2872,3 +2876,17 @@ export const kolTraVe = pgTable('kol_tra_ve', {
   ghiChu: text('ghi_chu'),
   taoBoi: text('tao_boi').notNull(),
 }, (t) => [index('kol_tra_ve_dong_idx').on(t.dongDonId)]);
+
+/** Một CHỖ LỖI trên một chiếc hàng. Một chiếc có thể nhiều dòng — bẩn gấu VÀ
+ *  rách nách VÀ hỏng khoá là ba dòng, mỗi dòng một ảnh. Nhồi vào một ô
+ *  `qc_fail_photo_key` là mất bằng chứng khi cãi với brand. */
+export const whLoiQc = pgTable('wh_loi_qc', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  receiptItemId: uuid('receipt_item_id')
+    .references(() => goodsReceiptItems.id, { onDelete: 'cascade' }).notNull(),
+  lyDo: qcLyDoLoiEnum('ly_do').notNull(),
+  anhKey: text('anh_key'),
+  ghiChu: text('ghi_chu'),
+  taoLuc: timestamp('tao_luc').notNull().defaultNow(),
+  taoBoi: text('tao_boi').notNull(),
+}, (t) => [index('wh_loi_qc_item_idx').on(t.receiptItemId)]);
