@@ -93,6 +93,7 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     id: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
     sku: schema.goodsReceiptItems.sku,
+    shopifyVariantId: schema.goodsReceiptItems.shopifyVariantId,
     tenSanPham: schema.goodsReceiptItems.productTitle,
     tenBienThe: schema.goodsReceiptItems.variantTitle,
     orderId: schema.goodsReceiptItems.orderId,

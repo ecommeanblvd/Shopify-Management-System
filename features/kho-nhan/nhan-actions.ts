@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
+import { layIdBienThe } from './shopify-qc';
 
 /**
  * Ghi nhận MỘT chiếc vừa về, ở trạng thái ĐANG KIỂM.
@@ -29,8 +30,24 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
       productTitle: schema.shopifyOrderLines.productTitle,
       variantTitle: schema.shopifyOrderLines.variantTitle,
       vendor: schema.shopifyOrderLines.vendor,
-    }).from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.id, lineId)).limit(1);
+      variantIdDaCo: schema.shopifyOrderLines.shopifyVariantId,
+      storeId: schema.shopifyOrders.storeId,
+      shopifyOrderId: schema.shopifyOrders.shopifyOrderId,
+    }).from(schema.shopifyOrderLines)
+      .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shopifyOrderLines.orderId))
+      .where(eq(schema.shopifyOrderLines.id, lineId)).limit(1);
     if (!line) return { ok: false, loi: 'Không tìm thấy dòng đơn.' };
+
+    /**
+     * ID biến thể — hai tầng, tầng trên chính xác hơn:
+     *  1. cột trên dòng đơn nếu bộ đồng bộ có điền (hiện chỉ 199/15.836 dòng);
+     *  2. hỏi thẳng Shopify theo ĐÚNG đơn này.
+     * KHÔNG tra theo SKU: `shopify_variants` chỉ có MỘT store nên trượt hàng
+     * store khác, và SKU trùng giữa hai store thì còn chọn NHẦM biến thể.
+     * Không ra thì để null — vẫn nhận hàng được, không chặn kho.
+     */
+    const variantId = line.variantIdDaCo
+      ?? (line.sku ? await layIdBienThe(line.storeId, line.shopifyOrderId, line.sku) : null);
 
     const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, line.vendor);
     let [phieu] = await db.select().from(schema.goodsReceipts)
@@ -57,6 +74,7 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
         receiptId: phieu!.id,
         unitCode,
         sku: line.sku,
+        shopifyVariantId: variantId,
         productTitle: line.productTitle,
         variantTitle: line.variantTitle,
         orderId: line.orderId,

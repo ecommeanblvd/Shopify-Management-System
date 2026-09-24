@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { OTimMonChoVe } from './OTimMonChoVe';
@@ -42,6 +43,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Mã chiếc</th>
                   <th className="px-3 py-2 text-left font-medium">Sản phẩm</th>
+                  <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
                   <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
                   <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
                   <th className="px-3 py-2" />
@@ -54,6 +56,11 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                     <td className="max-w-[420px] px-3 py-2">
                       <span className="block truncate">{c.tenSanPham ?? c.sku}</span>
                       <span className="block truncate font-mono text-xs text-muted-foreground">{c.sku}</span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {soIdShopify(c.shopifyVariantId ?? '') ?? (
+                        <span className="text-muted-foreground">chưa tra được</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>

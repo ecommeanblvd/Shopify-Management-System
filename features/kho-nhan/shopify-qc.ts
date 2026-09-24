@@ -46,3 +46,38 @@ export async function layDuLieuQc(storeId: string, shopifyOrderId: string): Prom
     return null;
   }
 }
+
+const TRUY_VAN_ID = `query($id: ID!) {
+  order(id: $id) { lineItems(first: 50) { nodes { sku variant { id } } } } }`;
+
+/**
+ * ID biến thể của ĐÚNG dòng hàng này trong ĐÚNG đơn này, hỏi thẳng Shopify.
+ *
+ * Nhẹ hơn hẳn `layDuLieuQc` (chi phí ~5 điểm, không kéo ảnh và metafield) vì
+ * chỉ dùng lúc ghi nhận hàng về — thao tác kho bấm liên tục.
+ *
+ * Vì sao không tra `shopify_variants` theo SKU: bảng đó chỉ chứa MỘT store, nên
+ * hàng của store khác trượt hẳn (đo 24/09: chiếc Mirer không tra ra; tỉ lệ
+ * chung 977/1082 = 90%). Và SKU trùng giữa hai store thì tra theo SKU còn chọn
+ * NHẦM biến thể — tệ hơn là không có.
+ *
+ * Trả `null` khi hỏng: thiếu ID thì vẫn nhận hàng được, không chặn kho.
+ */
+export async function layIdBienThe(
+  storeId: string, shopifyOrderId: string, sku: string,
+): Promise<string | null> {
+  try {
+    const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
+    if (!store) return null;
+    const token = await getStoreToken(store.id);
+    const r = await graphqlCall({
+      shopDomain: store.shopDomain, apiVersion: store.apiVersion, token,
+      query: TRUY_VAN_ID, variables: { id: shopifyOrderId },
+    }) as { data?: { order?: { lineItems?: { nodes?: { sku?: string | null; variant?: { id?: string } | null }[] } } | null } };
+    const nodes = r.data?.order?.lineItems?.nodes ?? [];
+    return nodes.find((n) => n.sku === sku)?.variant?.id ?? null;
+  } catch (e) {
+    console.error('[kho-nhan] layIdBienThe lỗi:', e);
+    return null;
+  }
+}

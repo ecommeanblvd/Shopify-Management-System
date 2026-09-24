@@ -2065,6 +2065,9 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   receiptId: uuid('receipt_id').references(() => goodsReceipts.id, { onDelete: 'cascade' }).notNull(),
   unitCode: text('unit_code').notNull().unique(),
   sku: text('sku'),
+  /** ID biến thể Shopify của ĐÚNG chiếc này, ghim lúc nhận (D-106). SKU của
+   *  brand đổi liên tục; ID thì không. Null khi tra không ra. */
+  shopifyVariantId: text('shopify_variant_id'),
   productTitle: text('product_title'),
   variantTitle: text('variant_title'),
   photoKey: text('photo_key'),
