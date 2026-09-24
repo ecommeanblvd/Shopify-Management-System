@@ -8,20 +8,27 @@ export function kepSoLuong(v: number, toiThieu = 1): number {
 
 /** Số lượng dạng stepper (−/ô số/+) — spec CEO: "một stepper, không phải ô gõ tự do", chặn dưới ở 1. */
 export function Stepper({
-  value, onChange, min = 1,
+  value, onChange, min = 1, ariaLabel, canhBao = false,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
+  /** Nhãn cho trình đọc màn hình — bảng có nhiều dòng, "Số lượng" trơn không
+   *  phân biệt được dòng nào. */
+  ariaLabel?: string;
+  /** Vượt tồn kho: viền và số chuyển sang màu cảnh báo (bản thiết kế 24/09).
+   *  Màu KHÔNG phải tín hiệu duy nhất — dòng chữ "thiếu {n}" ở ô sản phẩm mới
+   *  là chỗ nói rõ, để người không phân biệt được màu vẫn đọc ra. */
+  canhBao?: boolean;
 }) {
   return (
-    <div className="flex h-9 w-fit items-stretch rounded-md border border-input">
+    <div className={`flex h-[34px] w-fit items-stretch rounded-lg border ${canhBao ? 'border-warning/60' : 'border-input'}`}>
       <button
         type="button"
         aria-label="Giảm số lượng"
         disabled={value <= min}
         onClick={() => onChange(kepSoLuong(value - 1, min))}
-        className="flex w-9 shrink-0 cursor-pointer items-center justify-center text-base leading-none disabled:cursor-not-allowed disabled:opacity-40 hover:bg-muted"
+        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted-surface disabled:cursor-not-allowed disabled:opacity-40"
       >
         −
       </button>
@@ -31,13 +38,14 @@ export function Stepper({
         step={1}
         value={value}
         onChange={(e) => onChange(kepSoLuong(Number(e.target.value), min))}
-        className="h-full w-14 border-x border-input bg-transparent text-center text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        aria-label={ariaLabel}
+        className={`h-full w-12 border-x bg-transparent text-center text-sm font-semibold tabular-nums outline-none ${canhBao ? 'border-warning/60 text-warning' : 'border-input'} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       />
       <button
         type="button"
         aria-label="Tăng số lượng"
         onClick={() => onChange(kepSoLuong(value + 1, min))}
-        className="flex w-9 shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted"
+        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted-surface"
       >
         +
       </button>

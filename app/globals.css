@@ -21,6 +21,13 @@
   --color-danger-foreground: oklch(100% 0 0);
   --color-warning: oklch(70% 0.18 75);
   --color-warning-foreground: oklch(15% 0.03 270);
+  /* Tag loại người nhận đơn xuất hàng (bản thiết kế 24/09): KOL hồng (hue 330),
+     Production House xanh ngọc (hue 200). Thiết kế chỉ vẽ nền tối; bản sáng
+     giữ nguyên hue, đảo độ sáng để chữ vẫn đủ tương phản. */
+  --color-tag-kol-bg: oklch(93% 0.05 330);
+  --color-tag-kol-text: oklch(42% 0.14 330);
+  --color-tag-ph-bg: oklch(93% 0.04 200);
+  --color-tag-ph-text: oklch(38% 0.1 200);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -38,6 +45,10 @@
    - primary keeps the brand purple, brightened for dark contrast
    --------------------------------------------------------------- */
 [data-theme="dark"] {
+  --color-tag-kol-bg: oklch(40% 0.09 330 / 0.45);
+  --color-tag-kol-text: oklch(90% 0.08 330);
+  --color-tag-ph-bg: oklch(40% 0.07 200 / 0.45);
+  --color-tag-ph-text: oklch(90% 0.07 200);
   --color-bg: oklch(15% 0 0);
   --color-surface: oklch(23% 0 0);
   --color-border: oklch(33% 0 0);

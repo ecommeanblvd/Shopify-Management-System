@@ -1,21 +1,21 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { taoDon, goiYGiaVon, traTonKhaDung } from '@/features/kol/actions';
+import { taoDon } from '@/features/kol/actions';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { SearchSelect, type SelectOption } from '@/components/ui/search-select';
-import { formatMoneyForDisplay } from '@/components/ui/money-input';
-import { MaHangPicker } from '@/components/kol/MaHangPicker';
-import { Stepper, kepSoLuong } from '@/components/kol/Stepper';
+import { buttonVariants } from '@/components/ui/button';
+import { Stepper } from '@/components/kol/Stepper';
+import { ChonSanPham } from '@/components/kol/ChonSanPham';
+import { TagLoai } from '@/components/kol/TagLoai';
 import type { NguoiNhan } from '@/features/kol/queries';
-import type { HinhThuc, KetQuaBienThe, MucDich } from '@/features/kol/types';
-
-const NHAN_MUC_DICH: Record<MucDich, string> = { kol: 'KOL', chup_do: 'Chụp đồ', khac: 'Khác' };
+import type { HinhThuc, KetQuaBienThe, LoaiNguoiNhan } from '@/features/kol/types';
+import { TIEN_TO_MA } from '@/features/kol/types';
+import { boDauTiengViet } from '@/features/kol/bo-dau';
+import { thangKinhDoanh } from '@/lib/timezone';
 
 interface DongState {
   key: string;
@@ -23,127 +23,132 @@ interface DongState {
   tenHang: string;
   kho: string;
   soLuong: number;
-  hinhThuc: HinhThuc;
-  hanTra: string;
-  giaVon: string;
-  giaVonTienTe: string;
-  dangTraGiaVon: boolean;
-  ton: number | null;
-  tonDangTai: boolean;
+  /** Tồn khả dụng TỪNG KHO, lấy một lần lúc chọn sản phẩm — đổi kho không phải
+   *  gọi lại server, chỉ đọc lại từ mảng này. */
+  tonTheoKho: { kho: string; ton: number }[];
+  giaVon: number | null;
+  giaVonTienTe: string | null;
 }
 
 function dongMoi(): DongState {
   return {
     key: crypto.randomUUID(),
     sku: '', tenHang: '', kho: WAREHOUSE_PRIORITY[0], soLuong: 1,
-    hinhThuc: 'tang', hanTra: '', giaVon: '', giaVonTienTe: 'VND',
-    dangTraGiaVon: false, ton: null, tonDangTai: false,
+    tonTheoKho: [], giaVon: null, giaVonTienTe: null,
   };
 }
 
+const so = (v: number) => new Intl.NumberFormat('vi-VN').format(Math.round(v));
+const tien = (v: number, tt: string | null) => (tt && tt !== 'VND' ? `${so(v)} ${tt}` : `${so(v)} ₫`);
+
+/** Tồn của dòng tại kho đang chọn. Chưa chọn sản phẩm → null (chưa biết, khác 0). */
+function tonCuaDong(d: DongState): number | null {
+  if (!d.sku) return null;
+  return d.tonTheoKho.find((t) => t.kho === d.kho)?.ton ?? 0;
+}
+
+function chuCaiDau(ten: string): string {
+  return ten.trim().split(/\s+/).slice(0, 2).map((w) => w[0] ?? '').join('').toUpperCase() || '?';
+}
+
 /**
- * Modal "Tạo đơn" — thay cho trang `/f/kol/moi` cũ (spec CEO 23/09/2026):
- * mọi trường là một LỰA CHỌN (chọn người nhận từ sổ, chọn mã hàng qua tìm
- * kiếm/quét, chọn kho/hình thức từ danh sách, số lượng qua stepper), không có
- * ô gõ tay nào nhận thẳng giá trị hệ thống phải tin. Giá vốn CHỈ đọc, hệ
- * thống tự tra qua `goiYGiaVon` — không có ô gõ tay giá vốn ở đây, sửa giá
- * còn thiếu là việc của `suaGiaVon` ở màn chi tiết đơn.
+ * Modal "Tạo đơn xuất hàng" — dựng theo bản thiết kế `design_handoff_kol_order_modal`
+ * (CEO giao 24/09/2026).
+ *
+ * Ba điểm bám sát thiết kế, khác bản trước:
+ *  - LOẠI người nhận (KOL / Production House) đến từ SỔ, người dùng không chọn
+ *    tay; nó quyết định tag và tiền tố mã đơn. Trường "Mục đích" cũ bỏ hẳn.
+ *  - HÌNH THỨC (Tặng / Cho mượn) và HẠN THU HỒI đặt ở cấp ĐƠN, áp cho mọi dòng.
+ *    Schema vẫn giữ hai cột đó ở cấp DÒNG (không phải di dời gì) — lúc gửi thì
+ *    ghi cùng một giá trị xuống mọi dòng. Giữ được khả năng tách theo dòng sau.
+ *  - Dòng hàng là BẢNG, không phải chồng thẻ; tồn và giá vốn lấy sẵn từ lượt
+ *    tìm nên đổi kho / đổi số lượng không gọi thêm server lần nào.
+ *
+ * Cảnh báo vượt tồn và thiếu giá vốn KHÔNG chặn tạo nháp — nháp chưa đụng tồn.
  */
 export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState(false);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+
   const [nguoiNhanId, setNguoiNhanId] = useState('');
-  const [mucDich, setMucDich] = useState<MucDich>('kol');
+  const [timNhan, setTimNhan] = useState('');
+  const [hinhThuc, setHinhThuc] = useState<HinhThuc>('tang');
+  const [hanTra, setHanTra] = useState('');
   const [ghiChu, setGhiChu] = useState('');
   const [dong, setDong] = useState<DongState[]>([dongMoi()]);
+  const [picker, setPicker] = useState<'them' | string | null>(null);
 
-  // Hồ sơ ngừng dùng KHÔNG được chọn khi tạo đơn mới (spec CEO) — vẫn hiện ở bộ lọc
-  // danh sách đơn (nơi mảng `nguoiNhan` này được tải sẵn với gomCaNgung=true) nên lọc ở đây.
-  const nguoiNhanOptions: SelectOption[] = nguoiNhan
-    .filter((n) => !n.ngungDung)
-    .map((n) => ({ value: n.id, label: `${n.ten}${n.quocGia && n.quocGia !== 'VN' ? ` (${n.quocGia})` : ''}` }));
+  const chonDuoc = useMemo(() => nguoiNhan.filter((n) => !n.ngungDung), [nguoiNhan]);
+  const daChon = chonDuoc.find((n) => n.id === nguoiNhanId) ?? null;
+
+  const ketQuaNhan = useMemo(() => {
+    const k = boDauTiengViet(timNhan.trim());
+    if (!k) return chonDuoc.slice(0, 8);
+    return chonDuoc
+      .filter((n) => boDauTiengViet(`${n.ten} ${n.kenh ?? ''} ${n.dienThoai ?? ''}`).includes(k))
+      .slice(0, 8);
+  }, [chonDuoc, timNhan]);
 
   const capNhat = (key: string, patch: Partial<DongState>) =>
     setDong((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
 
-  const xoaDong = (key: string) => setDong((prev) => (prev.length > 1 ? prev.filter((d) => d.key !== key) : prev));
-  const themDong = () => setDong((prev) => [...prev, dongMoi()]);
-
-  function refreshTon(key: string, sku: string, kho: string) {
-    if (!sku.trim() || !kho.trim()) return;
-    capNhat(key, { tonDangTai: true });
-    start(async () => {
-      const t = await traTonKhaDung(sku, kho);
-      capNhat(key, { ton: t, tonDangTai: false });
-    });
+  function onChonSanPham(bt: KetQuaBienThe) {
+    const chonKhoCoHang = bt.tonTheoKho.find((t) => t.ton > 0)?.kho ?? WAREHOUSE_PRIORITY[0];
+    if (picker === 'them') {
+      setDong((prev) => [...prev, {
+        ...dongMoi(), sku: bt.sku, tenHang: bt.tenHang, kho: chonKhoCoHang,
+        tonTheoKho: bt.tonTheoKho, giaVon: bt.giaVon, giaVonTienTe: bt.giaVonTienTe,
+      }]);
+    } else if (picker) {
+      // Chế độ THAY: giữ nguyên kho và số lượng, chỉ đổi sản phẩm (theo thiết kế).
+      capNhat(picker, {
+        sku: bt.sku, tenHang: bt.tenHang,
+        tonTheoKho: bt.tonTheoKho, giaVon: bt.giaVon, giaVonTienTe: bt.giaVonTienTe,
+      });
+    }
   }
 
-  function goiYGia(key: string, sku: string) {
-    capNhat(key, { dangTraGiaVon: true });
-    start(async () => {
-      const g = await goiYGiaVon(sku);
-      capNhat(key, g
-        ? { giaVon: g.gia, giaVonTienTe: g.tienTe, dangTraGiaVon: false }
-        : { giaVon: '', dangTraGiaVon: false });
-    });
-  }
+  const tongSl = dong.reduce((a, d) => a + (d.sku ? d.soLuong : 0), 0);
+  const tongGiaVon = dong.reduce((a, d) => a + (d.giaVon != null ? d.giaVon * d.soLuong : 0), 0);
+  const soVuotTon = dong.filter((d) => { const t = tonCuaDong(d); return t != null && d.soLuong > t; }).length;
+  const soThieuGia = dong.filter((d) => d.sku && d.giaVon == null).length;
 
-  /** Chọn mã hàng xong (qua tìm kiếm hoặc quét) — nạp tên, tra tồn theo kho hiện tại, tra giá vốn. */
-  function onChonMaHang(key: string, bt: KetQuaBienThe) {
-    const khoHienTai = dong.find((d) => d.key === key)?.kho ?? WAREHOUSE_PRIORITY[0];
-    capNhat(key, { sku: bt.sku, tenHang: bt.tenHang });
-    refreshTon(key, bt.sku, khoHienTai);
-    goiYGia(key, bt.sku);
-  }
+  const maPreview = daChon
+    ? `${TIEN_TO_MA[daChon.loai as LoaiNguoiNhan]}-${(thangKinhDoanh(new Date()) ?? '').replace('-', '').slice(-4)}-…`
+    : 'Mã đơn tự sinh theo người nhận';
 
-  function onKhoChange(key: string, sku: string, kho: string) {
-    capNhat(key, { kho });
-    refreshTon(key, sku, kho);
-  }
-
-  function onHinhThucChange(key: string, hinhThuc: HinhThuc) {
-    // Tặng thì KHÔNG được có hạn trả — xoá trống ngay khi đổi hình thức.
-    capNhat(key, { hinhThuc, hanTra: hinhThuc === 'tang' ? '' : dong.find((d) => d.key === key)?.hanTra ?? '' });
-  }
+  const thieuHan = hinhThuc === 'muon' && !hanTra;
+  const coTheTao = Boolean(nguoiNhanId) && dong.some((d) => d.sku) && !thieuHan;
 
   function resetForm() {
-    setErr(null);
-    setNguoiNhanId('');
-    setMucDich('kol');
-    setGhiChu('');
-    setDong([dongMoi()]);
+    setErr(null); setNguoiNhanId(''); setTimNhan(''); setHinhThuc('tang');
+    setHanTra(''); setGhiChu(''); setDong([dongMoi()]); setPicker(null);
   }
-
-  const soDongThieuGia = dong.filter((d) => !d.giaVon.trim() && !d.dangTraGiaVon).length;
 
   const submit = () =>
     start(async () => {
       setErr(null);
       if (!nguoiNhanId) { setErr('Phải chọn người nhận.'); return; }
-      for (let i = 0; i < dong.length; i++) {
-        const d = dong[i];
-        const nhan = `Dòng ${i + 1}${d.sku ? ` (${d.sku})` : ''}`;
-        if (!d.sku.trim()) { setErr(`${nhan}: chưa chọn mã hàng — tìm hoặc quét để chọn.`); return; }
-        if (!d.kho.trim()) { setErr(`${nhan}: thiếu kho.`); return; }
-        if (!Number.isInteger(d.soLuong) || d.soLuong <= 0) { setErr(`${nhan}: số lượng phải là số nguyên dương.`); return; }
-        if (d.hinhThuc === 'muon' && !d.hanTra) { setErr(`${nhan}: hình thức mượn bắt buộc phải có hạn trả.`); return; }
-      }
+      const coHang = dong.filter((d) => d.sku.trim());
+      if (coHang.length === 0) { setErr('Phải có ít nhất một dòng hàng.'); return; }
+      if (thieuHan) { setErr('Cho mượn thì bắt buộc có hạn thu hồi.'); return; }
 
       const fd = new FormData();
       fd.set('nguoiNhanId', nguoiNhanId);
-      fd.set('mucDich', mucDich);
       fd.set('ghiChu', ghiChu);
-      fd.set('dong', JSON.stringify(dong.map((d) => ({
+      // Hình thức + hạn thu hồi là của cả ĐƠN nhưng schema lưu theo DÒNG —
+      // ghi cùng một giá trị xuống mọi dòng.
+      fd.set('dong', JSON.stringify(coHang.map((d) => ({
         sku: d.sku.trim(),
         tenHang: d.tenHang.trim() || undefined,
         kho: d.kho,
         soLuong: d.soLuong,
-        hinhThuc: d.hinhThuc,
-        hanTra: d.hinhThuc === 'muon' ? d.hanTra : undefined,
-        giaVon: d.giaVon.trim() || undefined,
-        giaVonTienTe: d.giaVon.trim() ? d.giaVonTienTe : undefined,
+        hinhThuc,
+        hanTra: hinhThuc === 'muon' ? hanTra : undefined,
+        giaVon: d.giaVon != null ? String(d.giaVon) : undefined,
+        giaVonTienTe: d.giaVon != null ? (d.giaVonTienTe ?? 'VND') : undefined,
       }))));
 
       const r = await taoDon(fd);
@@ -156,171 +161,260 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
   return (
     <Dialog open={openDialog} onOpenChange={(v) => { setOpenDialog(v); if (!v) resetForm(); }}>
       <DialogTrigger className={buttonVariants({})}>+ Tạo đơn</DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Tạo đơn KOL / chụp đồ</DialogTitle>
-          <DialogDescription>Đơn tạo ở trạng thái nháp, chưa đụng tồn kho — chốt đơn mới giữ chỗ.</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="mb-1 block">Người nhận *</span>
-              <SearchSelect
-                value={nguoiNhanId}
-                onChange={setNguoiNhanId}
-                options={nguoiNhanOptions}
-                placeholder="Gõ để tìm người nhận…"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block">Mục đích *</span>
-              <select
-                className="block h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                value={mucDich}
-                onChange={(e) => setMucDich(e.target.value as MucDich)}
+      <DialogContent className="relative max-h-[90vh] w-full gap-0 overflow-hidden p-0 sm:max-w-[1000px]">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-6 pb-4 pt-[18px]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <DialogTitle className="text-[17px] font-semibold tracking-[-0.015em]">Tạo đơn xuất hàng</DialogTitle>
+              <span
+                className={`rounded-md px-2 py-[3px] font-mono text-[12px] ${
+                  daChon ? 'border border-border text-text' : 'border border-dashed border-border text-muted'
+                }`}
               >
-                {(Object.keys(NHAN_MUC_DICH) as MucDich[]).map((m) => (
-                  <option key={m} value={m}>{NHAN_MUC_DICH[m]}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="block text-sm">
-            <span className="mb-1 block">Ghi chú</span>
-            <textarea
-              className="block w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-              rows={2}
-              value={ghiChu}
-              onChange={(e) => setGhiChu(e.target.value)}
-            />
-          </label>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Dòng hàng</h2>
-              <Button type="button" variant="outline" size="sm" onClick={themDong}>+ Thêm dòng</Button>
+                {maPreview}
+              </span>
             </div>
-            <div className="space-y-3">
-              {dong.map((d, i) => {
-                const vuotTon = d.ton !== null && d.soLuong > d.ton;
-                return (
-                  <div key={d.key} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Dòng {i + 1}</span>
-                      {dong.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => xoaDong(d.key)}
-                          className="cursor-pointer text-xs text-red-600 hover:underline"
-                        >
-                          Xoá dòng
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">Mã hàng *</span>
-                        <MaHangPicker sku={d.sku} tenHang={d.tenHang} onChon={(bt) => onChonMaHang(d.key, bt)} />
-                      </div>
-                      <label className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">Kho *</span>
-                        <select
-                          className="block h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                          value={d.kho}
-                          onChange={(e) => onKhoChange(d.key, d.sku, e.target.value)}
-                        >
-                          {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{k}</option>)}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <div className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">Số lượng *</span>
-                        <Stepper value={d.soLuong} onChange={(v) => capNhat(d.key, { soLuong: kepSoLuong(v) })} />
-                      </div>
-                      <label className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">Hình thức *</span>
-                        <select
-                          className="block h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                          value={d.hinhThuc}
-                          onChange={(e) => onHinhThucChange(d.key, e.target.value as HinhThuc)}
-                        >
-                          <option value="tang">Tặng</option>
-                          <option value="muon">Mượn</option>
-                        </select>
-                      </label>
-                      <label className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">
-                          Hạn trả {d.hinhThuc === 'muon' ? '*' : '(chỉ áp dụng khi mượn)'}
-                        </span>
-                        <input
-                          type="date"
-                          className="block h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
-                          value={d.hanTra}
-                          disabled={d.hinhThuc !== 'muon'}
-                          onChange={(e) => capNhat(d.key, { hanTra: e.target.value })}
-                        />
-                      </label>
-                      <div className="text-xs">
-                        <span className="mb-1 block text-muted-foreground">Giá vốn (tự tra)</span>
-                        <div className="flex h-9 items-center rounded-md border border-input bg-muted/30 px-2">
-                          {d.dangTraGiaVon ? (
-                            <span className="text-muted-foreground">đang tra…</span>
-                          ) : d.giaVon.trim() ? (
-                            <span className="font-medium tabular-nums">
-                              {formatMoneyForDisplay(d.giaVon)} {d.giaVonTienTe}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">— chưa có</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-xs">
-                      <span className="mb-1 block text-muted-foreground">Tồn khả dụng tại {d.kho}</span>
-                      {d.tonDangTai ? (
-                        <span className="text-muted-foreground">đang tra…</span>
-                      ) : d.ton === null ? (
-                        <span className="text-muted-foreground">— chưa tra</span>
-                      ) : (
-                        <span className={vuotTon ? 'font-medium text-red-600' : 'font-medium'}>{d.ton}</span>
-                      )}
-                    </div>
-
-                    {vuotTon && (
-                      <p className="text-xs font-medium text-amber-600">
-                        ⚠ Số lượng ({d.soLuong}) vượt tồn khả dụng ({d.ton}) của {d.sku} tại kho {d.kho} — có thể tạo đơn
-                        nháp ngay nhưng chốt đơn sẽ thất bại cho tới khi nhập thêm hàng.
-                      </p>
-                    )}
-                    {d.sku && !d.giaVon.trim() && !d.dangTraGiaVon && (
-                      <p className="text-xs text-muted-foreground">
-                        Chưa tra được giá vốn — dòng này sẽ KHÔNG vào báo cáo chi phí cho tới khi được điền ở màn chi tiết đơn.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {soDongThieuGia > 0 && (
-              <p className="text-xs font-medium text-amber-600">
-                ⚠ {soDongThieuGia} dòng chưa có giá vốn — các dòng này sẽ KHÔNG vào báo cáo chi phí cho tới khi được điền.
-              </p>
-            )}
+            <p className="mt-0.5 text-[12px] text-muted">Nháp — chưa đụng tồn kho, chốt đơn mới giữ chỗ</p>
           </div>
-
-          {err && <p className="text-sm font-medium text-red-600">{err}</p>}
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpenDialog(false)} disabled={pending}>Huỷ</Button>
-          <Button type="button" onClick={submit} disabled={pending}>{pending ? 'Đang tạo…' : 'Tạo đơn (nháp)'}</Button>
-        </DialogFooter>
+        {/* ── Thông tin đơn ──────────────────────────────────────── */}
+        <div className="flex flex-col gap-2.5 px-6 pb-[18px]">
+          <div className="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Người nhận */}
+            <div className="relative">
+              {daChon ? (
+                <div className="flex h-10 items-center gap-2 rounded-[9px] border border-border bg-input px-2.5">
+                  <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-primary/20 text-[11px] font-semibold">
+                    {chuCaiDau(daChon.ten)}
+                  </span>
+                  <span className="shrink-0 text-sm font-medium">{daChon.ten}</span>
+                  <TagLoai loai={daChon.loai} />
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{daChon.kenh ?? ''}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setNguoiNhanId(''); setTimNhan(''); }}
+                    className="shrink-0 cursor-pointer text-[12px] font-medium text-primary hover:underline"
+                  >
+                    Đổi
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={timNhan}
+                    onChange={(e) => setTimNhan(e.target.value)}
+                    placeholder="Người nhận — gõ tên, SĐT hoặc @handle"
+                    aria-label="Tìm người nhận theo tên, số điện thoại hoặc handle"
+                    className="h-10 w-full rounded-[9px] border border-border bg-input px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                  />
+                  {timNhan.trim() !== '' && (
+                    <div className="absolute left-0 top-[46px] z-10 w-full rounded-[10px] border border-border bg-surface p-1.5 shadow-xl">
+                      {ketQuaNhan.length === 0 ? (
+                        <p className="px-2.5 py-3 text-[13px] text-muted">Không tìm thấy người nhận.</p>
+                      ) : ketQuaNhan.map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={() => { setNguoiNhanId(n.id); setTimNhan(''); }}
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-muted-surface"
+                        >
+                          <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-primary/20 text-[11px] font-semibold">
+                            {chuCaiDau(n.ten)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-medium">{n.ten}</span>
+                            <span className="block truncate text-[12px] text-muted">
+                              {[n.kenh, n.dienThoai, n.quocGia !== 'VN' ? n.quocGia : null].filter(Boolean).join(' · ')}
+                            </span>
+                          </span>
+                          <TagLoai loai={n.loai} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Hình thức — áp cho CẢ ĐƠN */}
+            <div
+              className="flex h-10 items-center gap-[3px] rounded-[9px] border border-border bg-input p-[3px]"
+              role="radiogroup"
+              aria-label="Hình thức xuất hàng"
+            >
+              {([['tang', 'Tặng', 'không thu hồi'], ['muon', 'Cho mượn', 'cần thu hồi']] as const).map(([v, chinh, phu]) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={hinhThuc === v}
+                  onClick={() => { setHinhThuc(v); if (v === 'tang') setHanTra(''); }}
+                  className={`flex h-full flex-1 cursor-pointer flex-col items-center justify-center rounded-md leading-tight ${
+                    hinhThuc === v ? 'bg-primary font-semibold text-primary-foreground shadow-sm' : 'text-muted hover:text-text'
+                  }`}
+                >
+                  <span className="text-[13px]">{chinh}</span>
+                  <span className="text-[11px] opacity-75">{phu}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2.5 md:flex-row">
+            <input
+              value={ghiChu}
+              onChange={(e) => setGhiChu(e.target.value)}
+              placeholder="Ghi chú (không bắt buộc)"
+              aria-label="Ghi chú"
+              className="h-[34px] min-w-0 flex-1 rounded-lg border border-transparent bg-muted-surface px-3 text-[13px] outline-none focus:border-border"
+            />
+            {hinhThuc === 'muon' && (
+              <label className="flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-primary/35 bg-primary/10 px-2.5 md:w-[320px]">
+                <span className="shrink-0 text-[12px] font-medium text-primary">Hạn thu hồi *</span>
+                <input
+                  type="date"
+                  value={hanTra}
+                  onChange={(e) => setHanTra(e.target.value)}
+                  required
+                  aria-label="Hạn thu hồi"
+                  className="min-w-0 flex-1 rounded border-none bg-bg px-1.5 py-0.5 text-[13px] outline-none"
+                />
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* ── Dòng hàng ──────────────────────────────────────────── */}
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border bg-muted-surface px-6 pb-3 pt-4">
+          <div className="mb-2 flex items-baseline gap-3">
+            <h2 className="text-[15px] font-semibold">Dòng hàng</h2>
+            <p className="text-[12px] tabular-nums text-muted">
+              {dong.filter((d) => d.sku).length} dòng · {tongSl} sản phẩm
+              {tongGiaVon > 0 && ` · giá vốn ${so(tongGiaVon)} ₫`}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-[20px_minmax(0,1fr)_84px_110px_110px_28px] gap-3 border-b border-border pb-2 text-[10px] uppercase tracking-[0.1em] text-muted">
+            <span /><span>Sản phẩm</span><span>Kho</span><span>Số lượng</span><span className="text-right">Giá vốn</span><span />
+          </div>
+
+          {dong.map((d, i) => {
+            const ton = tonCuaDong(d);
+            const vuot = ton != null && d.soLuong > ton;
+            return (
+              <div key={d.key} className="grid grid-cols-[20px_minmax(0,1fr)_84px_110px_110px_28px] items-center gap-3 border-b border-border/60 py-2.5">
+                <span className="text-[12px] tabular-nums text-muted">{i + 1}</span>
+
+                <button
+                  type="button"
+                  onClick={() => setPicker(d.key)}
+                  className="min-w-0 cursor-pointer rounded-[7px] px-1.5 py-1 text-left hover:bg-border/40"
+                >
+                  {d.sku ? (
+                    <>
+                      <span className="block truncate font-mono text-[13px] font-semibold">{d.sku}</span>
+                      <span className="block truncate text-[12px] text-muted">
+                        {d.tenHang}
+                        {ton != null && (
+                          <span className={vuot ? 'text-warning' : 'text-success'}>
+                            {' · '}Tồn {ton}{vuot && ` · thiếu ${d.soLuong - ton}`}
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[13px] text-muted">Bấm để chọn sản phẩm…</span>
+                  )}
+                </button>
+
+                <select
+                  value={d.kho}
+                  onChange={(e) => capNhat(d.key, { kho: e.target.value })}
+                  aria-label={`Kho cho dòng ${i + 1}`}
+                  className="h-[34px] w-full cursor-pointer rounded-lg border border-border bg-bg px-1.5 text-[13px]"
+                >
+                  {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+
+                <Stepper
+                  value={d.soLuong}
+                  onChange={(v) => capNhat(d.key, { soLuong: v })}
+                  ariaLabel={`Số lượng dòng ${i + 1}`}
+                  canhBao={vuot}
+                />
+
+                <span className="text-right text-[13px] tabular-nums">
+                  {d.giaVon == null
+                    ? <span className="text-muted">Chưa có</span>
+                    : <span className="font-medium">{tien(d.giaVon * d.soLuong, d.giaVonTienTe)}</span>}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setDong((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== d.key) : prev))}
+                  disabled={dong.length <= 1}
+                  aria-label={`Xoá dòng ${i + 1}`}
+                  className="grid size-7 cursor-pointer place-items-center rounded-md text-muted hover:bg-border/50 hover:text-text disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setPicker('them')}
+            className="mt-2 h-8 cursor-pointer rounded-lg px-2.5 text-[13px] font-medium text-primary hover:bg-primary/10"
+          >
+            + Thêm dòng
+          </button>
+        </div>
+
+        {/* ── Footer ─────────────────────────────────────────────── */}
+        <div className="flex items-center gap-4 border-t border-border px-6 py-3.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px]">
+              {daChon
+                ? `Gửi ${daChon.ten} · ${hinhThuc === 'tang' ? 'Tặng, không thu hồi' : 'Cho mượn, cần thu hồi'}`
+                : 'Chưa chọn người nhận'}
+            </p>
+            {(soVuotTon > 0 || soThieuGia > 0) && (
+              <p className="truncate text-[12px] text-warning">
+                {[
+                  soVuotTon > 0 && `${soVuotTon} dòng vượt tồn — chốt đơn sẽ lỗi tới khi nhập thêm`,
+                  soThieuGia > 0 && `${soThieuGia} dòng chưa có giá vốn — chưa vào báo cáo chi phí`,
+                ].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {err && <p className="truncate text-[12px] text-danger">{err}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpenDialog(false)}
+            className="h-[38px] shrink-0 cursor-pointer rounded-lg border border-border px-4 text-sm hover:bg-muted-surface"
+          >
+            Huỷ
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!coTheTao || pending}
+            className="h-[38px] shrink-0 cursor-pointer rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? 'Đang tạo…' : 'Tạo đơn nháp'}
+          </button>
+        </div>
+
+        {picker && (
+          <ChonSanPham
+            che_do={picker}
+            onChon={onChonSanPham}
+            onDong={() => setPicker(null)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

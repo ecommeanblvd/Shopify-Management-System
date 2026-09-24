@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { hienNgay } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
+import { TagLoai } from './TagLoai';
 import type { DonTomTat } from '@/features/kol/queries';
-import type { TrangThaiDon, MucDich } from '@/features/kol/types';
+import type { TrangThaiDon, } from '@/features/kol/types';
 
 export const NHAN_TRANG_THAI: Record<TrangThaiDon, string> = {
   nhap: 'Nháp',
@@ -18,11 +19,6 @@ const MAU_TRANG_THAI: Record<TrangThaiDon, string> = {
   huy: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
-export const NHAN_MUC_DICH: Record<MucDich, string> = {
-  kol: 'KOL',
-  chup_do: 'Chụp đồ',
-  khac: 'Khác',
-};
 
 interface NguoiNhanOption { id: string; ten: string; ngungDung: boolean }
 
@@ -104,7 +100,7 @@ export function BangDonKol({
                     </Link>
                   </td>
                   <td>{d.tenNhan}</td>
-                  <td>{NHAN_MUC_DICH[d.mucDich]}</td>
+                  <td><TagLoai loai={d.loaiNhan} /></td>
                   <td>{d.quocGia === 'VN' ? 'Nội địa' : 'Quốc tế'}</td>
                   <td className="text-right tabular-nums">{d.soDong}</td>
                   <td>

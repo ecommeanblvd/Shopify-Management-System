@@ -3,14 +3,14 @@ import { db, schema } from '@/db/client';
 import { soNgayTre } from './chi-phi';
 import { conNo } from './tra-ve';
 import { dangUuid } from './uuid';
-import type { DongDon, TrangThaiDon, HinhThuc, MucDich } from './types';
+import type { DongDon, TrangThaiDon, HinhThuc, LoaiNguoiNhan } from './types';
 
 /** Một dòng trong bảng danh sách đơn — kèm số dòng hàng, không cần tải cả dòng. */
 export interface DonTomTat {
   id: string;
   ma: string;
   trangThai: TrangThaiDon;
-  mucDich: MucDich;
+  loaiNhan: LoaiNguoiNhan;
   nguoiNhanId: string;
   /** Ảnh chụp tên người nhận tại lúc tạo đơn, không phải tra sổ KOL hiện tại. */
   tenNhan: string;
@@ -28,7 +28,7 @@ export interface DonDayDu {
   id: string;
   ma: string;
   nguoiNhanId: string;
-  mucDich: MucDich;
+  loaiNhan: LoaiNguoiNhan;
   trangThai: TrangThaiDon;
   tenNhan: string;
   dienThoaiNhan: string | null;
@@ -57,6 +57,8 @@ export interface NguoiNhan {
   diaChi: string | null;
   thanhPho: string | null;
   ghiChu: string | null;
+  /** KOL hay Production House — quyết định tag và tiền tố mã đơn. */
+  loai: LoaiNguoiNhan;
   ngungDung: boolean;
 }
 
@@ -117,7 +119,7 @@ export async function danhSachDon(
       id: schema.kolDon.id,
       ma: schema.kolDon.ma,
       trangThai: schema.kolDon.trangThai,
-      mucDich: schema.kolDon.mucDich,
+      loaiNhan: schema.kolDon.loaiNhan,
       nguoiNhanId: schema.kolDon.nguoiNhanId,
       tenNhan: schema.kolDon.tenNhan,
       quocGia: schema.kolDon.quocGia,
@@ -163,6 +165,7 @@ export async function danhSachNguoiNhan(gomCaNgung = false): Promise<NguoiNhan[]
       diaChi: schema.kolNguoiNhan.diaChi,
       thanhPho: schema.kolNguoiNhan.thanhPho,
       ghiChu: schema.kolNguoiNhan.ghiChu,
+      loai: schema.kolNguoiNhan.loai,
       ngungDung: schema.kolNguoiNhan.ngungDung,
     })
     .from(schema.kolNguoiNhan)
@@ -239,6 +242,7 @@ export async function layNguoiNhan(id: string): Promise<NguoiNhan | null> {
       diaChi: schema.kolNguoiNhan.diaChi,
       thanhPho: schema.kolNguoiNhan.thanhPho,
       ghiChu: schema.kolNguoiNhan.ghiChu,
+      loai: schema.kolNguoiNhan.loai,
       ngungDung: schema.kolNguoiNhan.ngungDung,
     })
     .from(schema.kolNguoiNhan)

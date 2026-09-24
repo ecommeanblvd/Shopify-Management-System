@@ -11,7 +11,8 @@ import { ngayKinhDoanh, hienNgayGio } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MoneyInput } from '@/components/ui/money-input';
-import { NHAN_TRANG_THAI, NHAN_MUC_DICH } from './BangDonKol';
+import { NHAN_TRANG_THAI } from './BangDonKol';
+import { TagLoai } from './TagLoai';
 import type { DonDayDu } from '@/features/kol/queries';
 import type { DongDon } from '@/features/kol/types';
 
@@ -170,7 +171,7 @@ export function ChiTietDon({ don, dong, canManage }: { don: DonDayDu; dong: Dong
           </Link>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">{don.ma}</h1>
           <p className="text-sm text-muted-foreground">
-            {NHAN_MUC_DICH[don.mucDich]} · {don.quocGia === 'VN' ? 'Nội địa' : 'Quốc tế'} · Tạo lúc {hienNgayGio(don.taoLuc)}
+            <TagLoai loai={don.loaiNhan} /> · {don.quocGia === 'VN' ? 'Nội địa' : 'Quốc tế'} · Tạo lúc {hienNgayGio(don.taoLuc)}
           </p>
         </div>
         <span className="inline-block rounded px-2.5 py-1 text-sm font-medium bg-muted">{NHAN_TRANG_THAI[tt]}</span>

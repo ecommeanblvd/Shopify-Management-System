@@ -7,7 +7,8 @@ import { taoNguoiNhan, suaNguoiNhan, doiNgungDung } from '@/features/kol/actions
 import { hienNgay } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { NHAN_MUC_DICH } from './BangDonKol';
+import { TagLoai } from './TagLoai';
+import type { LoaiNguoiNhan } from '@/features/kol/types';
 import type { NguoiNhan, DonTomTat, MonDangGiu } from '@/features/kol/queries';
 
 const inputCls = 'block w-full h-9 rounded-md border border-input bg-background px-2 text-sm';
@@ -15,14 +16,17 @@ const inputCls = 'block w-full h-9 rounded-md border border-input bg-background 
 interface HoSoTho {
   ten: string; kenh: string; dienThoai: string; email: string;
   quocGia: string; thanhPho: string; diaChi: string; ghiChu: string;
+  /** KOL hay Production House. Đặt ở ĐÂY chứ không phải lúc lên đơn: loại là
+   *  thuộc tính của người nhận, và nó quyết định tiền tố mã đơn (KOL-… / PH-…). */
+  loai: LoaiNguoiNhan;
 }
 
-const hoSoRong: HoSoTho = { ten: '', kenh: '', dienThoai: '', email: '', quocGia: 'VN', thanhPho: '', diaChi: '', ghiChu: '' };
+const hoSoRong: HoSoTho = { ten: '', kenh: '', dienThoai: '', email: '', quocGia: 'VN', thanhPho: '', diaChi: '', ghiChu: '', loai: 'kol' };
 
 function hoSoTuNguoiNhan(n: NguoiNhan): HoSoTho {
   return {
     ten: n.ten, kenh: n.kenh ?? '', dienThoai: n.dienThoai ?? '', email: n.email ?? '',
-    quocGia: n.quocGia, thanhPho: n.thanhPho ?? '', diaChi: n.diaChi ?? '', ghiChu: n.ghiChu ?? '',
+    quocGia: n.quocGia, thanhPho: n.thanhPho ?? '', diaChi: n.diaChi ?? '', ghiChu: n.ghiChu ?? '', loai: n.loai,
   };
 }
 
@@ -34,6 +38,24 @@ function CacO({ v, set }: { v: HoSoTho; set: (patch: Partial<HoSoTho>) => void }
         <span className="mb-1 block text-muted-foreground">Tên *</span>
         <input className={inputCls} value={v.ten} onChange={(e) => set({ ten: e.target.value })} />
       </label>
+      <fieldset className="text-xs sm:col-span-2">
+        <legend className="mb-1 block text-muted-foreground">Loại *</legend>
+        <div className="flex gap-4">
+          {(['kol', 'ph'] as const).map((l) => (
+            <label key={l} className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="loai-nguoi-nhan"
+                value={l}
+                checked={v.loai === l}
+                onChange={() => set({ loai: l })}
+                className="cursor-pointer"
+              />
+              <span>{l === 'kol' ? 'KOL' : 'Production House'}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <label className="text-xs">
         <span className="mb-1 block text-muted-foreground">Kênh</span>
         <input className={inputCls} value={v.kenh} onChange={(e) => set({ kenh: e.target.value })} placeholder="VD TikTok, Instagram…" />
@@ -81,7 +103,7 @@ function FormThem({ onClose }: { onClose: () => void }) {
       if (!v.ten.trim()) { setErr('Tên là bắt buộc.'); return; }
       const fd = new FormData();
       fd.set('ten', v.ten); fd.set('kenh', v.kenh); fd.set('dienThoai', v.dienThoai);
-      fd.set('email', v.email); fd.set('quocGia', v.quocGia); fd.set('thanhPho', v.thanhPho);
+      fd.set('email', v.email); fd.set('quocGia', v.quocGia); fd.set('thanhPho', v.thanhPho); fd.set('loai', v.loai);
       fd.set('diaChi', v.diaChi); fd.set('ghiChu', v.ghiChu);
       const r = await taoNguoiNhan(fd);
       if (!r.ok) { setErr(r.loi ?? 'Có lỗi xảy ra.'); return; }
@@ -121,7 +143,7 @@ function FormSua({ hoSo, onSaved, onClose }: { hoSo: NguoiNhan; onSaved: () => v
       const fd = new FormData();
       fd.set('id', hoSo.id);
       fd.set('ten', v.ten); fd.set('kenh', v.kenh); fd.set('dienThoai', v.dienThoai);
-      fd.set('email', v.email); fd.set('quocGia', v.quocGia); fd.set('thanhPho', v.thanhPho);
+      fd.set('email', v.email); fd.set('quocGia', v.quocGia); fd.set('thanhPho', v.thanhPho); fd.set('loai', v.loai);
       fd.set('diaChi', v.diaChi); fd.set('ghiChu', v.ghiChu);
       const r = await suaNguoiNhan(fd);
       if (!r.ok) { setErr(r.loi ?? 'Có lỗi xảy ra.'); return; }
@@ -328,7 +350,7 @@ export function SoKol({
                       {chiTiet.donDaGui.map((d) => (
                         <tr key={d.id} className="border-b last:border-0 [&>td]:py-1.5">
                           <td><Link href={`/f/kol/${d.ma}`} className="underline-offset-2 hover:underline">{d.ma}</Link></td>
-                          <td>{NHAN_MUC_DICH[d.mucDich]}</td>
+                          <td><TagLoai loai={d.loaiNhan} /></td>
                           <td className="text-right tabular-nums">{d.soDong}</td>
                           <td className="text-muted-foreground">{hienNgay(d.guiLuc)}</td>
                         </tr>

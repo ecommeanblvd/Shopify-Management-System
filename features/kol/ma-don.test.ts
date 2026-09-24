@@ -22,3 +22,20 @@ describe('maDonKol', () => {
     expect(() => maDonKol(0, new Date('2026-09-23T10:00:00Z'))).toThrow();
   });
 });
+
+describe('maDonKol — tiền tố theo loại người nhận', () => {
+  it('Production House dùng tiền tố PH', () => {
+    expect(maDonKol(41, new Date('2026-09-26T10:00:00Z'), 'ph')).toBe('PH-2609-0041');
+  });
+  it('KOL giữ tiền tố KOL', () => {
+    expect(maDonKol(128, new Date('2026-09-26T10:00:00Z'), 'kol')).toBe('KOL-2609-0128');
+  });
+  it('không truyền loại thì mặc định KOL (đơn cũ không đổi mã)', () => {
+    expect(maDonKol(7, new Date('2026-09-23T10:00:00Z'))).toBe('KOL-2609-0007');
+  });
+  it('sequence dùng CHUNG: cùng số thứ tự ở hai loại KHÔNG ra cùng một mã', () => {
+    const a = maDonKol(9, new Date('2026-09-23T10:00:00Z'), 'kol');
+    const b = maDonKol(9, new Date('2026-09-23T10:00:00Z'), 'ph');
+    expect(a).not.toBe(b);
+  });
+});

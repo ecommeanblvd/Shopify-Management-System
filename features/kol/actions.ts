@@ -5,7 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { applyMovement } from '@/features/warehouse/ledger';
-import { requireQuanLyKol, requireXemKol } from './perm';
+import { requireQuanLyKol } from './perm';
 import { chuyenDuoc, ghiGiaVonDuoc, giaVonDangTrong } from './trang-thai';
 import { dangUuid } from './uuid';
 import { maDonKol } from './ma-don';
@@ -13,9 +13,7 @@ import { kiemTraVe } from './tra-ve';
 import { draftGiuCho, draftTraCho, draftXuat, draftNhapLai } from './ton-kho';
 import { chonGiaVon } from './gia-von';
 import { tonKhaDung } from './queries';
-import type { HinhThuc, MucDich } from './types';
-
-const MUC_DICH_HOP_LE: readonly MucDich[] = ['kol', 'chup_do', 'khac'];
+import type { HinhThuc } from './types';
 
 /**
  * Tiền tệ hợp lệ cho giá vốn — đúng tập mà phần còn lại của luồng (sku_costs,
@@ -171,49 +169,17 @@ async function storeCuaSku(chay: DbHoacTx, sku: string): Promise<string | null> 
   return boStore.size === 1 ? [...boStore][0]! : null;
 }
 
-/**
- * Tra giá vốn hiện hành cho một SKU, tại một ngày — dùng chung cho gợi ý lúc
- * gõ form (`goiYGiaVon`) và lúc đông cứng khi gửi (`danhDauDaGui`), để hai nơi
- * không bao giờ lệch logic. KHÔNG export — chỉ dùng nội bộ file này.
- */
-async function traGiaVonHienHanh(sku: string, ngay: string): Promise<{ costPerUnit: string; currency: string } | null> {
-  const storeId = await storeCuaSku(db, sku);
-  // Không xác định được sku này thuộc cửa hàng nào thì KHÔNG tra sku_costs —
-  // trả null. Xem giải thích đầy đủ ở storeCuaSku.
-  if (!storeId) return null;
-  const ds = await db.select({
-    costPerUnit: schema.skuCosts.costPerUnit,
-    currency: schema.skuCosts.currency,
-    effectiveFrom: schema.skuCosts.effectiveFrom,
-  }).from(schema.skuCosts).where(and(eq(schema.skuCosts.sku, sku), eq(schema.skuCosts.storeId, storeId)));
-  return chonGiaVon(ds, ngay);
-}
 
-/**
- * Gợi ý giá vốn khi người dùng gõ mã hàng ở form tạo đơn. Chỉ ĐỌC — gác bằng
- * `requireXemKol`, không phải `requireQuanLyKol`. Trả null khi không tra được;
- * màn hình phải để trống chứ không bịa số.
- */
-export async function goiYGiaVon(sku: string): Promise<{ gia: string; tienTe: string } | null> {
-  await requireXemKol();
-  const s = sku.trim();
-  if (!s) return null;
-  const homNay = ngayKinhDoanh(new Date())!;
-  const g = await traGiaVonHienHanh(s, homNay);
-  return g ? { gia: g.costPerUnit, tienTe: g.currency } : null;
-}
 
-/**
- * Tồn khả dụng cho một SKU tại một kho — dùng để hiện ngay cạnh dòng hàng lúc
- * người dùng đang gõ form, trước khi lưu. Chỉ ĐỌC.
- */
-export async function traTonKhaDung(sku: string, kho: string): Promise<number> {
-  await requireXemKol();
-  if (!sku.trim() || !kho.trim()) return 0;
-  return tonKhaDung(sku.trim(), kho.trim());
-}
 
 /** Sổ KOL: thêm một người nhận mới. Chỉ `ten` bắt buộc. */
+
+/** Loại người nhận từ form — giá trị lạ thì về 'kol', KHÔNG ném lỗi: đây là ô
+ *  chọn hai nút, chuỗi lạ chỉ có thể do form bị sửa tay. */
+function docLoai(fd: FormData): 'kol' | 'ph' {
+  return String(fd.get('loai') ?? '') === 'ph' ? 'ph' : 'kol';
+}
+
 export async function taoNguoiNhan(fd: FormData): Promise<{ ok: boolean; loi?: string; id?: string }> {
   const actor = await requireQuanLyKol();
   const ten = String(fd.get('ten') ?? '').trim();
@@ -235,6 +201,7 @@ export async function taoNguoiNhan(fd: FormData): Promise<{ ok: boolean; loi?: s
       diaChi: chuoi('diaChi'),
       thanhPho: chuoi('thanhPho'),
       ghiChu: chuoi('ghiChu'),
+      loai: docLoai(fd),
       taoBoi: actor,
       suaBoi: actor,
     }).returning({ id: schema.kolNguoiNhan.id });
@@ -275,6 +242,9 @@ export async function suaNguoiNhan(fd: FormData): Promise<{ ok: boolean; loi?: s
       diaChi: chuoi('diaChi'),
       thanhPho: chuoi('thanhPho'),
       ghiChu: chuoi('ghiChu'),
+      // Đổi loại chỉ ảnh hưởng đơn TẠO SAU: đơn cũ đã chụp `loai_nhan` riêng,
+      // vì mã đơn của chúng đã phát ra theo loại cũ.
+      loai: docLoai(fd),
       suaLuc: new Date(),
       suaBoi: actor,
     }).where(eq(schema.kolNguoiNhan.id, id)).returning({ id: schema.kolNguoiNhan.id });
@@ -323,14 +293,12 @@ export async function doiNgungDung(id: string, ngungDung: boolean): Promise<{ ok
 export async function taoDon(fd: FormData): Promise<{ ok: boolean; loi?: string; ma?: string }> {
   const actor = await requireQuanLyKol();
   const nguoiNhanId = String(fd.get('nguoiNhanId') ?? '').trim();
-  const mucDich = String(fd.get('mucDich') ?? '') as MucDich;
   const ghiChu = String(fd.get('ghiChu') ?? '').trim() || null;
 
   // Kiểm hình dạng uuid, không chỉ "khác rỗng": id gõ/dán nhầm đi thẳng vào so
   // sánh cột uuid thì Postgres ném 22P02, và lệnh đọc này nằm NGOÀI try/catch
   // nên nó thoát hẳn ra ngoài server action thay vì thành {ok:false}.
   if (!dangUuid(nguoiNhanId)) return { ok: false, loi: 'Phải chọn người nhận.' };
-  if (!MUC_DICH_HOP_LE.includes(mucDich)) return { ok: false, loi: 'Mục đích không hợp lệ.' };
 
   let dongRaw: unknown;
   try {
@@ -357,13 +325,15 @@ export async function taoDon(fd: FormData): Promise<{ ok: boolean; loi?: string;
 
     const seq = await db.execute<{ v: string }>('SELECT nextval(\'kol_don_seq\') AS v');
     const soSeq = Number(seq.rows[0]?.v);
-    ma = maDonKol(soSeq, luc);
+    // Loại lấy từ SỔ người nhận, không lấy từ form: người dùng không được
+    // chọn tay (bản thiết kế 24/09), và form là thứ ai cũng sửa được.
+    ma = maDonKol(soSeq, luc, nguoiNhan.loai);
 
     await db.transaction(async (tx) => {
       const [don] = await tx.insert(schema.kolDon).values({
         ma,
         nguoiNhanId,
-        mucDich,
+        loaiNhan: nguoiNhan.loai,
         trangThai: 'nhap',
         // Ảnh chụp từ sổ KOL — KHÔNG tham chiếu động.
         tenNhan: nguoiNhan.ten,

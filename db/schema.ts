@@ -2781,7 +2781,10 @@ export const creditNoteLines = pgTable('credit_note_lines', {
  *  Bảng ĐỘC LẬP, không dẫn xuất từ shopify_orders: đơn nội bộ không được lẫn
  *  vào số liệu bán hàng. Khuôn theo shipHoOrders (địa chỉ là cột phẳng, ảnh
  *  chụp giá trị bất biến), khác ở chỗ đơn KOL CÓ dòng hàng và CÓ trừ tồn. */
-export const kolMucDichEnum = pgEnum('kol_muc_dich', ['kol', 'chup_do', 'khac']);
+/** Loại NGƯỜI NHẬN — thuộc tính của người nhận, không phải lựa chọn lúc lên đơn.
+ *  Quyết định tag hiển thị và tiền tố mã đơn (KOL-… / PH-…). Thay hẳn
+ *  `kol_muc_dich` cũ (bỏ ở migration 0162, CEO 24/09). */
+export const kolLoaiNguoiNhanEnum = pgEnum('kol_loai_nguoi_nhan', ['kol', 'ph']);
 export const kolDonTrangThaiEnum = pgEnum('kol_don_trang_thai', ['nhap', 'da_chot', 'da_gui', 'huy']);
 export const kolHinhThucEnum = pgEnum('kol_hinh_thuc', ['tang', 'muon']);
 
@@ -2795,19 +2798,22 @@ export const kolNguoiNhan = pgTable('kol_nguoi_nhan', {
   diaChi: text('dia_chi'),
   thanhPho: text('thanh_pho'),
   ghiChu: text('ghi_chu'),
+  loai: kolLoaiNguoiNhanEnum('loai').notNull().default('kol'),
   /** Ẩn khỏi ô chọn mà KHÔNG xoá, để đơn cũ vẫn tra ngược được người nhận. */
   ngungDung: boolean('ngung_dung').notNull().default(false),
   taoLuc: timestamp('tao_luc').notNull().defaultNow(),
   taoBoi: text('tao_boi'),
   suaLuc: timestamp('sua_luc').notNull().defaultNow(),
   suaBoi: text('sua_boi'),
-}, (t) => [index('kol_nguoi_nhan_ten_idx').on(t.ten)]);
+}, (t) => [index('kol_nguoi_nhan_ten_idx').on(t.ten), index('kol_nguoi_nhan_loai_idx').on(t.loai, t.ten)]);
 
 export const kolDon = pgTable('kol_don', {
   id: uuid('id').defaultRandom().primaryKey(),
   ma: text('ma').notNull().unique(),
   nguoiNhanId: uuid('nguoi_nhan_id').references(() => kolNguoiNhan.id).notNull(),
-  mucDich: kolMucDichEnum('muc_dich').notNull(),
+  /** Ảnh chụp loại người nhận lúc tạo đơn: sửa sổ về sau KHÔNG đổi đơn cũ,
+   *  vì mã đơn đã phát ra theo loại này. */
+  loaiNhan: kolLoaiNguoiNhanEnum('loai_nhan').notNull().default('kol'),
   trangThai: kolDonTrangThaiEnum('trang_thai').notNull().default('nhap'),
   /** Ảnh chụp từ sổ lúc tạo đơn: sửa sổ về sau KHÔNG đổi đơn cũ. */
   tenNhan: text('ten_nhan').notNull(),
