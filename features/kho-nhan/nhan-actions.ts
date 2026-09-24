@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { ngayKinhDoanh } from '@/lib/timezone';
@@ -89,5 +89,66 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
   } catch (e) {
     console.error('[kho-nhan] ghiNhanChiec lỗi:', e);
     return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
+  }
+}
+
+/**
+ * Gỡ MỘT chiếc vừa nhận nhầm khỏi danh sách đang kiểm.
+ *
+ * CEO 24/09: "chọn 2 sản phẩm này bị sai cần chọn lại thì remove được ở đâu".
+ * Chiếc nhận nhầm chưa từng là hàng thật nên xoá hẳn dòng, không để lại rác.
+ *
+ * BA ĐIỀU KIỆN trong chính câu WHERE, không kiểm ở tầng trên:
+ *  - `qc_result = 'pending'` — đã QC rồi thì KHÔNG được xoá, vì QC đạt đã ghi
+ *    tồn kho qua applyMovement, xoá dòng là tồn treo không ai đối chiếu được;
+ *  - `lark_record_id IS NULL` — đã gửi Lark thì phải "Gỡ khỏi Lark" trước, nếu
+ *    không bảng Lark còn dòng mà bên mình mất dấu;
+ *  - `id` đích danh — không bao giờ xoá theo điều kiện lọc.
+ *
+ * `goods_receipt_items` đang giữ 833 chiếc thật và `allocate.ts` đọc nó, nên
+ * mọi đường xoá ở đây phải hẹp đến mức không thể chạm hàng cũ.
+ */
+export async function goChiecNhanNham(itemId: string): Promise<{ ok: boolean; loi?: string }> {
+  await requirePerm('manage_qc');
+  try {
+    const xoa = await db.delete(schema.goodsReceiptItems)
+      .where(and(
+        eq(schema.goodsReceiptItems.id, itemId),
+        eq(schema.goodsReceiptItems.qcResult, 'pending'),
+        isNull(schema.goodsReceiptItems.larkRecordId),
+      ))
+      .returning({ id: schema.goodsReceiptItems.id });
+    if (xoa.length === 0) {
+      return { ok: false, loi: 'Không gỡ được — chiếc này đã kiểm hoặc đã gửi Lark. Gỡ khỏi Lark trước.' };
+    }
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true };
+  } catch (e) {
+    console.error('[kho-nhan] goChiecNhanNham lỗi:', e);
+    return { ok: false, loi: 'Gỡ thất bại, thử lại.' };
+  }
+}
+
+/**
+ * "Huỷ nhập": dọn SẠCH các chiếc đang kiểm CHƯA gửi Lark.
+ *
+ * Cùng ba điều kiện với `goChiecNhanNham`, chỉ khác là không giới hạn một id.
+ * Chiếc đã QC hoặc đã gửi Lark KHÔNG bị đụng tới — đó là lý do hàm này an toàn
+ * dù nó xoá nhiều dòng.
+ */
+export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; loi?: string }> {
+  await requirePerm('manage_qc');
+  try {
+    const xoa = await db.delete(schema.goodsReceiptItems)
+      .where(and(
+        eq(schema.goodsReceiptItems.qcResult, 'pending'),
+        isNull(schema.goodsReceiptItems.larkRecordId),
+      ))
+      .returning({ id: schema.goodsReceiptItems.id });
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true, soXoa: xoa.length };
+  } catch (e) {
+    console.error('[kho-nhan] huyNhapChuaGui lỗi:', e);
+    return { ok: false, soXoa: 0, loi: 'Huỷ nhập thất bại, thử lại.' };
   }
 }

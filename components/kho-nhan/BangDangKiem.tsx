@@ -6,6 +6,7 @@ import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { guiLenLark, goKhoiLark } from '@/features/kho-nhan/day-wh-lark';
+import { goChiecNhanNham, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
 
@@ -45,6 +46,24 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       }
     });
 
+  const goNham = (c: DangKiem) =>
+    start(async () => {
+      setKetQuaGui(null); setLoiGui(null);
+      const r = await goChiecNhanNham(c.id);
+      if (!r.ok) { setLoiGui(r.loi ?? 'Gỡ thất bại.'); return; }
+      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi danh sách.`);
+      lamMoi();
+    });
+
+  const huyHet = () =>
+    start(async () => {
+      setKetQuaGui(null); setLoiGui(null);
+      const r = await huyNhapChuaGui();
+      if (!r.ok) { setLoiGui(r.loi ?? 'Huỷ nhập thất bại.'); return; }
+      setKetQuaGui(`Đã huỷ ${r.soXoa} chiếc chưa gửi.`);
+      lamMoi();
+    });
+
   const go = (c: DangKiem) =>
     start(async () => {
       setKetQuaGui(null); setLoiGui(null);
@@ -55,7 +74,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
     });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <OTimMonChoVe onDaNhan={lamMoi} />
 
       <section className="space-y-2">
@@ -64,11 +83,6 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
             Đang kiểm{' '}
             <span className="font-normal text-muted-foreground">({dangKiem.length} chiếc)</span>
           </h2>
-          {chuaGui.length > 0 && (
-            <Button type="button" size="lg" onClick={gui} disabled={pending}>
-              {pending ? 'Đang gửi…' : `Gửi ${chuaGui.length} chiếc lên Lark`}
-            </Button>
-          )}
         </div>
         {ketQuaGui && <p className="text-sm text-emerald-600 dark:text-emerald-400">{ketQuaGui}</p>}
         {loiGui && <p className="text-sm text-amber-600 dark:text-amber-400">{loiGui}</p>}
@@ -118,11 +132,25 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                           </button>
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">chưa gửi</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">chưa gửi</span>
+                          <button
+                            type="button" onClick={() => goNham(c)} disabled={pending}
+                            className="cursor-pointer text-xs text-muted-foreground underline hover:text-foreground disabled:cursor-not-allowed"
+                          >
+                            Gỡ
+                          </button>
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
+                      {/* Chỉ kiểm được SAU khi đã gửi Lark (CEO 24/09): các bộ
+                          phận khác phải thấy trạng thái "Chờ QC" trước đã. */}
+                      {c.larkRecordId ? (
+                        <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">gửi Lark trước</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -131,6 +159,22 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
           </div>
         )}
       </section>
+
+      {chuaGui.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 print:hidden">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2.5 shadow-lg">
+            <span className="text-sm text-muted-foreground">
+              {chuaGui.length} chiếc chưa gửi
+            </span>
+            <Button type="button" variant="outline" size="lg" onClick={huyHet} disabled={pending}>
+              Huỷ nhập
+            </Button>
+            <Button type="button" size="lg" onClick={gui} disabled={pending}>
+              {pending ? 'Đang gửi…' : 'Gửi lên Lark'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ModalQc
         chiec={chon}
