@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { conNhanDuoc, kieuTuKhoa } from './tim-don-logic';
+import { conNhanDuoc, kieuTuKhoa, phanSo } from './tim-don-logic';
 
 describe('conNhanDuoc', () => {
   it('đặt 3 mới nhận 1 → VẪN hiện, vì hàng về nhiều đợt là chuyện thường', () => {
@@ -30,5 +30,22 @@ describe('kieuTuKhoa', () => {
   it('dưới 2 ký tự → không tìm', () => {
     expect(kieuTuKhoa('a')).toBe('qua_ngan');
     expect(kieuTuKhoa(' ')).toBe('qua_ngan');
+  });
+});
+
+describe('phanSo — phao khi gõ sai phần chữ', () => {
+  it('lấy phần số của mã đơn gõ sai chữ', () => {
+    expect(phanSo('MBVLD28543')).toBe('28543');
+    expect(phanSo('MBLVD28543')).toBe('28543');
+  });
+  it('hai cách gõ sai khác nhau vẫn ra cùng phần số', () => {
+    expect(phanSo('MBVLD28543')).toBe(phanSo('mblvd 28543'));
+  });
+  it('số quá ngắn thì KHÔNG dùng làm phao — tránh "áo 2" quét cả kho', () => {
+    expect(phanSo('áo 2')).toBe(null);
+    expect(phanSo('size 12')).toBe(null);
+  });
+  it('không có số thì null', () => {
+    expect(phanSo('ao dai')).toBe(null);
   });
 });

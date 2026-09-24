@@ -5,7 +5,7 @@ import { db, schema } from '@/db/client';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { requirePerm } from '@/features/receiving/perm';
 import { chuanHoaMaDon } from './ma-don';
-import { conNhanDuoc, kieuTuKhoa } from './tim-don-logic';
+import { conNhanDuoc, kieuTuKhoa, phanSo } from './tim-don-logic';
 
 const GIOI_HAN = 20;
 
@@ -35,6 +35,7 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
   const q = tuKhoa.trim();
   const maDon = chuanHoaMaDon(q);
   const khongDau = `%${boDauTiengViet(q)}%`;
+  const so = phanSo(q);
 
   const dieuKien = kieu === 'id'
     ? or(
@@ -48,6 +49,9 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
         sql`${schema.shopifyOrderLines.sku} ILIKE ${`%${q}%`}`,
         sql`EXISTS (SELECT 1 FROM shopify_variants v WHERE v.sku = ${schema.shopifyOrderLines.sku}
               AND v.tim_kiem LIKE ${khongDau})`,
+        // Phao khi gõ sai phần chữ của mã đơn: "MBVLD28543" vẫn ra "#MBLVD28543".
+        // Xem `phanSo` — chỉ bật khi chuỗi số đủ dài.
+        ...(so ? [sql`regexp_replace(${schema.shopifyOrders.shopifyOrderNumber}, '\\D', '', 'g') LIKE ${`%${so}%`}`] : []),
       );
 
   const rows = await db.select({
