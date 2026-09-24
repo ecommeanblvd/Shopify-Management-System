@@ -158,6 +158,8 @@ export async function boSungGiaThuShipHo(opts?: { limit?: number }): Promise<Ket
     partnerBrandSlug: schema.shipHoOrders.partnerBrandSlug,
     chargedVnd: schema.shipHoOrders.chargedVnd,
     country: schema.shipHoOrders.country,
+    postcode: schema.shipHoOrders.postcode,
+    city: schema.shipHoOrders.city,
     weightKg: schema.shipHoOrders.weightKg,
     smsWeightKg: schema.shipHoOrders.smsWeightKg,
     dimLengthCm: schema.shipHoOrders.dimLengthCm,
@@ -183,6 +185,10 @@ export async function boSungGiaThuShipHo(opts?: { limit?: number }): Promise<Ket
 
     const est = await estimateForBrand(dauVao.brandSlug, {
       country: dauVao.country,
+      // Thiếu hai dòng này thì giá thu HỤT phụ phí vùng — xem chú thích ở
+      // DauVaoGiaThu.
+      postcode: dauVao.postcode ?? undefined,
+      city: dauVao.city ?? undefined,
       weightKg: dauVao.weightKg,
       dimLengthCm: dauVao.dimensions?.lengthCm,
       dimWidthCm: dauVao.dimensions?.widthCm,

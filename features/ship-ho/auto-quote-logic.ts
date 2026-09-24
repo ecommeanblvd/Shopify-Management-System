@@ -139,6 +139,8 @@ export interface DonCanGiaThu {
   /** Đã có giá thu thì thôi — giá đã báo brand là con số hợp đồng. */
   chargedVnd: string | null;
   country: string | null;
+  postcode: string | null;
+  city: string | null;
   weightKg: string | null;
   smsWeightKg: string | null;
   dimLengthCm: string | null; dimWidthCm: string | null; dimHeightCm: string | null;
@@ -155,6 +157,15 @@ export type LyDoBoQuaGiaThu = 'da_co_gia_thu' | 'khong_ro_brand' | 'thieu_nuoc' 
 export interface DauVaoGiaThu {
   brandSlug: string;
   country: string;
+  /**
+   * BẮT BUỘC đi kèm xuống engine. Phụ phí theo ĐỊA CHỈ (vùng xa / ODA, tên
+   * thành phố) chỉ khớp được khi có mã bưu chính hoặc tên thành phố. Thiếu
+   * chúng thì engine vẫn trả về một con số trông hợp lệ nhưng HỤT đúng phần
+   * phụ phí vùng — với UPS/FedEx là 600–900 nghìn một đơn. Bỏ sót đúng chỗ này
+   * ở bản 98f8b63f (CEO bắt được 24/09).
+   */
+  postcode: string | null;
+  city: string | null;
   weightKg: number;
   dimensions: { lengthCm: number; widthCm: number; heightCm: number } | null;
   packagingType: 'bag' | 'box' | null;
@@ -189,7 +200,8 @@ export function chonDonTinhGiaThu(o: DonCanGiaThu):
   return {
     ok: true,
     dauVao: {
-      brandSlug, country, weightKg, dimensions, packagingType: pk,
+      brandSlug, country, postcode: o.postcode, city: o.city,
+      weightKg, dimensions, packagingType: pk,
       ...(asOf ? { asOf } : {}),
     },
   };

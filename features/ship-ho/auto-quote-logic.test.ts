@@ -86,7 +86,7 @@ import { chonDonTinhGiaThu, type DonCanGiaThu } from './auto-quote-logic';
 
 const donThu = (o: Partial<DonCanGiaThu> = {}): DonCanGiaThu => ({
   id: 'id1', partnerBrandSlug: 'kalisa', chargedVnd: null,
-  country: 'US', weightKg: '2', smsWeightKg: null,
+  country: 'US', postcode: '04353', city: 'Whitefield', weightKg: '2', smsWeightKg: null,
   dimLengthCm: null, dimWidthCm: null, dimHeightCm: null,
   smsDimLengthCm: null, smsDimWidthCm: null, smsDimHeightCm: null,
   shippedAt: new Date('2026-09-01T00:00:00Z'),
@@ -163,5 +163,25 @@ describe('chonDauVaoBaoGia — mốc tính giá', () => {
   it('không có ngày gửi → không đặt asOf (rơi về bảng giá hiện hành)', () => {
     const r = chonDauVaoBaoGia(don({ shippedAt: null }));
     expect(r.ok && r.dauVao.asOf).toBeUndefined();
+  });
+});
+
+
+describe('chonDonTinhGiaThu — địa chỉ phải đi cùng xuống engine', () => {
+  it('mã bưu chính và thành phố được chuyển tiếp (thiếu là hụt phụ phí vùng)', () => {
+    const r = chonDonTinhGiaThu(donThu({ postcode: '04353', city: 'Whitefield' }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.dauVao).toMatchObject({ postcode: '04353', city: 'Whitefield' });
+  });
+
+  it('giá thu và giá dự tính nhận CÙNG một địa chỉ cho cùng một đơn', () => {
+    const chung = { country: 'US', weightKg: '2', postcode: '04353', city: 'Whitefield' };
+    const dt = chonDauVaoBaoGia(don(chung as never));
+    const thu = chonDonTinhGiaThu(donThu(chung as never));
+    expect(dt.ok && thu.ok).toBe(true);
+    if (dt.ok && thu.ok) {
+      expect(dt.dauVao.postcode).toBe(thu.dauVao.postcode);
+      expect(dt.dauVao.city).toBe(thu.dauVao.city);
+    }
   });
 });
