@@ -7,6 +7,7 @@ import { applyMovement } from '@/features/warehouse/ledger';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { requirePerm } from '@/features/receiving/perm';
 import { chuyenDuocQc, kiemLoQc, type DongLoiVao } from './qc-logic';
+import type { DangKiem } from './types';
 
 /**
  * QC ĐẠT → chiếc vào tồn. Đây là chỗ DUY NHẤT trong luồng này gọi `applyMovement`.
@@ -84,13 +85,6 @@ export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise
   }
 }
 
-export interface DangKiem {
-  id: string; unitCode: string; sku: string | null;
-  tenSanPham: string | null; tenBienThe: string | null;
-  orderId: string | null; maDon: string | null;
-  storeId: string | null; shopifyOrderId: string | null;
-  taoLuc: Date;
-}
 
 /** Chiếc đang chờ kiểm — mới nhất trước. Chỉ `pending`. */
 export async function danhSachDangKiem(): Promise<DangKiem[]> {

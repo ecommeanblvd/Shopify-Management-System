@@ -6,15 +6,10 @@ import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { requirePerm } from '@/features/receiving/perm';
 import { chuanHoaMaDon } from './ma-don';
 import { conNhanDuoc, kieuTuKhoa, phanSo } from './tim-don-logic';
+import type { KetQuaTim } from './types';
 
 const GIOI_HAN = 20;
 
-export interface KetQuaTim {
-  lineId: string; orderId: string; storeId: string; shopifyOrderId: string;
-  maDon: string; sku: string | null;
-  tenSanPham: string | null; tenBienThe: string | null;
-  vendor: string | null; datSl: number; daNhan: number;
-}
 
 /**
  * Món của đơn đang UNFULFILLED / PARTIALLY_FULFILLED mà CHƯA nhận đủ.

@@ -5,12 +5,8 @@ import { db, schema } from '@/db/client';
 import { getSignedDownloadUrl, isStorageConfigured } from '@/lib/storage/s3';
 import { requirePerm } from '@/features/receiving/perm';
 import { NHAN_LY_DO, type LyDoLoi } from './loi-qc';
+import type { ChiecLoi } from './types';
 
-export interface ChiecLoi {
-  itemId: string; unitCode: string; sku: string | null;
-  tenSanPham: string | null; tenBienThe: string | null; maDon: string | null;
-  loi: { lyDo: string; ghiChu: string | null; anhUrl: string | null }[];
-}
 
 /**
  * Chiếc QC không đạt, chờ trả brand, CHƯA nằm trong biên bản nào.

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DangKiem } from '@/features/kho-nhan/qc-actions';
+import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';

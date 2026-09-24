@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
-import { chiecChoTraBrand, danhDauDaLapBienBan, type ChiecLoi } from '@/features/kho-nhan/bien-ban';
+import { chiecChoTraBrand, danhDauDaLapBienBan } from '@/features/kho-nhan/bien-ban';
+import type { ChiecLoi } from '@/features/kho-nhan/types';
 
 function ngayHomNay(): string { return new Date().toISOString().slice(0, 10); }
 function ngayTruoc(n: number): string {

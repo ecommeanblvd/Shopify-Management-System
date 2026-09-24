@@ -2,19 +2,9 @@
  * THUẦN: đổi `order.lineItems.nodes` thô của Shopify thành dữ liệu màn QC dùng.
  * Tách khỏi phần gọi mạng để test được mà không cần request context.
  */
-import { locThuocTinh, type DongThuocTinh, type MetafieldTho } from './thuoc-tinh-shopify';
+import { locThuocTinh, type MetafieldTho } from './thuoc-tinh-shopify';
+import type { DongQc } from './types';
 
-export interface DongQc {
-  sku: string | null;
-  variantId: string | null;
-  productId: string | null;
-  tenSanPham: string | null;
-  tenBienThe: string | null;
-  /** Ảnh biến thể ĐỨNG ĐẦU (đúng màu khách đặt), rồi tới ảnh sản phẩm. */
-  anh: string[];
-  thuocTinh: DongThuocTinh[];
-  soBiCat: number;
-}
 
 interface AnhNode { url: string }
 interface BienTheTho { id?: string; title?: string; image?: { url?: string } | null }

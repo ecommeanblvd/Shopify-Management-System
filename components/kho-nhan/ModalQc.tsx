@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
-import { layDuLieuQc, type DongQc } from '@/features/kho-nhan/shopify-qc';
-import { qcDat, type DangKiem } from '@/features/kho-nhan/qc-actions';
+import { layDuLieuQc } from '@/features/kho-nhan/shopify-qc';
+import { qcDat } from '@/features/kho-nhan/qc-actions';
+import type { DangKiem, DongQc } from '@/features/kho-nhan/types';
 import { KhoiLoi } from './KhoiLoi';
 
 /**

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { timMonChuaNhan, type KetQuaTim } from '@/features/kho-nhan/tim-don';
+import { timMonChuaNhan } from '@/features/kho-nhan/tim-don';
+import type { KetQuaTim } from '@/features/kho-nhan/types';
 import { ghiNhanChiec } from '@/features/kho-nhan/nhan-actions';
 
 const TOI_THIEU = 2;
@@ -19,6 +20,16 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
   const [ds, setDs] = useState<KetQuaTim[]>([]);
   const [dangTim, setDangTim] = useState(false);
   const [thongBao, setThongBao] = useState<string | null>(null);
+  /**
+   * Lỗi GỌI, tách hẳn khỏi "không có kết quả".
+   *
+   * Bản đầu bọc lượt gọi trong try/finally KHÔNG CÓ catch, nên một server action
+   * chết cũng hiện thành "Không có món nào chờ về khớp …". Ngày 24/09 module
+   * `shopify-qc` nổ `ReferenceError` trên production và màn im lặng báo không có
+   * kết quả — CEO thử ba lần, không ai biết vì sao. Không bao giờ để một lỗi
+   * đội lốt một kết quả rỗng nữa.
+   */
+  const [loiGoi, setLoiGoi] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const luotRef = useRef(0);
 
@@ -32,6 +43,12 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
         const r = await timMonChuaNhan(ky);
         if (luot !== luotRef.current) return;
         setDs(r);
+        setLoiGoi(null);
+      } catch (e) {
+        if (luot !== luotRef.current) return;
+        console.error('[kho-nhan] tìm món lỗi:', e);
+        setDs([]);
+        setLoiGoi('Không gọi được máy chủ để tìm. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
       } finally {
         if (luot === luotRef.current) setDangTim(false);
       }
@@ -61,7 +78,7 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
         <span className="mb-1 block text-sm font-medium">Tìm món chờ về</span>
         <input
           value={q}
-          onChange={(e) => { setQ(e.target.value); setThongBao(null); }}
+          onChange={(e) => { setQ(e.target.value); setThongBao(null); setLoiGoi(null); }}
           placeholder="Mã đơn, SKU, tên sản phẩm — hoặc quét mã sản phẩm"
           aria-label="Tìm món chờ về theo mã đơn, SKU, tên sản phẩm hoặc mã sản phẩm"
           className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
@@ -69,10 +86,13 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
       </label>
 
       {thongBao && <p className="text-sm text-emerald-600 dark:text-emerald-400">{thongBao}</p>}
+      {loiGoi && <p className="text-sm text-destructive">{loiGoi}</p>}
 
       {ky.length >= TOI_THIEU && (
         <div className="rounded-lg border border-border">
-          {dangTim && hienThi.length === 0 ? (
+          {loiGoi ? (
+            <p className="px-3 py-4 text-sm text-destructive">Không tìm được — xem thông báo ở trên.</p>
+          ) : dangTim && hienThi.length === 0 ? (
             <p className="px-3 py-4 text-sm text-muted-foreground">Đang tìm…</p>
           ) : hienThi.length === 0 ? (
             <p className="px-3 py-4 text-sm text-muted-foreground">

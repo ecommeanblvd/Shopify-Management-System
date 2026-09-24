@@ -4,11 +4,8 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { requirePerm } from '@/features/receiving/perm';
-import { dungDongQc, type DongQc, type DongTho } from './qc-dong';
-
-export type { DongQc };
-
-export interface DuLieuQcDon { dong: DongQc[] }
+import { dungDongQc, type DongTho } from './qc-dong';
+import type { DuLieuQcDon } from './types';
 
 const TRUY_VAN = `query($id: ID!) {
   order(id: $id) {
@@ -49,5 +46,3 @@ export async function layDuLieuQc(storeId: string, shopifyOrderId: string): Prom
     return null;
   }
 }
-
-export { TRUY_VAN as TRUY_VAN_QC };
