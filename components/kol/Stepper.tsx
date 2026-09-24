@@ -22,13 +22,13 @@ export function Stepper({
   canhBao?: boolean;
 }) {
   return (
-    <div className={`flex h-[34px] w-fit items-stretch rounded-lg border ${canhBao ? 'border-warning/60' : 'border-input'}`}>
+    <div className={`flex h-[34px] w-fit items-stretch rounded-lg border ${canhBao ? 'border-amber-500/60' : 'border-input'}`}>
       <button
         type="button"
         aria-label="Giảm số lượng"
         disabled={value <= min}
         onClick={() => onChange(kepSoLuong(value - 1, min))}
-        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted-surface disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
       >
         −
       </button>
@@ -39,13 +39,13 @@ export function Stepper({
         value={value}
         onChange={(e) => onChange(kepSoLuong(Number(e.target.value), min))}
         aria-label={ariaLabel}
-        className={`h-full w-12 border-x bg-transparent text-center text-sm font-semibold tabular-nums outline-none ${canhBao ? 'border-warning/60 text-warning' : 'border-input'} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+        className={`h-full w-12 border-x bg-transparent text-center text-sm font-semibold tabular-nums outline-none ${canhBao ? 'border-amber-500/60 text-amber-600 dark:text-amber-400' : 'border-input'} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       />
       <button
         type="button"
         aria-label="Tăng số lượng"
         onClick={() => onChange(kepSoLuong(value + 1, min))}
-        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted-surface"
+        className="flex w-[30px] shrink-0 cursor-pointer items-center justify-center text-base leading-none hover:bg-muted"
       >
         +
       </button>

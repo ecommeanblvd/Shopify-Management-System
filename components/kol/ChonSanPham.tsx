@@ -110,12 +110,12 @@ export function ChonSanPham({
       role="presentation"
     >
       <div
-        className="mx-auto mt-16 w-[640px] max-w-[calc(100%-48px)] overflow-hidden rounded-[14px] border border-border bg-surface shadow-2xl"
+        className="mx-auto mt-16 w-[640px] max-w-[calc(100%-48px)] overflow-hidden rounded-[14px] border border-border bg-card shadow-2xl"
         role="dialog"
         aria-label="Tìm sản phẩm"
       >
         <div className="flex items-center gap-2 border-b border-border p-3">
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" strokeLinecap="round" />
           </svg>
           <input
@@ -125,20 +125,20 @@ export function ChonSanPham({
             onKeyDown={onKeyDown}
             placeholder="Tên, SKU, ID sản phẩm — hoặc quét bằng máy"
             aria-label="Tìm sản phẩm theo tên, SKU, ID sản phẩm hoặc quét mã"
-            className="h-[34px] min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"
+            className="h-[34px] min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
           />
         </div>
 
         <div ref={listRef} className="max-h-[360px] overflow-y-auto p-1.5">
           {loiQuet && (
-            <p className="px-3 py-2 text-[13px] text-danger">{loiQuet}</p>
+            <p className="px-3 py-2 text-[13px] text-red-600 dark:text-red-400">{loiQuet}</p>
           )}
           {ky.length < DO_DAI_TOI_THIEU ? (
-            <p className="px-3 py-7 text-center text-[13px] text-muted">Gõ ít nhất {DO_DAI_TOI_THIEU} ký tự để tìm</p>
+            <p className="px-3 py-7 text-center text-[13px] text-muted-foreground">Gõ ít nhất {DO_DAI_TOI_THIEU} ký tự để tìm</p>
           ) : dangTim && hienThi.length === 0 ? (
-            <p className="px-3 py-7 text-center text-[13px] text-muted">Đang tìm…</p>
+            <p className="px-3 py-7 text-center text-[13px] text-muted-foreground">Đang tìm…</p>
           ) : hienThi.length === 0 ? (
-            <p className="px-3 py-7 text-center text-[13px] text-muted">Không có sản phẩm khớp “{ky}”</p>
+            <p className="px-3 py-7 text-center text-[13px] text-muted-foreground">Không có sản phẩm khớp “{ky}”</p>
           ) : (
             hienThi.map((bt, i) => (
               <button
@@ -153,12 +153,12 @@ export function ChonSanPham({
               >
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span className="shrink-0 font-mono text-[13px] font-semibold">{bt.sku}</span>
-                  <span className="truncate text-[13px] text-muted">{bt.tenHang}</span>
+                  <span className="truncate text-[13px] text-muted-foreground">{bt.tenHang}</span>
                 </span>
-                <span className="shrink-0 text-right text-[12px] tabular-nums text-muted">
+                <span className="shrink-0 text-right text-[12px] tabular-nums text-muted-foreground">
                   {bt.tonTheoKho.map((t) => `${t.kho} ${t.ton}`).join(' · ')}
                 </span>
-                <span className="col-span-2 flex items-baseline justify-between gap-3 text-[11px] text-muted">
+                <span className="col-span-2 flex items-baseline justify-between gap-3 text-[11px] text-muted-foreground">
                   <span className="truncate font-mono">{soIdShopify(bt.shopifyVariantId ?? '') ?? '—'}</span>
                   <span className="shrink-0">
                     {bt.giaVon == null ? 'Chưa có giá vốn' : `Giá vốn ${tienVnd(bt.giaVon, bt.giaVonTienTe)}`}
@@ -169,7 +169,7 @@ export function ChonSanPham({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px] text-muted">
+        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
           <span>↑↓ chọn · Enter thêm · Esc đóng</span>
           <span>{che_do === 'them' ? 'Thêm dòng mới' : 'Đang thay sản phẩm cho dòng này'}</span>
         </div>

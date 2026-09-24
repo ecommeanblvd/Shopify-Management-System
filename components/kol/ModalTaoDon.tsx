@@ -183,13 +183,13 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
               <DialogTitle className="text-[17px] font-semibold tracking-[-0.015em]">Tạo đơn xuất hàng</DialogTitle>
               <span
                 className={`rounded-md px-2 py-[3px] font-mono text-[12px] ${
-                  daChon ? 'border border-border text-text' : 'border border-dashed border-border text-muted'
+                  daChon ? 'border border-border text-foreground' : 'border border-dashed border-border text-muted-foreground'
                 }`}
               >
                 {maPreview}
               </span>
             </div>
-            <p className="mt-0.5 text-[12px] text-muted">Nháp — chưa đụng tồn kho, chốt đơn mới giữ chỗ</p>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">Nháp — chưa đụng tồn kho, chốt đơn mới giữ chỗ</p>
           </div>
         </div>
 
@@ -205,7 +205,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   </span>
                   <span className="shrink-0 text-sm font-medium">{daChon.ten}</span>
                   <TagLoai loai={daChon.loai} />
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{daChon.kenh ?? ''}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{daChon.kenh ?? ''}</span>
                   <button
                     type="button"
                     onClick={() => { setNguoiNhanId(''); setTimNhan(''); }}
@@ -224,22 +224,22 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                     className="h-10 w-full rounded-[9px] border border-border bg-input px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                   />
                   {timNhan.trim() !== '' && (
-                    <div className="absolute left-0 top-[46px] z-10 w-full rounded-[10px] border border-border bg-surface p-1.5 shadow-xl">
+                    <div className="absolute left-0 top-[46px] z-10 w-full rounded-[10px] border border-border bg-card p-1.5 shadow-xl">
                       {ketQuaNhan.length === 0 ? (
-                        <p className="px-2.5 py-3 text-[13px] text-muted">Không tìm thấy người nhận.</p>
+                        <p className="px-2.5 py-3 text-[13px] text-muted-foreground">Không tìm thấy người nhận.</p>
                       ) : ketQuaNhan.map((n) => (
                         <button
                           key={n.id}
                           type="button"
                           onClick={() => { setNguoiNhanId(n.id); setTimNhan(''); }}
-                          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-muted-surface"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-muted"
                         >
                           <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-primary/20 text-[11px] font-semibold">
                             {chuCaiDau(n.ten)}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[13px] font-medium">{n.ten}</span>
-                            <span className="block truncate text-[12px] text-muted">
+                            <span className="block truncate text-[12px] text-muted-foreground">
                               {[n.kenh, n.dienThoai, n.quocGia !== 'VN' ? n.quocGia : null].filter(Boolean).join(' · ')}
                             </span>
                           </span>
@@ -266,7 +266,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   aria-checked={hinhThuc === v}
                   onClick={() => { setHinhThuc(v); if (v === 'tang') setHanTra(''); }}
                   className={`flex h-full flex-1 cursor-pointer flex-col items-center justify-center rounded-md leading-tight ${
-                    hinhThuc === v ? 'bg-primary font-semibold text-primary-foreground shadow-sm' : 'text-muted hover:text-text'
+                    hinhThuc === v ? 'bg-primary font-semibold text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <span className="text-[13px]">{chinh}</span>
@@ -282,7 +282,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
               onChange={(e) => setGhiChu(e.target.value)}
               placeholder="Ghi chú (không bắt buộc)"
               aria-label="Ghi chú"
-              className="h-[34px] min-w-0 flex-1 rounded-lg border border-transparent bg-muted-surface px-3 text-[13px] outline-none focus:border-border"
+              className="h-[34px] min-w-0 flex-1 rounded-lg border border-transparent bg-muted px-3 text-[13px] outline-none focus:border-border"
             />
             {hinhThuc === 'muon' && (
               <label className="flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-primary/35 bg-primary/10 px-2.5 md:w-[320px]">
@@ -293,7 +293,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   onChange={(e) => setHanTra(e.target.value)}
                   required
                   aria-label="Hạn thu hồi"
-                  className="min-w-0 flex-1 rounded border-none bg-bg px-1.5 py-0.5 text-[13px] outline-none"
+                  className="min-w-0 flex-1 rounded border-none bg-background px-1.5 py-0.5 text-[13px] outline-none"
                 />
               </label>
             )}
@@ -301,16 +301,16 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
         </div>
 
         {/* ── Dòng hàng ──────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border bg-muted-surface px-6 pb-3 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border bg-muted px-6 pb-3 pt-4">
           <div className="mb-2 flex items-baseline gap-3">
             <h2 className="text-[15px] font-semibold">Dòng hàng</h2>
-            <p className="text-[12px] tabular-nums text-muted">
+            <p className="text-[12px] tabular-nums text-muted-foreground">
               {dong.filter((d) => d.sku).length} dòng · {tongSl} sản phẩm
               {tongGiaVon > 0 && ` · giá vốn ${so(tongGiaVon)} ₫`}
             </p>
           </div>
 
-          <div className="grid grid-cols-[20px_minmax(0,1fr)_84px_110px_110px_28px] gap-3 border-b border-border pb-2 text-[10px] uppercase tracking-[0.1em] text-muted">
+          <div className="grid grid-cols-[20px_minmax(0,1fr)_84px_110px_110px_28px] gap-3 border-b border-border pb-2 text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
             <span /><span>Sản phẩm</span><span>Kho</span><span>Số lượng</span><span className="text-right">Giá vốn</span><span />
           </div>
 
@@ -319,7 +319,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
             const vuot = ton != null && d.soLuong > ton;
             return (
               <div key={d.key} className="grid grid-cols-[20px_minmax(0,1fr)_84px_110px_110px_28px] items-center gap-3 border-b border-border/60 py-2.5">
-                <span className="text-[12px] tabular-nums text-muted">{i + 1}</span>
+                <span className="text-[12px] tabular-nums text-muted-foreground">{i + 1}</span>
 
                 <button
                   type="button"
@@ -329,17 +329,17 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   {d.sku ? (
                     <>
                       <span className="block truncate font-mono text-[13px] font-semibold">{d.sku}</span>
-                      <span className="block truncate text-[12px] text-muted">
+                      <span className="block truncate text-[12px] text-muted-foreground">
                         {d.tenHang}
                         {ton != null && (
-                          <span className={vuot ? 'text-warning' : 'text-success'}>
+                          <span className={vuot ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>
                             {' · '}Tồn {ton}{vuot && ` · thiếu ${d.soLuong - ton}`}
                           </span>
                         )}
                       </span>
                     </>
                   ) : (
-                    <span className="text-[13px] text-muted">Bấm để chọn sản phẩm…</span>
+                    <span className="text-[13px] text-muted-foreground">Bấm để chọn sản phẩm…</span>
                   )}
                 </button>
 
@@ -347,7 +347,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   value={d.kho}
                   onChange={(e) => capNhat(d.key, { kho: e.target.value })}
                   aria-label={`Kho cho dòng ${i + 1}`}
-                  className="h-[34px] w-full cursor-pointer rounded-lg border border-border bg-bg px-1.5 text-[13px]"
+                  className="h-[34px] w-full cursor-pointer rounded-lg border border-border bg-background px-1.5 text-[13px]"
                 >
                   {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{k}</option>)}
                 </select>
@@ -361,7 +361,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
 
                 <span className="text-right text-[13px] tabular-nums">
                   {d.giaVon == null
-                    ? <span className="text-muted">Chưa có</span>
+                    ? <span className="text-muted-foreground">Chưa có</span>
                     : <span className="font-medium">{tien(d.giaVon * d.soLuong, d.giaVonTienTe)}</span>}
                 </span>
 
@@ -370,7 +370,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                   onClick={() => setDong((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== d.key) : prev))}
                   disabled={dong.length <= 1}
                   aria-label={`Xoá dòng ${i + 1}`}
-                  className="grid size-7 cursor-pointer place-items-center rounded-md text-muted hover:bg-border/50 hover:text-text disabled:cursor-not-allowed disabled:opacity-30"
+                  className="grid size-7 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-border/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   ✕
                 </button>
@@ -396,19 +396,19 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
                 : 'Chưa chọn người nhận'}
             </p>
             {(soVuotTon > 0 || soThieuGia > 0) && (
-              <p className="truncate text-[12px] text-warning">
+              <p className="truncate text-[12px] text-amber-600 dark:text-amber-400">
                 {[
                   soVuotTon > 0 && `${soVuotTon} dòng vượt tồn — chốt đơn sẽ lỗi tới khi nhập thêm`,
                   soThieuGia > 0 && `${soThieuGia} dòng chưa có giá vốn — chưa vào báo cáo chi phí`,
                 ].filter(Boolean).join(' · ')}
               </p>
             )}
-            {err && <p className="truncate text-[12px] text-danger">{err}</p>}
+            {err && <p className="truncate text-[12px] text-red-600 dark:text-red-400">{err}</p>}
           </div>
           <button
             type="button"
             onClick={() => setOpenDialog(false)}
-            className="h-[38px] shrink-0 cursor-pointer rounded-lg border border-border px-4 text-sm hover:bg-muted-surface"
+            className="h-[38px] shrink-0 cursor-pointer rounded-lg border border-border px-4 text-sm hover:bg-muted"
           >
             Huỷ
           </button>
