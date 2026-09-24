@@ -20,6 +20,8 @@
 - Migration là SQL thô, áp bằng script tạm rồi xoá; **KHÔNG** cập nhật journal của drizzle (lệ từ 0139).
 - Lớp màu Tailwind: chỉ dùng lớp repo đang dùng rộng rãi (`text-muted-foreground`, `bg-muted`, `bg-card`, `bg-background`, `text-foreground`, `border-border`, `border-input`, `bg-input`, `text-red-600 dark:text-red-400`, `text-amber-600 dark:text-amber-400`, `text-emerald-600 dark:text-emerald-400`). **Không tự chế token màu mới** (D-107).
 - Mọi class truyền vào component shadcn có thể ĐÈ class gốc vì `cn()` dùng twMerge — đọc class gốc trước khi thêm (D-107).
+- **Quyền dùng `requirePerm` SẴN CÓ** ở `features/receiving/perm.ts` — `requirePerm('view_receiving')` để đọc, `requirePerm('manage_qc')` để ghi. `features/kho-nhan/actions.ts` đã dùng đúng khuôn này. **KHÔNG tạo file quyền mới cho kho-nhan.**
+- **Tải ảnh dùng `uploadReceiptImage` SẴN CÓ** ở `features/receiving/actions.ts` (nhận FormData với `file` + `scope`, trả khoá S3). Không viết lại đường tải ảnh.
 - Commit trailer: `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
 
 ## File Structure
@@ -440,7 +442,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { locThuocTinh, type DongThuocTinh, type MetafieldTho } from './thuoc-tinh-shopify';
-import { requireXemNhanKcs } from './perm';
+import { requirePerm } from '@/features/receiving/perm';
 
 export interface DongQc {
   sku: string | null;
@@ -483,7 +485,7 @@ const TRUY_VAN = `query($id: ID!) {
  * tốc độ hồi 1.000/giây — không có rủi ro chạm trần.
  */
 export async function layDuLieuQc(storeId: string, shopifyOrderId: string): Promise<DuLieuQcDon | null> {
-  await requireXemNhanKcs();
+  await requirePerm('view_receiving');
   try {
     const [store] = await db.select().from(schema.stores).where(eq(schema.stores.id, storeId)).limit(1);
     if (!store) return null;
@@ -619,7 +621,7 @@ import { db, schema } from '@/db/client';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { chuanHoaMaDon } from './ma-don';
 import { conNhanDuoc, kieuTuKhoa } from './tim-don-logic';
-import { requireXemNhanKcs } from './perm';
+import { requirePerm } from '@/features/receiving/perm';
 
 const GIOI_HAN = 20;
 
@@ -638,7 +640,7 @@ export interface KetQuaTim {
  * phẩm/biến thể dạng số (thứ tem `V:` in ra).
  */
 export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
-  await requireXemNhanKcs();
+  await requirePerm('view_receiving');
   const kieu = kieuTuKhoa(tuKhoa);
   if (kieu === 'qua_ngan') return [];
   const q = tuKhoa.trim();
@@ -771,7 +773,7 @@ import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { maChiec } from './nhan-logic';
-import { requireQuanLyNhanKcs } from './perm';
+import { requirePerm } from '@/features/receiving/perm';
 
 /**
  * Ghi nhận MỘT chiếc vừa về, ở trạng thái ĐANG KIỂM.
@@ -783,7 +785,7 @@ import { requireQuanLyNhanKcs } from './perm';
  * `current_warehouse_code` để NULL tới khi QC đạt — chưa kiểm thì chưa thuộc kho nào.
  */
 export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?: string; itemId?: string }> {
-  const actor = await requireQuanLyNhanKcs();
+  const actor = await requirePerm('manage_qc');
   try {
     const [line] = await db.select({
       id: schema.shopifyOrderLines.id,
@@ -930,7 +932,7 @@ import { db, schema } from '@/db/client';
 import { applyMovement } from '@/features/warehouse/ledger';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { chuyenDuocQc, kiemLoQc, type DongLoiVao } from './qc-logic';
-import { requireQuanLyNhanKcs } from './perm';
+import { requirePerm } from '@/features/receiving/perm';
 
 /**
  * QC ĐẠT → chiếc vào tồn. Đây là chỗ DUY NHẤT trong luồng này gọi `applyMovement`.
@@ -939,7 +941,7 @@ import { requireQuanLyNhanKcs } from './perm';
  * bấm Đạt trên một chiếc thì người sau phải thấy `pass` và dừng, không nhập đôi tồn.
  */
 export async function qcDat(itemId: string, kho: string): Promise<{ ok: boolean; loi?: string }> {
-  const actor = await requireQuanLyNhanKcs();
+  const actor = await requirePerm('manage_qc');
   try {
     await db.transaction(async (tx) => {
       const [it] = await tx.select().from(schema.goodsReceiptItems)
@@ -972,7 +974,7 @@ export async function qcDat(itemId: string, kho: string): Promise<{ ok: boolean;
  * KHÔNG gọi `applyMovement`: hàng lỗi không bao giờ vào tồn.
  */
 export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise<{ ok: boolean; loi?: string }> {
-  const actor = await requireQuanLyNhanKcs();
+  const actor = await requirePerm('manage_qc');
   const kiem = kiemLoQc(dongLoi, isStorageConfigured());
   if (!kiem.ok) return { ok: false, loi: kiem.loi };
   try {
@@ -1006,7 +1008,7 @@ export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise
 ```ts
 /** Chiếc đang chờ kiểm — mới nhất trước. Chỉ `pending`. */
 export async function danhSachDangKiem(): Promise<DangKiem[]> {
-  await requireXemNhanKcs();
+  await requirePerm('view_receiving');
   return db.select({
     id: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
@@ -1058,7 +1060,13 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
   - Shopify trả `null` → vẫn mở, hiện "Không lấy được ảnh và thuộc tính từ Shopify", hai nút vẫn bấm được.
   - Hai nút: **Đạt** (chọn kho GVM/AP/DM rồi gọi `qcDat`) và **Không đạt** (mở `KhoiLoi`).
 
-- [ ] **Bước 5: Viết `KhoiLoi.tsx`** — danh sách chỗ lỗi thêm/xoá được; mỗi dòng: chọn lý do từ `LY_DO_HOP_LE` (nhãn `NHAN_LY_DO`), ô ảnh (`capture="environment"`), ô ghi chú. Nút Lưu gọi `qcKhongDat`. Lỗi trả về hiện đúng chỗ lỗi nào sai.
+- [ ] **Bước 5: Viết `KhoiLoi.tsx`** — danh sách chỗ lỗi thêm/xoá được; mỗi dòng: chọn lý do từ `LY_DO_HOP_LE` (nhãn `NHAN_LY_DO`), ô ảnh (`capture="environment"` để điện thoại mở thẳng camera), ô ghi chú.
+
+  **Tải ảnh:** mỗi ô ảnh gọi `uploadReceiptImage` SẴN CÓ (`features/receiving/actions.ts`) với `FormData` mang `file` và `scope = itemId`; hàm trả về khoá S3, đặt vào `anhKey` của dòng lỗi đó. **Không viết lại đường tải ảnh.**
+
+  Nút Lưu gọi `qcKhongDat(itemId, dongLoi)`. Lỗi trả về hiện đúng chỗ lỗi nào sai (`kiemLoQc` đã ghi rõ "Chỗ lỗi 2: …").
+
+  Chưa cấu hình kho ảnh → ô ảnh ẩn đi và hiện dòng "chưa cấu hình kho ảnh nên không đính được ảnh"; vẫn lưu được lỗi + lý do.
 
 - [ ] **Bước 6: Nối vào** `page.tsx` — bỏ ô gõ mã đơn cũ, đặt `ODdKiemHang` trên cùng, `BangDangKiem` dưới.
 
@@ -1090,7 +1098,7 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
 import { and, eq, gte, isNull, lte } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { getSignedDownloadUrl, isStorageConfigured } from '@/lib/storage/s3';
-import { requireXemNhanKcs, requireQuanLyNhanKcs } from './perm';
+import { requirePerm } from '@/features/receiving/perm';
 
 export interface ChiecLoi {
   itemId: string; unitCode: string; sku: string | null;
@@ -1104,7 +1112,7 @@ export interface ChiecLoi {
  * để không lập trùng.
  */
 export async function chiecChoTraBrand(brand: string, tuNgay: Date, denNgay: Date): Promise<ChiecLoi[]> {
-  await requireXemNhanKcs();
+  await requirePerm('view_receiving');
   const rows = await db.select({
     itemId: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
@@ -1141,7 +1149,7 @@ export async function chiecChoTraBrand(brand: string, tuNgay: Date, denNgay: Dat
 
 /** Đánh dấu đã lập biên bản để lần sau không lấy lại những chiếc này. */
 export async function danhDauDaLapBienBan(itemIds: string[], maBienBan: string): Promise<void> {
-  await requireQuanLyNhanKcs();
+  await requirePerm('manage_qc');
   if (itemIds.length === 0) return;
   for (const id of itemIds) {
     await db.update(schema.goodsReceiptItems)
