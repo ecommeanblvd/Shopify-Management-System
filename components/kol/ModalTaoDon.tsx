@@ -164,9 +164,20 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
   return (
     <Dialog open={openDialog} onOpenChange={(v) => { setOpenDialog(v); if (!v) resetForm(); }}>
       <DialogTrigger className={buttonVariants({})}>+ Tạo đơn</DialogTrigger>
-      <DialogContent className="relative max-h-[90vh] w-full gap-0 overflow-hidden p-0 sm:max-w-[1000px]">
+      {/*
+        KHÔNG thêm `relative` vào đây. DialogContent gốc là
+        `fixed top-1/2 left-1/2 -translate-*`; `relative` sẽ ĐÈ MẤT `fixed`,
+        modal rơi khỏi lớp nổi và tụt xuống cuối luồng trang (CEO báo 24/09).
+        Phần tử `fixed` vốn đã là gốc toạ độ cho con `absolute`, nên popup tìm
+        sản phẩm neo đúng mà không cần `relative`.
+
+        `flex flex-col` đè `grid` của bản gốc: vùng dòng hàng phải là chỗ CUỘN
+        (`min-h-0 flex-1`), mà `flex-1` không có tác dụng trong grid — để grid
+        thì `overflow-hidden` cắt cụt danh sách thay vì cho cuộn.
+      */}
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[1000px]">
         {/* ── Header ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-6 pb-4 pt-[18px]">
+        <div className="flex shrink-0 items-center gap-3 px-6 pb-4 pt-[18px]">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <DialogTitle className="text-[17px] font-semibold tracking-[-0.015em]">Tạo đơn xuất hàng</DialogTitle>
@@ -183,7 +194,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
         </div>
 
         {/* ── Thông tin đơn ──────────────────────────────────────── */}
-        <div className="flex flex-col gap-2.5 px-6 pb-[18px]">
+        <div className="flex shrink-0 flex-col gap-2.5 px-6 pb-[18px]">
           <div className="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_320px]">
             {/* Người nhận */}
             <div className="relative">
@@ -377,7 +388,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
         </div>
 
         {/* ── Footer ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-4 border-t border-border px-6 py-3.5">
+        <div className="flex shrink-0 items-center gap-4 border-t border-border px-6 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px]">
               {daChon
