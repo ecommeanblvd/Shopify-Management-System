@@ -20,6 +20,8 @@ import { thangKinhDoanh } from '@/lib/timezone';
 interface DongState {
   key: string;
   sku: string;
+  /** Ghim theo ID chứ không chỉ SKU — SKU của brand đổi liên tục (CEO 24/09). */
+  shopifyVariantId: string | null;
   tenHang: string;
   kho: string;
   soLuong: number;
@@ -33,7 +35,7 @@ interface DongState {
 function dongMoi(): DongState {
   return {
     key: crypto.randomUUID(),
-    sku: '', tenHang: '', kho: WAREHOUSE_PRIORITY[0], soLuong: 1,
+    sku: '', shopifyVariantId: null, tenHang: '', kho: WAREHOUSE_PRIORITY[0], soLuong: 1,
     tonTheoKho: [], giaVon: null, giaVonTienTe: null,
   };
 }
@@ -98,13 +100,13 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
     const chonKhoCoHang = bt.tonTheoKho.find((t) => t.ton > 0)?.kho ?? WAREHOUSE_PRIORITY[0];
     if (picker === 'them') {
       setDong((prev) => [...prev, {
-        ...dongMoi(), sku: bt.sku, tenHang: bt.tenHang, kho: chonKhoCoHang,
+        ...dongMoi(), sku: bt.sku, shopifyVariantId: bt.shopifyVariantId, tenHang: bt.tenHang, kho: chonKhoCoHang,
         tonTheoKho: bt.tonTheoKho, giaVon: bt.giaVon, giaVonTienTe: bt.giaVonTienTe,
       }]);
     } else if (picker) {
       // Chế độ THAY: giữ nguyên kho và số lượng, chỉ đổi sản phẩm (theo thiết kế).
       capNhat(picker, {
-        sku: bt.sku, tenHang: bt.tenHang,
+        sku: bt.sku, shopifyVariantId: bt.shopifyVariantId, tenHang: bt.tenHang,
         tonTheoKho: bt.tonTheoKho, giaVon: bt.giaVon, giaVonTienTe: bt.giaVonTienTe,
       });
     }
@@ -142,6 +144,7 @@ export function ModalTaoDon({ nguoiNhan }: { nguoiNhan: NguoiNhan[] }) {
       // ghi cùng một giá trị xuống mọi dòng.
       fd.set('dong', JSON.stringify(coHang.map((d) => ({
         sku: d.sku.trim(),
+        shopifyVariantId: d.shopifyVariantId ?? undefined,
         tenHang: d.tenHang.trim() || undefined,
         kho: d.kho,
         soLuong: d.soLuong,

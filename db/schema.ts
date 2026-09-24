@@ -2840,6 +2840,9 @@ export const kolDongDon = pgTable('kol_dong_don', {
   id: uuid('id').defaultRandom().primaryKey(),
   donId: uuid('don_id').references(() => kolDon.id, { onDelete: 'cascade' }).notNull(),
   sku: text('sku').notNull(),
+  /** ID biến thể Shopify (gid đầy đủ) — thứ KHÔNG đổi khi brand đánh lại SKU
+   *  (CEO 24/09). SKU vẫn giữ vì tồn kho khoá theo SKU. Null khi tra không ra. */
+  shopifyVariantId: text('shopify_variant_id'),
   tenHang: text('ten_hang'),
   kho: text('kho').notNull(),
   soLuong: integer('so_luong').notNull(),
@@ -2855,6 +2858,7 @@ export const kolDongDon = pgTable('kol_dong_don', {
 }, (t) => [
   index('kol_dong_don_don_idx').on(t.donId),
   index('kol_dong_don_muon_idx').on(t.hinhThuc, t.hanTra),
+  index('kol_dong_don_variant_idx').on(t.shopifyVariantId),
 ]);
 
 export const kolTraVe = pgTable('kol_tra_ve', {

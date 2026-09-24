@@ -59,6 +59,7 @@ class LoiNghiepVu extends Error {}
 /** Một dòng hàng gõ trong form tạo đơn — chưa qua kiểm tra. */
 interface DongTaoTho {
   sku?: unknown;
+  shopifyVariantId?: unknown;
   tenHang?: unknown;
   kho?: unknown;
   soLuong?: unknown;
@@ -70,6 +71,7 @@ interface DongTaoTho {
 
 interface DongTaoDaKiem {
   sku: string;
+  shopifyVariantId: string | null;
   tenHang: string | null;
   kho: string;
   soLuong: number;
@@ -88,6 +90,11 @@ function kiemDongTao(dongRaw: unknown): { ok: true; dong: DongTaoDaKiem[] } | { 
   for (let i = 0; i < dongRaw.length; i++) {
     const r = (dongRaw[i] ?? {}) as DongTaoTho;
     const sku = String(r.sku ?? '').trim();
+    // ID biến thể chỉ nhận đúng khuôn gid Shopify. Dòng hàng tới đây là một
+    // khối JSON trong FormData nên người dùng post được chuỗi bất kỳ; nhận bừa
+    // thì cột định danh — thứ đang thay dần SKU — nhiễm rác ngay từ đầu.
+    const variantTho = String(r.shopifyVariantId ?? '').trim();
+    const shopifyVariantId = /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/.test(variantTho) ? variantTho : null;
     const kho = String(r.kho ?? '').trim();
     const soLuong = Number(r.soLuong);
     const hinhThuc: HinhThuc = r.hinhThuc === 'muon' ? 'muon' : 'tang';
@@ -132,6 +139,7 @@ function kiemDongTao(dongRaw: unknown): { ok: true; dong: DongTaoDaKiem[] } | { 
 
     dong.push({
       sku,
+      shopifyVariantId,
       tenHang: (typeof r.tenHang === 'string' && r.tenHang.trim()) || null,
       kho,
       soLuong,
@@ -349,6 +357,7 @@ export async function taoDon(fd: FormData): Promise<{ ok: boolean; loi?: string;
       await tx.insert(schema.kolDongDon).values(kiemDong.dong.map((d) => ({
         donId: don.id,
         sku: d.sku,
+        shopifyVariantId: d.shopifyVariantId,
         tenHang: d.tenHang,
         kho: d.kho,
         soLuong: d.soLuong,

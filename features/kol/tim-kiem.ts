@@ -43,6 +43,7 @@ export async function timKiemBienThe(tuKhoa: string): Promise<KetQuaBienThe[]> {
   const rows = await db
     .select({
       sku: schema.shopifyVariants.sku,
+      shopifyVariantId: schema.shopifyVariants.shopifyVariantId,
       tenSanPham: schema.shopifyVariants.productTitle,
       tenBienThe: schema.shopifyVariants.variantTitle,
     })
@@ -86,6 +87,7 @@ export async function timKiemBienThe(tuKhoa: string): Promise<KetQuaBienThe[]> {
     const g = gia.get(r.sku!);
     return {
       sku: r.sku!,
+      shopifyVariantId: r.shopifyVariantId ?? null,
       tenHang: ghepTenBienThe(r.tenSanPham, r.tenBienThe),
       ton: tonTheoKho.reduce((a, x) => a + x.ton, 0),
       tonTheoKho,
@@ -101,7 +103,7 @@ export async function timKiemBienThe(tuKhoa: string): Promise<KetQuaBienThe[]> {
  * hình dạng. Thiếu cái này thì quét xong ô sản phẩm mất phần tồn/giá vốn mà
  * gõ tay lại có, và không ai biết vì sao.
  */
-async function boSungTonVaGia(sku: string, tenHang: string): Promise<KetQuaBienThe> {
+async function boSungTonVaGia(sku: string, tenHang: string, shopifyVariantId: string | null): Promise<KetQuaBienThe> {
   const [tonRows, gia] = await Promise.all([
     db.select({
       kho: schema.warehouseInventory.warehouseCode,
@@ -117,6 +119,7 @@ async function boSungTonVaGia(sku: string, tenHang: string): Promise<KetQuaBienT
   const g = gia.get(sku);
   return {
     sku,
+    shopifyVariantId,
     tenHang,
     ton: tonTheoKho.reduce((a, x) => a + x.ton, 0),
     tonTheoKho,
@@ -129,13 +132,14 @@ async function boSungTonVaGia(sku: string, tenHang: string): Promise<KetQuaBienT
 async function bienTheTheoShopifyVariantId(shopifyVariantId: string): Promise<KetQuaBienThe | null> {
   const [row] = await db.select({
     sku: schema.shopifyVariants.sku,
+    variantId: schema.shopifyVariants.shopifyVariantId,
     tenSanPham: schema.shopifyVariants.productTitle,
     tenBienThe: schema.shopifyVariants.variantTitle,
   }).from(schema.shopifyVariants)
     .where(inArray(schema.shopifyVariants.shopifyVariantId, cacDangIdShopify(shopifyVariantId, 'ProductVariant')))
     .limit(1);
   if (!row?.sku) return null;
-  return boSungTonVaGia(row.sku, ghepTenBienThe(row.tenSanPham, row.tenBienThe));
+  return boSungTonVaGia(row.sku, ghepTenBienThe(row.tenSanPham, row.tenBienThe), row.variantId ?? null);
 }
 
 /**
@@ -146,13 +150,14 @@ async function bienTheTheoShopifyVariantId(shopifyVariantId: string): Promise<Ke
 async function bienTheTheoDongDon(shopifyLineId: string): Promise<KetQuaBienThe | null> {
   const [row] = await db.select({
     sku: schema.shopifyOrderLines.sku,
+    variantId: schema.shopifyOrderLines.shopifyVariantId,
     tenSanPham: schema.shopifyOrderLines.productTitle,
     tenBienThe: schema.shopifyOrderLines.variantTitle,
   }).from(schema.shopifyOrderLines)
     .where(inArray(schema.shopifyOrderLines.shopifyLineId, cacDangIdShopify(shopifyLineId, 'LineItem')))
     .limit(1);
   if (!row?.sku) return null;
-  return boSungTonVaGia(row.sku, ghepTenBienThe(row.tenSanPham, row.tenBienThe));
+  return boSungTonVaGia(row.sku, ghepTenBienThe(row.tenSanPham, row.tenBienThe), row.variantId ?? null);
 }
 
 /**

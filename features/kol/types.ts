@@ -36,6 +36,10 @@ export interface DongDon {
  */
 export interface KetQuaBienThe {
   sku: string;
+  /** ID biến thể Shopify dạng gid đầy đủ. Đây là thứ tem `V:` mã hoá và là
+   *  khoá định danh hệ thống đang chuyển sang dùng thay SKU (CEO 24/09) —
+   *  120.817 biến thể có đúng 120.817 ID, không dòng nào thiếu. */
+  shopifyVariantId: string | null;
   /** Tên sản phẩm ghép biến thể (vd "Áo dài lụa — M / Đỏ"), sẵn để hiển thị. */
   tenHang: string;
   /** Tồn khả dụng CỘNG DỒN qua MỌI kho — tín hiệu tổng quan lúc chọn hàng, KHÔNG

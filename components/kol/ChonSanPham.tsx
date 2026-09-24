@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { timKiemBienThe, giaiMaQuetTaoDon } from '@/features/kol/tim-kiem';
+import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { KetQuaBienThe } from '@/features/kol/types';
 
 const DO_DAI_TOI_THIEU = 2;
@@ -23,7 +24,9 @@ function tienVnd(v: number, tienTe: string | null): string {
  * tem `V:`/`L:`. Máy quét hoạt động như bàn phím rồi gửi Enter, nên Enter phải
  * thử giải mã quét TRƯỚC khi lấy dòng đang chọn — quét là thêm luôn, không cần
  * bấm gì thêm. Hệ thống KHÔNG lưu mã vạch của brand nên ở đây không có dòng
- * barcode như bản thiết kế vẽ; thay bằng chính thứ máy quét đọc được.
+ * barcode của brand; "barcode" ở đây là ID BIẾN THỂ Shopify — chính thứ tem `V:`
+ * mã hoá, và là khoá định danh hệ thống đang chuyển sang dùng thay SKU vì SKU
+ * của brand đổi liên tục (CEO 24/09). Gõ tay số đó cũng tìm ra, không chỉ quét.
  */
 export function ChonSanPham({
   che_do, onChon, onDong,
@@ -120,8 +123,8 @@ export function ChonSanPham({
             value={q}
             onChange={(e) => { setQ(e.target.value); setLoiQuet(null); }}
             onKeyDown={onKeyDown}
-            placeholder="Tên, SKU hoặc quét bằng máy"
-            aria-label="Tìm sản phẩm theo tên, SKU hoặc quét mã"
+            placeholder="Tên, SKU, ID sản phẩm — hoặc quét bằng máy"
+            aria-label="Tìm sản phẩm theo tên, SKU, ID sản phẩm hoặc quét mã"
             className="h-[34px] min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"
           />
         </div>
@@ -155,8 +158,11 @@ export function ChonSanPham({
                 <span className="shrink-0 text-right text-[12px] tabular-nums text-muted">
                   {bt.tonTheoKho.map((t) => `${t.kho} ${t.ton}`).join(' · ')}
                 </span>
-                <span className="col-span-2 text-[11px] text-muted">
-                  {bt.giaVon == null ? 'Chưa có giá vốn' : `Giá vốn ${tienVnd(bt.giaVon, bt.giaVonTienTe)}`}
+                <span className="col-span-2 flex items-baseline justify-between gap-3 text-[11px] text-muted">
+                  <span className="truncate font-mono">{soIdShopify(bt.shopifyVariantId ?? '') ?? '—'}</span>
+                  <span className="shrink-0">
+                    {bt.giaVon == null ? 'Chưa có giá vốn' : `Giá vốn ${tienVnd(bt.giaVon, bt.giaVonTienTe)}`}
+                  </span>
                 </span>
               </button>
             ))
