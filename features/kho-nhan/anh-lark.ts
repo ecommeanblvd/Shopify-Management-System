@@ -1,5 +1,14 @@
-'use server';
-
+/**
+ * CỐ Ý KHÔNG có `'use server'`.
+ *
+ * Đây là hàm dùng chung giữa hai file server action, không phải thứ trình duyệt
+ * gọi. Để `'use server'` là mỗi hàm export ở đây thành MỘT ENDPOINT công khai
+ * gọi được từ ngoài mà không qua `requirePerm` — `dongBoAnhLenLark` sẽ cho
+ * người lạ bắn ghi sang bảng Lark vận hành chỉ bằng một id phiếu.
+ *
+ * File này chỉ được import từ module chạy phía máy chủ (`db/client` kéo theo
+ * kết nối Postgres nên bundler client cũng nổ ngay nếu ai lỡ import).
+ */
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { updateWhInventoryRecord, uploadWhInventoryMedia } from '@/features/lark/client';
