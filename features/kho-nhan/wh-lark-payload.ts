@@ -54,6 +54,21 @@ export const QC_CHECK_FAILED = 'QC Failed';
 export const COT_UNIQUE_CODE = 'WH - Unique code (k xóa)';
 export const COT_ORDER_FINAL = 'Order Number final';
 export const COT_SKU_FINAL = 'Lineitem SKU final';
+export const COT_STORE_FINAL = 'Store final';
+export const COT_LINEITEM_NAME = 'Lineitem Name';
+export const COT_QTY_TRUOC_QC = 'Quantity tiếp nhận trước QC';
+
+/**
+ * Lựa chọn NGUYÊN VĂN của cột CHỌN `Store final` (đọc 25/09).
+ *
+ * Bắt buộc phải canh: ghi một giá trị lạ vào cột chọn thì Lark ĐẺ THÊM lựa
+ * chọn mới trên bảng vận hành chứ không báo lỗi, làm hỏng bộ lọc và báo cáo
+ * của cả đội (D-045). Giá trị lạ thì BỎ TRỐNG cột, để người sửa tay.
+ */
+export const STORE_FINAL_HOP_LE = new Set([
+  '#MBLVD', '#MXHS', '#MTB', '#HC', '#TINH', '#HCKOL', '#MCN', '#MIRER',
+  'TINH Atelier', 'MER Request', 'MBLVD Off-store', '#DISCN', 'MIRER GLB', '#MOS',
+]);
 
 /**
  * Kho bên mình → tên lựa chọn NGUYÊN VĂN trên Lark.
@@ -77,20 +92,37 @@ export const KHO_SANG_LARK: Record<string, string> = {
  * khít. Brand, giá, ngày đặt… Lark TỰ LOOKUP từ liên kết này nên không điền tay;
  * riêng `Order Number final` / `Lineitem SKU final` thì phải điền (xem trên).
  *
- * `maDon` và `sku` lấy NGUYÊN VĂN từ `lark_mon_don` — cùng nguồn mà cột look up
- * đọc — để hai cột `final` và hai cột `look up` luôn khớp nhau từng ký tự.
+ * `maDon` lấy từ `shopify_orders.shopify_order_number`, KHÔNG lấy từ
+ * `lark_mon_don`: bảng mirror bên mình strip sạch dấu `#` (0/7752 dòng còn `#`)
+ * nên ghi theo nó là ra "MBLVD30465" trong khi cả bảng Lark là "#MBLVD30465".
+ * Số đơn Shopify giữ đúng quy ước từng store — MEAN/CICI/MIRER có `#`, TINH
+ * thì không (1.320/1.340 đơn không `#`) — khớp y hệt thứ Lark đang có.
+ *
+ * `store` và `tenMon` lấy từ `lark_mon_don` vì đó là bản sao của chính bảng
+ * liên kết; ba cột `Store final`, `Lineitem Name`, `Quantity tiếp nhận trước QC`
+ * là cột NHẬP TAY trên Lark (không phải lookup) nên không điền là trống trơn —
+ * đúng lỗi đội kho báo 25/09.
  */
 export function dungPayloadNhan(
-  d: { larkMonRecordId: string; maDon: string; sku: string; nhanLuc: Date; kho: string },
+  d: {
+    larkMonRecordId: string; maDon: string; sku: string;
+    store: string | null; tenMon: string | null;
+    nhanLuc: Date; kho: string;
+  },
 ): Record<string, unknown> {
   const kho = KHO_SANG_LARK[d.kho];
   if (!kho) throw new Error(`Kho "${d.kho}" chưa có tên tương ứng trên Lark.`);
+  const store = d.store?.trim();
   return {
     [COT_NGAY_IMPORT]: d.nhanLuc.getTime(),
     [COT_INVENTORY_TYPE]: INVENTORY_TYPE_RETAIL,
     [COT_SELECT_ORDER]: [d.larkMonRecordId],
     [COT_ORDER_FINAL]: d.maDon,
     [COT_SKU_FINAL]: d.sku,
+    ...(store && STORE_FINAL_HOP_LE.has(store) ? { [COT_STORE_FINAL]: store } : {}),
+    ...(d.tenMon?.trim() ? { [COT_LINEITEM_NAME]: d.tenMon.trim() } : {}),
+    // Mô hình bên mình MỖI DÒNG LÀ MỘT CHIẾC nên số tiếp nhận luôn là 1.
+    [COT_QTY_TRUOC_QC]: 1,
     [COT_WH_ACTION]: WH_ACTION_CHO_QC,
     [COT_WAREHOUSE]: kho,
     // Điền ngay từ lúc tạo: để trống là dòng của mình rơi ra ngoài mọi bộ lọc

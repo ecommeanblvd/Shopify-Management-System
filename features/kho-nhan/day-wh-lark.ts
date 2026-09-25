@@ -68,6 +68,8 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       recordId: schema.larkMonDon.recordId,
       maDon: schema.larkMonDon.orderNumber,
       sku: schema.larkMonDon.sku,
+      store: schema.larkMonDon.store,
+      tenMon: schema.larkMonDon.lineitemName,
     })
       .from(schema.larkMonDon)
       .where(and(
@@ -87,7 +89,11 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     try {
       const recordId = await createWhInventoryRecord(
         dungPayloadNhan({
-          larkMonRecordId: mon.recordId, maDon: mon.maDon, sku: skuFinal,
+          larkMonRecordId: mon.recordId,
+          // Số đơn của Shopify — giữ dấu `#` đúng quy ước store; bản mirror
+          // `lark_mon_don` đã strip sạch `#` nên không dùng được cho cột này.
+          maDon: c.maDon, sku: skuFinal,
+          store: mon.store, tenMon: mon.tenMon,
           nhanLuc: c.taoLuc, kho: c.kho,
         }),
       );
