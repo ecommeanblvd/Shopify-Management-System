@@ -178,25 +178,31 @@ describe('dấu # của Order Number final', () => {
 });
 
 describe('chonVendorHopLe', () => {
-  const co = new Set(['Mirer', 'DeNio', 'Happy Clothing', 'TOM FRIED']);
+  const co = ['Mirer', 'DeNio', 'Happy Clothing', 'TOM FRIED', 'THESÓNG', 'L\u2019SCARLETT'];
 
   it('trùng khít lựa chọn sẵn có thì nhận', () => {
     expect(chonVendorHopLe('TOM FRIED', co)).toBe('TOM FRIED');
     expect(chonVendorHopLe('  DeNio  ', co)).toBe('DeNio');
   });
 
-  /* "MIRER" và "Mirer" là HAI lựa chọn khác nhau trên Lark. Đoán hộ là chọn
-   * nhầm cái người ta không dùng — thà để trống cho người chọn. */
-  it('lệch hoa/thường thì TỪ CHỐI, không đoán hộ', () => {
-    expect(chonVendorHopLe('MIRER', co)).toBeNull();
-    expect(chonVendorHopLe('denio', co)).toBeNull();
+  /* Các cặp chỉ khác CÁCH VIẾT, cùng một brand. Dấu của THÉSONG rơi vào chữ
+   * khác với THESÓNG; L'SCARLETT dùng nháy thẳng còn Lark dùng nháy cong. */
+  it('bỏ dấu và hoa/thường, khớp duy nhất thì nhận LỰA CHỌN CỦA LARK', () => {
+    expect(chonVendorHopLe('MIRER', co)).toBe('Mirer');
+    expect(chonVendorHopLe('Denio', co)).toBe('DeNio');
+    expect(chonVendorHopLe('THÉSONG', co)).toBe('THESÓNG');
+    expect(chonVendorHopLe("L'SCARLETT", co)).toBe('L\u2019SCARLETT');
   });
 
-  /* Đo 25/09: 23/129 brand trong lark_mon_don không có lựa chọn nào tương ứng
-   * (KEIRA TONG, KALISA, THÉSONG…). Ghi vào là Lark đẻ thêm lựa chọn mới trên
-   * bảng vận hành chứ không báo lỗi — bảng đã có "Happy Clothing" lẫn
-   * "Happy Clothings" vì đúng kiểu này. */
-  it('tên gần giống nhưng không trùng thì TỪ CHỐI', () => {
+  /* Chính bảng Lark đang có 9 nhóm lựa chọn trùng nhau sau chuẩn hoá ("LASSY"
+   * và "Lassy"…). Bốc bừa một cái là chẻ dữ liệu ra thêm một nhánh nữa. */
+  it('khớp NHIỀU hơn một lựa chọn thì TỪ CHỐI', () => {
+    expect(chonVendorHopLe('lassy', ['LASSY', 'Lassy'])).toBeNull();
+  });
+
+  /* Đo 25/09: 16 brand không có lựa chọn nào tương ứng (KEIRA TONG, KALISA…).
+   * Ghi vào là Lark đẻ thêm lựa chọn mới chứ không báo lỗi. */
+  it('không có lựa chọn nào thì TỪ CHỐI, kể cả tên gần giống', () => {
     expect(chonVendorHopLe('Happy Clothings', co)).toBeNull();
     expect(chonVendorHopLe('KEIRA TONG', co)).toBeNull();
   });
@@ -206,8 +212,8 @@ describe('chonVendorHopLe', () => {
     expect(chonVendorHopLe('   ', co)).toBeNull();
   });
 
-  /* Đọc lựa chọn từ Lark hỏng → tập rỗng → bỏ trống cột, KHÔNG được ghi bừa. */
-  it('tập lựa chọn rỗng thì không ghi gì', () => {
-    expect(chonVendorHopLe('TOM FRIED', new Set())).toBeNull();
+  /* Đọc lựa chọn từ Lark hỏng → mảng rỗng → bỏ trống cột, KHÔNG ghi bừa. */
+  it('danh sách lựa chọn rỗng thì không ghi gì', () => {
+    expect(chonVendorHopLe('TOM FRIED', [])).toBeNull();
   });
 });

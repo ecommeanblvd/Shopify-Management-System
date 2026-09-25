@@ -64,7 +64,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
    * → bỏ trống cột, chứ không chặn cả lượt gửi vì một cột phụ. */
   const vendorHopLe = await layLuaChonVendorFinal().catch((e) => {
     console.error('[kho-nhan] đọc lựa chọn Vendor final lỗi:', e);
-    return new Set<string>();
+    return [] as string[];
   });
 
   for (const c of dsChiec) {

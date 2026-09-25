@@ -63,22 +63,41 @@ export const COT_QTY_TRUOC_QC = 'Quantity tiếp nhận trước QC';
  * thống tạo mà mình chưa hề đụng vào.
  */
 
+/** Bỏ dấu, bỏ mọi ký tự không phải chữ/số, hạ chữ thường. */
+function chuanHoaBrand(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
 /**
- * THUẦN: chỉ nhận tên brand TRÙNG KHÍT một lựa chọn sẵn có của `Vendor final`.
+ * THUẦN: chọn lựa chọn `Vendor final` ứng với tên brand bên mình.
  *
  * Cột này là cột CHỌN. Ghi tên lạ vào là Lark ĐẺ THÊM lựa chọn mới trên bảng
- * vận hành chứ không báo lỗi (D-045) — bảng đã có sẵn dấu vết: "Happy Clothing"
- * và "Happy Clothings" cùng tồn tại trong 164 lựa chọn.
+ * vận hành chứ không báo lỗi (D-045) — bảng đã mang sẵn dấu vết: "Happy
+ * Clothing" và "Happy Clothings" cùng nằm trong 164 lựa chọn.
  *
- * KHÔNG khớp kiểu bỏ hoa/thường: "MIRER" và "Mirer" là hai lựa chọn KHÁC NHAU
- * trên Lark, đoán hộ là chọn nhầm cái người ta không dùng. Không khớp thì trả
- * null và để trống, đúng như 58% số dòng đội kho cũng đang để trống.
+ * Hai bước, theo đúng thứ tự:
+ *  1. trùng khít từng ký tự → nhận;
+ *  2. bỏ dấu và hoa/thường rồi vẫn chỉ khớp ĐÚNG MỘT lựa chọn → nhận lựa chọn
+ *     đó. Bắt được các cặp chỉ khác cách viết: "MIRER"/"Mirer",
+ *     "THÉSONG"/"THESÓNG" (dấu rơi vào chữ khác), "L'SCARLETT"/"L’SCARLETT"
+ *     (dấu nháy thẳng và dấu nháy cong).
+ *
+ * Khớp NHIỀU hơn một thì TỪ CHỐI, không bốc bừa: chính bảng Lark đang có 9
+ * nhóm lựa chọn trùng nhau sau chuẩn hoá ("LASSY" và "Lassy", "O'Hara" và
+ * "OHara"…). Chọn nhầm cái người ta không dùng là chẻ dữ liệu ra thêm một
+ * nhánh nữa — thà để trống cho người chọn.
  */
 export function chonVendorHopLe(
-  vendor: string | null | undefined, luaChon: ReadonlySet<string>,
+  vendor: string | null | undefined, luaChon: readonly string[],
 ): string | null {
   const v = vendor?.trim();
-  return v && luaChon.has(v) ? v : null;
+  if (!v) return null;
+  if (luaChon.includes(v)) return v;
+  const k = chuanHoaBrand(v);
+  if (!k) return null;
+  const hop = luaChon.filter((o) => chuanHoaBrand(o) === k);
+  return hop.length === 1 ? hop[0]! : null;
 }
 
 /**
@@ -99,21 +118,17 @@ export const KHO_SANG_LARK: Record<string, string> = {
  *
  * `Import (select order)` là cột LIÊN KẾT tới bảng "CX - MER - Product line
  * Management", nhận MẢNG record_id. Giá trị đúng chính là
- * `lark_mon_don.record_id` — đã đối chiếu thật 24/09: record_id ở hai nơi trùng
- * khít. Brand, giá, ngày đặt… Lark TỰ LOOKUP từ liên kết này nên không điền tay;
- * riêng `Order Number final` / `Lineitem SKU final` thì phải điền (xem trên).
+ * `lark_mon_don.record_id`.
  *
  * `maDon` lấy từ `shopify_orders.shopify_order_number`, KHÔNG lấy từ
  * `lark_mon_don`: bảng mirror bên mình strip sạch dấu `#` (0/7752 dòng còn `#`)
  * nên ghi theo nó là ra "MBLVD30465" trong khi cả bảng Lark là "#MBLVD30465".
- * Số đơn Shopify giữ đúng quy ước từng store — MEAN/CICI/MIRER có `#`, TINH
- * thì không (1.320/1.340 đơn không `#`) — khớp y hệt thứ Lark đang có.
  *
  * `tenMon` lấy từ `lark_mon_don.lineitem_name` — chính giá trị mà cột
- * `Lineitem Name (look up)` trả về. Đo 2.785 dòng từ 01/06: cột tay
- * `Lineitem Name` TRÙNG KHÍT cột look up ở 2.439/2.441 dòng (99,9%), và chỉ 1
- * dòng duy nhất bỏ trống cột tay. Tức quy ước của bảng là cột tay chép đúng
- * cột look up, nên mình chép y hệt.
+ * `Lineitem Name (look up)` trả về. Đo 2.785 dòng từ 01/06: cột tay trùng khít
+ * cột look up ở 2.439/2.441 dòng (99,9%).
+ *
+ * `vendor` caller đã lọc qua `chonVendorHopLe`.
  */
 export function dungPayloadNhan(
   d: {

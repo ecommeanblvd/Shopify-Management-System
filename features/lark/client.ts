@@ -379,14 +379,16 @@ export async function uploadWhInventoryMedia(
  * cột chọn thì Lark đẻ thêm lựa chọn mới chứ không báo lỗi, và bảng này đã có
  * sẵn dấu vết của chuyện đó ("Happy Clothing" vs "Happy Clothings").
  */
-let cachedVendors: { bo: Set<string>; hetHan: number } | null = null;
-export async function layLuaChonVendorFinal(): Promise<Set<string>> {
-  if (cachedVendors && cachedVendors.hetHan > Date.now()) return cachedVendors.bo;
+let cachedVendors: { ds: string[]; hetHan: number } | null = null;
+export async function layLuaChonVendorFinal(): Promise<string[]> {
+  if (cachedVendors && cachedVendors.hetHan > Date.now()) return cachedVendors.ds;
   const cot = await listWhInventoryFields();
   const opts = cot.find((c) => c.field_name === 'Vendor final')?.property?.options ?? [];
-  const bo = new Set(opts.map((o) => (o.name ?? '').trim()).filter(Boolean));
-  cachedVendors = { bo, hetHan: Date.now() + 10 * 60_000 };
-  return bo;
+  // Giữ MẢNG chứ không Set: bảng có 9 nhóm lựa chọn trùng nhau sau chuẩn hoá,
+  // và `chonVendorHopLe` phải đếm được số lựa chọn khớp để biết lúc nào nên từ chối.
+  const ds = opts.map((o) => (o.name ?? '').trim()).filter(Boolean);
+  cachedVendors = { ds, hetHan: Date.now() + 10 * 60_000 };
+  return ds;
 }
 
 /** Tạo MỘT dòng bảng kho. Trả record id. */
