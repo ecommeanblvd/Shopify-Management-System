@@ -105,9 +105,11 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     maDon: schema.shopifyOrders.shopifyOrderNumber,
     storeId: schema.shopifyOrders.storeId,
     shopifyOrderId: schema.shopifyOrders.shopifyOrderId,
+    kho: schema.goodsReceipts.warehouseCode,
     taoLuc: schema.goodsReceiptItems.createdAt,
   })
     .from(schema.goodsReceiptItems)
+    .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .where(eq(schema.goodsReceiptItems.qcResult, 'pending'))
     .orderBy(desc(schema.goodsReceiptItems.createdAt))

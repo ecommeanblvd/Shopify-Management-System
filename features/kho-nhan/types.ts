@@ -25,6 +25,8 @@ export interface DangKiem {
   tenSanPham: string | null; tenBienThe: string | null;
   orderId: string | null; maDon: string | null;
   storeId: string | null; shopifyOrderId: string | null;
+  /** Kho của phiếu nhận — cũng là kho đã ghi sang Lark. Mặc định của ô "Nhập kho". */
+  kho: string;
   taoLuc: Date;
 }
 

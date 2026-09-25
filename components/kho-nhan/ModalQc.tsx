@@ -1,14 +1,15 @@
 'use client';
 
-import Image from 'next/image';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
+import { nhanKho } from '@/features/warehouse/ten-kho';
 import { layDuLieuQc } from '@/features/kho-nhan/shopify-qc';
 import { qcDat } from '@/features/kho-nhan/qc-actions';
 import type { DangKiem, DongQc } from '@/features/kho-nhan/types';
 import { KhoiLoi } from './KhoiLoi';
+import { AnhQc } from './AnhQc';
 
 /**
  * Modal QC toàn màn hình (CEO 24/09: "ảnh hiện to full height modal gần bằng cả
@@ -46,9 +47,12 @@ function NoiDungQc({
    *  thứ gây render dây chuyền. */
   const [daTai, setDaTai] = useState(false);
   const [loiTai, setLoiTai] = useState(false);
-  const [iAnh, setIAnh] = useState(0);
   const [moKhoiLoi, setMoKhoiLoi] = useState(false);
-  const [kho, setKho] = useState<string>(WAREHOUSE_PRIORITY[0]!);
+  /* Mặc định là kho của CHÍNH phiếu nhận — cũng là kho đã ghi sang Lark lúc
+   * "Bắt đầu QC". Trước đây luôn mặc định GVM, nên người ở An Phú bấm Đạt mà
+   * không để ý là tồn rơi vào GVM còn Lark ghi SG | AP: hai bên lệch nhau mà
+   * không có gì báo. */
+  const [kho, setKho] = useState<string>(chiec.kho ?? WAREHOUSE_PRIORITY[0]!);
   const [loi, setLoi] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -76,19 +80,6 @@ function NoiDungQc({
 
   const anh = dong?.anh ?? [];
   const soAnh = anh.length;
-  const doiAnh = useCallback((b: number) => {
-    if (soAnh === 0) return;
-    setIAnh((i) => (i + b + soAnh) % soAnh);
-  }, [soAnh]);
-
-  useEffect(() => {
-    const f = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); doiAnh(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); doiAnh(1); }
-    };
-    window.addEventListener('keydown', f);
-    return () => window.removeEventListener('keydown', f);
-  }, [doiAnh]);
 
   const dat = () =>
     start(async () => {
@@ -107,43 +98,21 @@ function NoiDungQc({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <div className="relative flex min-h-0 flex-1 items-center justify-center bg-muted">
-          {dangTai ? (
-            <p className="text-sm text-muted-foreground">Đang tải ảnh…</p>
-          ) : soAnh === 0 ? (
-            <p className="px-6 text-center text-sm text-muted-foreground">
-              {loiShopify
-                ? 'Không lấy được ảnh và thuộc tính từ Shopify — vẫn kiểm và ghi kết quả bình thường.'
-                : 'Sản phẩm này chưa có ảnh trên Shopify.'}
-            </p>
-          ) : (
-            <>
-              <Image
-                src={anh[iAnh]!}
-                alt={`Ảnh ${iAnh + 1}/${soAnh} của ${chiec.tenSanPham ?? chiec.sku ?? 'sản phẩm'}`}
-                fill
-                sizes="(max-width: 768px) 100vw, 60vw"
-                className="object-contain"
-                unoptimized
-              />
-              {soAnh > 1 && (
-                <>
-                  <button
-                    type="button" onClick={() => doiAnh(-1)} aria-label="Ảnh trước"
-                    className="absolute left-2 top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-background/80 text-xl hover:bg-background"
-                  >‹</button>
-                  <button
-                    type="button" onClick={() => doiAnh(1)} aria-label="Ảnh sau"
-                    className="absolute right-2 top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-background/80 text-xl hover:bg-background"
-                  >›</button>
-                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-xs tabular-nums">
-                    {iAnh + 1}/{soAnh}
-                  </span>
-                </>
-              )}
-            </>
-          )}
-        </div>
+        {dangTai || soAnh === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center bg-muted">
+            {dangTai ? (
+              <p className="text-sm text-muted-foreground">Đang tải ảnh…</p>
+            ) : (
+              <p className="px-6 text-center text-sm text-muted-foreground">
+                {loiShopify
+                  ? 'Không lấy được ảnh và thuộc tính từ Shopify — vẫn kiểm và ghi kết quả bình thường.'
+                  : 'Sản phẩm này chưa có ảnh trên Shopify.'}
+              </p>
+            )}
+          </div>
+        ) : (
+          <AnhQc anh={anh} ten={chiec.tenSanPham ?? chiec.sku ?? 'sản phẩm'} />
+        )}
 
         <div className="min-h-0 w-full shrink-0 overflow-y-auto border-t border-border p-4 md:w-[420px] md:border-l md:border-t-0">
           <p className="text-sm font-semibold">{chiec.tenSanPham ?? chiec.sku}</p>
@@ -182,7 +151,7 @@ function NoiDungQc({
                 value={kho} onChange={(e) => setKho(e.target.value)} aria-label="Kho nhập vào"
                 className="h-10 cursor-pointer rounded-lg border border-input bg-background px-2 text-sm"
               >
-                {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{k}</option>)}
+                {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{nhanKho(k)}</option>)}
               </select>
             </label>
             <Button type="button" variant="destructive" size="lg" onClick={() => setMoKhoiLoi(true)}>
