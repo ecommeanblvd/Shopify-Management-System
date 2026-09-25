@@ -42,3 +42,22 @@ export function gomTheoPhieu<T extends CoPhieu>(
   }
   return [...theo.values()];
 }
+
+export interface CoNhanLuc { nhanLuc: Date }
+
+/**
+ * Gom sổ nhập theo NGÀY NGHIỆP VỤ, mới nhất trước — để trang dựng thành từng
+ * mảng như bảng Lark đang nhóm (CEO 25/09).
+ */
+export function gomTheoNgay<T extends CoNhanLuc>(
+  ds: readonly T[],
+): { ngay: string; dong: T[] }[] {
+  const theo = new Map<string, T[]>();
+  for (const c of ds) {
+    const n = ngayKinhDoanh(c.nhanLuc) ?? '(không rõ ngày)';
+    (theo.get(n) ?? theo.set(n, []).get(n)!).push(c);
+  }
+  return [...theo.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0))
+    .map(([ngay, dong]) => ({ ngay, dong }));
+}

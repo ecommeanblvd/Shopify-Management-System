@@ -1,9 +1,8 @@
 'use server';
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { requirePerm } from '@/features/receiving/perm';
-import { sqlGioKinhDoanh } from '@/lib/timezone';
 import { NHAN_LY_DO, type LyDoLoi } from './loi-qc';
 import type { DongSoNhap } from './types';
 
@@ -18,12 +17,11 @@ const TRAN = 400;
  * Khác màn Nhận & Kiểm ở chỗ nó KHÔNG lọc theo `qc_result`: đây là sổ, phải
  * thấy cả chiếc đạt, chiếc không đạt lẫn chiếc còn đang kiểm.
  */
-export async function soNhap(loc: { ngay?: string; kho?: string }): Promise<DongSoNhap[]> {
+export async function soNhap(loc: { kho?: string }): Promise<DongSoNhap[]> {
   await requirePerm('view_receiving');
-  const dk = [
-    loc.ngay ? sql`${sql.raw(sqlGioKinhDoanh('goods_receipt_items.created_at'))}::date = ${loc.ngay}::date` : undefined,
-    loc.kho ? eq(schema.goodsReceipts.warehouseCode, loc.kho) : undefined,
-  ].filter(Boolean);
+  // Không lọc theo ngày: trang chia thành từng mảng theo ngày, cần nhiều ngày
+  // một lượt. Trần 400 dòng là đủ vài tuần làm việc của kho.
+  const dk = [loc.kho ? eq(schema.goodsReceipts.warehouseCode, loc.kho) : undefined].filter(Boolean);
 
   const dsThoRaw = await db.select({
     id: schema.goodsReceiptItems.id,
@@ -71,13 +69,4 @@ export async function soNhap(loc: { ngay?: string; kho?: string }): Promise<Dong
     lyDoLoi: theoChiec.get(x.id)?.lyDo ?? [],
     soAnhLoi: theoChiec.get(x.id)?.soAnhLoi ?? 0,
   })) as DongSoNhap[];
-}
-
-/** Các ngày CÓ hàng nhận, mới nhất trước — để dựng ô chọn ngày không đoán mò. */
-export async function ngayCoHang(): Promise<string[]> {
-  await requirePerm('view_receiving');
-  const r = await db.execute(sql`
-    select distinct ${sql.raw(sqlGioKinhDoanh('created_at'))}::date::text as ngay
-    from goods_receipt_items order by 1 desc limit 60`);
-  return ((r.rows ?? r) as { ngay: string }[]).map((x) => x.ngay);
 }

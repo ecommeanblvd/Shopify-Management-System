@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tachTheoNgay, gomTheoPhieu } from './tach-ngay';
+import { tachTheoNgay, gomTheoPhieu, gomTheoNgay } from './tach-ngay';
 
 const luc = (s: string) => ({ taoLuc: new Date(s) });
 
@@ -64,5 +64,26 @@ describe('gomTheoPhieu', () => {
 
   it('danh sách rỗng → không nhóm nào', () => {
     expect(gomTheoPhieu([])).toEqual([]);
+  });
+});
+
+describe('gomTheoNgay', () => {
+  const r = (s: string) => ({ nhanLuc: new Date(s) });
+
+  it('gom theo ngày, MỚI NHẤT trước', () => {
+    const g = gomTheoNgay([r('2026-09-23T03:00:00Z'), r('2026-09-25T03:00:00Z'), r('2026-09-25T04:00:00Z')]);
+    expect(g.map((x) => x.ngay)).toEqual(['2026-09-25', '2026-09-23']);
+    expect(g[0]!.dong).toHaveLength(2);
+  });
+
+  /* Ngày NGHIỆP VỤ: 18:00Z ngày 24 là 01:00 sáng ngày 25 giờ Việt Nam. Tính
+   * theo UTC là nó rơi nhầm sang mảng hôm trước. */
+  it('dùng ngày nghiệp vụ chứ không phải ngày UTC', () => {
+    const g = gomTheoNgay([r('2026-09-24T18:00:00Z')]);
+    expect(g[0]!.ngay).toBe('2026-09-25');
+  });
+
+  it('rỗng → không mảng nào', () => {
+    expect(gomTheoNgay([])).toEqual([]);
   });
 });
