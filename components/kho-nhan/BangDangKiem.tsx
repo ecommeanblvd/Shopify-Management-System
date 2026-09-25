@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { soIdShopify } from '@/features/receiving/ma-tem';
-import type { AnhNhan, DangKiem } from '@/features/kho-nhan/types';
+import type { AnhNhan, DangKiem, LoaiAnhNhan } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
@@ -13,7 +13,7 @@ import { timPhieuThieu, cauNhacThieu } from '@/features/kho-nhan/thieu-dinh-kem'
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
-import { KhoiAnhNhan, NhanThieuAnh } from './KhoiAnhNhan';
+import { OAnhNhan, ModalAnhNhan } from './AnhNhanCell';
 
 /**
  * Báo việc đã xong là tin THOÁNG QUA: hiện vài giây rồi tự tắt, không chiếm chỗ
@@ -51,6 +51,7 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
    *  cứng (CEO 25/09): hàng về gấp, brand gửi biên bản sau là chuyện thường,
    *  kho chỉ cần biết chứ không cần bị khoá. */
   const [daNhac, setDaNhac] = useState(false);
+  const [moAnh, setMoAnh] = useState<{ receiptId: string; vendor: string | null; loai: LoaiAnhNhan } | null>(null);
 
   const lamMoi = () => router.refresh();
 
@@ -132,28 +133,18 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
           </p>
         ) : (
           <div className="space-y-4">
-            {theoPhieu.map((g) => {
-              const cua = anh.filter((a) => a.receiptId === g.receiptId);
-              const du = (['hang_den', 'bb_ban_giao'] as const).every(
-                (l) => cua.some((a) => a.loai === l),
-              );
-              return (
-                <div key={g.receiptId} className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{g.vendor ?? 'Không rõ brand'}</span>
-                    <span className="text-xs text-muted-foreground">{g.chiec.length} chiếc</span>
-                    <NhanThieuAnh du={du} />
-                  </div>
-                  {/* Ảnh hàng đến + biên bản bàn giao gắn ở MỨC PHIẾU: một tấm
-                      ảnh chụp cả lô của brand đó, không phải từng chiếc. */}
-                  <KhoiAnhNhan
-                    receiptId={g.receiptId} vendor={g.vendor} anh={cua}
-                    coStorage={coStorage} onXong={lamMoi}
-                  />
-                  <Bang ds={g.chiec} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+            {theoPhieu.map((g) => (
+              <div key={g.receiptId} className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{g.vendor ?? 'Không rõ brand'}</span>
+                  <span className="text-xs text-muted-foreground">{g.chiec.length} chiếc</span>
                 </div>
-              );
-            })}
+                <Bang
+                  ds={g.chiec} anh={anh} dangXoa={dangXoa}
+                  onKiem={setChon} onXoa={(c) => void xoa(c)} onMoAnh={setMoAnh}
+                />
+              </div>
+            ))}
           </div>
         )}
 
@@ -166,7 +157,10 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
               {nhomTruoc.length} chiếc tồn từ hôm trước — chưa kiểm xong
             </summary>
             <div className="p-2 pt-0">
-              <Bang ds={nhomTruoc} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+              <Bang
+                ds={nhomTruoc} anh={anh} dangXoa={dangXoa}
+                onKiem={setChon} onXoa={(c) => void xoa(c)} onMoAnh={setMoAnh}
+              />
             </div>
           </details>
         )}
@@ -193,6 +187,17 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
         </div>
       )}
 
+      {moAnh && (
+        <ModalAnhNhan
+          mo
+          receiptId={moAnh.receiptId} vendor={moAnh.vendor} loai={moAnh.loai}
+          anh={anh.filter((a) => a.receiptId === moAnh.receiptId && a.loai === moAnh.loai)}
+          coStorage={coStorage}
+          onDong={() => setMoAnh(null)}
+          onXong={lamMoi}
+        />
+      )}
+
       <ModalQc
         chiec={chon}
         coStorage={coStorage}
@@ -204,11 +209,13 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
 }
 
 /** Bảng chiếc đang kiểm — dùng chung cho nhóm hôm nay và nhóm tồn hôm trước. */
-function Bang({ ds, dangXoa, onKiem, onXoa }: {
+function Bang({ ds, anh, dangXoa, onKiem, onXoa, onMoAnh }: {
   ds: DangKiem[];
+  anh: AnhNhan[];
   dangXoa: string | null;
   onKiem: (c: DangKiem) => void;
   onXoa: (c: DangKiem) => void;
+  onMoAnh: (v: { receiptId: string; vendor: string | null; loai: LoaiAnhNhan }) => void;
 }) {
   return (
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -220,6 +227,10 @@ function Bang({ ds, dangXoa, onKiem, onXoa }: {
                 <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
                 <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
                 <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
+                {/* Ảnh lưu ở mức PHIẾU nhưng hiện trên MỌI DÒNG của lô, đúng
+                    như bảng Lark (CEO 25/09). */}
+                <th className="px-3 py-2 text-left font-medium">Ảnh hàng đến</th>
+                <th className="px-3 py-2 text-left font-medium">BBBG</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -243,6 +254,18 @@ function Bang({ ds, dangXoa, onKiem, onXoa }: {
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
                   <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
+                  <td className="px-3 py-2">
+                    <OAnhNhan
+                      anh={anh.filter((a) => a.receiptId === c.receiptId && a.loai === 'hang_den')}
+                      onMo={() => onMoAnh({ receiptId: c.receiptId, vendor: c.vendor, loai: 'hang_den' })}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <OAnhNhan
+                      anh={anh.filter((a) => a.receiptId === c.receiptId && a.loai === 'bb_ban_giao')}
+                      onMo={() => onMoAnh({ receiptId: c.receiptId, vendor: c.vendor, loai: 'bb_ban_giao' })}
+                    />
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-2">
                       {/* Chỉ kiểm được SAU khi chiếc đã vào hàng chờ QC (CEO
