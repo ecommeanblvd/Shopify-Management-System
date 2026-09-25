@@ -21,3 +21,24 @@ export function tachTheoNgay<T extends CoNgay>(
   }
   return { homNay: a, truoc: b };
 }
+
+export interface CoPhieu { receiptId: string; vendor: string | null }
+
+/**
+ * Gom chiếc theo PHIẾU NHẬN, giữ nguyên thứ tự phiếu xuất hiện lần đầu.
+ *
+ * Ảnh hàng đến và biên bản bàn giao gắn ở mức phiếu, nên màn nhận phải nhóm
+ * theo phiếu mới có chỗ treo hai thứ đó. Một ngày kho nhận hàng của nhiều
+ * brand thì mỗi brand là một phiếu riêng (maPhieuNhan: ngày + vendor + kho).
+ */
+export function gomTheoPhieu<T extends CoPhieu>(
+  ds: readonly T[],
+): { receiptId: string; vendor: string | null; chiec: T[] }[] {
+  const theo = new Map<string, { receiptId: string; vendor: string | null; chiec: T[] }>();
+  for (const c of ds) {
+    const g = theo.get(c.receiptId);
+    if (g) g.chiec.push(c);
+    else theo.set(c.receiptId, { receiptId: c.receiptId, vendor: c.vendor, chiec: [c] });
+  }
+  return [...theo.values()];
+}

@@ -2899,6 +2899,27 @@ export const whLoiQc = pgTable('wh_loi_qc', {
 }, (t) => [index('wh_loi_qc_item_idx').on(t.receiptItemId)]);
 
 /** Nhật ký MỌI lượt đụng vào bảng Lark WH - Inventory, kể cả lượt hỏng. */
+/**
+ * Ảnh lúc NHẬN HÀNG, gắn vào PHIẾU NHẬN (CEO 25/09).
+ *
+ * `hang_den` = ảnh thực tế lô hàng, phải thấy đủ số lượng; `bb_ban_giao` =
+ * biên bản bàn giao brand đưa. Trên Lark là hai cột "Ảnh Thực Tế SP" và
+ * "BB Giao Nhận".
+ *
+ * Gắn vào phiếu chứ không vào từng chiếc: một tấm ảnh chụp cả lô của một brand
+ * trong ngày. `goods_receipts.handover_doc_key` là ô MỘT file của luồng cũ —
+ * để nguyên, không dùng lại.
+ */
+export const whAnhNhan = pgTable('wh_anh_nhan', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  receiptId: uuid('receipt_id').references(() => goodsReceipts.id, { onDelete: 'cascade' }).notNull(),
+  loai: text('loai').notNull(),
+  s3Key: text('s3_key').notNull(),
+  tenFile: text('ten_file'),
+  nguoiTai: text('nguoi_tai').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('wh_anh_nhan_receipt_idx').on(t.receiptId, t.loai)]);
+
 export const whLarkNhatKy = pgTable('wh_lark_nhat_ky', {
   id: uuid('id').defaultRandom().primaryKey(),
   hanhDong: text('hanh_dong').notNull(),

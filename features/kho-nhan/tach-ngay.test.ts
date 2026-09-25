@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tachTheoNgay } from './tach-ngay';
+import { tachTheoNgay, gomTheoPhieu } from './tach-ngay';
 
 const luc = (s: string) => ({ taoLuc: new Date(s) });
 
@@ -42,5 +42,27 @@ describe('tachTheoNgay', () => {
 
   it('danh sách rỗng → hai nhóm rỗng', () => {
     expect(tachTheoNgay([], '2026-09-25')).toEqual({ homNay: [], truoc: [] });
+  });
+});
+
+describe('gomTheoPhieu', () => {
+  const c = (receiptId: string, vendor: string | null, ma: string) => ({ receiptId, vendor, ma });
+
+  it('gom đúng theo phiếu, giữ thứ tự phiếu xuất hiện lần đầu', () => {
+    const r = gomTheoPhieu([
+      c('p1', 'TomFried', 'a'), c('p2', 'Keira', 'b'), c('p1', 'TomFried', 'c'),
+    ]);
+    expect(r.map((g) => g.receiptId)).toEqual(['p1', 'p2']);
+    expect(r[0]!.chiec.map((x) => x.ma)).toEqual(['a', 'c']);
+  });
+
+  /* Hai brand khác nhau PHẢI là hai khối riêng: ảnh hàng đến và biên bản của
+   * brand này không được treo nhầm sang lô của brand kia. */
+  it('hai brand trong cùng ngày tách thành hai phiếu', () => {
+    expect(gomTheoPhieu([c('p1', 'A', 'x'), c('p2', 'B', 'y')])).toHaveLength(2);
+  });
+
+  it('danh sách rỗng → không nhóm nào', () => {
+    expect(gomTheoPhieu([])).toEqual([]);
   });
 });

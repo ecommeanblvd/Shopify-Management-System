@@ -4,14 +4,15 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { soIdShopify } from '@/features/receiving/ma-tem';
-import type { DangKiem } from '@/features/kho-nhan/types';
+import type { AnhNhan, DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
-import { tachTheoNgay } from '@/features/kho-nhan/tach-ngay';
+import { tachTheoNgay, gomTheoPhieu } from '@/features/kho-nhan/tach-ngay';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
+import { KhoiAnhNhan, NhanThieuAnh } from './KhoiAnhNhan';
 
 /**
  * Báo việc đã xong là tin THOÁNG QUA: hiện vài giây rồi tự tắt, không chiếm chỗ
@@ -32,7 +33,9 @@ function gio(d: Date): string {
 }
 
 /** Màn nhận & kiểm: tìm món chờ về ở trên, danh sách đang kiểm ở dưới. */
-export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; coStorage: boolean }) {
+export function BangDangKiem({ dangKiem, anh, coStorage }: {
+  dangKiem: DangKiem[]; anh: AnhNhan[]; coStorage: boolean;
+}) {
   const router = useRouter();
   const [chon, setChon] = useState<DangKiem | null>(null);
   const [pending, start] = useTransition();
@@ -48,6 +51,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
 
   const hienThi = dangKiem.filter((c) => !daXoa.includes(c.id));
   const { homNay: nhomHomNay, truoc: nhomTruoc } = tachTheoNgay(hienThi, ngayKinhDoanh(new Date())!);
+  const theoPhieu = gomTheoPhieu(nhomHomNay);
   /* Thanh nổi thao tác trên việc của HÔM NAY. "Huỷ nhập" cũng chỉ đụng hôm nay
    * (chặn ngay trong câu WHERE ở máy chủ) — xoá nhầm việc dang dở của hôm qua
    * thì không có đường lấy lại. */
@@ -112,7 +116,30 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
             Hôm nay chưa nhận chiếc nào. Tìm món ở ô trên để ghi nhận hàng vừa về.
           </p>
         ) : (
-          <Bang ds={nhomHomNay} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+          <div className="space-y-4">
+            {theoPhieu.map((g) => {
+              const cua = anh.filter((a) => a.receiptId === g.receiptId);
+              const du = (['hang_den', 'bb_ban_giao'] as const).every(
+                (l) => cua.some((a) => a.loai === l),
+              );
+              return (
+                <div key={g.receiptId} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{g.vendor ?? 'Không rõ brand'}</span>
+                    <span className="text-xs text-muted-foreground">{g.chiec.length} chiếc</span>
+                    <NhanThieuAnh du={du} />
+                  </div>
+                  {/* Ảnh hàng đến + biên bản bàn giao gắn ở MỨC PHIẾU: một tấm
+                      ảnh chụp cả lô của brand đó, không phải từng chiếc. */}
+                  <KhoiAnhNhan
+                    receiptId={g.receiptId} vendor={g.vendor} anh={cua}
+                    coStorage={coStorage} onXong={lamMoi}
+                  />
+                  <Bang ds={g.chiec} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {/* Việc DANG DỞ của hôm trước ở lại đây chứ không bị đẩy sang sổ nhập:

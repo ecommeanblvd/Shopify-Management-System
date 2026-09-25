@@ -27,6 +27,9 @@ export interface DangKiem {
   storeId: string | null; shopifyOrderId: string | null;
   /** Kho của phiếu nhận — cũng là kho đã ghi sang Lark. Mặc định của ô "Nhập kho". */
   kho: string;
+  /** Phiếu nhận chứa chiếc này — ảnh hàng đến và biên bản gắn ở MỨC PHIẾU. */
+  receiptId: string;
+  vendor: string | null;
   taoLuc: Date;
 }
 
@@ -58,4 +61,14 @@ export interface DongSoNhap {
   ketQuaQc: string; trangThaiTon: string | null;
   larkRecordId: string | null;
   nhanLuc: Date; qcLuc: Date | null;
+}
+
+/** Hai loại đính kèm lúc nhận hàng — khớp hai cột đính kèm trên Lark. */
+export type LoaiAnhNhan = 'hang_den' | 'bb_ban_giao';
+
+export interface AnhNhan {
+  id: string; receiptId: string; loai: LoaiAnhNhan;
+  s3Key: string; tenFile: string | null;
+  /** Link ký hạn ngắn; null khi S3 chưa cấu hình hoặc ký hỏng. */
+  url: string | null;
 }

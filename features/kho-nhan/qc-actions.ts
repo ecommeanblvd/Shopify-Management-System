@@ -106,6 +106,8 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     storeId: schema.shopifyOrders.storeId,
     shopifyOrderId: schema.shopifyOrders.shopifyOrderId,
     kho: schema.goodsReceipts.warehouseCode,
+    receiptId: schema.goodsReceiptItems.receiptId,
+    vendor: schema.goodsReceipts.vendor,
     taoLuc: schema.goodsReceiptItems.createdAt,
   })
     .from(schema.goodsReceiptItems)
