@@ -38,6 +38,8 @@ export const COT_WAREHOUSE = 'Warehouse';
  * cột look up rỗng, chỉ `final` giữ được mã. Nên chúng là cột tay, không phải
  * lookup.)
  */
+/** AutoNumber Lark sinh khi tạo dòng — chỉ ĐỌC, không bao giờ ghi. */
+export const COT_UNIQUE_CODE = 'WH - Unique code (k xóa)';
 export const COT_ORDER_FINAL = 'Order Number final';
 export const COT_SKU_FINAL = 'Lineitem SKU final';
 

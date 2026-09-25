@@ -8,7 +8,7 @@ import {
   getWhInventoryRecord, updateWhInventoryRecord,
 } from '@/features/lark/client';
 import { requirePerm } from '@/features/receiving/perm';
-import { dungPayloadNhan, dungPayloadSauQcDat, COT_SELECT_ORDER } from './wh-lark-payload';
+import { dungPayloadNhan, dungPayloadSauQcDat, COT_SELECT_ORDER, COT_UNIQUE_CODE } from './wh-lark-payload';
 
 async function ghiNhatKy(d: {
   hanhDong: 'tao' | 'xoa' | 'sua'; larkRecordId: string | null;
@@ -88,8 +88,23 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
           nhanLuc: c.taoLuc, kho: c.kho,
         }),
       );
+      /* Đọc ngược `WH - Unique code` — AutoNumber Lark sinh lúc tạo, mình không
+       * đoán được. Thiếu nó thì Sổ nhập vĩnh viễn không dựng lại được cột
+       * `Định danh` để đối chiếu. Đọc hỏng KHÔNG được làm hỏng lượt gửi đã
+       * thành công: record đã có trên Lark rồi, mất mã chỉ là mất tiện nghi. */
+      let uniqueCode: string | null = null;
+      try {
+        const rec = await getWhInventoryRecord(recordId);
+        const v = rec?.fields?.[COT_UNIQUE_CODE];
+        uniqueCode = typeof v === 'string' ? v
+          : Array.isArray(v) ? (v.map((x) => (x as { text?: string })?.text ?? '').join('') || null)
+          : v == null ? null : String(v);
+      } catch (e) {
+        console.error('[kho-nhan] đọc WH - Unique code lỗi:', e);
+      }
+
       await db.update(schema.goodsReceiptItems)
-        .set({ larkRecordId: recordId, updatedAt: new Date() })
+        .set({ larkRecordId: recordId, larkUniqueCode: uniqueCode, updatedAt: new Date() })
         .where(and(eq(schema.goodsReceiptItems.id, c.id), isNull(schema.goodsReceiptItems.larkRecordId)));
       await ghiNhatKy({ hanhDong: 'tao', larkRecordId: recordId, receiptItemId: c.id, thanhCong: true, chiTiet: null, actor });
       ket.daGui += 1;

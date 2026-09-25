@@ -1,9 +1,10 @@
 'use server';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { requirePerm } from '@/features/receiving/perm';
 import { sqlGioKinhDoanh } from '@/lib/timezone';
+import { NHAN_LY_DO, type LyDoLoi } from './loi-qc';
 import type { DongSoNhap } from './types';
 
 const TRAN = 400;
@@ -24,7 +25,7 @@ export async function soNhap(loc: { ngay?: string; kho?: string }): Promise<Dong
     loc.kho ? eq(schema.goodsReceipts.warehouseCode, loc.kho) : undefined,
   ].filter(Boolean);
 
-  return db.select({
+  const dsThoRaw = await db.select({
     id: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
     sku: schema.goodsReceiptItems.sku,
@@ -32,6 +33,9 @@ export async function soNhap(loc: { ngay?: string; kho?: string }): Promise<Dong
     tenBienThe: schema.goodsReceiptItems.variantTitle,
     maDon: schema.shopifyOrders.shopifyOrderNumber,
     kho: schema.goodsReceipts.warehouseCode,
+    vendor: schema.goodsReceipts.vendor,
+    receiptId: schema.goodsReceiptItems.receiptId,
+    larkUniqueCode: schema.goodsReceiptItems.larkUniqueCode,
     ketQuaQc: schema.goodsReceiptItems.qcResult,
     trangThaiTon: schema.goodsReceiptItems.stockStatus,
     larkRecordId: schema.goodsReceiptItems.larkRecordId,
@@ -44,6 +48,29 @@ export async function soNhap(loc: { ngay?: string; kho?: string }): Promise<Dong
     .where(dk.length > 0 ? and(...dk) : undefined)
     .orderBy(desc(schema.goodsReceiptItems.createdAt))
     .limit(TRAN);
+
+  // Lỗi QC gộp theo chiếc trong MỘT lượt truy vấn, không N+1 theo từng dòng.
+  const ids = dsThoRaw.map((x) => x.id);
+  const loi = ids.length === 0 ? [] : await db.select({
+    receiptItemId: schema.whLoiQc.receiptItemId,
+    lyDo: schema.whLoiQc.lyDo,
+    anhKey: schema.whLoiQc.anhKey,
+  }).from(schema.whLoiQc).where(inArray(schema.whLoiQc.receiptItemId, ids));
+
+  const theoChiec = new Map<string, { lyDo: string[]; soAnhLoi: number }>();
+  for (const l of loi) {
+    const g = theoChiec.get(l.receiptItemId) ?? { lyDo: [], soAnhLoi: 0 };
+    g.lyDo.push(NHAN_LY_DO[l.lyDo as LyDoLoi] ?? l.lyDo);
+    if (l.anhKey) g.soAnhLoi += 1;
+    theoChiec.set(l.receiptItemId, g);
+  }
+
+  return dsThoRaw.map((x) => ({
+    ...x,
+    lyDo: undefined,
+    lyDoLoi: theoChiec.get(x.id)?.lyDo ?? [],
+    soAnhLoi: theoChiec.get(x.id)?.soAnhLoi ?? 0,
+  })) as DongSoNhap[];
 }
 
 /** Các ngày CÓ hàng nhận, mới nhất trước — để dựng ô chọn ngày không đoán mò. */

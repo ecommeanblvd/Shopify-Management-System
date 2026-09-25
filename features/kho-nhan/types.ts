@@ -58,9 +58,14 @@ export interface DongSoNhap {
   id: string; unitCode: string; sku: string | null;
   tenSanPham: string | null; tenBienThe: string | null;
   maDon: string | null; kho: string;
+  vendor: string | null; receiptId: string;
   ketQuaQc: string; trangThaiTon: string | null;
-  larkRecordId: string | null;
+  larkRecordId: string | null; larkUniqueCode: string | null;
   nhanLuc: Date; qcLuc: Date | null;
+  /** Lý do QC không đạt, gộp từ `wh_loi_qc`. Rỗng khi chưa/không có lỗi. */
+  lyDoLoi: string[];
+  /** Số ảnh lỗi QC đã chụp. */
+  soAnhLoi: number;
 }
 
 /** Hai loại đính kèm lúc nhận hàng — khớp hai cột đính kèm trên Lark. */

@@ -2072,6 +2072,9 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
    *  Null = chưa gửi. Đây cũng là HÀNG RÀO xoá: chỉ được xoá record có id nằm
    *  ở đây, không bao giờ xoá theo điều kiện lọc. */
   larkRecordId: text('lark_record_id'),
+  /** `WH - Unique code (k xóa)` — AutoNumber do Lark sinh, đọc ngược về lúc tạo
+   *  record. Không có nó thì không dựng lại được cột `Định danh` để đối chiếu. */
+  larkUniqueCode: text('lark_unique_code'),
   productTitle: text('product_title'),
   variantTitle: text('variant_title'),
   photoKey: text('photo_key'),
