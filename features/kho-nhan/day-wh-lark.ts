@@ -68,6 +68,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       recordId: schema.larkMonDon.recordId,
       maDon: schema.larkMonDon.orderNumber,
       sku: schema.larkMonDon.sku,
+      tenMon: schema.larkMonDon.lineitemName,
     })
       .from(schema.larkMonDon)
       .where(and(
@@ -90,7 +91,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
           larkMonRecordId: mon.recordId,
           // Số đơn của Shopify — giữ dấu `#` đúng quy ước store; bản mirror
           // `lark_mon_don` đã strip sạch `#` nên không dùng được cho cột này.
-          maDon: c.maDon, sku: skuFinal,
+          maDon: c.maDon, sku: skuFinal, tenMon: mon.tenMon,
           nhanLuc: c.taoLuc, kho: c.kho,
         }),
       );
