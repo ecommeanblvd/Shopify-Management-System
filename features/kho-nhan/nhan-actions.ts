@@ -109,8 +109,8 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
  * BA ĐIỀU KIỆN trong chính câu WHERE, không kiểm ở tầng trên:
  *  - `qc_result = 'pending'` — đã QC rồi thì KHÔNG được xoá, vì QC đạt đã ghi
  *    tồn kho qua applyMovement, xoá dòng là tồn treo không ai đối chiếu được;
- *  - `lark_record_id IS NULL` — đã gửi Lark thì phải "Gỡ khỏi Lark" trước, nếu
- *    không bảng Lark còn dòng mà bên mình mất dấu;
+ *  - `lark_record_id IS NULL` — chiếc đã vào hàng chờ QC đi đường `goKhoiLark`
+ *    (xoá dòng Lark trước), nếu không bảng Lark còn dòng mà bên mình mất dấu;
  *  - `id` đích danh — không bao giờ xoá theo điều kiện lọc.
  *
  * `goods_receipt_items` đang giữ 833 chiếc thật và `allocate.ts` đọc nó, nên
@@ -127,7 +127,7 @@ export async function goChiecNhanNham(itemId: string): Promise<{ ok: boolean; lo
       ))
       .returning({ id: schema.goodsReceiptItems.id });
     if (xoa.length === 0) {
-      return { ok: false, loi: 'Không gỡ được — chiếc này đã kiểm hoặc đã gửi Lark. Gỡ khỏi Lark trước.' };
+      return { ok: false, loi: 'Không gỡ được — chiếc này đã kiểm hoặc đã vào hàng chờ QC.' };
     }
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };

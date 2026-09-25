@@ -57,7 +57,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     .where(inArray(schema.goodsReceiptItems.id, itemIds));
 
   for (const c of dsChiec) {
-    if (c.larkRecordId) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'đã gửi rồi' }); continue; }
+    if (c.larkRecordId) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'đã vào chờ QC rồi' }); continue; }
     if (!c.maDon || !c.sku) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'thiếu mã đơn hoặc SKU' }); continue; }
 
     // Chuẩn hoá `#` cả hai phía — quên là truy vấn trả rỗng mà không báo lỗi.

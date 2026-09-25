@@ -34,15 +34,15 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       setKetQuaGui(null); setLoiGui(null);
       try {
         const r = await guiLenLark(chuaGui.map((c) => c.id));
-        setKetQuaGui(`Đã gửi ${r.daGui} chiếc lên Lark.`);
+        setKetQuaGui(`${r.daGui} chiếc đã vào hàng chờ QC.`);
         if (r.boQua.length) {
-          setLoiGui(`${r.boQua.length} chiếc chưa gửi được — ` +
+          setLoiGui(`${r.boQua.length} chiếc chưa vào được — ` +
             r.boQua.map((b) => `${b.unitCode}: ${b.lyDo}`).join(' · '));
         }
         lamMoi();
       } catch (e) {
-        console.error('[kho-nhan] gửi Lark lỗi:', e);
-        setLoiGui('Không gọi được máy chủ để gửi. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
+        console.error('[kho-nhan] chuyển sang chờ QC lỗi:', e);
+        setLoiGui('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
       }
     });
 
@@ -60,7 +60,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       setKetQuaGui(null); setLoiGui(null);
       const r = await huyNhapChuaGui();
       if (!r.ok) { setLoiGui(r.loi ?? 'Huỷ nhập thất bại.'); return; }
-      setKetQuaGui(`Đã huỷ ${r.soXoa} chiếc chưa gửi.`);
+      setKetQuaGui(`Đã huỷ ${r.soXoa} chiếc chưa vào QC.`);
       lamMoi();
     });
 
@@ -69,7 +69,7 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       setKetQuaGui(null); setLoiGui(null);
       const r = await goKhoiLark(c.id);
       if (!r.ok) { setLoiGui(r.loi ?? 'Gỡ thất bại.'); return; }
-      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi Lark.`);
+      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi danh sách.`);
       lamMoi();
     });
 
@@ -121,18 +121,23 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
-                        {/* Chỉ kiểm được SAU khi đã gửi Lark (CEO 24/09): các bộ
-                            phận khác phải thấy trạng thái "Chờ QC" trước đã. */}
+                        {/* Chỉ kiểm được SAU khi chiếc đã vào hàng chờ QC (CEO
+                            24/09): các bộ phận khác phải thấy trạng thái "Chờ
+                            QC" trước đã. */}
                         {c.larkRecordId && (
                           <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
                         )}
-                        {/* Chiếc đã gửi thì phải gỡ khỏi Lark TRƯỚC rồi mới gỡ khỏi
-                            danh sách — nếu không bảng Lark còn dòng mà bên mình mất dấu. */}
+                        {/* MỘT nhãn cho cả hai trạng thái: việc đồng bộ Lark là
+                            đường ống tạm thời của giai đoạn chạy song song hai
+                            hệ thống, người dùng không cần biết (CEO 25/09).
+                            Chiếc đã vào chờ QC thì `go` xoá dòng Lark TRƯỚC rồi
+                            mới gỡ bên mình — ngược lại là Lark còn dòng mà bên
+                            mình mất dấu. */}
                         <Button
                           type="button" variant="outline" size="sm" disabled={pending}
                           onClick={() => (c.larkRecordId ? go(c) : goNham(c))}
                         >
-                          {c.larkRecordId ? 'Gỡ khỏi Lark' : 'Gỡ'}
+                          Gỡ
                         </Button>
                       </div>
                     </td>
@@ -148,13 +153,13 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 print:hidden">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2.5 shadow-lg">
             <span className="text-sm text-muted-foreground">
-              {chuaGui.length} chiếc chưa gửi
+              {chuaGui.length} chiếc chờ bắt đầu QC
             </span>
             <Button type="button" variant="outline" size="lg" onClick={huyHet} disabled={pending}>
               Huỷ nhập
             </Button>
             <Button type="button" size="lg" onClick={gui} disabled={pending}>
-              {pending ? 'Đang gửi…' : 'Gửi lên Lark'}
+              {pending ? 'Đang chuyển…' : 'Bắt đầu QC'}
             </Button>
           </div>
         </div>
