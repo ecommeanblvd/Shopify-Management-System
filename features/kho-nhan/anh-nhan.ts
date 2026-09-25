@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requirePerm } from '@/features/receiving/perm';
 import { putObject, getSignedDownloadUrl } from '@/lib/storage/s3';
+import { dongBoAnhLenLark } from './anh-lark';
 import type { AnhNhan, LoaiAnhNhan } from './types';
 
 const HOP_LE: LoaiAnhNhan[] = ['hang_den', 'bb_ban_giao'];
@@ -38,6 +39,9 @@ export async function themAnhNhan(formData: FormData): Promise<{ ok: boolean; lo
     await db.insert(schema.whAnhNhan).values({
       receiptId, loai, s3Key: key, tenFile: file.name, nguoiTai: userId,
     });
+    // Lô đã gửi Lark rồi thì đẩy luôn; chưa gửi thì hàm này thoát ngay, và lúc
+    // bấm "Bắt đầu QC" sẽ gắn một thể.
+    await dongBoAnhLenLark(receiptId);
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
   } catch (e) {
@@ -51,7 +55,11 @@ export async function themAnhNhan(formData: FormData): Promise<{ ok: boolean; lo
 export async function xoaAnhNhan(id: string): Promise<{ ok: boolean; loi?: string }> {
   await requirePerm('manage_qc');
   try {
+    // Nhớ phiếu TRƯỚC khi xoá — xoá rồi thì không còn đường lần ra lô nào.
+    const [a] = await db.select({ receiptId: schema.whAnhNhan.receiptId })
+      .from(schema.whAnhNhan).where(eq(schema.whAnhNhan.id, id)).limit(1);
     await db.delete(schema.whAnhNhan).where(eq(schema.whAnhNhan.id, id));
+    if (a) await dongBoAnhLenLark(a.receiptId);
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
   } catch (e) {

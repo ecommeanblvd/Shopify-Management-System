@@ -2920,6 +2920,8 @@ export const whAnhNhan = pgTable('wh_anh_nhan', {
   s3Key: text('s3_key').notNull(),
   tenFile: text('ten_file'),
   nguoiTai: text('nguoi_tai').references(() => user.id, { onDelete: 'set null' }),
+  /** file_token sau khi tải lên Lark Drive — tải MỘT lần, gắn cho mọi dòng của lô. */
+  larkFileToken: text('lark_file_token'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('wh_anh_nhan_receipt_idx').on(t.receiptId, t.loai)]);
 

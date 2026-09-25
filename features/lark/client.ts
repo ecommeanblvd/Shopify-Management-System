@@ -318,6 +318,56 @@ export async function listWhInventoryFields(): Promise<LarkField[]> {
   return out;
 }
 
+/**
+ * app_token THẬT của base, khác `LARK_BASE_APP_TOKEN` trong env.
+ *
+ * Biến env đang giữ token NODE WIKI (base nằm trong wiki). API bitable nhận cả
+ * hai như nhau nên suốt từ đầu không ai thấy khác biệt — nhưng API Drive thì
+ * chỉ nhận app_token thật, đưa token wiki vào là "parent node not exist"
+ * (đo 25/09). Hỏi một lần rồi nhớ: giá trị này không đổi.
+ */
+let cachedAppToken: string | null = null;
+async function getRealAppToken(): Promise<string> {
+  if (cachedAppToken) return cachedAppToken;
+  const token = await getTenantToken();
+  const res = await fetch(`${DOMAIN}/open-apis/bitable/v1/apps/${env('LARK_BASE_APP_TOKEN')}`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string; data?: { app?: { app_token?: string } } };
+  if (j.code !== 0 || !j.data?.app?.app_token) throw new Error(`[lark] app meta fail: code=${j.code} msg=${j.msg}`);
+  cachedAppToken = j.data.app.app_token;
+  return cachedAppToken;
+}
+
+/**
+ * Tải MỘT file lên Lark Drive để gắn vào cột đính kèm. Trả `file_token`.
+ *
+ * `parent_type` dùng `bitable_image` — đo 25/09 cả `bitable_image` lẫn
+ * `bitable_file` đều nhận ảnh, nhưng ảnh gắn kiểu image mới hiện thumbnail
+ * trong ô như các dòng đội kho đang có.
+ */
+export async function uploadWhInventoryMedia(
+  tenFile: string, noiDung: Uint8Array, kieu: string,
+): Promise<string> {
+  const token = await getTenantToken();
+  const appToken = await getRealAppToken();
+  const fd = new FormData();
+  fd.set('file_name', tenFile);
+  fd.set('parent_type', kieu === 'application/pdf' ? 'bitable_file' : 'bitable_image');
+  fd.set('parent_node', appToken);
+  fd.set('size', String(noiDung.byteLength));
+  fd.set('extra', JSON.stringify({ drive_route_token: appToken }));
+  fd.set('file', new Blob([noiDung as unknown as BlobPart], { type: kieu || 'application/octet-stream' }), tenFile);
+  const res = await fetch(`${DOMAIN}/open-apis/drive/v1/medias/upload_all`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd,
+    // File ảnh kho chụp bằng điện thoại có thể vài MB — rộng hơn 30s của các call khác.
+    signal: AbortSignal.timeout(120_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string; data?: { file_token?: string } };
+  if (j.code !== 0 || !j.data?.file_token) throw new Error(`[lark] upload media fail: code=${j.code} msg=${j.msg}`);
+  return j.data.file_token;
+}
+
 /** Tạo MỘT dòng bảng kho. Trả record id. */
 export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);

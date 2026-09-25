@@ -8,6 +8,7 @@ import {
   getWhInventoryRecord, updateWhInventoryRecord,
 } from '@/features/lark/client';
 import { requirePerm } from '@/features/receiving/perm';
+import { dongBoAnhLenLark, phieuCuaChiec } from './anh-lark';
 import {
   dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat,
   COT_SELECT_ORDER, COT_UNIQUE_CODE,
@@ -120,6 +121,12 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       await ghiNhatKy({ hanhDong: 'tao', larkRecordId: null, receiptItemId: c.id, thanhCong: false, chiTiet, actor });
       ket.boQua.push({ unitCode: c.unitCode, lyDo: `Lark từ chối: ${chiTiet}` });
     }
+  }
+
+  // Dòng đã có trên Lark rồi mới gắn được ảnh vào. Ảnh nào kho tải sau thì
+  // `themAnhNhan` tự đẩy tiếp, nên không cần bắt kho phải tải trước khi gửi.
+  if (ket.daGui > 0) {
+    for (const phieu of await phieuCuaChiec(itemIds)) await dongBoAnhLenLark(phieu);
   }
 
   revalidatePath('/f/warehouse/nhan-kcs');
