@@ -5,12 +5,10 @@
  * đang hiện, để nhìn hai bên là biết khớp hay lệch ngay. Nên mọi tên lựa chọn ở
  * đây phải khớp NGUYÊN VĂN với Lark, không phải bản dịch cho đẹp.
  */
-import { KHO_SANG_LARK, WH_ACTION_CHO_QC, WH_ACTION_TAM_NHAP, INVENTORY_TYPE_RETAIL } from './wh-lark-payload';
-
-/** Tên lựa chọn NGUYÊN VĂN của cột `QC Check` trên Lark (đọc 25/09). */
-export const QC_CHECK_CHUA = 'Tiếp nhận - chưa QC';
-export const QC_CHECK_PASS = 'QC Pass';
-export const QC_CHECK_FAILED = 'QC Failed';
+import {
+  KHO_SANG_LARK, WH_ACTION_CHO_QC, WH_ACTION_TAM_NHAP, INVENTORY_TYPE_RETAIL,
+  QC_CHECK_CHUA, QC_CHECK_PASS, QC_CHECK_FAILED,
+} from './wh-lark-payload';
 
 /** `qc_result` bên mình → tên lựa chọn `QC Check` bên Lark. */
 export function qcCheckLark(ketQua: string): string {

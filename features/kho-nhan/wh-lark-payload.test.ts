@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  dungPayloadNhan, dungPayloadSauQcDat,
+  dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat,
   WH_ACTION_CHO_QC, WH_ACTION_TAM_NHAP, INVENTORY_TYPE_RETAIL,
 } from './wh-lark-payload';
 
@@ -22,12 +22,12 @@ describe('giá trị cột chọn phải khớp NGUYÊN VĂN tên lựa chọn t
 describe('dungPayloadNhan', () => {
   const luc = new Date('2026-09-24T10:00:00Z');
 
-  it('đủ bảy cột, không thừa cột nào', () => {
+  it('đủ tám cột, không thừa cột nào', () => {
     const p = dungPayloadNhan({ larkMonRecordId: 'recABC', maDon: '#MBLVD30542', sku: 'TomFried-TS2644-S-KPTT-PLA', nhanLuc: luc, kho: 'GVM' });
     expect(Object.keys(p).sort()).toEqual([
       'Import (select order)', 'Import - Inventory type', 'Lineitem SKU final',
       'Ngày Import - tiếp nhận đồ tại kho', 'Order Number final',
-      'WH - Action', 'Warehouse',
+      'QC Check', 'WH - Action', 'Warehouse',
     ]);
   });
 
@@ -50,15 +50,31 @@ describe('dungPayloadNhan', () => {
    * Khác hẳn cột `… final`, vốn là Text và PHẢI điền (xem nhóm test cuối file). */
   it('KHÔNG điền tay các cột Lark tự lookup', () => {
     const p = dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', nhanLuc: luc, kho: 'GVM' });
-    for (const k of ['Lineitem SKU (look up)', 'Order number (look up)', 'Brand', 'Định danh']) {
+    for (const k of ['Lineitem SKU (look up)', 'Order number (look up)', 'Brand', 'Định danh', 'WH - Unique code (k xóa)']) {
       expect(p).not.toHaveProperty(k);
     }
   });
 });
 
 describe('dungPayloadSauQcDat', () => {
-  it('chỉ đổi ĐÚNG một cột, không đụng ngày hay liên kết', () => {
-    expect(dungPayloadSauQcDat()).toEqual({ 'WH - Action': 'Tạm nhập (đi đơn)' });
+  it('đổi ĐÚNG hai cột kết quả, không đụng ngày hay liên kết', () => {
+    expect(dungPayloadSauQcDat()).toEqual({
+      'WH - Action': 'Tạm nhập (đi đơn)', 'QC Check': 'QC Pass',
+    });
+  });
+});
+
+describe('dungPayloadSauQcKhongDat', () => {
+  /* Đội kho điền QC Check 100% (1.390/1.390 dòng từ 01/08) và đang có 131 dòng
+   * QC Failed. Không ghi cột này là dòng của mình thủng đúng con số đó. */
+  it('ghi QC Check = QC Failed', () => {
+    expect(dungPayloadSauQcKhongDat()['QC Check']).toBe('QC Failed');
+  });
+
+  /* "Gửi trả Vendor (QC fail)" mang nghĩa ĐÃ GỬI TRẢ. QC hỏng chưa chắc đã gửi
+   * trả ngay, đặt hộ là báo sai một việc chưa ai làm. */
+  it('KHÔNG đụng WH - Action — việc gửi trả để kho tự chọn', () => {
+    expect(dungPayloadSauQcKhongDat()).not.toHaveProperty('WH - Action');
   });
 });
 
@@ -94,5 +110,17 @@ describe('hai cột nuôi công thức Định danh', () => {
       larkMonRecordId: 'rec1', maDon: 'TA2337', sku: 'S', nhanLuc: luc, kho: 'GVM',
     });
     expect(p['Order Number final']).toBe('TA2337');
+  });
+});
+
+describe('QC Check lúc TẠO', () => {
+  /* Để trống là dòng của mình rơi ra ngoài mọi bộ lọc theo QC Check mà đội kho
+   * đang dùng — họ điền cột này 100%. */
+  it('tạo dòng là điền luôn "Tiếp nhận - chưa QC"', () => {
+    const p = dungPayloadNhan({
+      larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'S1',
+      nhanLuc: new Date('2026-09-25T03:00:00Z'), kho: 'GVM',
+    });
+    expect(p['QC Check']).toBe('Tiếp nhận - chưa QC');
   });
 });

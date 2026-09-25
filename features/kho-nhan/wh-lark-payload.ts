@@ -20,6 +20,18 @@ export const COT_INVENTORY_TYPE = 'Import - Inventory type';
 export const COT_SELECT_ORDER = 'Import (select order)';
 export const COT_WH_ACTION = 'WH - Action';
 export const COT_WAREHOUSE = 'Warehouse';
+export const COT_QC_CHECK = 'QC Check';
+
+/**
+ * Tên lựa chọn NGUYÊN VĂN của cột `QC Check` (đọc 25/09).
+ *
+ * Cột này đội kho điền 100% (1.390/1.390 dòng từ 01/08), và dùng để ra con số
+ * QC Pass 1.258 / QC Failed 131. Hệ thống mình trước đây KHÔNG ghi nó — mọi
+ * dòng do mình tạo sẽ để trống và làm thủng chính báo cáo đó.
+ */
+export const QC_CHECK_CHUA = 'Tiếp nhận - chưa QC';
+export const QC_CHECK_PASS = 'QC Pass';
+export const QC_CHECK_FAILED = 'QC Failed';
 
 /**
  * Hai cột TEXT nhập tay nuôi công thức `Định danh`.
@@ -81,10 +93,24 @@ export function dungPayloadNhan(
     [COT_SKU_FINAL]: d.sku,
     [COT_WH_ACTION]: WH_ACTION_CHO_QC,
     [COT_WAREHOUSE]: kho,
+    // Điền ngay từ lúc tạo: để trống là dòng của mình rơi ra ngoài mọi bộ lọc
+    // theo QC Check mà đội kho đang dùng.
+    [COT_QC_CHECK]: QC_CHECK_CHUA,
   };
 }
 
-/** Nội dung sửa sau khi QC ĐẠT — chỉ đổi đúng một cột, không đụng gì khác. */
+/** Nội dung sửa sau khi QC ĐẠT — đổi đúng hai cột kết quả, không đụng gì khác. */
 export function dungPayloadSauQcDat(): Record<string, unknown> {
-  return { [COT_WH_ACTION]: WH_ACTION_TAM_NHAP };
+  return { [COT_WH_ACTION]: WH_ACTION_TAM_NHAP, [COT_QC_CHECK]: QC_CHECK_PASS };
+}
+
+/**
+ * Nội dung sửa sau khi QC KHÔNG ĐẠT.
+ *
+ * CHỈ đổi `QC Check`, KHÔNG đụng `WH - Action`. Cột action có lựa chọn
+ * "Gửi trả Vendor (QC fail)" nhưng nó mang nghĩa ĐÃ GỬI TRẢ, mà QC hỏng chưa
+ * chắc đã gửi trả ngay — đặt hộ là báo sai việc chưa làm. Để kho tự chọn.
+ */
+export function dungPayloadSauQcKhongDat(): Record<string, unknown> {
+  return { [COT_QC_CHECK]: QC_CHECK_FAILED };
 }

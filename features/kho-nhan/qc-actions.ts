@@ -7,7 +7,7 @@ import { applyMovement } from '@/features/warehouse/ledger';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { requirePerm } from '@/features/receiving/perm';
 import { chuyenDuocQc, kiemLoQc, type DongLoiVao } from './qc-logic';
-import { danhDauQcDatTrenLark } from './day-wh-lark';
+import { danhDauQcDatTrenLark, danhDauQcKhongDatTrenLark } from './day-wh-lark';
 import type { DangKiem } from './types';
 
 /**
@@ -81,6 +81,9 @@ export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise
         anhKey: d.anhKey, ghiChu: d.ghiChu.trim() || null, taoBoi: actor,
       })));
     });
+    // Sau khi ghi xong bên mình: báo Lark. Trước đây luồng hỏng không báo gì,
+    // chiếc trượt QC nằm im ở " Chờ QC " và không bộ phận nào biết.
+    await danhDauQcKhongDatTrenLark(itemId, actor);
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
   } catch (e) {

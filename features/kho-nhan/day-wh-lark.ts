@@ -8,7 +8,10 @@ import {
   getWhInventoryRecord, updateWhInventoryRecord,
 } from '@/features/lark/client';
 import { requirePerm } from '@/features/receiving/perm';
-import { dungPayloadNhan, dungPayloadSauQcDat, COT_SELECT_ORDER, COT_UNIQUE_CODE } from './wh-lark-payload';
+import {
+  dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat,
+  COT_SELECT_ORDER, COT_UNIQUE_CODE,
+} from './wh-lark-payload';
 
 async function ghiNhatKy(d: {
   hanhDong: 'tao' | 'xoa' | 'sua'; larkRecordId: string | null;
@@ -186,5 +189,30 @@ export async function danhDauQcDatTrenLark(itemId: string, actor: string): Promi
     const chiTiet = e instanceof Error ? e.message : String(e);
     await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: false, chiTiet, actor });
     console.error('[kho-nhan] danhDauQcDatTrenLark lỗi:', e);
+  }
+}
+
+/**
+ * QC KHÔNG ĐẠT → ghi `QC Check = QC Failed` lên Lark.
+ *
+ * Trước đây luồng hỏng KHÔNG ghi gì sang Lark cả: chiếc trượt QC vẫn nằm im ở
+ * " Chờ QC " trên bảng vận hành, các bộ phận khác không hề biết. Đo 25/09: đội
+ * kho điền `QC Check` 100% và đang có 131 dòng QC Failed — bỏ trống là dòng
+ * của mình thủng đúng con số đó.
+ *
+ * Best-effort như lượt QC đạt: Lark hỏng không được làm hỏng việc đã ghi xong
+ * bên mình, nhưng phải vào nhật ký để còn chữa.
+ */
+export async function danhDauQcKhongDatTrenLark(itemId: string, actor: string): Promise<void> {
+  const [c] = await db.select({ larkRecordId: schema.goodsReceiptItems.larkRecordId })
+    .from(schema.goodsReceiptItems).where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
+  if (!c?.larkRecordId) return;
+  try {
+    await updateWhInventoryRecord(c.larkRecordId, dungPayloadSauQcKhongDat());
+    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: true, chiTiet: 'QC Check → QC Failed', actor });
+  } catch (e) {
+    const chiTiet = e instanceof Error ? e.message : String(e);
+    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: false, chiTiet, actor });
+    console.error('[kho-nhan] danhDauQcKhongDatTrenLark lỗi:', e);
   }
 }
