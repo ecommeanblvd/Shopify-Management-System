@@ -368,6 +368,27 @@ export async function uploadWhInventoryMedia(
   return j.data.file_token;
 }
 
+/**
+ * Các lựa chọn hiện có của cột CHỌN `Vendor final`.
+ *
+ * ĐỌC LIVE (nhớ 10 phút) thay vì ghim cứng danh sách: đội kho thêm brand mới
+ * liên tục — 164 lựa chọn tính đến 25/09 — ghim cứng là brand mới vừa thêm hôm
+ * nay lại bị hệ thống bỏ qua.
+ *
+ * Dùng để CHẶN: chỉ ghi giá trị trùng khít một lựa chọn sẵn có. Ghi tên lạ vào
+ * cột chọn thì Lark đẻ thêm lựa chọn mới chứ không báo lỗi, và bảng này đã có
+ * sẵn dấu vết của chuyện đó ("Happy Clothing" vs "Happy Clothings").
+ */
+let cachedVendors: { bo: Set<string>; hetHan: number } | null = null;
+export async function layLuaChonVendorFinal(): Promise<Set<string>> {
+  if (cachedVendors && cachedVendors.hetHan > Date.now()) return cachedVendors.bo;
+  const cot = await listWhInventoryFields();
+  const opts = cot.find((c) => c.field_name === 'Vendor final')?.property?.options ?? [];
+  const bo = new Set(opts.map((o) => (o.name ?? '').trim()).filter(Boolean));
+  cachedVendors = { bo, hetHan: Date.now() + 10 * 60_000 };
+  return bo;
+}
+
 /** Tạo MỘT dòng bảng kho. Trả record id. */
 export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);

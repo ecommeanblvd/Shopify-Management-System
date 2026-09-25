@@ -5,12 +5,12 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import {
   createWhInventoryRecord, deleteWhInventoryRecord,
-  getWhInventoryRecord, updateWhInventoryRecord,
+  getWhInventoryRecord, updateWhInventoryRecord, layLuaChonVendorFinal,
 } from '@/features/lark/client';
 import { requirePerm } from '@/features/receiving/perm';
 import { dongBoAnhLenLark, phieuCuaChiec } from './anh-lark';
 import {
-  dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat,
+  dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat, chonVendorHopLe,
   COT_SELECT_ORDER, COT_UNIQUE_CODE,
 } from './wh-lark-payload';
 
@@ -60,6 +60,13 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .where(inArray(schema.goodsReceiptItems.id, itemIds));
 
+  /* Đọc một lần cho cả lượt gửi. Hỏng thì coi như không có lựa chọn nào hợp lệ
+   * → bỏ trống cột, chứ không chặn cả lượt gửi vì một cột phụ. */
+  const vendorHopLe = await layLuaChonVendorFinal().catch((e) => {
+    console.error('[kho-nhan] đọc lựa chọn Vendor final lỗi:', e);
+    return new Set<string>();
+  });
+
   for (const c of dsChiec) {
     if (c.larkRecordId) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'đã vào chờ QC rồi' }); continue; }
     if (!c.maDon || !c.sku) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'thiếu mã đơn hoặc SKU' }); continue; }
@@ -70,6 +77,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       maDon: schema.larkMonDon.orderNumber,
       sku: schema.larkMonDon.sku,
       tenMon: schema.larkMonDon.lineitemName,
+      vendor: schema.larkMonDon.vendor,
     })
       .from(schema.larkMonDon)
       .where(and(
@@ -93,6 +101,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
           // Số đơn của Shopify — giữ dấu `#` đúng quy ước store; bản mirror
           // `lark_mon_don` đã strip sạch `#` nên không dùng được cho cột này.
           maDon: c.maDon, sku: skuFinal, tenMon: mon.tenMon,
+          vendor: chonVendorHopLe(mon.vendor, vendorHopLe),
           nhanLuc: c.taoLuc, kho: c.kho,
         }),
       );

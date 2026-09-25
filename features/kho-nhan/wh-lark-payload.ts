@@ -55,16 +55,31 @@ export const COT_UNIQUE_CODE = 'WH - Unique code (k xóa)';
 export const COT_ORDER_FINAL = 'Order Number final';
 export const COT_SKU_FINAL = 'Lineitem SKU final';
 export const COT_LINEITEM_NAME = 'Lineitem Name';
+export const COT_VENDOR_FINAL = 'Vendor final';
 export const COT_QTY_TRUOC_QC = 'Quantity tiếp nhận trước QC';
 
 /**
- * HAI CỘT KHÔNG GHI, dù chúng cũng là cột tay: `Store final` và `Vendor final`.
- *
- * `Store final` đã có sẵn giá trị đúng trên cả hai dòng hệ thống tạo mà mình
- * chưa hề ghi — bên Lark tự lo. `Vendor final` là cột CHỌN với cả trăm tên
- * brand: ghi lệch một ký tự hoa/thường là Lark đẻ thêm lựa chọn mới trên bảng
- * vận hành chứ không báo lỗi (D-045), nên để người chọn.
+ * `Store final` KHÔNG ghi: bên Lark đã tự có giá trị đúng trên mọi dòng hệ
+ * thống tạo mà mình chưa hề đụng vào.
  */
+
+/**
+ * THUẦN: chỉ nhận tên brand TRÙNG KHÍT một lựa chọn sẵn có của `Vendor final`.
+ *
+ * Cột này là cột CHỌN. Ghi tên lạ vào là Lark ĐẺ THÊM lựa chọn mới trên bảng
+ * vận hành chứ không báo lỗi (D-045) — bảng đã có sẵn dấu vết: "Happy Clothing"
+ * và "Happy Clothings" cùng tồn tại trong 164 lựa chọn.
+ *
+ * KHÔNG khớp kiểu bỏ hoa/thường: "MIRER" và "Mirer" là hai lựa chọn KHÁC NHAU
+ * trên Lark, đoán hộ là chọn nhầm cái người ta không dùng. Không khớp thì trả
+ * null và để trống, đúng như 58% số dòng đội kho cũng đang để trống.
+ */
+export function chonVendorHopLe(
+  vendor: string | null | undefined, luaChon: ReadonlySet<string>,
+): string | null {
+  const v = vendor?.trim();
+  return v && luaChon.has(v) ? v : null;
+}
 
 /**
  * Kho bên mình → tên lựa chọn NGUYÊN VĂN trên Lark.
@@ -103,7 +118,7 @@ export const KHO_SANG_LARK: Record<string, string> = {
 export function dungPayloadNhan(
   d: {
     larkMonRecordId: string; maDon: string; sku: string;
-    tenMon: string | null; nhanLuc: Date; kho: string;
+    tenMon: string | null; vendor: string | null; nhanLuc: Date; kho: string;
   },
 ): Record<string, unknown> {
   const kho = KHO_SANG_LARK[d.kho];
@@ -115,6 +130,8 @@ export function dungPayloadNhan(
     [COT_ORDER_FINAL]: d.maDon,
     [COT_SKU_FINAL]: d.sku,
     ...(d.tenMon?.trim() ? { [COT_LINEITEM_NAME]: d.tenMon.trim() } : {}),
+    // Caller đã lọc qua `chonVendorHopLe` — tới đây chỉ còn tên hợp lệ hoặc null.
+    ...(d.vendor ? { [COT_VENDOR_FINAL]: d.vendor } : {}),
     // Luôn 1: mô hình bên mình mỗi dòng là MỘT CHIẾC, và bảng Lark cũng vậy —
     // 2.758/2.770 dòng từ 01/06 mang giá trị 1, kể cả các nhóm nhiều chiếc
     // cùng một dòng đơn (mỗi chiếc một dòng, mỗi dòng ghi 1).
