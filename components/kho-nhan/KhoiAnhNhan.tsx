@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { themAnhNhan, xoaAnhNhan } from '@/features/kho-nhan/anh-nhan';
+import { chapNhanKieu, tenFileDan } from '@/features/kho-nhan/dan-anh';
 import type { AnhNhan, LoaiAnhNhan } from '@/features/kho-nhan/types';
 
 const NHAN: Record<LoaiAnhNhan, { ten: string; y: string }> = {
@@ -33,13 +34,15 @@ export function KhoiAnhNhan({
     );
   }
 
-  const tai = async (loai: LoaiAnhNhan, files: FileList) => {
+  const tai = async (loai: LoaiAnhNhan, ds: File[]) => {
+    if (ds.length === 0) return;
     setDangTai(loai);
     try {
       let hong = 0;
+      const files = ds;
       // Tuần tự chứ không song song: tải 10 ảnh cùng lúc từ điện thoại kho là
       // nghẽn mạng và Next từ chối bớt lượt, người dùng chỉ thấy "thất bại".
-      for (const f of Array.from(files)) {
+      for (const f of files) {
         const fd = new FormData();
         fd.set('receiptId', receiptId); fd.set('loai', loai); fd.set('file', f);
         const r = await themAnhNhan(fd);
@@ -56,6 +59,32 @@ export function KhoiAnhNhan({
     }
   };
 
+  /**
+   * Dán thẳng từ clipboard (CEO 25/09: nhân sự copy ảnh từ Zalo sang).
+   *
+   * Ảnh dán không mang tên gốc nên phải tự đặt — dán năm tấm mà cùng tên
+   * "image.png" thì nhìn danh sách không biết cái nào là cái nào.
+   */
+  const dan = (loai: LoaiAnhNhan) => (e: React.ClipboardEvent) => {
+    const tho = Array.from(e.clipboardData?.items ?? [])
+      .filter((i) => i.kind === 'file')
+      .map((i) => i.getAsFile())
+      .filter((f): f is File => f !== null && chapNhanKieu(f.type));
+    if (tho.length === 0) return;
+    // Chỉ chặn sự kiện khi THẬT SỰ có file: dán nhầm chữ thì để trình duyệt xử
+    // lý như bình thường, không nuốt im lặng.
+    e.preventDefault();
+    const luc = new Date();
+    void tai(loai, tho.map((f, i) => new File([f], tenFileDan(loai, f.type, luc, i + 1), { type: f.type })));
+  };
+
+  const keoTha = (loai: LoaiAnhNhan) => (e: React.DragEvent) => {
+    const ds = Array.from(e.dataTransfer?.files ?? []).filter((f) => chapNhanKieu(f.type));
+    if (ds.length === 0) return;
+    e.preventDefault();
+    void tai(loai, ds);
+  };
+
   const go = async (a: AnhNhan) => {
     const r = await xoaAnhNhan(a.id);
     if (!r.ok) { toast.error(r.loi ?? 'Gỡ ảnh thất bại.', { duration: 10000 }); return; }
@@ -68,7 +97,14 @@ export function KhoiAnhNhan({
       {(Object.keys(NHAN) as LoaiAnhNhan[]).map((loai) => {
         const cua = anh.filter((a) => a.loai === loai);
         return (
-          <div key={loai} className="rounded-lg border border-border p-3">
+          <div
+            key={loai}
+            tabIndex={0}
+            onPaste={dan(loai)}
+            onDrop={keoTha(loai)}
+            onDragOver={(e) => e.preventDefault()}
+            className="rounded-lg border border-border p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-sm font-medium">{NHAN[loai].ten}</span>
               <span className={`text-xs ${cua.length ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -103,12 +139,16 @@ export function KhoiAnhNhan({
                 disabled={dangTai !== null}
                 onChange={(e) => {
                   const f = e.target.files;
-                  if (f && f.length) void tai(loai, f);
+                  if (f && f.length) void tai(loai, Array.from(f));
                   e.target.value = '';
                 }}
                 className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-input file:bg-background file:px-2 file:py-1 file:text-xs"
               />
             </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              hoặc bấm vào khung này rồi <kbd className="rounded border border-border px-1">Ctrl/Cmd+V</kbd> để
+              dán ảnh từ Zalo · kéo thả file vào cũng được
+            </p>
             {dangTai === loai && <p className="mt-1 text-xs text-muted-foreground">Đang tải…</p>}
           </div>
         );
