@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
-import { guiLenLark, goKhoiLark } from '@/features/kho-nhan/day-wh-lark';
-import { goChiecNhanNham, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
+import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
+import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
 
@@ -24,10 +24,18 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
   const [ketQuaGui, setKetQuaGui] = useState<string | null>(null);
   const [loiGui, setLoiGui] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  /** Chiếc đang xoá — theo TỪNG DÒNG, để nút của đúng dòng đó báo "Đang xoá…"
+   *  thay vì khoá cả bảng mà không nói đang bận vì cái gì. */
+  const [dangXoa, setDangXoa] = useState<string | null>(null);
+  /** Đã xoá xong ở máy chủ — ẩn ngay, không đợi trang vẽ lại. Xoá một chiếc mất
+   *  2–3 giây vì phải gọi Lark hai lượt (đọc đối chiếu rồi mới xoá, hàng rào
+   *  CEO chốt 24/09); chỗ chờ đó không được im lặng. */
+  const [daXoa, setDaXoa] = useState<string[]>([]);
 
   const lamMoi = () => router.refresh();
 
-  const chuaGui = dangKiem.filter((c) => !c.larkRecordId);
+  const hienThi = dangKiem.filter((c) => !daXoa.includes(c.id));
+  const chuaGui = hienThi.filter((c) => !c.larkRecordId);
 
   const gui = () =>
     start(async () => {
@@ -46,14 +54,25 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       }
     });
 
-  const goNham = (c: DangKiem) =>
-    start(async () => {
-      setKetQuaGui(null); setLoiGui(null);
-      const r = await goChiecNhanNham(c.id);
-      if (!r.ok) { setLoiGui(r.loi ?? 'Gỡ thất bại.'); return; }
-      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi danh sách.`);
-      lamMoi();
-    });
+  /* KHÔNG dùng useTransition ở đây: `pending` dùng chung sẽ khoá mọi nút trên
+   * bảng, trong khi việc đang chạy chỉ thuộc về một dòng. */
+  const xoa = async (c: DangKiem) => {
+    setKetQuaGui(null); setLoiGui(null);
+    setDangXoa(c.id);
+    try {
+      const r = await xoaChiec(c.id);
+      if (!r.ok) { setLoiGui(r.loi ?? 'Xoá thất bại.'); return; }
+      setDaXoa((d) => [...d, c.id]);
+      setKetQuaGui(`Đã xoá ${c.unitCode} khỏi danh sách.`);
+    } catch (e) {
+      // `finally` mà không `catch` thì lỗi máy chủ trôi đi im lặng, người dùng
+      // chỉ thấy nút hết quay mà dòng vẫn còn — đã mắc đúng kiểu này ở ô tìm.
+      console.error('[kho-nhan] xoá chiếc lỗi:', e);
+      setLoiGui('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
+    } finally {
+      setDangXoa(null);
+    }
+  };
 
   const huyHet = () =>
     start(async () => {
@@ -61,15 +80,6 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       const r = await huyNhapChuaGui();
       if (!r.ok) { setLoiGui(r.loi ?? 'Huỷ nhập thất bại.'); return; }
       setKetQuaGui(`Đã huỷ ${r.soXoa} chiếc chưa vào QC.`);
-      lamMoi();
-    });
-
-  const go = (c: DangKiem) =>
-    start(async () => {
-      setKetQuaGui(null); setLoiGui(null);
-      const r = await goKhoiLark(c.id);
-      if (!r.ok) { setLoiGui(r.loi ?? 'Gỡ thất bại.'); return; }
-      setKetQuaGui(`Đã gỡ ${c.unitCode} khỏi danh sách.`);
       lamMoi();
     });
 
@@ -81,13 +91,13 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold">
             Đang kiểm{' '}
-            <span className="font-normal text-muted-foreground">({dangKiem.length} chiếc)</span>
+            <span className="font-normal text-muted-foreground">({hienThi.length} chiếc)</span>
           </h2>
         </div>
         {ketQuaGui && <p className="text-sm text-emerald-600 dark:text-emerald-400">{ketQuaGui}</p>}
         {loiGui && <p className="text-sm text-amber-600 dark:text-amber-400">{loiGui}</p>}
 
-        {dangKiem.length === 0 ? (
+        {hienThi.length === 0 ? (
           <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
             Chưa có chiếc nào chờ kiểm. Tìm món ở ô trên để ghi nhận hàng vừa về.
           </p>
@@ -105,8 +115,13 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                 </tr>
               </thead>
               <tbody>
-                {dangKiem.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-b-0">
+                {hienThi.map((c) => (
+                  <tr
+                    key={c.id}
+                    className={`border-b border-border last:border-b-0 ${
+                      dangXoa === c.id ? 'opacity-50' : ''
+                    }`}
+                  >
                     <td className="px-3 py-2 font-mono text-xs">{c.unitCode}</td>
                     <td className="max-w-[420px] px-3 py-2">
                       <span className="block truncate">{c.tenSanPham ?? c.sku}</span>
@@ -125,19 +140,21 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
                             24/09): các bộ phận khác phải thấy trạng thái "Chờ
                             QC" trước đã. */}
                         {c.larkRecordId && (
-                          <Button type="button" size="sm" onClick={() => setChon(c)}>Kiểm</Button>
+                          <Button
+                            type="button" size="sm" disabled={dangXoa === c.id}
+                            onClick={() => setChon(c)}
+                          >Kiểm</Button>
                         )}
-                        {/* MỘT nhãn cho cả hai trạng thái: việc đồng bộ Lark là
-                            đường ống tạm thời của giai đoạn chạy song song hai
-                            hệ thống, người dùng không cần biết (CEO 25/09).
-                            Chiếc đã vào chờ QC thì `go` xoá dòng Lark TRƯỚC rồi
-                            mới gỡ bên mình — ngược lại là Lark còn dòng mà bên
-                            mình mất dấu. */}
+                        {/* MỘT nút, MỘT nhát: `xoaChiec` tự lo thứ tự Lark →
+                            bên mình. Việc đồng bộ Lark là đường ống tạm của
+                            giai đoạn chạy song song hai hệ thống, người dùng
+                            không cần biết (CEO 25/09). */}
                         <Button
-                          type="button" variant="outline" size="sm" disabled={pending}
-                          onClick={() => (c.larkRecordId ? go(c) : goNham(c))}
+                          type="button" variant="outline" size="sm"
+                          disabled={dangXoa === c.id}
+                          onClick={() => void xoa(c)}
                         >
-                          Gỡ
+                          {dangXoa === c.id ? 'Đang xoá…' : 'Xoá'}
                         </Button>
                       </div>
                     </td>

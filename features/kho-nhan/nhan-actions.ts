@@ -2,6 +2,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { goKhoiLark } from './day-wh-lark';
 import { db, schema } from '@/db/client';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
@@ -127,7 +128,7 @@ export async function goChiecNhanNham(itemId: string): Promise<{ ok: boolean; lo
       ))
       .returning({ id: schema.goodsReceiptItems.id });
     if (xoa.length === 0) {
-      return { ok: false, loi: 'Không gỡ được — chiếc này đã kiểm hoặc đã vào hàng chờ QC.' };
+      return { ok: false, loi: 'Không xoá được — chiếc này đã kiểm hoặc đã vào hàng chờ QC.' };
     }
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
@@ -144,6 +145,34 @@ export async function goChiecNhanNham(itemId: string): Promise<{ ok: boolean; lo
  * Chiếc đã QC hoặc đã gửi Lark KHÔNG bị đụng tới — đó là lý do hàm này an toàn
  * dù nó xoá nhiều dòng.
  */
+/**
+ * Xoá MỘT chiếc khỏi danh sách — một nhát, dù đã vào chờ QC hay chưa.
+ *
+ * Trước đây nút này chạy `goKhoiLark` cho chiếc đã gửi, mà hàm đó CHỈ xoá dòng
+ * bên Lark rồi trả chiếc về trạng thái chờ gửi — dòng vẫn nằm nguyên trong
+ * danh sách. Người dùng phải bấm hai lần mới xoá xong mà không có gì nói cho
+ * biết (CEO 25/09).
+ *
+ * THỨ TỰ BẮT BUỘC: Lark trước, bên mình sau. Xoá dòng của mình trước mà Lark
+ * hỏng thì bảng Lark còn dòng trong khi bên mình đã mất dấu `lark_record_id` —
+ * không còn gì để tìm ra mà dọn. Lark hỏng thì DỪNG HẲN, giữ nguyên hiện
+ * trạng, để người dùng thử lại.
+ */
+export async function xoaChiec(itemId: string): Promise<{ ok: boolean; loi?: string }> {
+  await requirePerm('manage_qc');
+  const [c] = await db.select({ larkRecordId: schema.goodsReceiptItems.larkRecordId })
+    .from(schema.goodsReceiptItems)
+    .where(eq(schema.goodsReceiptItems.id, itemId))
+    .limit(1);
+  if (!c) return { ok: false, loi: 'Không tìm thấy chiếc hàng.' };
+
+  if (c.larkRecordId) {
+    const r = await goKhoiLark(itemId);
+    if (!r.ok) return r;
+  }
+  return goChiecNhanNham(itemId);
+}
+
 export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; loi?: string }> {
   await requirePerm('manage_qc');
   try {
