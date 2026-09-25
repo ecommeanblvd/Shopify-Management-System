@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { soIdShopify } from '@/features/receiving/ma-tem';
 import type { DangKiem } from '@/features/kho-nhan/types';
@@ -9,6 +10,17 @@ import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
+
+/**
+ * Báo việc đã xong là tin THOÁNG QUA: hiện vài giây rồi tự tắt, không chiếm chỗ
+ * trên màn (CEO 25/09). Xoá nhiều chiếc thì sonner xếp chồng và gộp lại, chứ
+ * không đẩy bảng tụt dần xuống như khi in ra thành dòng.
+ *
+ * Báo LỖI sống lâu hơn hẳn: lỡ mất một tin vui thì không sao, lỡ mất một dòng
+ * "chiếc này chưa có trên bảng Lark" là kho tưởng đã xong việc.
+ */
+const GIAY_VUI = 3000;
+const GIAY_LOI = 10000;
 
 function gio(d: Date): string {
   return new Intl.DateTimeFormat('vi-VN', {
@@ -21,8 +33,6 @@ function gio(d: Date): string {
 export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; coStorage: boolean }) {
   const router = useRouter();
   const [chon, setChon] = useState<DangKiem | null>(null);
-  const [ketQuaGui, setKetQuaGui] = useState<string | null>(null);
-  const [loiGui, setLoiGui] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /** Chiếc đang xoá — theo TỪNG DÒNG, để nút của đúng dòng đó báo "Đang xoá…"
    *  thay vì khoá cả bảng mà không nói đang bận vì cái gì. */
@@ -39,36 +49,34 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
 
   const gui = () =>
     start(async () => {
-      setKetQuaGui(null); setLoiGui(null);
       try {
         const r = await guiLenLark(chuaGui.map((c) => c.id));
-        setKetQuaGui(`${r.daGui} chiếc đã vào hàng chờ QC.`);
+        if (r.daGui > 0) toast.success(`${r.daGui} chiếc đã vào hàng chờ QC.`, { duration: GIAY_VUI });
         if (r.boQua.length) {
-          setLoiGui(`${r.boQua.length} chiếc chưa vào được — ` +
-            r.boQua.map((b) => `${b.unitCode}: ${b.lyDo}`).join(' · '));
+          toast.error(`${r.boQua.length} chiếc chưa vào được — ` +
+            r.boQua.map((b) => `${b.unitCode}: ${b.lyDo}`).join(' · '), { duration: GIAY_LOI });
         }
         lamMoi();
       } catch (e) {
         console.error('[kho-nhan] chuyển sang chờ QC lỗi:', e);
-        setLoiGui('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
+        toast.error('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.', { duration: GIAY_LOI });
       }
     });
 
   /* KHÔNG dùng useTransition ở đây: `pending` dùng chung sẽ khoá mọi nút trên
    * bảng, trong khi việc đang chạy chỉ thuộc về một dòng. */
   const xoa = async (c: DangKiem) => {
-    setKetQuaGui(null); setLoiGui(null);
     setDangXoa(c.id);
     try {
       const r = await xoaChiec(c.id);
-      if (!r.ok) { setLoiGui(r.loi ?? 'Xoá thất bại.'); return; }
+      if (!r.ok) { toast.error(r.loi ?? 'Xoá thất bại.', { duration: GIAY_LOI }); return; }
       setDaXoa((d) => [...d, c.id]);
-      setKetQuaGui(`Đã xoá ${c.unitCode} khỏi danh sách.`);
+      toast.success(`Đã xoá ${c.unitCode} khỏi danh sách.`, { duration: GIAY_VUI });
     } catch (e) {
       // `finally` mà không `catch` thì lỗi máy chủ trôi đi im lặng, người dùng
       // chỉ thấy nút hết quay mà dòng vẫn còn — đã mắc đúng kiểu này ở ô tìm.
       console.error('[kho-nhan] xoá chiếc lỗi:', e);
-      setLoiGui('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
+      toast.error('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.', { duration: GIAY_LOI });
     } finally {
       setDangXoa(null);
     }
@@ -76,10 +84,9 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
 
   const huyHet = () =>
     start(async () => {
-      setKetQuaGui(null); setLoiGui(null);
       const r = await huyNhapChuaGui();
-      if (!r.ok) { setLoiGui(r.loi ?? 'Huỷ nhập thất bại.'); return; }
-      setKetQuaGui(`Đã huỷ ${r.soXoa} chiếc chưa vào QC.`);
+      if (!r.ok) { toast.error(r.loi ?? 'Huỷ nhập thất bại.', { duration: GIAY_LOI }); return; }
+      toast.success(`Đã huỷ ${r.soXoa} chiếc chưa vào QC.`, { duration: GIAY_VUI });
       lamMoi();
     });
 
@@ -94,9 +101,6 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
             <span className="font-normal text-muted-foreground">({hienThi.length} chiếc)</span>
           </h2>
         </div>
-        {ketQuaGui && <p className="text-sm text-emerald-600 dark:text-emerald-400">{ketQuaGui}</p>}
-        {loiGui && <p className="text-sm text-amber-600 dark:text-amber-400">{loiGui}</p>}
-
         {hienThi.length === 0 ? (
           <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
             Chưa có chiếc nào chờ kiểm. Tìm món ở ô trên để ghi nhận hàng vừa về.

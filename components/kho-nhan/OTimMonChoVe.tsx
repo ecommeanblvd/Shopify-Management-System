@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { timMonChuaNhan } from '@/features/kho-nhan/tim-don';
 import type { KetQuaTim } from '@/features/kho-nhan/types';
 import { ghiNhanChiec } from '@/features/kho-nhan/nhan-actions';
@@ -19,7 +20,6 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
   const [q, setQ] = useState('');
   const [ds, setDs] = useState<KetQuaTim[]>([]);
   const [dangTim, setDangTim] = useState(false);
-  const [thongBao, setThongBao] = useState<string | null>(null);
   /**
    * Lỗi GỌI, tách hẳn khỏi "không có kết quả".
    *
@@ -61,11 +61,10 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
   const hienThi = ky.length < TOI_THIEU ? [] : ds;
 
   function nhan(m: KetQuaTim) {
-    setThongBao(null);
     start(async () => {
       const r = await ghiNhanChiec(m.lineId);
-      if (!r.ok) { setThongBao(r.loi ?? 'Ghi nhận thất bại.'); return; }
-      setThongBao(`Đã nhận 1 chiếc ${m.sku ?? ''} — đang chờ kiểm.`);
+      if (!r.ok) { toast.error(r.loi ?? 'Ghi nhận thất bại.', { duration: 10000 }); return; }
+      toast.success(`Đã nhận 1 chiếc ${m.sku ?? ''} — đang chờ kiểm.`, { duration: 3000 });
       setQ('');
       setDs([]);
       onDaNhan();
@@ -78,14 +77,13 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
         <span className="mb-1 block text-sm font-medium">Tìm món chờ về</span>
         <input
           value={q}
-          onChange={(e) => { setQ(e.target.value); setThongBao(null); setLoiGoi(null); }}
+          onChange={(e) => { setQ(e.target.value); setLoiGoi(null); }}
           placeholder="Mã đơn, SKU, tên sản phẩm — hoặc quét mã sản phẩm"
           aria-label="Tìm món chờ về theo mã đơn, SKU, tên sản phẩm hoặc mã sản phẩm"
           className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
         />
       </label>
 
-      {thongBao && <p className="text-sm text-emerald-600 dark:text-emerald-400">{thongBao}</p>}
       {loiGoi && <p className="text-sm text-destructive">{loiGoi}</p>}
 
       {ky.length >= TOI_THIEU && (
