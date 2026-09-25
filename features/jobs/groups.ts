@@ -33,7 +33,10 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // bản ghi lên Lark một, nên việc đẩy tự động phải nằm ngoài mọi nhóm đang chạy. Khi nào bật
   // thì chuyển khoá này vào 'moi-15-phut'.
   'chua-bat': ['day-nhan-kcs-lark'],
-  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho'],
+  // `dong-bo-wh-lark` mất ~2 phút (9.122 dòng, 19 lượt gọi Lark) nên KHÔNG
+  // để ở 'moi-15-phut' cùng các việc vài giây. CHỈ ĐỌC từ Lark — không dính
+  // tới lệnh hoãn ghi tự động của CEO.
+  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark'],
   // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
   // nhìn "5,9 phút" không biết việc nào chậm.

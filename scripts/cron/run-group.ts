@@ -18,6 +18,7 @@ import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
 import { pruneOldLogs } from '@/features/db-maintenance/prune-logs';
 import { trackPendingShipments } from '@/features/shipments/track';
 import { dayLaiDongCho } from '@/features/kho-nhan/day-lark';
+import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 
 /** Tác vụ nào chạy bằng hàm nào. Khoá phải khớp sổ đăng ký. */
 const CHAY: Record<string, () => Promise<unknown>> = {
@@ -27,6 +28,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
   }),
   'retry-ship-ho-events': () => retryPendingShipHoEvents(),
   'day-nhan-kcs-lark': () => dayLaiDongCho(),
+  'dong-bo-wh-lark': () => dongBoWhInventory(),
   'prune-logs': () => pruneOldLogs(),
   'track-shipments': () => trackPendingShipments({ limit: 200 }),
 };

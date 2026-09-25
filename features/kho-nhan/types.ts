@@ -53,19 +53,27 @@ export interface ChiecLoi {
   loi: { lyDo: string; ghiChu: string | null; anhUrl: string | null }[];
 }
 
-/** Một dòng SỔ NHẬP KHO — dựng theo hình bảng Lark "WH - Inventory". */
+/** Một dòng SỔ NHẬP KHO — đọc từ bản sao bảng Lark "WH - Inventory". */
 export interface DongSoNhap {
-  id: string; unitCode: string; sku: string | null;
-  tenSanPham: string | null; tenBienThe: string | null;
-  maDon: string | null; kho: string;
-  vendor: string | null; receiptId: string;
-  ketQuaQc: string; trangThaiTon: string | null;
-  larkRecordId: string | null; larkUniqueCode: string | null;
-  nhanLuc: Date; qcLuc: Date | null;
-  /** Lý do QC không đạt, gộp từ `wh_loi_qc`. Rỗng khi chưa/không có lỗi. */
-  lyDoLoi: string[];
-  /** Số ảnh lỗi QC đã chụp. */
-  soAnhLoi: number;
+  recordId: string;
+  /** 'YYYY-MM-DD' theo giờ nghiệp vụ. */
+  ngayImport: string | null;
+  dinhDanh: string | null;
+  warehouse: string | null;
+  inventoryType: string | null;
+  orderNumber: string | null;
+  sku: string | null;
+  lineitemName: string | null;
+  storeFinal: string | null;
+  vendorFinal: string | null;
+  qcCheck: string | null;
+  whAction: string | null;
+  uniqueCode: string | null;
+  soLuong: number | null;
+  coAnhHangDen: boolean;
+  coBbBanGiao: boolean;
+  /** Dòng do CHÍNH hệ thống này tạo, không phải đội kho gõ thẳng trên Lark. */
+  cuaHeThong: boolean;
 }
 
 /** Hai loại đính kèm lúc nhận hàng — khớp hai cột đính kèm trên Lark. */

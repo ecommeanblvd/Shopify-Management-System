@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { soNhap } from '@/features/kho-nhan/so-nhap';
+import { soNhap, larkCapNhatLuc } from '@/features/kho-nhan/so-nhap';
 import { BangSoNhap } from '@/components/kho-nhan/BangSoNhap';
 
 export const dynamic = 'force-dynamic';
@@ -32,13 +32,14 @@ export default async function DongBoPage({
   // KHÔNG lọc theo một ngày nữa: trang chia thành từng mảng theo ngày giống
   // hệt bảng Lark (CEO 25/09), nên phải lấy nhiều ngày một lượt.
   const dong = await soNhap({ kho: kho || undefined });
+  const capNhatLuc = await larkCapNhatLuc();
 
   return (
     <div className="space-y-5 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sổ nhập kho &amp; đối chiếu Lark</h1>
       </div>
-      <BangSoNhap dong={dong} kho={kho} />
+      <BangSoNhap dong={dong} kho={kho} capNhatLuc={capNhatLuc} />
     </div>
   );
 }

@@ -7,22 +7,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { nhanKho } from '@/features/warehouse/ten-kho';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
-import { gomTheoNgay } from '@/features/kho-nhan/tach-ngay';
-import {
-  dinhDanh, qcCheckLark, storeFinalLark, warehouseLark, whActionLark,
-} from '@/features/kho-nhan/cot-lark';
-import { INVENTORY_TYPE_RETAIL } from '@/features/kho-nhan/wh-lark-payload';
 import { doiChieuNgay } from '@/features/kho-nhan/doi-chieu';
 import type { KetQuaDoiChieu } from '@/features/kho-nhan/doi-chieu-logic';
 import { coLech } from '@/features/kho-nhan/doi-chieu-logic';
 import type { DongSoNhap } from '@/features/kho-nhan/types';
-
-function gio(d: Date | null): string {
-  if (!d) return '—';
-  return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok',
-  }).format(new Date(d));
-}
 
 /** 'YYYY-MM-DD' → 'dd/mm/yyyy', đúng cách bảng Lark đặt tiêu đề mảng. */
 function ngayVn(s: string): string {
@@ -49,7 +37,13 @@ function Nhan({ mau, children }: { mau: Mau; children: React.ReactNode }) {
   );
 }
 
-const MAU_QC: Record<string, Mau> = { pass: 'dat', fail: 'khongDat', pending: 'choQc' };
+/** Tên lựa chọn QC Check NGUYÊN VĂN của Lark → màu nhãn. */
+const MAU_QC: Record<string, Mau> = {
+  'QC Pass': 'dat',
+  'QC Failed': 'khongDat',
+  'Tiếp nhận - chưa QC': 'choQc',
+  'Gửi dư': 'loai',
+};
 
 function O({ v }: { v: string | null | undefined }) {
   return v ? <>{v}</> : <span className="text-muted-foreground">—</span>;
@@ -58,16 +52,24 @@ function O({ v }: { v: string | null | undefined }) {
 const GIAI_THICH = 'Sổ ghi mọi chiếc đã nhận, chia theo ngày, dựng theo đúng hình bảng Lark '
   + 'WH - Inventory. Nút đối chiếu chỉ ĐỌC hai bên và chỉ ra chỗ lệch — không tự sửa bên nào.';
 
-const COT = ['Định danh', 'Warehouse', 'Nhận lúc', 'Inventory type', 'Import (select order)',
-  'Store final', 'Vendor final', 'Order Number final', 'Lineitem Name', 'Lineitem SKU final',
-  'Qty', 'QC Check', 'Lý do QC failed', 'Ảnh lỗi', 'WH - Action'];
+const COT = ['Định danh', 'Warehouse', 'Inventory type', 'Store final', 'Vendor final',
+  'Order Number final', 'Lineitem Name', 'Lineitem SKU final', 'Qty', 'QC Check',
+  'WH - Action', 'Ảnh SP', 'BBGN', 'Nguồn'];
 
-export function BangSoNhap({ dong, kho }: { dong: DongSoNhap[]; kho: string }) {
+export function BangSoNhap({ dong, kho, capNhatLuc }: {
+  dong: DongSoNhap[]; kho: string; capNhatLuc: Date | null;
+}) {
   const router = useRouter();
   const [ket, setKet] = useState<Record<string, KetQuaDoiChieu>>({});
   const [dangSoi, setDangSoi] = useState<string | null>(null);
 
-  const mang = gomTheoNgay(dong);
+  // Bản sao đã sắp theo ngày giảm dần nên chỉ cần gom liên tiếp, không sắp lại.
+  const mang: { ngay: string; dong: DongSoNhap[] }[] = [];
+  for (const c of dong) {
+    const n = c.ngayImport ?? '(không rõ ngày)';
+    if (mang[mang.length - 1]?.ngay !== n) mang.push({ ngay: n, dong: [] });
+    mang[mang.length - 1]!.dong.push(c);
+  }
 
   const soi = async (ngay: string) => {
     setDangSoi(ngay);
@@ -87,6 +89,7 @@ export function BangSoNhap({ dong, kho }: { dong: DongSoNhap[]; kho: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-4">
       <label className="flex w-fit flex-col gap-1 text-sm">
         <span className="text-muted-foreground">Kho</span>
         <select
@@ -98,6 +101,18 @@ export function BangSoNhap({ dong, kho }: { dong: DongSoNhap[]; kho: string }) {
           {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{nhanKho(k)}</option>)}
         </select>
       </label>
+        {/* Trang đọc BẢN SAO kéo về mỗi 6 tiếng, nên phải nói rõ bản sao cũ cỡ
+            nào — im lặng là người xem tưởng đang nhìn Lark thời gian thực. */}
+        <p className="text-xs text-muted-foreground">
+          Bản sao Lark cập nhật lúc{' '}
+          {capNhatLuc
+            ? new Intl.DateTimeFormat('vi-VN', {
+                hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit',
+                timeZone: 'Asia/Bangkok',
+              }).format(new Date(capNhatLuc))
+            : 'chưa kéo lần nào'}
+        </p>
+      </div>
 
       {mang.length === 0 ? (
         <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
@@ -138,37 +153,34 @@ export function BangSoNhap({ dong, kho }: { dong: DongSoNhap[]; kho: string }) {
                   </thead>
                   <tbody>
                     {m.dong.map((c) => (
-                      <tr key={c.id} className="border-b border-border last:border-b-0">
-                        <td className="px-2 py-1.5 font-mono">
-                          {dinhDanh({ maDon: c.maDon, sku: c.sku, uniqueCode: c.larkUniqueCode })}
-                        </td>
-                        <td className="px-2 py-1.5"><Nhan mau="kho">{warehouseLark(c.kho)}</Nhan></td>
-                        <td className="px-2 py-1.5 tabular-nums text-muted-foreground">{gio(c.nhanLuc)}</td>
-                        <td className="px-2 py-1.5"><Nhan mau="loai">{INVENTORY_TYPE_RETAIL}</Nhan></td>
+                      <tr key={c.recordId} className="border-b border-border last:border-b-0">
+                        <td className="px-2 py-1.5 font-mono"><O v={c.dinhDanh} /></td>
                         <td className="px-2 py-1.5">
-                          {c.larkRecordId
-                            ? <Nhan mau="mo">{c.maDon ?? c.larkRecordId}</Nhan>
-                            : <Nhan mau="choQc">chưa gửi</Nhan>}
+                          {c.warehouse ? <Nhan mau="kho">{c.warehouse}</Nhan> : <O v={null} />}
                         </td>
-                        <td className="px-2 py-1.5"><O v={storeFinalLark(c.maDon)} /></td>
-                        <td className="px-2 py-1.5"><O v={c.vendor} /></td>
-                        <td className="px-2 py-1.5"><O v={c.maDon} /></td>
-                        <td className="max-w-[240px] truncate px-2 py-1.5"><O v={c.tenSanPham ?? c.tenBienThe} /></td>
+                        <td className="px-2 py-1.5">
+                          {c.inventoryType ? <Nhan mau="loai">{c.inventoryType}</Nhan> : <O v={null} />}
+                        </td>
+                        <td className="px-2 py-1.5"><O v={c.storeFinal} /></td>
+                        <td className="px-2 py-1.5"><O v={c.vendorFinal} /></td>
+                        <td className="px-2 py-1.5"><O v={c.orderNumber} /></td>
+                        <td className="max-w-[240px] truncate px-2 py-1.5"><O v={c.lineitemName} /></td>
                         <td className="px-2 py-1.5 font-mono"><O v={c.sku} /></td>
-                        <td className="px-2 py-1.5 tabular-nums">1</td>
+                        <td className="px-2 py-1.5 tabular-nums"><O v={c.soLuong?.toString()} /></td>
                         <td className="px-2 py-1.5">
-                          <Nhan mau={MAU_QC[c.ketQuaQc] ?? 'mo'}>{qcCheckLark(c.ketQuaQc)}</Nhan>
-                        </td>
-                        <td className="max-w-[200px] truncate px-2 py-1.5">
-                          <O v={c.lyDoLoi.length ? c.lyDoLoi.join(', ') : null} />
-                        </td>
-                        <td className="px-2 py-1.5 tabular-nums">
-                          {c.soAnhLoi > 0 ? `${c.soAnhLoi} ảnh` : <span className="text-muted-foreground">—</span>}
+                          {c.qcCheck
+                            ? <Nhan mau={MAU_QC[c.qcCheck] ?? 'mo'}>{c.qcCheck}</Nhan>
+                            : <O v={null} />}
                         </td>
                         <td className="px-2 py-1.5">
-                          {whActionLark(c)
-                            ? <Nhan mau={c.ketQuaQc === 'pass' ? 'dat' : 'choQc'}>{whActionLark(c)}</Nhan>
-                            : <span className="text-muted-foreground">—</span>}
+                          {c.whAction ? <Nhan mau="mo">{c.whAction.trim()}</Nhan> : <O v={null} />}
+                        </td>
+                        <td className="px-2 py-1.5 text-center">{c.coAnhHangDen ? '✓' : '—'}</td>
+                        <td className="px-2 py-1.5 text-center">{c.coBbBanGiao ? '✓' : '—'}</td>
+                        <td className="px-2 py-1.5">
+                          {c.cuaHeThong
+                            ? <Nhan mau="dat">hệ thống</Nhan>
+                            : <Nhan mau="mo">nhập trên Lark</Nhan>}
                         </td>
                       </tr>
                     ))}

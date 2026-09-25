@@ -2925,6 +2925,36 @@ export const whAnhNhan = pgTable('wh_anh_nhan', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('wh_anh_nhan_receipt_idx').on(t.receiptId, t.loai)]);
 
+/**
+ * Bản sao bảng Lark "WH - Inventory (Nhập, QC, Pack)" — 9.122 dòng, 437 ngày.
+ *
+ * Trang Sổ nhập đọc bảng này chứ không đọc `goods_receipt_items`: phần lớn
+ * dòng trên Lark do đội kho nhập thẳng bên đó, hệ thống này chưa bao giờ biết
+ * tới. Cùng cách đã làm với `lark_mon_don`.
+ */
+export const larkWhInventory = pgTable('lark_wh_inventory', {
+  recordId: text('record_id').primaryKey(),
+  ngayImport: date('ngay_import'),
+  dinhDanh: text('dinh_danh'),
+  warehouse: text('warehouse'),
+  inventoryType: text('inventory_type'),
+  orderNumber: text('order_number'),
+  sku: text('sku'),
+  lineitemName: text('lineitem_name'),
+  storeFinal: text('store_final'),
+  vendorFinal: text('vendor_final'),
+  qcCheck: text('qc_check'),
+  whAction: text('wh_action'),
+  uniqueCode: text('unique_code'),
+  soLuong: integer('so_luong'),
+  coAnhHangDen: boolean('co_anh_hang_den').notNull().default(false),
+  coBbBanGiao: boolean('co_bb_ban_giao').notNull().default(false),
+  capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+}, (t) => [
+  index('lark_wh_inventory_ngay_idx').on(t.ngayImport),
+  index('lark_wh_inventory_kho_idx').on(t.warehouse, t.ngayImport),
+]);
+
 export const whLarkNhatKy = pgTable('wh_lark_nhat_ky', {
   id: uuid('id').defaultRandom().primaryKey(),
   hanhDong: text('hanh_dong').notNull(),

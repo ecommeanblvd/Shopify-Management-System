@@ -78,6 +78,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Tem in mã kho tự cấp thay vì mã dòng đơn/biến thể, hoặc món không nối được để dán tem' },
   // CHƯA BẬT (CEO 23/09/2026): kiểm từng bản ghi lên Lark một rồi mới cho chạy tự động.
   // Chu kỳ để 1 NGÀY nên trang giám sát không báo đỏ trong lúc chờ.
+  { key: 'dong-bo-wh-lark', ten: 'Kéo bảng Lark WH - Inventory về bản sao', chuKyPhut: 6 * GIO,
+    hauQua: 'Sổ nhập & đối chiếu hiện dữ liệu cũ — kho tưởng thiếu hàng hoặc thiếu ngày' },
   { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark (chưa bật)', chuKyPhut: 1 * NGAY,
     hauQua: 'Việc kho đã làm trên SMS không lên bảng kho Lark' },
   { key: 'lark-pack-webhook', ten: 'Nhận kiện đóng xong từ Lark (webhook)', chuKyPhut: 1 * NGAY,

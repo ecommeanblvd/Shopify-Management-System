@@ -391,6 +391,28 @@ export async function layLuaChonVendorFinal(): Promise<string[]> {
   return ds;
 }
 
+/**
+ * TOÀN BỘ dòng bảng kho, phân trang hết. ~9.100 dòng / 19 lượt gọi tính đến
+ * 25/09 — chỉ dùng cho lượt đồng bộ nền, KHÔNG gọi trong lúc dựng trang.
+ */
+export async function listAllWhInventoryRecords(): Promise<LarkRecord[]> {
+  const token = await getTenantToken();
+  const appToken = env('LARK_BASE_APP_TOKEN');
+  const out: LarkRecord[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${WH_INVENTORY_TABLE_ID}/records`);
+    url.searchParams.set('page_size', '500');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) });
+    const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkRecord[]; page_token?: string; has_more?: boolean } };
+    if (j.code !== 0) throw new Error(`[lark] list wh inventory fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
+
 /** Tạo MỘT dòng bảng kho. Trả record id. */
 export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);
