@@ -26,6 +26,10 @@ export const ORDER_NODE_FIELDS = `
     nodes {
       id sku vendor title variantTitle quantity
       variant { id product { id } }
+      customAttributes { key value }
+      product { id
+        b: metafield(namespace: "theme", key: "estimateStartDate") { value }
+        e: metafield(namespace: "theme", key: "estimateEndDate") { value } }
       originalUnitPriceSet { shopMoney { amount currencyCode } }
       discountAllocations { allocatedAmountSet { shopMoney { amount currencyCode } } }
     }

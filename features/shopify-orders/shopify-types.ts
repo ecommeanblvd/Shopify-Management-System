@@ -31,6 +31,14 @@ export interface ShopifyLineItem {
   }>;
   /** Hàng tuỳ biến (customize) không gắn biến thể → null. */
   variant?: { id: string; product?: { id: string } | null } | null;
+  /** Thuộc tính đóng băng lúc đặt hàng — chứa "Estimated Delivery". */
+  customAttributes?: Array<{ key: string; value: string | null }> | null;
+  /** Metafield thời gian xử lý của sản phẩm, alias b/e trong câu truy vấn. */
+  product?: {
+    id?: string;
+    b?: { value: string | null } | null;
+    e?: { value: string | null } | null;
+  } | null;
 }
 
 export interface ShopifyRefundLineItem {

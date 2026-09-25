@@ -897,6 +897,12 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   /** @deprecated 09/09/2026 — cột "chi thật" nhập tay, chưa từng dùng (0/15.563 dòng). Giá vốn thực nay lấy tự động từ
    *  `order_line_cogs` (bảng kê brand đã chốt / PO / MMP). Giữ cột để không mất lịch sử, KHÔNG đọc/ghi nữa. */
   costOverride: numeric('cost_override', { precision: 14, scale: 4 }),
+  /** Metafield SẢN PHẨM `theme.estimateStartDate`/`EndDate` — giá trị HIỆN TẠI,
+   *  brand sửa là đổi theo. Email xác nhận đơn hiện "8 - 14 business days". */
+  processingMinDays: integer('processing_min_days'),
+  processingMaxDays: integer('processing_max_days'),
+  /** Thuộc tính của chính DÒNG ĐƠN, ĐÓNG BĂNG lúc đặt — thứ đã hứa với khách. */
+  estimatedDelivery: text('estimated_delivery'),
 }, (t) => [
   index('shopify_order_lines_order_idx').on(t.orderId),
   index('shopify_order_lines_sku_idx').on(t.sku),

@@ -1,3 +1,4 @@
+import { rutThoiGianXuLy } from '../thoi-gian-xu-ly';
 import type {
   ShopifyOrderPayload,
   ShopifyLineItem,
@@ -60,6 +61,9 @@ export interface MappedOrder {
     unitPrice: string;
     discountAlloc: string;
     total: string;
+    processingMinDays: number | null;
+    processingMaxDays: number | null;
+    estimatedDelivery: string | null;
   }>;
   refunds: Array<{
     shopifyRefundId: string;
@@ -186,6 +190,14 @@ function mapLine(node: ShopifyLineItem): MappedOrder['lines'][number] {
     unitPrice,
     discountAlloc,
     total,
+    ...(() => {
+      const t = rutThoiGianXuLy(node);
+      return {
+        processingMinDays: t.soNgayMin,
+        processingMaxDays: t.soNgayMax,
+        estimatedDelivery: t.duKienGiao,
+      };
+    })(),
   };
 }
 
