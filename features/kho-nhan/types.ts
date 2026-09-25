@@ -49,3 +49,13 @@ export interface ChiecLoi {
   tenSanPham: string | null; tenBienThe: string | null; maDon: string | null;
   loi: { lyDo: string; ghiChu: string | null; anhUrl: string | null }[];
 }
+
+/** Một dòng SỔ NHẬP KHO — dựng theo hình bảng Lark "WH - Inventory". */
+export interface DongSoNhap {
+  id: string; unitCode: string; sku: string | null;
+  tenSanPham: string | null; tenBienThe: string | null;
+  maDon: string | null; kho: string;
+  ketQuaQc: string; trangThaiTon: string | null;
+  larkRecordId: string | null;
+  nhanLuc: Date; qcLuc: Date | null;
+}

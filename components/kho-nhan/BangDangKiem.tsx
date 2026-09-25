@@ -8,6 +8,8 @@ import type { DangKiem } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
+import { tachTheoNgay } from '@/features/kho-nhan/tach-ngay';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
 
@@ -45,7 +47,11 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
   const lamMoi = () => router.refresh();
 
   const hienThi = dangKiem.filter((c) => !daXoa.includes(c.id));
-  const chuaGui = hienThi.filter((c) => !c.larkRecordId);
+  const { homNay: nhomHomNay, truoc: nhomTruoc } = tachTheoNgay(hienThi, ngayKinhDoanh(new Date())!);
+  /* Thanh nổi thao tác trên việc của HÔM NAY. "Huỷ nhập" cũng chỉ đụng hôm nay
+   * (chặn ngay trong câu WHERE ở máy chủ) — xoá nhầm việc dang dở của hôm qua
+   * thì không có đường lấy lại. */
+  const chuaGui = nhomHomNay.filter((c) => !c.larkRecordId);
 
   const gui = () =>
     start(async () => {
@@ -97,76 +103,30 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold">
-            Đang kiểm{' '}
-            <span className="font-normal text-muted-foreground">({hienThi.length} chiếc)</span>
+            Nhận hôm nay{' '}
+            <span className="font-normal text-muted-foreground">({nhomHomNay.length} chiếc)</span>
           </h2>
         </div>
-        {hienThi.length === 0 ? (
+        {nhomHomNay.length === 0 ? (
           <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
-            Chưa có chiếc nào chờ kiểm. Tìm món ở ô trên để ghi nhận hàng vừa về.
+            Hôm nay chưa nhận chiếc nào. Tìm món ở ô trên để ghi nhận hàng vừa về.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Mã chiếc</th>
-                  <th className="px-3 py-2 text-left font-medium">Sản phẩm</th>
-                  <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
-                  <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
-                  <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {hienThi.map((c) => (
-                  <tr
-                    key={c.id}
-                    className={`border-b border-border last:border-b-0 ${
-                      dangXoa === c.id ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs">{c.unitCode}</td>
-                    <td className="max-w-[420px] px-3 py-2">
-                      <span className="block truncate">{c.tenSanPham ?? c.sku}</span>
-                      <span className="block truncate font-mono text-xs text-muted-foreground">{c.sku}</span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {soIdShopify(c.shopifyVariantId ?? '') ?? (
-                        <span className="text-muted-foreground">chưa tra được</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
-                    <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-2">
-                        {/* Chỉ kiểm được SAU khi chiếc đã vào hàng chờ QC (CEO
-                            24/09): các bộ phận khác phải thấy trạng thái "Chờ
-                            QC" trước đã. */}
-                        {c.larkRecordId && (
-                          <Button
-                            type="button" size="sm" disabled={dangXoa === c.id}
-                            onClick={() => setChon(c)}
-                          >Kiểm</Button>
-                        )}
-                        {/* MỘT nút, MỘT nhát: `xoaChiec` tự lo thứ tự Lark →
-                            bên mình. Việc đồng bộ Lark là đường ống tạm của
-                            giai đoạn chạy song song hai hệ thống, người dùng
-                            không cần biết (CEO 25/09). */}
-                        <Button
-                          type="button" variant="outline" size="sm"
-                          disabled={dangXoa === c.id}
-                          onClick={() => void xoa(c)}
-                        >
-                          {dangXoa === c.id ? 'Đang xoá…' : 'Xoá'}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Bang ds={nhomHomNay} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+        )}
+
+        {/* Việc DANG DỞ của hôm trước ở lại đây chứ không bị đẩy sang sổ nhập:
+            giấu việc chưa xong vào 9.000 dòng lịch sử là không ai nhớ ra nữa
+            (CEO 25/09). Gập lại để không lẫn vào việc của hôm nay. */}
+        {nhomTruoc.length > 0 && (
+          <details className="rounded-lg border border-border">
+            <summary className="cursor-pointer px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+              {nhomTruoc.length} chiếc tồn từ hôm trước — chưa kiểm xong
+            </summary>
+            <div className="p-2 pt-0">
+              <Bang ds={nhomTruoc} dangXoa={dangXoa} onKiem={setChon} onXoa={(c) => void xoa(c)} />
+            </div>
+          </details>
         )}
       </section>
 
@@ -193,5 +153,77 @@ export function BangDangKiem({ dangKiem, coStorage }: { dangKiem: DangKiem[]; co
         onXong={() => { setChon(null); lamMoi(); }}
       />
     </div>
+  );
+}
+
+/** Bảng chiếc đang kiểm — dùng chung cho nhóm hôm nay và nhóm tồn hôm trước. */
+function Bang({ ds, dangXoa, onKiem, onXoa }: {
+  ds: DangKiem[];
+  dangXoa: string | null;
+  onKiem: (c: DangKiem) => void;
+  onXoa: (c: DangKiem) => void;
+}) {
+  return (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Mã chiếc</th>
+                <th className="px-3 py-2 text-left font-medium">Sản phẩm</th>
+                <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
+                <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
+                <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {ds.map((c) => (
+                <tr
+                  key={c.id}
+                  className={`border-b border-border last:border-b-0 ${
+                    dangXoa === c.id ? 'opacity-50' : ''
+                  }`}
+                >
+                  <td className="px-3 py-2 font-mono text-xs">{c.unitCode}</td>
+                  <td className="max-w-[420px] px-3 py-2">
+                    <span className="block truncate">{c.tenSanPham ?? c.sku}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">{c.sku}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {soIdShopify(c.shopifyVariantId ?? '') ?? (
+                      <span className="text-muted-foreground">chưa tra được</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      {/* Chỉ kiểm được SAU khi chiếc đã vào hàng chờ QC (CEO
+                          24/09): các bộ phận khác phải thấy trạng thái "Chờ
+                          QC" trước đã. */}
+                      {c.larkRecordId && (
+                        <Button
+                          type="button" size="sm" disabled={dangXoa === c.id}
+                          onClick={() => onKiem(c)}
+                        >Kiểm</Button>
+                      )}
+                      {/* MỘT nút, MỘT nhát: `xoaChiec` tự lo thứ tự Lark →
+                          bên mình. Việc đồng bộ Lark là đường ống tạm của
+                          giai đoạn chạy song song hai hệ thống, người dùng
+                          không cần biết (CEO 25/09). */}
+                      <Button
+                        type="button" variant="outline" size="sm"
+                        disabled={dangXoa === c.id}
+                        onClick={() => onXoa(c)}
+                      >
+                        {dangXoa === c.id ? 'Đang xoá…' : 'Xoá'}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
   );
 }

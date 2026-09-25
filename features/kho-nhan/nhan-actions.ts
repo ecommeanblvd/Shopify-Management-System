@@ -1,10 +1,10 @@
 'use server';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { goKhoiLark } from './day-wh-lark';
 import { db, schema } from '@/db/client';
-import { ngayKinhDoanh } from '@/lib/timezone';
+import { ngayKinhDoanh, sqlGioKinhDoanh } from '@/lib/timezone';
 import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
 import { layIdBienThe } from './shopify-qc';
@@ -180,6 +180,10 @@ export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; lo
       .where(and(
         eq(schema.goodsReceiptItems.qcResult, 'pending'),
         isNull(schema.goodsReceiptItems.larkRecordId),
+        // CHỈ hàng nhận HÔM NAY. Từ 25/09 màn này còn hiện nhóm "tồn từ hôm
+        // trước"; không có mốc ngày thì một cú "Huỷ nhập" của phiên hôm nay
+        // xoá luôn việc dang dở của hôm qua mà không ai kịp thấy.
+        sql`${sql.raw(sqlGioKinhDoanh('created_at'))}::date = (now() AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')::date`,
       ))
       .returning({ id: schema.goodsReceiptItems.id });
     revalidatePath('/f/warehouse/nhan-kcs');

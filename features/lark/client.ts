@@ -264,6 +264,29 @@ export async function searchWhInventoryByDon(orderNumber: string): Promise<LarkR
   });
 }
 
+/**
+ * Các dòng bảng kho có NGÀY IMPORT đúng một ngày.
+ *
+ * `operator: 'is'` với `value: ['ExactDate', <mốc ms>]` — dạng Lark dùng cho cột
+ * ngày. Mốc phải là 00:00 GIỜ VIỆT NAM của ngày đó, không phải 00:00 UTC: lệch
+ * 7 tiếng là vắt sang ngày bên cạnh. Đo thật 25/09: lọc 23/09 trả 33 dòng.
+ *
+ * Lọc ngay trên Lark chứ không kéo cả bảng về rồi lọc ở mình — bảng đang 9.083
+ * dòng, kéo hết mất 19 lượt gọi.
+ */
+export async function searchWhInventoryByNgay(mocMs: number): Promise<LarkRecord[]> {
+  return searchAllRecords(WH_INVENTORY_TABLE_ID, {
+    filter: {
+      conjunction: 'and',
+      conditions: [{
+        field_name: 'Ngày Import - tiếp nhận đồ tại kho',
+        operator: 'is', value: ['ExactDate', String(mocMs)],
+      }],
+    },
+    automatic_fields: true, page_size: 500,
+  });
+}
+
 /** Một cột của bảng Lark. Cột CHỌN có sẵn danh sách lựa chọn ở property.options. */
 export interface LarkField {
   field_name: string;
