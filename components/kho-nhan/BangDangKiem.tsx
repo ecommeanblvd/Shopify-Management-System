@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
 import { tachTheoNgay, gomTheoPhieu } from '@/features/kho-nhan/tach-ngay';
+import { timPhieuThieu, cauNhacThieu } from '@/features/kho-nhan/thieu-dinh-kem';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
@@ -46,6 +47,10 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
    *  2–3 giây vì phải gọi Lark hai lượt (đọc đối chiếu rồi mới xoá, hàng rào
    *  CEO chốt 24/09); chỗ chờ đó không được im lặng. */
   const [daXoa, setDaXoa] = useState<string[]>([]);
+  /** Đã nhắc "còn thiếu đính kèm" rồi — bấm lần nữa là đi tiếp. KHÔNG chặn
+   *  cứng (CEO 25/09): hàng về gấp, brand gửi biên bản sau là chuyện thường,
+   *  kho chỉ cần biết chứ không cần bị khoá. */
+  const [daNhac, setDaNhac] = useState(false);
 
   const lamMoi = () => router.refresh();
 
@@ -56,8 +61,15 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
    * (chặn ngay trong câu WHERE ở máy chủ) — xoá nhầm việc dang dở của hôm qua
    * thì không có đường lấy lại. */
   const chuaGui = nhomHomNay.filter((c) => !c.larkRecordId);
+  const thieu = timPhieuThieu(gomTheoPhieu(chuaGui), anh);
 
-  const gui = () =>
+  const gui = () => {
+    // Nhắc MỘT lần, nêu đích danh brand và thứ còn thiếu, rồi mới cho đi tiếp.
+    if (thieu.length > 0 && !daNhac) {
+      setDaNhac(true);
+      toast.warning(cauNhacThieu(thieu), { duration: GIAY_LOI });
+      return;
+    }
     start(async () => {
       try {
         const r = await guiLenLark(chuaGui.map((c) => c.id));
@@ -70,8 +82,11 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
       } catch (e) {
         console.error('[kho-nhan] chuyển sang chờ QC lỗi:', e);
         toast.error('Không gọi được máy chủ. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.', { duration: GIAY_LOI });
+      } finally {
+        setDaNhac(false);
       }
     });
+  };
 
   /* KHÔNG dùng useTransition ở đây: `pending` dùng chung sẽ khoá mọi nút trên
    * bảng, trong khi việc đang chạy chỉ thuộc về một dòng. */
@@ -163,11 +178,16 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
             <span className="text-sm text-muted-foreground">
               {chuaGui.length} chiếc chờ bắt đầu QC
             </span>
+            {thieu.length > 0 && (
+              <span className="text-sm text-amber-600 dark:text-amber-400">
+                · {thieu.length} lô thiếu đính kèm
+              </span>
+            )}
             <Button type="button" variant="outline" size="lg" onClick={huyHet} disabled={pending}>
               Huỷ nhập
             </Button>
             <Button type="button" size="lg" onClick={gui} disabled={pending}>
-              {pending ? 'Đang chuyển…' : 'Bắt đầu QC'}
+              {pending ? 'Đang chuyển…' : daNhac && thieu.length > 0 ? 'Vẫn bắt đầu QC' : 'Bắt đầu QC'}
             </Button>
           </div>
         </div>
