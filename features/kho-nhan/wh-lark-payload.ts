@@ -63,11 +63,31 @@ export const COT_QTY_TRUOC_QC = 'Quantity tiếp nhận trước QC';
  * thống tạo mà mình chưa hề đụng vào.
  */
 
-/** Bỏ dấu, bỏ mọi ký tự không phải chữ/số, hạ chữ thường. */
+/**
+ * Bỏ dấu, bỏ mọi ký tự không phải chữ/số, hạ chữ thường.
+ *
+ * `đ`/`Đ` phải đổi sang `d` THỦ CÔNG trước: đó là CHỮ CÁI RIÊNG trong Unicode
+ * (U+0111/U+0110), không phải `d` mang dấu, nên `NFD` không tách ra được và bước
+ * lọc ký tự sẽ XOÁ MẤT nó — "Đăng Phong Designer" thành "angphongdesigner",
+ * không bao giờ khớp "Dang Phong Designer". Đã đo: thêm bước này KHÔNG đẻ thêm
+ * nhóm lựa chọn trùng nào (vẫn 153 dạng chuẩn hoá trên 164 lựa chọn).
+ */
 function chuanHoaBrand(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return s.replace(/[đĐ]/g, 'd')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
+
+/**
+ * Tên brand bên mình → tên CHÍNH THỨC do CEO chốt (25/09), cho các cặp mà
+ * chuẩn hoá không bắt được vì khác nhau ở chữ chứ không ở cách viết.
+ *
+ * Chỉ dùng làm bước tra tên; tên chốt vẫn phải CÓ THẬT trong danh sách lựa chọn
+ * đang đọc từ Lark, nếu không thì bỏ trống như mọi trường hợp khác.
+ */
+const TEN_CHOT: Record<string, string> = {
+  'Happy Clothings': 'Happy Clothing',
+};
 
 /**
  * THUẦN: chọn lựa chọn `Vendor final` ứng với tên brand bên mình.
@@ -81,7 +101,10 @@ function chuanHoaBrand(s: string): string {
  *  2. bỏ dấu và hoa/thường rồi vẫn chỉ khớp ĐÚNG MỘT lựa chọn → nhận lựa chọn
  *     đó. Bắt được các cặp chỉ khác cách viết: "MIRER"/"Mirer",
  *     "THÉSONG"/"THESÓNG" (dấu rơi vào chữ khác), "L'SCARLETT"/"L’SCARLETT"
- *     (dấu nháy thẳng và dấu nháy cong).
+ *     (dấu nháy thẳng và dấu nháy cong), "Dang Phong"/"Đăng Phong".
+ *
+ * Trước cả hai bước là bảng `TEN_CHOT` cho các cặp khác nhau ở CHỮ, chuẩn hoá
+ * không bắt được — ví dụ "Happy Clothings" (thừa s).
  *
  * Khớp NHIỀU hơn một thì TỪ CHỐI, không bốc bừa: chính bảng Lark đang có 9
  * nhóm lựa chọn trùng nhau sau chuẩn hoá ("LASSY" và "Lassy", "O'Hara" và
@@ -91,8 +114,9 @@ function chuanHoaBrand(s: string): string {
 export function chonVendorHopLe(
   vendor: string | null | undefined, luaChon: readonly string[],
 ): string | null {
-  const v = vendor?.trim();
-  if (!v) return null;
+  const tho = vendor?.trim();
+  if (!tho) return null;
+  const v = TEN_CHOT[tho] ?? tho;
   if (luaChon.includes(v)) return v;
   const k = chuanHoaBrand(v);
   if (!k) return null;

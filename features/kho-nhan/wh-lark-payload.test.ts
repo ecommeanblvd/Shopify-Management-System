@@ -202,9 +202,27 @@ describe('chonVendorHopLe', () => {
 
   /* Đo 25/09: 16 brand không có lựa chọn nào tương ứng (KEIRA TONG, KALISA…).
    * Ghi vào là Lark đẻ thêm lựa chọn mới chứ không báo lỗi. */
-  it('không có lựa chọn nào thì TỪ CHỐI, kể cả tên gần giống', () => {
-    expect(chonVendorHopLe('Happy Clothings', co)).toBeNull();
+  it('không có lựa chọn nào thì TỪ CHỐI', () => {
     expect(chonVendorHopLe('KEIRA TONG', co)).toBeNull();
+    expect(chonVendorHopLe('KALISA', co)).toBeNull();
+  });
+
+  /* `Đ` là CHỮ CÁI RIÊNG trong Unicode, không phải `d` mang dấu — NFD không
+   * tách ra được nên bước lọc ký tự sẽ xoá mất nó nếu không đổi trước. */
+  it('Đ và D khớp được với nhau', () => {
+    expect(chonVendorHopLe('Dang Phong Designer', ['Đăng Phong Designer']))
+      .toBe('Đăng Phong Designer');
+  });
+
+  /* Cặp khác nhau ở CHỮ (thừa "s"), chuẩn hoá không bắt được — CEO chốt 25/09
+   * tên đúng là "Happy Clothing". */
+  it('"Happy Clothings" đi theo tên CEO chốt', () => {
+    expect(chonVendorHopLe('Happy Clothings', co)).toBe('Happy Clothing');
+  });
+
+  /* Tên chốt vẫn phải CÓ THẬT trong danh sách lựa chọn đang đọc từ Lark. */
+  it('tên chốt mà Lark không có thì vẫn để trống', () => {
+    expect(chonVendorHopLe('Happy Clothings', ['Mirer'])).toBeNull();
   });
 
   it('rỗng hoặc null thì trả null', () => {
