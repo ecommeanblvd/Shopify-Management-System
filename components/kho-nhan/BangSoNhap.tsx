@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CircleAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,9 @@ const MAU_QC: Record<string, Mau> = { pass: 'dat', fail: 'khongDat', pending: 'c
 function O({ v }: { v: string | null | undefined }) {
   return v ? <>{v}</> : <span className="text-muted-foreground">—</span>;
 }
+
+const GIAI_THICH = 'Sổ ghi mọi chiếc đã nhận, chia theo ngày, dựng theo đúng hình bảng Lark '
+  + 'WH - Inventory. Nút đối chiếu chỉ ĐỌC hai bên và chỉ ra chỗ lệch — không tự sửa bên nào.';
 
 const COT = ['Định danh', 'Warehouse', 'Nhận lúc', 'Inventory type', 'Import (select order)',
   'Store final', 'Vendor final', 'Order Number final', 'Lineitem Name', 'Lineitem SKU final',
@@ -114,6 +118,15 @@ export function BangSoNhap({ dong, kho }: { dong: DongSoNhap[]; kho: string }) {
               >
                 {dangSoi === m.ngay ? 'Đang đối chiếu…' : 'Đối chiếu Lark'}
               </Button>
+              {/* Lời giải thích nằm trong tooltip chứ không in ra màn (CEO
+                  25/09) — nó chỉ cần thiết đúng lúc người ta định bấm. */}
+              <span
+                title={GIAI_THICH}
+                aria-label={GIAI_THICH}
+                className="cursor-help text-muted-foreground hover:text-foreground"
+              >
+                <CircleAlertIcon className="size-4" />
+              </span>
             </summary>
 
             <div className="border-t border-border p-3">

@@ -37,11 +37,6 @@ export default async function DongBoPage({
     <div className="space-y-5 p-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sổ nhập kho &amp; đối chiếu Lark</h1>
-        <p className="text-sm text-muted-foreground">
-          Mọi chiếc đã ghi nhận, chia theo ngày và dựng theo đúng hình bảng Lark
-          <em> WH - Inventory</em>. Nút đối chiếu chỉ ĐỌC hai bên và chỉ ra chỗ lệch — không tự
-          sửa bên nào.
-        </p>
       </div>
       <BangSoNhap dong={dong} kho={kho} />
     </div>
