@@ -65,3 +65,24 @@ export function danhDauNoiTiep<T extends CoDon>(ds: readonly T[]): (T & { noiTie
     noiTiep: i > 0 && !!r.orderNumber && ds[i - 1]!.orderNumber === r.orderNumber,
   }));
 }
+
+/**
+ * Tên brand để hiện ở cột Brand.
+ *
+ * `Vendor final` bên Lark chỉ điền 5.227/9.122 dòng (57%) nên cột này trống
+ * quá nửa. Tiền tố SKU phủ 8.792/9.122 (96%) và ứng 1:1 với brand — đo 26/09:
+ * Denio→DeNio, MR→Mirer, HappyClothing→Happy Clothing, MEAN→MEAN BLVD…
+ *
+ * Nên lấy `Vendor final` trước; thiếu thì SUY RA từ tiền tố SKU và đánh dấu
+ * `suyRa` để giao diện hiện mờ hơn. Cách viết có thể lệch với Lark (Denio vs
+ * DeNio) — mờ đi là lời nhắc "đây là mình đoán, không phải Lark ghi".
+ */
+export function tenBrand(
+  vendorFinal: string | null, sku: string | null,
+): { ten: string; suyRa: boolean } | null {
+  const v = (vendorFinal ?? '').trim();
+  if (v) return { ten: v, suyRa: false };
+  const tien = (sku ?? '').trim().split('-')[0]?.trim();
+  // Tiền tố một ký tự hoặc toàn số không phải tên brand — thà để trống.
+  return tien && tien.length >= 2 && !/^\d+$/.test(tien) ? { ten: tien, suyRa: true } : null;
+}

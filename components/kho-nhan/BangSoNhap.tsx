@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { nhanKho } from '@/features/warehouse/ten-kho';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
 import {
-  tachTenBienThe, nhomQc, nhomKho, danhDauNoiTiep,
+  tachTenBienThe, nhomQc, nhomKho, danhDauNoiTiep, tenBrand,
 } from '@/features/kho-nhan/dong-so-nhap';
 import { doiChieuNgay } from '@/features/kho-nhan/doi-chieu';
 import type { KetQuaDoiChieu } from '@/features/kho-nhan/doi-chieu-logic';
@@ -40,7 +40,7 @@ const CHU_KHO: Record<string, string> = {
  * Lưới cột dùng chung cho hàng tiêu đề và mọi dòng — lệch một chỗ là lệch cả
  * bảng. ĐỦ trường của bảng Lark (CEO 26/09), không rút gọn.
  */
-const COT = 'minmax(230px,1fr) 104px 86px minmax(200px,1fr) minmax(170px,240px) '
+const COT = '104px 92px minmax(220px,1fr) minmax(180px,250px) '
   + '32px 74px 86px 112px 128px 138px 52px 52px 76px 78px';
 
 function ngayVn(s: string): string {
@@ -233,12 +233,12 @@ export function BangSoNhap({
       {ket && <KhoiLech ket={ket} />}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-[10px] border border-border bg-card">
-        <div className="min-w-[1720px]">
+        <div className="min-w-[1500px]">
           <div
             className="sticky top-0 z-[2] grid h-[34px] items-center gap-3 border-b border-border bg-muted px-3.5 text-[11px] font-medium text-muted-foreground"
             style={{ gridTemplateColumns: COT }}
           >
-            <span>Định danh</span><span>Đơn</span><span>Brand</span><span>Sản phẩm</span>
+            <span>Đơn</span><span>Brand</span><span>Sản phẩm</span>
             <span>SKU</span><span className="text-center">SL</span><span>Store</span>
             <span>Kho</span><span>Loại nhập</span><span>QC</span><span>Xử lý kho</span>
             <span className="text-center">Ảnh</span><span className="text-center">BBGN</span>
@@ -253,6 +253,7 @@ export function BangSoNhap({
             const { ten, bienThe } = tachTenBienThe(r.lineitemName);
             const mq = nhomQc(r.qcCheck);
             const mk = nhomKho(r.whAction);
+            const brand = tenBrand(r.vendorFinal, r.sku);
             return (
               <div
                 key={r.recordId}
@@ -263,9 +264,12 @@ export function BangSoNhap({
               >
                 {/* Dòng nối tiếp cùng đơn bỏ trống ô mã đơn và ẩn đường kẻ — mắt
                     đọc ra ngay đây là mấy chiếc của CÙNG một đơn. */}
-                <span className="truncate font-mono text-[11px] text-muted-foreground">{r.dinhDanh ?? '—'}</span>
                 <span className="truncate font-mono text-xs">{r.noiTiep ? '' : r.orderNumber ?? '—'}</span>
-                <span className="truncate text-xs text-muted-foreground">{r.vendorFinal ?? '—'}</span>
+                {/* Vendor final bên Lark chỉ điền 57% dòng; thiếu thì suy từ
+                    tiền tố SKU và hiện MỜ hơn để phân biệt với thứ Lark ghi. */}
+                <span className={`truncate text-xs ${brand?.suyRa ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
+                  {brand?.ten ?? '—'}
+                </span>
                 <span className="truncate">
                   {ten || '—'}
                   {bienThe && <span className="text-muted-foreground"> · {bienThe}</span>}

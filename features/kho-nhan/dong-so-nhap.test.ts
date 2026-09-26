@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tachTenBienThe, nhomQc, nhomKho, danhDauNoiTiep } from './dong-so-nhap';
+import { tachTenBienThe, nhomQc, nhomKho, danhDauNoiTiep, tenBrand } from './dong-so-nhap';
 
 describe('tachTenBienThe', () => {
   it('tách ở dấu gạch có khoảng trắng hai bên', () => {
@@ -74,5 +74,30 @@ describe('danhDauNoiTiep', () => {
   it('mã đơn rỗng không bao giờ gộp', () => {
     const r = danhDauNoiTiep([d(null), d(null)]);
     expect(r.map((x) => x.noiTiep)).toEqual([false, false]);
+  });
+});
+
+describe('tenBrand', () => {
+  it('có Vendor final thì dùng, không suy ra', () => {
+    expect(tenBrand('DeNio', 'Denio-DN0824-M-BLA')).toEqual({ ten: 'DeNio', suyRa: false });
+  });
+
+  /* Vendor final chỉ điền 57% số dòng; tiền tố SKU phủ 96% và ứng 1:1 brand. */
+  it('thiếu Vendor final thì suy ra từ tiền tố SKU', () => {
+    expect(tenBrand(null, 'Denio-DN0824-M-BLA')).toEqual({ ten: 'Denio', suyRa: true });
+    expect(tenBrand('  ', 'HappyClothing-VDN0082-S-BEI')).toEqual({ ten: 'HappyClothing', suyRa: true });
+  });
+
+  /* Tiền tố một ký tự hoặc toàn số không phải tên brand — thà để trống còn hơn
+   * hiện "4" ở cột Brand. */
+  it('tiền tố không ra tên brand thì trả null', () => {
+    expect(tenBrand(null, '4951793-S-VAC')).toBeNull();
+    expect(tenBrand(null, 'A-B-C')).toBeNull();
+    expect(tenBrand(null, null)).toBeNull();
+    expect(tenBrand(null, '   ')).toBeNull();
+  });
+
+  it('SKU không có gạch thì cả chuỗi là tiền tố', () => {
+    expect(tenBrand(null, 'KALISA')).toEqual({ ten: 'KALISA', suyRa: true });
   });
 });
