@@ -1118,6 +1118,11 @@ export const shipments = pgTable('shipments', {
   skuText: text('sku_text'),
   pieces: integer('pieces'),
   larkHop: text('lark_hop'),
+  /** record_id của dòng vật tư đóng gói đã dùng (Lark `Select VTĐG1` trỏ về
+   *  chính bảng WH-Inventory — hộp là HÀNG TỒN, không phải chuỗi tên). */
+  hopLarkRecordId: text('hop_lark_record_id'),
+  /** Dòng `LOG - Export` do hệ thống tạo. Null = chưa ghi sang Lark. */
+  larkRecordId: text('lark_record_id'),
   /** Ngày đi hàng Lark đang ghi, kể cả ngày tương lai khi kiện bị hold sang ngày khác.
    *  Màn Đóng hàng nhóm theo cột này; label_created_at vẫn là mốc ship thực cho tính cước. */
   ngayDiDuKien: timestamp('ngay_di_du_kien'),
@@ -2963,6 +2968,17 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   index('lark_wh_inventory_ngay_idx').on(t.ngayImport),
   index('lark_wh_inventory_kho_idx').on(t.warehouse, t.ngayImport),
 ]);
+
+/** Ảnh kiện đã đóng — cùng hình với `wh_anh_nhan` của bước nhận. */
+export const whAnhKien = pgTable('wh_anh_kien', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'cascade' }).notNull(),
+  s3Key: text('s3_key').notNull(),
+  tenFile: text('ten_file'),
+  nguoiTai: text('nguoi_tai').references(() => user.id, { onDelete: 'set null' }),
+  larkFileToken: text('lark_file_token'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('wh_anh_kien_shipment_idx').on(t.shipmentId)]);
 
 export const whLarkNhatKy = pgTable('wh_lark_nhat_ky', {
   id: uuid('id').defaultRandom().primaryKey(),

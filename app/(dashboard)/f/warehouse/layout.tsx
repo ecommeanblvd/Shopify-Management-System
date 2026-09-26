@@ -23,6 +23,7 @@ export default async function WarehouseLayout({ children }: { children: React.Re
   const tabs = [
     ...(hasPermission(role, 'view_receiving')
       ? [{ href: '/f/warehouse/nhan-kcs', label: 'Nhận & kiểm hàng' },
+         { href: '/f/warehouse/dong-goi', label: 'Đóng hàng' },
          { href: '/f/warehouse/dong-bo', label: 'Sổ nhập & đối chiếu' }]
       : []),
     ...(hasPermission(role, 'view_fulfillment')
