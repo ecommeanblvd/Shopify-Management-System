@@ -421,11 +421,19 @@ export async function listAllWhInventoryRecords(): Promise<LarkRecord[]> {
  *
  * Vì sao không dùng `tmp_url` sẵn trong bản ghi: đó là URL API, vẫn cần header
  * Authorization, dán thẳng vào thẻ <img> là 401.
+ *
+ * BẮT BUỘC có tham số `extra` với `bitablePerm`: file đính kèm của Bitable
+ * không tải được bằng quyền Drive thường. Thiếu nó là Lark trả 400 với thân
+ * RỖNG, không một chữ giải thích — đo thật 26/09: không `extra` → 400 0 byte,
+ * có `extra` → 200 image/png 2,1MB.
  */
 export async function taiFileLark(fileToken: string): Promise<Response> {
   const token = await getTenantToken();
+  const extra = encodeURIComponent(JSON.stringify({
+    bitablePerm: { tableId: WH_INVENTORY_TABLE_ID, rev: 1 },
+  }));
   return fetch(
-    `${DOMAIN}/open-apis/drive/v1/medias/${encodeURIComponent(fileToken)}/download`,
+    `${DOMAIN}/open-apis/drive/v1/medias/${encodeURIComponent(fileToken)}/download?extra=${extra}`,
     { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) },
   );
 }

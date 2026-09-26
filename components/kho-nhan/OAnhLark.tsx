@@ -7,6 +7,8 @@ import type { FileLark } from '@/features/kho-nhan/types';
 
 const laAnh = (f: FileLark) => !/\.pdf$/i.test(f.ten);
 const duong = (f: FileLark) => `/api/kho-nhan/anh-lark/${f.token}`;
+/** Ô trên bảng chỉ cần 56px (28px ở màn hình 2×) — kéo bản gốc 2MB là phí. */
+const duongNho = (f: FileLark) => `${duong(f)}?w=56`;
 
 /**
  * Ô đính kèm trên từng dòng Sổ nhập: ảnh nhỏ, bấm mở ảnh to (CEO 26/09).
@@ -32,7 +34,7 @@ export function OAnhLark({ ds, nhan }: { ds: FileLark[]; nhan: string }) {
       >
         {laAnh(ds[0]!) ? (
           // eslint-disable-next-line @next/next/no-img-element -- ảnh đi qua route nội bộ có kiểm quyền, không qua optimiser của Next
-          <img src={duong(ds[0]!)} alt={nhan} loading="lazy"
+          <img src={duongNho(ds[0]!)} alt={nhan} loading="lazy"
                className="size-7 rounded border border-border object-cover" />
         ) : (
           <span className="grid size-7 place-items-center rounded border border-border text-[9px] text-muted-foreground">PDF</span>
