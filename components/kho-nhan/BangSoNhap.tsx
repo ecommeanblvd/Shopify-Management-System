@@ -15,6 +15,7 @@ import type { KetQuaDoiChieu } from '@/features/kho-nhan/doi-chieu-logic';
 import { coLech } from '@/features/kho-nhan/doi-chieu-logic';
 import type { DongSoNhap } from '@/features/kho-nhan/types';
 import { LichNgay } from './LichNgay';
+import { OAnhLark } from './OAnhLark';
 
 const THU = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const GIAI_THICH = 'Sổ ghi mọi chiếc đã nhận, dựng theo đúng hình bảng Lark WH - Inventory. '
@@ -35,8 +36,12 @@ const CHU_KHO: Record<string, string> = {
   khac: 'text-muted-foreground',
 };
 
-/** Lưới cột dùng chung cho hàng tiêu đề và mọi dòng — lệch một chỗ là lệch cả bảng. */
-const COT = '104px 88px minmax(220px,1fr) minmax(180px,260px) 34px 128px 140px 44px 48px 78px';
+/**
+ * Lưới cột dùng chung cho hàng tiêu đề và mọi dòng — lệch một chỗ là lệch cả
+ * bảng. ĐỦ trường của bảng Lark (CEO 26/09), không rút gọn.
+ */
+const COT = 'minmax(230px,1fr) 104px 86px minmax(200px,1fr) minmax(170px,240px) '
+  + '32px 74px 86px 112px 128px 138px 52px 52px 76px 78px';
 
 function ngayVn(s: string): string {
   const [y, m, d] = s.split('-');
@@ -228,14 +233,16 @@ export function BangSoNhap({
       {ket && <KhoiLech ket={ket} />}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-[10px] border border-border bg-card">
-        <div className="min-w-[1080px]">
+        <div className="min-w-[1720px]">
           <div
             className="sticky top-0 z-[2] grid h-[34px] items-center gap-3 border-b border-border bg-muted px-3.5 text-[11px] font-medium text-muted-foreground"
             style={{ gridTemplateColumns: COT }}
           >
-            <span>Đơn</span><span>Brand</span><span>Sản phẩm</span><span>SKU</span>
-            <span className="text-center">SL</span><span>QC</span><span>Xử lý kho</span>
-            <span className="text-center">Ảnh</span><span className="text-center">BBGN</span><span>Nguồn</span>
+            <span>Định danh</span><span>Đơn</span><span>Brand</span><span>Sản phẩm</span>
+            <span>SKU</span><span className="text-center">SL</span><span>Store</span>
+            <span>Kho</span><span>Loại nhập</span><span>QC</span><span>Xử lý kho</span>
+            <span className="text-center">Ảnh</span><span className="text-center">BBGN</span>
+            <span>Mã WH</span><span>Nguồn</span>
           </div>
 
           {hienThi.length === 0 ? (
@@ -249,13 +256,14 @@ export function BangSoNhap({
             return (
               <div
                 key={r.recordId}
-                className={`grid h-[34px] items-center gap-3 px-3.5 text-[13px] hover:bg-muted/50 ${
+                className={`grid h-[38px] items-center gap-3 px-3.5 text-[13px] hover:bg-muted/50 ${
                   r.noiTiep ? '' : 'border-t border-border'
                 } ${mq === 'hong' ? 'bg-red-500/[0.07]' : ''}`}
                 style={{ gridTemplateColumns: COT }}
               >
                 {/* Dòng nối tiếp cùng đơn bỏ trống ô mã đơn và ẩn đường kẻ — mắt
                     đọc ra ngay đây là mấy chiếc của CÙNG một đơn. */}
+                <span className="truncate font-mono text-[11px] text-muted-foreground">{r.dinhDanh ?? '—'}</span>
                 <span className="truncate font-mono text-xs">{r.noiTiep ? '' : r.orderNumber ?? '—'}</span>
                 <span className="truncate text-xs text-muted-foreground">{r.vendorFinal ?? '—'}</span>
                 <span className="truncate">
@@ -264,17 +272,25 @@ export function BangSoNhap({
                 </span>
                 <span className="truncate font-mono text-[11.5px] text-muted-foreground">{r.sku ?? '—'}</span>
                 <span className={`text-center ${(r.soLuong ?? 1) > 1 ? 'font-bold' : ''}`}>{r.soLuong ?? 1}</span>
+                <span className="truncate text-xs text-muted-foreground">{r.storeFinal ?? '—'}</span>
+                <span className="truncate text-xs">
+                  {r.warehouse
+                    ? <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-300">{r.warehouse}</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </span>
+                <span className="truncate text-xs">
+                  {r.inventoryType
+                    ? <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">{r.inventoryType}</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </span>
                 <span className={`flex items-center gap-1.5 truncate text-xs ${CHU_QC[mq]}`}>
                   <span className={`size-1.5 shrink-0 rounded-full ${MAU_QC[mq]}`} />
                   {(r.qcCheck ?? '').trim() || '—'}
                 </span>
                 <span className={`truncate text-xs ${CHU_KHO[mk]}`}>{(r.whAction ?? '').trim() || '—'}</span>
-                <span className={`text-center text-xs ${r.coAnhHangDen ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {r.coAnhHangDen ? '✓' : 'Thiếu'}
-                </span>
-                <span className={`text-center text-xs ${r.coBbBanGiao ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
-                  {r.coBbBanGiao ? '✓' : '—'}
-                </span>
+                <OAnhLark ds={r.anhHangDen} nhan={`Ảnh thực tế · ${r.orderNumber ?? ''}`} />
+                <OAnhLark ds={r.bbBanGiao} nhan={`Biên bản bàn giao · ${r.orderNumber ?? ''}`} />
+                <span className="truncate font-mono text-[11px] text-muted-foreground">{r.uniqueCode ?? '—'}</span>
                 <span className={`justify-self-start whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[11px] font-medium ${
                   r.cuaHeThong
                     ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'

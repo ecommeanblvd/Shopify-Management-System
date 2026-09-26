@@ -36,6 +36,17 @@ function coFile(v: unknown): boolean {
   return Array.isArray(v) && v.length > 0;
 }
 
+/** [{file_token,name,…}] của Lark → dạng gọn mình lưu. */
+function dsFile(v: unknown): { token: string; ten: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => {
+      const f = x as { file_token?: string; name?: string };
+      return { token: f.file_token ?? '', ten: f.name ?? '' };
+    })
+    .filter((x) => x.token !== '');
+}
+
 /** Mốc ms của Lark → ngày NGHIỆP VỤ 'YYYY-MM-DD'. */
 function ngay(v: unknown): string | null {
   if (typeof v !== 'number') return null;
@@ -62,6 +73,8 @@ export function dungDongMirror(r: LarkRecord) {
     soLuong: so(f['Quantity tiếp nhận trước QC']) ?? so(f['Quantity (look up)']),
     coAnhHangDen: coFile(f['Ảnh Thực Tế SP']),
     coBbBanGiao: coFile(f['BB Giao Nhận']),
+    anhHangDen: dsFile(f['Ảnh Thực Tế SP']),
+    bbBanGiao: dsFile(f['BB Giao Nhận']),
     capNhatLuc: new Date(),
   };
 }
@@ -86,7 +99,9 @@ export async function dongBoWhInventory(): Promise<KetQuaDongBo> {
         vendorFinal: sql`excluded.vendor_final`, qcCheck: sql`excluded.qc_check`,
         whAction: sql`excluded.wh_action`, uniqueCode: sql`excluded.unique_code`,
         soLuong: sql`excluded.so_luong`, coAnhHangDen: sql`excluded.co_anh_hang_den`,
-        coBbBanGiao: sql`excluded.co_bb_ban_giao`, capNhatLuc: sql`excluded.cap_nhat_luc`,
+        coBbBanGiao: sql`excluded.co_bb_ban_giao`,
+        anhHangDen: sql`excluded.anh_hang_den`, bbBanGiao: sql`excluded.bb_ban_giao`,
+        capNhatLuc: sql`excluded.cap_nhat_luc`,
       },
     });
     ghi += lo.length;

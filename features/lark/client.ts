@@ -413,6 +413,23 @@ export async function listAllWhInventoryRecords(): Promise<LarkRecord[]> {
   return out;
 }
 
+/**
+ * Tải NỘI DUNG một file đính kèm của Lark Drive.
+ *
+ * Trả thẳng `Response` để caller stream tiếp, không nạp cả ảnh vào bộ nhớ —
+ * ảnh kho chụp bằng điện thoại thường vài MB, một trang có vài chục ảnh.
+ *
+ * Vì sao không dùng `tmp_url` sẵn trong bản ghi: đó là URL API, vẫn cần header
+ * Authorization, dán thẳng vào thẻ <img> là 401.
+ */
+export async function taiFileLark(fileToken: string): Promise<Response> {
+  const token = await getTenantToken();
+  return fetch(
+    `${DOMAIN}/open-apis/drive/v1/medias/${encodeURIComponent(fileToken)}/download`,
+    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(60_000) },
+  );
+}
+
 /** Tạo MỘT dòng bảng kho. Trả record id. */
 export async function createWhInventoryRecord(fields: Record<string, unknown>): Promise<string> {
   return postRecord(env('LARK_BASE_APP_TOKEN'), WH_INVENTORY_TABLE_ID, fields);

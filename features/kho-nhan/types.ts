@@ -53,6 +53,8 @@ export interface ChiecLoi {
   loi: { lyDo: string; ghiChu: string | null; anhUrl: string | null }[];
 }
 
+export interface FileLark { token: string; ten: string }
+
 /** Một dòng SỔ NHẬP KHO — đọc từ bản sao bảng Lark "WH - Inventory". */
 export interface DongSoNhap {
   recordId: string;
@@ -72,6 +74,9 @@ export interface DongSoNhap {
   soLuong: number | null;
   coAnhHangDen: boolean;
   coBbBanGiao: boolean;
+  /** File đính kèm trên Lark — token để tải qua /api/kho-nhan/anh-lark. */
+  anhHangDen: FileLark[];
+  bbBanGiao: FileLark[];
   /** Dòng do CHÍNH hệ thống này tạo, không phải đội kho gõ thẳng trên Lark. */
   cuaHeThong: boolean;
 }

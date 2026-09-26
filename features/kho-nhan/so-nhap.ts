@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { requirePerm } from '@/features/receiving/perm';
 import { KHO_SANG_LARK } from './wh-lark-payload';
-import type { DongSoNhap } from './types';
+import type { DongSoNhap, FileLark } from './types';
 
 
 
@@ -29,7 +29,7 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
     SELECT w.record_id, w.ngay_import, w.dinh_danh, w.warehouse, w.inventory_type,
            w.order_number, w.sku, w.lineitem_name, w.store_final, w.vendor_final,
            w.qc_check, w.wh_action, w.unique_code, w.so_luong,
-           w.co_anh_hang_den, w.co_bb_ban_giao,
+           w.co_anh_hang_den, w.co_bb_ban_giao, w.anh_hang_den, w.bb_ban_giao,
            EXISTS (SELECT 1 FROM goods_receipt_items gi
                     WHERE gi.lark_record_id = w.record_id) AS cua_he_thong
     FROM lark_wh_inventory w
@@ -54,6 +54,8 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
     soLuong: x.so_luong == null ? null : Number(x.so_luong),
     coAnhHangDen: Boolean(x.co_anh_hang_den),
     coBbBanGiao: Boolean(x.co_bb_ban_giao),
+    anhHangDen: (x.anh_hang_den as FileLark[]) ?? [],
+    bbBanGiao: (x.bb_ban_giao as FileLark[]) ?? [],
     cuaHeThong: Boolean(x.cua_he_thong),
   }));
 }

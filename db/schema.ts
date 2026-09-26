@@ -2955,6 +2955,9 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   soLuong: integer('so_luong'),
   coAnhHangDen: boolean('co_anh_hang_den').notNull().default(false),
   coBbBanGiao: boolean('co_bb_ban_giao').notNull().default(false),
+  /** [{ token, ten }] — token để tải file qua API Lark, tên để phân biệt ảnh/PDF. */
+  anhHangDen: jsonb('anh_hang_den').notNull().default([]),
+  bbBanGiao: jsonb('bb_ban_giao').notNull().default([]),
   capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
 }, (t) => [
   index('lark_wh_inventory_ngay_idx').on(t.ngayImport),
