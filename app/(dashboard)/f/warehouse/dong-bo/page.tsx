@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { soNhap, larkCapNhatLuc } from '@/features/kho-nhan/so-nhap';
+import { soNhap, larkCapNhatLuc, ngayCoDong } from '@/features/kho-nhan/so-nhap';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { BangSoNhap } from '@/components/kho-nhan/BangSoNhap';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export default async function DongBoPage({
   searchParams,
 }: {
   // Bản Next này trả searchParams dưới dạng Promise — phải await.
-  searchParams: Promise<{ kho?: string }>;
+  searchParams: Promise<{ kho?: string; ngay?: string }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
@@ -29,17 +30,22 @@ export default async function DongBoPage({
 
   const sp = await searchParams;
   const kho = sp.kho ?? '';
-  // KHÔNG lọc theo một ngày nữa: trang chia thành từng mảng theo ngày giống
-  // hệt bảng Lark (CEO 25/09), nên phải lấy nhiều ngày một lượt.
-  const dong = await soNhap({ kho: kho || undefined });
-  const capNhatLuc = await larkCapNhatLuc();
+  const homNay = ngayKinhDoanh(new Date())!;
+  // Một ngày mỗi lượt, mặc định hôm nay — màn có lịch chọn ngày (bản thiết kế
+  // CEO 26/09). Ngày tương lai kẹp về hôm nay: sổ không ghi việc chưa xảy ra.
+  const ngay = sp.ngay && sp.ngay <= homNay ? sp.ngay : homNay;
+  const [dong, cacNgay, capNhatLuc] = await Promise.all([
+    soNhap({ kho: kho || undefined, ngay }),
+    ngayCoDong(kho || undefined),
+    larkCapNhatLuc(),
+  ]);
 
   return (
-    <div className="space-y-5 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Sổ nhập kho &amp; đối chiếu Lark</h1>
-      </div>
-      <BangSoNhap dong={dong} kho={kho} capNhatLuc={capNhatLuc} />
+    <div className="flex h-[calc(100vh-7rem)] flex-col p-5">
+      <BangSoNhap
+        dong={dong} kho={kho} ngay={ngay} homNay={homNay}
+        cacNgay={cacNgay} capNhatLuc={capNhatLuc}
+      />
     </div>
   );
 }
