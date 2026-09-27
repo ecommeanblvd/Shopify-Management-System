@@ -1,4 +1,9 @@
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { Headset } from 'lucide-react';
+import { auth } from '@/lib/auth/auth';
+import { getRole } from '@/lib/auth/role';
+import { hasPermission } from '@/lib/auth/rbac';
 import { nguoiHienTai } from '@/features/cx-ticket/nguoi';
 import { danhSachTicket, demTheoTrangThai } from '@/features/cx-ticket/queries';
 import { NHOM, boPhanHopLe } from '@/features/cx-ticket/phan-loai';
@@ -12,7 +17,24 @@ interface Props {
 }
 
 export default async function CxTicketPage({ searchParams }: Props) {
-  // Quyền đã chặn ở layout; gọi lại ở đây để lấy bộ phận + toàn quyền của người xem.
+  // TỰ guard, không dựa vào layout: Next render layout và page SONG SONG, nên
+  // `redirect` của layout chưa kịp chạy thì `nguoiHienTai()` đã ném lỗi và log
+  // ra một stack trace mỗi lần khách chưa đăng nhập mở trang.
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect('/sign-in');
+  const role = await getRole(session.user.id);
+  if (!role || !hasPermission(role, 'view_cx_ticket')) {
+    return (
+      <div className="px-6 py-16 text-center">
+        <h1 className="text-3xl">Không có quyền</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Cần quyền xem ticket CX. Nhờ quản trị cấp ở Roles.
+        </p>
+      </div>
+    );
+  }
+
+  // Tới đây chắc chắn qua cửa — gọi để lấy bộ phận + toàn quyền của người xem.
   const nguoi = await nguoiHienTai();
   const sp = await searchParams;
 
