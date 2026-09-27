@@ -12,6 +12,9 @@ export const appRoles = pgTable('app_roles', {
   name: text('name').notNull(),
   description: text('description'),
   isSystem: boolean('is_system').notNull().default(false),
+  /** Bộ phận của vai trò (CX-CS, PROCUREMENT…) — quyết định người này ghi được
+   *  phần việc ticket của bộ phận nào. Nullable: admin/viewer không thuộc bộ phận. */
+  boPhan: text('bo_phan'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -3018,3 +3021,70 @@ export const whLarkNhatKy = pgTable('wh_lark_nhat_ky', {
   actor: text('actor').notNull(),
   luc: timestamp('luc').notNull().defaultNow(),
 }, (t) => [index('wh_lark_nhat_ky_luc_idx').on(t.luc), index('wh_lark_nhat_ky_item_idx').on(t.receiptItemId)]);
+
+
+/**
+ * Ticket CX liên bộ phận (migration 0178) — bảng `CX - To Do` của Lark.
+ *
+ * Phân loại và trạng thái để TEXT chứ không enum: thêm một loại vấn đề mới không
+ * được phép cần migration. Giá trị kiểm ở `features/cx-ticket/phan-loai.ts` và
+ * `trang-thai.ts`, có unit test.
+ */
+export const cxTicket = pgTable('cx_ticket', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  maTicket: text('ma_ticket').notNull().unique(),
+  tieuDe: text('tieu_de').notNull(),
+  nhom: text('nhom').notNull(),
+  loai: text('loai').notNull(),
+  boPhanNeu: text('bo_phan_neu').notNull(),
+  trangThai: text('trang_thai').notNull().default('moi'),
+  hanXuLy: date('han_xu_ly'),
+  maTicketCs: text('ma_ticket_cs'),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
+  khachEmail: text('khach_email'),
+  /** 'he_thong' | 'lark' — bản ghi nhập từ Lark là CHỈ ĐỌC trên UI. */
+  nguon: text('nguon').notNull().default('he_thong'),
+  larkRecordId: text('lark_record_id').unique(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  dongLuc: timestamp('dong_luc'),
+}, (t) => [
+  index('cx_ticket_trang_thai_idx').on(t.trangThai),
+  index('cx_ticket_nhom_idx').on(t.nhom),
+]);
+
+/** Dòng đơn gắn vào ticket — nhiều-nhiều (62/675 ticket Lark gắn 2–7 dòng). */
+export const cxTicketDong = pgTable('cx_ticket_dong', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ticketId: uuid('ticket_id').notNull().references(() => cxTicket.id, { onDelete: 'cascade' }),
+  orderLineId: uuid('order_line_id').notNull()
+    .references(() => shopifyOrderLines.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('cx_ticket_dong_uniq').on(t.ticketId, t.orderLineId),
+  index('cx_ticket_dong_line_idx').on(t.orderLineId),
+]);
+
+/** Phần việc của MỘT bộ phận trên một ticket — chỗ trả lời "bộ phận nào đang tắc". */
+export const cxTicketPhanViec = pgTable('cx_ticket_phan_viec', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ticketId: uuid('ticket_id').notNull().references(() => cxTicket.id, { onDelete: 'cascade' }),
+  boPhan: text('bo_phan').notNull(),
+  trangThai: text('trang_thai').notNull().default('dang_xu_ly'),
+  nguoiPhuTrach: text('nguoi_phu_trach').references(() => user.id, { onDelete: 'set null' }),
+  xongLuc: timestamp('xong_luc'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [uniqueIndex('cx_ticket_phan_viec_uniq').on(t.ticketId, t.boPhan)]);
+
+/** Ghi chú append-only. `ghiHo` = CX gõ thay bộ phận chưa có tài khoản. */
+export const cxTicketGhiChu = pgTable('cx_ticket_ghi_chu', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ticketId: uuid('ticket_id').notNull().references(() => cxTicket.id, { onDelete: 'cascade' }),
+  boPhan: text('bo_phan').notNull(),
+  noiDung: text('noi_dung').notNull(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  ghiHo: boolean('ghi_ho').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('cx_ticket_ghi_chu_ticket_idx').on(t.ticketId, t.createdAt)]);

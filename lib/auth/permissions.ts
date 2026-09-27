@@ -33,6 +33,10 @@ export const CATALOG: ScopeDef[] = [
   { key: 'kpi.logistics', label: 'KPI vị trí Logistics', actions: ['view'] },
   { key: 'mmp_products', label: 'Sản phẩm MMP', actions: ['view', 'create', 'edit', 'delete', 'push'] },
   { key: 'functions', label: 'Functions', actions: ['view', 'edit'] },
+  // CX — ticket liên bộ phận (bảng `CX - To Do` của Lark). 'edit' là quyền GHI HỘ:
+  // người có nó ghi được phần việc của MỌI bộ phận, vì hệ thống chưa có tài khoản
+  // cho PROCUREMENT / MERCHANDISE / WAREHOUSE (CEO 27/09/2026).
+  { key: 'cx.ticket', label: 'CX — Việc cần làm (ticket)', actions: ['view', 'create', 'edit'] },
   { key: 'markets', label: 'Markets', actions: ['view', 'edit', 'apply'] },
   // settings_sync needs 3 distinct non-apply capabilities to mirror the legacy
   // perms exactly: view=xem lịch sử (view_settings_history), create=quản lý
