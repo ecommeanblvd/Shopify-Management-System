@@ -15,10 +15,15 @@ export default async function CxLayout({ children }: { children: React.ReactNode
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
-  if (!role || !hasPermission(role, 'view_cx_ticket')) redirect('/');
+  if (!role || (!hasPermission(role, 'view_cx_ticket') && !hasPermission(role, 'view_cx_dispute'))) {
+    redirect('/');
+  }
 
   const tabs = [
     { href: '/f/cx', label: 'Việc cần làm' },
+    ...(hasPermission(role, 'view_cx_dispute')
+      ? [{ href: '/f/cx/tranh-chap', label: 'Tranh chấp' }]
+      : []),
     ...(hasPermission(role, 'view_functions')
       ? [{ href: '/f/customer-account/requests', label: 'Đổi trả' }]
       : []),

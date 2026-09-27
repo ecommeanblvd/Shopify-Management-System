@@ -37,6 +37,9 @@ export const CATALOG: ScopeDef[] = [
   // người có nó ghi được phần việc của MỌI bộ phận, vì hệ thống chưa có tài khoản
   // cho PROCUREMENT / MERCHANDISE / WAREHOUSE (CEO 27/09/2026).
   { key: 'cx.ticket', label: 'CX — Việc cần làm (ticket)', actions: ['view', 'create', 'edit'] },
+  // Tranh chấp / chargeback. Scope RIÊNG, không dùng chung với cx.ticket: đây là
+  // tiền, và thường là việc của tài chính chứ không phải CX.
+  { key: 'cx.dispute', label: 'CX — Tranh chấp thanh toán', actions: ['view', 'create', 'edit'] },
   { key: 'markets', label: 'Markets', actions: ['view', 'edit', 'apply'] },
   // settings_sync needs 3 distinct non-apply capabilities to mirror the legacy
   // perms exactly: view=xem lịch sử (view_settings_history), create=quản lý

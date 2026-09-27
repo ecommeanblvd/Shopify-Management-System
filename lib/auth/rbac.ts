@@ -49,7 +49,11 @@ export type Permission =
   /** Xem ticket CX. */
   | 'view_cx_ticket'
   /** Tạo/sửa ticket CX — gồm quyền GHI HỘ phần việc của bộ phận khác. */
-  | 'manage_cx_ticket';
+  | 'manage_cx_ticket'
+  /** Xem tranh chấp thanh toán. */
+  | 'view_cx_dispute'
+  /** Nhập/sửa tranh chấp và chạy đồng bộ từ Shopify. */
+  | 'manage_cx_dispute';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -67,6 +71,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_kol', 'manage_kol',
     'view_cogs', 'manage_cogs', 'view_kpi_logistics',
     'view_cx_ticket', 'manage_cx_ticket',
+    'view_cx_dispute', 'manage_cx_dispute',
   ],
   operator: [
     'view', 'run_feature',
@@ -80,13 +85,14 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_ship_ho', 'manage_ship_ho',
     'view_kol', 'manage_kol',
     'view_cx_ticket', 'manage_cx_ticket',
+    'view_cx_dispute', 'manage_cx_dispute',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
     'view_orders', 'view_functions',
     'view_mmp_products',
     'view_fulfillment',
-    'view_cx_ticket',
+    'view_cx_ticket', 'view_cx_dispute',
   ],
 };
 

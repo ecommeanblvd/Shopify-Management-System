@@ -3088,3 +3088,62 @@ export const cxTicketGhiChu = pgTable('cx_ticket_ghi_chu', {
   ghiHo: boolean('ghi_ho').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('cx_ticket_ghi_chu_ticket_idx').on(t.ticketId, t.createdAt)]);
+
+
+/**
+ * Tranh chấp thanh toán / chargeback (migration 0179).
+ *
+ * Hai nửa trong một bảng: `nguon='shopify'` do sync ghi (Shopify là nguồn đúng),
+ * `nguon='tay'` do CX nhập cho PayPal/Stripe.
+ *
+ * KHÔNG có cột tổng tiền — `soTien` luôn đi kèm `tienTe`, và việc gom theo đơn vị
+ * tiền do `features/dispute/tong-tien.ts` làm. Bảng Lark cộng lẫn 6 loại tiền vào
+ * một cột nên con số của nó vô nghĩa.
+ */
+export const dispute = pgTable('dispute', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  storeId: uuid('store_id').notNull().references(() => stores.id, { onDelete: 'cascade' }),
+  nguon: text('nguon').notNull().default('tay'),
+  /** `shopify_payments` / `paypal` / `stripe` — xem `features/dispute/chuan-hoa.ts`. */
+  congThanhToan: text('cong_thanh_toan').notNull(),
+  shopifyDisputeId: text('shopify_dispute_id').unique(),
+
+  /* Shopify sở hữu — sync GHI ĐÈ. */
+  loai: text('loai').notNull().default('chargeback'),
+  trangThai: text('trang_thai').notNull(),
+  lyDo: text('ly_do'),
+  lyDoMang: text('ly_do_mang'),
+  soTien: numeric('so_tien', { precision: 14, scale: 2 }).notNull(),
+  tienTe: text('tien_te').notNull(),
+  moLuc: timestamp('mo_luc'),
+  hanNop: timestamp('han_nop'),
+  daNopLuc: timestamp('da_nop_luc'),
+  chotLuc: timestamp('chot_luc'),
+
+  /* CX sở hữu — sync KHÔNG BAO GIỜ chạm. */
+  maHoSo: text('ma_ho_so'),
+  phiDispute: numeric('phi_dispute', { precision: 14, scale: 2 }),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  maDon: text('ma_don'),
+  khachEmail: text('khach_email'),
+
+  larkRecordId: text('lark_record_id').unique(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  dongBoLuc: timestamp('dong_bo_luc'),
+}, (t) => [
+  index('dispute_trang_thai_idx').on(t.trangThai),
+  index('dispute_han_nop_idx').on(t.hanNop),
+  index('dispute_store_idx').on(t.storeId),
+]);
+
+/** Ghi chú append-only. `tuLark` = mang từ ô `Following up` của Lark sang. */
+export const disputeGhiChu = pgTable('dispute_ghi_chu', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  disputeId: uuid('dispute_id').notNull().references(() => dispute.id, { onDelete: 'cascade' }),
+  noiDung: text('noi_dung').notNull(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  tuLark: boolean('tu_lark').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('dispute_ghi_chu_idx').on(t.disputeId, t.createdAt)]);
