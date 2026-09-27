@@ -2731,6 +2731,24 @@ export const customerOrderRequests = pgTable('customer_order_requests', {
   qcAt: timestamp('qc_at'),
   refundedAt: timestamp('refunded_at'),
   refundedMarkedBy: text('refunded_marked_by'),
+  /* ── Đổi trả (0177): một dòng = MỘT MÓN trả, đúng hình CX đang dùng. ── */
+  rmaCode: text('rma_code'),
+  orderLineId: uuid('order_line_id').references(() => shopifyOrderLines.id, { onDelete: 'set null' }),
+  sku: text('sku'),
+  itemName: text('item_name'),
+  quantity: integer('quantity').notNull().default(1),
+  itemValue: numeric('item_value', { precision: 14, scale: 2 }),
+  /** store_credit | original_payment — 93% là store credit. */
+  refundTo: text('refund_to'),
+  /** refund | exchange — đổi hàng chỉ 2%, ghi nhận chứ chưa có luồng riêng. */
+  returnCategory: text('return_category').notNull().default('refund'),
+  lyDoChinh: text('ly_do_chinh'),
+  lyDoPhu: text('ly_do_phu'),
+  qcKetQua: text('qc_ket_qua'),
+  qcLyDo: text('qc_ly_do'),
+  cancelledAt: timestamp('cancelled_at'),
+  /** CX nhập hộ khách — ghi lại ai nhập để còn truy. */
+  taoBoi: text('tao_boi'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [

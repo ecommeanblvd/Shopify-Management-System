@@ -45,6 +45,18 @@ export async function listAdminRequests(
     adminNote: schema.customerOrderRequests.adminNote,
     rejectedReason: schema.customerOrderRequests.rejectedReason,
     createdAt: schema.customerOrderRequests.createdAt,
+    rmaCode: schema.customerOrderRequests.rmaCode,
+    sku: schema.customerOrderRequests.sku,
+    itemName: schema.customerOrderRequests.itemName,
+    quantity: schema.customerOrderRequests.quantity,
+    itemValue: schema.customerOrderRequests.itemValue,
+    refundTo: schema.customerOrderRequests.refundTo,
+    returnCategory: schema.customerOrderRequests.returnCategory,
+    lyDoChinh: schema.customerOrderRequests.lyDoChinh,
+    lyDoPhu: schema.customerOrderRequests.lyDoPhu,
+    qcKetQua: schema.customerOrderRequests.qcKetQua,
+    qcLyDo: schema.customerOrderRequests.qcLyDo,
+    cancelledAt: schema.customerOrderRequests.cancelledAt,
   }).from(schema.customerOrderRequests)
     .innerJoin(schema.stores, eq(schema.customerOrderRequests.storeId, schema.stores.id))
     .leftJoin(schema.returnHubs, eq(schema.customerOrderRequests.returnHubId, schema.returnHubs.id))

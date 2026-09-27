@@ -72,3 +72,32 @@ describe('pgErrorCode', () => {
     expect(pgErrorCode({ cause: { cause: { code: '23505' } } })).toBe('23505');
   });
 });
+
+describe('canTransition — huỷ yêu cầu & kênh CX nhập hộ (27/09)', () => {
+  it('huỷ được từ mọi trạng thái chưa hoàn tiền', () => {
+    for (const from of ['submitted', 'under_review', 'approved', 'return_in_transit', 'refund_pending'] as const) {
+      expect(canTransition('claim', from, 'cancelled')).toBe(true);
+    }
+  });
+
+  it('không huỷ được sau khi đã hoàn tiền hoặc đã đóng hồ sơ', () => {
+    expect(canTransition('claim', 'refunded', 'cancelled')).toBe(false);
+    expect(canTransition('claim', 'rejected', 'cancelled')).toBe(false);
+    expect(canTransition('claim', 'cancelled', 'cancelled')).toBe(false);
+  });
+
+  it('nhận hàng đi thẳng từ approved — hồ sơ CX nhập hộ không có tracking khách', () => {
+    expect(canTransition('claim', 'approved', 'received')).toBe(true);
+  });
+
+  it('nhận hàng vẫn đi được qua đường khách nhập tracking', () => {
+    expect(canTransition('claim', 'approved', 'return_in_transit')).toBe(true);
+    expect(canTransition('claim', 'return_in_transit', 'received')).toBe(true);
+  });
+
+  it('yêu cầu huỷ đơn (cancel) chỉ huỷ được khi vừa gửi', () => {
+    expect(canTransition('cancel', 'submitted', 'cancelled')).toBe(true);
+    expect(canTransition('cancel', 'refund_pending', 'cancelled')).toBe(true);
+    expect(canTransition('cancel', 'approved', 'cancelled')).toBe(false);
+  });
+});

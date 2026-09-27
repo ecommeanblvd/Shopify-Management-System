@@ -1,27 +1,35 @@
 /** THUẦN: state machine của customer_order_requests (spec §5). */
 export type RequestKind = 'cancel' | 'claim';
 export type RequestStatus = 'submitted' | 'under_review' | 'approved' | 'rejected'
-  | 'return_in_transit' | 'received' | 'refund_pending' | 'refunded';
+  | 'return_in_transit' | 'received' | 'refund_pending' | 'refunded' | 'cancelled';
 
 export const CLAIM_REASONS = ['damaged_package', 'damaged_product', 'wrong_item', 'wrong_size', 'missing_item', 'other'] as const;
 export type ClaimReason = (typeof CLAIM_REASONS)[number];
 
-const TERMINAL: RequestStatus[] = ['rejected', 'refunded'];
+const TERMINAL: RequestStatus[] = ['rejected', 'refunded', 'cancelled'];
 export const OPEN_STATUSES: RequestStatus[] =
   ['submitted', 'under_review', 'approved', 'return_in_transit', 'received', 'refund_pending'];
 
+/* `cancelled` đi được từ MỌI trạng thái chưa hoàn tiền: đo Lark 27/09 có 142/1.414
+ * yêu cầu ở CANCEL (10%), và khách rút yêu cầu ở bất kỳ khâu nào cũng là chuyện
+ * thường — khoá nó vào một khâu là CX phải bịa trạng thái khác để đóng hồ sơ. */
 const CLAIM_EDGES: Record<RequestStatus, RequestStatus[]> = {
-  submitted: ['under_review', 'approved', 'rejected'],
-  under_review: ['approved', 'rejected'],
-  approved: ['return_in_transit'],
-  return_in_transit: ['received'],
+  submitted: ['under_review', 'approved', 'rejected', 'cancelled'],
+  under_review: ['approved', 'rejected', 'cancelled'],
+  /* `received` đi thẳng từ `approved`: yêu cầu do CX nhập hộ khách KHÔNG bao giờ
+   * có tracking (`return_in_transit` chỉ do khách tự nhập trên trang tài khoản),
+   * nên thiếu cạnh này thì hồ sơ CX nằm mãi ở `approved` và nút "Đã nhận hàng"
+   * luôn báo lỗi — đúng lỗi màn queue đang mắc từ trước 27/09. */
+  approved: ['return_in_transit', 'received', 'cancelled'],
+  return_in_transit: ['received', 'cancelled'],
   received: ['refund_pending', 'rejected'],   // QC pass | fail
-  refund_pending: ['refunded'],
-  rejected: [], refunded: [],
+  refund_pending: ['refunded', 'cancelled'],
+  rejected: [], refunded: [], cancelled: [],
 };
 const CANCEL_EDGES: Record<RequestStatus, RequestStatus[]> = {
-  refund_pending: ['refunded'],
-  submitted: [], under_review: [], approved: [], return_in_transit: [], received: [], rejected: [], refunded: [],
+  refund_pending: ['refunded', 'cancelled'],
+  submitted: ['cancelled'], under_review: [], approved: [], return_in_transit: [],
+  received: [], rejected: [], refunded: [], cancelled: [],
 };
 
 export function canTransition(kind: RequestKind, from: RequestStatus, to: RequestStatus): boolean {

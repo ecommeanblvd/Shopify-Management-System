@@ -8,6 +8,7 @@ import { listStoresBasic } from '@/features/customer-account/admin-queries';
 import { listAdminRequests } from '@/features/customer-account/requests-admin';
 import { listHubs } from '@/features/customer-account/hubs-admin';
 import { REQUEST_KINDS, REQUEST_STATUSES } from '@/features/customer-account/requests-shared';
+import { FormTaoYeuCau } from '@/components/doi-tra/FormTaoYeuCau';
 import { RequestsTable } from './RequestsTable';
 
 export const dynamic = 'force-dynamic';
@@ -53,11 +54,18 @@ export default async function RequestsQueuePage({ searchParams }: PageProps): Pr
           Yêu cầu đơn hàng
         </h1>
         <p className="text-sm text-muted-foreground max-w-xl">
-          Duyệt yêu cầu hủy đơn / khiếu nại (claim) khách gửi từ trang tài khoản:
-          xác định lỗi, chọn kho nhận hàng trả, QC hàng, và đánh dấu hoàn tiền
-          thủ công trong Shopify.
+          CX nhập yêu cầu trả thay khách, hoặc duyệt yêu cầu hủy đơn / khiếu nại
+          khách tự gửi từ trang tài khoản: xác định lỗi, chọn kho nhận hàng trả,
+          QC hàng, và đánh dấu hoàn tiền thủ công trong Shopify.
         </p>
       </header>
+
+      {canManage && (
+        <section className="rounded-xl border border-border p-4 md:p-5">
+          <h2 className="mb-3 text-base font-semibold">Tạo yêu cầu trả thay khách</h2>
+          <FormTaoYeuCau />
+        </section>
+      )}
 
       <RequestsTable
         stores={stores}

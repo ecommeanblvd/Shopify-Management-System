@@ -13,6 +13,8 @@ import type { HubRow } from '@/features/customer-account/hubs-shared';
 import {
   approveClaim, rejectRequest, markReceived, recordQc, markRefunded,
 } from '@/features/customer-account/requests-actions';
+import { huyYeuCau } from '@/features/doi-tra/actions';
+import { nhanLyDo, NOI_HOAN } from '@/features/doi-tra/ly-do';
 
 interface StoreRef { id: string; name: string; shopDomain: string }
 
@@ -36,6 +38,16 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 const KIND_LABELS: Record<string, string> = { cancel: 'Hủy đơn', claim: 'Khiếu nại' };
+
+const NOI_HOAN_LABELS: Record<string, string> = Object.fromEntries(
+  NOI_HOAN.map((n) => [n.ma, n.ten]),
+);
+
+/** Trạng thái nào còn huỷ được — khớp đúng `CLAIM_EDGES` trong request-status.ts,
+ *  để nút Huỷ không bao giờ hiện ra rồi bị server từ chối. */
+const HUY_DUOC = new Set([
+  'submitted', 'under_review', 'approved', 'return_in_transit', 'refund_pending',
+]);
 
 export function RequestsTable({
   stores, hubs, requests, activeStoreId, activeKind, activeStatus, canManage,
@@ -137,6 +149,7 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
   const [approveNote, setApproveNote] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [qcNote, setQcNote] = useState('');
+  const [huyLyDo, setHuyLyDo] = useState('');
 
   const showProductionBadge = row.kind === 'cancel' && row.refundPercent === 60 && row.status !== 'refunded';
 
@@ -145,6 +158,15 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
     startAction(async () => {
       const res = await fn();
       setResult(res.ok ? 'Đã lưu.' : `Lỗi: ${res.error ?? 'không rõ'}`);
+      if (res.ok) router.refresh();
+    });
+  }
+
+  function runHuy() {
+    setResult(null);
+    startAction(async () => {
+      const res = await huyYeuCau(row.id, huyLyDo);
+      setResult(res.ok ? 'Đã huỷ yêu cầu.' : `Lỗi: ${res.loi ?? 'không rõ'}`);
       if (res.ok) router.refresh();
     });
   }
@@ -158,6 +180,9 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
               <span className="font-medium">{row.storeName}</span>
               <span className="text-muted-foreground">·</span>
               <span className="whitespace-nowrap">{row.orderNumber ?? '—'}</span>
+              {row.rmaCode && (
+                <span className="font-mono text-xs text-muted-foreground">{row.rmaCode}</span>
+              )}
               <Badge variant="outline">{KIND_LABELS[row.kind] ?? row.kind}</Badge>
               <Badge variant="secondary">{row.status}</Badge>
               {showProductionBadge && (
@@ -167,7 +192,18 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
                 </Badge>
               )}
             </div>
-            <div className="text-xs text-muted-foreground font-mono">{row.shopifyCustomerId}</div>
+            {row.itemName && (
+              <div className="text-sm">
+                {row.itemName}
+                {row.quantity != null && row.quantity > 1 && (
+                  <span className="text-muted-foreground"> × {row.quantity}</span>
+                )}
+                {row.sku && <span className="ml-2 font-mono text-xs text-muted-foreground">{row.sku}</span>}
+              </div>
+            )}
+            {row.shopifyCustomerId && (
+              <div className="text-xs text-muted-foreground font-mono">{row.shopifyCustomerId}</div>
+            )}
             <div className="text-xs text-muted-foreground">
               {row.createdAt.toLocaleString('vi-VN')}
             </div>
@@ -176,7 +212,10 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
             <div className="text-lg font-semibold whitespace-nowrap">
               {row.refundAmount} {row.currency}
             </div>
-            <div className="text-xs text-muted-foreground">Hoàn {row.refundPercent}%</div>
+            <div className="text-xs text-muted-foreground">
+              Hoàn {row.refundPercent}%
+              {row.refundTo && ` · ${NOI_HOAN_LABELS[row.refundTo] ?? row.refundTo}`}
+            </div>
             <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
               {expanded ? <ChevronUp /> : <ChevronDown />}
               Chi tiết
@@ -186,7 +225,13 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
 
         {expanded && (
           <div className="border-t border-border pt-3 space-y-3">
-            {row.reasonCodes && row.reasonCodes.length > 0 && (
+            {row.lyDoChinh && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Lý do: </span>
+                {nhanLyDo(row.lyDoChinh, row.lyDoPhu)}
+              </p>
+            )}
+            {!row.lyDoChinh && row.reasonCodes && row.reasonCodes.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {row.reasonCodes.map((code) => (
                   <Badge key={code} variant="outline">{REASON_LABELS[code] ?? code}</Badge>
@@ -215,6 +260,14 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
             )}
             {row.rejectedReason && (
               <p className="text-xs text-destructive">Lý do từ chối: {row.rejectedReason}</p>
+            )}
+            {row.qcKetQua && (
+              <p className={`text-xs ${row.qcKetQua === 'pass'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-red-600 dark:text-red-400'}`}>
+                QC hàng trả: {row.qcKetQua === 'pass' ? 'đạt' : 'không đạt'}
+                {row.qcLyDo && ` — ${row.qcLyDo}`}
+              </p>
             )}
 
             {/* Action theo trạng thái hiện tại */}
@@ -366,6 +419,27 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
                 >
                   {isPending && <Loader2 className="animate-spin" />}
                   Đã refund trong Shopify
+                </Button>
+              </div>
+            )}
+
+            {HUY_DUOC.has(row.status) && (
+              <div className="flex items-center gap-2 border-t border-border pt-3">
+                <input
+                  value={huyLyDo}
+                  disabled={disabled}
+                  onChange={(e) => setHuyLyDo(e.target.value)}
+                  placeholder="Lý do huỷ yêu cầu"
+                  className="h-8 w-56 rounded-lg border border-input bg-background px-2.5 text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled || isPending}
+                  onClick={() => runHuy()}
+                >
+                  Huỷ yêu cầu
                 </Button>
               </div>
             )}

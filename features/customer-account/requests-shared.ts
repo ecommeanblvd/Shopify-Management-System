@@ -11,7 +11,7 @@
 /** Toàn bộ trạng thái vòng đời của customer_order_requests (xem request-status.ts). */
 export const REQUEST_STATUSES = [
   'submitted', 'under_review', 'approved', 'rejected',
-  'return_in_transit', 'received', 'refund_pending', 'refunded',
+  'return_in_transit', 'received', 'refund_pending', 'refunded', 'cancelled',
 ] as const;
 export type RequestStatusValue = (typeof REQUEST_STATUSES)[number];
 
@@ -41,4 +41,18 @@ export interface AdminRequestRow {
   adminNote: string | null;
   rejectedReason: string | null;
   createdAt: Date;
+  /* Các trường của module đổi trả (migration 0177) — yêu cầu do CX nhập hộ khách
+     là MỘT DÒNG = MỘT MÓN, nên hàng nào cũng có SKU + số lượng + giá trị. */
+  rmaCode: string | null;
+  sku: string | null;
+  itemName: string | null;
+  quantity: number | null;
+  itemValue: string | null;
+  refundTo: string | null;
+  returnCategory: string | null;
+  lyDoChinh: string | null;
+  lyDoPhu: string | null;
+  qcKetQua: string | null;
+  qcLyDo: string | null;
+  cancelledAt: Date | null;
 }

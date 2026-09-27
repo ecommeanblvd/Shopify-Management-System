@@ -165,9 +165,15 @@ export async function recordQc(
       return { ok: false, error: 'Không thể ghi QC ở trạng thái hiện tại' };
     }
 
+    // `qcKetQua`/`qcLyDo` (migration 0177) giữ kết quả QC ĐỘC LẬP với `status`:
+    // QC fail đẩy hồ sơ sang `rejected`, mà `rejected` cũng là kết cục của việc
+    // CX từ chối ngay từ đầu — không có hai cột này thì về sau không phân biệt
+    // được "hàng trả về không đạt" với "không duyệt yêu cầu".
     await db.update(schema.customerOrderRequests).set({
       status: nextStatus,
       ...(pass ? {} : { rejectedReason: cleanNote }),
+      qcKetQua: pass ? 'pass' : 'fail',
+      qcLyDo: cleanNote || null,
       qcAt: new Date(),
       updatedAt: new Date(),
     }).where(eq(schema.customerOrderRequests.id, id));
