@@ -25,23 +25,32 @@ export function tachEdd(s: string | null): { min: string | null; max: string | n
 export interface ThuocTinhDong { key: string; value: string | null }
 export interface SoDo { nhan: string; giaTri: string }
 
-/** Khoá `"1--2.Waist*"` → thứ tự [1, 2] để sắp đúng như khách thấy lúc đặt. */
-function thuTu(key: string): [number, number] {
-  const m = /^(\d+)--(\d+)\./.exec(key);
-  return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+/**
+ * Khoá số đo có dạng `"1--2.Waist*"`, đôi khi có số phụ `"7--13.1.Dress Length"`.
+ * `_Customize Type` là loại trang phục, không mang số thứ tự.
+ */
+const KHOA_SO_DO = /^(\d+)--(\d+)(?:\.(\d+))?\./;
+const KHOA_LOAI = '_customize type';
+
+/** Thứ tự để sắp đúng như khách thấy lúc đặt. Loại trang phục đứng đầu. */
+function thuTu(key: string): [number, number, number] {
+  const m = KHOA_SO_DO.exec(key);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)] : [0, 0, 0];
 }
 
 /** `"1--2.Waist*"` → `"Waist"`. Bỏ tiền tố thứ tự và dấu sao bắt buộc. */
 function nhanDep(key: string): string {
-  return key.replace(/^\d+--\d+\./, '').replace(/\*+$/, '').replace(/^_/, '').trim();
+  return key.replace(KHOA_SO_DO, '').replace(/\*+$/, '').replace(/^_/, '').trim();
 }
 
 /**
  * Số đo khách đặt may đo, lấy từ thuộc tính của DÒNG ĐƠN.
  *
- * Shopify để chúng lẫn với thứ khác trong `customAttributes`, khoá mang tiền tố
- * thứ tự hiển thị (`1--1.Bust*`, `2--3.Hip*`). Bỏ `Estimated Delivery` vì nó đã
- * có cột riêng — để lại là một con số ngày nằm giữa bảng số đo cơ thể.
+ * CHỈ nhận khoá đúng dạng số đo (`1--1.Bust*`, `7--13.1.Dress Length`) và
+ * `_Customize Type`. Lọc theo danh sách CHO PHÉP chứ không phải loại trừ: ô
+ * `customAttributes` của Shopify là bãi chứa chung, app khuyến mãi nhét cả
+ * `foxDiscount` với nguyên một khối JSON vào đó — lọc kiểu loại trừ là khối
+ * JSON ấy hiện lên giữa bảng số đo cơ thể (đã mắc đúng thế 27/09).
  *
  * Sắp theo đúng tiền tố thứ tự chứ không theo bảng chữ cái: đó là trình tự
  * người thợ đọc khi may.
@@ -49,13 +58,13 @@ function nhanDep(key: string): string {
 export function locSoDo(attrs: readonly ThuocTinhDong[] | null | undefined): SoDo[] {
   return (attrs ?? [])
     .filter((a) => {
-      const k = a.key.trim().toLowerCase();
       if (!a.value?.trim()) return false;
-      return k !== 'estimated delivery';
+      const k = a.key.trim();
+      return KHOA_SO_DO.test(k) || k.toLowerCase() === KHOA_LOAI;
     })
     .sort((a, b) => {
-      const [a1, a2] = thuTu(a.key); const [b1, b2] = thuTu(b.key);
-      return a1 - b1 || a2 - b2 || a.key.localeCompare(b.key);
+      const [a1, a2, a3] = thuTu(a.key); const [b1, b2, b3] = thuTu(b.key);
+      return a1 - b1 || a2 - b2 || a3 - b3 || a.key.localeCompare(b.key);
     })
     .map((a) => ({ nhan: nhanDep(a.key), giaTri: a.value!.trim() }))
     .filter((x) => x.nhan !== '');

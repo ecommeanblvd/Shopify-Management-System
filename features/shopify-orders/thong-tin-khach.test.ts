@@ -43,10 +43,25 @@ describe('locSoDo', () => {
       .toEqual({ nhan: 'Biceps/Upper Arms', giaTri: '30 cm' });
   });
 
-  /* Estimated Delivery đã có cột riêng — để lại là một con số ngày nằm giữa
-   * bảng số đo cơ thể. */
-  it('loại Estimated Delivery ra khỏi bảng số đo', () => {
-    expect(locSoDo(a).some((x) => /Estimated/i.test(x.nhan))).toBe(false);
+  /* Lọc theo danh sách CHO PHÉP, không phải loại trừ: customAttributes là bãi
+   * chứa chung. App khuyến mãi nhét `foxDiscount` với nguyên khối JSON vào đó,
+   * và bản Ả Rập của Estimated Delivery cũng nằm cùng chỗ — lọc kiểu loại trừ
+   * là chúng hiện lên giữa bảng số đo cơ thể (đã mắc đúng thế 27/09). */
+  it('chỉ nhận khoá ĐÚNG DẠNG số đo, loại mọi thứ khác', () => {
+    const r = locSoDo([
+      { key: '1--1.Bust*', value: '91 cm' },
+      { key: 'Estimated Delivery', value: '6 October - 20 October' },
+      { key: 'التسليم المقدر', value: '٦ أكتوبر' },
+      { key: 'foxDiscount', value: '{"discount_value": 0, "plugin": "PrePurchase"}' },
+      { key: '_fbp', value: 'fb.1.123' },
+    ]);
+    expect(r).toEqual([{ nhan: 'Bust', giaTri: '91 cm' }]);
+  });
+
+  /* Khoá có số phụ: "7--13.1.Dress Length" phải ra nhãn sạch, không còn "1." */
+  it('bỏ hết tiền tố kể cả số phụ', () => {
+    expect(locSoDo([{ key: '7--13.1.Dress Length  - Measure from the collar stand', value: '120 cm' }])[0]!.nhan)
+      .toBe('Dress Length  - Measure from the collar stand');
   });
 
   it('bỏ thuộc tính không có giá trị', () => {
