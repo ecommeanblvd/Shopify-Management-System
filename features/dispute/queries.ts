@@ -59,10 +59,15 @@ export async function danhSachDispute(loc: LocDispute = {}): Promise<DongDispute
 }
 
 /**
- * Ca CÒN PHẢI LÀM, xếp theo hạn nộp gần nhất — khối trên của màn.
+ * Ca CÒN PHẢI LÀM, khối trên của màn.
  *
- * Ca không có hạn xếp CUỐI: hiện chúng lên đầu chỉ vì `NULL` sắp trước là đẩy ca
- * sắp mất tiền xuống dưới màn hình.
+ * Thứ tự: CHƯA nộp bằng chứng trước, rồi hạn gần nhất trước, ca không hạn cuối.
+ *
+ * Hai lần sắp xếp này đều để trả lời đúng một câu: "việc nào đang chờ MÌNH".
+ * Ca đã nộp bằng chứng là đang chờ ngân hàng, không chờ mình — xếp theo hạn
+ * thuần thì một ca năm 2020 đã nộp xong đứng đầu danh sách việc hôm nay. Ca
+ * không có hạn xếp cuối vì `NULL` sắp trước sẽ đẩy ca sắp mất tiền xuống dưới
+ * màn hình.
  */
 export async function disputeDangMo(): Promise<DongDispute[]> {
   await requirePerm('view_cx_dispute');
@@ -70,7 +75,7 @@ export async function disputeDangMo(): Promise<DongDispute[]> {
     SELECT ${CHON}, ${CONG}
     FROM dispute d JOIN stores s ON s.id = d.store_id
     WHERE d.trang_thai IN ('needs_response', 'under_review')
-    ORDER BY d.han_nop ASC NULLS LAST
+    ORDER BY (d.da_nop_luc IS NOT NULL), d.han_nop ASC NULLS LAST
     LIMIT 100`);
   return rows<Record<string, unknown>>(r).map(doiDong);
 }
