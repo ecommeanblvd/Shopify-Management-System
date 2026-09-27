@@ -131,7 +131,9 @@ export interface ShopifyOrderPayload {
   // on the read_customers scope (see order-fields.ts orderNodeFields). GID
   // form (gid://shopify/Customer/N) as returned by GraphQL; normalized to the
   // bare numeric id before persisting (see upsert-order.ts normalizeCustomerGid).
-  customer?: { id: string } | null;
+  customer?: { id: string; email?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  /** Ghi chú trên đơn (Shopify `note`), ví dụ "Split Shipments". */
+  note?: string | null;
   lineItems: { nodes: ShopifyLineItem[] };
   refunds: ShopifyRefund[];
   fulfillments: ShopifyFulfillment[];

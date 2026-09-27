@@ -95,6 +95,12 @@ export async function upsertOrder(
         target: schema.shopifyOrders.shopifyOrderId,
         set: {
           ...mapped.order,
+          /* Email và tên khách là DỮ LIỆU CÓ ĐIỀU KIỆN: chỉ store cấp scope
+           * `read_customers` mới trả về. Lượt đồng bộ nào không có chúng phải
+           * GIỮ NGUYÊN giá trị cũ, không được ghi đè bằng null — mất email là
+           * mất luôn, Shopify không cho đọc lại nếu scope bị rút. */
+          ...(mapped.order.customerEmail == null ? { customerEmail: undefined } : {}),
+          ...(mapped.order.customerName == null ? { customerName: undefined } : {}),
           rawPayload: payload,
           source,
           syncedAt: new Date(),

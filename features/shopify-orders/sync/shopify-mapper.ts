@@ -1,4 +1,5 @@
 import { rutThoiGianXuLy } from '../thoi-gian-xu-ly';
+import { tachEdd, locSoDo, tenKhach } from '../thong-tin-khach';
 import type {
   ShopifyOrderPayload,
   ShopifyLineItem,
@@ -40,6 +41,9 @@ export interface MappedOrder {
     shipName: string | null;
     shipCompany: string | null;
     shipWeightKg: string | null;
+    customerEmail: string | null;
+    customerName: string | null;
+    orderNote: string | null;
     /** Carrier the customer paid Shopify shipping for, derived from
      *  `shippingLines`. NULL when no line is matchable — the engine
      *  defaults to FedEx per operator spec. */
@@ -64,6 +68,9 @@ export interface MappedOrder {
     processingMinDays: number | null;
     processingMaxDays: number | null;
     estimatedDelivery: string | null;
+    eddMin: string | null;
+    eddMax: string | null;
+    soDo: { nhan: string; giaTri: string }[];
   }>;
   refunds: Array<{
     shopifyRefundId: string;
@@ -161,6 +168,11 @@ export function mapShopifyOrder(payload: ShopifyOrderPayload, storeId: string): 
       shipName: payload.shippingAddress?.name ?? null,
       shipCompany: payload.shippingAddress?.company ?? null,
       shipWeightKg: payload.totalWeight !== null ? (payload.totalWeight / 1000).toFixed(3) : null,
+      // Chỉ có ở store cấp scope `read_customers`; store khác trả null, KHÔNG
+      // được ghi đè giá trị cũ bằng null — xem onConflictDoUpdate bên upsert.
+      customerEmail: payload.customer?.email?.trim() || null,
+      customerName: tenKhach(payload.customer?.firstName, payload.customer?.lastName),
+      orderNote: payload.note?.trim() || null,
       shippingCarrierKey: detectCarrierKey(shipLines),
       transactionFee: txnFee.feeOrderCcy !== null ? String(txnFee.feeOrderCcy) : null,
       transactionFeeNative: txnFee.feeNative !== null ? String(txnFee.feeNative) : null,
@@ -192,10 +204,13 @@ function mapLine(node: ShopifyLineItem): MappedOrder['lines'][number] {
     total,
     ...(() => {
       const t = rutThoiGianXuLy(node);
+      const e = tachEdd(t.duKienGiao);
       return {
         processingMinDays: t.soNgayMin,
         processingMaxDays: t.soNgayMax,
         estimatedDelivery: t.duKienGiao,
+        eddMin: e.min, eddMax: e.max,
+        soDo: locSoDo(node.customAttributes),
       };
     })(),
   };

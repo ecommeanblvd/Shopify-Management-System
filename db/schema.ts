@@ -838,6 +838,11 @@ export const shopifyOrders = pgTable('shopify_orders', {
   addrVerifiedAt: timestamp('addr_verified_at'),
   addrConfidence: text('addr_confidence'), // verified|census_verified|zip_only|undeliverable (4 mức UI)
   shipWeightKg: numeric('ship_weight_kg', { precision: 10, scale: 3 }),
+  /** Chỉ có với store cấp scope `read_customers` (meanblvd, cici-mean). */
+  customerEmail: text('customer_email'),
+  customerName: text('customer_name'),
+  /** Shopify `note` — ghi chú trên đơn, ví dụ "Split Shipments". */
+  orderNote: text('order_note'),
   rawPayload: jsonb('raw_payload').notNull(),
   syncedAt: timestamp('synced_at').defaultNow().notNull(),
   // Shopify updated_at (last-updated thật) + phát hiện sửa nội dung (sub-project C).
@@ -903,6 +908,11 @@ export const shopifyOrderLines = pgTable('shopify_order_lines', {
   processingMaxDays: integer('processing_max_days'),
   /** Thuộc tính của chính DÒNG ĐƠN, ĐÓNG BĂNG lúc đặt — thứ đã hứa với khách. */
   estimatedDelivery: text('estimated_delivery'),
+  /** Hai đầu của `estimatedDelivery`, tách sẵn để lọc và so ngày. */
+  eddMin: text('edd_min'),
+  eddMax: text('edd_max'),
+  /** [{nhan, giaTri}] — số đo khách nhập lúc đặt hàng may đo. */
+  soDo: jsonb('so_do').notNull().default([]),
 }, (t) => [
   index('shopify_order_lines_order_idx').on(t.orderId),
   index('shopify_order_lines_sku_idx').on(t.sku),

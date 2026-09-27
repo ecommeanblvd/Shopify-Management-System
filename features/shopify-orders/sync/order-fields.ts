@@ -7,7 +7,7 @@
  * chấp nhận undefined → carrier=null, đặt sau hoặc do bulk backfill set.
  */
 export const ORDER_NODE_FIELDS = `
-  id name createdAt processedAt updatedAt cancelledAt
+  id name note createdAt processedAt updatedAt cancelledAt
   displayFinancialStatus displayFulfillmentStatus currencyCode
   subtotalLineItemsQuantity
   totalDiscountsSet { shopMoney { amount currencyCode } }
@@ -57,7 +57,10 @@ export const ORDER_NODE_FIELDS = `
 
 /** Field customer chỉ query được khi app có read_customers trên store đó —
  *  store thiếu scope mà query sẽ ACCESS_DENIED vỡ cả trang. */
-export const ORDER_CUSTOMER_FIELD = 'customer { id }';
+/* Email và tên là DỮ LIỆU KHÁCH ĐƯỢC BẢO VỆ của Shopify — chỉ lấy được ở store
+ * đã cấp scope `read_customers` (đo 27/09: meanblvd và cici-mean có, mirer và
+ * tinhatelier không). Caller đã gác bằng `includeCustomer`. */
+export const ORDER_CUSTOMER_FIELD = 'customer { id email firstName lastName }';
 
 export function orderNodeFields(opts: { includeCustomer: boolean }): string {
   return opts.includeCustomer ? `${ORDER_NODE_FIELDS}\n  ${ORDER_CUSTOMER_FIELD}` : ORDER_NODE_FIELDS;
