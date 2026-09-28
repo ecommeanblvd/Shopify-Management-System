@@ -42,7 +42,10 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // tính chất với `dong-bo-wh-lark` nên ở cùng nhóm, KHÔNG để ở 'moi-15-phut'
   // cùng các việc vài giây. Ghi ĐÚNG HAI cột và bỏ qua dòng đã đúng, nên chạy
   // lại nhiều lần vô hại.
-  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark', 'sync-dispute', 'day-production-time-cx'],
+  // `gom-bang-ke-nhap` CHỈ tạo/bổ sung bản NHÁP, không bao giờ tự phát hành — chốt
+  // kỳ là việc kế toán, người bấm (CEO 28/09/2026). Chạy lại vô hại: kỳ đã có nháp
+  // thì gom thêm vào đúng bản đó rồi tính lại tổng.
+  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark', 'sync-dispute', 'day-production-time-cx', 'gom-bang-ke-nhap'],
   // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
   // nhìn "5,9 phút" không biết việc nào chậm.

@@ -1,12 +1,12 @@
 'use server';
 
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement, QUYET_DINH_DA_CHOT, giaThuBangKe } from './statement-logic';
+import { summarizeStatement, giaThuBangKe } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
-import { tinhLaiTongBangKe } from './statement-core';
+import { donVaoKe, tinhLaiTongBangKe } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
 import { payloadStatementIssued, pushStatementEvent } from './statement-push';
 import type { DongBangKeMmp } from './statement-push';
@@ -22,51 +22,7 @@ export async function generateStatement(
   if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', ...rong };
   if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', ...rong };
 
-  const ids: string[] = []; const tien: number[] = []; let choHoaDon = 0;
-  if (type === 'freight') {
-    // MỐC KỲ = ngày LẦN PUSH ĐẦU TIÊN thành công của `order.reconciled` sang MMP (CEO 22/09/2026):
-    // MMP chốt kỳ theo đơn Đức đã đối soát và đẩy sang họ; bản đối soát của SMS phải khớp từng
-    // dòng nên dùng cùng mốc. Lấy lần ĐẦU (không phải lần gần nhất) để bắn lại khi tách duty
-    // không kéo đơn kỳ 07/08 đã khoá sang kỳ mới. Ngày gửi / ngày bill / ngày Đức chốt chỉ dùng
-    // cho báo cáo nội bộ. Điều kiện vào kê không đổi: đã đối soát và Đức đã chốt.
-    // cho (chờ hoá đơn) = đơn GỬI trong kỳ mà chưa có giá thực dùng được — chưa reconciled, giá
-    // null (re-quote lỗi), hay còn chờ Đức duyệt/claim — hiển thị để Ops biết còn gì treo.
-    const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
-      SELECT o.id,
-             CASE WHEN o.reconcile_status = 'reconciled'
-                   AND (o.reconcile_decision IS NULL OR o.reconcile_decision IN ${QUYET_DINH_DA_CHOT})
-                   AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}
-                  THEN o.actual_charged_vnd END AS gia,
-             ((o.actual_charged_vnd IS NULL OR o.reconcile_status IS DISTINCT FROM 'reconciled'
-               OR (o.reconcile_decision IS NOT NULL AND o.reconcile_decision NOT IN ${QUYET_DINH_DA_CHOT}))
-              AND o.shipped_at BETWEEN ${periodStart} AND ${periodEnd}) AS cho
-        FROM ship_ho_orders o
-        LEFT JOIN LATERAL (
-          SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-           WHERE e.order_id = o.id AND e.event = 'order.reconciled' AND e.delivery_status = 'delivered'
-        ) p ON TRUE
-       WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.statement_id IS NULL
-         AND o.status IN ('shipped','delivered')
-         AND NOT (COALESCE(o.ly_do_cham,'') = 'khong_gui_hang' AND COALESCE(o.ly_do_doi_chieu,'') = 'xac_nhan')`);
-    for (const r of rows.rows) {
-      if (r.gia != null) { ids.push(r.id); tien.push(Number(r.gia)); }
-      else if (r.cho) choHoaDon++;
-    }
-  } else {
-    // MỐC KỲ DUTY = ngày lần push đầu tiên thành công của `order.duty_charged` (CEO 22/09/2026) —
-    // trước khi bật MMP_TACH_DUTY chưa có sự kiện nào nên bảng kê duty rỗng; đúng ý: MMP là nơi
-    // phát hành, chưa nhận duty thì chưa có kỳ để đối soát.
-    const rows = await db.execute<{ id: string; gia: string }>(sql`
-      SELECT o.id, o.actual_duty_vnd AS gia
-        FROM ship_ho_orders o
-        LEFT JOIN LATERAL (
-          SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-           WHERE e.order_id = o.id AND e.event = 'order.duty_charged' AND e.delivery_status = 'delivered'
-        ) p ON TRUE
-       WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.duty_statement_id IS NULL AND o.actual_duty_vnd > 0
-         AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}`);
-    for (const r of rows.rows) { ids.push(r.id); tien.push(Number(r.gia)); }
-  }
+  const { ids, tien, choHoaDon } = await donVaoKe(partnerBrandSlug, type, periodStart, periodEnd);
   const sums = summarizeStatement(tien);
   if (dryRun || ids.length === 0) return { ok: true, ...sums, dryRun, choHoaDon };
 

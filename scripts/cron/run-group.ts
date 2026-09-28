@@ -21,6 +21,7 @@ import { dayLaiDongCho } from '@/features/kho-nhan/day-lark';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoDispute } from '@/features/dispute/sync';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
+import { goBangKeNhap } from '@/features/ship-ho/statement-core';
 
 /** Tác vụ nào chạy bằng hàm nào. Khoá phải khớp sổ đăng ký. */
 const CHAY: Record<string, () => Promise<unknown>> = {
@@ -33,6 +34,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
   'dong-bo-wh-lark': () => dongBoWhInventory(),
   'sync-dispute': () => dongBoDispute(),
   'day-production-time-cx': () => dayProductionTime(),
+  'gom-bang-ke-nhap': () => goBangKeNhap(),
   'prune-logs': () => pruneOldLogs(),
   'track-shipments': () => trackPendingShipments({ limit: 200 }),
 };
