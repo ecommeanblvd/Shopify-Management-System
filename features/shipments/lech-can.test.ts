@@ -38,3 +38,39 @@ describe('lech-can — đo chọn sai size thùng', () => {
     expect(chamSizeThung([k(null, null, null, null, null)]).tyLeDung).toBeNull();
   });
 });
+
+describe('kiện đã có chứng từ điều chỉnh của hãng (CEO 28/09/2026)', () => {
+  /* #MBLVD29877: cân thực 0,9 kg, FedEx ghi 9,4 kg rồi trả lại 4.002.767/4.353.468đ
+     bằng giấy báo có 1K26TFA/45602. Hoá đơn làm căn cứ đã bị chính hãng huỷ một
+     phần nên không chấm kho sai thùng. */
+  const kien = { thucKg: 0.9, daiCm: null, rongCm: null, caoCm: null, billedKg: 9.4 };
+
+  it('không có chứng từ → vẫn là sai thùng', () => {
+    expect(phanLoaiKien(kien).loai).toBe('sai_thung');
+  });
+
+  it('có chứng từ điều chỉnh → chuyển sang "đã điều chỉnh"', () => {
+    expect(phanLoaiKien({ ...kien, daDieuChinh: true }).loai).toBe('da_dieu_chinh');
+  });
+
+  it('VẪN giữ số lệch để bảng chi tiết hiện được con số gốc', () => {
+    expect(phanLoaiKien({ ...kien, daDieuChinh: true }).lech).toBe(8.5);
+  });
+
+  it('kiện ĐÚNG size mà có chứng từ điều chỉnh thì vẫn là đúng — cờ chỉ gỡ án sai thùng', () => {
+    expect(phanLoaiKien({ thucKg: 2, daiCm: null, rongCm: null, caoCm: null, billedKg: 2.1, daDieuChinh: true }).loai).toBe('dung');
+  });
+
+  it('KHÔNG cộng vào kg dôi và KHÔNG vào mẫu số — bằng chứng bị hãng rút thì không chấm ai', () => {
+    const r = chamSizeThung([
+      { thucKg: 1, daiCm: null, rongCm: null, caoCm: null, billedKg: 3 },
+      { ...kien, daDieuChinh: true },
+      { thucKg: 2, daiCm: null, rongCm: null, caoCm: null, billedKg: 2 },
+    ]);
+    expect(r.saiThung).toBe(1);
+    expect(r.daDieuChinh).toBe(1);
+    expect(r.n).toBe(2);
+    expect(r.kgDoiRa).toBe(2);
+    expect(r.tyLeDung).toBe(0.5);
+  });
+});

@@ -16,6 +16,9 @@ export interface KienCan {
   daiCm: number | null; rongCm: number | null; caoCm: number | null;
   /** Cân carrier tính tiền trên hoá đơn (kg). */
   billedKg: number | null;
+  /** Hoá đơn này đã bị CHÍNH hãng điều chỉnh (có giấy báo có / hoá đơn sửa).
+   *  Khi đó cân trên hoá đơn gốc không còn là bằng chứng để chấm kho. */
+  daDieuChinh?: boolean;
 }
 
 /** Cân quy đổi từ kích thước (kg); 0 khi thiếu chiều nào đó. */
@@ -31,14 +34,22 @@ export function canTinhCuoc(k: KienCan, heSo = HE_SO_QUY_DOI): number | null {
   return Math.max(k.thucKg ?? 0, qd);
 }
 
-export type PhanLoaiKien = 'dung' | 'sai_thung' | 'nhe_hon' | 'thieu_du_lieu';
+export type PhanLoaiKien = 'dung' | 'sai_thung' | 'nhe_hon' | 'thieu_du_lieu' | 'da_dieu_chinh';
 
-/** Phân loại một kiện: sai thùng khi carrier charge nặng hơn cân của mình từ ngưỡng trở lên. */
+/**
+ * Phân loại một kiện: sai thùng khi carrier charge nặng hơn cân của mình từ ngưỡng trở lên.
+ *
+ * `daDieuChinh` (CEO 28/09/2026): kiện mà chính hãng đã xuất chứng từ điều chỉnh thì
+ * KHÔNG chấm là sai thùng — hoá đơn làm căn cứ đã bị hãng tự huỷ một phần, nên cân
+ * trên đó không còn chứng minh được kho chọn sai thùng. Ví dụ thật: `#MBLVD29877`
+ * cân thực 0,9 kg, FedEx ghi 9,4 kg rồi trả lại 4.002.767/4.353.468đ bằng giấy báo
+ * có `1K26TFA/45602`. Vẫn giữ `lech` để bảng chi tiết hiện được con số gốc.
+ */
 export function phanLoaiKien(k: KienCan, heSo = HE_SO_QUY_DOI): { loai: PhanLoaiKien; lech: number | null } {
   const cua = canTinhCuoc(k, heSo);
   if (cua == null || k.billedKg == null) return { loai: 'thieu_du_lieu', lech: null };
   const lech = Math.round((k.billedKg - cua) * 1000) / 1000;
-  if (lech >= NGUONG_SAI_THUNG) return { loai: 'sai_thung', lech };
+  if (lech >= NGUONG_SAI_THUNG) return { loai: k.daDieuChinh ? 'da_dieu_chinh' : 'sai_thung', lech };
   if (lech <= -NGUONG_SAI_THUNG) return { loai: 'nhe_hon', lech };
   return { loai: 'dung', lech };
 }
@@ -51,6 +62,9 @@ export interface KetQuaSizeThung {
   /** Carrier charge NHẸ hơn cân mình — vẫn tính là đúng size, chỉ đếm để biết. */
   nheHon: number;
   thieuDuLieu: number;
+  /** Kiện lẽ ra tính sai thùng nhưng hãng đã xuất chứng từ điều chỉnh — KHÔNG vào
+   *  mẫu số và KHÔNG cộng kg dôi. Bằng chứng bị chính hãng rút thì không chấm ai. */
+  daDieuChinh: number;
   /** dung / n (nheHon tính vào dung); null khi chưa chấm được kiện nào. */
   tyLeDung: number | null;
   /** Tổng kg dôi ra do đóng sai thùng — phần phải trả thêm cho carrier. */
@@ -59,17 +73,18 @@ export interface KetQuaSizeThung {
 
 /** Tỉ lệ đóng đúng size thùng của một tập kiện. */
 export function chamSizeThung(kien: readonly KienCan[], heSo = HE_SO_QUY_DOI): KetQuaSizeThung {
-  let dung = 0, saiThung = 0, nheHon = 0, thieuDuLieu = 0, kgDoiRa = 0;
+  let dung = 0, saiThung = 0, nheHon = 0, thieuDuLieu = 0, daDieuChinh = 0, kgDoiRa = 0;
   for (const k of kien) {
     const { loai, lech } = phanLoaiKien(k, heSo);
     if (loai === 'sai_thung') { saiThung += 1; kgDoiRa += lech ?? 0; }
     else if (loai === 'nhe_hon') { nheHon += 1; }
     else if (loai === 'dung') { dung += 1; }
+    else if (loai === 'da_dieu_chinh') { daDieuChinh += 1; }
     else thieuDuLieu += 1;
   }
   const n = dung + saiThung + nheHon;
   return {
-    n, dung, saiThung, nheHon, thieuDuLieu,
+    n, dung, saiThung, nheHon, thieuDuLieu, daDieuChinh,
     tyLeDung: n > 0 ? (dung + nheHon) / n : null,
     kgDoiRa: Math.round(kgDoiRa * 1000) / 1000,
   };

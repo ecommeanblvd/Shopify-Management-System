@@ -202,16 +202,27 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
     return { ...goc, chungTu };
   }
 
-  const { rows } = await db.execute<{ don: string | null; tk: string | null; ngay: string | null; thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
+  const { rows } = await db.execute<{ don: string | null; tk: string | null; ngay: string | null; thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null; da_dieu_chinh: boolean }>(sql`
     SELECT o.shopify_order_number AS don, s.tracking_number AS tk, s.label_created_at::text AS ngay,
            s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
-           s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed
+           s.dim_height_cm::text AS c, ch.billing_weight_kg::text AS billed,
+      -- Kiện mà CHÍNH hãng đã xuất chứng từ điều chỉnh. Bảng credit_note_lines đang
+      -- rỗng nên mã vận đơn chỉ nằm trong ô văn bản tự do noi_dung (CEO 28/09/2026).
+      -- Vẫn ưu tiên dòng chi tiết nếu sau này có, rồi mới dò trong nội dung.
+      -- KHÔNG dùng dấu backtick trong comment SQL: nó đóng luôn template literal.
+      EXISTS (
+        SELECT 1 FROM credit_note_lines cl WHERE cl.tracking_number = s.tracking_number
+        UNION ALL
+        SELECT 1 FROM credit_notes cn
+         WHERE s.tracking_number IS NOT NULL AND length(s.tracking_number) BETWEEN 10 AND 14
+           AND position(s.tracking_number in coalesce(cn.noi_dung,'')) > 0
+      ) AS da_dieu_chinh
       FROM shipments s JOIN shipment_charges ch ON ch.shipment_id = s.id
       JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
      WHERE st.shop_domain = ${STORE_VAN_HANH}
        AND s.label_created_at >= ${tuTs}::timestamp AND s.label_created_at <= ${denTs}::timestamp;`);
   const sizeThung: DongSizeThung[] = rows.map((r) => {
-    const kien = { thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed) };
+    const kien = { thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed), daDieuChinh: r.da_dieu_chinh };
     const { loai, lech } = phanLoaiKien(kien);
     const quyDoi = kien.daiCm != null && kien.rongCm != null && kien.caoCm != null ? canQuyDoi(kien.daiCm, kien.rongCm, kien.caoCm) : null;
     return {

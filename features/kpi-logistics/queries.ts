@@ -154,9 +154,20 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     docKienGiao(cuaSoTuyen.tu, cuaSoTuyen.den, null),
     docKienGiaoShipHo(cuaSoTuyen.tu, cuaSoTuyen.den),
     docChungTuShipHo(tu, den),
-    db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null }>(sql`
+    db.execute<{ thuc: string | null; d: string | null; r: string | null; c: string | null; billed: string | null; da_dieu_chinh: boolean }>(sql`
       SELECT s.actual_weight_kg::text AS thuc, s.dim_length_cm::text AS d, s.dim_width_cm::text AS r,
-             s.dim_height_cm::text AS c, c.billing_weight_kg::text AS billed
+             s.dim_height_cm::text AS c, c.billing_weight_kg::text AS billed,
+      -- Kiện mà CHÍNH hãng đã xuất chứng từ điều chỉnh. Bảng credit_note_lines đang
+      -- rỗng nên mã vận đơn chỉ nằm trong ô văn bản tự do noi_dung (CEO 28/09/2026).
+      -- Vẫn ưu tiên dòng chi tiết nếu sau này có, rồi mới dò trong nội dung.
+      -- KHÔNG dùng dấu backtick trong comment SQL: nó đóng luôn template literal.
+      EXISTS (
+        SELECT 1 FROM credit_note_lines cl WHERE cl.tracking_number = s.tracking_number
+        UNION ALL
+        SELECT 1 FROM credit_notes cn
+         WHERE s.tracking_number IS NOT NULL AND length(s.tracking_number) BETWEEN 10 AND 14
+           AND position(s.tracking_number in coalesce(cn.noi_dung,'')) > 0
+      ) AS da_dieu_chinh
         FROM shipments s JOIN shipment_charges c ON c.shipment_id = s.id
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE st.shop_domain = ${STORE_VAN_HANH}
@@ -177,6 +188,7 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   const so = (v: string | null) => (v == null ? null : Number(v));
   const sizeThung = chamSizeThung(canRows.rows.map((r) => ({
     thucKg: so(r.thuc), daiCm: so(r.d), rongCm: so(r.r), caoCm: so(r.c), billedKg: so(r.billed),
+    daDieuChinh: r.da_dieu_chinh,
   })));
 
   const suCo = tomTatSuCo(suCoRows.rows.map((r) => ({

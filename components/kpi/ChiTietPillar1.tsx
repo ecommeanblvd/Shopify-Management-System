@@ -336,21 +336,26 @@ function BangSize({ rows, ky }: { rows: NonNullable<ChiTietKpi['sizeThung']>; ky
   const sai = rows.filter((r) => r.phanLoai === 'sai_thung');
   const doiRa = Math.round(sai.reduce((s, r) => s + (r.lechKg ?? 0), 0) * 10) / 10;
   const thieu = rows.filter((r) => r.phanLoai === 'thieu_du_lieu').length;
-  const nhan: Record<string, string> = { dung: 'Đúng', sai_thung: 'Sai thùng', nhe_hon: 'Carrier tính nhẹ hơn', thieu_du_lieu: 'Thiếu dữ liệu' };
+  // Kiện chính hãng đã xuất chứng từ điều chỉnh: vẫn hiện để Ops thấy hãng hay ghi
+  // sai ở đâu, nhưng KHÔNG chấm kho và KHÔNG cộng vào kg dôi (CEO 28/09/2026).
+  const daSua = rows.filter((r) => r.phanLoai === 'da_dieu_chinh');
+  const kgDaSua = Math.round(daSua.reduce((s, r) => s + (r.lechKg ?? 0), 0) * 10) / 10;
+  const nhan: Record<string, string> = { dung: 'Đúng', sai_thung: 'Sai thùng', nhe_hon: 'Carrier tính nhẹ hơn', thieu_du_lieu: 'Thiếu dữ liệu', da_dieu_chinh: 'Hãng đã điều chỉnh' };
   const mau: Record<string, string> = {
     dung: 'text-emerald-600 dark:text-emerald-400',
     sai_thung: 'text-red-600 dark:text-red-400',
     nhe_hon: 'text-emerald-600 dark:text-emerald-400',
     thieu_du_lieu: 'text-muted-foreground',
+    da_dieu_chinh: 'text-amber-700 dark:text-amber-400',
   };
   const [hienHet, setHienHet] = useState(false);
   const hien = hienHet ? rows : rows.filter((r) => laSizeCoVanDe(r.phanLoai));
   // CSV: kiện đúng lên đầu, rồi tới kiện cần soi, trong nhóm xếp theo lệch cân giảm dần.
-  const thuTu: Record<string, number> = { dung: 0, nhe_hon: 1, thieu_du_lieu: 2, sai_thung: 3 };
+  const thuTu: Record<string, number> = { dung: 0, nhe_hon: 1, thieu_du_lieu: 2, da_dieu_chinh: 3, sai_thung: 4 };
   const choCsv = [...rows].sort((a, b) => thuTu[a.phanLoai] - thuTu[b.phanLoai] || (b.lechKg ?? -Infinity) - (a.lechKg ?? -Infinity));
   return (
     <Khung
-      tomTat={<><b>{sai.length}</b> kiện sai thùng trên {rows.length - thieu} kiện chấm được · dôi <b>{doiRa} kg</b> phải trả thêm{thieu > 0 ? ` · ${thieu} kiện thiếu dữ liệu cân` : ''}</>}
+      tomTat={<><b>{sai.length}</b> kiện sai thùng trên {rows.length - thieu - daSua.length} kiện chấm được · dôi <b>{doiRa} kg</b> phải trả thêm{daSua.length > 0 ? ` · ${daSua.length} kiện hãng đã điều chỉnh (${kgDaSua} kg, không tính cho kho)` : ''}{thieu > 0 ? ` · ${thieu} kiện thiếu dữ liệu cân` : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.4-size-thung.csv`,
         ['Đơn', 'Tracking', 'Ngày gửi', 'Cân thực (kg)', 'Cân quy đổi (kg)', 'Cân mình tính (kg)', 'Cân carrier bill (kg)', 'Lệch (kg)', 'Kết quả'],
         choCsv.map((r) => [r.maDon, r.tracking, r.ngayGui, r.canThucKg, r.canQuyDoiKg, r.canTinhCuocKg, r.canBillKg, r.lechKg, nhan[r.phanLoai]]))}

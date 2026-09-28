@@ -157,7 +157,8 @@ export interface DongSizeThung {
   canBillKg: number | null;
   /** canBillKg − canTinhCuocKg. Dương = carrier tính nặng hơn mình dự tính. */
   lechKg: number | null;
-  phanLoai: 'dung' | 'sai_thung' | 'nhe_hon' | 'thieu_du_lieu';
+  /** `da_dieu_chinh` = lẽ ra sai thùng nhưng chính hãng đã xuất chứng từ điều chỉnh. */
+  phanLoai: 'dung' | 'sai_thung' | 'nhe_hon' | 'thieu_du_lieu' | 'da_dieu_chinh';
 }
 
 export interface ChiTietKpi {
@@ -218,6 +219,8 @@ export function xepChoCsv(dong: readonly DongSla[]): DongSla[] {
 }
 
 /** 1.4 — kiện có vấn đề là kiện KHÔNG đóng đúng size. */
+/** Dòng đáng soi trong bảng 1.4. `da_dieu_chinh` VẪN hiện: CEO 28/09/2026 chọn giữ
+ *  dấu vết để còn biết hãng hay ghi sai ở đâu mà đòi, chỉ không chấm kho. */
 export const laSizeCoVanDe = (p: DongSizeThung['phanLoai']): boolean => p !== 'dung';
 
 /* ───────── 1.1: trạng thái phân định của một đơn âm cước (CEO 16/09/2026) ─────────
