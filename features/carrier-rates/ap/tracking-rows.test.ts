@@ -86,3 +86,65 @@ describe('buildTrackingRows', () => {
     expect(r.overdue).toBe(false);
   });
 });
+
+/**
+ * Khoản cước Aramex (Hợp Nhất) có hình `{name, usd, vnd}` — KHÔNG có `charge`
+ * và `tax` như DHL. `foldCharges` cộng thẳng `c.charge`/`c.tax` nên ra
+ * `undefined` và `NaN`, và bảng theo-tracking hiện "NaN" ở cột Khác và VAT
+ * (CEO báo 28/09/2026).
+ *
+ * Dòng bill ĐÃ có sẵn cột số đúng (base/fuel/other/vat), nên khi breakdown không
+ * phải hình DHL thì phải rơi về cột — đừng cố đọc trường không tồn tại.
+ */
+describe('breakdown KHÔNG phải hình DHL — rơi về cột số của dòng bill', () => {
+  const dongAramex = {
+    billId: 'b1', trackingNumber: '35278977112', orderNumber: null, weightKg: 3.5,
+    base: 1391729, discount: 0, fuel: 417571, remote: 0, demand: 0, signature: 0,
+    vat: 0, other: 10472, total: 1819772, note: null,
+    charges: [
+      { name: 'Cước gốc', usd: 52.9, vnd: 1391729 },
+      { name: 'Phụ phí xăng dầu', usd: 15.87, vnd: 417571 },
+      { name: 'Phí phát sinh', usd: 0.4, vnd: 10472 },
+    ] as never,
+  };
+  const bill = [{ id: 'b1', billNumber: 'BK', dueDate: null, amount: 1819772 }];
+
+  it('không sinh NaN hay undefined ở bất kỳ khoản nào', () => {
+    const r = buildTrackingRows(bill, [dongAramex], [], '2026-09-28');
+    for (const f of [...r[0]!.fees, ...r[0]!.breakdown]) {
+      expect(Number.isFinite(f.value)).toBe(true);
+    }
+  });
+
+  it('lấy đúng số từ cột của dòng bill', () => {
+    const r = buildTrackingRows(bill, [dongAramex], [], '2026-09-28');
+    const theo = new Map(r[0]!.fees.map((f) => [f.label, f.value]));
+    expect(theo.get('Giá gốc')).toBe(1391729);
+    expect(theo.get('Fuel')).toBe(417571);
+    expect(theo.get('Khác')).toBe(10472);
+  });
+
+  it('VAT chưa biết (chưa đính hoá đơn) thì KHÔNG hiện cột, không hiện 0 giả', () => {
+    const r = buildTrackingRows(bill, [{ ...dongAramex, vat: null as never }], [], '2026-09-28');
+    expect(r[0]!.fees.some((f) => f.label === 'VAT')).toBe(false);
+  });
+
+  it('breakdown hình DHL đầy đủ vẫn dùng đường cũ', () => {
+    const r = buildTrackingRows(
+      [{ id: 'b2', billNumber: 'D1', dueDate: null, amount: 200 }],
+      [{
+        billId: 'b2', trackingNumber: 'T1', orderNumber: '#A1', weightKg: 1,
+        base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0,
+        vat: 0, other: 0, total: 200, note: null,
+        charges: [
+          { code: 'WEIGHT', name: 'Weight charge', charge: 100, tax: 10, total: 110 },
+          { code: 'FF', name: 'Fuel Surcharge', charge: 80, tax: 8, total: 88 },
+        ],
+      }],
+      [], '2026-09-28',
+    );
+    const theo = new Map(r[0]!.fees.map((f) => [f.label, f.value]));
+    expect(theo.get('VAT')).toBe(18);
+    expect([...theo.values()].every((v) => Number.isFinite(v))).toBe(true);
+  });
+});

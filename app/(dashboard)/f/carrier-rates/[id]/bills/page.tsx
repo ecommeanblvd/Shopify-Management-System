@@ -147,7 +147,12 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   async function deletePaymentAction(paymentId: string) { 'use server'; await deletePayment(paymentId); REV.forEach((p) => revalidatePath(p)); }
   async function listLinesAction(billId: string) { 'use server'; return listBillLines(billId); }
 
-  const fmt = (v: number) => `${Math.round(v).toLocaleString('vi-VN')} ${currency}`;
+  // Tiền tệ của CHÍNH các hoá đơn, KHÔNG phải của tài khoản (D-122). Aramex có
+  // cost_currency = USD nhưng hoá đơn Hợp Nhất xuất VNĐ. Lẫn nhiều loại tiền thì
+  // BỎ nhãn — thà không ghi còn hơn ghi sai một nửa số.
+  const tienHoaDon = [...new Set(bills.map((b) => b.currency).filter(Boolean))];
+  const nhanTien = tienHoaDon.length === 1 ? tienHoaDon[0]! : '';
+  const fmt = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}${nhanTien ? ` ${nhanTien}` : ''}`;
 
   return (
     <div className="px-6 md:px-10 py-6 space-y-6">

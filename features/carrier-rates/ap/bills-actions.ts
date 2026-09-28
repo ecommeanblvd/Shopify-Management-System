@@ -295,15 +295,20 @@ export interface AllBillLineRow extends BillLineRow { billId: string; charges: B
 
 /** Mọi line của các bill thuộc 1 account (kèm billId + breakdown) — dựng bảng theo tracking. */
 export async function listAllBillLines(carrierAccountId: string): Promise<AllBillLineRow[]> {
+  // Mã đơn SUY từ shipment khi dòng bill không tự có: bảng kê Aramex không ghi
+  // mã đơn (103/103 dòng trống) nhưng dòng ĐÃ khớp được shipment, mà shipment
+  // thì biết đơn. FedEx cũng thiếu 61 dòng. Suy lúc đọc để không phải backfill.
   const rows = await db
-    .select({ l: schema.carrierBillLines })
+    .select({ l: schema.carrierBillLines, maDonTheoShipment: schema.shopifyOrders.shopifyOrderNumber })
     .from(schema.carrierBillLines)
     .innerJoin(schema.carrierBills, eq(schema.carrierBills.id, schema.carrierBillLines.billId))
+    .leftJoin(schema.shipments, eq(schema.shipments.id, schema.carrierBillLines.shipmentId))
+    .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .where(eq(schema.carrierBills.carrierAccountId, carrierAccountId))
     .orderBy(schema.carrierBillLines.trackingNumber);
-  return rows.map(({ l: r }) => ({
+  return rows.map(({ l: r, maDonTheoShipment }) => ({
     id: r.id, billId: r.billId,
-    trackingNumber: r.trackingNumber, orderNumber: r.orderNumber,
+    trackingNumber: r.trackingNumber, orderNumber: r.orderNumber ?? maDonTheoShipment ?? null,
     weightKg: num(r.weightKg), base: num(r.base), discount: num(r.discount), fuel: num(r.fuel),
     remote: num(r.remote), demand: num(r.demand), signature: num(r.signature),
     vat: num(r.vat), other: num(r.other), total: num(r.total), note: r.note,

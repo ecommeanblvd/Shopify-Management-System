@@ -59,6 +59,11 @@ const FEE_LABELS: Array<[keyof TrackingLineInput, string]> = [
  *    giữ cột riêng cho cước lõi + phụ phí có nghĩa ('keep').
  * Tổng dòng (ln.total) KHÔNG đổi — cột ẩn vẫn nằm trong Tổng.
  */
+/** Khoản cước có đúng hình DHL không — `charge` và `tax` phải là SỐ HỮU HẠN. */
+function hinhDhl(c: LineCharge | null | undefined): boolean {
+  return Number.isFinite(c?.charge as number) && Number.isFinite(c?.tax as number);
+}
+
 function foldCharges(charges: LineCharge[]): TrackingFee[] {
   const keep = new Map<string, number>();
   let other = 0;
@@ -107,7 +112,11 @@ export function buildTrackingRows(
     }
     bl.forEach((ln, i) => {
       // Cột bảng (fees): ẩn duty + gộp Khác. Dòng mở rộng (breakdown): ĐẦY ĐỦ.
-      const hasCharges = ln.charges && ln.charges.length;
+      // Breakdown chỉ dùng được khi nó ĐÚNG HÌNH DHL (`charge`/`tax` là số).
+      // Khoản cước Aramex là `{name, usd, vnd}` — cộng `c.charge` ra `undefined`
+      // và `c.tax` ra `NaN`, và bảng hiện "NaN" ở cột Khác/VAT (CEO báo 28/09).
+      // Dòng bill đã có sẵn cột số đúng nên rơi về cột là câu trả lời đúng.
+      const hasCharges = ln.charges?.length ? ln.charges.every(hinhDhl) : false;
       const fees = hasCharges
         ? foldCharges(ln.charges!)
         : FEE_LABELS.map(([k, label]) => ({ label, value: Number(ln[k] ?? 0) })).filter((f) => f.value !== 0);
