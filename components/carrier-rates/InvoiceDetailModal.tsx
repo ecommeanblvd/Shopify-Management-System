@@ -50,11 +50,21 @@ export function InvoiceDetailModal(props: Props) {
         {bill && (
           <>
             <DialogHeader>
-              <DialogTitle className="flex flex-wrap items-center gap-3 text-sm">
+              {/* `pr-8` chừa chỗ cho nút đóng nằm tuyệt đối ở góc phải — không có
+                  nó thì số tiền chạy xuống dưới dấu X và không đọc được. */}
+              <DialogTitle className="flex flex-wrap items-center gap-3 pr-8 text-sm">
                 <span>{bill.billNumber ?? '(không mã)'}</span>
                 <span className="font-mono text-xs text-muted-foreground">{bill.periodStart} → {bill.periodEnd}</span>
-                <span className="tabular-nums">{fmt(bill.amount)} {currency}</span>
-                {summary && summary.outstanding > 0 && <span className="tabular-nums text-amber-600 dark:text-amber-400">còn nợ {fmt(summary.outstanding)}</span>}
+                {/* Tiền tệ của CHÍNH hoá đơn, KHÔNG phải của tài khoản. Aramex có
+                    cost_currency = USD nhưng hoá đơn Hợp Nhất xuất VNĐ — lấy theo
+                    tài khoản thì 42.170.689 ₫ hiện thành "42.170.689 USD". DHL và
+                    FedEx đều có cost_currency = VND nên lỗi này chỉ lộ ở Aramex. */}
+                <span className="tabular-nums">{fmt(bill.amount)} {bill.currency || currency}</span>
+                {summary && summary.outstanding > 0 && (
+                  <span className="tabular-nums text-amber-600 dark:text-amber-400">
+                    còn nợ {fmt(summary.outstanding)} {bill.currency || currency}
+                  </span>
+                )}
                 {bill.dueDate && <span className="text-xs font-normal text-muted-foreground">Hạn TT: {bill.dueDate}</span>}
                 {summary && (() => {
                   const st = summary.status === 'paid' ? { l: 'Đã trả', c: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' }
@@ -84,7 +94,11 @@ export function InvoiceDetailModal(props: Props) {
             </DialogHeader>
 
             {/* Line items (parsed from the invoice file) */}
-            <div className="space-y-2">
+            {/* `min-w-0` KHÔNG thừa: `DialogContent` là `grid`, mà grid item mặc
+                định `min-width: auto` nên nó KHÔNG co xuống dưới bề rộng
+                min-content của bảng 14 cột — `overflow-auto` bên trong vì vậy
+                không bao giờ kích hoạt và bảng tràn ra ngoài khung modal. */}
+            <div className="min-w-0 space-y-2">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Chi tiết theo đơn</div>
               <div className="rounded-lg border border-border overflow-auto max-h-[50vh]">
                 {loading || lines === null ? (
@@ -123,7 +137,7 @@ export function InvoiceDetailModal(props: Props) {
               <div className="flex items-center justify-between">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Thanh toán</div>
                 {canManage && summary?.status !== 'paid' && (
-                  <AddPaymentDialog billId={bill.id} outstanding={summary?.outstanding ?? bill.amount} currency={currency} addPaymentAction={props.addPaymentAction} />
+                  <AddPaymentDialog billId={bill.id} outstanding={summary?.outstanding ?? bill.amount} currency={bill.currency || currency} addPaymentAction={props.addPaymentAction} />
                 )}
               </div>
               {pays.length === 0 ? (
@@ -132,7 +146,7 @@ export function InvoiceDetailModal(props: Props) {
                 <ul className="space-y-1">
                   {pays.map((p) => (
                     <li key={p.id} className="flex items-center justify-between gap-3 text-xs rounded bg-muted/30 px-3 py-1.5">
-                      <span><span className="font-mono tabular-nums">{fmt(p.amount)} {currency}</span> <span className="text-muted-foreground">· {p.paidAt}{p.method ? ` · ${p.method}` : ''}{p.note ? ` · ${p.note}` : ''}</span></span>
+                      <span><span className="font-mono tabular-nums">{fmt(p.amount)} {bill.currency || currency}</span> <span className="text-muted-foreground">· {p.paidAt}{p.method ? ` · ${p.method}` : ''}{p.note ? ` · ${p.note}` : ''}</span></span>
                       <span className="flex items-center gap-2 shrink-0">
                         {p.hasProof && (
                           <a href={`/f/carrier-rates/${accountId}/bills/payments/${p.id}/proof`} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title="Bằng chứng"><Paperclip className="size-3.5" /></a>
