@@ -172,13 +172,70 @@ export async function getLogRecordById(recordId: string): Promise<LarkRecord | n
   return j.data?.record ?? null;
 }
 
+const COT_MA_KIEN = 'Log Unique code';
+
+/** Dãy số CUỐI của một chuỗi, đã bỏ số 0 đệm đầu; null nếu không có số. */
+function soCuoi(v: string): string | null {
+  const m = /(\d+)\s*$/.exec(v.trim());
+  if (!m) return null;
+  const so = m[1]!.replace(/^0+(?=\d)/, '');
+  return so || null;
+}
+
+/**
+ * THUẦN: mã kiện ("PK-19651") → phần SỐ để lọc Lark ("19651"); null nếu không có số.
+ *
+ * Cột "Log Unique code" là **AutoNumber** (type 1005), và `records/search` TỪ CHỐI
+ * mọi phép so chuỗi trên AutoNumber — `is`/`contains` với "PK-19651" đều trả
+ * `InvalidFilter` (code 1254018). Đo thật 28/09/2026: `is` với "19651" trả đúng
+ * một dòng, hiển thị "PK-19651". Tiền tố là cấu hình HIỂN THỊ của cột, không nằm
+ * trong giá trị lọc được.
+ */
+export function soAutoNumberLark(ma: string): string | null {
+  return soCuoi(ma);
+}
+
+/** THUẦN: ô AutoNumber của Lark → chuỗi hiển thị. Lark trả string, có lúc bọc object. */
+function chuoiO(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'object') {
+    const o = v as { text?: unknown; value?: unknown };
+    if (typeof o.text === 'string') return o.text;
+    if (typeof o.value === 'string' || typeof o.value === 'number') return String(o.value);
+  }
+  return '';
+}
+
+/**
+ * THUẦN: ô "Log Unique code" của một record có đúng là mã đang tìm.
+ *
+ * Cần thiết vì lọc theo SỐ nên TIỀN TỐ không vào điều kiện: nếu Lark đổi tiền tố
+ * hoặc có cột AutoNumber khác cùng số, phép lọc vẫn trả về. So tên hiển thị là chốt
+ * cuối. Khi một bên chỉ có số (Lark gửi số trần) thì so theo số.
+ */
+export function khopMaKien(oLark: unknown, maCanTim: string): boolean {
+  const a = chuoiO(oLark).trim(), b = maCanTim.trim();
+  if (!a || !b) return false;
+  if (a.toLowerCase() === b.toLowerCase()) return true;
+  const chiSo = (v: string) => /^\d+$/.test(v);
+  if (chiSo(a) || chiSo(b)) {
+    const sa = soCuoi(a), sb = soCuoi(b);
+    return sa != null && sa === sb;
+  }
+  return false;
+}
+
 /** Tìm record Lark theo "Log Unique code" (PK-…). Read-only. */
 export async function searchRecordsByLogCode(logCode: string): Promise<LarkRecord[]> {
-  if (!logCode.trim()) return [];
-  return searchAllRecords(logTableId(), {
-    filter: { conjunction: 'and', conditions: [{ field_name: 'Log Unique code', operator: 'is', value: [logCode.trim()] }] },
+  const so = soAutoNumberLark(logCode);
+  if (!so) return [];
+  const recs = await searchAllRecords(logTableId(), {
+    filter: { conjunction: 'and', conditions: [{ field_name: COT_MA_KIEN, operator: 'is', value: [so] }] },
     automatic_fields: true, page_size: 500,
   });
+  return recs.filter((r) => khopMaKien(r.fields[COT_MA_KIEN], logCode));
 }
 
 /** Tìm record Lark theo Order Number (cả 2 dạng #). Read-only. Phân trang. */
