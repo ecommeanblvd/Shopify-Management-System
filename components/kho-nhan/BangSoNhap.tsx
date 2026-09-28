@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CircleAlertIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { nhanKho } from '@/features/warehouse/ten-kho';
+import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
 import {
   tachTenBienThe, nhomQc, nhomKho, danhDauNoiTiep, tenBrand,
@@ -277,16 +278,10 @@ export function BangSoNhap({
                 <span className="truncate font-mono text-[11.5px] text-muted-foreground">{r.sku ?? '—'}</span>
                 <span className={`text-center ${(r.soLuong ?? 1) > 1 ? 'font-bold' : ''}`}>{r.soLuong ?? 1}</span>
                 <span className="truncate text-xs text-muted-foreground">{r.storeFinal ?? '—'}</span>
-                <span className="truncate text-xs">
-                  {r.warehouse
-                    ? <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-300">{r.warehouse}</span>
-                    : <span className="text-muted-foreground">—</span>}
-                </span>
-                <span className="truncate text-xs">
-                  {r.inventoryType
-                    ? <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">{r.inventoryType}</span>
-                    : <span className="text-muted-foreground">—</span>}
-                </span>
+                {/* Màu theo GIÁ TRỊ để mắt phân biệt khi quét bảng (CEO 28/09/2026); chữ
+                    vẫn hiện đủ nên màu chỉ là kênh thứ hai. `title` vì cột hẹp cắt chữ. */}
+                <ONhanMau giaTri={r.warehouse} mau={mauKho(r.warehouse)} />
+                <ONhanMau giaTri={r.inventoryType} mau={mauLoaiNhap(r.inventoryType)} />
                 <span className={`flex items-center gap-1.5 truncate text-xs ${CHU_QC[mq]}`}>
                   <span className={`size-1.5 shrink-0 rounded-full ${MAU_QC[mq]}`} />
                   {(r.qcCheck ?? '').trim() || '—'}
@@ -308,6 +303,17 @@ export function BangSoNhap({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Một ô nhãn có màu theo giá trị. Trống thì gạch ngang, không tô gì. */
+function ONhanMau({ giaTri, mau }: { giaTri: string | null; mau: string }) {
+  return (
+    <span className="truncate text-xs">
+      {giaTri
+        ? <span title={giaTri} className={`rounded-full px-1.5 py-0.5 text-[11px] ${mau}`}>{giaTri}</span>
+        : <span className="text-muted-foreground">—</span>}
+    </span>
   );
 }
 
