@@ -53,7 +53,11 @@ export type Permission =
   /** Xem tranh chấp thanh toán. */
   | 'view_cx_dispute'
   /** Nhập/sửa tranh chấp và chạy đồng bộ từ Shopify. */
-  | 'manage_cx_dispute';
+  | 'manage_cx_dispute'
+  /** Xem sự cố và thiệt hại. */
+  | 'view_cx_incident'
+  /** Ghi/sửa sự cố và các dòng chi phí. */
+  | 'manage_cx_incident';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -72,6 +76,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cogs', 'manage_cogs', 'view_kpi_logistics',
     'view_cx_ticket', 'manage_cx_ticket',
     'view_cx_dispute', 'manage_cx_dispute',
+    'view_cx_incident', 'manage_cx_incident',
   ],
   operator: [
     'view', 'run_feature',
@@ -86,13 +91,14 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_kol', 'manage_kol',
     'view_cx_ticket', 'manage_cx_ticket',
     'view_cx_dispute', 'manage_cx_dispute',
+    'view_cx_incident', 'manage_cx_incident',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
     'view_orders', 'view_functions',
     'view_mmp_products',
     'view_fulfillment',
-    'view_cx_ticket', 'view_cx_dispute',
+    'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident',
   ],
 };
 

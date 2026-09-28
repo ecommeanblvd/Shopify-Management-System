@@ -72,29 +72,12 @@ export function nhanLoai(nhom: string, loai: string): string {
   return l ? `${n.ten} · ${l.ten}` : n.ten;
 }
 
-/**
- * Sáu bộ phận, theo đúng danh sách lựa chọn của chính bảng Lark. Giữ nguyên mã
- * Lark (`CX-CS`, `DISCO-WH`…) để đối chiếu ngược không phải dịch.
- */
-export const BO_PHAN = [
-  { ma: 'CX-CS', ten: 'CX - Chăm sóc khách' },
-  { ma: 'MERCHANDISE', ten: 'Merchandise' },
-  { ma: 'PROCUREMENT', ten: 'Procurement' },
-  { ma: 'DISCO-WH', ten: 'Kho' },
-  { ma: 'DISCO-LOG', ten: 'Logistics' },
-  { ma: 'CHINA', ten: 'BD China' },
-] as const;
-export type MaBoPhan = (typeof BO_PHAN)[number]['ma'];
-
-const BO_PHAN_MA = new Set(BO_PHAN.map((b) => b.ma));
-
-export function boPhanHopLe(ma: string): boolean {
-  return BO_PHAN_MA.has(ma as MaBoPhan);
-}
-
-export function nhanBoPhan(ma: string): string {
-  return BO_PHAN.find((b) => b.ma === ma)?.ten ?? ma;
-}
+/* Danh sách bộ phận CHUYỂN sang `features/to-chuc/bo-phan.ts` (28/09) vì module
+ * sự cố cũng dùng. Export lại ở đây để mọi nơi đang import từ file này không phải
+ * sửa. */
+export {
+  BO_PHAN, boPhanHopLe, nhanBoPhan, type MaBoPhan,
+} from '@/features/to-chuc/bo-phan';
 
 /** Mã ticket đọc được: `CXT-0001`. Đệm 4 chữ số, quá 9999 thì dài ra tự nhiên. */
 export function maTicket(so: number): string {

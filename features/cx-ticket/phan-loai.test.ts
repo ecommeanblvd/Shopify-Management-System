@@ -41,14 +41,12 @@ describe('phân loại ticket CX', () => {
     expect(nhanLoai('don_hang', 'loai_la')).toBe('Vấn đề quản lý đơn');
   });
 
-  it('sáu bộ phận, giữ nguyên mã Lark', () => {
-    expect(BO_PHAN.map((b) => b.ma)).toEqual(
-      ['CX-CS', 'MERCHANDISE', 'PROCUREMENT', 'DISCO-WH', 'DISCO-LOG', 'CHINA'],
-    );
+  it('vẫn export lại danh sách bộ phận sau khi chuyển sang features/to-chuc', () => {
+    // Danh sách bộ phận giờ ở `features/to-chuc/bo-phan.ts` và được test ở đó;
+    // đây chỉ canh cho đường import cũ không đứt.
+    expect(BO_PHAN.length).toBeGreaterThanOrEqual(6);
     expect(boPhanHopLe('PROCUREMENT')).toBe(true);
-    expect(boPhanHopLe('procurement')).toBe(false);
     expect(nhanBoPhan('DISCO-WH')).toBe('Kho');
-    expect(nhanBoPhan('LẠ')).toBe('LẠ');
   });
 
   it('mã ticket đệm 4 chữ số, quá 9999 thì dài ra', () => {

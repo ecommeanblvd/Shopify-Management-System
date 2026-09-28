@@ -3147,3 +3147,65 @@ export const disputeGhiChu = pgTable('dispute_ghi_chu', {
   tuLark: boolean('tu_lark').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('dispute_ghi_chu_idx').on(t.disputeId, t.createdAt)]);
+
+
+/**
+ * Sự cố + thiệt hại tiền (migration 0180) — bảng `Incident Management` của Lark.
+ *
+ * Tiền KHÔNG nằm ở đây mà ở bảng con `suCoChiPhi`: bảng Lark gốc dùng 8 cột tiền
+ * cố định cộng một cột khai loại, tức hai chỗ ghi một sự thật, và đo 156 bản ghi
+ * thì cả hai chiều đều lệch.
+ */
+export const suCo = pgTable('su_co', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  maSuCo: text('ma_su_co').notNull().unique(),
+  ngayBao: date('ngay_bao').notNull(),
+  nguyenNhan: text('nguyen_nhan').notNull(),
+  giaiDoan: text('giai_doan'),
+  trangThai: text('trang_thai').notNull().default('mo'),
+  moTa: text('mo_ta'),
+  /** Bộ phận chịu chính; dòng chi phí không tự khai thì thừa hưởng cột này. */
+  boPhanChinh: text('bo_phan_chinh'),
+  /** Mã giảm giá đã cấp cho khách — KHÔNG phải một loại chi phí. */
+  maGiamGia: text('ma_giam_gia'),
+  maTicketCs: text('ma_ticket_cs'),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  maDon: text('ma_don'),
+  anhKeys: text('anh_keys').array().notNull().default([]),
+  /** Ca nhập từ Lark mà dữ liệu gốc không đủ để suy cách quy trách nhiệm. */
+  canXemLai: boolean('can_xem_lai').notNull().default(false),
+  larkRecordId: text('lark_record_id').unique(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  dongLuc: timestamp('dong_luc'),
+}, (t) => [
+  index('su_co_trang_thai_idx').on(t.trangThai),
+  index('su_co_nguyen_nhan_idx').on(t.nguyenNhan),
+  index('su_co_bo_phan_idx').on(t.boPhanChinh),
+]);
+
+/** Chỗ TIỀN sống: một dòng = một loại + một số tiền + một đơn vị + một bộ phận. */
+export const suCoChiPhi = pgTable('su_co_chi_phi', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  suCoId: uuid('su_co_id').notNull().references(() => suCo.id, { onDelete: 'cascade' }),
+  loai: text('loai').notNull(),
+  soTien: numeric('so_tien', { precision: 14, scale: 2 }).notNull(),
+  tienTe: text('tien_te').notNull(),
+  /** Trống = thừa hưởng `boPhanChinh` của sự cố. */
+  boPhan: text('bo_phan'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('su_co_chi_phi_su_co_idx').on(t.suCoId),
+  index('su_co_chi_phi_loai_idx').on(t.loai),
+]);
+
+export const suCoGhiChu = pgTable('su_co_ghi_chu', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  suCoId: uuid('su_co_id').notNull().references(() => suCo.id, { onDelete: 'cascade' }),
+  noiDung: text('noi_dung').notNull(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  tuLark: boolean('tu_lark').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('su_co_ghi_chu_idx').on(t.suCoId, t.createdAt)]);
