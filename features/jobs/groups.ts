@@ -38,7 +38,11 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // tới lệnh hoãn ghi tự động của CEO.
   // `sync-dispute` CHỈ ĐỌC từ Shopify. 6 giờ là quá đủ: hạn nộp bằng chứng của
   // Shopify cách ngày mở 16–40 ngày.
-  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark', 'sync-dispute'],
+  // `day-production-time-cx` đo thật 28/09: 26 giây, đọc 5.968 dòng bảng CX. Cùng
+  // tính chất với `dong-bo-wh-lark` nên ở cùng nhóm, KHÔNG để ở 'moi-15-phut'
+  // cùng các việc vài giây. Ghi ĐÚNG HAI cột và bỏ qua dòng đã đúng, nên chạy
+  // lại nhiều lần vô hại.
+  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark', 'sync-dispute', 'day-production-time-cx'],
   // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
   // nhìn "5,9 phút" không biết việc nào chậm.
