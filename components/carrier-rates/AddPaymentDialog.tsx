@@ -23,7 +23,7 @@ export function AddPaymentDialog({ billId, outstanding, currency, addPaymentActi
       <DialogTrigger className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs hover:bg-muted whitespace-nowrap">
         <Plus className="size-3.5" /> Thanh toán
       </DialogTrigger>
-      <DialogContent className="w-[92vw] max-w-md">
+      <DialogContent className="w-[92vw] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-sm">Ghi nhận thanh toán</DialogTitle>
         </DialogHeader>

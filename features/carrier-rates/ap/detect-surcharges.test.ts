@@ -103,3 +103,27 @@ describe('khoản cước Hợp Nhất (Aramex) — không còn báo là phí l�
     expect(r[0]!.name).toBe('Phí lưu kho');
   });
 });
+
+describe('tiền tệ của khoản phí lạ — lấy từ HOÁ ĐƠN, không phải tài khoản', () => {
+  const dong = (ten: string, currency: string | null) => ({
+    billId: 'b1', billNumber: 'HD1', periodStart: '2026-09-01', trackingNumber: 'AWB1',
+    currency,
+    charges: [{ name: ten, code: '', charge: 100, tax: 0, total: 100 } as never],
+  });
+
+  it('mang theo tiền tệ của hoá đơn', () => {
+    const r = detectUnknownCharges([dong('Phí lưu kho', 'VND')]);
+    expect(r[0]!.currency).toBe('VND');
+  });
+
+  it('cùng khoản mà LẪN hai loại tiền thì bỏ nhãn, không chọn bừa cái đầu', () => {
+    const r = detectUnknownCharges([dong('Phí lưu kho', 'VND'), dong('Phí lưu kho', 'USD')]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.currency).toBeNull();
+    expect(r[0]!.count).toBe(2);
+  });
+
+  it('hoá đơn không ghi tiền tệ thì null', () => {
+    expect(detectUnknownCharges([dong('Phí lưu kho', null)])[0]!.currency).toBeNull();
+  });
+});

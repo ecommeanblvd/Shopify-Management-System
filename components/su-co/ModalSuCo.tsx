@@ -289,7 +289,7 @@ function NoiDung({ id, coQuyenGhi, onDoi }: { id: string; coQuyenGhi: boolean; o
 
       {/* Ảnh to */}
       <Dialog open={anhTo !== null} onOpenChange={(v) => { if (!v) setAnhTo(null); }}>
-        <DialogContent className="w-full max-w-[95vw] p-2 sm:max-w-[1100px]">
+        <DialogContent className="w-full sm:max-w-[95vw] p-2 sm:max-w-[1100px]">
           <DialogTitle className="sr-only">Ảnh bằng chứng</DialogTitle>
           {anhTo && (
             // eslint-disable-next-line @next/next/no-img-element

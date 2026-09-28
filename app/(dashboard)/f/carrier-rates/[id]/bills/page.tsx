@@ -87,13 +87,18 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   );
 
   // Phí lạ (chưa map cước, không phải thuế/duty) → gợi ý set up surcharge mới.
-  const billMetaById = new Map(bills.map((b) => [b.id, { billNumber: b.billNumber, periodStart: b.periodStart }]));
+  // `currency` lấy từ CHÍNH hoá đơn, không phải từ tài khoản: Aramex có
+  // cost_currency = USD nhưng hoá đơn Hợp Nhất xuất VNĐ.
+  const billMetaById = new Map(bills.map((b) => [b.id, {
+    billNumber: b.billNumber, periodStart: b.periodStart, currency: b.currency,
+  }]));
   const unknownCharges = detectUnknownCharges(
     allLines.map((l) => ({
       billId: l.billId,
       billNumber: billMetaById.get(l.billId)?.billNumber ?? null,
       periodStart: billMetaById.get(l.billId)?.periodStart ?? '',
       trackingNumber: l.trackingNumber,
+      currency: billMetaById.get(l.billId)?.currency ?? null,
       charges: l.charges,
     })),
   );

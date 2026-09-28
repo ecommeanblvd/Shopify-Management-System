@@ -62,7 +62,10 @@ export function NewSurchargesReport({ accountId, currency, rows }: Props) {
                     <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.code || '—'}</td>
                     <td className="px-3 py-2">{r.name || '—'}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{r.count}</td>
-                    <td className="px-2 py-2 text-right tabular-nums font-medium">{fmt(r.totalCharge)} {currency}</td>
+                    {/* Tiền tệ của HOÁ ĐƠN chứa khoản này; `null` = lẫn nhiều loại tiền nên
+    bỏ nhãn. Không lấy tiền tệ của tài khoản: Aramex có cost_currency = USD
+    mà hoá đơn Hợp Nhất xuất VNĐ. */}
+                    <td className="px-2 py-2 text-right tabular-nums font-medium">{fmt(r.totalCharge)} {r.currency ?? ''}</td>
                     <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{fmt(r.totalTax)}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
                       {r.firstPeriod === r.lastPeriod ? r.firstPeriod : `${r.firstPeriod} → ${r.lastPeriod}`}

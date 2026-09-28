@@ -25,8 +25,12 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
   const [results, setResults] = useState<InvoiceImportResult[] | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Tiền tệ của CHÍNH file đang xem trước, KHÔNG phải của tài khoản: hoá đơn
+  // Aramex (Hợp Nhất) xuất VNĐ trong khi tài khoản có cost_currency = USD.
+  // `previewOneInvoice` đã trả đúng `currency` từ file — chỉ là trước giờ không
+  // ai dùng tới.
   const fmt = (v: number | null) =>
-    v == null ? '—' : `${Math.round(v).toLocaleString('vi-VN')} ${currency}`;
+    v == null ? '—' : `${Math.round(v).toLocaleString('vi-VN')} ${preview?.currency || currency}`;
 
   function reset() {
     setFiles([]);

@@ -46,7 +46,13 @@ export function InvoiceDetailModal(props: Props) {
 
   return (
     <Dialog open={!!bill} onOpenChange={(o) => { if (!o) props.onClose(); }}>
-      <DialogContent className="w-[95vw] max-w-5xl">
+      {/* `sm:max-w-*` chứ KHÔNG phải `max-w-*`: base của `DialogContent` có
+          `sm:max-w-sm`, mà twMerge không coi hai biến thể khác nhau là xung đột
+          nên GIỮ CẢ HAI — và trong CSS đã biên dịch, luật `sm:` đứng SAU nên nó
+          thắng ở mọi màn ≥640px. `max-w-5xl` vì vậy là class chết, modal bị ép về
+          384px và bảng 12 cột phải cuộn ngang mới xem hết (CEO báo 28/09).
+          Đủ rộng để 12 cột hiện hết, không cuộn ngang trên màn thường. */}
+      <DialogContent className="w-[98vw] sm:max-w-[1600px]">
         {bill && (
           <>
             <DialogHeader>

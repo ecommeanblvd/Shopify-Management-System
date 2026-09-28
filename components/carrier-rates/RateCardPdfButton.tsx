@@ -11,7 +11,7 @@ export function RateCardPdfButton({ pdfUrl, title }: { pdfUrl: string; title?: s
       <DialogTrigger className="inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted whitespace-nowrap">
         <FileText className="size-3.5" /> Xem PDF gốc
       </DialogTrigger>
-      <DialogContent className="w-[92vw] max-w-5xl">
+      <DialogContent className="w-[92vw] sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="text-sm">{title ?? 'Rate card PDF'}</DialogTitle>
         </DialogHeader>

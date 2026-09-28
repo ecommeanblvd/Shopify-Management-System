@@ -33,7 +33,7 @@ export function FuelHistoryDialog({ count, rows }: { count: number; rows: FuelHi
         Xem toàn bộ lịch sử ({count})
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Lịch sử phụ phí xăng dầu</DialogTitle>
           <DialogDescription>{count} mức phí theo tuần, mới nhất ở trên.</DialogDescription>

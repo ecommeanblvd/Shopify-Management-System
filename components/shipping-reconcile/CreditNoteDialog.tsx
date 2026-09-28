@@ -72,7 +72,7 @@ export function CreditNoteDialog() {
         <FilePlus2 className="size-4" /> Upload credit note
       </DialogTrigger>
 
-      <DialogContent className="w-[95vw] max-w-2xl">
+      <DialogContent className="w-[95vw] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-sm">Upload credit note (XML + PDF)</DialogTitle>
         </DialogHeader>

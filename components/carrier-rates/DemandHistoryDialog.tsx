@@ -45,7 +45,7 @@ export function DemandHistoryDialog({
         Xem toàn bộ lịch sử ({count})
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{count} mức phí theo vùng/kỳ, mới nhất ở trên.</DialogDescription>
