@@ -159,7 +159,11 @@ export async function nhapSuCoTuLark(
       .filter((l): l is string => l != null && !dongChiPhi.some((d) => d.loai === l));
 
     const nhieuBoPhan = boPhanLark.length > 1;
-    const canXemLai = nhieuBoPhan && dongChiPhi.length > 1;
+    /* Nhiều bộ phận + CÓ TIỀN là đã không suy được: Lark không nói khoản nào của
+     * ai, nên số tiền đang được gán cho bộ phận Lark tình cờ liệt kê đầu. Điều
+     * kiện ban đầu em đặt là `> 1` dòng chi phí, và nó bỏ sót 16/18 ca — ca một
+     * khoản tiền với hai bộ phận vẫn mơ hồ y như ca hai khoản. */
+    const canXemLai = nhieuBoPhan && dongChiPhi.length > 0;
 
     const maDonRaw = mang(f['Order Number'])[0]?.trim().replace(/^#/, '') ?? '';
     const idLark = chu(f['Incident ID']).trim() || chu(f.ID).trim();
@@ -219,7 +223,7 @@ export async function nhapSuCoTuLark(
           ket.khaiKhongCoSo += khaiThieuSo.length;
         }
         if (nhieuBoPhan) {
-          ghiChu.push(`Lark ghi ${boPhanLark.length} bộ phận: ${boPhanLark.join(', ')}. Đặt "${boPhanLark[0]}" làm bộ phận chịu chính${canXemLai ? ' và đánh dấu cần xem lại vì có nhiều khoản chi phí' : ''}.`);
+          ghiChu.push(`Lark ghi ${boPhanLark.length} bộ phận: ${boPhanLark.join(', ')}. Đặt "${boPhanLark[0]}" làm bộ phận chịu chính${canXemLai ? ' và đánh dấu CẦN XEM LẠI — Lark không nói khoản nào thuộc bộ phận nào' : ''}.`);
         }
         await tx.insert(schema.suCoGhiChu).values(
           ghiChu.map((noiDung) => ({ suCoId: sc.id, noiDung, tuLark: true })),
