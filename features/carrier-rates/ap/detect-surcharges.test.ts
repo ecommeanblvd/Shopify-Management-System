@@ -76,3 +76,30 @@ describe('detectUnknownCharges', () => {
     expect(rows[0].name).toBe('OVERSIZE PIECE');
   });
 });
+
+describe('khoản cước Hợp Nhất (Aramex) — không còn báo là phí lạ', () => {
+  const dong = (ten: string) => ({
+    billId: 'b1', billNumber: '00007957', periodStart: '2026-09-01',
+    trackingNumber: 'AWB1',
+    charges: [{ name: ten, usd: 17.4, vnd: 457794 } as never],
+  });
+
+  it('ba khoản Hợp Nhất KHÔNG vào danh sách phí chưa nhận diện', () => {
+    // Trước 28/09: cả ba hiện lên như phí lạ vì bộ phân loại DHL tra theo MÃ,
+    // mà khoản Aramex chỉ có tên — 3 dòng nhiễu × 36 lần trên màn Aramex.
+    const r = detectUnknownCharges([
+      dong('Cước gốc'), dong('Phụ phí xăng dầu'), dong('Phí phát sinh'),
+    ]);
+    expect(r).toEqual([]);
+  });
+
+  it('không phân biệt hoa thường và khoảng trắng thừa', () => {
+    expect(detectUnknownCharges([dong('  cước gốc  ')])).toEqual([]);
+  });
+
+  it('khoản LẠ của Aramex vẫn được báo — đây mới là việc của màn này', () => {
+    const r = detectUnknownCharges([dong('Phí lưu kho')]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.name).toBe('Phí lưu kho');
+  });
+});

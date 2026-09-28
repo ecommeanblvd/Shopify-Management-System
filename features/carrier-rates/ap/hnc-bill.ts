@@ -48,6 +48,29 @@ export interface HncBillPrefill {
   warnings: string[];
 }
 
+/**
+ * Tên ba khoản cước của bảng kê Hợp Nhất (Aramex). Do CHÍNH code này sinh ra —
+ * không phải đọc từ file hãng — nên đây là nguồn DUY NHẤT của ba tên đó.
+ *
+ * Xuất ra vì màn "Phụ phí mới" cần biết khoản nào đã nhận diện. Trước 28/09 nó
+ * dùng bộ phân loại của DHL (theo mã cước), mà khoản Aramex không có mã, nên cả
+ * ba khoản hiện lên như phí lạ chưa cấu hình — 3 dòng nhiễu × 36 lần.
+ */
+export const TEN_KHOAN = {
+  base: 'Cước gốc',
+  fuel: 'Phụ phí xăng dầu',
+  /** Phí hải quan đầu xuất, $0,4/lô (CEO xác nhận 27/08) → cột `import_handling`. */
+  phatSinh: 'Phí phát sinh',
+} as const;
+
+const TEN_CHUAN = new Set<string>(Object.values(TEN_KHOAN).map((x) => x.toLowerCase()));
+
+/** Tên khoản có phải một trong ba khoản Hợp Nhất không (bỏ qua hoa/thường, khoảng trắng). */
+export function laKhoanHnc(ten: string | null | undefined): boolean {
+  const t = (ten ?? '').trim().toLowerCase();
+  return t !== '' && TEN_CHUAN.has(t);
+}
+
 const vnd = (usd: number | null, fx: number | null): number | null =>
   usd === null || fx === null ? null : Math.round(usd * fx);
 
@@ -94,9 +117,9 @@ export function ghepBangKeVoiHoaDon(
       shipDate: l.shipDate,
       note: [l.destination, l.hncBill ? `bill HNC ${l.hncBill}` : null].filter(Boolean).join(' · '),
       charges: [
-        { name: 'Cước gốc', usd: l.baseUsd, vnd: base },
-        { name: 'Phụ phí xăng dầu', usd: l.fuelUsd, vnd: fuel },
-        { name: 'Phí phát sinh', usd: l.extraUsd, vnd: other },
+        { name: TEN_KHOAN.base, usd: l.baseUsd, vnd: base },
+        { name: TEN_KHOAN.fuel, usd: l.fuelUsd, vnd: fuel },
+        { name: TEN_KHOAN.phatSinh, usd: l.extraUsd, vnd: other },
       ],
     };
   });
