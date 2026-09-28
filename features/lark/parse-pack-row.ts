@@ -111,6 +111,23 @@ export function plausiblePastLarkDate(d: Date | null, now: Date = new Date()): D
   return p.getTime() <= now.getTime() + FUTURE_SLACK_MS ? p : null;
 }
 
+// Ops điền placeholder "30/12/2026" vào "Label Created Date" cho kiện CHƯA hẹn đi.
+// Trước 28/09/2026 SMS giữ nguyên nó làm ngày đi dự kiến, nên 11 kiện tồn 10–98 ngày
+// nằm TRÊN CÙNG màn Đóng hàng dưới nhãn 31/12/2026: không bao giờ vào bộ lọc "Hôm nay",
+// luôn thoả "Dự kiến đi", và không chỗ nào nói chúng đã cũ. CEO 28/09/2026 chốt: coi
+// placeholder là CHƯA HẸN.
+// Ngưỡng 30 ngày: hold thật của Ops là 1–2 ngày, còn 31/12/2026 là ngày DUY NHẤT vượt
+// +30 ngày trong toàn bộ bảng shipments (đo 28/09/2026, đúng 12 dòng) — nên ngưỡng này
+// bắt trọn placeholder mà không chạm lời hẹn thật nào.
+const HEN_XA_TOI_DA_MS = 30 * 24 * 60 * 60 * 1000;
+/** null nếu ngày rác HOẶC hẹn xa quá 30 ngày (placeholder "chưa hẹn"); ngược lại giữ.
+ *  Dùng cho NGÀY DỰ KIẾN — ngày đã qua vẫn giữ để kiện quá hẹn già đi đúng mốc của nó. */
+export function plausibleHenLarkDate(d: Date | null, now: Date = new Date()): Date | null {
+  const p = plausibleLarkDate(d);
+  if (!p) return null;
+  return p.getTime() <= now.getTime() + HEN_XA_TOI_DA_MS ? p : null;
+}
+
 /** THUẦN: nhiều đoạn rich-text của một ô Lark → nối bằng ", ".
  *  larkText nối liền không dấu, nên 2 SKU trong một kiện dính thành một chuỗi khó đọc. */
 export function larkDanhSach(v: unknown): string | null {
@@ -191,9 +208,11 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
     if (ds) { const t = Date.parse(ds); if (!Number.isNaN(t)) labelDate = larkEpochToVnMidnight(t); }
   }
 
-  // Ngày Lark đang ghi, chỉ loại rác quá cũ: hold sang ngày mai là NGÀY ĐI DỰ KIẾN hợp lệ,
-  // màn Đóng hàng phải bám theo nó (CEO 22/09/2026).
-  const ngayDiDuKien = plausibleLarkDate(labelDate);
+  // Ngày Lark đang ghi: hold sang ngày mai là NGÀY ĐI DỰ KIẾN hợp lệ, màn Đóng hàng
+  // phải bám theo nó (CEO 22/09/2026). Nhưng placeholder hẹn xa (31/12/2026) là "chưa
+  // hẹn", không phải lời hẹn — để lọt thì kiện tồn đọng trông như việc của tương lai
+  // (CEO 28/09/2026).
+  const ngayDiDuKien = plausibleHenLarkDate(labelDate);
 
   // Loại ngày quá cũ (epoch hỏng → 1997…) VÀ ngày tương lai (ops gõ nhầm năm /
   // placeholder cho đơn chưa ship): label là mốc ĐÃ xảy ra, không thể ở tương lai.

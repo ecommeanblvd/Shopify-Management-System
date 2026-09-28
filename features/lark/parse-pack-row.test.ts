@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePackRow, maLienKetDauTien, tenHopGon, larkDanhSach, tachMaDon } from './parse-pack-row';
+import { parsePackRow, maLienKetDauTien, tenHopGon, larkDanhSach, tachMaDon, plausibleHenLarkDate } from './parse-pack-row';
 
 describe('parsePackRow', () => {
   it('field string cơ bản → map đầy đủ', () => {
@@ -153,5 +153,52 @@ describe('tachMaDon (kiện gộp nhiều đơn)', () => {
     const r = parsePackRow({ 'Order Number': '#MBLVD30321#MBLVD30322', 'Order number (look up)': '#MBLVD30321,#MBLVD30322' });
     expect(r.orderNumber).toBe('#MBLVD30321');
     expect(r.orderNumbers).toEqual(['#MBLVD30321', '#MBLVD30322']);
+  });
+});
+
+describe('plausibleHenLarkDate — placeholder "chưa hẹn"', () => {
+  const now = new Date(Date.UTC(2026, 8, 28, 3, 0, 0)); // 28/09/2026
+  const ngay = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d));
+
+  it('placeholder 31/12/2026 (Lark gõ 30/12 epoch) → null: KHÔNG phải lời hẹn', () => {
+    expect(plausibleHenLarkDate(ngay(2026, 11, 31), now)).toBeNull();
+  });
+
+  it('hold sang mai vẫn là lời hẹn thật → giữ nguyên', () => {
+    const mai = ngay(2026, 8, 29);
+    expect(plausibleHenLarkDate(mai, now)).toEqual(mai);
+  });
+
+  it('hẹn đúng biên 30 ngày → vẫn giữ', () => {
+    const bien = ngay(2026, 9, 28);
+    expect(plausibleHenLarkDate(bien, now)).toEqual(bien);
+  });
+
+  it('quá biên 30 ngày → null', () => {
+    expect(plausibleHenLarkDate(ngay(2026, 9, 29), now)).toBeNull();
+  });
+
+  it('ngày đã qua vẫn giữ (kiện quá hẹn phải già đi theo đúng ngày đó)', () => {
+    const qua = ngay(2026, 5, 22);
+    expect(plausibleHenLarkDate(qua, now)).toEqual(qua);
+  });
+
+  it('rác quá cũ (epoch hỏng → 1997) → null', () => {
+    expect(plausibleHenLarkDate(ngay(1997, 0, 1), now)).toBeNull();
+  });
+
+  it('null → null', () => {
+    expect(plausibleHenLarkDate(null, now)).toBeNull();
+  });
+});
+
+describe('parsePackRow.ngayDiDuKien', () => {
+  it('Label Created Date = placeholder 31/12/2026 → ngayDiDuKien null (chưa hẹn)', () => {
+    const r = parsePackRow({
+      'Order Number': 'TA2113', 'Log Unique code': 'PK-19651',
+      'Label Created Date': Date.UTC(2026, 11, 30, 17, 0, 0),
+    });
+    expect(r.ngayDiDuKien).toBeNull();
+    expect(r.labelDate).toBeNull();
   });
 });
