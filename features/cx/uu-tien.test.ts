@@ -114,6 +114,23 @@ describe('xepViec', () => {
     expect(r.ngay[0]!.tong).toBe(10);
   });
 
+  it('BẤT BIẾN: tổng hai nhóm luôn bằng số việc đưa vào', () => {
+    // Bất biến này là thứ bị vi phạm ngày 28/09 — không phải ở hàm thuần mà ở nơi
+    // GỌI nó: `tong-quan.ts` lấy LIMIT 100 dòng sự cố rồi đưa vào đây, nên trang
+    // báo 170 trong khi thật có 190. Hàm thuần đúng; dữ liệu vào bị cắt.
+    const ds = [
+      ...Array.from({ length: 37 }, () => v({ loai: 'su_co', tuLark: true })),
+      ...Array.from({ length: 11 }, () => v({ loai: 'ticket', tuLark: false })),
+      ...Array.from({ length: 5 }, () => v({ loai: 'tranh_chap', tuLark: true, conLai: 9 })),
+    ];
+    const r = xepViec(ds);
+    expect(r.tongNgay + r.tongTonDong).toBe(ds.length);
+    // Và tổng `tong` của mọi khối cũng bằng đúng ngần ấy, dù mỗi khối chỉ hiện 5.
+    const tongKhoi = [...r.ngay, ...r.tonDong].reduce((a, k) => a + k.tong, 0);
+    expect(tongKhoi).toBe(ds.length);
+    expect([...r.ngay, ...r.tonDong].every((k) => k.viec.length <= GIOI_HAN)).toBe(true);
+  });
+
   it('rỗng trả hai nhóm rỗng, không nổ', () => {
     const r = xepViec([]);
     expect(r).toEqual({ ngay: [], tonDong: [], tongNgay: 0, tongTonDong: 0 });

@@ -32,9 +32,13 @@ export interface TongQuanCx {
 /**
  * Việc đang treo ở mọi module, ĐÃ lọc theo quyền người xem.
  *
- * Mỗi truy vấn con lấy tối đa 50 dòng: hàm thuần `xepViec` chỉ hiện 5 việc mỗi
- * khối, nhưng `tong` phải là TỔNG THẬT nên số đếm lấy riêng bằng `count(*)`, KHÔNG
- * đếm trên danh sách đã giới hạn.
+ * KHÔNG `LIMIT` truy vấn nào, và KHÔNG có bộ đếm riêng. Bản đầu lấy 50–100 dòng
+ * mỗi module rồi đếm bằng `count(*)` riêng để bù — nhưng bù thiếu: `tongNgay` và
+ * `tongTonDong` vẫn tính trên danh sách đã cắt, nên trang báo 170 trong khi thật
+ * có 190 (LIMIT 100 cắt mất 20 sự cố). Hai nguồn sự thật thì sớm muộn cũng lệch.
+ *
+ * Giờ lấy HẾT rồi để hàm thuần `xepViec` vừa cắt còn 5 việc mỗi khối vừa giữ tổng
+ * thật. Bị chặn tự nhiên vì chỉ lấy việc CÒN TREO: 191 dòng ngày 28/09.
  */
 export async function tongQuanCx(): Promise<TongQuanCx> {
   const q = await quyenCx();
@@ -42,15 +46,13 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
   const moc = new Date();
   const viec: Viec[] = [];
   const khongXemDuoc: string[] = [];
-  /** Tổng thật theo loại — lấy riêng vì danh sách bị LIMIT. */
-  const tongThat = new Map<string, number>();
 
   if (q.tranhChap) {
     const r = await db.execute(sql`
       SELECT id, so_tien, tien_te, ma_don, han_nop, lark_record_id
       FROM dispute
       WHERE trang_thai IN ('needs_response', 'under_review') AND da_nop_luc IS NULL
-      ORDER BY han_nop ASC NULLS LAST LIMIT 50`);
+      ORDER BY han_nop ASC NULLS LAST`);
     for (const x of rows<Record<string, unknown>>(r)) {
       viec.push({
         id: String(x.id), loai: 'tranh_chap',
@@ -61,10 +63,6 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
         href: '/f/cx/tranh-chap',
       });
     }
-    const [c] = rows<Record<string, unknown>>(await db.execute(sql`
-      SELECT count(*)::int AS n FROM dispute
-      WHERE trang_thai IN ('needs_response','under_review') AND da_nop_luc IS NULL`));
-    tongThat.set('tranh_chap', Number(c?.n ?? 0));
   } else khongXemDuoc.push('Tranh chấp');
 
   if (q.doiTra) {
@@ -73,7 +71,7 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
       FROM customer_order_requests r
       WHERE r.rma_code IS NOT NULL
         AND r.status NOT IN ('refunded', 'rejected', 'cancelled')
-      ORDER BY r.created_at ASC LIMIT 50`);
+      ORDER BY r.created_at ASC`);
     for (const x of rows<Record<string, unknown>>(r)) {
       viec.push({
         id: String(x.id), loai: 'doi_tra',
@@ -83,10 +81,6 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
         href: '/f/customer-account/requests',
       });
     }
-    const [c] = rows<Record<string, unknown>>(await db.execute(sql`
-      SELECT count(*)::int AS n FROM customer_order_requests
-      WHERE rma_code IS NOT NULL AND status NOT IN ('refunded','rejected','cancelled')`));
-    tongThat.set('doi_tra', Number(c?.n ?? 0));
   } else khongXemDuoc.push('Đổi trả');
 
   if (q.danhGia) {
@@ -94,7 +88,7 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
       SELECT id, so_sao, vendor, ma_don, noi_dung, lark_record_id
       FROM danh_gia
       WHERE so_sao <= 2 AND COALESCE(trang_thai, '') NOT IN ('responded', 'archived')
-      ORDER BY ngay DESC LIMIT 50`);
+      ORDER BY ngay DESC`);
     for (const x of rows<Record<string, unknown>>(r)) {
       viec.push({
         id: String(x.id), loai: 'danh_gia',
@@ -105,10 +99,6 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
         href: '/f/cx/danh-gia?cc=1',
       });
     }
-    const [c] = rows<Record<string, unknown>>(await db.execute(sql`
-      SELECT count(*)::int AS n FROM danh_gia
-      WHERE so_sao <= 2 AND COALESCE(trang_thai,'') NOT IN ('responded','archived')`));
-    tongThat.set('danh_gia', Number(c?.n ?? 0));
   } else khongXemDuoc.push('Đánh giá');
 
   if (q.ticket) {
@@ -119,7 +109,7 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
                WHERE p.ticket_id = t.id AND p.trang_thai <> 'da_xu_ly') AS con_tac
       FROM cx_ticket t
       WHERE t.trang_thai <> 'xong'
-      ORDER BY t.han_xu_ly ASC NULLS LAST, t.created_at DESC LIMIT 100`);
+      ORDER BY t.han_xu_ly ASC NULLS LAST, t.created_at DESC`);
     for (const x of rows<Record<string, unknown>>(r)) {
       const cl = conLai(x.han_xu_ly, moc);
       viec.push({
@@ -133,12 +123,6 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
         href: '/f/cx/viec-can-lam',
       });
     }
-    const [c] = rows<Record<string, unknown>>(await db.execute(sql`
-      SELECT count(*) FILTER (WHERE han_xu_ly IS NOT NULL)::int AS co_han,
-             count(*) FILTER (WHERE han_xu_ly IS NULL)::int AS khong_han
-      FROM cx_ticket WHERE trang_thai <> 'xong'`));
-    tongThat.set('ticket_han', Number(c?.co_han ?? 0));
-    tongThat.set('ticket', Number(c?.khong_han ?? 0));
   } else khongXemDuoc.push('Việc cần làm');
 
   if (q.suCo) {
@@ -148,7 +132,7 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
              (SELECT max(c.tien_te) FROM su_co_chi_phi c WHERE c.su_co_id = s.id) AS tien_te
       FROM su_co s
       WHERE s.trang_thai <> 'xong' OR s.can_xem_lai
-      ORDER BY s.can_xem_lai DESC, s.ngay_bao DESC LIMIT 100`);
+      ORDER BY s.can_xem_lai DESC, s.ngay_bao DESC`);
     for (const x of rows<Record<string, unknown>>(r)) {
       const tien = Number(x.tien ?? 0);
       viec.push({
@@ -165,22 +149,9 @@ export async function tongQuanCx(): Promise<TongQuanCx> {
         href: x.can_xem_lai ? '/f/cx/su-co?xl=1' : '/f/cx/su-co',
       });
     }
-    const [c] = rows<Record<string, unknown>>(await db.execute(sql`
-      SELECT count(*) FILTER (WHERE can_xem_lai)::int AS xem_lai,
-             count(*) FILTER (WHERE trang_thai <> 'xong' AND NOT can_xem_lai)::int AS chua_xong
-      FROM su_co`));
-    tongThat.set('su_co_xem_lai', Number(c?.xem_lai ?? 0));
-    tongThat.set('su_co', Number(c?.chua_xong ?? 0));
   } else khongXemDuoc.push('Sự cố');
 
   const xep = xepViec(viec);
-  // Đè `tong` bằng TỔNG THẬT: danh sách trên đã bị LIMIT nên đếm trên nó là sai —
-  // đúng lỗi màn sổ nhập 26/09 báo "397 chiếc" khi kho có 470.
-  for (const k of [...xep.ngay, ...xep.tonDong]) {
-    const t = tongThat.get(k.loai);
-    if (t != null) k.tong = t;
-  }
-
   return { xep, soLieu: await soLieuNhanh(q.suCo, q.tranhChap, q.danhGia), khongXemDuoc };
 }
 
