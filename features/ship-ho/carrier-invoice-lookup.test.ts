@@ -90,3 +90,27 @@ describe('aggregateBilledLines — 1 lô hàng có NHIỀU dòng bill (cước 7
     expect(billedHasFreight(mk({ base: 1_000_000, discount: -700_000 }, { totalVnd: 300_000 }))).toBe(true);
   });
 });
+
+describe('costToVndFactor — tiền tệ của CHÍNH hoá đơn thắng cấu hình tài khoản (28/09/2026)', () => {
+  /* Tài khoản "Aramex HN (Hợp Nhất)" khai cost=USD, fx=0,0000377858 → hệ số 26.465.
+     Nhưng hoá đơn của chính nó lại ghi VND. Đơn #KLS2098 vì thế có chi thực
+     36.153.052.205đ trong khi hoá đơn thật là 1.366.072đ — gấp đúng 26.465 lần,
+     và báo cáo ship của Kalisa phình lên 78 TỶ. */
+  it('hoá đơn ghi VND thì hệ số là 1, bất kể tài khoản khai USD', () => {
+    expect(costToVndFactor('USD', 'VND', 0.0000377858, 'VND')).toBe(1);
+  });
+
+  it('không có tiền tệ hoá đơn → giữ nguyên luật cũ theo cấu hình tài khoản', () => {
+    expect(costToVndFactor('VND', 'USD', 26000)).toBe(1);
+    expect(costToVndFactor('USD', 'VND', 0.0000377858)).toBeCloseTo(26465, 0);
+  });
+
+  it('hoá đơn khớp cấu hình → vẫn quy đổi như cũ', () => {
+    expect(costToVndFactor('VND', 'USD', 26000, 'VND')).toBe(1);
+  });
+
+  it('hoá đơn ghi một loại tiền KHÁC cấu hình và không phải VND → null, KHÔNG đoán tỉ giá', () => {
+    expect(costToVndFactor('USD', 'VND', 0.0000377858, 'EUR')).toBeNull();
+    expect(costToVndFactor('VND', 'USD', 26000, 'SAR')).toBeNull();
+  });
+});

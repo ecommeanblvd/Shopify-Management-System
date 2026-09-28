@@ -124,8 +124,27 @@ export function billedHasFreight(b: BilledLookup): boolean {
   return b.surcharges.base + b.surcharges.discount > 0;
 }
 
-/** COST currency → VND. costCurrency VND → 1; displayCurrency VND → 1/fx; khác → null. */
-export function costToVndFactor(costCurrency: string, displayCurrency: string, fxCostPerDisplay: number): number | null {
+/**
+ * COST currency → VND. costCurrency VND → 1; displayCurrency VND → 1/fx; khác → null.
+ *
+ * `billCurrency` là tiền tệ ghi trên CHÍNH hoá đơn và nó THẮNG cấu hình tài khoản.
+ * Vì sao: tài khoản "Aramex HN (Hợp Nhất)" khai `cost=USD, fx=0,0000377858` (hệ số
+ * 26.465) trong khi hoá đơn của chính nó ghi VND. Đơn #KLS2098 vì thế được ghi chi
+ * thực 36.153.052.205đ trong khi hoá đơn thật là 1.366.072đ — gấp đúng 26.465 lần —
+ * và báo cáo ship của Kalisa tháng 9 phình lên 78 TỶ (CEO phát hiện 28/09/2026).
+ *
+ * Hoá đơn ghi một loại tiền KHÁC cấu hình và không phải VND thì trả `null`: thà
+ * không đối soát còn hơn đoán tỉ giá (cùng luật D-124 — đừng thay cái chưa biết
+ * bằng một con số trông hợp lý).
+ */
+export function costToVndFactor(
+  costCurrency: string, displayCurrency: string, fxCostPerDisplay: number, billCurrency?: string | null,
+): number | null {
+  const bill = billCurrency?.trim().toUpperCase();
+  if (bill) {
+    if (bill === 'VND') return 1;
+    if (bill !== costCurrency.trim().toUpperCase()) return null;
+  }
   if (costCurrency === 'VND') return 1;
   if (displayCurrency === 'VND') return 1 / fxCostPerDisplay;
   return null;
@@ -148,6 +167,7 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       importHandling: schema.carrierBillLines.importHandling, duty: schema.carrierBillLines.duty,
       total: schema.carrierBillLines.total, shipDate: schema.carrierBillLines.shipDate,
       billNumber: schema.carrierBills.billNumber,
+      billCurrency: schema.carrierBills.currency,
       costCurrency: schema.carrierAccounts.costCurrency,
       displayCurrency: schema.carrierAccounts.displayCurrency,
       fx: schema.carrierAccounts.fxCostPerDisplay,
@@ -170,7 +190,7 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
     .orderBy(schema.carrierBills.periodEnd);
   if (rows.length === 0) return null;
 
-  const factor = costToVndFactor(rows[0].costCurrency, rows[0].displayCurrency, Number(rows[0].fx));
+  const factor = costToVndFactor(rows[0].costCurrency, rows[0].displayCurrency, Number(rows[0].fx), rows[0].billCurrency);
   if (factor == null) return null; // cấu hình tiền tệ không quy được VND
   // residentialRaw là số CẤP LÔ HÀNG (từ shipment_charges) nhưng subquery gắn nó
   // vào MỌI dòng — chỉ áp cho 1 dòng (ưu tiên dòng cước có signature gộp) để
