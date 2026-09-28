@@ -19,6 +19,10 @@ export function patchFrom(row: PackRow): Record<string, unknown> {
   // Ngày đi dự kiến ĐỒNG BỘ HẲN theo Lark, kể cả khi Lark xoá ngày (ghi null): Ops hold kiện
   // rồi đổi/bỏ ngày thì màn Đóng hàng phải theo, không được giữ ngày cũ.
   p.ngayDiDuKien = row.ngayDiDuKien;
+  // Ghi chú đơn ĐỒNG BỘ HẲN theo Lark, kể cả khi Lark xoá cờ (ghi null): kiện của
+  // đơn Invalid tự rời hàng chờ, và khi CX sửa xong địa chỉ thì TỰ QUAY LẠI. Giữ
+  // giá trị cũ là giấu mất việc thật (CEO 28/09/2026).
+  p.larkGhiChuDon = row.ghiChuDon;
   if (row.base) p.originHub = row.base;
   // Mọi đơn trong kiện, đồng bộ hẳn theo Lark (gộp rồi lại tách thì phải mất đi).
   p.cacDonTrongKien = row.orderNumbers.length > 1 ? row.orderNumbers : null;
@@ -42,6 +46,7 @@ export function giaTriTaoKien(row: PackRow, orderId: string): typeof schema.ship
     labelCreatedAt: row.labelDate,
     originHub: row.base,
     ngayDiDuKien: row.ngayDiDuKien,
+    larkGhiChuDon: row.ghiChuDon,
     cacDonTrongKien: row.orderNumbers.length > 1 ? row.orderNumbers : null,
     larkHop: row.hop,
     skuText: row.skuText,

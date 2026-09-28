@@ -1,8 +1,12 @@
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
-export type BoLocDongHang = 'cho_chon_line' | 'hom_nay' | 'du_kien_di' | '7_ngay' | 'tat_ca';
-export const BO_LOC: readonly BoLocDongHang[] = ['cho_chon_line', 'hom_nay', 'du_kien_di', '7_ngay', 'tat_ca'];
+export type BoLocDongHang =
+  | 'cho_chon_line' | 'hom_nay' | 'du_kien_di' | '7_ngay' | 'don_invalid' | 'da_dong' | 'tat_ca';
+export const BO_LOC: readonly BoLocDongHang[] =
+  ['cho_chon_line', 'hom_nay', 'du_kien_di', '7_ngay', 'don_invalid', 'da_dong', 'tat_ca'];
 export interface KienDongHang {
   shipmentId: string; orderId: string; orderNumber: string; storeName: string; country: string | null;
+  /** Mã kiện Lark (PK-…) — hiện trên hộp thoại đóng kiện và để chặn tự chỉ về chính nó. */
+  logUniqueCode: string | null;
   /** Cân THỰC đã cân khi đóng gói. NULL = chưa đóng. */
   weightKg: number | null;
   /** Cân dự kiến theo Shopify — dùng so cước khi chưa cân thực. */
@@ -18,6 +22,11 @@ export interface KienDongHang {
   donDiChung: string[];
   /** Dòng Lark của kiện đã bị Ops xoá — kiện không còn là việc phải làm. */
   larkMatDong: boolean;
+  /** Ghi chú đơn bên Lark; `Invalid` = đơn không bao giờ đi nên kiện tự rời hàng chờ. */
+  ghiChuDon: string | null;
+  donInvalid: boolean;
+  /** Đã đóng kiện dù không có vận đơn. NULL = chưa đóng. */
+  dong: { luc: string; lyDo: string; ghiChu: string | null; kienThayThe: string | null; boi: string | null } | null;
   huy: { loai: 'khong' | 'mot_phan' | 'toan_bo'; soHuy: number; tong: number; lyDo: string | null };
   selectedCarrierKey: string | null; selectedCarrierBy: string | null; selectedCarrierAt: string | null;
   /** ISO — coalesce(label_created_at, created_at). */

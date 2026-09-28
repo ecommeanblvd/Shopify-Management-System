@@ -4,6 +4,7 @@ import { db, schema } from '@/db/client';
 import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
+import { laDonInvalid } from './dong-kien';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 
 /** Số kiện tối đa một lượt tải — UI báo "chỉ hiện 500 đầu" khi chạm trần để không cắt âm thầm. */
@@ -16,6 +17,11 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   // Ngày hiển thị: Lark đang hẹn đi ngày nào thì theo ngày đó (hold sang ngày khác vẫn đúng),
   // chưa hẹn thì lấy ngày lên nhãn, cuối cùng mới tới ngày kiện về SMS.
   const ngayDong = sql<Date>`coalesce(${s.ngayDiDuKien}, ${s.labelCreatedAt}, ${s.createdAt})`;
+  /* So SÁNH BẰNG, không dùng `like '%invalid%'`: "Invalid address fixed" nghĩa ngược
+     hẳn mà vẫn dính. Cờ này ĐUỔI việc ra khỏi hàng chờ nên nhận nhầm là giấu mất
+     việc thật. Cùng luật với hàm thuần `laDonInvalid`, có test đối chiếu. */
+  const LA_INVALID = sql`lower(trim(coalesce(${s.larkGhiChuDon}, ''))) = 'invalid'`;
+  const KHONG_INVALID = sql`lower(trim(coalesce(${s.larkGhiChuDon}, ''))) <> 'invalid'`;
   const dk = [isNotNull(s.logUniqueCode)];
   // Chờ chọn line = kiện ĐÃ ĐÓNG XONG (có cân) mà chưa lên nhãn. Dòng Lark tạo sẵn từ lúc
   // lên đơn nhưng chưa đóng thì KHÔNG phải việc của màn này — kiện chưa cân cũng không so
@@ -27,7 +33,16 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     dk.push(isNull(s.trackingNumber));
     // Dòng Lark đã bị Ops xoá → không còn là việc phải làm (vẫn xem được ở "Tất cả").
     dk.push(isNull(s.larkMatDongLuc));
+    // Ba lối RA khác của kiện không bao giờ có vận đơn (CEO 28/09/2026):
+    //  • đơn Invalid — đọc thẳng từ Lark, TỰ rời và TỰ quay lại khi CX sửa xong;
+    //  • đã đóng tay kèm lý do (giao tận tay, dòng trùng, đơn huỷ).
+    // Thiếu hai điều kiện này thì 13/14 kiện tồn đọng nằm lại vĩnh viễn.
+    dk.push(KHONG_INVALID);
+    dk.push(isNull(s.dongKienLuc));
   }
+  // Hai ngăn riêng để xem lại thứ đã rời hàng chờ — rời không có nghĩa là biến mất.
+  if (loc === 'don_invalid') { dk.push(LA_INVALID); dk.push(isNull(s.trackingNumber)); }
+  if (loc === 'da_dong') dk.push(isNotNull(s.dongKienLuc));
   // Ngày VN = UTC+7; so theo ngày-lịch VN của mốc đóng.
   if (loc === 'hom_nay') dk.push(sql`(${ngayDong} + interval '7 hours')::date = (now() + interval '7 hours')::date`);
   // Dự kiến đi: Lark hẹn ngày đi ở TƯƠNG LAI (kiện hold sang ngày khác) và chưa lên nhãn.
@@ -40,9 +55,11 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   if (tim) dk.push(or(ilike(o.shopifyOrderNumber, `%${escapeLike(tim)}%`), ilike(s.logUniqueCode, `%${escapeLike(tim)}%`))!);
 
   const rows = await db.select({
-    shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, storeName: st.name, country: o.shipCountry,
+    shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, logUniqueCode: s.logUniqueCode, storeName: st.name, country: o.shipCountry,
     weightKg: s.actualWeightKg, canDuKien: sql<string | null>`coalesce(${o.shipWeightKgOverride}, ${o.shipWeightKg})`, l: s.dimLengthCm, w: s.dimWidthCm, h: s.dimHeightCm,
-    base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, cacDonTrongKien: s.cacDonTrongKien, larkMatDongLuc: s.larkMatDongLuc, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
+    base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, ghiChuDon: s.larkGhiChuDon,
+    dongKienLuc: s.dongKienLuc, dongKienLyDo: s.dongKienLyDo, dongKienGhiChu: s.dongKienGhiChu,
+    dongKienKienThayThe: s.dongKienKienThayThe, dongKienBy: s.dongKienBy, cacDonTrongKien: s.cacDonTrongKien, larkMatDongLuc: s.larkMatDongLuc, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
     hangKhachTra: o.shippingCarrierKey, selectedCarrierKey: o.selectedCarrierKey, selectedCarrierBy: o.selectedCarrierBy, tenNguoiChon: u.name, selectedCarrierAt: o.selectedCarrierAt,
     ngayDong,
     soKienCungDon: sql<number>`(select count(*)::int from shipments s2 where s2.order_id = ${o.id} and s2.log_unique_code is not null)`,
@@ -72,7 +89,15 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     weightKg: r.weightKg != null ? Number(r.weightKg) : null,
     canDuKienKg: r.canDuKien != null ? Number(r.canDuKien) : null,
     dims: r.l != null && r.w != null ? { l: Number(r.l), w: Number(r.w), h: r.h != null ? Number(r.h) : null } : null,
-    base: r.base, theoHenLark: r.ngayDiDuKien != null, donDiChung: (r.cacDonTrongKien ?? []).filter((d) => d.replace(/^#/, '') !== r.orderNumber.replace(/^#/, '')), hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
+    logUniqueCode: r.logUniqueCode ?? null,
+    base: r.base, theoHenLark: r.ngayDiDuKien != null,
+    ghiChuDon: r.ghiChuDon ?? null,
+    donInvalid: laDonInvalid(r.ghiChuDon),
+    dong: r.dongKienLuc == null ? null : {
+      luc: r.dongKienLuc.toISOString(), lyDo: r.dongKienLyDo ?? 'khac',
+      ghiChu: r.dongKienGhiChu ?? null, kienThayThe: r.dongKienKienThayThe ?? null,
+      boi: r.dongKienBy ?? null,
+    }, donDiChung: (r.cacDonTrongKien ?? []).filter((d) => d.replace(/^#/, '') !== r.orderNumber.replace(/^#/, '')), hop: r.hop, skuText: r.skuText, pieces: r.pieces, trackingNumber: r.trackingNumber, hangKhachTra: r.hangKhachTra,
     larkMatDong: r.larkMatDongLuc != null,
     huy: tinhTrangHuyKien(r.skuText, monTheoDon.get(r.orderNumber.replace(/^#/, '')) ?? []),
     selectedCarrierKey: r.selectedCarrierKey, selectedCarrierBy: tenNguoiDung(r.tenNguoiChon, r.selectedCarrierBy),

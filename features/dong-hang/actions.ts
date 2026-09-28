@@ -10,6 +10,7 @@ import { db, schema } from '@/db/client';
 import { quoteOrderAcrossCarriers } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { assignOrderCarrier } from '@/features/shopify-orders/carrier-select-actions';
+import { kiemDongKien, type DongKienVao } from './dong-kien';
 import { xepQuote } from './logic';
 import { thoiGianGiaoTheoHang } from './thoi-gian-giao';
 import type { BaoGiaKien } from './types';
@@ -72,4 +73,72 @@ export async function chonHangChoDon(orderId: string, carrierKey: string): Promi
   const r = await assignOrderCarrier(orderId, carrierKey);
   revalidatePath('/f/dong-hang');
   return r;
+}
+
+/** Người đang đăng nhập nếu có quyền đóng/mở kiện; ngược lại trả lý do từ chối. */
+async function nguoiDuocDongKien(): Promise<{ id: string } | { loi: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { loi: 'Chưa đăng nhập.' };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'manage_fulfillment')) return { loi: 'Không có quyền đóng kiện.' };
+  return { id: session.user.id };
+}
+
+const duongDongHang = () => revalidatePath('/f/dong-hang');
+
+/**
+ * ĐÓNG một kiện sẽ không bao giờ có vận đơn — giao tận tay, dòng trùng, đơn huỷ
+ * (CEO 28/09/2026). Kiện rời hàng chờ nhưng KHÔNG bị xoá: vẫn xem được ở ngăn
+ * "Đã đóng" và ở "Tất cả", kèm lý do và người đóng.
+ */
+export async function dongKienKhongVanDon(
+  shipmentId: string, vao: DongKienVao,
+): Promise<{ ok: boolean; loi?: string }> {
+  const ai = await nguoiDuocDongKien();
+  if ('loi' in ai) return { ok: false, loi: ai.loi };
+
+  const [kien] = await db.select({
+    logUniqueCode: schema.shipments.logUniqueCode,
+    trackingNumber: schema.shipments.trackingNumber,
+  }).from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
+  if (!kien) return { ok: false, loi: 'Không thấy kiện.' };
+  // Kiện ĐÃ có vận đơn thì không phải việc của lối này — đóng nó là che mất một
+  // kiện đang đi thật.
+  if (kien.trackingNumber) return { ok: false, loi: 'Kiện đã có vận đơn, không cần đóng tay.' };
+
+  const loi = kiemDongKien(vao, kien.logUniqueCode);
+  if (loi) return { ok: false, loi };
+
+  try {
+    await db.update(schema.shipments).set({
+      dongKienLuc: new Date(),
+      dongKienLyDo: vao.lyDo,
+      dongKienGhiChu: vao.ghiChu?.trim() || null,
+      dongKienKienThayThe: vao.lyDo === 'dong_trung' ? vao.kienThayThe!.trim() : null,
+      dongKienBy: ai.id,
+      updatedAt: new Date(),
+    }).where(eq(schema.shipments.id, shipmentId));
+    duongDongHang();
+    return { ok: true };
+  } catch (e) {
+    console.error('[dong-hang] dongKienKhongVanDon lỗi:', e);
+    return { ok: false, loi: 'Đóng kiện thất bại.' };
+  }
+}
+
+/** MỞ LẠI kiện đã đóng — xoá sạch dấu vết đóng để nó quay về hàng chờ. */
+export async function moLaiKien(shipmentId: string): Promise<{ ok: boolean; loi?: string }> {
+  const ai = await nguoiDuocDongKien();
+  if ('loi' in ai) return { ok: false, loi: ai.loi };
+  try {
+    await db.update(schema.shipments).set({
+      dongKienLuc: null, dongKienLyDo: null, dongKienGhiChu: null,
+      dongKienKienThayThe: null, dongKienBy: null, updatedAt: new Date(),
+    }).where(eq(schema.shipments.id, shipmentId));
+    duongDongHang();
+    return { ok: true };
+  } catch (e) {
+    console.error('[dong-hang] moLaiKien lỗi:', e);
+    return { ok: false, loi: 'Mở lại kiện thất bại.' };
+  }
 }

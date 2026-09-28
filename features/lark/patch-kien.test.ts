@@ -4,7 +4,7 @@ import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
   orderNumber: '#MBLVD1', orderNumbers: ['#MBLVD1'], logUniqueCode: 'PK-1', weightKg: null, dims: null, trackingNumber: null,
-  carrierKey: null, labelDate: null, base: null, ngayDiDuKien: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [], ...o,
+  carrierKey: null, labelDate: null, base: null, ngayDiDuKien: null, ghiChuDon: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [], ...o,
 });
 
 describe('patchFrom', () => {
@@ -14,8 +14,8 @@ describe('patchFrom', () => {
     expect(p.trackingNumber).toBeUndefined();
     expect(p.updatedAt).toBeInstanceOf(Date);
   });
-  it('dòng trống → chỉ có updatedAt và ngày đi dự kiến (đồng bộ hẳn theo Lark, kể cả xoá)', () => {
-    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien', 'cacDonTrongKien']);
+  it('dòng trống → chỉ có updatedAt và ba cột đồng bộ hẳn theo Lark (kể cả khi Lark xoá)', () => {
+    expect(Object.keys(patchFrom(mk({})))).toEqual(['updatedAt', 'ngayDiDuKien', 'larkGhiChuDon', 'cacDonTrongKien']);
     expect(patchFrom(mk({})).ngayDiDuKien).toBeNull();
   });
 
@@ -33,7 +33,7 @@ describe('giaTriTaoKien', () => {
     expect(v).toEqual({
       orderId: 'order-1', logUniqueCode: 'PK-1', trackingNumber: 'T1', carrierKey: 'ups',
       actualWeightKg: '0.5', dimLengthCm: '10', dimWidthCm: '10', dimHeightCm: null,
-      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, cacDonTrongKien: null, larkHop: 'Bag', skuText: null, pieces: 1,
+      labelCreatedAt: null, originHub: null, ngayDiDuKien: null, larkGhiChuDon: null, cacDonTrongKien: null, larkHop: 'Bag', skuText: null, pieces: 1,
     });
   });
 });
@@ -46,5 +46,13 @@ describe('kiện gộp nhiều đơn', () => {
   });
   it('kiện một đơn → null (gộp rồi tách lại thì mất đi)', () => {
     expect(patchFrom(mk({ orderNumbers: ['#MBLVD1'] })).cacDonTrongKien).toBeNull();
+  });
+});
+
+describe('patchFrom.larkGhiChuDon', () => {
+  it('ghi ĐÈ vô điều kiện, kể cả khi Lark bỏ cờ — kiện Invalid phải quay lại được hàng chờ', () => {
+    expect(patchFrom(mk({ ghiChuDon: 'Invalid' })).larkGhiChuDon).toBe('Invalid');
+    expect(patchFrom(mk({ ghiChuDon: null })).larkGhiChuDon).toBeNull();
+    expect('larkGhiChuDon' in patchFrom(mk({ ghiChuDon: null }))).toBe(true);
   });
 });

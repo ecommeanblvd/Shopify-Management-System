@@ -2,7 +2,9 @@
 
 import { Fragment, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { baoGiaKien, chonHangChoDon } from '@/features/dong-hang/actions';
+import { baoGiaKien, chonHangChoDon, dongKienKhongVanDon, moLaiKien } from '@/features/dong-hang/actions';
+import { LY_DO_DONG, kiemDongKien, nhanLyDoDong } from '@/features/dong-hang/dong-kien';
+import { toast } from 'sonner';
 import { canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
@@ -33,6 +35,8 @@ const NHAN_LOC: Record<BoLocDongHang, string> = {
   hom_nay: 'Hôm nay',
   du_kien_di: 'Dự kiến đi',
   '7_ngay': '7 ngày',
+  don_invalid: 'Đơn Invalid',
+  da_dong: 'Đã đóng',
   tat_ca: 'Tất cả',
 };
 
@@ -49,13 +53,14 @@ const LUOI =
   'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(132px,auto)_minmax(186px,1.2fr)]';
 
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, gioiHan, soKienChuaCan,
+  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
   loc: BoLocDongHang;
   q: string;
   coQuyenChon: boolean;
+  coQuyenDong: boolean;
   gioiHan: number;
   soKienChuaCan: number;
 }) {
@@ -252,6 +257,7 @@ export function BangDongHang({
                       k={k}
                       bao={bao.get(k.shipmentId)}
                       coQuyenChon={coQuyenChon}
+                      coQuyenDong={coQuyenDong}
                       chonCucBo={chonCucBo.get(k.orderId)}
                       ketQua={ketQua.get(k.orderId)}
                       dangChonHang={dangChon.get(k.orderId)}
@@ -303,16 +309,25 @@ function ONhin({ nhan, so, noiBat }: { nhan: string; so: number; noiBat?: boolea
 }
 
 function DongKien({
-  k, bao, coQuyenChon, chonCucBo, ketQua, dangChonHang, moSoCuoc,
+  k, bao, coQuyenChon, coQuyenDong, chonCucBo, ketQua, dangChonHang, moSoCuoc,
 }: {
   k: KienDongHang;
   bao: BaoGiaKien | undefined;
   coQuyenChon: boolean;
+  coQuyenDong: boolean;
   chonCucBo: string | undefined;
   ketQua: KetQuaChon | undefined;
   dangChonHang: string | undefined;
   moSoCuoc: () => void;
 }) {
+  const [moDong, setMoDong] = useState(false);
+  const [dangDong, start] = useTransition();
+  const moLai = () => start(async () => {
+    const r = await moLaiKien(k.shipmentId);
+    if (!r.ok) { toast.error(r.loi ?? 'Mở lại thất bại.'); return; }
+    toast.success(`Đã mở lại ${k.logUniqueCode ?? 'kiện'}.`, { duration: 3000 });
+  });
+
   const daChon = chonCucBo ?? k.selectedCarrierKey;
   const tt = trangThaiKien({ ...k, selectedCarrierKey: daChon });
   // Chưa đóng thì cân cước tạm tính theo cân dự kiến Shopify (chọn line trước, đóng sau).
@@ -393,7 +408,11 @@ function DongKien({
       </div>
 
       <div className="min-w-0 space-y-1">
-        {k.huy.loai === 'toan_bo' ? (
+        {k.dong ? (
+          <Chip mau="xam">Đã đóng · {nhanLyDoDong(k.dong.lyDo)}</Chip>
+        ) : k.donInvalid ? (
+          <Chip mau="do">Đơn Invalid — sẽ không đi</Chip>
+        ) : k.huy.loai === 'toan_bo' ? (
           <Chip mau="do" cham>Đã huỷ{k.huy.lyDo ? ` · ${k.huy.lyDo}` : ''}</Chip>
         ) : k.larkMatDong ? (
           <Chip mau="xam">Lark đã xoá dòng</Chip>
@@ -418,8 +437,129 @@ function DongKien({
                   ? tt.tracking
                   : chuaDong ? 'chưa đóng gói' : `đóng xong ${gioVn(k.ngayDong)}`}
         </div>
+
+        {/* Lối RA cho kiện không bao giờ có vận đơn (CEO 28/09/2026). Đơn Invalid
+            tự rời hàng chờ nên không cần nút; ba trường hợp còn lại đóng tay. */}
+        {coQuyenDong && !k.trackingNumber && (
+          k.dong ? (
+            <div className="truncate text-[11px] leading-snug text-muted-foreground">
+              {[k.dong.ghiChu, k.dong.kienThayThe ? `→ ${k.dong.kienThayThe}` : null]
+                .filter(Boolean).join(' · ')}
+              <button
+                type="button" onClick={() => moLai()} disabled={dangDong}
+                className="ml-2 cursor-pointer underline hover:text-foreground disabled:opacity-50"
+              >
+                {dangDong ? 'đang mở…' : 'mở lại'}
+              </button>
+            </div>
+          ) : !k.donInvalid && (
+            <button
+              type="button" onClick={() => setMoDong(true)}
+              className="cursor-pointer text-[11px] text-muted-foreground underline hover:text-foreground"
+            >
+              đóng kiện (không có vận đơn)
+            </button>
+          )
+        )}
       </div>
+
+      {moDong && (
+        <ModalDongKien
+          k={k}
+          dong={dangDong}
+          onDong={(v) => {
+            start(async () => {
+              const r = await dongKienKhongVanDon(k.shipmentId, v);
+              if (!r.ok) { toast.error(r.loi ?? 'Đóng kiện thất bại.'); return; }
+              toast.success(`Đã đóng ${k.logUniqueCode ?? 'kiện'}.`, { duration: 3000 });
+              setMoDong(false);
+            });
+          }}
+          onDong2={() => setMoDong(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Hộp thoại đóng kiện — lý do bắt buộc, ghi chú bắt buộc khi chọn "khác". */
+function ModalDongKien({
+  k, dong, onDong, onDong2,
+}: {
+  k: KienDongHang; dong: boolean;
+  onDong: (v: { lyDo: string; ghiChu: string | null; kienThayThe: string | null }) => void;
+  onDong2: () => void;
+}) {
+  const [lyDo, setLyDo] = useState(LY_DO_DONG[0]!.ma);
+  const [ghiChu, setGhiChu] = useState('');
+  const [kienThayThe, setKienThayThe] = useState('');
+
+  const vao = { lyDo, ghiChu: ghiChu.trim() || null, kienThayThe: kienThayThe.trim() || null };
+  // Cùng hàm thuần server dùng để kiểm — người bấm thấy lỗi ngay, không phải chờ vòng mạng.
+  const loi = kiemDongKien(vao, k.logUniqueCode);
+
+  return (
+    <Dialog open onOpenChange={(m) => { if (!m) onDong2(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="pr-8">Đóng kiện {k.logUniqueCode ?? ''}</DialogTitle>
+          <DialogDescription>
+            Kiện rời hàng chờ nhưng KHÔNG bị xoá — vẫn xem lại được ở ngăn “Đã đóng”, và mở lại được.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">Lý do</span>
+            <select
+              value={lyDo} onChange={(e) => setLyDo(e.target.value)}
+              className="h-10 w-full cursor-pointer rounded-lg border border-input bg-background px-2 text-sm"
+            >
+              {LY_DO_DONG.map((l) => <option key={l.ma} value={l.ma}>{l.ten}</option>)}
+            </select>
+          </label>
+
+          {lyDo === 'dong_trung' && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium">Kiện đã đi thật</span>
+              <input
+                value={kienThayThe} onChange={(e) => setKienThayThe(e.target.value)}
+                placeholder="vd PK-18803"
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 font-mono text-sm"
+              />
+            </label>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">
+              Ghi chú{lyDo === 'khac' ? '' : ' (tuỳ chọn)'}
+            </span>
+            <textarea
+              value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} rows={2}
+              placeholder="Vì sao kiện này không có vận đơn — để sau còn đọc lại hiểu"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            />
+          </label>
+
+          {loi && <p className="text-sm text-destructive">{loi}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button" onClick={onDong2}
+            className="cursor-pointer rounded-lg border border-border px-4 py-2 text-sm hover:border-foreground/40"
+          >
+            Thôi
+          </button>
+          <button
+            type="button" onClick={() => onDong(vao)} disabled={dong || loi != null}
+            className="cursor-pointer rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-amber-950 transition hover:bg-amber-400 disabled:opacity-50"
+          >
+            {dong ? 'Đang đóng…' : 'Đóng kiện'}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

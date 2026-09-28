@@ -21,6 +21,8 @@ export interface PackRow {
   base: string | null;
   /** Ngày Lark đang ghi ở "Label Created Date", GIỮ cả ngày tương lai (kiện hold sang ngày khác). */
   ngayDiDuKien: Date | null;
+  /** Cột Lark "LOG-Order Remark (Full)" — "Invalid" nghĩa là đơn sẽ không bao giờ đi. */
+  ghiChuDon: string | null;
   hop: string | null;
   /** Mã record kho mà cột "Select VTĐG1" trỏ tới — tra tên hộp qua getTenHopVtdg. */
   hopRecordId: string | null;
@@ -174,6 +176,7 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const orderNumbers = tachMaDon(larkText(fields['Order Number']), larkText(fields['Order number (look up)']));
   const orderNumber = orderNumbers[0] ?? '';
   const logUniqueCode = larkText(fields['Log Unique code']);
+  const ghiChuDon = larkText(fields['LOG-Order Remark (Full)']);
   const trackingNumber = larkText(fields['Tracking Number']);
 
   // weight
@@ -245,5 +248,5 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, orderNumbers, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, hop, hopRecordId, skuText, pieces, warnings };
+  return { orderNumber, orderNumbers, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, ghiChuDon, hop, hopRecordId, skuText, pieces, warnings };
 }

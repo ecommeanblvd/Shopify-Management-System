@@ -202,3 +202,14 @@ describe('parsePackRow.ngayDiDuKien', () => {
     expect(r.labelDate).toBeNull();
   });
 });
+
+describe('parsePackRow.ghiChuDon', () => {
+  it('đọc cột "LOG-Order Remark (Full)" — cờ Invalid quyết định kiện có phải việc phải làm không', () => {
+    expect(parsePackRow({ 'LOG-Order Remark (Full)': 'Invalid' }).ghiChuDon).toBe('Invalid');
+    expect(parsePackRow({ 'LOG-Order Remark (Full)': 'Address Checked' }).ghiChuDon).toBe('Address Checked');
+  });
+
+  it('Lark bỏ cờ → null, để đồng bộ ghi đè và kiện quay lại hàng chờ', () => {
+    expect(parsePackRow({}).ghiChuDon).toBeNull();
+  });
+});

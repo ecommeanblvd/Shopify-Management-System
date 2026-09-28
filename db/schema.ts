@@ -1142,6 +1142,18 @@ export const shipments = pgTable('shipments', {
   /** MỌI mã đơn Lark ghi trên kiện này (gộp đơn). NULL = kiện của một đơn duy nhất.
    *  Lưu đủ cả đơn chính vì kiện có thể được gắn vào đơn thứ hai; nơi hiển thị tự lọc. */
   cacDonTrongKien: text('cac_don_trong_kien').array(),
+  /** Ghi chú đơn bên Lark (cột "LOG-Order Remark (Full)"), vd "Invalid" / "Address Checked".
+   *  Đồng bộ ghi ĐÈ vô điều kiện: kiện của đơn Invalid tự rời hàng chờ và TỰ QUAY LẠI khi
+   *  CX sửa được địa chỉ và Lark bỏ cờ (CEO 28/09/2026). */
+  larkGhiChuDon: text('lark_ghi_chu_don'),
+  /** Đóng kiện KHÔNG có vận đơn — giao tận tay, dòng trùng, đơn huỷ (features/dong-hang/dong-kien.ts).
+   *  NULL = chưa đóng. Mở lại được: xoá hết bốn cột này. */
+  dongKienLuc: timestamp('dong_kien_luc'),
+  dongKienLyDo: text('dong_kien_ly_do'),
+  dongKienGhiChu: text('dong_kien_ghi_chu'),
+  /** Mã kiện đã đi thật — bắt buộc khi lý do là `dong_trung`, để còn truy ngược. */
+  dongKienKienThayThe: text('dong_kien_kien_thay_the'),
+  dongKienBy: text('dong_kien_by').references(() => user.id, { onDelete: 'set null' }),
   /** Lúc phát hiện dòng Lark của kiện này không còn (Ops xoá). NULL = dòng vẫn còn.
    *  Kiện bị đánh dấu không nằm trong việc "chờ chọn line" nữa nhưng KHÔNG bị xoá. */
   larkMatDongLuc: timestamp('lark_mat_dong_luc'),
