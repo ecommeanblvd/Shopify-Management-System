@@ -40,7 +40,7 @@ export function BangTicket({
     if (bp) q.set('bp', bp);
     if (ct) q.set('toi', '1');
     const s = q.toString();
-    start(() => router.push(`/f/cx${s ? `?${s}` : ''}`));
+    start(() => router.push(`/f/cx/viec-can-lam${s ? `?${s}` : ''}`));
   }
 
   return (

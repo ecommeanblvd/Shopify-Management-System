@@ -9,6 +9,7 @@ import { NHAN_TICKET, NHAN_VIEC, boPhanConTac } from '@/features/cx-ticket/trang
 import { chiTietTicket } from '@/features/cx-ticket/queries';
 import { doiTrangThaiTicket, ghiPhanViec } from '@/features/cx-ticket/actions';
 import type { ChiTietTicket } from '@/features/cx-ticket/types';
+import { DaiLienQuan } from '@/components/cx/DaiLienQuan';
 
 /**
  * Modal chi tiết ticket.
@@ -148,6 +149,8 @@ function NoiDung({
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        <DaiLienQuan maDon={t.dong[0]?.maDon ?? null} boQua="ticket" />
+
         {t.dong.length > 0 && (
           <section>
             <h3 className="mb-1.5 text-xs uppercase tracking-wider text-muted-foreground">

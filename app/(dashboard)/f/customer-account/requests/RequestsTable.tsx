@@ -15,6 +15,7 @@ import {
 } from '@/features/customer-account/requests-actions';
 import { huyYeuCau } from '@/features/doi-tra/actions';
 import { nhanLyDo, NOI_HOAN } from '@/features/doi-tra/ly-do';
+import { DaiLienQuan } from '@/components/cx/DaiLienQuan';
 
 interface StoreRef { id: string; name: string; shopDomain: string }
 
@@ -225,6 +226,8 @@ function RequestCard({ row, hubs, disabled }: { row: AdminRequestRow; hubs: HubR
 
         {expanded && (
           <div className="border-t border-border pt-3 space-y-3">
+            <DaiLienQuan maDon={row.orderNumber} boQua="doi_tra" />
+
             {row.lyDoChinh && (
               <p className="text-sm">
                 <span className="text-muted-foreground">Lý do: </span>

@@ -1,15 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { NHOM, BO_PHAN, nhanBoPhan } from '@/features/cx-ticket/phan-loai';
 import { timDongDon } from '@/features/cx-ticket/queries';
 import { taoTicket } from '@/features/cx-ticket/actions';
 import type { DongDonGan } from '@/features/cx-ticket/types';
-
-const TOI_THIEU = 2;
-const DEBOUNCE_MS = 250;
+import { dungTimDong } from '@/components/cx/dung-tim-dong';
 
 /**
  * Form tạo ticket. Gắn dòng đơn là TUỲ CHỌN — đo Lark: 321/675 ticket (48%)
@@ -175,40 +173,14 @@ export function TaoTicket({
   );
 }
 
-/** Ô tìm và gắn dòng đơn — nhiều dòng một ticket (62/675 ticket Lark gắn 2–7 dòng). */
+/** Ô tìm và gắn dòng đơn — nhiều dòng một ticket (62/675 ticket Lark gắn 2–7 dòng).
+ *  Phần debounce + chặn đua + tách lỗi khỏi rỗng nằm ở hook `dungTimDong`. */
 function OGanDon({ dong, onDoi }: { dong: DongDonGan[]; onDoi: (d: DongDonGan[]) => void }) {
-  const [q, setQ] = useState('');
-  const [ds, setDs] = useState<DongDonGan[]>([]);
-  const [dangTim, setDangTim] = useState(false);
-  const [loiGoi, setLoiGoi] = useState<string | null>(null);
-  const luotRef = useRef(0);
+  const o = dungTimDong<DongDonGan>(timDongDon);
 
-  useEffect(() => {
-    const ky = q.trim();
-    if (ky.length < TOI_THIEU) return;
-    const luot = ++luotRef.current;
-    const t = setTimeout(async () => {
-      setDangTim(true);
-      try {
-        const r = await timDongDon(ky);
-        if (luot !== luotRef.current) return;
-        setDs(r);
-        setLoiGoi(null);
-      } catch (e) {
-        if (luot !== luotRef.current) return;
-        console.error('[cx-ticket] tìm dòng đơn lỗi:', e);
-        setDs([]);
-        setLoiGoi('Không gọi được máy chủ để tìm. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
-      } finally {
-        if (luot === luotRef.current) setDangTim(false);
-      }
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const ky = q.trim();
   const daGan = new Set(dong.map((d) => d.lineId));
-  const hienThi = ky.length < TOI_THIEU ? [] : ds.filter((d) => !daGan.has(d.lineId));
+  // Lọc món ĐÃ gắn khỏi gợi ý: hiện lại món vừa chọn chỉ làm người dùng bấm hai lần.
+  const hienThi = o.hienThi.filter((d) => !daGan.has(d.lineId));
 
   return (
     <div>
@@ -237,26 +209,27 @@ function OGanDon({ dong, onDoi }: { dong: DongDonGan[]; onDoi: (d: DongDonGan[])
       )}
 
       <input
-        value={q} onChange={(e) => { setQ(e.target.value); setLoiGoi(null); }}
+        value={o.tuKhoa} onChange={(e) => o.doiTuKhoa(e.target.value)}
         placeholder="Mã đơn, SKU, tên sản phẩm, email khách"
+        aria-label="Tìm dòng đơn để gắn vào ticket"
         className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
       />
 
-      {loiGoi && <p className="mt-1 text-sm text-destructive">{loiGoi}</p>}
+      {o.loiGoi && <p className="mt-1 text-sm text-destructive">{o.loiGoi}</p>}
 
-      {ky.length >= TOI_THIEU && !loiGoi && (
+      {!o.duNgan && !o.loiGoi && (
         <div className="mt-1 max-h-56 overflow-y-auto rounded-lg border border-border">
-          {dangTim && hienThi.length === 0 ? (
+          {o.dangTim && hienThi.length === 0 ? (
             <p className="px-3 py-3 text-sm text-muted-foreground">Đang tìm…</p>
           ) : hienThi.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">Không có dòng đơn nào khớp “{ky}”.</p>
+            <p className="px-3 py-3 text-sm text-muted-foreground">Không có dòng đơn nào khớp “{o.ky}”.</p>
           ) : (
             <ul>
               {hienThi.map((d) => (
                 <li key={d.lineId} className="border-b border-border last:border-b-0">
                   <button
                     type="button"
-                    onClick={() => { onDoi([...dong, d]); setQ(''); setDs([]); }}
+                    onClick={() => { onDoi([...dong, d]); o.xoa(); }}
                     className="w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-muted"
                   >
                     <span className="block truncate">

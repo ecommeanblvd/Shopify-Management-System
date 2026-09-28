@@ -90,7 +90,7 @@ export async function taoTicket(v: TaoTicketVao): Promise<Ket & { id?: string; m
       }
       return { id, ma };
     }));
-    revalidatePath('/f/cx');
+    revalidatePath('/f/cx/viec-can-lam');
     return { ok: true, ...ket };
   } catch (e) {
     console.error('[cx-ticket] taoTicket lỗi:', e);
@@ -153,7 +153,7 @@ export async function ghiPhanViec(
         .set({ trangThai: 'dang_xu_ly', updatedAt: new Date() })
         .where(sql`${schema.cxTicket.id} = ${ticketId} AND ${schema.cxTicket.trangThai} = 'moi'`);
     });
-    revalidatePath('/f/cx');
+    revalidatePath('/f/cx/viec-can-lam');
     return { ok: true };
   } catch (e) {
     console.error('[cx-ticket] ghiPhanViec lỗi:', e);
@@ -180,7 +180,7 @@ export async function doiTrangThaiTicket(id: string, den: string): Promise<Ket> 
       trangThai: den, updatedAt: new Date(),
       dongLuc: den === 'xong' ? new Date() : null,
     }).where(eq(schema.cxTicket.id, id));
-    revalidatePath('/f/cx');
+    revalidatePath('/f/cx/viec-can-lam');
     return { ok: true };
   } catch (e) {
     console.error('[cx-ticket] doiTrangThaiTicket lỗi:', e);
@@ -198,7 +198,7 @@ export async function ganDongDon(ticketId: string, lineId: string): Promise<Ket>
     if (t.nguon === 'lark') return { ok: false, loi: 'Ticket nhập từ Lark chỉ để đọc.' };
     await db.insert(schema.cxTicketDong).values({ ticketId, orderLineId: lineId })
       .onConflictDoNothing();
-    revalidatePath('/f/cx');
+    revalidatePath('/f/cx/viec-can-lam');
     return { ok: true };
   } catch (e) {
     console.error('[cx-ticket] ganDongDon lỗi:', e);
@@ -215,7 +215,7 @@ export async function boDongDon(ticketId: string, lineId: string): Promise<Ket> 
     if (t.nguon === 'lark') return { ok: false, loi: 'Ticket nhập từ Lark chỉ để đọc.' };
     await db.delete(schema.cxTicketDong).where(
       sql`${schema.cxTicketDong.ticketId} = ${ticketId} AND ${schema.cxTicketDong.orderLineId} = ${lineId}`);
-    revalidatePath('/f/cx');
+    revalidatePath('/f/cx/viec-can-lam');
     return { ok: true };
   } catch (e) {
     console.error('[cx-ticket] boDongDon lỗi:', e);

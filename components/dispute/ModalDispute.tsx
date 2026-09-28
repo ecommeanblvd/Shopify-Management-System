@@ -9,6 +9,7 @@ import {
 import { chiTietDispute } from '@/features/dispute/queries';
 import { suaPhanCx, themGhiChu } from '@/features/dispute/actions';
 import type { ChiTietDispute } from '@/features/dispute/types';
+import { DaiLienQuan } from '@/components/cx/DaiLienQuan';
 
 /**
  * Chi tiết một ca tranh chấp.
@@ -101,6 +102,8 @@ function NoiDung({ id, coQuyenGhi, onDoi }: { id: string; coQuyenGhi: boolean; o
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        <DaiLienQuan maDon={d.maDon} boQua="tranh_chap" />
+
         <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {[
             ['Lý do', `${nhanLyDo(d.lyDo)}${d.lyDoMang ? ` (mã ${d.lyDoMang})` : ''}`],

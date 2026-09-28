@@ -13,6 +13,7 @@ import {
   daXemLai, doiBoPhanChinh, doiTrangThaiSuCo, themChiPhi, themGhiChuSuCo, xoaChiPhi,
 } from '@/features/su-co/actions';
 import type { ChiTietSuCo } from '@/features/su-co/types';
+import { DaiLienQuan } from '@/components/cx/DaiLienQuan';
 
 /**
  * KHÔNG thêm `relative` vào DialogContent: bản gốc là `fixed top-1/2 left-1/2
@@ -116,6 +117,8 @@ function NoiDung({ id, coQuyenGhi, onDoi }: { id: string; coQuyenGhi: boolean; o
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        <DaiLienQuan maDon={s.maDon} boQua="su_co" />
+
         {s.moTa && <p className="whitespace-pre-wrap text-sm">{s.moTa}</p>}
 
         {s.maDon && !s.coDonTrongHeThong && (

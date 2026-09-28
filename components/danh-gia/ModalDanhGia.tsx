@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { TRANG_THAI, nhanKenh, nhanTrang, nhanTrangThai } from '@/features/danh-gia/phan-loai';
 import { doiTrangThaiDanhGia, suaPhanCxDanhGia } from '@/features/danh-gia/actions';
 import type { DongDanhGiaUI } from '@/features/danh-gia/types';
+import { DaiLienQuan } from '@/components/cx/DaiLienQuan';
 
 /**
  * Chi tiết một đánh giá.
@@ -84,6 +85,8 @@ function NoiDung({
           {d.khachEmail && ` · ${d.khachEmail}`}
         </p>
       </div>
+
+      <DaiLienQuan maDon={d.maDon} boQua="danh_gia" />
 
       {d.maDon && !d.coDonTrongHeThong && (
         <p className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">

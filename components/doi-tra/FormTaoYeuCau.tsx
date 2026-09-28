@@ -1,15 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { timDongDeTra } from '@/features/doi-tra/queries';
 import type { DongDonTra } from '@/features/doi-tra/types';
 import { taoYeuCauTra } from '@/features/doi-tra/actions';
 import { LY_DO, NOI_HOAN, LOAI_TRA, type NoiHoan, type LoaiTra } from '@/features/doi-tra/ly-do';
-
-const TOI_THIEU = 2;
-const DEBOUNCE_MS = 250;
+import { dungTimDong } from '@/components/cx/dung-tim-dong';
 
 /**
  * CX tạo yêu cầu trả thay khách (CEO 27/09: "CX nhập hộ, giữ nguyên thói quen").
@@ -18,47 +16,18 @@ const DEBOUNCE_MS = 250;
  * CX đang ghi MỘT DÒNG = MỘT MÓN trên Lark và hoàn tiền tính theo món.
  */
 export function FormTaoYeuCau() {
-  const [q, setQ] = useState('');
-  const [ds, setDs] = useState<DongDonTra[]>([]);
-  const [dangTim, setDangTim] = useState(false);
-  /** Lỗi GỌI, tách hẳn khỏi "không có kết quả" — một action chết không được
-   *  đội lốt một danh sách rỗng (đã mắc đúng lỗi này ở màn nhận hàng 24/09). */
-  const [loiGoi, setLoiGoi] = useState<string | null>(null);
+  /* Phần debounce + chặn đua lượt gọi + TÁCH "lỗi gọi" khỏi "không có kết quả"
+     nằm ở hook `dungTimDong` — dùng chung với ô tìm của module ticket. */
+  const o = dungTimDong<DongDonTra>(timDongDeTra);
   const [chon, setChon] = useState<DongDonTra | null>(null);
-  const luotRef = useRef(0);
-
-  useEffect(() => {
-    const ky = q.trim();
-    if (ky.length < TOI_THIEU) return;
-    const luot = ++luotRef.current;
-    const t = setTimeout(async () => {
-      setDangTim(true);
-      try {
-        const r = await timDongDeTra(ky);
-        if (luot !== luotRef.current) return;
-        setDs(r);
-        setLoiGoi(null);
-      } catch (e) {
-        if (luot !== luotRef.current) return;
-        console.error('[doi-tra] tìm dòng lỗi:', e);
-        setDs([]);
-        setLoiGoi('Không gọi được máy chủ để tìm. Thử lại, nếu vẫn lỗi thì báo kỹ thuật.');
-      } finally {
-        if (luot === luotRef.current) setDangTim(false);
-      }
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const ky = q.trim();
-  const hienThi = ky.length < TOI_THIEU ? [] : ds;
+  const hienThi = o.hienThi;
 
   if (chon) {
     return (
       <BuocLyDo
         dong={chon}
         onQuayLai={() => setChon(null)}
-        onXong={() => { setChon(null); setQ(''); setDs([]); }}
+        onXong={() => { setChon(null); o.xoa(); }}
       />
     );
   }
@@ -68,22 +37,22 @@ export function FormTaoYeuCau() {
       <label className="block">
         <span className="mb-1 block text-sm font-medium">Tìm món khách muốn trả</span>
         <input
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setLoiGoi(null); }}
+          value={o.tuKhoa}
+          onChange={(e) => o.doiTuKhoa(e.target.value)}
           placeholder="Mã đơn, SKU, tên sản phẩm, hoặc email khách"
           aria-label="Tìm món khách muốn trả theo mã đơn, SKU, tên sản phẩm hoặc email khách"
           className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
         />
       </label>
 
-      {loiGoi && <p className="text-sm text-destructive">{loiGoi}</p>}
+      {o.loiGoi && <p className="text-sm text-destructive">{o.loiGoi}</p>}
 
-      {ky.length >= TOI_THIEU && !loiGoi && (
+      {!o.duNgan && !o.loiGoi && (
         <div className="rounded-lg border border-border">
-          {dangTim && hienThi.length === 0 ? (
+          {o.dangTim && hienThi.length === 0 ? (
             <p className="px-3 py-4 text-sm text-muted-foreground">Đang tìm…</p>
           ) : hienThi.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground">Không có món nào khớp “{ky}”.</p>
+            <p className="px-3 py-4 text-sm text-muted-foreground">Không có món nào khớp “{o.ky}”.</p>
           ) : (
             <ul>
               {hienThi.map((m) => {

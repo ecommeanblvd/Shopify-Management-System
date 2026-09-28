@@ -4,9 +4,11 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { WarehouseTabs } from '@/components/fulfillment/WarehouseTabs';
+import { OTimXuyenModule } from '@/components/cx/OTimXuyenModule';
 
 /**
- * Khung module CX. "Việc cần làm" đứng đầu vì đó là thứ CX mở ra mỗi ngày.
+ * Khung module CX. "Hôm nay" đứng đầu: đó là trang trả lời "cần làm gì" cho cả năm
+ * module, thay vì buộc CX mở bốn tab mới biết.
  *
  * Tab "Đổi trả" TRỎ sang màn đã có ở `/f/customer-account/requests` chứ không
  * dựng lại — một luồng đổi trả, hai chỗ vào.
@@ -22,7 +24,10 @@ export default async function CxLayout({ children }: { children: React.ReactNode
   if (!role || !coQuyenCx) redirect('/');
 
   const tabs = [
-    { href: '/f/cx', label: 'Việc cần làm' },
+    { href: '/f/cx', label: 'Hôm nay' },
+    ...(hasPermission(role, 'view_cx_ticket')
+      ? [{ href: '/f/cx/viec-can-lam', label: 'Việc cần làm' }]
+      : []),
     ...(hasPermission(role, 'view_cx_dispute')
       ? [{ href: '/f/cx/tranh-chap', label: 'Tranh chấp' }]
       : []),
@@ -39,6 +44,13 @@ export default async function CxLayout({ children }: { children: React.ReactNode
   return (
     <div>
       <WarehouseTabs tabs={tabs} />
+      {/* Ô tìm nằm ở LAYOUT nên có trên mọi tab CX: tra một đơn không phải đi về
+          trang chủ trước. */}
+      <div className="border-b border-border px-6 py-3 md:px-10">
+        <div className="max-w-xl">
+          <OTimXuyenModule />
+        </div>
+      </div>
       {children}
     </div>
   );
