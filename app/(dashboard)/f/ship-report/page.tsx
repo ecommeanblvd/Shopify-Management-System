@@ -459,6 +459,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                     <th className="text-right">Margin</th><th className="text-right">Margin %</th>
                     <th className="text-right" title="% đơn có chi phí từ bill thực">Phủ bill</th>
                     <th className="text-right" title="Đơn chưa báo giá cho brand — không tính vào Thu / Chi / Margin">Chưa có giá</th>
+                    <th className="text-right" title="Đơn TRỘN dự tính với thực (vd chi đã đối soát nhưng thu còn báo giá) — vẫn tính vào Thu / Chi / Margin nhưng margin của chúng chưa chắc">Lệch nguồn</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -482,6 +483,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                       <td className="text-right">{r.marginPct == null ? '—' : `${r.marginPct}%`}</td>
                       <td className="text-right">{r.billedPct}%</td>
                       <td className="text-right">{r.donChuaCoGia > 0 ? <span className="text-amber-600 dark:text-amber-400" title="Đơn chưa báo giá cho brand — không tính vào doanh thu, chi phí và lãi ở dòng này">{r.donChuaCoGia}</span> : '—'}</td>
+                      <td className="text-right">{r.donLechNguon > 0 ? <span className="text-amber-600 dark:text-amber-400" title="Đơn trộn dự tính với thực — vẫn nằm trong Thu / Chi / Margin, nhưng margin của chúng chưa chắc cho tới khi đối soát xong">{r.donLechNguon}</span> : '—'}</td>
                     </tr>
                   ))}
                 </tbody>

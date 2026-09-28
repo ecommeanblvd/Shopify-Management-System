@@ -4,6 +4,7 @@
  * created_at ship hộ). Thu Shopify quy VND qua FX của store (fxCostPerOrderCurrency).
  */
 import { sql } from 'drizzle-orm';
+import { thuChiShipHo } from './thu-chi-ship-ho';
 import { db } from '@/db/client';
 import type { ShipPnlItem } from './pnl';
 import type { SurchargeItem } from './surcharges';
@@ -50,14 +51,21 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
     WHERE s.label_created_at >= ${since}
   `);
 
-  // ── Ship hộ: thu = actualCharged ?? charged; chi = actualCost ?? cost dự tính ──
+  // ── Ship hộ ──
+  // Lấy CỘT THÔ, chọn thu/chi bằng hàm thuần `thuChiShipHo` (có test). Trước đây
+  // chọn thẳng trong SQL bằng COALESCE và quên duty: `actual_charged_vnd` KHÔNG
+  // gồm duty còn `actual_carrier_cost_vnd` CÓ, nên margin hụt đúng bằng duty và
+  // âm mọi tháng (CEO báo 28/09). Luật ở trong TypeScript thì test được.
   const shipHo = await db.execute(sql`
     SELECT
       to_char(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month,
       carrier_key AS carrier,
       country,
-      COALESCE(actual_charged_vnd, charged_vnd)::float8 AS revenue_vnd,
-      COALESCE(actual_carrier_cost_vnd, carrier_cost_vnd)::float8 AS cost_vnd,
+      charged_vnd::float8 AS charged,
+      actual_charged_vnd::float8 AS actual_charged,
+      actual_duty_vnd::float8 AS actual_duty,
+      carrier_cost_vnd::float8 AS cost,
+      actual_carrier_cost_vnd::float8 AS actual_cost,
       (reconcile_status = 'reconciled') AS billed
     FROM ship_ho_orders
     WHERE created_at >= ${since} AND status::text NOT IN ('draft', 'cancelled')
@@ -73,15 +81,24 @@ export async function loadShipReport(monthsBack: number): Promise<ShipReportRaw>
       costVnd: r.cost_vnd == null ? null : Math.round(Number(r.cost_vnd)),
       billed: r.cost_vnd != null,
     })),
-    ...shipHo.rows.map((r: Record<string, unknown>) => ({
-      month: String(r.month),
-      segment: 'ship_ho' as const,
-      carrierKey: (r.carrier as string | null) ?? 'fedex',
-      country: r.country as string | null,
-      revenueVnd: r.revenue_vnd == null ? null : Math.round(Number(r.revenue_vnd)),
-      costVnd: r.cost_vnd == null ? null : Math.round(Number(r.cost_vnd)),
-      billed: Boolean(r.billed),
-    })),
+    ...shipHo.rows.map((r: Record<string, unknown>) => {
+      const so = (v: unknown) => (v == null ? null : Number(v));
+      const tc = thuChiShipHo({
+        chargedVnd: so(r.charged), actualChargedVnd: so(r.actual_charged),
+        actualDutyVnd: so(r.actual_duty),
+        carrierCostVnd: so(r.cost), actualCarrierCostVnd: so(r.actual_cost),
+      });
+      return {
+        month: String(r.month),
+        segment: 'ship_ho' as const,
+        carrierKey: (r.carrier as string | null) ?? 'fedex',
+        country: r.country as string | null,
+        revenueVnd: tc.revenueVnd,
+        costVnd: tc.costVnd,
+        billed: Boolean(r.billed),
+        lechNguon: tc.lechNguon,
+      };
+    }),
   ];
 
   // ── Phụ phí: shipment_charges (Shopify, unpivot cột) + carrier_bill_lines (ship hộ) ──

@@ -19,6 +19,8 @@ export interface ShipPnlItem {
   revenueVnd: number | null;
   costVnd: number | null;
   billed: boolean;
+  /** Thu và chi lấy từ hai nguồn khác nhau (dự tính + thực) → margin lệch. */
+  lechNguon?: boolean;
 }
 
 export interface PnlRow {
@@ -34,6 +36,10 @@ export interface PnlRow {
   billedPct: number;
   /** Đơn chưa có giá thu — không nằm trong doanh thu/chi phí/lãi ở trên. */
   donChuaCoGia: number;
+  /** Đơn TRỘN dự tính với thực (vd chi đã đối soát nhưng thu còn báo giá). Số
+   *  này VẪN nằm trong Thu/Chi/Margin, nhưng margin của chúng không chắc — đo
+   *  28/09: 4 đơn tháng 9. */
+  donLechNguon: number;
 }
 
 const pct = (num: number, den: number): number | null => (den > 0 ? Math.round((num / den) * 1000) / 10 : null);
@@ -51,6 +57,7 @@ function rowOf(month: string, segment: PnlRow['segment'], items: ShipPnlItem[]):
     marginPct: pct(marginVnd, revenueVnd),
     billedPct: items.length > 0 ? Math.round((billed / items.length) * 1000) / 10 : 0,
     donChuaCoGia: items.length - coGia.length,
+    donLechNguon: coGia.filter((i) => i.lechNguon).length,
   };
 }
 
