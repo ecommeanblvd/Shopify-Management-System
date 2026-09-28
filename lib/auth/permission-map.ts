@@ -55,6 +55,8 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   manage_cx_dispute: ['cx.dispute:view', 'cx.dispute:create', 'cx.dispute:edit'],
   view_cx_incident: ['cx.incident:view'],
   manage_cx_incident: ['cx.incident:view', 'cx.incident:create', 'cx.incident:edit'],
+  view_cx_review: ['cx.review:view'],
+  manage_cx_review: ['cx.review:view', 'cx.review:create', 'cx.review:edit'],
 };
 
 const OPERATOR_OLD = [
@@ -69,11 +71,12 @@ const OPERATOR_OLD = [
   'view_cx_ticket', 'manage_cx_ticket',
   'view_cx_dispute', 'manage_cx_dispute',
   'view_cx_incident', 'manage_cx_incident',
+  'view_cx_review', 'manage_cx_review',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
   'view_orders', 'view_functions', 'view_mmp_products', 'view_fulfillment',
-  'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident',
+  'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
 ];
 
 function expand(oldPerms: string[]): PermissionKey[] {

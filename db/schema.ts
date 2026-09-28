@@ -3209,3 +3209,41 @@ export const suCoGhiChu = pgTable('su_co_ghi_chu', {
   tuLark: boolean('tu_lark').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('su_co_ghi_chu_idx').on(t.suCoId, t.createdAt)]);
+
+
+/**
+ * Đánh giá Trustpilot / Judge.me (migration 0181).
+ *
+ * MỘT bảng, không bảng con — 2,6 ca/tháng. `vendor` lưu thành cột chứ không suy
+ * lúc hiển thị: một đơn nhiều brand thì đếm một đánh giá cho hai brand là cộng trùng.
+ */
+export const danhGia = pgTable('danh_gia', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  maDanhGia: text('ma_danh_gia').notNull().unique(),
+  ngay: date('ngay').notNull(),
+  soSao: integer('so_sao').notNull(),
+  trang: text('trang'),
+  /** Lời KHÁCH viết. */
+  noiDung: text('noi_dung'),
+  /** Phân tích của CX — tách hẳn khỏi `noiDung`, vì Lark dồn cả hai vào một ô. */
+  ghiChuCx: text('ghi_chu_cx'),
+  trangThai: text('trang_thai'),
+  kenhLienHe: text('kenh_lien_he'),
+  quocGia: text('quoc_gia'),
+  khachEmail: text('khach_email'),
+  khachTen: text('khach_ten'),
+  storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  maDon: text('ma_don'),
+  /** Trống = chưa rõ brand (đơn nhiều vendor, hoặc không nối được đơn). */
+  vendor: text('vendor'),
+  theoDoi: text('theo_doi'),
+  larkRecordId: text('lark_record_id').unique(),
+  taoBoi: text('tao_boi').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('danh_gia_sao_idx').on(t.soSao),
+  index('danh_gia_vendor_idx').on(t.vendor),
+  index('danh_gia_trang_thai_idx').on(t.trangThai),
+]);

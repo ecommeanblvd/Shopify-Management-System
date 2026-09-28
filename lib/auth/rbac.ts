@@ -57,7 +57,11 @@ export type Permission =
   /** Xem sự cố và thiệt hại. */
   | 'view_cx_incident'
   /** Ghi/sửa sự cố và các dòng chi phí. */
-  | 'manage_cx_incident';
+  | 'manage_cx_incident'
+  /** Xem đánh giá Trustpilot / Judge.me. */
+  | 'view_cx_review'
+  /** Ghi/sửa đánh giá. */
+  | 'manage_cx_review';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -77,6 +81,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_ticket', 'manage_cx_ticket',
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
+    'view_cx_review', 'manage_cx_review',
   ],
   operator: [
     'view', 'run_feature',
@@ -92,13 +97,14 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_ticket', 'manage_cx_ticket',
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
+    'view_cx_review', 'manage_cx_review',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
     'view_orders', 'view_functions',
     'view_mmp_products',
     'view_fulfillment',
-    'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident',
+    'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
   ],
 };
 

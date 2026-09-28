@@ -17,7 +17,8 @@ export default async function CxLayout({ children }: { children: React.ReactNode
   const role = await getRole(session.user.id);
   const coQuyenCx = hasPermission(role, 'view_cx_ticket')
     || hasPermission(role, 'view_cx_dispute')
-    || hasPermission(role, 'view_cx_incident');
+    || hasPermission(role, 'view_cx_incident')
+    || hasPermission(role, 'view_cx_review');
   if (!role || !coQuyenCx) redirect('/');
 
   const tabs = [
@@ -27,6 +28,9 @@ export default async function CxLayout({ children }: { children: React.ReactNode
       : []),
     ...(hasPermission(role, 'view_cx_incident')
       ? [{ href: '/f/cx/su-co', label: 'Sự cố' }]
+      : []),
+    ...(hasPermission(role, 'view_cx_review')
+      ? [{ href: '/f/cx/danh-gia', label: 'Đánh giá' }]
       : []),
     ...(hasPermission(role, 'view_functions')
       ? [{ href: '/f/customer-account/requests', label: 'Đổi trả' }]
