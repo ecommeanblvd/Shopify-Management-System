@@ -310,11 +310,16 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
             // qua (row phát hiện muộn — cron chết dài ngày thì ngày sync sai cả
             // tháng) → thời điểm sync (sai số ≤1h khi cron chạy đều).
             if (laDelivered) patch.deliveredAt = resolveDeliveredAt(s);
-            // GUARD (29/07): pack CHƯA ship (không tracking, không label) thì không
-            // thể "delivered" — cột Final|Delivery Status trên Lark từng đánh nhầm
-            // cho 16 đơn Invalid Address/đang hold, làm SMS ghi delivered ảo.
+            // GUARD (29/07, THU HẸP 28/09): pack CHƯA ship thì không thể "delivered"
+            // — cột Final|Delivery Status trên Lark đánh "Đúng dự kiến" cho cả đơn
+            // Invalid Address/đang hold.
+            // Bản 29/07 nhận ngày lên nhãn làm bằng chứng đã ship nên vá trượt:
+            // `patchFrom` không xoá ngày lên nhãn khi Lark đổi ô đó thành
+            // placeholder, ngày cũ nằm lại và vẫn mở cửa. Đo 28/09 vẫn đúng 16
+            // kiện sai — y hệt con số 29/07. Bằng chứng ĐÃ SHIP chỉ có thể là MÃ
+            // VẬN ĐƠN; xem `daShip`.
             const notYetShippedGuard = laDelivered
-              ? [or(isNotNull(schema.shipments.trackingNumber), isNotNull(schema.shipments.labelCreatedAt))!]
+              ? [isNotNull(schema.shipments.trackingNumber)]
               : [];
             if (canDongTrangThai(mot, laDelivered)) {
               const res = await tx.update(schema.shipments).set(patch).where(and(

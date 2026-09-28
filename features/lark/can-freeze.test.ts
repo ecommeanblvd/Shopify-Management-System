@@ -74,8 +74,11 @@ describe('chonTrangThaiChoKien — đơn tách kiện (CEO 16/09/2026)', () => {
     expect(chonTrangThaiChoKien({ trackingNumber: null }, 2, theoTracking, cuaDon)).toBeNull();
   });
 
-  it('đơn một kiện thì vẫn dùng trạng thái cả đơn như cũ', () => {
-    expect(chonTrangThaiChoKien({ trackingNumber: null }, 1, new Map(), cuaDon)).toBe(cuaDon);
+  /* THU HẸP 28/09/2026: luật 16/09 cho đơn MỘT kiện mượn trạng thái cả đơn, kể cả
+     khi kiện chưa có mã vận đơn — đó chính là chỗ "delivered" ảo lọt vào. Nay đơn
+     một kiện vẫn mượn được, nhưng kiện phải CÓ mã vận đơn đã. */
+  it('đơn một kiện, kiện ĐÃ có mã vận đơn → vẫn dùng trạng thái cả đơn như luật 16/09', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: '876026631930' }, 1, new Map(), cuaDon)).toBe(cuaDon);
   });
 
   it('mã vận đơn có khoảng trắng thừa vẫn khớp', () => {
@@ -98,5 +101,36 @@ describe('nguồn hãng thắng Lark (spec ghi ngược §6)', () => {
   });
   it('canSuaNgay vốn chỉ nguồn lark — giữ nguyên', () => {
     expect(canSuaNgay([sp({ deliveryStatus: 'delivered', deliverySource: 'fedex', deliveredAt: new Date('2026-05-01') })], new Date('2026-05-03'))).toBe(false);
+  });
+});
+
+describe('bằng chứng ĐÃ SHIP là MÃ VẬN ĐƠN, không phải ngày lên nhãn (28/09/2026)', () => {
+  /* Guard 29/07 nhận `labelCreatedAt` làm bằng chứng đã ship. Không đủ: ngày lên
+     nhãn KHÔNG bị xoá khi Lark đổi ô đó thành placeholder (patchFrom chỉ ghi khi
+     có giá trị), nên một ngày CŨ nằm lại và mở cửa cho "delivered" ảo. Đo
+     28/09/2026: đúng 16 kiện delivered mà không có tracking — y hệt con số 29/07,
+     tức bản vá cũ không chạm vào gốc. 4 trong số đó là kiện đóng gói NGAY HÔM ĐÓ. */
+  it('có ngày lên nhãn nhưng KHÔNG có mã vận đơn → KHÔNG được đánh delivered', () => {
+    expect(canDongTrangThai([sp({ labelCreatedAt: new Date('2026-08-10') })], true)).toBe(false);
+  });
+
+  it('có mã vận đơn → vẫn chạy bình thường', () => {
+    expect(canDongTrangThai([sp({ trackingNumber: '5563167186' })], true)).toBe(true);
+  });
+
+  it('trạng thái KHÁC delivered thì không cần bằng chứng ship', () => {
+    expect(canDongTrangThai([sp({ labelCreatedAt: new Date('2026-08-10') })], false)).toBe(true);
+  });
+});
+
+describe('chonTrangThaiChoKien — kiện KHÔNG có mã vận đơn', () => {
+  const cuaDon = { deliveryState: 'delivered' as const, actualDeliveredAt: new Date('2026-09-28'), expectedDeliveryDate: null };
+
+  it('đơn một kiện mà kiện chưa có mã vận đơn → KHÔNG lấy trạng thái cả đơn', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: null }, 1, new Map(), cuaDon)).toBeNull();
+  });
+
+  it('có mã vận đơn nhưng Lark không có dòng nào trùng mã → vẫn dùng trạng thái cả đơn', () => {
+    expect(chonTrangThaiChoKien({ trackingNumber: 'T9' }, 1, new Map(), cuaDon)).toEqual(cuaDon);
   });
 });

@@ -27,8 +27,27 @@ export function canDongTrangThai(dsShipment: ShipmentHienTai[], laDelivered: boo
     if (s.deliveryStatus === 'delivered') return false;
     if (laNguonHang(s.deliverySource)) return false;
     if (!laDelivered) return true;
-    return s.trackingNumber != null || s.labelCreatedAt != null;
+    return daShip(s);
   });
+}
+
+/**
+ * THUẦN: kiện này có bằng chứng ĐÃ RỜI KHO chưa.
+ *
+ * Bằng chứng là MÃ VẬN ĐƠN, KHÔNG phải ngày lên nhãn. Guard 29/07/2026 nhận cả
+ * `labelCreatedAt` và vì thế vá trượt: `patchFrom` chỉ ghi ngày lên nhãn KHI CÓ
+ * giá trị, nên khi Ops đổi ô đó trên Lark thành placeholder thì ngày CŨ nằm lại
+ * vĩnh viễn — và một ngày cũ đủ để mở cửa cho "delivered" ảo.
+ *
+ * Đo 28/09/2026: đúng 16 kiện `delivered` mà không có mã vận đơn — y hệt con số
+ * 29/07, tức bản vá cũ không chạm vào gốc. 4 trong số đó là kiện đóng gói NGAY
+ * HÔM ĐÓ, còn UNFULFILLED. Lỗi vẫn đang đẻ ra dòng sai mỗi ngày.
+ *
+ * Kiện giao tận tay (không bao giờ có vận đơn) KHÔNG đi lối này: nó được đóng
+ * bằng lý do `giao_tay` ở màn Đóng hàng — đúng chỗ để ghi việc đó.
+ */
+export function daShip(s: Pick<ShipmentHienTai, 'trackingNumber'>): boolean {
+  return s.trackingNumber != null && s.trackingNumber.trim() !== '';
 }
 
 /** Lệnh 2 — lấp ngày giao còn trống. WHERE: đã 'delivered' và deliveredAt NULL, nguồn không phải hãng. */
@@ -70,7 +89,10 @@ export function chonTrangThaiChoKien(
   cuaDon: TrangThaiGiaoLark | undefined,
 ): TrangThaiGiaoLark | null {
   const tk = kien.trackingNumber?.trim();
-  if (tk && theoTracking.has(tk)) return theoTracking.get(tk)!;
+  /* Kiện CHƯA có mã vận đơn thì không có gì để nói về việc giao hàng — đây chính
+     là chỗ trạng thái cả đơn tràn xuống kiện chưa rời kho (28/09/2026). */
+  if (!tk) return null;
+  if (theoTracking.has(tk)) return theoTracking.get(tk)!;
   if (soKienCuaDon === 1 && cuaDon) return cuaDon;
   return null;
 }
