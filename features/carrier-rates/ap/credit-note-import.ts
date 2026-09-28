@@ -20,6 +20,7 @@ import { db, schema } from '@/db/client';
 import { bocTep } from './boc-tep';
 import { bamHoaDon, docHoaDonXml, maThamChieu, phanLoaiHoaDon, type HoaDonDienTu, type LoaiChungTu } from './hoa-don-xml';
 import { parseDhlInvoiceCsv, tachTheoHoaDon, type DhlShipment } from './dhl-invoice-csv';
+import { parseCreditNoteXml } from '@/features/shipments/credit-note-parse';
 
 export interface KetQuaNhapCreditNote {
   tenFile: string;
@@ -51,10 +52,14 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
 
   // 1) Hoá đơn điện tử (XML) — nguồn TIỀN và NGÀY.
   let hoaDon: HoaDonDienTu | null = null;
+  // Giữ NGUYÊN VĂN XML: cột `noi_dung` chỉ lưu thẻ THHDVu ĐẦU TIÊN, nên một chứng
+  // từ nhiều dòng sẽ mất hết các dòng sau nếu không đọc lại từ đây (CEO 28/09/2026).
+  let xmlGoc: string | null = null;
   for (const [ten, buf] of files) {
     if (!/\.xml$/i.test(ten)) continue;
-    const h = docHoaDonXml(buf.toString('utf8'));
-    if (h) { hoaDon = h; break; }
+    const noiDungXml = buf.toString('utf8');
+    const h = docHoaDonXml(noiDungXml);
+    if (h) { hoaDon = h; xmlGoc = noiDungXml; break; }
   }
   if (!hoaDon) {
     return { tenFile, hoaDon: null, loai: null, canCuPhanLoai: null, daGhi: false, trungLap: null, daCo: false, soDongChiTiet: 0, soDongKhopKien: 0,
@@ -133,6 +138,7 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     .values({ soHoaDon: hoaDon.soHoaDon, kyHieu: hoaDon.kyHieu, ...gt })
     .returning({ id: schema.creditNotes.id });
   let khop = 0;
+  let soDongXml = 0;
   if (chiTiet.length) {
     const rows = chiTiet.map((s) => {
       const shipmentId = theoTracking.get(s.shipmentNumber) ?? null;
@@ -151,11 +157,45 @@ export async function nhapCreditNote(tenFile: string, base64: string): Promise<K
     });
     for (let i = 0; i < rows.length; i += 500) await db.insert(schema.creditNoteLines).values(rows.slice(i, i + 500));
   } else {
-    canhBao.push('Không có file CSV chi tiết — vẫn ghi được tiền và ngày, nhưng không truy được đơn nào liên quan.');
+    /* KHÔNG có CSV thì đọc dòng chi tiết từ CHÍNH XML. Hoá đơn điện tử TT78 đã có
+     * mỗi kiện một khối <HHDVu>, và repo đã sẵn `parseCreditNoteXml` bóc đúng thứ
+     * đó — trước nay chỉ dùng ở luồng claim, nên luồng nhập này bỏ phí.
+     *
+     * Hệ quả của việc bỏ phí (đo 28/09/2026): `credit_note_lines` RỖNG hoàn toàn,
+     * cột "Kiện liên quan" trống ở cả 12 chứng từ, và KPI 1.4 vẫn chấm kho sai thùng
+     * bằng hoá đơn mà chính hãng đã huỷ. Dữ liệu vẫn nằm trong tệp, chỉ là không ai đọc.
+     *
+     * XML không nêu cân nên `weightKg` để NULL — không bịa số (D-124). */
+    const dongXml = xmlGoc ? parseCreditNoteXml(xmlGoc).lines : [];
+    if (dongXml.length > 0) {
+      const ma = dongXml.map((d) => d.tracking);
+      const kien = await db.select({ id: schema.shipments.id, tk: schema.shipments.trackingNumber })
+        .from(schema.shipments).where(inArray(schema.shipments.trackingNumber, ma));
+      const theoMaXml = new Map(kien.map((k) => [k.tk ?? '', k.id]));
+      const rows = dongXml.map((d) => {
+        const shipmentId = theoMaXml.get(d.tracking) ?? null;
+        if (shipmentId) khop += 1;
+        return {
+          creditNoteId: ghi.id,
+          trackingNumber: d.tracking,
+          orderNumber: null as string | null,
+          shipmentId,
+          originalInvoice: null as string | null,
+          invoiceNumber: null as string | null,
+          shipDate: null as string | null,
+          weightKg: null as string | null,
+          totalInclVat: String(d.creditVnd),
+        };
+      });
+      for (let i = 0; i < rows.length; i += 500) await db.insert(schema.creditNoteLines).values(rows.slice(i, i + 500));
+      soDongXml = rows.length;
+    } else {
+      canhBao.push('Không có file CSV chi tiết và XML cũng không nêu kiện nào — vẫn ghi được tiền và ngày, nhưng không truy được đơn nào liên quan.');
+    }
   }
   if (chiTiet.length && khop === 0) canhBao.push('Không khớp được kiện nào theo mã vận đơn — kiểm tra lại dữ liệu shipments.');
 
   revalidatePath('/f/shipping-reconcile');
   revalidatePath('/f/ship-report');
-  return { tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: true, trungLap: null, daCo: false, soDongChiTiet: chiTiet.length, soDongKhopKien: khop, canhBao };
+  return { tenFile, hoaDon, loai, canCuPhanLoai: canCu, daGhi: true, trungLap: null, daCo: false, soDongChiTiet: chiTiet.length + soDongXml, soDongKhopKien: khop, canhBao };
 }

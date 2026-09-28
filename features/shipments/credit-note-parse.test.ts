@@ -40,3 +40,28 @@ describe('parseCreditNoteXml', () => {
     expect(parseCreditNoteXml('blah')).toEqual({ creditNoteNumber: null, lines: [] });
   });
 });
+
+describe('XML nhiều dòng — nguồn để lấp "Kiện liên quan" (CEO 28/09/2026)', () => {
+  /* Cột `noi_dung` chỉ lưu thẻ THHDVu ĐẦU TIÊN nên chứng từ nhiều kiện mất hết
+     các dòng sau. Bộ đọc này lấy ĐỦ, và luồng nhập giờ dùng nó khi không có CSV. */
+  const khoi = (desc: string, tien: number) =>
+    `<HHDVu><THHDVu>${desc}</THHDVu><ThTien>${tien}</ThTien></HHDVu>`;
+  const xml = `<HDon><KHHDon>1K26TFA</KHHDon><SHDon>45602</SHDon>`
+    + khoi('876291039886 VN SA', -4002767)
+    + khoi('875281985908 VN SA', -11268313)
+    + `</HDon>`;
+
+  it('bóc ĐỦ mọi kiện, không chỉ kiện đầu', () => {
+    const r = parseCreditNoteXml(xml);
+    expect(r.creditNoteNumber).toBe('1K26TFA-45602');
+    expect(r.lines.map((l) => l.tracking)).toEqual(['876291039886', '875281985908']);
+    expect(r.lines.map((l) => l.creditVnd)).toEqual([4002767, 11268313]);
+  });
+
+  it('dòng mô tả KHÔNG bắt đầu bằng số (kiểu DHL) → bỏ qua, không bịa mã', () => {
+    const dhl = `<HDon><KHHDon>1K26THA</KHHDon><SHDon>463</SHDon>`
+      + khoi('Cước phí sử dụng dịch vụ DHL. Số tài khoản: 527888723', -3453840)
+      + `</HDon>`;
+    expect(parseCreditNoteXml(dhl).lines).toEqual([]);
+  });
+});
