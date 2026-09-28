@@ -124,6 +124,10 @@ export async function createBatchShippingEstimator(
    *  đúng dòng ODA cần — lọc theo nước thôi vẫn nặng vì riêng US đã 112.589
    *  dòng. Đối chiếu trên 8.826 đơn thật: kết quả tra ODA giống hệt nạp full. */
   postcodes?: readonly (string | null | undefined)[],
+  /** CẶP (nước, mã) của chính lô đơn đó. Bắt buộc dùng cho luồng hàng loạt:
+   *  truyền hai danh sách rời thì nhánh dải ghép tích Descartes và nổ — xem
+   *  `features/carrier-rates/engine/cap-dai.ts`. */
+  diem?: readonly { country: string | null | undefined; postcode: string | null | undefined }[],
 ): Promise<BatchShippingEstimator> {
   // Every enabled carrier account joined to its parent carrier brand,
   // so we can group snapshots by carrier_key ('fedex' | 'dhl' | …).
@@ -141,7 +145,7 @@ export async function createBatchShippingEstimator(
     accountRows.map(async (row): Promise<[string, string | null, CarrierAccountSnapshot | null]> => {
       return [row.id, row.carrierKey, await loadAccountSnapshot(row.id, new Date(), {
         remoteCountries: countries,
-        remotePostcodes: postcodes,
+        ...(diem?.length ? { remoteDiem: diem } : { remotePostcodes: postcodes }),
       })];
     }),
   );

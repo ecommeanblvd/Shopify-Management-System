@@ -213,7 +213,10 @@ async function buildOrderRows(
     orders.map((o) => (o.shipCountry ?? '').trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)),
   )];
   const batchPostcodes = [...new Set(orders.map((o) => o.shipPostcode).filter((p): p is string => !!p))];
-  const estimator = await createBatchShippingEstimator(batchCountries, batchPostcodes);
+  // Truyền thêm CẶP (nước, mã): hai danh sách rời làm nhánh dải ghép tích
+  // Descartes, đúng lỗi đã làm sập trang Đối soát phí ship 28/09.
+  const batchDiem = orders.map((o) => ({ country: o.shipCountry, postcode: o.shipPostcode }));
+  const estimator = await createBatchShippingEstimator(batchCountries, batchPostcodes, batchDiem);
 
   // Compute per-order metrics.
   const allMetrics: OrderMetrics[] = [];

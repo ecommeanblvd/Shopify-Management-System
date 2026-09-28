@@ -203,7 +203,11 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
   const nuocDich = [...new Set(
     filtered.map((r) => r.shipCountry?.trim().toUpperCase()).filter((c): c is string => !!c),
   )];
-  const maBuuChinh = [...new Set(filtered.map((r) => r.shipPostcode).filter((p): p is string => !!p))];
+  // CẶP (nước, mã) — KHÔNG truyền hai danh sách rời xuống snapshot. Nhánh dải
+  // ghép tích Descartes giữa hai danh sách: đo 28/09 ra 76 nước × 6.717 tiền tố
+  // = 510.492 mảnh SQL, drizzle nổ stack và trang Đối soát trắng. Xem
+  // `features/carrier-rates/engine/cap-dai.ts`.
+  const diemDen = filtered.map((r) => ({ country: r.shipCountry, postcode: r.shipPostcode }));
 
   // 2. Pre-load one snapshot PER rate card, grouped by carrier key.
   // A carrier (fedex/dhl) has one account; that account has N dated cards.
@@ -227,7 +231,7 @@ export async function reconcileShipments(opts: ReconcileOptions = {}): Promise<R
       // Anchor load to the card's own start date so it resolves that card.
       snapByCard.set(c.id, await loadAccountSnapshot(a.id, c.effectiveFrom, {
         remoteCountries: nuocDich,
-        remotePostcodes: maBuuChinh,
+        remoteDiem: diemDen,
       }));
     }
     byKey.set(a.key, { cards, snapByCard });

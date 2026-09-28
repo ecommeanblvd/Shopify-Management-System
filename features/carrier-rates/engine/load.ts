@@ -6,7 +6,8 @@ import { recordAudit } from '@/lib/logging/audit';
 import { carrierRatesManifest } from '../manifest';
 import { quote, type CarrierAccountSnapshot, type QuoteInput, type QuoteResult } from './quote';
 import { chuanHoaDanhSachPostcode } from './remote-postcode-filter';
-import { tienToTheoDoDai, type DaiMaBuuChinh } from './remote-range';
+import { type DaiMaBuuChinh } from './remote-range';
+import { capDaiTuDiem, capDaiTuHaiDanhSach, chiaLo, type CapDai, type DiemDen } from './cap-dai';
 import { napPhanTinhSnapshot } from './snapshot-static';
 
 /**
@@ -38,28 +39,29 @@ const TRAN_UNG_VIEN_DAI = 8;
  * Tài khoản không có dòng dải nào (DHL, FedEx) thì mỗi lần đi xuống cây trả về
  * rỗng ngay ở nút gốc của index bộ phận — gần như không tốn gì.
  */
-async function napDai(
-  carrierAccountId: string,
-  nuoc: string[],
-  maBuuChinh: readonly (string | null | undefined)[],
-  asOf: string,
-) {
+async function napDai(carrierAccountId: string, cap: CapDai[], asOf: string) {
   const t = schema.carrierRemotePostcodes;
-  // Không biết nước → không khoanh được vùng index; bỏ qua dải thay vì quét cả
-  // bảng. Mọi luồng có truyền mã bưu chính đều có truyền nước (checkout, đối
-  // soát, ước lượng hàng loạt), nên nhánh này trên thực tế không chạy.
-  if (nuoc.length === 0) return [];
+  // Không có cặp nào → không khoanh được vùng index; bỏ qua dải thay vì quét cả
+  // bảng.
+  if (cap.length === 0) return [];
 
-  const tienTo = new Map<string, { doDai: number; khoa: string }>();
-  for (const ma of maBuuChinh) {
-    for (const p of tienToTheoDoDai(ma)) tienTo.set(`${p.doDai}:${p.khoa}`, p);
+  // CHIA LÔ: mỗi cặp tốn 3 tham số bind, mà Postgres chỉ cho 65.535 và drizzle
+  // nổ stack trước đó. Xem `cap-dai.ts` để biết con số đo được (510.492 cặp).
+  const lo = chiaLo(cap);
+  if (lo.length > 1) {
+    const phan = await Promise.all(lo.map((x) => napDaiMotLo(carrierAccountId, x, asOf)));
+    const theoId = new Map<string, (typeof phan)[number][number]>();
+    for (const ds of phan) for (const r of ds) theoId.set(r.id, r);
+    return [...theoId.values()];
   }
-  if (tienTo.size === 0) return [];
+  return napDaiMotLo(carrierAccountId, lo[0]!, asOf);
+}
 
-  const bo: ReturnType<typeof sql>[] = [];
-  for (const n of nuoc) {
-    for (const p of tienTo.values()) bo.push(sql`(${n}::text, ${p.doDai}::int, ${p.khoa}::text)`);
-  }
+async function napDaiMotLo(carrierAccountId: string, cap: CapDai[], asOf: string) {
+  const t = schema.carrierRemotePostcodes;
+  const bo: ReturnType<typeof sql>[] = cap.map(
+    (c) => sql`(${c.cc}::text, ${c.doDai}::int, ${c.khoa}::text)`,
+  );
 
   // Hai chi tiết dưới đây KHÔNG phải tuỳ hứng — đo 24/09/2026, cùng một truy
   // vấn, ba cách viết:
@@ -119,6 +121,11 @@ export async function loadAccountSnapshot(
      *  dòng nào dùng ký tự đại diện nên lọc thẳng theo mã là ĐỦ và không mất
      *  kết quả. Riêng US nạp cả nước đã là 112.589 dòng/lượt. */
     remotePostcodes?: readonly (string | null | undefined)[];
+    /** Điểm đến dạng CẶP (nước, mã bưu chính) — giữ đúng quan hệ giữa hai thứ.
+     *  Luồng HÀNG LOẠT phải dùng cái này: truyền hai danh sách rời thì nhánh dải
+     *  ghép tích Descartes và nổ (76 nước × 6.717 tiền tố = 510.492 mảnh SQL,
+     *  xem `cap-dai.ts`). */
+    remoteDiem?: readonly DiemDen[];
   },
 ): Promise<CarrierAccountSnapshot | null> {
   const tinh = await napPhanTinhSnapshot(carrierAccountId, effectiveDate);
@@ -138,11 +145,19 @@ export async function loadAccountSnapshot(
   //   (c) dòng ghi TÊN THÀNH PHỐ (không có chữ số) → index từng phần WHERE postcode_pattern !~ '[0-9]'.
   // Kết quả giống hệt bản OR cũ (cùng ba điều kiện, cùng lọc ngày hiệu lực), chỉ khác đường đi.
   const postcodes = opts?.skipRemotePostcodes ? [] : await (async () => {
+    // `remoteDiem` (cặp nước↔mã) là nguồn ĐẦY ĐỦ nhất: suy ra cả danh sách nước
+    // lẫn danh sách mã từ nó, để nơi gọi không phải truyền ba thứ và không thể
+    // truyền thiếu. Truyền `remoteDiem` mà quên `remotePostcodes` từng làm ba
+    // nhánh tra mã chính xác rơi về "nạp cả nước" — 110.234 dòng ODA một lượt.
     const nuoc = [...new Set([
       ...(opts?.remoteCountry ? [opts.remoteCountry] : []),
       ...(opts?.remoteCountries ?? []),
+      ...(opts?.remoteDiem ?? []).map((d) => d.country ?? ''),
     ].map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))];
-    const pc = chuanHoaDanhSachPostcode(opts?.remotePostcodes ?? []);
+    const maTho = opts?.remotePostcodes?.length
+      ? opts.remotePostcodes
+      : (opts?.remoteDiem ?? []).map((d) => d.postcode);
+    const pc = chuanHoaDanhSachPostcode(maTho);
     const t = schema.carrierRemotePostcodes;
     const chung = [
       eq(t.carrierAccountId, carrierAccountId),
@@ -162,7 +177,13 @@ export async function loadAccountSnapshot(
     const nhanhRutGon = db.select().from(t).where(and(...chung, chiMaChinhXac, inArray(
       sql`upper(regexp_replace(${t.postcodePattern}, '[^A-Za-z0-9]', '', 'g'))`, pc.rutGon.length ? pc.rutGon : pc.goc)));
     const nhanhThanhPho = db.select().from(t).where(and(...chung, chiMaChinhXac, sql`${t.postcodePattern} !~ '[0-9]'`));
-    const nhanhDai = napDai(carrierAccountId, nuoc, opts?.remotePostcodes ?? [], remoteAsOf);
+    // Ưu tiên `remoteDiem` (giữ đúng cặp nước ↔ mã). Nơi gọi chỉ có hai danh
+    // sách rời thì rơi về tích Descartes — chấp nhận được vì chúng là luồng
+    // quote MỘT đơn (một mã, ≤12 tiền tố).
+    const cap = opts?.remoteDiem?.length
+      ? capDaiTuDiem(opts.remoteDiem)
+      : capDaiTuHaiDanhSach(nuoc, opts?.remotePostcodes ?? []);
+    const nhanhDai = napDai(carrierAccountId, cap, remoteAsOf);
     const [a, b, c, d] = await Promise.all([nhanhGoc, nhanhRutGon, nhanhThanhPho, nhanhDai]);
     // Gộp, bỏ trùng theo id (một dòng có thể khớp cả (a) và (b)).
     const theoId = new Map<string, (typeof a)[number]>();

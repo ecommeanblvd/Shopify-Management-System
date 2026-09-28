@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyDhlProduct, mapDhlFreightToBilled, mapChargesToBilled, isFreightCharges } from './dhl-billed-map';
+import { classifyDhlProduct, mapDhlFreightToBilled, mapChargesToBilled, isFreightCharges, isRecognizedCharge } from './dhl-billed-map';
 import type { DhlShipment } from './dhl-invoice-csv';
 
 const ship = (o: Partial<DhlShipment>): DhlShipment => ({
@@ -106,5 +106,43 @@ describe('mapDhlFreightToBilled', () => {
     expect(m.elevatedRisk).toBe(10);
     expect(m.addressCorrection).toBe(40);
     expect(m.unknown).toEqual([]);
+  });
+});
+
+/**
+ * Khoản cước Aramex có hình KHÁC DHL: `{usd, vnd, name}`, KHÔNG có `code`.
+ * Kiểu `DhlChargeLine` khai `code: string` nhưng dữ liệu đến từ cột jsonb nên
+ * TypeScript không ép được — đo 28/09/2026: 108/108 khoản Aramex thiếu `code`,
+ * 22.388/22.388 khoản DHL có đủ.
+ *
+ * Trang Billing/Invoices của Aramex trắng vì `bucketOf` gọi thẳng
+ * `c.code.toUpperCase()` trên khoản không có `code`.
+ */
+describe('khoản cước THIẾU code — hình dữ liệu của Aramex', () => {
+  const khoanAramex = { name: 'Cước gốc', charge: 457794, tax: 0, total: 457794 } as never;
+  const tron = { charge: 1, tax: 0, total: 1 } as never;
+
+  it('isRecognizedCharge không ném lỗi', () => {
+    expect(() => isRecognizedCharge(khoanAramex)).not.toThrow();
+  });
+
+  it('isFreightCharges không ném lỗi', () => {
+    expect(() => isFreightCharges([khoanAramex])).not.toThrow();
+  });
+
+  it('mapChargesToBilled không ném lỗi, dồn khoản chưa nhận diện vào unknown', () => {
+    const r = mapChargesToBilled([khoanAramex], { totalTax: 0, totalInclVat: 457794, weightKg: 1 });
+    expect(r.unknown).toHaveLength(1);
+  });
+
+  it('khoản thiếu CẢ code lẫn name cũng không ném lỗi', () => {
+    expect(() => isRecognizedCharge(tron)).not.toThrow();
+    expect(() => isFreightCharges([tron])).not.toThrow();
+    expect(() => mapChargesToBilled([tron], { totalTax: 0, totalInclVat: 1, weightKg: null })).not.toThrow();
+  });
+
+  it('nhận diện được theo TÊN khi không có code', () => {
+    const fuel = { name: 'Fuel Surcharge', charge: 1, tax: 0, total: 1 } as never;
+    expect(isRecognizedCharge(fuel)).toBe(true);
   });
 });

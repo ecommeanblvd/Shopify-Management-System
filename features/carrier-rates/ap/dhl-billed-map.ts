@@ -36,12 +36,19 @@ export interface DhlBilledMap {
   unknown: DhlChargeLine[];
 }
 
-/** Phân loại 1 khoản cước DHL về bucket billed. null = không nhận diện. */
+/**
+ * Phân loại 1 khoản cước DHL về bucket billed. null = không nhận diện.
+ *
+ * `code` và `name` đọc PHÒNG THỦ dù kiểu khai `string`: dữ liệu đến từ cột jsonb
+ * nên TypeScript không ép được hình. Khoản cước của Aramex là `{usd, vnd, name}`
+ * — KHÔNG có `code` (đo 28/09: 108/108 khoản Aramex thiếu, 22.388/22.388 khoản
+ * DHL có đủ), và `c.code.toUpperCase()` đã làm trắng trang Billing của Aramex.
+ */
 function bucketOf(c: DhlChargeLine): keyof DhlBilledMap | null {
-  if (c.code === 'WEIGHT') return 'base';
-  if (c.code === 'P') return 'base'; // XML DHL: freight = code 'P' (CSV dùng 'WEIGHT')
-  const n = c.name.toLowerCase();
-  const code = c.code.toUpperCase();
+  const code = (c?.code ?? '').toUpperCase();
+  if (code === 'WEIGHT') return 'base';
+  if (code === 'P') return 'base'; // XML DHL: freight = code 'P' (CSV dùng 'WEIGHT')
+  const n = (c?.name ?? '').toLowerCase();
   // Non-Conveyable trước nhánh cước vì tên "... - WEIGHT" chứa "weight".
   if (/non.?conveyable/.test(n)) return 'nonConveyable';
   if (code === 'YL' || code === 'YO') return 'nonConveyable'; // XML: name rỗng, nhận theo code
@@ -90,10 +97,13 @@ export function mapDhlFreightToBilled(s: DhlShipment): DhlBilledMap {
  * Khoản KHÔNG nhận diện = phí lạ chưa cấu hình surcharge → cần operator xem & set up.
  */
 export function isRecognizedCharge(c: DhlChargeLine): boolean {
-  return bucketOf(c) !== null || classifyCharge(c.name || c.code) === 'hide';
+  return bucketOf(c) !== null || classifyCharge(c?.name || c?.code || '') === 'hide';
 }
 
 /** Freight nếu có cước cân hoặc fuel (duties chỉ có XB/XX/DD/XI). */
 export function isFreightCharges(charges: DhlChargeLine[] | null | undefined): boolean {
-  return !!charges?.some((c) => c.code === 'WEIGHT' || c.code.toUpperCase() === 'FF' || /fuel/i.test(c.name));
+  return !!charges?.some((c) => {
+    const code = (c?.code ?? '').toUpperCase();
+    return code === 'WEIGHT' || code === 'FF' || /fuel/i.test(c?.name ?? '');
+  });
 }
