@@ -48,3 +48,6 @@ public/flags/
 
 # geo-dict build output cục bộ (scripts/build-geo-files.ts, không --upload) — không commit
 /tmp-geo-files/
+
+# Script nháp chạy một lần (dò dữ liệu production) — không thuộc mã nguồn
+scripts/tmp/
