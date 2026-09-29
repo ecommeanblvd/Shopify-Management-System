@@ -20,6 +20,9 @@ import { syncLarkPacks } from '@/features/lark/sync';
 import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron, chayMotJob } from '@/features/jobs/run';
+import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
+import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
+import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
 import { backfillCourierLark } from '@/features/lark/courier-backfill';
 import { ghiNguocLark } from '@/features/lark/ghi-nguoc/ghi-nguoc';
 import { backfillNhanHangLark } from '@/features/lark/nhan-hang-backfill';
@@ -75,6 +78,27 @@ async function main(): Promise<void> {
   // LARK_NHAN_HANG_PUSH tới khi ops tạo cột "Mã món". Nhật ký riêng để trang
   // giám sát thấy nó chạy hay không.
   await chayMotJob('push-nhan-hang', backfillNhanHangLark);
+
+  /* BA TÁC VỤ LARK DƯỚI ĐÂY CHẠY LỒNG Ở ĐÂY, không qua run-group (CEO 29/09/2026).
+   *
+   * Vì sao: nhóm 'moi-6-gio' trong groups.ts KHÔNG CÓ service nào chạy — đo
+   * job_runs 29/09 thì `dong-bo-wh-lark`, `sync-dispute`, `day-production-time-cx`,
+   * `gom-bang-ke-nhap`, `dien-store-final` CHƯA CHẠY LẦN NÀO kể từ khi được khai.
+   * Các service cron trên Railway là MỖI VIỆC MỘT SERVICE (cron-track-shipments,
+   * cron-sync-lifecycle…), không có service nào gọi `run-group`. Nên khai vào
+   * nhóm là khai suông.
+   *
+   * Đặt ở CUỐI: ba việc này không phải nguồn dữ liệu của phần trên, hỏng cũng
+   * không được kéo theo phần đồng bộ chính. `chayCron` ghi mỗi việc một dòng
+   * job_runs nên trang giám sát vẫn thấy từng việc.
+   *
+   * Thời lượng đo 29/09: sync-lark 80s + dong-bo-wh-lark 109s + dien-store-final
+   * ~60s + day-production-time-cx 26s ≈ 4,5 phút, lịch mỗi giờ — còn rất thừa chỗ.
+   */
+  await chayMotJob('dong-bo-wh-lark', dongBoWhInventory);
+  // Điền Store final SAU khi đã đồng bộ, để dòng mới về là điền được ngay.
+  await chayMotJob('dien-store-final', () => dienStoreFinal());
+  await chayMotJob('day-production-time-cx', () => dayProductionTime());
 }
 
 chayCron('sync-lark', main);

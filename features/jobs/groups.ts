@@ -24,8 +24,15 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // sync-lark-ship-ho cũng chạy LỒNG trong script sync-lark.ts như push-nhan-hang.
   // ghi-nguoc-lark cũng chạy LỒNG trong sync-lark.ts, dùng lại record đã tải.
   // noi-line-id-mon chạy LỒNG trong syncBrandReceived (gọi từ cả sync-lark.ts lẫn route HTTP).
-  'sync-lark': ['sync-lark', 'push-nhan-hang', 'sync-lark-ship-ho', 'ghi-nguoc-lark', 'noi-line-id-mon'],
-  'sync-orders': ['sync-orders'],
+  // ĐO 29/09/2026: KHÔNG có service Railway nào gọi `run-group`. Các service cron
+  // là MỖI VIỆC MỘT SERVICE (cron-track-shipments, cron-sync-lifecycle, …), nên
+  // khai một việc vào nhóm mà không service nào chạy = việc KHÔNG BAO GIỜ chạy.
+  // Năm việc từng mắc đúng lỗi này (dong-bo-wh-lark, sync-dispute,
+  // day-production-time-cx, gom-bang-ke-nhap, dien-store-final) — nay chuyển sang
+  // chạy LỒNG trong hai script có service thật.
+  'sync-lark': ['sync-lark', 'push-nhan-hang', 'sync-lark-ship-ho', 'ghi-nguoc-lark', 'noi-line-id-mon',
+    'dong-bo-wh-lark', 'dien-store-final', 'day-production-time-cx'],
+  'sync-orders': ['sync-orders', 'gom-bang-ke-nhap', 'sync-dispute'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.
   'moi-15-phut': ['retry-mmp-orders', 'retry-ship-ho-events'],
@@ -45,7 +52,7 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // `gom-bang-ke-nhap` CHỈ tạo/bổ sung bản NHÁP, không bao giờ tự phát hành — chốt
   // kỳ là việc kế toán, người bấm (CEO 28/09/2026). Chạy lại vô hại: kỳ đã có nháp
   // thì gom thêm vào đúng bản đó rồi tính lại tổng.
-  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho', 'dong-bo-wh-lark', 'sync-dispute', 'day-production-time-cx', 'gom-bang-ke-nhap', 'dien-store-final'],
+  'moi-6-gio': ['sync-lifecycle', 'track-shipments', 'track-ship-ho'],
   // Việc bám theo nhịp đồng bộ đơn — tách khỏi 'sync-orders' ngày 05/09 để
   // mỗi việc có nhật ký riêng; trước đó 11 việc dùng chung một tên tác vụ nên
   // nhìn "5,9 phút" không biết việc nào chậm.

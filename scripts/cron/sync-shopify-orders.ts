@@ -24,6 +24,8 @@ import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcil
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
 import { chayMotJob } from '@/features/jobs/run';
+import { goBangKeNhap } from '@/features/ship-ho/statement-core';
+import { dongBoDispute } from '@/features/dispute/sync';
 
 /** Thứ tự có ý nghĩa: nạp đơn trước, các việc ăn theo dữ liệu đơn sau. */
 const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary: unknown) => string | null }> = [
@@ -71,6 +73,12 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
   { key: 'ship-ho-bao-gia', fn: () => boSungUocTinhShipHo() },
   { key: 'ship-ho-gia-thu', fn: () => boSungGiaThuShipHo() },
   { key: 'ship-ho-reconcile', fn: () => reconcileShipHoFromCarrierBillsCore() },
+  /* Hai việc dưới đây chạy LỒNG ở đây vì nhóm 'moi-6-gio' không có service nào
+   * gọi (đo job_runs 29/09: chưa chạy lần nào kể từ khi khai). Đặt NGAY SAU
+   * `ship-ho-reconcile` vì `gom-bang-ke-nhap` chỉ gom được đơn vừa chốt giá ở
+   * bước đó — sai thứ tự thì kỳ này thiếu, phải đợi kỳ sau. */
+  { key: 'gom-bang-ke-nhap', fn: () => goBangKeNhap() },
+  { key: 'sync-dispute', fn: () => dongBoDispute() },
 ];
 
 async function main(): Promise<void> {
