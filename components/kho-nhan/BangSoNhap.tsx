@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CircleAlertIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { dichNgay } from '@/lib/timezone';
 import { nhanKho } from '@/features/warehouse/ten-kho';
 import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
@@ -117,9 +118,10 @@ export function BangSoNhap({
   };
 
   const doiNgay = (b: number) => {
-    const x = new Date(`${ngay}T00:00:00`);
-    x.setDate(x.getDate() + b);
-    const s = x.toISOString().slice(0, 10);
+    // `dichNgay` là phép cộng lịch THUẦN. Cách cũ dựng Date theo giờ địa phương
+    // rồi đọc bằng toISOString() (UTC) nên mất 7 tiếng: lùi từ 29/09 ra thẳng
+    // 27/09, và 27/09 + 1 lại ra 27/09 nên nút tiến đứng im (CEO 29/09/2026).
+    const s = dichNgay(ngay, b);
     if (s <= homNay) di({ ngay: s });
   };
 

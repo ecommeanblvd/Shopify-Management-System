@@ -2,14 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
+import { dichNgay, ngayKinhDoanh } from '@/lib/timezone';
 import { chiecChoTraBrand, danhDauDaLapBienBan } from '@/features/kho-nhan/bien-ban';
 import type { ChiecLoi } from '@/features/kho-nhan/types';
 
-function ngayHomNay(): string { return new Date().toISOString().slice(0, 10); }
-function ngayTruoc(n: number): string {
-  const d = new Date(); d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+/* Ngày theo giờ VIỆT NAM, không phải UTC. `new Date().toISOString()` trả ngày UTC
+ * nên từ 00:00 đến 07:00 giờ VN nó ra NGÀY HÔM QUA — biên bản lập lúc 6 giờ sáng
+ * sẽ mang sai ngày. Cùng họ lỗi với nút chuyển ngày của Sổ nhập (CEO 29/09/2026). */
+function ngayHomNay(): string { return ngayKinhDoanh(new Date())!; }
+function ngayTruoc(n: number): string { return dichNgay(ngayHomNay(), -n); }
 
 /**
  * Biên bản trả brand — gom chiếc QC không đạt theo brand để in gửi lại.

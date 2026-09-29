@@ -57,3 +57,25 @@ export function hienNgay(d: Date | string | null | undefined): string {
   if (Number.isNaN(dt.getTime())) return '—';
   return dt.toLocaleDateString('vi-VN', { timeZone: MUI_GIO_KINH_DOANH });
 }
+
+/**
+ * THUẦN: dịch một ngày lịch 'YYYY-MM-DD' đi `buoc` ngày. KHÔNG đụng múi giờ.
+ *
+ * Vì sao phải có hàm riêng: cách viết quen tay
+ *   `const x = new Date(`${ngay}T00:00:00`); x.setDate(x.getDate() + b);`
+ *   `x.toISOString().slice(0, 10)`
+ * SAI ở Việt Nam — `new Date('…T00:00:00')` đọc theo giờ ĐỊA PHƯƠNG (UTC+7) còn
+ * `toISOString()` trả về UTC, nên mất 7 tiếng và rơi về NGÀY TRƯỚC. Nút chuyển
+ * ngày của Sổ nhập vì vậy lùi từ Thứ Ba 29/09 ra thẳng Chủ Nhật 27/09, rồi bấm
+ * tiến thì đứng im vì 27/09 + 1 cũng ra 27/09 (CEO báo 29/09/2026).
+ *
+ * Ở đây dùng UTC cho CẢ hai đầu (dựng và đọc) nên phép cộng ngày là phép cộng
+ * lịch thuần tuý, đúng qua biên tháng, biên năm và năm nhuận.
+ */
+export function dichNgay(ngay: string, buoc: number): string {
+  const [y, m, d] = ngay.split('-').map(Number);
+  if (!y || !m || !d) return ngay;
+  const t = new Date(Date.UTC(y, m - 1, d) + buoc * 86_400_000);
+  const hai = (n: number) => String(n).padStart(2, '0');
+  return `${t.getUTCFullYear()}-${hai(t.getUTCMonth() + 1)}-${hai(t.getUTCDate())}`;
+}
