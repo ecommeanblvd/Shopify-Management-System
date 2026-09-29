@@ -8,6 +8,7 @@
  * Idempotent: re-upload upsert theo (account, billNumber) — xoá+ghi lại lines.
  */
 import { randomUUID } from 'crypto';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import * as XLSX from 'xlsx';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -142,7 +143,8 @@ export async function importFboToDatabase(
   const bills = groupFboIntoBills(rows);
   const awbMap = await resolveAwbStoreMap(rows.map((r) => r.awb));
   const { carrierAccountId, currency, userId, fileMeta } = opts;
-  const today = new Date().toISOString().slice(0, 10);
+  // Ngày VIỆT NAM (lib/timezone.ts): toISOString() trả ngày UTC nên 00:00–07:00 giờ VN lệch một ngày.
+  const today = ngayKinhDoanh(new Date())!;
 
   const counts = await db.transaction(async (tx) => {
     let created = 0, updated = 0, charges = 0;

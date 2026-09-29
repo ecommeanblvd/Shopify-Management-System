@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { CreditNoteCard } from '@/components/carrier-rates/CreditNoteCard';
@@ -73,7 +74,8 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
     thang: r.thang, tong: Number(r.tong), n: Number(r.n), tongDebit: Number(r.tong_debit), nDebit: Number(r.n_debit),
   }));
   const inputs = toSummaryInputs(bills, payments);
-  const today = new Date().toISOString().slice(0, 10);
+  // Ngày VIỆT NAM (lib/timezone.ts): toISOString() trả ngày UTC nên 00:00–07:00 giờ VN lệch một ngày.
+  const today = ngayKinhDoanh(new Date())!;
   const summary = summariseAp(inputs.bills, inputs.payments, today);
   const trackingRows = buildTrackingRows(
     bills.map((b) => ({ id: b.id, billNumber: b.billNumber, dueDate: b.dueDate, amount: b.amount })),

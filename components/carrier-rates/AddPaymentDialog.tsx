@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,8 @@ interface Props {
 /** Modal to record a (partial) payment against a bill, with a proof file. */
 export function AddPaymentDialog({ billId, outstanding, currency, addPaymentAction }: Props) {
   const [open, setOpen] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  // Ngày VIỆT NAM — mốc thanh toán ghi sai ngày thì lệch cả kỳ đối soát.
+  const today = ngayKinhDoanh(new Date())!;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs hover:bg-muted whitespace-nowrap">

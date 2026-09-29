@@ -1,6 +1,7 @@
 'use client';
 
 import { Zap, Loader2 } from 'lucide-react';
+import { dichNgay, ngayKinhDoanh } from '@/lib/timezone';
 import { Button } from '@/components/ui/button';
 import { NHAN_MOC, type MocLoc } from '@/features/shopify-orders/loc-ngay';
 
@@ -39,15 +40,12 @@ const PRESETS: Array<{ label: string; days: number }> = [
  * React 19's purity rule by calling Date.now() during render.
  */
 function presetWindow(days: number, todayMs: number): { from: string; to: string } {
-  const today = new Date(todayMs);
-  const to = today.toISOString().slice(0, 10);
-  let fromDate: Date;
-  if (days === 0) {
-    fromDate = new Date(today.getFullYear(), 0, 1);
-  } else {
-    fromDate = new Date(todayMs - days * 24 * 60 * 60 * 1000);
-  }
-  return { from: fromDate.toISOString().slice(0, 10), to };
+  // Ngày VIỆT NAM cho cả hai đầu. `toISOString()` trả ngày UTC nên khoảng
+  // 00:00–07:00 giờ VN mọi mốc lùi một ngày, và "từ đầu năm" lấy nhầm năm cũ
+  // đúng đêm giao thừa. `dichNgay` cộng trừ trên chuỗi lịch nên không lệch.
+  const to = ngayKinhDoanh(new Date(todayMs))!;
+  const from = days === 0 ? `${to.slice(0, 4)}-01-01` : dichNgay(to, -days);
+  return { from, to };
 }
 
 export function MetricsFilters({

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { resendBrandRequest } from '@/features/fulfillment/brand-actions';
 import { isFollowUpDue } from '@/features/fulfillment/brand-logic';
 
@@ -58,7 +59,8 @@ function ResendButton({ id, disabled }: { id: string; disabled: boolean }) {
 }
 
 export function BrandRequestsTable({ rows, canManage, defaultFollowUp }: Props) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Ngày VIỆT NAM: `toISOString()` trả ngày UTC nên 00:00–07:00 giờ VN ra ngày hôm qua.
+  const todayIso = ngayKinhDoanh(new Date())!;
   const [confirmFilter, setConfirmFilter] = useState<string>('all');
   const [followUpOnly, setFollowUpOnly] = useState(defaultFollowUp ?? false);
 

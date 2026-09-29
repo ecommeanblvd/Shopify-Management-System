@@ -12,6 +12,7 @@
  * Chạy lại vô hại: `lark_record_id` UNIQUE.
  */
 import { sql } from 'drizzle-orm';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { db, schema } from '@/db/client';
 import { locQuocGia, mapKenh, mapTrang, mapTrangThai, soSaoHopLe } from './phan-loai';
 
@@ -141,7 +142,7 @@ export async function nhapDanhGiaTuLark(
 
     const maDonRaw = (gop(f, 'Order Number', 'Order number (Data cũ)') ?? '')
       .trim().replace(/^#/, '');
-    const ngay = ngayVn(f.Date) ?? new Date().toISOString().slice(0, 10);
+    const ngay = ngayVn(f.Date) ?? ngayKinhDoanh(new Date())!;
 
     try {
       const themMoi = await db.transaction(async (tx) => {

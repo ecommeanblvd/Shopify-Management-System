@@ -7,6 +7,7 @@
  * Phần thuần: khopOBangGia. Phần DB: layOBangGia.
  */
 import { sql } from 'drizzle-orm';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { db } from '@/db/client';
 
 export interface OBangGia { kg: number; loaiGoi: string; vnd: number }
@@ -31,7 +32,7 @@ export function khopOBangGia(netVnd: number, cells: readonly OBangGia[]): KetQua
 
 /** Mọi ô (mốc cân × loại gói) của rate card hiệu lực tại `ngay` (YYYY-MM-DD) cho các zone chứa nước đích. */
 export async function layOBangGia(carrierAccountId: string, countryCode: string, ngay: string | null): Promise<OBangGia[]> {
-  const d = ngay ?? new Date().toISOString().slice(0, 10);
+  const d = ngay ?? ngayKinhDoanh(new Date())!;
   const rows = await db.execute(sql`
     select t.upper_kg as kg, c.package_type as loai_goi, c.cost_amount as vnd
     from carrier_rate_cells c

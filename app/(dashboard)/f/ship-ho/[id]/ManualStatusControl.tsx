@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { useRouter } from 'next/navigation';
 import { setShipHoDeliveryStatusManual, type ManualDeliveryStatus } from '@/features/ship-ho/tracking-actions';
 
@@ -14,7 +15,8 @@ export function ManualStatusControl({ orderId, current }: {
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<ManualDeliveryStatus | ''>('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // Ngày VIỆT NAM (lib/timezone.ts): toISOString() trả ngày UTC nên 00:00–07:00 giờ VN lệch một ngày.
+  const [date, setDate] = useState(() => ngayKinhDoanh(new Date())!);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -43,7 +45,7 @@ export function ManualStatusControl({ orderId, current }: {
       </select>
       {status === 'delivered' && (
         <input type="date" className="rounded border border-border bg-background px-2 py-1 text-xs"
-          value={date} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} />
+          value={date} max={ngayKinhDoanh(new Date())!} onChange={(e) => setDate(e.target.value)} />
       )}
       <button type="button" disabled={pending || !status} onClick={save}
         className="rounded-md border border-border px-2.5 py-1 text-xs font-medium transition hover:bg-muted disabled:opacity-50">

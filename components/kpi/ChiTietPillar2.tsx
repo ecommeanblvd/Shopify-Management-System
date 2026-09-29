@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { NHAN_KET_QUA_SLA } from '@/features/kpi-logistics/chi-tiet';
 import { LOAI_SU_CO, NHAN_THUOC_VE, HAN_GHI_SU_CO_NGAY, HE_SO_HANG_HOA, DIEN_BIEN, DIEN_BIEN_HANG_HOA, dienBienGoiY, nhanDienBien, layLoaiSuCo, tongChiPhi, tomTatSuCo, type KhoanChiPhi, type ThuocVe } from '@/features/ship-ho/su-co';
@@ -289,7 +290,8 @@ function FormSuCo({ donHang, timDon, luu, xong, huy }: {
   const [dangTim, startTim] = useTransition();
   const [loai, setLoai] = useState(LOAI_SU_CO[0].ma);
   const [thuocVe, setThuocVe] = useState<ThuocVe>(LOAI_SU_CO[0].macDinhThuocVe);
-  const [ngay, setNgay] = useState(new Date().toISOString().slice(0, 10));
+  // Ngày VIỆT NAM (xem lib/timezone.ts) — mặc định ô ngày không được lệch sang hôm qua.
+  const [ngay, setNgay] = useState(() => ngayKinhDoanh(new Date())!);
   const [dienBien, setDienBien] = useState<string[]>(dienBienGoiY(LOAI_SU_CO[0].ma));
   const [moTa, setMoTa] = useState('');
   const [thuHoi, setThuHoi] = useState('0');

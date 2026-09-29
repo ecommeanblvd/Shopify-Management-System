@@ -14,6 +14,7 @@
  *     `can_xem_lai` để CX rà.
  */
 import { sql } from 'drizzle-orm';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { db, schema } from '@/db/client';
 import {
   COT_TIEN_LARK, LOAI_KHAI_LARK, mapBoPhanLark, mapGiaiDoanLark,
@@ -168,7 +169,7 @@ export async function nhapSuCoTuLark(
     const maDonRaw = mang(f['Order Number'])[0]?.trim().replace(/^#/, '') ?? '';
     const idLark = chu(f['Incident ID']).trim() || chu(f.ID).trim();
     const ma = `LARK-${idLark || r.record_id.slice(-8)}`;
-    const ngayBao = ngayVn(f['Date Reported']) ?? new Date().toISOString().slice(0, 10);
+    const ngayBao = ngayVn(f['Date Reported']) ?? ngayKinhDoanh(new Date())!;
 
     try {
       const themMoi = await db.transaction(async (tx) => {

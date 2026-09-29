@@ -1,3 +1,5 @@
+import { ngayKinhDoanh } from '@/lib/timezone';
+
 export interface SkuCostRow {
   sku: string;
   cost: string;            // keep as string; downstream Drizzle numeric needs strings
@@ -29,7 +31,8 @@ export function parseSkuCostsCsv(text: string, today: Date = new Date()): ParseR
   if (errors.length > 0) return { rows: [], errors };
 
   const idx = (k: string) => header.indexOf(k);
-  const todayIso = today.toISOString().slice(0, 10);
+  // Ngày VIỆT NAM của mốc truyền vào — giá vốn hiệu lực lệch một ngày là sai cả kỳ.
+  const todayIso = ngayKinhDoanh(today)!;
 
   const rows: SkuCostRow[] = [];
   for (let i = 1; i < lines.length; i++) {

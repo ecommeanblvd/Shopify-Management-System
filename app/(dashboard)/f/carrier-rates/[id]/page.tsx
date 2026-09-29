@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -22,7 +23,8 @@ export const dynamic = 'force-dynamic';
 
 const FX_STALE_DAYS = 30;
 
-function todayIso(): string { return new Date().toISOString().slice(0, 10); }
+/** Hôm nay theo giờ VIỆT NAM — mốc so hiệu lực bảng giá, lệch một ngày là chọn sai bảng. */
+function todayIso(): string { return ngayKinhDoanh(new Date())!; }
 
 async function toggleEnabledAction(id: string, next: boolean, userId: string) {
   'use server';

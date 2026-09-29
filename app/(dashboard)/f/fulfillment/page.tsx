@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
@@ -54,7 +55,7 @@ export default async function FulfillmentWorklistPage() {
       expectedDeliveryDate: r.expectedDeliveryDate,
       deliveredAt: r.deliveredAt,
     })),
-    new Date().toISOString().slice(0, 10),
+    ngayKinhDoanh(new Date())!,
   );
 
   return (
