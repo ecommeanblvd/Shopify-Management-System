@@ -21,15 +21,39 @@ import { batDauJob, ketThucJob } from './record';
  * một tác vụ hỏng 100 % vẫn báo xanh — đúng cách `track-ship-ho` chết âm thầm
  * suốt 141 lượt (phát hiện 11/09/2026).
  */
+/** Hạn mặc định cho MỘT tác vụ nền. Đo 29/09/2026 trên 14 ngày: mọi việc trừ
+ *  `refresh-owned-store` đều xong trong 512 giây, nên 15 phút là rộng rãi. */
+export const HAN_MAC_DINH_GIAY = 15 * 60;
+
+/**
+ * Lời hứa "một việc hỏng KHÔNG chặn các việc sau" chỉ đúng với việc NÉM LỖI.
+ * Việc TREO thì không ném gì cả — nó nằm im và bỏ đói mọi việc phía sau.
+ *
+ * Đo 29/09/2026: `refresh-owned-store` không ghi `finished_at` ở 41/294 lượt
+ * (13,9%), và mỗi lần như vậy sáu việc xếp sau nó trong `sync-orders` không chạy
+ * — trong đó có hai việc vừa thêm hôm ấy. Không có lỗi nào, không ai biết.
+ *
+ * Hết hạn thì ghi HỎNG rồi đi tiếp. KHÔNG dừng được việc đang treo (JS không huỷ
+ * được promise của người khác) nhưng vòng lặp thoát ra được — đó mới là thứ cần.
+ */
+function hetHan(giay: number, jobKey: string): Promise<never> {
+  return new Promise((_, tuChoi) => {
+    setTimeout(() => tuChoi(new Error(`${jobKey}: quá hạn ${giay}s — bỏ qua để việc sau còn chạy`)),
+      giay * 1000).unref?.();
+  });
+}
+
 export async function chayMotJob(
   jobKey: string,
   fn: () => Promise<unknown>,
   kiemTra?: (summary: unknown) => string | null,
+  opts?: { hanGiay?: number },
 ): Promise<boolean> {
+  const han = opts?.hanGiay ?? HAN_MAC_DINH_GIAY;
   const batDau = Date.now();
   const id = await batDauJob(jobKey);
   try {
-    const summary = await fn();
+    const summary = await Promise.race([fn(), hetHan(han, jobKey)]);
     const loi = kiemTra?.(summary) ?? null;
     await ketThucJob(id, { ok: loi == null, summary, batDau, error: loi ?? undefined });
     process.stdout.write(`  ${loi == null ? '✓' : '✗'} ${jobKey} (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary).slice(0, 160) : ''}${loi ? ` — ${loi}` : ''}\n`);

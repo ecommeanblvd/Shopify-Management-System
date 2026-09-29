@@ -28,7 +28,12 @@ import { goBangKeNhap } from '@/features/ship-ho/statement-core';
 import { dongBoDispute } from '@/features/dispute/sync';
 
 /** Thứ tự có ý nghĩa: nạp đơn trước, các việc ăn theo dữ liệu đơn sau. */
-const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary: unknown) => string | null }> = [
+const VIEC: Array<{
+  key: string; fn: () => Promise<unknown>;
+  kiemTra?: (summary: unknown) => string | null;
+  /** Hạn riêng (giây) cho việc chậm bất thường; bỏ trống thì dùng hạn mặc định. */
+  hanGiay?: number;
+}> = [
   { key: 'sync-orders', fn: async () => {
     const r = await runHourlySync();
     const loi = r.filter((x) => x.error);
@@ -40,9 +45,6 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
   // đó hàng đợi rỗng và việc này còn 0,1 giây. Đặt cửa sổ ngày ở đây sẽ chặn mất
   // đúng những đợt dọn tồn như vậy.
   { key: 'push-unsent-brand', fn: () => pushUnsentBrandOrders() },
-  // Store riêng của brand (TINH, Mirer): quét cả đơn đã gửi để MMP nhận chi phí ship
-  // cập nhật khi hoá đơn carrier về muộn. Không force — đơn không đổi tự bị bỏ qua.
-  { key: 'refresh-owned-store', fn: () => pushOwnedStoreOrders({ refresh: true }) },
   { key: 'addr-verify', fn: () => verifyUnverifiedAddresses({ limit: 100 }) },
   {
     key: 'track-ship-ho',
@@ -79,11 +81,21 @@ const VIEC: Array<{ key: string; fn: () => Promise<unknown>; kiemTra?: (summary:
    * bước đó — sai thứ tự thì kỳ này thiếu, phải đợi kỳ sau. */
   { key: 'gom-bang-ke-nhap', fn: () => goBangKeNhap() },
   { key: 'sync-dispute', fn: () => dongBoDispute() },
+  /* `refresh-owned-store` xuống CUỐI DANH SÁCH (CEO 29/09/2026).
+   *
+   * Đo 14 ngày: việc này trung bình 42 PHÚT, lâu nhất 87 phút, và 41/294 lượt
+   * (13,9%) không ghi nổi `finished_at`. Mọi việc khác xong trong 512 giây. Khi
+   * nó treo, SÁU việc xếp sau nó không chạy — đó là lý do `gom-bang-ke-nhap` và
+   * `sync-dispute` thêm hôm nay vẫn chưa chạy lần nào.
+   *
+   * Việc chậm nhất và hay treo nhất phải đứng CUỐI: nó chỉ tự hại nó. Kèm hạn
+   * riêng 90 phút (rộng hơn lần lâu nhất đo được) để lượt sau còn khởi động. */
+  { key: 'refresh-owned-store', fn: () => pushOwnedStoreOrders({ refresh: true }), hanGiay: 90 * 60 },
 ];
 
 async function main(): Promise<void> {
   let hong = 0;
-  for (const v of VIEC) if (!(await chayMotJob(v.key, v.fn, v.kiemTra))) hong++;
+  for (const v of VIEC) if (!(await chayMotJob(v.key, v.fn, v.kiemTra, { hanGiay: v.hanGiay }))) hong++;
   process.stdout.write(`xong: ${VIEC.length - hong}/${VIEC.length} việc ok\n`);
   if (hong > 0) process.exitCode = 1;
 }
