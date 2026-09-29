@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { timXuyenModule, type HoSoTim, type KetQuaTimCx } from '@/features/cx/tim-kiem';
-import { dungTimDong } from './dung-tim-dong';
+import { useTimDong } from './dung-tim-dong';
 
 const NHAN_MODULE: Record<string, string> = {
   ticket: 'Việc cần làm',
@@ -21,7 +21,7 @@ const NHAN_MODULE: Record<string, string> = {
  */
 export function OTimXuyenModule() {
   const router = useRouter();
-  const o = dungTimDong<HoSoTim>(
+  const o = useTimDong<HoSoTim>(
     async (q) => (await timXuyenModule(q)).hoSo,
     { toiThieu: 3 },
   );

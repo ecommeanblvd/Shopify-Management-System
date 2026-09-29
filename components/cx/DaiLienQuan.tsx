@@ -11,10 +11,18 @@ import { hoSoLienQuan, type LienQuan } from '@/features/cx/lien-quan';
  * nên một dòng "không có hồ sơ liên quan" sẽ hiện gần như mọi lần mở và chỉ làm nhiễu.
  */
 export function DaiLienQuan({ maDon, boQua }: { maDon: string | null; boQua: string }) {
-  const [ds, setDs] = useState<LienQuan[]>([]);
+  /* Lưu KÈM KHOÁ của lượt gọi, không lưu mảng trần.
+   *
+   * Bản cũ `setDs([])` ngay trong thân effect: vừa là tác dụng phụ đồng bộ khiến
+   * React render thêm một lượt thừa, vừa GIẤU một lỗi thật — đổi từ đơn A sang
+   * đơn B thì dữ liệu của A vẫn hiện cho tới khi lượt gọi của B về, tức người
+   * dùng nhìn thấy hồ sơ của ĐƠN KHÁC gắn tên đơn đang mở. So khoá lúc render
+   * thì dữ liệu lệch đơn không bao giờ hiện được, và không cần setState nào để dọn. */
+  const khoa = `${maDon ?? ''}|${boQua}`;
+  const [kq, setKq] = useState<{ khoa: string; ds: LienQuan[] } | null>(null);
 
   useEffect(() => {
-    if (!maDon) { setDs([]); return; }
+    if (!maDon) return;
     let huy = false;
     void (async () => {
       const r = await hoSoLienQuan(maDon, boQua).catch((e) => {
@@ -23,11 +31,12 @@ export function DaiLienQuan({ maDon, boQua }: { maDon: string | null; boQua: str
         console.error('[cx] hồ sơ liên quan lỗi:', e);
         return [] as LienQuan[];
       });
-      if (!huy) setDs(r);
+      if (!huy) setKq({ khoa: `${maDon}|${boQua}`, ds: r });
     })();
     return () => { huy = true; };
   }, [maDon, boQua]);
 
+  const ds = maDon && kq?.khoa === khoa ? kq.ds : [];
   if (ds.length === 0) return null;
 
   return (

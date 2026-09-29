@@ -14,7 +14,11 @@ import { useEffect, useRef, useState } from 'react';
  * món nào khớp". CEO thử ba lần, không ai biết vì sao. Không bao giờ để một lỗi
  * đội lốt một kết quả rỗng nữa.
  */
-export function dungTimDong<T>(tim: (tuKhoa: string) => Promise<T[]>, options?: {
+/* TÊN phải bắt đầu bằng `use`: đó là cách DUY NHẤT để eslint nhận ra đây là hook
+ * và kiểm được luật hook cho nó. Tên cũ `dungTimDong` ("dùng tìm dòng") đọc xuôi
+ * tiếng Việt nhưng máy không hiểu, nên mất luôn lớp canh — đổi tên rẻ hơn nhiều
+ * so với mất một lớp kiểm tra tự động. */
+export function useTimDong<T>(tim: (tuKhoa: string) => Promise<T[]>, options?: {
   toiThieu?: number;
   debounceMs?: number;
 }) {
@@ -27,9 +31,14 @@ export function dungTimDong<T>(tim: (tuKhoa: string) => Promise<T[]>, options?: 
   const [loiGoi, setLoiGoi] = useState<string | null>(null);
   const luotRef = useRef(0);
   /** Giữ hàm tìm trong ref: truyền inline `(q) => f(q)` thì tham chiếu đổi mỗi
-   *  lượt render, và để nó trong deps của effect là gọi lại vô hạn. */
+   *  lượt render, và để nó trong deps của effect là gọi lại vô hạn.
+   *
+   *  Gán trong EFFECT chứ không gán thẳng khi render: ghi vào ref lúc render là
+   *  tác dụng phụ trong thân render, React có thể render thử rồi bỏ đi và ref
+   *  mang giá trị của một lượt không bao giờ hiện. Effect chạy sau MỌI lượt
+   *  render, mà lượt tìm sớm nhất cũng phải đợi debounce 250ms, nên ref luôn kịp mới. */
   const timRef = useRef(tim);
-  timRef.current = tim;
+  useEffect(() => { timRef.current = tim; });
 
   useEffect(() => {
     const ky = tuKhoa.trim();

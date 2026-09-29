@@ -7,7 +7,7 @@ import { NHOM, BO_PHAN, nhanBoPhan } from '@/features/cx-ticket/phan-loai';
 import { timDongDon } from '@/features/cx-ticket/queries';
 import { taoTicket } from '@/features/cx-ticket/actions';
 import type { DongDonGan } from '@/features/cx-ticket/types';
-import { dungTimDong } from '@/components/cx/dung-tim-dong';
+import { useTimDong } from '@/components/cx/dung-tim-dong';
 
 /**
  * Form tạo ticket. Gắn dòng đơn là TUỲ CHỌN — đo Lark: 321/675 ticket (48%)
@@ -174,9 +174,9 @@ export function TaoTicket({
 }
 
 /** Ô tìm và gắn dòng đơn — nhiều dòng một ticket (62/675 ticket Lark gắn 2–7 dòng).
- *  Phần debounce + chặn đua + tách lỗi khỏi rỗng nằm ở hook `dungTimDong`. */
+ *  Phần debounce + chặn đua + tách lỗi khỏi rỗng nằm ở hook `useTimDong`. */
 function OGanDon({ dong, onDoi }: { dong: DongDonGan[]; onDoi: (d: DongDonGan[]) => void }) {
-  const o = dungTimDong<DongDonGan>(timDongDon);
+  const o = useTimDong<DongDonGan>(timDongDon);
 
   const daGan = new Set(dong.map((d) => d.lineId));
   // Lọc món ĐÃ gắn khỏi gợi ý: hiện lại món vừa chọn chỉ làm người dùng bấm hai lần.

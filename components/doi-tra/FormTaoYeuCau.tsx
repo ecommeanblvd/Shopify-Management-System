@@ -7,7 +7,7 @@ import { timDongDeTra } from '@/features/doi-tra/queries';
 import type { DongDonTra } from '@/features/doi-tra/types';
 import { taoYeuCauTra } from '@/features/doi-tra/actions';
 import { LY_DO, NOI_HOAN, LOAI_TRA, type NoiHoan, type LoaiTra } from '@/features/doi-tra/ly-do';
-import { dungTimDong } from '@/components/cx/dung-tim-dong';
+import { useTimDong } from '@/components/cx/dung-tim-dong';
 
 /**
  * CX tạo yêu cầu trả thay khách (CEO 27/09: "CX nhập hộ, giữ nguyên thói quen").
@@ -17,8 +17,8 @@ import { dungTimDong } from '@/components/cx/dung-tim-dong';
  */
 export function FormTaoYeuCau() {
   /* Phần debounce + chặn đua lượt gọi + TÁCH "lỗi gọi" khỏi "không có kết quả"
-     nằm ở hook `dungTimDong` — dùng chung với ô tìm của module ticket. */
-  const o = dungTimDong<DongDonTra>(timDongDeTra);
+     nằm ở hook `useTimDong` — dùng chung với ô tìm của module ticket. */
+  const o = useTimDong<DongDonTra>(timDongDeTra);
   const [chon, setChon] = useState<DongDonTra | null>(null);
   const hienThi = o.hienThi;
 
