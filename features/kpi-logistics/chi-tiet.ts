@@ -134,6 +134,8 @@ export interface DongSla {
   lyDoDoiChieu?: string | null;
   /** Sự kiện của hãng làm bằng chứng, hoặc lý do không kiểm được. */
   lyDoBangChung?: string | null;
+  /** Quyết định duyệt tay của admin: 'duyet' | 'tu_choi' | null (chưa ai duyệt). */
+  lyDoDuyet?: string | null;
 }
 
 export interface DongChungTu {

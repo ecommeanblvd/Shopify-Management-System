@@ -142,11 +142,11 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
 
   if (ma === '1.2') {
     // 1.2 chấm MỌI kiện mình chạy nên KHÔNG lọc store; kiện ship hộ lên từ Lark cộng thêm ở dưới.
-    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string | null; ngay: string; ly_do: string | null; doi_chieu: string | null; bang_chung: string | null; dom: string; chua_giao: boolean }>(sql`
+    const { rows } = await db.execute<{ id: string; don: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string | null; ngay: string; ly_do: string | null; doi_chieu: string | null; duyet: string | null; bang_chung: string | null; dom: string; chua_giao: boolean }>(sql`
       SELECT s.id AS id, o.shopify_order_number AS don, s.tracking_number AS tk, COALESCE(o.ship_country, '?') AS cc,
              COALESCE(s.carrier_key, '?') AS line, s.label_created_at::text AS gui, s.delivered_at::text AS giao,
              (EXTRACT(EPOCH FROM (COALESCE(s.delivered_at::timestamp, now()) - s.label_created_at)) / 86400)::text AS ngay,
-             s.ly_do_cham AS ly_do, s.ly_do_doi_chieu AS doi_chieu, s.ly_do_bang_chung AS bang_chung,
+             s.ly_do_cham AS ly_do, s.ly_do_doi_chieu AS doi_chieu, s.ly_do_duyet AS duyet, s.ly_do_bang_chung AS bang_chung,
              st.shop_domain AS dom, (s.delivered_at IS NULL) AS chua_giao
         FROM shipments s JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE s.label_created_at IS NOT NULL
@@ -165,7 +165,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
       // Bị loại vì lý do ngoài tầm kiểm soát (mục VII) HOẶC nước không nằm trong
       // phạm vi chấm (VN nội địa) — khớp đúng bộ lọc của `chamKpi`.
       // Lý do chỉ gỡ được kiện ĐANG TRỄ: gỡ một kiện đạt là rút mất kiện tốt khỏi mẫu số.
-      const biLoaiTru = (lyDoCoHieuLuc(r.ly_do, r.doi_chieu) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU;
+      const biLoaiTru = (lyDoCoHieuLuc(r.ly_do, r.doi_chieu, r.duyet) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU;
       return {
         shipmentId: r.id, nguon: 'shopify' as const, thuocVe: nhanThuocVe(r.dom),
         maDon: r.don, tracking: r.tk, nuoc, line,
@@ -173,7 +173,7 @@ export async function docChiTietKpi(ma: MaTieuChi, tu: string, den: string): Pro
         soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line),
         ketQua: xepLoaiSla(soNgay, slaNgay, biLoaiTru, undefined, r.chua_giao),
         lyDoCham: r.ly_do, chuaGiao: r.chua_giao,
-        lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung,
+        lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung, lyDoDuyet: r.duyet,
       };
     });
     const shipHo = await docSlaShipHo(tu, den);

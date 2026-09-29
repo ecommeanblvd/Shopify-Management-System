@@ -7,7 +7,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
-import { layLyDo } from './ly-do-cham';
+import { layLyDo, duyetTayDuoc } from './ly-do-cham';
 import { doiChieuLyDoCham } from './doi-chieu-ly-do';
 
 /** Kiện thuộc luồng nào — quyết định ghi vào bảng nào. */
@@ -36,6 +36,9 @@ export async function datLyDoCham(input: {
   const gia = {
     // Đổi lý do là phải đối chiếu lại từ đầu — kết quả cũ thuộc về lý do cũ.
     lyDoDoiChieu: null, lyDoBangChung: null, lyDoDoiChieuAt: null,
+    // ...và quyết định duyệt tay cũng thuộc về lý do cũ. Giữ lại là để một lượt duyệt cho
+    // "khách hẹn lại" tự động hợp thức hoá một lý do khác hẳn được gán sau đó.
+    lyDoDuyet: null, lyDoDuyetGhiChu: null, lyDoDuyetBoi: null, lyDoDuyetAt: null,
     lyDoCham: input.lyDo,
     lyDoChamGhiChu: input.lyDo == null ? null : (input.ghiChu?.trim() || null),
     lyDoChamBy: input.lyDo == null ? null : userId,
@@ -53,6 +56,54 @@ export async function datLyDoCham(input: {
     try { await doiChieuLyDoCham({ chi: { nguon: input.nguon ?? 'shopify', id: input.shipmentId } }); }
     catch (e) { console.error('[ly-do] đối chiếu ngay lỗi, để cron làm lại:', (e as Error).message); }
   }
+
+  revalidatePath('/f/ship-report');
+  revalidatePath('/f/kpi-logistics');
+  return { ok: true };
+}
+
+/**
+ * DUYỆT TAY một kiện mà máy không kiểm được (CEO 29/09/2026).
+ *
+ * Chỉ ADMIN, và chỉ ở đúng chỗ máy mù: `duyetTayDuoc` chặn cả ca hãng đã tra và không thấy dấu
+ * hiệu nào khớp — bằng chứng ngược thì người không được phép nói khác. Kiểm lại trạng thái NGAY
+ * TRƯỚC KHI GHI, không tin vào thứ giao diện gửi lên: giao diện có thể đã cũ vài phút, và trong
+ * khoảng đó cron có thể đã tra ra kết quả thật.
+ */
+export async function duyetLyDoCham(input: {
+  shipmentId: string; nguon?: NguonKien; quyetDinh: 'duyet' | 'tu_choi'; ghiChu?: string | null;
+}): Promise<{ ok: true }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) throw new Error('Chưa đăng nhập');
+  const role = await getRole(session.user.id);
+  if (role !== 'admin') throw new Error('Chỉ quản lý được duyệt lý do giao chậm');
+  if (input.quyetDinh !== 'duyet' && input.quyetDinh !== 'tu_choi') throw new Error('Quyết định không hợp lệ');
+
+  const shipHo = input.nguon === 'ship_ho';
+  const [kien] = shipHo
+    ? await db.select({ lyDo: schema.shipHoOrders.lyDoCham, doiChieu: schema.shipHoOrders.lyDoDoiChieu })
+        .from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, input.shipmentId)).limit(1)
+    : await db.select({ lyDo: schema.shipments.lyDoCham, doiChieu: schema.shipments.lyDoDoiChieu })
+        .from(schema.shipments).where(eq(schema.shipments.id, input.shipmentId)).limit(1);
+  if (!kien) throw new Error('Không tìm thấy kiện');
+  if (!duyetTayDuoc(kien.lyDo, kien.doiChieu)) {
+    throw new Error(
+      kien.doiChieu === 'khong_thay'
+        ? 'Hãng đã tra và không thấy dấu hiệu nào khớp lý do này — không duyệt tay được'
+        : kien.doiChieu === 'xac_nhan'
+          ? 'Hãng đã xác nhận rồi, không cần duyệt'
+          : 'Chỉ duyệt được kiện mà hệ thống không kiểm được, và lý do phải thuộc nhóm ngoài tầm kiểm soát',
+    );
+  }
+
+  const gia = {
+    lyDoDuyet: input.quyetDinh,
+    lyDoDuyetGhiChu: input.ghiChu?.trim() || null,
+    lyDoDuyetBoi: session.user.id,
+    lyDoDuyetAt: new Date(),
+  };
+  if (shipHo) await db.update(schema.shipHoOrders).set(gia).where(eq(schema.shipHoOrders.id, input.shipmentId));
+  else await db.update(schema.shipments).set(gia).where(eq(schema.shipments.id, input.shipmentId));
 
   revalidatePath('/f/ship-report');
   revalidatePath('/f/kpi-logistics');

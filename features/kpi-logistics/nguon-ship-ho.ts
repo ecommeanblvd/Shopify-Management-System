@@ -27,7 +27,7 @@ export function soNgayShipHo(ngayGui: string, mocGiao: string): number {
   return Math.max(0, Math.round((ms / 86_400_000) * 10) / 10);
 }
 
-type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; ly_do: string | null; doi_chieu: string | null; bang_chung: string | null; su_co_noi_bo: number };
+type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; ly_do: string | null; doi_chieu: string | null; duyet: string | null; bang_chung: string | null; su_co_noi_bo: number };
 
 /**
  * `su_co_noi_bo` > 0 nghĩa là đơn có sự cố quy về lỗi nội bộ → kiện bị KHOÁ THÀNH TRỄ dù số
@@ -48,6 +48,7 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
            (o.delivered_at IS NULL) AS chua_giao,
            (o.delivery_status = 'returning') AS dang_hoan,
            o.ly_do_cham AS ly_do, o.ly_do_doi_chieu AS doi_chieu, o.ly_do_bang_chung AS bang_chung,
+           o.ly_do_duyet AS duyet,
            (SELECT COUNT(*) FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo')::int AS su_co_noi_bo
       FROM ship_ho_orders o
      WHERE o.shipped_at IS NOT NULL
@@ -61,7 +62,7 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
  * `docKienGiao` để cộng thẳng vào cùng một mảng, gồm cả `lyDoCham` để bộ lọc mẫu số dùng
  * chung một luật cho cả hai luồng.
  */
-export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<KienGiao & { lyDoCham: string | null; lyDoDoiChieu: string | null }>> {
+export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<KienGiao & { lyDoCham: string | null; lyDoDoiChieu: string | null; lyDoDuyet: string | null }>> {
   const rows = await docGiao(tu, den);
   return rows.map((r) => ({
     country: (r.cc ?? '?').trim().toUpperCase(),
@@ -72,6 +73,7 @@ export async function docKienGiaoShipHo(tu: string, den: string): Promise<Array<
     chuaGiao: r.chua_giao,
     lyDoCham: r.ly_do,
     lyDoDoiChieu: r.doi_chieu,
+    lyDoDuyet: r.duyet,
   }));
 }
 
@@ -87,7 +89,7 @@ export async function docSlaShipHo(tu: string, den: string): Promise<DongSla[]> 
     const buocTre = r.su_co_noi_bo > 0 || r.dang_hoan;
     const slaNgay = slaCuaNuoc(nuoc);
     // Lý do chỉ gỡ được kiện ĐANG TRỄ, giống hệt luật bên kiện Shopify.
-    const biLoaiTru = !buocTre && ((lyDoCoHieuLuc(r.ly_do, r.doi_chieu) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU);
+    const biLoaiTru = !buocTre && ((lyDoCoHieuLuc(r.ly_do, r.doi_chieu, r.duyet) && soNgay > slaNgay) || nuoc in NUOC_LOAI_TRU);
     const ketQua = buocTre && !biLoaiTru
       ? (soNgay <= NGUONG_NGOAI_LE_SOP ? 'tre' as const : 'ngoai_le' as const)
       : xepLoaiSla(soNgay, slaNgay, biLoaiTru, NGUONG_NGOAI_LE_SOP, r.chua_giao);
@@ -96,7 +98,7 @@ export async function docSlaShipHo(tu: string, den: string): Promise<DongSla[]> 
       maDon: r.code, tracking: r.tk, nuoc, line,
       ngayGui: r.gui.slice(0, 10), ngayGiao: r.chua_giao ? '' : r.giao.slice(0, 10),
       soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua, lyDoCham: r.ly_do,
-      lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung,
+      lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung, lyDoDuyet: r.duyet,
       chuaGiao: r.chua_giao,
     };
   });

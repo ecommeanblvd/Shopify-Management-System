@@ -1168,6 +1168,13 @@ export const shipments = pgTable('shipments', {
   lyDoDoiChieu: text('ly_do_doi_chieu'),
   lyDoBangChung: text('ly_do_bang_chung'),
   lyDoDoiChieuAt: timestamp('ly_do_doi_chieu_at'),
+  /* Duyệt TAY của admin, chỉ hợp lệ khi máy báo 'khong_kiem_duoc' (CEO 29/09/2026 — xem
+   * `duyetTayDuoc`): 'duyet' | 'tu_choi'; null = chưa ai duyệt. Cố ý KHÔNG ghi đè
+   * `lyDoDoiChieu` để luôn đối chất được máy đã nói gì trước khi người quyết. */
+  lyDoDuyet: text('ly_do_duyet'),
+  lyDoDuyetGhiChu: text('ly_do_duyet_ghi_chu'),
+  lyDoDuyetBoi: text('ly_do_duyet_boi').references(() => user.id, { onDelete: 'set null' }),
+  lyDoDuyetAt: timestamp('ly_do_duyet_at'),
   /** Operator who ran the secondary check-packed verification step. */
   checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
   /** Timestamp when the check-packed verification was completed. */
@@ -2463,6 +2470,13 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   lyDoDoiChieu: text('ly_do_doi_chieu'),
   lyDoBangChung: text('ly_do_bang_chung'),
   lyDoDoiChieuAt: timestamp('ly_do_doi_chieu_at'),
+  /* Duyệt TAY của admin, chỉ hợp lệ khi máy báo 'khong_kiem_duoc' (CEO 29/09/2026 — xem
+   * `duyetTayDuoc`): 'duyet' | 'tu_choi'; null = chưa ai duyệt. Cố ý KHÔNG ghi đè
+   * `lyDoDoiChieu` để luôn đối chất được máy đã nói gì trước khi người quyết. */
+  lyDoDuyet: text('ly_do_duyet'),
+  lyDoDuyetGhiChu: text('ly_do_duyet_ghi_chu'),
+  lyDoDuyetBoi: text('ly_do_duyet_boi').references(() => user.id, { onDelete: 'set null' }),
+  lyDoDuyetAt: timestamp('ly_do_duyet_at'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),
@@ -2825,6 +2839,20 @@ export const kpiLogisticsThang = pgTable('kpi_logistics_thang', {
   ghiChu: text('ghi_chu'),
   updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * CHỐT KỲ KPI (CEO 29/09/2026). Trước nay bảng KPI tính lại từ dữ liệu sống mỗi lần mở trang, nên
+ * con số của một tháng vẫn trôi sau khi HR đã trả lương theo nó — mở lại tháng 8 sau này ra số khác.
+ * Chốt = CHỤP LẠI toàn bộ số liệu tại thời điểm chốt và từ đó trang hiện ảnh chụp, không tính lại.
+ */
+export const kpiLogisticsChot = pgTable('kpi_logistics_chot', {
+  ky: text('ky').primaryKey(),
+  /** Ảnh chụp: SoLieuTuDong + bảng điểm + số nhập tay lúc chốt. */
+  soLieu: jsonb('so_lieu').notNull(),
+  ghiChu: text('ghi_chu'),
+  chotBoi: text('chot_boi').references(() => user.id, { onDelete: 'set null' }),
+  chotAt: timestamp('chot_at').notNull().defaultNow(),
 });
 
 /**

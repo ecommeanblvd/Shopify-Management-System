@@ -67,7 +67,9 @@ describe('quy-che KPI logistics', () => {
     // Ví dụ tháng 7 trong quy chế: 1 đơn âm cước (90 %), SLA 96 % (100 %), lỗi 1,5 % (100 %), size 97 % (50 %).
     const b = bangDiemKpi({
       soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
-      gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
+      // `daChamP3B` nói rằng quản lý ĐÃ chấm hai mục 3B — ví dụ trong quy chế là kỳ đã có kết luận.
+      // Thiếu cờ này thì 3B để trống, đúng luật 29/09: chưa ai chấm thì không được vẽ thành đạt hay trượt.
+      gateDat: true, roRiGiam: true, khacPhucGoc: true, daChamP3B: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
     expect(b.diemP1).toBeCloseTo(0.3 * 0.9 + 0.3 + 0.3 + 0.1 * 0.5, 10); // = 0,92
@@ -161,5 +163,40 @@ describe('1.1 chưa phân định xong thì CHƯA CHẤM (CEO 14/09/2026)', () =
     const chuaXet = bangDiemKpi(day({ soDonAmCuocChuaXet: 48 }), KY_2026);
     const daXet = bangDiemKpi(day(), KY_2026);
     expect(daXet.diemP1 - chuaXet.diemP1).toBeCloseTo(TRONG_SO_P1.bienCuoc, 10);
+  });
+});
+
+describe('3B: "chưa ai chấm" KHÁC "không đạt" (CEO 29/09/2026)', () => {
+  const nen = {
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 0.95, tyLeLoiChungTu: 0.01,
+    tyLeSizeThung: 0.99, soDonShipHo: 0, thietHaiChamDiemVnd: 0,
+    thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
+  };
+  const lay = (ma: string, v: Parameters<typeof bangDiemKpi>[0]) => bangDiemKpi(v, '2026-08-01').p3.find((d) => d.ma === ma)!;
+
+  it('Gate đạt mà chưa ai nhập kết luận → để TRỐNG, không phải "Chưa đạt"', () => {
+    const d = lay('3B-1', { ...nen, gateDat: true, roRiGiam: false, khacPhucGoc: false });
+    expect(d.mucDat).toBeNull();
+    expect(d.soLieu).toBe('Chưa có kết luận của quản lý');
+  });
+
+  it('quản lý đã chấm là KHÔNG đạt → mới được hiện "Chưa đạt" và tính 0', () => {
+    const d = lay('3B-2', { ...nen, gateDat: true, roRiGiam: false, khacPhucGoc: false, daChamP3B: true });
+    expect(d.mucDat).toBe(0);
+    expect(d.soLieu).toBe('Chưa đạt');
+  });
+
+  it('quản lý đã chấm là đạt → 1', () => {
+    const d = lay('3B-1', { ...nen, gateDat: true, roRiGiam: true, khacPhucGoc: true, daChamP3B: true });
+    expect(d.mucDat).toBe(1);
+    expect(d.soLieu).toBe('Đạt');
+  });
+
+  it('trượt Gate thì không xét, bất kể đã chấm hay chưa', () => {
+    for (const daCham of [true, false, undefined]) {
+      const d = lay('3B-1', { ...nen, gateDat: false, roRiGiam: true, khacPhucGoc: true, daChamP3B: daCham });
+      expect(d.mucDat).toBe(0);
+      expect(d.soLieu).toBe('Không xét (trượt Gate)');
+    }
   });
 });

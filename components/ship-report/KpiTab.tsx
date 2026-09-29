@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
+import { NutChotKy } from '@/components/kpi/NutChotKy';
 import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
 import { ChiTietPillar2 } from '@/components/kpi/ChiTietPillar2';
 import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
@@ -25,10 +26,12 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
+  /** Kỳ đã chốt chưa — `auto`/`nhap` khi đó là ẢNH CHỤP, không phải số sống. */
+  chot: { chotAt: string; ghiChu: string | null } | null;
   /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
   suaDuoc: boolean;
   /** Nhân sự logistics (quyền đối soát phí ship) gán được lý do chậm trên bảng 1.2. */
@@ -55,6 +58,10 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
     gateDat,
     roRiGiam: nhap?.roRiGiam ?? false,
     khacPhucGoc: nhap?.khacPhucGoc ?? false,
+    // Có dòng nhập tay = quản lý đã vào chấm kỳ này. Không có dòng thì hai mục 3B để TRỐNG
+    // thay vì "Chưa đạt" — bảng `kpi_logistics_thang` rỗng hoàn toàn tính tới 29/09/2026, nên
+    // mặc định cũ đang kết tội mọi kỳ cho phần việc chưa ai kiểm.
+    daChamP3B: nhap != null,
     thuHoiVnd: thuHoi,
     tyLeThuHoi,
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
@@ -105,8 +112,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
 
   return (
     <>
+      <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
 
-      
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
         {the.map((t) => (
           <div key={t.nhan} className="space-y-1 bg-card p-4">
@@ -122,7 +129,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, suaDuoc, ganLyDoDuoc, ghiSuCoD
 
       {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
 
-      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} />
+      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={suaDuoc} />
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">

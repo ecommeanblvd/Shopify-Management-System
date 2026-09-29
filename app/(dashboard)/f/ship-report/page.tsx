@@ -20,6 +20,7 @@ import {
 import { SopTab } from '@/components/ship-report/SopTab';
 import { KpiTab } from '@/components/ship-report/KpiTab';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
+import { docChotKy } from '@/features/kpi-logistics/chot-actions';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
 
 export const dynamic = 'force-dynamic';
@@ -83,9 +84,16 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const dsKy = cacKy(homNay);
   const kyKpi = sp.ky && dsKy.includes(sp.ky) ? sp.ky : dsKy[1] ?? dsKy[0]; // mặc định tháng trước (kỳ đã chốt)
   const [tuKpi, denKpi] = bienKy(kyKpi);
-  const [autoKpi, nhapKpi] = tab === 'kpi' && xemDuocKpi
-    ? await Promise.all([docSoLieuKpi(tuKpi, denKpi), docNhapKpi(kyKpi)])
-    : [null, null];
+  const chotKpi = tab === 'kpi' && xemDuocKpi ? await docChotKy(kyKpi) : null;
+  /* Kỳ ĐÃ CHỐT đọc từ ảnh chụp, không tính lại: con số HR đã trả lương theo phải giữ nguyên
+   * dù đối soát và credit note vẫn chạy tiếp sau đó (CEO 29/09/2026). */
+  const [autoKpi, nhapKpi] = chotKpi
+    // Ảnh chụp đi qua JSON nên các ô ngày trong `nhap` về dạng CHUỖI, không còn là Date. Bảng KPI
+    // chỉ đọc các ô số và boolean của nó nên không sao — ai thêm chỗ đọc ngày ở đây phải tự đổi kiểu.
+    ? [chotKpi.anhChup.auto, chotKpi.anhChup.nhap as typeof import('@/db/schema').kpiLogisticsThang.$inferSelect | null]
+    : tab === 'kpi' && xemDuocKpi
+      ? await Promise.all([docSoLieuKpi(tuKpi, denKpi), docNhapKpi(kyKpi)])
+      : [null, null];
 
   // Tab Tiêu chuẩn giao: toàn bộ lịch sử (mặc định), tách theo line ship × quốc gia (CEO 10/09/2026).
   const phamVi = chuanHoaPhamVi(sp.pv);
@@ -151,6 +159,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
               </span>
             </div>
             <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
+              chot={chotKpi ? { chotAt: chotKpi.chotAt, ghiChu: chotKpi.ghiChu } : null}
               ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')}
               ghiSuCoDuoc={laAdmin || hasPermission(role, 'manage_ship_ho')} />
           </>

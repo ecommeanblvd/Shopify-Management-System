@@ -5,7 +5,8 @@ import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
 import { dauHieu, layLyDoAmCuoc, thieuSanPham, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
-import { layLyDo, loaiTruKhoiKpi } from '@/features/shipments/ly-do-cham';
+import { layLyDo, loaiTruKhoiKpi, duyetTayDuoc } from '@/features/shipments/ly-do-cham';
+import { NutDuyetLyDo } from '@/components/shipments/NutDuyetLyDo';
 import {
   TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, conViec, laLoiNoiBo,
   type ChiTietKpi, type MaTieuChi,
@@ -28,11 +29,13 @@ function taiCsv(ten: string, header: string[], rows: CsvValue[][]) {
  * Report chi tiết từng tiêu chí Pillar 1: liệt kê ĐÚNG các đơn/kiện tạo nên con số
  * KPI (CEO 11/09/2026). Nạp lười — chọn tiêu chí nào mới truy vấn tiêu chí đó.
  */
-export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
+export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = false }: {
   tu: string; den: string; ky: string;
   tai: (ma: MaTieuChi, tu: string, den: string) => Promise<ChiTietKpi>;
   /** Nhân sự có quyền đối soát phí ship mới gán được lý do chậm ngay trên bảng. */
   ganLyDoDuoc: boolean;
+  /** Chỉ quản lý mới duyệt tay được kiện mà hệ thống không kiểm được. */
+  duyetDuoc?: boolean;
 }) {
   const [ma, setMa] = useState<MaTieuChi | null>(null);
   const [kho, setKho] = useState<Partial<Record<MaTieuChi, ChiTietKpi>>>({});
@@ -90,7 +93,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc }: {
         <div className="space-y-3 p-4">
           <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI_THEO_MA[ma]}</p>
           {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} giaiTrinhDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.1')} />}
-          {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.2')} />}
+          {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={duyetDuoc} sauKhiLuu={() => taiLai('1.2')} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}
           {data.sizeThung && <BangSize rows={data.sizeThung} ky={ky} />}
         </div>
@@ -136,10 +139,14 @@ const NHAN_DOI_CHIEU: Record<string, string> = {
 };
 
 /** Kết quả đối chiếu lý do với hãng (FedEx / UPS) — nói rõ kiện có được rút khỏi mẫu số không và vì sao. */
-function NhanDoiChieu({ ketQua, bangChung }: { ketQua: string | null; bangChung: string | null }) {
+function NhanDoiChieu({ ketQua, bangChung, duyet }: { ketQua: string | null; bangChung: string | null; duyet?: string | null }) {
   const [mau, chu] = ketQua === 'xac_nhan' ? ['text-emerald-600 dark:text-emerald-400', '✓ Hãng xác nhận — rời mẫu số']
     : ketQua === 'khong_thay' ? ['text-red-600 dark:text-red-400', '✗ Hãng không có dấu hiệu — vẫn tính trễ']
-    : ketQua === 'khong_kiem_duoc' ? ['text-muted-foreground', '— Không kiểm được — vẫn tính trễ']
+    // Máy mù mà đã có người duyệt thì nói theo người: nhãn "vẫn tính trễ" ở đây sẽ mâu thuẫn
+    // với chính con số trên đầu bảng, và người đọc sẽ tin cái nào cũng sai.
+    : ketQua === 'khong_kiem_duoc' ? (duyet === 'duyet'
+        ? ['text-muted-foreground', '— Máy không kiểm được, quản lý đã duyệt']
+        : ['text-muted-foreground', '— Không kiểm được — vẫn tính trễ'])
     : ['text-muted-foreground', '⋯ Đang đối chiếu với hãng'];
   return (
     <span className={`mt-0.5 block text-[10px] ${mau}`} title={bangChung ?? undefined}>
@@ -226,8 +233,8 @@ function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
   );
 }
 
-function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
-  rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; sauKhiLuu: () => void;
+function BangSla({ rows, ky, ganLyDoDuoc, duyetDuoc, sauKhiLuu }: {
+  rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; duyetDuoc: boolean; sauKhiLuu: () => void;
 }) {
   const d = demKetQuaSla(rows);
   const coLyDoLoaiTru = rows.filter((r) => r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham));
@@ -290,7 +297,11 @@ function BangSla({ rows, ky, ganLyDoDuoc, sauKhiLuu }: {
                 && !(r.ketQua === 'loai_tru' && r.lyDoCham == null)
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} nguon={r.nguon} sauKhiLuu={sauKhiLuu} />
                 : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
-              {r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) && <NhanDoiChieu ketQua={r.lyDoDoiChieu ?? null} bangChung={r.lyDoBangChung ?? null} />}
+              {r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) && <NhanDoiChieu ketQua={r.lyDoDoiChieu ?? null} bangChung={r.lyDoBangChung ?? null} duyet={r.lyDoDuyet ?? null} />}
+              {/* Nút duyệt CHỈ hiện đúng chỗ máy mù — `duyetTayDuoc` là cùng một luật máy chủ
+                  dùng để chặn, nên giao diện không bao giờ mời bấm một việc sẽ bị từ chối. */}
+              {duyetDuoc && r.shipmentId && duyetTayDuoc(r.lyDoCham, r.lyDoDoiChieu)
+                && <NutDuyetLyDo shipmentId={r.shipmentId} nguon={r.nguon} daDuyet={r.lyDoDuyet ?? null} sauKhiLuu={sauKhiLuu} />}
             </td>
           </tr>
         ))}

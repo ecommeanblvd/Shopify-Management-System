@@ -9,6 +9,7 @@ import { db } from '@/db/client';
 import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
+import { MOC_AP_QUY_CHE } from './moc-quy-che';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
 import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, cuaSoNhinTuyen, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
@@ -122,12 +123,18 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
          AND COALESCE(delivered_at, created_at) <= ${`${den} 23:59:59`}::timestamp;`),
     // Gate đo TỒN ĐỌNG chứ không đo kiện trong kỳ: hoá đơn carrier về trễ (quy chế chi trả gối 1 kỳ), nên kiện vừa gửi
     // trong tháng chưa thể phân định xong. Đếm kiện có bill mà NGÀY GỬI trước đầu kỳ chấm và vẫn chưa ai phân định.
+    // CHẶN DƯỚI bằng MỐC ÁP QUY CHẾ (CEO 29/09/2026): 2.431 kiện tồn đo ngày 29/09 trải từ 06/2025 đến
+    // 07/2026 và không kiện nào thuộc kỳ đang chấm — nợ có trước khi quy chế tồn tại. Tính chúng vào
+    // thì Gate không bao giờ đạt dù làm tốt đến đâu, tức tiêu chí thôi đo và chỉ còn chặn. Nợ cũ vẫn
+    // nằm nguyên trong danh sách đối soát (`kienCanPhanDinh`), chỉ không khoá Gate của người không gây ra.
     // Cùng PHẠM VI với Pillar 1 (D-072): chỉ kiện của store MEAN BLVD. Kiện brand khác
     // đối soát ở luồng ship hộ, để lẫn vào đây thì Gate của nhân sự MEAN bị treo vì
     // tồn đọng của brand mà họ không phụ trách.
     db.execute<{ can: string; da: string; ton: string }>(sql`
       SELECT COUNT(*)::text AS can, (COUNT(r.id))::text AS da,
-             (COUNT(*) FILTER (WHERE r.id IS NULL AND s.label_created_at < ${`${tu} 00:00:00`}::timestamp))::text AS ton
+             (COUNT(*) FILTER (WHERE r.id IS NULL
+                               AND s.label_created_at >= ${`${MOC_AP_QUY_CHE} 00:00:00`}::timestamp
+                               AND s.label_created_at < ${`${tu} 00:00:00`}::timestamp))::text AS ton
         FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
         LEFT JOIN shipment_reconcile_status r ON r.shipment_id = s.id
@@ -179,11 +186,11 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   const kienGiao = [...kienShopify, ...kienShipHo];
   // Lý do ngoài tầm kiểm soát chỉ gỡ được kiện ĐANG TRỄ. Kiện đạt cam kết mà lỡ bị gán lý do
   // vẫn ở lại mẫu số — xem `loaiTruDuoc`.
-  const tinhKpi = kienGiao.filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
+  const tinhKpi = kienGiao.filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu, k.lyDoDuyet) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
   const sop = tongKpi(chamKpi(tinhKpi, tu), tu);
   // Bảng tuyến chấm trên cửa sổ rộng, dùng cùng luật lọc lý do.
   const kienRong = [...kienRongShopify, ...kienRongShipHo]
-    .filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
+    .filter((k) => !(lyDoCoHieuLuc(k.lyDoCham, k.lyDoDoiChieu, k.lyDoDuyet) && loaiTruDuoc(k, slaCuaNuoc(k.country))));
   const theoNuoc = chamKpi(kienRong, tu);
   const so = (v: string | null) => (v == null ? null : Number(v));
   const sizeThung = chamSizeThung(canRows.rows.map((r) => ({

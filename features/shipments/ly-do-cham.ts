@@ -49,12 +49,41 @@ export const layLyDo = (ma: string | null | undefined): LyDoCham | null => (ma ?
 export const loaiTruKhoiKpi = (ma: string | null | undefined): boolean => layLyDo(ma)?.loaiTruKpi ?? false;
 
 /**
- * Lý do có ĐƯỢC loại kiện khỏi KPI không: phải là lý do ngoài tầm kiểm soát VÀ đã được hãng xác
- * nhận bằng lịch sử quét (CEO 16/09/2026 — xem `doi-chieu-fedex.ts`). Chưa đối chiếu, không thấy
- * bằng chứng, hay không kiểm được đều KHÔNG loại.
+ * MÁY MÙ: hãng không có nguồn để đối chiếu, hoặc kiện quá cửa sổ tra cứu. Đây là trạng thái DUY
+ * NHẤT mà con người được phép quyết thay (CEO 29/09/2026).
+ *
+ * Đo ngày 29/09 trên kiện tháng 8: 4 kiện Aramex kẹt vĩnh viễn với bằng chứng "Chưa có nguồn đối
+ * chiếu cho hãng aramex" — hệ thống chỉ biết đọc FedEx và UPS. Không có đường duyệt tay thì lý do
+ * thật của người phụ trách cũng không bao giờ có hiệu lực.
  */
-export const lyDoCoHieuLuc = (ma: string | null | undefined, doiChieu: string | null | undefined): boolean =>
-  loaiTruKhoiKpi(ma) && doiChieu === 'xac_nhan';
+export const mayKhongKiemDuoc = (doiChieu: string | null | undefined): boolean => doiChieu === 'khong_kiem_duoc';
+
+/**
+ * Admin có được duyệt tay kiện này không.
+ *
+ * CỐ Ý HẸP. Chỉ mở đúng chỗ máy mù:
+ *   - `xac_nhan`     → máy đã xác nhận rồi, duyệt tay thừa;
+ *   - `khong_thay`   → máy ĐÃ TRA và thấy hãng không có dấu hiệu nào khớp lý do. Cho người đè lên
+ *                      đây là mở lại đúng lỗ hổng 16/09 (một lượt gán 58 kiện đẩy SLA T8 từ 83,3%
+ *                      lên 95,1%). Bằng chứng ngược thì người không được phép nói khác;
+ *   - `null`         → chưa tra xong, phải đợi chứ không đoán trước.
+ */
+export const duyetTayDuoc = (ma: string | null | undefined, doiChieu: string | null | undefined): boolean =>
+  loaiTruKhoiKpi(ma) && mayKhongKiemDuoc(doiChieu);
+
+/**
+ * Lý do có ĐƯỢC loại kiện khỏi KPI không: phải là lý do ngoài tầm kiểm soát, VÀ có một trong hai
+ * bằng chứng — hãng xác nhận bằng lịch sử quét (CEO 16/09/2026, xem `doi-chieu-fedex.ts`), hoặc
+ * admin duyệt tay ở đúng chỗ máy không kiểm được (CEO 29/09/2026).
+ *
+ * Chưa đối chiếu, hay hãng không thấy dấu hiệu, thì vẫn KHÔNG loại — kể cả khi có người duyệt.
+ */
+export const lyDoCoHieuLuc = (
+  ma: string | null | undefined,
+  doiChieu: string | null | undefined,
+  duyet?: string | null,
+): boolean =>
+  loaiTruKhoiKpi(ma) && (doiChieu === 'xac_nhan' || (duyet === 'duyet' && mayKhongKiemDuoc(doiChieu)));
 
 export interface DemLyDo { ma: string; ten: string; thuocVe: LyDoCham['thuocVe']; loaiTruKpi: boolean; n: number }
 

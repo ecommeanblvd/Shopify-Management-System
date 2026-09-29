@@ -158,6 +158,15 @@ export interface DauVaoKpi {
   /** 3B — hai hạng mục 150.000đ. */
   roRiGiam: boolean;
   khacPhucGoc: boolean;
+  /**
+   * Quản lý ĐÃ chấm hai mục 3B của kỳ này chưa (có dòng nhập tay cho kỳ). Bỏ trống = CHƯA.
+   *
+   * Vì sao phải có (CEO 29/09/2026): `roRiGiam` và `khacPhucGoc` mặc định `false`, mà bảng nhập
+   * tay đo ngày 29/09 RỖNG — chưa kỳ nào được nhập. Bảng điểm vì vậy vẽ mọi kỳ thành "Chưa đạt",
+   * không phân biệt được với "chưa ai chấm", tức KẾT TỘI cho phần việc chưa hề kiểm. Đây là mặt
+   * ngược của lỗi đã sửa cho tiêu chí 1.1 ngày 14/09 (khi đó là CHỨNG NHẬN SẠCH cho phần chưa kiểm).
+   */
+  daChamP3B?: boolean;
   /** 3C — tiền thu hồi thực tế và tỉ lệ thực thu / tổng thuộc diện khiếu nại. */
   thuHoiVnd: number;
   tyLeThuHoi: number | null;
@@ -228,6 +237,19 @@ export interface BangDiemKpi {
   gateDat: boolean;
 }
 
+/**
+ * Một mục 3B do quản lý chấm tay: ba trạng thái chứ không phải hai.
+ *
+ * Trượt Gate thì không xét. Gate đạt mà chưa ai chấm thì để TRỐNG (`mucDat` null → bảng hiện
+ * "Chưa chấm được", xám, như tiêu chí 1.1) — không được vẽ thành "Chưa đạt" đỏ, vì đó là kết tội
+ * cho phần việc chưa hề kiểm.
+ */
+function mucTay(v: DauVaoKpi, dat: boolean): { soLieu: string; mucDat: number | null } {
+  if (!v.gateDat) return { soLieu: 'Không xét (trượt Gate)', mucDat: 0 };
+  if (!v.daChamP3B) return { soLieu: 'Chưa có kết luận của quản lý', mucDat: null };
+  return { soLieu: dat ? 'Đạt' : 'Chưa đạt', mucDat: dat ? 1 : 0 };
+}
+
 /** Bảng điểm KPI một kỳ — chỉ kết quả, không quy ra tiền. `ngayKy` (ISO, đầu kỳ) quyết định ngưỡng đạt của tiêu chí 1.2. */
 export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
   const bienCuoc = diemBienCuoc(v.soDonAmCuocLoi);
@@ -296,15 +318,15 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
     },
     {
       ma: '3B-1', ten: 'Giảm rò rỉ dưới ngưỡng', trongSo: null,
-      soLieu: v.gateDat ? (v.roRiGiam ? 'Đạt' : 'Chưa đạt') : 'Không xét (trượt Gate)',
+      soLieu: mucTay(v, v.roRiGiam).soLieu,
       nguong: 'Tỉ lệ kg chênh không đòi được giảm so với baseline',
-      mucDat: v.gateDat && v.roRiGiam ? 1 : 0,
+      mucDat: mucTay(v, v.roRiGiam).mucDat,
     },
     {
       ma: '3B-2', ten: 'Khắc phục gốc lỗi "ta sai"', trongSo: null,
-      soLieu: v.gateDat ? (v.khacPhucGoc ? 'Đạt' : 'Chưa đạt') : 'Không xét (trượt Gate)',
+      soLieu: mucTay(v, v.khacPhucGoc).soLieu,
       nguong: '100 % lỗi nhóm "ta sai" được khắc phục, không tái diễn',
-      mucDat: v.gateDat && v.khacPhucGoc ? 1 : 0,
+      mucDat: mucTay(v, v.khacPhucGoc).mucDat,
     },
     {
       ma: '3C', ten: 'Thu hồi công nợ carrier', trongSo: null,
