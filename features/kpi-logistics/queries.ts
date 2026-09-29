@@ -10,6 +10,7 @@ import { docKienGiao } from '@/features/shipments/tieu-chuan-giao';
 import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
 import { MOC_AP_QUY_CHE } from './moc-quy-che';
+import { gomThuHoi } from './thu-hoi';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
 import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, cuaSoNhinTuyen, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
@@ -62,9 +63,14 @@ export interface SoLieuTuDong {
   /** 3C — tiền thu hồi = tổng credit note có NGÀY HOÁ ĐƠN trong kỳ (CEO 10/09/2026), lấy trị tuyệt đối. */
   thuHoiVnd: number;
   soCreditNote: number;
-  /** Số cũ: cộng theo ngày ops bấm ghi nhận — giữ để đối chiếu khi số lệch. */
-  thuHoiTheoNgayGhiNhan: number;
+  /** Tổng thu hồi THÔ trên các dòng khiếu nại (chưa chặn trần) — giữ để đối chiếu khi số lệch. */
+  thuHoiThoVnd: number;
+  /** Tổng mức đã khiếu nại của các dòng đối soát trong kỳ — MẪU SỐ của hệ số K. */
   thuocDienKhieuNaiVnd: number;
+  /** TỬ SỐ của hệ số K: tiền hãng thực trả trên CHÍNH các dòng đó, đã chặn trần từng dòng. */
+  thuHoiTheoKhieuNaiVnd: number;
+  soDongKhieuNai: number;
+  /** Tỉ lệ thực thu 0..1 — hai vế cùng một tập dòng (xem `thu-hoi.ts`); null = kỳ không có dòng khiếu nại nào. */
   tyLeThuHoi: number | null;
 }
 
@@ -143,12 +149,16 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     db.execute<{ tong: string | null; n: string }>(sql`
       SELECT SUM(ABS(tong_cong::numeric))::text AS tong, COUNT(*)::text AS n
         FROM credit_notes WHERE loai = 'credit' AND ngay >= ${tu}::date AND ngay <= ${den}::date;`),
-    db.execute<{ thu: string | null; dien: string | null }>(sql`
-      SELECT SUM(COALESCE(recovered_vnd::numeric, 0))::text AS thu,
-             -- Thuộc diện khiếu nại = mọi dòng ta xác định HÃNG SAI: đang đòi, đã có credit note, hoặc mới flag.
-             SUM(ABS(COALESCE(delta_vnd_at_review::numeric, 0))) FILTER (WHERE status IN ('carrier_error', 'disputing', 'credited'))::text AS dien
+    /* Trả về TỪNG DÒNG khiếu nại, không cộng gộp trong SQL: luật cộng (chặn trần từng dòng)
+     * nằm ở `gomThuHoi` để có test canh. Trước 29/09/2026 chỗ này cộng gộp và lấy tử số từ
+     * BẢNG KHÁC (credit_notes theo ngày hoá đơn), ra tỉ lệ 241% — xem `thu-hoi.ts`.
+     * Lọc đúng các trạng thái ta đã xác định HÃNG SAI: đang đòi, đã có credit note, hoặc mới flag. */
+    db.execute<{ claim: string | null; thu: string | null }>(sql`
+      SELECT ABS(COALESCE(delta_vnd_at_review::numeric, 0))::text AS claim,
+             COALESCE(recovered_vnd::numeric, 0)::text AS thu
         FROM shipment_reconcile_status
-       WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp;`),
+       WHERE reconciled_at >= ${`${tu} 00:00:00`}::timestamp AND reconciled_at <= ${`${den} 23:59:59`}::timestamp
+         AND status IN ('carrier_error', 'disputing', 'credited');`),
     db.execute<{ loai: string; thuoc_ve: string; tong: string; thu_hoi: string; ngay: string; ghi: string; dien_bien: unknown; co_tien_hang: boolean; da_chot_tien: boolean }>(sql`
       SELECT loai, thuoc_ve, tong_chi_phi_vnd::text AS tong, da_thu_hoi_vnd::text AS thu_hoi,
              ngay::text AS ngay, created_at::text AS ghi, dien_bien, co_tien_hang, da_chot_tien
@@ -211,8 +221,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
   const can = Number(gate.rows[0]?.can ?? 0);
   const da = Number(gate.rows[0]?.da ?? 0);
   const ton = Number(gate.rows[0]?.ton ?? 0);
-  const thuCu = Number(thuHoi.rows[0]?.thu ?? 0);
-  const dien = Number(thuHoi.rows[0]?.dien ?? 0);
+  const khieuNai = gomThuHoi(thuHoi.rows.map((r) => ({
+    khieuNaiVnd: Number(r.claim ?? 0), thuHoiVnd: Number(r.thu ?? 0),
+  })));
   const thu = Number(creditNote.rows[0]?.tong ?? 0);
 
   return {
@@ -243,8 +254,10 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     gateDat: ton === 0 && suCo.nGhiTre === 0 && suCo.nChuaQuyTrachNhiem === 0,
     thuHoiVnd: Math.round(thu),
     soCreditNote: Number(creditNote.rows[0]?.n ?? 0),
-    thuHoiTheoNgayGhiNhan: Math.round(thuCu),
-    thuocDienKhieuNaiVnd: Math.round(dien),
-    tyLeThuHoi: dien > 0 ? thu / dien : null,
+    thuHoiThoVnd: khieuNai.thuHoiThoVnd,
+    thuocDienKhieuNaiVnd: khieuNai.khieuNaiVnd,
+    thuHoiTheoKhieuNaiVnd: khieuNai.thuHoiVnd,
+    soDongKhieuNai: khieuNai.soDong,
+    tyLeThuHoi: khieuNai.tyLe,
   };
 }

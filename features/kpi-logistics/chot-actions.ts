@@ -63,9 +63,8 @@ export async function chotKyKpi(input: { ky: string; ghiChu?: string | null }): 
     khacPhucGoc: nhap?.khacPhucGoc ?? false,
     daChamP3B: nhap != null,
     thuHoiVnd: nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd,
-    tyLeThuHoi: auto.thuocDienKhieuNaiVnd > 0
-      ? (nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd) / auto.thuocDienKhieuNaiVnd
-      : null,
+    // Lấy thẳng tỉ lệ đã tính trên cùng một tập dòng; không chia tiền credit note cho mức khiếu nại.
+    tyLeThuHoi: auto.tyLeThuHoi,
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
   }, tu);
 

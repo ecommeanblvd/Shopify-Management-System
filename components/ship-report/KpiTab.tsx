@@ -44,7 +44,11 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
   const tuyen = gomTuyenItKien(auto.slaTheoNuoc);
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
-  const tyLeThuHoi = auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null;
+  /* KHÔNG tự chia lại ở đây. Tỉ lệ thực thu phải lấy hai vế từ CÙNG một tập dòng đối soát
+   * (`auto.tyLeThuHoi`). Chia tiền credit note cho mức khiếu nại là hai tập khác nhau trên hai
+   * trục ngày khác nhau — chính là chỗ ra 241% của tháng 8 (CEO 29/09/2026). Ô nhập tay
+   * `thuHoiKeToanVnd` chỉ ghi đè SỐ TIỀN 3C, không đổi được chất lượng đòi nợ. */
+  const tyLeThuHoi = auto.tyLeThuHoi;
 
   const diem = bangDiemKpi({
     // Mặc định lấy số hệ thống ĐÃ chốt là lỗi nội bộ; ô nhập tay chỉ để quản lý ghi đè.
@@ -210,7 +214,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai, chỉ tính kiện của MEAN BLVD. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}. Đã phân định ${auto.kienDaPhanDinh}/${auto.kienCanPhanDinh} kiện.`],
-                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} / thuộc diện ${vnd(auto.thuocDienKhieuNaiVnd)} = ${pct(auto.thuocDienKhieuNaiVnd > 0 ? auto.thuHoiVnd / auto.thuocDienKhieuNaiVnd : null)}`, `Tổng ${auto.soCreditNote} credit note có NGÀY HOÁ ĐƠN trong kỳ (tải tệp ở trang Đối soát phí ship). Cộng theo ngày ops bấm ghi nhận thì ra ${vnd(auto.thuHoiTheoNgayGhiNhan)} — chỉ để đối chiếu.`],
+                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} · chất lượng đòi ${pct(auto.tyLeThuHoi)}`, `TIỀN 3C là tổng ${auto.soCreditNote} credit note có NGÀY HOÁ ĐƠN trong kỳ (tải tệp ở trang Đối soát phí ship). CHẤT LƯỢNG ĐÒI là con số khác và đo trên tập khác: ${auto.soDongKhieuNai} dòng đối soát trong kỳ đã xác định hãng sai, khiếu nại ${vnd(auto.thuocDienKhieuNaiVnd)} và đòi về được ${vnd(auto.thuHoiTheoKhieuNaiVnd)}. Hai số này KHÔNG chia cho nhau được — chia nhầm từng ra 241%. Chưa chặn trần từng dòng thì tổng đòi về là ${vnd(auto.thuHoiThoVnd)}.`],
               ].map(([a, b, c]) => (
                 <tr key={a} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left font-medium">{a}</td>

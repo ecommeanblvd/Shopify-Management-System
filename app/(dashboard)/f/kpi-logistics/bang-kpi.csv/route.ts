@@ -39,7 +39,8 @@ export async function GET(req: Request): Promise<Response> {
     roRiGiam: nhap?.roRiGiam ?? false,
     khacPhucGoc: nhap?.khacPhucGoc ?? false,
     thuHoiVnd: thuHoi,
-    tyLeThuHoi: auto.thuocDienKhieuNaiVnd > 0 ? thuHoi / auto.thuocDienKhieuNaiVnd : null,
+    // Tỉ lệ đã tính sẵn trên CÙNG một tập dòng đối soát — không chia lại ở đây (xem `thu-hoi.ts`).
+    tyLeThuHoi: auto.tyLeThuHoi,
     clawbackVnd: nhap?.clawbackVnd ? Number(nhap.clawbackVnd) : 0,
   }, tu);
 
@@ -58,7 +59,8 @@ export async function GET(req: Request): Promise<Response> {
     ...auto.slaTheoNuoc.map((d): CsvValue[] => [`SLA từng tuyến (${auto.cuaSoTuyen.tu} → ${auto.cuaSoTuyen.den})`, d.country, `${d.slaNgay} ngày`, `${d.dungHan}/${d.n}`, '', d.tyLeDungHan]),
     ['Số liệu hệ thống', 'Kiện phát sinh phí địa chỉ/chứng từ', '', `${auto.kienLoiChungTu}/${auto.kienCoBill}`, '', auto.tyLeLoiChungTu],
     ['Số liệu hệ thống', 'Tồn đọng chưa phân định', '', `${auto.kienTonDong} kiện`, '', ''],
-    ['Số liệu hệ thống', 'Thu hồi công nợ', '', `${thuHoi}đ / thuộc diện ${auto.thuocDienKhieuNaiVnd}đ`, '', auto.tyLeThuHoi],
+    ['Số liệu hệ thống', 'Thu hồi công nợ (tiền 3C, từ credit note)', '', `${thuHoi}đ`, '', ''],
+    ['Số liệu hệ thống', 'Chất lượng đòi nợ (trên dòng đối soát)', '', `${auto.thuHoiTheoKhieuNaiVnd}đ / khiếu nại ${auto.thuocDienKhieuNaiVnd}đ`, '', auto.tyLeThuHoi],
     ['Ghi chú kỳ', nhap?.ghiChu ?? '', '', '', '', ''],
   ];
 

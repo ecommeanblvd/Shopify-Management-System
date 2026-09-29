@@ -330,7 +330,7 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
     },
     {
       ma: '3C', ten: 'Thu hồi công nợ carrier', trongSo: null,
-      soLieu: `Thu hồi ${tien(v.thuHoiVnd)}${v.tyLeThuHoi == null ? '' : ` · thực thu ${Math.round(v.tyLeThuHoi * 100)}% số thuộc diện khiếu nại (hệ số K ${heSoK(v.tyLeThuHoi).toFixed(1)})`}`,
+      soLieu: `Thu hồi ${tien(v.thuHoiVnd)}${v.tyLeThuHoi == null ? ' · chưa có dòng khiếu nại nào trong kỳ để đo chất lượng đòi' : ` · đòi về ${Math.round(v.tyLeThuHoi * 100)}% số đã khiếu nại trên các dòng đối soát trong kỳ (hệ số K ${heSoK(v.tyLeThuHoi).toFixed(1)})`}`,
       nguong: `Sàn nghĩa vụ ${tien(SAN_THU_HOI)}/tháng, vượt sàn mới tính thưởng`,
       mucDat: v.gateDat ? (thuHoi.tien > 0 ? 1 : 0) : 0,
     },
