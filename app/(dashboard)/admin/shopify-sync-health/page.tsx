@@ -79,6 +79,16 @@ export default async function SyncHealth() {
     revalidatePath('/admin/shopify-sync-health');
   }
 
+  /* Chụp MỘT mốc cho cả bảng: mỗi ô tự gọi Date.now() thì hai dòng cùng trạng
+   * thái có thể hiện khác nhau.
+   *
+   * Tắt luật purity ĐÚNG MỘT DÒNG, có lý do: đây là server component `async`,
+   * render đúng một lần mỗi request rồi trả HTML — không có re-render nên không
+   * có chuyện "giá trị đổi bất ngờ giữa hai lượt" mà luật này phòng. Giá trị
+   * cũng chỉ đọc một lần rồi truyền xuống dưới dạng prop thuần. */
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-8">
       <div className="flex items-center justify-between gap-4">
@@ -119,6 +129,7 @@ export default async function SyncHealth() {
                         ingested={s.state?.backfillIngested ?? null}
                         progressAt={s.state?.backfillProgressAt ?? null}
                         error={s.state?.backfillError ?? null}
+                        nowMs={nowMs}
                       />
                     </td>
                     <td className="px-4 py-2">{ago(s.state?.lastWebhookAt)}</td>

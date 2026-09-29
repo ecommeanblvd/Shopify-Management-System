@@ -37,7 +37,13 @@ export function ShipHoCarrierPanel({ orderId, currentKey, canManage }: {
     });
   };
 
-  const now = Date.now();
+  /* Chụp mốc "bây giờ" MỘT lần lúc mở panel, không gọi Date.now() trong thân
+   * render: đó là hàm không thuần, React có thể render thử rồi bỏ và mốc đổi
+   * giữa các lượt render mà không có lý do nào từ dữ liệu.
+   *
+   * Lấy mốc lúc mount là đủ đúng ở đây: cửa sổ tạm ngưng của carrier tính bằng
+   * NGÀY, còn panel này mở ra chọn line rồi đóng trong vài phút. */
+  const [now] = useState(() => Date.now());
   const canSelect = (r: { suspendedAt?: string | null }) => !r.suspendedAt || new Date(r.suspendedAt).getTime() > now;
   const okRows = data?.rows.filter((r) => r.ok) ?? [];
   const cheapest = okRows.find(canSelect) ?? okRows[0];

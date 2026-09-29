@@ -80,7 +80,10 @@ export function OrdersTable({
   const [rows, setRows] = useState<OrderRow[]>(initialRows);
   const [totalCount, setTotalCount] = useState(initialTotalCount);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(0);
+  /* `page` lưu KÈM KHOÁ bộ lọc. Đổi bộ lọc là khoá đổi, `page` tự suy về 0 —
+   * không cần `setPage(0)` đồng bộ trong effect (React render thừa một lượt, và
+   * luật set-state-in-effect chặn đúng chỗ này). Cùng cách đã dùng ở DaiLienQuan. */
+  const [trang, datTrang] = useState<{ khoa: string; p: number }>({ khoa: '', p: 0 });
   const [pageSize, setPageSize] = useState<PageSize>(25);
   const [pending, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,23 +108,24 @@ export function OrdersTable({
   // Bộ lọc ngày / mốc đổi (từ thanh KPI) → bảng về trang 0 theo khoảng mới. Bỏ qua lần mount: trang đầu đã render từ server
   // đúng bộ lọc. Khi đang tìm chữ thì server bỏ lọc ngày nên không cần tải lại.
   const khoaLoc = `${fromISO}|${toISO}|${moc}`;
+  const page = trang.khoa === khoaLoc ? trang.p : 0;
   const khoaLocDau = useRef(khoaLoc);
   useEffect(() => {
     if (khoaLocDau.current === khoaLoc) return;
     khoaLocDau.current = khoaLoc;
     if (search) return;
-    setPage(0);
+    // Chỉ còn việc TẢI ở đây; số trang đã tự về 0 nhờ so khoá ở trên.
     load({ page: 0, pageSize, search: '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [khoaLoc]);
 
   const goPage = (p: number): void => {
-    setPage(p);
+    datTrang({ khoa: khoaLoc, p });
     load({ page: p, pageSize, search });
   };
   const changePageSize = (s: PageSize): void => {
     setPageSize(s);
-    setPage(0);
+    datTrang({ khoa: khoaLoc, p: 0 });
     load({ page: 0, pageSize: s, search });
   };
   // Debounce search so we don't fire a query per keystroke. Matches the
@@ -129,7 +133,7 @@ export function OrdersTable({
   // recipient name), so the client hint stays truthful.
   const onSearchChange = (v: string): void => {
     setSearch(v);
-    setPage(0);
+    datTrang({ khoa: khoaLoc, p: 0 });
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => load({ page: 0, pageSize, search: v }), 350);
   };

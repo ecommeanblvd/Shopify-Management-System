@@ -226,20 +226,35 @@ function ChonMonSaiCan({ mon, chon, doi }: {
   mon: MonTrongDon[]; chon: SanPhamSaiCan[]; doi: (x: SanPhamSaiCan[]) => void;
 }) {
   const theoSku = new Map(chon.map((c) => [c.sku, c]));
-  const [nhap, setNhap] = useState<Record<string, string>>(
-    () => Object.fromEntries(chon.map((c) => [c.sku, String(c.canMoiG / 1000)])),
+
+  /* Đơn MỘT món thì tick sẵn với cân gợi ý — chỉ một lần khi mở, người nhập bỏ
+   * tick được (CEO 16/09/2026).
+   *
+   * `nhap` KHỞI TẠO thẳng giá trị chọn sẵn thay vì `setNhap` trong effect: gọi
+   * setState đồng bộ trong thân effect làm React render thừa một lượt, và quan
+   * trọng hơn là nó che mất chuyện "giá trị này vốn tính được ngay lúc dựng".
+   * `mon` ở đây là prop của dòng ĐÃ tải, không về sau, nên tính một lần là đủ.
+   *
+   * Việc báo ra ngoài (`doi`) vẫn phải ở effect vì đó là setState của component
+   * CHA — gọi trong thân render là sửa state người khác giữa lượt render. */
+  // useMemo để tham chiếu ổn định — không thì deps của effect đổi mỗi lượt render.
+  const tuChon = useMemo(
+    () => (mon.length === 1 && chon.length === 0 && mon[0]?.goiYG
+      ? { sku: mon[0].sku, canMoiG: mon[0].goiYG }
+      : null),
+    [mon, chon],
   );
-  // Đơn một món: chọn sẵn với cân gợi ý — chỉ một lần khi mở, người nhập bỏ tick được.
-  const daTuChon = useRef(false);
+  const [nhap, setNhap] = useState<Record<string, string>>(() => (
+    tuChon
+      ? { [tuChon.sku]: String(tuChon.canMoiG / 1000) }
+      : Object.fromEntries(chon.map((c) => [c.sku, String(c.canMoiG / 1000)]))
+  ));
+  const daBao = useRef(false);
   useEffect(() => {
-    if (daTuChon.current) return;
-    daTuChon.current = true;
-    const m = mon[0];
-    if (mon.length === 1 && chon.length === 0 && m.goiYG) {
-      doi([{ sku: m.sku, canMoiG: m.goiYG }]);
-      setNhap({ [m.sku]: String(m.goiYG / 1000) });
-    }
-  }, [mon, chon, doi]);
+    if (daBao.current || !tuChon) return;
+    daBao.current = true;
+    doi([tuChon]);
+  }, [tuChon, doi]);
 
   const tick = (m: MonTrongDon) => {
     if (theoSku.has(m.sku)) { doi(chon.filter((c) => c.sku !== m.sku)); return; }

@@ -91,7 +91,7 @@ export function QuizPreview({ stores, questions }: {
 
       {/* Cột phải: kết quả */}
       <div className="space-y-3">
-        {!result && <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">Trả lời rồi bấm "Xem kết quả" để xem hồ sơ + gợi ý.</div>}
+        {!result && <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">Trả lời rồi bấm “Xem kết quả” để xem hồ sơ + gợi ý.</div>}
         {result && (
           <>
             <div className="rounded border p-3 space-y-2 text-sm">

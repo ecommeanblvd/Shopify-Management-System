@@ -18,6 +18,11 @@ export interface BackfillCellProps {
   ingested: number | null;
   progressAt: Date | string | null;
   error: string | null;
+  /** Mốc "bây giờ" do TRANG chụp một lần, truyền xuống. Gọi `Date.now()` ngay
+   *  trong thân render là hàm không thuần — React có thể render thử rồi bỏ, và
+   *  mỗi dòng sẽ lấy một mốc khác nhau nên hai dòng cùng trạng thái lại hiện
+   *  khác nhau. Một mốc cho cả bảng vừa thuần vừa nhất quán. */
+  nowMs: number;
 }
 
 function Bar({ pct }: { pct: number }): React.ReactElement {
@@ -32,7 +37,7 @@ function Bar({ pct }: { pct: number }): React.ReactElement {
 }
 
 export function BackfillCell(props: BackfillCellProps): React.ReactElement {
-  const { status, phase, objectCount, total, ingested, progressAt, error } = props;
+  const { status, phase, objectCount, total, ingested, progressAt, error, nowMs } = props;
   const nf = (n: number) => n.toLocaleString('en-US');
 
   if (status === 'done') {
@@ -52,7 +57,7 @@ export function BackfillCell(props: BackfillCellProps): React.ReactElement {
   }
 
   // running — figure out the sub-phase + staleness.
-  const ageMs = progressAt ? Date.now() - new Date(progressAt).getTime() : null;
+  const ageMs = progressAt ? nowMs - new Date(progressAt).getTime() : null;
   const stale = ageMs != null && ageMs > STALE_MS;
 
   let body: React.ReactElement;

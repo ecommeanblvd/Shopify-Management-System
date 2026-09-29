@@ -19,7 +19,7 @@ export function UocGiaVonButton({ stores }: { stores: Array<{ id: string; name: 
   return (
     <Card><CardContent className="p-4 space-y-3">
       <div className="text-sm font-medium">Giá vốn dự tính cho SKU chưa có bảng giá</div>
-      <p className="text-xs text-muted-foreground">Nguồn theo thứ tự: giá nội địa của đúng SKU → của cùng mã sản phẩm cùng brand (bỏ size/màu), lấy từ bảng kê gần nhất → MMP niêm yết VND. Giá dự tính = giá nội địa × (1 − CK brand <b>đúng tháng đơn</b>) — tier CK tính theo doanh số tháng nên mỗi lần CK brand đổi ghi một mức giá hiệu lực đầu tháng; tháng chưa kê dùng CK kỳ gần nhất trước đó (tạm). SKU có CK riêng (phụ kiện 0 %…) giữ CK riêng. Ghi vào bảng giá (sku_costs, nguồn "uoc:…@ck=kỳ"), không đụng bảng giá ops upload. Giá thực từ bảng kê luôn đè lên dự tính.</p>
+      <p className="text-xs text-muted-foreground">Nguồn theo thứ tự: giá nội địa của đúng SKU → của cùng mã sản phẩm cùng brand (bỏ size/màu), lấy từ bảng kê gần nhất → MMP niêm yết VND. Giá dự tính = giá nội địa × (1 − CK brand <b>đúng tháng đơn</b>) — tier CK tính theo doanh số tháng nên mỗi lần CK brand đổi ghi một mức giá hiệu lực đầu tháng; tháng chưa kê dùng CK kỳ gần nhất trước đó (tạm). SKU có CK riêng (phụ kiện 0 %…) giữ CK riêng. Ghi vào bảng giá (sku_costs, nguồn “uoc:…@ck=kỳ”), không đụng bảng giá ops upload. Giá thực từ bảng kê luôn đè lên dự tính.</p>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">Store
           <select className="mt-1 block rounded border px-2 py-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 // CHỈ import type — module unmatched-billed kéo db/schema (server). Banner là
 // 'use client' nên import VALUE sẽ lôi db vào client bundle (build fail).
 // Summary tính ở page (RSC) rồi truyền xuống.
@@ -86,7 +87,7 @@ export function UnmatchedBilledBanner({ rows, summary, shipHoRows = [], returnRo
 
       {mo === 'shipho' && (
         <div className="mt-2 text-xs text-muted-foreground">
-          <p className="mb-1">Đối soát tự động ở <a href="/f/ship-ho" className="underline">module Ship hộ</a>, không phải tracking lạ.</p>
+          <p className="mb-1">Đối soát tự động ở <Link href="/f/ship-ho" className="underline">module Ship hộ</Link>, không phải tracking lạ.</p>
           <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
             {gopMaTheoDon(shipHoRows, (r) => r.shipHoCode).map((x) => (
               <span key={x.ma}>{x.ma}{x.soTracking > 1 ? ` (${x.soTracking} kiện)` : ''}</span>
