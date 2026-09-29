@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CircleAlertIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { dichNgay } from '@/lib/timezone';
+import { NutBoSungFile } from './NutBoSungFile';
 import { nhanKho } from '@/features/warehouse/ten-kho';
 import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
 import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
@@ -289,8 +290,14 @@ export function BangSoNhap({
                   {(r.qcCheck ?? '').trim() || '—'}
                 </span>
                 <span className={`truncate text-xs ${CHU_KHO[mk]}`}>{(r.whAction ?? '').trim() || '—'}</span>
-                <OAnhLark ds={r.anhHangDen} nhan={`Ảnh thực tế · ${r.orderNumber ?? ''}`} />
-                <OAnhLark ds={r.bbBanGiao} nhan={`Biên bản bàn giao · ${r.orderNumber ?? ''}`} />
+                {/* Thiếu file thì cho tải ngay tại dòng, áp cho cả đơn trong ngày
+                    (CEO 29/09/2026). Dòng đã có thì giữ nguyên ô xem ảnh. */}
+                {r.anhHangDen.length > 0
+                  ? <OAnhLark ds={r.anhHangDen} nhan={`Ảnh thực tế · ${r.orderNumber ?? ''}`} />
+                  : <NutBoSungFile recordId={r.recordId} loai="hang_den" maDon={r.orderNumber} />}
+                {r.bbBanGiao.length > 0
+                  ? <OAnhLark ds={r.bbBanGiao} nhan={`Biên bản bàn giao · ${r.orderNumber ?? ''}`} />
+                  : <NutBoSungFile recordId={r.recordId} loai="bb_ban_giao" maDon={r.orderNumber} />}
                 <span className="truncate font-mono text-[11px] text-muted-foreground">{r.uniqueCode ?? '—'}</span>
                 <span className={`justify-self-start whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[11px] font-medium ${
                   r.cuaHeThong
