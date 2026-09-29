@@ -11,6 +11,7 @@ import { docKienGiaoShipHo, docChungTuShipHo } from './nguon-ship-ho';
 import { STORE_VAN_HANH } from './pham-vi';
 import { MOC_AP_QUY_CHE } from './moc-quy-che';
 import { gomThuHoi } from './thu-hoi';
+import { thieuChungTu, type ThieuChungTu } from './credit-note-thieu';
 import { tomTatSuCo, type SuCoTomTat } from '@/features/ship-ho/su-co';
 import { chamKpi, tongKpi, loaiTruDuoc, slaCuaNuoc, cuaSoNhinTuyen, type DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 import { chamSizeThung, type KetQuaSizeThung } from '@/features/shipments/lech-can';
@@ -72,11 +73,17 @@ export interface SoLieuTuDong {
   soDongKhieuNai: number;
   /** Tỉ lệ thực thu 0..1 — hai vế cùng một tập dòng (xem `thu-hoi.ts`); null = kỳ không có dòng khiếu nại nào. */
   tyLeThuHoi: number | null;
+  /**
+   * Tiền ĐÃ ĐÒI ĐƯỢC mà chứng từ credit note chưa có trong hệ thống — nên chưa được tính vào 3C
+   * của THÁNG NÀO CẢ. Đo TOÀN THỜI GIAN, không riêng kỳ: đây là tồn đọng chứng từ, giống tồn
+   * đọng đối soát của Gate, và nó chỉ hết khi có người tải tệp lên.
+   */
+  chungTuThieu: ThieuChungTu;
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
   const cuaSoTuyen = cuaSoNhinTuyen(tu);
-  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, kienRongShopify, kienRongShipHo, chungTuShipHo, canRows] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, kienRongShopify, kienRongShipHo, chungTuShipHo, canRows, daDoi, chungTuCo] = await Promise.all([
     db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -189,6 +196,13 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
        WHERE st.shop_domain = ${STORE_VAN_HANH}
          AND s.label_created_at >= ${`${tu} 00:00:00`}::timestamp AND s.label_created_at <= ${`${den} 23:59:59`}::timestamp;`),
+    /* TOÀN THỜI GIAN, cố ý không lọc kỳ: câu hỏi là "tiền này đã được tính cho tháng nào chưa",
+     * mà chưa có chứng từ thì câu trả lời là chưa tháng nào. Lọc theo kỳ sẽ giấu mất phần tồn. */
+    db.execute<{ cn: string | null; thu: string }>(sql`
+      SELECT credit_note_number AS cn, recovered_vnd::text AS thu
+        FROM shipment_reconcile_status WHERE COALESCE(recovered_vnd::numeric, 0) > 0;`),
+    db.execute<{ ky: string; so: string }>(sql`
+      SELECT ky_hieu AS ky, so_hoa_don AS so FROM credit_notes;`),
   ]);
 
   // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
@@ -259,5 +273,9 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     thuHoiTheoKhieuNaiVnd: khieuNai.thuHoiVnd,
     soDongKhieuNai: khieuNai.soDong,
     tyLeThuHoi: khieuNai.tyLe,
+    chungTuThieu: thieuChungTu(
+      daDoi.rows.map((r) => ({ soCreditNote: r.cn, thuHoiVnd: Number(r.thu) })),
+      chungTuCo.rows.map((r) => ({ kyHieu: r.ky, so: r.so })),
+    ),
   };
 }

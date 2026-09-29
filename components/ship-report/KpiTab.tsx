@@ -118,6 +118,19 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
     <>
       <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
 
+      {/* Tiền đã đòi được nhưng thiếu chứng từ thì KHÔNG vào 3C của tháng nào — trước đây nó
+          im lặng biến mất. Hiện thành con số để có người đi tìm tệp (CEO 29/09/2026). */}
+      {auto.chungTuThieu.soTo > 0 && (
+        <div className="rounded-xl border border-amber-600/40 bg-amber-600/10 px-4 py-2.5 text-sm">
+          <b className="text-amber-700 dark:text-amber-400">Thiếu chứng từ credit note: {vnd(auto.chungTuThieu.tienVnd)} đã đòi được chưa vào 3C của tháng nào</b>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            Tiền 3C tính theo credit note ĐƯỢC XUẤT trong kỳ, nên tờ nào chưa tải lên thì không tháng nào được tính.
+            Còn {auto.chungTuThieu.soTo} tờ ghi trên dòng đối soát mà chưa có tệp trong hệ thống: {auto.chungTuThieu.danhSach.join(', ')}.
+            Tải ở trang Đối soát phí ship, tháng tương ứng sẽ tự cộng thêm.
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-5">
         {the.map((t) => (
           <div key={t.nhan} className="space-y-1 bg-card p-4">
@@ -214,7 +227,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai, chỉ tính kiện của MEAN BLVD. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}. Đã phân định ${auto.kienDaPhanDinh}/${auto.kienCanPhanDinh} kiện.`],
-                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} · chất lượng đòi ${pct(auto.tyLeThuHoi)}`, `TIỀN 3C là tổng ${auto.soCreditNote} credit note có NGÀY HOÁ ĐƠN trong kỳ (tải tệp ở trang Đối soát phí ship). CHẤT LƯỢNG ĐÒI là con số khác và đo trên tập khác: ${auto.soDongKhieuNai} dòng đối soát trong kỳ đã xác định hãng sai, khiếu nại ${vnd(auto.thuocDienKhieuNaiVnd)} và đòi về được ${vnd(auto.thuHoiTheoKhieuNaiVnd)}. Hai số này KHÔNG chia cho nhau được — chia nhầm từng ra 241%. Chưa chặn trần từng dòng thì tổng đòi về là ${vnd(auto.thuHoiThoVnd)}.`],
+                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} · chất lượng đòi ${pct(auto.tyLeThuHoi)}`, `TIỀN 3C là tổng ${auto.soCreditNote} credit note ĐƯỢC XUẤT trong kỳ (tải tệp ở trang Đối soát phí ship) — credit note xuất tháng nào thì tính cho tháng đó. CHẤT LƯỢNG ĐÒI là con số khác và đo trên tập khác: ${auto.soDongKhieuNai} dòng đối soát trong kỳ đã xác định hãng sai, khiếu nại ${vnd(auto.thuocDienKhieuNaiVnd)} và đòi về được ${vnd(auto.thuHoiTheoKhieuNaiVnd)}. Hai số này KHÔNG chia cho nhau được — chia nhầm từng ra 241%. Chưa chặn trần từng dòng thì tổng đòi về là ${vnd(auto.thuHoiThoVnd)}.`],
               ].map(([a, b, c]) => (
                 <tr key={a} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left font-medium">{a}</td>
