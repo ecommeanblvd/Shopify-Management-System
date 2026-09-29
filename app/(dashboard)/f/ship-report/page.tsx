@@ -21,6 +21,7 @@ import { SopTab } from '@/components/ship-report/SopTab';
 import { KpiTab } from '@/components/ship-report/KpiTab';
 import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docChotKy } from '@/features/kpi-logistics/chot-actions';
+import { docSoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
 
 export const dynamic = 'force-dynamic';
@@ -85,6 +86,8 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const kyKpi = sp.ky && dsKy.includes(sp.ky) ? sp.ky : dsKy[1] ?? dsKy[0]; // mặc định tháng trước (kỳ đã chốt)
   const [tuKpi, denKpi] = bienKy(kyKpi);
   const chotKpi = tab === 'kpi' && xemDuocKpi ? await docChotKy(kyKpi) : null;
+  // Chỉ quản lý mới có việc để duyệt, nên chỉ quản lý mới phải trả giá cho hai truy vấn này.
+  const soChoDuyet = tab === 'kpi' && laAdmin ? await docSoChoDuyet() : null;
   /* Kỳ ĐÃ CHỐT đọc từ ảnh chụp, không tính lại: con số HR đã trả lương theo phải giữ nguyên
    * dù đối soát và credit note vẫn chạy tiếp sau đó (CEO 29/09/2026). */
   const [autoKpi, nhapKpi] = chotKpi
@@ -160,6 +163,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
             </div>
             <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
               chot={chotKpi ? { chotAt: chotKpi.chotAt, ghiChu: chotKpi.ghiChu } : null}
+              soChoDuyet={soChoDuyet}
               ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')}
               ghiSuCoDuoc={laAdmin || hasPermission(role, 'manage_ship_ho')} />
           </>

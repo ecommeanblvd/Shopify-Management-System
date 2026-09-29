@@ -3,6 +3,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { NutChotKy } from '@/components/kpi/NutChotKy';
+import Link from 'next/link';
+import { viecChoDuyet } from '@/features/kpi-logistics/cho-duyet';
 import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
 import { ChiTietPillar2 } from '@/components/kpi/ChiTietPillar2';
 import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
@@ -26,12 +28,14 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
   /** Kỳ đã chốt chưa — `auto`/`nhap` khi đó là ẢNH CHỤP, không phải số sống. */
   chot: { chotAt: string; ghiChu: string | null } | null;
+  /** Hai con số cho dải "Chờ quản lý duyệt"; null khi người xem không phải quản lý. */
+  soChoDuyet: { kienChoDuyet: number; monCanChoDuyet: number } | null;
   /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
   suaDuoc: boolean;
   /** Nhân sự logistics (quyền đối soát phí ship) gán được lý do chậm trên bảng 1.2. */
@@ -72,6 +76,13 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
   }, tu);
 
   const soTieuChiDat = diem.p1.filter((d) => (d.mucDat ?? 0) >= 1).length;
+  /* Dải việc chờ CHỈ dựng cho quản lý: người bị chấm không duyệt được gì, hiện ra chỉ là nhiễu. */
+  const choDuyet = soChoDuyet == null ? [] : viecChoDuyet({
+    ky, kienChoDuyet: soChoDuyet.kienChoDuyet, monCanChoDuyet: soChoDuyet.monCanChoDuyet,
+    daChamP3B: nhap != null, daChot: chot != null,
+    p1ChuaCham: diem.p1.filter((d) => d.mucDat == null).length,
+    donChuaPhanDinh: auto.soDonAmCuocChuaXet,
+  });
   const the = [
     { nhan: 'Điểm KPI vận hành (Pillar 1)', so: pct(diem.diemP1), chinh: true },
     { nhan: 'Tiêu chí Pillar 1 đạt đủ', so: `${soTieuChiDat}/4` },
@@ -116,6 +127,27 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
 
   return (
     <>
+      {/* Bốn điểm duyệt nằm bốn nơi và không nơi nào báo là có việc chờ, nên quản lý phải tự nhớ
+          mở từng màn. Gom lại một chỗ, nói thẳng còn bao nhiêu và làm ở đâu (CEO 29/09/2026). */}
+      {choDuyet.length > 0 && (
+        <div className="rounded-xl border border-border bg-card px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chờ quản lý duyệt</div>
+          <ul className="mt-2 space-y-2">
+            {choDuyet.map((v) => (
+              <li key={v.ma + v.nhan} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                <span className="font-medium">{v.nhan}</span>
+                <span className="text-xs text-muted-foreground">{v.huong}</span>
+                {v.href && (
+                  <Link href={v.href} className="cursor-pointer rounded border border-border px-2 py-0.5 text-xs transition-colors hover:bg-muted">
+                    Mở trang
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
 
       {/* Tiền đã đòi được nhưng thiếu chứng từ thì KHÔNG vào 3C của tháng nào — trước đây nó
