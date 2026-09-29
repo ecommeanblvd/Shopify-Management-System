@@ -200,3 +200,28 @@ describe('3B: "chưa ai chấm" KHÁC "không đạt" (CEO 29/09/2026)', () => {
     }
   });
 });
+
+describe('1.1: ô ghi đè để TRỐNG phải khác ghi đè bằng 0 (CEO 29/09/2026)', () => {
+  const nen = {
+    soDonAmCuocChuaXet: 0, tyLeSla: 0.95, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99,
+    soDonShipHo: 0, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
+    thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
+  };
+  const lay = (soDonAmCuocLoi: number) => bangDiemKpi({ ...nen, soDonAmCuocLoi }, '2026-08-01').p1[0];
+
+  it('ghi đè bằng 0 = kết luận "không đơn nào lỗi" → điểm tuyệt đối', () => {
+    expect(lay(0).mucDat).toBe(1);
+  });
+
+  it('42 đơn lỗi nội bộ (số thật T8) chạm trần trừ 50 % → mức đạt 0,5', () => {
+    expect(lay(42).mucDat).toBe(0.5);
+  });
+
+  /* Vì sao test này quan trọng: bảng điểm đọc `nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo`.
+     Khi cột còn NOT NULL DEFAULT 0, chỉ cần lưu một dòng cho kỳ là 42 biến thành 0 và người bị
+     chấm được điểm tuyệt đối mà không ai cố ý cho. Hai con số dưới đây phải khác nhau — nếu một
+     ngày nào đó chúng bằng nhau thì bản vá 0185 đã bị đảo ngược. */
+  it('0 và 42 KHÔNG được cho cùng kết quả', () => {
+    expect(lay(0).mucDat).not.toBe(lay(42).mucDat);
+  });
+});

@@ -35,12 +35,14 @@ export function NhapKpiForm({ ky, banDau, soDonAmCuocGoiY, soDonLoiNoiBo, soDonC
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-1 text-sm">
           <div className="font-medium">P1.1 · Số đơn âm cước do lỗi trách nhiệm</div>
-          <input type="number" min={0} className={`${o} w-full`} value={v.soDonAmCuocLoi}
-            onChange={(e) => setV({ ...v, soDonAmCuocLoi: so(e.target.value) })} />
+          <input type="number" min={0} className={`${o} w-full`}
+            value={v.soDonAmCuocLoi ?? ''}
+            onChange={(e) => setV({ ...v, soDonAmCuocLoi: e.target.value === '' ? null : so(e.target.value) })} />
           <div className="space-y-1 text-[11px] text-muted-foreground">
             <div>
               Hệ thống thấy <b>{soDonAmCuocGoiY}</b> đơn âm cước trong kỳ; đối soát đã chốt <b>{soDonLoiNoiBo}</b> đơn là lỗi nội bộ
               và còn <b>{soDonChuaXet}</b> đơn chưa ai xét. Chỉ điền số đơn do sai bảng giá web hoặc phân sai luồng carrier.
+              <b> Bỏ trống = dùng số hệ thống</b> — điền 0 là kết luận &quot;không đơn nào lỗi&quot;, khác hẳn.
             </div>
             {soDonLoiNoiBo !== banDau.soDonAmCuocLoi && (
               <button type="button" onClick={() => setV((x) => ({ ...x, soDonAmCuocLoi: soDonLoiNoiBo }))}

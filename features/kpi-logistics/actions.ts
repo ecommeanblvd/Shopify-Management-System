@@ -30,7 +30,8 @@ async function requireXem(): Promise<string> {
 
 export interface NhapKpiInput {
   ky: string;
-  soDonAmCuocLoi: number;
+  /** null = không ghi đè, dùng số hệ thống. */
+  soDonAmCuocLoi: number | null;
   tyLeSizeThung: number | null;
   roRiGiam: boolean;
   khacPhucGoc: boolean;
@@ -47,7 +48,7 @@ export async function luuNhapKpi(input: NhapKpiInput): Promise<{ ok: true }> {
   const userId = await requireAdmin();
   if (!/^\d{4}-\d{2}$/.test(input.ky)) throw new Error('Kỳ phải dạng YYYY-MM');
   const gt = {
-    soDonAmCuocLoi: Math.max(0, Math.floor(input.soDonAmCuocLoi || 0)),
+    soDonAmCuocLoi: input.soDonAmCuocLoi == null ? null : Math.max(0, Math.floor(input.soDonAmCuocLoi)),
     tyLeSizeThung: input.tyLeSizeThung == null ? null : String(Math.min(1, Math.max(0, input.tyLeSizeThung))),
     roRiGiam: !!input.roRiGiam,
     khacPhucGoc: !!input.khacPhucGoc,

@@ -257,7 +257,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, suaDuoc, ganLyDoDuoc, gh
           gateTuDong={auto.gateDat}
           banDau={{
             ky,
-            soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? 0,
+            // Bỏ trống = dùng số hệ thống. KHÔNG mặc định 0: 0 là một kết luận, trống là chưa có kết luận.
+            soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? null,
             // 1.4 tự chấm từ lệch cân (chọn sai thùng); ô nhập tay chỉ dùng khi cần ghi đè (miễn trừ theo mục VII).
             tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),
             roRiGiam: nhap?.roRiGiam ?? false,

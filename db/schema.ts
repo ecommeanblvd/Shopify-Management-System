@@ -2822,8 +2822,10 @@ export const customerOrderRequests = pgTable('customer_order_requests', {
  */
 export const kpiLogisticsThang = pgTable('kpi_logistics_thang', {
   ky: text('ky').primaryKey(),
-  /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí (quản lý chốt từ danh sách hệ thống flag). */
-  soDonAmCuocLoi: integer('so_don_am_cuoc_loi').notNull().default(0),
+  /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí (quản lý chốt từ danh sách hệ thống flag).
+   *  NULL = CHƯA GHI ĐÈ, dùng số hệ thống đo được. Trước 29/09/2026 cột này NOT NULL DEFAULT 0,
+   *  nên chỉ cần lưu một dòng cho kỳ là số hệ thống bị thay bằng 0 — xem migration 0185. */
+  soDonAmCuocLoi: integer('so_don_am_cuoc_loi'),
   /** 1.4 — tỉ lệ đơn Kho đóng đúng size thùng (0..1); null = chưa audit. */
   tyLeSizeThung: numeric('ty_le_size_thung', { precision: 5, scale: 4 }),
   roRiGiam: boolean('ro_ri_giam').notNull().default(false),
