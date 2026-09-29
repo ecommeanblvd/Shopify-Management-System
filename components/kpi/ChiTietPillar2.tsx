@@ -110,14 +110,15 @@ function BangTien({ rows, ky }: { rows: ChiTietPillar2['donHang']; ky: string })
   const von = coGia.reduce((s, r) => s + r.vonVnd, 0);
   const lo = coGia.filter((r) => (r.laiVnd ?? 0) < 0);
   const tienLo = lo.reduce((s, r) => s + (r.laiVnd ?? 0), 0);
+  const duty = coGia.reduce((s, r) => s + (r.dutyVnd ?? 0), 0);
   const chuaCoGia = rows.length - coGia.length;
   const chuaCoBill = rows.filter((r) => !r.vonThat).length;
   return (
     <Khung
-      tomTat={<><b>{rows.length}</b> đơn · thu <b>{vnd(thu)}</b> · vốn <b>{vnd(von)}</b> · lãi <b className={thu - von < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>{vnd(thu - von)}</b> · <b>{lo.length}</b> đơn lỗ <b className="text-red-600 dark:text-red-400">{vnd(tienLo)}</b>{chuaCoGia > 0 ? <> · <b className="text-amber-600 dark:text-amber-400">{chuaCoGia}</b> đơn chưa báo giá cho brand, đã loại khỏi phép cộng</> : null}{chuaCoBill > 0 ? ` · ${chuaCoBill} đơn chưa có hoá đơn thật, vốn đang lấy theo báo giá` : ''}</>}
+      tomTat={<><b>{rows.length}</b> đơn · thu <b>{vnd(thu)}</b> · vốn <b>{vnd(von)}</b> · lãi <b className={thu - von < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>{vnd(thu - von)}</b> · <b>{lo.length}</b> đơn lỗ <b className="text-red-600 dark:text-red-400">{vnd(tienLo)}</b>{duty > 0 ? <> · thu đã gộp <b>{vnd(duty)}</b> duty thu hộ brand, vì vốn cũng gồm duty — hai vế phải cùng gốc</> : null}{chuaCoGia > 0 ? <> · <b className="text-amber-600 dark:text-amber-400">{chuaCoGia}</b> đơn chưa báo giá cho brand, đã loại khỏi phép cộng</> : null}{chuaCoBill > 0 ? ` · ${chuaCoBill} đơn chưa có hoá đơn thật, vốn đang lấy theo báo giá` : ''}</>}
       onCsv={() => taiCsv(`kpi-${ky}-p2-tien.csv`,
-        ['Mã đơn', 'Brand', 'Nước', 'Ngày gửi', 'Cân (kg)', 'Thu brand (VND)', 'Vốn carrier (VND)', 'Lãi (VND)', 'Nguồn vốn', 'Trạng thái'],
-        rows.map((r) => [r.ma, r.brand, r.nuoc, r.ngayGui, r.canKg, r.thuVnd, r.vonVnd, r.laiVnd, r.vonThat ? 'hoá đơn thật' : 'báo giá', r.trangThai]))}
+        ['Mã đơn', 'Brand', 'Nước', 'Ngày gửi', 'Cân (kg)', 'Thu brand gồm duty (VND)', 'Trong đó duty (VND)', 'Vốn carrier gồm duty (VND)', 'Lãi (VND)', 'Nguồn vốn', 'Trạng thái'],
+        rows.map((r) => [r.ma, r.brand, r.nuoc, r.ngayGui, r.canKg, r.thuVnd, r.dutyVnd, r.vonVnd, r.laiVnd, r.vonThat ? 'hoá đơn thật' : 'báo giá', r.trangThai]))}
     >
       <thead><tr>
         <th className={`${TH} text-left`}>Mã đơn</th><th className={`${TH} text-left`}>Brand</th><th className={`${TH} text-left`}>Nước</th>
@@ -134,7 +135,10 @@ function BangTien({ rows, ky }: { rows: ChiTietPillar2['donHang']; ky: string })
             <td className="px-2.5 py-1.5 text-left">{r.nuoc}</td>
             <td className="px-2.5 py-1.5 text-left">{r.ngayGui ?? '—'}</td>
             <td className="px-2.5 py-1.5 text-right">{r.canKg ?? '—'}</td>
-            <td className={`px-2.5 py-1.5 text-right ${r.thuVnd == null ? 'text-amber-600 dark:text-amber-400' : ''}`}>{r.thuVnd == null ? 'chưa báo giá' : vnd(r.thuVnd)}</td>
+            <td className={`px-2.5 py-1.5 text-right ${r.thuVnd == null ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+              {r.thuVnd == null ? 'chưa báo giá' : vnd(r.thuVnd)}
+              {r.dutyVnd != null && <span className="block text-[10px] text-muted-foreground">gồm {vnd(r.dutyVnd)} duty</span>}
+            </td>
             <td className={`px-2.5 py-1.5 text-right ${r.vonThat ? '' : 'text-muted-foreground italic'}`}>{vnd(r.vonVnd)}</td>
             <td className={`px-2.5 py-1.5 text-right font-semibold ${r.laiVnd == null ? 'text-muted-foreground' : r.laiVnd < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{r.laiVnd == null ? '—' : vnd(r.laiVnd)}</td>
             <td className="px-2.5 py-1.5 text-left text-muted-foreground">{r.trangThai}</td>

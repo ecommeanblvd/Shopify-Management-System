@@ -12,6 +12,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
+import { displayCarrierCost, displayChargedWithDuty, displayMarginWithDuty } from './pnl';
 import { slaCuaNuoc, NGUONG_NGOAI_LE_SOP } from '@/features/shipments/sop-giao-hang';
 import { lyDoCoHieuLuc } from '@/features/shipments/ly-do-cham';
 import { xepLoaiSla, type KetQuaSla } from '@/features/kpi-logistics/chi-tiet';
@@ -44,8 +45,10 @@ export interface DongDonShipHo {
   nuoc: string;
   ngayGui: string | null;
   canKg: number | null;
-  /** Giá thu brand: ưu tiên số tính LẠI trên cân thực, chưa báo giá thì null. */
+  /** Giá thu brand ĐÃ GỘP DUTY, để so cùng gốc với `vonVnd` (vốn gồm duty). Chưa báo giá → null. */
   thuVnd: number | null;
+  /** Phần duty nằm trong `thuVnd`, null khi đơn không có duty hoặc chưa có số thực. */
+  dutyVnd: number | null;
   vonVnd: number;
   /** null khi chưa có giá thu — không được coi là lỗ. */
   laiVnd: number | null;
@@ -104,10 +107,11 @@ const so = (v: string | null | undefined): number => (v == null ? 0 : Number(v))
 export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTietPillar2> {
   await requireXem();
   const [donRows, suCoRows] = await Promise.all([
-    db.execute<{ id: string; code: string; brand: string; cc: string; gui: string | null; giao: string | null; can: string | null; thu: string | null; von_that: string | null; von_bao: string | null; st: string; dst: string | null; ly_do: string | null; doi_chieu: string | null }>(sql`
+    db.execute<{ id: string; code: string; brand: string; cc: string; gui: string | null; giao: string | null; can: string | null; thu_bao: string | null; thu_that: string | null; duty: string | null; von_that: string | null; von_bao: string | null; st: string; dst: string | null; ly_do: string | null; doi_chieu: string | null }>(sql`
       SELECT o.id, o.code, o.partner_brand_slug AS brand, o.country AS cc, o.ly_do_cham AS ly_do, o.ly_do_doi_chieu AS doi_chieu,
              o.shipped_at::text AS gui, o.delivered_at::text AS giao, o.weight_kg::text AS can,
-             COALESCE(o.actual_charged_vnd, o.charged_vnd)::text AS thu, o.actual_carrier_cost_vnd::text AS von_that,
+             o.charged_vnd::text AS thu_bao, o.actual_charged_vnd::text AS thu_that,
+             o.actual_duty_vnd::text AS duty, o.actual_carrier_cost_vnd::text AS von_that,
              o.carrier_cost_vnd::text AS von_bao, o.status::text AS st, o.delivery_status AS dst
         FROM ship_ho_orders o
        WHERE o.shipped_at IS NOT NULL AND o.shipped_at >= ${tu}::date AND o.shipped_at <= ${den}::date
@@ -122,16 +126,29 @@ export async function docChiTietPillar2(tu: string, den: string): Promise<ChiTie
   ]);
 
   const donHang: DongDonShipHo[] = donRows.rows.map((r) => {
-    // Chưa báo giá cho brand → để TRỐNG, không quy về 0 rồi tính thành lỗ.
-    const thu = r.thu == null ? null : Math.round(so(r.thu));
-    const vonThat = r.von_that != null;
-    const von = Math.round(vonThat ? so(r.von_that) : so(r.von_bao));
+    const soHoacNull = (v: string | null) => (v == null ? null : Math.round(so(v)));
+    const thuBao = soHoacNull(r.thu_bao), thuThat = soHoacNull(r.thu_that);
+    const duty = soHoacNull(r.duty), vonThatVnd = soHoacNull(r.von_that), vonBao = soHoacNull(r.von_bao);
+    /* DUTY PHẢI CỘNG LẠI VÀO VẾ THU (CEO 29/09/2026).
+     *
+     * Từ 21/09 duty tách khỏi cước: `actual_charged_vnd` chỉ còn cước freight, còn
+     * `actual_carrier_cost_vnd` vẫn là TỔNG đã trả FedEx — có duty. Trừ thẳng hai vế đó là
+     * trừ một khoản thu hộ ra khỏi doanh thu mà vẫn để nguyên nó trong chi phí, nên margin
+     * hụt đúng bằng duty. Đo T8: báo cáo hiện -8.885.791đ trong khi thật ra LÃI 16.540.500đ,
+     * vì duty kỳ đó là 25.426.291đ. Mọi nước có duty đều hiện "lỗ", mọi nước không duty đều
+     * hiện lãi — đó là dấu hiệu của lỗi so lệch vế, không phải của giá bán sai.
+     *
+     * `displayMarginWithDuty` và `displayChargedWithDuty` viết sẵn cho đúng ca này; duty cộng
+     * vào cả hai vế nên nó tự triệt tiêu, margin KHÔNG bị thổi lên. */
+    const thu = displayChargedWithDuty(thuBao, thuThat, duty);
+    const cost = displayCarrierCost(vonBao, vonThatVnd);
+    const lai = displayMarginWithDuty(thuBao, thuThat, duty, vonBao, vonThatVnd);
     return {
       id: r.id, ma: r.code, brand: r.brand, nuoc: r.cc,
       ngayGui: r.gui ? r.gui.slice(0, 10) : null,
       canKg: r.can == null ? null : Number(r.can),
-      thuVnd: thu, vonVnd: von, laiVnd: thu == null ? null : thu - von,
-      vonThat, trangThai: r.st,
+      thuVnd: thu.vnd, dutyVnd: thu.dutyVnd, vonVnd: cost.vnd ?? 0, laiVnd: lai.vnd,
+      vonThat: cost.actual, trangThai: r.st,
     };
   });
 

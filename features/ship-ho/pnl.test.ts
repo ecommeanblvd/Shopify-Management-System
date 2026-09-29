@@ -111,3 +111,35 @@ describe('displayMarginWithDuty', () => {
     });
   });
 });
+
+describe('duty phải cộng lại vào vế THU, nếu không margin hụt đúng bằng duty (CEO 29/09/2026)', () => {
+  /* Ca thật 26-INSLG-SV-0080 (US, 08/2026): cước thu freight-only 1.834.101đ, vốn FedEx
+     2.608.980đ đã GỒM duty. Trừ thẳng ra "lỗ 774.879đ" — nhưng đó là trừ một khoản thu hộ ra
+     khỏi doanh thu trong khi vẫn để nguyên nó trong chi phí. */
+  const THU_FREIGHT = 1_834_101, VON_CO_DUTY = 2_608_980, DUTY = 900_000;
+
+  it('trừ thẳng hai vế lệch gốc → lỗ giả', () => {
+    expect(displayMargin(null, THU_FREIGHT, null, VON_CO_DUTY).vnd).toBe(THU_FREIGHT - VON_CO_DUTY);
+    expect(displayMargin(null, THU_FREIGHT, null, VON_CO_DUTY).vnd).toBeLessThan(0);
+  });
+
+  it('cộng duty vào vế thu → hai vế cùng gốc, lỗ giả biến mất', () => {
+    const m = displayMarginWithDuty(null, THU_FREIGHT, DUTY, null, VON_CO_DUTY);
+    expect(m.vnd).toBe(THU_FREIGHT + DUTY - VON_CO_DUTY);
+    // Chênh giữa hai cách tính ĐÚNG BẰNG duty — không hơn, không kém.
+    expect((m.vnd ?? 0) - (displayMargin(null, THU_FREIGHT, null, VON_CO_DUTY).vnd ?? 0)).toBe(DUTY);
+  });
+
+  it('đơn KHÔNG có duty thì hai cách cho cùng một số', () => {
+    expect(displayMarginWithDuty(null, THU_FREIGHT, null, null, 1_600_000).vnd)
+      .toBe(displayMargin(null, THU_FREIGHT, null, 1_600_000).vnd);
+    expect(displayMarginWithDuty(null, THU_FREIGHT, 0, null, 1_600_000).vnd)
+      .toBe(displayMargin(null, THU_FREIGHT, null, 1_600_000).vnd);
+  });
+
+  it('đơn CHƯA đối soát (chỉ có báo giá) thì KHÔNG gộp duty — báo giá vốn không có duty', () => {
+    const t = displayChargedWithDuty(1_500_000, null, DUTY);
+    expect(t.vnd).toBe(1_500_000);
+    expect(t.dutyVnd).toBeNull();
+  });
+});
