@@ -11,6 +11,7 @@ const TRUY_VAN = `query($id: ID!) {
   order(id: $id) {
     lineItems(first: 50) { nodes {
       sku
+      customAttributes { key value }
       variant { id title image { url } }
       product { id title
         images(first: 8) { nodes { url } }

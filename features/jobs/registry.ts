@@ -38,6 +38,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Không biết đơn đã giao hay chưa' },
   { key: 'track-ship-ho', ten: 'Tra trạng thái giao (ship hộ)', chuKyPhut: 6 * GIO,
     hauQua: 'Đối tác không thấy đơn đã giao' },
+  { key: 'dien-store-final', ten: 'Điền cột Store final còn trống trên bảng kho Lark', chuKyPhut: 6 * GIO,
+    hauQua: 'Dòng kho mới không có Store final — đội kho phải điền tay, báo cáo theo store thiếu dòng' },
   { key: 'gom-bang-ke-nhap', ten: 'Gom đơn đã chốt giá vào bảng kê nháp của kỳ', chuKyPhut: 6 * GIO,
     hauQua: 'Đơn đã chốt giá nằm chờ vô thời hạn, không ai biết còn bao nhiêu tiền chưa thu của brand' },
   { key: 'day-production-time-cx', ten: 'Điền Min/Max Production (days) vào file CX Working', chuKyPhut: 6 * GIO,

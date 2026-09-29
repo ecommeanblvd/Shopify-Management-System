@@ -65,11 +65,33 @@ const STORE_THEO_TIEN_TO: Record<string, string> = {
   MBLVD: '#MBLVD', TA: '#TINH', MIRER: '#MIRER', MIR: '#MIRER',
   MTB: '#MTB', MCN: '#MCN', HC: '#HC', MXHS: '#MXHS',
   MOS: '#MOS', DISCN: '#DISCN',
+  // Bổ sung 28/09/2026, đo lại trên 9.480 dòng Lark. Hai tiền tố đầu chiếm TRỌN
+  // 125 dòng đang để trống: MBLVDPO 435 dòng→#MBLVD (67 trống), và CSM xử riêng
+  // bên dưới vì cần thêm SKU. Còn lại: MER 78→MER Request, MBAGC 8→#MBLVD,
+  // OS 4→MBLVD Off-store, MEAN/PO mỗi cái 1→#MBLVD.
+  MBLVDPO: '#MBLVD', MBAGC: '#MBLVD', MEAN: '#MBLVD', PO: '#MBLVD',
+  MER: 'MER Request', OS: 'MBLVD Off-store',
 };
 
-export function storeFinalLark(maDon: string | null): string | null {
+/* CSM là tiền tố DUY NHẤT không quyết được bằng mã đơn: 480 dòng →#MBLVD và 58
+ * dòng →#MIRER. Dấu hiệu tách bạch tuyệt đối là SKU: 58/58 dòng #MIRER có SKU
+ * bắt đầu bằng "MR", không dòng #MBLVD nào như vậy. */
+const CSM_MIRER_SKU = /^MR/i;
+
+/**
+ * `Store final` của một dòng kho.
+ *
+ * `sku` chỉ cần cho tiền tố CSM; thiếu SKU ở CSM thì trả null — thà để trống cho
+ * người điền còn hơn đoán một trong hai store (D-124).
+ */
+export function storeFinalLark(maDon: string | null, sku?: string | null): string | null {
   if (!maDon) return null;
-  const tien = /^#?([A-Za-z]+)/.exec(maDon.trim())?.[1];
+  const tien = /^#?([A-Za-z]+)/.exec(maDon.trim())?.[1]?.toUpperCase();
   if (!tien) return null;
-  return STORE_THEO_TIEN_TO[tien.toUpperCase()] ?? null;
+  if (tien === 'CSM') {
+    const s = sku?.trim();
+    if (!s) return null;
+    return CSM_MIRER_SKU.test(s) ? '#MIRER' : '#MBLVD';
+  }
+  return STORE_THEO_TIEN_TO[tien] ?? null;
 }

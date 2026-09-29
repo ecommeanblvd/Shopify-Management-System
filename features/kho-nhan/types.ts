@@ -8,6 +8,7 @@
  * biết vì sao.
  */
 import type { DongThuocTinh } from './thuoc-tinh-shopify';
+import type { SoDoMayDo } from './so-do-may-do';
 
 export interface KetQuaTim {
   lineId: string; orderId: string; storeId: string; shopifyOrderId: string;
@@ -42,6 +43,8 @@ export interface DongQc {
   /** Ảnh biến thể ĐỨNG ĐẦU (đúng màu khách đặt), rồi tới ảnh sản phẩm. */
   anh: string[];
   thuocTinh: DongThuocTinh[];
+  /** Số đo khách nhập (đơn may đo). `soDo` rỗng = hàng thường. */
+  mayDo: SoDoMayDo;
   soBiCat: number;
 }
 

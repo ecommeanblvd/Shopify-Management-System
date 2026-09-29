@@ -128,6 +128,38 @@ function NoiDungQc({
             ))}
           </dl>
 
+          {/* Số đo đơn MAY ĐO (CEO 28/09/2026). Đặt TRÊN thuộc tính sản phẩm vì đây
+              là thứ KCS phải cầm thước đo lại, còn thuộc tính chỉ để đối chiếu. */}
+          {dong && dong.mayDo.soDo.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Hàng may đo — phải kiểm số đo
+                {dong.mayDo.loai ? ` · ${dong.mayDo.loai}` : ''}
+              </p>
+              <dl className="mt-2 space-y-1">
+                {dong.mayDo.soDo.map((sd) => (
+                  <div key={`${sd.thuTu}-${sd.ten}`} className="grid grid-cols-[minmax(0,1fr)_92px] gap-2 text-sm">
+                    <dt className="truncate text-muted-foreground" title={sd.ten}>
+                      {sd.ten}{sd.batBuoc && <span className="text-amber-700 dark:text-amber-400"> *</span>}
+                    </dt>
+                    {/* Khách bỏ trống thì nói rõ là trống — không để ô rỗng cho KCS tự đoán. */}
+                    <dd className={`text-right font-medium tabular-nums ${sd.giaTri ? '' : 'text-muted-foreground'}`}>
+                      {sd.giaTri ?? '— trống —'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {dong.mayDo.soTrong > 0 && (
+                <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+                  {dong.mayDo.soTrong} số đo khách bỏ trống — hỏi CX trước khi kết luận sai số đo.
+                </p>
+              )}
+              {dong.mayDo.giaoDuKien && (
+                <p className="mt-1 text-xs text-muted-foreground">Khách được hẹn giao: {dong.mayDo.giaoDuKien}</p>
+              )}
+            </div>
+          )}
+
           {dong && dong.thuocTinh.length === 0 && !loiShopify && (
             <p className="mt-4 text-sm text-muted-foreground">Sản phẩm này chưa khai thuộc tính trên Shopify.</p>
           )}

@@ -79,3 +79,41 @@ describe('storeFinalLark', () => {
     expect(storeFinalLark('')).toBeNull();
   });
 });
+
+describe('storeFinalLark — bổ sung theo đo lại 28/09/2026', () => {
+  it('MBLVDPO là tiền tố RIÊNG, không phải MBLVD — trước đây trả null nên 67 dòng để trống', () => {
+    expect(storeFinalLark('#MBLVDPO1234')).toBe('#MBLVD');
+  });
+
+  it('các tiền tố mới đo được', () => {
+    expect(storeFinalLark('#MER123')).toBe('MER Request');
+    expect(storeFinalLark('#OS7')).toBe('MBLVD Off-store');
+    expect(storeFinalLark('#MBAGC9')).toBe('#MBLVD');
+  });
+
+  describe('CSM — tiền tố duy nhất cần SKU mới quyết được', () => {
+    it('SKU bắt đầu MR → #MIRER (58/58 dòng thật)', () => {
+      expect(storeFinalLark('#CSM0012', 'MR-2025-01-S-BLA')).toBe('#MIRER');
+      expect(storeFinalLark('#CSM0012', 'mr-thuong')).toBe('#MIRER');
+    });
+
+    it('SKU khác → #MBLVD', () => {
+      expect(storeFinalLark('#CSM0012', 'TINH-LA25-01')).toBe('#MBLVD');
+      expect(storeFinalLark('#CSM0012', 'Atous-99')).toBe('#MBLVD');
+    });
+
+    it('THIẾU SKU → null, thà để trống cho người điền còn hơn đoán một trong hai', () => {
+      expect(storeFinalLark('#CSM0012')).toBeNull();
+      expect(storeFinalLark('#CSM0012', '   ')).toBeNull();
+    });
+
+    it('SKU chỉ CHỨA "MR" ở giữa thì không tính', () => {
+      expect(storeFinalLark('#CSM0012', 'BEMRLOVED-1')).toBe('#MBLVD');
+    });
+  });
+
+  it('tiền tố lạ vẫn trả null — thà trống còn hơn gán sai store', () => {
+    expect(storeFinalLark('#ZZZ1')).toBeNull();
+    expect(storeFinalLark(null)).toBeNull();
+  });
+});
