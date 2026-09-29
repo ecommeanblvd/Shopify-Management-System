@@ -22,6 +22,7 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
+import { dongBoPoLark } from '@/features/kho-nhan/dong-bo-po-lark';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
 import { backfillCourierLark } from '@/features/lark/courier-backfill';
 import { ghiNguocLark } from '@/features/lark/ghi-nguoc/ghi-nguoc';
@@ -99,6 +100,8 @@ async function main(): Promise<void> {
   // Điền Store final SAU khi đã đồng bộ, để dòng mới về là điền được ngay.
   await chayMotJob('dien-store-final', () => dienStoreFinal());
   await chayMotJob('day-production-time-cx', () => dayProductionTime());
+  // Bảng PO cho màn Nhận hàng (CEO 29/09/2026) — CHỈ ĐỌC từ Lark.
+  await chayMotJob('dong-bo-po-lark', dongBoPoLark);
 }
 
 chayCron('sync-lark', main);

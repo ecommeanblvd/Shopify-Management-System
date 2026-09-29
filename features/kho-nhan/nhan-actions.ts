@@ -8,6 +8,7 @@ import { db, schema } from '@/db/client';
 import { ngayKinhDoanh, sqlGioKinhDoanh } from '@/lib/timezone';
 import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
+import { khoa, monPoConNhan } from './po-con-nhan';
 import { layIdBienThe } from './shopify-qc';
 
 /** Kho làm việc của người đang thao tác. Chưa gán thì rơi về GVM (kho chính). */
@@ -112,6 +113,69 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
 }
 
 /**
+ * Nhận MỘT chiếc hàng đặt PO (CEO 29/09/2026).
+ *
+ * PO không thuộc đơn Shopify nào nên `order_id` để NULL và giữ mã PO ở
+ * `po_order_number`. Kiểm lại điều kiện NGAY TRƯỚC KHI GHI thay vì tin kết quả
+ * tìm: ô tìm có thể mở từ mười phút trước, trong lúc đó đội kho đã nhập nốt số
+ * còn thiếu trên Lark và PO đã đủ — ghi tiếp là nhận thừa.
+ */
+export async function ghiNhanChiecPo(poRecordId: string): Promise<{ ok: boolean; loi?: string; itemId?: string }> {
+  const actor = await requirePerm('manage_qc');
+  try {
+    const [dong] = await db.select().from(schema.larkPoDong)
+      .where(eq(schema.larkPoDong.recordId, poRecordId)).limit(1);
+    if (!dong) return { ok: false, loi: 'Không tìm thấy dòng PO.' };
+    if (!dong.baoDon) return { ok: false, loi: 'Dòng PO này chưa tick "Báo đơn".' };
+    if (!dong.orderNumber || !dong.sku) return { ok: false, loi: 'Dòng PO thiếu mã đơn hoặc SKU.' };
+
+    const con = await conNhanDuocPo(dong.orderNumber, dong.sku);
+    if (con <= 0) {
+      return { ok: false, loi: `PO ${dong.orderNumber} đã nhập đủ — không nhận thêm được.` };
+    }
+
+    const kho = await khoCuaNguoiDung(actor);
+    const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, dong.vendor, kho);
+    let [phieu] = await db.select().from(schema.goodsReceipts)
+      .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+    if (!phieu) {
+      try {
+        [phieu] = await db.insert(schema.goodsReceipts).values({
+          code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
+          vendor: dong.vendor, receivedAt: new Date(), receivedBy: actor,
+        }).returning();
+      } catch {
+        [phieu] = await db.select().from(schema.goodsReceipts)
+          .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+      }
+    }
+    if (!phieu) return { ok: false, loi: 'Không dựng được phiếu nhận.' };
+
+    const item = await withUniqueRetry(async () => {
+      const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
+      const [row] = await db.insert(schema.goodsReceiptItems).values({
+        receiptId: phieu!.id,
+        unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
+        sku: dong.sku,
+        productTitle: dong.lineitemName,
+        orderId: null,
+        poOrderNumber: dong.orderNumber,
+        poRecordId: dong.recordId,
+        qcResult: 'pending',
+        disposition: 'pending',
+      }).returning({ id: schema.goodsReceiptItems.id });
+      return row;
+    });
+
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true, itemId: item.id };
+  } catch (e) {
+    console.error('[kho-nhan] ghiNhanChiecPo lỗi:', e);
+    return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
+  }
+}
+
+/**
  * Gỡ MỘT chiếc vừa nhận nhầm khỏi danh sách đang kiểm.
  *
  * CEO 24/09: "chọn 2 sản phẩm này bị sai cần chọn lại thì remove được ở đâu".
@@ -202,4 +266,32 @@ export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; lo
     console.error('[kho-nhan] huyNhapChuaGui lỗi:', e);
     return { ok: false, soXoa: 0, loi: 'Huỷ nhập thất bại, thử lại.' };
   }
+}
+
+/**
+ * Còn nhận được bao nhiêu chiếc cho (PO, SKU) — ĐỌC LẠI ngay trước khi ghi.
+ *
+ * Cộng hai nguồn đúng như luật CEO chốt: dòng đội kho nhập tay trên bảng Lark,
+ * và chiếc đã nhận trên SMS. Đồng thời áp luật "ĐƠN đã đủ thì chặn cả đơn" —
+ * không chỉ xét riêng SKU này.
+ */
+async function conNhanDuocPo(orderNumber: string, sku: string): Promise<number> {
+  const moiDong = await db.select({
+    recordId: schema.larkPoDong.recordId, orderNumber: schema.larkPoDong.orderNumber,
+    sku: schema.larkPoDong.sku, soLuong: schema.larkPoDong.soLuong, baoDon: schema.larkPoDong.baoDon,
+  }).from(schema.larkPoDong).where(eq(schema.larkPoDong.orderNumber, orderNumber));
+
+  const tran = orderNumber.replace(/^#/, '');
+  const lark = await db.execute<{ sku: string; n: number }>(sql`
+    SELECT sku, count(*)::int AS n FROM lark_wh_inventory
+    WHERE regexp_replace(coalesce(order_number,''), '^#', '') = ${tran} AND sku IS NOT NULL GROUP BY 1`);
+  const sms = await db.execute<{ sku: string; n: number }>(sql`
+    SELECT sku, count(*)::int AS n FROM goods_receipt_items
+    WHERE regexp_replace(coalesce(po_order_number,''), '^#', '') = ${tran} AND sku IS NOT NULL GROUP BY 1`);
+  const daNhan = new Map<string, number>();
+  for (const r of [...lark.rows, ...sms.rows]) {
+    const k = khoa(orderNumber, r.sku);
+    daNhan.set(k, (daNhan.get(k) ?? 0) + Number(r.n));
+  }
+  return monPoConNhan(moiDong, daNhan).find((m) => m.sku === sku.trim())?.con ?? 0;
 }

@@ -2096,6 +2096,31 @@ export const goodsReceipts = pgTable('goods_receipts', {
 }, (t) => [index('goods_receipts_source_idx').on(t.sourceType)]);
 
 /** One physical unit received. QC + disposition are per-unit. */
+/**
+ * Bản sao bảng PO trên Lark (base WH, table `tblrbN04rB1FOixv`) — nguồn hàng đặt
+ * PO cho màn Nhận hàng (CEO 29/09/2026). Chỉ ĐỌC từ Lark, không ghi ngược.
+ */
+export const larkPoDong = pgTable('lark_po_dong', {
+  recordId: text('record_id').primaryKey(),
+  dinhDanh: text('dinh_danh'),
+  orderNumber: text('order_number'),
+  ngayDat: date('ngay_dat'),
+  /** Cột "Báo đơn" — chỉ dòng đã tick mới được nhập. */
+  baoDon: boolean('bao_don').notNull().default(false),
+  vendor: text('vendor'),
+  lineitemName: text('lineitem_name'),
+  sku: text('sku'),
+  soLuong: integer('so_luong').notNull().default(1),
+  donGia: numeric('don_gia', { precision: 16, scale: 2 }),
+  parentItems: text('parent_items'),
+  sourceId: text('source_id'),
+  /** Tên sản phẩm đã BỎ DẤU + thường hoá, dựng lúc đồng bộ để ô tìm khớp không dấu. */
+  timKiem: text('tim_kiem'),
+  capNhatLuc: timestamp('cap_nhat_luc').defaultNow().notNull(),
+}, (t) => [
+  index('lark_po_dong_don_sku_idx').on(t.orderNumber, t.sku),
+]);
+
 export const goodsReceiptItems = pgTable('goods_receipt_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   receiptId: uuid('receipt_id').references(() => goodsReceipts.id, { onDelete: 'cascade' }).notNull(),
@@ -2124,6 +2149,10 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   brandRequestId: uuid('brand_request_id').references(() => brandOrderRequests.id, { onDelete: 'set null' }),
   fulfillmentLineId: uuid('fulfillment_line_id').references(() => orderFulfillmentLines.id, { onDelete: 'set null' }),
   orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'set null' }),
+  /** Hàng đặt PO (CEO 29/09/2026): không thuộc đơn Shopify nào nên `order_id` NULL.
+   *  Giữ mã PO để đếm "đã nhận", và `record_id` dòng PO để truy ngược về Lark. */
+  poOrderNumber: text('po_order_number'),
+  poRecordId: text('po_record_id'),
   domPrice: numeric('dom_price', { precision: 14, scale: 2 }),
   domPriceCurrency: text('dom_price_currency'),
   globalPrice: numeric('global_price', { precision: 14, scale: 2 }),

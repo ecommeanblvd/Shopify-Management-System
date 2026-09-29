@@ -8,6 +8,7 @@ import { requirePerm } from '@/features/receiving/perm';
 import { chuanHoaMaDon } from './ma-don';
 import { conNhanDuoc, kieuTuKhoa, phanSo } from './tim-don-logic';
 import type { KetQuaTim } from './types';
+import { khoa, monPoConNhan } from './po-con-nhan';
 
 const GIOI_HAN = 20;
 
@@ -78,5 +79,95 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
     ))
     .limit(GIOI_HAN * 3);
 
-  return rows.filter((r) => conNhanDuoc({ datSl: r.datSl, daNhan: r.daNhan })).slice(0, GIOI_HAN);
+  const shopify: KetQuaTim[] = rows
+    .filter((r) => conNhanDuoc({ datSl: r.datSl, daNhan: r.daNhan }))
+    .map((r) => ({ ...r, nguon: 'shopify' as const }));
+
+  /* Hàng đặt PO xếp SAU hàng của đơn khách: đơn khách có người đang đợi, PO là
+   * hàng nhập về bán dần. Cùng một trần `GIOI_HAN` cho cả hai nguồn. */
+  const po = shopify.length >= GIOI_HAN ? [] : await timMonPo(q, GIOI_HAN - shopify.length);
+  return [...shopify, ...po].slice(0, GIOI_HAN);
+}
+
+/**
+ * Món hàng đặt PO còn nhập được (CEO 29/09/2026).
+ *
+ * Chỉ dòng đã tick "Báo đơn", chỉ PO CHƯA nhập đủ, và chỉ món còn thiếu — luật ở
+ * `po-con-nhan.ts`. "Đã nhận" cộng cả hai nguồn: dòng đội kho nhập tay trên bảng
+ * Lark và chiếc vừa nhận trên SMS (lệnh đẩy sang Lark đang tắt nên thiếu vế thứ
+ * hai là nhận thừa).
+ */
+async function timMonPo(q: string, gioiHan: number): Promise<KetQuaTim[]> {
+  const maDon = chuanHoaMaDon(q);
+  const khongDau = `%${boDauTiengViet(q)}%`;
+  const dong = await db.select({
+    recordId: schema.larkPoDong.recordId,
+    orderNumber: schema.larkPoDong.orderNumber,
+    sku: schema.larkPoDong.sku,
+    soLuong: schema.larkPoDong.soLuong,
+    baoDon: schema.larkPoDong.baoDon,
+    ten: schema.larkPoDong.lineitemName,
+    vendor: schema.larkPoDong.vendor,
+  }).from(schema.larkPoDong).where(and(
+    eq(schema.larkPoDong.baoDon, true),
+    or(
+      sql`regexp_replace(coalesce(${schema.larkPoDong.orderNumber}, ''), '^#', '') ILIKE ${`%${maDon}%`}`,
+      sql`${schema.larkPoDong.sku} ILIKE ${`%${q}%`}`,
+      sql`${schema.larkPoDong.timKiem} LIKE ${khongDau.toLowerCase()}`,
+    ),
+  ));
+  if (dong.length === 0) return [];
+
+  /* Đếm đã nhận cho TOÀN BỘ các đơn PO chạm tới, không chỉ dòng khớp từ khoá:
+   * luật "đơn đã đủ thì chặn cả đơn" cần biết mọi món của đơn đó. */
+  const cacDon = [...new Set(dong.map((d) => d.orderNumber).filter((x): x is string => !!x))];
+  const moiDong = await db.select({
+    recordId: schema.larkPoDong.recordId, orderNumber: schema.larkPoDong.orderNumber,
+    sku: schema.larkPoDong.sku, soLuong: schema.larkPoDong.soLuong, baoDon: schema.larkPoDong.baoDon,
+  }).from(schema.larkPoDong).where(and(
+    eq(schema.larkPoDong.baoDon, true),
+    inArray(schema.larkPoDong.orderNumber, cacDon),
+  ));
+
+  const daNhan = await demDaNhanPo(cacDon);
+  const con = new Map(monPoConNhan(moiDong, daNhan).map((m) => [khoa(m.orderNumber, m.sku), m]));
+
+  const ra: KetQuaTim[] = [];
+  const daCo = new Set<string>();
+  for (const d of dong) {
+    const k = khoa(d.orderNumber, d.sku);
+    const m = con.get(k);
+    if (!m || daCo.has(k)) continue;     // đơn đã đủ / món đã đủ / đã gom rồi
+    daCo.add(k);
+    ra.push({
+      nguon: 'po', lineId: m.recordId,
+      orderId: null, storeId: null, shopifyOrderId: null,
+      maDon: m.orderNumber, sku: m.sku,
+      tenSanPham: d.ten, tenBienThe: null, vendor: d.vendor,
+      datSl: m.dat, daNhan: m.daNhan,
+    });
+    if (ra.length >= gioiHan) break;
+  }
+  return ra;
+}
+
+/** Đã nhận theo `đơn|sku`, CỘNG hai nguồn: bảng kho Lark + phiếu nhận trên SMS. */
+async function demDaNhanPo(cacDon: readonly string[]): Promise<Map<string, number>> {
+  const m = new Map<string, number>();
+  if (cacDon.length === 0) return m;
+  const khongDau2 = cacDon.map((d) => d.replace(/^#/, ''));
+
+  const lark = await db.execute<{ don: string; sku: string; n: number }>(sql`
+    SELECT order_number AS don, sku, count(*)::int AS n FROM lark_wh_inventory
+    WHERE regexp_replace(coalesce(order_number,''), '^#', '') IN ${khongDau2}
+      AND sku IS NOT NULL GROUP BY 1, 2`);
+  const sms = await db.execute<{ don: string; sku: string; n: number }>(sql`
+    SELECT po_order_number AS don, sku, count(*)::int AS n FROM goods_receipt_items
+    WHERE regexp_replace(coalesce(po_order_number,''), '^#', '') IN ${khongDau2}
+      AND sku IS NOT NULL GROUP BY 1, 2`);
+  for (const r of [...lark.rows, ...sms.rows]) {
+    const k = khoa(`#${String(r.don).replace(/^#/, '')}`, r.sku);
+    m.set(k, (m.get(k) ?? 0) + Number(r.n));
+  }
+  return m;
 }

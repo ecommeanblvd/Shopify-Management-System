@@ -244,6 +244,13 @@ export async function searchRecordsByOrderNumber(orderNumber: string): Promise<L
   return searchAllRecords(logTableId(), buildOrderNumberSearchBody(orderNumber));
 }
 
+/** Bảng PO trên base WH (CEO 29/09/2026) — nguồn hàng đặt PO cho màn Nhận hàng. CHỈ ĐỌC. */
+const PO_TABLE_ID = process.env.LARK_PO_TABLE_ID ?? 'tblrbN04rB1FOixv';
+
+export async function listPoRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(PO_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);
+}
+
 /** Đọc TẤT CẢ record bảng brand-received (đơn × SKU × ngày MEAN nhận). Phân trang. */
 export async function listBrandReceivedRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(BRAND_RECV_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);

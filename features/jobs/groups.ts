@@ -31,7 +31,7 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // day-production-time-cx, gom-bang-ke-nhap, dien-store-final) — nay chuyển sang
   // chạy LỒNG trong hai script có service thật.
   'sync-lark': ['sync-lark', 'push-nhan-hang', 'sync-lark-ship-ho', 'ghi-nguoc-lark', 'noi-line-id-mon',
-    'dong-bo-wh-lark', 'dien-store-final', 'day-production-time-cx'],
+    'dong-bo-wh-lark', 'dien-store-final', 'day-production-time-cx', 'dong-bo-po-lark'],
   'sync-orders': ['sync-orders', 'gom-bang-ke-nhap', 'sync-dispute'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.

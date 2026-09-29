@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { timMonChuaNhan } from '@/features/kho-nhan/tim-don';
 import type { KetQuaTim } from '@/features/kho-nhan/types';
-import { ghiNhanChiec } from '@/features/kho-nhan/nhan-actions';
+import { ghiNhanChiec, ghiNhanChiecPo } from '@/features/kho-nhan/nhan-actions';
 
 const TOI_THIEU = 2;
 const DEBOUNCE_MS = 250;
@@ -62,7 +62,8 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
 
   function nhan(m: KetQuaTim) {
     start(async () => {
-      const r = await ghiNhanChiec(m.lineId);
+      // Hàng đặt PO đi đường riêng: nó không thuộc đơn Shopify nào.
+      const r = m.nguon === 'po' ? await ghiNhanChiecPo(m.lineId) : await ghiNhanChiec(m.lineId);
       if (!r.ok) { toast.error(r.loi ?? 'Ghi nhận thất bại.', { duration: 10000 }); return; }
       toast.success(`Đã nhận 1 chiếc ${m.sku ?? ''} — đang chờ kiểm.`, { duration: 3000 });
       setQ('');
@@ -112,6 +113,11 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
                         {m.tenBienThe && <span className="text-muted-foreground"> — {m.tenBienThe}</span>}
                       </span>
                       <span className="block truncate text-xs text-muted-foreground">
+                        {m.nguon === 'po' && (
+                          <span className="mr-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                            PO
+                          </span>
+                        )}
                         {m.maDon} · <span className="font-mono">{m.sku}</span>
                         {m.vendor && ` · ${m.vendor}`}
                       </span>

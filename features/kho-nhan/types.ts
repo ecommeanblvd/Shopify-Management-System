@@ -11,7 +11,12 @@ import type { DongThuocTinh } from './thuoc-tinh-shopify';
 import type { SoDoMayDo } from './so-do-may-do';
 
 export interface KetQuaTim {
-  lineId: string; orderId: string; storeId: string; shopifyOrderId: string;
+  /** `shopify` = dòng đơn khách; `po` = dòng hàng đặt PO nhập kho bán dần. */
+  nguon: 'shopify' | 'po';
+  /** Dòng đơn Shopify, hoặc `record_id` dòng PO trên Lark khi `nguon = 'po'`. */
+  lineId: string;
+  /** PO không thuộc đơn Shopify nào nên ba trường này rỗng. */
+  orderId: string | null; storeId: string | null; shopifyOrderId: string | null;
   maDon: string; sku: string | null;
   tenSanPham: string | null; tenBienThe: string | null;
   vendor: string | null; datSl: number; daNhan: number;
