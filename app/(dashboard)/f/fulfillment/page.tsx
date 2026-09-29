@@ -42,7 +42,7 @@ export default async function FulfillmentWorklistPage() {
     updatedAtShopify: r.updatedAtShopify,
     addr: summarizeAddr(r),
     kcs: summarizeKcs(r.kcs, r.larkQc),
-    delivery: summarizeDelivery(r.ship),
+    delivery: summarizeDelivery(r.ship, r.fulfillmentStatus),
     packs: r.ship.packs,
     tracks: r.ship.tracks,
     selectedCarrierKey: r.selectedCarrierKey,

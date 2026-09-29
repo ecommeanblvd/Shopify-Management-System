@@ -9,6 +9,8 @@ export interface WorklistStatusRow {
   stage: OrderStage;
   /** Phát hiện sửa (sub-project C): last-updated + cờ sửa / sửa-sau-ship. */
   updatedAtShopify: Date | null; editedAt: Date | null; editedAfterFulfilledAt: Date | null;
+  /** Trạng thái fulfill của STORE (Shopify). `UNFULFILLED` = đơn chưa đi. */
+  fulfillmentStatus: string | null;
   addrDeliverable: boolean | null; addrVerifiedAt: Date | null;
   addrConfidence: string | null;
   /** Carrier logistic staff đã chọn để đi hàng (selected_carrier_key). */
@@ -29,6 +31,8 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
     storeName: schema.stores.name,
     createdAtShopify: schema.shopifyOrders.createdAtShopify,
     updatedAtShopify: schema.shopifyOrders.updatedAtShopify,
+    /** Trạng thái fulfill của STORE — nguồn cho nhãn "Đơn chưa đi" (CEO 29/09/2026). */
+    fulfillmentStatus: schema.shopifyOrders.fulfillmentStatus,
     editedAt: schema.shopifyOrders.editedAt,
     editedAfterFulfilledAt: schema.shopifyOrders.editedAfterFulfilledAt,
     addrDeliverable: schema.shopifyOrders.addrDeliverable,
@@ -103,6 +107,7 @@ export async function listWorklistStatus(): Promise<WorklistStatusRow[]> {
       orderId: r.orderId, status: r.status, stage, orderNumber: r.orderNumber, storeName: r.storeName,
       createdAtShopify: r.createdAtShopify,
       updatedAtShopify: r.updatedAtShopify, editedAt: r.editedAt, editedAfterFulfilledAt: r.editedAfterFulfilledAt,
+      fulfillmentStatus: r.fulfillmentStatus,
       addrDeliverable: r.addrDeliverable, addrVerifiedAt: r.addrVerifiedAt, addrConfidence: r.addrConfidence,
       selectedCarrierKey: r.selectedCarrierKey,
       kcs: { pending: n(k?.pending), pass: n(k?.pass), fail: n(k?.fail) },

@@ -56,3 +56,36 @@ describe('summarizeDelivery', () => {
   it('đã giao', () => expect(summarizeDelivery({ packs: 2, withTracking: 2, delivered: 2, exception: 0, inTransit: 0 }).tone).toBe('ok'));
   it('đang chuyển', () => expect(summarizeDelivery({ packs: 1, withTracking: 1, delivered: 0, exception: 0, inTransit: 1 }).tone).toBe('info'));
 });
+
+describe('summarizeDelivery — trạng thái "Đơn chưa đi" (CEO 29/09/2026)', () => {
+  const k = (p: Partial<{ packs: number; withTracking: number; delivered: number; exception: number; inTransit: number }> = {}) =>
+    ({ packs: 0, withTracking: 0, delivered: 0, exception: 0, inTransit: 0, ...p });
+
+  it('store báo UNFULFILLED và chưa có kiện → "Đơn chưa đi"', () => {
+    expect(summarizeDelivery(k(), 'UNFULFILLED')).toEqual({ label: 'Đơn chưa đi', tone: 'warn' });
+  });
+
+  it('UNFULFILLED mà đã đóng kiện, chưa có bằng chứng hãng → vẫn "Đơn chưa đi"', () => {
+    expect(summarizeDelivery(k({ packs: 2 }), 'UNFULFILLED').label).toBe('Đơn chưa đi');
+    expect(summarizeDelivery(k({ packs: 1, withTracking: 1 }), 'UNFULFILLED').label).toBe('Đơn chưa đi');
+  });
+
+  it('BẰNG CHỨNG CỦA HÃNG THẮNG: hãng đã giao thì không nói "chưa đi" dù Shopify để UNFULFILLED', () => {
+    // Ca thật #MBLVD29788 / #MBLVD30230 — fulfill chưa đẩy lên Shopify mà hàng đã tới khách.
+    expect(summarizeDelivery(k({ packs: 1, delivered: 1 }), 'UNFULFILLED').label).toBe('Đã giao');
+    expect(summarizeDelivery(k({ packs: 1, inTransit: 1 }), 'UNFULFILLED').label).toBe('Đang chuyển');
+    expect(summarizeDelivery(k({ packs: 1, exception: 1 }), 'UNFULFILLED').label).toBe('Sự cố');
+  });
+
+  it('đơn đã FULFILLED thì giữ nguyên cách chấm cũ', () => {
+    expect(summarizeDelivery(k(), 'FULFILLED').label).toBe('Chưa');
+    expect(summarizeDelivery(k({ packs: 1, withTracking: 1 }), 'FULFILLED').label).toBe('Có tracking');
+    expect(summarizeDelivery(k({ packs: 1 }), 'FULFILLED').label).toBe('Chưa ship');
+  });
+
+  it('không truyền trạng thái store → hành vi CŨ không đổi', () => {
+    expect(summarizeDelivery(k()).label).toBe('Chưa');
+    expect(summarizeDelivery(k({ packs: 1, delivered: 1 })).label).toBe('Đã giao');
+    expect(summarizeDelivery(k({ packs: 1 })).label).toBe('Chưa ship');
+  });
+});

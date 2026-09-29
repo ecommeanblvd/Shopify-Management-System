@@ -29,11 +29,34 @@ export function summarizeKcs(o: { pending: number; pass: number; fail: number },
   return { label: '—', tone: 'muted' };
 }
 
-export function summarizeDelivery(o: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number }): Badge {
+/**
+ * Trạng thái giao của MỘT đơn trên màn Quản lí đơn.
+ *
+ * `fulfillmentStatus` là trạng thái fulfill Shopify của store (CEO 29/09/2026):
+ * `UNFULFILLED` nghĩa là store chưa xuất đơn — **đơn chưa đi**. Đây là câu hỏi
+ * đầu tiên người điều phối cần trả lời, nên nó được một nhãn riêng thay vì lẫn
+ * vào "Chưa" / "Chưa ship".
+ *
+ * NHƯNG bằng chứng của HÃNG thắng trạng thái Shopify khi hai bên mâu thuẫn: đo
+ * 28/09 có đơn Shopify để UNFULFILLED trong khi hãng đã giao xong (#MBLVD29788,
+ * #MBLVD30230) — fulfill chưa được đẩy lên Shopify chứ hàng đã đi. Hiện "Đơn
+ * chưa đi" cho những ca đó là nói sai với người đang điều phối.
+ *
+ * Nên thứ tự là: sự cố → đã giao → đang chuyển → rồi mới tới trạng thái Shopify.
+ */
+export function summarizeDelivery(
+  o: { packs: number; withTracking: number; delivered: number; exception: number; inTransit: number },
+  fulfillmentStatus?: string | null,
+): Badge {
+  // Bằng chứng từ hãng: nói thẳng thứ đang xảy ra, bất kể Shopify ghi gì.
+  if (o.packs > 0) {
+    if (o.exception > 0) return { label: 'Sự cố', tone: 'bad' };
+    if (o.delivered === o.packs) return { label: 'Đã giao', tone: 'ok' };
+    if (o.inTransit > 0) return { label: 'Đang chuyển', tone: 'info' };
+  }
+  // Không có bằng chứng nào từ hãng → tin trạng thái store.
+  if (fulfillmentStatus === 'UNFULFILLED') return { label: 'Đơn chưa đi', tone: 'warn' };
   if (o.packs === 0) return { label: 'Chưa', tone: 'muted' };
-  if (o.exception > 0) return { label: 'Sự cố', tone: 'bad' };
-  if (o.delivered === o.packs) return { label: 'Đã giao', tone: 'ok' };
-  if (o.inTransit > 0) return { label: 'Đang chuyển', tone: 'info' };
   if (o.withTracking > 0) return { label: 'Có tracking', tone: 'info' };
   return { label: 'Chưa ship', tone: 'muted' };
 }
