@@ -1,6 +1,7 @@
 'use server';
 
 import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import { STORE_NHAN_HANG } from './pham-vi';
 import { db, schema } from '@/db/client';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { requirePerm } from '@/features/receiving/perm';
@@ -66,7 +67,11 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
   })
     .from(schema.shopifyOrderLines)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shopifyOrderLines.orderId))
+    .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
     .where(and(
+      // Chỉ ba store vận hành thật. Trước 29/09/2026 màn này không lọc store nên
+      // `cici-mean` lọt vào (21 đơn chưa fulfill, 47 dòng) — CEO chốt chặn.
+      inArray(schema.stores.shopDomain, [...STORE_NHAN_HANG]),
       inArray(schema.shopifyOrders.fulfillmentStatus, ['UNFULFILLED', 'PARTIALLY_FULFILLED']),
       isNotNull(schema.shopifyOrderLines.sku),
       dieuKien,

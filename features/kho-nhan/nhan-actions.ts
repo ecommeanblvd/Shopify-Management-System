@@ -1,6 +1,7 @@
 'use server';
 
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { nhanHangDuoc } from './pham-vi';
 import { revalidatePath } from 'next/cache';
 import { goKhoiLark } from './day-wh-lark';
 import { db, schema } from '@/db/client';
@@ -41,10 +42,19 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
       variantIdDaCo: schema.shopifyOrderLines.shopifyVariantId,
       storeId: schema.shopifyOrders.storeId,
       shopifyOrderId: schema.shopifyOrders.shopifyOrderId,
+      shopDomain: schema.stores.shopDomain,
     }).from(schema.shopifyOrderLines)
       .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shopifyOrderLines.orderId))
+      .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
       .where(eq(schema.shopifyOrderLines.id, lineId)).limit(1);
     if (!line) return { ok: false, loi: 'Không tìm thấy dòng đơn.' };
+    /* Chặn LẦN HAI ở chỗ GHI, không chỉ ở ô tìm: ô tìm là cửa duy nhất hôm nay,
+     * nhưng action nhận thẳng `lineId` nên một kết quả tìm cũ (hoặc một lời gọi
+     * dựng tay) vẫn ghi được hàng của store bị chặn. Kiểm ở nơi THAY ĐỔI dữ liệu
+     * mới là kiểm thật (CEO 29/09/2026). */
+    if (!nhanHangDuoc(line.shopDomain)) {
+      return { ok: false, loi: `Store ${line.shopDomain} không thuộc phạm vi nhận hàng.` };
+    }
 
     /**
      * ID biến thể — hai tầng, tầng trên chính xác hơn:
