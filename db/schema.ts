@@ -1175,6 +1175,10 @@ export const shipments = pgTable('shipments', {
   lyDoDuyetGhiChu: text('ly_do_duyet_ghi_chu'),
   lyDoDuyetBoi: text('ly_do_duyet_boi').references(() => user.id, { onDelete: 'set null' }),
   lyDoDuyetAt: timestamp('ly_do_duyet_at'),
+  /* Quản lý TRẢ LẠI dòng này để sửa (CEO 30/09/2026): ghi chú nói sai ở đâu; NULL = không bị trả.
+   * Dòng bị trả là dòng DUY NHẤT được mở khoá trong một kỳ đã nộp — xem `dongBiKhoa`. */
+  lyDoTraLai: text('ly_do_tra_lai'),
+  lyDoTraLaiAt: timestamp('ly_do_tra_lai_at'),
   /** Operator who ran the secondary check-packed verification step. */
   checkPackedBy: text('check_packed_by').references(() => user.id, { onDelete: 'set null' }),
   /** Timestamp when the check-packed verification was completed. */
@@ -2477,6 +2481,10 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   lyDoDuyetGhiChu: text('ly_do_duyet_ghi_chu'),
   lyDoDuyetBoi: text('ly_do_duyet_boi').references(() => user.id, { onDelete: 'set null' }),
   lyDoDuyetAt: timestamp('ly_do_duyet_at'),
+  /* Quản lý TRẢ LẠI dòng này để sửa (CEO 30/09/2026): ghi chú nói sai ở đâu; NULL = không bị trả.
+   * Dòng bị trả là dòng DUY NHẤT được mở khoá trong một kỳ đã nộp — xem `dongBiKhoa`. */
+  lyDoTraLai: text('ly_do_tra_lai'),
+  lyDoTraLaiAt: timestamp('ly_do_tra_lai_at'),
   status: shipHoOrderStatusEnum('status').notNull().default('draft'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   createdBy: text('created_by'),
@@ -2848,6 +2856,21 @@ export const kpiLogisticsThang = pgTable('kpi_logistics_thang', {
  * con số của một tháng vẫn trôi sau khi HR đã trả lương theo nó — mở lại tháng 8 sau này ra số khác.
  * Chốt = CHỤP LẠI toàn bộ số liệu tại thời điểm chốt và từ đó trang hiện ảnh chụp, không tính lại.
  */
+/**
+ * NỘP lý do giao chậm của một kỳ để quản lý duyệt (CEO 30/09/2026). Một dòng một kỳ.
+ * Trạng thái: 'dang_lam' | 'cho_duyet' | 'da_duyet' — luật chuyển ở `nop-1-2.ts`.
+ */
+export const kpi12Nop = pgTable('kpi_12_nop', {
+  ky: text('ky').primaryKey(),
+  trangThai: text('trang_thai').notNull().default('dang_lam'),
+  nopBoi: text('nop_boi').references(() => user.id, { onDelete: 'set null' }),
+  nopAt: timestamp('nop_at'),
+  duyetBoi: text('duyet_boi').references(() => user.id, { onDelete: 'set null' }),
+  duyetAt: timestamp('duyet_at'),
+  ghiChu: text('ghi_chu'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const kpiLogisticsChot = pgTable('kpi_logistics_chot', {
   ky: text('ky').primaryKey(),
   /** Ảnh chụp: SoLieuTuDong + bảng điểm + số nhập tay lúc chốt. */

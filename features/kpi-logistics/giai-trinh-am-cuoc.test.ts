@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   goiYLyDo, dauHieu, quyTrachNhiem, daPhanDinh, danhGiaKien, layLyDoAmCuoc, tongBilledKg, LY_DO_AM_CUOC,
-  canChonSanPham, thieuSanPham, kiemSanPhamSai, hienCanGram, type TinHieu,
+  canChonSanPham, thieuSanPham, kiemSanPhamSai, hienCanGram, suyMonSaiCan, type TinHieu,
 } from './giai-trinh-am-cuoc';
 
 const t = (kien: TinHieu['kien'], extra: Partial<TinHieu> = {}): TinHieu =>
@@ -115,5 +115,68 @@ describe('hienCanGram — cân lưu gram hiện thành kg', () => {
   });
   it('chưa có số thì gạch', () => {
     expect(hienCanGram(null)).toBe('—');
+  });
+});
+
+describe('chưa xác định được món (CEO 30/09/2026)', () => {
+  const don = [{ sku: 'A', canHienTaiG: 1000 }, { sku: 'B', canHienTaiG: 800 }];
+
+  it('đánh dấu chưa biết thì lưu được, không chặn nữa', () => {
+    expect(kiemSanPhamSai(null, don, true)).toBeNull();
+    expect(kiemSanPhamSai([], don, true)).toBeNull();
+  });
+
+  it('vừa đánh dấu chưa biết vừa chọn món là hai lời mâu thuẫn → chặn', () => {
+    expect(kiemSanPhamSai([{ sku: 'A', canMoiG: 2000 }], don, true)).toBe('Đã đánh dấu chưa xác định được món thì không chọn món nào');
+  });
+
+  it('KHÔNG đánh dấu thì luật cũ giữ nguyên — bỏ trống vẫn bị chặn', () => {
+    expect(kiemSanPhamSai(null, don)).toBe('Chọn ít nhất một món bị khai sai cân');
+    expect(kiemSanPhamSai(null, don, false)).toBe('Chọn ít nhất một món bị khai sai cân');
+  });
+
+  it('trách nhiệm vẫn là nội bộ — chưa biết món KHÔNG phải lối thoát khỏi KPI', () => {
+    expect(quyTrachNhiem('can_quy_doi_web', { chuaXacDinhMon: true })).toBe('noi_bo');
+  });
+
+  it('vẫn nằm trong danh sách cần tìm món', () => {
+    expect(thieuSanPham('can_quy_doi_web', { chuaXacDinhMon: true })).toBe(true);
+  });
+});
+
+describe('suyMonSaiCan — suy món khi không nhớ, bằng bằng chứng chứ không chia đều', () => {
+  const don = [{ sku: 'A' }, { sku: 'B' }, { sku: 'C' }];
+
+  it('đúng MỘT món từng bị chỉ đích danh ở đơn khác → chỉ nó', () => {
+    expect(suyMonSaiCan(don, new Set(['B']), new Set())).toEqual({ sku: 'B', canCu: 'don-khac' });
+  });
+
+  it('HAI món đều từng bị chỉ → TRẢ NULL, không đoán giữa hai', () => {
+    expect(suyMonSaiCan(don, new Set(['A', 'B']), new Set())).toBeNull();
+  });
+
+  it('mọi món khác đã sửa cân, còn đúng một món → loại trừ ra nó', () => {
+    expect(suyMonSaiCan(don, new Set(), new Set(['A', 'B']))).toEqual({ sku: 'C', canCu: 'loai-tru' });
+  });
+
+  it('còn hai món chưa sửa → TRẢ NULL', () => {
+    expect(suyMonSaiCan(don, new Set(), new Set(['A']))).toBeNull();
+  });
+
+  it('bằng chứng từ đơn khác ĐƯỢC ƯU TIÊN hơn loại trừ', () => {
+    expect(suyMonSaiCan(don, new Set(['A']), new Set(['A', 'B']))).toEqual({ sku: 'A', canCu: 'don-khac' });
+  });
+
+  it('đơn MỘT món không cần suy — form đã điền sẵn', () => {
+    expect(suyMonSaiCan([{ sku: 'A' }], new Set(), new Set())).toBeNull();
+  });
+
+  it('đơn không có SKU nào → null, không ném', () => {
+    expect(suyMonSaiCan([], new Set(), new Set())).toBeNull();
+  });
+
+  it('món trùng lặp trong đơn chỉ tính một lần', () => {
+    expect(suyMonSaiCan([{ sku: 'A' }, { sku: 'A' }, { sku: 'B' }], new Set(), new Set(['A'])))
+      .toEqual({ sku: 'B', canCu: 'loai-tru' });
   });
 });

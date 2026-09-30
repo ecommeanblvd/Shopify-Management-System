@@ -55,6 +55,19 @@ export interface ChiTietGiaiTrinh {
   soTienDoiVnd?: number | null;
   /** Đơn đi line HNC — Đức đánh dấu riêng trong bảng T8. */
   lineHnc?: boolean;
+  /**
+   * CHƯA XÁC ĐỊNH ĐƯỢC món nào sai cân (CEO 30/09/2026).
+   *
+   * Đơn một món thì không có gì để nhớ — máy điền sẵn, đo 30/09: 37/37 đơn một món đã chỉ xong.
+   * Chỗ kẹt là đơn NHIỀU món (8 đơn, toàn 2–3 món): người giải trình không nhớ món nào nhẹ, và
+   * trước nay form CHẶN lưu nên đơn đứng im, không ai phân định và lỗi tháng sau lặp lại y nguyên.
+   *
+   * Bật cờ này thì lưu được, nhưng KHÔNG phải lối thoát khỏi KPI: trách nhiệm vẫn là nội bộ,
+   * và đơn vẫn nằm trong danh sách "cần tìm món" cho tới khi chỉ được đích danh. Cố ý KHÔNG chia
+   * đều cân cho mọi món — quyết định 16/09 "không thể tù mù được" vẫn đứng, vì chia đều là nâng
+   * cân oan những món không có lỗi và bắt khách trả thừa ở mọi đơn sau.
+   */
+  chuaXacDinhMon?: boolean;
 }
 
 export type MaLyDoAmCuoc =
@@ -128,13 +141,49 @@ export const thieuSanPham = (ma: string | null | undefined, ct: ChiTietGiaiTrinh
   canChonSanPham(ma) && !(ct?.sanPhamSai?.length);
 
 /**
+ * SUY RA món sai cân khi người giải trình không nhớ (CEO 30/09/2026). Hai đường, cả hai đều
+ * dựa trên bằng chứng chứ không chia đều:
+ *
+ *   1. ĐÃ CHỨNG MINH Ở ĐƠN KHÁC — trong đơn này có đúng MỘT món từng bị chỉ đích danh là khai
+ *      thiếu cân ở một đơn khác. Món đó là thủ phạm quen mặt.
+ *   2. LOẠI TRỪ — mọi món khác trong đơn đã được sửa cân rồi, chỉ còn đúng một món chưa. Phần
+ *      còn thiếu không thể đến từ đâu khác.
+ *
+ * Nhiều hơn một ứng viên thì TRẢ NULL. Đoán giữa hai món là quay lại đúng chỗ "tù mù" mà quyết
+ * định 16/09 cấm; thà để đơn nằm trong danh sách cần tìm còn hơn nâng cân oan một món.
+ */
+export type CanCuSuyMon = 'don-khac' | 'loai-tru';
+
+export function suyMonSaiCan(
+  monTrongDon: ReadonlyArray<{ sku: string }>,
+  daChungMinhNhe: ReadonlySet<string>,
+  daSuaCan: ReadonlySet<string>,
+): { sku: string; canCu: CanCuSuyMon } | null {
+  const sku = [...new Set(monTrongDon.map((m) => m.sku).filter(Boolean))];
+  if (sku.length === 0) return null;
+
+  const quenMat = sku.filter((s) => daChungMinhNhe.has(s));
+  if (quenMat.length === 1) return { sku: quenMat[0], canCu: 'don-khac' };
+
+  const chuaSua = sku.filter((s) => !daSuaCan.has(s));
+  // Đòi sku.length > 1: đơn một món thì "loại trừ" không phải suy luận, form đã điền sẵn rồi.
+  if (chuaSua.length === 1 && sku.length > 1) return { sku: chuaSua[0], canCu: 'loai-tru' };
+
+  return null;
+}
+
+/**
  * Kiểm danh sách món sai cân trước khi lưu. `dongDon` là các món thật trong đơn kèm cân hiện tại.
  * Trả về câu lỗi cho người nhập, hoặc null nếu hợp lệ.
  */
 export function kiemSanPhamSai(
   chon: readonly SanPhamSaiCan[] | null | undefined,
   dongDon: ReadonlyArray<{ sku: string; canHienTaiG: number | null }>,
+  chuaXacDinh = false,
 ): string | null {
+  // Khai báo thẳng là chưa biết thì cho qua — nhưng chỉ khi KHÔNG chọn món nào. Vừa đánh dấu
+  // "chưa biết" vừa chỉ một món là hai lời mâu thuẫn, không được lưu cả hai.
+  if (chuaXacDinh) return chon && chon.length > 0 ? 'Đã đánh dấu chưa xác định được món thì không chọn món nào' : null;
   if (!chon || chon.length === 0) return 'Chọn ít nhất một món bị khai sai cân';
   const theoSku = new Map(dongDon.map((d) => [d.sku, d]));
   const daGap = new Set<string>();

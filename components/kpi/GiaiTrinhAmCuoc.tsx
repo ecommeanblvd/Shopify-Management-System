@@ -150,7 +150,28 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
         {ld.truong.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2">
             {ld.truong.includes('sanPhamSai') && (
-              <ChonMonSaiCan mon={dong.monHang} chon={ct.sanPhamSai ?? []} doi={(x) => dat({ sanPhamSai: x })} />
+              <>
+              {/* Lối thoát cho đơn NHIỀU món mà người giải trình không nhớ món nào nhẹ (CEO
+                  30/09/2026). Đơn một món không cần: món đó là món duy nhất, form điền sẵn.
+                  Đánh dấu KHÔNG giảm trách nhiệm — đơn vẫn tính lỗi nội bộ và vẫn nằm trong
+                  danh sách cần tìm món. */}
+              {dong.monHang.length > 1 && (
+                <label className="flex cursor-pointer items-start gap-2 rounded border border-border px-2 py-1.5 text-xs">
+                  <input type="checkbox" className="mt-0.5 cursor-pointer" checked={ct.chuaXacDinhMon === true}
+                    onChange={(e) => dat({ chuaXacDinhMon: e.target.checked, sanPhamSai: e.target.checked ? null : ct.sanPhamSai })} />
+                  <span>
+                    <b>Chưa xác định được món nào sai cân</b>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Lưu được ngay, nhưng đơn vẫn tính là lỗi nội bộ và vẫn nằm trong danh sách cần tìm món.
+                      Hệ thống sẽ tự chỉ ra món khi có bằng chứng từ đơn khác, hoặc khi loại trừ còn đúng một món.
+                    </span>
+                  </span>
+                </label>
+              )}
+              {ct.chuaXacDinhMon !== true && (
+                <ChonMonSaiCan mon={dong.monHang} chon={ct.sanPhamSai ?? []} doi={(x) => dat({ sanPhamSai: x })} />
+              )}
+              </>
             )}
             {ld.truong.includes('phiVnd') && (
               <label className="space-y-1 text-xs"><div className="font-medium">Số tiền phụ phí (VND)</div>
@@ -206,7 +227,7 @@ function FormGiaiTrinh({ dong, dong_lai, xong }: { dong: DongAmCuoc; dong_lai: (
           <div className="flex gap-2">
             {cu && <button type="button" onClick={xoa} disabled={pending} className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-red-600 disabled:opacity-50">Xoá giải trình</button>}
             <button type="button" onClick={dong_lai} disabled={pending} className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted">Huỷ</button>
-            <button type="button" onClick={luu} disabled={pending || (lyDo === 'khac' && !ghiChu.trim()) || (canChonSanPham(lyDo) && !ct.sanPhamSai?.length)}
+            <button type="button" onClick={luu} disabled={pending || (lyDo === 'khac' && !ghiChu.trim()) || (canChonSanPham(lyDo) && ct.chuaXacDinhMon !== true && !ct.sanPhamSai?.length)}
               className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
               {pending ? 'Đang lưu…' : 'Lưu giải trình'}
             </button>

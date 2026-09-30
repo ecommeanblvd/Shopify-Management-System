@@ -2,12 +2,13 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { layLyDo, duyetTayDuoc } from './ly-do-cham';
+import { dongBiKhoa, type TrangThaiNop } from '@/features/kpi-logistics/nop-1-2';
 import { doiChieuLyDoCham } from './doi-chieu-ly-do';
 
 /** Kiện thuộc luồng nào — quyết định ghi vào bảng nào. */
@@ -23,6 +24,29 @@ async function chuanBi(lyDo: string | null): Promise<string> {
 }
 
 /**
+ * CHẶN sửa lý do khi kỳ đã gửi đi duyệt (CEO 30/09/2026).
+ *
+ * Kiểm ở MÁY CHỦ chứ không chỉ khoá ô trên màn: ẩn nút mà hành động vẫn gọi được thì chưa phải
+ * là khoá. Dòng được quản lý TRẢ LẠI vẫn sửa được — trả lại chính là mở khoá đúng chỗ cần sửa.
+ */
+async function chanKhiDaKhoa(nguon: NguonKien, id: string): Promise<void> {
+  const { rows } = await (nguon === 'ship_ho'
+    ? db.execute<{ ky: string | null; tra: string | null }>(sql`
+        SELECT to_char(shipped_at, 'YYYY-MM') AS ky, ly_do_tra_lai AS tra FROM ship_ho_orders WHERE id = ${id}`)
+    : db.execute<{ ky: string | null; tra: string | null }>(sql`
+        SELECT to_char(label_created_at, 'YYYY-MM') AS ky, ly_do_tra_lai AS tra FROM shipments WHERE id = ${id}`));
+  const r = rows[0];
+  // Kiện chưa có ngày gửi thì không thuộc kỳ nào để mà khoá.
+  if (!r?.ky) return;
+  const [kyRow] = await db.select().from(schema.kpi12Nop).where(eq(schema.kpi12Nop.ky, r.ky));
+  const trangThai = (kyRow?.trangThai as TrangThaiNop) ?? 'dang_lam';
+  if (!dongBiKhoa(trangThai, r.tra != null)) return;
+  throw new Error(trangThai === 'da_duyet'
+    ? `Kỳ ${r.ky} đã duyệt xong — lý do đã chốt, muốn sửa thì quản lý phải mở lại kỳ`
+    : `Kỳ ${r.ky} đang chờ quản lý duyệt nên các ô đã khoá. Quản lý trả lại dòng này thì mới sửa được`);
+}
+
+/**
  * Gán / bỏ lý do giao chậm cho một kiện. Ops có quyền đối soát phí ship là gán được.
  *
  * Nhận cả hai luồng: kiện Shopify ghi vào `shipments`, kiện ship hộ ghi vào `ship_ho_orders`.
@@ -33,6 +57,7 @@ export async function datLyDoCham(input: {
   shipmentId: string; lyDo: string | null; ghiChu?: string | null; nguon?: NguonKien;
 }): Promise<{ ok: true }> {
   const userId = await chuanBi(input.lyDo);
+  await chanKhiDaKhoa(input.nguon ?? 'shopify', input.shipmentId);
   const gia = {
     // Đổi lý do là phải đối chiếu lại từ đầu — kết quả cũ thuộc về lý do cũ.
     lyDoDoiChieu: null, lyDoBangChung: null, lyDoDoiChieuAt: null,

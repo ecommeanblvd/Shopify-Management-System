@@ -28,7 +28,7 @@ function ketQua(m: number | null): { chu: string; mau: string } {
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
@@ -36,6 +36,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, suaDuoc, gan
   chot: { chotAt: string; ghiChu: string | null } | null;
   /** Hai con số cho dải "Chờ quản lý duyệt"; null khi người xem không phải quản lý. */
   soChoDuyet: { kienChoDuyet: number; monCanChoDuyet: number } | null;
+  /** Trạng thái nộp lý do giao chậm của kỳ (tiêu chí 1.2). */
+  nop12: { trangThai: 'dang_lam' | 'cho_duyet' | 'da_duyet'; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number } | null;
   /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
   suaDuoc: boolean;
   /** Nhân sự logistics (quyền đối soát phí ship) gán được lý do chậm trên bảng 1.2. */
@@ -178,7 +180,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, suaDuoc, gan
 
       {bangTieuChi('Pillar 1 — KPI vận hành & bảo toàn chi phí', diem.p1, true)}
 
-      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={suaDuoc} />
+      <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={suaDuoc} nop12={nop12 ?? undefined} />
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">

@@ -27,7 +27,7 @@ export function soNgayShipHo(ngayGui: string, mocGiao: string): number {
   return Math.max(0, Math.round((ms / 86_400_000) * 10) / 10);
 }
 
-type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; ly_do: string | null; doi_chieu: string | null; duyet: string | null; bang_chung: string | null; su_co_noi_bo: number };
+type RowGiao = { id: string; code: string; brand: string | null; tk: string | null; cc: string | null; line: string | null; gui: string; giao: string; chua_giao: boolean; dang_hoan: boolean; ly_do: string | null; doi_chieu: string | null; duyet: string | null; tra_lai: string | null; bang_chung: string | null; su_co_noi_bo: number };
 
 /**
  * `su_co_noi_bo` > 0 nghĩa là đơn có sự cố quy về lỗi nội bộ → kiện bị KHOÁ THÀNH TRỄ dù số
@@ -48,7 +48,7 @@ async function docGiao(tu: string, den: string): Promise<RowGiao[]> {
            (o.delivered_at IS NULL) AS chua_giao,
            (o.delivery_status = 'returning') AS dang_hoan,
            o.ly_do_cham AS ly_do, o.ly_do_doi_chieu AS doi_chieu, o.ly_do_bang_chung AS bang_chung,
-           o.ly_do_duyet AS duyet,
+           o.ly_do_duyet AS duyet, o.ly_do_tra_lai AS tra_lai,
            (SELECT COUNT(*) FROM ship_ho_su_co s WHERE s.order_id = o.id AND s.thuoc_ve = 'noi_bo')::int AS su_co_noi_bo
       FROM ship_ho_orders o
      WHERE o.shipped_at IS NOT NULL
@@ -98,7 +98,7 @@ export async function docSlaShipHo(tu: string, den: string): Promise<DongSla[]> 
       maDon: r.code, tracking: r.tk, nuoc, line,
       ngayGui: r.gui.slice(0, 10), ngayGiao: r.chua_giao ? '' : r.giao.slice(0, 10),
       soNgay, slaNgay, slaLineNgay: slaCuaLine(nuoc, line), ketQua, lyDoCham: r.ly_do,
-      lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung, lyDoDuyet: r.duyet,
+      lyDoDoiChieu: r.doi_chieu, lyDoBangChung: r.bang_chung, lyDoDuyet: r.duyet, lyDoTraLai: r.tra_lai,
       chuaGiao: r.chua_giao,
     };
   });

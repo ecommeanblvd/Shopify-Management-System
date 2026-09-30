@@ -34,6 +34,7 @@ function lamSach(ct: ChiTietGiaiTrinh): ChiTietGiaiTrinh {
     lyDoTach: trongDs(ct.lyDoTach, ['thieu_hang', 'khach_yeu_cau', 'do_kich_thuoc', 'chua_ro'] as const),
     soTienDoiVnd: soDuong(ct.soTienDoiVnd),
     lineHnc: ct.lineHnc === true,
+    chuaXacDinhMon: ct.chuaXacDinhMon === true,
     sanPhamSai: Array.isArray(ct.sanPhamSai)
       ? ct.sanPhamSai
           .filter((x) => x && typeof x.sku === 'string' && x.sku.trim())
@@ -57,7 +58,7 @@ export async function luuGiaiTrinhAmCuoc(input: {
                       WHERE v.store_id = o.store_id AND v.sku = l.sku)::text AS can_g
         FROM shopify_order_lines l JOIN shopify_orders o ON o.id = l.order_id
        WHERE l.order_id = ${input.orderId} AND l.sku IS NOT NULL AND l.sku <> ''`);
-    const loi = kiemSanPhamSai(chiTiet.sanPhamSai, rows.map((r) => ({ sku: r.sku, canHienTaiG: r.can_g == null ? null : Number(r.can_g) })));
+    const loi = kiemSanPhamSai(chiTiet.sanPhamSai, rows.map((r) => ({ sku: r.sku, canHienTaiG: r.can_g == null ? null : Number(r.can_g) })), chiTiet.chuaXacDinhMon === true);
     if (loi) throw new Error(loi);
     chiTiet.soDo = rows.length;
   } else {

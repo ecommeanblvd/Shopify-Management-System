@@ -7,6 +7,9 @@ import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
 import { dauHieu, layLyDoAmCuoc, thieuSanPham, NHAN_THUOC_VE_AM_CUOC } from '@/features/kpi-logistics/giai-trinh-am-cuoc';
 import { layLyDo, loaiTruKhoiKpi, duyetTayDuoc } from '@/features/shipments/ly-do-cham';
 import { NutDuyetLyDo } from '@/components/shipments/NutDuyetLyDo';
+import { DaiNop12 } from './DaiNop12';
+import { NutTraLaiDong } from './NutTraLaiDong';
+import { dongBiKhoa, traLaiDuoc, type TrangThaiNop } from '@/features/kpi-logistics/nop-1-2';
 import {
   TEN_TIEU_CHI, NHAN_KET_QUA_SLA, PHAM_VI_THEO_MA, demKetQuaSla, laCoVanDe, laSizeCoVanDe, xepChoCsv, canGiaiTrinh, conViec, laLoiNoiBo,
   type ChiTietKpi, type MaTieuChi,
@@ -29,13 +32,15 @@ function taiCsv(ten: string, header: string[], rows: CsvValue[][]) {
  * Report chi tiết từng tiêu chí Pillar 1: liệt kê ĐÚNG các đơn/kiện tạo nên con số
  * KPI (CEO 11/09/2026). Nạp lười — chọn tiêu chí nào mới truy vấn tiêu chí đó.
  */
-export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = false }: {
+export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = false, nop12 }: {
   tu: string; den: string; ky: string;
   tai: (ma: MaTieuChi, tu: string, den: string) => Promise<ChiTietKpi>;
   /** Nhân sự có quyền đối soát phí ship mới gán được lý do chậm ngay trên bảng. */
   ganLyDoDuoc: boolean;
   /** Chỉ quản lý mới duyệt tay được kiện mà hệ thống không kiểm được. */
   duyetDuoc?: boolean;
+  /** Trạng thái nộp của tiêu chí 1.2 trong kỳ; bỏ trống = coi như đang làm. */
+  nop12?: { trangThai: TrangThaiNop; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number };
 }) {
   const [ma, setMa] = useState<MaTieuChi | null>(null);
   const [kho, setKho] = useState<Partial<Record<MaTieuChi, ChiTietKpi>>>({});
@@ -93,7 +98,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = fals
         <div className="space-y-3 p-4">
           <p className="text-[11px] leading-relaxed text-muted-foreground">{data.cachDo} {PHAM_VI_THEO_MA[ma]}</p>
           {data.amCuoc && <BangAmCuoc rows={data.amCuoc} ky={ky} giaiTrinhDuoc={ganLyDoDuoc} sauKhiLuu={() => taiLai('1.1')} />}
-          {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={duyetDuoc} sauKhiLuu={() => taiLai('1.2')} />}
+          {data.sla && <BangSla rows={data.sla} ky={ky} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={duyetDuoc} nop12={nop12} sauKhiLuu={() => taiLai('1.2')} />}
           {data.chungTu && <BangChungTu rows={data.chungTu} ky={ky} />}
           {data.sizeThung && <BangSize rows={data.sizeThung} ky={ky} />}
         </div>
@@ -233,9 +238,12 @@ function BangAmCuoc({ rows, ky, giaiTrinhDuoc, sauKhiLuu }: {
   );
 }
 
-function BangSla({ rows, ky, ganLyDoDuoc, duyetDuoc, sauKhiLuu }: {
-  rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; duyetDuoc: boolean; sauKhiLuu: () => void;
+function BangSla({ rows, ky, ganLyDoDuoc, duyetDuoc, nop12, sauKhiLuu }: {
+  rows: NonNullable<ChiTietKpi['sla']>; ky: string; ganLyDoDuoc: boolean; duyetDuoc: boolean;
+  nop12?: { trangThai: TrangThaiNop; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number };
+  sauKhiLuu: () => void;
 }) {
+  const tt: TrangThaiNop = nop12?.trangThai ?? 'dang_lam';
   const d = demKetQuaSla(rows);
   const coLyDoLoaiTru = rows.filter((r) => r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham));
   const dc = {
@@ -255,6 +263,9 @@ function BangSla({ rows, ky, ganLyDoDuoc, duyetDuoc, sauKhiLuu }: {
     chua_den_han: 'text-muted-foreground',
   };
   return (
+    <>
+    {nop12 && <DaiNop12 ky={ky} trangThai={tt} nopAt={nop12.nopAt} duyetAt={nop12.duyetAt}
+      soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc={ganLyDoDuoc} laQuanLy={duyetDuoc} sauKhiLuu={sauKhiLuu} />}
     <Khung
       tomTat={<><b>{d.dat}</b> đạt · <b>{d.tre}</b> trễ · <b>{d.ngoai_le}</b> trễ nặng · <b>{d.loai_tru}</b> loại khỏi KPI · <b>{d.chua_den_han}</b> chưa tới hạn (chưa giao, còn trong cam kết — đứng ngoài mẫu số) · tỉ lệ đạt <b>{d.tyLeDat == null ? '—' : `${Math.round(d.tyLeDat * 1000) / 10}%`}</b> trên {d.tinhKpi} kiện. Cột Thước hãng là mức nội bộ chặt hơn của hãng; dấu ⚑ là kiện đạt cam kết với khách nhưng chậm so với thước hãng, không trừ điểm.{ganLyDoDuoc ? ' Chọn lý do chậm ngay ở cột cuối.' : ''} Lý do ngoài tầm kiểm soát chỉ rút kiện khỏi mẫu số khi hãng (FedEx / UPS) có sự kiện xác nhận.{coLyDoLoaiTru.length > 0 && <> Đối chiếu: <b className="text-emerald-600 dark:text-emerald-400">{dc.xacNhan}</b> xác nhận · <b className="text-red-600 dark:text-red-400">{dc.khongThay}</b> hãng không có dấu hiệu · <b>{dc.khongKiem}</b> không kiểm được{dc.cho > 0 && <> · <b>{dc.cho}</b> đang chờ</>}.</>}</>}
       onCsv={() => taiCsv(`kpi-${ky}-1.2-sla.csv`,
@@ -292,21 +303,30 @@ function BangSla({ rows, ky, ganLyDoDuoc, duyetDuoc, sauKhiLuu }: {
                   Kiện bị loại vì NƯỚC (VN nội địa) cũng không cần: gán lý do gì nó cũng đã
                   đứng ngoài mẫu số. Nhưng kiện bị loại vì CHÍNH LÝ DO đã gán thì vẫn cho sửa,
                   nếu không thì gán nhầm một lần là kẹt luôn, không gỡ ra được. */}
+              {/* Kỳ đã gửi đi duyệt thì ô chọn KHOÁ, trừ dòng quản lý đã trả lại — trả lại chính
+                  là mở khoá đúng chỗ cần sửa. Máy chủ chặn lần nữa, ẩn ô không phải là khoá. */}
               {ganLyDoDuoc && r.shipmentId
+                && !dongBiKhoa(tt, r.lyDoTraLai != null)
                 && r.ketQua !== 'dat' && r.ketQua !== 'chua_den_han'
                 && !(r.ketQua === 'loai_tru' && r.lyDoCham == null)
                 ? <LyDoChamSelect shipmentId={r.shipmentId} banDau={r.lyDoCham} nguon={r.nguon} sauKhiLuu={sauKhiLuu} />
-                : <span className="text-muted-foreground">{r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}</span>}
+                : <span className="text-muted-foreground">
+                    {r.lyDoCham ? (layLyDo(r.lyDoCham)?.ten ?? r.lyDoCham) : '—'}
+                    {dongBiKhoa(tt, r.lyDoTraLai != null) && r.lyDoCham && <span className="ml-1 text-[10px]">🔒</span>}
+                  </span>}
               {r.lyDoCham && loaiTruKhoiKpi(r.lyDoCham) && <NhanDoiChieu ketQua={r.lyDoDoiChieu ?? null} bangChung={r.lyDoBangChung ?? null} duyet={r.lyDoDuyet ?? null} />}
               {/* Nút duyệt CHỈ hiện đúng chỗ máy mù — `duyetTayDuoc` là cùng một luật máy chủ
                   dùng để chặn, nên giao diện không bao giờ mời bấm một việc sẽ bị từ chối. */}
               {duyetDuoc && r.shipmentId && duyetTayDuoc(r.lyDoCham, r.lyDoDoiChieu)
                 && <NutDuyetLyDo shipmentId={r.shipmentId} nguon={r.nguon} daDuyet={r.lyDoDuyet ?? null} sauKhiLuu={sauKhiLuu} />}
+              {r.shipmentId && r.lyDoCham && (r.lyDoTraLai != null || (duyetDuoc && traLaiDuoc(tt)))
+                && <NutTraLaiDong ky={ky} nguon={r.nguon} id={r.shipmentId} daTraLai={r.lyDoTraLai ?? null} sauKhiLuu={sauKhiLuu} />}
             </td>
           </tr>
         ))}
       </tbody>
     </Khung>
+    </>
   );
 }
 

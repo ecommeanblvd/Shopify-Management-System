@@ -136,6 +136,8 @@ export interface DongSla {
   lyDoBangChung?: string | null;
   /** Quyết định duyệt tay của admin: 'duyet' | 'tu_choi' | null (chưa ai duyệt). */
   lyDoDuyet?: string | null;
+  /** Quản lý trả lại dòng này để sửa, kèm ghi chú sai ở đâu; null = không bị trả. */
+  lyDoTraLai?: string | null;
 }
 
 export interface DongChungTu {
