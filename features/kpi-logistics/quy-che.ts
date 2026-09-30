@@ -13,20 +13,41 @@ export const LUONG_CUNG = LUONG_CO_BAN + PHU_CAP_TRACH_NHIEM; // 10.500.000đ
 export const QUY_P1 = { bienCuoc: 360_000, sla: 360_000, hoanHao: 360_000, sizeThung: 120_000 } as const;
 export const QUY_P1_TONG = QUY_P1.bienCuoc + QUY_P1.sla + QUY_P1.hoanHao + QUY_P1.sizeThung; // 1.200.000đ
 
-/** 1.1 — mỗi đơn âm cước do lỗi trách nhiệm trừ 10 % quỹ; trần trừ 50 % quỹ. */
-export const TRU_MOI_DON_AM_CUOC = 36_000;
-export const TRAN_TRU_BIEN_CUOC = 180_000;
-
 export interface MucDat { tien: number; mucNhan: number; dienGiai: string }
 
-/** 1.1 Bảo toàn biên cước. `soDonLoi` = số đơn âm cước ĐÃ quy trách nhiệm cho vị trí này. */
-export function diemBienCuoc(soDonLoi: number): MucDat {
-  const n = Math.max(0, Math.floor(soDonLoi));
-  const tru = Math.min(n * TRU_MOI_DON_AM_CUOC, TRAN_TRU_BIEN_CUOC);
-  const tien = QUY_P1.bienCuoc - tru;
+/**
+ * 1.1 Bảo toàn biên cước — đo bằng TỈ LỆ TIỀN rò rỉ (CEO 30/09/2026), thay cách đếm SỐ ĐƠN.
+ *
+ * CÁCH CŨ HỎNG Ở ĐÂU: trừ 10 %/đơn với trần 50 % nghĩa là chạm trần ở ĐƠN THỨ 5. Tháng 8 có 46
+ * đơn, nên 5 đơn và 46 đơn chấm giống hệt nhau — tiêu chí thôi đo lường trên toàn bộ dải thực tế,
+ * và từ đơn thứ 5 trở đi không còn động cơ nào để giảm. Bỏ trần cũng không cứu, chỉ dời vùng
+ * phẳng lên 10 đơn: gốc là BƯỚC TRỪ thiết kế cho một thế giới 0–5 đơn/tháng.
+ *
+ * VÌ SAO LÀ TIỀN: tiêu chí tên "Bảo toàn biên cước", mà số đơn không nói gì về biên cước — một
+ * đơn âm 50.000đ đang được tính bằng một đơn âm 2 triệu. Và 1.1 từng là tiêu chí DUY NHẤT trong
+ * Pillar 1 đếm số tuyệt đối, trong khi 1.2/1.3/1.4 đều đo tỉ lệ — mà sản lượng đơn âm cước dao
+ * động 134/84/44/58/31 theo tháng nên ngưỡng đếm tuyệt đối không thể công bằng.
+ *
+ * BẬC do CEO chốt: "lệch trên 2 % đã là không chấp nhận được rồi" → trên 2 % mất sạch tiêu chí.
+ * Đo thật tháng 8 (kỳ duy nhất phân định xong): 12.809.741đ / 564.424.833đ = 2,3 % → 0 %.
+ */
+export const BAC_BIEN_CUOC: Array<{ toiDa: number; mucNhan: number }> = [
+  { toiDa: 0.005, mucNhan: 1 },
+  { toiDa: 0.010, mucNhan: 0.75 },
+  { toiDa: 0.020, mucNhan: 0.5 },
+];
+
+/** `tyLeTien` = tiền âm cước do lỗi nội bộ / tổng cước carrier của kỳ (0..1); null = chưa đo được. */
+export function diemBienCuoc(tyLeTien: number | null): MucDat {
+  if (tyLeTien == null) return { tien: 0, mucNhan: 0, dienGiai: 'Chưa đo được tỉ lệ rò rỉ biên cước' };
+  const p = `${Math.round(tyLeTien * 1000) / 10} %`;
+  const bac = BAC_BIEN_CUOC.find((b) => tyLeTien <= b.toiDa);
+  const mucNhan = bac?.mucNhan ?? 0;
   return {
-    tien, mucNhan: tien / QUY_P1.bienCuoc,
-    dienGiai: n === 0 ? 'Không có đơn âm cước do lỗi trách nhiệm' : `${n} đơn × 36.000đ = trừ ${tru.toLocaleString('vi-VN')}đ${tru === TRAN_TRU_BIEN_CUOC ? ' (chạm trần 50 %)' : ''}`,
+    tien: Math.round(QUY_P1.bienCuoc * mucNhan), mucNhan,
+    dienGiai: bac == null
+      ? `${p} — vượt ngưỡng 2 %, mất toàn bộ tiêu chí`
+      : `${p} ≤ ${Math.round(bac.toiDa * 1000) / 10} %`,
   };
 }
 
@@ -139,8 +160,10 @@ export function thuongThuHoi(thuHoiVnd: number, tyLeThuHoi: number | null): MucD
 }
 
 export interface DauVaoKpi {
-  /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí (quản lý chốt). */
+  /** 1.1 — số đơn âm cước đã quy trách nhiệm cho vị trí. CHỈ để hiện bối cảnh, KHÔNG còn dùng chấm điểm. */
   soDonAmCuocLoi: number;
+  /** 1.1 — tiền âm cước do lỗi nội bộ / tổng cước carrier (0..1); null = chưa đo được. Đây là thứ CHẤM ĐIỂM. */
+  tyLeBienCuocRoRi: number | null;
   /** 1.1 — số đơn âm cước CHƯA ai phân định đúng/sai. Còn tồn thì chưa chấm được tiêu chí này. */
   soDonAmCuocChuaXet: number;
   /** 1.2 — tỉ lệ kiện đạt SLA (0..1). */
@@ -178,7 +201,7 @@ export interface DongBangLuong { ma: string; ten: string; soLieu: string; tien: 
 
 /** Bảng lương KPI một kỳ: từng dòng + tổng. */
 export function tinhBangLuong(v: DauVaoKpi): { dong: DongBangLuong[]; p1: number; p2: number; p3: number; tong: number } {
-  const bienCuoc = diemBienCuoc(v.soDonAmCuocLoi);
+  const bienCuoc = diemBienCuoc(v.tyLeBienCuocRoRi);
   const sla = diemSla(v.tyLeSla);
   const hoanHao = diemDonHoanHao(v.tyLeLoiChungTu);
   const size = diemSizeThung(v.tyLeSizeThung);
@@ -260,7 +283,7 @@ function mucTay(v: DauVaoKpi, dat: boolean): { soLieu: string; mucDat: number | 
 
 /** Bảng điểm KPI một kỳ — chỉ kết quả, không quy ra tiền. `ngayKy` (ISO, đầu kỳ) quyết định ngưỡng đạt của tiêu chí 1.2. */
 export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
-  const bienCuoc = diemBienCuoc(v.soDonAmCuocLoi);
+  const bienCuoc = diemBienCuoc(v.tyLeBienCuocRoRi);
   const sla = diemSlaTheoKy(v.tyLeSla, ngayKy);
   const hoanHao = diemDonHoanHao(v.tyLeLoiChungTu);
   const size = diemSizeThung(v.tyLeSizeThung);
@@ -278,19 +301,17 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
        * và không nối được hai số — phần trừ và trần nằm trong `dienGiai` mà bảng không dùng. */
       soLieu: v.soDonAmCuocChuaXet > 0
         ? `${v.soDonAmCuocLoi} đơn đã chốt lỗi nội bộ · CÒN ${v.soDonAmCuocChuaXet} đơn chưa phân định`
-        : v.soDonAmCuocLoi === 0
-          ? 'Không có đơn âm cước do lỗi trách nhiệm'
-          // Nói phần trừ bằng PHẦN TRĂM, không bằng tiền: đây là bảng chỉ-điểm, tiền để HR tính.
-          : `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm · trừ ${Math.round((1 - bienCuoc.mucNhan) * 100)} % tiêu chí${bienCuoc.mucNhan === 0.5 ? ' (chạm trần)' : ''}`,
+        : v.tyLeBienCuocRoRi == null
+          ? 'Chưa đo được tỉ lệ rò rỉ biên cước'
+          : `${Math.round(v.tyLeBienCuocRoRi * 1000) / 10} % cước rò rỉ do lỗi nội bộ (${v.soDonAmCuocLoi} đơn)`,
       /* CỘT NGƯỠNG không được MỞ ĐẦU bằng một con số kèm đơn vị: "0 đơn — …" đọc y như một số
        * ĐO trong kỳ, và CEO 30/09 đã đọc đúng như vậy rồi thấy nó mâu thuẫn với "Đạt 50 %".
        * Ngưỡng phải nói rõ nó là MỤC TIÊU.
        *
        * Câu "phải phân định hết" chỉ thêm KHI CÒN đơn treo: tháng 8 đã phân định hết mà vẫn hiện
        * câu đó thì người đọc tưởng còn việc chưa xong. */
-      nguong: v.soDonAmCuocChuaXet > 0
-        ? 'Mục tiêu: KHÔNG đơn nào do lỗi trách nhiệm. Mỗi đơn trừ 10 % tiêu chí, trừ tối đa 50 %. Còn đơn chưa phân định nên chưa chấm được.'
-        : 'Mục tiêu: KHÔNG đơn nào do lỗi trách nhiệm. Mỗi đơn trừ 10 % tiêu chí, trừ tối đa 50 % — từ đơn thứ 5 là chạm trần.',
+      nguong: 'Đo bằng TIỀN rò rỉ / tổng cước: ≤0,5 % đủ · >0,5–1 % còn 75 % · >1–2 % còn 50 % · trên 2 % mất toàn bộ'
+        + (v.soDonAmCuocChuaXet > 0 ? '. Còn đơn chưa phân định nên chưa chấm được.' : ''),
       mucDat: v.soDonAmCuocChuaXet > 0 ? null : bienCuoc.mucNhan,
     },
     {

@@ -10,6 +10,7 @@
  * "tại thời điểm chốt, bảng nói thế này", và từ đó trang hiện ảnh chụp thay vì tính lại.
  */
 import type { SoLieuTuDong } from './queries';
+import type { BangDiemKpi } from './quy-che';
 
 export interface AnhChupKpi {
   /** Phiên bản hình dạng ảnh chụp — đọc ảnh cũ bằng mã mới thì phải biết nó thuộc đời nào. */
@@ -21,6 +22,17 @@ export interface AnhChupKpi {
   /** Điểm Pillar 1 đã tính sẵn — để đọc nhanh mà không cần dựng lại cả bảng. */
   diemP1: number;
   gateDat: boolean;
+  /**
+   * TOÀN BỘ bảng điểm tại thời điểm chốt (CEO 30/09/2026).
+   *
+   * Trước nay ảnh chụp chỉ giữ ĐẦU VÀO, còn màn TÍNH LẠI bảng điểm mỗi lần mở. Nghĩa là chốt kỳ
+   * đóng băng số liệu nhưng KHÔNG đóng băng CÔNG THỨC: đổi cách chấm một tiêu chí là điểm của
+   * mọi kỳ đã chốt tự đổi theo, âm thầm, không ai mở lại kỳ nào cả. Phát hiện đúng lúc đổi cách
+   * chấm 1.1 — điểm tháng 8 sẽ tự tụt từ 85 % xuống 70 % mà không ai bấm gì.
+   *
+   * Ảnh chụp ĐỜI CŨ không có trường này; màn phải tính lại và NÓI RÕ là đang tính lại.
+   */
+  bangDiem?: BangDiemKpi;
 }
 
 /**

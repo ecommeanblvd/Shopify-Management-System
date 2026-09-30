@@ -53,6 +53,8 @@ export async function chotKyKpi(input: { ky: string; ghiChu?: string | null }): 
   const diem = bangDiemKpi({
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo,
     soDonAmCuocChuaXet: auto.soDonAmCuocChuaXet,
+    // 1.1 nay chấm bằng TỈ LỆ TIỀN rò rỉ, không còn đếm số đơn (CEO 30/09/2026).
+    tyLeBienCuocRoRi: auto.bienCuoc.tyLeTien,
     tyLeSla: auto.slaTong.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),
@@ -72,6 +74,9 @@ export async function chotKyKpi(input: { ky: string; ghiChu?: string | null }): 
     ban: 1, auto,
     nhap: nhap ? (JSON.parse(JSON.stringify(nhap)) as Record<string, unknown>) : null,
     diemP1: diem.diemP1, gateDat,
+    // Giữ CẢ bảng điểm, không chỉ số liệu: chốt phải đóng băng cả công thức, nếu không đổi cách
+    // chấm về sau là âm thầm viết lại điểm của mọi kỳ đã chốt.
+    bangDiem: diem,
   };
   await db.insert(schema.kpiLogisticsChot).values({
     ky: input.ky, soLieu: anhChup, ghiChu: input.ghiChu?.trim() || null, chotBoi: session.user.id,

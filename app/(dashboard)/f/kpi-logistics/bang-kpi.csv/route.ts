@@ -30,6 +30,8 @@ export async function GET(req: Request): Promise<Response> {
   const diem = bangDiemKpi({
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo,
     soDonAmCuocChuaXet: auto.soDonAmCuocChuaXet,
+    // 1.1 nay chấm bằng TỈ LỆ TIỀN rò rỉ, không còn đếm số đơn (CEO 30/09/2026).
+    tyLeBienCuocRoRi: auto.bienCuoc.tyLeTien,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? null : Number(nhap.tyLeSizeThung),

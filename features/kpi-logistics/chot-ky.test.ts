@@ -48,3 +48,20 @@ describe('chuanHoaAuto — ảnh chụp cũ thiếu trường thêm sau ngày ch
     expect(chuanHoaAuto(anhCu).tu).toBe('2026-08-01');
   });
 });
+
+describe('ảnh chụp phải đóng băng CẢ CÔNG THỨC, không chỉ đầu vào (CEO 30/09/2026)', () => {
+  /* Lỗi gốc: ảnh chụp chỉ giữ số liệu, còn màn TÍNH LẠI bảng điểm mỗi lần mở. Nên đổi cách chấm
+     một tiêu chí là điểm của MỌI kỳ đã chốt tự đổi theo — âm thầm, không ai mở lại kỳ nào.
+     Phát hiện đúng lúc đổi 1.1 sang tỉ lệ tiền: điểm tháng 8 sẽ tự tụt 85 % → 70 %. */
+  it('kiểu dữ liệu ảnh chụp có chỗ giữ bảng điểm', () => {
+    const anh = { ban: 1 as const, auto: {}, nhap: null, diemP1: 0.85, gateDat: true,
+      bangDiem: { p1: [], diemP1: 0.85, p2: [], p3: [], gateDat: true } };
+    expect(laAnhChupHopLe(anh)).toBe(true);
+    expect(anh.bangDiem.diemP1).toBe(0.85);
+  });
+
+  it('ảnh chụp ĐỜI CŨ không có bảng điểm — vẫn đọc được, màn sẽ tính lại', () => {
+    // Không được từ chối ảnh cũ: kỳ tháng 8 chốt trước khi có trường này.
+    expect(laAnhChupHopLe({ ban: 1, auto: {}, diemP1: 0.85 })).toBe(true);
+  });
+});

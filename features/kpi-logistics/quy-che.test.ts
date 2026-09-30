@@ -11,11 +11,17 @@ describe('quy-che KPI logistics', () => {
     expect(LUONG_CUNG).toBe(10_500_000);
     expect(QUY_P1_TONG).toBe(1_200_000);
   });
-  it('1.1 biên cước: trừ 36.000đ/đơn, chạm trần 180.000đ', () => {
-    expect(diemBienCuoc(0).tien).toBe(360_000);
-    expect(diemBienCuoc(1).tien).toBe(324_000); // ví dụ trong quy chế
-    expect(diemBienCuoc(5).tien).toBe(180_000);
-    expect(diemBienCuoc(20).tien).toBe(180_000); // trần 50 %
+  it('1.1 biên cước: chấm theo TỈ LỆ TIỀN rò rỉ, trên 2 % mất sạch (CEO 30/09/2026)', () => {
+    expect(diemBienCuoc(0).mucNhan).toBe(1);
+    expect(diemBienCuoc(0.005).mucNhan).toBe(1);
+    expect(diemBienCuoc(0.0051).mucNhan).toBe(0.75);
+    expect(diemBienCuoc(0.01).mucNhan).toBe(0.75);
+    expect(diemBienCuoc(0.015).mucNhan).toBe(0.5);
+    expect(diemBienCuoc(0.02).mucNhan).toBe(0.5);
+    // CEO: "lệch trên 2 % đã là không chấp nhận được rồi".
+    expect(diemBienCuoc(0.0201).mucNhan).toBe(0);
+    expect(diemBienCuoc(0.023).mucNhan).toBe(0); // số thật tháng 8
+    expect(diemBienCuoc(null).mucNhan).toBe(0);
   });
   it('1.2 SLA: bậc 95/90/85', () => {
     expect(diemSla(0.96).tien).toBe(360_000);
@@ -56,7 +62,7 @@ describe('quy-che KPI logistics', () => {
   });
   it('trượt Gate thì mất toàn bộ Pillar 3', () => {
     const v: DauVaoKpi = {
-      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, thietHaiChamDiemVnd: 0, soDonShipHo: 10,
+      soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0, soDonAmCuocLoi: 0, tyLeSla: 0.96, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, thietHaiChamDiemVnd: 0, soDonShipHo: 10,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 100_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     };
     expect(tinhBangLuong(v).p3).toBe(0);
@@ -64,20 +70,22 @@ describe('quy-che KPI logistics', () => {
   });
   it('bảng điểm KPI: trọng số 30/30/30/10, điểm P1 = Σ trọng số × mức đạt', () => {
     expect(TRONG_SO_P1.bienCuoc + TRONG_SO_P1.sla + TRONG_SO_P1.hoanHao + TRONG_SO_P1.sizeThung).toBeCloseTo(1, 10);
-    // Ví dụ tháng 7 trong quy chế: 1 đơn âm cước (90 %), SLA 96 % (100 %), lỗi 1,5 % (100 %), size 97 % (50 %).
+    /* Ví dụ tháng 7 trong quy chế, DỰNG LẠI theo cách chấm mới: 1.1 nay đo bằng tỉ lệ tiền rò
+       rỉ chứ không đếm đơn, nên lấy 0,4 % (dưới ngưỡng 0,5 %) để tiêu chí đạt đủ.
+       SLA 96 % (100 %), lỗi chứng từ 1,5 % (100 %), size 97 % (50 %). */
     const b = bangDiemKpi({
-      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
+      soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0.004, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       // `daChamP3B` nói rằng quản lý ĐÃ chấm hai mục 3B — ví dụ trong quy chế là kỳ đã có kết luận.
       // Thiếu cờ này thì 3B để trống, đúng luật 29/09: chưa ai chấm thì không được vẽ thành đạt hay trượt.
       gateDat: true, roRiGiam: true, khacPhucGoc: true, daChamP3B: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     }, KY_2026);
-    expect(b.p1.map((d) => d.mucDat)).toEqual([0.9, 1, 1, 0.5]);
-    expect(b.diemP1).toBeCloseTo(0.3 * 0.9 + 0.3 + 0.3 + 0.1 * 0.5, 10); // = 0,92
+    expect(b.p1.map((d) => d.mucDat)).toEqual([1, 1, 1, 0.5]);
+    expect(b.diemP1).toBeCloseTo(0.3 + 0.3 + 0.3 + 0.1 * 0.5, 10); // = 0,95
     expect(b.p3.every((d) => d.mucDat === 1)).toBe(true);
   });
   it('bảng điểm: tiêu chí chưa có dữ liệu để mức đạt null và tính 0 điểm; trượt Gate thì Pillar 3 về 0', () => {
     const b = bangDiemKpi({
-      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, thietHaiChamDiemVnd: 0, soDonShipHo: 0,
+      soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0, soDonAmCuocLoi: 0, tyLeSla: null, tyLeLoiChungTu: null, tyLeSizeThung: null, thietHaiChamDiemVnd: 0, soDonShipHo: 0,
       gateDat: false, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 90_000_000, tyLeThuHoi: 1, clawbackVnd: 0,
     }, KY_2026);
     expect(b.p1.map((d) => d.mucDat)).toEqual([1, null, null, null]);
@@ -98,15 +106,17 @@ describe('quy-che KPI logistics', () => {
     expect(diemSlaTheoKy(0.50, '2026-09-01').mucNhan).toBe(0);
     expect(diemSlaTheoKy(null, '2026-09-01').mucNhan).toBe(0);
   });
-  it('dựng lại đúng ví dụ tháng 7/2026 trong quy chế: 13.404.000đ', () => {
+  it('ví dụ tháng 7/2026 dựng lại theo cách chấm 1.1 MỚI', () => {
+    /* Bản quy chế gốc cho 13.404.000đ với 1 đơn âm cước (1.1 còn 324.000đ). Cách chấm mới đo
+       tỉ lệ tiền: 0,4 % dưới ngưỡng 0,5 % nên 1.1 đủ 360.000đ, tổng nhích thêm 36.000đ. */
     const { p1, p2, p3, tong } = tinhBangLuong({
-      soDonAmCuocChuaXet: 0, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
+      soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0.004, soDonAmCuocLoi: 1, tyLeSla: 0.96, tyLeLoiChungTu: 0.015, tyLeSizeThung: 0.97, thietHaiChamDiemVnd: 0, soDonShipHo: 80,
       gateDat: true, roRiGiam: true, khacPhucGoc: true, thuHoiVnd: 55_000_000, tyLeThuHoi: 0.917, clawbackVnd: 0,
     });
-    expect(p1).toBe(1_104_000);
+    expect(p1).toBe(1_140_000);
     expect(p2).toBe(1_200_000);
     expect(p3).toBe(600_000);
-    expect(tong).toBe(13_404_000);
+    expect(tong).toBe(13_440_000);
   });
 });
 
@@ -143,7 +153,7 @@ describe('hệ số chất lượng Pillar 2 (CEO 12/09/2026)', () => {
 
 describe('1.1 chưa phân định xong thì CHƯA CHẤM (CEO 14/09/2026)', () => {
   const day = (over: Partial<DauVaoKpi> = {}): DauVaoKpi => ({
-    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 1, tyLeLoiChungTu: 0, tyLeSizeThung: 1,
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0, tyLeSla: 1, tyLeLoiChungTu: 0, tyLeSizeThung: 1,
     soDonShipHo: 0, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
     thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0, ...over,
   });
@@ -154,9 +164,14 @@ describe('1.1 chưa phân định xong thì CHƯA CHẤM (CEO 14/09/2026)', () =
     expect(b.p1[0].soLieu).toContain('CÒN 48 đơn chưa phân định');
   });
 
-  it('phân định hết rồi mới chấm, và chấm theo số đơn lỗi nội bộ', () => {
+  it('phân định hết rồi mới chấm, và chấm theo TỈ LỆ TIỀN chứ không theo số đơn', () => {
     expect(bangDiemKpi(day(), KY_2026).p1[0].mucDat).toBe(1);
-    expect(bangDiemKpi(day({ soDonAmCuocLoi: 2 }), KY_2026).p1[0].mucDat).toBeCloseTo(0.8, 10);
+    // Số ĐƠN không còn đổi điểm: 2 đơn hay 46 đơn mà cùng tỉ lệ tiền thì cùng mức đạt.
+    expect(bangDiemKpi(day({ soDonAmCuocLoi: 2 }), KY_2026).p1[0].mucDat).toBe(1);
+    expect(bangDiemKpi(day({ soDonAmCuocLoi: 46 }), KY_2026).p1[0].mucDat).toBe(1);
+    // Tỉ lệ TIỀN mới là thứ đổi điểm.
+    expect(bangDiemKpi(day({ tyLeBienCuocRoRi: 0.015 }), KY_2026).p1[0].mucDat).toBe(0.5);
+    expect(bangDiemKpi(day({ tyLeBienCuocRoRi: 0.023 }), KY_2026).p1[0].mucDat).toBe(0);
   });
 
   it('tiêu chí chưa chấm được thì không cộng điểm P1 — không chứng nhận sạch cho phần chưa kiểm', () => {
@@ -168,7 +183,7 @@ describe('1.1 chưa phân định xong thì CHƯA CHẤM (CEO 14/09/2026)', () =
 
 describe('3B: "chưa ai chấm" KHÁC "không đạt" (CEO 29/09/2026)', () => {
   const nen = {
-    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 0.95, tyLeLoiChungTu: 0.01,
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0, tyLeSla: 0.95, tyLeLoiChungTu: 0.01,
     tyLeSizeThung: 0.99, soDonShipHo: 0, thietHaiChamDiemVnd: 0,
     thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
   };
@@ -202,78 +217,75 @@ describe('3B: "chưa ai chấm" KHÁC "không đạt" (CEO 29/09/2026)', () => {
 });
 
 describe('1.1: ô ghi đè để TRỐNG phải khác ghi đè bằng 0 (CEO 29/09/2026)', () => {
+  /* Bẫy gốc: cột `so_don_am_cuoc_loi` từng là NOT NULL DEFAULT 0, mà bảng đọc
+     `nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo` — chỉ cần lưu một dòng cho kỳ là 46 đơn
+     biến thành 0. Từ 30/09 số đơn không còn chấm điểm, nhưng nó vẫn HIỆN trên bảng nên vẫn phải
+     phân biệt được "chưa ghi đè" với "ghi đè bằng 0". */
   const nen = {
-    soDonAmCuocChuaXet: 0, tyLeSla: 0.95, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99,
-    soDonShipHo: 0, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
-    thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
+    soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0.004, tyLeSla: 0.95, tyLeLoiChungTu: 0.01,
+    tyLeSizeThung: 0.99, soDonShipHo: 0, thietHaiChamDiemVnd: 0, gateDat: true,
+    roRiGiam: false, khacPhucGoc: false, thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
   };
   const lay = (soDonAmCuocLoi: number) => bangDiemKpi({ ...nen, soDonAmCuocLoi }, '2026-08-01').p1[0];
 
-  it('ghi đè bằng 0 = kết luận "không đơn nào lỗi" → điểm tuyệt đối', () => {
-    expect(lay(0).mucDat).toBe(1);
+  it('số đơn vẫn hiện trên bảng để biết quy mô', () => {
+    expect(lay(46).soLieu).toContain('46 đơn');
+    expect(lay(0).soLieu).toContain('0 đơn');
   });
 
-  it('42 đơn lỗi nội bộ (số thật T8) chạm trần trừ 50 % → mức đạt 0,5', () => {
-    expect(lay(42).mucDat).toBe(0.5);
-  });
-
-  /* Vì sao test này quan trọng: bảng điểm đọc `nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo`.
-     Khi cột còn NOT NULL DEFAULT 0, chỉ cần lưu một dòng cho kỳ là 42 biến thành 0 và người bị
-     chấm được điểm tuyệt đối mà không ai cố ý cho. Hai con số dưới đây phải khác nhau — nếu một
-     ngày nào đó chúng bằng nhau thì bản vá 0185 đã bị đảo ngược. */
-  it('0 và 42 KHÔNG được cho cùng kết quả', () => {
-    expect(lay(0).mucDat).not.toBe(lay(42).mucDat);
+  it('nhưng số đơn KHÔNG còn đổi mức đạt — điểm do tỉ lệ tiền quyết', () => {
+    expect(lay(0).mucDat).toBe(lay(46).mucDat);
+    expect(lay(46).mucDat).toBe(1);
   });
 });
 
-describe('1.1: cột Ngưỡng không được đọc nhầm thành số đo (CEO 30/09/2026)', () => {
+describe('1.1 đo bằng TỈ LỆ TIỀN (CEO 30/09/2026)', () => {
   const nen = {
-    tyLeSla: 0.95, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, soDonShipHo: 0,
+    soDonAmCuocLoi: 46, tyLeSla: 0.95, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, soDonShipHo: 0,
     thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
     thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
   };
-  const lay = (soDonAmCuocLoi: number, soDonAmCuocChuaXet = 0) =>
-    bangDiemKpi({ ...nen, soDonAmCuocLoi, soDonAmCuocChuaXet }, '2026-08-01').p1[0];
+  const lay = (tyLe: number | null, chuaXet = 0) =>
+    bangDiemKpi({ ...nen, tyLeBienCuocRoRi: tyLe, soDonAmCuocChuaXet: chuaXet }, '2026-08-01').p1[0];
 
-  it('ngưỡng KHÔNG mở đầu bằng con số kèm đơn vị — đó là chỗ CEO đọc nhầm', () => {
-    // "0 đơn — …" đọc y như số đo trong kỳ; phải nói rõ là MỤC TIÊU.
-    expect(lay(46).nguong.startsWith('0 đơn')).toBe(false);
-    expect(lay(46).nguong).toContain('Mục tiêu');
+  it('số thật tháng 8: 2,3 % → MẤT SẠCH, vì CEO chốt trên 2 % là không chấp nhận được', () => {
+    expect(lay(0.023).mucDat).toBe(0);
+    expect(lay(0.023).soLieu).toContain('2.3 %');
+    expect(lay(0.023).soLieu).toContain('46 đơn');
+  });
+
+  it('bốn bậc đúng như CEO chốt', () => {
+    expect(lay(0.004).mucDat).toBe(1);
+    expect(lay(0.008).mucDat).toBe(0.75);
+    expect(lay(0.018).mucDat).toBe(0.5);
+    expect(lay(0.021).mucDat).toBe(0);
+  });
+
+  it('ngưỡng nói rõ đo bằng TIỀN, không mở đầu bằng con số kèm đơn vị', () => {
+    expect(lay(0.004).nguong.startsWith('0 đơn')).toBe(false);
+    expect(lay(0.004).nguong).toContain('TIỀN rò rỉ / tổng cước');
   });
 
   it('phân định hết rồi thì THÔI nhắc "chưa chấm được"', () => {
-    expect(lay(46).nguong).not.toContain('chưa chấm được');
-    expect(lay(46).mucDat).toBe(0.5);
+    expect(lay(0.004).nguong).not.toContain('chưa chấm được');
+    expect(lay(0.004, 27).nguong).toContain('chưa chấm được');
+    expect(lay(0.004, 27).mucDat).toBeNull();
   });
 
-  it('còn đơn treo thì MỚI nhắc, và mức đạt để trống', () => {
-    expect(lay(2, 27).nguong).toContain('chưa phân định');
-    expect(lay(2, 27).mucDat).toBeNull();
+  it('SỐ ĐƠN không còn đổi điểm — đó là cả lý do đổi cách chấm', () => {
+    const it = bangDiemKpi({ ...nen, soDonAmCuocLoi: 1, tyLeBienCuocRoRi: 0.018, soDonAmCuocChuaXet: 0 }, '2026-08-01').p1[0];
+    const nhieu = bangDiemKpi({ ...nen, soDonAmCuocLoi: 46, tyLeBienCuocRoRi: 0.018, soDonAmCuocChuaXet: 0 }, '2026-08-01').p1[0];
+    expect(it.mucDat).toBe(nhieu.mucDat);
   });
 
-  it('cột Kết quả nói luôn VÌ SAO ra mức đạt — nối được 46 đơn với 50 %', () => {
-    const d = lay(46);
-    expect(d.soLieu).toContain('46 đơn');
-    expect(d.soLieu).toContain('trừ 50 % tiêu chí');
-    expect(d.soLieu).toContain('chạm trần');
-  });
-
-  it('0 đơn lỗi thì đạt tuyệt đối, và câu mô tả KHÔNG lặp lại chính nó', () => {
-    expect(lay(0).mucDat).toBe(1);
-    expect(lay(0).soLieu).toBe('Không có đơn âm cước do lỗi trách nhiệm');
-  });
-
-  it('chưa chạm trần thì nói đúng phần trăm bị trừ, không nói "chạm trần"', () => {
-    // 3 đơn × 10 % = trừ 30 %, mức đạt còn 70 %.
-    expect(lay(3).mucDat).toBeCloseTo(0.7, 10);
-    expect(lay(3).soLieu).toContain('trừ 30 % tiêu chí');
-    expect(lay(3).soLieu).not.toContain('chạm trần');
+  it('chưa đo được tỉ lệ thì nói rõ, không coi là 0 %', () => {
+    expect(lay(null).soLieu).toContain('Chưa đo được');
   });
 });
 
 describe('2A sản lượng: "không chấm" KHÁC "chưa chấm được" (CEO 30/09/2026)', () => {
   const b = bangDiemKpi({
-    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 0.9, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99,
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeBienCuocRoRi: 0, tyLeSla: 0.9, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99,
     soDonShipHo: 46, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: true, khacPhucGoc: true,
     daChamP3B: true, thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
   }, '2026-09-01');

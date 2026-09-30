@@ -13,7 +13,7 @@ import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/sh
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { SoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import type { kpiLogisticsThang } from '@/db/schema';
-import { bangDiemKpi, type DongDiem } from '@/features/kpi-logistics/quy-che';
+import { bangDiemKpi, type DongDiem, type BangDiemKpi } from '@/features/kpi-logistics/quy-che';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -31,12 +31,14 @@ function ketQua(m: number | null, khongCham = false): { chu: string; mau: string
  * Tab KPI Logistics — bảng điểm KPI của nhân sự vận hành theo Quy chế bản 1.2. Chỉ KẾT QUẢ, không quy ra tiền
  * (CEO 10/09/2026: tiền để HR tính). Dữ liệu do trang cha nạp sẵn theo kỳ.
  */
-export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
+export function KpiTab({ ky, tu, den, auto, nhap, chot, bangDiemDaChot, soChoDuyet, nop12, suaDuoc, ganLyDoDuoc, ghiSuCoDuoc }: {
   ky: string; tu: string; den: string;
   auto: SoLieuTuDong;
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
   /** Kỳ đã chốt chưa — `auto`/`nhap` khi đó là ẢNH CHỤP, không phải số sống. */
   chot: { chotAt: string; ghiChu: string | null } | null;
+  /** Bảng điểm ĐÃ ĐÓNG BĂNG lúc chốt; thiếu = ảnh chụp đời cũ, phải tính lại bằng công thức hiện tại. */
+  bangDiemDaChot: BangDiemKpi | null;
   /** Số liệu cho dải "Chờ quản lý duyệt" và Khu vực quản lý; null khi người xem không phải quản lý. */
   soChoDuyet: SoChoDuyet | null;
   /** Trạng thái nộp lý do giao chậm của kỳ (tiêu chí 1.2). */
@@ -57,10 +59,14 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
    * `thuHoiKeToanVnd` chỉ ghi đè SỐ TIỀN 3C, không đổi được chất lượng đòi nợ. */
   const tyLeThuHoi = auto.tyLeThuHoi;
 
-  const diem = bangDiemKpi({
+  /* Kỳ ĐÃ CHỐT thì hiện đúng bảng điểm đã đóng băng, KHÔNG tính lại — nếu tính lại thì mỗi lần
+   * đổi công thức là điểm của kỳ đã chốt tự đổi theo, âm thầm (CEO 30/09/2026). */
+  const diem = bangDiemDaChot ?? bangDiemKpi({
     // Mặc định lấy số hệ thống ĐÃ chốt là lỗi nội bộ; ô nhập tay chỉ để quản lý ghi đè.
     soDonAmCuocLoi: nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo,
     soDonAmCuocChuaXet: auto.soDonAmCuocChuaXet,
+    // 1.1 nay chấm bằng TỈ LỆ TIỀN rò rỉ, không còn đếm số đơn (CEO 30/09/2026).
+    tyLeBienCuocRoRi: auto.bienCuoc.tyLeTien,
     tyLeSla: sla.tyLe,
     tyLeLoiChungTu: auto.tyLeLoiChungTu,
     tyLeSizeThung: nhap?.tyLeSizeThung == null ? auto.sizeThung.tyLeDung : Number(nhap.tyLeSizeThung),

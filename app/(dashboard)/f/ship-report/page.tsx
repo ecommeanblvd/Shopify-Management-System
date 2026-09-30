@@ -165,6 +165,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
             </div>
             <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
               chot={chotKpi ? { chotAt: chotKpi.chotAt, ghiChu: chotKpi.ghiChu } : null}
+              bangDiemDaChot={chotKpi?.anhChup.bangDiem ?? null}
               soChoDuyet={soChoDuyet}
               nop12={nop12}
               ganLyDoDuoc={laAdmin || hasPermission(role, 'manage_shipping_invoices')}

@@ -45,6 +45,7 @@ async function man(ky: string, tu: string, den: string, laAdmin: boolean) {
         auto={chot ? chuanHoaAuto((chot.soLieu as { auto: SoLieuTuDong }).auto) : auto}
         nhap={nhap ?? null}
         chot={chot ? { chotAt: chot.chotAt.toISOString(), ghiChu: chot.ghiChu } : null}
+        bangDiemDaChot={(chot?.soLieu as { bangDiem?: Parameters<typeof KpiTab>[0]['bangDiemDaChot'] })?.bangDiem ?? null}
         soChoDuyet={soChoDuyet}
         nop12={{
           trangThai: (np?.trangThai as 'dang_lam' | 'cho_duyet' | 'da_duyet') ?? 'dang_lam',
