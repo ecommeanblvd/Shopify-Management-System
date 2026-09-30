@@ -167,8 +167,10 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, bangDiemDaChot, soChoDuy
           Quản lý KHÔNG thấy dải này: của họ nằm trong Khu vực quản lý cuối trang, để hai vai
           không bấm nhầm việc của nhau. */}
       {!suaDuoc && ganLyDoDuoc && nop12 && (
+        /* KHÔNG truyền `sauKhiLuu`: KpiTab là SERVER component, và truyền một hàm sang client
+           component là lỗi RSC làm vỡ cả trang. DaiNop12 tự `router.refresh()` khi thiếu prop này. */
         <DaiNop12 ky={ky} trangThai={nop12.trangThai} nopAt={nop12.nopAt} duyetAt={nop12.duyetAt}
-          soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc laQuanLy={false} sauKhiLuu={() => {}} />
+          soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc laQuanLy={false} />
       )}
 
       {/* Tiền đã đòi được nhưng thiếu chứng từ thì KHÔNG vào 3C của tháng nào — trước đây nó

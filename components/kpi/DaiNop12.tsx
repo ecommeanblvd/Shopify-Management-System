@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { nopKy12, duyetKy12, moLaiKy12 } from '@/features/kpi-logistics/nop-1-2-actions';
 import { NHAN_TRANG_THAI, moTaTrangThai, nopDuoc, duyetDuocKy, type TrangThaiNop } from '@/features/kpi-logistics/nop-1-2';
 
@@ -21,15 +22,25 @@ export function DaiNop12({ ky, trangThai, nopAt, duyetAt, soDongDangTraLai, ganL
   soDongDangTraLai: number;
   ganLyDoDuoc: boolean;
   laQuanLy: boolean;
-  sauKhiLuu: () => void;
+  /**
+   * Việc làm sau khi lưu xong. BỎ TRỐNG thì tự `router.refresh()`.
+   *
+   * Phải là TUỲ CHỌN: dải này còn được dựng từ `KpiTab` — một SERVER component — và truyền một
+   * hàm từ server sang client component là lỗi RSC làm VỠ CẢ TRANG (500). Một prop bắt buộc kiểu
+   * hàm là cái bẫy mời người gọi viết `sauKhiLuu={() => {}}` cho đủ kiểu, và `tsc` sẽ nói OK.
+   */
+  sauKhiLuu?: () => void;
 }) {
   const [loi, setLoi] = useState<string | null>(null);
   const [dangChay, batDau] = useTransition();
+  const router = useRouter();
 
   const chay = (fn: () => Promise<unknown>) => {
     setLoi(null);
     batDau(async () => {
-      try { await fn(); sauKhiLuu(); }
+      // Mặc định là làm mới route: đó là việc ĐÚNG sau khi lưu, nên để nó làm mặc định thay vì
+      // bắt mọi chỗ gọi tự nhớ. Không có mặc định thì chỗ gọi nào quên là dải đứng im sau khi bấm.
+      try { await fn(); if (sauKhiLuu) sauKhiLuu(); else router.refresh(); }
       catch (e) { setLoi(e instanceof Error ? e.message : 'Không lưu được, thử lại'); }
     });
   };

@@ -11,6 +11,16 @@
  * KHÔNG thay được mắt người: nó đọc CHỮ, không đo bố cục, màu hay khoảng cách. Dùng để bắt lỗi
  * nội dung và lỗi phân vai, rồi vẫn nhờ người mở màn xem bố cục.
  *
+ * ĐIỂM MÙ PHẢI BIẾT (30/09/2026, trả giá thật để học):
+ * `renderToStaticMarkup` dựng CẢ CÂY như MỘT khối, nên nó KHÔNG kiểm ranh giới server/client của
+ * RSC. `KpiTab` (server) truyền `sauKhiLuu={() => {}}` sang `DaiNop12` (client) — lỗi làm VỠ CẢ
+ * TRANG bằng mã 500 cho người không phải quản lý — mà bộ soi này vẫn in "Không chỗ nào lệch".
+ * Em đã đem đúng dòng chữ đó ra làm bằng chứng nói với CEO là nhánh của Đức không sao.
+ *
+ * Nên: một lượt chạy XANH ở đây KHÔNG nói được là trang dựng được trên máy chủ thật. Lỗi ranh giới
+ * RSC do `components/rsc-ham-qua-bien.test.ts` canh; lỗi lúc chạy thì chỉ có nhật ký production
+ * (`railway logs` và `railway logs --http`) mới nói thật.
+ *
  * Chạy:  railway run --service Shopify-Management-System npx tsx scripts/soi-man-kpi.tsx
  * Xem toàn bộ chữ:  DAY_DU=1 railway run … npx tsx scripts/soi-man-kpi.tsx
  */
