@@ -4,6 +4,7 @@ import { upsertOrder } from '../sync/upsert-order';
 import { submitBackfillBulkQuery } from './submit-bulk-query';
 import { pollBulkOperation } from './poll-bulk-operation';
 import { streamBulkResult } from './stream-jsonl';
+import { denLucDapNhip } from './ket';
 
 const POLL_INTERVAL_MS = 30_000;
 const WATCHDOG_MS = 2 * 60 * 60 * 1000; // 2h
@@ -128,13 +129,24 @@ export async function runBackfillForStore(
     await bump({ backfillPhase: 'ingesting', backfillTotal: total ?? 0, backfillIngested: 0 });
 
     let ingested = 0;
+    // Nhịp đập theo THỜI GIAN, không theo batch. Trước nay chỉ đập ở cuối mỗi batch (~100 đơn),
+    // nên nhịp thưa hay dày phụ thuộc vào tốc độ ghi — đo thật ở MEAN BLVD 30/09/2026 là ~5
+    // phút/nhịp. `conSong` lại dùng nhịp để phán sống/chết với hạn 30 phút, nên một store chậm
+    // hơn 6 lần sẽ bị kết luận oan là xác chết và bị cho chạy lượt thứ hai song song.
+    let nhipCuoiMs = Date.now();
     await streamBulkResult(url, async (orders) => {
       for (const o of orders) {
         await upsertOrder(storeId, o, 'backfill');
         ingested++;
+        if (denLucDapNhip(nhipCuoiMs)) {
+          await bump({ backfillIngested: ingested });
+          nhipCuoiMs = Date.now();
+        }
       }
-      // One write per batch (~100 orders), not per order — cheap heartbeat.
+      // Vẫn đập ở cuối batch: số hiện trên màn phải đúng ngay khi một batch xong, chứ không
+      // đợi tới nhịp thời gian kế tiếp.
       await bump({ backfillIngested: ingested });
+      nhipCuoiMs = Date.now();
     });
 
     await bump({

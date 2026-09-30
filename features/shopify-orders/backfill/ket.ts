@@ -7,8 +7,27 @@
  * hay 'failed' nên nối lại store cũng KHÔNG kích hoạt lại được. Việc chết mà cổng vào vẫn khoá.
  */
 
-/** Không nhúc nhích quá ngần này thì coi như đã chết. Một lượt nạp thật bump nhịp mỗi vài giây. */
+/**
+ * Không nhúc nhích quá ngần này thì coi như đã chết.
+ *
+ * Con số này chỉ đúng khi lượt nạp đập nhịp DÀY HƠN HẲN nó. Đo lượt thật của MEAN BLVD
+ * (30/09/2026): nhịp vốn chỉ đập MỘT LẦN mỗi batch ~100 đơn, và ở ~21 đơn/phút thì một batch
+ * mất ~5 phút — dư có 6 lần. Một store chậm hơn 6 lần sẽ bị kết luận OAN là xác chết, rồi
+ * `chayLaiDuoc` cho chạy lượt thứ hai song song. Nên nhịp đã chuyển sang đập theo THỜI GIAN
+ * (`NHIP_DAP_GIAY`), và test canh tỉ lệ giữa hai con số này.
+ */
 export const HAN_NHIP_PHUT = 30;
+
+/**
+ * Cách nhau bao nhiêu giây thì đập nhịp một lần, tính TRONG lúc ghi từng đơn.
+ *
+ * Phải theo thời gian chứ không theo batch: batch là đơn vị của nguồn dữ liệu, không nói gì về
+ * việc ghi mất bao lâu. Một batch to hoặc một CSDL chậm là nhịp thưa ra, mà `conSong` thì đọc
+ * nhịp để phán sống/chết — nên đơn vị của hai bên phải là cùng một thứ: thời gian.
+ *
+ * Trần trên của phí: một lượt ghi CSDL mỗi 30 giây. Không đáng kể so với hàng nghìn lượt upsert.
+ */
+export const NHIP_DAP_GIAY = 30;
 
 /**
  * Lượt nạp có đang thật sự sống không.
@@ -37,4 +56,15 @@ export function chayLaiDuoc(
 ): boolean {
   if (trangThai === 'done') return false;
   return !conSong(trangThai, nhipCuoi, batDau, bayGio);
+}
+
+/**
+ * Đã tới lúc đập nhịp chưa.
+ *
+ * Tách ra thành hàm thuần để test được cái RÀNG BUỘC giữa hai hạn (nhịp phải dày hơn hạn chết
+ * ít nhất 10 lần) — thứ mà đọc mã vòng lặp thì không thấy, và sửa một trong hai con số thì im
+ * lặng làm hỏng con số kia.
+ */
+export function denLucDapNhip(lanCuoiMs: number, bayGioMs: number = Date.now()): boolean {
+  return bayGioMs - lanCuoiMs >= NHIP_DAP_GIAY * 1000;
 }
