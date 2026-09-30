@@ -21,14 +21,14 @@ describe('laKyHopLe / laAnhChupHopLe', () => {
 
 describe('chuanHoaAuto — ảnh chụp cũ thiếu trường thêm sau ngày chốt (CEO 30/09/2026)', () => {
   /* Lỗi thật: `bienCuoc` thêm vào SAU khi kỳ tháng 8 đã chốt, nên ảnh chụp không có nó và màn
-     đọc `auto.bienCuoc.tonChuaPhanDinh` VỠ TRẮNG. 4.184 test không bắt được vì test nào cũng
+     đọc `auto.bienCuoc.tyLeTien` VỠ TRẮNG. 4.184 test không bắt được vì test nào cũng
      dựng đối tượng đầy đủ — chỉ ảnh chụp THẬT mới thiếu. */
   const anhCu = { tu: '2026-08-01', den: '2026-08-31', soDonAmCuoc: 58 } as unknown as Parameters<typeof chuanHoaAuto>[0];
 
   it('lấp trường thiếu thay vì để undefined làm vỡ màn', () => {
     const r = chuanHoaAuto(anhCu);
     expect(r.bienCuoc).toBeDefined();
-    expect(r.bienCuoc.tonChuaPhanDinh).toBe(0);
+    expect(r.bienCuoc.tongCuocVnd).toBe(0);
     expect(r.chungTuThieu.danhSach).toEqual([]);
   });
 
@@ -38,9 +38,9 @@ describe('chuanHoaAuto — ảnh chụp cũ thiếu trường thêm sau ngày ch
   });
 
   it('KHÔNG đè lên số đã có trong ảnh chụp', () => {
-    const coSan = { ...anhCu, bienCuoc: { tongCuocVnd: 9, amDoLoiNoiBoVnd: 3, tyLeTien: 0.33, tonChuaPhanDinh: 7 } } as Parameters<typeof chuanHoaAuto>[0];
+    const coSan = { ...anhCu, bienCuoc: { tongCuocVnd: 9, amDoLoiNoiBoVnd: 3, tyLeTien: 0.33 } } as Parameters<typeof chuanHoaAuto>[0];
     expect(chuanHoaAuto(coSan).bienCuoc.tyLeTien).toBe(0.33);
-    expect(chuanHoaAuto(coSan).bienCuoc.tonChuaPhanDinh).toBe(7);
+    expect(chuanHoaAuto(coSan).bienCuoc.tongCuocVnd).toBe(9);
   });
 
   it('giữ nguyên mọi trường cũ, không làm mất gì', () => {
@@ -72,7 +72,7 @@ describe('vaChungTuThieuSong — đóng băng ĐIỂM, không đóng băng VIỆ
   const anh = {
     tu: '2026-08-01', den: '2026-08-31', soDonAmCuoc: 58, thuHoiVnd: 50676806,
     chungTuThieu: { soTo: 16, tienVnd: 74910023, danhSach: ['K26TFA-35641'] },
-    bienCuoc: { tongCuocVnd: 9, amDoLoiNoiBoVnd: 3, tyLeTien: 0.0225, tonChuaPhanDinh: 0 },
+    bienCuoc: { tongCuocVnd: 9, amDoLoiNoiBoVnd: 3, tyLeTien: 0.0225 },
   } as unknown as Parameters<typeof vaChungTuThieuSong>[0];
 
   it('thay bằng số đo hiện tại, nên việc đã làm xong thì cảnh báo tắt', () => {

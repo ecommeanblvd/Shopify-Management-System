@@ -66,32 +66,34 @@ describe('duDieuKienChot', () => {
   });
 });
 
-describe('tồn đọng phân định toàn thời gian (CEO 30/09/2026)', () => {
+describe('KỲ chỉ tính đơn theo rule CỦA KỲ — bỏ mục tồn đọng toàn thời gian (CEO 30/09/2026)', () => {
   const nen: DauVaoChoDuyet = {
     ky: '2026-09', kienChoDuyet: 0, monCanChoDuyet: 0,
     daChamP3B: true, daChot: false, p1ChuaCham: 0, donChuaPhanDinh: 0,
   };
 
-  it('tồn NGOÀI kỳ đang xem thì nhắc riêng — kỳ cũ cũng phải dọn', () => {
-    const r = viecChoDuyet({ ...nen, donChuaPhanDinh: 27, tonChuaPhanDinh: 281 });
-    expect(r.map((x) => x.ma)).toContain('ton-phan-dinh');
-    expect(r.find((x) => x.ma === 'ton-phan-dinh')!.nhan).toContain('281 đơn');
-  });
+  /* CEO: "các đơn âm cước từ xa xưa thì sẽ không đếm vào trong kỳ, kỳ chỉ tính các đơn theo rule
+     của kỳ đó thôi". Dải này là việc PHẢI LÀM ĐỂ CHỐT KỲ NÀY; nhét tồn kho toàn thời gian vào đó
+     biến nó thành danh sách không bao giờ hết, và dải không bao giờ hết thì người đọc thôi đọc. */
 
-  it('tồn CHỈ nằm trong kỳ đang xem thì KHÔNG nhắc hai lần', () => {
-    // 27 đơn treo và tất cả thuộc kỳ này → dòng "27 đơn chưa phân định" đã nói rồi.
-    const r = viecChoDuyet({ ...nen, donChuaPhanDinh: 27, tonChuaPhanDinh: 27 });
-    expect(r.map((x) => x.ma)).not.toContain('ton-phan-dinh');
-    expect(r.map((x) => x.ma)).toContain('phan-dinh-1-1');
-  });
-
-  it('không có tồn thì không nhắc', () => {
-    expect(viecChoDuyet({ ...nen, tonChuaPhanDinh: 0 }).map((x) => x.ma)).not.toContain('ton-phan-dinh');
+  it('KHÔNG còn mục tồn đọng toàn thời gian, kể cả kỳ đã chốt', () => {
     expect(viecChoDuyet(nen).map((x) => x.ma)).not.toContain('ton-phan-dinh');
+    expect(viecChoDuyet({ ...nen, daChot: true }).map((x) => x.ma)).not.toContain('ton-phan-dinh');
   });
 
-  it('kỳ ĐÃ CHỐT vẫn nhắc tồn — nó là việc của người, không thuộc kỳ nào', () => {
-    const r = viecChoDuyet({ ...nen, daChot: true, donChuaPhanDinh: 0, tonChuaPhanDinh: 281 });
-    expect(r.map((x) => x.ma)).toEqual(['ton-phan-dinh']);
+  it('vẫn nhắc đơn treo CỦA KỲ — đó mới là thứ chặn 1.1 và chặn chốt kỳ', () => {
+    const r = viecChoDuyet({ ...nen, donChuaPhanDinh: 27 });
+    expect(r.map((x) => x.ma)).toContain('phan-dinh-1-1');
+    expect(r.find((x) => x.ma === 'phan-dinh-1-1')!.nhan).toContain('27 đơn');
+  });
+
+  it('bỏ mục đó KHÔNG mở lỏng cửa chốt kỳ — cửa vốn chỉ xét số CỦA KỲ', () => {
+    // duDieuKienChot chưa bao giờ đọc con số toàn thời gian; test này canh để không ai thêm vào.
+    expect(duDieuKienChot({ p1ChuaCham: 0, donChuaPhanDinh: 0, daChot: false })).toBe(true);
+    expect(duDieuKienChot({ p1ChuaCham: 0, donChuaPhanDinh: 1, daChot: false })).toBe(false);
+  });
+
+  it('kỳ đã chốt và sạch việc thì dải TRỐNG, không còn gì để giục', () => {
+    expect(viecChoDuyet({ ...nen, daChot: true, donChuaPhanDinh: 0 })).toEqual([]);
   });
 });

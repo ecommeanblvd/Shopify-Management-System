@@ -62,7 +62,7 @@ export function laAnhChupHopLe(v: unknown): v is AnhChupKpi {
  */
 export function chuanHoaAuto(auto: SoLieuTuDong): SoLieuTuDong {
   const mac: Partial<SoLieuTuDong> = {
-    bienCuoc: { tongCuocVnd: 0, amDoLoiNoiBoVnd: 0, tyLeTien: null, tonChuaPhanDinh: 0 },
+    bienCuoc: { tongCuocVnd: 0, amDoLoiNoiBoVnd: 0, tyLeTien: null },
     chungTuThieu: { soTo: 0, tienVnd: 0, danhSach: [] },
   };
   // Ảnh chụp cũ THIẾU trường nên nó không thật sự là `SoLieuTuDong` cho tới khi lấp xong —

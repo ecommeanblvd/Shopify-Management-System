@@ -42,7 +42,6 @@ export interface DauVaoChoDuyet {
    * Đơn âm cước chưa phân định TOÀN THỜI GIAN. Khác `donChuaPhanDinh` ở chỗ nó gồm cả các kỳ cũ —
    * và chừng nào còn tồn thì chưa đặt được bậc cho cách chấm 1.1 mới (CEO 30/09/2026).
    */
-  tonChuaPhanDinh?: number;
 }
 
 /**
@@ -88,16 +87,15 @@ export function viecChoDuyet(v: DauVaoChoDuyet): ViecChoDuyet[] {
     });
   }
 
-  const tonNgoaiKy = (v.tonChuaPhanDinh ?? 0) - (v.daChot ? 0 : v.donChuaPhanDinh);
-  if (tonNgoaiKy > 0) {
-    ra.push({
-      ma: 'ton-phan-dinh',
-      nhan: `${v.tonChuaPhanDinh} đơn âm cước chưa phân định trên toàn bộ lịch sử`,
-      huong: 'Chừng nào còn tồn thì chưa đủ căn cứ đặt bậc cho cách chấm 1.1 mới (đo bằng tỉ lệ tiền). Chọn kỳ cũ ở đầu trang rồi mở tiêu chí 1.1',
-      href: null,
-    });
-  }
-
+  /* BỎ mục "tồn đọng toàn thời gian" (CEO 30/09/2026): "kỳ chỉ tính các đơn theo rule của kỳ
+   * đó thôi". Đơn âm cước từ các kỳ xa không thuộc kỳ đang xem, nên nhắc chúng ở dải việc CỦA KỲ
+   * là đặt sai chỗ — nó biến một dải "việc phải làm để chốt kỳ này" thành một danh sách tồn kho
+   * không bao giờ hết, và dải nào không bao giờ hết thì người đọc thôi đọc.
+   *
+   * Lý do gốc của mục này cũng đã hết hiệu lực: nó viết ra khi bậc chấm 1.1 CHƯA chốt ("dọn hết
+   * rồi mới đủ căn cứ đặt bậc"). CEO đã chốt bậc ở 657356f9 và nó đang áp, nên câu đó vừa sai
+   * vừa giục một việc không chặn gì. `duDieuKienChot` chưa bao giờ xét con số này — nó chỉ xét
+   * `donChuaPhanDinh` CỦA KỲ — nên bỏ mục này không mở lỏng cửa chốt kỳ nào. */
   if (v.monCanChoDuyet > 0) {
     ra.push({
       ma: 'duyet-can',
