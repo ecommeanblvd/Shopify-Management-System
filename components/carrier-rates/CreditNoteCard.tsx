@@ -1,10 +1,17 @@
+import type { KienNoiDuoc } from '@/features/shipments/credit-note-tracking';
 import { Card, CardContent } from '@/components/ui/card';
 import { CreditNoteUpload } from './CreditNoteUpload';
 import { CreditNoteDetailDialog } from './CreditNoteDetailDialog';
 
 export interface CreditNoteRow {
-  id: string; soHoaDon: string; kyHieu: string; ngay: string; tongCong: number; soDong: number; tenFile: string | null;
+  id: string; soHoaDon: string; kyHieu: string; ngay: string; tongCong: number; tenFile: string | null;
   loai: 'credit' | 'debit';
+  /** Kiện nối được từ mã vận đơn trong nội dung chứng từ. */
+  kien: KienNoiDuoc[];
+  /** Mã bóc được nhưng không kiện nào mang mã đó. */
+  maLa: string[];
+  /** Vì sao không nối được kiện nào — null khi đã nối được. */
+  vuongMac: string | null;
 }
 
 export interface CreditNoteThang { thang: string; tong: number; n: number; tongDebit: number; nDebit: number }

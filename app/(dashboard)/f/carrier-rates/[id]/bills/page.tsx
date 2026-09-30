@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
+import { kienCuaChungTu } from '@/features/shipments/credit-note-kien';
 import { CreditNoteCard } from '@/components/carrier-rates/CreditNoteCard';
 import { notFound, redirect } from 'next/navigation';
 import { headers } from 'next/headers';
@@ -55,12 +56,19 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
   const [bills, payments, allLines] = await Promise.all([listBills(id), listPaymentsForAccount(id), listAllBillLines(id)]);
 
   // Hoá đơn điều chỉnh (credit / billing note) — nhân sự logistics tải thẳng email .msg vào đây.
-  const { rows: cnRows } = await db.execute<{ id: string; so: string; ky: string; ngay: string; tong: string; n: string; ten: string | null; loai: string }>(sql`
+  const { rows: cnRows } = await db.execute<{ id: string; so: string; ky: string; ngay: string; tong: string; nd: string | null; ma_tc: unknown; ten: string | null; loai: string }>(sql`
     SELECT c.id, c.so_hoa_don AS so, c.ky_hieu AS ky, c.ngay::text AS ngay, c.tong_cong::text AS tong, c.loai,
-           (SELECT COUNT(*) FROM credit_note_lines l WHERE l.credit_note_id = c.id)::text AS n, c.ten_file AS ten
+           c.noi_dung AS nd, c.ma_tham_chieu AS ma_tc, c.ten_file AS ten
       FROM credit_notes c ORDER BY c.ngay DESC, c.so_hoa_don DESC LIMIT 30;`);
+  // Nối chứng từ với kiện bằng mã vận đơn bóc từ nội dung — `credit_note_lines` rỗng nên đếm
+  // dòng ở đó chỉ ra "—" mãi mãi (CEO 30/09/2026).
+  const noiKien = await kienCuaChungTu(cnRows.map((r) => ({ id: r.id, noiDung: r.nd, maThamChieu: r.ma_tc })));
+  const theoId = new Map(noiKien.map((k) => [k.creditNoteId, k]));
   const creditNotes = cnRows.map((r) => ({
-    id: r.id, soHoaDon: r.so, kyHieu: r.ky, ngay: r.ngay, tongCong: Number(r.tong), soDong: Number(r.n), tenFile: r.ten,
+    id: r.id, soHoaDon: r.so, kyHieu: r.ky, ngay: r.ngay, tongCong: Number(r.tong), tenFile: r.ten,
+    kien: theoId.get(r.id)?.kien ?? [],
+    maLa: theoId.get(r.id)?.maLa ?? [],
+    vuongMac: theoId.get(r.id)?.vuongMac ?? null,
     loai: r.loai === 'debit' ? ('debit' as const) : ('credit' as const),
   }));
   const { rows: cnThang } = await db.execute<{ thang: string; tong: string; n: string; tong_debit: string; n_debit: string }>(sql`

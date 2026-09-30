@@ -84,7 +84,7 @@ export function CreditNoteDetailDialog({ rows, tongThang }: { rows: CreditNoteRo
                       <td className={`text-left text-xs ${mau}`}>{r.loai === 'credit' ? 'Credit note' : 'Billing note'}</td>
                       <td className="text-right">{r.ngay}</td>
                       <td className={`text-right font-medium ${mau}`}>{r.loai === 'credit' ? '+' : '−'}{tien(Math.abs(r.tongCong))}</td>
-                      <td className="text-right text-muted-foreground">{r.soDong || '—'}</td>
+                      <OKienLienQuan r={r} />
                       <td className="text-left text-[11px] text-muted-foreground">{r.tenFile ?? '—'}</td>
                     </tr>
                   );
@@ -95,5 +95,39 @@ export function CreditNoteDetailDialog({ rows, tongThang }: { rows: CreditNoteRo
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Ô "Kiện liên quan" của một chứng từ điều chỉnh.
+ *
+ * Cột này trước nay đếm `credit_note_lines` — bảng RỖNG HOÀN TOÀN nên nó hiện "—" cho mọi dòng và
+ * sẽ hiện "—" mãi mãi. Nay nối bằng mã vận đơn bóc từ nội dung chứng từ; khi không nối được thì
+ * NÓI RÕ vì sao, vì "hãng không ghi mã" khác hẳn "hệ thống chưa làm" (CEO 30/09/2026).
+ *
+ * Tách riêng để dựng được trong test mà không phải mở modal.
+ */
+export function OKienLienQuan({ r }: { r: Pick<CreditNoteRow, 'kien' | 'maLa' | 'vuongMac'> }) {
+  return (
+    <td className="text-right">
+      {r.kien.length > 0 ? (
+        <span className="inline-flex flex-col items-end gap-0.5">
+          {r.kien.map((k) => (
+            <span key={k.tracking} className="text-[11px]">
+              <span className="font-mono">{k.tracking}</span>
+              {k.maDon && <span className="ml-1 font-medium">{k.maDon}</span>}
+              {k.nguon === 'ship_ho' && <span className="ml-1 text-muted-foreground">ship hộ</span>}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="text-[11px] text-muted-foreground" title={r.vuongMac ?? undefined}>{r.vuongMac ?? '—'}</span>
+      )}
+      {r.maLa.length > 0 && (
+        <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+          mã không có trong hệ thống: {r.maLa.join(', ')}
+        </span>
+      )}
+    </td>
   );
 }

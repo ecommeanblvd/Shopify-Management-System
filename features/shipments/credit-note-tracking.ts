@@ -35,3 +35,53 @@ export function maVanDonTrongChungTu(noiDung: string | null | undefined): string
   }
   return [...ra];
 }
+
+/** Một kiện nối được với chứng từ điều chỉnh. */
+export interface KienNoiDuoc { tracking: string; maDon: string | null; nguon: 'shopify' | 'ship_ho' }
+
+export interface NoiChungTu {
+  /** Kiện tìm thấy trong hệ thống. */
+  kien: KienNoiDuoc[];
+  /** Mã bóc được từ nội dung nhưng KHÔNG có kiện nào mang mã đó. */
+  maLa: string[];
+  /** Vì sao chứng từ này không nối được kiện nào — để người đọc khỏi tưởng hệ thống hỏng. */
+  vuongMac: string | null;
+}
+
+/**
+ * Nối một chứng từ điều chỉnh với các kiện của nó (CEO 30/09/2026).
+ *
+ * Cột "Kiện liên quan" trước nay đếm `credit_note_lines` — bảng RỖNG HOÀN TOÀN, nên nó hiện "—"
+ * cho mọi dòng và sẽ hiện "—" mãi mãi. Một cột không bao giờ có giá trị thì không phải là cột,
+ * nó là chỗ trống có tiêu đề.
+ *
+ * Đo 13 chứng từ đang có (30/09/2026): 3 tờ FedEx bóc được mã vận đơn từ `noi_dung`, 2 trong số
+ * đó khớp kiện thật; 10 tờ DHL KHÔNG hề ghi mã vận đơn — chúng chỉ ghi số tài khoản, mã tham
+ * chiếu HANR và số hoá đơn gốc được điều chỉnh.
+ *
+ * Vì vậy hàm này trả về cả LÝ DO không nối được: "không nối được" vì hãng không ghi mã khác hẳn
+ * với "không nối được" vì hệ thống chưa làm.
+ */
+export function noiChungTuVoiKien(
+  noiDung: string | null | undefined,
+  maThamChieu: readonly string[] | null | undefined,
+  timKien: (ma: string) => KienNoiDuoc | null,
+): NoiChungTu {
+  const ma = maVanDonTrongChungTu(noiDung);
+  const kien: KienNoiDuoc[] = [];
+  const maLa: string[] = [];
+  for (const m of ma) {
+    const k = timKien(m);
+    if (k) kien.push(k); else maLa.push(m);
+  }
+  if (kien.length > 0) return { kien, maLa, vuongMac: null };
+  const soThamChieu = maThamChieu?.length ?? 0;
+  return {
+    kien, maLa,
+    vuongMac: ma.length > 0
+      ? 'Có mã vận đơn nhưng không kiện nào trong hệ thống mang mã đó'
+      : soThamChieu > 0
+        ? 'Chứng từ chỉ ghi mã tham chiếu của hãng, không ghi mã vận đơn'
+        : 'Nội dung chứng từ không có mã vận đơn nào',
+  };
+}
