@@ -29,13 +29,38 @@ export interface MucDat { tien: number; mucNhan: number; dienGiai: string }
  * động 134/84/44/58/31 theo tháng nên ngưỡng đếm tuyệt đối không thể công bằng.
  *
  * BẬC do CEO chốt: "lệch trên 2 % đã là không chấp nhận được rồi" → trên 2 % mất sạch tiêu chí.
- * Đo thật tháng 8 (kỳ duy nhất phân định xong): 12.809.741đ / 564.424.833đ = 2,3 % → 0 %.
+ * Đo thật tháng 8 (kỳ duy nhất phân định xong): 12.809.741đ / 564.424.833đ = 2,3 % → 0 %. Mẫu số
+ * là số ĐO LÚC ĐÓ; hoá đơn carrier về thêm nên tỉ lệ đóng băng trong ảnh chụp là 2,2536 % trên
+ * mẫu số 568.411.236đ. Chính chuyện trôi này là lý do phải chốt kỳ.
  */
 export const BAC_BIEN_CUOC: Array<{ toiDa: number; mucNhan: number }> = [
   { toiDa: 0.005, mucNhan: 1 },
   { toiDa: 0.010, mucNhan: 0.75 },
   { toiDa: 0.020, mucNhan: 0.5 },
 ];
+
+/**
+ * Mô tả bậc bằng chữ, SINH RA từ chính `BAC_BIEN_CUOC`.
+ *
+ * Vì sao phải sinh chứ không viết tay: câu này trước nay viết tay ở HAI nơi — cột "Ngưỡng" của
+ * tiêu chí 1.1 và ô tham chiếu trên màn. Đổi cách chấm hôm 30/09/2026 thì bốn chỗ chữ khác nhau
+ * nói sai sự thật cùng lúc ("CHƯA đặt bậc", "chưa dùng chấm điểm"…), và không cửa kiểm nào thấy
+ * vì chữ thì luôn hợp lệ. Sinh từ dữ liệu thì đổi bậc là chữ tự đổi theo.
+ */
+export function moTaBacBienCuoc(): string {
+  // Dấu thập phân kiểu Việt: bảng này người Việt đọc, và `0.5` cạnh `0,5` trong cùng một màn là
+  // hai kiểu viết cho một con số. Đơn vị đặt MỘT LẦN ở cuối khoảng ("0,5–1 %"), không lặp hai đầu.
+  const so = (v: number) => String(Math.round(v * 1000) / 10).replace('.', ',');
+  const phan: string[] = [];
+  let truoc = 0;
+  for (const b of BAC_BIEN_CUOC) {
+    const muc = b.mucNhan === 1 ? 'đủ' : `còn ${Math.round(b.mucNhan * 100)} %`;
+    phan.push(truoc === 0 ? `≤${so(b.toiDa)} % ${muc}` : `>${so(truoc)}–${so(b.toiDa)} % ${muc}`);
+    truoc = b.toiDa;
+  }
+  phan.push(`trên ${so(truoc)} % mất toàn bộ`);
+  return phan.join(' · ');
+}
 
 /** `tyLeTien` = tiền âm cước do lỗi nội bộ / tổng cước carrier của kỳ (0..1); null = chưa đo được. */
 export function diemBienCuoc(tyLeTien: number | null): MucDat {
@@ -310,7 +335,7 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
        *
        * Câu "phải phân định hết" chỉ thêm KHI CÒN đơn treo: tháng 8 đã phân định hết mà vẫn hiện
        * câu đó thì người đọc tưởng còn việc chưa xong. */
-      nguong: 'Đo bằng TIỀN rò rỉ / tổng cước: ≤0,5 % đủ · >0,5–1 % còn 75 % · >1–2 % còn 50 % · trên 2 % mất toàn bộ'
+      nguong: `Đo bằng TIỀN rò rỉ / tổng cước CỦA MEAN BLVD: ${moTaBacBienCuoc()}`
         + (v.soDonAmCuocChuaXet > 0 ? '. Còn đơn chưa phân định nên chưa chấm được.' : ''),
       mucDat: v.soDonAmCuocChuaXet > 0 ? null : bienCuoc.mucNhan,
     },

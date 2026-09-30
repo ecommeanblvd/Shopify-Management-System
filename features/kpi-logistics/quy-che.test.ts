@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   LUONG_CUNG, QUY_P1_TONG, TRONG_SO_P1, bangDiemKpi, diemBienCuoc, diemDonHoanHao, diemSizeThung, diemSla, heSoK,
-  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, diemSlaTheoKy, nguongDatKy, heSoChatLuongP2, type DauVaoKpi,
+  thuongShipHo, thuongTheoNac, thuongThuHoi, tinhBangLuong, diemSlaTheoKy, nguongDatKy, heSoChatLuongP2,
+  moTaBacBienCuoc, BAC_BIEN_CUOC, type DauVaoKpi,
 } from './quy-che';
 
 const KY_2026 = '2026-09-01'; // lộ trình khởi động: lỗi ≤35 % → ngưỡng đạt 65 %
@@ -305,5 +306,36 @@ describe('2A sản lượng: "không chấm" KHÁC "chưa chấm được" (CEO 
   it('2B vẫn chấm bình thường — chất lượng có ngưỡng', () => {
     expect(b.p2.find((d) => d.ma === '2B')!.khongCham).toBeUndefined();
     expect(b.p2.find((d) => d.ma === '2B')!.mucDat).toBe(1);
+  });
+});
+
+describe('moTaBacBienCuoc — chữ phải SINH RA từ bậc thật (CEO 30/09/2026)', () => {
+  /* Vì sao có test này: mô tả bậc trước nay viết TAY ở hai nơi (cột Ngưỡng của 1.1 và ô tham
+     chiếu trên màn). Đổi cách chấm hôm nay thì BỐN chỗ chữ nói sai sự thật cùng lúc — "CHƯA đặt
+     bậc", "chưa dùng chấm điểm" — và không cửa kiểm nào thấy, vì chữ thì luôn hợp lệ với tsc. */
+  it('nêu đủ mọi bậc trong BAC_BIEN_CUOC, theo đúng thứ tự', () => {
+    const s = moTaBacBienCuoc();
+    expect(s).toBe('≤0,5 % đủ · >0,5–1 % còn 75 % · >1–2 % còn 50 % · trên 2 % mất toàn bộ');
+  });
+
+  it('mọi mốc và mọi mức nhận đều xuất hiện — thêm bậc mới không thể bị bỏ sót', () => {
+    const s = moTaBacBienCuoc();
+    for (const b of BAC_BIEN_CUOC) {
+      expect(s).toContain(`${String(Math.round(b.toiDa * 1000) / 10).replace('.', ',')} %`);
+      if (b.mucNhan !== 1) expect(s).toContain(`còn ${Math.round(b.mucNhan * 100)} %`);
+    }
+  });
+
+  it('luôn kết bằng vế "mất toàn bộ" ở mốc CAO NHẤT — vượt bậc cuối là mất sạch', () => {
+    // Không có vế này thì người đọc tưởng trên 2 % vẫn còn được một phần nào.
+    const caoNhat = BAC_BIEN_CUOC[BAC_BIEN_CUOC.length - 1].toiDa;
+    expect(moTaBacBienCuoc()).toContain(`trên ${String(Math.round(caoNhat * 1000) / 10).replace('.', ',')} % mất toàn bộ`);
+  });
+
+  it('khớp với hàm CHẤM ĐIỂM, không chỉ khớp với chính nó', () => {
+    // Chữ nói "≤0,5 % đủ" thì diemBienCuoc(0.005) phải cho mức nhận 1, và 0.0051 thì không.
+    expect(diemBienCuoc(0.005).mucNhan).toBe(1);
+    expect(diemBienCuoc(0.0051).mucNhan).toBe(0.75);
+    expect(diemBienCuoc(0.021).mucNhan).toBe(0);
   });
 });

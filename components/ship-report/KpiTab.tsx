@@ -13,7 +13,7 @@ import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/sh
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import type { SoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import type { kpiLogisticsThang } from '@/db/schema';
-import { bangDiemKpi, type DongDiem, type BangDiemKpi } from '@/features/kpi-logistics/quy-che';
+import { bangDiemKpi, moTaBacBienCuoc, type DongDiem, type BangDiemKpi } from '@/features/kpi-logistics/quy-che';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -215,9 +215,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, bangDiemDaChot, soChoDuy
           <table className="w-full text-sm tabular-nums">
             <tbody>
               {[
-                ['Biên cước rò rỉ do lỗi nội bộ (tỉ lệ TIỀN — chưa dùng chấm điểm)',
+                ['Biên cước rò rỉ do lỗi nội bộ / tổng cước MEAN BLVD (tỉ lệ TIỀN)',
                   `${vnd(auto.bienCuoc.amDoLoiNoiBoVnd)} / ${vnd(auto.bienCuoc.tongCuocVnd)} = ${pct(auto.bienCuoc.tyLeTien)}`,
-                  'Tiêu chí 1.1 chấm bằng TỈ LỆ TIỀN này — CEO chốt và ÁP từ 30/09/2026. Bậc: ≤0,5 % đủ · >0,5–1 % còn 75 % · >1–2 % còn 50 % · trên 2 % mất toàn bộ. Vì sao đổi: cách đếm SỐ ĐƠN cũ trừ 10 %/đơn với trần 50 % nên chạm trần ở đơn thứ 5 — tháng 8 có 46 đơn, tức 5 đơn và 46 đơn chấm giống hệt nhau và tiêu chí thôi đo lường. Tên tiêu chí là "Bảo toàn biên cước" mà số đơn không nói gì về biên cước: một đơn âm 50.000đ đang tính bằng một đơn âm 2 triệu. Kỳ còn đơn chưa phân định thì 1.1 để TRỐNG chứ không chấm — chưa xét thì không chứng nhận sạch.'],
+                  `Tiêu chí 1.1 chấm bằng TỈ LỆ TIỀN này — CEO chốt và ÁP từ 30/09/2026. Bậc: ${moTaBacBienCuoc()}. PHẠM VI: chỉ cước của store MEAN BLVD, KHÔNG gồm store brand (Tinh Atelier, Mirer) và KHÔNG gồm ship hộ — nên tổng cước ở đây THẤP HƠN Báo cáo ship, đó là đúng chứ không lệch (CEO chốt 12/09/2026: 1.1 so cước hãng với cước KHÁCH trả ở checkout, mà đơn brand không có checkout của mình). Vì sao đổi: cách đếm SỐ ĐƠN cũ trừ 10 %/đơn với trần 50 % nên chạm trần ở đơn thứ 5 — tháng 8 có 46 đơn, tức 5 đơn và 46 đơn chấm giống hệt nhau và tiêu chí thôi đo lường. Tên tiêu chí là "Bảo toàn biên cước" mà số đơn không nói gì về biên cước: một đơn âm 50.000đ đang tính bằng một đơn âm 2 triệu. Kỳ còn đơn chưa phân định thì 1.1 để TRỐNG chứ không chấm — chưa xét thì không chứng nhận sạch.`],
                 ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, `Cước carrier thực trả vượt cước thu của khách. Con số này CHƯA trừ KPI: tiêu chí 1.1 chỉ đếm đơn đã được quản lý chốt là LỖI NỘI BỘ, hiện là ${nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo} đơn. Bấm tiêu chí 1.1 ở report chi tiết để xem từng đơn và trạng thái phân định. Số này đã TRỪ ${vnd(auto.thuHoiTruVaoCuocVnd)} carrier trả lại bằng credit note, nhờ đó ${auto.soDonHetAmNhoThuHoi} đơn hết âm và rời danh sách. Trong kỳ này đối soát đã chốt ${auto.soDonAmCuocLoiNoiBo} đơn là lỗi nội bộ, còn ${auto.soDonAmCuocChuaXet} đơn chưa ai xét.`],
                 ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, `Chấm theo bảng SOP cam kết từng nước và từng hãng. Đã loại ${auto.slaLoaiTru} kiện chậm vì lý do ngoài tầm kiểm soát (Quy chế mục VII).`],
                 ['Đóng đúng size thùng', `${auto.sizeThung.dung + auto.sizeThung.nheHon}/${auto.sizeThung.n} = ${pct(auto.sizeThung.tyLeDung)}`, `Đo bằng lệch giữa cân tính cước của mình và cân carrier charge: lệch từ 0,5 kg là chọn sai thùng (thùng chật, phồng ra). Kỳ này ${auto.sizeThung.saiThung} kiện sai, dôi ${auto.sizeThung.kgDoiRa} kg phải trả thêm.`],
