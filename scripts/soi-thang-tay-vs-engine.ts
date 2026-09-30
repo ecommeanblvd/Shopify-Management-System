@@ -36,6 +36,8 @@ interface Bac { min: number; max: number; gia: number; tien: string }
 
 async function main() {
   const ten = process.argv[2] ?? 'tinhatelier';
+  const TEN_RATE = process.argv[3] ?? 'Express Shipping';
+  const MUC = process.argv[4] ?? 'express';
   const s = (await db.execute<Record<string, unknown>>(sql`SELECT id, shop_domain, api_version FROM stores WHERE name=${ten};`)).rows[0];
   const r = await graphqlCall({ shopDomain: s.shop_domain as string, apiVersion: s.api_version as string,
     token: await getStoreToken(s.id as string), query: Q });
@@ -47,7 +49,7 @@ async function main() {
   }).from(schema.carrierAccounts).innerJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId)));
 
   const snapTheoNuoc = new Map<string, CheckoutRateCarrier[]>();
-  async function giaEngine(nuoc: string, kg: number): Promise<{ gia: number; tien: string } | null> {
+  async function giaEngine(nuoc: string, kg: number, MUC = process.argv[4] ?? 'express'): Promise<{ gia: number; tien: string } | null> {
     if (!snapTheoNuoc.has(nuoc)) {
       const cs: CheckoutRateCarrier[] = [];
       for (const a of accts) {
@@ -57,7 +59,7 @@ async function main() {
       snapTheoNuoc.set(nuoc, cs);
     }
     const rates = computeCheckoutRates({ country: nuoc, weightKg: kg, carriers: snapTheoNuoc.get(nuoc)! });
-    const ex = rates.find((x) => x.service_code === 'express');
+    const ex = rates.find((x) => x.service_code === MUC);
     return ex ? { gia: Number(ex.total_price) / 100, tien: ex.currency } : null;
   }
 
@@ -74,7 +76,7 @@ async function main() {
         const bac: Bac[] = [];
         for (const m of z.node.methodDefinitions.edges) {
           const n = m.node;
-          if (!n.active || !n.rateProvider?.price) continue;
+          if (!n.active || !n.rateProvider?.price || n.name !== TEN_RATE) continue;
           let lo = 0, hi = Infinity;
           for (const c of n.methodConditions ?? []) {
             const v = c.conditionCriteria?.value;

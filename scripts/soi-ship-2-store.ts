@@ -42,6 +42,7 @@ function bocVung(raw: unknown): Map<string, Vung> {
         for (const m of z?.node?.methodDefinitions?.edges ?? []) {
           const n = m?.node;
           if (!n?.name) continue;
+          if (n.active === false) continue; // rate đã tắt không ra checkout → không phải lệch
           const gia = n.rateProvider?.price ? `${n.rateProvider.price.amount} ${n.rateProvider.price.currencyCode}` : null;
           pt.push({ ten: String(n.name), gia });
         }

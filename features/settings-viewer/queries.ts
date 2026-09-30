@@ -9,6 +9,10 @@ import { settingsViewerManifest } from './manifest';
  * tức bản cũ chỉ cho thấy 40/72 vùng của MEAN BLVD và một nửa thang giá, mà không báo gì.
  * Cắt im lặng nguy hiểm hơn lỗi: người đọc tin là đã xem hết.
  *
+ * Có `active`: rate đã TẮT không ra checkout. Không lấy trường này thì màn hình và mọi phép so
+ * đều coi rate tắt như đang sống — bắt được 01/10/2026: tắt xong 1.829 rate mà phép so vẫn báo
+ * lệch y nguyên.
+ *
  * Mức 5/50/60 là mức ĐÃ DÒ trên store thật — to hơn nữa thì Shopify chặn vì vượt trần chi phí
  * truy vấn (25/100/100 ra cost 1322 > 1000). Nới thêm phải dò lại, không đoán.
  */
@@ -35,6 +39,7 @@ export const SHIPPING_QUERY = `query {
                   edges {
                     node {
                       name
+                      active
                       rateProvider {
                         __typename
                         ... on DeliveryRateDefinition {
