@@ -5,6 +5,7 @@ import { ShopHandleInput } from '@/components/stores/ShopHandleInput';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { laMaLoi, tenGon, THONG_DIEP_LOI } from '@/features/stores/ket-qua-noi';
+import { conSong } from '@/features/shopify-orders/backfill/ket';
 
 export default async function ConnectStorePage({ searchParams }: { searchParams: Promise<{ kq?: string; ma?: string; shop?: string }> }) {
   const sp = await searchParams;
@@ -20,6 +21,7 @@ export default async function ConnectStorePage({ searchParams }: { searchParams:
       dom: schema.stores.shopDomain, ten: schema.stores.name, tt: schema.stores.status,
       noiLuc: schema.stores.connectedAt, napTt: schema.shopifySyncState.backfillStatus,
       napXong: schema.shopifySyncState.backfillIngested, napTong: schema.shopifySyncState.backfillTotal,
+      napNhip: schema.shopifySyncState.backfillProgressAt, napBatDau: schema.shopifySyncState.backfillStartedAt,
     })
     .from(schema.stores)
     .leftJoin(schema.shopifySyncState, eq(schema.shopifySyncState.storeId, schema.stores.id))
@@ -82,8 +84,11 @@ export default async function ConnectStorePage({ searchParams }: { searchParams:
                   <td className={s.tt === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>{s.tt}</td>
                   <td className="text-muted-foreground">{s.noiLuc ? s.noiLuc.toISOString().slice(0, 10) : '—'}</td>
                   <td className="text-muted-foreground">
+                    {/* 'running' mà không nhúc nhích là XÁC CHẾT giữ chỗ, không phải đang chạy —
+                        phải nói đúng thế, nếu không người đọc cứ ngồi đợi một việc đã chết. */}
                     {s.napTt === 'done' ? `xong (${s.napXong ?? 0} đơn)`
-                      : s.napTt === 'running' ? `đang chạy ${s.napXong ?? 0}/${s.napTong ?? '?'}`
+                      : s.napTt === 'running' && conSong(s.napTt, s.napNhip, s.napBatDau) ? `đang chạy ${s.napXong ?? 0}/${s.napTong ?? '?'}`
+                      : s.napTt === 'running' ? <span className="text-amber-600 dark:text-amber-400">KẸT ở {s.napXong ?? 0}/{s.napTong ?? '?'} từ {s.napNhip ? s.napNhip.toISOString().slice(0, 10) : '—'} · nối lại để chạy tiếp</span>
                       : s.napTt === 'failed' ? 'HỎNG — nối lại để chạy lại'
                       : 'chưa chạy'}
                   </td>

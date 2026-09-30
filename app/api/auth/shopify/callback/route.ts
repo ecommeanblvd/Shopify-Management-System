@@ -9,6 +9,7 @@ import { getEnv } from '@/lib/env';
 import { registerOrderWebhooks } from '@/features/shopify-orders/webhook/register-subscriptions';
 import { runBackfillForStore } from '@/features/shopify-orders/backfill/run-backfill';
 import { maLoiTuLoi } from '@/features/stores/ket-qua-noi';
+import { chayLaiDuoc } from '@/features/shopify-orders/backfill/ket';
 
 // Matches the same regex used in the install route.
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
@@ -156,11 +157,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Fire-and-forget: the backfill polls Shopify for minutes-to-hours;
     // we just need the OAuth callback to return inside Shopify's timeout.
     const [syncState] = await db
-      .select({ status: schema.shopifySyncState.backfillStatus })
+      .select({
+        status: schema.shopifySyncState.backfillStatus,
+        nhip: schema.shopifySyncState.backfillProgressAt,
+        batDau: schema.shopifySyncState.backfillStartedAt,
+      })
       .from(schema.shopifySyncState)
       .where(eq(schema.shopifySyncState.storeId, storeId))
       .limit(1);
-    const shouldBackfill = !syncState || syncState.status === 'idle' || syncState.status === 'failed';
+    /* Trước nay chỉ chạy lại khi trạng thái là 'idle'/'failed'. Một lượt nạp CHẾT GIỮA CHỪNG
+     * (deploy giết tiến trình) nằm lại ở 'running' mãi mãi, nên cổng này khoá luôn — lượt nạp của
+     * MEAN BLVD kẹt như thế 2,5 tháng. Nay xét cả NHỊP: 'running' mà không nhúc nhích thì là xác
+     * chết giữ chỗ, phải cho chạy lại (CEO 30/09/2026 — xem `ket.ts`). */
+    const shouldBackfill = !syncState || chayLaiDuoc(syncState.status, syncState.nhip, syncState.batDau);
     if (shouldBackfill) {
       void runBackfillForStore(storeId).catch(async (backfillErr) => {
         // Status + error are also recorded inside runBackfillForStore; this
