@@ -12,7 +12,7 @@ import { displayMargin } from './pnl';
 import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile, donDaDongBang } from './reconcile-decision';
-import { khopOBangGia, layOBangGia } from './bill-base-check';
+import { khopOBangGia, layOBangGia, canTinhCuocTuO } from './bill-base-check';
 import { ghiDutyChoDon } from './duty';
 import { giaCuoiVaDelta } from './gia-cuoi-mmp';
 
@@ -184,6 +184,8 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // + fuel trên (base+phụ phí vận chuyển) + VAT bước cuối (gồm cả customs).
     let actualChargedVnd: number | null = null;
     let billedChargeableKg: number | null = null;
+    // Cân ĐÃ TÍNH TIỀN suy từ ô biểu giá mà cước net trên bill trùng (CEO 30/09).
+    let canTuBangGia: number | null = null;
     let sellBreakdown: Record<string, number> | null = null;
     if (billed.weightKg != null && billed.weightKg > 0) {
       // Ngày hiệu lực fuel/bảng giá: ship_date trên bill thắng; dòng bill thiếu
@@ -227,6 +229,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         const billNetFreight = s.base + s.discount;
         // Net bill KHÔNG trùng ô nào của bảng giá → dữ liệu lệch (rate card / dòng bill), báo ops.
         const kiemO = khopOBangGia(billNetFreight, await layOBangGia(est.internal.carrierAccountId, o.country, shipDateStr ?? null));
+        canTuBangGia = canTinhCuocTuO(kiemO, null);
         if (!kiemO.khop) summary.baseLech.push({ code: o.code, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
         const rc = reconciledBrandCharge({
           baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
@@ -272,9 +275,12 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     const margin = displayMargin(quotedCharged, actualChargedVnd, estCost, cuocBillVnd);
     const deltaVnd = estCost == null ? null : Math.round(cuocBillVnd - estCost);
 
-    // actualWeightKg = CÂN TÍNH CƯỚC carrier dùng (chargeable) — thứ mọi chỗ hiển
-    // thị gọi là "cân bill"; cân thực trên cân giữ ở breakdown (scaleWeightKg).
-    const kgToStore = billedChargeableKg ?? billed.weightKg;
+    // actualWeightKg = CÂN ĐÃ TÍNH TIỀN — mốc cân của ô biểu giá mà cước net trên bill trùng
+    // (CEO 30/09). Suy từ TIỀN nên không thể mâu thuẫn với số tiền cùng dòng. Cân FedEx CÂN
+    // ĐƯỢC giữ riêng ở breakdown (`scaleWeightKg`) — xem canTinhCuocTuO để biết vì sao hai
+    // con số đó khác nhau và vì sao không được lấy cân cân được làm cân tính cước.
+    // Không tra được ô → rơi về đường cũ (engine suy theo kích thước khai) rồi tới cân bill.
+    const kgToStore = canTuBangGia ?? billedChargeableKg ?? billed.weightKg;
 
     // Sai lệch cost thực vs dự tính → cần operator DUYỆT TAY (accept/claim) trước
     // khi đẩy giá; khớp → tự đẩy như cũ. Quyết định đã chốt → giữ (không ghi đè).

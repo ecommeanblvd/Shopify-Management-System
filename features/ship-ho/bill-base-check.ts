@@ -30,6 +30,26 @@ export function khopOBangGia(netVnd: number, cells: readonly OBangGia[]): KetQua
   return { khop: false, ganNhat, lechVnd: ganNhat == null ? null : Math.round(netVnd - ganNhat.vnd) };
 }
 
+/**
+ * THUẦN: CÂN ĐÃ TÍNH TIỀN của một dòng bill — lấy mốc cân của ô biểu giá mà cước net trùng.
+ *
+ * Vì sao phải suy ngược từ tiền (đo 30/09/2026, 42 đơn kalisa của 2 kỳ đã phát hành):
+ * cột cân trên bill FBO là cân FedEx CÂN ĐƯỢC, không phải cân tính cước — so với mốc cân của
+ * ô mà chính hoá đơn trùng thì bằng nhau 8, THẤP HƠN 34, cao hơn 0, và giá trị rơi lung tung
+ * (1,7 · 2,1 · 1,4) chứ không nằm trên bậc 0,5kg. FedEx làm tròn LÊN bậc để tính tiền rồi
+ * không in bậc đó ra.
+ *
+ * Đường cũ — đưa cân cân được vào engine rồi để nó tự suy lại theo KÍCH THƯỚC BRAND KHAI —
+ * sai khi brand khai thừa: #KLS1994 ra 4kg trong khi hoá đơn tính ô 3,5kg, #KLS2011 ra 2,5kg
+ * trong khi hoá đơn tính ô 1,5kg. Suy từ tiền thì cân KHÔNG THỂ mâu thuẫn với số tiền cùng dòng.
+ *
+ * Không tra được ô → trả `roiVe` (số đang có). KHÔNG bịa cân.
+ */
+export function canTinhCuocTuO(ket: KetQuaKhopO, roiVe: number | null): number | null {
+  if (ket.khop && ket.o != null && ket.o.kg > 0) return ket.o.kg;
+  return roiVe;
+}
+
 /** Mọi ô (mốc cân × loại gói) của rate card hiệu lực tại `ngay` (YYYY-MM-DD) cho các zone chứa nước đích. */
 export async function layOBangGia(carrierAccountId: string, countryCode: string, ngay: string | null): Promise<OBangGia[]> {
   const d = ngay ?? ngayKinhDoanh(new Date())!;
