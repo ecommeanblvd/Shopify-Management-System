@@ -472,3 +472,35 @@ describe('shipHoRowMarginVnd (bug: dòng chỉ có bên thu — vd Phí xử lý
     expect(shipHoRowMarginVnd(row, false)).toBe(row.quoteChargeVnd! - row.costVnd!);
   });
 });
+
+describe('duty: CỘT thắng bản sao trong breakdown (CEO 30/09/2026)', () => {
+  /* Hoá đơn duty về sau cước 3–6 tuần và `ghiDutyChoDon` ghi thẳng vào cột, độc lập với lượt
+     đối soát. Bản sao duty trong `actualBill.breakdown` chỉ dựng lại khi có đối soát chạy, nên
+     nó CHẬM HƠN. Đo thật 30/09: 2 đơn có cột 736.241 / 328.802 mà breakdown vẫn 0 — bảng khoản
+     phí hiện thiếu đúng khoản đó, và bảng kê gửi MMP cũng sẽ thiếu. */
+  const nen = {
+    breakdown: { carrierCost: 100_000, base: 100_000 },
+    carrierCostVnd: 100_000, chargedVnd: 120_000, markupPercent: 20,
+    actualBill: { breakdown: { base: 100_000, duty: 0, sell: { baseVnd: 120_000, dutyVnd: 0, chargedVnd: 120_000 } }, totalVnd: 100_000, weightKg: 1 },
+  };
+  const dongDuty = (s: ReturnType<typeof shipHoPriceStructure>) =>
+    s?.rows.find((r) => r.label.includes('duty'))?.chargeVnd ?? null;
+
+  it('có cột thì dùng cột, dù breakdown ghi 0', () => {
+    expect(dongDuty(shipHoPriceStructure({ ...nen, actualDutyVnd: 736_241 }))).toBe(736_241);
+  });
+
+  it('không truyền cột thì rơi về bản sao như cũ — không làm hỏng chỗ gọi cũ', () => {
+    // Bản sao = 0 nên dòng duty bị lọc khỏi bảng (bảng không hiện dòng rỗng) — đó là hành vi
+    // CŨ và phải giữ nguyên, vì mọi chỗ gọi hiện tại chưa truyền cột.
+    expect(dongDuty(shipHoPriceStructure(nen))).toBeNull();
+  });
+
+  it('cột = 0 vẫn là một KẾT LUẬN, ĐÈ được bản sao khác 0', () => {
+    // `undefined` = "không truyền"; `0` = "đã xét, không có duty". Hai thứ khác nhau, và cột 0
+    // phải thắng một bản sao cũ ghi 99.000 — nếu không thì duty đã được gỡ vẫn hiện mãi.
+    const coBanSao = { ...nen, actualBill: { ...nen.actualBill, breakdown: { ...nen.actualBill.breakdown, sell: { baseVnd: 120_000, dutyVnd: 99_000, chargedVnd: 120_000 } } } };
+    expect(dongDuty(shipHoPriceStructure({ ...coBanSao, actualDutyVnd: 0 }))).toBeNull();
+    expect(dongDuty(shipHoPriceStructure(coBanSao))).toBe(99_000);
+  });
+});

@@ -50,6 +50,7 @@ export default async function ShipHoReconcilePage({ searchParams }: { searchPara
     actualWeightKg: schema.shipHoOrders.actualWeightKg,
     carrierCostVnd: schema.shipHoOrders.carrierCostVnd,
     actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
+    actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
     deltaVnd: schema.shipHoOrders.deltaVnd,
     chargedVnd: schema.shipHoOrders.chargedVnd,
     actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
@@ -81,6 +82,9 @@ export default async function ShipHoReconcilePage({ searchParams }: { searchPara
             chargedVnd: Number(r.chargedVnd),
             markupPercent: Number(r.markupPercent ?? 0),
             serviceLabel: r.service === 'standard' ? 'Standard Delivery' : 'Express Delivery',
+            /* Duty lấy từ CỘT, không từ bản sao trong breakdown: cột do `ghiDutyChoDon` duy trì
+               độc lập, còn bản sao chỉ dựng lại khi có lượt đối soát chạy nên chậm hơn (CEO 30/09). */
+            actualDutyVnd: r.actualDutyVnd == null ? null : Number(r.actualDutyVnd),
             actualBill: r.actualBillBreakdown && r.actualCarrierCostVnd
               ? {
                   breakdown: r.actualBillBreakdown,

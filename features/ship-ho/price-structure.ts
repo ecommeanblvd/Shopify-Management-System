@@ -81,6 +81,19 @@ export function shipHoPriceStructure(input: {
   serviceLabel?: string;
   /** Bill thực (sau đối soát): breakdown VND đã lưu + tổng + cân bill. */
   actualBill?: { breakdown: unknown; totalVnd: number; weightKg: number | null } | null;
+  /**
+   * Duty đã ghi ở CỘT `ship_ho_orders.actual_duty_vnd` — NGUỒN SỰ THẬT cho duty.
+   *
+   * Vì sao phải nhận riêng (CEO 30/09/2026): duty do `ghiDutyChoDon` duy trì ĐỘC LẬP với lượt
+   * đối soát cước, vì hoá đơn duty về sau cước 3–6 tuần. Bản sao duty nằm trong `actualBill.
+   * breakdown` chỉ được dựng lại khi có lượt đối soát chạy — nên nó CHẬM HƠN cột.
+   *
+   * Đo thật 30/09: hai đơn vừa nối duty có cột = 736.241 / 328.802 nhưng breakdown vẫn 0, nên
+   * bảng khoản phí hiện thiếu đúng khoản đó — và bảng kê gửi MMP cũng sẽ thiếu.
+   *
+   * Bỏ trống thì rơi về bản sao trong breakdown như cũ.
+   */
+  actualDutyVnd?: number | null;
 }): ShipHoPriceStructure | null {
   const b = input.breakdown as Record<string, unknown> | null;
   if (!b || typeof b !== 'object') return null;
@@ -177,7 +190,10 @@ export function shipHoPriceStructure(input: {
   // HỘ, ngoài cước, ghi riêng ở actual_duty_vnd). Cộng nó vào chargeSum thì dòng "Điều
   // chỉnh khớp số đã ghi" hiện một khoản ẢO đúng bằng −duty. Vẫn giữ DÒNG duty để đối
   // chiếu ba phía, nhưng nằm ngoài tổng cước; tổng brand phải trả có dòng riêng cuối bảng.
-  const chDuty = sell ? S(sell.dutyVnd ?? 0) : 0;
+  /* Cột thắng bản sao: cột là thứ `ghiDutyChoDon` duy trì, bản sao trong breakdown có thể chậm
+     vài tuần. Chỉ rơi về bản sao khi cột chưa có gì. */
+  const chDuty = input.actualDutyVnd != null ? Math.round(input.actualDutyVnd)
+    : sell ? S(sell.dutyVnd ?? 0) : 0;
   const chOther = sell ? S(sell.otherVnd ?? 0) : qOtherSur;
   // Phí sửa địa chỉ: quote không dự tính được (chỉ phát sinh khi địa chỉ sai).
   const chAc = sell ? S(sell.acVnd ?? 0) : 0;

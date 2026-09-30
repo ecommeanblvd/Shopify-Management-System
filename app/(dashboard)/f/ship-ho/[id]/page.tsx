@@ -51,6 +51,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         chargedVnd: Number(o.chargedVnd),
         markupPercent: Number(o.markupPercent ?? 0),
         serviceLabel: o.service === 'standard' ? 'Standard Delivery' : 'Express Delivery',
+        /* Duty lấy từ CỘT, không từ bản sao trong breakdown: cột do `ghiDutyChoDon` duy trì
+           độc lập, còn bản sao chỉ dựng lại khi có lượt đối soát chạy nên chậm hơn (CEO 30/09). */
+        actualDutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd),
         actualBill: (o.actualBillBreakdown && o.actualCarrierCostVnd)
           ? {
               breakdown: o.actualBillBreakdown,
