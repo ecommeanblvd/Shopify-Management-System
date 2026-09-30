@@ -79,11 +79,33 @@ export interface SoLieuTuDong {
    * đọng đối soát của Gate, và nó chỉ hết khi có người tải tệp lên.
    */
   chungTuThieu: ThieuChungTu;
+  /**
+   * 1.1 đo bằng TỈ LỆ TIỀN — dựng sẵn theo hướng CEO chốt 30/09/2026, CHƯA dùng để chấm điểm.
+   *
+   * Vì sao đổi hướng: cách chấm hiện tại đếm SỐ ĐƠN, trừ 10 %/đơn, trần 50 % — nên chạm trần ở
+   * đơn thứ 5. Tháng 8 có 46 đơn, tức 5 đơn và 46 đơn chấm giống hệt nhau và tiêu chí thôi đo
+   * lường trên toàn bộ dải thực tế. Bỏ trần cũng không cứu: nó chỉ dời vùng phẳng lên 10 đơn.
+   *
+   * Vì sao là TIỀN chứ không phải ĐƠN: tiêu chí tên "Bảo toàn biên cước", mà số đơn không nói gì
+   * về biên cước — một đơn âm 50.000đ và một đơn âm 2 triệu đang được tính như nhau.
+   *
+   * CHƯA đặt bậc: chỉ tháng 8 có dữ liệu phân định xong (các kỳ khác còn 27–78 đơn treo, nên số
+   * 0 % của chúng là "chưa ai xét" chứ không phải "sạch"). Đặt bậc trên một điểm dữ liệu là đúng
+   * cái lỗi hệ thống này đã mắc nhiều lần. Dọn hết `tonChuaPhanDinh` rồi mới chốt bậc.
+   */
+  bienCuoc: {
+    tongCuocVnd: number;
+    amDoLoiNoiBoVnd: number;
+    /** 0..1; null khi kỳ không có cước nào để lấy làm mẫu số. */
+    tyLeTien: number | null;
+    /** Đơn âm cước chưa phân định TOÀN THỜI GIAN — còn tồn thì chưa đặt bậc được. */
+    tonChuaPhanDinh: number;
+  };
 }
 
 export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDong> {
   const cuaSoTuyen = cuaSoNhinTuyen(tu);
-  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, kienRongShopify, kienRongShipHo, chungTuShipHo, canRows, daDoi, chungTuCo] = await Promise.all([
+  const [amCuoc, chungTu, shipHo, gate, creditNote, thuHoi, suCoRows, kienShopify, kienShipHo, kienRongShopify, kienRongShipHo, chungTuShipHo, canRows, daDoi, chungTuCo, bienCuocRows] = await Promise.all([
     db.execute<{ n: string; tong: string | null; loi_noi_bo: string; chua_xet: string; da_cuu: string; thu_hoi: string | null }>(sql`
       WITH bill AS (
         SELECT s.order_id, SUM(c.total_amount::numeric) AS billed
@@ -203,6 +225,36 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
         FROM shipment_reconcile_status WHERE COALESCE(recovered_vnd::numeric, 0) > 0;`),
     db.execute<{ ky: string; so: string }>(sql`
       SELECT ky_hieu AS ky, so_hoa_don AS so FROM credit_notes;`),
+    /* 1.1 theo TỈ LỆ TIỀN: mẫu số là TỔNG cước carrier của kỳ, nên phải đọc MỌI đơn chứ không
+     * riêng đơn âm cước như truy vấn trên. Cột tồn đọng đo TOÀN THỜI GIAN, không lọc kỳ: bậc chỉ
+     * đặt được khi đã phân định hết, mà lọc theo kỳ sẽ giấu mất phần tồn của các kỳ khác. */
+    db.execute<{ tong_cuoc: string | null; am_noi_bo: string | null; ton: string }>(sql`
+      WITH bill AS (
+        SELECT s.order_id, SUM(c.total_amount::numeric) AS billed, MIN(s.label_created_at) AS ngay
+          FROM shipment_charges c JOIN shipments s ON s.id = c.shipment_id
+          JOIN shopify_orders o ON o.id = s.order_id JOIN stores st ON st.id = o.store_id
+         WHERE st.shop_domain = ${STORE_VAN_HANH}
+         GROUP BY 1),
+      thu AS (
+        SELECT s.order_id, SUM(COALESCE(r.recovered_vnd::numeric, 0)) AS thu_hoi,
+               string_agg(DISTINCT r.status::text, ',') AS phan_dinh
+          FROM shipments s JOIN shipment_reconcile_status r ON r.shipment_id = s.id
+         GROUP BY 1),
+      x AS (
+        SELECT bill.ngay,
+               bill.billed,
+               bill.billed - COALESCE(thu.thu_hoi, 0) AS rong,
+               o.total_shipping::numeric * COALESCE(st.fx_cost_per_order_currency::numeric, 1) AS khach,
+               thu.phan_dinh, gt.thuoc_ve AS gt
+          FROM bill JOIN shopify_orders o ON o.id = bill.order_id JOIN stores st ON st.id = o.store_id
+          LEFT JOIN thu ON thu.order_id = bill.order_id
+          LEFT JOIN am_cuoc_giai_trinh gt ON gt.order_id = bill.order_id)
+      SELECT
+        COALESCE(SUM(billed) FILTER (WHERE ngay >= ${`${tu} 00:00:00`}::timestamp AND ngay <= ${`${den} 23:59:59`}::timestamp), 0)::text AS tong_cuoc,
+        COALESCE(SUM(rong - khach) FILTER (WHERE ngay >= ${`${tu} 00:00:00`}::timestamp AND ngay <= ${`${den} 23:59:59`}::timestamp
+                 AND rong > khach AND (phan_dinh LIKE '%internal_error%' OR gt = 'noi_bo')), 0)::text AS am_noi_bo,
+        COUNT(*) FILTER (WHERE rong > khach AND phan_dinh IS NULL AND (gt IS NULL OR gt = 'chua_ro'))::text AS ton
+        FROM x;`),
   ]);
 
   // Quy chế mục VII: kiện chậm vì khách / hải quan ngoài / thiên tai không tính vào KPI nhân sự.
@@ -273,6 +325,16 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     thuHoiTheoKhieuNaiVnd: khieuNai.thuHoiVnd,
     soDongKhieuNai: khieuNai.soDong,
     tyLeThuHoi: khieuNai.tyLe,
+    bienCuoc: (() => {
+      const r = bienCuocRows.rows[0];
+      const tongCuocVnd = Math.round(Number(r?.tong_cuoc ?? 0));
+      const amDoLoiNoiBoVnd = Math.round(Number(r?.am_noi_bo ?? 0));
+      return {
+        tongCuocVnd, amDoLoiNoiBoVnd,
+        tyLeTien: tongCuocVnd > 0 ? amDoLoiNoiBoVnd / tongCuocVnd : null,
+        tonChuaPhanDinh: Number(r?.ton ?? 0),
+      };
+    })(),
     chungTuThieu: thieuChungTu(
       daDoi.rows.map((r) => ({ soCreditNote: r.cn, thuHoiVnd: Number(r.thu) })),
       chungTuCo.rows.map((r) => ({ kyHieu: r.ky, so: r.so })),

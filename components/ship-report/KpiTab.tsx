@@ -85,6 +85,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
     daChamP3B: nhap != null, daChot: chot != null,
     p1ChuaCham: diem.p1.filter((d) => d.mucDat == null).length,
     donChuaPhanDinh: auto.soDonAmCuocChuaXet,
+    tonChuaPhanDinh: auto.bienCuoc.tonChuaPhanDinh,
   });
   const the = [
     { nhan: 'Điểm KPI vận hành (Pillar 1)', so: pct(diem.diemP1), chinh: true },
@@ -207,6 +208,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
           <table className="w-full text-sm tabular-nums">
             <tbody>
               {[
+                ['Biên cước rò rỉ do lỗi nội bộ (tỉ lệ TIỀN — chưa dùng chấm điểm)',
+                  `${vnd(auto.bienCuoc.amDoLoiNoiBoVnd)} / ${vnd(auto.bienCuoc.tongCuocVnd)} = ${pct(auto.bienCuoc.tyLeTien)}`,
+                  `CEO chốt 30/09/2026 sẽ đổi tiêu chí 1.1 sang đo bằng TỈ LỆ TIỀN này, vì cách đếm SỐ ĐƠN hiện tại chạm trần ở đơn thứ 5 — tháng 8 có 46 đơn nên 5 đơn và 46 đơn chấm giống hệt nhau, tiêu chí thôi đo lường. Tên tiêu chí là "Bảo toàn biên cước" mà số đơn không nói gì về biên cước: một đơn âm 50.000đ đang tính bằng một đơn âm 2 triệu. CHƯA đặt bậc và CHƯA đổi cách chấm — còn ${auto.bienCuoc.tonChuaPhanDinh} đơn âm cước chưa phân định trên toàn bộ lịch sử, nên chỉ tháng 8 có số thật. Dọn hết rồi mới đủ căn cứ đặt bậc.`],
                 ['Đơn âm cước trong kỳ (hệ thống flag)', `${auto.soDonAmCuoc} đơn · chênh ${vnd(auto.amCuocVnd)}`, `Cước carrier thực trả vượt cước thu của khách. Con số này CHƯA trừ KPI: tiêu chí 1.1 chỉ đếm đơn đã được quản lý chốt là LỖI NỘI BỘ, hiện là ${nhap?.soDonAmCuocLoi ?? auto.soDonAmCuocLoiNoiBo} đơn. Bấm tiêu chí 1.1 ở report chi tiết để xem từng đơn và trạng thái phân định. Số này đã TRỪ ${vnd(auto.thuHoiTruVaoCuocVnd)} carrier trả lại bằng credit note, nhờ đó ${auto.soDonHetAmNhoThuHoi} đơn hết âm và rời danh sách. Trong kỳ này đối soát đã chốt ${auto.soDonAmCuocLoiNoiBo} đơn là lỗi nội bộ, còn ${auto.soDonAmCuocChuaXet} đơn chưa ai xét.`],
                 ['SLA giao hàng', `${auto.slaTong.dungHan}/${auto.slaTong.n} = ${pct(auto.slaTong.tyLe)}`, `Chấm theo bảng SOP cam kết từng nước và từng hãng. Đã loại ${auto.slaLoaiTru} kiện chậm vì lý do ngoài tầm kiểm soát (Quy chế mục VII).`],
                 ['Đóng đúng size thùng', `${auto.sizeThung.dung + auto.sizeThung.nheHon}/${auto.sizeThung.n} = ${pct(auto.sizeThung.tyLeDung)}`, `Đo bằng lệch giữa cân tính cước của mình và cân carrier charge: lệch từ 0,5 kg là chọn sai thùng (thùng chật, phồng ra). Kỳ này ${auto.sizeThung.saiThung} kiện sai, dôi ${auto.sizeThung.kgDoiRa} kg phải trả thêm.`],

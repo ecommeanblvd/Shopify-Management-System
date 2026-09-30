@@ -11,7 +11,7 @@
  * chạy thì không kêu", chỉ khác là ở đây người mới là thứ không được gọi.
  */
 
-export type MaViecDuyet = 'phan-dinh-1-1' | 'duyet-ly-do' | 'cham-3b' | 'duyet-can' | 'chot-ky';
+export type MaViecDuyet = 'phan-dinh-1-1' | 'ton-phan-dinh' | 'duyet-ly-do' | 'cham-3b' | 'duyet-can' | 'chot-ky';
 
 export interface ViecChoDuyet {
   ma: MaViecDuyet;
@@ -36,8 +36,13 @@ export interface DauVaoChoDuyet {
   daChot: boolean;
   /** Số tiêu chí Pillar 1 còn chưa chấm được (mức đạt null). */
   p1ChuaCham: number;
-  /** Đơn âm cước còn chưa phân định. */
+  /** Đơn âm cước còn chưa phân định TRONG KỲ đang xem. */
   donChuaPhanDinh: number;
+  /**
+   * Đơn âm cước chưa phân định TOÀN THỜI GIAN. Khác `donChuaPhanDinh` ở chỗ nó gồm cả các kỳ cũ —
+   * và chừng nào còn tồn thì chưa đặt được bậc cho cách chấm 1.1 mới (CEO 30/09/2026).
+   */
+  tonChuaPhanDinh?: number;
 }
 
 /**
@@ -79,6 +84,16 @@ export function viecChoDuyet(v: DauVaoChoDuyet): ViecChoDuyet[] {
       ma: 'cham-3b',
       nhan: `Kỳ ${v.ky} chưa có kết luận cho hai mục 3B`,
       huong: 'Điền ở ô nhập tay cuối trang — để trống thì hai mục này không đóng góp điểm',
+      href: null,
+    });
+  }
+
+  const tonNgoaiKy = (v.tonChuaPhanDinh ?? 0) - (v.daChot ? 0 : v.donChuaPhanDinh);
+  if (tonNgoaiKy > 0) {
+    ra.push({
+      ma: 'ton-phan-dinh',
+      nhan: `${v.tonChuaPhanDinh} đơn âm cước chưa phân định trên toàn bộ lịch sử`,
+      huong: 'Chừng nào còn tồn thì chưa đủ căn cứ đặt bậc cho cách chấm 1.1 mới (đo bằng tỉ lệ tiền). Chọn kỳ cũ ở đầu trang rồi mở tiêu chí 1.1',
       href: null,
     });
   }

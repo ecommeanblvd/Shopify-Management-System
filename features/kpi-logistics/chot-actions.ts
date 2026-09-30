@@ -9,7 +9,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { db, schema } from '@/db/client';
 import { docSoLieuKpi } from './queries';
 import { bangDiemKpi } from './quy-che';
-import { laKyHopLe, laAnhChupHopLe, type AnhChupKpi } from './chot-ky';
+import { laKyHopLe, laAnhChupHopLe, chuanHoaAuto, type AnhChupKpi } from './chot-ky';
 
 /** Kỳ YYYY-MM → [đầu kỳ, cuối kỳ] theo lịch. */
 function bienKy(ky: string): [string, string] {
@@ -111,7 +111,9 @@ export async function docChotKy(ky: string): Promise<ChotKyDaLuu | null> {
     return null;
   }
   return {
-    ky: row.ky, anhChup: row.soLieu, ghiChu: row.ghiChu,
-    chotBoi: row.chotBoi, chotAt: row.chotAt.toISOString(),
+    // Ảnh chụp cũ thiếu trường thêm sau ngày chốt — chuẩn hoá trước khi giao cho màn, nếu không
+    // màn đọc `auto.truongMoi.x` sẽ vỡ. Xem `chuanHoaAuto`.
+    ky: row.ky, anhChup: { ...row.soLieu, auto: chuanHoaAuto(row.soLieu.auto) },
+    ghiChu: row.ghiChu, chotBoi: row.chotBoi, chotAt: row.chotAt.toISOString(),
   };
 }

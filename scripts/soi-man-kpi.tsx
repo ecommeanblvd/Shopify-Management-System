@@ -18,9 +18,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
+import { docSoLieuKpi, type SoLieuTuDong } from '@/features/kpi-logistics/queries';
 import { docSoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import { KpiTab } from '@/components/ship-report/KpiTab';
+import { chuanHoaAuto } from '@/features/kpi-logistics/chot-ky';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 
 /** Router giả: chỉ để component gọi `useRouter()` dựng được ngoài Next. Không điều hướng gì. */
@@ -41,7 +42,7 @@ async function man(ky: string, tu: string, den: string, laAdmin: boolean) {
     <AppRouterContext.Provider value={routerGia}>
       <KpiTab
         ky={ky} tu={tu} den={den}
-        auto={chot ? (chot.soLieu as { auto: typeof auto }).auto : auto}
+        auto={chot ? chuanHoaAuto((chot.soLieu as { auto: SoLieuTuDong }).auto) : auto}
         nhap={nhap ?? null}
         chot={chot ? { chotAt: chot.chotAt.toISOString(), ghiChu: chot.ghiChu } : null}
         soChoDuyet={soChoDuyet}

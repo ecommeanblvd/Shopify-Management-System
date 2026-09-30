@@ -65,3 +65,33 @@ describe('duDieuKienChot', () => {
     expect(duDieuKienChot({ p1ChuaCham: 0, donChuaPhanDinh: 0, daChot: true })).toBe(false);
   });
 });
+
+describe('tồn đọng phân định toàn thời gian (CEO 30/09/2026)', () => {
+  const nen: DauVaoChoDuyet = {
+    ky: '2026-09', kienChoDuyet: 0, monCanChoDuyet: 0,
+    daChamP3B: true, daChot: false, p1ChuaCham: 0, donChuaPhanDinh: 0,
+  };
+
+  it('tồn NGOÀI kỳ đang xem thì nhắc riêng — kỳ cũ cũng phải dọn', () => {
+    const r = viecChoDuyet({ ...nen, donChuaPhanDinh: 27, tonChuaPhanDinh: 281 });
+    expect(r.map((x) => x.ma)).toContain('ton-phan-dinh');
+    expect(r.find((x) => x.ma === 'ton-phan-dinh')!.nhan).toContain('281 đơn');
+  });
+
+  it('tồn CHỈ nằm trong kỳ đang xem thì KHÔNG nhắc hai lần', () => {
+    // 27 đơn treo và tất cả thuộc kỳ này → dòng "27 đơn chưa phân định" đã nói rồi.
+    const r = viecChoDuyet({ ...nen, donChuaPhanDinh: 27, tonChuaPhanDinh: 27 });
+    expect(r.map((x) => x.ma)).not.toContain('ton-phan-dinh');
+    expect(r.map((x) => x.ma)).toContain('phan-dinh-1-1');
+  });
+
+  it('không có tồn thì không nhắc', () => {
+    expect(viecChoDuyet({ ...nen, tonChuaPhanDinh: 0 }).map((x) => x.ma)).not.toContain('ton-phan-dinh');
+    expect(viecChoDuyet(nen).map((x) => x.ma)).not.toContain('ton-phan-dinh');
+  });
+
+  it('kỳ ĐÃ CHỐT vẫn nhắc tồn — nó là việc của người, không thuộc kỳ nào', () => {
+    const r = viecChoDuyet({ ...nen, daChot: true, donChuaPhanDinh: 0, tonChuaPhanDinh: 281 });
+    expect(r.map((x) => x.ma)).toEqual(['ton-phan-dinh']);
+  });
+});
