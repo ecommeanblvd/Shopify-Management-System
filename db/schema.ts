@@ -1131,6 +1131,16 @@ export const shipments = pgTable('shipments', {
   skuText: text('sku_text'),
   pieces: integer('pieces'),
   larkHop: text('lark_hop'),
+  /* ĐÓNG THÙNG ghi từ SMS (CEO 30/09/2026) — CỐ Ý tách khỏi `lark_hop`/`actual_weight_kg`,
+     vì hai cột kia do lượt đồng bộ Lark SỞ HỮU và ghi đè mỗi lượt. Ghi chung là mất dữ liệu
+     im lặng. Cùng nếp với `ship_ho_orders.sms_weight_kg`. */
+  smsHop: text('sms_hop'),
+  smsWeightKg: numeric('sms_weight_kg', { precision: 10, scale: 3 }),
+  smsDimLengthCm: numeric('sms_dim_length_cm', { precision: 10, scale: 2 }),
+  smsDimWidthCm: numeric('sms_dim_width_cm', { precision: 10, scale: 2 }),
+  smsDimHeightCm: numeric('sms_dim_height_cm', { precision: 10, scale: 2 }),
+  smsPackedAt: timestamp('sms_packed_at'),
+  smsPackedBy: text('sms_packed_by'),
   /** record_id của dòng vật tư đóng gói đã dùng (Lark `Select VTĐG1` trỏ về
    *  chính bảng WH-Inventory — hộp là HÀNG TỒN, không phải chuỗi tên). */
   hopLarkRecordId: text('hop_lark_record_id'),

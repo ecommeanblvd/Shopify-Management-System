@@ -11,6 +11,7 @@ import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-ti
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { KhoiDongThung } from './KhoiDongThung';
 
 type KetQuaChon = Awaited<ReturnType<typeof chonHangChoDon>>;
 
@@ -641,10 +642,14 @@ function ModalSoCuoc({
 
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
           <O nhan="CÂN THỰC" giaTri={k.weightKg != null ? `${soKg(k.weightKg)} kg` : k.canDuKienKg != null ? `${soKg(k.canDuKienKg)} kg (dự kiến)` : '—'} />
+          {/* Cân hiện ở ô trên là cân ĐỒNG BỘ TỪ LARK. Khối dưới là bước đóng thùng làm ngay
+              trong SMS, ghi vào cột SMS sở hữu để lượt đồng bộ Lark không xoá mất (CEO 30/09). */}
           <O nhan="KÍCH THƯỚC" giaTri={k.dims ? `${k.dims.l}×${k.dims.w}${k.dims.h != null ? `×${k.dims.h}` : ''} cm` : '—'} />
           <O nhan="CÂN TÍNH CƯỚC" giaTri={can.tinhCuoc != null ? `${soKg(can.tinhCuoc)} kg` : '—'} />
           <O nhan="HỘP" giaTri={k.hop ?? '—'} />
         </div>
+
+        <KhoiDongThung k={k} />
 
         {bao?.theoDuKien && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">

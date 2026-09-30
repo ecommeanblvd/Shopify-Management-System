@@ -1,17 +1,21 @@
 /**
- * THUẦN: tổng cân các MÓN trong một kiện, để điền sẵn ô cân lúc đóng hàng (CEO 30/09/2026).
+ * THUẦN: tổng CÂN DỰ KIẾN SAU ĐÓNG THÙNG của các món trong một kiện (CEO 30/09/2026).
  *
- * Vì sao: đội kho đã cân từng chiếc lúc QC và điền lên Lark; bắt người đóng hàng gõ lại là
- * gõ lại một con số đã có. CEO chốt "điền tổng cân món thôi" — KHÔNG tự cộng thêm cân thùng.
+ * CEO đã sửa cách hiểu của em, và chỗ này quan trọng: cân đội kho điền lúc QC KHÔNG phải cân
+ * trần của sản phẩm. Lúc QC các bạn cân sản phẩm RỒI ĐẶT THỬ VÀO HỘP để chọn loại hộp vừa, và
+ * điền cân DỰ KIẾN SAU KHI ĐÓNG — "cân thực tế sản phẩm chỉ 1 kg nhưng phải đóng thùng 3 kg
+ * mới vừa thì điền 3". Nên số này ĐÃ tính hộp của riêng món đó.
  *
- * ĐIỀU QUAN TRỌNG NHẤT Ở TỆP NÀY: con số trả về KHÔNG PHẢI cân kiện. Cân kiện còn thùng, túi
- * khí, hoá đơn. Chính CEO đã nói "đóng hàng sẽ là cân nặng của thùng cũng như cả kiện hàng".
- * Nên nơi hiện nó BẮT BUỘC phải nói rõ "chưa gồm thùng" — điền sẵn mà không nói thì người đóng
- * bấm lưu luôn, và mình có một cân kiện thiếu trọng lượng thùng, ra cước sai mà không ai biết.
+ * Bản đầu của tệp này ghi nhãn "chưa gồm thùng" — SAI, và sai theo hướng nguy hiểm: nó bảo
+ * người đóng hàng cộng thêm hộp một lần nữa vào con số đã có hộp.
+ *
+ * Vẫn KHÔNG phải cân kiện: nhiều món gộp một thùng thì tổng cân dự kiến từng món CAO HƠN cân
+ * kiện thật (mỗi món tính một hộp, nhưng cả kiện chỉ dùng một thùng). Nên đây là số THAM CHIẾU
+ * để đối chiếu, không phải số thay cho lần cân thật lúc đóng.
  */
 
 /** Nhãn bắt buộc đi kèm con số này ở mọi chỗ hiển thị. Có test canh. */
-export const NHAN_CHUA_GOM_THUNG = 'tổng cân sản phẩm — chưa gồm thùng';
+export const NHAN_DU_KIEN = 'cân dự kiến sau đóng thùng, cộng từ từng món — vẫn phải cân lại cả kiện';
 
 export interface MonCoCan { weightKg: number | null }
 
@@ -46,5 +50,5 @@ export function moTaTongCan(t: TongCanMon): string {
   if (t.soMonThieuCan > 0) {
     return `Chưa điền sẵn được: còn ${t.soMonThieuCan}/${t.soMon} món chưa có cân lúc kiểm`;
   }
-  return `Điền sẵn ${t.tongKg} kg từ ${t.soMon} món — ${NHAN_CHUA_GOM_THUNG}`;
+  return `Dự kiến ${t.tongKg} kg từ ${t.soMon} món — ${NHAN_DU_KIEN}`;
 }

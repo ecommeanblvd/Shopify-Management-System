@@ -57,6 +57,13 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
   const rows = await db.select({
     shipmentId: s.id, orderId: o.id, orderNumber: o.shopifyOrderNumber, logUniqueCode: s.logUniqueCode, storeName: st.name, country: o.shipCountry,
     weightKg: s.actualWeightKg, canDuKien: sql<string | null>`coalesce(${o.shipWeightKgOverride}, ${o.shipWeightKg})`, l: s.dimLengthCm, w: s.dimWidthCm, h: s.dimHeightCm,
+    /* Đóng thùng ghi từ SMS — cột SMS sở hữu, đồng bộ Lark không đụng tới (xem migration 0187). */
+    smsHop: s.smsHop, smsCan: s.smsWeightKg, smsL: s.smsDimLengthCm, smsW: s.smsDimWidthCm, smsH: s.smsDimHeightCm, smsDongLuc: s.smsPackedAt,
+    /* Tổng cân DỰ KIẾN SAU ĐÓNG THÙNG của các món, kéo từ Lark về lúc QC. `count(*) - count(weight_kg)`
+       đếm món THIẾU cân: thiếu một món là tổng không dùng được, và phải nói ra chứ không lặng lẽ cộng thiếu. */
+    canMonTong: sql<string | null>`(SELECT SUM(gi.weight_kg) FROM goods_receipt_items gi WHERE gi.order_id = ${o.id})`,
+    canMonThieu: sql<string | null>`(SELECT (COUNT(*) - COUNT(gi.weight_kg))::text FROM goods_receipt_items gi WHERE gi.order_id = ${o.id})`,
+    canMonSo: sql<string | null>`(SELECT COUNT(*)::text FROM goods_receipt_items gi WHERE gi.order_id = ${o.id})`,
     base: s.originHub, ngayDiDuKien: s.ngayDiDuKien, ghiChuDon: s.larkGhiChuDon,
     dongKienLuc: s.dongKienLuc, dongKienLyDo: s.dongKienLyDo, dongKienGhiChu: s.dongKienGhiChu,
     dongKienKienThayThe: s.dongKienKienThayThe, dongKienBy: s.dongKienBy, cacDonTrongKien: s.cacDonTrongKien, larkMatDongLuc: s.larkMatDongLuc, hop: s.larkHop, skuText: s.skuText, pieces: s.pieces, trackingNumber: s.trackingNumber,
@@ -88,6 +95,17 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     shipmentId: r.shipmentId, orderId: r.orderId, orderNumber: r.orderNumber, storeName: r.storeName, country: r.country,
     weightKg: r.weightKg != null ? Number(r.weightKg) : null,
     canDuKienKg: r.canDuKien != null ? Number(r.canDuKien) : null,
+    dongThung: r.smsDongLuc != null ? {
+      hop: r.smsHop, canKg: r.smsCan != null ? Number(r.smsCan) : null,
+      dims: r.smsL != null && r.smsW != null && r.smsH != null
+        ? { l: Number(r.smsL), w: Number(r.smsW), h: Number(r.smsH) } : null,
+      luc: r.smsDongLuc.toISOString(),
+    } : null,
+    canMon: {
+      tongKg: r.canMonTong != null ? Number(r.canMonTong) : null,
+      soMonThieuCan: Number(r.canMonThieu ?? 0),
+      soMon: Number(r.canMonSo ?? 0),
+    },
     dims: r.l != null && r.w != null ? { l: Number(r.l), w: Number(r.w), h: r.h != null ? Number(r.h) : null } : null,
     logUniqueCode: r.logUniqueCode ?? null,
     base: r.base, theoHenLark: r.ngayDiDuKien != null,

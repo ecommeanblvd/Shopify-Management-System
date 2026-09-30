@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tongCanMon, moTaTongCan, NHAN_CHUA_GOM_THUNG } from './can-du-kien';
+import { tongCanMon, moTaTongCan, NHAN_DU_KIEN } from './can-du-kien';
 
 describe('tongCanMon', () => {
   it('cộng đúng, không lệch vì dấu phẩy động', () => {
@@ -27,11 +27,14 @@ describe('tongCanMon', () => {
 });
 
 describe('moTaTongCan — con số này KHÔNG phải cân kiện, câu chữ phải nói ra', () => {
-  it('luôn nói "chưa gồm thùng" khi có điền sẵn', () => {
-    /* CEO đã nói cân đóng hàng là cân CẢ KIỆN. Điền sẵn tổng cân món mà không nói rõ thì người
-       đóng bấm lưu luôn → cân kiện thiếu trọng lượng thùng → cước sai mà không ai biết. */
+  it('nói rõ là DỰ KIẾN và vẫn phải cân lại cả kiện', () => {
+    /* Cân lúc QC ĐÃ gồm hộp của riêng món đó (CEO: sản phẩm 1 kg mà phải đóng thùng 3 kg thì
+       điền 3). Nhiều món gộp một thùng thì tổng này CAO HƠN cân kiện thật — nên nó là số tham
+       chiếu, không thay được lần cân thật. Nhãn cũ "chưa gồm thùng" SAI và sai nguy hiểm: nó
+       bảo người đóng cộng thêm hộp lần nữa vào con số đã có hộp. */
     const s = moTaTongCan(tongCanMon([{ weightKg: 0.4 }, { weightKg: 0.7 }]));
-    expect(s).toContain(NHAN_CHUA_GOM_THUNG);
+    expect(s).toContain(NHAN_DU_KIEN);
+    expect(s).not.toContain('chưa gồm thùng');
     expect(s).toContain('1.1');
     expect(s).toContain('2 món');
   });

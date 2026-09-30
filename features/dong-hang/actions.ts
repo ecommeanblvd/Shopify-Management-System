@@ -11,6 +11,7 @@ import { quoteOrderAcrossCarriers } from '@/features/carrier-rates/compare/quote
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { assignOrderCarrier } from '@/features/shopify-orders/carrier-select-actions';
 import { kiemDongKien, type DongKienVao } from './dong-kien';
+import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
 import { xepQuote } from './logic';
 import { thoiGianGiaoTheoHang } from './thoi-gian-giao';
 import type { BaoGiaKien } from './types';
@@ -141,4 +142,35 @@ export async function moLaiKien(shipmentId: string): Promise<{ ok: boolean; loi?
     console.error('[dong-hang] moLaiKien lỗi:', e);
     return { ok: false, loi: 'Mở lại kiện thất bại.' };
   }
+}
+
+/**
+ * Ghi kết quả ĐÓNG THÙNG: thùng đã dùng + cân cả kiện + kích thước (CEO 30/09/2026).
+ *
+ * Ghi vào cột SMS SỞ HỮU (`sms_*`), KHÔNG ghi vào `lark_hop`/`actual_weight_kg`: hai cột kia
+ * do lượt đồng bộ Lark ghi đè mỗi lượt, ghi vào đó là mất dữ liệu im lặng. Khi đội Lark làm
+ * xong cột bên đó thì đẩy sang từ đây — `sms_packed_at` có index để tìm kiện chưa đẩy.
+ */
+export async function ghiDongThung(shipmentId: string, vao: NhapDongThung): Promise<{ ok: boolean; error?: string; loi?: string[] }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, error: 'Chưa đăng nhập' };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'view_fulfillment')) return { ok: false, error: 'Không có quyền đóng hàng' };
+
+  const kq = kiemNhapDongThung(vao);
+  if (!kq.ok || !kq.sach) return { ok: false, loi: kq.loi };
+
+  const r = await db.update(schema.shipments).set({
+    smsHop: kq.sach.hop,
+    smsWeightKg: String(kq.sach.canKg),
+    smsDimLengthCm: kq.sach.dai != null ? String(kq.sach.dai) : null,
+    smsDimWidthCm: kq.sach.rong != null ? String(kq.sach.rong) : null,
+    smsDimHeightCm: kq.sach.cao != null ? String(kq.sach.cao) : null,
+    smsPackedAt: new Date(),
+    smsPackedBy: session.user.id,
+  }).where(eq(schema.shipments.id, shipmentId)).returning({ id: schema.shipments.id });
+  if (r.length === 0) return { ok: false, error: 'Không tìm thấy kiện' };
+
+  revalidatePath('/f/dong-hang');
+  return { ok: true };
 }
