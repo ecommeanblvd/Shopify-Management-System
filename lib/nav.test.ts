@@ -37,6 +37,29 @@ describe('NAV structure', () => {
     expect(item!.requires).toBe('view_fulfillment');
   });
 
+  it('KPI Logistics ở MENU CHÍNH, không nằm trong Settings (CEO 30/09/2026)', () => {
+    /* Đức báo không vào được KPI. Đo ra: quyền của anh ấy THÔNG, mọi route đều sống — nhưng
+       link duy nhất tới bảng điểm của CHÍNH anh ấy lại nằm trong Settings, dưới một nhóm tên
+       là "Admin", cạnh ba nhóm trống rỗng. Người vào để xem điểm của mình không có lý do nào
+       để mở Settings, và càng không có lý do để tìm trong mục "Admin". */
+    const item = NAV.find((n) => n.href.startsWith('/f/ship-report?tab=kpi'));
+    expect(item).toBeDefined();
+    expect(item!.requires).toBe('view_kpi_logistics');
+    expect(SETTINGS_ITEMS.map((n) => n.href)).not.toContain(item!.href);
+  });
+
+  it('KPI Logistics chỉ hiện cho quản lý và chính nhân sự logistics', () => {
+    /* Đo trên HẠT GIỐNG vai, không trên production: seed là baseline tối thiểu, còn production
+       có thêm quyền cấp tay trong Settings. Test này canh đúng cái baseline — vì baseline mới là
+       thứ một môi trường dựng lại sẽ nhận được. */
+    const item = NAV.find((n) => n.href.startsWith('/f/ship-report?tab=kpi'))!;
+    expect(canSeeNavItem('admin', item.requires)).toBe(true);
+    expect(canSeeNavItem('logistics', item.requires)).toBe(true);
+    for (const vai of ['operator', 'viewer']) {
+      expect(canSeeNavItem(vai, item.requires)).toBe(false);
+    }
+  });
+
   it('includes warehouse module OR-gated, and receiving no longer at top level', () => {
     const item = NAV.find((n) => n.href === '/f/warehouse');
     expect(item).toBeDefined();
@@ -67,8 +90,8 @@ describe('canSeeNavItem', () => {
 });
 
 describe('SETTINGS_ITEMS', () => {
-  it('has twelve permission-gated, grouped, described items', () => {
-    expect(SETTINGS_ITEMS).toHaveLength(12);
+  it('has eleven permission-gated, grouped, described items', () => {
+    expect(SETTINGS_ITEMS).toHaveLength(11);
     for (const item of SETTINGS_ITEMS) {
       expect(item.requires).toBeTruthy();
       expect(item.description.length).toBeGreaterThan(0);

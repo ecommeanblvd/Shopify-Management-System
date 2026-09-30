@@ -102,6 +102,11 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
       // Xem view tổng module Orders (landing + bảng đơn per-store). Chi tiết đơn
       // (modal) vẫn cần manage_sku_costs nên logistics chỉ xem, không mở chi tiết.
       'orders:view',
+      // Bảng điểm KPI của CHÍNH vị trí này — chỉ ĐỌC (mọi ô nhập vẫn chỉ quản lý, chặn trong
+      // features/kpi-logistics/actions.ts). Production đã có quyền này nhưng do CẤP TAY trong
+      // Settings, không nằm trong hạt giống — nên môi trường dựng lại là mất, và không ai đọc
+      // mã mà biết được đây là chủ ý. Seed chỉ THÊM nên ghi vào đây không đụng gì đang có.
+      'kpi.logistics:view',
     ],
   },
 };

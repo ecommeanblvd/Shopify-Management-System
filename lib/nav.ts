@@ -58,6 +58,13 @@ export const NAV: NavItem[] = [
   { href: '/f/cx',            label: 'CX',            icon: Headset,         requires: 'view_cx_ticket' },
   { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/ship-report',   label: 'Báo cáo ship',  icon: ChartColumnBig,  requires: 'view_carrier_rates' },
+  /* KPI Logistics là bảng điểm của CHÍNH nhân sự logistics, nên phải nằm ở menu chính.
+     Trước nay nó nằm trong Settings dưới nhóm tên "Admin" — Đức báo "không vào được KPI"
+     (30/09/2026) trong khi quyền của anh ấy thông và mọi route đều sống. Người vào để xem
+     điểm của mình không có lý do nào mở Settings, càng không có lý do tìm trong "Admin".
+     href mang sẵn ?tab=kpi vì trang gộp theo tab; `navItemActive` chỉ so pathname nên mục
+     "Báo cáo ship" là mục được tô sáng — chấp nhận, đổi lại link luôn đúng đích. */
+  { href: '/f/ship-report?tab=kpi', label: 'KPI Logistics', icon: Target,      requires: 'view_kpi_logistics' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
   // Customer Account + Style Quiz nằm TRONG hub Functions (không đứng riêng).
   { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions', match: ['/f/customer-account'] },
@@ -73,7 +80,6 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
   { href: '/f/markets',               label: 'Markets',         icon: Globe,       requires: 'view_markets_history',  group: 'Markets',       description: 'Per-market shipping configuration.' },
   { href: '/f/markets/history',       label: 'Markets history', icon: History,     requires: 'view_markets_history',  group: 'Markets',       description: 'Changes to market configuration over time.' },
   { href: '/f/jobs',                  label: 'Tác vụ nền',      icon: Activity,    requires: 'view_functions',        group: 'Admin',         description: 'Tác vụ nào đang chạy, cái nào ngưng — đọc nhật ký do chính tác vụ ghi ra.' },
-  { href: '/f/ship-report?tab=kpi',    label: 'KPI Logistics',   icon: Target,      requires: 'view_kpi_logistics',    group: 'Admin',         description: 'Bảng điểm KPI của Logistics Operations Specialist theo tháng (nằm trong Báo cáo ship). Nhân sự logistics xem được kết quả của mình; sửa số liệu thì chỉ quản lý.' },
   { href: '/f/can-san-pham',           label: 'Sửa cân sản phẩm', icon: Target,      requires: 'view_kpi_logistics',    group: 'Admin',         description: 'SKU khai cân trên Shopify thấp hơn cân hãng tính (từ đơn âm cước tiêu chí 1.1). Quản lý duyệt để đẩy cân mới lên Shopify.' },
   { href: '/admin/users',             label: 'Users',           icon: Users,       requires: 'manage_users',          group: 'Admin',         description: 'Manage users and their roles.' },
   { href: '/admin/roles',             label: 'Roles',           icon: ShieldCheck, requires: 'manage_users',          group: 'Admin',         description: 'Phân quyền theo role.' },
