@@ -225,3 +225,48 @@ describe('1.1: ô ghi đè để TRỐNG phải khác ghi đè bằng 0 (CEO 29/
     expect(lay(0).mucDat).not.toBe(lay(42).mucDat);
   });
 });
+
+describe('1.1: cột Ngưỡng không được đọc nhầm thành số đo (CEO 30/09/2026)', () => {
+  const nen = {
+    tyLeSla: 0.95, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99, soDonShipHo: 0,
+    thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: false, khacPhucGoc: false,
+    thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
+  };
+  const lay = (soDonAmCuocLoi: number, soDonAmCuocChuaXet = 0) =>
+    bangDiemKpi({ ...nen, soDonAmCuocLoi, soDonAmCuocChuaXet }, '2026-08-01').p1[0];
+
+  it('ngưỡng KHÔNG mở đầu bằng con số kèm đơn vị — đó là chỗ CEO đọc nhầm', () => {
+    // "0 đơn — …" đọc y như số đo trong kỳ; phải nói rõ là MỤC TIÊU.
+    expect(lay(46).nguong.startsWith('0 đơn')).toBe(false);
+    expect(lay(46).nguong).toContain('Mục tiêu');
+  });
+
+  it('phân định hết rồi thì THÔI nhắc "chưa chấm được"', () => {
+    expect(lay(46).nguong).not.toContain('chưa chấm được');
+    expect(lay(46).mucDat).toBe(0.5);
+  });
+
+  it('còn đơn treo thì MỚI nhắc, và mức đạt để trống', () => {
+    expect(lay(2, 27).nguong).toContain('chưa phân định');
+    expect(lay(2, 27).mucDat).toBeNull();
+  });
+
+  it('cột Kết quả nói luôn VÌ SAO ra mức đạt — nối được 46 đơn với 50 %', () => {
+    const d = lay(46);
+    expect(d.soLieu).toContain('46 đơn');
+    expect(d.soLieu).toContain('trừ 50 % tiêu chí');
+    expect(d.soLieu).toContain('chạm trần');
+  });
+
+  it('0 đơn lỗi thì đạt tuyệt đối, và câu mô tả KHÔNG lặp lại chính nó', () => {
+    expect(lay(0).mucDat).toBe(1);
+    expect(lay(0).soLieu).toBe('Không có đơn âm cước do lỗi trách nhiệm');
+  });
+
+  it('chưa chạm trần thì nói đúng phần trăm bị trừ, không nói "chạm trần"', () => {
+    // 3 đơn × 10 % = trừ 30 %, mức đạt còn 70 %.
+    expect(lay(3).mucDat).toBeCloseTo(0.7, 10);
+    expect(lay(3).soLieu).toContain('trừ 30 % tiêu chí');
+    expect(lay(3).soLieu).not.toContain('chạm trần');
+  });
+});

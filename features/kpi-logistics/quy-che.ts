@@ -266,10 +266,23 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
       // xét — tức đang chứng nhận sạch cho phần việc chưa hề kiểm. Để trống như các tiêu chí
       // khác khi thiếu dữ liệu, và nói rõ còn tồn bao nhiêu đơn.
       ma: '1.1', ten: 'Bảo toàn biên cước', trongSo: TRONG_SO_P1.bienCuoc,
+      /* CỘT KẾT QUẢ nói luôn VÌ SAO ra mức đạt đó. CEO 30/09 đọc "46 đơn" rồi thấy "Đạt 50 %"
+       * và không nối được hai số — phần trừ và trần nằm trong `dienGiai` mà bảng không dùng. */
       soLieu: v.soDonAmCuocChuaXet > 0
         ? `${v.soDonAmCuocLoi} đơn đã chốt lỗi nội bộ · CÒN ${v.soDonAmCuocChuaXet} đơn chưa phân định`
-        : `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm`,
-      nguong: '0 đơn — mỗi đơn trừ 10 % tiêu chí, trần trừ 50 %. Phải phân định hết đơn âm cước mới chấm được.',
+        : v.soDonAmCuocLoi === 0
+          ? 'Không có đơn âm cước do lỗi trách nhiệm'
+          // Nói phần trừ bằng PHẦN TRĂM, không bằng tiền: đây là bảng chỉ-điểm, tiền để HR tính.
+          : `${v.soDonAmCuocLoi} đơn âm cước do lỗi trách nhiệm · trừ ${Math.round((1 - bienCuoc.mucNhan) * 100)} % tiêu chí${bienCuoc.mucNhan === 0.5 ? ' (chạm trần)' : ''}`,
+      /* CỘT NGƯỠNG không được MỞ ĐẦU bằng một con số kèm đơn vị: "0 đơn — …" đọc y như một số
+       * ĐO trong kỳ, và CEO 30/09 đã đọc đúng như vậy rồi thấy nó mâu thuẫn với "Đạt 50 %".
+       * Ngưỡng phải nói rõ nó là MỤC TIÊU.
+       *
+       * Câu "phải phân định hết" chỉ thêm KHI CÒN đơn treo: tháng 8 đã phân định hết mà vẫn hiện
+       * câu đó thì người đọc tưởng còn việc chưa xong. */
+      nguong: v.soDonAmCuocChuaXet > 0
+        ? 'Mục tiêu: KHÔNG đơn nào do lỗi trách nhiệm. Mỗi đơn trừ 10 % tiêu chí, trừ tối đa 50 %. Còn đơn chưa phân định nên chưa chấm được.'
+        : 'Mục tiêu: KHÔNG đơn nào do lỗi trách nhiệm. Mỗi đơn trừ 10 % tiêu chí, trừ tối đa 50 % — từ đơn thứ 5 là chạm trần.',
       mucDat: v.soDonAmCuocChuaXet > 0 ? null : bienCuoc.mucNhan,
     },
     {
