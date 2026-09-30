@@ -18,13 +18,11 @@ import type { KienChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
  * Cả khối chỉ dựng cho quản lý (trang không truyền props này cho người khác), nên người bị chấm
  * không nhìn thấy các lệnh duyệt về chính mình.
  */
-export function KhuQuanLy({ ky, nop12, kienChoDuyet, monCanChoDuyet, ganLyDoDuoc, children }: {
+export function KhuQuanLy({ ky, nop12, kienChoDuyet, monCanChoDuyet, children }: {
   ky: string;
   nop12: { trangThai: TrangThaiNop; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number } | null;
   kienChoDuyet: KienChoDuyet[];
   monCanChoDuyet: number;
-  /** Quản lý cũng gán được lý do, nên dải nộp cần biết để hiện nút gửi. */
-  ganLyDoDuoc: boolean;
   /** Ô nhập tay của kỳ (3B, ghi đè, Gate) và nút chốt kỳ — trang cha dựng sẵn. */
   children: React.ReactNode;
 }) {
@@ -45,8 +43,11 @@ export function KhuQuanLy({ ky, nop12, kienChoDuyet, monCanChoDuyet, ganLyDoDuoc
         <section className="space-y-1">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">1 · Lý do giao chậm (tiêu chí 1.2)</h3>
           {nop12
+            /* ganLyDoDuoc={false} CỐ Ý: khối này chỉ chứa lệnh DUYỆT. Nút "Gửi quản lý duyệt" là
+               việc của người làm — để nó ở đây thì quản lý bấm nhầm một cái là khoá hết ô chọn
+               của người ta mà không ai chủ ý. Quản lý nào cũng làm đối soát thì gửi ở bảng 1.2. */
             ? <DaiNop12 ky={ky} trangThai={nop12.trangThai} nopAt={nop12.nopAt} duyetAt={nop12.duyetAt}
-                soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc={ganLyDoDuoc} laQuanLy sauKhiLuu={lamMoi} />
+                soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc={false} laQuanLy sauKhiLuu={lamMoi} />
             : <p className="text-xs text-muted-foreground">Chưa có dữ liệu nộp cho kỳ này.</p>}
           <p className="text-[11px] text-muted-foreground">
             Trả lại từng dòng thì làm ở bảng chi tiết tiêu chí 1.2 phía trên — ở đó mới thấy được dòng nào sai.

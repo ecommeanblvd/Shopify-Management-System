@@ -226,6 +226,14 @@ export interface DongDiem {
   nguong: string;
   /** Mức đạt 0..1 (theo bậc quy chế); null = chưa có dữ liệu để chấm. */
   mucDat: number | null;
+  /**
+   * Dòng này KHÔNG chấm đạt/trượt — chỉ đếm để đối chiếu (CEO 30/09/2026).
+   *
+   * Sản lượng ship hộ là số đơn, không có ngưỡng đạt: `mucDat` để null vì không có gì để chấm,
+   * NHƯNG bảng vẽ null thành "Chưa chấm được" — nghĩa là THIẾU DỮ LIỆU, sai hẳn. Cùng họ với
+   * D-151: một ô trống bị đọc thành một kết luận.
+   */
+  khongCham?: boolean;
 }
 
 export interface BangDiemKpi {
@@ -312,7 +320,7 @@ export function bangDiemKpi(v: DauVaoKpi, ngayKy: string): BangDiemKpi {
       ma: '2A', ten: 'Sản lượng ship hộ thành công', trongSo: null,
       soLieu: `${v.soDonShipHo} đơn`,
       nguong: `Mốc lũy tiến tại đơn thứ ${SHIP_HO_MOC}`,
-      mucDat: null,
+      mucDat: null, khongCham: true,
     },
     {
       ma: '2B', ten: 'Chất lượng ship hộ (sự cố lỗi nội bộ)', trongSo: null,

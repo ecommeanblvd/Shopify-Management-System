@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { NutChotKy } from '@/components/kpi/NutChotKy';
+import { DaiNop12 } from '@/components/kpi/DaiNop12';
 import { BangTuyen12 } from '@/components/kpi/BangTuyen12';
 import { KhuQuanLy } from '@/components/kpi/KhuQuanLy';
 import Link from 'next/link';
@@ -16,8 +17,10 @@ import { bangDiemKpi, type DongDiem } from '@/features/kpi-logistics/quy-che';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
-/** Nhãn kết quả từ mức đạt: đủ / một phần / mất / chưa chấm được. */
-function ketQua(m: number | null): { chu: string; mau: string } {
+/** Nhãn kết quả từ mức đạt: đủ / một phần / mất / chưa chấm được / không chấm. */
+function ketQua(m: number | null, khongCham = false): { chu: string; mau: string } {
+  // "Không chấm" KHÁC "chưa chấm được": sản lượng ship hộ không có ngưỡng đạt/trượt, nó chỉ đếm.
+  if (khongCham) return { chu: 'Chỉ đếm, không chấm', mau: 'text-muted-foreground' };
   if (m == null) return { chu: 'Chưa chấm được', mau: 'text-muted-foreground' };
   if (m >= 1) return { chu: 'Đạt đủ', mau: 'text-emerald-600 dark:text-emerald-400' };
   if (m > 0) return { chu: `Đạt ${Math.round(m * 100)}%`, mau: 'text-amber-600 dark:text-amber-400' };
@@ -107,7 +110,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
           </thead>
           <tbody>
             {dong.map((d) => {
-              const k = ketQua(d.mucDat);
+              const k = ketQua(d.mucDat, d.khongCham);
               return (
                 <tr key={d.ma} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left font-medium whitespace-nowrap">{d.ma} · {d.ten}</td>
@@ -139,7 +142,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
                 <span className="text-xs text-muted-foreground">{v.huong}</span>
                 {v.href && (
                   <Link href={v.href} className="cursor-pointer rounded border border-border px-2 py-0.5 text-xs transition-colors hover:bg-muted">
-                    Mở trang
+                    Mở trang Sửa cân sản phẩm
                   </Link>
                 )}
               </li>
@@ -151,6 +154,15 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
       {/* Ở ĐẦU trang chỉ hiện TRẠNG THÁI chốt cho mọi người; nút bấm nằm ở Khu vực quản lý
           cuối trang để quản lý có đúng MỘT chỗ thao tác (CEO 30/09/2026). */}
       <NutChotKy ky={ky} daChot={chot} suaDuoc={false} />
+
+      {/* Người ĐƯỢC CHẤM cũng cần một chỗ ở cấp trang để biết kỳ đang ở trạng thái nào và bấm
+          gửi — trước nay phải mở tiêu chí 1.2 mới thấy, đúng lỗi khó tìm mà quản lý đã gặp.
+          Quản lý KHÔNG thấy dải này: của họ nằm trong Khu vực quản lý cuối trang, để hai vai
+          không bấm nhầm việc của nhau. */}
+      {!suaDuoc && ganLyDoDuoc && nop12 && (
+        <DaiNop12 ky={ky} trangThai={nop12.trangThai} nopAt={nop12.nopAt} duyetAt={nop12.duyetAt}
+          soDongDangTraLai={nop12.soDongDangTraLai} ganLyDoDuoc laQuanLy={false} sauKhiLuu={() => {}} />
+      )}
 
       {/* Tiền đã đòi được nhưng thiếu chứng từ thì KHÔNG vào 3C của tháng nào — trước đây nó
           im lặng biến mất. Hiện thành con số để có người đi tìm tệp (CEO 29/09/2026). */}
@@ -201,7 +213,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
                 ['Kiện phát sinh phí sửa địa chỉ / chứng từ', `${auto.kienLoiChungTu}/${auto.kienCoBill} = ${pct(auto.tyLeLoiChungTu)}`, 'Đọc từ khoản address correction trên hoá đơn carrier.'],
                 ['Đơn ship hộ đã giao / đã chốt cước', `${auto.soDonShipHo} đơn`, 'Trạng thái delivered, billed hoặc settled trong kỳ.'],
                 ['Tồn đọng chưa phân định đối soát', `${auto.kienTonDong} kiện`, `Kiện có hoá đơn từ các kỳ trước mà chưa ai phân định đúng/sai, chỉ tính kiện của MEAN BLVD. Gate đạt khi tồn bằng 0 — hiện ${auto.gateDat ? 'đạt' : 'chưa đạt'}. Đã phân định ${auto.kienDaPhanDinh}/${auto.kienCanPhanDinh} kiện.`],
-                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} · chất lượng đòi ${pct(auto.tyLeThuHoi)}`, `TIỀN 3C là tổng ${auto.soCreditNote} credit note ĐƯỢC XUẤT trong kỳ (tải tệp ở trang Đối soát phí ship) — credit note xuất tháng nào thì tính cho tháng đó. CHẤT LƯỢNG ĐÒI là con số khác và đo trên tập khác: ${auto.soDongKhieuNai} dòng đối soát trong kỳ đã xác định hãng sai, khiếu nại ${vnd(auto.thuocDienKhieuNaiVnd)} và đòi về được ${vnd(auto.thuHoiTheoKhieuNaiVnd)}. Hai số này KHÔNG chia cho nhau được — chia nhầm từng ra 241%. Chưa chặn trần từng dòng thì tổng đòi về là ${vnd(auto.thuHoiThoVnd)}.`],
+                ['Thu hồi công nợ carrier', `${vnd(auto.thuHoiVnd)} · chất lượng đòi ${pct(auto.tyLeThuHoi)}`, `TIỀN 3C là tổng ${auto.soCreditNote} credit note ĐƯỢC XUẤT trong kỳ (tải tệp ở trang Đối soát phí ship) — credit note xuất tháng nào thì tính cho tháng đó. CHẤT LƯỢNG ĐÒI là con số khác và đo trên tập khác: ${auto.soDongKhieuNai} dòng đối soát trong kỳ đã xác định hãng sai, khiếu nại ${vnd(auto.thuocDienKhieuNaiVnd)} và đòi về được ${vnd(auto.thuHoiTheoKhieuNaiVnd)}. Hai số này KHÔNG chia cho nhau được — chia nhầm từng ra 241%. ${auto.thuHoiThoVnd !== auto.thuHoiTheoKhieuNaiVnd ? ` Chưa chặn trần từng dòng thì tổng đòi về là ${vnd(auto.thuHoiThoVnd)} — chênh vì có dòng hãng trả nhiều hơn mức đã khiếu nại.` : ''}`],
               ].map(([a, b, c]) => (
                 <tr key={a} className="border-t border-border/60 [&>td]:px-3 [&>td]:py-2 align-top">
                   <td className="text-left font-medium">{a}</td>
@@ -216,7 +228,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
 
       {suaDuoc ? (
       <KhuQuanLy ky={ky} nop12={nop12} kienChoDuyet={soChoDuyet?.danhSachKien ?? []}
-        monCanChoDuyet={soChoDuyet?.monCanChoDuyet ?? 0} ganLyDoDuoc={ganLyDoDuoc}>
+        monCanChoDuyet={soChoDuyet?.monCanChoDuyet ?? 0}>
       <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
       <Card><CardContent className="space-y-4 p-4">
         <div>

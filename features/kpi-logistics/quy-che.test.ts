@@ -270,3 +270,28 @@ describe('1.1: cột Ngưỡng không được đọc nhầm thành số đo (CE
     expect(lay(3).soLieu).not.toContain('chạm trần');
   });
 });
+
+describe('2A sản lượng: "không chấm" KHÁC "chưa chấm được" (CEO 30/09/2026)', () => {
+  const b = bangDiemKpi({
+    soDonAmCuocLoi: 0, soDonAmCuocChuaXet: 0, tyLeSla: 0.9, tyLeLoiChungTu: 0.01, tyLeSizeThung: 0.99,
+    soDonShipHo: 46, thietHaiChamDiemVnd: 0, gateDat: true, roRiGiam: true, khacPhucGoc: true,
+    daChamP3B: true, thuHoiVnd: 0, tyLeThuHoi: null, clawbackVnd: 0,
+  }, '2026-09-01');
+  const p2a = b.p2.find((d) => d.ma === '2A')!;
+
+  it('sản lượng đánh dấu KHÔNG CHẤM — nó chỉ đếm đơn, không có ngưỡng đạt/trượt', () => {
+    expect(p2a.khongCham).toBe(true);
+    expect(p2a.mucDat).toBeNull();
+    expect(p2a.soLieu).toBe('46 đơn');
+  });
+
+  it('các dòng còn lại KHÔNG bị đánh dấu — chỉ 2A là dòng chỉ-đếm', () => {
+    const khac = [...b.p1, ...b.p3, ...b.p2.filter((d) => d.ma !== '2A')];
+    expect(khac.every((d) => !d.khongCham)).toBe(true);
+  });
+
+  it('2B vẫn chấm bình thường — chất lượng có ngưỡng', () => {
+    expect(b.p2.find((d) => d.ma === '2B')!.khongCham).toBeUndefined();
+    expect(b.p2.find((d) => d.ma === '2B')!.mucDat).toBe(1);
+  });
+});
