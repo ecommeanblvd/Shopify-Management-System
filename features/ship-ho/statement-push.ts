@@ -5,10 +5,22 @@
  */
 import { signMmpPayload } from '@/features/mmp/hmac';
 import type { LoaiBangKe } from './statement-logic';
+import type { KhoanPhiMmp } from './bang-ke-khoan-phi';
 
 export interface DongBangKeMmp {
   code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null;
   shippedAt: string | null; amountVnd: number; fedexInvoiceNumber?: string | null; invoiceDate?: string | null;
+  /**
+   * KHOẢN PHÍ chi tiết (CEO 30/09/2026) — kế toán MMP trước nay chỉ có MỘT con số `amountVnd`
+   * nên vẫn phải xin file tay của Đức. Cộng mọi `amountVnd` của `fees` ra đúng `amountVnd` của
+   * đơn; có test canh và đã đo 137/137 đơn thật.
+   *
+   * CHỈ VẾ THU — không giá vốn, không lãi, đúng như file Đức.
+   * Khoá bằng `code` (mã ổn định), KHÔNG bằng `label` (chữ hiển thị, đổi được).
+   */
+  fees?: KhoanPhiMmp[];
+  carrier?: string | null; country?: string | null;
+  weightKg?: number | null; chargeableWeightKg?: number | null; dimensions?: string | null;
 }
 export interface BangKeMmp { id: string; type: LoaiBangKe; periodStart: string; periodEnd: string; partnerBrandSlug: string }
 
@@ -16,6 +28,12 @@ export function payloadStatementIssued(st: BangKeMmp, dong: readonly DongBangKeM
   const orders = dong.map((d) => ({
     code: d.code, mmpRef: d.mmpRef ?? d.code, brandReference: d.brandReference, trackingNumber: d.trackingNumber,
     shippedAt: d.shippedAt, amountVnd: Math.round(d.amountVnd),
+    ...(d.fees ? { fees: d.fees } : {}),
+    ...(d.carrier != null ? { carrier: d.carrier } : {}),
+    ...(d.country != null ? { country: d.country } : {}),
+    ...(d.weightKg != null ? { weightKg: d.weightKg } : {}),
+    ...(d.chargeableWeightKg != null ? { chargeableWeightKg: d.chargeableWeightKg } : {}),
+    ...(d.dimensions != null ? { dimensions: d.dimensions } : {}),
     ...(st.type === 'duty' ? { fedexInvoiceNumber: d.fedexInvoiceNumber ?? null, invoiceDate: d.invoiceDate ?? null } : {}),
   }));
   return {

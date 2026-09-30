@@ -9,6 +9,7 @@ import type { LoaiBangKe } from './statement-logic';
 import { donVaoKe, tinhLaiTongBangKe } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
 import { payloadStatementIssued, pushStatementEvent } from './statement-push';
+import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
 import type { DongBangKeMmp } from './statement-push';
 
 /** Gom đơn theo LOẠI bảng kê: cước (freight, kỳ theo ngày gửi, chỉ đơn đã chốt đối
@@ -89,6 +90,8 @@ export async function setStatementStatus(
     const data = await getShipHoStatement(id);
     if (data) {
       const dong: DongBangKeMmp[] = [];
+      /* Nạp khoản phí CẢ LÔ một lượt trước vòng lặp — hỏi từng đơn là một lượt đi CSDL mỗi dòng. */
+      const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code));
       for (const o of data.orders) {
         const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
         // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd
@@ -101,6 +104,7 @@ export async function setStatementStatus(
         dong.push({
           code: r.code, mmpRef: r.mmpRef, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
           shippedAt: r.shippedAt, amountVnd: r.giaThuVnd,
+          ...(phi.get(r.code) ?? {}),
           ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
         });
       }
