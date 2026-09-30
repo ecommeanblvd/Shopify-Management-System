@@ -74,10 +74,18 @@ export function markupTheoBac(p: { strategic: boolean; tierOverrideCode: string 
   return Math.round(effectiveMarkupPercent(tier.discountPct) * 10000) / 10000;
 }
 
-/** Markup dùng khi TÍNH LẠI theo bill: ưu tiên markup ĐÃ GHI trên đơn lúc báo giá (brand
- *  được báo bao nhiêu trả bấy nhiêu; đổi bậc chỉ áp cho đơn báo giá sau đó) → Dự tính và
- *  Thực khớp nhau khi cân không đổi. Đơn chưa có markup (chưa báo giá) → theo bậc hiện tại. */
-export function markupKhiReBill(daGhi: string | number | null | undefined, theoBacHienTai: number): number {
-  const v = daGhi == null || daGhi === '' ? NaN : Number(daGhi);
-  return Number.isFinite(v) && v >= 0 ? v : theoBacHienTai;
-}
+/**
+ * KHÔNG có hàm "markup khi re-bill" riêng: tính lại theo bill dùng CHÍNH `markupTheoBac`
+ * ở trên (CEO 30/09/2026, thay quyết định 08/09).
+ *
+ * Vì sao bỏ: bản 08/09 cho re-bill đọc `ship_ho_orders.markup_percent` với lý do "brand được
+ * báo bao nhiêu trả bấy nhiêu". Nhưng cột đó trên đơn CŨ là giá trị legacy từ trước khi có
+ * hệ bậc (kalisa 30, brand khác 20) — chính con số mà commit 08/09 bỏ không đọc nữa khi BÁO
+ * GIÁ vì nó sai. Đọc lại nó lúc tính lại làm đơn đã chốt giá nhảy lên: đo production 30/09,
+ * 17 đơn đã bắn giá mới sang MMP (+6.041.723đ) và 78 đơn nữa sẽ nhảy khi hoá đơn duty về
+ * (+24.038.592đ). Ví dụ #KLS1990: 1.567.050đ (gửi MMP 23/07, markup 8% = Platinum) thành
+ * 1.711.590đ (markup 20% legacy).
+ *
+ * Bậc là thoả thuận với brand, nên nó là nguồn đúng cho CẢ báo giá lẫn tính lại.
+ * Đơn đã đối soát vẫn ĐÓNG BĂNG theo `donDaDongBang` — đổi bậc không tự viết lại hoá đơn cũ.
+ */

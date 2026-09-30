@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {SHIP_HO_TIERS, RACK_MARKUP_PERCENT, tierForVolume, resolveTier, effectiveMarkupPercent, type ShipHoTierCode, markupTheoBac, markupKhiReBill } from './tier-pricing';
+import {SHIP_HO_TIERS, RACK_MARKUP_PERCENT, tierForVolume, resolveTier, effectiveMarkupPercent, type ShipHoTierCode, markupTheoBac } from './tier-pricing';
 
 describe('SHIP_HO_TIERS (thang chốt: +20/+16/+12/+8 trên base)', () => {
   it('4 bậc, rack 40% (chỉ trình bày CK), sàn volume ĐÚNG 8%', () => {
@@ -42,7 +42,7 @@ describe('resolveTier — ưu tiên strategic > override > auto > standard', () 
   });
 });
 
-describe('markupTheoBac / markupKhiReBill (CEO 08/09: tính theo đúng tier từng brand)', () => {
+describe('markupTheoBac (CEO 08/09: tính theo đúng tier từng brand)', () => {
   it('markupTheoBac: override platinum → 8; silver → 16; strategic không override → 8; không đối tác → 20 (Standard)', () => {
     expect(markupTheoBac({ strategic: true, tierOverrideCode: 'platinum', tierCode: 'standard' })).toBe(8);
     expect(markupTheoBac({ strategic: false, tierOverrideCode: 'silver', tierCode: 'standard' })).toBe(16);
@@ -51,13 +51,5 @@ describe('markupTheoBac / markupKhiReBill (CEO 08/09: tính theo đúng tier t�
   });
   it('markupTheoBac KHÔNG đọc cột markup_percent cũ', () => {
     expect(markupTheoBac({ strategic: false, tierOverrideCode: null, tierCode: 'standard', markupPercent: '30' } as never)).toBe(20);
-  });
-  it('markupKhiReBill: ưu tiên markup đã ghi trên đơn; thiếu/hỏng → bậc hiện tại', () => {
-    expect(markupKhiReBill('30.0000', 8)).toBe(30);
-    expect(markupKhiReBill(20, 8)).toBe(20);
-    expect(markupKhiReBill(null, 8)).toBe(8);
-    expect(markupKhiReBill('', 8)).toBe(8);
-    expect(markupKhiReBill('abc', 8)).toBe(8);
-    expect(markupKhiReBill('0', 8)).toBe(0); // markup 0 là hợp lệ (đối tác không markup)
   });
 });

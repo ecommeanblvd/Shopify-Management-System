@@ -81,3 +81,32 @@ describe('reconciledBrandCharge — duty (thuế/hải quan)', () => {
     expect(co.lines.reduce((s, l) => s + l.amountVnd, 0)).toBe(co.chargedVnd);
   });
 });
+
+/**
+ * Neo tiền THẬT — đơn #KLS1990 (26-INSLG-SV-0002, brand kalisa, hoá đơn FedEx 734105850).
+ * Cùng một hoá đơn, chỉ đổi markup là giá nhảy 144.540đ. Bậc của kalisa là Platinum (8%);
+ * cột `markup_percent` trên đơn còn giữ 20% legacy từ trước khi có hệ bậc. Con số 1.567.050
+ * là giá SMS đã bắn sang MMP ngày 23/07 và cũng là con số trong file đối soát tay.
+ */
+describe('reconciledBrandCharge — neo #KLS1990 (CEO 30/09: tính lại theo BẬC)', () => {
+  const bill = {
+    baseVnd: 806_720,            // cước net trên bill = base − chiết khấu
+    transportSurchargesVnd: 92_700,  // ký nhận trực tiếp
+    customsSurchargesVnd: 68_300,    // phí xử lý hàng nhập khẩu
+    fuelPercent: 38.25, vatPercent: 8, serviceLabel: 'Express Delivery',
+  };
+
+  it('markup 8% (Platinum — bậc của kalisa) → 1.567.050đ, đúng giá đã gửi MMP 23/07', () => {
+    const r = reconciledBrandCharge({ ...bill, markupPercent: 8 });
+    expect(r.markedBaseVnd).toBe(871_258);
+    expect(r.fuelVnd).toBe(368_714);
+    expect(r.vatVnd).toBe(116_078);
+    expect(r.chargedVnd).toBe(1_567_050);
+  });
+
+  it('markup 20% (giá trị legacy trên cột đơn) → 1.711.590đ: thu thừa 144.540đ', () => {
+    const r = reconciledBrandCharge({ ...bill, markupPercent: 20 });
+    expect(r.chargedVnd).toBe(1_711_590);
+    expect(r.chargedVnd - 1_567_050).toBe(144_540);
+  });
+});
