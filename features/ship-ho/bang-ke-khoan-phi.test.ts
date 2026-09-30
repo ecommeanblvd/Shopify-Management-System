@@ -60,3 +60,39 @@ describe('bocKhoanPhi', () => {
     for (const f of bocKhoanPhi(dung()).fees) expect(hopLe.has(f.code)).toBe(true);
   });
 });
+
+describe('duty thuộc bảng kê RIÊNG — sum(fees) phải bằng amountVnd của ĐÚNG loại kê', () => {
+  /* Lỗi thật 30/09: `fees` mang cả duty trong khi `amountVnd` của bảng kê CƯỚC là
+     `actual_charged_vnd` (chỉ cước). Tổng lệch đúng bằng duty — phá bất biến đã cam kết với
+     MMP, và MMP vừa đề xuất trả 422 khi tổng không khớp. Test đầu của em xanh vì em so với
+     `cước + duty`, tức so sai bất biến. */
+  const coDuty = shipHoPriceStructure({
+    breakdown: { carrierCost: 100_000, base: 100_000 },
+    carrierCostVnd: 100_000, chargedVnd: 120_000, markupPercent: 20,
+    actualBill: { breakdown: { base: 100_000, duty: 0, sell: { baseVnd: 120_000, dutyVnd: 0, chargedVnd: 120_000 } }, totalVnd: 100_000, weightKg: 1 },
+    actualDutyVnd: 500_000,
+  });
+
+  it('bảng kê CƯỚC không mang khoản duty', () => {
+    const r = bocKhoanPhi(coDuty, 'freight');
+    expect(r.fees.some((f) => f.code === 'duty')).toBe(false);
+    expect(r.fees.length).toBeGreaterThan(0);
+  });
+
+  it('bảng kê DUTY mang ĐÚNG khoản duty, không kèm cước', () => {
+    const r = bocKhoanPhi(coDuty, 'duty');
+    expect(r.fees.map((f) => f.code)).toEqual(['duty']);
+    expect(r.totalVnd).toBe(500_000);
+  });
+
+  it('mặc định là bảng kê cước — chỗ gọi cũ không vô tình kéo duty vào', () => {
+    expect(bocKhoanPhi(coDuty).fees.some((f) => f.code === 'duty')).toBe(false);
+  });
+
+  it('cộng hai loại kê lại đúng bằng tổng brand phải trả — không mất, không đếm hai lần', () => {
+    const c = bocKhoanPhi(coDuty, 'freight').totalVnd;
+    const d = bocKhoanPhi(coDuty, 'duty').totalVnd;
+    expect(d).toBe(500_000);
+    expect(c + d).toBe(bocKhoanPhi(coDuty, 'freight').totalVnd + 500_000);
+  });
+});

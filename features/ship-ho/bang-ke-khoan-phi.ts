@@ -78,7 +78,21 @@ export interface BocKhoanPhi {
  *
  * KHÔNG bỏ khoản ÂM: "Điều chỉnh khớp số đã ghi" có thể âm, và bỏ nó là tổng không khớp.
  */
-export function bocKhoanPhi(s: ShipHoPriceStructure | null): BocKhoanPhi {
+export function bocKhoanPhi(
+  s: ShipHoPriceStructure | null,
+  /**
+   * Loại bảng kê — QUYẾT ĐỊNH khoản nào thuộc về nó.
+   *
+   * Duty đi ở bảng kê RIÊNG (`type: 'duty'`), còn `amountVnd` của bảng kê cước là
+   * `actual_charged_vnd` — CHỈ CƯỚC, không gồm duty. Nhét duty vào `fees` của bảng kê cước
+   * là phá đúng bất biến đã cam kết với MMP: `sum(fees) === amountVnd`.
+   *
+   * Lỗi này lọt qua test đầu tiên của em vì em so tổng với `cước + duty` thay vì với
+   * `amountVnd` thật — test sai bất biến thì xanh cũng vô nghĩa. MMP phát hiện gián tiếp khi
+   * đề xuất trả 422 nếu tổng không khớp (30/09/2026).
+   */
+  loai: 'freight' | 'duty' = 'freight',
+): BocKhoanPhi {
   if (!s) return { fees: [], totalVnd: 0, nhanLa: [] };
   const fees: KhoanPhiMmp[] = [];
   const nhanLa: string[] = [];
@@ -87,6 +101,8 @@ export function bocKhoanPhi(s: ShipHoPriceStructure | null): BocKhoanPhi {
     const tien = Math.round(r.chargeVnd ?? 0);
     const ma = maCuaNhan(r.label);
     if (!ma) { if (tien !== 0) nhanLa.push(r.label); continue; }
+    // Bảng kê cước KHÔNG mang duty; bảng kê duty mang ĐÚNG duty.
+    if (loai === 'duty' ? ma !== 'duty' : ma === 'duty') continue;
     if (tien === 0) continue;
     fees.push({
       code: ma, label: r.label, amountVnd: tien,

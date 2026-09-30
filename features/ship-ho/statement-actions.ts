@@ -91,7 +91,7 @@ export async function setStatementStatus(
     if (data) {
       const dong: DongBangKeMmp[] = [];
       /* Nạp khoản phí CẢ LÔ một lượt trước vòng lặp — hỏi từng đơn là một lượt đi CSDL mỗi dòng. */
-      const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code));
+      const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code), data.statement.type);
       for (const o of data.orders) {
         const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
         // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd

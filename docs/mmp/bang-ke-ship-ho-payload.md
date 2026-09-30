@@ -48,7 +48,7 @@ Ký trên **raw body**, không phải JSON đã parse lại.
 | `brandReference` | chuỗi \| null | Mã brand tự đặt (`#KLS1983`) |
 | `trackingNumber` | chuỗi \| null | Mã vận đơn |
 | `shippedAt` | `YYYY-MM-DD` \| null | Ngày gửi |
-| **`amountVnd`** | số | **Số tiền brand phải trả cho đơn này** — đã gồm duty |
+| **`amountVnd`** | số | Số tiền của đơn này **TRONG BẢNG KÊ NÀY** — xem "Hai loại bảng kê" |
 | `fees[]` | mảng | Khoản phí chi tiết — xem dưới |
 | `carrier` | chuỗi \| null | `fedex`, `dhl`… |
 | `country` | chuỗi \| null | Mã nước nhận |
@@ -57,8 +57,42 @@ Ký trên **raw body**, không phải JSON đã parse lại.
 | `dimensions` | chuỗi \| null | `DxRxC` cm |
 | `fedexInvoiceNumber`, `invoiceDate` | | **chỉ có ở bảng kê `type: "duty"`** |
 
-**Bất biến quan trọng:** `sum(fees[].amountVnd) === amountVnd`. Đã kiểm trên toàn bộ 137 đơn
-thật của 4 brand: khớp 137/137.
+**Bất biến quan trọng:** `sum(fees[].amountVnd) === amountVnd`, trong CÙNG một bảng kê.
+Đã kiểm trên dữ liệu thật: bảng kê cước **137/137**, bảng kê duty **74/74**.
+
+Đề xuất của MMP — **trả 422 khi tổng không khớp** — là đúng và chúng tôi ủng hộ. Lệch tiền
+phải bật lên ngay, không ghi bừa.
+
+## Hai loại bảng kê, và vì sao `amountVnd` khác nhau
+
+Cước và duty đi ở **hai bảng kê riêng**, vì hoá đơn duty của FedEx về sau hoá đơn cước 3–6 tuần.
+
+| `type` | `amountVnd` của mỗi đơn | `fees[]` chứa |
+|---|---|---|
+| `freight` | **chỉ CƯỚC** | mọi khoản TRỪ `duty` |
+| `duty` | **chỉ DUTY** | đúng một khoản `duty` |
+
+Một đơn xuất hiện ở **cả hai** bảng kê, ở hai thời điểm khác nhau. Tổng brand phải trả cho đơn
+đó = `amountVnd` ở kê cước + `amountVnd` ở kê duty. **Đừng cộng `fees` của hai kê vào một chỗ
+rồi so với một con số duy nhất** — chúng là hai lần thu.
+
+## Quan hệ với sự kiện `order.reconciled`
+
+`statement.issued` **không thay thế** `order.reconciled`. Hai kênh khác nhau, đọc cả hai:
+
+| | `order.reconciled` | `statement.issued` |
+|---|---|---|
+| Cấp | từng đơn | cả bảng kê |
+| Khi nào | lúc đối soát xong, chốt giá thu | lúc phát hành bảng kê |
+| Trường giá | `finalChargedVnd` (+ `dutyVnd`, `totalWithDutyVnd`) | `orders[].amountVnd` |
+| Dùng để | **đặt giá của đơn** | **đối soát kế toán** |
+
+SMS **vẫn đang gửi** `finalChargedVnd` trong `order.reconciled` — không có gì thay đổi, MMP cứ
+đọc như cũ. Với công tắc hiện tại (`MMP_TACH_DUTY=1`), `finalChargedVnd` là **cước riêng**, kèm
+`dutyVnd` và `totalWithDutyVnd`. Sự kiện KHÔNG có `dutyVnd` là bản hợp đồng cũ.
+
+Vì cả hai đều là **cước riêng**, MMP có thể dùng làm phép chiếu chéo:
+`amountVnd` (kê `freight`) nên bằng `finalChargedVnd` của cùng đơn.
 
 ## `fees[]` — khoản phí
 
@@ -106,7 +140,14 @@ thường, không phải lỗi.
 
 **3. `label` là chữ hiển thị.** Nó đã đổi vài lần trong dự án. Khoá theo `code`.
 
-## Ví dụ thật (đơn `26-INSLG-SV-0012`, brand kalisa)
+**4. Công thức MMP tái kiểm được (MMP xác nhận 30/09):**
+`fuel = (base + signature) × fuel%` — phí xử lý hàng nhập KHÔNG chịu phụ phí nhiên liệu
+(pass-through). `vat = (mọi khoản trước VAT) × vat%`. Duty KHÔNG chịu markup, KHÔNG chịu VAT.
+
+## Ví dụ thật — bảng kê `type: "freight"` (đơn `26-INSLG-SV-0012`, brand kalisa)
+
+Đơn này không có duty nên nó chỉ xuất hiện ở kê cước. Đơn CÓ duty sẽ có thêm một dòng ở bảng
+kê `duty` riêng, với `fees` đúng một khoản `duty`.
 
 ```json
 {

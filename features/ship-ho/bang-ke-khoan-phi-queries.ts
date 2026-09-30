@@ -27,7 +27,11 @@ export interface KhoanPhiDon {
 const kt = (l: unknown, w: unknown, h: unknown): string | null =>
   l == null || w == null || h == null ? null : `${Number(l)}x${Number(w)}x${Number(h)}`;
 
-export async function khoanPhiChoBangKe(codes: readonly string[]): Promise<Map<string, KhoanPhiDon>> {
+export async function khoanPhiChoBangKe(
+  codes: readonly string[],
+  /** Loại bảng kê — quyết định khoản nào thuộc về nó (xem `bocKhoanPhi`). */
+  loai: 'freight' | 'duty' = 'freight',
+): Promise<Map<string, KhoanPhiDon>> {
   const ra = new Map<string, KhoanPhiDon>();
   if (codes.length === 0) return ra;
 
@@ -63,7 +67,7 @@ export async function khoanPhiChoBangKe(codes: readonly string[]): Promise<Map<s
       // Duty lấy từ CỘT — bản sao trong breakdown chậm vài tuần (xem price-structure.ts).
       actualDutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd),
     });
-    const b = bocKhoanPhi(s);
+    const b = bocKhoanPhi(s, loai);
     /* Nhãn chưa ánh xạ = payload THIẾU TIỀN mà không ai biết. Ghi nhật ký to tiếng: test canh
      * được ca đã biết, còn ca mới chỉ lộ ra ở đây, trên dữ liệu thật. */
     if (b.nhanLa.length > 0) console.error(`[bảng kê MMP] đơn ${o.code} có khoản phí CHƯA ánh xạ mã: ${b.nhanLa.join(' | ')}`);
