@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { NHAN_KET_QUA_SLA } from '@/features/kpi-logistics/chi-tiet';
@@ -37,21 +37,42 @@ export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, timDon, suaDuoc }: 
   timDon: (tuKhoa: string) => Promise<DonTimDuoc[]>;
   suaDuoc: boolean;
 }) {
-  const [tab, setTab] = useState<Tab | null>(null);
-  const [data, setData] = useState<ChiTietPillar2 | null>(null);
+  /* MỞ SẴN "Tiền bill vs tiền thu" thay vì để trống (CEO 30/09/2026) — cùng lý do với tiêu chí
+   * 1.1 bên Pillar 1: đây là mục người ta luôn phải vào, để trống là bắt bấm thêm một nhịp. */
+  const MAC_DINH: Tab = 'tien';
+  const [tab, setTab] = useState<Tab | null>(MAC_DINH);
+  /* Dữ liệu GẮN VỚI KỲ. Trước nay `nap()` thoát sớm khi đã có `data`, mà đổi kỳ thì component
+   * không bị dựng lại (điều hướng client giữ nguyên vị trí trong cây React) — nên số của kỳ cũ
+   * nằm lại dưới nhãn kỳ mới. Suy ra từ khoá kỳ thay vì xoá bằng setState trong effect. */
+  const khoaKy = `${tu}|${den}`;
+  const [kho, setKho] = useState<{ ky: string; data: ChiTietPillar2 | null }>({ ky: khoaKy, data: null });
+  const data = kho.ky === khoaKy ? kho.data : null;
   const [loi, setLoi] = useState<string | null>(null);
   const [dangTai, start] = useTransition();
 
-  const nap = (ep = false) => start(async () => {
-    if (data && !ep) return;
-    try { setData(await tai(tu, den)); setLoi(null); }
+  /** Kỳ nào ĐÃ yêu cầu rồi — chặn effect gọi lại vòng vô hạn. */
+  const daYeuCau = useRef<Set<string>>(new Set());
+
+  // Nạp dữ liệu của kỳ: chạy cả lúc mới mở lẫn khi đổi kỳ.
+  useEffect(() => {
+    if (tab == null) return;
+    if (daYeuCau.current.has(khoaKy)) return;
+    daYeuCau.current.add(khoaKy);
+    start(async () => {
+      try { setKho({ ky: khoaKy, data: await tai(tu, den) }); setLoi(null); }
+      catch (e) { setLoi(String((e as Error).message ?? e)); }
+    });
+  }, [tab, khoaKy, tai, tu, den]);
+
+  /** Nạp LẠI có chủ đích sau khi sửa dữ liệu — đi thẳng, không qua ref chặn. */
+  const napLai = () => start(async () => {
+    try { setKho({ ky: khoaKy, data: await tai(tu, den) }); setLoi(null); }
     catch (e) { setLoi(String((e as Error).message ?? e)); }
   });
 
   const chon = (t: Tab) => {
-    if (tab === t) { setTab(null); return; }
-    setTab(t);
-    nap();
+    setLoi(null);
+    setTab(tab === t ? null : t);
   };
 
   return (
@@ -73,7 +94,7 @@ export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, timDon, suaDuoc }: 
 
       {dangTai && <p className="px-4 py-3 text-xs text-muted-foreground animate-pulse">Đang lấy dữ liệu…</p>}
       {loi && <p className="px-4 py-3 text-xs text-red-600 dark:text-red-400">{loi}</p>}
-      {!tab && !dangTai && <p className="px-4 py-3 text-xs text-muted-foreground">Chưa chọn mục nào.</p>}
+      {!tab && !dangTai && <p className="px-4 py-3 text-xs text-muted-foreground">Đã đóng — bấm một mục để mở lại.</p>}
 
       {tab && data && !dangTai && (
         <div className="space-y-3 p-4">
@@ -81,7 +102,7 @@ export function ChiTietPillar2({ ky, tu, den, tai, luu, xoa, timDon, suaDuoc }: 
           {tab === 'sla' && <BangSlaShipHo rows={data.sla} ky={ky} />}
           {tab === 'su-co' && (
             <BangSuCo rows={data.suCo} donHang={data.donHang} ky={ky} suaDuoc={suaDuoc}
-              luu={luu} xoa={xoa} timDon={timDon} sauKhiLuu={() => nap(true)} />
+              luu={luu} xoa={xoa} timDon={timDon} sauKhiLuu={napLai} />
           )}
         </div>
       )}
