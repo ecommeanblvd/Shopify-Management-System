@@ -3,7 +3,8 @@ import { isFeatureEnabled } from '@/lib/flags/flags';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { settingsViewerManifest } from './manifest';
 
-const SHIPPING_QUERY = `query {
+/** Xuất ra để script rà soát dùng ĐÚNG câu này — chép lại là có ngày hai bên trôi khác nhau. */
+export const SHIPPING_QUERY = `query {
   deliveryProfiles(first: 10) {
     edges {
       node {
