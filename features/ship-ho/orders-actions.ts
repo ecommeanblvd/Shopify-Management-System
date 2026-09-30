@@ -8,6 +8,7 @@ import { emitShipHoEvent } from './mmp-events';
 import { internalCodePrefix } from './internal-code';
 import { computeOffer } from './offer-pricing';
 import { markupTheoBac } from './tier-pricing';
+import { payloadOrderReceived } from './order-received-payload';
 import { quoteShipHoOrder } from './quote-adapter';
 import { requireManageShipHo } from './require-manage';
 
@@ -175,36 +176,7 @@ export async function requoteShipHoOrder(orderId: string): Promise<{ ok: boolean
     await emitShipHoEvent(
       { id: order.id, code: order.code, source: order.source, mmpRef: order.mmpRef },
       'order.received',
-      {
-        brandSlug: order.partnerBrandSlug,
-        customerRef: order.customerRef ?? null,
-        recipient: {
-          name: order.recipientName ?? null,
-          company: order.recipientCompany ?? null,
-          phone: order.recipientPhone ?? null,
-        },
-        address: {
-          country: order.country,
-          city: order.city ?? null,
-          province: order.province ?? null,
-          postcode: order.postcode ?? null,
-          address1: order.address1 ?? null,
-          address2: order.address2 ?? null,
-          houseNumber: order.houseNumber ?? null,
-          shortAddress: order.shortAddress ?? null,
-          mapsUrl: order.mapsUrl ?? null,
-        },
-        country: order.country,
-        city: order.city ?? null,
-        weightKg: Number(order.weightKg),
-        dimLengthCm: order.dimLengthCm == null ? null : Number(order.dimLengthCm),
-        dimWidthCm: order.dimWidthCm == null ? null : Number(order.dimWidthCm),
-        dimHeightCm: order.dimHeightCm == null ? null : Number(order.dimHeightCm),
-        packagingType: order.packagingType ?? null,
-        service: 'express',
-        chargedVnd: charged,
-        createdVia: 'sms',
-      },
+      payloadOrderReceived({ ...order, chargedVnd: charged }),
     );
   }
 

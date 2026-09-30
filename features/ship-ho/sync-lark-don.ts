@@ -9,6 +9,8 @@
  * Một chiều Lark → hệ thống. KHÔNG ghi ngược lên Lark.
  */
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
+import { emitShipHoEvent } from './mmp-events';
+import { payloadOrderReceived } from './order-received-payload';
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { db, schema } from '@/db/client';
 import { listShipHoDonRecords } from '@/features/lark/client';
@@ -125,7 +127,7 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
   const code = await maDonTrong(d.maLark ?? `LARK-${d.recordId}`);
   // Lark không ghi hãng → nhận theo dạng mã vận đơn (CEO 19/09).
   const carrierKey = d.carrierKey ?? hangTheoMaVanDon(d.trackingNumber);
-  await db.insert(schema.shipHoOrders).values({
+  const [row] = await db.insert(schema.shipHoOrders).values({
     code,
     partnerBrandSlug: brandSlug,
     recipientName: d.nguoiNhan,
@@ -153,7 +155,33 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     // Có mã vận đơn nghĩa là hàng đã đi — 'shipped' là trạng thái đúng nhất mà không
     // giả định gì thêm về tiền hay việc đã giao.
     status: 'shipped',
-  });
+  }).returning({ id: schema.shipHoOrders.id });
+
+  /* Báo MMP NGAY khi tạo, không chờ ai bấm nút.
+   *
+   * Trước 30/09/2026 `order.received` chỉ phát sinh bên trong `requoteShipHoOrder` — hàm chạy
+   * khi người vận hành bấm "báo giá lại". Đơn Lark đi thẳng ra giao hàng thì MMP không biết đơn
+   * tồn tại, và MỌI sự kiện sau bị trả 409 vĩnh viễn (MMP xác nhận 409 = không tìm thấy đơn).
+   * Đo hôm đó: 18/61 đơn Lark chưa từng báo MMP, 8 đơn đã sinh 409, 12.175.986đ hàng đã đi mà
+   * MMP không có hồ sơ.
+   *
+   * Đặt ở đây vì đây là nơi đơn RA ĐỜI — báo sự tồn tại của đơn không phụ thuộc việc đã báo giá
+   * hay chưa. Giá về sau bằng `order.reconciled`.
+   *
+   * Chỉ chạy ở nhánh TẠO MỚI, nên không bắn trùng khi đồng bộ lại. Đơn Lark cũ đã lỡ (18 đơn)
+   * cần một lượt đẩy bù riêng — cố ý KHÔNG làm ở đây, vì nó tạo hồ sơ bên MMP và phải có người
+   * quyết.
+   */
+  await emitShipHoEvent(
+    { id: row.id, code, source: 'lark', mmpRef: null },
+    'order.received',
+    payloadOrderReceived({
+      partnerBrandSlug: brandSlug, brandReference: d.brandReference,
+      recipientName: d.nguoiNhan, recipientPhone: d.dienThoai,
+      country: d.nuoc!, city: d.thanhPho, postcode: d.maBuuChinh,
+      address1: d.diaChi, houseNumber: d.soNha, weightKg: d.canKg,
+    }),
+  );
 }
 
 /** Đơn ship hộ chưa gắn dòng Lark nào — để biết còn bao nhiêu chỗ lệch. */
