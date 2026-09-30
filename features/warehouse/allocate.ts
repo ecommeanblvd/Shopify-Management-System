@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { pickItem, fifoOrder } from './allocation-logic';
 import { applyMovement } from './ledger';
 import { recomputeRollup } from '@/features/fulfillment/rollup';
+import { nenGiuHang } from './nen-giu-hang';
 
 const ACTOR = 'system:allocator';
 
@@ -20,7 +21,7 @@ export function toCandidates(
 export async function allocateOrder(orderId: string): Promise<void> {
   // Một select duy nhất (index orderId unique + fulfillmentId) — chạy trên
   // MỌI lần sync đơn nên đường "không có gì để cấp" phải rẻ, không ghi gì.
-  const lines = await db.select({ id: schema.orderFulfillmentLines.id, sku: schema.orderFulfillmentLines.sku, cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify })
+  const lines = await db.select({ id: schema.orderFulfillmentLines.id, sku: schema.orderFulfillmentLines.sku, cancelledAtShopify: schema.shopifyOrders.cancelledAtShopify, trangThaiGiao: schema.shopifyOrders.fulfillmentStatus })
     .from(schema.orderFulfillmentLines)
     .innerJoin(schema.orderFulfillment,
       eq(schema.orderFulfillment.id, schema.orderFulfillmentLines.fulfillmentId))
@@ -28,8 +29,12 @@ export async function allocateOrder(orderId: string): Promise<void> {
       eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
     .where(and(eq(schema.orderFulfillment.orderId, orderId),
                eq(schema.orderFulfillmentLines.status, 'pending_check')));
-  // Đơn đã huỷ: không cấp hàng (release hook lo phần đã giữ).
-  if (lines.length > 0 && lines[0].cancelledAtShopify != null) return;
+  /* Đơn đã HUỶ hoặc đã GIAO XONG: không cấp hàng.
+   *
+   * Chốt "đã giao" thêm 30/09/2026 sau khi lượt nạp 3.238 đơn lịch sử 2025 giữ 55 món hàng
+   * THẬT trên kệ cho đơn đã giao từ 2024–2025. Trước đó chỉ có chốt cho đơn huỷ, nên đơn mới
+   * và đơn năm ngoái đi qua đúng một đường. Xem `nen-giu-hang.ts`. */
+  if (lines.length > 0 && !nenGiuHang(lines[0].trangThaiGiao, lines[0].cancelledAtShopify)) return;
   for (const line of lines) {
     if (!line.sku) continue;
     try {
