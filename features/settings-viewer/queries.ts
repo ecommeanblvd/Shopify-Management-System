@@ -9,6 +9,12 @@ import { settingsViewerManifest } from './manifest';
  * tức bản cũ chỉ cho thấy 40/72 vùng của MEAN BLVD và một nửa thang giá, mà không báo gì.
  * Cắt im lặng nguy hiểm hơn lỗi: người đọc tin là đã xem hết.
  *
+ * Có `participantServices`: Shopify LỌC giá trả về từ carrier service theo danh sách dịch vụ
+ * BẬT trong participant. Tên không khớp thì Shopify loại SẠCH và vùng thành không giao được —
+ * sự cố 01/10/2026: Tinh Atelier bật "FedEx International Priority" (tên trước D-071) trong khi
+ * callback trả "Standard Shipping"/"Express Shipping", cả 32 vùng câm lặng. Participant có mặt
+ * và engine trả giá đúng khi gọi thẳng, nên nhìn từ ngoài tưởng đã chạy.
+ *
  * Có `active`: rate đã TẮT không ra checkout. Không lấy trường này thì màn hình và mọi phép so
  * đều coi rate tắt như đang sống — bắt được 01/10/2026: tắt xong 1.829 rate mà phép so vẫn báo
  * lệch y nguyên.
@@ -44,6 +50,10 @@ export const SHIPPING_QUERY = `query {
                         __typename
                         ... on DeliveryRateDefinition {
                           price { amount currencyCode }
+                        }
+                        ... on DeliveryParticipant {
+                          carrierService { id name active }
+                          participantServices { name active }
                         }
                       }
                     }

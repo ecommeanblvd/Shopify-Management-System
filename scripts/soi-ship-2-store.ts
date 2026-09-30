@@ -19,9 +19,13 @@ import { sql } from 'drizzle-orm';
 import { SHIPPING_QUERY } from '@/features/settings-viewer/queries';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import type { ConnectorStore } from '@/lib/shopify/connector';
+import { TEN_MUC } from '@/features/carrier-rates/hai-muc-giao';
+
+/** Tên mức mà callback THỰC SỰ trả về — participant phải bật đúng những tên này. */
+const MUC_ENGINE = [TEN_MUC.standard, TEN_MUC.express];
 
 interface PhuongThuc { ten: string; gia: string | null }
-interface Vung { ten: string; nuoc: string[]; restOfWorld: boolean; pt: PhuongThuc[] }
+interface Vung { ten: string; nuoc: string[]; restOfWorld: boolean; pt: PhuongThuc[]; dvSai: string[] }
 
 /** Bóc cây deliveryProfiles → danh sách vùng phẳng, sắp xếp ổn định để so được. */
 function bocVung(raw: unknown): Map<string, Vung> {
@@ -39,15 +43,22 @@ function bocVung(raw: unknown): Map<string, Vung> {
           else if (c?.code?.countryCode) nuoc.push(String(c.code.countryCode));
         }
         const pt: PhuongThuc[] = [];
+        const dvSai: string[] = [];
         for (const m of z?.node?.methodDefinitions?.edges ?? []) {
           const n = m?.node;
           if (!n?.name) continue;
           if (n.active === false) continue; // rate đã tắt không ra checkout → không phải lệch
           const gia = n.rateProvider?.price ? `${n.rateProvider.price.amount} ${n.rateProvider.price.currencyCode}` : null;
           pt.push({ ten: String(n.name), gia });
+          /* Participant chỉ chuyển tiếp giá có TÊN nằm trong participantServices đang bật. Tên
+             không khớp thứ callback trả về thì vùng câm lặng — xem ghi chú ở settings-viewer. */
+          if (n.rateProvider?.__typename === 'DeliveryParticipant') {
+            const bat = (n.rateProvider.participantServices ?? []).filter((x: any) => x.active).map((x: any) => String(x.name));
+            for (const can of MUC_ENGINE) if (!bat.includes(can)) dvSai.push(`${zone.name}: thiếu "${can}" (đang bật: ${bat.join(', ') || 'rỗng'})`);
+          }
         }
         const key = `${p.node.name} › ${zone.name}`;
-        ra.set(key, { ten: key, nuoc: nuoc.sort(), restOfWorld: row, pt: pt.sort((a, b) => a.ten.localeCompare(b.ten)) });
+        ra.set(key, { ten: key, nuoc: nuoc.sort(), restOfWorld: row, pt: pt.sort((a, b) => a.ten.localeCompare(b.ten)), dvSai });
       }
     }
   }
@@ -111,6 +122,14 @@ async function main() {
     }
     if (bang(a) !== bang(b)) lechGia.push({ vung: k, chuan: bang(a) || '—', soi: bang(b) || '—' });
   }
+  for (const [nhan, m] of [[tenChuan, va], [tenSoi, vb]] as const) {
+    const sai = [...m.values()].flatMap((v) => v.dvSai);
+    console.log(sai.length === 0
+      ? `PARTICIPANT ${nhan}: mọi vùng nhận đúng ${MUC_ENGINE.join(' + ')} ✓`
+      : `!! PARTICIPANT ${nhan}: ${sai.length} vùng KHÔNG nhận đúng tên mức — engine câm lặng ở đó`);
+    sai.slice(0, 6).forEach((x) => console.log(`     ${x}`));
+  }
+  console.log('');
   console.log(`THIẾU ở ${tenSoi} (có bên chuẩn, không có bên soi): ${thieu.length}`);
   thieu.forEach((k) => console.log(`   − ${k}  [${va.get(k)!.nuoc.length} nước] ${bang(va.get(k)!)}`));
   console.log(`\nTHỪA ở ${tenSoi} (không có bên chuẩn): ${thua.length}`);
