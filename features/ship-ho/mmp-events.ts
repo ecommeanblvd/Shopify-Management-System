@@ -7,10 +7,23 @@ import { lyDoBoQua } from './event-obsolete';
 export type ShipHoEmitOrder = { id: string; code: string; source: string; mmpRef: string | null };
 const MAX_ATTEMPTS = 8;
 
-/** MMP có phản hồi nhưng không phải 2xx — giữ mã HTTP để ghi vào outbox (MMP đối chiếu 19/09/2026). */
+/**
+ * MMP có phản hồi nhưng không phải 2xx — giữ mã HTTP VÀ THÂN phản hồi để ghi vào outbox.
+ *
+ * Vì sao phải giữ thân (MMP 30/09/2026): MMP nói rõ LÝ DO ngay trong body (`missing brandSlug`,
+ * `unknown brandSlug: <slug>`, `missing required field: …`, `smsRef đã thuộc đơn origin mmp`).
+ * Bản cũ chỉ ghi `http 422` rồi vứt body — nên 3 đơn tinh-atelier nằm kẹt nhiều tuần, và phải
+ * mất một vòng hỏi đáp với MMP mới biết lý do vốn đã nằm sẵn trong phản hồi SMS nhận được.
+ * Cắt 500 ký tự: đủ đọc, không phình outbox.
+ */
 export class LoiHttpMmp extends Error {
-  constructor(public readonly status: number) { super(`http ${status}`); }
+  constructor(public readonly status: number, public readonly than: string = '') {
+    super(than ? `http ${status} · ${than}` : `http ${status}`);
+  }
 }
+
+/** Cắt thân phản hồi về mức đủ chẩn đoán. */
+export const THAN_TOI_DA = 500;
 
 /** THUẦN: dựng envelope webhook. Đơn khởi tạo từ SMS (source 'internal') không có
  *  mmpRef của MMP → dùng CODE SMS làm ref ổn định + origin:'sms' để MMP biết phải
@@ -127,7 +140,9 @@ export async function deliverShipHoEvent(row: {
       }
       return;
     }
-    throw new LoiHttpMmp(res.status);
+    // Đọc LÝ DO trước khi ném — MMP ghi lý do 422 ở đây (xem LoiHttpMmp).
+    const than = await res.text().catch(() => '');
+    throw new LoiHttpMmp(res.status, than.trim().slice(0, THAN_TOI_DA));
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'fetch failed';
     // Lỗi mạng / timeout không có mã HTTP → NULL, để MMP phân biệt "không tới nơi" với "tới nhưng bị từ chối".

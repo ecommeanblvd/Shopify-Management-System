@@ -31,6 +31,28 @@ describe('ghepBrand', () => {
     { slug: 'kalisa', ten: 'Kalisa' },
     { slug: 'eegen', ten: 'Eegen' },
   ];
+  /**
+   * Ca thật 30/09/2026 — dựng đúng như production: `tinh` (active) hiển thị "Tinh", còn
+   * `tinh-atelier` (archived) hiển thị "Tinh Atelier". Lark gõ "TINH Atelier".
+   *
+   * Nạp cả brand archived thì nó khớp TÊN TUYỆT ĐỐI và cướp mất phép ghép của brand còn sống →
+   * MMP trả `unknown brandSlug: tinh-atelier`, 3 đơn kẹt nhiều tuần. Hàm này THUẦN nên cách
+   * chặn duy nhất là LỌC active ngay ở truy vấn — hai test dưới ghim cả hai phía của việc đó.
+   */
+  const dsThat = [
+    { slug: 'tinh', ten: 'Tinh' },
+    { slug: 'kalisa', ten: 'Kalisa' },
+  ];
+
+  it('danh sách CHỈ CÓ brand active → "TINH Atelier" ghép đúng brand còn sống', () => {
+    expect(ghepBrand('TINH Atelier', dsThat)).toBe('tinh');
+  });
+
+  it('lọt brand archived cùng tên vào danh sách → nó CƯỚP phép ghép; đây là lý do phải lọc ở truy vấn', () => {
+    const conArchived = [...dsThat, { slug: 'tinh-atelier', ten: 'Tinh Atelier' }];
+    expect(ghepBrand('TINH Atelier', conArchived)).toBe('tinh-atelier');
+  });
+
   it('khớp bất kể hoa thường, dấu cách, dấu tiếng Việt', () => {
     expect(ghepBrand('Kalisa', ds)).toBe('kalisa');
     expect(ghepBrand('tom fried', ds)).toBe('tom-fried');

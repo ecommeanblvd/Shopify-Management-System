@@ -47,7 +47,12 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
   const recs = await listShipHoDonRecords();
   const dong = recs.map((r) => docDongLark(r.record_id, r.fields));
 
-  const brands = await db.select({ slug: schema.mmpBrands.slug, ten: schema.mmpBrands.displayName }).from(schema.mmpBrands);
+  /* CHỈ brand ĐANG HOẠT ĐỘNG. Brand archived vẫn nằm trong bảng và vẫn khớp tên, nên nó CƯỚP
+   * mất phép ghép của brand còn sống: "Tinh Atelier" khớp đúng `tinh-atelier` (archived) thay
+   * vì `tinh` (active) — MMP trả `unknown brandSlug` và 3 đơn kẹt nhiều tuần (30/09/2026).
+   * Không ghép được thì bộ đồng bộ BỎ QUA và báo người — tốt hơn hẳn gán một slug chết. */
+  const brands = await db.select({ slug: schema.mmpBrands.slug, ten: schema.mmpBrands.displayName })
+    .from(schema.mmpBrands).where(eq(schema.mmpBrands.status, 'active'));
   const hienCo = await db.select({
     id: schema.shipHoOrders.id, code: schema.shipHoOrders.code,
     tracking: schema.shipHoOrders.trackingNumber, shippedAt: schema.shipHoOrders.shippedAt,
