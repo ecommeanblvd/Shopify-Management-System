@@ -14,6 +14,8 @@ import { ngayKinhDoanh } from '@/lib/timezone';
 import { OTimMonChoVe } from './OTimMonChoVe';
 import { ModalQc } from './ModalQc';
 import { OAnhNhan, ModalAnhNhan } from './AnhNhanCell';
+import { OAnhLoiQc } from './OAnhLoiQc';
+import type { AnhLoiQc } from '@/features/kho-nhan/anh-loi-qc';
 
 /**
  * Báo việc đã xong là tin THOÁNG QUA: hiện vài giây rồi tự tắt, không chiếm chỗ
@@ -34,8 +36,8 @@ function gio(d: Date): string {
 }
 
 /** Màn nhận & kiểm: tìm món chờ về ở trên, danh sách đang kiểm ở dưới. */
-export function BangDangKiem({ dangKiem, anh, coStorage }: {
-  dangKiem: DangKiem[]; anh: AnhNhan[]; coStorage: boolean;
+export function BangDangKiem({ dangKiem, anh, anhLoiQc, coStorage }: {
+  dangKiem: DangKiem[]; anh: AnhNhan[]; anhLoiQc: Record<string, AnhLoiQc[]>; coStorage: boolean;
 }) {
   const router = useRouter();
   const [chon, setChon] = useState<DangKiem | null>(null);
@@ -142,6 +144,7 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
                 <Bang
                   ds={g.chiec} anh={anh} dangXoa={dangXoa}
                   onKiem={setChon} onXoa={(c) => void xoa(c)} onMoAnh={setMoAnh}
+                  anhLoiQc={anhLoiQc} coStorage={coStorage} lamMoi={lamMoi}
                 />
               </div>
             ))}
@@ -160,6 +163,7 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
               <Bang
                 ds={nhomTruoc} anh={anh} dangXoa={dangXoa}
                 onKiem={setChon} onXoa={(c) => void xoa(c)} onMoAnh={setMoAnh}
+                  anhLoiQc={anhLoiQc} coStorage={coStorage} lamMoi={lamMoi}
               />
             </div>
           </details>
@@ -209,13 +213,16 @@ export function BangDangKiem({ dangKiem, anh, coStorage }: {
 }
 
 /** Bảng chiếc đang kiểm — dùng chung cho nhóm hôm nay và nhóm tồn hôm trước. */
-function Bang({ ds, anh, dangXoa, onKiem, onXoa, onMoAnh }: {
+function Bang({ ds, anh, anhLoiQc, coStorage, dangXoa, onKiem, onXoa, onMoAnh, lamMoi }: {
   ds: DangKiem[];
   anh: AnhNhan[];
   dangXoa: string | null;
   onKiem: (c: DangKiem) => void;
   onXoa: (c: DangKiem) => void;
   onMoAnh: (v: { receiptId: string; vendor: string | null; loai: LoaiAnhNhan }) => void;
+  anhLoiQc: Record<string, AnhLoiQc[]>;
+  coStorage: boolean;
+  lamMoi: () => void;
 }) {
   return (
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -231,6 +238,10 @@ function Bang({ ds, anh, dangXoa, onKiem, onXoa, onMoAnh }: {
                     như bảng Lark (CEO 25/09). */}
                 <th className="px-3 py-2 text-left font-medium">Ảnh hàng đến</th>
                 <th className="px-3 py-2 text-left font-medium">BBBG</th>
+                {/* Ảnh lỗi QC gắn vào TỪNG CHIẾC (không phải mức phiếu như hai cột trên):
+                    một chiếc có thể nhiều chỗ lỗi, mỗi chỗ một ảnh. Lark gọi cột này là
+                    "Ảnh chụp lỗi QC fail" (CEO 30/09). */}
+                <th className="px-3 py-2 text-left font-medium">Ảnh lỗi QC</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -265,6 +276,10 @@ function Bang({ ds, anh, dangXoa, onKiem, onXoa, onMoAnh }: {
                       anh={anh.filter((a) => a.receiptId === c.receiptId && a.loai === 'bb_ban_giao')}
                       onMo={() => onMoAnh({ receiptId: c.receiptId, vendor: c.vendor, loai: 'bb_ban_giao' })}
                     />
+                  </td>
+                  <td className="px-3 py-2">
+                    <OAnhLoiQc itemId={c.id} anh={anhLoiQc[c.id] ?? []} coStorage={coStorage}
+                      sauKhiLuu={lamMoi} />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-2">

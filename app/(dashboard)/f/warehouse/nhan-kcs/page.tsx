@@ -6,6 +6,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { danhSachDangKiem } from '@/features/kho-nhan/qc-actions';
 import { anhCuaPhieu } from '@/features/kho-nhan/anh-nhan';
+import { anhLoiQcTheoChiec } from '@/features/kho-nhan/anh-loi-qc';
 import { BangDangKiem } from '@/components/kho-nhan/BangDangKiem';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,8 @@ export default async function NhanKcsPage() {
 
   const dangKiem = await danhSachDangKiem();
   const anh = await anhCuaPhieu([...new Set(dangKiem.map((c) => c.receiptId))]);
+  // Ảnh lỗi QC gắn vào TỪNG CHIẾC, đọc cả lô một lượt (bảng tới 200 dòng).
+  const anhLoiQc = await anhLoiQcTheoChiec(dangKiem.map((c) => c.id));
 
   return (
     <div className="space-y-5 p-6">
@@ -32,7 +35,7 @@ export default async function NhanKcsPage() {
           trả lại brand.
         </p>
       </div>
-      <BangDangKiem dangKiem={dangKiem} anh={anh} coStorage={isStorageConfigured()} />
+      <BangDangKiem dangKiem={dangKiem} anh={anh} anhLoiQc={anhLoiQc} coStorage={isStorageConfigured()} />
     </div>
   );
 }
