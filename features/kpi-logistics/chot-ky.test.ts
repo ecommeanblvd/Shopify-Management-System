@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chuanHoaAuto, laAnhChupHopLe, laKyHopLe } from './chot-ky';
+import { chuanHoaAuto, laAnhChupHopLe, laKyHopLe, vaChungTuThieuSong } from './chot-ky';
 
 describe('laKyHopLe / laAnhChupHopLe', () => {
   it('kỳ phải đúng dạng YYYY-MM', () => {
@@ -63,5 +63,39 @@ describe('ảnh chụp phải đóng băng CẢ CÔNG THỨC, không chỉ đầ
   it('ảnh chụp ĐỜI CŨ không có bảng điểm — vẫn đọc được, màn sẽ tính lại', () => {
     // Không được từ chối ảnh cũ: kỳ tháng 8 chốt trước khi có trường này.
     expect(laAnhChupHopLe({ ban: 1, auto: {}, diemP1: 0.85 })).toBe(true);
+  });
+});
+
+describe('vaChungTuThieuSong — đóng băng ĐIỂM, không đóng băng VIỆC CẦN LÀM (CEO 30/09/2026)', () => {
+  /* Kỳ 8 chốt 11:08 với "16 tờ · 74.910.023đ". Đức tải đủ 16 tờ lên lúc 12:22. Tính lại ra 0,
+     nhưng màn đọc ảnh chụp nên vẫn giục đi tìm những tờ đã nằm sẵn trong hệ thống. */
+  const anh = {
+    tu: '2026-08-01', den: '2026-08-31', soDonAmCuoc: 58, thuHoiVnd: 50676806,
+    chungTuThieu: { soTo: 16, tienVnd: 74910023, danhSach: ['K26TFA-35641'] },
+    bienCuoc: { tongCuocVnd: 9, amDoLoiNoiBoVnd: 3, tyLeTien: 0.0225, tonChuaPhanDinh: 0 },
+  } as unknown as Parameters<typeof vaChungTuThieuSong>[0];
+
+  it('thay bằng số đo hiện tại, nên việc đã làm xong thì cảnh báo tắt', () => {
+    const r = vaChungTuThieuSong(anh, { soTo: 0, tienVnd: 0, danhSach: [] });
+    expect(r.chungTuThieu.soTo).toBe(0);
+    expect(r.chungTuThieu.tienVnd).toBe(0);
+  });
+
+  it('KHÔNG đụng bất kỳ đầu vào ĐIỂM nào — đó là thứ HR đã trả lương theo', () => {
+    const r = vaChungTuThieuSong(anh, { soTo: 0, tienVnd: 0, danhSach: [] });
+    expect(r.soDonAmCuoc).toBe(58);
+    expect(r.thuHoiVnd).toBe(50676806);
+    expect(r.bienCuoc.tyLeTien).toBe(0.0225);
+    expect(r.tu).toBe('2026-08-01');
+  });
+
+  it('không đo được thì GIỮ NGUYÊN ảnh chụp, không bịa thành 0', () => {
+    // null = "lượt này không đo"; biến nó thành 0 là tự tay tắt một cảnh báo có thể đang đúng.
+    expect(vaChungTuThieuSong(anh, null).chungTuThieu.soTo).toBe(16);
+  });
+
+  it('không sửa vào đối tượng gốc', () => {
+    vaChungTuThieuSong(anh, { soTo: 0, tienVnd: 0, danhSach: [] });
+    expect(anh.chungTuThieu.soTo).toBe(16);
   });
 });

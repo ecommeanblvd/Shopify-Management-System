@@ -11,6 +11,7 @@
  */
 import type { SoLieuTuDong } from './queries';
 import type { BangDiemKpi } from './quy-che';
+import type { ThieuChungTu } from './credit-note-thieu';
 
 export interface AnhChupKpi {
   /** Phiên bản hình dạng ảnh chụp — đọc ảnh cũ bằng mã mới thì phải biết nó thuộc đời nào. */
@@ -73,3 +74,25 @@ export function chuanHoaAuto(auto: SoLieuTuDong): SoLieuTuDong {
 
 /** Kỳ dạng YYYY-MM. Chặn ở đây để không ai chốt nhầm một chuỗi bất kỳ thành khoá chính. */
 export const laKyHopLe = (ky: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(ky);
+
+/**
+ * Thay con số "thiếu chứng từ credit note" trong ảnh chụp bằng số ĐO HIỆN TẠI (CEO 30/09/2026).
+ *
+ * Lỗi thật: kỳ tháng 8 chốt lúc 11:08 và đóng băng `chungTuThieu = 16 tờ · 74.910.023đ`. Đức tải
+ * đủ 16 tờ lên lúc 12:22 — 74 phút SAU đó. Tính lại bây giờ ra 0 tờ · 0đ, nhưng màn đọc ảnh chụp
+ * nên vẫn giục đi tìm 16 tờ đã nằm sẵn trong hệ thống. Cảnh báo ấy sẽ không bao giờ tắt được.
+ *
+ * LUẬT RÚT RA: chốt kỳ đóng băng ĐẦU VÀO ĐIỂM, KHÔNG đóng băng VIỆC CẦN LÀM.
+ *   · đầu vào điểm (số đơn âm cước, tỉ lệ biên cước, tiền thu hồi…) phải đứng yên — HR đã trả
+ *     lương theo nó, và mở lại là mất bằng chứng lúc trả (xem D-163).
+ *   · việc cần làm (còn tờ nào chưa tải lên) tồn tại để GIỤC NGƯỜI LÀM. Làm xong thì phải tắt.
+ *     Một lời giục không tắt được thì người đọc học cách bỏ qua nó, và lần sau nó giục thật cũng
+ *     không ai nhìn.
+ *
+ * An toàn cho điểm: `chungTuThieu` KHÔNG có trong `quy-che.ts` — nó chỉ để hiển thị. Đổi nó không
+ * làm điểm của kỳ đã chốt nhúc nhích. Ai đưa nó vào công thức chấm thì phải bỏ hàm này đi.
+ */
+export function vaChungTuThieuSong(auto: SoLieuTuDong, song: ThieuChungTu | null): SoLieuTuDong {
+  if (song == null) return auto;
+  return { ...auto, chungTuThieu: song };
+}

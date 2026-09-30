@@ -23,7 +23,8 @@ import { docNhapKpi } from '@/features/kpi-logistics/actions';
 import { docChotKy } from '@/features/kpi-logistics/chot-actions';
 import { docSoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import { docTrangThaiKy12 } from '@/features/kpi-logistics/nop-1-2-actions';
-import { docSoLieuKpi } from '@/features/kpi-logistics/queries';
+import { docSoLieuKpi, docChungTuThieu } from '@/features/kpi-logistics/queries';
+import { vaChungTuThieuSong } from '@/features/kpi-logistics/chot-ky';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,10 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
   const nop12 = tab === 'kpi' && xemDuocKpi ? await docTrangThaiKy12(kyKpi) : null;
   /* Kỳ ĐÃ CHỐT đọc từ ảnh chụp, không tính lại: con số HR đã trả lương theo phải giữ nguyên
    * dù đối soát và credit note vẫn chạy tiếp sau đó (CEO 29/09/2026). */
+  /* VIỆC CẦN LÀM phải là số HIỆN TẠI, kể cả với kỳ ĐÃ CHỐT — xem `vaChungTuThieuSong`.
+   * Kỳ 8 chốt 11:08 với "16 tờ · 74,9tr"; Đức tải đủ 16 tờ lên lúc 12:22, và màn vẫn giục đi tìm
+   * những tờ đã nằm sẵn trong hệ thống. Một lời giục không tắt được thì người đọc học cách bỏ qua. */
+  const chungTuThieuSong = tab === 'kpi' && xemDuocKpi ? await docChungTuThieu() : null;
   const [autoKpi, nhapKpi] = chotKpi
     // Ảnh chụp đi qua JSON nên các ô ngày trong `nhap` về dạng CHUỖI, không còn là Date. Bảng KPI
     // chỉ đọc các ô số và boolean của nó nên không sao — ai thêm chỗ đọc ngày ở đây phải tự đổi kiểu.
@@ -163,7 +168,7 @@ export default async function ShipReportPage({ searchParams }: { searchParams: P
                 Kỳ chấm theo NGÀY GỬI {tuKpi} → {denKpi}. Hoá đơn carrier về trễ nên kỳ vừa kết thúc chốt được từ đầu tháng sau.
               </span>
             </div>
-            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={autoKpi} nhap={nhapKpi} suaDuoc={laAdmin}
+            <KpiTab ky={kyKpi} tu={tuKpi} den={denKpi} auto={vaChungTuThieuSong(autoKpi, chungTuThieuSong)} nhap={nhapKpi} suaDuoc={laAdmin}
               chot={chotKpi ? { chotAt: chotKpi.chotAt, ghiChu: chotKpi.ghiChu } : null}
               bangDiemDaChot={chotKpi?.anhChup.bangDiem ?? null}
               soChoDuyet={soChoDuyet}

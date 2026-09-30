@@ -341,3 +341,25 @@ export async function docSoLieuKpi(tu: string, den: string): Promise<SoLieuTuDon
     ),
   };
 }
+
+/**
+ * ĐO HIỆN TẠI: còn tờ credit note nào đã đòi được tiền mà chưa có chứng từ trong hệ thống.
+ *
+ * Tách riêng khỏi `docSoLieuKpi` vì nó phải chạy được cho CẢ kỳ ĐÃ CHỐT — ảnh chụp đóng băng đầu
+ * vào điểm, nhưng đây là VIỆC CẦN LÀM nên phải luôn là số hiện tại (xem `vaChungTuThieuSong`).
+ * Hai truy vấn nhỏ, không lọc kỳ (tồn đọng chứng từ là toàn thời gian), nên gọi thêm rất nhẹ so
+ * với chạy lại cả `docSoLieuKpi`.
+ */
+export async function docChungTuThieu(): Promise<ThieuChungTu> {
+  const [daDoi, chungTuCo] = await Promise.all([
+    db.execute<{ cn: string | null; thu: string }>(sql`
+      SELECT credit_note_number AS cn, recovered_vnd::text AS thu
+        FROM shipment_reconcile_status WHERE COALESCE(recovered_vnd::numeric, 0) > 0;`),
+    db.execute<{ ky: string; so: string }>(sql`
+      SELECT ky_hieu AS ky, so_hoa_don AS so FROM credit_notes;`),
+  ]);
+  return thieuChungTu(
+    daDoi.rows.map((r) => ({ soCreditNote: r.cn, thuHoiVnd: Number(r.thu) })),
+    chungTuCo.rows.map((r) => ({ kyHieu: r.ky, so: r.so })),
+  );
+}
