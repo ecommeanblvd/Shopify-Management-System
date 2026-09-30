@@ -67,7 +67,7 @@ export async function khoanPhiChoBangKe(
       // Duty lấy từ CỘT — bản sao trong breakdown chậm vài tuần (xem price-structure.ts).
       actualDutyVnd: o.actualDutyVnd == null ? null : Number(o.actualDutyVnd),
     });
-    const b = bocKhoanPhi(s, loai);
+    const b = bocKhoanPhi(s, loai, o.actualDutyVnd == null ? null : Number(o.actualDutyVnd));
     /* Nhãn chưa ánh xạ = payload THIẾU TIỀN mà không ai biết. Ghi nhật ký to tiếng: test canh
      * được ca đã biết, còn ca mới chỉ lộ ra ở đây, trên dữ liệu thật. */
     if (b.nhanLa.length > 0) console.error(`[bảng kê MMP] đơn ${o.code} có khoản phí CHƯA ánh xạ mã: ${b.nhanLa.join(' | ')}`);

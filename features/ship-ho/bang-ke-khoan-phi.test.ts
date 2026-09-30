@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bocKhoanPhi, maCuaNhan, MA_THEO_NHAN, type MaKhoanPhi } from './bang-ke-khoan-phi';
+import { bocKhoanPhi, maCuaNhan, MA_THEO_NHAN, NHAN_DUTY_NGAN, type MaKhoanPhi } from './bang-ke-khoan-phi';
 import { shipHoPriceStructure } from './price-structure';
 
 const dung = (over: Record<string, unknown> = {}) => shipHoPriceStructure({
@@ -94,5 +94,31 @@ describe('duty thuộc bảng kê RIÊNG — sum(fees) phải bằng amountVnd c
     const d = bocKhoanPhi(coDuty, 'duty').totalVnd;
     expect(d).toBe(500_000);
     expect(c + d).toBe(bocKhoanPhi(coDuty, 'freight').totalVnd + 500_000);
+  });
+
+  /**
+   * Đơn 26-INSLG-SV-0123 (#KLS2068) trên production: không dựng được cấu trúc giá (thiếu
+   * quoteBreakdown) nên `bocKhoanPhi` trả fees RỖNG, trong khi bảng kê duty vẫn ghi
+   * amountVnd = 199.581đ. Đúng cảnh MMP đề xuất trả 422. Duty KHÔNG cần cấu trúc giá —
+   * nó nằm nguyên ở cột `actual_duty_vnd`.
+   */
+  it('kê DUTY: không dựng được cấu trúc giá thì vẫn ra khoản duty từ CỘT', () => {
+    const r = bocKhoanPhi(null, 'duty', 199_581);
+    expect(r.fees).toEqual([{ code: 'duty', label: NHAN_DUTY_NGAN, amountVnd: 199_581 }]);
+    expect(r.totalVnd).toBe(199_581);
+  });
+
+  it('kê CƯỚC không bao giờ lấy duty từ cột', () => {
+    expect(bocKhoanPhi(null, 'freight', 199_581).fees).toEqual([]);
+  });
+
+  it('cột duty = 0 hoặc thiếu → không đẻ khoản 0đ', () => {
+    expect(bocKhoanPhi(null, 'duty', 0).fees).toEqual([]);
+    expect(bocKhoanPhi(null, 'duty').fees).toEqual([]);
+  });
+
+  it('dựng được cấu trúc giá thì cột KHÔNG ghi đè khoản đã bóc', () => {
+    const r = bocKhoanPhi(coDuty, 'duty', 999_999);
+    expect(r.totalVnd).toBe(500_000);
   });
 });

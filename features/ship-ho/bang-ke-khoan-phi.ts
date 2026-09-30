@@ -44,6 +44,9 @@ export const MA_THEO_NHAN: ReadonlyArray<readonly [string, MaKhoanPhi]> = [
   ['Thuế / hải quan', 'duty'],
 ];
 
+/** Nhãn khoản duty khi dựng thẳng từ cột `actual_duty_vnd` (không qua cấu trúc giá). */
+export const NHAN_DUTY_NGAN = 'Thuế / hải quan (duty) — ngoài cước, thu hộ';
+
 /** Dòng TỔNG do `price-structure` thêm vào để hiển thị — không phải khoản phí. */
 const LA_DONG_TONG = (nhan: string) => /^Tổng/.test(nhan);
 
@@ -92,8 +95,26 @@ export function bocKhoanPhi(
    * đề xuất trả 422 nếu tổng không khớp (30/09/2026).
    */
   loai: 'freight' | 'duty' = 'freight',
+  /**
+   * Duty ở CỘT `ship_ho_orders.actual_duty_vnd` — lưới an toàn cho bảng kê duty.
+   *
+   * Vì sao cần (đo production 30/09/2026): đơn #KLS2068 không dựng được cấu trúc giá vì thiếu
+   * `quoteBreakdown`, nên hàm này trả `fees` RỖNG trong khi bảng kê duty vẫn ghi amountVnd =
+   * 199.581đ — đúng cảnh MMP đề xuất trả 422. Duty KHÔNG cần cấu trúc giá: nó là con số nguyên
+   * ở cột, không markup, không VAT.
+   *
+   * CHỈ là lưới: bóc được từ cấu trúc giá thì giữ nguyên kết quả đó, không ghi đè.
+   * Bảng kê CƯỚC không bao giờ đụng tới tham số này.
+   */
+  dutyVndCot?: number | null,
 ): BocKhoanPhi {
-  if (!s) return { fees: [], totalVnd: 0, nhanLa: [] };
+  const tuCot = (): BocKhoanPhi => {
+    const v = Math.round(dutyVndCot ?? 0);
+    return loai === 'duty' && v !== 0
+      ? { fees: [{ code: 'duty', label: NHAN_DUTY_NGAN, amountVnd: v }], totalVnd: v, nhanLa: [] }
+      : { fees: [], totalVnd: 0, nhanLa: [] };
+  };
+  if (!s) return tuCot();
   const fees: KhoanPhiMmp[] = [];
   const nhanLa: string[] = [];
   for (const r of s.rows) {
@@ -111,5 +132,6 @@ export function bocKhoanPhi(
       ...(r.billPercent != null || r.percent != null ? { percent: r.billPercent ?? r.percent ?? undefined } : {}),
     });
   }
+  if (fees.length === 0 && nhanLa.length === 0) return tuCot();
   return { fees, totalVnd: fees.reduce((t, f) => t + f.amountVnd, 0), nhanLa };
 }
