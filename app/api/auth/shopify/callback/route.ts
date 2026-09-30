@@ -8,6 +8,7 @@ import { recordAudit } from '@/lib/logging/audit';
 import { getEnv } from '@/lib/env';
 import { registerOrderWebhooks } from '@/features/shopify-orders/webhook/register-subscriptions';
 import { runBackfillForStore } from '@/features/shopify-orders/backfill/run-backfill';
+import { maLoiTuLoi } from '@/features/stores/ket-qua-noi';
 
 // Matches the same regex used in the install route.
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,59}\.myshopify\.com$/;
@@ -187,7 +188,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Use the configured public URL — `req.url` resolves to the internal
     // container host (e.g. 0.0.0.0:8080) when running behind a reverse proxy
     // like Railway, which would send the browser to an unreachable address.
-    const response = NextResponse.redirect(new URL('/', env.SHOPIFY_APP_URL));
+    /* Đẩy về TRANG NỐI STORE kèm kết quả, không về dashboard im lặng: CEO nối store HC rồi bị
+     * đẩy về dashboard không một chữ nào, và không có cách nào biết đã nối được chưa
+     * (CEO 30/09/2026). */
+    const ve = new URL('/stores/connect', env.SHOPIFY_APP_URL);
+    ve.searchParams.set('kq', 'ok');
+    ve.searchParams.set('shop', shop);
+    const response = NextResponse.redirect(ve);
     response.cookies.set('shopify_oauth_state', '', {
       httpOnly: true,
       sameSite: 'lax',
@@ -204,9 +211,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       result: 'error',
       errorDetail: String(err),
     });
-    return NextResponse.json(
-      { error: 'OAuth callback failed' },
-      { status: 400 },
-    );
+    /* Hỏng thì cũng đẩy về trang nối store kèm MÃ LỖI ngắn, thay vì ném JSON thô giữa màn hình.
+     * Chi tiết thật vẫn nằm trong nhật ký ở trên cho người kỹ thuật đọc — URL chỉ mang mã. */
+    const ve = new URL('/stores/connect', getEnv().SHOPIFY_APP_URL);
+    ve.searchParams.set('kq', 'loi');
+    ve.searchParams.set('ma', maLoiTuLoi(err));
+    const response = NextResponse.redirect(ve);
+    response.cookies.set('shopify_oauth_state', '', {
+      httpOnly: true, sameSite: 'lax', secure: true,
+      path: '/api/auth/shopify/callback', maxAge: 0,
+    });
+    return response;
   }
 }
