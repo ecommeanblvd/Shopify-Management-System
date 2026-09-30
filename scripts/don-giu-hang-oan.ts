@@ -17,6 +17,10 @@ import { db } from '@/db/client';
 /** Mốc lượt nạp 30/09/2026 (UTC). Chỉ dọn thứ CHÍNH lượt nạp đó tạo ra. */
 const MOC_NAP = '2026-09-30 04:00:00';
 const AP_DUNG = process.argv.includes('--ap-dung');
+/** `--ca-cu`: xử các ca giữ oan có TỪ TRƯỚC lượt nạp (mục C). Tách lượt riêng có chủ ý —
+ *  gộp chung là đổi hơn 300 dòng tồn kho trong một lần bấm, sai thì không tách được nguyên nhân. */
+const CA_CU = process.argv.includes('--ca-cu');
+const MOC_SO_SANH = CA_CU ? '<' : '>=';
 
 const bang = (ten: string, rows: Record<string, unknown>[]) => {
   console.log(`\n### ${ten} — ${rows.length} dòng`);
@@ -41,10 +45,10 @@ async function main() {
       JOIN shopify_orders o ON o.id = f.order_id
       LEFT JOIN warehouse_inventory w ON w.id = fl.warehouse_inventory_id
      WHERE fl.status = 'in_stock' AND fl.warehouse_inventory_id IS NOT NULL
-       AND fl.updated_at >= ${MOC_NAP}::timestamp
+       AND fl.updated_at ${sql.raw(MOC_SO_SANH)} ${MOC_NAP}::timestamp
        AND o.fulfillment_status = 'FULFILLED'
      ORDER BY o.created_at_shopify`);
-  bang('A. Hàng giữ oan cho đơn ĐÃ GIAO (do lượt nạp 30/09)', giuOan.rows);
+  bang(`A. Hàng giữ oan cho đơn ĐÃ GIAO (${CA_CU ? 'ca CŨ, trước lượt nạp' : 'do lượt nạp 30/09'})`, giuOan.rows);
   const tongGiu = giuOan.rows.reduce((s, r) => s + Number(r.giu ?? 0), 0);
   console.log(`    → tổng ${tongGiu} món sẽ được NHẢ ra`);
 
@@ -55,7 +59,7 @@ async function main() {
            f.status AS dang_o, o.fulfillment_status AS shopify
       FROM order_fulfillment f
       JOIN shopify_orders o ON o.id = f.order_id
-     WHERE f.created_at >= ${MOC_NAP}::timestamp
+     WHERE f.created_at ${sql.raw(MOC_SO_SANH)} ${MOC_NAP}::timestamp
        AND f.status IN ('received','checking','ready_to_pick','picking')
        AND o.fulfillment_status = 'FULFILLED'
      ORDER BY o.created_at_shopify`);
@@ -73,6 +77,13 @@ async function main() {
   console.log('\n### C. CHỈ ĐỂ BIẾT — ca giữ oan có TRƯỚC lượt nạp (KHÔNG dọn lượt này)');
   console.log('   ', JSON.stringify(cu.rows[0]));
 
+  const tong = async () => {
+    const r = await db.execute<{ giu: string }>(sql`SELECT COALESCE(SUM(qty_reserved),0)::text AS giu FROM warehouse_inventory`);
+    return Number(r.rows[0]?.giu ?? 0);
+  };
+  const giuTruoc = await tong();
+  console.log(`\n### Tổng ĐANG GIỮ toàn kho trước lượt này: ${giuTruoc}`);
+
   if (!AP_DUNG) {
     console.log('\n--- KHÔNG ghi gì. Chạy lại với --ap-dung để dọn thật. ---');
     process.exit(0);
@@ -81,6 +92,7 @@ async function main() {
   /* DỌN. Mỗi dòng một transaction riêng: một dòng hỏng không được kéo theo dòng khác, và
    * `applyMovement` là chỗ duy nhất được phép đụng sổ kho — không tự UPDATE tồn kho bằng tay. */
   const { applyMovement } = await import('@/features/warehouse/ledger');
+  const { recomputeRollup } = await import('@/features/fulfillment/rollup');
   const { eq } = await import('drizzle-orm');
   const { schema } = await import('@/db/client');
   let nha = 0, loi = 0;
@@ -94,12 +106,19 @@ async function main() {
           sku: inv.sku, warehouseCode: inv.kho,
           deltaOnHand: 0, deltaReserved: -Number(r.giu ?? 1),
           reason: 'release_allocation', refType: 'item', refId: String(r.o_kho),
-          note: `Nhả giữ oan: đơn ${r.don} đã giao xong (lượt nạp lịch sử 30/09/2026)`,
+          note: `Nhả giữ oan: đơn ${r.don} đã giao xong (${CA_CU ? 'ca cũ trước 30/09/2026' : 'lượt nạp lịch sử 30/09/2026'})`,
           actor: 'system:don-giu-hang-oan',
         });
         await tx.update(schema.orderFulfillmentLines)
           .set({ status: 'shipped', warehouseInventoryId: null, allocatedQty: 0, updatedAt: sql`now()` })
           .where(eq(schema.orderFulfillmentLines.id, String(r.dong_id)));
+        /* PHẢI tính lại trạng thái hồ sơ trong CÙNG transaction. Bản đầu của script thiếu chỗ
+         * này: nó đẩy dòng sang 'shipped' rồi để hồ sơ nằm lại ở 'ready_to_pick' — tạo ra đúng
+         * 125 hồ sơ "mọi dòng đã đi mà hồ sơ vẫn trong hàng đợi", rồi em suýt báo CEO đó là một
+         * lỗi khác có từ trước. Sửa dòng mà không tính lại tổng là để lại hai sự thật đá nhau. */
+        const [dong] = await tx.select({ hoSo: schema.orderFulfillmentLines.fulfillmentId })
+          .from(schema.orderFulfillmentLines).where(eq(schema.orderFulfillmentLines.id, String(r.dong_id)));
+        if (dong) await recomputeRollup(tx, dong.hoSo);
       });
       nha++;
     } catch (e) {
@@ -113,7 +132,11 @@ async function main() {
       .where(eq(schema.orderFulfillment.id, String(r.ho_so_id)));
     doHoSo++;
   }
+  const giuSau = await tong();
   console.log(`\nĐÃ NHẢ ${nha} món (hỏng ${loi}) · đưa ${doHoSo} hồ sơ ra khỏi hàng đợi.`);
+  console.log(`Tổng đang giữ toàn kho: ${giuTruoc} → ${giuSau} (giảm ${giuTruoc - giuSau})`);
+  // Số giảm PHẢI bằng số đã nhả. Lệch nghĩa là có thứ khác vừa đụng vào tồn, phải biết ngay.
+  if (giuTruoc - giuSau !== nha) console.error(`!! LỆCH: giảm ${giuTruoc - giuSau} nhưng nhả ${nha} — kiểm ngay`);
   process.exit(loi > 0 ? 1 : 0);
 }
 main().catch((e) => { console.error('HỎNG:', e instanceof Error ? e.stack : String(e)); process.exit(1); });
