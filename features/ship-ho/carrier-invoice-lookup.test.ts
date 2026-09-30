@@ -114,3 +114,45 @@ describe('costToVndFactor — tiền tệ của CHÍNH hoá đơn thắng cấu 
     expect(costToVndFactor('VND', 'USD', 26000, 'SAR')).toBeNull();
   });
 });
+
+/**
+ * MMP hỏi 30/09/2026: tài liệu nói `signature` đã gộp phí giao nhà dân, nhưng danh sách mã vẫn
+ * có `residential` riêng — bảng kê mang cả hai thì nhà dân bị thu hai lần, mà Σ vẫn khớp nên
+ * bộ kiểm của họ không bắt được.
+ *
+ * Trả lời là KHÔNG thu hai lần, và đây là chỗ canh điều đó: hoá đơn FedEx ghi CHUNG hai khoản
+ * vào cột `signature`; SMS lấy phần nhà dân từ nguồn khác (`shipment_charges.residential`) rồi
+ * TRỪ khỏi signature. Nên `signature + residential` luôn bằng đúng dòng gộp trên hoá đơn —
+ * không thừa, không thiếu, bất kể tách hay không tách.
+ */
+describe('normalizeBilledLine — signature ĐÃ TRỪ residential (bất biến MMP hỏi)', () => {
+  const co = (signature: string, residentialRaw: string | null): BilledSurcharges =>
+    normalizeBilledLine({ ...raw, signature, residentialRaw }, 1, null).surcharges;
+
+  it('có tách: signature + residential = ĐÚNG dòng gộp trên hoá đơn, không thu hai lần', () => {
+    const s = co('177100', '84400');
+    expect(s.signature).toBe(92_700);
+    expect(s.residential).toBe(84_400);
+    expect(s.signature + s.residential).toBe(177_100);
+  });
+
+  it('không tách được (nguồn nhà dân trống): signature giữ NGUYÊN khoản gộp, residential = 0', () => {
+    const s = co('177100', null);
+    expect(s.signature).toBe(177_100);
+    expect(s.residential).toBe(0);
+    expect(s.signature + s.residential).toBe(177_100);
+  });
+
+  it('nhà dân lớn hơn dòng gộp (lệch dữ liệu) → signature kẹp ≥ 0, KHÔNG ra số âm', () => {
+    const s = co('84400', '92700');
+    expect(s.signature).toBe(0);
+    expect(s.residential).toBe(92_700);
+  });
+
+  it('không có khoản ký nhận nào → cả hai bằng 0', () => {
+    const s = co('0', null);
+    expect(s.signature).toBe(0);
+    expect(s.residential).toBe(0);
+  });
+});
+

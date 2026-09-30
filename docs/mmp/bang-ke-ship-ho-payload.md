@@ -76,6 +76,20 @@ Một đơn xuất hiện ở **cả hai** bảng kê, ở hai thời điểm kh
 đó = `amountVnd` ở kê cước + `amountVnd` ở kê duty. **Đừng cộng `fees` của hai kê vào một chỗ
 rồi so với một con số duy nhất** — chúng là hai lần thu.
 
+## `order.duty_charged` — bảng kê duty KHÔNG thay thế nó
+
+Bảng kê `type: "duty"` là **thêm vào**, không phải bản thay thế. `order.duty_charged` vẫn bắn
+như cũ, cho từng đơn, ngay khi hoá đơn thuế về — độc lập hoàn toàn với việc có bảng kê hay
+chưa (nó chạy cả khi hoá đơn cước chưa về và cả khi đơn đã đóng băng đối soát).
+
+Đo 30/09/2026: **76 sự kiện · 76 đơn · 49.574.929đ**, tất cả đã gửi thành công, **0 sự kiện
+tồn**, gần nhất 30/09. Con số này **trùng tuyệt đối** với tổng duty trong SMS (76 đơn,
+49.574.929đ) — và trùng với `ShipHoDutyCharge` phía MMP.
+
+Hai đường phục vụ hai việc khác nhau và phải đọc cả hai: `order.duty_charged` **đưa thuế vào
+công nợ từng đơn**; bảng kê duty **gom kỳ để kế toán đối soát**. Tắt đường nào cũng mất việc
+của đường đó.
+
 ## Quan hệ với sự kiện `order.reconciled`
 
 `statement.issued` **không thay thế** `order.reconciled`. Hai kênh khác nhau, đọc cả hai:
@@ -128,10 +142,25 @@ bày đủ cột thì khoản vắng mặt coi như 0.
 
 ## Ba lưu ý để MMP không đối soát nhầm với file tay của Đức
 
-**1. `signature` gộp cả phí giao nhà dân.** Hoá đơn FedEx ghi chung hai khoản vào mục ký nhận
-— đo 141 đơn, **không đơn nào** có hai khoản tách riêng trên hoá đơn. File của Đức tách chúng
-bằng kiến thức riêng (phí nhà dân chuẩn 84.400đ), không phải bằng số trên hoá đơn. SMS trung
-thành với hoá đơn nên gửi một khoản gộp. Ví dụ: Đức ghi `92.700 + 84.400`, SMS gửi `177.100`.
+**1. `signature` và `residential` KHÔNG chồng nhau — mang cả hai không thu hai lần.**
+
+Câu trong bản trước (*"`signature` gộp cả phí giao nhà dân"*) mô tả **hoá đơn**, không phải
+payload, và dễ hiểu nhầm. Nói lại cho đúng:
+
+- Hoá đơn FedEx ghi **chung** hai khoản vào một dòng ký nhận.
+- SMS lấy phần nhà dân từ **nguồn khác** rồi **TRỪ khỏi** `signature`.
+- Bất biến: `signature + residential` = **đúng** dòng gộp trên hoá đơn. Luôn đúng, dù tách
+  được hay không. Tách được thì `92.700 + 84.400`; không tách được thì `177.100 + 0`
+  (khoản 0 bị bỏ khỏi payload). **Tổng không đổi ở cả hai đường.**
+
+Đo trên toàn bộ 141 đơn đã đối soát (30/09/2026): `residential > 0` ở **0 đơn**, mang **cả
+hai** ở **0 đơn**, và `signature + residential` lệch dòng gộp ở **0 đơn**. Nên thực tế hôm nay
+`signature` đang mang khoản gộp và `residential` vắng mặt — nhưng nếu nguồn tách được bật lên
+thì `signature` tự nhỏ lại đúng bằng phần nhà dân. **Có test canh bất biến này.**
+
+MMP đúng khi nói bộ kiểm tổng không bắt được ca này: Σ vẫn khớp kể cả khi một khoản sai.
+Phép kiểm thẳng cho ca này là **`residential` chỉ được xuất hiện kèm `signature` đã nhỏ đi
+tương ứng** — mà điều đó thì phía nhận không tự kiểm được, nên nó được canh ở phía SMS.
 
 **2. Duty về sau cước 3–6 tuần.** Một đơn có thể được gửi ở bảng kê `freight` trước, rồi duty
 về sau và vào bảng kê `duty`. Khi duty về, giá cước của đơn **có thể được tính lại**. Đo
