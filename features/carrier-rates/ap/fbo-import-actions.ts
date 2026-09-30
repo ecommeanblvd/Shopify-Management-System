@@ -256,6 +256,9 @@ export async function importFboToDatabase(
         directSignature: numStr(r.signature), residential: numStr(r.residential), vat: numStr(r.vat), gogreen: '0',
         addressCorrection: numStr(r.addressCorrection),
         discount: numStr(r.discount), elevatedRisk: '0', importHandling: numStr(r.importHandling),
+        // Tên cột là `billing_weight_kg` nhưng giá trị là CÂN FedEx CÂN ĐƯỢC, không phải cân
+        // tính cước — xem ghi chú đã đo ở `fedex-fbo-parse.ts`. Giữ tên cột (đổi tên cột là
+        // migration + mọi chỗ đọc), ghi rõ ở đây để không ai đọc nhầm nghĩa lần nữa.
         billingWeightKg: r.weightKg != null ? numStr(r.weightKg) : null,
         source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
       };

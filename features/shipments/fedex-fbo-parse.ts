@@ -76,9 +76,22 @@ export interface FboBilledRow {
   recipientCity: string | null;
   recipientState: string | null;
   recipientPostcode: string | null;
-  /** CÂN TÍNH PHÍ (chargeable/billing weight) FedEx dùng, đã quy về KG. Cột FBO
-   *  "Số tiền theo trọng lượng tính cước" (giá trị là CÂN, không phải tiền) +
-   *  đơn vị (K=kg, P=lb). Dùng làm input quote chính xác nhất cho từng AWB. */
+  /**
+   * CÂN FedEx CÂN ĐƯỢC, đã quy về KG. Cột FBO "Số tiền theo trọng lượng tính cước"
+   * (giá trị là CÂN, không phải tiền) + đơn vị (K=kg, P=lb).
+   *
+   * ĐÂY KHÔNG PHẢI CÂN TÍNH CƯỚC, dù tên cột trong file FBO nghe như vậy. Ghi chú cũ ở đây
+   * viết là "chargeable/billing weight" — ĐO TRÊN DỮ LIỆU THẬT 30/09/2026 thì sai:
+   *   - 42 đơn kalisa của 2 kỳ đã phát hành, so cân này với MỐC CÂN của ô bảng giá mà chính
+   *     hoá đơn trùng từng đồng: bằng nhau 8, THẤP HƠN 34, cao hơn 0.
+   *   - Giá trị rơi lung tung (1,7 · 1,8 · 2,1 · 2,2 · 1,4) chứ không nằm trên bậc 0,5kg.
+   *     Cân tính cước thì phải trùng bậc biểu giá.
+   * Tức FedEx ghi cân CÂN ĐƯỢC rồi tự làm tròn LÊN bậc để tính tiền; bậc đó không in ra.
+   *
+   * Muốn biết CÂN TÍNH CƯỚC thì suy ngược từ tiền: cước net của dòng bill trùng đúng một ô
+   * biểu giá, mốc cân của ô đó chính là cân FedEx đã tính. KHÔNG suy từ kích thước brand
+   * khai — kích thước khai bị thổi lên làm lệch 2/42 đơn (#KLS1994, #KLS2011).
+   */
   weightKg: number | null;
   /** POD từ bill: bằng chứng giao hàng chính thức của FedEx (ngày+giờ, người ký). */
   podAt: string | null;   // 'YYYY-MM-DDTHH:mm:00' (giờ địa phương điểm giao)
