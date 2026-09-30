@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { CountryFlag } from '@/components/ui/country-flag';
 import { LO_TRINH_LOI, NGUONG_HIEN_TUYEN, SO_THANG_NHIN_TUYEN, gomTuyenItKien } from '@/features/shipments/sop-giao-hang';
 import { nguongDatKy } from '@/features/kpi-logistics/quy-che';
+import { xepLoaiTuyen, MAU_XEP_LOAI } from '@/features/kpi-logistics/xep-loai-tuyen';
 import type { DongKpiNuoc } from '@/features/shipments/sop-giao-hang';
 
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -76,7 +77,9 @@ export function BangTuyen12({ ky, tu, cuaSoTuyen, theoNuoc }: {
               <thead className="sticky top-0 z-10 bg-muted/90 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
                   <th className="text-left">Nước / hãng</th><th className="text-right">Cam kết</th>
-                  <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th><th className="text-right">% đúng hạn</th>
+                  <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th>
+                  <th className="text-right">% đúng hạn</th><th className="text-right">Ngưỡng kỳ</th>
+                  <th className="text-left">Kết quả</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,7 +92,9 @@ export function BangTuyen12({ ky, tu, cuaSoTuyen, theoNuoc }: {
                       <td className="text-right">{d.slaNgay} ngày</td>
                       <td className="text-right">{d.n}</td>
                       <td className="text-right">{d.dungHan}</td>
-                      <td className={`text-right font-semibold ${(d.tyLeDungHan ?? 0) >= nguong ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{pct(d.tyLeDungHan)}</td>
+                      <td className={`text-right font-semibold ${MAU_XEP_LOAI[xepLoaiTuyen(d.tyLeDungHan, d.n, nguong).ma]}`}>{pct(d.tyLeDungHan)}</td>
+                      <td className="text-right text-muted-foreground">{pct(nguong)}</td>
+                      <td className={`text-left text-xs ${MAU_XEP_LOAI[xepLoaiTuyen(d.tyLeDungHan, d.n, nguong).ma]}`}>{xepLoaiTuyen(d.tyLeDungHan, d.n, nguong).nhan}</td>
                     </tr>
                     {d.theoLine.map((l) => (
                       <tr key={`${d.country}-${l.line}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
@@ -97,7 +102,12 @@ export function BangTuyen12({ ky, tu, cuaSoTuyen, theoNuoc }: {
                         <td className="text-right">{l.slaNgay} ngày</td>
                         <td className="text-right">{l.n}</td>
                         <td className="text-right">{l.dungHan}</td>
-                        <td className="text-right">{pct(l.tyLeDungHan)}</td>
+                        {/* Dòng hãng con TRƯỚC NAY không có tín hiệu nào: UPS 11,1% trông y hệt
+                            FedEx 85,5%. Nay chấm như dòng nước, nhưng hãng ít kiện thì nói
+                            "chưa đủ kiện" chứ không nhuộm đỏ một kết luận trên nhiễu. */}
+                        <td className={`text-right font-medium ${MAU_XEP_LOAI[xepLoaiTuyen(l.tyLeDungHan, l.n, nguong).ma]}`}>{pct(l.tyLeDungHan)}</td>
+                        <td className="text-right">{pct(nguong)}</td>
+                        <td className={`text-left text-[11px] ${MAU_XEP_LOAI[xepLoaiTuyen(l.tyLeDungHan, l.n, nguong).ma]}`}>{xepLoaiTuyen(l.tyLeDungHan, l.n, nguong).nhan}</td>
                       </tr>
                     ))}
                   </Fragment>
@@ -109,6 +119,8 @@ export function BangTuyen12({ ky, tu, cuaSoTuyen, theoNuoc }: {
                     <td className="text-right">{tuyen.gop.n}</td>
                     <td className="text-right">{tuyen.gop.dungHan}</td>
                     <td className="text-right">{pct(tuyen.gop.tyLeDungHan)}</td>
+                    <td className="text-right">{pct(nguong)}</td>
+                    <td className="text-left text-[11px] italic">Không chấm riêng từng nước</td>
                   </tr>
                 )}
               </tbody>
@@ -118,7 +130,10 @@ export function BangTuyen12({ ky, tu, cuaSoTuyen, theoNuoc }: {
           <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
             Bảng này nhìn {SO_THANG_NHIN_TUYEN} tháng chứ không riêng kỳ chấm: một tháng cho mỗi tuyến quá ít kiện để kết
             luận — T9/2026 tuyến AU có đúng 10 kiện, thêm một kiện trễ là tụt 10 điểm. ĐIỂM SỐ vẫn chấm theo tháng ở bảng
-            tiêu chí. Cam kết lấy từ bảng SOP trong Báo cáo ship — theo từng nước, hãng nhanh hơn có thước riêng.
+            tiêu chí. Cột <b>Cam kết</b> là số NGÀY giao theo từng nước (bảng SOP trong Báo cáo ship, hãng nhanh hơn có
+            thước riêng); cột <b>Ngưỡng kỳ</b> là tỉ lệ đúng hạn phải đạt — quy chế chỉ có MỘT ngưỡng chung cho mọi
+            tuyến, siết dần theo lộ trình, KHÔNG có ngưỡng riêng theo nước. Dòng dưới {NGUONG_HIEN_TUYEN} kiện không
+            chấm đạt/trượt: một kiện trễ đã đổi tỉ lệ cả chục điểm nên kết luận sẽ là kết luận trên nhiễu.
             {tuyen.gop && ` Nước dưới ${NGUONG_HIEN_TUYEN} kiện gộp một dòng: vài kiện lẻ không đủ kết luận một tuyến có vấn đề. Kiện của các nước đó vẫn nằm trong tổng, và bản CSV vẫn có đủ từng nước.`}
           </p>
         </DialogContent>
