@@ -58,7 +58,22 @@ Ký trên **raw body**, không phải JSON đã parse lại.
 | `fedexInvoiceNumber`, `invoiceDate` | | **chỉ có ở bảng kê `type: "duty"`** |
 
 **Bất biến quan trọng:** `sum(fees[].amountVnd) === amountVnd`, trong CÙNG một bảng kê.
-Đã kiểm trên dữ liệu thật: bảng kê cước **137/137**, bảng kê duty **74/74**.
+Đo lại 30/09/2026: bảng kê cước **137/137**, bảng kê duty **75/75**.
+
+### Ba con số hay bị so nhầm với nhau
+
+Bản trước ghi "137/137 và 74/74" mà không nói rõ **đếm cái gì**, nên MMP so nó với số đơn đã
+nhận được và tưởng thiếu 1 đơn cước, thừa 2 đơn duty. Không đơn nào thiếu. Ba con số dưới đây
+đếm **ba tập khác nhau** và không được so chéo:
+
+| Con số | Đếm cái gì | Hôm nay |
+|---|---|---|
+| Bất biến khoản phí | đơn có bảng khoản phí, dùng để KIỂM `sum(fees) === amountVnd` | cước 137, duty 75 |
+| Đơn đã đẩy `order.reconciled` thành công | đơn MMP đã nhận giá chốt | **136** |
+| Đơn đã đẩy `order.duty_charged` thành công | đơn MMP đã nhận thuế | **76** |
+
+Hai con số cuối là thứ MMP đối chiếu được với sổ của mình, và chúng **khớp tuyệt đối** với số
+MMP báo (136 / 76). Con số đầu chỉ là thống kê kiểm nội bộ của SMS.
 
 Đề xuất của MMP — **trả 422 khi tổng không khớp** — là đúng và chúng tôi ủng hộ. Lệch tiền
 phải bật lên ngay, không ghi bừa.
