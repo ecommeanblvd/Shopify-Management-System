@@ -5,6 +5,13 @@
  * những phương thức giao nào, giá bao nhiêu. KHÔNG so với bảng tham chiếu nội bộ — bảng
  * `market_store_overrides` chỉ có dòng cho cici-mean, nên nó không nói được gì về hai store này.
  *
+ * SỐ PROFILE KHÁC NHAU KHÔNG PHẢI LỖI (CEO 01/10/2026): MEAN BLVD cần 2 profile vì gom nhiều
+ * brand với thời gian sản xuất khác nhau; Tinh Atelier chỉ cần 1. Nên chỉ so vùng TRONG NHỮNG
+ * PROFILE CẢ HAI BÊN ĐỀU CÓ, còn chênh lệch profile thì báo ở mục thông tin.
+ *
+ * Lý do tách như vậy: một phép rà báo động chuyện CỐ Ý thì lần sau không ai tin nó nữa — cùng
+ * bài học với dải cảnh báo hàng đợi (đếm cả bản cố ý bỏ thì con số phình lên và mất uy tín).
+ *
  * Chạy: railway run --service Shopify-Management-System npx tsx scripts/soi-ship-2-store.ts <chuan> <soi>
  */
 import { db } from '@/db/client';
@@ -77,7 +84,18 @@ async function main() {
   const vb = bocVung(await docShip(B));
   console.log(`Vùng giao hàng: ${tenChuan} ${va.size} · ${tenSoi} ${vb.size}\n`);
 
-  const moi = [...new Set([...va.keys(), ...vb.keys()])].sort();
+  // Tách profile ra: chỉ so vùng trong profile CẢ HAI bên đều có.
+  const prof = (k: string) => k.split(' › ')[0];
+  const pa = new Set([...va.keys()].map(prof)), pb = new Set([...vb.keys()].map(prof));
+  const chung = [...pa].filter((x) => pb.has(x));
+  console.log('PROFILE — thông tin, không phải lỗi:');
+  console.log(`   ${tenChuan}: ${[...pa].join(' | ')}`);
+  console.log(`   ${tenSoi}: ${[...pb].join(' | ')}`);
+  const rieng = [...pa].filter((x) => !pb.has(x)).concat([...pb].filter((x) => !pa.has(x)));
+  if (rieng.length) console.log(`   Chỉ một bên có: ${rieng.join(' | ')} — số profile khác nhau là CHỦ Ý, không so.`);
+  console.log(`   So vùng trong ${chung.length} profile chung: ${chung.join(' | ')}\n`);
+
+  const moi = [...new Set([...va.keys(), ...vb.keys()])].filter((k) => chung.includes(prof(k))).sort();
   const thieu: string[] = [], thua: string[] = [], lechNuoc: any[] = [], lechGia: any[] = [];
   for (const k of moi) {
     const a = va.get(k), b = vb.get(k);
