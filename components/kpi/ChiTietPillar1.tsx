@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { csvBody, type CsvValue } from '@/lib/csv';
 import { LyDoChamSelect } from '@/components/shipments/LyDoChamSelect';
 import { NutGiaiTrinh, NhanTrachNhiem } from './GiaiTrinhAmCuoc';
@@ -42,36 +42,57 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = fals
   /** Trạng thái nộp của tiêu chí 1.2 trong kỳ; bỏ trống = coi như đang làm. */
   nop12?: { trangThai: TrangThaiNop; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number };
 }) {
-  const [ma, setMa] = useState<MaTieuChi | null>(null);
-  const [kho, setKho] = useState<Partial<Record<MaTieuChi, ChiTietKpi>>>({});
+  /* MỞ SẴN 1.1 thay vì để trống (CEO 30/09/2026). Tiêu chí 1.1 là thứ có việc phải làm nhiều
+   * nhất — giải trình từng đơn âm cước — nên để trống là bắt người dùng bấm thêm một nhịp ở
+   * đúng chỗ họ luôn phải vào. */
+  const MAC_DINH: MaTieuChi = '1.1';
+  const [ma, setMa] = useState<MaTieuChi | null>(MAC_DINH);
+  /* Kho nhớ GẮN VỚI KỲ. Trước nay chỉ nhớ theo mã tiêu chí, mà đổi kỳ thì component không bị
+   * dựng lại (điều hướng client giữ nguyên vị trí trong cây React) — nên dữ liệu kỳ cũ nằm lại
+   * dưới nhãn kỳ mới. Suy ra từ khoá kỳ thay vì xoá bằng setState trong effect. */
+  const khoaKy = `${tu}|${den}`;
+  const [kho, setKho] = useState<{ ky: string; data: Partial<Record<MaTieuChi, ChiTietKpi>> }>({ ky: khoaKy, data: {} });
+  const duLieuKy = kho.ky === khoaKy ? kho.data : {};
   const [loi, setLoi] = useState<string | null>(null);
   const [dangTai, start] = useTransition();
 
-  const chon = (m: MaTieuChi) => {
-    if (ma === m) { setMa(null); return; }
-    setMa(m); setLoi(null);
-    if (kho[m]) return;
+  const ghiKho = (m: MaTieuChi, d: ChiTietKpi) =>
+    setKho((cu) => ({ ky: khoaKy, data: { ...(cu.ky === khoaKy ? cu.data : {}), [m]: d } }));
+
+  /** Tiêu chí + kỳ nào ĐÃ yêu cầu rồi — chặn effect gọi lại vòng vô hạn. */
+  const daYeuCau = useRef<Set<string>>(new Set());
+
+  // Nạp tiêu chí đang chọn: chạy cả lúc mới mở (1.1) lẫn khi đổi kỳ.
+  useEffect(() => {
+    if (ma == null) return;
+    const khoa = `${khoaKy}|${ma}`;
+    if (daYeuCau.current.has(khoa)) return;
+    daYeuCau.current.add(khoa);
     start(async () => {
       try {
-        const d = await tai(m, tu, den);
-        setKho((k) => ({ ...k, [m]: d }));
+        const d = await tai(ma, tu, den);
+        setKho((cu) => ({ ky: khoaKy, data: { ...(cu.ky === khoaKy ? cu.data : {}), [ma]: d } }));
       } catch (e) {
         setLoi(String((e as Error).message ?? e));
       }
     });
+  }, [ma, khoaKy, tai, tu, den]);
+
+  const chon = (m: MaTieuChi) => {
+    setLoi(null);
+    setMa(ma === m ? null : m);
   };
 
   /** Nạp lại một tiêu chí sau khi đổi dữ liệu (gán lý do chậm có thể đổi cả kết quả chấm). */
   const taiLai = (m: MaTieuChi) => start(async () => {
     try {
-      const d = await tai(m, tu, den);
-      setKho((k) => ({ ...k, [m]: d }));
+      ghiKho(m, await tai(m, tu, den));
     } catch (e) {
       setLoi(String((e as Error).message ?? e));
     }
   });
 
-  const data = ma ? kho[ma] : undefined;
+  const data = ma ? duLieuKy[ma] : undefined;
 
   return (
     <section className="rounded-lg border border-border">
@@ -92,7 +113,7 @@ export function ChiTietPillar1({ tu, den, ky, tai, ganLyDoDuoc, duyetDuoc = fals
 
       {dangTai && <p className="px-4 py-3 text-xs text-muted-foreground animate-pulse">Đang lấy dữ liệu…</p>}
       {loi && <p className="px-4 py-3 text-xs text-red-600 dark:text-red-400">{loi}</p>}
-      {!ma && !dangTai && <p className="px-4 py-3 text-xs text-muted-foreground">Chưa chọn tiêu chí nào.</p>}
+      {!ma && !dangTai && <p className="px-4 py-3 text-xs text-muted-foreground">Đã đóng — bấm một tiêu chí để mở lại.</p>}
 
       {ma && data && !dangTai && (
         <div className="space-y-3 p-4">
