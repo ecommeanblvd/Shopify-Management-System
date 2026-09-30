@@ -113,7 +113,15 @@ export interface InvoiceCtx {
   displayCurrency?: string;
   userId: string;
 }
-export interface InvoiceImportResult { filename: string; ok: boolean; billNumber: string | null; amount: number | null; matched: number | null; freight: number | null; message: string | null }
+export interface InvoiceImportResult {
+  filename: string; ok: boolean; billNumber: string | null; amount: number | null;
+  matched: number | null; freight: number | null; message: string | null;
+  /* Thêm 30/09/2026: "khớp 0" trước nay gộp "đơn SHIP HỘ hệ thống có biết" với "mã hoàn toàn
+     lạ". Đức tải hai tờ duty ship hộ, thấy "0/2", nghĩ hỏng — 1.065.043đ nằm im tới khi CEO
+     hỏi tới. Tách ra để con số nói đúng việc cần làm. Xem `awb-ship-ho.ts`. */
+  shipHo?: number | null;
+  shipHoNoiDuty?: number | null;
+}
 
 const td = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
@@ -433,7 +441,11 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const amount = res.bills.reduce((s, b) => s + (b.amount || 0), 0);
         const billNumber = res.bills.length === 1 ? (res.bills[0]?.billNumber ?? null) : `${res.bills.length} hoá đơn`;
         res.bills.forEach((b) => { if (b.billNumber) seen.add(b.billNumber); });
-        out.push({ filename: f.filename, ok: true, billNumber, amount: amount || null, matched: res.matchedAwb, freight: res.totalAwb, message: `Tạo ${res.billsCreated}, cập nhật ${res.billsUpdated} hoá đơn` });
+        out.push({ filename: f.filename, ok: true, billNumber, amount: amount || null, matched: res.matchedAwb, freight: res.totalAwb,
+          shipHo: res.shipHoAwb, shipHoNoiDuty: res.shipHoNoiDuty,
+          message: [`Tạo ${res.billsCreated}, cập nhật ${res.billsUpdated} hoá đơn`,
+            res.shipHoAwb > 0 ? `${res.shipHoAwb} dòng ship hộ — đã nối duty ${res.shipHoNoiDuty} đơn` : null,
+            res.khongBietAwb > 0 ? `${res.khongBietAwb} mã không tìm thấy` : null].filter(Boolean).join(' · ') });
       }
     } catch (e) { out.push({ ...base, message: (e as Error).message || 'Lỗi xử lý file' }); }
   }

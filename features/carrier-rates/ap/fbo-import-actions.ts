@@ -17,6 +17,7 @@ import { applyReturnLinks } from '@/features/shipments/return-bill';
 import { putObject } from '@/lib/storage/s3';
 import { parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, type FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
+import { phanLoaiAwb } from './awb-ship-ho';
 import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
 
 export interface FboBillSummary {
@@ -55,6 +56,27 @@ async function resolveAwbMap(awbs: string[]): Promise<Map<string, string>> {
       .select({ id: schema.shipments.id, t: schema.shipments.trackingNumber })
       .from(schema.shipments)
       .where(inArray(schema.shipments.trackingNumber, chunk));
+    for (const s of rows) if (s.t) map.set(s.t, s.id);
+  }
+  return map;
+}
+
+/**
+ * AWB nào thuộc đơn SHIP HỘ (bảng riêng, bộ khớp store không tra tới).
+ *
+ * Thêm 30/09/2026: hoá đơn duty ship hộ vào hệ thống rồi mà màn báo "KHỚP/TỔNG 0/2" — đọc y
+ * như hỏng, nên người tải nghĩ hệ thống không nhận và 1.065.043đ nằm im. Biết mã nào là ship
+ * hộ thì vừa đếm đúng, vừa NỐI ĐƯỢC duty ngay tại đây thay vì chờ ai nhớ sang màn khác bấm.
+ */
+async function resolveShipHoAwbMap(awbs: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (awbs.length === 0) return map;
+  for (let i = 0; i < awbs.length; i += 500) {
+    const chunk = awbs.slice(i, i + 500);
+    const rows = await db
+      .select({ id: schema.shipHoOrders.id, t: schema.shipHoOrders.trackingNumber })
+      .from(schema.shipHoOrders)
+      .where(inArray(schema.shipHoOrders.trackingNumber, chunk));
     for (const s of rows) if (s.t) map.set(s.t, s.id);
   }
   return map;
@@ -124,6 +146,14 @@ export interface FboApplyResult extends FboPreview {
   billsCreated: number;
   billsUpdated: number;
   chargesUpserted: number;
+  /* Thêm 30/09/2026 — xem `awb-ship-ho.ts`. "Không khớp" trước nay gộp hai chuyện rất khác:
+     mã của đơn SHIP HỘ (hệ thống CÓ biết) và mã hoàn toàn lạ (mới cần người đi tra). */
+  /** Dòng thuộc đơn ship hộ. */
+  shipHoAwb: number;
+  /** Trong số đó, bao nhiêu đơn vừa được ghi duty ngay trong lượt nhập này. */
+  shipHoNoiDuty: number;
+  /** Dòng không tìm thấy ở BẤT KỲ bảng nào — đây mới là việc cần người. */
+  khongBietAwb: number;
 }
 
 const numStr = (v: number) => v.toString();
@@ -273,12 +303,51 @@ export async function importFboToDatabase(
   const awbs = rows.map((r) => r.awb);
   const matched = awbs.filter((a) => awbMap.has(a));
   const unmatched = awbs.filter((a) => !awbMap.has(a));
+
+  /* Dòng KHÔNG khớp kiện store có thể là đơn SHIP HỘ — hệ thống CÓ biết, chỉ là bộ khớp trên
+   * không tra bảng đó. Nối duty NGAY TẠI ĐÂY: trước nay phải có người nhớ sang màn Ship hộ bấm
+   * "Đối soát", và không màn nào nói ra điều đó (CEO 30/09/2026). */
+  const shipHoMap = await resolveShipHoAwbMap(unmatched);
+  const phanLoai = phanLoaiAwb(awbs, awbMap, shipHoMap);
+  let shipHoNoiDuty = 0;
+  if (shipHoMap.size > 0) {
+    try { shipHoNoiDuty = await noiDutyChoShipHo([...new Set(phanLoai.laShipHo)]); }
+    catch (e) { console.error('[fbo-import] nối duty ship hộ hỏng:', e); }
+  }
+
   return {
     bills: toSummary(bills),
     totalAwb: awbs.length, matchedAwb: matched.length, unmatchedAwb: unmatched.length,
-    grandTotal: bills.reduce((s, x) => s + x.amount, 0), unmatchedSample: unmatched.slice(0, 8),
+    shipHoAwb: phanLoai.laShipHo.length, shipHoNoiDuty,
+    khongBietAwb: phanLoai.khongBiet.length,
+    grandTotal: bills.reduce((s, x) => s + x.amount, 0), unmatchedSample: phanLoai.khongBiet.slice(0, 8),
     billsCreated: counts.created, billsUpdated: counts.updated, chargesUpserted: counts.charges,
   };
+}
+
+/**
+ * Nối duty cho các đơn ship hộ vừa có hoá đơn.
+ *
+ * Best-effort có chủ ý: lượt nhập hoá đơn KHÔNG được hỏng chỉ vì phần nối duty lỗi — hoá đơn
+ * đã vào CSDL rồi, và lượt đối soát ship hộ vẫn nối lại được. Nhưng lỗi phải ghi ra, không nuốt.
+ */
+async function noiDutyChoShipHo(trackings: readonly string[]): Promise<number> {
+  if (trackings.length === 0) return 0;
+  const { ghiDutyChoDon } = await import('@/features/ship-ho/duty');
+  const don = await db.select({
+    id: schema.shipHoOrders.id, code: schema.shipHoOrders.code, source: schema.shipHoOrders.source,
+    mmpRef: schema.shipHoOrders.mmpRef, trackingNumber: schema.shipHoOrders.trackingNumber,
+    shippedAt: schema.shipHoOrders.shippedAt, actualDutyVnd: schema.shipHoOrders.actualDutyVnd,
+    dutyBillNumbers: schema.shipHoOrders.dutyBillNumbers,
+  }).from(schema.shipHoOrders).where(inArray(schema.shipHoOrders.trackingNumber, [...trackings]));
+  let n = 0;
+  for (const o of don) {
+    try {
+      const r = await ghiDutyChoDon({ ...o, shippedAt: o.shippedAt ?? null });
+      if (r.daGhi) n++;
+    } catch (e) { console.error(`[fbo-import] nối duty hỏng cho ${o.code}:`, e); }
+  }
+  return n;
 }
 
 /** Action UI: parse + lưu file Excel lên R2 (đính chứng từ) + import. */

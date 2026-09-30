@@ -266,7 +266,15 @@ function ResultsTable({ results, fmt }: { results: InvoiceImportResult[]; fmt: (
                   <td className="px-3 py-1.5 font-mono">{r.billNumber ?? '—'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{fmt(r.amount)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
+                    {/* "0/2" trần trụi đọc y như HỎNG. Dòng ship hộ là thứ hệ thống CÓ biết và
+                        đã tự nối — phải hiện riêng, không trộn vào phần chưa khớp (CEO 30/09). */}
                     {r.matched != null && r.freight != null ? `${r.matched}/${r.freight}` : '—'}
+                    {r.shipHo != null && r.shipHo > 0 && (
+                      <span className="ml-1 rounded bg-sky-600/15 px-1 text-[10px] text-sky-700 dark:text-sky-400"
+                            title="Đơn ship hộ — nối qua đối soát ship hộ, không phải kiện của store">
+                        +{r.shipHo} ship hộ
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-1.5 text-muted-foreground max-w-[200px] truncate">{r.message ?? ''}</td>
                 </tr>
