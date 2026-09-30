@@ -16,6 +16,7 @@ import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } f
 import { ReconcileStatusCell, type ReconcileModalData } from '@/components/ship-ho/reconcile-decision-ui';
 import { ReconcileBillsButton } from './ReconcileBillsButton';
 import { OrderRow } from './OrderRow';
+import { CanhBaoHangDoi } from '@/components/ship-ho/CanhBaoHangDoi';
 import { TrackingCell } from './TrackingCell';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
@@ -105,6 +106,9 @@ export default async function ShipHoListPage({
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
+      {/* Sự kiện kẹt trong hàng đợi gửi MMP — đặt TRÊN CÙNG màn đơn vì đây là chỗ người vận
+          hành thật sự mở. Hàng đợi sạch thì không hiện gì (xem CanhBaoHangDoi). */}
+      <CanhBaoHangDoi />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Đơn ship hộ</h1>
