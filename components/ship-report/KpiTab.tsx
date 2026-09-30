@@ -1,8 +1,8 @@
-import { Fragment } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { CountryFlag } from '@/components/ui/country-flag';
 import { NhapKpiForm } from '@/components/kpi/NhapKpiForm';
 import { NutChotKy } from '@/components/kpi/NutChotKy';
+import { BangTuyen12 } from '@/components/kpi/BangTuyen12';
+import { KhuQuanLy } from '@/components/kpi/KhuQuanLy';
 import Link from 'next/link';
 import { viecChoDuyet } from '@/features/kpi-logistics/cho-duyet';
 import { ChiTietPillar1 } from '@/components/kpi/ChiTietPillar1';
@@ -10,9 +10,9 @@ import { ChiTietPillar2 } from '@/components/kpi/ChiTietPillar2';
 import { docChiTietKpi } from '@/features/kpi-logistics/chi-tiet-actions';
 import { docChiTietPillar2, luuSuCo, xoaSuCo, timDonShipHo } from '@/features/ship-ho/pillar2-actions';
 import type { SoLieuTuDong } from '@/features/kpi-logistics/queries';
+import type { SoChoDuyet } from '@/features/kpi-logistics/cho-duyet-queries';
 import type { kpiLogisticsThang } from '@/db/schema';
-import { bangDiemKpi, nguongDatKy, type DongDiem } from '@/features/kpi-logistics/quy-che';
-import { LO_TRINH_LOI, NGUONG_HIEN_TUYEN, SO_THANG_NHIN_TUYEN, gomTuyenItKien } from '@/features/shipments/sop-giao-hang';
+import { bangDiemKpi, type DongDiem } from '@/features/kpi-logistics/quy-che';
 
 const vnd = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 1000) / 10}%`);
@@ -34,8 +34,8 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
   nhap: typeof kpiLogisticsThang.$inferSelect | null;
   /** Kỳ đã chốt chưa — `auto`/`nhap` khi đó là ẢNH CHỤP, không phải số sống. */
   chot: { chotAt: string; ghiChu: string | null } | null;
-  /** Hai con số cho dải "Chờ quản lý duyệt"; null khi người xem không phải quản lý. */
-  soChoDuyet: { kienChoDuyet: number; monCanChoDuyet: number } | null;
+  /** Số liệu cho dải "Chờ quản lý duyệt" và Khu vực quản lý; null khi người xem không phải quản lý. */
+  soChoDuyet: SoChoDuyet | null;
   /** Trạng thái nộp lý do giao chậm của kỳ (tiêu chí 1.2). */
   nop12: { trangThai: 'dang_lam' | 'cho_duyet' | 'da_duyet'; nopAt: string | null; duyetAt: string | null; soDongDangTraLai: number } | null;
   /** Chỉ quản lý (admin) mới sửa được các ô nhập tay — người bị chấm chỉ xem. */
@@ -46,8 +46,6 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
   ghiSuCoDuoc: boolean;
 }) {
   const sla = auto.slaTong;
-  // Cắt nhiễu: tuyến ít kiện gộp một dòng, xem `gomTuyenItKien` (CEO 14/09/2026).
-  const tuyen = gomTuyenItKien(auto.slaTheoNuoc);
   const gateDat = nhap?.gateOverride ?? auto.gateDat;
   const thuHoi = nhap?.thuHoiKeToanVnd != null ? Number(nhap.thuHoiKeToanVnd) : auto.thuHoiVnd;
   /* KHÔNG tự chia lại ở đây. Tỉ lệ thực thu phải lấy hai vế từ CÙNG một tập dòng đối soát
@@ -133,7 +131,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
           mở từng màn. Gom lại một chỗ, nói thẳng còn bao nhiêu và làm ở đâu (CEO 29/09/2026). */}
       {choDuyet.length > 0 && (
         <div className="rounded-xl border border-border bg-card px-4 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chờ quản lý duyệt</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chờ quản lý duyệt — các lệnh duyệt nằm ở KHU VỰC QUẢN LÝ cuối trang</div>
           <ul className="mt-2 space-y-2">
             {choDuyet.map((v) => (
               <li key={v.ma + v.nhan} className="flex flex-wrap items-baseline gap-x-2 text-sm">
@@ -150,7 +148,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
         </div>
       )}
 
-      <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
+      {/* Ở ĐẦU trang chỉ hiện TRẠNG THÁI chốt cho mọi người; nút bấm nằm ở Khu vực quản lý
+          cuối trang để quản lý có đúng MỘT chỗ thao tác (CEO 30/09/2026). */}
+      <NutChotKy ky={ky} daChot={chot} suaDuoc={false} />
 
       {/* Tiền đã đòi được nhưng thiếu chứng từ thì KHÔNG vào 3C của tháng nào — trước đây nó
           im lặng biến mất. Hiện thành con số để có người đi tìm tệp (CEO 29/09/2026). */}
@@ -182,67 +182,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
 
       <ChiTietPillar1 ky={ky} tu={tu} den={den} tai={docChiTietKpi} ganLyDoDuoc={ganLyDoDuoc} duyetDuoc={suaDuoc} nop12={nop12 ?? undefined} />
 
-      <Card><CardContent className="p-0">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold">Chi tiết tiêu chí 1.2 — từng tuyến, {SO_THANG_NHIN_TUYEN} tháng gần nhất</span>
-          <span className="text-[11px] text-muted-foreground">
-            {auto.cuaSoTuyen.tu} → {auto.cuaSoTuyen.den} · ngưỡng {Math.round(nguongDatKy(tu) * 1000) / 10}% · lộ trình {LO_TRINH_LOI.map((m) => `${m.nhan} ${Math.round((1 - m.loiToiDa) * 100)}%`).join(' → ')}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm tabular-nums">
-            <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-                <th className="text-left">Nước / hãng</th><th className="text-right">Cam kết</th>
-                <th className="text-right">Kiện</th><th className="text-right">Đúng hạn</th><th className="text-right">% đúng hạn</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auto.slaTheoNuoc.length === 0 && (
-                <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Chưa có kiện nào ghi nhận giao trong kỳ.</td></tr>
-              )}
-              {tuyen.hien.map((d) => (
-                <Fragment key={d.country}>
-                  <tr className="border-t border-border bg-muted/30 font-medium [&>td]:px-3 [&>td]:py-2">
-                    <td className="text-left">
-                      <span className="inline-flex items-center gap-2"><CountryFlag code={d.country} className="!h-4 !w-6" />{d.country}</span>
-                    </td>
-                    <td className="text-right">{d.slaNgay} ngày</td>
-                    <td className="text-right">{d.n}</td>
-                    <td className="text-right">{d.dungHan}</td>
-                    <td className={`text-right font-semibold ${(d.tyLeDungHan ?? 0) >= nguongDatKy(tu) ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{pct(d.tyLeDungHan)}</td>
-                  </tr>
-                  {d.theoLine.map((l) => (
-                    <tr key={`${d.country}-${l.line}`} className="border-t border-border/30 text-muted-foreground [&>td]:px-3 [&>td]:py-1.5">
-                      <td className="pl-10 text-left text-xs uppercase">{l.line}</td>
-                      <td className="text-right">{l.slaNgay} ngày</td>
-                      <td className="text-right">{l.n}</td>
-                      <td className="text-right">{l.dungHan}</td>
-                      <td className="text-right">{pct(l.tyLeDungHan)}</td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-              {tuyen.gop && (
-                <tr className="border-t border-border text-muted-foreground [&>td]:px-3 [&>td]:py-2">
-                  <td className="text-left italic">{tuyen.gop.soNuoc} nước dưới {NGUONG_HIEN_TUYEN} kiện</td>
-                  <td className="text-right">—</td>
-                  <td className="text-right">{tuyen.gop.n}</td>
-                  <td className="text-right">{tuyen.gop.dungHan}</td>
-                  <td className="text-right">{pct(tuyen.gop.tyLeDungHan)}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-          Bảng này nhìn {SO_THANG_NHIN_TUYEN} tháng chứ không riêng kỳ chấm: một tháng cho mỗi tuyến quá ít kiện để kết luận —
-          T9/2026 tuyến AU có đúng 10 kiện, thêm một kiện trễ là tụt 10 điểm. ĐIỂM SỐ vẫn chấm theo tháng ở bảng tiêu chí phía trên.
-          Cam kết lấy từ bảng SOP trong Báo cáo ship — theo từng nước, hãng nhanh hơn có thước riêng. Ngưỡng đạt siết dần
-          theo lộ trình ở trên nên cùng một kết quả sẽ khó đạt hơn ở các quý sau.
-          {tuyen.gop && ` Nước dưới ${NGUONG_HIEN_TUYEN} kiện gộp thành một dòng: vài kiện lẻ không đủ để kết luận một tuyến có vấn đề — chính SOP cũng lấy mốc ${NGUONG_HIEN_TUYEN} kiện mới đặt cam kết riêng cho một nước. Kiện của các nước đó vẫn nằm trong tổng, và bản CSV vẫn có đủ từng nước.`}
-        </p>
-      </CardContent></Card>
+      <BangTuyen12 ky={ky} tu={tu} cuaSoTuyen={auto.cuaSoTuyen} theoNuoc={auto.slaTheoNuoc} />
 
       {bangTieuChi('Pillar 2 — Ship hộ (sản lượng và chất lượng)', diem.p2, false)}
 
@@ -275,6 +215,9 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
       </CardContent></Card>
 
       {suaDuoc ? (
+      <KhuQuanLy ky={ky} nop12={nop12} kienChoDuyet={soChoDuyet?.danhSachKien ?? []}
+        monCanChoDuyet={soChoDuyet?.monCanChoDuyet ?? 0} ganLyDoDuoc={ganLyDoDuoc}>
+      <NutChotKy ky={ky} daChot={chot} suaDuoc={suaDuoc} />
       <Card><CardContent className="space-y-4 p-4">
         <div>
           <div className="text-sm font-semibold">Nhập phần hệ thống không tự biết — kỳ {ky}</div>
@@ -306,6 +249,7 @@ export function KpiTab({ ky, tu, den, auto, nhap, chot, soChoDuyet, nop12, suaDu
           }}
         />
       </CardContent></Card>
+      </KhuQuanLy>
       ) : (
         <Card><CardContent className="p-4 text-[11px] text-muted-foreground">
           Một số tiêu chí cần quản lý xác nhận thủ công (quy trách nhiệm đơn âm cước, miễn trừ size thùng, hai hạng mục
