@@ -52,8 +52,8 @@ Ký trên **raw body**, không phải JSON đã parse lại.
 | `fees[]` | mảng | Khoản phí chi tiết — xem dưới |
 | `carrier` | chuỗi \| null | `fedex`, `dhl`… |
 | `country` | chuỗi \| null | Mã nước nhận |
-| `weightKg` | số \| null | Cân khai |
-| `chargeableWeightKg` | số \| null | Cân hãng tính cước (có thể khác cân khai do quy đổi kích thước) |
+| `weightKg` | số \| null | Cân **brand tự khai** lúc tạo đơn. KHÔNG phải số trên hoá đơn — đo 42 đơn thì lệch cân hãng cân được ở 33 đơn. Chỉ để tham khảo, đừng đối soát bằng nó |
+| `chargeableWeightKg` | số \| null | **Cân hãng đã dùng để tính tiền** = mốc cân của ô biểu giá mà cước net trên hoá đơn trùng. Suy ra TỪ TIỀN nên không thể mâu thuẫn với `amountVnd` cùng dòng |
 | `dimensions` | chuỗi \| null | `DxRxC` cm |
 | `fedexInvoiceNumber`, `invoiceDate` | | **chỉ có ở bảng kê `type: "duty"`** |
 
@@ -138,7 +138,7 @@ Vì cả hai đều là **cước riêng**, MMP có thể dùng làm phép chi�
 |---|---|---|
 | `base` | Cước cơ bản | Cước vận chuyển |
 | `fuel` | Phụ phí xăng dầu (kèm `percent`) | PP Nhiên liệu + % PP Nhiên liệu |
-| `signature` | Ký nhận trực tiếp | PP kí nhận trực tiếp **+ Phí Giao nhà dân** — xem lưu ý |
+| `signature` | Ký nhận trực tiếp (đã TRỪ phần nhà dân) | PP kí nhận trực tiếp — xem lưu ý 1 |
 | `demand` | Phụ phí nhu cầu | PP Nhu cầu |
 | `remote` | Phụ phí vùng xa | PP vùng sâu xa |
 | `residential` | Giao nhà dân | Phí Giao nhà dân |
@@ -155,7 +155,7 @@ bày đủ cột thì khoản vắng mặt coi như 0.
 
 **Khoản có thể ÂM:** `weight_adjust`. Đừng lọc số âm, lọc là tổng không khớp.
 
-## Ba lưu ý để MMP không đối soát nhầm với file tay của Đức
+## Bốn lưu ý để MMP không đối soát nhầm với file tay của Đức
 
 **1. `signature` và `residential` KHÔNG chồng nhau — mang cả hai không thu hai lần.**
 
