@@ -6,7 +6,7 @@ import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
 import { summarizeStatement, giaThuBangKe } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
-import { donVaoKe, tinhLaiTongBangKe } from './statement-core';
+import { donVaoKe, tinhLaiTongBangKe, donLechKy } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
 import { payloadStatementIssued, pushStatementEvent } from './statement-push';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
@@ -23,8 +23,9 @@ export async function generateStatement(
   if (!partnerBrandSlug) return { ok: false, error: 'Thiếu partner', ...rong };
   if (!periodStart || !periodEnd) return { ok: false, error: 'Thiếu kỳ', ...rong };
 
-  const { ids, tien, choHoaDon } = await donVaoKe(partnerBrandSlug, type, periodStart, periodEnd);
-  const sums = summarizeStatement(tien);
+  const { don, choHoaDon } = await donVaoKe(partnerBrandSlug, type, periodStart, periodEnd);
+  const ids = don.map((d) => d.id);
+  const sums = summarizeStatement(don.map((d) => d.tien));
   if (dryRun || ids.length === 0) return { ok: true, ...sums, dryRun, choHoaDon };
 
   const [st] = await db.insert(schema.shipHoStatements).values({
@@ -85,6 +86,13 @@ export async function setStatementStatus(
       }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id));
       const chuaChot = dangKe.filter((o) => giaThuBangKe(o) == null).length;
       if (chuaChot > 0) return { ok: false, error: `Bảng kê còn ${chuaChot} đơn chưa chốt — bấm Tính lại trước` };
+    }
+    /* Phép chiếu chéo mục (e) — CHẶN, không cảnh báo suông (CEO 01/10/2026, thống nhất với MMP).
+     * Phát hành một kỳ có đơn lệch mốc là gửi brand một con số mà bên MMP tính ra kỳ khác, rồi
+     * phải xuất hoá đơn điều chỉnh cho một chuyện lẽ ra chặn được trước khi bấm. */
+    const lech = await donLechKy(id);
+    if (lech.length > 0) {
+      return { ok: false, error: `Bảng kê có ${lech.length} đơn mốc kỳ nằm ngoài kỳ này: ${lech.slice(0, 8).join(', ')}${lech.length > 8 ? '…' : ''} — chạy lại lệnh gom để xếp đúng kỳ trước khi phát hành` };
     }
     await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
     const data = await getShipHoStatement(id);

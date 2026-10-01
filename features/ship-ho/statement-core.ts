@@ -10,7 +10,7 @@ import { db, schema } from '@/db/client';
 import { sql } from 'drizzle-orm';
 import { chiaDonTrongKe, summarizeStatement, QUYET_DINH_DA_CHOT } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
-import { kyThang, viecGom } from './ky-bang-ke';
+import { kyThang, viecGom, kyTuTen, chonKyGom, type LyDoKy } from './ky-bang-ke';
 
 export async function tinhLaiTongBangKe(id: string): Promise<{
   ok: boolean; error?: string; orderCount: number; totalChargedVnd: number; truoc?: number;
@@ -63,120 +63,206 @@ export async function tinhLaiTongBangKe(id: string): Promise<{
   return { ok: true, orderCount: sums.orderCount, totalChargedVnd: sums.totalChargedVnd, truoc: Number(st.total), daGo, daGoMa };
 }
 
+/** Một đơn đủ điều kiện vào kê, kèm MỐC KỲ của nó. */
+export interface DonVaoKe { id: string; tien: number; moc: Date }
+
 /**
  * Lõi KHÔNG-AUTH: gom đơn đủ điều kiện vào một kỳ. Dùng chung bởi server action
  * `generateStatement` (nút bấm tay) và lệnh tự động — một nguồn sự thật duy nhất
  * cho điều kiện "được vào bảng kê" (D-125).
  *
- * MỐC KỲ = ngày LẦN PUSH ĐẦU TIÊN thành công của `order.reconciled` sang MMP
- * (CEO 22/09/2026): MMP chốt kỳ theo đơn Đức đã đối soát và đẩy sang họ; bản đối
- * soát của SMS phải khớp từng dòng nên dùng cùng mốc. Lấy lần ĐẦU (không phải lần
- * gần nhất) để bắn lại khi tách duty không kéo đơn kỳ đã khoá sang kỳ mới.
+ * MỐC KỲ = `occurred_at` của LẦN ĐẨY ĐẦU TIÊN `order.reconciled` sang MMP (CEO 01/10/2026,
+ * nhận đề xuất MMP). Lấy lần ĐẦU, không phải lần gần nhất: bắn lại khi tách duty thì không
+ * kéo đơn của kỳ đã khoá sang kỳ mới.
+ *
+ * KHÔNG lọc `delivery_status = 'delivered'` nữa — bỏ chữ "THÀNH CÔNG" khỏi mốc. Lý do của
+ * MMP đúng và SMS đã tự bị cắn một lần: gắn kỳ kế toán vào chất lượng đường truyền thì một cú
+ * 409 hay một lần đối tác bảo trì sẽ ĐẨY DOANH THU SANG THÁNG KHÁC mà không ai sai (ba đơn
+ * `26-INSLG-SV-0957/0995/0912` vừa kẹt 12 ngày vì đúng cái 409 đó). `occurred_at` là mốc
+ * nghiệp vụ, bền qua mọi lần thử lại.
+ * Đo 01/10 trước khi đổi: bỏ lọc làm mốc đổi ở 3 đơn, **0 đơn đổi THÁNG**; duty 76/76 đều
+ * `delivered` nên không đổi gì. Tức đổi luật này hôm nay là MIỄN PHÍ, chỉ chặn trước tương lai.
+ *
+ * `periodStart`/`periodEnd` bỏ trống = KHÔNG bó cửa sổ: người gọi tự xếp đơn theo mốc của nó
+ * (xem `goBangKeNhap`). Nút bấm tay vẫn truyền cửa sổ của đúng kỳ đang dựng.
  */
 export async function donVaoKe(
-  partnerBrandSlug: string, type: LoaiBangKe, periodStart: string, periodEnd: string,
-): Promise<{ ids: string[]; tien: number[]; choHoaDon: number }> {
-  const ids: string[] = []; const tien: number[] = []; let choHoaDon = 0;
+  partnerBrandSlug: string, type: LoaiBangKe, periodStart?: string, periodEnd?: string,
+): Promise<{ don: DonVaoKe[]; choHoaDon: number }> {
+  const don: DonVaoKe[] = []; let choHoaDon = 0;
+  // Cửa sổ bỏ trống → dải mở hai đầu, điều kiện BETWEEN luôn đúng.
+  const dau = periodStart ?? '0001-01-01';
+  const cuoi = periodEnd ?? '9999-12-31';
   if (type === 'freight') {
-    const rows = await db.execute<{ id: string; gia: string | null; cho: boolean }>(sql`
+    const rows = await db.execute<{ id: string; gia: string | null; moc: string | null; cho: boolean }>(sql`
       SELECT o.id,
              CASE WHEN o.reconcile_status = 'reconciled'
                    AND (o.reconcile_decision IS NULL OR o.reconcile_decision IN ${QUYET_DINH_DA_CHOT})
-                   AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}
+                   AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${dau} AND ${cuoi}
                   THEN o.actual_charged_vnd END AS gia,
+             p.push_dau AS moc,
              ((o.actual_charged_vnd IS NULL OR o.reconcile_status IS DISTINCT FROM 'reconciled'
                OR (o.reconcile_decision IS NOT NULL AND o.reconcile_decision NOT IN ${QUYET_DINH_DA_CHOT}))
-              AND o.shipped_at BETWEEN ${periodStart} AND ${periodEnd}) AS cho
+              AND o.shipped_at BETWEEN ${dau} AND ${cuoi}) AS cho
         FROM ship_ho_orders o
         LEFT JOIN LATERAL (
           SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-           WHERE e.order_id = o.id AND e.event = 'order.reconciled' AND e.delivery_status = 'delivered'
+           WHERE e.order_id = o.id AND e.event = 'order.reconciled'
         ) p ON TRUE
        WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.statement_id IS NULL
          AND o.status IN ('shipped','delivered')
          AND NOT (COALESCE(o.ly_do_cham,'') = 'khong_gui_hang' AND COALESCE(o.ly_do_doi_chieu,'') = 'xac_nhan')`);
     for (const r of rows.rows) {
-      if (r.gia != null) { ids.push(r.id); tien.push(Number(r.gia)); }
+      if (r.gia != null && r.moc != null) don.push({ id: r.id, tien: Number(r.gia), moc: new Date(r.moc) });
       else if (r.cho) choHoaDon++;
     }
   } else {
-    const rows = await db.execute<{ id: string; gia: string }>(sql`
-      SELECT o.id, o.actual_duty_vnd AS gia
+    const rows = await db.execute<{ id: string; gia: string; moc: string }>(sql`
+      SELECT o.id, o.actual_duty_vnd AS gia, p.push_dau AS moc
         FROM ship_ho_orders o
         LEFT JOIN LATERAL (
           SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-           WHERE e.order_id = o.id AND e.event = 'order.duty_charged' AND e.delivery_status = 'delivered'
+           WHERE e.order_id = o.id AND e.event = 'order.duty_charged'
         ) p ON TRUE
        WHERE o.partner_brand_slug = ${partnerBrandSlug} AND o.duty_statement_id IS NULL AND o.actual_duty_vnd > 0
-         AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${periodStart} AND ${periodEnd}`);
-    for (const r of rows.rows) { ids.push(r.id); tien.push(Number(r.gia)); }
+         AND p.push_dau IS NOT NULL AND p.push_dau::date BETWEEN ${dau} AND ${cuoi}`);
+    for (const r of rows.rows) don.push({ id: r.id, tien: Number(r.gia), moc: new Date(r.moc) });
   }
-  return { ids, tien, choHoaDon };
+  return { don, choHoaDon };
 }
 
-/** Mốc quá khứ đủ xa để cửa sổ gom không bỏ sót đơn kỳ cũ chưa kê. */
-const MOC_XA = '2000-01-01';
+export interface KetQuaGom {
+  brand: string; type: LoaiBangKe; viec: string; don: number; tien: number; statementId?: string;
+  /** Kỳ bảng kê được gom vào (`YYYY-MM`). */
+  ky?: string;
+  /** Vì sao đơn vào kỳ này: đúng kỳ của mốc, hay kỳ của mốc đã chốt nên phải dời. */
+  ly?: LyDoKy;
+}
 
-export interface KetQuaGom { brand: string; type: LoaiBangKe; viec: string; don: number; tien: number; statementId?: string }
+/** Đơn KHÔNG xếp được vào kỳ nào, kèm lý do — đếm riêng từng lý do, không gộp. */
+export interface DonChuaXep { brand: string; type: LoaiBangKe; ly: LyDoKy; don: number; tien: number }
 
 /**
- * Lệnh TỰ ĐỘNG: gom đơn đã chốt giá vào bảng kê NHÁP của kỳ đang chạy, cho mọi
- * brand. KHÔNG tự phát hành — chốt kỳ là việc kế toán, người bấm (CEO 28/09/2026).
+ * Lệnh TỰ ĐỘNG: gom đơn đã chốt giá vào bảng kê NHÁP của ĐÚNG KỲ CHỨA MỐC, cho mọi brand.
+ * KHÔNG tự phát hành — chốt kỳ là việc kế toán, người bấm (CEO 28/09/2026).
  *
- * Idempotent: kỳ đã có bản nháp thì gom THÊM vào đúng bản đó rồi tính lại tổng,
- * không đẻ bản thứ hai. Kỳ đã `issued`/`paid` thì bỏ qua — số đã gửi brand phải
- * đứng yên, đơn về muộn sang kỳ sau.
+ * LUẬT GÁN KỲ (CEO 01/10/2026, nhận đề xuất MMP — thay luật 28/09):
+ * kỳ của đơn = kỳ chứa mốc `order.reconciled` lần đầu. TRƯỚC ĐÂY xếp theo THÁNG LÚC CHẠY LỆNH
+ * GOM, nên một đơn đẩy tháng 7 mà lệnh gom chạy tháng 9 thì nằm ở kỳ 9. Đo 01/10: 14 đơn /
+ * 32.316.966đ nằm sai kỳ, và chính phép chiếu chéo "mốc kỳ phải nằm trong kỳ đó" mà hai bên
+ * vừa thống nhất sẽ CHẶN PHÁT HÀNH vì SMS tự vi phạm nó.
+ *
+ * Kỳ của mốc đã `issued`/`paid` thì không mở lại — đơn đi tới KỲ ĐANG MỞ SỚM NHẤT
+ * (`chonKyGom`), giống `assignBillingPeriod` bên MMP. Giữ nguyên bài học D-130: không đơn nào
+ * bị kẹt không kỳ nào nhận.
+ *
+ * Idempotent: kỳ đã có bản nháp thì gom THÊM vào đúng bản đó rồi tính lại tổng từ chính các
+ * đơn đã gán, không đẻ bản thứ hai và không cộng dồn con số cũ.
  */
 export async function goBangKeNhap(now: Date = new Date()): Promise<KetQuaGom[]> {
-  const ky = kyThang(now);
+  const kyNay = kyThang(now);
   const brands = await db.selectDistinct({ slug: schema.shipHoOrders.partnerBrandSlug })
     .from(schema.shipHoOrders);
   const ket: KetQuaGom[] = [];
 
   for (const { slug } of brands) {
     for (const type of ['freight', 'duty'] as const) {
-      /* Cửa sổ gom MỞ VỀ QUÁ KHỨ, không bó trong tháng đang chạy.
-       *
-       * Nếu chỉ lấy đơn đẩy trong tháng này thì đơn đẩy ở một kỳ ĐÃ CHỐT nhưng
-       * chưa kịp vào kê sẽ không bao giờ được gom nữa: kỳ cũ khoá rồi, kỳ mới
-       * không nhận. Đo 28/09: Kalisa có đúng một đơn như vậy, 3.333.719đ đẩy
-       * tháng 8. Đây là họ lỗi D-130 — hàng chờ không có lối ra.
-       *
-       * CEO 28/09 chốt: mọi đơn đã chốt giá mà chưa kê đều vào KỲ ĐANG MỞ. Bảng
-       * kê vẫn mang kỳ của tháng này; chỉ cửa sổ NHẶT đơn là mở về trước. */
-      const { ids, tien } = await donVaoKe(slug, type, MOC_XA, ky.cuoi);
-      if (ids.length === 0) continue;
+      // KHÔNG bó cửa sổ: lấy mọi đơn đã chốt giá chưa kê, rồi tự xếp theo mốc của từng đơn.
+      const { don } = await donVaoKe(slug, type);
+      if (don.length === 0) continue;
 
-      const [daCo] = await db.select({ id: schema.shipHoStatements.id, status: schema.shipHoStatements.status })
-        .from(schema.shipHoStatements)
-        .where(and(
-          eq(schema.shipHoStatements.partnerBrandSlug, slug),
-          eq(schema.shipHoStatements.periodStart, ky.dau),
-          eq(schema.shipHoStatements.type, type),
-        )).limit(1);
+      // Trạng thái bảng kê của brand+loại này theo kỳ — đọc MỘT LẦN, dùng cho cả vòng xếp.
+      const keCu = await db.select({
+        id: schema.shipHoStatements.id, periodStart: schema.shipHoStatements.periodStart,
+        status: schema.shipHoStatements.status,
+      }).from(schema.shipHoStatements).where(and(
+        eq(schema.shipHoStatements.partnerBrandSlug, slug),
+        eq(schema.shipHoStatements.type, type),
+      ));
+      const theoKy = new Map(keCu.map((k) => [String(k.periodStart).slice(0, 7), k]));
+      const trangThai = (ten: string): string | null => theoKy.get(ten)?.status ?? null;
 
-      const viec = viecGom(daCo?.status);
-      if (viec === 'bo_qua_da_chot') {
-        ket.push({ brand: slug, type, viec, don: ids.length, tien: 0 });
-        continue;
+      const gio = new Map<string, { ly: LyDoKy; ids: string[]; tien: number[] }>();
+      const chuaXep = new Map<LyDoKy, { don: number; tien: number }>();
+      for (const d of don) {
+        const chon = chonKyGom({ tenMoc: kyThang(d.moc).ten, tenHienTai: kyNay.ten, trangThai });
+        if (chon.ten == null) {
+          const c = chuaXep.get(chon.ly) ?? { don: 0, tien: 0 };
+          chuaXep.set(chon.ly, { don: c.don + 1, tien: c.tien + d.tien });
+          continue;
+        }
+        const g = gio.get(chon.ten) ?? { ly: chon.ly, ids: [], tien: [] };
+        g.ids.push(d.id); g.tien.push(d.tien);
+        gio.set(chon.ten, g);
       }
 
-      const sums = summarizeStatement(tien);
-      let id = daCo?.id;
-      if (!id) {
-        const [st] = await db.insert(schema.shipHoStatements).values({
-          partnerBrandSlug: slug, type, periodStart: ky.dau, periodEnd: ky.cuoi,
-          orderCount: sums.orderCount, totalChargedVnd: String(sums.totalChargedVnd), status: 'draft',
-        }).returning({ id: schema.shipHoStatements.id });
-        id = st!.id;
+      for (const [ly, c] of chuaXep) {
+        ket.push({ brand: slug, type, viec: `chua_xep:${ly}`, don: c.don, tien: c.tien, ly });
       }
-      await db.update(schema.shipHoOrders)
-        .set(type === 'freight' ? { statementId: id, status: 'billed' } : { dutyStatementId: id })
-        .where(inArray(schema.shipHoOrders.id, ids));
-      // Tính lại từ CHÍNH các đơn đã gán — không cộng dồn con số cũ.
-      const lai = await tinhLaiTongBangKe(id);
-      ket.push({ brand: slug, type, viec, don: lai.orderCount, tien: lai.totalChargedVnd, statementId: id });
+
+      // Kỳ cũ trước kỳ mới: bản nháp của kỳ sớm phải đủ số trước khi ai đó đi phát hành nó.
+      for (const ten of [...gio.keys()].sort()) {
+        const g = gio.get(ten)!;
+        const ky = kyTuTen(ten);
+        const daCo = theoKy.get(ten);
+        const viec = viecGom(daCo?.status);
+        // chonKyGom đã loại kỳ đã chốt, nên nhánh này không xảy ra — giữ lại làm hàng rào.
+        if (viec === 'bo_qua_da_chot') {
+          ket.push({ brand: slug, type, viec, don: g.ids.length, tien: 0, ky: ten, ly: g.ly });
+          continue;
+        }
+        const sums = summarizeStatement(g.tien);
+        let id = daCo?.id;
+        if (!id) {
+          const [st] = await db.insert(schema.shipHoStatements).values({
+            partnerBrandSlug: slug, type, periodStart: ky.dau, periodEnd: ky.cuoi,
+            orderCount: sums.orderCount, totalChargedVnd: String(sums.totalChargedVnd), status: 'draft',
+          }).returning({ id: schema.shipHoStatements.id });
+          id = st!.id;
+          theoKy.set(ten, { id, periodStart: ky.dau, status: 'draft' });
+        }
+        await db.update(schema.shipHoOrders)
+          .set(type === 'freight' ? { statementId: id, status: 'billed' } : { dutyStatementId: id })
+          .where(inArray(schema.shipHoOrders.id, g.ids));
+        // Tính lại từ CHÍNH các đơn đã gán — không cộng dồn con số cũ.
+        const lai = await tinhLaiTongBangKe(id);
+        ket.push({ brand: slug, type, viec, don: lai.orderCount, tien: lai.totalChargedVnd, statementId: id, ky: ten, ly: g.ly });
+      }
     }
   }
   return ket;
+}
+
+/**
+ * Phép CHIẾU CHÉO (mục (e) đề xuất chốt kỳ, CEO 01/10/2026): đơn trong bảng kê CƯỚC có mốc kỳ
+ * nằm NGOÀI cửa sổ kỳ của chính bảng kê đó.
+ *
+ * CHỈ ÁP CHO `freight`, và đây là giới hạn CỐ Ý. Kỳ duty của SMS theo thiết kế là **ngày hoá
+ * đơn FedEx** (xem `shipHoStatements.type`), không phải ngày đẩy; MMP ở mục (b) cũng nói duty
+ * KHÔNG đổi gì. Đo 01/10: áp phép kiểm theo ngày đẩy cho duty thì bảng kê duty Kalisa kỳ 08
+ * lệch 23/23 đơn — tức nó sẽ chặn vĩnh viễn mọi bảng kê duty vì một bất biến chưa bên nào
+ * thống nhất. Hai luật kỳ duty đang mâu thuẫn nhau trong chính mã SMS (schema nói ngày hoá
+ * đơn, `donVaoKe` lọc theo ngày đẩy) — phải chốt với CEO trước khi canh bất biến nào.
+ *
+ * CHẶN phát hành, không cảnh báo suông — hai bên đã thống nhất đây là bất biến, mà một cảnh
+ * báo không ai đọc thì bằng không có (bài học D-177: 84 sự kiện hỏng nằm đó nhiều tuần).
+ *
+ * Trả MÃ ĐƠN, không trả số đếm: người bấm phải biết đơn nào để đi xem, chứ "còn 3 đơn lệch kỳ"
+ * thì không ai tra được (đúng lỗi em đã gây một vòng lãng phí với MMP — xem D-176).
+ */
+export async function donLechKy(statementId: string): Promise<string[]> {
+  // `${statementId}` đi qua THAM SỐ, không nối chuỗi vào câu lệnh: id tới từ tham số server
+  // action, nối tay là mở đường tiêm SQL ngay giữa luồng tiền.
+  const r = await db.execute<{ code: string }>(sql`
+    SELECT o.code
+      FROM ship_ho_statements s
+      JOIN ship_ho_orders o ON o.statement_id = s.id
+      LEFT JOIN LATERAL (
+        SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
+         WHERE e.order_id = o.id AND e.event = 'order.reconciled'
+      ) p ON TRUE
+     WHERE s.id = ${statementId}::uuid AND s.type = 'freight'
+       AND (p.push_dau IS NULL OR p.push_dau::date NOT BETWEEN s.period_start AND s.period_end)
+     ORDER BY o.code`);
+  return r.rows.map((x) => x.code);
 }
