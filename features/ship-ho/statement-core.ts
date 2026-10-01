@@ -234,35 +234,46 @@ export async function goBangKeNhap(now: Date = new Date()): Promise<KetQuaGom[]>
 }
 
 /**
- * Phép CHIẾU CHÉO (mục (e) đề xuất chốt kỳ, CEO 01/10/2026): đơn trong bảng kê có mốc kỳ nằm
- * NGOÀI cửa sổ kỳ của chính bảng kê đó.
+ * Phép CHIẾU CHÉO (mục (e) đề xuất chốt kỳ, CEO 01/10/2026): đơn trong bảng kê KHÔNG nằm ở kỳ
+ * mà luật gán kỳ sẽ đặt nó vào. Trả MÃ ĐƠN, không trả số đếm — người bấm phải biết đơn nào để
+ * đi xem, "còn 3 đơn lệch kỳ" thì không ai tra được (đúng lỗi em đã gây một vòng lãng phí với
+ * MMP, xem D-176).
  *
- * ÁP CHO CẢ `freight` VÀ `duty`, vì cả hai cùng một mốc: ngày đẩy sự kiện tương ứng
- * (`order.reconciled` / `order.duty_charged`).
+ * CHẶN phát hành, không cảnh báo suông: một cảnh báo không ai đọc thì bằng không có (D-177).
  *
- * Tưởng là hai luật mâu thuẫn, hoá ra KHÔNG (CEO hỏi 01/10/2026, truy ra): `shipHoStatements`
- * và `statement-actions` còn ghi "kỳ duty theo ngày hoá đơn FedEx" — đó là văn bản của quyết
- * định 21/09, bị quyết định 22/09 thay (ngày đẩy) mà KHÔNG AI XOÁ. Đo 01/10: bản duty kỳ 08
- * (phát hành dưới luật cũ) có tháng hoá đơn 07/08 nhưng tháng đẩy 09 cho cả 23 đơn; bản kỳ 09
- * và sau đó khớp ngày đẩy 100%. Hai bình luận cũ đã sửa cùng vòng này.
+ * KHÔNG so thẳng "mốc có nằm trong cửa sổ kỳ" — đó là bản đầu em viết và nó SAI. Đơn có mốc ở
+ * một kỳ ĐÃ PHÁT HÀNH thì theo đúng luật hai bên thống nhất phải rơi vào kỳ đang mở sớm nhất,
+ * nên mốc của nó nằm ngoài kỳ nó đang ở là HỢP LỆ. Đo 01/10 sau khi xếp lại: `26-INSLG-SV-0035`
+ * (mốc kỳ 08, kỳ 08 đã phát hành, nằm ở kỳ 09) bị bản đầu báo lỗi — tức guard sẽ chặn vĩnh viễn
+ * việc phát hành kỳ 09 của Kalisa.
  *
- * Ngày hoá đơn FedEx VẪN có việc riêng, chỉ không phải việc chia kỳ: nó in trên từng dòng bảng
- * kê để brand tra đúng tờ khai (`statement-queries.ts`).
+ * Nên phép kiểm hỏi đúng câu của luật: `chonKyGom` sẽ đặt đơn này vào kỳ nào? Khác kỳ nó đang
+ * nằm thì mới là lỗi. Dùng LẠI hàm thuần đã có test thay vì mã hoá luật lần hai bằng SQL — hai
+ * bản sao của một luật tiền là cách chắc nhất để chúng lệch nhau.
  *
- * Bản duty kỳ 08 lệch 23/23 là DI SẢN của luật cũ, và không bị phép kiểm này cản: nó đã
- * `issued`, mà đường phát hành chặn bản đã phát hành từ trước đó.
- *
- * CHẶN phát hành, không cảnh báo suông — hai bên đã thống nhất đây là bất biến, mà một cảnh
- * báo không ai đọc thì bằng không có (bài học D-177: 84 sự kiện hỏng nằm đó nhiều tuần).
- *
- * Trả MÃ ĐƠN, không trả số đếm: người bấm phải biết đơn nào để đi xem, chứ "còn 3 đơn lệch kỳ"
- * thì không ai tra được (đúng lỗi em đã gây một vòng lãng phí với MMP — xem D-176).
+ * Bảng kê ĐANG kiểm được coi là MỞ: nếu không, `chonKyGom` nhảy qua chính nó và mọi đơn đều lệch.
  */
 export async function donLechKy(statementId: string): Promise<string[]> {
+  const [st] = await db.select({
+    brand: schema.shipHoStatements.partnerBrandSlug, type: schema.shipHoStatements.type,
+    periodStart: schema.shipHoStatements.periodStart,
+  }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, statementId)).limit(1);
+  if (!st) return [];
+  const tenKe = String(st.periodStart).slice(0, 7);
+
+  const keCu = await db.select({
+    periodStart: schema.shipHoStatements.periodStart, status: schema.shipHoStatements.status,
+  }).from(schema.shipHoStatements).where(and(
+    eq(schema.shipHoStatements.partnerBrandSlug, st.brand),
+    eq(schema.shipHoStatements.type, st.type),
+  ));
+  const theoKy = new Map(keCu.map((k) => [String(k.periodStart).slice(0, 7), k.status]));
+  const trangThai = (ten: string): string | null => (ten === tenKe ? null : theoKy.get(ten) ?? null);
+
   // `${statementId}` đi qua THAM SỐ, không nối chuỗi vào câu lệnh: id tới từ tham số server
   // action, nối tay là mở đường tiêm SQL ngay giữa luồng tiền.
-  const r = await db.execute<{ code: string }>(sql`
-    SELECT o.code
+  const r = await db.execute<{ code: string; moc: string | null }>(sql`
+    SELECT o.code, p.push_dau AS moc
       FROM ship_ho_statements s
       JOIN ship_ho_orders o
         ON (CASE WHEN s.type = 'duty' THEN o.duty_statement_id ELSE o.statement_id END) = s.id
@@ -272,7 +283,15 @@ export async function donLechKy(statementId: string): Promise<string[]> {
            AND e.event = CASE WHEN s.type = 'duty' THEN 'order.duty_charged' ELSE 'order.reconciled' END
       ) p ON TRUE
      WHERE s.id = ${statementId}::uuid
-       AND (p.push_dau IS NULL OR p.push_dau::date NOT BETWEEN s.period_start AND s.period_end)
      ORDER BY o.code`);
-  return r.rows.map((x) => x.code);
+
+  const lech: string[] = [];
+  for (const x of r.rows) {
+    // Không có mốc nào = chưa từng đẩy sang MMP. Phát hành đơn đó là gửi brand một dòng mà
+    // MMP không có hồ sơ — đúng cái 409 đã tốn một vòng hỏi đáp (D-176).
+    if (x.moc == null) { lech.push(x.code); continue; }
+    const chon = chonKyGom({ tenMoc: kyThang(new Date(x.moc)).ten, tenHienTai: tenKe, trangThai });
+    if (chon.ten !== tenKe) lech.push(x.code);
+  }
+  return lech;
 }

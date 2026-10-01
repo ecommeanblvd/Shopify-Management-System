@@ -16,7 +16,7 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { goBangKeNhap, tinhLaiTongBangKe } from '@/features/ship-ho/statement-core';
+import { goBangKeNhap, tinhLaiTongBangKe, donLechKy } from '@/features/ship-ho/statement-core';
 
 const apDung = process.argv.includes('--ap-dung');
 
@@ -25,23 +25,44 @@ interface DongLech extends Record<string, unknown> {
   ky_ke: string; ky_moc: string | null; trang_thai: string; tien: string | null;
 }
 
-async function main(): Promise<void> {
-  const r = await db.execute<DongLech>(sql`
-    SELECT o.id AS order_id, o.code, o.partner_brand_slug AS brand, s.type AS loai,
-           s.id AS ke_id, to_char(s.period_start, 'YYYY-MM') AS ky_ke,
-           to_char(p.push_dau, 'YYYY-MM') AS ky_moc, s.status AS trang_thai,
-           COALESCE(o.actual_charged_vnd, o.charged_vnd)::text AS tien
-      FROM ship_ho_orders o
-      JOIN ship_ho_statements s ON s.id = o.statement_id
-      LEFT JOIN LATERAL (
-        SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-         WHERE e.order_id = o.id AND e.event = 'order.reconciled'
-      ) p ON TRUE
-     WHERE s.type = 'freight'
-       AND (p.push_dau IS NULL OR p.push_dau::date NOT BETWEEN s.period_start AND s.period_end)
-     ORDER BY s.status, o.partner_brand_slug, o.code`);
+/**
+ * Tìm đơn sai kỳ bằng CHÍNH `donLechKy` — không viết luật lần thứ hai bằng SQL ở đây.
+ *
+ * Bản đầu của script tự so "mốc có nằm trong [period_start, period_end]" và BỎ SÓT: hai bản kê
+ * tom-fried kỳ 07 có cửa sổ NHIỀU THÁNG (`07-01→08-31`, `07-01→09-08`) nên đơn mốc tháng 8 nằm
+ * trong cửa sổ, qua được phép so của script, nhưng luật tháng mới thì không đặt nó ở đó.
+ */
+async function timLech(): Promise<DongLech[]> {
+  const kes = await db.select({
+    id: schema.shipHoStatements.id, brand: schema.shipHoStatements.partnerBrandSlug,
+    type: schema.shipHoStatements.type, status: schema.shipHoStatements.status,
+    periodStart: schema.shipHoStatements.periodStart,
+  }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.type, 'freight'));
 
-  const lech = r.rows;
+  const ra: DongLech[] = [];
+  for (const k of kes) {
+    const ma = await donLechKy(k.id);
+    if (ma.length === 0) continue;
+    const r = await db.execute<DongLech>(sql`
+      SELECT o.id AS order_id, o.code, o.partner_brand_slug AS brand, 'freight' AS loai,
+             ${k.id}::uuid AS ke_id, ${String(k.periodStart).slice(0, 7)} AS ky_ke,
+             to_char(p.push_dau, 'YYYY-MM') AS ky_moc, ${k.status} AS trang_thai,
+             COALESCE(o.actual_charged_vnd, o.charged_vnd)::text AS tien
+        FROM ship_ho_orders o
+        LEFT JOIN LATERAL (
+          SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
+           WHERE e.order_id = o.id AND e.event = 'order.reconciled'
+        ) p ON TRUE
+       WHERE o.code IN ${ma}
+         AND o.statement_id = ${k.id}::uuid
+       ORDER BY o.code`);
+    ra.push(...r.rows);
+  }
+  return ra.sort((a, b) => `${a.trang_thai}${a.brand}${a.code}`.localeCompare(`${b.trang_thai}${b.brand}${b.code}`));
+}
+
+async function main(): Promise<void> {
+  const lech = await timLech();
   const nhap = lech.filter((x) => x.trang_thai === 'draft');
   const daChot = lech.filter((x) => x.trang_thai !== 'draft');
   const tong = (xs: DongLech[]) => xs.reduce((a, x) => a + Number(x.tien ?? 0), 0);
@@ -74,16 +95,17 @@ async function main(): Promise<void> {
     console.log(`  ${k.brand} · ${k.type} · ${k.viec}${k.ky ? ` · kỳ ${k.ky}` : ''}${k.ly ? ` · ${k.ly}` : ''} · ${k.don} đơn · ${k.tien.toLocaleString('vi-VN')}đ`);
   }
 
-  const sau = await db.execute<{ n: string }>(sql`
-    SELECT count(*)::text AS n FROM ship_ho_orders o
-      JOIN ship_ho_statements s ON s.id = o.statement_id
-      LEFT JOIN LATERAL (
-        SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-         WHERE e.order_id = o.id AND e.event = 'order.reconciled'
-      ) p ON TRUE
-     WHERE s.type = 'freight' AND s.status = 'draft'
-       AND (p.push_dau IS NULL OR p.push_dau::date NOT BETWEEN s.period_start AND s.period_end)`);
-  console.log(`\nKiểm lại: còn ${sau.rows[0]?.n} đơn sai kỳ trên bản NHÁP (phải là 0).`);
+  const con = (await timLech()).filter((x) => x.trang_thai === 'draft');
+  console.log(`\nKiểm lại: còn ${con.length} đơn sai kỳ trên bản NHÁP (phải là 0).`);
+  for (const x of con) console.log(`   ${x.code} · ${x.brand} · kê ${x.ky_ke} ← mốc ${x.ky_moc}`);
+
+  const rong = await db.execute<{ id: string; brand: string; ky: string }>(sql`
+    SELECT id, partner_brand_slug AS brand, to_char(period_start,'YYYY-MM') AS ky
+      FROM ship_ho_statements WHERE status = 'draft' AND order_count = 0 ORDER BY brand, ky`);
+  if (rong.rows.length > 0) {
+    console.log(`\nBản NHÁP RỖNG còn lại (${rong.rows.length}) — KHÔNG tự xoá, xoá bảng kê là không lùi được:`);
+    for (const x of rong.rows) console.log(`   ${x.brand} · kỳ ${x.ky} · ${x.id}`);
+  }
 }
 
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

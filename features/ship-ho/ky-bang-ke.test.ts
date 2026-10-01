@@ -99,3 +99,26 @@ describe('chonKyGom', () => {
       .toEqual({ ten: '2026-10', ly: 'dung_moc' });
   });
 });
+
+/* Ca đã làm phép kiểm (e) bản đầu của em báo lỗi oan, ghim lại để không tái diễn:
+   đơn bị DỜI vì kỳ của mốc đã phát hành thì mốc nằm ngoài kỳ nó đang ở là HỢP LỆ.
+   `26-INSLG-SV-0035`: mốc kỳ 08, kỳ 08 đã issued, nằm ở kỳ 09. */
+describe('chonKyGom dùng làm phép kiểm (e)', () => {
+  const trangThaiKalisa = (ten: string) => (ten === '2026-07' || ten === '2026-08' ? 'issued' : null);
+
+  it('đơn bị dời vì kỳ của mốc đã phát hành → kỳ đích ĐÚNG là kỳ nó đang nằm, không phải lỗi', () => {
+    expect(chonKyGom({ tenMoc: '2026-08', tenHienTai: '2026-09', trangThai: trangThaiKalisa }).ten)
+      .toBe('2026-09');
+  });
+
+  it('đơn có mốc ở kỳ CÒN MỞ mà lại nằm ở kỳ khác → kỳ đích khác, ĐÚNG là lỗi', () => {
+    // Kiểm bản kê kỳ 2026-09 nhưng mốc ở 2026-07 và kỳ 07 còn mở → lẽ ra phải ở 07.
+    expect(chonKyGom({ tenMoc: '2026-07', tenHienTai: '2026-09', trangThai: () => null }).ten)
+      .toBe('2026-07');
+  });
+
+  it('mốc ở kỳ SAU bản kê → không xếp được, ĐÚNG là lỗi', () => {
+    expect(chonKyGom({ tenMoc: '2026-10', tenHienTai: '2026-09', trangThai: () => null }))
+      .toEqual({ ten: null, ly: 'moc_tuong_lai' });
+  });
+});
