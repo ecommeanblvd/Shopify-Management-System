@@ -53,7 +53,13 @@ export function NutBoSungFile({ recordId, loai, maDon }: {
       <button
         type="button" disabled={dangDay}
         onClick={() => oFile.current?.click()}
-        title={`Thiếu ${TEN_LOAI[loai].toLowerCase()} — bấm để tải lên, áp cho cả đơn trong ngày`}
+        /* Dán và kéo thả, không chỉ bấm chọn (CEO 01/10/2026): ảnh hàng về thường nằm trong
+         * Zalo. Nút này focus được nên Ctrl/Cmd+V vào nó là dán được; `chon` nhận `FileList`
+         * nên dùng thẳng được cả hai nguồn, không cần đường tải thứ hai. */
+        onPaste={(e) => { if (dangDay) return; const f = e.clipboardData?.files; if (f?.length) { e.preventDefault(); chon(f); } }}
+        onDragOver={(e) => { if (!dangDay) e.preventDefault(); }}
+        onDrop={(e) => { if (dangDay) return; const f = e.dataTransfer?.files; if (f?.length) { e.preventDefault(); chon(f); } }}
+        title={`Thiếu ${TEN_LOAI[loai].toLowerCase()} — bấm để tải lên, dán (Ctrl/Cmd+V) hoặc kéo thả cũng được; áp cho cả đơn trong ngày`}
         aria-label={`Bổ sung ${TEN_LOAI[loai].toLowerCase()}`}
         className="mx-auto grid size-7 cursor-pointer place-items-center rounded border border-dashed border-border text-muted-foreground transition hover:border-foreground/40 hover:text-foreground disabled:cursor-default disabled:opacity-50"
       >

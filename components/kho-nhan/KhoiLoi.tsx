@@ -5,6 +5,7 @@ import { LY_DO_HOP_LE, NHAN_LY_DO, type LyDoLoi } from '@/features/kho-nhan/loi-
 import { qcKhongDat } from '@/features/kho-nhan/qc-actions';
 import { uploadReceiptImage } from '@/features/receiving/actions';
 import { Button } from '@/components/ui/button';
+import { ONhanAnh } from '@/components/ui/o-nhan-anh';
 
 interface DongLoiUi { key: string; lyDo: LyDoLoi; anhKey: string | null; anhTen: string; ghiChu: string }
 
@@ -103,17 +104,15 @@ export function KhoiLoi({
 
           <div className="flex items-end gap-2">
             {coStorage && (
-              <label className="cursor-pointer text-xs">
-                <span className="mb-1 block text-muted-foreground">Ảnh *</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  aria-label={`Ảnh chỗ lỗi ${i + 1}`}
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void chonAnh(d.key, f); }}
+              <div className="text-xs">
+                <span className="mb-1 block text-muted-foreground">Ảnh</span>
+                <ONhanAnh
+                  name={`anh-loi-${i + 1}`}
+                  onChon={(f) => void chonAnh(d.key, f)}
+                  goiY="Dán (Ctrl/Cmd+V), kéo thả, hay bấm chọn"
                   className="w-44 cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded file:border file:border-input file:bg-background file:px-2 file:py-1"
                 />
-              </label>
+              </div>
             )}
             {dangTai === d.key && <span className="pb-1 text-xs text-muted-foreground">đang tải…</span>}
             {d.anhKey && <span className="pb-1 text-xs text-emerald-600 dark:text-emerald-400">đã có ảnh</span>}
