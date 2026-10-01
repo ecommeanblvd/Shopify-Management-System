@@ -8,6 +8,7 @@ import type { AnhNhan, DangKiem, LoaiAnhNhan } from '@/features/kho-nhan/types';
 import { Button } from '@/components/ui/button';
 import { guiLenLark } from '@/features/kho-nhan/day-wh-lark';
 import { xoaChiec, huyNhapChuaGui } from '@/features/kho-nhan/nhan-actions';
+import { OCanChiec } from './OCanChiec';
 import { tachTheoNgay, gomTheoPhieu } from '@/features/kho-nhan/tach-ngay';
 import { timPhieuThieu, cauNhacThieu } from '@/features/kho-nhan/thieu-dinh-kem';
 import { ngayKinhDoanh } from '@/lib/timezone';
@@ -234,6 +235,9 @@ function Bang({ ds, anh, anhLoiQc, coStorage, dangXoa, onKiem, onXoa, onMoAnh, l
                 <th className="px-3 py-2 text-left font-medium">ID biến thể</th>
                 <th className="px-3 py-2 text-left font-medium">Mã đơn</th>
                 <th className="px-3 py-2 text-left font-medium">Nhận lúc</th>
+                {/* Cân điền SAU khi kiểm và KHÔNG bắt buộc lúc đó (CEO 01/10) — nên ô nằm ngay
+                    trên bảng, gõ bổ sung được bất cứ lúc nào, không phải mở modal kiểm. */}
+                <th className="px-3 py-2 text-left font-medium">Cân (kg)</th>
                 {/* Ảnh lưu ở mức PHIẾU nhưng hiện trên MỌI DÒNG của lô, đúng
                     như bảng Lark (CEO 25/09). */}
                 <th className="px-3 py-2 text-left font-medium">Ảnh hàng đến</th>
@@ -265,6 +269,7 @@ function Bang({ ds, anh, anhLoiQc, coStorage, dangXoa, onKiem, onXoa, onMoAnh, l
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{c.maDon ?? '—'}</td>
                   <td className="px-3 py-2 tabular-nums text-muted-foreground">{gio(c.taoLuc)}</td>
+                  <td className="px-3 py-2"><OCanChiec itemId={c.id} canKg={c.canKg} /></td>
                   <td className="px-3 py-2">
                     <OAnhNhan
                       anh={anh.filter((a) => a.receiptId === c.receiptId && a.loai === 'hang_den')}

@@ -12,11 +12,15 @@ describe('kiemViec', () => {
     const r = kiemViec(co);
     expect(r.ok).toBe(true);
   });
-  it('QC Failed thiếu lý do hoặc thiếu ảnh → chặn', () => {
+  it('QC Failed thiếu LÝ DO → chặn (lý do gõ ngay đây, bảng không có chỗ bổ sung sau)', () => {
     expect(kiemViec({ ...co, qcCheck: 'QC Failed', whAction: 'Gửi trả Vendor (QC fail)', lyDoFail: null, coAnh: true }))
       .toEqual({ ok: false, loi: 'Không đạt thì phải ghi lý do' });
-    expect(kiemViec({ ...co, qcCheck: 'QC Failed', whAction: 'Gửi trả Vendor (QC fail)', lyDoFail: 'bẩn', coAnh: false }))
-      .toEqual({ ok: false, loi: 'Không đạt thì phải có ảnh lỗi' });
+  });
+
+  /* CEO 01/10/2026: ảnh lỗi "không bắt buộc tại thời điểm này mà có thể bổ sung sau tại bảng
+   * Nhận hôm nay". Trước đó thiếu ảnh là chặn lưu — kho đang kiểm mà chưa kịp chụp thì kẹt. */
+  it('QC Failed CHƯA có ảnh → VẪN LƯU ĐƯỢC, ảnh bổ sung sau ở bảng', () => {
+    expect(kiemViec({ ...co, qcCheck: 'QC Failed', whAction: 'Gửi trả Vendor (QC fail)', lyDoFail: 'bẩn', coAnh: false }).ok).toBe(true);
     expect(kiemViec({ ...co, qcCheck: 'QC Failed', whAction: 'Gửi trả Vendor (QC fail)', lyDoFail: 'bẩn', coAnh: true }).ok).toBe(true);
   });
   it('số lượng phải là số nguyên dương', () => {
@@ -51,9 +55,8 @@ describe('ảnh lỗi khi sửa món vốn đã không đạt trên Lark', () =>
   it('món Lark vốn đã không đạt → sửa cân không cần chụp lại ảnh', () => {
     expect(kiemViec({ ...fail, coAnh: false, daFailTruoc: true }).ok).toBe(true);
   });
-  it('món mới CHUYỂN sang không đạt → vẫn bắt buộc ảnh', () => {
-    expect(kiemViec({ ...fail, coAnh: false, daFailTruoc: false }))
-      .toEqual({ ok: false, loi: 'Không đạt thì phải có ảnh lỗi' });
+  it('món mới CHUYỂN sang không đạt mà chưa có ảnh → KHÔNG còn chặn (CEO 01/10)', () => {
+    expect(kiemViec({ ...fail, coAnh: false, daFailTruoc: false }).ok).toBe(true);
   });
   it('dù đã không đạt từ trước vẫn phải có lý do', () => {
     expect(kiemViec({ ...fail, lyDoFail: null, coAnh: false, daFailTruoc: true }))

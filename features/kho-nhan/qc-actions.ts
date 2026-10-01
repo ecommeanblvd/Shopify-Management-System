@@ -9,6 +9,7 @@ import { requirePerm } from '@/features/receiving/perm';
 import { chuyenDuocQc, kiemLoQc, type DongLoiVao } from './qc-logic';
 import { danhDauQcDatTrenLark, danhDauQcKhongDatTrenLark } from './day-wh-lark';
 import type { DangKiem } from './types';
+import { docCanNhap } from './can-chiec';
 
 /**
  * QC ĐẠT → chiếc vào tồn. Đây là chỗ DUY NHẤT trong luồng này gọi `applyMovement`.
@@ -112,6 +113,7 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     receiptId: schema.goodsReceiptItems.receiptId,
     vendor: schema.goodsReceipts.vendor,
     taoLuc: schema.goodsReceiptItems.createdAt,
+    canKg: schema.goodsReceiptItems.weightKg,
   })
     .from(schema.goodsReceiptItems)
     .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
@@ -119,4 +121,28 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
     .where(eq(schema.goodsReceiptItems.qcResult, 'pending'))
     .orderBy(desc(schema.goodsReceiptItems.createdAt))
     .limit(200);
+}
+
+/**
+ * Ghi cân cho MỘT chiếc ngay tại bảng "Nhận hôm nay" (CEO 01/10/2026).
+ *
+ * CEO chốt: cân điền sau khi kiểm, KHÔNG bắt buộc lúc đó, bổ sung được sau ngay ở bảng này.
+ *
+ * Ghi thẳng vào `goods_receipt_items.weight_kg` — ĐÚNG cột mà lượt đồng bộ Lark dùng, để cân
+ * một chiếc chỉ có MỘT chỗ ở. Hôm nay đã sửa nhiều lỗi sinh ra từ việc một đại lượng có hai
+ * nơi chứa; không mở thêm một nơi nữa.
+ *
+ * Để trống là XOÁ cân (xem `docCanNhap`) — người gõ nhầm phải rút lại được.
+ */
+export async function datCanChiec(id: string, tho: string): Promise<{ ok: boolean; loi?: string }> {
+  await requirePerm('manage_qc');
+  const kq = docCanNhap(tho);
+  if (!kq.ok) return { ok: false, loi: kq.loi };
+  const n = await db.update(schema.goodsReceiptItems)
+    .set({ weightKg: kq.kg == null ? null : String(kq.kg) })
+    .where(eq(schema.goodsReceiptItems.id, id))
+    .returning({ id: schema.goodsReceiptItems.id });
+  if (n.length === 0) return { ok: false, loi: 'Không tìm thấy chiếc này' };
+  revalidatePath('/f/warehouse/nhan-kcs');
+  return { ok: true };
 }

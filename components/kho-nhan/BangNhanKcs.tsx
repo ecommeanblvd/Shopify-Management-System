@@ -1,4 +1,5 @@
 'use client';
+import { ONhanAnh } from '@/components/ui/o-nhan-anh';
 
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -456,7 +457,12 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
           <Nhan chu={coAnhCu ? 'Ảnh lỗi (đã có — chọn ảnh mới nếu muốn thay)' : 'Ảnh lỗi'}>
             {/* Đã có ảnh cũ thì KHÔNG bắt buộc: sửa lại một món đã ghi hỏng (vd gõ nhầm cân)
                 mà bắt chụp lại là hành người — máy chủ tự dùng ảnh đang lưu. */}
-            <input name="anh" type="file" accept="image/*" required={!coAnhCu} disabled={khoa} className={`${O_NHAP} py-1.5 text-xs file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs`} />
+            {/* Ảnh KHÔNG còn chặn lưu (CEO 01/10) — bổ sung sau được ở bảng "Nhận hôm nay".
+                `required` chỉ còn khi chưa có ảnh cũ VÀ trình duyệt muốn nhắc, không phải luật. */}
+            <ONhanAnh name="anh" required={false} disabled={khoa}
+              className={`${O_NHAP} py-1.5 text-xs file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs`}
+              goiY={coAnhCu ? 'Đã có ảnh — chọn ảnh mới nếu muốn thay. Dán Ctrl/Cmd+V hoặc kéo thả cũng được.'
+                : 'Bấm chọn, kéo thả, hoặc bấm vào đây rồi Ctrl/Cmd+V — copy thẳng từ Zalo là dán được'} />
           </Nhan>
         </div>
       )}

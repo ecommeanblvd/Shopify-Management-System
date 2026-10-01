@@ -21,10 +21,10 @@ export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean; daFailTruo
   if (v.canKg != null && (!(v.canKg > 0) || v.canKg > CAN_TOI_DA)) return { ok: false, loi: 'Cân không hợp lệ' };
   if (v.qcCheck === 'QC Failed') {
     if (!v.lyDoFail?.trim()) return { ok: false, loi: 'Không đạt thì phải ghi lý do' };
-    // Ảnh chỉ bắt buộc khi món CHUYỂN sang không đạt. Món trên Lark vốn đã không đạt từ
-    // trước (8.858/9.007 dòng có kết quả) thì bắt chụp lại ảnh lỗi cũ là điều không làm được —
-    // sửa mỗi cái cân sẽ thành bế tắc.
-    if (!v.coAnh && !v.daFailTruoc) return { ok: false, loi: 'Không đạt thì phải có ảnh lỗi' };
+    /* Ảnh lỗi KHÔNG chặn lưu nữa (CEO 01/10/2026): "không bắt buộc tại thời điểm này mà có thể
+     * bổ sung sau tại bảng Nhận hôm nay" — bảng đó đã có cột "Ảnh lỗi QC" với nút thêm.
+     * LÝ DO thì VẪN bắt buộc (ở trên): lý do gõ ngay trong form này, bảng không có chỗ bổ sung
+     * sau, và một chiếc "không đạt" mà không ai ghi vì sao thì không dùng được để cãi với brand. */
   }
   return {
     ok: true,

@@ -37,6 +37,8 @@ export interface DangKiem {
   receiptId: string;
   vendor: string | null;
   taoLuc: Date;
+  /** Cân một chiếc (kg). Null = chưa cân — CEO 01/10: không bắt buộc lúc kiểm, bổ sung sau được. */
+  canKg: string | null;
 }
 
 export interface DongQc {
