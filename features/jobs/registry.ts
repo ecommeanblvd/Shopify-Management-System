@@ -88,6 +88,11 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
   // Chu kỳ để 1 NGÀY nên trang giám sát không báo đỏ trong lúc chờ.
   { key: 'dong-bo-wh-lark', ten: 'Kéo bảng Lark WH - Inventory về bản sao', chuKyPhut: 6 * GIO,
     hauQua: 'Sổ nhập & đối chiếu hiện dữ liệu cũ — kho tưởng thiếu hàng hoặc thiếu ngày' },
+  // Chạy LỒNG ngay sau `dong-bo-wh-lark` trong scripts/cron/sync-lark.ts, dùng lại bảng
+  // Lark việc kia vừa tải nên chu kỳ phải bằng nhau. CHỈ ĐỌC Lark, chỉ điền ô cân còn
+  // trống bên mình — không ghi gì lên Lark, không ghi đè số người ta vừa sửa.
+  { key: 'dong-bo-can-lark', ten: 'Kéo cân từng chiếc từ Lark về SMS', chuKyPhut: 6 * GIO,
+    hauQua: 'Chiếc kho đã cân trên Lark vẫn trống cân trong SMS — bảng Nhận hôm nay thiếu số để tính cước' },
   { key: 'sync-dispute', ten: 'Kéo tranh chấp (chargeback) từ Shopify Payments', chuKyPhut: 6 * GIO,
     hauQua: 'Hạn nộp bằng chứng hiện sai — ca sắp mất tiền không lên khối "cần phản hồi"' },
   { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark (chưa bật)', chuKyPhut: 1 * NGAY,

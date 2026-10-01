@@ -81,8 +81,13 @@ export function dungDongMirror(r: LarkRecord) {
 
 export interface KetQuaDongBo { doc: number; ghi: number; xoa: number }
 
-export async function dongBoWhInventory(): Promise<KetQuaDongBo> {
-  const tho = await listAllWhInventoryRecords();
+/**
+ * @param daTai Bảng Lark đã tải sẵn ở chỗ gọi — truyền vào để KHÔNG đọc lại cả bảng.
+ *   Một lượt đọc là 19 lượt gọi Lark + ~2 phút cho 9.122 dòng; trong cron, việc này và
+ *   `dongBoCanTuLark` cần CÙNG dữ liệu đó, nên tải một lần rồi chia nhau.
+ */
+export async function dongBoWhInventory(daTai?: LarkRecord[]): Promise<KetQuaDongBo> {
+  const tho = daTai ?? (await listAllWhInventoryRecords());
   const dong = tho.map(dungDongMirror);
 
   // Chia lô 500: một câu insert 9.000 dòng vượt trần tham số của Postgres.

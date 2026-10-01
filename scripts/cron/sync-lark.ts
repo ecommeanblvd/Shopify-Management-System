@@ -21,6 +21,8 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
+import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
+import { listAllWhInventoryRecords, type LarkRecord } from '@/features/lark/client';
 import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
 import { dongBoPoLark } from '@/features/kho-nhan/dong-bo-po-lark';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
@@ -96,7 +98,18 @@ async function main(): Promise<void> {
    * Thời lượng đo 29/09: sync-lark 80s + dong-bo-wh-lark 109s + dien-store-final
    * ~60s + day-production-time-cx 26s ≈ 4,5 phút, lịch mỗi giờ — còn rất thừa chỗ.
    */
-  await chayMotJob('dong-bo-wh-lark', dongBoWhInventory);
+  // Tải bảng WH - Inventory MỘT LẦN rồi chia cho hai việc: một lượt đọc là 19 lượt gọi
+  // Lark + ~2 phút cho 9.122 dòng, đọc lại lần nữa cho cùng dữ liệu là trả giá hai lần.
+  // Để lượt tải BÊN TRONG chayMotJob (không nhấc ra ngoài): Lark sập thì chỉ việc này đỏ
+  // và có dòng job_runs, ba việc dưới vẫn chạy. Nhấc ra ngoài là cả script chết câm.
+  const daiWh: { dong: LarkRecord[] | null } = { dong: null };
+  await chayMotJob('dong-bo-wh-lark', async () => {
+    daiWh.dong = await listAllWhInventoryRecords();
+    return dongBoWhInventory(daiWh.dong);
+  });
+  // Cân từng chiếc kho điền trên Lark → điền vào ô cân còn trống bên mình (CEO 30/09/2026).
+  // `?? undefined` để nếu việc trên ngã thì việc này tự tải lại, chứ không lặng lẽ không làm gì.
+  await chayMotJob('dong-bo-can-lark', () => dongBoCanTuLark(daiWh.dong ?? undefined));
   // Điền Store final SAU khi đã đồng bộ, để dòng mới về là điền được ngay.
   await chayMotJob('dien-store-final', () => dienStoreFinal());
   await chayMotJob('day-production-time-cx', () => dayProductionTime());

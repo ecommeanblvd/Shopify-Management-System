@@ -10,7 +10,7 @@
  */
 import { eq, inArray, isNull, and, isNotNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { listAllWhInventoryRecords } from '@/features/lark/client';
+import { listAllWhInventoryRecords, type LarkRecord } from '@/features/lark/client';
 import { canTuDongLark } from './can-tu-lark';
 
 export interface KetQuaDongBoCan {
@@ -32,8 +32,11 @@ export interface KetQuaDongBoCan {
  *
  * Nối bằng `lark_record_id`. KHÔNG nối bằng mã chiếc: SMS đánh `WH-2609-00028`, Lark đánh
  * `WH-34184` — hai hệ mã khác nhau, nối nhầm là gán cân của chiếc này sang chiếc khác.
+ *
+ * @param daTai Bảng Lark đã tải sẵn ở chỗ gọi (xem `dongBoWhInventory`). Không truyền thì
+ *   tự đọc — để chạy một mình (run-group, gọi tay) vẫn đúng.
  */
-export async function dongBoCanTuLark(): Promise<KetQuaDongBoCan> {
+export async function dongBoCanTuLark(daTai?: LarkRecord[]): Promise<KetQuaDongBoCan> {
   const canLay = await db.select({ id: schema.goodsReceiptItems.id, rec: schema.goodsReceiptItems.larkRecordId })
     .from(schema.goodsReceiptItems)
     .where(and(isNotNull(schema.goodsReceiptItems.larkRecordId), isNull(schema.goodsReceiptItems.weightKg)));
@@ -41,7 +44,7 @@ export async function dongBoCanTuLark(): Promise<KetQuaDongBoCan> {
   if (canLay.length === 0) return ra;
 
   const theoRecord = new Map(canLay.map((x) => [x.rec as string, x.id]));
-  const dong = await listAllWhInventoryRecords();
+  const dong = daTai ?? (await listAllWhInventoryRecords());
   ra.docLark = dong.length;
 
   // Gom theo cân để ghi mỗi cân một lượt UPDATE thay vì mỗi chiếc một lượt: đội kho dùng
