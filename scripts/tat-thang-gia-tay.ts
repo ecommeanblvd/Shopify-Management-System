@@ -16,6 +16,7 @@ import { writeFileSync } from 'node:fs';
 import { db } from '@/db/client';
 import { sql } from 'drizzle-orm';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
+import type { KetQuaDocShip, KetQuaUpdateShip } from './lib/shopify-ship-shape';
 
 const TEN_RATE = 'Express Shipping';
 const AP = process.argv.includes('--ap-dung');
@@ -63,21 +64,28 @@ async function main() {
   writeFileSync(`/tmp/anh-chup-ship-${ten}.json`, JSON.stringify(r.data, null, 2));
   console.log(`Ảnh chụp TRƯỚC khi đụng: /tmp/anh-chup-ship-${ten}.json`);
 
-  const can: Muc[] = []; let giuLai = 0;
-  for (const p of (r.data as any).deliveryProfiles.edges)
-    for (const g of p.node.profileLocationGroups)
-      for (const z of g.locationGroupZones.edges)
-        for (const m of z.node.methodDefinitions.edges) {
+  const can: Muc[] = []; let giuLai = 0, thieuId = 0;
+  for (const p of (r.data as KetQuaDocShip).deliveryProfiles?.edges ?? [])
+    for (const g of p.node?.profileLocationGroups ?? [])
+      for (const z of g.locationGroupZones?.edges ?? [])
+        for (const m of z.node?.methodDefinitions?.edges ?? []) {
           const n = m.node;
+          if (!n) continue;
           if (n.name !== TEN_RATE) { if (n.active) giuLai++; continue; }
           if (!n.active) continue;
-          can.push({ profileId: p.node.id, profileName: p.node.name, lgId: g.locationGroup.id,
-            zoneId: z.node.zone.id, zoneName: z.node.zone.name, id: n.id,
+          /* Thiếu BẤT KỲ id nào thì BỎ QUA và đếm riêng — xem ghi chú cùng loại ở
+           * sua-participant-services.ts. Script này TẮT rate trên store thật, nên một lệnh ghi
+           * mang id rỗng là tắt nhầm thứ không ai biết. */
+          const pid = p.node?.id, lg = g.locationGroup?.id, zid = z.node?.zone?.id;
+          if (!pid || !lg || !zid || !n.id) { thieuId++; continue; }
+          can.push({ profileId: pid, profileName: p.node?.name ?? '(không tên)', lgId: lg,
+            zoneId: zid, zoneName: z.node?.zone?.name ?? '(không tên)', id: n.id,
             gia: n.rateProvider?.price ? `${n.rateProvider.price.amount} ${n.rateProvider.price.currencyCode}` : '?' });
         }
 
   console.log(`\nSẼ TẮT: ${can.length} rate tên "${TEN_RATE}" đang bật`);
   console.log(`GIỮ NGUYÊN: ${giuLai} rate khác đang bật (gồm Engine Carrier Rates)`);
+  if (thieuId) console.log(`⚠ BỎ QUA ${thieuId} rate vì Shopify không trả đủ id — KHÔNG ghi mò`);
   const theoVung = new Map<string, number>();
   for (const c of can) theoVung.set(`${c.profileName} › ${c.zoneName}`, (theoVung.get(`${c.profileName} › ${c.zoneName}`) ?? 0) + 1);
   console.log(`Trải trên ${theoVung.size} vùng.`);
@@ -98,7 +106,7 @@ async function main() {
       const res = await goi(SUA, { id: profileId, profile: { locationGroupsToUpdate: [{
         id: lgId, zonesToUpdate: [{ id: zoneId,
           methodDefinitionsToUpdate: lo.map((m) => ({ id: m.id, active: false })) }] }] } });
-      const ue = (res.data as any)?.deliveryProfileUpdate?.userErrors ?? [];
+      const ue = (res.data as KetQuaUpdateShip | null)?.deliveryProfileUpdate?.userErrors ?? [];
       if (res.errors || ue.length) {
         loi += lo.length;
         console.log(`  ✗ ${ds[0].zoneName} lô ${i / LO + 1}: ${JSON.stringify(res.errors ?? ue).slice(0, 180)}`);
@@ -109,11 +117,11 @@ async function main() {
 
   const lai = await goi(DOC);
   let conBat = 0;
-  for (const p of (lai.data as any).deliveryProfiles.edges)
-    for (const g of p.node.profileLocationGroups)
-      for (const z of g.locationGroupZones.edges)
-        for (const m of z.node.methodDefinitions.edges)
-          if (m.node.name === TEN_RATE && m.node.active) conBat++;
+  for (const p of (lai.data as KetQuaDocShip).deliveryProfiles?.edges ?? [])
+    for (const g of p.node?.profileLocationGroups ?? [])
+      for (const z of g.locationGroupZones?.edges ?? [])
+        for (const m of z.node?.methodDefinitions?.edges ?? [])
+          if (m.node?.name === TEN_RATE && m.node.active) conBat++;
   console.log(`Kiểm lại trên Shopify: còn ${conBat} rate "${TEN_RATE}" đang bật.`);
   process.exit(0);
 }

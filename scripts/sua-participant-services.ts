@@ -16,6 +16,7 @@ import { db } from '@/db/client';
 import { sql } from 'drizzle-orm';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { TEN_MUC } from '@/features/carrier-rates/hai-muc-giao';
+import type { KetQuaDocShip, KetQuaUpdateShip } from './lib/shopify-ship-shape';
 
 const AP = process.argv.includes('--ap-dung');
 const DOC = `query {
@@ -70,19 +71,28 @@ async function main() {
   if (r.errors) throw new Error(JSON.stringify(r.errors).slice(0, 200));
   const MUON = [TEN_MUC.standard, TEN_MUC.express];
   const can: Array<{ pid: string; lg: string; zid: string; zname: string; mid: string; csid: string; dang: string }> = [];
-  let dungRoi = 0;
-  for (const p of (r.data as any).deliveryProfiles.edges)
-    for (const g of p.node.profileLocationGroups)
-      for (const z of g.locationGroupZones.edges)
-        for (const m of z.node.methodDefinitions.edges) {
+  let dungRoi = 0, thieuId = 0;
+  for (const p of (r.data as KetQuaDocShip).deliveryProfiles?.edges ?? [])
+    for (const g of p.node?.profileLocationGroups ?? [])
+      for (const z of g.locationGroupZones?.edges ?? [])
+        for (const m of z.node?.methodDefinitions?.edges ?? []) {
           const n = m.node;
+          if (!n) continue;
           if (n.rateProvider?.__typename !== 'DeliveryParticipant') continue;
-          const co = (n.rateProvider.participantServices ?? []).filter((x: any) => x.active).map((x: any) => x.name).sort();
+          const co = (n.rateProvider.participantServices ?? []).filter((x) => x.active).map((x) => x.name).sort();
           if (MUON.every((x) => co.includes(x)) && co.length === MUON.length) { dungRoi++; continue; }
-          can.push({ pid: p.node.id, lg: g.locationGroup.id, zid: z.node.zone.id, zname: z.node.zone.name,
-            mid: n.id, csid: n.rateProvider.carrierService.id, dang: co.join(' | ') || '(rỗng)' });
+          /* Thiếu BẤT KỲ id nào thì BỎ QUA và đếm riêng, KHÔNG dựng lệnh ghi với id rỗng.
+           * Bản cũ dùng `any` nên bốn id này được coi như luôn có; thực tế Shopify có thể trả
+           * null ở bất kỳ nhánh nào, và một `deliveryProfileUpdate` mang id rỗng là ghi vào
+           * đâu không ai biết. Đây chính là chỗ `any` che mất. */
+          const pid = p.node?.id, lg = g.locationGroup?.id, zid = z.node?.zone?.id, mid = n.id;
+          const csid = n.rateProvider.carrierService?.id;
+          if (!pid || !lg || !zid || !mid || !csid) { thieuId++; continue; }
+          can.push({ pid, lg, zid, zname: z.node?.zone?.name ?? '(không tên)',
+            mid, csid, dang: co.join(' | ') || '(rỗng)' });
         }
   console.log(`${ten}: ${dungRoi} participant đã đúng · ${can.length} cần sửa`);
+  if (thieuId) console.log(`   ⚠ BỎ QUA ${thieuId} mức vì Shopify không trả đủ id — KHÔNG ghi mò`);
   const nhom = new Map<string, number>();
   for (const c of can) nhom.set(c.dang, (nhom.get(c.dang) ?? 0) + 1);
   for (const [k, v] of nhom) console.log(`   ${v} vùng đang bật: ${k}  →  ${MUON.join(' | ')}`);
@@ -95,20 +105,21 @@ async function main() {
       zonesToUpdate: [{ id: c.zid, methodDefinitionsToUpdate: [{ id: c.mid, participant: {
         carrierServiceId: c.csid,
         participantServices: MUON.map((name) => ({ name, active: true })) } }] }] }] } });
-    const ue = (res.data as any)?.deliveryProfileUpdate?.userErrors ?? [];
+    const ue = (res.data as KetQuaUpdateShip | null)?.deliveryProfileUpdate?.userErrors ?? [];
     if (res.errors || ue.length) { loi++; console.log(`  ✗ ${c.zname}: ${JSON.stringify(res.errors ?? ue).slice(0, 200)}`); }
     else xong++;
   }
   console.log(`\nĐã sửa: ${xong} · lỗi: ${loi}`);
   const lai = await goi(DOC);
   let sai = 0;
-  for (const p of (lai.data as any).deliveryProfiles.edges)
-    for (const g of p.node.profileLocationGroups)
-      for (const z of g.locationGroupZones.edges)
-        for (const m of z.node.methodDefinitions.edges) {
+  for (const p of (lai.data as KetQuaDocShip).deliveryProfiles?.edges ?? [])
+    for (const g of p.node?.profileLocationGroups ?? [])
+      for (const z of g.locationGroupZones?.edges ?? [])
+        for (const m of z.node?.methodDefinitions?.edges ?? []) {
           const n = m.node;
+          if (!n) continue;
           if (n.rateProvider?.__typename !== 'DeliveryParticipant') continue;
-          const co = (n.rateProvider.participantServices ?? []).filter((x: any) => x.active).map((x: any) => x.name);
+          const co = (n.rateProvider.participantServices ?? []).filter((x) => x.active).map((x) => x.name);
           if (!MUON.every((x) => co.includes(x))) sai++;
         }
   console.log(`Kiểm lại trên Shopify: còn ${sai} participant chưa đúng.`);

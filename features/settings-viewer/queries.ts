@@ -68,6 +68,46 @@ export const SHIPPING_QUERY = `query {
   }
 }`;
 
+/**
+ * Hình dạng phản hồi của `SHIPPING_QUERY` — ĐẶT CẠNH chính câu truy vấn (CEO 01/10/2026).
+ *
+ * Vì sao ở đây mà không ở từng script: bốn script soi/sửa ship đều đi cùng cái cây này, và
+ * trước đó mỗi script tự `as any` để lách — nên sửa câu truy vấn không làm chỗ nào báo lỗi.
+ * Để kiểu sát câu truy vấn thì ai đổi query sẽ thấy ngay chỗ nào đọc sai.
+ *
+ * Mọi nhánh đều `?` và mảng đều có thể thiếu: Shopify trả `null` cho nhánh không có dữ liệu, và
+ * một kiểu khai "luôn có" chỉ chuyển lỗi từ lúc biên dịch sang lúc chạy.
+ */
+export interface GiaMucShopify { amount?: string | null; currencyCode?: string | null }
+export interface DichVuThamGia { name?: string | null; active?: boolean | null }
+export interface NhaCungCapGia {
+  __typename?: string | null;
+  price?: GiaMucShopify | null;
+  carrierService?: { id?: string | null; name?: string | null; active?: boolean | null } | null;
+  participantServices?: readonly DichVuThamGia[] | null;
+}
+export interface MucGiaoHang {
+  name?: string | null; active?: boolean | null; rateProvider?: NhaCungCapGia | null;
+}
+export interface VungGiaoHang {
+  name?: string | null;
+  countries?: readonly { code?: { countryCode?: string | null; restOfWorld?: boolean | null } | null }[] | null;
+}
+export interface VungTheoNhomViTri {
+  zone?: VungGiaoHang | null;
+  methodDefinitions?: { edges?: readonly { node?: MucGiaoHang | null }[] | null } | null;
+}
+export interface NhomViTriProfile {
+  locationGroupZones?: { edges?: readonly { node?: VungTheoNhomViTri | null }[] | null } | null;
+}
+export interface ProfileGiaoHang {
+  name?: string | null;
+  profileLocationGroups?: readonly NhomViTriProfile[] | null;
+}
+export interface KetQuaShippingQuery {
+  deliveryProfiles?: { edges?: readonly { node?: ProfileGiaoHang | null }[] | null } | null;
+}
+
 const CHECKOUT_QUERY = `query {
   checkoutBranding { designSystem { colors { global { brand } } } }
 }`;

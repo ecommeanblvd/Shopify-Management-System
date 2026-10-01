@@ -21,6 +21,39 @@ import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { loadAccountSnapshot } from '@/features/carrier-rates/engine/load';
 import { computeCheckoutRates, locCarrierCheckout, type CheckoutRateCarrier } from '@/features/carrier-rates/checkout-rates';
 
+/**
+ * Hình dạng phản hồi của câu `Q` NGAY TRONG tệp này — câu đó có `methodConditions`, thứ
+ * `SHIPPING_QUERY` dùng chung KHÔNG có. Dùng kiểu chung cho nó là khai sai: `tsc` báo ngay
+ * `methodConditions` không tồn tại, và đó là bằng chứng hai câu truy vấn khác nhau thật.
+ */
+interface DieuKienMuc {
+  operator?: string | null;
+  conditionCriteria?: { value?: number | null; unit?: string | null } | null;
+}
+interface MucCoDieuKien {
+  name?: string | null; active?: boolean | null;
+  rateProvider?: { price?: { amount?: string | null; currencyCode?: string | null } | null } | null;
+  methodConditions?: readonly DieuKienMuc[] | null;
+}
+interface KetQuaQ {
+  deliveryProfiles?: {
+    edges?: readonly {
+      node?: {
+        profileLocationGroups?: readonly {
+          locationGroupZones?: {
+            edges?: readonly {
+              node?: {
+                zone?: { name?: string | null; countries?: readonly { code?: { countryCode?: string | null } | null }[] | null } | null;
+                methodDefinitions?: { edges?: readonly { node?: MucCoDieuKien | null }[] | null } | null;
+              } | null;
+            }[] | null;
+          } | null;
+        }[] | null;
+      } | null;
+    }[] | null;
+  } | null;
+}
+
 const Q = `query {
   deliveryProfiles(first: 5) { edges { node { name profileLocationGroups {
     locationGroupZones(first: 50) { edges { node {
@@ -66,17 +99,17 @@ async function main() {
   const ket: Array<Record<string, unknown>> = [];
   let tongBac = 0, reHon = 0, datHon = 0, catNhau = 0, khongTinh = 0, khacTien = 0;
 
-  for (const p of (r.data as any).deliveryProfiles.edges) {
-    for (const g of p.node.profileLocationGroups) {
-      for (const z of g.locationGroupZones.edges) {
-        const zone = z.node.zone;
-        const nuoc = (zone.countries ?? []).map((c: any) => c?.code?.countryCode).filter(Boolean) as string[];
+  for (const p of (r.data as KetQuaQ).deliveryProfiles?.edges ?? []) {
+    for (const g of p.node?.profileLocationGroups ?? []) {
+      for (const z of g.locationGroupZones?.edges ?? []) {
+        const zone = z.node?.zone;
+        const nuoc = (zone?.countries ?? []).map((c) => c?.code?.countryCode).filter(Boolean) as string[];
         if (nuoc.length === 0) continue;
         const dai = nuoc[0];
         const bac: Bac[] = [];
-        for (const m of z.node.methodDefinitions.edges) {
+        for (const m of z.node?.methodDefinitions?.edges ?? []) {
           const n = m.node;
-          if (!n.active || !n.rateProvider?.price || n.name !== TEN_RATE) continue;
+          if (!n?.active || !n.rateProvider?.price || n.name !== TEN_RATE) continue;
           let lo = 0, hi = Infinity;
           for (const c of n.methodConditions ?? []) {
             const v = c.conditionCriteria?.value;
@@ -84,7 +117,9 @@ async function main() {
             if (String(c.operator).startsWith('GREATER')) lo = Number(v);
             else hi = Number(v);
           }
-          bac.push({ min: lo, max: hi === Infinity ? lo + 0.5 : hi, gia: Number(n.rateProvider.price.amount), tien: n.rateProvider.price.currencyCode });
+          // Thiếu đơn vị tiền thì ghi '?' chứ KHÔNG đoán 'USD': script này so giá hai nguồn,
+          // đoán sai đơn vị tiền là so hai con số khác đơn vị mà vẫn in ra như nhau.
+          bac.push({ min: lo, max: hi === Infinity ? lo + 0.5 : hi, gia: Number(n.rateProvider.price.amount), tien: n.rateProvider.price.currencyCode ?? '?' });
         }
         if (bac.length === 0) continue;
         bac.sort((a, b) => a.min - b.min);
@@ -102,8 +137,8 @@ async function main() {
           } else if (b.gia > eHi.gia) datHon++;
           else catNhau++;
         }
-        ket.push({ __bac: bac, vung: zone.name, nuoc: dai, soBac: bac.length, bacReHon: zReHon,
-          hutLonNhat: hutMax > 0 ? `${Math.round(hutMax)} ${bac[0].tien} @ ${bacHutMax}` : '—' });
+        ket.push({ __bac: bac, vung: zone?.name ?? '(không tên)', nuoc: dai, soBac: bac.length, bacReHon: zReHon,
+          hutLonNhat: hutMax > 0 ? `${Math.round(hutMax)} ${bac[0]!.tien} @ ${bacHutMax}` : '—' });
       }
     }
   }
@@ -134,7 +169,12 @@ async function main() {
   console.log(`\nTổng bậc so được: ${tongBac} · rẻ hơn engine SUỐT bậc: ${reHon} · đắt hơn: ${datHon} · cắt nhau: ${catNhau}`);
   if (khongTinh) console.log(`Engine không ra giá: ${khongTinh} bậc`);
   if (khacTien) console.log(`Khác đơn vị tiền, KHÔNG quy đổi (không bịa tỉ giá): ${khacTien} bậc`);
-  console.table(ket.map(({ __bac, ...r }: any) => r));
+  // Bỏ khoá nội bộ `__bac` khỏi bảng in: nó là dữ liệu trung gian, không phải thứ người đọc cần.
+  console.table(ket.map((hang) => {
+    const { __bac: _bo, ...conLai } = hang as Record<string, unknown> & { __bac?: unknown };
+    void _bo;
+    return conLai;
+  }));
   process.exit(0);
 }
 main();

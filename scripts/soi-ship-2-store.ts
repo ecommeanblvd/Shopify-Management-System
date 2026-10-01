@@ -20,6 +20,19 @@ import { SHIPPING_QUERY } from '@/features/settings-viewer/queries';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import type { ConnectorStore } from '@/lib/shopify/connector';
 import { TEN_MUC } from '@/features/carrier-rates/hai-muc-giao';
+import type { KetQuaShippingQuery } from '@/features/settings-viewer/queries';
+
+/**
+ * Dòng `stores` mà script này đọc — khai đúng cột trong câu SELECT, không `any`.
+ *
+ * `extends Record<string, unknown>`: `db.execute<T>` của drizzle đòi vậy. Và các cột nullable
+ * khai đúng là nullable — `any` trước đây che mất chuyện `status` có thể NULL, rồi gán thẳng vào
+ * `ConnectorStore.status` vốn chỉ nhận ba giá trị.
+ */
+interface DongStore extends Record<string, unknown> {
+  id: string; shop_domain: string; api_version: string;
+  status: string | null; maintenance_mode: boolean | null; scopes: string[] | null;
+}
 
 /** Tên mức mà callback THỰC SỰ trả về — participant phải bật đúng những tên này. */
 const MUC_ENGINE = [TEN_MUC.standard, TEN_MUC.express];
@@ -30,7 +43,7 @@ interface Vung { ten: string; nuoc: string[]; restOfWorld: boolean; pt: PhuongTh
 /** Bóc cây deliveryProfiles → danh sách vùng phẳng, sắp xếp ổn định để so được. */
 function bocVung(raw: unknown): Map<string, Vung> {
   const ra = new Map<string, Vung>();
-  const profiles = (raw as any)?.deliveryProfiles?.edges ?? [];
+  const profiles = (raw as KetQuaShippingQuery)?.deliveryProfiles?.edges ?? [];
   for (const p of profiles) {
     const groups = p?.node?.profileLocationGroups ?? [];
     for (const g of groups) {
@@ -53,11 +66,11 @@ function bocVung(raw: unknown): Map<string, Vung> {
           /* Participant chỉ chuyển tiếp giá có TÊN nằm trong participantServices đang bật. Tên
              không khớp thứ callback trả về thì vùng câm lặng — xem ghi chú ở settings-viewer. */
           if (n.rateProvider?.__typename === 'DeliveryParticipant') {
-            const bat = (n.rateProvider.participantServices ?? []).filter((x: any) => x.active).map((x: any) => String(x.name));
+            const bat = (n.rateProvider.participantServices ?? []).filter((x) => x.active).map((x) => String(x.name));
             for (const can of MUC_ENGINE) if (!bat.includes(can)) dvSai.push(`${zone.name}: thiếu "${can}" (đang bật: ${bat.join(', ') || 'rỗng'})`);
           }
         }
-        const key = `${p.node.name} › ${zone.name}`;
+        const key = `${p.node?.name ?? '(không tên)'} › ${zone.name}`;
         ra.set(key, { ten: key, nuoc: nuoc.sort(), restOfWorld: row, pt: pt.sort((a, b) => a.ten.localeCompare(b.ten)), dvSai });
       }
     }
@@ -80,12 +93,15 @@ async function docShip(s: ConnectorStore): Promise<unknown> {
 }
 
 async function layStore(ten: string): Promise<ConnectorStore> {
-  const r = await db.execute<any>(sql`SELECT id, shop_domain, api_version, status, maintenance_mode, scopes
+  const r = await db.execute<DongStore>(sql`SELECT id, shop_domain, api_version, status, maintenance_mode, scopes
      FROM stores WHERE name = ${ten} LIMIT 1;`);
   const s = r.rows[0];
   if (!s) throw new Error(`Không thấy store "${ten}"`);
+  /* Store THIẾU `status` thì coi là `disconnected`, không coi là `active`: `docShip` chặn theo
+   * đúng trường này, nên đoán sai hướng kia là mở đường gọi Shopify cho một store chưa nối. */
+  const tt = s.status === 'active' || s.status === 'error' ? s.status : 'disconnected';
   return { id: s.id, shopDomain: s.shop_domain, apiVersion: s.api_version,
-    status: s.status, maintenanceMode: s.maintenance_mode, scopes: s.scopes ?? [] };
+    status: tt, maintenanceMode: s.maintenance_mode ?? false, scopes: s.scopes ?? [] };
 }
 
 async function main() {
@@ -108,7 +124,9 @@ async function main() {
   console.log(`   So vùng trong ${chung.length} profile chung: ${chung.join(' | ')}\n`);
 
   const moi = [...new Set([...va.keys(), ...vb.keys()])].filter((k) => chung.includes(prof(k))).sort();
-  const thieu: string[] = [], thua: string[] = [], lechNuoc: any[] = [], lechGia: any[] = [];
+  const thieu: string[] = [], thua: string[] = [];
+  const lechNuoc: { vung: string; chiCoOChuan: string; chiCoOSoi: string; restOfWorld: string }[] = [];
+  const lechGia: { vung: string; chuan: string; soi: string }[] = [];
   for (const k of moi) {
     const a = va.get(k), b = vb.get(k);
     if (a && !b) { thieu.push(k); continue; }
@@ -137,7 +155,7 @@ async function main() {
   console.log(`\nLỆCH DANH SÁCH NƯỚC: ${lechNuoc.length}`);
   if (lechNuoc.length) console.table(lechNuoc);
   console.log(`\nLỆCH PHƯƠNG THỨC / GIÁ: ${lechGia.length}`);
-  if (lechGia.length) lechGia.forEach((x:any)=>console.log(`\n  ${x.vung}\n    chuẩn: ${x.chuan}\n    soi  : ${x.soi}`));
+  if (lechGia.length) lechGia.forEach((x)=>console.log(`\n  ${x.vung}\n    chuẩn: ${x.chuan}\n    soi  : ${x.soi}`));
   process.exit(0);
 }
 main();

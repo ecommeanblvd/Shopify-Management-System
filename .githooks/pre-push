@@ -1,9 +1,31 @@
 #!/bin/sh
-# Chặn push khi type-check hoặc test đỏ (quy tắc toàn cục: không bao giờ push đỏ).
+# Chặn push khi type-check, lint hoặc test đỏ (quy tắc toàn cục: không bao giờ push đỏ).
 # Bật: git config core.hooksPath .githooks   (đã ghi trong docs/README). Build/e2e chạy ở deploy, không ở đây.
 set -e
 echo "[pre-push] npx tsc --noEmit"
 npx tsc --noEmit
+
+# ── eslint CHỈ trên tệp đã đổi so với origin/main.
+#
+# Vì sao không lint cả repo: đo 01/10/2026 — `npx eslint .` chạy quá 2 phút, dài hơn cả tsc +
+# test cộng lại. Một hàng rào chậm tới mức người ta tìm cách đi vòng thì không còn là hàng rào.
+#
+# Vì sao phải có: 01/10 phát hiện 26 lint ERROR nằm trong `scripts/` nhiều ngày mà không ai thấy,
+# vì hook chỉ chạy tsc + test. Trong số đó có hai script GHI lên Shopify dùng `any` nên bỏ qua
+# việc `id` có thể null — tức `any` đang che một đường ghi mò lên store thật.
+#
+# Chỉ chặn ở ERROR, warning cho qua: repo còn 67 warning cũ, bắt sửa hết mới cho push là đổi một
+# hàng rào đang dùng được thành một hàng rào bị tắt.
+GOC=$(git merge-base origin/main HEAD 2>/dev/null || echo '')
+if [ -n "$GOC" ]; then
+  DOI=$(git diff --name-only --diff-filter=ACMR "$GOC"...HEAD -- '*.ts' '*.tsx' | tr '\n' ' ')
+  if [ -n "$DOI" ]; then
+    echo "[pre-push] npx eslint (tệp đã đổi)"
+    # shellcheck disable=SC2086
+    npx eslint $DOI
+  fi
+fi
+
 echo "[pre-push] npx vitest run"
 npx vitest run --reporter=dot
 echo "[pre-push] xanh — cho push"
