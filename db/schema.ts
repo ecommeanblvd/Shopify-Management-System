@@ -2370,7 +2370,15 @@ export const shipHoStatements = pgTable('ship_ho_statements', {
   orderCount: integer('order_count').notNull().default(0),
   totalChargedVnd: numeric('total_charged_vnd', { precision: 16, scale: 2 }).notNull().default('0'),
   status: shipHoStatementStatusEnum('status').notNull().default('draft'),
-  /** freight = cước (kỳ theo ngày gửi); duty = thuế/phí NK thu hộ (kỳ theo ngày hoá đơn FedEx). Spec 21/09/2026. */
+  /**
+   * freight = cước; duty = thuế/phí NK thu hộ.
+   *
+   * KỲ CỦA CẢ HAI LOẠI = ngày đẩy sự kiện tương ứng sang MMP lần đầu (`order.reconciled` /
+   * `order.duty_charged`) — CEO 22/09/2026, nhận lại nguyên văn 01/10 cùng MMP. Dòng cũ ở đây
+   * ghi "duty theo ngày hoá đơn FedEx" là văn bản spec 21/09 đã bị quyết định 22/09 thay mà
+   * không ai xoá; nó làm chính em tưởng SMS có hai luật kỳ mâu thuẫn. Ngày hoá đơn FedEx chỉ
+   * in trên DÒNG bảng kê để brand tra tờ khai, không dùng chia kỳ.
+   */
   type: shipHoStatementTypeEnum('type').notNull().default('freight'),
   issuedAt: timestamp('issued_at'),
   paidAt: timestamp('paid_at'),

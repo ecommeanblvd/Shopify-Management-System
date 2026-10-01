@@ -12,8 +12,9 @@ import { payloadStatementIssued, pushStatementEvent } from './statement-push';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
 import type { DongBangKeMmp } from './statement-push';
 
-/** Gom đơn theo LOẠI bảng kê: cước (freight, kỳ theo ngày gửi, chỉ đơn đã chốt đối
- *  soát) hoặc duty (kỳ theo ngày hoá đơn FedEx). CEO 21/09/2026. */
+/** Gom đơn theo LOẠI bảng kê. KỲ CỦA CẢ HAI LOẠI = ngày đẩy lần đầu sang MMP
+ *  (`order.reconciled` / `order.duty_charged`) — CEO 22/09/2026, nhận lại 01/10 cùng MMP.
+ *  Bản cũ ở đây ghi "duty theo ngày hoá đơn FedEx" (spec 21/09) — đã bị thay, xem `donLechKy`. */
 export async function generateStatement(
   partnerBrandSlug: string, type: LoaiBangKe, periodStart: string, periodEnd: string, opts?: { dryRun?: boolean },
 ): Promise<{ ok: boolean; error?: string; statementId?: string; orderCount: number; totalChargedVnd: number; dryRun: boolean; choHoaDon: number }> {

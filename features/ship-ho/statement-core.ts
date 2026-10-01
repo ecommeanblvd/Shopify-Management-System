@@ -234,15 +234,23 @@ export async function goBangKeNhap(now: Date = new Date()): Promise<KetQuaGom[]>
 }
 
 /**
- * Phép CHIẾU CHÉO (mục (e) đề xuất chốt kỳ, CEO 01/10/2026): đơn trong bảng kê CƯỚC có mốc kỳ
- * nằm NGOÀI cửa sổ kỳ của chính bảng kê đó.
+ * Phép CHIẾU CHÉO (mục (e) đề xuất chốt kỳ, CEO 01/10/2026): đơn trong bảng kê có mốc kỳ nằm
+ * NGOÀI cửa sổ kỳ của chính bảng kê đó.
  *
- * CHỈ ÁP CHO `freight`, và đây là giới hạn CỐ Ý. Kỳ duty của SMS theo thiết kế là **ngày hoá
- * đơn FedEx** (xem `shipHoStatements.type`), không phải ngày đẩy; MMP ở mục (b) cũng nói duty
- * KHÔNG đổi gì. Đo 01/10: áp phép kiểm theo ngày đẩy cho duty thì bảng kê duty Kalisa kỳ 08
- * lệch 23/23 đơn — tức nó sẽ chặn vĩnh viễn mọi bảng kê duty vì một bất biến chưa bên nào
- * thống nhất. Hai luật kỳ duty đang mâu thuẫn nhau trong chính mã SMS (schema nói ngày hoá
- * đơn, `donVaoKe` lọc theo ngày đẩy) — phải chốt với CEO trước khi canh bất biến nào.
+ * ÁP CHO CẢ `freight` VÀ `duty`, vì cả hai cùng một mốc: ngày đẩy sự kiện tương ứng
+ * (`order.reconciled` / `order.duty_charged`).
+ *
+ * Tưởng là hai luật mâu thuẫn, hoá ra KHÔNG (CEO hỏi 01/10/2026, truy ra): `shipHoStatements`
+ * và `statement-actions` còn ghi "kỳ duty theo ngày hoá đơn FedEx" — đó là văn bản của quyết
+ * định 21/09, bị quyết định 22/09 thay (ngày đẩy) mà KHÔNG AI XOÁ. Đo 01/10: bản duty kỳ 08
+ * (phát hành dưới luật cũ) có tháng hoá đơn 07/08 nhưng tháng đẩy 09 cho cả 23 đơn; bản kỳ 09
+ * và sau đó khớp ngày đẩy 100%. Hai bình luận cũ đã sửa cùng vòng này.
+ *
+ * Ngày hoá đơn FedEx VẪN có việc riêng, chỉ không phải việc chia kỳ: nó in trên từng dòng bảng
+ * kê để brand tra đúng tờ khai (`statement-queries.ts`).
+ *
+ * Bản duty kỳ 08 lệch 23/23 là DI SẢN của luật cũ, và không bị phép kiểm này cản: nó đã
+ * `issued`, mà đường phát hành chặn bản đã phát hành từ trước đó.
  *
  * CHẶN phát hành, không cảnh báo suông — hai bên đã thống nhất đây là bất biến, mà một cảnh
  * báo không ai đọc thì bằng không có (bài học D-177: 84 sự kiện hỏng nằm đó nhiều tuần).
@@ -256,12 +264,14 @@ export async function donLechKy(statementId: string): Promise<string[]> {
   const r = await db.execute<{ code: string }>(sql`
     SELECT o.code
       FROM ship_ho_statements s
-      JOIN ship_ho_orders o ON o.statement_id = s.id
+      JOIN ship_ho_orders o
+        ON (CASE WHEN s.type = 'duty' THEN o.duty_statement_id ELSE o.statement_id END) = s.id
       LEFT JOIN LATERAL (
         SELECT min(e.occurred_at) AS push_dau FROM ship_ho_order_events e
-         WHERE e.order_id = o.id AND e.event = 'order.reconciled'
+         WHERE e.order_id = o.id
+           AND e.event = CASE WHEN s.type = 'duty' THEN 'order.duty_charged' ELSE 'order.reconciled' END
       ) p ON TRUE
-     WHERE s.id = ${statementId}::uuid AND s.type = 'freight'
+     WHERE s.id = ${statementId}::uuid
        AND (p.push_dau IS NULL OR p.push_dau::date NOT BETWEEN s.period_start AND s.period_end)
      ORDER BY o.code`);
   return r.rows.map((x) => x.code);
