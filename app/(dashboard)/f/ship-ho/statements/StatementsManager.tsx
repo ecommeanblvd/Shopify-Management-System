@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { utils, writeFile } from 'xlsx';
-import { generateStatement, setStatementStatus, recomputeDraftStatement } from '@/features/ship-ho/statement-actions';
+import { generateStatement, setStatementStatus, recomputeDraftStatement, guiLaiBangKe } from '@/features/ship-ho/statement-actions';
 import { fetchStatementForExport } from '@/features/ship-ho/statement-export-action';
 import { isDutyStatementExport } from '@/features/ship-ho/statement-export-types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +48,22 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
       if (!r.mmp) setMsg(`${nhan} nhưng KHÔNG gửi được MMP: không đọc được dữ liệu bảng kê.`);
       else if (r.mmp.ok) setMsg(`${nhan} · đã gửi MMP: ${r.mmp.detail}`);
       else setMsg(`${nhan} nhưng MMP KHÔNG nhận: ${r.mmp.detail} — báo MMP đối soát tay.`);
+    });
+
+  /* Gửi LẠI bản đối soát sang MMP, không đổi trạng thái gì (đo 01/10: 0 sự kiện statement.*
+   * từng được bắn, và ba kê Kalisa nhập từ MMP về nên nút "Gửi" chặn vĩnh viễn). */
+  const guiLai = (id: string) =>
+    start(async () => {
+      setMsg(null);
+      const r = await guiLaiBangKe(id);
+      if (!r.ok) { setMsg(r.error ?? 'Lỗi gửi lại'); return; }
+      // Phép chiếu chéo ở đây là THÔNG TIN, không phải chặn — nhưng vẫn phải nói ra, không
+      // thì người bấm tưởng bản vừa gửi khớp luật kỳ trong khi nó không.
+      const lech = r.lech && r.lech.length > 0
+        ? ` · LƯU Ý ${r.lech.length} đơn mốc kỳ ngoài kỳ này: ${r.lech.slice(0, 5).join(', ')}${r.lech.length > 5 ? '…' : ''}`
+        : '';
+      if (r.mmp?.ok) setMsg(`Đã gửi lại bản đối soát sang MMP: ${r.mmp.detail}${lech}`);
+      else setMsg(`MMP KHÔNG nhận: ${r.mmp?.detail ?? 'không rõ'} — thử lại hoặc báo MMP đối soát tay.${lech}`);
     });
 
   const tinhLai = (id: string) =>
@@ -165,6 +181,12 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
                     {canManage && s.status === 'draft' && <Button variant="outline" size="sm" title="Cập nhật tổng theo giá thực của các đơn đã có bill (bill về sau khi tạo kê)" onClick={() => tinhLai(s.id)} disabled={pending}>Tính lại</Button>}
                     {canManage && s.status === 'draft' && <Button variant="outline" size="sm" onClick={() => mark(s.id, 'issued')} disabled={pending}>Gửi</Button>}
                     {canManage && s.status === 'issued' && <Button size="sm" onClick={() => mark(s.id, 'paid')} disabled={pending}>Đã thu</Button>}
+                    {canManage && s.status !== 'draft' && (
+                      <Button variant="outline" size="sm" disabled={pending}
+                        title="Bắn lại bản đối soát sang MMP — KHÔNG đổi trạng thái, không dời mốc phát hành. Dùng khi MMP chưa có bảng kê này trong sổ."
+                        onClick={() => guiLai(s.id)}
+                      >Gửi lại MMP</Button>
+                    )}
                   </td>
                 </tr>
               ))}
