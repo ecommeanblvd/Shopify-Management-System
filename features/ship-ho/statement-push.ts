@@ -1,9 +1,13 @@
 /**
  * Sự kiện cấp brand `statement.issued` / `statement.paid` — BẢN ĐỐI SOÁT cho MMP (phương án B,
  * CEO 21/09/2026): MMP so với bảng kê của mình theo (mã đơn, loại) và báo lệch, KHÔNG render cho
- * brand. Không qua outbox (outbox gắn đơn) — best-effort như ratecard-push; kết quả ghi log.
+ * brand.
+ *
+ * TỪ 01/10/2026 ĐI QUA OUTBOX (`statement-outbox.ts`): trước đó hàm này POST thẳng và không ghi
+ * một dòng nào, nên một lượt gửi hỏng là không ai còn cách nào biết — xem migration 0189.
  */
 import { signMmpPayload } from '@/features/mmp/hmac';
+import { THAN_TOI_DA } from './mmp-events';
 import type { LoaiBangKe } from './statement-logic';
 import type { KhoanPhiMmp } from './bang-ke-khoan-phi';
 
@@ -44,13 +48,32 @@ export function payloadStatementIssued(st: BangKeMmp, dong: readonly DongBangKeM
   };
 }
 
-export async function pushStatementEvent(event: 'statement.issued' | 'statement.paid', brandSlug: string, data: Record<string, unknown>): Promise<{ ok: boolean; detail: string }> {
+/**
+ * POST một sự kiện cấp bảng kê sang MMP. KHÔNG ghi sổ — việc ghi sổ là của
+ * `statement-outbox.ts`; hàm này chỉ gửi và kể lại đầy đủ những gì nhận được.
+ *
+ * `occurredAtIso` do NGƯỜI GỌI truyền, không lấy `new Date()` tại đây: mốc phải GIỮ NGUYÊN qua
+ * mọi lần gửi lại, nếu không thì mỗi lượt thử lại là một `occurredAt` khác và MMP thấy hai ảnh
+ * chụp khác nhau của cùng một bảng kê — đúng cái câu chặn "đã phát hành, không gửi lại" sinh ra
+ * để tránh. Bản cũ lấy `new Date()` ngay trong hàm nên không gửi lại được mà vẫn an toàn.
+ *
+ * Trả kèm `status` + `than` (thân phản hồi, cắt 500 ký tự) để outbox ghi được LÝ DO, không chỉ
+ * ghi "có lỗi" — bài học D-177: mã HTTP nói có lỗi, thân phản hồi nói lỗi gì.
+ */
+export async function pushStatementEvent(
+  event: 'statement.issued' | 'statement.paid', brandSlug: string, data: Record<string, unknown>,
+  occurredAtIso: string = new Date().toISOString(),
+): Promise<{ ok: boolean; detail: string; status?: number; than?: string }> {
   const url = process.env.MMP_SHIP_HO_WEBHOOK_URL; const secret = process.env.MMP_WEBHOOK_SECRET;
   if (!url || !secret) return { ok: false, detail: 'chưa cấu hình MMP webhook' };
-  const rawBody = JSON.stringify({ event, mmpRef: brandSlug, code: brandSlug, origin: 'sms', occurredAt: new Date().toISOString(), data });
+  const rawBody = JSON.stringify({ event, mmpRef: brandSlug, code: brandSlug, origin: 'sms', occurredAt: occurredAtIso, data });
   const ts = Math.floor(Date.now() / 1000);
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-mean-signature': signMmpPayload(secret, ts, rawBody), 'x-mean-timestamp': String(ts) }, body: rawBody, signal: AbortSignal.timeout(10_000) });
-    return res.ok ? { ok: true, detail: `http ${res.status}` } : { ok: false, detail: `MMP trả http ${res.status}` };
+    // Đọc thân TRƯỚC khi quyết: MMP viết rõ lý do ngay trong body khi từ chối.
+    const than = (await res.text().catch(() => '')).slice(0, THAN_TOI_DA);
+    return res.ok
+      ? { ok: true, detail: `http ${res.status}`, status: res.status, than }
+      : { ok: false, detail: than ? `MMP trả http ${res.status} · ${than}` : `MMP trả http ${res.status}`, status: res.status, than };
   } catch (e) { return { ok: false, detail: e instanceof Error ? e.message : 'fetch failed' }; }
 }

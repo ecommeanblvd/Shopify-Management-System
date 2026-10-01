@@ -15,6 +15,7 @@ import { NHOM_JOB, TEN_NHOM } from '@/features/jobs/groups';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
 import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
 import { retryPendingShipHoEvents } from '@/features/ship-ho/mmp-events';
+import { thuLaiSuKienBangKe } from '@/features/ship-ho/statement-outbox';
 import { pruneOldLogs } from '@/features/db-maintenance/prune-logs';
 import { trackPendingShipments } from '@/features/shipments/track';
 import { dayLaiDongCho } from '@/features/kho-nhan/day-lark';
@@ -33,6 +34,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
     moi: await pushUnsentBrandOrders({ sinceDays: 90 }),
   }),
   'retry-ship-ho-events': () => retryPendingShipHoEvents(),
+  'retry-statement-events': () => thuLaiSuKienBangKe(),
   'day-nhan-kcs-lark': () => dayLaiDongCho(),
   'dong-bo-wh-lark': () => dongBoWhInventory(),
   'dong-bo-can-lark': () => dongBoCanTuLark(),

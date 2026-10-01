@@ -74,6 +74,9 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Đơn ship hộ không được tính lại giá theo cân thực' },
   { key: 'retry-mmp-orders', ten: 'Đẩy đơn sang MMP', chuKyPhut: 1 * GIO,
     hauQua: 'MMP không nhận được đơn mới → đối soát công nợ brand thiếu đơn' },
+  // Chạy LỒNG trong scripts/cron/retry-ship-ho-events.ts nên chu kỳ phải khớp việc đó.
+  { key: 'retry-statement-events', ten: 'Gửi lại bản đối soát bảng kê còn kẹt', chuKyPhut: 15 * PHUT,
+    hauQua: 'MMP không có bảng kê của SMS để đối chiếu — lệch kỳ/giá không ai phát hiện' },
   { key: 'retry-ship-ho-events', ten: 'Gửi lại sự kiện MMP còn kẹt', chuKyPhut: 15 * PHUT,
     hauQua: 'Sự kiện hỏng nằm kẹt vĩnh viễn, MMP không nhận được' },
   { key: 'push-nhan-hang', ten: 'Đẩy "MEAN đã nhận" + Mã món lên Lark', chuKyPhut: CHU_KY_SYNC_LARK,

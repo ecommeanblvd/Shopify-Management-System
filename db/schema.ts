@@ -2632,6 +2632,35 @@ export const shipHoOrderEvents = pgTable('ship_ho_order_events', {
 
 export const shipHoPartnerRequestStatusEnum = pgEnum('ship_ho_partner_request_status', ['pending', 'approved', 'rejected']);
 
+/**
+ * OUTBOX sự kiện CẤP BẢNG KÊ gửi MMP (migration 0189, CEO 01/10/2026).
+ *
+ * Bảng RIÊNG, không dùng `ship_ho_order_events`: cột `order_id` của bảng đó NOT NULL + FK sang
+ * `ship_ho_orders`, còn sự kiện này thuộc một BRAND + một KỲ, không thuộc đơn nào.
+ *
+ * MỘT dòng cho mỗi (bảng kê × loại sự kiện) — unique index. Gửi lại là thêm một LẦN THỬ trên
+ * đúng dòng đó: MMP thấy đúng một ảnh chụp của một bảng kê, SMS giữ đúng một dòng sổ.
+ */
+export const shipHoStatementEvents = pgTable('ship_ho_statement_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  statementId: uuid('statement_id').references(() => shipHoStatements.id).notNull(),
+  brandSlug: text('brand_slug').notNull(),
+  event: text('event').notNull(),
+  /** Mốc GIỮ NGUYÊN qua mọi lần gửi lại — đó là thứ làm MMP thấy một ảnh chụp, không phải hai. */
+  occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+  payload: jsonb('payload').notNull(),
+  deliveryStatus: shipHoEventStatusEnum('delivery_status').notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  lastError: text('last_error'),
+  /** Mã HTTP MMP trả ở lần gần nhất; NULL = chưa gửi hoặc lỗi mạng không có phản hồi. */
+  lastHttpStatus: integer('last_http_status'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex('ship_ho_statement_events_ke_event_idx').on(t.statementId, t.event),
+  index('ship_ho_statement_events_trangthai_idx').on(t.deliveryStatus, t.occurredAt),
+]);
+
 export const shipHoPartnerRequests = pgTable('ship_ho_partner_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
   brandSlug: text('brand_slug').notNull(),

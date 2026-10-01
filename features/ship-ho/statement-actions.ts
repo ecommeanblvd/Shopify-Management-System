@@ -8,7 +8,8 @@ import { summarizeStatement, giaThuBangKe } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
 import { donVaoKe, tinhLaiTongBangKe, donLechKy } from './statement-core';
 import { getShipHoStatement } from './statement-queries';
-import { payloadStatementIssued, pushStatementEvent } from './statement-push';
+import { payloadStatementIssued } from './statement-push';
+import { banSuKienBangKe } from './statement-outbox';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
 import type { DongBangKeMmp } from './statement-push';
 
@@ -106,7 +107,8 @@ export async function setStatementStatus(
       await db.update(schema.shipHoOrders).set({ status: 'settled' }).where(eq(schema.shipHoOrders.statementId, id));
     }
     if (st) {
-      mmp = await pushStatementEvent('statement.paid', st.partnerBrandSlug, { statementId: id, type: st.type, paidAt: paidAt.toISOString() });
+      mmp = await banSuKienBangKe(id, st.partnerBrandSlug, 'statement.paid',
+        { statementId: id, type: st.type, paidAt: paidAt.toISOString() });
     }
   }
   revalidatePath('/f/ship-ho/statements');
@@ -142,7 +144,10 @@ async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detail: stri
       ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
     });
   }
-  return pushStatementEvent('statement.issued', data.statement.partnerBrandSlug, payloadStatementIssued(data.statement, dong));
+  return banSuKienBangKe(
+    id, data.statement.partnerBrandSlug, 'statement.issued',
+    payloadStatementIssued(data.statement, dong) as unknown as Record<string, unknown>,
+  );
 }
 
 /**
