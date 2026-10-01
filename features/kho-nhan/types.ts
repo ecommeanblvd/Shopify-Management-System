@@ -39,6 +39,13 @@ export interface DangKiem {
   taoLuc: Date;
   /** Cân một chiếc (kg). Null = chưa cân — CEO 01/10: không bắt buộc lúc kiểm, bổ sung sau được. */
   canKg: string | null;
+  /**
+   * `pending` = chờ kiểm; `fail` = ĐÃ kiểm không đạt trong NGÀY, còn ở bảng để bổ sung ảnh lỗi
+   * (CEO 01/10). Bảng KHÔNG bao giờ chứa `pass` — hàng đạt đã vào tồn.
+   */
+  qcResult: string;
+  /** Lúc kiểm (chỉ có với chiếc đã fail). */
+  qcLuc: Date | null;
 }
 
 export interface DongQc {

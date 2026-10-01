@@ -12,13 +12,16 @@ import type { AnhLoiQc } from '@/features/kho-nhan/anh-loi-qc';
  * kiểm chứ không làm một ô tải ảnh riêng — để ảnh luôn đi kèm LÝ DO LỖI. Ảnh không lý do là
  * bằng chứng không dùng được khi cãi với brand, và bảng `wh_loi_qc` sinh ra để giữ đúng cặp đó.
  *
- * Bảng này chỉ liệt kê chiếc CHƯA kiểm, nên ô thường trống: nó là chỗ ĐÍNH BẰNG CHỨNG lúc đánh
- * fail, không phải kho ảnh của hàng đã kiểm xong.
+ * Bảng liệt kê chiếc CHƯA kiểm, CỘNG chiếc đã fail TRONG NGÀY (CEO 01/10/2026) — vì ảnh lỗi
+ * thôi bắt buộc lúc kiểm nên phải còn chỗ bổ sung sau. Với chiếc đã fail, ô này gọi
+ * `themDongLoiQc` (chỉ thêm bằng chứng) chứ không gọi lại `qcKhongDat`.
  */
-export function OAnhLoiQc({ itemId, anh, coStorage, sauKhiLuu }: {
+export function OAnhLoiQc({ itemId, anh, coStorage, daFail = false, sauKhiLuu }: {
   itemId: string;
   anh: AnhLoiQc[];
   coStorage: boolean;
+  /** Chiếc đã kiểm KHÔNG ĐẠT — lượt này là bổ sung bằng chứng, không phải đánh fail lần đầu. */
+  daFail?: boolean;
   sauKhiLuu: () => void;
 }) {
   const [mo, setMo] = useState(false);
@@ -62,7 +65,7 @@ export function OAnhLoiQc({ itemId, anh, coStorage, sauKhiLuu }: {
             </ul>
           )}
           <KhoiLoi
-            itemId={itemId} coStorage={coStorage}
+            itemId={itemId} coStorage={coStorage} daFail={daFail}
             onXong={() => { setMo(false); sauKhiLuu(); }}
             onHuy={() => setMo(false)}
           />

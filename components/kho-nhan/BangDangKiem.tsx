@@ -158,7 +158,16 @@ export function BangDangKiem({ dangKiem, anh, anhLoiQc, coStorage }: {
         {nhomTruoc.length > 0 && (
           <details className="rounded-lg border border-border">
             <summary className="cursor-pointer px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
-              {nhomTruoc.length} chiếc tồn từ hôm trước — chưa kiểm xong
+              {(() => {
+                // Nhóm này nay có thể chứa chiếc NHẬN hôm trước mà KIỂM KHÔNG ĐẠT hôm nay
+                // (CEO 01/10 — xem `danhSachDangKiem`). Gọi chung là "chưa kiểm xong" thì sai:
+                // nó đã kiểm rồi, chỉ là còn ở đây để bổ sung ảnh.
+                const fail = nhomTruoc.filter((c) => c.qcResult === 'fail').length;
+                const cho = nhomTruoc.length - fail;
+                if (fail === 0) return `${cho} chiếc tồn từ hôm trước — chưa kiểm xong`;
+                if (cho === 0) return `${fail} chiếc nhận hôm trước — QC không đạt, bổ sung ảnh được`;
+                return `${nhomTruoc.length} chiếc nhận hôm trước — ${cho} chưa kiểm xong, ${fail} QC không đạt`;
+              })()}
             </summary>
             <div className="p-2 pt-0">
               <Bang
@@ -253,11 +262,21 @@ function Bang({ ds, anh, anhLoiQc, coStorage, dangXoa, onKiem, onXoa, onMoAnh, l
               {ds.map((c) => (
                 <tr
                   key={c.id}
+                  /* Dòng đã kiểm KHÔNG ĐẠT tô đỏ nhạt: nó nằm chung bảng với hàng chờ kiểm (để
+                     bổ sung ảnh được — CEO 01/10), nên phải phân biệt được bằng MẮT, không chỉ
+                     bằng việc thiếu nút Kiểm. Đỏ đã mang nghĩa "QC hỏng" ở các màn khác. */
                   className={`border-b border-border last:border-b-0 ${
-                    dangXoa === c.id ? 'opacity-50' : ''
-                  }`}
+                    c.qcResult === 'fail' ? 'bg-destructive/5' : ''
+                  } ${dangXoa === c.id ? 'opacity-50' : ''}`}
                 >
-                  <td className="px-3 py-2 font-mono text-xs">{c.unitCode}</td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {c.unitCode}
+                    {c.qcResult === 'fail' && (
+                      <span className="mt-0.5 block font-sans text-[10px] font-medium text-destructive">
+                        QC không đạt{c.qcLuc ? ` · ${gio(c.qcLuc)}` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="max-w-[420px] px-3 py-2">
                     <span className="block truncate">{c.tenSanPham ?? c.sku}</span>
                     <span className="block truncate font-mono text-xs text-muted-foreground">{c.sku}</span>
@@ -284,14 +303,16 @@ function Bang({ ds, anh, anhLoiQc, coStorage, dangXoa, onKiem, onXoa, onMoAnh, l
                   </td>
                   <td className="px-3 py-2">
                     <OAnhLoiQc itemId={c.id} anh={anhLoiQc[c.id] ?? []} coStorage={coStorage}
-                      sauKhiLuu={lamMoi} />
+                      daFail={c.qcResult === 'fail'} sauKhiLuu={lamMoi} />
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-2">
                       {/* Chỉ kiểm được SAU khi chiếc đã vào hàng chờ QC (CEO
                           24/09): các bộ phận khác phải thấy trạng thái "Chờ
                           QC" trước đã. */}
-                      {c.larkRecordId && (
+                      {/* Chiếc đã fail KHÔNG còn nút Kiểm: `qcKhongDat`/`qcDat` đều chặn
+                          `chuyenDuocQc`, nên nút đó chỉ dẫn tới một thông báo lỗi. */}
+                      {c.larkRecordId && c.qcResult !== 'fail' && (
                         <Button
                           type="button" size="sm" disabled={dangXoa === c.id}
                           onClick={() => onKiem(c)}

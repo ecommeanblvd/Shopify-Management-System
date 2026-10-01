@@ -24,8 +24,6 @@ export interface DongLoiTho {
   lyDo: LyDoLoi;
   anhKey: string | null;
   ghiChu: string;
-  /** `isStorageConfigured()` — chưa có kho ảnh thì không chặn kho làm việc. */
-  coStorage: boolean;
 }
 
 export function kiemDongLoi(d: DongLoiTho): { ok: true } | { ok: false; loi: string } {
@@ -35,6 +33,15 @@ export function kiemDongLoi(d: DongLoiTho): { ok: true } | { ok: false; loi: str
   if (d.lyDo === 'khac' && d.ghiChu.trim() === '') {
     return { ok: false, loi: 'Lý do "Khác" phải ghi rõ trong ô ghi chú.' };
   }
-  if (d.coStorage && !d.anhKey) return { ok: false, loi: 'Phải chụp ảnh chỗ lỗi.' };
+  /* Ảnh KHÔNG bắt buộc (CEO 01/10/2026): "nếu lỗi thì điền QC lỗi, nhưng 2 trường này là không
+   * bắt buộc tại thời điểm này mà có thể bổ sung sau tại bảng Nhận hôm nay". Kiểm xong mà chưa
+   * kịp chụp thì phải lưu được — chặn ở đây là kho kẹt giữa ca.
+   *
+   * Thả luật này CHỈ an toàn vì cùng vòng đã mở đường bổ sung sau: `danhSachDangKiem` giữ chiếc
+   * ĐÃ FAIL TRONG NGÀY ở bảng, và `themDongLoiQc` thêm được dòng lỗi cho chiếc đã kiểm. Thả mà
+   * không có hai thứ đó là tạo bẫy: lưu không ảnh rồi chiếc rời bảng, mất luôn bằng chứng để
+   * cãi với brand — đúng thứ bảng `wh_loi_qc` sinh ra để giữ.
+   *
+   * LÝ DO thì VẪN bắt buộc (ở trên): nó gõ ngay trong form này, bảng không có chỗ bổ sung sau. */
   return { ok: true };
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { LY_DO_HOP_LE, NHAN_LY_DO, type LyDoLoi } from '@/features/kho-nhan/loi-qc';
-import { qcKhongDat } from '@/features/kho-nhan/qc-actions';
+import { qcKhongDat, themDongLoiQc } from '@/features/kho-nhan/qc-actions';
 import { uploadReceiptImage } from '@/features/receiving/actions';
 import { Button } from '@/components/ui/button';
 import { ONhanAnh } from '@/components/ui/o-nhan-anh';
@@ -18,10 +18,15 @@ const dongMoi = (): DongLoiUi =>
  *
  * Ảnh tải qua `uploadReceiptImage` sẵn có; không viết lại đường tải ảnh.
  */
+/**
+ * `daFail`: chiếc này ĐÃ kiểm không đạt rồi, đây là lượt BỔ SUNG bằng chứng (CEO 01/10/2026).
+ * Khi đó gọi `themDongLoiQc` — chỉ thêm dòng lỗi, không đổi trạng thái, không báo Lark lần hai.
+ * `qcKhongDat` sẽ từ chối ("Chiếc này đã QC rồi") và nó PHẢI từ chối, vì nó còn đổi trạng thái.
+ */
 export function KhoiLoi({
-  itemId, coStorage, onXong, onHuy,
+  itemId, coStorage, daFail = false, onXong, onHuy,
 }: {
-  itemId: string; coStorage: boolean; onXong: () => void; onHuy: () => void;
+  itemId: string; coStorage: boolean; daFail?: boolean; onXong: () => void; onHuy: () => void;
 }) {
   const [dong, setDong] = useState<DongLoiUi[]>([dongMoi()]);
   const [loi, setLoi] = useState<string | null>(null);
@@ -49,9 +54,8 @@ export function KhoiLoi({
   const luu = () =>
     start(async () => {
       setLoi(null);
-      const r = await qcKhongDat(itemId, dong.map((d) => ({
-        lyDo: d.lyDo, anhKey: d.anhKey, ghiChu: d.ghiChu,
-      })));
+      const vao = dong.map((d) => ({ lyDo: d.lyDo, anhKey: d.anhKey, ghiChu: d.ghiChu }));
+      const r = daFail ? await themDongLoiQc(itemId, vao) : await qcKhongDat(itemId, vao);
       if (!r.ok) { setLoi(r.loi ?? 'Lưu thất bại.'); return; }
       onXong();
     });
@@ -59,7 +63,7 @@ export function KhoiLoi({
   return (
     <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Chỗ lỗi</h3>
+        <h3 className="text-sm font-semibold">{daFail ? 'Bổ sung chỗ lỗi / ảnh' : 'Chỗ lỗi'}</h3>
         <button
           type="button"
           onClick={() => setDong((p) => [...p, dongMoi()])}
@@ -138,7 +142,7 @@ export function KhoiLoi({
           type="button" variant="destructive" size="lg"
           onClick={luu} disabled={pending || dangTai !== null}
         >
-          {pending ? 'Đang lưu…' : 'Lưu — trả brand'}
+          {pending ? 'Đang lưu…' : daFail ? 'Lưu bổ sung' : 'Lưu — trả brand'}
         </Button>
       </div>
     </div>
