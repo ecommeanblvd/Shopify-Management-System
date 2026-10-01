@@ -24,7 +24,7 @@ import { reconcileShipHoFromCarrierBillsCore } from '@/features/ship-ho/reconcil
 import { applyPodDeliveries } from '@/features/shipments/apply-pod';
 import { applyReturnLinks } from '@/features/shipments/return-bill';
 import { chayMotJob } from '@/features/jobs/run';
-import { goBangKeNhap } from '@/features/ship-ho/statement-core';
+import { goBangKeNhap, goDieuChinhTatCa } from '@/features/ship-ho/statement-core';
 import { dongBoDispute } from '@/features/dispute/sync';
 
 /** Thứ tự có ý nghĩa: nạp đơn trước, các việc ăn theo dữ liệu đơn sau. */
@@ -80,6 +80,10 @@ const VIEC: Array<{
    * `ship-ho-reconcile` vì `gom-bang-ke-nhap` chỉ gom được đơn vừa chốt giá ở
    * bước đó — sai thứ tự thì kỳ này thiếu, phải đợi kỳ sau. */
   { key: 'gom-bang-ke-nhap', fn: () => goBangKeNhap() },
+  /* NGAY SAU `gom-bang-ke-nhap`: lượt gom có thể vừa GỠ một đơn khỏi bản nháp hoặc đổi giá
+   * đơn trong bản đã phát hành, và `go-dieu-chinh` là chỗ duy nhất biến chênh lệch đó thành
+   * một dòng brand nhìn thấy. Chạy trước nó thì chênh lệch vừa sinh phải đợi một tiếng. */
+  { key: 'gom-dieu-chinh', fn: () => goDieuChinhTatCa() },
   { key: 'sync-dispute', fn: () => dongBoDispute() },
   /* `refresh-owned-store` xuống CUỐI DANH SÁCH (CEO 29/09/2026).
    *

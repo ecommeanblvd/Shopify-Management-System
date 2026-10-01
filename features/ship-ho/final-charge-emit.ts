@@ -94,6 +94,28 @@ export async function banGiaCuoiNeuDoi(
 ): Promise<boolean> {
   const truoc = daGui === undefined ? await giaCuoiDaGuiMotDon(order.id) : daGui;
   if (!nenBanGiaCuoi(data.finalChargedVnd, data.reconcileResolution ?? null, truoc)) return false;
-  await emitShipHoEvent(order, 'order.reconciled', data);
+  /* Đơn ĐÃ nằm trên một bảng kê đã phát hành thì kèm `statementId` (CEO 01/10/2026; MMP đã
+   * đồng ý nhận trường này): nó nói với MMP đây là SỬA một dòng đã gửi, không phải một khoản
+   * phát sinh mới của kỳ đang mở. Thiếu nó thì MMP chỉ thấy "giá đổi" mà không biết giá nào
+   * trong sổ của họ phải đổi, và chênh lệch rơi vào kỳ sai. */
+  const keDaPhatHanh = await bangKeDaPhatHanhCuaDon(order.id);
+  await emitShipHoEvent(order, 'order.reconciled', keDaPhatHanh ? { ...data, statementId: keDaPhatHanh } : data);
   return true;
+}
+
+/**
+ * Bảng kê CƯỚC đã phát hành mà đơn này đang thuộc về, hoặc `null`.
+ *
+ * Chỉ `issued`/`paid`: bản còn NHÁP thì chưa ai gửi brand, giá đổi lúc đó chỉ là bản nháp tự
+ * cập nhật — kèm `statementId` của một bản nháp là nói với MMP phải sửa một dòng chưa từng gửi.
+ */
+async function bangKeDaPhatHanhCuaDon(orderId: string): Promise<string | null> {
+  const [r] = await db.select({ id: schema.shipHoStatements.id })
+    .from(schema.shipHoOrders)
+    .innerJoin(schema.shipHoStatements, eq(schema.shipHoStatements.id, schema.shipHoOrders.statementId))
+    .where(and(
+      eq(schema.shipHoOrders.id, orderId),
+      inArray(schema.shipHoStatements.status, ['issued', 'paid']),
+    )).limit(1);
+  return r?.id ?? null;
 }

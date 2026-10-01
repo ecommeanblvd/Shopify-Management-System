@@ -100,6 +100,9 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
   // 01/10/2026). Mặc định CHẠY THỬ — bật bằng biến RIÊNG `WH_GHI_CAN_LARK`, từng bản ghi một.
   { key: 'day-can-lark', ten: 'Đẩy cân nhập ở SMS lên ô Lark còn trống', chuKyPhut: 6 * GIO,
     hauQua: 'Cân kho gõ ở bảng Nhận hôm nay không bao giờ lên Lark — hai bên lệch số vĩnh viễn' },
+  // Chạy LỒNG ngay sau `gom-bang-ke-nhap` trong scripts/cron/sync-shopify-orders.ts.
+  { key: 'gom-dieu-chinh', ten: 'Gom dòng điều chỉnh cho kỳ đã phát hành', chuKyPhut: 6 * GIO,
+    hauQua: 'Giá đổi sau khi chốt kỳ không bao giờ ra tới brand — SMS giữ số mới, brand đã thu số cũ' },
   { key: 'sync-dispute', ten: 'Kéo tranh chấp (chargeback) từ Shopify Payments', chuKyPhut: 6 * GIO,
     hauQua: 'Hạn nộp bằng chứng hiện sai — ca sắp mất tiền không lên khối "cần phản hồi"' },
   { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark (chưa bật)', chuKyPhut: 1 * NGAY,

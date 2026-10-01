@@ -5,7 +5,7 @@
  * Dùng bởi server action (nút "Tính lại tổng") và script bảo trì. Bảng kê đã
  * issued/paid KHÔNG tính lại — số đã gửi brand phải đứng yên.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { sql } from 'drizzle-orm';
 import { chiaDonTrongKe, summarizeStatement, QUYET_DINH_DA_CHOT } from './statement-logic';
@@ -13,7 +13,8 @@ import type { LoaiBangKe } from './statement-logic';
 import { kyThang, viecGom, kyTuTen, chonKyGom, type LyDoKy } from './ky-bang-ke';
 import { giaThuBangKe } from './statement-logic';
 import { getShipHoStatement } from './statement-queries';
-import { payloadStatementIssued, type DongBangKeMmp } from './statement-push';
+import { payloadStatementIssued, payloadStatementAdjustment, type DongBangKeMmp } from './statement-push';
+import { docDongDieuChinh, docAnhChup, tinhDongDieuChinh } from './dieu-chinh';
 import { banSuKienBangKe } from './statement-outbox';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
 
@@ -309,11 +310,33 @@ export async function donLechKy(statementId: string): Promise<string[]> {
  * lại khác bản đã gửi mà không ai thấy.
  */
 export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detail: string } | null> {
+  /* Bảng kê ĐIỀU CHỈNH đi đường riêng: nó KHÔNG sở hữu đơn nào qua `statement_id` (đơn vẫn
+   * thuộc bản gốc), dòng của nó nằm trong `lines_json`. Dựng payload từ đơn như bản thường sẽ
+   * ra một bảng kê RỖNG — và gửi rỗng thì MMP xoá sạch dòng điều chỉnh bên họ. */
+  const [kt] = await db.select({
+    type: schema.shipHoStatements.type, brand: schema.shipHoStatements.partnerBrandSlug,
+    periodStart: schema.shipHoStatements.periodStart, periodEnd: schema.shipHoStatements.periodEnd,
+    lines: schema.shipHoStatements.linesJson, sua: schema.shipHoStatements.adjustsStatementId,
+  }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
+  if (!kt) return null;
+  if (kt.type === 'adjustment') {
+    if (!kt.sua) { console.warn(`[statement-push] kê điều chỉnh ${id} thiếu adjustsStatementId — KHÔNG gửi`); return null; }
+    const dongDc = docDongDieuChinh(kt.lines);
+    if (dongDc == null || dongDc.length === 0) {
+      console.warn(`[statement-push] kê điều chỉnh ${id} không có dòng nào — KHÔNG gửi`);
+      return null;
+    }
+    return banSuKienBangKe(id, kt.brand, 'statement.issued', payloadStatementAdjustment(
+      { id, periodStart: String(kt.periodStart), periodEnd: String(kt.periodEnd), partnerBrandSlug: kt.brand },
+      kt.sua, dongDc,
+    ));
+  }
+
   const data = await getShipHoStatement(id);
   if (!data) return null;
   const dong: DongBangKeMmp[] = [];
   /* Nạp khoản phí CẢ LÔ một lượt trước vòng lặp — hỏi từng đơn là một lượt đi CSDL mỗi dòng. */
-  const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code), data.statement.type);
+  const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code), data.statement.type as LoaiBangKe);
   for (const o of data.orders) {
     const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
     // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd
@@ -330,10 +353,20 @@ export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detai
       ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
     });
   }
-  return banSuKienBangKe(
-    id, data.statement.partnerBrandSlug, 'statement.issued',
-    payloadStatementIssued(data.statement, dong) as unknown as Record<string, unknown>,
-  );
+  const payload = payloadStatementIssued(
+    { ...data.statement, type: data.statement.type as LoaiBangKe }, dong,
+  ) as unknown as Record<string, unknown>;
+
+  /* GHI ẢNH CHỤP TỪNG DÒNG, và ghi MỘT LẦN DUY NHẤT (`lines_json IS NULL`).
+   *
+   * Đây là bản ghi duy nhất chứng minh đã gửi brand số bao nhiêu, và là đầu vào để tính điều
+   * chỉnh về sau. Cho lượt GỬI LẠI ghi đè nó là xoá mất chính cái mốc mà điều chỉnh so với:
+   * sau khi ghi đè thì hiệu luôn bằng 0 và mọi chênh lệch biến mất không dấu vết. */
+  await db.update(schema.shipHoStatements)
+    .set({ linesJson: payload })
+    .where(and(eq(schema.shipHoStatements.id, id), isNull(schema.shipHoStatements.linesJson)));
+
+  return banSuKienBangKe(id, data.statement.partnerBrandSlug, 'statement.issued', payload);
 }
 
 /**
@@ -382,3 +415,102 @@ export async function phatHanhBangKe(id: string): Promise<{
   const mmp = (await banBangKeSangMmp(id)) ?? undefined;
   return { ok: true, mmp };
 }
+
+export interface KetQuaGomDieuChinh {
+  brand: string; keGoc: string; kyGoc: string;
+  /** Kỳ mà bản điều chỉnh được phát hành vào. */
+  kyDieuChinh?: string;
+  soDong: number; tongDelta: number;
+  viec: 'khong_co_hieu' | 'thieu_anh_chup' | 'khong_con_ky_mo' | 'tao_moi' | 'cap_nhat';
+  statementId?: string;
+}
+
+/**
+ * Gom DÒNG ĐIỀU CHỈNH cho một bảng kê ĐÃ PHÁT HÀNH: so ảnh chụp lúc phát hành với giá hiện tại
+ * của chính các đơn trong kê, rồi dựng/cập nhật một bảng kê `adjustment` NHÁP ở kỳ đang mở.
+ *
+ * KHÔNG mở lại kỳ cũ (CEO + MMP thống nhất 01/10/2026): số đã gửi brand phải đứng yên, chênh
+ * lệch đi đường điều chỉnh. Bản điều chỉnh KHÔNG sở hữu đơn nào — đơn vẫn thuộc bản gốc; nếu
+ * gán lại `statement_id` thì bản gốc rỗng dần và không còn gì để so ảnh chụp.
+ *
+ * `thieu_anh_chup`: bảng kê phát hành TRƯỚC migration 0190 (ba bản Kalisa 07/08 nhập từ MMP)
+ * không có `lines_json`, nên không tính được hiệu. Báo RIÊNG thay vì coi là "không có hiệu" —
+ * hai chuyện đó khác nhau, và gộp lại là báo an toàn giả.
+ */
+export async function goDieuChinh(keGocId: string, now: Date = new Date()): Promise<KetQuaGomDieuChinh> {
+  const [goc] = await db.select({
+    id: schema.shipHoStatements.id, brand: schema.shipHoStatements.partnerBrandSlug,
+    type: schema.shipHoStatements.type, status: schema.shipHoStatements.status,
+    periodStart: schema.shipHoStatements.periodStart, lines: schema.shipHoStatements.linesJson,
+  }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, keGocId)).limit(1);
+  if (!goc) throw new Error(`[dieu-chinh] không thấy bảng kê ${keGocId}`);
+  const kyGoc = String(goc.periodStart).slice(0, 7);
+  const chung = { brand: goc.brand, keGoc: keGocId, kyGoc };
+  if (goc.status === 'draft' || goc.type === 'adjustment') {
+    return { ...chung, soDong: 0, tongDelta: 0, viec: 'khong_co_hieu' };
+  }
+
+  const anhChup = docAnhChup(goc.lines);
+  if (anhChup == null) return { ...chung, soDong: 0, tongDelta: 0, viec: 'thieu_anh_chup' };
+
+  const cot = goc.type === 'duty' ? schema.shipHoOrders.dutyStatementId : schema.shipHoOrders.statementId;
+  const donRows = await db.select({
+    code: schema.shipHoOrders.code,
+    cuoc: schema.shipHoOrders.actualChargedVnd, bao: schema.shipHoOrders.chargedVnd,
+    duty: schema.shipHoOrders.actualDutyVnd,
+  }).from(schema.shipHoOrders).where(eq(cot, keGocId));
+  const hienTai = donRows.map((o) => ({
+    code: o.code,
+    amountVnd: Number(goc.type === 'duty' ? (o.duty ?? 0) : (o.cuoc ?? o.bao ?? 0)),
+  }));
+
+  const hieu = tinhDongDieuChinh(anhChup, hienTai);
+  if (hieu.dong.length === 0) return { ...chung, soDong: 0, tongDelta: 0, viec: 'khong_co_hieu' };
+
+  // Bản điều chỉnh phát hành vào KỲ ĐANG MỞ SỚM NHẤT của brand, tính từ kỳ gốc — cùng phép
+  // `chonKyGom` mà luật gán kỳ dùng, nên hai bên không lệch cách xử lý.
+  const keCu = await db.select({
+    periodStart: schema.shipHoStatements.periodStart, status: schema.shipHoStatements.status,
+  }).from(schema.shipHoStatements).where(and(
+    eq(schema.shipHoStatements.partnerBrandSlug, goc.brand),
+    eq(schema.shipHoStatements.type, 'adjustment'),
+  ));
+  const theoKy = new Map(keCu.map((k) => [String(k.periodStart).slice(0, 7), k.status]));
+  const chon = chonKyGom({ tenMoc: kyGoc, tenHienTai: kyThang(now).ten, trangThai: (t) => theoKy.get(t) ?? null });
+  if (chon.ten == null) return { ...chung, soDong: hieu.dong.length, tongDelta: hieu.tongDelta, viec: 'khong_con_ky_mo' };
+  const ky = kyTuTen(chon.ten);
+
+  const [daCo] = await db.select({ id: schema.shipHoStatements.id })
+    .from(schema.shipHoStatements).where(and(
+      eq(schema.shipHoStatements.adjustsStatementId, keGocId),
+      eq(schema.shipHoStatements.status, 'draft'),
+    )).limit(1);
+
+  const giaTri = {
+    orderCount: hieu.dong.length, totalChargedVnd: String(Math.round(hieu.tongDelta)),
+    linesJson: { dong: hieu.dong, tongDelta: hieu.tongDelta },
+  };
+  if (daCo) {
+    await db.update(schema.shipHoStatements).set(giaTri).where(eq(schema.shipHoStatements.id, daCo.id));
+    return { ...chung, kyDieuChinh: chon.ten, soDong: hieu.dong.length, tongDelta: hieu.tongDelta, viec: 'cap_nhat', statementId: daCo.id };
+  }
+  const [moi] = await db.insert(schema.shipHoStatements).values({
+    partnerBrandSlug: goc.brand, type: 'adjustment', status: 'draft',
+    periodStart: ky.dau, periodEnd: ky.cuoi, adjustsStatementId: keGocId, ...giaTri,
+  }).returning({ id: schema.shipHoStatements.id });
+  return { ...chung, kyDieuChinh: chon.ten, soDong: hieu.dong.length, tongDelta: hieu.tongDelta, viec: 'tao_moi', statementId: moi!.id };
+}
+
+/** Gom điều chỉnh cho MỌI bảng kê đã phát hành. Dùng bởi cron và script. */
+export async function goDieuChinhTatCa(now: Date = new Date()): Promise<KetQuaGomDieuChinh[]> {
+  const ds = await db.select({ id: schema.shipHoStatements.id })
+    .from(schema.shipHoStatements)
+    .where(and(
+      inArray(schema.shipHoStatements.status, ['issued', 'paid']),
+      inArray(schema.shipHoStatements.type, ['freight', 'duty']),
+    ));
+  const ra: KetQuaGomDieuChinh[] = [];
+  for (const k of ds) ra.push(await goDieuChinh(k.id, now));
+  return ra;
+}
+

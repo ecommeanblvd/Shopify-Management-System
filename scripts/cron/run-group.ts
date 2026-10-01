@@ -24,7 +24,7 @@ import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
 import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
 import { dongBoDispute } from '@/features/dispute/sync';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
-import { goBangKeNhap } from '@/features/ship-ho/statement-core';
+import { goBangKeNhap, goDieuChinhTatCa } from '@/features/ship-ho/statement-core';
 import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
 
 /** Tác vụ nào chạy bằng hàm nào. Khoá phải khớp sổ đăng ký. */
@@ -42,6 +42,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
   'sync-dispute': () => dongBoDispute(),
   'day-production-time-cx': () => dayProductionTime(),
   'gom-bang-ke-nhap': () => goBangKeNhap(),
+  'gom-dieu-chinh': () => goDieuChinhTatCa(),
   'dien-store-final': () => dienStoreFinal(),
   'prune-logs': () => pruneOldLogs(),
   'track-shipments': () => trackPendingShipments({ limit: 200 }),

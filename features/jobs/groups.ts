@@ -33,7 +33,7 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   'sync-lark': ['sync-lark', 'push-nhan-hang', 'sync-lark-ship-ho', 'ghi-nguoc-lark', 'noi-line-id-mon',
     'dong-bo-wh-lark', 'dong-bo-can-lark', 'day-can-lark', 'dien-store-final',
     'day-production-time-cx', 'dong-bo-po-lark'],
-  'sync-orders': ['sync-orders', 'gom-bang-ke-nhap', 'sync-dispute'],
+  'sync-orders': ['sync-orders', 'gom-bang-ke-nhap', 'gom-dieu-chinh', 'sync-dispute'],
 
   // ── Gộp được: các tác vụ chạy trong vài giây tới vài chục giây.
   'moi-15-phut': ['retry-mmp-orders', 'retry-ship-ho-events', 'retry-statement-events'],

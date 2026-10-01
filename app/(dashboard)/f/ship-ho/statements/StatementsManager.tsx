@@ -11,11 +11,13 @@ import { Button } from '@/components/ui/button';
 const vnd = (v: string | number | null) => (v == null ? '—' : Number(v).toLocaleString('vi-VN') + ' ₫');
 
 interface Statement {
-  id: string; partnerBrandSlug: string; brandName: string | null; type: 'freight' | 'duty';
+  id: string; partnerBrandSlug: string; brandName: string | null;
+  /** `adjustment` = bảng kê điều chỉnh của một kỳ đã phát hành (CEO 01/10/2026). */
+  type: 'freight' | 'duty' | 'adjustment';
   periodStart: string; periodEnd: string; orderCount: number; totalChargedVnd: string;
   status: string; issuedAt: Date | null; paidAt: Date | null;
 }
-interface Ar { partnerBrandSlug: string; brandName: string | null; type: 'freight' | 'duty'; outstandingVnd: string }
+interface Ar { partnerBrandSlug: string; brandName: string | null; type: 'freight' | 'duty' | 'adjustment'; outstandingVnd: string }
 interface Margin { partnerBrandSlug: string; brandName: string | null; orderCount: number; totalMarginVnd: string }
 interface PartnerOpt { slug: string; name: string }
 
@@ -171,8 +173,11 @@ export function StatementsManager({ statements, ar, margin, partners, canManage 
               {statements.map((s) => (
                 <tr key={s.id} className="border-b [&>td]:p-3">
                   <td>{s.brandName ?? s.partnerBrandSlug}</td>
-                  <td>{s.type === 'duty' ? 'Thuế-phí' : 'Cước'}</td>
-                  <td title={s.type === 'duty' ? 'Kỳ theo ngày hoá đơn FedEx' : 'Kỳ theo ngày gửi'}>{s.periodStart} → {s.periodEnd}</td>
+                  <td>{s.type === 'duty' ? 'Thuế-phí' : s.type === 'adjustment' ? 'Điều chỉnh' : 'Cước'}</td>
+                  {/* Kỳ của CẢ HAI loại theo ngày đẩy lần đầu sang MMP (CEO 22/09, nhận lại
+                      01/10 cùng MMP) — nhãn cũ ghi "ngày hoá đơn FedEx" là văn bản spec 21/09
+                      đã bị thay. Bảng kê điều chỉnh mang kỳ ĐANG MỞ, sửa một kỳ đã phát hành. */}
+                  <td title={s.type === 'adjustment' ? 'Điều chỉnh một kỳ đã phát hành — kỳ ghi ở đây là kỳ phát hành bản điều chỉnh' : 'Kỳ theo ngày đẩy lần đầu sang MMP'}>{s.periodStart} → {s.periodEnd}</td>
                   <td>{s.orderCount}</td>
                   <td className="font-medium">{vnd(s.totalChargedVnd)}</td>
                   <td>{s.status === 'draft' ? 'Nháp' : s.status === 'issued' ? 'Đã gửi' : 'Đã thu'}</td>

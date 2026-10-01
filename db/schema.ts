@@ -2306,7 +2306,7 @@ export const shipHoOrderStatusEnum = pgEnum('ship_ho_order_status', [
   'draft', 'quoted', 'shipped', 'delivered', 'billed', 'settled',
 ]);
 export const shipHoStatementStatusEnum = pgEnum('ship_ho_statement_status', ['draft', 'issued', 'paid']);
-export const shipHoStatementTypeEnum = pgEnum('ship_ho_statement_type', ['freight', 'duty']);
+export const shipHoStatementTypeEnum = pgEnum('ship_ho_statement_type', ['freight', 'duty', 'adjustment']);
 
 /** Bật dịch vụ ship hộ cho 1 brand (mmp_brands). 1 config / brand. */
 export const shipHoPartners = pgTable('ship_ho_partners', {
@@ -2383,6 +2383,16 @@ export const shipHoStatements = pgTable('ship_ho_statements', {
   issuedAt: timestamp('issued_at'),
   paidAt: timestamp('paid_at'),
   fileKey: text('file_key'),
+  /**
+   * ẢNH CHỤP TỪNG DÒNG lúc phát hành, BẤT BIẾN sau đó (migration 0190).
+   *
+   * Điều chỉnh là HIỆU giữa số ĐÃ GỬI brand và số hiện tại — `total_charged_vnd` chỉ là tổng,
+   * không nói đơn nào bao nhiêu. Payload trong `ship_ho_statement_events` có số từng dòng nhưng
+   * bị GHI ĐÈ mỗi lượt gửi lại: đó là sổ giao vận, không phải sổ kế toán.
+   */
+  linesJson: jsonb('lines_json'),
+  /** Bảng kê `adjustment` này sửa bảng kê nào. NULL với bảng kê thường. */
+  adjustsStatementId: uuid('adjusts_statement_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

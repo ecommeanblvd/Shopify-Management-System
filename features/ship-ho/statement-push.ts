@@ -77,3 +77,34 @@ export async function pushStatementEvent(
       : { ok: false, detail: than ? `MMP trả http ${res.status} · ${than}` : `MMP trả http ${res.status}`, status: res.status, than };
   } catch (e) { return { ok: false, detail: e instanceof Error ? e.message : 'fetch failed' }; }
 }
+
+/**
+ * Payload `statement.issued` cho bảng kê loại `adjustment` (CEO 01/10/2026; MMP đã đồng ý nhận
+ * `adjustsStatementId`).
+ *
+ * `amountVnd` của mỗi dòng là **DELTA**, không phải số tuyệt đối — để `totalVnd` cộng ra đúng
+ * số phải thu thêm (dương) hoặc trả lại brand (âm), dùng chung phép cộng với bảng kê thường.
+ * Kèm `previousVnd`/`currentVnd`/`adjustmentKind` để brand và MMP đối chiếu được TỪNG dòng:
+ * một đơn giảm 100k khác hẳn một đơn bị bỏ hẳn 100k, dù delta bằng nhau.
+ *
+ * `adjustsStatementId` là thứ giúp MMP biết dòng này SỬA kỳ nào, thay vì coi nó là khoản phát
+ * sinh mới của kỳ đang mở — đó là cả lý do trường này tồn tại.
+ */
+export function payloadStatementAdjustment(
+  st: { id: string; periodStart: string; periodEnd: string; partnerBrandSlug: string },
+  adjustsStatementId: string,
+  dong: readonly { code: string; loai: string; truoc: number; sau: number; delta: number }[],
+): Record<string, unknown> {
+  const orders = dong.map((d) => ({
+    code: d.code, mmpRef: d.code, amountVnd: Math.round(d.delta),
+    adjustmentKind: d.loai, previousVnd: Math.round(d.truoc), currentVnd: Math.round(d.sau),
+  }));
+  return {
+    statementId: st.id, type: 'adjustment',
+    periodStart: st.periodStart, periodEnd: st.periodEnd,
+    adjustsStatementId,
+    periodBasis: 'first_push_at',
+    orders, orderCount: orders.length, totalVnd: orders.reduce((s, o) => s + o.amountVnd, 0),
+  };
+}
+
