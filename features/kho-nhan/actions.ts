@@ -30,14 +30,12 @@ export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi
     anhKey = await uploadReceiptImage(fd);
   }
 
-  const soRaw = formData.get('canKg');
   const v = kiemViec({
     monDinhDanh,
     monRecordId: String(formData.get('monRecordId') ?? '') || null,
     orderNumber: String(formData.get('orderNumber') ?? ''),
     sku: String(formData.get('sku') ?? '') || null,
     soLuong: Number(formData.get('soLuong') ?? 0),
-    canKg: soRaw != null && String(soRaw).trim() !== '' ? Number(soRaw) : null,
     qcCheck: String(formData.get('qcCheck') ?? '') as never,
     whAction: String(formData.get('whAction') ?? '') as never,
     lyDoFail: String(formData.get('lyDoFail') ?? '') || null,
@@ -50,7 +48,7 @@ export async function ghiNhanKcs(formData: FormData): Promise<{ ok: boolean; loi
 
   const giaTri = {
     monDinhDanh: v.viec.monDinhDanh, monRecordId: v.viec.monRecordId, orderNumber: v.viec.orderNumber,
-    sku: v.viec.sku, soLuong: v.viec.soLuong, canKg: v.viec.canKg != null ? String(v.viec.canKg) : null,
+    sku: v.viec.sku, soLuong: v.viec.soLuong,
     qcCheck: v.viec.qcCheck, whAction: v.viec.whAction, lyDoFail: v.viec.lyDoFail,
     anhKey, warehouse: v.viec.warehouse, nguoiLam: userId, luc: new Date(),
     trangThaiDay: 'cho' as const, loi: null,

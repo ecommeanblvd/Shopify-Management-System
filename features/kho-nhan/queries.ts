@@ -35,7 +35,7 @@ export interface MonCuaDon {
   temInLuc: string | null;
   /** Kết quả kho đã ghi cho món này trong SMS (nếu có) — nhập tiếp là SỬA, không tạo dòng hai. */
   daNhan: {
-    luc: string; qcCheck: string; whAction: string; soLuong: number; canKg: number | null;
+    luc: string; qcCheck: string; whAction: string; soLuong: number;
     trangThaiDay: string; lyDoFail: string | null; anhKey: string | null;
     /** Kho món này ĐÃ nhận thật — nguồn duy nhất đáng tin để in lên tem (review 23/09/2026 Critical). */
     warehouse: string;
@@ -113,7 +113,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
   const rows = await db.select({
     dinhDanh: m.dinhDanh, recordId: m.recordId, sku: m.sku, lineitemName: m.lineitemName,
     store: m.store, vendor: m.vendor, huy: m.huy, lyDoHuy: m.lyDo,
-    wLuc: w.luc, wQc: w.qcCheck, wAction: w.whAction, wSl: w.soLuong, wCan: w.canKg,
+    wLuc: w.luc, wQc: w.qcCheck, wAction: w.whAction, wSl: w.soLuong,
     wTrangThai: w.trangThaiDay, wLyDo: w.lyDoFail, wAnh: w.anhKey, wKho: w.warehouse,
     shopifyLineId: m.shopifyLineId,
     shopifyVariantId: schema.shopifyOrderLines.shopifyVariantId,
@@ -169,7 +169,7 @@ export async function timMonCuaDon(orderNumber: string, opts?: { theoOrderId?: s
       daNhan: r.wLuc
         ? {
           luc: r.wLuc.toISOString(), qcCheck: r.wQc!, whAction: r.wAction!, soLuong: r.wSl!,
-          canKg: r.wCan != null ? Number(r.wCan) : null, trangThaiDay: r.wTrangThai!,
+          trangThaiDay: r.wTrangThai!,
           lyDoFail: r.wLyDo ?? null, anhKey: r.wAnh ?? null, warehouse: r.wKho!,
         }
         : null,

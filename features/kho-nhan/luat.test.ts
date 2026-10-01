@@ -3,7 +3,7 @@ import { kiemViec, actionMacDinh } from './luat';
 
 const co = {
   monDinhDanh: 'dd', monRecordId: 'recMON', orderNumber: '#MBLVD1', sku: 'A-1',
-  lineitemName: 'Áo', store: '#MBLVD', vendor: 'TRACY', soLuong: 1, canKg: 1.2,
+  lineitemName: 'Áo', store: '#MBLVD', vendor: 'TRACY', soLuong: 1,
   qcCheck: 'QC Pass' as const, whAction: 'Tạm nhập (đi đơn)' as const, lyDoFail: null, warehouse: 'HN | GVM' as const,
 };
 
@@ -27,10 +27,14 @@ describe('kiemViec', () => {
     expect(kiemViec({ ...co, soLuong: 0 })).toEqual({ ok: false, loi: 'Số lượng phải lớn hơn 0' });
     expect(kiemViec({ ...co, soLuong: 1.5 })).toEqual({ ok: false, loi: 'Số lượng phải là số nguyên' });
   });
-  it('cân âm hoặc quá lớn → chặn; bỏ trống thì được', () => {
-    expect(kiemViec({ ...co, canKg: -1 })).toEqual({ ok: false, loi: 'Cân không hợp lệ' });
-    expect(kiemViec({ ...co, canKg: 200 })).toEqual({ ok: false, loi: 'Cân không hợp lệ' });
-    expect(kiemViec({ ...co, canKg: null }).ok).toBe(true);
+  /* KHÔNG còn luật cân ở đây (CEO 01/10/2026): việc nhận-KCS không mang cân nữa, cân có đúng
+   * một chỗ ở `goods_receipt_items.weight_kg` với đúng một trần `CAN_TOI_DA_KG` = 50 kg
+   * (features/kho-nhan/can-tu-lark.ts). Trước đây luật này cho tới 100 kg trong khi đường
+   * Lark chặn ở 50 — hai trần cho cùng một đại lượng, xem D-179. */
+  it('việc trả về KHÔNG có trường cân — cân không còn thuộc việc nhận-KCS', () => {
+    const r = kiemViec(co);
+    expect(r.ok).toBe(true);
+    expect(Object.keys(r.ok ? r.viec : {})).not.toContain('canKg');
   });
   it('giá trị lạ ở cột chọn → chặn, KHÔNG để Lark đẻ lựa chọn mới', () => {
     expect(kiemViec({ ...co, qcCheck: 'Pass' as never })).toEqual({ ok: false, loi: 'Kết quả kiểm không hợp lệ' });

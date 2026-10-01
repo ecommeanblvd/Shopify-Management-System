@@ -26,7 +26,6 @@ export interface ViecNhanKcs {
   store: string | null;
   vendor: string | null;
   soLuong: number;
-  canKg: number | null;
   qcCheck: QcCheck;
   whAction: WhAction;
   lyDoFail: string | null;
@@ -52,8 +51,9 @@ export function cotTaoDong(v: ViecNhanKcs, ngay: Date): Record<string, unknown> 
   if (v.lineitemName) c['Lineitem Name'] = v.lineitemName;
   if (v.store) c['Store final'] = v.store;
   if (v.vendor) c['Vendor final'] = v.vendor;
-  if (v.canKg != null) c['Weight (kg)'] = v.canKg;
   if (v.lyDoFail) c['Lý do QC failed'] = v.lyDoFail;
+  // KHÔNG gửi 'Weight (kg)': cân là MỘT CHIỀU Lark → SMS (CEO 30/09/2026), Lark là nguồn sự
+  // thật. SMS ghi lên đó là ghi đè số kho vừa cân bằng một số SMS không có — xem D-179.
   return c;
 }
 
@@ -70,7 +70,8 @@ export function cotCapNhat(v: ViecNhanKcs, xoaLyDo: boolean): Record<string, unk
     'QC Check': v.qcCheck,
     'WH - Action': v.whAction,
   };
-  if (v.canKg != null) c['Weight (kg)'] = v.canKg;
+  // KHÔNG gửi 'Weight (kg)' — xem `cotTaoDong`. Ở đường CẬP NHẬT còn tệ hơn: dòng Lark đang
+  // có cân thật của kho, ghi đè là xoá số người ta đã cân.
   // Kiểm lại thành đạt thì XOÁ lý do hỏng cũ, không để nguyên trên Lark cho người sau đọc
   // nhầm là món vẫn lỗi. Ngoài hai trường hợp này thì KHÔNG gửi cột lý do.
   if (v.lyDoFail) c['Lý do QC failed'] = v.lyDoFail;

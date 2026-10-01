@@ -4,11 +4,11 @@ import { cotTaoDong, cotCapNhat, QC_CHECK, WH_ACTION, WAREHOUSE, type ViecNhanKc
 const viec: ViecNhanKcs = {
   monDinhDanh: '#MBLVD30426-Tracy-PDL-1', monRecordId: 'recMON', orderNumber: '#MBLVD30426',
   sku: 'Tracy-V1416-XS-WBRM-PLA', lineitemName: 'Vianne Maxi Dress', store: '#MBLVD', vendor: 'TRACY STUDIO',
-  soLuong: 1, canKg: 1.5, qcCheck: 'QC Pass', whAction: 'Tạm nhập (đi đơn)', lyDoFail: null, warehouse: 'HN | GVM',
+  soLuong: 1, qcCheck: 'QC Pass', whAction: 'Tạm nhập (đi đơn)', lyDoFail: null, warehouse: 'HN | GVM',
 };
 
 describe('cotTaoDong', () => {
-  it('đủ 13 cột kho đang dùng, ngày là epoch nửa đêm giờ VN', () => {
+  it('đủ 12 cột kho đang dùng, ngày là epoch nửa đêm giờ VN', () => {
     const c = cotTaoDong(viec, new Date('2026-09-22T05:00:00Z'));
     expect(c).toEqual({
       'Import (select order)': ['recMON'],
@@ -22,7 +22,6 @@ describe('cotTaoDong', () => {
       // epoch của nửa đêm 22/09 GIỜ VN = 21/09 17:00 UTC (ghi-nguoc/ngay-lark.ts)
       'Ngày Import - tiếp nhận đồ tại kho': Date.UTC(2026, 8, 22) - 7 * 60 * 60 * 1000,
       'Quantity tiếp nhận trước QC': 1,
-      'Weight (kg)': 1.5,
       'QC Check': 'QC Pass',
       'WH - Action': 'Tạm nhập (đi đơn)',
     });
@@ -34,15 +33,19 @@ describe('cotTaoDong', () => {
     expect('Import (select order)' in c).toBe(false);
   });
 
-  it('không có cân thì bỏ cột cân, không gửi 0', () => {
-    expect('Weight (kg)' in cotTaoDong({ ...viec, canKg: null }, new Date())).toBe(false);
+  /* GHIM MỘT CHIỀU (CEO 30/09/2026): cân chạy Lark → SMS, Lark là nguồn sự thật. SMS gửi
+   * 'Weight (kg)' lên Lark là ghi đè số kho vừa cân bằng một số SMS không có. Ghim ở CẢ hai
+   * hàm vì đường CẬP NHẬT mới là đường đụng vào dòng đã có cân. */
+  it('TUYỆT ĐỐI không gửi cột cân lên Lark — cân là một chiều Lark → SMS', () => {
+    expect('Weight (kg)' in cotTaoDong(viec, new Date())).toBe(false);
+    expect('Weight (kg)' in cotCapNhat(viec, false)).toBe(false);
   });
 });
 
 describe('cotCapNhat', () => {
   it('CHỈ những cột kết quả, không đụng cột định danh của dòng cũ', () => {
     expect(Object.keys(cotCapNhat({ ...viec, qcCheck: 'QC Failed', lyDoFail: 'bẩn' }, false)).sort()).toEqual(
-      ['Lý do QC failed', 'QC Check', 'Quantity tiếp nhận trước QC', 'WH - Action', 'Weight (kg)'].sort(),
+      ['Lý do QC failed', 'QC Check', 'Quantity tiếp nhận trước QC', 'WH - Action'].sort(),
     );
   });
 

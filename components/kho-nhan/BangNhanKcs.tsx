@@ -103,9 +103,11 @@ export function BangNhanKcs({ don, mon, loiLark, homNay, coQuyenNhap }: {
         const dinhDanh = ket.dinhDanh;
         setMonSang(dinhDanh);
         document.getElementById(`mon-${dinhDanh}`)?.scrollIntoView({ block: 'center' });
-        // Trên máy tính, sau khi quét con trỏ nhảy thẳng vào ô cân — gõ số, Enter là lưu và
-        // sang món kế, không rời tay khỏi bàn phím (spec §5). Đợi một nhịp cho scrollIntoView.
-        setTimeout(() => (document.getElementById(`can-${dinhDanh}`) as HTMLInputElement | null)?.focus(), 300);
+        // Trên máy tính, sau khi quét con trỏ nhảy thẳng vào ô số lượng — gõ số, Enter là lưu
+        // và sang món kế, không rời tay khỏi bàn phím (spec §5). Đợi một nhịp cho scrollIntoView.
+        // TRƯỚC 01/10/2026 nhảy vào ô CÂN; ô đó đã bỏ (cân nhập ở bảng "Nhận hôm nay", CEO chốt
+        // 01/10) nên để nguyên là con trỏ nhảy vào hư không và người quét phải với lấy chuột.
+        setTimeout(() => (document.getElementById(`sl-${dinhDanh}`) as HTMLInputElement | null)?.focus(), 300);
         setTimeout(() => setMonSang((cur) => (cur === dinhDanh ? null : cur)), 3000);
         return;
       }
@@ -287,9 +289,7 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
   // Số trên Lark có thể là 0 hoặc quá lớn (dòng cũ nhập tay). Điền sẵn một giá trị mà máy chủ
   // sẽ từ chối thì kho bấm Lưu là kẹt, nên chỉ nhận số hợp lệ, còn lại về mặc định.
   const slHopLe = (n: number | null | undefined) => (typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null);
-  const canHopLe = (n: number | null | undefined) => (typeof n === 'number' && n > 0 && n <= 100 ? n : null);
   const soLuongCu = slHopLe(m.daNhan?.soLuong) ?? slHopLe(m.larkCu?.soLuong) ?? 1;
-  const canCu = canHopLe(m.daNhan?.canKg) ?? canHopLe(m.larkCu?.canKg) ?? null;
   // Món trên Lark vốn đã không đạt → ảnh lỗi đã có từ lần kiểm trước, không bắt chụp lại.
   const larkQcCu = m.larkCu?.qcCheck === 'QC Failed' ? 'QC Failed' : '';
   // Ảnh lỗi chỉ SMS mới giữ (spec §3: Lark chỉ nhận lý do bằng chữ), nên dòng Lark có lý do
@@ -297,7 +297,6 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
   const coAnhCu = !!m.daNhan?.anhKey || larkQcCu === 'QC Failed';
 
   const [soLuong, setSoLuong] = useState(String(soLuongCu));
-  const [canKg, setCanKg] = useState(canCu != null ? String(canCu) : '');
   const [qc, setQc] = useState<QcCheck>(qcCu);
   const [action, setAction] = useState<WhAction>(actionCu);
   const [lyDo, setLyDo] = useState(m.daNhan?.lyDoFail ?? m.larkCu?.lyDoFail ?? '');
@@ -363,24 +362,21 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
   // bấm Lưu. Ô ảnh lỗi (type=file) KHÔNG được nhân đôi kiểu này — file chọn ở input này không
   // tự có ở input kia, nhân đôi sẽ khiến FormData lấy nhầm ô rỗng — nên khối "Lý do không đạt +
   // Ảnh lỗi" bên dưới giữ NGUYÊN VẸN một bộ dùng chung cho cả hai khổ màn.
+  // KHÔNG có ô "Cân (kg)" trong khối này (CEO 01/10/2026): cân nhập ở bảng "Nhận hôm nay",
+  // ghi vào `goods_receipt_items.weight_kg` — một chỗ duy nhất. Ô cũ ở đây ghi vào
+  // `wh_nhan_kcs.can_kg`, cột đã DROP (0 dòng từ khi dựng). Xem D-179.
   const truong = (lon: boolean) => {
     const cls = lon ? O_NHAP_LON : O_NHAP;
     return (
       <>
         <Nhan chu="Số lượng">
           <input
-            name="soLuong" type="number" min={1} step={1} required disabled={khoa}
-            value={soLuong} onChange={(e) => setSoLuong(e.target.value)} className={cls}
-          />
-        </Nhan>
-        <Nhan chu="Cân (kg)">
-          <input
             // id chỉ gắn ở bộ máy tính — sau khi quét chọn món, con trỏ nhảy thẳng vào đây
             // (spec §5 "bàn phím cho máy tính"). Gắn cả hai bộ sẽ trùng id, getElementById
             // vớ ngay bộ đang ẩn trên điện thoại.
-            {...(!lon ? { id: `can-${m.dinhDanh}` } : {})}
-            name="canKg" type="number" min={0} step={0.01} disabled={khoa}
-            value={canKg} onChange={(e) => setCanKg(e.target.value)} placeholder="—" className={cls}
+            {...(!lon ? { id: `sl-${m.dinhDanh}` } : {})}
+            name="soLuong" type="number" min={1} step={1} required disabled={khoa}
+            value={soLuong} onChange={(e) => setSoLuong(e.target.value)} className={cls}
           />
         </Nhan>
         <Nhan chu="Kết quả kiểm">
@@ -419,7 +415,7 @@ function KhoiMon({ m, donTran, kho, doiKho, coQuyenNhap, sang }: {
       {m.daNhan && (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
           Đã nhận {gioVn(m.daNhan.luc)} · {m.daNhan.qcCheck} · {m.daNhan.whAction} · SL {m.daNhan.soLuong}
-          {m.daNhan.canKg != null ? ` · ${m.daNhan.canKg} kg` : ''} — nhập tiếp là sửa dòng này.
+          {' '}— nhập tiếp là sửa dòng này.
         </p>
       )}
 

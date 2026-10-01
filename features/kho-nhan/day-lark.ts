@@ -74,7 +74,7 @@ export async function dayMotDong(id: string): Promise<KetQuaDay> {
   const viec: ViecNhanKcs = {
     monDinhDanh: d.monDinhDanh, monRecordId: d.monRecordId, orderNumber: d.orderNumber, sku: d.sku,
     lineitemName: null, store: null, vendor: null,
-    soLuong: d.soLuong, canKg: d.canKg != null ? Number(d.canKg) : null,
+    soLuong: d.soLuong,
     qcCheck: d.qcCheck as QcCheck, whAction: d.whAction as WhAction,
     lyDoFail: d.lyDoFail, warehouse: d.warehouse as Warehouse,
   };

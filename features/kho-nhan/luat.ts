@@ -1,9 +1,6 @@
 /** THUẦN: luật kiểm dữ liệu kho nhập, trước khi đụng tới DB hay Lark. */
 import { QC_CHECK, WH_ACTION, WAREHOUSE, type QcCheck, type WhAction, type ViecNhanKcs } from './gia-tri-lark';
 
-/** Cân một món vượt mức này là gõ nhầm (cùng ngưỡng parse-pack-row.ts dùng cho kiện). */
-const CAN_TOI_DA = 100;
-
 export function actionMacDinh(qc: QcCheck): WhAction {
   if (qc === 'QC Failed') return 'Gửi trả Vendor (QC fail)';
   if (qc === 'Gửi dư') return 'Lưu kho';
@@ -18,7 +15,6 @@ export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean; daFailTruo
   if (!WAREHOUSE.includes(v.warehouse as never)) return { ok: false, loi: 'Kho không hợp lệ' };
   if (typeof v.soLuong !== 'number' || v.soLuong <= 0) return { ok: false, loi: 'Số lượng phải lớn hơn 0' };
   if (!Number.isInteger(v.soLuong)) return { ok: false, loi: 'Số lượng phải là số nguyên' };
-  if (v.canKg != null && (!(v.canKg > 0) || v.canKg > CAN_TOI_DA)) return { ok: false, loi: 'Cân không hợp lệ' };
   if (v.qcCheck === 'QC Failed') {
     if (!v.lyDoFail?.trim()) return { ok: false, loi: 'Không đạt thì phải ghi lý do' };
     /* Ảnh lỗi KHÔNG chặn lưu nữa (CEO 01/10/2026): "không bắt buộc tại thời điểm này mà có thể
@@ -31,7 +27,7 @@ export function kiemViec(v: Partial<ViecNhanKcs> & { coAnh?: boolean; daFailTruo
     viec: {
       monDinhDanh: v.monDinhDanh, monRecordId: v.monRecordId ?? null, orderNumber: v.orderNumber.trim(),
       sku: v.sku ?? null, lineitemName: v.lineitemName ?? null, store: v.store ?? null, vendor: v.vendor ?? null,
-      soLuong: v.soLuong, canKg: v.canKg ?? null, qcCheck: v.qcCheck as QcCheck, whAction: v.whAction as WhAction,
+      soLuong: v.soLuong, qcCheck: v.qcCheck as QcCheck, whAction: v.whAction as WhAction,
       lyDoFail: v.lyDoFail?.trim() || null, warehouse: v.warehouse as never,
     },
   };

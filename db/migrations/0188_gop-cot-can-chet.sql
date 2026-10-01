@@ -1,0 +1,21 @@
+-- GỘP CÂN VỀ MỘT CHỖ: drop `wh_nhan_kcs.can_kg` (CEO 01/10/2026 "gộp cột chết đi em").
+--
+-- VÌ SAO DROP ĐƯỢC MÀ KHÔNG MẤT GÌ: đo production 01/10/2026 — `wh_nhan_kcs` có ĐÚNG 0 dòng
+-- (count(*) = 0, min(luc) = null) kể từ khi dựng 23/09. Không phải "cột rỗng" mà là CẢ BẢNG
+-- chưa ai ghi dòng nào, nên drop cột này không xoá của ai một con số nào.
+--
+-- VÌ SAO PHẢI BỎ: cân một chiếc từng có BA chỗ ở, với HAI cái trần khác nhau cho cùng một đại
+-- lượng — `wh_nhan_kcs.can_kg` (luat.ts cho tới 100 kg), `goods_receipt_items.weight_kg` (chỗ
+-- thật, 263/866 dòng có số, bảng "Nhận hôm nay" đọc), và cột `Weight (kg)` trên Lark do kho
+-- điền (can-tu-lark.ts chặn ở 50 kg). CEO chốt: lấy mốc 50 kg, và cân nhập ở bảng
+-- "Nhận hôm nay" → `goods_receipt_items.weight_kg` là chỗ duy nhất.
+--
+-- VÌ SAO KHÔNG CHUYỂN DỮ LIỆU SANG: không có đường nối. Đo 01/10 — `wh_nhan_kcs.mon_record_id`
+-- lấy từ `lark_mon_don` (bảng món theo đơn), còn `goods_receipt_items.lark_record_id` lấy từ
+-- `lark_wh_inventory`: giao của hai tập id là 0/866, trong khi giao với wh_inventory là 32/32.
+-- Hai không gian id KHÁC NHAU, nên "gộp" ở đây là BỎ, không phải copy.
+--
+-- Kèm theo (ở mã, không ở DB): SMS thôi gửi cột 'Weight (kg)' lên Lark. Cân là MỘT CHIỀU
+-- Lark → SMS (CEO 30/09/2026); ghi ngược là đè số kho vừa cân bằng số SMS không có.
+
+ALTER TABLE "wh_nhan_kcs" DROP COLUMN IF EXISTS "can_kg";

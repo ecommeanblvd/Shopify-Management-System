@@ -2247,7 +2247,8 @@ export const whNhanKcs = pgTable('wh_nhan_kcs', {
   orderNumber: text('order_number').notNull(),
   sku: text('sku'),
   soLuong: integer('so_luong').notNull(),
-  canKg: numeric('can_kg', { precision: 10, scale: 3 }),
+  /* KHÔNG có cột cân ở đây (01/10/2026): cân một chiếc có ĐÚNG MỘT chỗ ở
+     `goods_receipt_items.weight_kg`. Cột `can_kg` cũ đã DROP — xem D-179. */
   qcCheck: text('qc_check').notNull(),
   whAction: text('wh_action').notNull(),
   lyDoFail: text('ly_do_fail'),
