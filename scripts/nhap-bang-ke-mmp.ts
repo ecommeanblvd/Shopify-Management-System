@@ -14,7 +14,7 @@
  */
 import { readFileSync } from 'node:fs';
 import * as XLSX from 'xlsx';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 
 interface Dong { maShop: string; maHt: string; loai: 'Cước' | 'Thuế/phí'; tien: number }
@@ -83,29 +83,98 @@ async function nhapMot(duong: string, ghi: boolean): Promise<void> {
   if (thieu.length) throw new Error(`${thieu.length} mã trên bảng kê không có trong SMS: ${thieu.join(', ')}`);
   console.log(`    ${maHt.length} đơn phân biệt, khớp ${theoMa.size} trong SMS`);
 
-  if (!ghi) { console.log('    (chạy thử — thêm --ghi để nhập)'); return; }
-
   for (const [loai, ds, tong] of [['freight', cuoc, bk.tongCuoc], ['duty', thue, bk.tongThue]] as const) {
     if (ds.length === 0) continue;
-    const [daCo] = await db.select({ id: schema.shipHoStatements.id })
-      .from(schema.shipHoStatements)
+    const cot = loai === 'freight' ? schema.shipHoOrders.statementId : schema.shipHoOrders.dutyStatementId;
+    const ids = ds.map((d) => theoMa.get(d.maHt)!);
+
+    const [daCo] = await db.select({
+      id: schema.shipHoStatements.id, status: schema.shipHoStatements.status,
+      orderCount: schema.shipHoStatements.orderCount,
+      total: schema.shipHoStatements.totalChargedVnd,
+    }).from(schema.shipHoStatements)
       .where(and(
         eq(schema.shipHoStatements.partnerBrandSlug, brandRow.slug),
         eq(schema.shipHoStatements.periodStart, dau),
         eq(schema.shipHoStatements.type, loai),
       )).limit(1);
+
+    /* ĐÃ THU rồi thì KHÔNG đụng. Tiền đã về, sửa bảng kê lúc này là sửa chứng từ của một
+     * giao dịch đã xong — muốn đổi thì đi đường điều chỉnh, không đi đường nhập lại. */
+    if (daCo?.status === 'paid') {
+      console.log(`    ⚠ ${loai}: bảng kê ${daCo.id.slice(0, 8)} đã THU — BỎ QUA, không nhập lên bản đã thu`);
+      continue;
+    }
+
+    /* Đơn đang gắn vào bản này mà file MMP KHÔNG có.
+     *
+     * Vì sao phải gỡ: bản nháp bên SMS do `goBangKeNhap` tự gom theo luật của SMS, còn bản bên
+     * MMP là bản ĐÃ CHỐT — hai tập đơn có thể khác nhau. Nhập mà không gỡ thì bảng kê mang
+     * tổng của MMP nhưng lại chứa thêm đơn của SMS: tổng và danh sách dòng nói hai chuyện khác
+     * nhau, và đơn thừa đó bị kẹt vĩnh viễn trong một kỳ đã đóng (đo 01/10: `26-INSLG-SV-0032`
+     * đúng là ca này — nó thuộc kỳ 09 bên MMP nhưng nằm trong nháp kỳ 08 bên SMS).
+     *
+     * Gỡ ra là đủ: lượt `gom-bang-ke-nhap` kế tiếp xếp nó vào KỲ ĐANG MỞ SỚM NHẤT theo đúng
+     * luật mốc, không cần ai dời tay. */
+    const la = daCo
+      ? await db.select({ id: schema.shipHoOrders.id, code: schema.shipHoOrders.code, status: schema.shipHoOrders.status })
+          .from(schema.shipHoOrders)
+          .where(and(eq(cot, daCo.id), notInArray(schema.shipHoOrders.id, ids)))
+      : [];
+
+    // ── Báo cáo TRƯỚC khi ghi, và báo cả ở chế độ chạy thử: con số quyết định phải thấy được
+    //    trước khi bấm, không phải sau.
+    if (!daCo) {
+      console.log(`    ${loai}: TẠO bảng kê mới · ${ids.length} đơn · ${f(tong)}đ · issued (issued_at NULL)`);
+    } else {
+      const doiTrangThai = daCo.status !== 'issued' ? ` · ${daCo.status} → issued` : '';
+      const soCu = `${daCo.orderCount} đơn / ${f(Number(daCo.total))}đ`;
+      const soMoi = `${ids.length} đơn / ${f(tong)}đ`;
+      const doiSo = soCu !== soMoi ? ` · số: ${soCu} → ${soMoi}` : ' · số không đổi';
+      console.log(`    ${loai}: DÙNG LẠI bảng kê ${daCo.id.slice(0, 8)}${doiTrangThai}${doiSo}`);
+    }
+    for (const x of la) console.log(`      GỠ ${x.code} — file MMP không có đơn này (lượt gom sau sẽ xếp lại kỳ)`);
+
+    if (!ghi) continue;
+
     const id = daCo?.id ?? (await db.insert(schema.shipHoStatements).values({
       partnerBrandSlug: brandRow.slug, periodStart: dau, periodEnd: cuoi,
-      orderCount: ds.length, totalChargedVnd: String(tong),
+      orderCount: ids.length, totalChargedVnd: String(tong),
       status: 'issued', type: loai,
     }).returning({ id: schema.shipHoStatements.id }))[0]!.id;
 
-    const ids = ds.map((d) => theoMa.get(d.maHt)!);
+    // Gỡ TRƯỚC khi gắn: nếu gắn trước thì `notInArray` đã tính ở trên không còn đúng tập nữa.
+    if (la.length > 0) {
+      const idLa = la.map((x) => x.id);
+      await db.update(schema.shipHoOrders).set(loai === 'freight' ? { statementId: null } : { dutyStatementId: null })
+        .where(inArray(schema.shipHoOrders.id, idLa));
+      if (loai === 'freight') {
+        // 'billed' do `goBangKeNhap` đặt lúc gắn vào kê — lùi về 'shipped' để lượt gom sau
+        // nhặt lại được; status khác thì giữ nguyên.
+        const idBilled = la.filter((x) => x.status === 'billed').map((x) => x.id);
+        if (idBilled.length > 0) {
+          await db.update(schema.shipHoOrders).set({ status: 'shipped' }).where(inArray(schema.shipHoOrders.id, idBilled));
+        }
+      }
+    }
+
     await db.update(schema.shipHoOrders)
       .set(loai === 'freight' ? { statementId: id } : { dutyStatementId: id })
       .where(inArray(schema.shipHoOrders.id, ids));
-    console.log(`    ✓ ${loai}: bảng kê ${id.slice(0, 8)} · gắn ${ids.length} đơn · ${f(tong)}đ`);
+
+    /* Bản DÙNG LẠI phải được đổi sang `issued` và mang SỐ CỦA MMP.
+     * Nhánh tạo mới vốn đã set; nhánh dùng lại thì bản cũ KHÔNG đổi gì — bản kê vẫn là `draft`
+     * với số SMS tự tính, nên `chonKyGom` tiếp tục coi kỳ đó là MỞ và lại nhồi đơn vào. Đó là
+     * lý do bốn kỳ-brand của MMP vẫn là nháp bên SMS sau lượt nhập 28/09.
+     * `issued_at` vẫn để NGUYÊN (NULL): bảng kê chốt bên MMP, SMS không biết chốt lúc nào (D-124). */
+    await db.update(schema.shipHoStatements)
+      .set({ status: 'issued', orderCount: ids.length, totalChargedVnd: String(tong) })
+      .where(eq(schema.shipHoStatements.id, id));
+
+    console.log(`    ✓ ${loai}: bảng kê ${id.slice(0, 8)} · gắn ${ids.length} đơn · ${f(tong)}đ${la.length ? ` · gỡ ${la.length} đơn` : ''}`);
   }
+
+  if (!ghi) console.log('    (chạy thử — thêm --ghi để nhập)');
 }
 
 async function main(): Promise<void> {
