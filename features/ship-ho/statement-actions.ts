@@ -4,14 +4,10 @@ import { eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
-import { summarizeStatement, giaThuBangKe } from './statement-logic';
+import { summarizeStatement } from './statement-logic';
 import type { LoaiBangKe } from './statement-logic';
-import { donVaoKe, tinhLaiTongBangKe, donLechKy } from './statement-core';
-import { getShipHoStatement } from './statement-queries';
-import { payloadStatementIssued } from './statement-push';
+import { donVaoKe, tinhLaiTongBangKe, donLechKy, phatHanhBangKe, banBangKeSangMmp } from './statement-core';
 import { banSuKienBangKe } from './statement-outbox';
-import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
-import type { DongBangKeMmp } from './statement-push';
 
 /** Gom đơn theo LOẠI bảng kê. KỲ CỦA CẢ HAI LOẠI = ngày đẩy lần đầu sang MMP
  *  (`order.reconciled` / `order.duty_charged`) — CEO 22/09/2026, nhận lại 01/10 cùng MMP.
@@ -69,35 +65,11 @@ export async function setStatementStatus(
   }
   let mmp: { ok: boolean; detail: string } | undefined;
   if (status === 'issued') {
-    // Đã phát hành rồi thì KHÔNG đổi trạng thái và KHÔNG bắn lại: bản đối soát gửi hai
-    // lần làm MMP thấy hai ảnh chụp khác nhau của cùng bảng kê (issuedAt bị dời).
-    const [ht] = await db.select({ status: schema.shipHoStatements.status, type: schema.shipHoStatements.type })
-      .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
-    if (!ht) return { ok: false, error: 'Không tìm thấy bảng kê' };
-    if (ht.status === 'issued') return { ok: false, error: 'Bảng kê đã phát hành — không gửi lại' };
-    // Chặn phát hành kê còn đơn CHƯA CHỐT được giá (N2, review 21/09/2026): đơn có
-    // thể rơi về 'pending_review'/'claiming' hoặc mất actual_charged_vnd SAU khi đã
-    // gán vào kê mà operator quên bấm "Tính lại" — phát hành lúc đó gửi thiếu tiền
-    // (đơn không có trong payload MMP — xem vòng lặp bên dưới) mà bảng kê vẫn coi
-    // như đã gửi đủ.
-    if (ht.type === 'freight') {
-      const dangKe = await db.select({
-        actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
-        reconcileStatus: schema.shipHoOrders.reconcileStatus,
-        reconcileDecision: schema.shipHoOrders.reconcileDecision,
-      }).from(schema.shipHoOrders).where(eq(schema.shipHoOrders.statementId, id));
-      const chuaChot = dangKe.filter((o) => giaThuBangKe(o) == null).length;
-      if (chuaChot > 0) return { ok: false, error: `Bảng kê còn ${chuaChot} đơn chưa chốt — bấm Tính lại trước` };
-    }
-    /* Phép chiếu chéo mục (e) — CHẶN, không cảnh báo suông (CEO 01/10/2026, thống nhất với MMP).
-     * Phát hành một kỳ có đơn lệch mốc là gửi brand một con số mà bên MMP tính ra kỳ khác, rồi
-     * phải xuất hoá đơn điều chỉnh cho một chuyện lẽ ra chặn được trước khi bấm. */
-    const lech = await donLechKy(id);
-    if (lech.length > 0) {
-      return { ok: false, error: `Bảng kê có ${lech.length} đơn mốc kỳ nằm ngoài kỳ này: ${lech.slice(0, 8).join(', ')}${lech.length > 8 ? '…' : ''} — chạy lại lệnh gom để xếp đúng kỳ trước khi phát hành` };
-    }
-    await db.update(schema.shipHoStatements).set({ status: 'issued', issuedAt: new Date() }).where(eq(schema.shipHoStatements.id, id));
-    mmp = (await banBangKeSangMmp(id)) ?? undefined;
+    // Toàn bộ luật phát hành nằm ở `phatHanhBangKe` (lõi không-auth) — action này chỉ thêm
+    // lớp quyền. Một luật tiền có hai bản sao là cách chắc nhất để chúng lệch nhau.
+    const r = await phatHanhBangKe(id);
+    if (!r.ok) return { ok: false, error: r.error };
+    mmp = r.mmp;
   } else {
     const [st] = await db.select({ type: schema.shipHoStatements.type, partnerBrandSlug: schema.shipHoStatements.partnerBrandSlug })
       .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
@@ -113,41 +85,6 @@ export async function setStatementStatus(
   }
   revalidatePath('/f/ship-ho/statements');
   return { ok: true, mmp };
-}
-
-/**
- * Dựng payload `statement.issued` rồi bắn sang MMP. Trả `null` khi không đọc được bảng kê.
- *
- * Tách ra để `setStatementStatus` (lượt phát hành) và `guiLaiBangKe` (lượt gửi lại) dùng CHUNG
- * một đường dựng payload. Hai bản sao của phép dựng bản đối soát là cách chắc nhất để bản gửi
- * lại khác bản đã gửi mà không ai thấy.
- */
-async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detail: string } | null> {
-  const data = await getShipHoStatement(id);
-  if (!data) return null;
-  const dong: DongBangKeMmp[] = [];
-  /* Nạp khoản phí CẢ LÔ một lượt trước vòng lặp — hỏi từng đơn là một lượt đi CSDL mỗi dòng. */
-  const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code), data.statement.type);
-  for (const o of data.orders) {
-    const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
-    // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd
-    // — null ở đây là bất thường (dữ liệu đổi giữa lúc gom kê và lúc gửi); bỏ khỏi payload MMP
-    // thay vì báo lệch giả bằng 0, chỉ log cảnh báo.
-    if (r.giaThuVnd == null) {
-      console.warn(`[statement-push] bỏ đơn ${r.code} khỏi statement.issued ${id}: giaThuVnd null`);
-      continue;
-    }
-    dong.push({
-      code: r.code, mmpRef: r.mmpRef, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
-      shippedAt: r.shippedAt, amountVnd: r.giaThuVnd,
-      ...(phi.get(r.code) ?? {}),
-      ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
-    });
-  }
-  return banSuKienBangKe(
-    id, data.statement.partnerBrandSlug, 'statement.issued',
-    payloadStatementIssued(data.statement, dong) as unknown as Record<string, unknown>,
-  );
 }
 
 /**
