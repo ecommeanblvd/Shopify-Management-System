@@ -56,7 +56,11 @@ MMP phát hiện 4 kỳ-brand **đã khoá ở MMP mà vẫn là NHÁP ở SMS**
 | tinh 08 | 1 đơn · 1.250.219đ | nháp |
 | tom-fried 08 | 4 đơn · 15.501.251đ | nháp |
 
-**Gốc của bất đồng:** hai bên định nghĩa *"kỳ đã đóng"* bằng **hai thứ khác nhau** — MMP dùng **bản khoá kỳ** của họ, SMS dùng **trạng thái `issued` của bảng kê mình**. Hai thứ đó chưa bao giờ được đồng bộ, và **SMS hôm nay không có đường nào biết MMP đã khoá kỳ nào**. Mọi đơn có mốc rơi vào 4 kỳ đó sẽ lệch mãi, đúng như MMP viết.
+**SMS xin sửa lại một câu trong bản trước.** SMS đã viết *"hai bên định nghĩa kỳ đã đóng bằng hai thứ khác nhau"* — **không đúng**. Hai bên cùng một định nghĩa.
+
+Chuyện thật: SMS chỉ biết một kỳ đã đóng **qua lượt NHẬP bản đã chốt của MMP**, và lượt nhập 28/09 **chỉ nhập Kalisa**. Ba bảng kê Kalisa 07/08 mang trạng thái `issued` ở SMS chính vì được nhập từ MMP. Bốn bảng kê còn lại MMP đã khoá thì **chưa bao giờ được nhập**, nên SMS vẫn coi bốn kỳ đó là MỞ và `goBangKeNhap` tiếp tục gom đơn vào.
+
+Nên đây là **lỗ ĐỒNG BỘ, không phải bất đồng về luật** — và nó nguy hơn một bất đồng. Bất đồng thì hai bên biết mà bàn; lỗ này thì im lặng: hôm nay SMS không có đường nào biết MMP đã khoá kỳ nào, và cách duy nhất để biết là **có người nhớ nhập đúng một file cho mỗi brand mỗi kỳ**. Đó là lý do mục 5 là việc gấp, không phải việc cho đẹp.
 
 ### Bằng chứng rằng cách của MMP là cách khớp
 
@@ -86,7 +90,7 @@ Vì `tom-fried 08` đã khoá, dòng này cần **dòng điều chỉnh** — m�
 
 **Gửi danh sách kỳ-brand đã khoá, và một đường để SMS đọc được nó về sau.**
 
-Hôm nay SMS không biết MMP khoá gì. Không có danh sách đó thì `chonKyGom` của SMS vẫn xếp đơn vào kỳ mà MMP coi là đóng, và phép chiếu chéo hai bên sẽ báo lỗi ở hai phía khác nhau — đúng cảnh MMP cảnh báo ở §10.
+Hôm nay SMS biết một kỳ đã đóng CHỈ qua lượt nhập tay bản đã chốt của MMP (xem §3). Không có danh sách đọc được thì `chonKyGom` của SMS vẫn xếp đơn vào kỳ mà MMP coi là đóng mỗi khi ai đó quên nhập một file, và phép chiếu chéo hai bên sẽ báo lỗi ở hai phía khác nhau — đúng cảnh MMP cảnh báo ở §10.
 
 Đề nghị cụ thể: MMP thêm `lockedPeriods` (danh sách `{brandSlug, periodKey, lockedAt}`) vào phản hồi của một endpoint SMS gọi được, hoặc bắn một sự kiện `period.locked` khi khoá. SMS sẽ nhận và dùng nó làm đầu vào cho `chonKyGom` thay cho trạng thái `issued` nội bộ.
 
