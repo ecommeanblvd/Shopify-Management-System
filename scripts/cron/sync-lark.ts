@@ -22,6 +22,7 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
+import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
 import { listAllWhInventoryRecords, type LarkRecord } from '@/features/lark/client';
 import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
 import { dongBoPoLark } from '@/features/kho-nhan/dong-bo-po-lark';
@@ -110,6 +111,10 @@ async function main(): Promise<void> {
   // Cân từng chiếc kho điền trên Lark → điền vào ô cân còn trống bên mình (CEO 30/09/2026).
   // `?? undefined` để nếu việc trên ngã thì việc này tự tải lại, chứ không lặng lẽ không làm gì.
   await chayMotJob('dong-bo-can-lark', () => dongBoCanTuLark(daiWh.dong ?? undefined));
+  // Chiều ngược: cân gõ ở SMS → ô Lark còn TRỐNG. Đặt SAU lượt kéo để không tự đẩy lại số
+  // mình vừa kéo về. Mặc định chạy thử (WH_GHI_CAN_LARK), và mỗi lượt ghi còn đọc lại đúng
+  // dòng đó một lần nữa vì ảnh chụp bảng đã cũ vài phút.
+  await chayMotJob('day-can-lark', () => dayCanLenLark(daiWh.dong ?? undefined));
   // Điền Store final SAU khi đã đồng bộ, để dòng mới về là điền được ngay.
   await chayMotJob('dien-store-final', () => dienStoreFinal());
   await chayMotJob('day-production-time-cx', () => dayProductionTime());

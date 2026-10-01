@@ -20,6 +20,7 @@ import { trackPendingShipments } from '@/features/shipments/track';
 import { dayLaiDongCho } from '@/features/kho-nhan/day-lark';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
+import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
 import { dongBoDispute } from '@/features/dispute/sync';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
 import { goBangKeNhap } from '@/features/ship-ho/statement-core';
@@ -35,6 +36,7 @@ const CHAY: Record<string, () => Promise<unknown>> = {
   'day-nhan-kcs-lark': () => dayLaiDongCho(),
   'dong-bo-wh-lark': () => dongBoWhInventory(),
   'dong-bo-can-lark': () => dongBoCanTuLark(),
+  'day-can-lark': () => dayCanLenLark(),
   'sync-dispute': () => dongBoDispute(),
   'day-production-time-cx': () => dayProductionTime(),
   'gom-bang-ke-nhap': () => goBangKeNhap(),

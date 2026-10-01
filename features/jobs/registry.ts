@@ -93,6 +93,10 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
   // trống bên mình — không ghi gì lên Lark, không ghi đè số người ta vừa sửa.
   { key: 'dong-bo-can-lark', ten: 'Kéo cân từng chiếc từ Lark về SMS', chuKyPhut: 6 * GIO,
     hauQua: 'Chiếc kho đã cân trên Lark vẫn trống cân trong SMS — bảng Nhận hôm nay thiếu số để tính cước' },
+  // Chiều NGƯỢC LẠI, hẹp hơn hẳn: CHỈ điền ô Lark đang trống, không bao giờ ghi đè (CEO
+  // 01/10/2026). Mặc định CHẠY THỬ — bật bằng biến RIÊNG `WH_GHI_CAN_LARK`, từng bản ghi một.
+  { key: 'day-can-lark', ten: 'Đẩy cân nhập ở SMS lên ô Lark còn trống', chuKyPhut: 6 * GIO,
+    hauQua: 'Cân kho gõ ở bảng Nhận hôm nay không bao giờ lên Lark — hai bên lệch số vĩnh viễn' },
   { key: 'sync-dispute', ten: 'Kéo tranh chấp (chargeback) từ Shopify Payments', chuKyPhut: 6 * GIO,
     hauQua: 'Hạn nộp bằng chứng hiện sai — ca sắp mất tiền không lên khối "cần phản hồi"' },
   { key: 'day-nhan-kcs-lark', ten: 'Đẩy việc nhận + KCS của kho lên Lark (chưa bật)', chuKyPhut: 1 * NGAY,
