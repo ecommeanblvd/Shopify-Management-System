@@ -16,3 +16,13 @@ export const DO_DAI_TOI_THIEU = 32;
 export function sinhToken(): string {
   return randomBytes(32).toString('base64url');
 }
+
+/**
+ * Link đầy đủ để chép đi gửi brand.
+ *
+ * `origin` lấy từ trình duyệt (`window.location.origin`) chứ không viết cứng tên miền: hệ thống
+ * chạy cả ở localhost lẫn Railway, mà một link chép sai tên miền thì brand mở ra không thấy gì.
+ */
+export function duongDanLink(origin: string, token: string): string {
+  return `${origin.replace(/\/+$/, '')}/pp/${token}`;
+}

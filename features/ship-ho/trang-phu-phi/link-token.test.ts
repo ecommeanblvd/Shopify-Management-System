@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sinhToken, DO_DAI_TOI_THIEU } from './link-token';
+import { sinhToken, duongDanLink, DO_DAI_TOI_THIEU } from './link-token';
 
 describe('sinhToken', () => {
   /* Đoán được một token là đọc được phụ phí của brand khác. */
@@ -17,5 +17,18 @@ describe('sinhToken', () => {
 
   it('KHÔNG mang thông tin brand', () => {
     for (let i = 0; i < 20; i++) expect(sinhToken()).not.toMatch(/kalisa|brand|mmp|slug/i);
+  });
+});
+
+describe('duongDanLink', () => {
+  it('ghép origin với đường dẫn trang', () => {
+    expect(duongDanLink('https://mean.example', 'abc')).toBe('https://mean.example/pp/abc');
+    expect(duongDanLink('http://localhost:3000', 'abc')).toBe('http://localhost:3000/pp/abc');
+  });
+  /* `window.location.origin` không có dấu gạch cuối, nhưng origin truyền tay thì có — hai gạch
+     liền làm link vẫn mở được mà trông như lỗi khi brand nhìn thấy. */
+  it('bỏ gạch chéo thừa ở cuối origin', () => {
+    expect(duongDanLink('https://mean.example/', 'abc')).toBe('https://mean.example/pp/abc');
+    expect(duongDanLink('https://mean.example///', 'abc')).toBe('https://mean.example/pp/abc');
   });
 });
