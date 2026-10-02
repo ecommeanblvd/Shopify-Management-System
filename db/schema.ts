@@ -2309,6 +2309,23 @@ export const shipHoStatementStatusEnum = pgEnum('ship_ho_statement_status', ['dr
 export const shipHoStatementTypeEnum = pgEnum('ship_ho_statement_type', ['freight', 'duty', 'adjustment']);
 
 /** Bật dịch vụ ship hộ cho 1 brand (mmp_brands). 1 config / brand. */
+/**
+ * Link PUBLIC cho brand xem NGUỒN phụ phí ship hộ (migration 0192, CEO 02/10/2026).
+ *
+ * `revoked_at IS NULL` = còn hiệu lực. Unique index CÓ ĐIỀU KIỆN trên
+ * `(partner_brand_slug) WHERE revoked_at IS NULL` ép MỘT link sống mỗi brand ở tầng DB — không
+ * dựa vào mã nhớ thu hồi link cũ, vì hai link sống cùng lúc là hai thứ phải nhớ và sẽ có cái
+ * bị quên.
+ */
+export const brandSurchargeLinks = pgTable('brand_surcharge_links', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  partnerBrandSlug: text('partner_brand_slug').references(() => mmpBrands.slug).notNull(),
+  token: text('token').notNull().unique(),
+  createdBy: text('created_by').references(() => user.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  revokedAt: timestamp('revoked_at'),
+});
+
 export const shipHoPartners = pgTable('ship_ho_partners', {
   id: uuid('id').defaultRandom().primaryKey(),
   brandSlug: text('brand_slug').references(() => mmpBrands.slug).notNull().unique(),
