@@ -25,10 +25,15 @@ export async function trackAndStoreShipment(
     const r = await trackAny(s.carrier, s.tracking);
     const giu = trangThaiSauKhiTrack(s.deliveryStatus, r.status);
     if (giu == null) {
-      // Kiện đang hoàn về: chỉ đóng dấu đã tra, không để hãng kéo ngược trạng thái.
-      await db.update(schema.shipments).set({ lastTrackedAt: new Date(), updatedAt: sql`now()` })
-        .where(eq(schema.shipments.id, shipmentId));
-      return { ok: true, status: 'returning' };
+      /* GIỮ trạng thái đang có, nhưng VẪN ghi `track_detail`: giữ trạng thái là một quyết định,
+       * giấu thông tin là một lỗi. Người xem phải thấy được hãng đang nói gì để tự đối chiếu —
+       * ví dụ DB (Lark) nói "đang đi giao" mà UPS nói "mới nhận hàng" thì ai đó cần biết. */
+      await db.update(schema.shipments).set({
+        trackDetail: r.description, lastTrackedAt: new Date(), updatedAt: sql`now()`,
+      }).where(eq(schema.shipments.id, shipmentId));
+      // Trả về trạng thái ĐANG GIỮ, không trả 'returning' cứng: từ 02/10 còn ba lý do khác
+      // để giữ (đã giao · hãng trả unknown · hãng kéo lùi) — trả sai làm người gọi báo sai.
+      return { ok: true, status: (s.deliveryStatus ?? 'unknown') as DeliveryStatus };
     }
     await db.update(schema.shipments).set({
       deliveryStatus: r.status,

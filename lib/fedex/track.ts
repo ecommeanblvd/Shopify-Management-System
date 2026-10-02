@@ -195,8 +195,49 @@ export async function layLichSuQuet(trackingNumbers: readonly string[]): Promise
  * đè thì trạng thái người ta vừa đặt biến mất sau đúng một giờ.
  *
  * Chỉ có MỘT tin đủ mạnh để lật lại: hãng báo đã giao. Còn lại giữ nguyên 'returning'.
+ *
+ * Từ 02/10/2026 hàm này còn ba luật nữa — xem ghi chú trong thân hàm: 'delivered' là nấc cuối ·
+ * 'unknown' không ghi đè được · và hãng KHÔNG kéo trạng thái LÙI trên thang
+ * label_created → in_transit → out_for_delivery → delivered.
  */
+const NAC: Record<string, number> = { label_created: 0, in_transit: 1, out_for_delivery: 2, delivered: 3 };
+
 export function trangThaiSauKhiTrack(hienTai: string | null | undefined, moi: DeliveryStatus): DeliveryStatus | null {
+  /* Hãng nói ĐÚNG thứ đang có → cho qua, đừng coi là "giữ".
+   * Không có nhánh này thì mọi luật dưới đây bắn cả khi hai bên GIỐNG NHAU: 35 kiện `delivered`
+   * mà hãng cũng nói `delivered` bị xếp vào "giữ trạng thái", và người gọi bỏ luôn việc ghi
+   * `deliveredAt`. Vô hại vì cột đã có sẵn, nhưng đọc báo cáo thì sai nghĩa hoàn toàn. */
+  if (moi === hienTai) return moi;
+
   if (hienTai === 'returning' && moi !== 'delivered') return null; // null = đừng đụng vào
+
+  /* ĐÃ GIAO là nấc cuối: chỉ 'returning' lật lại được (giao rồi khách trả lại).
+   * Hãng kéo một kiện đã giao về in_transit gần như luôn là dữ liệu cũ của hãng. */
+  if (hienTai === 'delivered' && moi !== 'returning') return null; // (moi === 'delivered' đã qua ở trên)
+
+  /* 'unknown' KHÔNG mang tin gì — ghi nó lên một trạng thái đang đúng là xoá tin bằng vô tin.
+   * Trước bản này nó ghi đè được, nên một lượt hãng trả rỗng là mất trạng thái. */
+  if (moi === 'unknown') return null;
+
+  /* HÃNG THẮNG, NHƯNG KHÔNG LÙI (CEO 02/10/2026).
+   *
+   * Vì sao cần: đo 02/10 thì cả 43 kiện UPS đang mang `delivery_source = 'lark'` — trạng thái
+   * giao do đội vận hành gõ, vì tracking UPS chưa từng chạy. Bật tracking lên là có NGƯỜI GHI
+   * THỨ HAI trên cùng một cột: `sync-lark` mỗi giờ, `track-shipments` mỗi 6 giờ, hai bên lật
+   * qua lật lại và `delivery_source` chỉ cho biết ai ghi SAU, không cho biết ai ĐÚNG.
+   *
+   * Luật: nhận cập nhật của hãng khi nó TIẾN LÊN hoặc ngang nấc; lùi thì GIỮ trạng thái đang
+   * có. Đo trên dữ liệu thật: 4 kiện UPS đang `out_for_delivery` mà hãng nói `in_transit` —
+   * lùi như vậy là xoá công của người vừa nhìn thấy hàng đi giao.
+   *
+   * Lùi KHÔNG bị bỏ im: người gọi vẫn ghi `track_detail` để thấy hãng đang nói gì (xem
+   * `features/shipments/track.ts`). Giữ trạng thái khác hẳn giấu thông tin.
+   *
+   * `exception` và `returning` KHÔNG ở trên nấc nên vẫn qua: đó là tin có nghĩa, và từ 02/10
+   * `exception` của UPS chỉ còn là ngoại lệ thật (thông báo chậm đã về in_transit — xem
+   * `lib/ups/track.ts`), nên nó không còn là nguồn báo động giả. */
+  const cu = NAC[hienTai ?? ''], mo = NAC[moi];
+  if (cu != null && mo != null && mo < cu) return null;
+
   return moi;
 }

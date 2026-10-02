@@ -41,7 +41,12 @@ export async function trackAndStoreShipHo(
   if (!o.tracking) return { ok: false, error: 'no tracking' };
   try {
     const r = await trackAny(o.carrier, o.tracking);
-    // null = giữ nguyên trạng thái đang có (đơn 'returning' không bị hãng ghi đè).
+    /* null = GIỮ trạng thái đang có. Bốn lý do (xem `trangThaiSauKhiTrack`): đơn đang hoàn về ·
+     * đã giao · hãng trả `unknown` · hãng kéo LÙI trên thang nấc.
+     *
+     * KHÁC `shipments`: bảng `ship_ho_orders` KHÔNG có cột `track_detail`, nên khi giữ trạng
+     * thái thì lời của hãng không được lưu ở đâu — người đối soát chỉ thấy trạng thái cũ mà
+     * không biết hãng đang nói gì. Đã nêu để CEO quyết có thêm cột hay không; chưa tự thêm. */
     const giu = trangThaiSauKhiTrack(o.deliveryStatus, r.status);
     await db.update(schema.shipHoOrders).set({
       ...(giu == null ? {} : { deliveryStatus: giu }),

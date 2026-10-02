@@ -150,3 +150,58 @@ describe('mới tạo nhãn (CEO 17/09/2026)', () => {
     expect(mapFedexStatus('PU')).toBe('in_transit');
   });
 });
+
+/* CEO 02/10/2026 — "hãng thắng, nhưng không lùi".
+   Bối cảnh đo được: cả 43 kiện UPS đang mang delivery_source='lark' (trạng thái do đội vận hành
+   gõ, vì tracking UPS chưa từng chạy). Bật tracking là có NGƯỜI GHI THỨ HAI trên cùng một cột:
+   sync-lark mỗi giờ, track-shipments mỗi 6 giờ. Không có luật này thì hai bên lật qua lật lại. */
+describe('trangThaiSauKhiTrack — hãng không kéo trạng thái LÙI', () => {
+  it('tiến lên hoặc ngang nấc → nhận', () => {
+    expect(trangThaiSauKhiTrack('in_transit', 'out_for_delivery')).toBe('out_for_delivery');
+    expect(trangThaiSauKhiTrack('label_created', 'in_transit')).toBe('in_transit');
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'delivered')).toBe('delivered');
+    expect(trangThaiSauKhiTrack('in_transit', 'in_transit')).toBe('in_transit');
+  });
+
+  /* 4 kiện UPS thật đang out_for_delivery mà hãng nói in_transit — lùi như vậy là xoá công của
+     người vừa nhìn thấy hàng đi giao. */
+  it('LÙI → null, giữ trạng thái đang có', () => {
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'in_transit')).toBeNull();
+    expect(trangThaiSauKhiTrack('delivered', 'out_for_delivery')).toBeNull();
+    expect(trangThaiSauKhiTrack('in_transit', 'label_created')).toBeNull();
+  });
+
+  it('ĐÃ GIAO là nấc cuối — chỉ "đang hoàn về" lật lại được', () => {
+    expect(trangThaiSauKhiTrack('delivered', 'in_transit')).toBeNull();
+    expect(trangThaiSauKhiTrack('delivered', 'exception')).toBeNull();
+    expect(trangThaiSauKhiTrack('delivered', 'returning')).toBe('returning');
+  });
+
+  /* 'unknown' không mang tin gì — ghi nó lên một trạng thái đang đúng là xoá tin bằng vô tin.
+     Trước bản này nó ghi đè được, nên một lượt hãng trả rỗng là mất trạng thái. */
+  it('hãng trả "unknown" → KHÔNG ghi đè', () => {
+    expect(trangThaiSauKhiTrack('in_transit', 'unknown')).toBeNull();
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'unknown')).toBeNull();
+  });
+
+  /* exception/returning không ở trên thang nấc nên vẫn qua: đó là tin CÓ NGHĨA. Và từ 02/10
+     exception của UPS chỉ còn là ngoại lệ thật (thông báo chậm đã về in_transit). */
+  it('exception và returning vẫn qua — tin có nghĩa, không phải lùi', () => {
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'exception')).toBe('exception');
+    expect(trangThaiSauKhiTrack('in_transit', 'returning')).toBe('returning');
+  });
+
+  /* Hãng nói ĐÚNG thứ đang có thì cho qua, không xếp vào "giữ" — nếu không thì 35 kiện
+     delivered khớp hãng cũng bị báo là "giữ trạng thái", và người gọi bỏ việc ghi deliveredAt. */
+  it('hãng nói trùng trạng thái đang có → cho qua, không coi là giữ', () => {
+    expect(trangThaiSauKhiTrack('delivered', 'delivered')).toBe('delivered');
+    expect(trangThaiSauKhiTrack('returning', 'returning')).toBe('returning');
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'out_for_delivery')).toBe('out_for_delivery');
+  });
+
+  it('đang exception/unknown/chưa có → nhận mọi tin mới', () => {
+    expect(trangThaiSauKhiTrack('exception', 'in_transit')).toBe('in_transit');
+    expect(trangThaiSauKhiTrack('unknown', 'out_for_delivery')).toBe('out_for_delivery');
+    expect(trangThaiSauKhiTrack(null, 'in_transit')).toBe('in_transit');
+  });
+});
