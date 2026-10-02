@@ -113,12 +113,18 @@ export async function docTrangPhuPhi(token: string): Promise<TrangPhuPhi | null>
       eq(schema.carrierSurcharges.active, true),
     ));
 
+  /* CHỈ tệp được tick `chia_se_brand`. Không phải mọi tệp của hãng brand đã đi: bảng này nhận
+   * cả danh sách mã bưu chính lẫn bảng giá — "DHL Service & Rate Guide 2025" trong đó có nguyên
+   * bảng cước xuất khẩu theo vùng (kg × Vùng 1–8). Danh sách cho phép, như với `kind`. */
   const tepRows = await db.select({
     id: schema.carrierRemoteEvidence.id, acc: schema.carrierRemoteEvidence.carrierAccountId,
     label: schema.carrierRemoteEvidence.label,
     tu: schema.carrierRemoteEvidence.effectiveFrom, den: schema.carrierRemoteEvidence.effectiveTo,
   }).from(schema.carrierRemoteEvidence)
-    .where(inArray(schema.carrierRemoteEvidence.carrierAccountId, accIds));
+    .where(and(
+      inArray(schema.carrierRemoteEvidence.carrierAccountId, accIds),
+      eq(schema.carrierRemoteEvidence.chiaSeBrand, true),
+    ));
 
   /* Giờ KINH DOANH, không phải UTC: Railway chạy TZ=UTC, nên sau 7h sáng giờ VN hai mốc đã
    * khác ngày. `lib/ngay-vn.test.ts` quét cả repo để chặn `toISOString()` ở đúng chỗ này. */
@@ -177,9 +183,12 @@ export async function docTrangPhuPhi(token: string): Promise<TrangPhuPhi | null>
 /**
  * `file_key` của một tệp bằng chứng, hoặc `null`.
  *
- * Kiểm HAI điều: token còn hiệu lực, VÀ tệp thuộc một hãng brand đó đã đi. Thiếu phép kiểm thứ
- * hai thì brand chỉ cần đổi `evidenceId` trên URL là tải được tài liệu của hãng họ chưa bao
- * giờ dùng — một link hợp lệ trở thành chìa khoá cho cả kho tài liệu.
+ * Kiểm BA điều: token còn hiệu lực · tệp được tick `chia_se_brand` · tệp thuộc một hãng brand
+ * đó đã đi. Thiếu phép kiểm cuối thì brand chỉ cần đổi `evidenceId` trên URL là tải được tài
+ * liệu của hãng họ chưa bao giờ dùng — một link hợp lệ thành chìa khoá cho cả kho tài liệu.
+ *
+ * Phép kiểm `chia_se_brand` phải lặp lại Ở ĐÂY chứ không dựa vào việc trang không in link ra:
+ * route này gọi được thẳng bằng URL, nó không biết trang đã hiện gì.
  */
 export async function tepThuocBrand(token: string, evidenceId: string): Promise<string | null> {
   const [link] = await db.select({ slug: schema.brandSurchargeLinks.partnerBrandSlug })
@@ -191,7 +200,10 @@ export async function tepThuocBrand(token: string, evidenceId: string): Promise<
   const [tep] = await db.select({
     key: schema.carrierRemoteEvidence.fileKey, acc: schema.carrierRemoteEvidence.carrierAccountId,
   }).from(schema.carrierRemoteEvidence)
-    .where(eq(schema.carrierRemoteEvidence.id, evidenceId)).limit(1);
+    .where(and(
+      eq(schema.carrierRemoteEvidence.id, evidenceId),
+      eq(schema.carrierRemoteEvidence.chiaSeBrand, true),
+    )).limit(1);
   if (!tep?.key) return null;
 
   const [daDi] = await db.selectDistinct({ acc: schema.shipHoOrders.carrierAccountId })

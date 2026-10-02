@@ -612,6 +612,15 @@ export const carrierRemoteEvidence = pgTable('carrier_remote_evidence', {
   byteSize: integer('byte_size'),
   uploadedBy: text('uploaded_by').references(() => user.id),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+  /**
+   * Tệp này có được gửi brand qua trang `/pp/<token>` không. Mặc định KHÔNG.
+   *
+   * Danh sách CHO PHÉP từng tệp, không phải "mọi tệp của hãng brand đã đi": bảng này nhận cả
+   * danh sách mã bưu chính lẫn bảng giá, và "DHL Service & Rate Guide 2025" nằm trong đó có
+   * nguyên bảng cước xuất khẩu theo vùng. Mặc định mở là một hôm nào đó ai up bảng giá mình
+   * đàm phán được vào đây làm bằng chứng thì nó lên trang brand, không ai biết.
+   */
+  chiaSeBrand: boolean('chia_se_brand').notNull().default(false),
 }, (table) => [
   index('carrier_remote_evidence_account_idx').on(table.carrierAccountId),
 ]);

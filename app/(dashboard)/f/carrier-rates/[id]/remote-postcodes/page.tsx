@@ -13,6 +13,7 @@ import {
 } from '@/features/carrier-rates/postcodes-actions';
 import { parsePostcodeCsv } from '@/features/carrier-rates/postcodes-csv';
 import { RemotePostcodeSearch } from '@/components/carrier-rates/RemotePostcodeSearch';
+import { NutChiaSeBrand } from '@/components/carrier-rates/NutChiaSeBrand';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -177,22 +178,29 @@ export default async function RemotePostcodesPage({
         ) : (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {evidence.map((e) => (
-              <a
+              /* Thẻ KHÔNG còn là một `<a>` bọc tất cả: nút "Gửi brand" nằm cùng hàng, mà nút
+                 trong link là bấm nhầm. Tên tệp giữ vai trò link tải. */
+              <div
                 key={e.id}
-                href={`${baseHref}/evidence/${e.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
+                className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
               >
                 <FileText className="size-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{e.label}</div>
+                  <a
+                    href={`${baseHref}/evidence/${e.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-sm font-medium hover:underline"
+                  >
+                    {e.label}
+                    <Download className="ml-1.5 inline size-3.5 text-muted-foreground" />
+                  </a>
                   <div className="truncate text-[11px] text-muted-foreground font-mono">
                     {fmtPeriod(e.effectiveFrom, e.effectiveTo)} · {e.filename} {fmtBytes(e.byteSize) && `· ${fmtBytes(e.byteSize)}`}
                   </div>
                 </div>
-                <Download className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-              </a>
+                <NutChiaSeBrand id={e.id} bat={e.chiaSeBrand} canManage={canManage} />
+              </div>
             ))}
           </div>
         )}

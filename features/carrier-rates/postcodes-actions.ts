@@ -2,7 +2,9 @@
 
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { revalidatePath } from 'next/cache';
 import type { ParsedPostcodeCsv } from './postcodes-csv';
+import { requireManageCarrierRates } from './require-manage';
 
 export interface PostcodeRowDb {
   id: string;
@@ -168,6 +170,8 @@ export interface RemoteEvidenceRow {
   filename: string;
   byteSize: number | null;
   uploadedAt: Date;
+  /** Có gửi brand qua trang `/pp/<token>` không. Mặc định false — xem `db/schema.ts`. */
+  chiaSeBrand: boolean;
 }
 
 /** Source-file evidence attached to this account's remote lists. */
@@ -181,6 +185,7 @@ export async function listRemoteEvidence(carrierAccountId: string): Promise<Remo
       filename: schema.carrierRemoteEvidence.filename,
       byteSize: schema.carrierRemoteEvidence.byteSize,
       uploadedAt: schema.carrierRemoteEvidence.uploadedAt,
+      chiaSeBrand: schema.carrierRemoteEvidence.chiaSeBrand,
     })
     .from(schema.carrierRemoteEvidence)
     .where(eq(schema.carrierRemoteEvidence.carrierAccountId, carrierAccountId))
@@ -292,4 +297,23 @@ export async function loadRemoteTierCounts(
     .where(eq(schema.carrierRemotePostcodes.carrierAccountId, carrierAccountId))
     .groupBy(schema.carrierRemotePostcodes.tier);
   return rows.map((r) => ({ tier: r.tier, soDong: Number(r.soDong) }));
+}
+
+/**
+ * Bật/tắt việc gửi một tệp bằng chứng cho brand.
+ *
+ * Gác bằng `manage_carrier_rates` như mọi thao tác sửa bảng giá: bật cờ này là ĐẨY MỘT TỆP RA
+ * NGOÀI công ty, không phải đổi một tuỳ chọn hiển thị.
+ */
+export async function datChiaSeBrand(evidenceId: string, bat: boolean): Promise<{ ok: boolean; loi?: string }> {
+  try {
+    await requireManageCarrierRates();
+    await db.update(schema.carrierRemoteEvidence)
+      .set({ chiaSeBrand: bat })
+      .where(eq(schema.carrierRemoteEvidence.id, evidenceId));
+    revalidatePath('/f/carrier-rates', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, loi: e instanceof Error ? e.message : 'Không đổi được.' };
+  }
 }
