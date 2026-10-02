@@ -27,6 +27,38 @@ export interface UpsTrackResult {
  *   P  Pickup   I  In transit   O  Out for delivery      D  Delivered
  *   X  Exception                RS Returned to shipper
  */
+/**
+ * Mã `currentStatus.code` của UPS → trạng thái. ĐÂY là nguồn chính, không phải `type`.
+ *
+ * ĐO 02/10/2026 trên 47 kiện UPS thật (toàn bộ kiện 1Z trong hệ thống, 17/08–30/09):
+ * `currentStatus.type` **KHÔNG CÓ Ở MỘT MÃ NÀO** — 0/47. Nên nhánh `currentStatus.type` của
+ * parser là mã chết, và nó LUÔN rơi xuống lấy `type` của lần quét cuối. Hậu quả đo được:
+ * 4 kiện `code=005` "On the Way" (đang đi, kèm thông báo có thể chậm) bị gắn `exception`, chỉ
+ * vì lần quét cuối là `X`; còn 1 kiện CÙNG `code=005` lại ra `in_transit` vì lần quét cuối là
+ * `I`. Cùng một tình trạng thật, hai câu trả lời — và `order-stage.ts` bật cảnh báo
+ * "Sự cố giao hàng" cho hàng đang đi bình thường.
+ *
+ * Bộ mã dưới đây là bộ ĐO ĐƯỢC, không phải bộ đoán từ tài liệu. Mã lạ → `null` để người gọi
+ * rơi về luật cũ (theo `type` lần quét), chứ không ép thành `unknown`: luật cũ sai ở ca 005
+ * nhưng đúng ở phần lớn ca khác, nên nó là chỗ rơi an toàn hơn.
+ */
+export function mapUpsCode(code: string | null | undefined): DeliveryStatus | null {
+  switch ((code ?? '').trim()) {
+    case '011': return 'delivered';
+    /* "Ready for Customer Pickup" — kiện ĐANG Ở ĐIỂM UPS chờ khách tới lấy, chưa tới tay ai.
+     * Giữ `delivered` vì bộ trạng thái của hệ thống KHÔNG có nấc "chờ khách lấy", và 2 kiện
+     * kiểu này trong DB đã mang `delivered` từ tháng 8 — đổi là mở lại hai bản ghi cũ cho lượt
+     * quét mà chưa ai quyết nấc mới. Đã nêu để CEO chốt. */
+    case '040': return 'delivered';
+    /* Ngoại lệ THẬT: giao không thành vì thiếu tiền (thuế/phí người nhận phải trả). */
+    case '062': return 'exception';
+    /* Đang đi. `005` còn kèm thông báo "có thể chậm" — chậm KHÔNG phải ngoại lệ, và chính UPS
+     * vẫn đặt tiêu đề là "On the Way". `087` ở kho địa phương, `160` mới nhận hàng. */
+    case '005': case '087': case '160': return 'in_transit';
+    default: return null;
+  }
+}
+
 export function mapUpsStatus(type: string | null | undefined, description: string | null | undefined): DeliveryStatus {
   switch ((type ?? '').toUpperCase()) {
     case 'D': return 'delivered';
@@ -70,11 +102,25 @@ const goiDau = (raw: unknown): UpsPackage | null =>
 export function parseUpsTrack(raw: unknown): UpsTrackResult {
   const p = goiDau(raw);
   if (!p) return { status: 'unknown', description: null, deliveredAt: null };
-  // currentStatus không phải lúc nào cũng có `type` — lấy từ hoạt động mới nhất (UPS xếp mới trước).
   const moiNhat = p.activity?.[0]?.status ?? null;
-  const type = p.currentStatus?.type ?? moiNhat?.type ?? null;
   const description = p.currentStatus?.description?.trim() || moiNhat?.description?.trim() || null;
-  const status = mapUpsStatus(type, description);
+
+  /* THỨ TỰ NGUỒN (đo 02/10/2026 trên 47 kiện thật — xem `mapUpsCode`):
+   *   1. `currentStatus.code` — mã tình trạng HIỆN TẠI của kiện. Nguồn đúng.
+   *   2. nếu mã lạ: rơi về luật cũ theo `type`, với `currentStatus.type` trước (thực tế KHÔNG
+   *      BAO GIỜ có) rồi tới `type` của lần quét cuối.
+   *
+   * Vì sao mã đứng trước `type` lần quét: `type` mô tả MỘT SỰ KIỆN, không mô tả tình trạng.
+   * Một thông báo "có thể chậm" (`X`) là một sự kiện trên đường đi, không phải trạng thái của
+   * kiện — lấy nó làm trạng thái là biến hàng đang đi thành hàng sự cố.
+   *
+   * `out_for_delivery` vẫn nhận theo MÔ TẢ cho cả hai nhánh: UPS báo việc đó bằng chữ
+   * ("Out For Delivery Today") và bộ 47 kiện không có mã riêng cho nó. */
+  const theoMa = mapUpsCode(p.currentStatus?.code);
+  const type = p.currentStatus?.type ?? moiNhat?.type ?? null;
+  const status = theoMa != null
+    ? (theoMa === 'in_transit' && description && OUT_FOR_DELIVERY_RE.test(description) ? 'out_for_delivery' : theoMa)
+    : mapUpsStatus(type, description);
   let deliveredAt: Date | null = null;
   if (status === 'delivered') {
     const del = p.deliveryDate?.find((x) => (x.type ?? '').toUpperCase() === 'DEL') ?? null;
