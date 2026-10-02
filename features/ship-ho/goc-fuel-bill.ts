@@ -32,3 +32,27 @@ export interface KhoanChiuFuel {
 export function gocFuelTrenBill(s: KhoanChiuFuel): number {
   return s.base + s.discount + s.remote + s.demand + s.signature + s.residential + s.addressCorrection;
 }
+
+/** Hãng công bố phụ phí xăng dầu theo nấc 0,25% — FedEx, UPS, DHL đều vậy. */
+export const NAC_FUEL = 0.25;
+/** Sai số cho phép quanh một nấc: đủ che làm tròn của hãng, không đủ che mẫu số sai. */
+export const SAI_SO_NAC = 0.05;
+
+/**
+ * %fuel suy từ hoá đơn có đáng tin không.
+ *
+ * Mọi mức hãng từng công bố đều là bội của 0,25%. Một con số nằm ngoài lưới đó KHÔNG phải mức
+ * của hãng — nó là dấu hiệu MẪU SỐ SAI, tức mình quên một khoản chịu fuel.
+ *
+ * Vì sao cần chốt máy chứ không chỉ cần cẩn thận: ngày 02/10/2026 cột này hiện 52,65% cho đơn
+ * #KLS1998 và 48,91% cho SV-0015 — cả hai đều ngoài lưới, cả hai đều do mẫu số thiếu phí sửa
+ * địa chỉ. Em nhìn con số 52,65% và đi GIẢI THÍCH nó thay vì nghi nó, hai lượt liền. Một phép
+ * kiểm số học bắt được ngay cái mà sự cẩn thận đã bỏ lọt hai lần.
+ *
+ * Đo trên toàn bộ 141 đơn đã đối soát ở production: 141/141 nằm trên lưới sau khi mẫu số đúng,
+ * nên chốt này KHÔNG làm mất số của đơn nào đang hiển thị đúng.
+ */
+export function phanTramFuelDangTin(pct: number): boolean {
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return false;
+  return Math.abs(pct - Math.round(pct / NAC_FUEL) * NAC_FUEL) <= SAI_SO_NAC;
+}

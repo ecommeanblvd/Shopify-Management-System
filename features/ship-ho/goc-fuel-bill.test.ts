@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gocFuelTrenBill } from './goc-fuel-bill';
+import { gocFuelTrenBill, phanTramFuelDangTin } from './goc-fuel-bill';
 
 const k = (o: Partial<Parameters<typeof gocFuelTrenBill>[0]>) => ({
   base: 0, discount: 0, remote: 0, demand: 0, signature: 0, residential: 0, addressCorrection: 0, ...o,
@@ -32,5 +32,25 @@ describe('gocFuelTrenBill', () => {
 
   it('VAT / duty / phí xử lý hàng nhập không nằm trong gốc — không có chỗ nhận chúng', () => {
     expect(gocFuelTrenBill(k({ base: 1_000_000 }))).toBe(1_000_000);
+  });
+});
+
+describe('phanTramFuelDangTin — chốt chặn mẫu số sai', () => {
+  it('mức thật của hãng đều qua', () => {
+    for (const p of [38.25, 38.5, 39.75, 43, 52.5, 53.75, 30]) expect(phanTramFuelDangTin(p)).toBe(true);
+  });
+  /* Hai con số THẬT đã lọt ra bảng đối soát ngày 02/10/2026, cả hai do mẫu số thiếu phí sửa
+     địa chỉ. Không mức nào của hãng từng là 52,65% hay 48,91%. */
+  it('hai con số đã lọt ra bảng bị chặn', () => {
+    expect(phanTramFuelDangTin(52.65)).toBe(false);
+    expect(phanTramFuelDangTin(48.91)).toBe(false);
+  });
+  it('làm tròn của hãng vẫn qua, lệch to thì không', () => {
+    expect(phanTramFuelDangTin(38.26)).toBe(true);
+    expect(phanTramFuelDangTin(38.2)).toBe(true);
+    expect(phanTramFuelDangTin(38.19)).toBe(false);
+  });
+  it('số vô lý bị chặn', () => {
+    for (const p of [0, -5, 120, NaN, Infinity]) expect(phanTramFuelDangTin(p)).toBe(false);
   });
 });

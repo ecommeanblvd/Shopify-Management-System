@@ -7,7 +7,7 @@
  * chênh lệch cân lộ ra ngay.
  */
 import { computeBrandCharge, type BrandChargeParts } from './brand-pricing';
-import { gocFuelTrenBill } from './goc-fuel-bill';
+import { gocFuelTrenBill, phanTramFuelDangTin } from './goc-fuel-bill';
 
 export interface PriceStructureRow {
   label: string;
@@ -261,7 +261,14 @@ export function shipHoPriceStructure(input: {
         }));
         if (!(base > 0)) return null;
         const pct = Math.round((fuelBill / base) * 100 * 1000) / 1000;
-        return Number.isFinite(pct) ? pct : null;
+        if (!Number.isFinite(pct)) return null;
+        /* Ngoài lưới 0,25% thì KHÔNG hiện số nào — xem `phanTramFuelDangTin`. Thà để trống còn
+         * hơn hiện một con số không phải mức của hãng rồi để người đối soát tin vào nó. */
+        if (!phanTramFuelDangTin(pct)) {
+          console.warn(`[ship-ho] %fuel suy từ bill = ${pct} — ngoài lưới 0,25%, nhiều khả năng mẫu số thiếu một khoản chịu fuel. Không hiện.`);
+          return null;
+        }
+        return pct;
       })()
     : null;
 
