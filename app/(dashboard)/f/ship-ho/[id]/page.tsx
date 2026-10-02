@@ -411,6 +411,8 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
         carrierKey={o.carrierKey}
         deliveryStatus={o.deliveryStatus}
         deliveredAt={o.deliveredAt}
+        trackDetail={o.trackDetail}
+        lastTrackedAt={o.lastTrackedAt}
       />
     </div>
   );

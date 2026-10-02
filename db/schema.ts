@@ -2446,6 +2446,12 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   deliveryStatus: text('delivery_status'),
   deliveredAt: timestamp('delivered_at'),
   lastTrackedAt: timestamp('last_tracked_at'),
+  /**
+   * Lời của HÃNG ở lượt tra gần nhất (migration 0191). Ghi trong CẢ HAI nhánh của lượt track,
+   * kể cả khi SMS GIỮ trạng thái vì hãng kéo lùi — người đối soát phải thấy được hãng đang
+   * nói gì. Cùng nghĩa với `shipments.track_detail`.
+   */
+  trackDetail: text('track_detail'),
   // Đối soát (P3)
   actualCarrierCostVnd: numeric('actual_carrier_cost_vnd', { precision: 16, scale: 2 }),
   reconcileStatus: text('reconcile_status'),

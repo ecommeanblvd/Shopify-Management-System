@@ -44,12 +44,13 @@ export async function trackAndStoreShipHo(
     /* null = GIỮ trạng thái đang có. Bốn lý do (xem `trangThaiSauKhiTrack`): đơn đang hoàn về ·
      * đã giao · hãng trả `unknown` · hãng kéo LÙI trên thang nấc.
      *
-     * KHÁC `shipments`: bảng `ship_ho_orders` KHÔNG có cột `track_detail`, nên khi giữ trạng
-     * thái thì lời của hãng không được lưu ở đâu — người đối soát chỉ thấy trạng thái cũ mà
-     * không biết hãng đang nói gì. Đã nêu để CEO quyết có thêm cột hay không; chưa tự thêm. */
+     * `track_detail` ghi trong CẢ HAI nhánh (cột thêm ở migration 0191): giữ trạng thái là một
+     * quyết định, giấu thông tin là một lỗi. Người đối soát phải thấy được hãng đang nói gì —
+     * ví dụ đơn mang "đang đi giao" do đội vận hành gõ mà UPS nói "mới nhận hàng". */
     const giu = trangThaiSauKhiTrack(o.deliveryStatus, r.status);
     await db.update(schema.shipHoOrders).set({
       ...(giu == null ? {} : { deliveryStatus: giu }),
+      trackDetail: r.description,
       deliveredAt: r.deliveredAt ?? undefined,
       lastTrackedAt: new Date(),
       status: giu == null ? o.status : (orderStatusAfterTrack(o.status, giu) as typeof o.status),

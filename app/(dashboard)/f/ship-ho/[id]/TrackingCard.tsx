@@ -21,10 +21,13 @@ const TRACK_URL: Record<string, (tn: string) => string> = {
  * Thao tác kho đầu trang.
  */
 export function TrackingCard({
-  trackingNumber, carrierKey, deliveryStatus, deliveredAt,
+  trackingNumber, carrierKey, deliveryStatus, deliveredAt, trackDetail, lastTrackedAt,
 }: {
   trackingNumber: string | null; carrierKey: string | null;
   deliveryStatus: string | null; deliveredAt: Date | null;
+  /** Lời của HÃNG ở lượt tra gần nhất — xem `ship_ho_orders.track_detail`. */
+  trackDetail?: string | null;
+  lastTrackedAt?: Date | null;
 }) {
   const st = deliveryStatus ? (DELIVERY_LABEL[deliveryStatus] ?? { label: deliveryStatus, cls: 'bg-muted text-muted-foreground' }) : null;
   const url = trackingNumber && carrierKey && TRACK_URL[carrierKey] ? TRACK_URL[carrierKey](trackingNumber) : null;
@@ -51,6 +54,16 @@ export function TrackingCard({
             <span className="text-xs text-red-600 dark:text-red-400">Kiểm tra với carrier / cập nhật brand nếu delay.</span>
           )}
         </div>
+      )}
+      {/* Lời của HÃNG, hiện RIÊNG khỏi nhãn trạng thái: từ 02/10 hãng không kéo trạng thái lùi
+          được (lib/fedex/track.ts), nên hai thứ này CÓ THỂ nói khác nhau — ví dụ nhãn "đang đi
+          giao" do đội vận hành gõ, còn hãng nói "mới nhận hàng". Giấu dòng này đi là để người
+          đối soát không bao giờ thấy chênh lệch đó. */}
+      {trackingNumber && trackDetail && (
+        <p className="text-xs text-muted-foreground">
+          Hãng báo: <span className="text-foreground">{trackDetail}</span>
+          {lastTrackedAt ? ` · tra lúc ${new Date(lastTrackedAt).toLocaleString('vi-VN')}` : ''}
+        </p>
       )}
     </CardContent></Card>
   );
