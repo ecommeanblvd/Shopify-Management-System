@@ -85,6 +85,19 @@ export function cachTinhThat(cachTinh: string, valuePerKg: number | null): strin
     : cachTinh.replace(', hoặc theo kg — lấy mức cao hơn', '');
 }
 
+/**
+ * Mức VAT dùng CHUNG cho mọi hãng trên trang ("8,00%"), hoặc `null` khi các hãng khác nhau.
+ *
+ * Câu "VAT tính sau cùng" đặt ở đầu trang, trên mọi hãng, nên không được viết cứng "8%": ghi chú
+ * trong dữ liệu nói rõ 8% là mức GIẢM TẠM từ 10%. Viết cứng là đến ngày nó về 10% thì bảng dưới
+ * đổi theo dữ liệu còn câu ở trên vẫn nói 8% — brand đối soát theo câu sai mà không ai biết.
+ * Hãng nào đó khác mức thì trả `null` và trang nói "VAT theo bảng dưới" thay vì chọn bừa một số.
+ */
+export function mucVatChung(hang: readonly { dong: readonly { dong: string; giaTri: string }[] }[]): string | null {
+  const ds = new Set(hang.flatMap((h) => h.dong.filter((d) => d.dong === 'vat').map((d) => d.giaTri)));
+  return ds.size === 1 ? [...ds][0] : null;
+}
+
 /** `jsonb` nước → mảng ISO-2 đã sắp, hoặc `null`. Dữ liệu jsonb nên không tin kiểu sẵn. */
 export function maNuoc(v: unknown): string[] | null {
   if (!Array.isArray(v)) return null;

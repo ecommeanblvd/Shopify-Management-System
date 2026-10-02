@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { ExternalLink, FileText } from 'lucide-react';
 import { docTrangPhuPhi, type DongPhuPhi, type HangTrenTrang } from '@/features/ship-ho/trang-phu-phi/queries';
+import { mucVatChung } from '@/features/ship-ho/trang-phu-phi/trinh-bay';
 
 export const dynamic = 'force-dynamic';
 
@@ -163,6 +164,7 @@ export default async function TrangPhuPhiPage({ params }: { params: Promise<{ to
   const { token } = await params;
   const t = await docTrangPhuPhi(token);
   if (!t) notFound();
+  const vat = mucVatChung(t.hang);
 
   return (
     <main className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -177,6 +179,26 @@ export default async function TrangPhuPhiPage({ params }: { params: Promise<{ to
             phát hành khi có.
           </p>
         </header>
+
+        {/* Thứ tự tính (CEO 02/10/2026) — thứ bảng số liệu không nói ra, mà thiếu nó thì brand
+            cộng ra một con số khác hẳn: chênh lệch giữa "fuel nhân lên cước" và "fuel nhân lên
+            cước + phụ phí" là hàng chục nghìn đồng mỗi lô. Đặt TRƯỚC các khối hãng vì nó là luật
+            chung, không phải đặc điểm của một hãng. */}
+        {t.hang.length > 0 && (
+          <section className="mt-8 rounded-xl border border-neutral-300 bg-white p-5 sm:p-6">
+            <h2 className="text-base font-semibold">Thứ tự tính trên bảng kê</h2>
+            <ol className="mt-3 space-y-1.5 text-[15px] leading-relaxed text-neutral-800">
+              <li><span className="font-medium">1.</span> Cước cơ bản theo vùng và trọng lượng.</li>
+              <li><span className="font-medium">2.</span> Cộng các khoản phụ phí trong bảng bên dưới.</li>
+              <li><span className="font-medium">3.</span> Nhân phụ phí xăng dầu của <span className="font-medium">tuần gửi hàng</span> lên tổng ở bước 2.</li>
+              <li><span className="font-medium">4.</span> {vat ? `Cộng VAT ${vat}` : 'Cộng VAT'} trên toàn bộ.</li>
+            </ol>
+            <p className="mt-3 text-[15px] leading-relaxed text-neutral-700">
+              Nói gọn: phụ phí xăng dầu tính trên tổng cước cơ bản cộng các phụ phí, không chỉ trên
+              cước. {vat ? `VAT ${vat}` : 'VAT'} tính sau cùng, trên toàn bộ.
+            </p>
+          </section>
+        )}
 
         {t.hang.length === 0 ? (
           <p className="mt-10 rounded-xl border border-neutral-200 bg-white p-6 text-[15px] text-neutral-600">

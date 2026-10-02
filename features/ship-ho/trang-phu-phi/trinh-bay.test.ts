@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cachTinhThat, dinhDangGiaTri, maNuoc, ngay, phanTram, tenTuNote, tien } from './trinh-bay';
+import { cachTinhThat, dinhDangGiaTri, maNuoc, mucVatChung, ngay, phanTram, tenTuNote, tien } from './trinh-bay';
 
 describe('tenTuNote — chốt chặn chữ nội bộ', () => {
   /* Mọi ca dưới đây là `note` THẬT trong `carrier_surcharges` ngày 02/10/2026. Trang này gửi
@@ -124,5 +124,21 @@ describe('cachTinhThat', () => {
   });
   it('câu của kind khác không bị đụng', () => {
     expect(cachTinhThat('Phần trăm trên tổng', null)).toBe('Phần trăm trên tổng');
+  });
+});
+
+describe('mucVatChung', () => {
+  const h = (...v: string[]) => ({ dong: v.map((giaTri) => ({ dong: 'vat', giaTri })) });
+  it('mọi hãng cùng mức thì trả mức đó', () => {
+    expect(mucVatChung([h('8,00%'), h('8,00%'), h('8,00%')])).toBe('8,00%');
+  });
+  /* 8% là mức GIẢM TẠM từ 10% (ghi chú trong chính dữ liệu). Khi nó về 10% mà một hãng chưa kịp
+     cập nhật thì KHÔNG được chọn bừa một số để viết lên đầu trang. */
+  it('các hãng khác mức thì trả null', () => {
+    expect(mucVatChung([h('8,00%'), h('10,00%')])).toBeNull();
+  });
+  it('không hãng nào có dòng VAT thì trả null', () => {
+    expect(mucVatChung([{ dong: [{ dong: 'remote', giaTri: '1đ' }] }])).toBeNull();
+    expect(mucVatChung([])).toBeNull();
   });
 });
