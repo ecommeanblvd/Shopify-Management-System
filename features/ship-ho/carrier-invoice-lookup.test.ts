@@ -156,3 +156,31 @@ describe('normalizeBilledLine — signature ĐÃ TRỪ residential (bất biến
   });
 });
 
+describe('normalizeBilledLine — cột residential thắng đường lùi shipment_charges', () => {
+  const mkRaw = (over: Partial<RawBillLine>): RawBillLine => ({ ...raw, ...over });
+
+  /* Dòng nhập TỪ migration 0194 trở đi có cột riêng: signature đã sạch, không trừ gì nữa.
+     Trừ thêm lần nữa là ăn mất 84.400 của dòng ký nhận. */
+  it('có cột riêng → dùng thẳng cả hai, không trừ', () => {
+    const r = normalizeBilledLine(
+      mkRaw({ signature: '92700', residentialCot: '84400', residentialRaw: '84400', total: '1177100' }), 1, null);
+    expect(r.surcharges.signature).toBe(92_700);
+    expect(r.surcharges.residential).toBe(84_400);
+  });
+
+  /* Lô thật sự không có phí giao nhà dân vẫn ghi 0 — và 0 đó là số ĐÚNG, không được coi là
+     "chưa có cột" rồi rơi về đường lùi. */
+  it('cột riêng bằng 0 vẫn là có cột, không rơi về shipment_charges', () => {
+    const r = normalizeBilledLine(
+      mkRaw({ signature: '92700', residentialCot: '0', residentialRaw: '84400', total: '1092700' }), 1, null);
+    expect(r.surcharges.signature).toBe(92_700);
+    expect(r.surcharges.residential).toBe(0);
+  });
+
+  it('dòng CŨ (cột trống) vẫn tách bằng shipment_charges như trước', () => {
+    const r = normalizeBilledLine(
+      mkRaw({ signature: '177100', residentialRaw: '84400', total: '1177100' }), 1, null);
+    expect(r.surcharges.signature).toBe(92_700);
+    expect(r.surcharges.residential).toBe(84_400);
+  });
+});

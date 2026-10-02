@@ -84,3 +84,27 @@ describe('fboApLine — addressCorrection không bị rớt', () => {
     expect(sum).toBe(1_369_200);
   });
 });
+
+describe('fboApLine — residential KHÔNG còn gộp vào signature (migration 0194)', () => {
+  /* Hoá đơn FedEx tách sẵn hai khoản. Gộp lại làm bảng đối soát gửi brand hiện tiền giao nhà
+     dân nằm trong dòng "Ký nhận" — 43 đơn đã gửi đi như vậy trước khi vá. */
+  it('mỗi khoản một cột, không cộng dồn', () => {
+    const line = fboApLine(mkRow({ awb: 'R1', base: 1_000_000, signature: 92_700, residential: 84_400, total: 1_177_100 }));
+    expect(line.signature).toBe(92_700);
+    expect(line.residential).toBe(84_400);
+  });
+
+  it('chỉ có giao nhà dân thì signature bằng 0, không phải 84.400', () => {
+    const line = fboApLine(mkRow({ awb: 'R2', base: 1_000_000, residential: 84_400, total: 1_084_400 }));
+    expect(line.signature).toBe(0);
+    expect(line.residential).toBe(84_400);
+  });
+
+  it('Σ thành phần vẫn bằng total sau khi tách', () => {
+    const line = fboApLine(mkRow({ awb: 'R3', base: 1_000_000, signature: 92_700, residential: 84_400, vat: 80_000, total: 1_257_100 }));
+    const sum = line.base + line.discount + line.fuel + line.remote + line.demand
+      + line.signature + line.residential + line.vat + line.other + line.addressCorrection
+      + line.importHandling + line.duty;
+    expect(sum).toBe(1_257_100);
+  });
+});

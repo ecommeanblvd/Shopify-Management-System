@@ -46,6 +46,8 @@ export interface RawBillLine {
   /** Residential (Giao nhà dân) từ shipment_charges — carrier_bill_lines.signature
    *  GỘP cả residential, nên tách ra đây rồi trừ khỏi signature. null = không có. */
   residentialRaw?: string | null;
+  /** Cột `carrier_bill_lines.residential` (migration 0194) — nguồn ĐÚNG, thắng `residentialRaw`. */
+  residentialCot?: string | null;
 }
 
 const num = (s: string | null | undefined): number => (s == null || s === '' ? 0 : Number(s) || 0);
@@ -60,9 +62,12 @@ const num = (s: string | null | undefined): number => (s == null || s === '' ? 0
  */
 export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNumber: string | null): BilledLookup {
   const s = (v: string | null | undefined) => Math.round(num(v) * vndFactor);
-  const residential = s(raw.residentialRaw);
-  // signature phẳng đã gộp residential → trừ ra (kẹp ≥0 phòng lệch làm tròn).
-  const signature = Math.max(0, s(raw.signature) - residential);
+  /* Cột riêng có số thì signature KHÔNG còn gộp gì — dùng thẳng cả hai. Chỉ dòng cũ (cột
+   * trống) mới phải trừ residential ra khỏi signature. Phân biệt bằng `!= null` chứ không
+   * bằng `> 0`: lô thật sự không có phí giao nhà dân cũng ghi 0, và 0 đó là số ĐÚNG. */
+  const coCot = raw.residentialCot != null && raw.residentialCot !== '';
+  const residential = coCot ? s(raw.residentialCot) : s(raw.residentialRaw);
+  const signature = coCot ? s(raw.signature) : Math.max(0, s(raw.signature) - residential);
   return {
     weightKg: raw.weightKg == null || raw.weightKg === '' ? null : Number(raw.weightKg),
     totalVnd: s(raw.total),
@@ -162,6 +167,7 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       base: schema.carrierBillLines.base, discount: schema.carrierBillLines.discount,
       fuel: schema.carrierBillLines.fuel, remote: schema.carrierBillLines.remote,
       demand: schema.carrierBillLines.demand, signature: schema.carrierBillLines.signature,
+      residentialCot: schema.carrierBillLines.residential,
       vat: schema.carrierBillLines.vat, other: schema.carrierBillLines.other,
       addressCorrection: schema.carrierBillLines.addressCorrection,
       importHandling: schema.carrierBillLines.importHandling, duty: schema.carrierBillLines.duty,
@@ -171,8 +177,10 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       costCurrency: schema.carrierAccounts.costCurrency,
       displayCurrency: schema.carrierAccounts.displayCurrency,
       fx: schema.carrierAccounts.fxCostPerDisplay,
-      // Residential (Giao nhà dân) lưu RIÊNG ở shipment_charges (cùng cost currency,
-      // cùng lượt import FBO); carrier_bill_lines.signature gộp nó vào. Lấy ra để tách.
+      /* ĐƯỜNG LÙI cho dòng nhập TRƯỚC migration 0194, khi residential còn bị gộp vào
+       * `signature`: lấy từ `shipment_charges`. Đơn ship hộ không có dòng trong `shipments`
+       * nên đường này luôn trả NULL với chúng — đó đúng là lý do 141/141 đơn không tách
+       * được. Dòng mới đã có cột riêng nên không cần tới nó. */
       residentialRaw: sql<string | null>`(
         SELECT sc.residential FROM ${schema.shipmentCharges} sc
         JOIN ${schema.shipments} shp ON shp.id = sc.shipment_id

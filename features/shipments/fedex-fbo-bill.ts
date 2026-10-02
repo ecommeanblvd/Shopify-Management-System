@@ -35,12 +35,13 @@ export interface FboApLine {
    *  → reconcile rơi về fuel hôm nay, lệch giá thu vài nghìn — bug bắt 22/07). */
   shipDate: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
-  signature: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; total: number;
+  signature: number; residential: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; total: number;
 }
 
-/** Gộp 1 FboBilledRow → dòng AP: residential→signature; addressCorrection /
- *  importHandling / duty CỘT RIÊNG (21/07 — không giữ khoản gộp mập mờ); other
- *  chỉ còn nhãn CHƯA phân loại. Bảo toàn: Σ thành phần = total. */
+/** 1 FboBilledRow → dòng AP. Mỗi khoản MỘT CỘT, không gộp: address_correction /
+ *  import_handling / duty tách từ 21/07, residential tách từ 02/10 (migration 0194).
+ *  Gộp residential vào signature làm bảng đối soát gửi brand hiện tiền giao nhà dân
+ *  nằm trong dòng ký nhận — 43 đơn đã gửi đi như vậy. Bảo toàn: Σ thành phần = total. */
 export function fboApLine(r: FboBilledRow): FboApLine {
   return {
     awb: r.awb,
@@ -49,7 +50,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     podAt: r.podAt, podName: r.podName,
     shipDate: parseFboDate(r.shipDate),
     base: r.base, discount: r.discount, fuel: r.fuel, remote: r.remote, demand: r.demand,
-    signature: r.signature + r.residential,
+    signature: r.signature, residential: r.residential,
     vat: r.vat,
     other: r.other,
     addressCorrection: r.addressCorrection,

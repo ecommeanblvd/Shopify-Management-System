@@ -712,6 +712,10 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   remote: numeric('remote', { precision: 14, scale: 2 }),
   demand: numeric('demand', { precision: 14, scale: 2 }),
   signature: numeric('signature', { precision: 14, scale: 2 }),
+  /** Giao nhà dân (Residential) — TÁCH khỏi `signature`. Hoá đơn FedEx vốn tách sẵn hai khoản;
+   *  trước migration 0194 chúng bị cộng dồn vào `signature` nên bảng đối soát gửi brand hiện
+   *  một dòng "Ký nhận" mang cả tiền giao nhà dân. NULL = dòng nhập trước khi có cột. */
+  residential: numeric('residential', { precision: 14, scale: 2 }),
   vat: numeric('vat', { precision: 14, scale: 2 }),
   other: numeric('other', { precision: 14, scale: 2 }),
   // Phí sửa địa chỉ (Address Correction) — FedEx áp CẢ fuel lên khoản này
