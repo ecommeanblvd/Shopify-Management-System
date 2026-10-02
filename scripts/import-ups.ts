@@ -122,7 +122,7 @@ async function ensureCountries(accountId: string, zoneByLabel: Map<string, strin
  * tham chiếu đối soát, KHÔNG vào total trừ khi signatureOptIn=true.
  */
 interface SurchargeSeed {
-  kind: 'fuel_percent' | 'vat_percent' | 'residential_fixed' | 'remote_fixed' | 'addon_fixed';
+  kind: 'fuel_percent' | 'vat_percent' | 'residential_fixed' | 'remote_fixed' | 'addon_fixed' | 'country_fixed';
   value: number;
   valuePerKg?: number;
   tier?: string;
@@ -130,6 +130,10 @@ interface SurchargeSeed {
   note: string;
   active: boolean;
   applyMode?: 'always' | 'when_billed';
+  /** Có nằm trong gốc tính phụ phí xăng dầu không. `undefined` = theo mặc định của kind. */
+  fuelable?: boolean;
+  /** Ngày bắt đầu áp dụng. `undefined` = áp mọi đơn, kể cả đơn cũ. */
+  startsAt?: string;
 }
 
 function upsSurchargeSeeds(): SurchargeSeed[] {
@@ -146,6 +150,27 @@ function upsSurchargeSeeds(): SurchargeSeed[] {
     { kind: 'addon_fixed', value: 235000, note: 'UPS Lập lại hóa đơn 235.000đ', active: true, applyMode: 'when_billed' },
     { kind: 'addon_fixed', value: 423940, note: 'UPS Phụ phí xử lý (Additional Handling) 423.940đ/gói', active: true, applyMode: 'when_billed' },
     { kind: 'addon_fixed', value: 300800, note: 'UPS Sai địa chỉ 300.800đ/gói (tối đa 863.390đ/lô)', active: true, applyMode: 'when_billed' },
+    /* Phí Xử lý Quốc tế — tên lấy ĐÚNG theo "Hướng dẫn Dịch vụ Quốc tế" của UPS Việt Nam, vì
+     * brand đối chiếu bảng kê theo tên hãng in trên hoá đơn. UPS chỉ thu khoản này cho lô đến
+     * HOA KỲ, với Worldwide Express / Express Plus / Express Saver / Expedited — tài khoản mình
+     * là Worldwide Expedited nên có áp.
+     *
+     * `fuelable: true` là theo XÁC NHẬN CỦA SALES UPS cho chính tài khoản mình (CEO hỏi lại
+     * 02/10/2026): mọi phụ phí cộng vào trước rồi mới nhân fuel. Ghi TƯỜNG MINH chứ không để
+     * `undefined`, vì mặc định của `country_fixed` là NGOÀI gốc fuel — để trống là âm thầm ra
+     * kết quả ngược với điều đã chốt.
+     *
+     * Hai nguồn khác nói ngược, ghi lại ở đây để lần sau không phải tra lại:
+     *   - trang phụ phí nhiên liệu của UPS liệt kê các khoản phụ trợ bị tính fuel và KHÔNG có
+     *     khoản này;
+     *   - 845 dòng hoá đơn FedEx thật cho thấy khoản import handling tương đương nằm NGOÀI gốc
+     *     fuel (lệch đúng 0đ khi loại nó ra, 0 dòng khớp khi cộng vào).
+     * Cả hai đều là bằng chứng về HÃNG KHÁC hoặc về biểu phí CÔNG BỐ CHUNG; hợp đồng của mình
+     * thì sales UPS nói. Khi hoá đơn UPS đầu tiên về, kiểm lại đúng phép tính đó.
+     *
+     * Hiệu lực 01/10/2026: để trống là áp ngược cho cả 4 lô tháng 9 đã nằm trong kỳ đã chốt. */
+    { kind: 'country_fixed', value: 58750, countryCodes: ['US'], fuelable: true, startsAt: '2026-10-01',
+      note: 'Phí Xử lý Quốc tế (International Processing Fee) — 58.750đ mỗi lô hàng đến Hoa Kỳ', active: true },
   ];
 }
 
@@ -154,8 +179,22 @@ async function ensureSurcharges(accountId: string, apply: boolean): Promise<{ ex
   const existingRows = await db.select({ kind: schema.carrierSurcharges.kind, note: schema.carrierSurcharges.note })
     .from(schema.carrierSurcharges).where(eq(schema.carrierSurcharges.carrierAccountId, accountId));
   const have = new Set(existingRows.map((r) => `${r.kind}::${r.note}`));
-  const toCreate = seeds.filter((s) => !have.has(`${s.kind}::${s.note}`));
+  /* `fuel_percent` so theo KIND, không theo note.
+   *
+   * Dòng dầu do cron hàng tuần (`fuel-fetcher`) sở hữu, và nó ghi note riêng của nó. So theo
+   * `kind::note` thì seed luôn thấy dòng dầu của mình "chưa có" và tạo thêm — mà seed dầu ở đây
+   * có value 0. Chạy `--apply` ngày 02/10/2026 suýt chèn một dòng fuel 0% vào cạnh 26 dòng thật.
+   * Ai sở hữu một kind thì seed không đụng vào kind đó nữa. */
+  const coKind = new Set(existingRows.map((r) => r.kind));
+  const toCreate = seeds.filter((s) => (s.kind === 'fuel_percent'
+    ? !coKind.has('fuel_percent')
+    : !have.has(`${s.kind}::${s.note}`)));
   console.log(`Surcharges: ${have.size} có (tổng account), ${toCreate.length} cần tạo (của ${seeds.length} seed).`);
+  /* IN RA TỪNG DÒNG sắp tạo. Khoá so trùng là `kind::note`, nên chỉ cần ai đó sửa chữ trong
+   * `note` ở DB (hoặc cron fuel ghi đè note) là seed tưởng dòng đó chưa có và TẠO THÊM một
+   * dòng nữa — hai dòng cùng loại thì engine cộng cả hai. Một con số đếm không cho thấy điều
+   * đó; một danh sách thì có. */
+  for (const s of toCreate) console.log(`   + ${s.kind} ${s.value} — ${s.note}`);
   if (apply) {
     for (const s of toCreate) {
       await db.insert(schema.carrierSurcharges).values({
@@ -167,6 +206,8 @@ async function ensureSurcharges(accountId: string, apply: boolean): Promise<{ ex
         countryCodes: s.countryCodes === undefined ? null : s.countryCodes,
         active: s.active,
         applyMode: s.applyMode ?? 'always',
+        fuelable: s.fuelable ?? null,
+        startsAt: s.startsAt ? new Date(`${s.startsAt}T00:00:00`) : null,
         note: s.note,
       });
     }
