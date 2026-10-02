@@ -155,21 +155,18 @@ function upsSurchargeSeeds(): SurchargeSeed[] {
      * HOA KỲ, với Worldwide Express / Express Plus / Express Saver / Expedited — tài khoản mình
      * là Worldwide Expedited nên có áp.
      *
-     * `fuelable: true` là theo XÁC NHẬN CỦA SALES UPS cho chính tài khoản mình (CEO hỏi lại
-     * 02/10/2026): mọi phụ phí cộng vào trước rồi mới nhân fuel. Ghi TƯỜNG MINH chứ không để
-     * `undefined`, vì mặc định của `country_fixed` là NGOÀI gốc fuel — để trống là âm thầm ra
-     * kết quả ngược với điều đã chốt.
+     * `fuelable: false` — CEO chốt 02/10/2026 sau khi hỏi lại sales UPS: khoản này tính SAU
+     * fuel. Khớp với hai nguồn còn lại: trang phụ phí nhiên liệu của UPS liệt kê các khoản phụ
+     * trợ bị tính fuel và không có khoản này; và bảng kê FedEx đã gửi Kalisa kỳ 09 cho thấy
+     * khoản import handling tương đương nằm ngoài gốc fuel (844.343 = 39,75% × (cước 1.947.034
+     * + ký nhận 177.100), KHÔNG gồm 68.300).
      *
-     * Hai nguồn khác nói ngược, ghi lại ở đây để lần sau không phải tra lại:
-     *   - trang phụ phí nhiên liệu của UPS liệt kê các khoản phụ trợ bị tính fuel và KHÔNG có
-     *     khoản này;
-     *   - 845 dòng hoá đơn FedEx thật cho thấy khoản import handling tương đương nằm NGOÀI gốc
-     *     fuel (lệch đúng 0đ khi loại nó ra, 0 dòng khớp khi cộng vào).
-     * Cả hai đều là bằng chứng về HÃNG KHÁC hoặc về biểu phí CÔNG BỐ CHUNG; hợp đồng của mình
-     * thì sales UPS nói. Khi hoá đơn UPS đầu tiên về, kiểm lại đúng phép tính đó.
+     * Ghi TƯỜNG MINH `false` chứ không để trống, dù mặc định của `country_fixed` cũng là ngoài
+     * gốc fuel: dòng này đã bị đổi qua đổi lại một lần, viết rõ thì người sau không phải tra
+     * lại xem trống nghĩa là "chưa quyết" hay "đã quyết là không".
      *
-     * Hiệu lực 01/10/2026: để trống là áp ngược cho cả 4 lô tháng 9 đã nằm trong kỳ đã chốt. */
-    { kind: 'country_fixed', value: 58750, countryCodes: ['US'], fuelable: true, startsAt: '2026-10-01',
+     * Hiệu lực 01/10/2026: để trống là áp ngược cho 4 lô tháng 9 trong kỳ đã chốt. */
+    { kind: 'country_fixed', value: 58750, countryCodes: ['US'], fuelable: false, startsAt: '2026-10-01',
       note: 'Phí Xử lý Quốc tế (International Processing Fee) — 58.750đ mỗi lô hàng đến Hoa Kỳ', active: true },
   ];
 }
