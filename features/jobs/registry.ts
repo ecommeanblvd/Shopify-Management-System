@@ -38,6 +38,8 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Không biết đơn đã giao hay chưa' },
   { key: 'track-ship-ho', ten: 'Tra trạng thái giao (ship hộ)', chuKyPhut: 6 * GIO,
     hauQua: 'Đối tác không thấy đơn đã giao' },
+  { key: 'nap-ngay-lay-hang', ten: 'Nạp ngày hãng lấy hàng (ship hộ)', chuKyPhut: 6 * GIO,
+    hauQua: 'Quá 90 ngày là FedEx xoá lịch sử quét — mất vĩnh viễn ngày đi hàng, phụ phí xăng dầu hết đối chiếu được theo tuần' },
   { key: 'dong-bo-po-lark', ten: 'Đồng bộ bảng PO từ Lark cho màn Nhận hàng', chuKyPhut: 1 * GIO,
     hauQua: 'Hàng đặt PO mới không tìm được khi nhận, và PO vừa nhập đủ vẫn cho chọn tiếp' },
   { key: 'dien-store-final', ten: 'Điền cột Store final còn trống trên bảng kho Lark', chuKyPhut: 6 * GIO,
