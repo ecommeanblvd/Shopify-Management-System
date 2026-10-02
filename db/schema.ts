@@ -2473,6 +2473,15 @@ export const shipHoOrders = pgTable('ship_ho_orders', {
   // thể tạo tracking trước rồi đi hàng chậm 1-2 ngày. Dùng làm ngày hiệu lực fuel
   // khi bill chưa về / dòng bill thiếu ship_date (bill vẫn thắng khi có).
   shippedAt: date('shipped_at'),
+  /**
+   * Mốc quét PU (Picked up) của hãng — ngày hàng THẬT SỰ rời kho.
+   *
+   * Khác `shippedAt`, vốn là lúc mình tạo nhãn (sự kiện OC của FedEx). Hai mốc này cách nhau
+   * tới 3 ngày ở AWB 873918787369, và phụ phí xăng dầu tính theo TUẦN CỦA NGÀY ĐI — nên đối
+   * chiếu theo `shippedAt` sẽ ra tuần sai. Đo 116 đơn: %fuel của tuần chứa `pickedUpAt` khớp
+   * đúng % suy từ hoá đơn ở 116/116. NULL = chưa tra được (FedEx chỉ giữ 90 ngày).
+   */
+  pickedUpAt: timestamp('picked_up_at'),
   deliveryStatus: text('delivery_status'),
   deliveredAt: timestamp('delivered_at'),
   lastTrackedAt: timestamp('last_tracked_at'),
