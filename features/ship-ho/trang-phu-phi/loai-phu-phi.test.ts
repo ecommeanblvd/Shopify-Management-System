@@ -16,6 +16,13 @@ describe('loaiChoPhep', () => {
     expect(loaiChoPhep('', null)).toBeNull();
   });
 
+  /* `packaging_fixed` cũng là phí của MEAN: `engine/quote.ts:21` ghi thẳng "KHÔNG phải cước
+     carrier", nó lưu ở đơn vị HIỂN THỊ (quote.ts:813) khác mọi kind còn lại, và markup nhân
+     lên cả nó (quote.ts:822) — số trên trang sẽ không khớp số trên bảng kê. */
+  it('packaging_fixed KHÔNG lên trang — phí đóng gói của MEAN, khác đơn vị tiền, bị markup', () => {
+    expect(loaiChoPhep('packaging_fixed', null)).toBeNull();
+  });
+
   /* `processing` là phí của MEAN (price-structure dựng nó với costVnd/billVnd null — không
      hãng nào thu MEAN khoản đó), nên không thuộc tiền đề "dẫn nguồn hãng". */
   it('processing KHÔNG nằm trong bảng ánh xạ — phí của MEAN, không có nguồn hãng', () => {
@@ -39,7 +46,7 @@ describe('loaiChoPhep', () => {
   });
 
   it('các loại lẻ gom vào "Phụ phí khác"', () => {
-    for (const k of ['peak_fixed', 'per_kg_fixed', 'per_step_fixed', 'country_fixed', 'packaging_fixed']) {
+    for (const k of ['peak_fixed', 'per_kg_fixed', 'per_step_fixed', 'country_fixed']) {
       expect(loaiChoPhep(k, null)?.dong).toBe('other');
     }
   });
@@ -47,7 +54,7 @@ describe('loaiChoPhep', () => {
   it('mọi loại được phép đều có nhãn và cách tính, không dòng nào rỗng', () => {
     for (const k of ['fuel_percent', 'remote_fixed', 'demand_per_kg', 'residential_fixed',
       'vat_percent', 'peak_fixed', 'per_kg_fixed', 'per_step_fixed', 'country_fixed',
-      'packaging_fixed', 'addon_fixed']) {
+      'addon_fixed']) {
       const m = loaiChoPhep(k, null)!;
       expect(m, k).not.toBeNull();
       expect(m.nhan.length, k).toBeGreaterThan(0);

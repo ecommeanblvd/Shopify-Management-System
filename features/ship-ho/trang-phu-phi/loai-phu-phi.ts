@@ -44,8 +44,17 @@ const CHO_PHEP: Record<string, MoTaLoai> = {
   per_kg_fixed: { dong: 'other', nhan: 'Phụ phí theo trọng lượng', cachTinh: 'Tiền theo kg' },
   per_step_fixed: { dong: 'other', nhan: 'Phụ phí theo bậc trọng lượng', cachTinh: 'Tiền mỗi bậc cân' },
   country_fixed: { dong: 'other', nhan: 'Phụ phí theo nước đến', cachTinh: 'Tiền cố định mỗi đơn' },
-  packaging_fixed: { dong: 'other', nhan: 'Phí bao bì', cachTinh: 'Tiền cố định mỗi đơn' },
 };
+
+/* `packaging_fixed` KHÔNG có trong danh sách trên, dù spec 02/10 xếp nó vào "Phụ phí khác".
+ * Ba điều trong `engine/quote.ts` nói nó không thuộc trang này:
+ *   - `quote.ts:21` — "KHÔNG phải cước carrier": đây là phí đóng gói của MEAN, không phải
+ *     khoản hãng charge mình rồi mình charge lại — đúng loại mà spec đã bỏ `processing` ra.
+ *   - `quote.ts:813` — lưu ở ĐƠN VỊ HIỂN THỊ, trong khi mọi kind khác lưu ở đơn vị CHI PHÍ.
+ *     Cùng một bảng mà hai đơn vị tiền là chỗ sinh ra con số sai.
+ *   - `quote.ts:822` — markup nhân lên cả packaging, nên số trên trang không bao giờ khớp
+ *     số trên bảng kê. Một trang đối soát hiện số không khớp thì tệ hơn là không hiện.
+ * Mở lại chỉ cần thêm một dòng ở đây, nhưng phải chốt với CEO trước. */
 
 export function loaiChoPhep(kind: string, serviceKey: string | null): MoTaLoai | null {
   /* `addon_fixed` rẽ theo `service_key`: `direct_signature` là dòng "Ký nhận" trên bảng kê

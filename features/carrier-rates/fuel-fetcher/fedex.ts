@@ -31,7 +31,10 @@
  * the network call so they can be unit-tested without going over the wire.
  */
 
-const PAGE_URL = 'https://www.fedex.com/en-vn/shipping/surcharges.html';
+/** Trang FedEx công bố phụ phí. EXPORT vì trang dẫn nguồn cho brand
+ *  (`features/ship-ho/trang-phu-phi`) phải trỏ brand tới ĐÚNG trang này, không gõ lại chuỗi —
+ *  gõ lại là hai chỗ có hai URL khác nhau sau lần FedEx đổi đường dẫn. */
+export const FEDEX_SURCHARGE_PAGE_URL = 'https://www.fedex.com/en-vn/shipping/surcharges.html';
 
 const DEFAULT_HEADERS_HTML: Record<string, string> = {
   'User-Agent':
@@ -55,7 +58,7 @@ const DEFAULT_HEADERS_XHR: Record<string, string> = {
     'text/javascript, application/javascript, application/ecmascript, application/x-ecmascript, */*; q=0.01',
   'Accept-Language': 'en-US,en;q=0.9',
   'X-Requested-With': 'XMLHttpRequest',
-  Referer: PAGE_URL,
+  Referer: FEDEX_SURCHARGE_PAGE_URL,
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-origin',
@@ -222,7 +225,7 @@ export async function fetchFedExFuelPercent(
   const fetcher = options.fetchImpl ?? fetch;
 
   // Step 1 — bootstrap session cookies.
-  const pageRes = await fetcher(PAGE_URL, { headers: DEFAULT_HEADERS_HTML, redirect: 'follow' });
+  const pageRes = await fetcher(FEDEX_SURCHARGE_PAGE_URL, { headers: DEFAULT_HEADERS_HTML, redirect: 'follow' });
   if (!pageRes.ok) {
     throw new Error(`fetchFedExFuelPercent: page request failed (${pageRes.status})`);
   }
