@@ -33,6 +33,7 @@ const DELIVERY_BADGE: Record<string, { label: string; cls: string }> = {
   label_created:     { label: 'Mới tạo nhãn',      cls: 'bg-muted text-muted-foreground' },
   in_transit:        { label: '🚚 Đang chuyển',   cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
   out_for_delivery:  { label: 'Đang giao',         cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  awaiting_pickup:   { label: 'Chờ khách lấy',     cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   exception:         { label: '⚠ Sự cố',          cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 };
 

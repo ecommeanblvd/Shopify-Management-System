@@ -1,6 +1,10 @@
 import { fedexFetch } from './client';
 
-export type DeliveryStatus = 'label_created' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'returning' | 'exception' | 'unknown';
+export type DeliveryStatus =
+  | 'label_created' | 'in_transit' | 'out_for_delivery'
+  /** Kiện ĐANG Ở ĐIỂM NHẬN chờ khách tới lấy — hãng hết việc, khách chưa nhận (CEO 02/10/2026). */
+  | 'awaiting_pickup'
+  | 'delivered' | 'returning' | 'exception' | 'unknown';
 
 /**
  * Mã trạng thái FedEx → trạng thái hệ thống. Danh sách lấy từ bộ ca kiểm thử chính
@@ -28,7 +32,12 @@ const STATUS_BY_CODE: Record<string, DeliveryStatus> = {
   // chuyển. Trước đó ba mã này rơi vào 'unknown' (CP 17 kiện, CC 3, SF 1).
   CP: 'in_transit', CC: 'in_transit', SF: 'in_transit',
   // Cần người xử lý.
-  DE: 'exception', SE: 'exception', CA: 'exception', HL: 'exception',
+  DE: 'exception', SE: 'exception', CA: 'exception',
+  /* HL = Hold at Location: kiện nằm ở điểm nhận chờ khách tới lấy. TỪ 02/10/2026 tách khỏi
+   * 'exception' sang nấc riêng `awaiting_pickup` — "chờ khách lấy" không phải sự cố của hãng,
+   * mà gộp vào exception thì nó nằm chung rổ với kiện giao thất bại và không ai phân biệt được
+   * việc cần làm. Đo 02/10: 2 kiện FedEx đang exception với lời hãng "Ready for pickup". */
+  HL: 'awaiting_pickup',
   // RS = Return to Shipper. Tách khỏi 'exception' vì đây KHÔNG phải chuyện chờ xử lý mà là một
   // kết cục: kiện đang quay về và sẽ KHÔNG BAO GIỜ có ngày giao. Gộp vào exception thì kiện hỏng
   // nặng nhất lại nằm chung rổ với kiện chỉ đang chờ khách gọi lại (CEO 13/09/2026).
@@ -200,7 +209,16 @@ export async function layLichSuQuet(trackingNumbers: readonly string[]): Promise
  * 'unknown' không ghi đè được · và hãng KHÔNG kéo trạng thái LÙI trên thang
  * label_created → in_transit → out_for_delivery → delivered.
  */
-const NAC: Record<string, number> = { label_created: 0, in_transit: 1, out_for_delivery: 2, delivered: 3 };
+/* Thang nấc để chặn hãng kéo trạng thái LÙI.
+ *
+ * `awaiting_pickup` CÙNG NẤC với `out_for_delivery`, không đứng sau: hai thứ đều là chặng cuối
+ * và đi được CẢ HAI CHIỀU — kiện giao không được thì về điểm nhận chờ khách (ofd → chờ lấy), mà
+ * khách xin giao lại thì nó ra xe lần nữa (chờ lấy → ofd). Xếp `awaiting_pickup` thành nấc 3
+ * (sau ofd) sẽ chặn đúng chiều thứ hai, và trạng thái đứng im ở "chờ khách lấy" trong khi hãng
+ * đã mang đi giao. Nấc bằng nhau thì cả hai chiều qua được, mà vẫn không kéo lùi từ `delivered`. */
+const NAC: Record<string, number> = {
+  label_created: 0, in_transit: 1, out_for_delivery: 2, awaiting_pickup: 2, delivered: 3,
+};
 
 export function trangThaiSauKhiTrack(hienTai: string | null | undefined, moi: DeliveryStatus): DeliveryStatus | null {
   /* Hãng nói ĐÚNG thứ đang có → cho qua, đừng coi là "giữ".

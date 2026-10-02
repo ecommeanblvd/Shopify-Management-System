@@ -26,6 +26,10 @@ export interface ShipHoStage {
 export function deriveShipHoStage(i: ShipHoStageInput): ShipHoStage {
   const warnings: string[] = [];
   if (i.deliveryStatus === 'exception') warnings.push('Sự cố giao hàng');
+  /* Cảnh báo RIÊNG, không dùng chung chữ với 'exception' (CEO 02/10/2026): việc cần làm khác
+   * hẳn nhau. Sự cố thì gọi hãng; chờ khách lấy thì gọi KHÁCH. Một chữ cho hai việc là người
+   * đọc phải mở từng đơn ra mới biết phải làm gì. */
+  if (i.deliveryStatus === 'awaiting_pickup') warnings.push('Chờ khách tới lấy — nhắc brand liên hệ khách');
   if (i.reconcileStatus === 'reconciled' && i.marginVnd != null && i.marginVnd < 0) {
     warnings.push('Margin âm (bill > giá thu)');
   }
@@ -39,6 +43,9 @@ export function deriveShipHoStage(i: ShipHoStageInput): ShipHoStage {
   if (i.deliveryStatus === 'returning') return { label: 'Đang hoàn về', tone: 'bad', warnings };
   if (i.deliveryStatus === 'label_created') return { label: 'Mới tạo nhãn — hãng chưa nhận hàng', tone: 'warn', warnings };
   if (i.deliveryStatus === 'exception') return { label: 'Sự cố vận chuyển', tone: 'bad', warnings };
+  /* `tone: 'warn'` chứ không 'bad': hãng đã làm xong phần mình, kiện không hỏng — nhưng cũng
+   * không phải 'info', vì nó nằm im tới khi có người gọi khách. */
+  if (i.deliveryStatus === 'awaiting_pickup') return { label: 'Chờ khách tới lấy', tone: 'warn', warnings };
   if (i.trackingNumber) {
     if (i.deliveryStatus === 'out_for_delivery') return { label: 'Đang giao', tone: 'info', warnings };
     return { label: 'Đang vận chuyển', tone: 'info', warnings };

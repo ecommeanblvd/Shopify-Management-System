@@ -67,6 +67,12 @@ describe('mapUpsCode — bộ mã đo trên 47 kiện thật', () => {
     expect(mapUpsCode('160')).toBe('in_transit');
   });
 
+  /* 040 không còn là `delivered` (chưa ai nhận) và cũng không gộp vào `exception` (không phải
+     sự cố của hãng) — cùng nấc với FedEx HL. */
+  it('040 Ready for Customer Pickup → awaiting_pickup', () => {
+    expect(mapUpsCode('040')).toBe('awaiting_pickup');
+  });
+
   it('062 Delivery Attempted: Funds Needed → exception (ngoại lệ THẬT)', () => {
     expect(mapUpsCode('062')).toBe('exception');
   });

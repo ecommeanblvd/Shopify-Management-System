@@ -4,7 +4,9 @@ import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, parseLichSuQuet,
 describe('mapFedexStatus', () => {
   it('các mã đã đối chiếu thật trên sandbox FedEx', () => {
     expect(mapFedexStatus('DL')).toBe('delivered');
-    expect(mapFedexStatus('HL')).toBe('exception');      // chờ khách tới lấy — trước đây rơi vào unknown
+    // HL (chờ khách tới lấy): 'unknown' → 'exception' (13/09) → 'awaiting_pickup' (02/10) khi
+    // CEO chốt thêm nấc riêng. Gộp vào exception thì nó nằm chung rổ với kiện giao thất bại.
+    expect(mapFedexStatus('HL')).toBe('awaiting_pickup');
     expect(mapFedexStatus('AD')).toBe('out_for_delivery'); // tới điểm giao — trước đây rơi vào unknown
     expect(mapFedexStatus('AR')).toBe('in_transit');
     expect(mapFedexStatus('DP')).toBe('in_transit');
@@ -123,7 +125,8 @@ describe('trangThaiSauKhiTrack — giữ trạng thái đang hoàn về', () => 
 
   it('mã RS của FedEx map sang returning, không lẫn vào exception', () => {
     expect(mapFedexStatus('RS')).toBe('returning');
-    expect(mapFedexStatus('HL')).toBe('exception');
+    // HL nay là nấc riêng, không còn lẫn vào exception (CEO 02/10/2026).
+    expect(mapFedexStatus('HL')).toBe('awaiting_pickup');
   });
 });
 
@@ -203,5 +206,35 @@ describe('trangThaiSauKhiTrack — hãng không kéo trạng thái LÙI', () => 
     expect(trangThaiSauKhiTrack('exception', 'in_transit')).toBe('in_transit');
     expect(trangThaiSauKhiTrack('unknown', 'out_for_delivery')).toBe('out_for_delivery');
     expect(trangThaiSauKhiTrack(null, 'in_transit')).toBe('in_transit');
+  });
+});
+
+/* Nấc `awaiting_pickup` (CEO 02/10/2026) — kiện nằm ở điểm nhận chờ khách tới lấy. */
+describe('awaiting_pickup — cùng nấc với out_for_delivery, cả hai chiều đi được', () => {
+  /* Hai thứ đều là chặng cuối và đi được CẢ HAI CHIỀU: giao không được thì về điểm nhận
+     (ofd → chờ lấy); khách xin giao lại thì ra xe lần nữa (chờ lấy → ofd). Xếp nó thành nấc SAU
+     ofd sẽ chặn chiều thứ hai, và trạng thái đứng im ở "chờ khách lấy" trong khi hãng đã mang đi. */
+  it('ofd ⇄ chờ khách lấy: KHÔNG coi là kéo lùi', () => {
+    expect(trangThaiSauKhiTrack('out_for_delivery', 'awaiting_pickup')).toBe('awaiting_pickup');
+    expect(trangThaiSauKhiTrack('awaiting_pickup', 'out_for_delivery')).toBe('out_for_delivery');
+  });
+
+  it('chờ khách lấy → đã giao: tiến lên, nhận', () => {
+    expect(trangThaiSauKhiTrack('awaiting_pickup', 'delivered')).toBe('delivered');
+  });
+
+  it('đã giao KHÔNG lùi về chờ khách lấy', () => {
+    expect(trangThaiSauKhiTrack('delivered', 'awaiting_pickup')).toBeNull();
+  });
+
+  it('chờ khách lấy KHÔNG bị kéo về in_transit', () => {
+    expect(trangThaiSauKhiTrack('awaiting_pickup', 'in_transit')).toBeNull();
+  });
+
+  /* HL = Hold at Location. Trước 02/10 nó nằm chung rổ 'exception' với kiện giao thất bại, nên
+     không ai phân biệt được việc cần làm: sự cố thì gọi HÃNG, chờ lấy thì gọi KHÁCH. */
+  it('FedEx HL tách khỏi exception sang nấc mới', () => {
+    expect(mapFedexStatus('HL')).toBe('awaiting_pickup');
+    expect(mapFedexStatus('DE')).toBe('exception');
   });
 });

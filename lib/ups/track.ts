@@ -46,10 +46,9 @@ export function mapUpsCode(code: string | null | undefined): DeliveryStatus | nu
   switch ((code ?? '').trim()) {
     case '011': return 'delivered';
     /* "Ready for Customer Pickup" — kiện ĐANG Ở ĐIỂM UPS chờ khách tới lấy, chưa tới tay ai.
-     * Giữ `delivered` vì bộ trạng thái của hệ thống KHÔNG có nấc "chờ khách lấy", và 2 kiện
-     * kiểu này trong DB đã mang `delivered` từ tháng 8 — đổi là mở lại hai bản ghi cũ cho lượt
-     * quét mà chưa ai quyết nấc mới. Đã nêu để CEO chốt. */
-    case '040': return 'delivered';
+     * CEO 02/10/2026 chốt thêm nấc riêng, nên không còn báo `delivered` (sai: chưa ai nhận) và
+     * cũng không gộp vào `exception` (sai: không phải sự cố của hãng). Cùng nấc với FedEx `HL`. */
+    case '040': return 'awaiting_pickup';
     /* Ngoại lệ THẬT: giao không thành vì thiếu tiền (thuế/phí người nhận phải trả). */
     case '062': return 'exception';
     /* Đang đi. `005` còn kèm thông báo "có thể chậm" — chậm KHÔNG phải ngoại lệ, và chính UPS

@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 
 const DELIVERY_LABEL: Record<string, { label: string; cls: string }> = {
+  awaiting_pickup: { label: 'Chờ khách tới lấy', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   label_created: { label: 'Mới tạo nhãn', cls: 'bg-muted text-muted-foreground' },
   in_transit: { label: 'Đang vận chuyển', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
   out_for_delivery: { label: 'Đang giao', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' },
@@ -52,6 +53,10 @@ export function TrackingCard({
           )}
           {deliveryStatus === 'exception' && (
             <span className="text-xs text-red-600 dark:text-red-400">Kiểm tra với carrier / cập nhật brand nếu delay.</span>
+          )}
+          {/* Việc cần làm khác hẳn 'exception': gọi KHÁCH, không gọi hãng. */}
+          {deliveryStatus === 'awaiting_pickup' && (
+            <span className="text-xs text-amber-700 dark:text-amber-400">Hãng giữ ở điểm nhận — nhắc brand liên hệ khách tới lấy.</span>
           )}
         </div>
       )}
