@@ -71,6 +71,20 @@ export function tenTuNote(note: string | null): string | null {
   return cat;
 }
 
+/**
+ * Câu "cách tính" đã khớp với mức THẬT của dòng.
+ *
+ * `loaiChoPhep` trả câu chung cho cả `kind`, nhưng `remote_fixed` có hai dạng: FedEx Tier B/C và
+ * UPS Remote thu max(tiền/đơn, tiền/kg), còn Tier A và UPS Extended chỉ thu tiền/đơn. Để câu
+ * chung thì trang hiện "646.720đ/đơn" ngay cạnh "hoặc theo kg — lấy mức cao hơn" — một trang
+ * đối soát tự mâu thuẫn trong cùng một hàng thì brand phải đi hỏi, đúng thứ nó sinh ra để khỏi.
+ */
+export function cachTinhThat(cachTinh: string, valuePerKg: number | null): string {
+  return valuePerKg != null && valuePerKg > 0
+    ? cachTinh
+    : cachTinh.replace(', hoặc theo kg — lấy mức cao hơn', '');
+}
+
 /** `jsonb` nước → mảng ISO-2 đã sắp, hoặc `null`. Dữ liệu jsonb nên không tin kiểu sẵn. */
 export function maNuoc(v: unknown): string[] | null {
   if (!Array.isArray(v)) return null;

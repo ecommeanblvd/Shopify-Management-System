@@ -7,9 +7,10 @@
  */
 import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { ngayKinhDoanh } from '@/lib/timezone';
 import { loaiChoPhep, type DongBangKe } from './loai-phu-phi';
 import { locTuanCoDon, type TuanDau } from './tuan-dau';
-import { dinhDangGiaTri, maNuoc, ngay, tenTuNote } from './trinh-bay';
+import { cachTinhThat, dinhDangGiaTri, maNuoc, ngay, tenTuNote } from './trinh-bay';
 import { FEDEX_SURCHARGE_PAGE_URL } from '@/features/carrier-rates/fuel-fetcher/fedex';
 import { DHL_VN_PAGE_URL } from '@/features/carrier-rates/fuel-fetcher/dhl-vn';
 import { UPS_FUEL_PAGE_URL } from '@/features/carrier-rates/fuel-fetcher/ups';
@@ -119,7 +120,9 @@ export async function docTrangPhuPhi(token: string): Promise<TrangPhuPhi | null>
   }).from(schema.carrierRemoteEvidence)
     .where(inArray(schema.carrierRemoteEvidence.carrierAccountId, accIds));
 
-  const homNay = new Date().toISOString().slice(0, 10);
+  /* Giờ KINH DOANH, không phải UTC: Railway chạy TZ=UTC, nên sau 7h sáng giờ VN hai mốc đã
+   * khác ngày. `lib/ngay-vn.test.ts` quét cả repo để chặn `toISOString()` ở đúng chỗ này. */
+  const homNay = ngayKinhDoanh(new Date()) ?? '9999-12-31';
 
   const hang: HangTrenTrang[] = accs.map((a) => {
     const cua = sur.filter((s) => s.acc === a.id);
@@ -141,10 +144,10 @@ export async function docTrangPhuPhi(token: string): Promise<TrangPhuPhi | null>
       if (s.kind === 'fuel_percent' || s.endsAt != null) continue;
       const mo = loaiChoPhep(s.kind, s.serviceKey);
       if (!mo) continue; // markup_percent và mọi kind chưa khai đều rơi vào đây
+      const perKg = s.valuePerKg == null ? null : Number(s.valuePerKg);
       dong.push({
-        dong: mo.dong, nhan: mo.nhan, cachTinh: mo.cachTinh,
-        giaTri: dinhDangGiaTri(s.kind, Number(s.value), s.valuePerKg == null ? null : Number(s.valuePerKg),
-          s.stepKg == null ? null : Number(s.stepKg), a.tien),
+        dong: mo.dong, nhan: mo.nhan, cachTinh: cachTinhThat(mo.cachTinh, perKg),
+        giaTri: dinhDangGiaTri(s.kind, Number(s.value), perKg, s.stepKg == null ? null : Number(s.stepKg), a.tien),
         hieuLucTu: ngay(s.startsAt),
         tenDong: tenTuNote(s.note), mucHang: s.tier,
         apDungNuoc: maNuoc(s.apDung), mienNuoc: maNuoc(s.mien),

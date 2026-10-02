@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dinhDangGiaTri, maNuoc, ngay, phanTram, tenTuNote, tien } from './trinh-bay';
+import { cachTinhThat, dinhDangGiaTri, maNuoc, ngay, phanTram, tenTuNote, tien } from './trinh-bay';
 
 describe('tenTuNote — chốt chặn chữ nội bộ', () => {
   /* Mọi ca dưới đây là `note` THẬT trong `carrier_surcharges` ngày 02/10/2026. Trang này gửi
@@ -108,5 +108,21 @@ describe('phanTram', () => {
   it('luôn hai số thập phân', () => {
     expect(phanTram(30)).toBe('30,00%');
     expect(phanTram(52.5)).toBe('52,50%');
+  });
+});
+
+describe('cachTinhThat', () => {
+  const CHUNG = 'Tiền cố định mỗi đơn, hoặc theo kg — lấy mức cao hơn';
+  /* FedEx ODA Tier A và UPS Extended chỉ có vế tiền/đơn. Giữ câu chung là hiện "646.720đ/đơn"
+     ngay cạnh "hoặc theo kg" trong cùng một hàng. */
+  it('không có vế theo kg thì bỏ nửa câu đó', () => {
+    expect(cachTinhThat(CHUNG, null)).toBe('Tiền cố định mỗi đơn');
+    expect(cachTinhThat(CHUNG, 0)).toBe('Tiền cố định mỗi đơn');
+  });
+  it('có vế theo kg thì giữ nguyên', () => {
+    expect(cachTinhThat(CHUNG, 9_200)).toBe(CHUNG);
+  });
+  it('câu của kind khác không bị đụng', () => {
+    expect(cachTinhThat('Phần trăm trên tổng', null)).toBe('Phần trăm trên tổng');
   });
 });
