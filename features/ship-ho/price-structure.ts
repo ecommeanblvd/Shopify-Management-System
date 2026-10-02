@@ -7,6 +7,7 @@
  * chênh lệch cân lộ ra ngay.
  */
 import { computeBrandCharge, type BrandChargeParts } from './brand-pricing';
+import { gocFuelTrenBill } from './goc-fuel-bill';
 
 export interface PriceStructureRow {
   label: string;
@@ -24,9 +25,10 @@ export interface PriceStructureRow {
    * % HIỆU LỰC carrier áp trên BILL (Change 1, CEO 23/09) — CHỈ dòng "Phụ phí
    * xăng dầu". Khác `percent` (rate lock lúc quote) vì fuel rate đổi hàng tuần:
    * quote khoá rate lúc báo giá, carrier bill theo rate của TUẦN GIAO HÀNG.
-   * Suy từ `ab.fuel / billFuelBase` (base = cước cơ bản bill NET + phụ phí cùng
-   * đợt — remote/demand/residential/signature; KHÔNG gồm VAT/duty/phí NK/AC vì
-   * carrier không tính fuel trên các khoản pass-through này), làm tròn 3 chữ số
+   * Suy từ `ab.fuel / gocFuelTrenBill(...)` — DÙNG CHUNG định nghĩa với
+   * `billImpliedFuelPercent` (xem `goc-fuel-bill.ts`). Bản cũ tự dựng mẫu số riêng và bỏ
+   * `addressCorrection` ra, nên hai nơi nói hai % khác nhau cho cùng một đơn: #KLS1998 hiện
+   * 52,65% trong khi tiền thu tính theo 39,75%. Làm tròn 3 chữ số
    * thập phân (carrier công bố rate kiểu "46.500%"). Đã kiểm read-only trên TOÀN
    * BỘ đơn reconciled ở production (23/09/2026) — công thức này tái tạo đúng
    * `ab.fuel` ở 127/127 đơn; các base khác (chỉ net cước, hoặc lấy thẳng `ab.base`
@@ -247,11 +249,16 @@ export function shipHoPriceStructure(input: {
   ].filter((r) => (r.costVnd ?? 0) !== 0 || (r.billVnd ?? 0) !== 0 || (r.quoteChargeVnd ?? 0) !== 0 || (r.chargeVnd ?? 0) !== 0);
 
   // % xăng dầu HIỆU LỰC trên bill (Change 1, CEO 23/09) — xem doc-comment
-  // `PriceStructureRow.billPercent`. base = cước cơ bản bill NET + phụ phí cùng
-  // đợt (remote/demand/residential/signature); base ≤ 0 → null, không bịa %.
+  // `PriceStructureRow.billPercent`. base ≤ 0 → null, không bịa %.
   const fuelBillPercent = hasBill && fuelBill != null
     ? (() => {
-        const base = Math.round((baseBill ?? 0) + num(ab!.remote) + num(ab!.demand) + num(ab!.residential) + num(ab!.signature));
+        // `baseBill` đã là base + discount; truyền 0 cho discount để không trừ hai lần.
+        const base = Math.round(gocFuelTrenBill({
+          base: baseBill ?? 0, discount: 0,
+          remote: num(ab!.remote), demand: num(ab!.demand),
+          signature: num(ab!.signature), residential: num(ab!.residential),
+          addressCorrection: num(ab!.addressCorrection),
+        }));
         if (!(base > 0)) return null;
         const pct = Math.round((fuelBill / base) * 100 * 1000) / 1000;
         return Number.isFinite(pct) ? pct : null;

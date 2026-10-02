@@ -6,6 +6,7 @@
  */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { gocFuelTrenBill } from './goc-fuel-bill';
 import { gomDongDutyTheoHoaDon, type DongDuty } from './duty-gom';
 
 export type { DongDuty };
@@ -92,8 +93,7 @@ export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNum
  * fuel engine theo ship_date.
  */
 export function billImpliedFuelPercent(s: BilledSurcharges): number | null {
-  const fuelableBase = s.base + s.discount + s.remote + s.demand + s.signature
-    + s.residential + s.addressCorrection;
+  const fuelableBase = gocFuelTrenBill(s);
   if (!(s.fuel > 0) || !(fuelableBase > 0)) return null;
   const pct = Math.round((s.fuel / fuelableBase) * 100 * 4) / 4;
   if (pct <= 0 || pct > 100) return null;
