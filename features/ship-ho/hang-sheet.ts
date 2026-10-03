@@ -34,3 +34,29 @@ export function hangSheet(don: readonly DonSheet[]): (string | number)[][] {
     tien(d.xuLyDon), tien(d.tongThu), d.maSms,
   ]);
 }
+
+/* ── Bảng kê THUẾ / PHÍ NHẬP KHẨU ──
+ *
+ * Tab riêng, tên có hậu tố " Duty" — đúng nếp sheet Kalisa đang dùng (`8.26` và `8.26 Duty`).
+ * Bản đầu đặt tên tab chỉ theo tháng nên hai bảng kê cùng kỳ GHI ĐÈ nhau, phát hiện 03/10/2026
+ * khi gắn sheet cho lekieu và tom-fried.
+ *
+ * Bố cục 8 cột, đọc từ chính tab `8.26 Duty` của Kalisa — ít cột hơn hẳn bảng cước vì thuế là
+ * khoản THU HỘ nguyên giá: không markup, không nhiên liệu, không VAT.
+ */
+export const COT_SHEET_DUTY = [
+  'STT', 'Mã đơn', 'Mã tracking', 'Ngày gửi', 'Quốc gia', 'Số hoá đơn FedEx',
+  'Duty/Tax (Nước tới)', 'Mã SMS',
+] as const;
+
+export interface DonSheetDuty {
+  stt: number; maBrand: string; tracking: string; ngayDi: string | null; nuoc: string;
+  soHoaDon: string; duty: number; maSms: string;
+}
+
+export function hangSheetDuty(don: readonly DonSheetDuty[]): (string | number)[][] {
+  return don.map((d) => [
+    d.stt, d.maBrand, d.tracking, d.ngayDi ? serialNgay(d.ngayDi) : '', d.nuoc,
+    d.soHoaDon, tien(d.duty), d.maSms,
+  ]);
+}

@@ -14,14 +14,23 @@ import { goiSheets } from '@/lib/google/sheets';
 import { getShipHoStatement } from './statement-queries';
 import { shipHoPriceStructure } from './price-structure';
 import { ngayDiHang } from './ngay-di-hang';
-import { COT_SHEET, hangSheet, type DonSheet } from './hang-sheet';
+import {
+  COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty,
+  type DonSheet, type DonSheetDuty,
+} from './hang-sheet';
 
 const n = (v: unknown) => Number(v ?? 0);
 
-/** Tên tab theo nếp sheet Kalisa: "7.26", "8.26" — tháng.năm, không số 0 ở đầu. */
-export function tenTabKy(periodStart: string): string {
+/**
+ * Tên tab theo nếp sheet Kalisa: "7.26", "8.26", và "8.26 Duty" cho bảng kê thuế.
+ *
+ * Hậu tố loại là BẮT BUỘC: một brand có thể có cả bảng kê cước lẫn bảng kê thuế TRONG CÙNG MỘT
+ * KỲ (lekieu và tom-fried đều vậy ở kỳ 09). Đặt tên chỉ theo tháng thì bảng này xoá tab của
+ * bảng kia — bản đầu mắc đúng lỗi đó, phát hiện lúc gắn sheet 03/10/2026.
+ */
+export function tenTabKy(periodStart: string, type: string): string {
   const [nam, thang] = periodStart.slice(0, 10).split('-');
-  return `${Number(thang)}.${nam.slice(2)}`;
+  return `${Number(thang)}.${nam.slice(2)}${type === 'duty' ? ' Duty' : ''}`;
 }
 
 /**
@@ -81,10 +90,38 @@ async function dungDonSheet(statementId: string): Promise<DonSheet[]> {
   return ra;
 }
 
+/**
+ * Dòng cho bảng kê THUẾ.
+ *
+ * Đơn thuộc bảng kê thuế qua cột `duty_statement_id`, KHÔNG phải `statement_id` — một đơn vừa
+ * nằm trong bảng cước của kỳ này vừa nằm trong bảng thuế của kỳ khác, vì hoá đơn thuế FedEx về
+ * sau hoá đơn cước 3–6 tuần. Bản đầu dùng nhầm cột nên tab duty ghi ra 0 dòng.
+ */
+async function dungDonSheetDuty(statementId: string): Promise<DonSheetDuty[]> {
+  const r = await db.execute<Record<string, unknown>>(sql`
+    SELECT o.code, o.brand_reference, o.tracking_number, o.country, o.shipped_at::date gui,
+           o.picked_up_at, o.actual_duty_vnd, o.duty_bill_numbers
+    FROM ship_ho_orders o WHERE o.duty_statement_id = ${statementId}
+    ORDER BY o.shipped_at;`);
+  return r.rows.map((x, i) => ({
+    stt: i + 1,
+    maBrand: String(x.brand_reference ?? x.code), tracking: String(x.tracking_number ?? ''),
+    ngayDi: ngayDiHang({
+      pickedUpAt: x.picked_up_at as Date | null,
+      shippedAt: x.gui == null ? null : String(x.gui),
+    }).ngay,
+    nuoc: String(x.country ?? ''),
+    soHoaDon: Array.isArray(x.duty_bill_numbers) ? (x.duty_bill_numbers as string[]).join(' + ')
+      : String(x.duty_bill_numbers ?? ''),
+    duty: n(x.actual_duty_vnd), maSms: String(x.code),
+  }));
+}
+
 export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: boolean; detail: string }> {
   const [ke] = await db.select({
     brand: schema.shipHoStatements.partnerBrandSlug,
     ky: schema.shipHoStatements.periodStart,
+    type: schema.shipHoStatements.type,
   }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, statementId)).limit(1);
   if (!ke) return { ok: false, detail: 'không thấy bảng kê' };
 
@@ -94,8 +131,10 @@ export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: bool
     return { ok: true, detail: `brand ${ke.brand} chưa có sheet đối soát — tạo rồi chia sẻ quyền writer cho ${process.env.GOOGLE_SA_EMAIL ?? 'tài khoản dịch vụ'} và dán id vào trang đối tác` };
   }
 
-  const don = await dungDonSheet(statementId);
-  const tenTab = tenTabKy(String(ke.ky));
+  const laDuty = ke.type === 'duty';
+  const dau: readonly string[] = laDuty ? COT_SHEET_DUTY : COT_SHEET;
+  const hang = laDuty ? hangSheetDuty(await dungDonSheetDuty(statementId)) : hangSheet(await dungDonSheet(statementId));
+  const tenTab = tenTabKy(String(ke.ky), String(ke.type));
 
   const meta = await goiSheets(dt.sheetId, '?fields=sheets.properties(sheetId,title)');
   const cu = (meta.sheets as { properties: { sheetId: number; title: string } }[])
@@ -113,13 +152,14 @@ export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: bool
   await goiSheets(dt.sheetId, ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [
     { updateSpreadsheetProperties: { properties: { locale: 'vi_VN' }, fields: 'locale' } },
     { repeatCell: {
-      range: { sheetId: idTab, startRowIndex: 1, startColumnIndex: 4, endColumnIndex: 5 },
+      // Cột "Ngày gửi" đứng ở E trên bảng cước, D trên bảng thuế.
+      range: { sheetId: idTab, startRowIndex: 1, startColumnIndex: laDuty ? 3 : 4, endColumnIndex: laDuty ? 4 : 5 },
       cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd/mm/yyyy' } } },
       fields: 'userEnteredFormat.numberFormat' } },
   ] }) });
 
   await goiSheets(dt.sheetId, `/values/${encodeURIComponent(tenTab)}!A1?valueInputOption=RAW`, {
-    method: 'PUT', body: JSON.stringify({ values: [[...COT_SHEET], ...hangSheet(don)] }),
+    method: 'PUT', body: JSON.stringify({ values: [[...dau], ...hang] }),
   });
-  return { ok: true, detail: `ghi ${don.length} dòng vào tab ${tenTab}` };
+  return { ok: true, detail: `ghi ${hang.length} dòng vào tab ${tenTab}` };
 }

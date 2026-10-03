@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COT_SHEET, hangSheet, type DonSheet } from './hang-sheet';
+import { COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty, type DonSheet } from './hang-sheet';
 import { tenTabKy } from './day-sheet';
 
 /* Số THẬT của đơn 26-INSLG-SV-0007 (kalisakol85) đọc từ bảng đối soát ngày 03/10/2026. */
@@ -47,8 +47,42 @@ describe('hangSheet', () => {
 describe('tenTabKy', () => {
   /* Nếp sheet Kalisa đang dùng: "7.26", "8.26" — tháng không có số 0 ở đầu, năm 2 chữ số. */
   it('đúng nếp tab của sheet đang dùng', () => {
-    expect(tenTabKy('2026-07-01')).toBe('7.26');
-    expect(tenTabKy('2026-10-01')).toBe('10.26');
-    expect(tenTabKy('2026-09-01T00:00:00.000Z')).toBe('9.26');
+    expect(tenTabKy('2026-07-01', 'freight')).toBe('7.26');
+    expect(tenTabKy('2026-10-01', 'freight')).toBe('10.26');
+    expect(tenTabKy('2026-09-01T00:00:00.000Z', 'freight')).toBe('9.26');
+  });
+
+  /* Một brand có thể có CẢ bảng kê cước lẫn bảng kê thuế trong CÙNG MỘT KỲ — lekieu và
+     tom-fried đều vậy ở kỳ 09. Thiếu hậu tố là bảng này xoá tab của bảng kia. */
+  it('bảng kê thuế đi tab riêng, đúng nếp "8.26 Duty" của sheet Kalisa', () => {
+    expect(tenTabKy('2026-09-01', 'duty')).toBe('9.26 Duty');
+    expect(tenTabKy('2026-08-01', 'duty')).toBe('8.26 Duty');
+  });
+
+  it('hai loại cùng kỳ KHÔNG bao giờ trùng tên tab', () => {
+    expect(tenTabKy('2026-09-01', 'freight')).not.toBe(tenTabKy('2026-09-01', 'duty'));
+  });
+});
+
+describe('hangSheetDuty', () => {
+  /* Bố cục 8 cột đọc từ chính tab "8.26 Duty" của sheet Kalisa — ít cột hơn hẳn bảng cước vì
+     thuế là khoản THU HỘ nguyên giá: không markup, không nhiên liệu, không VAT. */
+  const d = {
+    stt: 1, maBrand: '#KLS1992', tracking: '873969176425', ngayDi: '2026-07-06', nuoc: 'SA',
+    soHoaDon: '736058090', duty: 325_901, maSms: '26-INSLG-SV-0001',
+  };
+  it('đúng 8 cột, đúng thứ tự', () => {
+    expect(COT_SHEET_DUTY).toHaveLength(8);
+    expect(COT_SHEET_DUTY[5]).toBe('Số hoá đơn FedEx');
+    expect(COT_SHEET_DUTY[6]).toBe('Duty/Tax (Nước tới)');
+  });
+  it('tiền có hậu tố đ, ngày là số serial', () => {
+    const h = hangSheetDuty([d])[0];
+    expect(h[3]).toBe(46209);
+    expect(h[6]).toBe('325.901 đ');
+    expect(h[7]).toBe('26-INSLG-SV-0001');
+  });
+  it('nhiều hoá đơn cho một đơn thì nối lại, không bỏ bớt', () => {
+    expect(hangSheetDuty([{ ...d, soHoaDon: '734110283 + 736056768' }])[0][5]).toBe('734110283 + 736056768');
   });
 });
