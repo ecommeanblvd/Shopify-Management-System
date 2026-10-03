@@ -12,6 +12,27 @@ import { khoa, monPoConNhan } from './po-con-nhan';
 
 const GIOI_HAN = 20;
 
+/* ── Chiếc TRƯỢT QC KHÔNG tính là "đã nhận" (CEO 03/10/2026) ──
+ *
+ * Chiếc fail bị đặt `stock_status = 'qc_failed'` và `current_warehouse_code` để NULL — nó không
+ * bao giờ vào tồn, không bán được. Nhưng đếm nó là một lượt nhận thì dòng "đặt 1" coi như đủ
+ * ngay khi chiếc đầu hỏng, và món BIẾN MẤT khỏi ô tìm: vendor gửi chiếc thay thế, kho gõ mã đơn
+ * ra ô trống. Bảo báo, đo được 16 dòng đơn Shopify đang kẹt (đặt 1 · nhận 1 · fail 1 · pass 0).
+ *
+ * Hai sự thật ngược nhau trên cùng một chiếc: không phải hàng, mà vẫn là một lượt nhận. Ô tìm
+ * trả lời câu "còn phải nhận gì nữa" nên nó phải đếm HÀNG, không đếm lượt.
+ *
+ * BA nguồn đếm, cùng một luật. Khai cạnh nhau để ai sửa một vế thì thấy ngay phải sửa cả ba —
+ * hai bản của một câu hỏi thì sớm muộn cũng phân kỳ.
+ *
+ * Đo trước khi mở (03/10/2026): vế SMS của PO +0 món, vế Lark +4 món còn nhập được trên 1.128
+ * dòng đã tick Báo đơn — luật "đơn đã đủ thì chặn cả đơn" hấp thụ 419/423 cặp có chiếc fail.
+ */
+/** `goods_receipt_items` — enum `qc_result`. Dùng cho cả nhánh Shopify (bí danh `gi.`) và PO. */
+const KHONG_TINH_FAIL = sql`qc_result IS DISTINCT FROM 'fail'`;
+/** `lark_wh_inventory` — cột chọn tay trên Lark, giá trị đúng chữ `QC Failed`. */
+const KHONG_TINH_FAIL_LARK = sql`coalesce(qc_check, '') <> 'QC Failed'`;
+
 
 /**
  * Món của đơn đang UNFULFILLED / PARTIALLY_FULFILLED mà CHƯA nhận đủ.
@@ -64,7 +85,8 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
     datSl: schema.shopifyOrderLines.quantity,
     daNhan: sql<number>`(SELECT count(*)::int FROM goods_receipt_items gi
       WHERE gi.order_id = ${schema.shopifyOrders.id}
-        AND gi.sku IS NOT DISTINCT FROM ${schema.shopifyOrderLines.sku})`,
+        AND gi.sku IS NOT DISTINCT FROM ${schema.shopifyOrderLines.sku}
+        AND gi.${KHONG_TINH_FAIL})`,
   })
     .from(schema.shopifyOrderLines)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shopifyOrderLines.orderId))
@@ -160,11 +182,11 @@ async function demDaNhanPo(cacDon: readonly string[]): Promise<Map<string, numbe
   const lark = await db.execute<{ don: string; sku: string; n: number }>(sql`
     SELECT order_number AS don, sku, count(*)::int AS n FROM lark_wh_inventory
     WHERE regexp_replace(coalesce(order_number,''), '^#', '') IN ${khongDau2}
-      AND sku IS NOT NULL GROUP BY 1, 2`);
+      AND sku IS NOT NULL AND ${KHONG_TINH_FAIL_LARK} GROUP BY 1, 2`);
   const sms = await db.execute<{ don: string; sku: string; n: number }>(sql`
     SELECT po_order_number AS don, sku, count(*)::int AS n FROM goods_receipt_items
     WHERE regexp_replace(coalesce(po_order_number,''), '^#', '') IN ${khongDau2}
-      AND sku IS NOT NULL GROUP BY 1, 2`);
+      AND sku IS NOT NULL AND ${KHONG_TINH_FAIL} GROUP BY 1, 2`);
   for (const r of [...lark.rows, ...sms.rows]) {
     const k = khoa(`#${String(r.don).replace(/^#/, '')}`, r.sku);
     m.set(k, (m.get(k) ?? 0) + Number(r.n));
