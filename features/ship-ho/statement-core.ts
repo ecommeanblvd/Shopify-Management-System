@@ -17,6 +17,8 @@ import { payloadStatementIssued, payloadStatementAdjustment, type DongBangKeMmp 
 import { docDongDieuChinh, docAnhChup, tinhDongDieuChinh } from './dieu-chinh';
 import { banSuKienBangKe } from './statement-outbox';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
+import { kiemCongChotKy, type DonKiemCong, type LoiCong } from './cong-chot-ky';
+import type { TuanFuel } from './tuan-fuel';
 
 export async function tinhLaiTongBangKe(id: string): Promise<{
   ok: boolean; error?: string; orderCount: number; totalChargedVnd: number; truoc?: number;
@@ -386,6 +388,48 @@ export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detai
  * Lượt bắn MMP là best-effort: hỏng KHÔNG lùi trạng thái (CEO 21/09/2026) — nhưng từ 01/10 nó
  * có dòng outbox nên cron tự thử lại và sau này còn tra được, thay vì mất cùng dòng thông báo.
  */
+
+/**
+ * Nạp dữ liệu rồi chạy cổng rà soát cho một bảng kê.
+ *
+ * Tách khỏi `phatHanhBangKe` để script `soi-cong-chot-ky.ts` dùng lại y nguyên — cổng chạy thử
+ * và cổng chạy thật phải là MỘT, không phải hai bản chép tay. Bản đầu của script nạp bảng tuần
+ * xăng dầu chỉ của FedEx và chặn nhầm hai đơn Aramex; lỗi đó sẽ lặp lại nếu có hai bản nạp.
+ */
+export async function chayCongChotKy(statementId: string): Promise<LoiCong[]> {
+  const n = (v: unknown) => Number(v ?? 0);
+  // Bảng tuần THEO TỪNG HÃNG: 21/09/2026 FedEx 51,75% còn Aramex 30% phẳng.
+  const tuanTheoHang = new Map<string, TuanFuel[]>();
+  for (const x of (await db.execute<Record<string, unknown>>(sql`
+    SELECT s.carrier_account_id acc, s.starts_at::date tu, s.ends_at::date den, s.value::numeric pct
+    FROM carrier_surcharges s
+    WHERE s.kind = 'fuel_percent' AND s.starts_at IS NOT NULL ORDER BY s.starts_at;`)).rows) {
+    const k = String(x.acc);
+    const ds = tuanTheoHang.get(k) ?? [];
+    ds.push({ tu: String(x.tu), den: x.den ? String(x.den) : null, pct: n(x.pct) });
+    tuanTheoHang.set(k, ds);
+  }
+  const don = (await db.execute<Record<string, unknown>>(sql`
+    SELECT o.code, ca.name hang, o.carrier_account_id acc, o.picked_up_at,
+           o.shipped_at::date gui, o.actual_bill_breakdown ab
+    FROM ship_ho_orders o LEFT JOIN carrier_accounts ca ON ca.id = o.carrier_account_id
+    WHERE o.statement_id = ${statementId};`)).rows
+    .map((x): DonKiemCong => {
+      const ab = x.ab as Record<string, unknown> | null;
+      return {
+        code: String(x.code), tenHang: x.hang == null ? null : String(x.hang),
+        carrierAccountId: x.acc == null ? null : String(x.acc),
+        pickedUpAt: x.picked_up_at as Date | null, shippedAt: x.gui == null ? null : String(x.gui),
+        bill: ab == null ? null : {
+          base: n(ab.base), discount: n(ab.discount), remote: n(ab.remote), demand: n(ab.demand),
+          signature: n(ab.signature), residential: n(ab.residential),
+          addressCorrection: n(ab.addressCorrection), fuel: n(ab.fuel),
+        },
+      };
+    });
+  return kiemCongChotKy(don, tuanTheoHang);
+}
+
 export async function phatHanhBangKe(id: string): Promise<{
   ok: boolean; error?: string; mmp?: { ok: boolean; detail: string };
 }> {
@@ -407,6 +451,16 @@ export async function phatHanhBangKe(id: string): Promise<{
   const lech = await donLechKy(id);
   if (lech.length > 0) {
     return { ok: false, error: `Bảng kê có ${lech.length} đơn mốc kỳ nằm ngoài kỳ này: ${lech.slice(0, 8).join(', ')}${lech.length > 8 ? '…' : ''} — chạy lại lệnh gom để xếp đúng kỳ trước khi phát hành` };
+  }
+
+  /* Cổng rà soát (CEO 03/10/2026): ngày đi hàng và %xăng dầu phải khớp TRƯỚC khi kỳ rời khỏi
+   * trạng thái nháp. Trước đó kỳ phát hành mà không có phép kiểm nào về hai thứ này, và một
+   * con số sai (52,65% ở #KLS1998) đã kịp ra tới bảng gửi brand. */
+  const congLoi = await chayCongChotKy(id);
+  if (congLoi.length > 0) {
+    const vd = congLoi.slice(0, 5).map((l) => `${l.code}: ${l.ly}`).join(' · ');
+    return { ok: false,
+      error: `Cổng rà soát chặn ${congLoi.length} đơn — ${vd}${congLoi.length > 5 ? ` · còn ${congLoi.length - 5} đơn` : ''}` };
   }
 
   await db.update(schema.shipHoStatements)
