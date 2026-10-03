@@ -60,9 +60,11 @@ export function BangSoNhap({
   const [trangThai, setTrangThai] = useState('tat-ca');
   const [locBbgn, setLocBbgn] = useState(false);
   const [moLich, setMoLich] = useState(false);
-  /** Dòng đang mở chi tiết. Giữ cả dòng chứ không giữ id: dữ liệu đã có sẵn trong tay,
-   *  đi hỏi máy chủ lần nữa là dựng nguồn thứ hai cho cùng một sự thật. */
-  const [xem, setXem] = useState<DongSoNhap | null>(null);
+  /* Giữ ID dòng đang mở, KHÔNG giữ bản sao của dòng: thêm ảnh lỗi trong modal làm máy chủ dựng
+   * lại trang, `dong` về bản mới — mà bản sao giữ trong state thì vẫn là bản cũ, nên ảnh vừa
+   * thêm không hiện ra. Tra lại từ `dong` thì modal luôn nói đúng thứ bảng đang nói. */
+  const [xemId, setXemId] = useState<string | null>(null);
+  const xem = xemId === null ? null : dong.find((r) => r.recordId === xemId) ?? null;
 
   const di = (p: { ngay?: string; kho?: string }) => {
     const sp = new URLSearchParams();
@@ -265,7 +267,7 @@ export function BangSoNhap({
                    xem ảnh lại bị ném sang một hộp thoại khác. */
                 onClick={(e) => {
                   if ((e.target as HTMLElement).closest('button,a,input,select')) return;
-                  setXem(r);
+                  setXemId(r.recordId);
                 }}
                 /* Bàn phím đi được đúng đường đó: dòng là một nút thật, không phải div bắt chuột. */
                 role="button"
@@ -274,7 +276,7 @@ export function BangSoNhap({
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
                   e.preventDefault();
-                  setXem(r);
+                  setXemId(r.recordId);
                 }}
                 className={`grid h-[38px] cursor-pointer items-center gap-3 px-3.5 text-[13px] outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-1 focus-visible:ring-ring ${
                   r.noiTiep ? '' : 'border-t border-border'
@@ -342,7 +344,7 @@ export function BangSoNhap({
         </div>
       </div>
 
-      <ChiTietDong dong={xem} onDong={() => setXem(null)} />
+      <ChiTietDong dong={xem} onDong={() => setXemId(null)} />
     </div>
   );
 }

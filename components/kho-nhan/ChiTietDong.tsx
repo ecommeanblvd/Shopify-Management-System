@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { nhomQc, nhomKho, tenBrand, tachTenBienThe } from '@/features/kho-nhan/dong-so-nhap';
 import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
 import type { DongSoNhap, FileLark } from '@/features/kho-nhan/types';
+import { NutBoSungFile } from './NutBoSungFile';
 
 /**
  * Chi tiết MỘT dòng Sổ nhập (CEO 03/10/2026: "chưa click vào record dòng nào để mở modal ra xem
@@ -63,7 +64,11 @@ const hoacGach = (s: string | null) => (s ?? '').trim() || '—';
  * Bấm vào mở khung xem từng tấm — ảnh và PDF đều xem TẠI CHỖ, không nhảy tab (CEO 03/10/2026:
  * "bấm vào thì mở modal ảnh luôn tại tab url đó"). Nhảy tab là mất chỗ đang đứng.
  */
-function KhoiAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: number) => void }) {
+function KhoiAnh({ ten, ds, onMo, duoi }: {
+  ten: string; ds: FileLark[]; onMo: (i: number) => void;
+  /** Thứ gắn dưới thẻ — chỗ đặt nút thêm ảnh. Để trống thì khối chỉ để xem. */
+  duoi?: React.ReactNode;
+}) {
   const dau = ds[0];
   return (
     <div className="min-w-0">
@@ -95,6 +100,7 @@ function KhoiAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: num
           </button>
         </div>
       )}
+      {duoi}
     </div>
   );
 }
@@ -257,7 +263,15 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
     <div className="grid gap-3 sm:grid-cols-3">
       <KhoiAnh ten="Biên bản bàn giao" ds={dong.bbBanGiao} onMo={mo(dong.bbBanGiao)} />
       <KhoiAnh ten="Ảnh thực tế sản phẩm" ds={dong.anhHangDen} onMo={mo(dong.anhHangDen)} />
-      <KhoiAnh ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} onMo={mo(dong.anhLoiQc)} />
+      <KhoiAnh
+        ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} onMo={mo(dong.anhLoiQc)}
+        /* Nút thêm ảnh đặt ở ĐÂY chứ không phải ô 52px trên bảng (CEO 03/10/2026): ô bảng đã có
+           ảnh thì không còn chỗ cho nút, mà bằng chứng lỗi thì còn bổ sung dài dài. Chỉ dòng
+           TRƯỢT QC mới có — gắn ảnh lỗi vào một chiếc đạt là ghi một lỗi không có thật. */
+        duoi={mq === 'hong'
+          ? <NutBoSungFile recordId={dong.recordId} loai="loi_qc" maDon={dong.orderNumber} bienThe="nut" />
+          : null}
+      />
     </div>
 
     {dong.dinhDanh && (

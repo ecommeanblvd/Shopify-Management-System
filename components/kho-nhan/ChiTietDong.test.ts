@@ -52,6 +52,23 @@ describe('ChiTietDong', () => {
     expect(html).toContain('aria-label="Xem ảnh thực tế sản phẩm"');   // 1 tệp → không kèm số
   });
 
+  /* CEO 03/10/2026: ô 52px trên bảng đã có ảnh thì hết chỗ cho nút, nên nút thêm nằm ở đây. */
+  it('dòng trượt QC có nút thêm ảnh lỗi, dán được', () => {
+    expect(html).toContain('aria-label="Thêm ảnh lỗi qc"');
+    expect(html).toContain('dán được');
+  });
+
+  it('dòng QC Pass thì KHÔNG có nút thêm ảnh lỗi', () => {
+    expect(ve({ ...d, qcCheck: 'QC Pass', lyDoFail: null, anhLoiQc: [] }))
+      .not.toContain('aria-label="Thêm ảnh lỗi qc"');
+  });
+
+  /* Hai khối kia không có nút: ảnh hàng đến và biên bản chụp một lần cho cả lô, và luật của
+     chúng là KHÔNG đụng vào dòng đã có file. */
+  it('chỉ khối ảnh lỗi có nút thêm, hai khối kia không', () => {
+    expect(html.match(/aria-label="Thêm /g) ?? []).toHaveLength(1);
+  });
+
   /* Ba khối LUÔN hiện, kể cả khối rỗng: "chưa có biên bản" là tin đáng biết, và giấu khối đi
      thì ba cột nhảy chỗ tuỳ dòng. */
   it('vẽ đủ ba khối ảnh, khối rỗng ghi rõ Chưa có', () => {
