@@ -95,19 +95,35 @@ nào.
 Sau khi kỳ tạo xong: ghi tab tên theo kỳ (`9.26`) vào sheet của brand, đúng bố cục sheet Kalisa
 đang dùng (21 cột, `Mã đơn` → `Mã SMS`).
 
-**Brand chưa có sheet thì hệ thống TỰ TẠO** (CEO chốt 03/10), rồi chia sẻ quyền `writer` cho
-CEO và ghi id sheet vào cột MỚI `ship_ho_partners.doi_soat_sheet_id` (migration riêng). Sheet
-Kalisa đang có thì nhập sẵn id của nó vào cột đó, không tạo lại.
+**Hệ thống KHÔNG tự tạo được sheet mới.** CEO đã bật Drive API ngày 03/10 và em thử thật:
 
-**Ràng buộc đã kiểm 03/10:** `spreadsheets.create` nằm trong Sheets API (đã bật), nhưng **chia
-sẻ file cần Drive API** — hiện **CHƯA BẬT** (`HTTP 403: Google Drive API has not been used in
-project 76133261392`). Không bật thì sheet tạo ra nằm trong Drive của service account và **không
-ai mở được**. Vậy nên:
+```
+Sheets spreadsheets.create → 403 "The caller does not have permission"
+Drive  files.create        → 403 storageQuotaExceeded
+                             "The user's Drive storage quota has been exceeded"
+Drive  files.copy          → 403 cùng lỗi
+```
 
-- Việc của CEO: bật **Google Drive API** cho project `shopify-management-510413`.
-- Nếu không bật: hệ thống **không tự tạo sheet**, mà báo *"brand chưa có sheet — tạo và chia sẻ
-  cho `sms-sheet-manager@…` rồi dán link vào trang đối tác"*. Thà bảo người làm còn hơn tạo ra
-  một file không ai mở được.
+`drive/v3/about` xác nhận `storageQuota.limit = 0`: **service account không có dung lượng Drive
+riêng**, nên không sở hữu được file nào. Đây là giới hạn của tài khoản dịch vụ ngoài Google
+Workspace Shared Drive, không phải thiếu quyền — bật thêm API không gỡ được.
+
+Việc service account LÀM ĐƯỢC trên sheet đã chia sẻ (đã kiểm thật 02/10): đọc · **tạo tab** ·
+ghi ô · xoá tab · đổi locale · đặt định dạng.
+
+**Nên chia việc theo đúng ranh giới đó:**
+
+| Việc | Ai làm | Tần suất |
+|---|---|---|
+| Tạo sheet rỗng cho brand mới, chia sẻ `writer` cho `sms-sheet-manager@…` | CEO | một lần mỗi brand (~5 brand) |
+| Dán link sheet vào trang đối tác | CEO | một lần mỗi brand |
+| Tạo tab cho kỳ, ghi toàn bộ dòng, đặt locale/định dạng | hệ thống | mỗi lần chốt kỳ |
+
+Brand chưa có link sheet thì cổng **không chặn** — kỳ vẫn tạo, MMP vẫn nhận, phần sheet trả một
+dòng báo việc: *"brand chưa có sheet đối soát — tạo rồi chia sẻ cho `sms-sheet-manager@…`"*.
+
+Id sheet lưu ở cột MỚI `ship_ho_partners.doi_soat_sheet_id` (migration riêng). Sheet Kalisa
+đang có thì nhập sẵn id của nó, không tạo lại.
 
 Ghi theo nếp đã dùng cho sheet Kalisa: locale `vi_VN`, cột ngày định dạng `dd/mm/yyyy`, tiền
 là chuỗi `1.234.567 đ`.
@@ -146,9 +162,12 @@ kỳ nào hôm nay sẽ bị chặn, vì lý do gì. Số đó phải giải th�
 
 ## 10. Điều kiện cần từ CEO
 
-1. Bật **Google Drive API** cho project `shopify-management-510413` (nếu muốn hệ thống tự tạo
-   sheet cho brand chưa có). Không bật thì mọi phần khác vẫn chạy; riêng brand chưa có sheet
-   sẽ nhận một dòng báo việc thay vì một sheet mới.
+1. ~~Bật Google Drive API~~ — **đã bật 03/10**. Nhưng bật rồi vẫn không tạo được sheet: service
+   account không có dung lượng Drive (xem mục 6). Nên:
+2. **Tạo sheet rỗng cho từng brand chưa có** và chia sẻ quyền `writer` cho
+   `sms-sheet-manager@shopify-management-510413.iam.gserviceaccount.com`, rồi dán link vào
+   trang đối tác. Một lần mỗi brand. Cách nhanh nhất: mở sheet Kalisa → *Tạo bản sao* → xoá
+   dữ liệu cũ → đổi tên → chia sẻ.
 
 ## 11. Thứ tự làm
 
