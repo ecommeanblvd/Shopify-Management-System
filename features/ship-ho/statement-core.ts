@@ -439,8 +439,10 @@ export async function chayCongChotKy(statementId: string): Promise<LoiCong[]> {
 export async function phatHanhBangKe(id: string): Promise<{
   ok: boolean; error?: string; mmp?: { ok: boolean; detail: string };
 }> {
-  const [ht] = await db.select({ status: schema.shipHoStatements.status, type: schema.shipHoStatements.type })
-    .from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
+  const [ht] = await db.select({
+    status: schema.shipHoStatements.status, type: schema.shipHoStatements.type,
+    brand: schema.shipHoStatements.partnerBrandSlug,
+  }).from(schema.shipHoStatements).where(eq(schema.shipHoStatements.id, id)).limit(1);
   if (!ht) return { ok: false, error: 'Không tìm thấy bảng kê' };
   if (ht.status !== 'draft') return { ok: false, error: `Bảng kê đã ${ht.status === 'paid' ? 'thu' : 'phát hành'} — không phát hành lại` };
 
@@ -473,6 +475,10 @@ export async function phatHanhBangKe(id: string): Promise<{
     .set({ status: 'issued', issuedAt: new Date() })
     .where(eq(schema.shipHoStatements.id, id));
   const mmp = (await banBangKeSangMmp(id)) ?? undefined;
+  /* Sheet đi SAU và ĐỘC LẬP: MMP là hợp đồng, sheet là bản tiện đọc. Sheet hỏng không được làm
+   * hỏng việc kỳ đã phát hành — nên nó đi qua outbox và cron thử lại, y như lượt gửi MMP. */
+  await banSuKienBangKe(id, ht.brand, 'statement.sheet', { statementId: id });
+
   return { ok: true, mmp };
 }
 

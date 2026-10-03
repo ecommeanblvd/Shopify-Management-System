@@ -15,7 +15,15 @@ import { pushStatementEvent } from './statement-push';
 /** Thử tối đa bao nhiêu lần rồi bỏ cuộc. Cùng mức với outbox cấp đơn. */
 export const LAN_THU_TOI_DA = 8;
 
-export type LoaiSuKienKe = 'statement.issued' | 'statement.paid';
+export type LoaiSuKienKe = 'statement.issued' | 'statement.paid' | 'statement.sheet';
+
+/**
+ * `statement.sheet` KHÔNG đi MMP — nó ghi lên Google Sheet của brand.
+ *
+ * Vẫn nằm trong outbox vì cùng tính chất với lượt gửi MMP: gọi ra ngoài, hỏng thì phải thử lại
+ * chứ không được âm thầm bỏ. Dùng chung bảng và chung cron thử lại.
+ */
+export const SU_KIEN_SHEET = 'statement.sheet';
 
 /**
  * THUẦN: dòng này còn đáng thử lại không.
@@ -36,8 +44,23 @@ interface HangKe {
 
 /** Gửi một dòng outbox rồi ghi kết quả. Không ném ra ngoài trừ lỗi lập trình. */
 export async function guiHangKe(r: HangKe): Promise<{ ok: boolean; detail: string }> {
+  if (r.event === SU_KIEN_SHEET) {
+    const { dayBangKeLenSheet } = await import('./day-sheet');
+    let kqSheet: { ok: boolean; detail: string };
+    try {
+      kqSheet = await dayBangKeLenSheet(r.statementId);
+    } catch (e) {
+      kqSheet = { ok: false, detail: e instanceof Error ? e.message : String(e) };
+    }
+    await db.update(schema.shipHoStatementEvents).set({
+      deliveryStatus: kqSheet.ok ? 'delivered' : 'failed',
+      attempts: r.attempts + 1, lastAttemptAt: new Date(),
+      lastError: kqSheet.ok ? null : kqSheet.detail, lastHttpStatus: null,
+    }).where(eq(schema.shipHoStatementEvents.id, r.id));
+    return kqSheet;
+  }
   const kq = await pushStatementEvent(
-    r.event as LoaiSuKienKe, r.brandSlug, r.payload as Record<string, unknown>,
+    r.event as 'statement.issued' | 'statement.paid', r.brandSlug, r.payload as Record<string, unknown>,
     // Mốc của DÒNG, không phải lúc gửi — xem `pushStatementEvent`.
     r.occurredAt.toISOString(),
   );
