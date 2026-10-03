@@ -2354,6 +2354,13 @@ export const shipHoPartners = pgTable('ship_ho_partners', {
   tierCode: text('tier_code').notNull().default('standard'),
   tierOverrideCode: text('tier_override_code'),
   tierUpdatedAt: timestamp('tier_updated_at'),
+  /**
+   * Id sheet đối soát của brand. NULL = chưa có.
+   *
+   * Hệ thống KHÔNG tự tạo được sheet (tài khoản dịch vụ không có dung lượng Drive — Google trả
+   * `storageQuotaExceeded`). CEO tạo và chia sẻ quyền writer, rồi dán id vào đây.
+   */
+  doiSoatSheetId: text('doi_soat_sheet_id'),
   note: text('note'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
