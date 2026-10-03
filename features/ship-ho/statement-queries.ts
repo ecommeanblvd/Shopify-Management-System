@@ -45,8 +45,8 @@ export async function getShipHoStatement(id: string) {
     // Kỳ duty xếp theo ngày push sang MMP (CEO 22/09/2026), nên hoá đơn kèm dòng là TOÀN BỘ hoá
     // đơn duty đã cộng cho đơn (`duty_bill_numbers`, gồm khoá dự phòng bill:<id> khi FedEx không
     // ghi số) và ngày hoá đơn mới nhất — để brand tra đúng tờ khai.
-    const { rows } = await db.execute<{ code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; dutyVnd: string; billNumber: string | null; issueDate: string | null }>(sql`
-      SELECT o.code, o.mmp_ref AS "mmpRef", o.brand_reference AS "brandReference", o.tracking_number AS "trackingNumber", o.shipped_at::text AS "shippedAt", o.actual_duty_vnd AS "dutyVnd",
+    const { rows } = await db.execute<{ code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; pickedUpAt: Date | null; dutyVnd: string; billNumber: string | null; issueDate: string | null }>(sql`
+      SELECT o.code, o.mmp_ref AS "mmpRef", o.brand_reference AS "brandReference", o.tracking_number AS "trackingNumber", o.shipped_at::text AS "shippedAt", o.picked_up_at AS "pickedUpAt", o.actual_duty_vnd AS "dutyVnd",
              array_to_string(o.duty_bill_numbers, ' + ') AS "billNumber",
              (SELECT max(COALESCE(b.issue_date, b.period_start))::text FROM carrier_bill_lines l JOIN carrier_bills b ON b.id = l.bill_id
                WHERE l.tracking_number = o.tracking_number AND l.duty > 0) AS "issueDate"
@@ -56,7 +56,8 @@ export async function getShipHoStatement(id: string) {
   }
   const orders = await db.select({
       code: schema.shipHoOrders.code, mmpRef: schema.shipHoOrders.mmpRef, brandReference: schema.shipHoOrders.brandReference, trackingNumber: schema.shipHoOrders.trackingNumber,
-      shippedAt: schema.shipHoOrders.shippedAt, country: schema.shipHoOrders.country,
+      shippedAt: schema.shipHoOrders.shippedAt, pickedUpAt: schema.shipHoOrders.pickedUpAt,
+      country: schema.shipHoOrders.country,
       chargedVnd: schema.shipHoOrders.chargedVnd, actualChargedVnd: schema.shipHoOrders.actualChargedVnd, reconcileStatus: schema.shipHoOrders.reconcileStatus,
       reconcileDecision: schema.shipHoOrders.reconcileDecision,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd, marginVnd: schema.shipHoOrders.marginVnd, actualDutyVnd: schema.shipHoOrders.actualDutyVnd,

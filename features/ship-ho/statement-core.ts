@@ -18,6 +18,7 @@ import { docDongDieuChinh, docAnhChup, tinhDongDieuChinh } from './dieu-chinh';
 import { banSuKienBangKe } from './statement-outbox';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
 import { kiemCongChotKy, type DonKiemCong, type LoiCong } from './cong-chot-ky';
+import { ngayDiHang } from './ngay-di-hang';
 import type { TuanFuel } from './tuan-fuel';
 
 export async function tinhLaiTongBangKe(id: string): Promise<{
@@ -340,7 +341,9 @@ export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detai
   /* Nạp khoản phí CẢ LÔ một lượt trước vòng lặp — hỏi từng đơn là một lượt đi CSDL mỗi dòng. */
   const phi = await khoanPhiChoBangKe(data.orders.map((x) => (x as { code: string }).code), data.statement.type as LoaiBangKe);
   for (const o of data.orders) {
-    const r = o as { code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null; shippedAt: string | null; giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
+    const r = o as { code: string; mmpRef: string | null; brandReference: string | null;
+      trackingNumber: string | null; shippedAt: string | null; pickedUpAt: Date | null;
+      giaThuVnd: number | null; billNumber?: string | null; issueDate?: string | null };
     // Đơn đã vào kê (statementId/dutyStatementId gán ở generateStatement) LẼ RA luôn có giaThuVnd
     // — null ở đây là bất thường (dữ liệu đổi giữa lúc gom kê và lúc gửi); bỏ khỏi payload MMP
     // thay vì báo lệch giả bằng 0, chỉ log cảnh báo.
@@ -348,9 +351,12 @@ export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detai
       console.warn(`[statement-push] bỏ đơn ${r.code} khỏi statement.issued ${id}: giaThuVnd null`);
       continue;
     }
+    /* NGÀY ĐI HÀNG, không phải ngày tạo nhãn: brand đối chiếu %xăng dầu theo tuần của ngày
+     * này. Kèm nguồn để kế toán MMP biết dòng nào có mốc hãng xác nhận. */
+    const ngay = ngayDiHang(r);
     dong.push({
       code: r.code, mmpRef: r.mmpRef, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
-      shippedAt: r.shippedAt, amountVnd: r.giaThuVnd,
+      shippedAt: ngay.ngay, nguonNgayDi: ngay.nguon, amountVnd: r.giaThuVnd,
       ...(phi.get(r.code) ?? {}),
       ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
     });

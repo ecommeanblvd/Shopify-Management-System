@@ -13,7 +13,20 @@ import type { KhoanPhiMmp } from './bang-ke-khoan-phi';
 
 export interface DongBangKeMmp {
   code: string; mmpRef: string | null; brandReference: string | null; trackingNumber: string | null;
-  shippedAt: string | null; amountVnd: number; fedexInvoiceNumber?: string | null; invoiceDate?: string | null;
+  /**
+   * NGÀY HÀNG RỜI KHO, không phải ngày tạo nhãn (CEO 03/10/2026).
+   *
+   * Brand đối chiếu %xăng dầu theo tuần của ngày này, mà hai mốc lệch nhau tới 3 ngày
+   * (AWB 873918787369: tạo nhãn 03/07, hãng lấy hàng 06/07).
+   */
+  shippedAt: string | null;
+  /**
+   * Con số `shippedAt` đến từ đâu: `hang` = mốc quét của hãng · `lark` = ngày đội logistics
+   * điền. Aramex HN không có API tra cứu nên luôn là `lark` — ngoại lệ KHAI BÁO, để kế toán
+   * MMP biết dòng nào có mốc hãng xác nhận và dòng nào không.
+   */
+  nguonNgayDi?: 'hang' | 'lark';
+  amountVnd: number; fedexInvoiceNumber?: string | null; invoiceDate?: string | null;
   /**
    * KHOẢN PHÍ chi tiết (CEO 30/09/2026) — kế toán MMP trước nay chỉ có MỘT con số `amountVnd`
    * nên vẫn phải xin file tay của Đức. Cộng mọi `amountVnd` của `fees` ra đúng `amountVnd` của
