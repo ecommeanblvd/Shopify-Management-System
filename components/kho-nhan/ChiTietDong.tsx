@@ -93,46 +93,46 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
 
   return (
     <div className="space-y-5">
-    <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
-      <O nhan="Sản phẩm">
-        <span>{ten || '—'}</span>
-        {bienThe && <span className="text-muted-foreground"> · {bienThe}</span>}
-      </O>
-      <O nhan="SKU"><span className="font-mono text-[13px]">{hoacGach(dong.sku)}</span></O>
-      <O nhan="Brand">
-        {brand
-          ? <span className={brand.suyRa ? 'text-muted-foreground' : undefined}>
-              {brand.ten}{brand.suyRa && <span className="text-xs"> (suy từ SKU)</span>}
-            </span>
-          : '—'}
-      </O>
-      <O nhan="Số lượng"><span className="tabular-nums">{dong.soLuong ?? 1}</span></O>
-      <O nhan="Store">{hoacGach(dong.storeFinal)}</O>
-      <O nhan="Ngày nhập kho">{ngayVn(dong.ngayImport)}</O>
-      <O nhan="Kho">
-        {dong.warehouse
-          ? <span className={`rounded-full px-1.5 py-0.5 text-xs ${mauKho(dong.warehouse)}`}>{dong.warehouse}</span>
-          : '—'}
-      </O>
-      <O nhan="Loại nhập">
-        {dong.inventoryType
-          ? <span className={`rounded-full px-1.5 py-0.5 text-xs ${mauLoaiNhap(dong.inventoryType)}`}>{dong.inventoryType}</span>
-          : '—'}
-      </O>
-      <O nhan="Xử lý kho">
-        <span className={CHU_KHO[mk]}>{hoacGach(dong.whAction)}</span>
-      </O>
-      {/* Dòng do hệ thống tạo hay đội kho gõ thẳng trên Lark — cùng thông tin cột `Nguồn`
-          của bảng, để người đọc modal không phải quay ra bảng mới biết. */}
-      <O nhan="Nguồn">
-        <span className={`whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[11px] font-medium ${
-          dong.cuaHeThong
-            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-            : 'bg-muted text-muted-foreground'}`}
-        >
-          {dong.cuaHeThong ? 'Hệ thống' : 'Lark'}
-        </span>
-      </O>
+      <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
+        <O nhan="Sản phẩm">
+          <span>{ten || '—'}</span>
+          {bienThe && <span className="text-muted-foreground"> · {bienThe}</span>}
+        </O>
+        <O nhan="SKU"><span className="font-mono text-[13px]">{hoacGach(dong.sku)}</span></O>
+        <O nhan="Brand">
+          {brand
+            ? <span className={brand.suyRa ? 'text-muted-foreground' : undefined}>
+                {brand.ten}{brand.suyRa && <span className="text-xs"> (suy từ SKU)</span>}
+              </span>
+            : '—'}
+        </O>
+        <O nhan="Số lượng"><span className="tabular-nums">{dong.soLuong ?? 1}</span></O>
+        <O nhan="Store">{hoacGach(dong.storeFinal)}</O>
+        <O nhan="Ngày nhập kho">{ngayVn(dong.ngayImport)}</O>
+        <O nhan="Kho">
+          {dong.warehouse
+            ? <span className={`rounded-full px-1.5 py-0.5 text-xs ${mauKho(dong.warehouse)}`}>{dong.warehouse}</span>
+            : '—'}
+        </O>
+        <O nhan="Loại nhập">
+          {dong.inventoryType
+            ? <span className={`rounded-full px-1.5 py-0.5 text-xs ${mauLoaiNhap(dong.inventoryType)}`}>{dong.inventoryType}</span>
+            : '—'}
+        </O>
+        <O nhan="Xử lý kho">
+          <span className={CHU_KHO[mk]}>{hoacGach(dong.whAction)}</span>
+        </O>
+        {/* Dòng do hệ thống tạo hay đội kho gõ thẳng trên Lark — cùng thông tin cột `Nguồn`
+            của bảng, để người đọc modal không phải quay ra bảng mới biết. */}
+        <O nhan="Nguồn">
+          <span className={`whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[11px] font-medium ${
+            dong.cuaHeThong
+              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : 'bg-muted text-muted-foreground'}`}
+          >
+            {dong.cuaHeThong ? 'Hệ thống' : 'Lark'}
+          </span>
+        </O>
     </div>
 
     {/* Khối QC tách riêng: đây là thứ người mở modal muốn đọc, và là thứ cột hẹp cắt mất. */}
