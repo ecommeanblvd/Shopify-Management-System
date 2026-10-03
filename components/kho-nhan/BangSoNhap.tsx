@@ -19,6 +19,7 @@ import { coLech } from '@/features/kho-nhan/doi-chieu-logic';
 import type { DongSoNhap } from '@/features/kho-nhan/types';
 import { LichNgay } from './LichNgay';
 import { OAnhLark } from './OAnhLark';
+import { ChiTietDong } from './ChiTietDong';
 import { COT_SO_NHAP, LUOI_SO_NHAP, RONG_TOI_THIEU } from '@/features/kho-nhan/cot-so-nhap';
 
 const THU = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -59,6 +60,9 @@ export function BangSoNhap({
   const [trangThai, setTrangThai] = useState('tat-ca');
   const [locBbgn, setLocBbgn] = useState(false);
   const [moLich, setMoLich] = useState(false);
+  /** Dòng đang mở chi tiết. Giữ cả dòng chứ không giữ id: dữ liệu đã có sẵn trong tay,
+   *  đi hỏi máy chủ lần nữa là dựng nguồn thứ hai cho cùng một sự thật. */
+  const [xem, setXem] = useState<DongSoNhap | null>(null);
 
   const di = (p: { ngay?: string; kho?: string }) => {
     const sp = new URLSearchParams();
@@ -256,7 +260,23 @@ export function BangSoNhap({
             return (
               <div
                 key={r.recordId}
-                className={`grid h-[38px] items-center gap-3 px-3.5 text-[13px] hover:bg-muted/50 ${
+                /* Bấm vào dòng mở chi tiết (CEO 03/10/2026). Ô ảnh và nút bổ sung file có việc
+                   riêng của chúng — bấm vào đó KHÔNG được mở modal, nếu không người đang muốn
+                   xem ảnh lại bị ném sang một hộp thoại khác. */
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('button,a,input,select')) return;
+                  setXem(r);
+                }}
+                /* Bàn phím đi được đúng đường đó: dòng là một nút thật, không phải div bắt chuột. */
+                role="button"
+                tabIndex={0}
+                aria-label={`Xem chi tiết ${r.orderNumber ?? ''} ${r.sku ?? ''}`}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  setXem(r);
+                }}
+                className={`grid h-[38px] cursor-pointer items-center gap-3 px-3.5 text-[13px] outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-1 focus-visible:ring-ring ${
                   r.noiTiep ? '' : 'border-t border-border'
                 } ${mq === 'hong' ? 'bg-red-500/[0.07]' : ''}`}
                 style={{ gridTemplateColumns: LUOI_SO_NHAP }}
@@ -316,6 +336,8 @@ export function BangSoNhap({
           })}
         </div>
       </div>
+
+      <ChiTietDong dong={xem} onDong={() => setXem(null)} />
     </div>
   );
 }

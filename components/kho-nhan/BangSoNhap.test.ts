@@ -68,6 +68,14 @@ describe('BangSoNhap — lưới cột', () => {
     expect(html).toContain('Ảnh lỗi');
   });
 
+  /* Bấm vào dòng mở chi tiết. Dòng phải là NÚT THẬT — có `role` và nhãn — chứ không phải div
+     chỉ bắt chuột, nếu không người dùng bàn phím không mở được chi tiết nào. */
+  it('mỗi dòng là một nút mở chi tiết, đi được bằng bàn phím', () => {
+    expect(html.match(/role="button"/g) ?? []).toHaveLength(2);
+    expect(html).toContain('aria-label="Xem chi tiết #MBLVD1 SKU-1"');
+    expect(html).toContain('tabindex="0"');
+  });
+
   it('dòng trượt QC hiện lý do và ảnh lỗi', () => {
     expect(html).toContain('xước chỉ, bẩn');
     expect(html).toContain('/api/kho-nhan/anh-lark/tk1');
