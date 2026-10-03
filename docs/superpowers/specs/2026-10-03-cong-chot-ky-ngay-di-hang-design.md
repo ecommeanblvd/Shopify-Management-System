@@ -56,11 +56,20 @@ phép kiểm đó trước khi tin.
 |---|---|
 | `shipped_at` | ngày Đức gõ trên Lark — **giữ nguyên, không đụng** |
 | `picked_up_at` | mốc hãng lấy hàng, `NULL` khi chưa tra được |
-| `nguon_ngay_di` | `'hang'` \| `'lark'` — **cột mới**, nói rõ con số đến từ đâu |
 
-**Ngày đi hàng dùng ở mọi nơi** = `picked_up_at ?? shipped_at`, kèm `nguon_ngay_di` để người
-đọc biết. Hàm thuần `ngayDiHang(don)` là nơi DUY NHẤT quyết định điều này — không nơi nào tự
-ghép lại, vì hai bản sao của một luật là hẹn ngày chúng lệch nhau (bài học D-201).
+**KHÔNG thêm cột `nguon_ngay_di`.** Bản nháp đầu của spec này có nó; đó là lỗi: nguồn suy được
+hoàn toàn từ `picked_up_at IS NULL`, nên lưu thêm là **hai chỗ giữ cùng một sự thật** và chỉ chờ
+ngày chúng lệch. Đúng loại lỗi mà `fedex-fbo-bill.ts` và `price-structure` vừa mắc (D-201).
+
+Một hàm THUẦN là nơi DUY NHẤT quyết định:
+
+```ts
+export type NguonNgayDi = 'hang' | 'lark';
+export function ngayDiHang(d: { pickedUpAt: Date | null; shippedAt: string | null }):
+  { ngay: string | null; nguon: NguonNgayDi };
+```
+
+Trả cả ngày lẫn nguồn trong một lượt, để không nơi nào phải tự ghép lại.
 
 ## 5. Cổng chốt kỳ
 
@@ -87,7 +96,8 @@ Sau khi kỳ tạo xong: ghi tab tên theo kỳ (`9.26`) vào sheet của brand,
 đang dùng (21 cột, `Mã đơn` → `Mã SMS`).
 
 **Brand chưa có sheet thì hệ thống TỰ TẠO** (CEO chốt 03/10), rồi chia sẻ quyền `writer` cho
-CEO và ghi `sheet_id` vào `ship_ho_partners`.
+CEO và ghi id sheet vào cột MỚI `ship_ho_partners.doi_soat_sheet_id` (migration riêng). Sheet
+Kalisa đang có thì nhập sẵn id của nó vào cột đó, không tạo lại.
 
 **Ràng buộc đã kiểm 03/10:** `spreadsheets.create` nằm trong Sheets API (đã bật), nhưng **chia
 sẻ file cần Drive API** — hiện **CHƯA BẬT** (`HTTP 403: Google Drive API has not been used in
@@ -137,4 +147,14 @@ kỳ nào hôm nay sẽ bị chặn, vì lý do gì. Số đó phải giải th�
 ## 10. Điều kiện cần từ CEO
 
 1. Bật **Google Drive API** cho project `shopify-management-510413` (nếu muốn hệ thống tự tạo
-   sheet cho brand chưa có).
+   sheet cho brand chưa có). Không bật thì mọi phần khác vẫn chạy; riêng brand chưa có sheet
+   sẽ nhận một dòng báo việc thay vì một sheet mới.
+
+## 11. Thứ tự làm
+
+1. `ngayDiHang` + cột ngày trên màn ship hộ — dùng ngay dữ liệu FedEx đã nạp.
+2. Nối UPS vào `napNgayLayHang`.
+3. Ba phép kiểm cổng, chạy **chế độ chỉ đếm** trên mọi kỳ cũ trước khi bật chặn.
+4. Bảng kê đổi sang ngày đi hàng.
+5. Đẩy Google Sheet qua outbox + migration `doi_soat_sheet_id`.
+6. Tự tạo sheet cho brand chưa có — **phụ thuộc mục 10.1**, làm sau cùng vì có thể bị hoãn.
