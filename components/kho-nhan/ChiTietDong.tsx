@@ -51,39 +51,50 @@ function O({ nhan, children }: { nhan: string; children: React.ReactNode }) {
 const hoacGach = (s: string | null) => (s ?? '').trim() || '—';
 
 /**
- * Một nhóm ảnh. Rỗng thì KHÔNG vẽ gì — khối trống chỉ làm modal dài ra.
+ * MỘT khối ảnh: một thẻ duy nhất, mép tấm phía sau hé ra khi còn tấm nữa (CEO 03/10/2026).
  *
- * Ảnh là NÚT mở khung xem ngay trong trang, không phải liên kết `target="_blank"` (CEO
- * 03/10/2026: "bấm vào thì mở modal ảnh luôn tại tab url đó thay vì bị đổi sang tab khác").
- * Nhảy tab là mất chỗ đang đứng: quay lại thì modal chi tiết đã đóng, phải tìm lại dòng từ đầu.
+ * Trước đó mỗi nhóm trải hết ảnh ra thành hàng, ba nhóm xếp dọc nên modal dài ngoẵng và người
+ * đọc phải cuộn mới biết có mấy loại ảnh. Ba khối nằm cạnh nhau, mỗi khối một thẻ: nhìn một cái
+ * là biết loại nào có, loại nào thiếu.
  *
- * PDF cũng mở tại chỗ (CEO 03/10/2026), nhúng bằng <iframe> để dùng trình đọc sẵn có của trình
- * duyệt. Vẫn chừa một đường mở tab mới trong khung xem, cho trình duyệt nào chặn nhúng PDF.
+ * Khối RỖNG vẫn vẽ, chỉ làm mờ: "chưa có biên bản bàn giao" là tin đáng biết, giấu khối đi thì
+ * ba cột nhảy chỗ tuỳ dòng và mắt phải đọc lại nhãn mỗi lần.
+ *
+ * Bấm vào mở khung xem từng tấm — ảnh và PDF đều xem TẠI CHỖ, không nhảy tab (CEO 03/10/2026:
+ * "bấm vào thì mở modal ảnh luôn tại tab url đó"). Nhảy tab là mất chỗ đang đứng.
  */
-function NhomAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: number) => void }) {
-  if (ds.length === 0) return null;
-  const vien = 'block cursor-pointer rounded-lg border border-border transition-colors hover:border-ring';
+function KhoiAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: number) => void }) {
+  const dau = ds[0];
   return (
-    <div>
-      <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-        {ten} · {ds.length}
+    <div className="min-w-0">
+      <p className="mb-1.5 truncate text-[11px] uppercase tracking-wide text-muted-foreground">
+        {ten}{ds.length > 1 && ` · ${ds.length}`}
       </p>
-      <div className="flex flex-wrap gap-2">
-        {ds.map((f, i) => (
-          <button key={f.token} type="button" title={f.ten} onClick={() => onMo(i)}
-                  aria-label={`Xem to ${f.ten}`} className={vien}>
-            {laAnh(f) ? (
+      {!dau ? (
+        <div className="grid h-36 place-items-center rounded-lg border border-dashed border-border text-xs text-muted-foreground">
+          Chưa có
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Mép tấm sau hé ra — dấu hiệu "còn nữa" mà không chiếm thêm chỗ. */}
+          {ds.length > 1 && (
+            <div aria-hidden className="absolute inset-0 translate-x-1.5 translate-y-1.5 rounded-lg border border-border bg-muted" />
+          )}
+          <button
+            type="button" onClick={() => onMo(0)} title={dau.ten}
+            aria-label={`Xem ${ten.toLowerCase()}${ds.length > 1 ? `, ${ds.length} tệp` : ''}`}
+            className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-ring"
+          >
+            {laAnh(dau) ? (
               // eslint-disable-next-line @next/next/no-img-element -- ảnh qua route nội bộ có kiểm quyền, không qua optimiser của Next
-              <img src={`${duong(f)}?w=320`} alt={f.ten} loading="lazy"
-                   className="size-28 rounded-lg object-cover" />
+              <img src={`${duong(dau)}?w=320`} alt={dau.ten} loading="lazy"
+                   className="h-36 w-full object-cover" />
             ) : (
-              <span className="grid size-28 place-items-center rounded-lg text-xs text-muted-foreground">
-                PDF
-              </span>
+              <span className="grid h-36 place-items-center text-xs text-muted-foreground">PDF</span>
             )}
           </button>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -240,11 +251,14 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
         {/* Chữ NGƯỜI gõ trên Lark, giữ nguyên xuống dòng — không rút gọn, không sửa chính tả. */}
         <span className="whitespace-pre-wrap">{hoacGach(dong.lyDoFail)}</span>
       </O>
-      <NhomAnh ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} onMo={mo(dong.anhLoiQc)} />
     </div>
 
-    <NhomAnh ten="Ảnh thực tế sản phẩm" ds={dong.anhHangDen} onMo={mo(dong.anhHangDen)} />
-    <NhomAnh ten="Biên bản bàn giao" ds={dong.bbBanGiao} onMo={mo(dong.bbBanGiao)} />
+    {/* Ba loại ảnh NẰM CẠNH NHAU, thứ tự cố định — người đọc quen chỗ thì không phải đọc nhãn. */}
+    <div className="grid gap-3 sm:grid-cols-3">
+      <KhoiAnh ten="Biên bản bàn giao" ds={dong.bbBanGiao} onMo={mo(dong.bbBanGiao)} />
+      <KhoiAnh ten="Ảnh thực tế sản phẩm" ds={dong.anhHangDen} onMo={mo(dong.anhHangDen)} />
+      <KhoiAnh ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} onMo={mo(dong.anhLoiQc)} />
+    </div>
 
     {dong.dinhDanh && (
       <O nhan="Định danh">

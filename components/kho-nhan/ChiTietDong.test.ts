@@ -32,33 +32,33 @@ describe('ChiTietDong', () => {
     expect(html).toContain('xước chỉ ở vai, bẩn gấu áo — brand đã xác nhận');
   });
 
-  it('ảnh lỗi xem cỡ lớn, không phải ô 28px của bảng', () => {
+  /* CEO 03/10/2026: mỗi loại ảnh một THẺ, không trải hết ảnh ra thành hàng. */
+  it('mỗi khối chỉ vẽ MỘT thẻ, lấy tệp đầu nhóm', () => {
     expect(html).toContain('/api/kho-nhan/anh-lark/loi1?w=320');
-    expect(html).toContain('size-28');
+    expect(html).not.toContain('/api/kho-nhan/anh-lark/loi2');   // tấm thứ hai chỉ hiện khi mở
   });
 
-  /* CEO 03/10/2026: bấm ảnh KHÔNG được nhảy tab. Ảnh phải là nút mở khung xem tại chỗ. */
-  it('ảnh là NÚT mở tại chỗ, không phải liên kết sang tab khác', () => {
-    const anh = /<(button|a)[^>]*>\s*<img[^>]*anh-lark\/loi1/.exec(html);
-    expect(anh?.[1]).toBe('button');
-    expect(html).toContain('aria-label="Xem to loi.jpg"');
+  /* Bấm ảnh KHÔNG được nhảy tab — phải là nút mở khung xem tại chỗ. */
+  it('thẻ ảnh là NÚT, không phải liên kết sang tab khác', () => {
+    expect(/<(button|a)[^>]*>\s*<img[^>]*anh-lark\/loi1/.exec(html)?.[1]).toBe('button');
+    expect(html).not.toContain('target="_blank"');
   });
 
-  /* CEO 03/10/2026: "PDF cũng xem tại chỗ luôn" — nên PDF cũng là nút, không phải liên kết. */
-  it('PDF cũng là nút mở tại chỗ', () => {
-    expect(/<a[^>]*anh-lark\/loi2/.test(html)).toBe(false);
-    expect(html).toContain('aria-label="Xem to bb.pdf"');
+  /* Mép tấm sau hé ra là dấu hiệu "còn nữa" — nhóm một tệp thì không bày. */
+  it('nhóm nhiều tệp có mép tấm sau và số đếm; nhóm một tệp thì không', () => {
+    expect(html).toContain('translate-x-1.5');                 // nhóm ảnh lỗi có 2 tệp
+    expect(html).toContain('Ảnh chụp lỗi QC · 2');
+    expect(html).toContain('aria-label="Xem ảnh chụp lỗi qc, 2 tệp"');
+    expect(html).toContain('aria-label="Xem ảnh thực tế sản phẩm"');   // 1 tệp → không kèm số
   });
 
-  it('PDF không vẽ thẻ ảnh hỏng', () => {
-    expect(html).not.toContain('/api/kho-nhan/anh-lark/loi2?w=320');
-    expect(html).toContain('PDF');
-  });
-
-  it('gộp đủ các nhóm ảnh đang có, bỏ nhóm rỗng', () => {
-    expect(html).toContain('Ảnh chụp lỗi QC');
+  /* Ba khối LUÔN hiện, kể cả khối rỗng: "chưa có biên bản" là tin đáng biết, và giấu khối đi
+     thì ba cột nhảy chỗ tuỳ dòng. */
+  it('vẽ đủ ba khối ảnh, khối rỗng ghi rõ Chưa có', () => {
+    expect(html).toContain('Biên bản bàn giao');
     expect(html).toContain('Ảnh thực tế sản phẩm');
-    expect(html).not.toContain('Biên bản bàn giao');   // rỗng → không vẽ khối trống
+    expect(html).toContain('Ảnh chụp lỗi QC');
+    expect(html).toContain('Chưa có');
   });
 
   it('nói rõ dòng này của Lark hay của hệ thống', () => {
