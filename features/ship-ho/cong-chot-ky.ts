@@ -16,6 +16,8 @@ export interface LoiCong { code: string; ma: MaLoiCong; ly: string }
 export interface DonKiemCong {
   code: string;
   tenHang: string | null;
+  /** Khoá tra bảng tuần xăng dầu. `null` = chưa gán hãng. */
+  carrierAccountId: string | null;
   pickedUpAt: Date | string | null;
   shippedAt: string | null;
   /** `null` = chưa có hoá đơn hãng → hai phép kiểm fuel không áp dụng. */
@@ -40,9 +42,31 @@ export function hangCoNguonTra(tenHang: string | null): boolean {
   return CO_NGUON.some((h) => t.startsWith(h));
 }
 
-const pct = (n: number) => n.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/**
+ * Dung sai khi so %fuel suy từ hoá đơn với mức hãng công bố.
+ *
+ * Hãng làm tròn TIỀN, nên % giải ngược ra lệch vài phần nghìn: đơn Aramex SV-0142 thật ra
+ * 30,002% so với mức công bố 30%. Dùng 0,001 là chặn nhầm đơn đã phát hành trót lọt — bắt được
+ * ở lượt chạy chỉ-đếm 03/10/2026.
+ *
+ * 0,05 cùng con số với `phanTramFuelDangTin`: hai tuần liền kề chênh nhau ít nhất 0,25%, nên
+ * sai một tuần vẫn bị bắt, còn làm tròn của hãng thì không.
+ */
+export const SAI_SO_TUAN = 0.05;
 
-export function kiemCongChotKy(don: readonly DonKiemCong[], tuan: readonly TuanFuel[]): LoiCong[] {
+/** Hiện tới 3 chữ số thập phân, nhưng bỏ số 0 thừa — thông báo in "30,00% vs 30,00%" là vô dụng. */
+const pct = (n: number) => n.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+
+/**
+ * Bảng tuần xăng dầu THEO TỪNG HÃNG.
+ *
+ * Mỗi hãng công bố mức riêng: ngày 21/09/2026 FedEx là 51,75% còn Aramex là 30%. Dùng chung
+ * một bảng là so đơn Aramex với mức FedEx — bản đầu của cổng này mắc đúng lỗi đó và chặn nhầm
+ * hai đơn Aramex đã phát hành trót lọt (phát hiện ở lượt chạy chỉ-đếm 03/10/2026).
+ */
+export type TuanTheoHang = ReadonlyMap<string, readonly TuanFuel[]>;
+
+export function kiemCongChotKy(don: readonly DonKiemCong[], tuanTheoHang: TuanTheoHang): LoiCong[] {
   const loi: LoiCong[] = [];
   for (const d of don) {
     const { ngay } = ngayDiHang(d);
@@ -60,8 +84,11 @@ export function kiemCongChotKy(don: readonly DonKiemCong[], tuan: readonly TuanF
         ly: `%xăng dầu suy từ hoá đơn = ${pct(suy)}% — không phải bội của 0,25%, nhiều khả năng mẫu số thiếu một khoản chịu fuel` });
       continue;
     }
-    const congBo = ngay ? pctTuanCuaNgay(tuan, ngay) : null;
-    if (congBo != null && Math.abs(congBo - suy) > 0.001) {
+    /* Không biết bảng tuần của hãng này thì BỎ QUA phép so, không so bừa với hãng khác.
+     * Thiếu dữ liệu là thiếu dữ liệu — không phải bằng chứng sai. */
+    const tuan = d.carrierAccountId ? tuanTheoHang.get(d.carrierAccountId) : undefined;
+    const congBo = ngay && tuan ? pctTuanCuaNgay(tuan, ngay) : null;
+    if (congBo != null && Math.abs(congBo - suy) > SAI_SO_TUAN) {
       loi.push({ code: d.code, ma: 'fuel_lech_tuan',
         ly: `đi hàng ${ngay} thuộc tuần ${pct(congBo)}% nhưng hoá đơn tính ${pct(suy)}%` });
     }
