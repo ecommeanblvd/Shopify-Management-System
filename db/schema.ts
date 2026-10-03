@@ -3142,6 +3142,8 @@ export const whLoiQc = pgTable('wh_loi_qc', {
     .references(() => goodsReceiptItems.id, { onDelete: 'cascade' }).notNull(),
   lyDo: qcLyDoLoiEnum('ly_do').notNull(),
   anhKey: text('anh_key'),
+  /** `file_token` sau khi tải ảnh lên Lark Drive — tải MỘT lần, các lượt ghi sau dùng lại. */
+  larkFileToken: text('lark_file_token'),
   ghiChu: text('ghi_chu'),
   taoLuc: timestamp('tao_luc').notNull().defaultNow(),
   taoBoi: text('tao_boi').notNull(),

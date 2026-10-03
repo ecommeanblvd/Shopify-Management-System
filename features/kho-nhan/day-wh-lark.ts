@@ -5,10 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import {
   createWhInventoryRecord, deleteWhInventoryRecord,
-  getWhInventoryRecord, updateWhInventoryRecord, layLuaChonVendorFinal,
+  getWhInventoryRecord, updateWhInventoryRecord, layLuaChonVendorFinal, uploadWhInventoryMedia,
 } from '@/features/lark/client';
 import { requirePerm } from '@/features/receiving/perm';
-import { dongBoAnhLenLark, phieuCuaChiec } from './anh-lark';
+import { dongBoAnhLenLark, phieuCuaChiec, kieuTheoTen } from './anh-lark';
+import { getObject } from '@/lib/storage/s3';
+import { moTaLoiQc } from './mo-ta-loi-qc';
+import type { LyDoLoi } from './loi-qc';
 import {
   dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat, chonVendorHopLe,
   COT_SELECT_ORDER, COT_UNIQUE_CODE,
@@ -223,13 +226,69 @@ export async function danhDauQcDatTrenLark(itemId: string, actor: string): Promi
  * Best-effort như lượt QC đạt: Lark hỏng không được làm hỏng việc đã ghi xong
  * bên mình, nhưng phải vào nhật ký để còn chữa.
  */
+/**
+ * Token Lark của mọi ảnh lỗi QC thuộc một chiếc, tải lên nếu chưa có.
+ *
+ * Nhớ token vào `wh_loi_qc.lark_file_token`: tải lại cùng một tấm ảnh mỗi lượt ghi là đẻ ra
+ * hàng loạt bản y hệt nhau trong Drive của đội — đúng lỗi mà `wh_anh_nhan` đã tránh.
+ *
+ * Tải hỏng một tấm thì BỎ QUA tấm đó, các tấm còn lại vẫn lên: mất một ảnh còn hơn mất cả lượt
+ * báo lỗi.
+ */
+async function tokenAnhLoi(itemId: string): Promise<string[]> {
+  const dong = await db.select().from(schema.whLoiQc)
+    .where(eq(schema.whLoiQc.receiptItemId, itemId));
+  const ra: string[] = [];
+  for (const d of dong) {
+    if (!d.anhKey) continue;
+    if (d.larkFileToken) { ra.push(d.larkFileToken); continue; }
+    try {
+      const bytes = await getObject(d.anhKey);
+      const ten = d.anhKey.split('/').pop() ?? 'anh-loi-qc.jpg';
+      const token = await uploadWhInventoryMedia(ten, bytes, kieuTheoTen(ten));
+      await db.update(schema.whLoiQc).set({ larkFileToken: token })
+        .where(eq(schema.whLoiQc.id, d.id));
+      ra.push(token);
+    } catch (e) {
+      console.error(`[kho-nhan] tải ảnh lỗi QC ${d.id} lên Lark hỏng:`, e);
+    }
+  }
+  return ra;
+}
+
+/**
+ * QC KHÔNG ĐẠT → ghi `QC Check`, `WH - Action`, `Lý do QC failed` và ảnh lỗi lên Lark.
+ *
+ * Trước 03/10/2026 hàm này chỉ ghi `QC Check`. Bảo báo ba triệu chứng — lý do không tự điền,
+ * action vẫn đứng ở " Chờ QC ", ảnh không đẩy — và cả ba là cùng một chỗ thiếu ấy. Đội kho vẫn
+ * điền đủ bên mình (7/7 dòng lỗi có ảnh ngày 02/10) nhưng không gì tới bảng vận hành.
+ *
+ * Gọi được NHIỀU LẦN cho một chiếc: kho bổ sung lỗi hoặc ảnh sau thì gọi lại, nội dung ghi đè
+ * là ảnh chụp mới nhất của toàn bộ dòng lỗi — không cộng dồn, không nhân bản.
+ *
+ * Best-effort: Lark hỏng KHÔNG được làm hỏng việc đã ghi xong bên mình, nhưng phải vào nhật ký
+ * để còn chữa.
+ */
 export async function danhDauQcKhongDatTrenLark(itemId: string, actor: string): Promise<void> {
   const [c] = await db.select({ larkRecordId: schema.goodsReceiptItems.larkRecordId })
     .from(schema.goodsReceiptItems).where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
   if (!c?.larkRecordId) return;
   try {
-    await updateWhInventoryRecord(c.larkRecordId, dungPayloadSauQcKhongDat());
-    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: true, chiTiet: 'QC Check → QC Failed', actor });
+    const dong = await db.select({ lyDo: schema.whLoiQc.lyDo, ghiChu: schema.whLoiQc.ghiChu })
+      .from(schema.whLoiQc).where(eq(schema.whLoiQc.receiptItemId, itemId));
+    const lyDo = moTaLoiQc(dong.map((d) => ({ lyDo: d.lyDo as LyDoLoi, ghiChu: d.ghiChu })));
+    const anh = await tokenAnhLoi(itemId);
+    /* ĐỌC TRƯỚC KHI GHI. Ba cột này đang có chữ và ảnh người dán tay (456 lý do, 429 ảnh trên
+     * 463 dòng QC Failed) vì hệ thống chưa đẩy được. `dungPayloadSauQcKhongDat` chỉ nối thêm
+     * phần còn thiếu, nhưng nó cần biết đang có gì — không đọc được thì nó tự thu về ghi đúng
+     * một cột `QC Check`. */
+    const banGhi = await getWhInventoryRecord(c.larkRecordId);
+    const payload = dungPayloadSauQcKhongDat(banGhi?.fields ?? null, { lyDo, anh });
+    await updateWhInventoryRecord(c.larkRecordId, payload);
+    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId,
+      thanhCong: true, actor,
+      chiTiet: `QC Failed · ghi ${Object.keys(payload).join(', ')} · lý do "${lyDo}" · ${anh.length} ảnh`,
+    });
   } catch (e) {
     const chiTiet = e instanceof Error ? e.message : String(e);
     await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: false, chiTiet, actor });

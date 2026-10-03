@@ -67,19 +67,112 @@ describe('dungPayloadSauQcDat', () => {
 });
 
 describe('dungPayloadSauQcKhongDat', () => {
-  /* Đội kho điền QC Check 100% (1.390/1.390 dòng từ 01/08) và đang có 131 dòng
-   * QC Failed. Không ghi cột này là dòng của mình thủng đúng con số đó. */
+  const TRONG = { 'WH - Action': ' Chờ QC ' };
+
+  /* Đội kho điền QC Check 100% (1.390/1.390 dòng từ 01/08). Không ghi cột này là dòng của mình
+   * thủng đúng con số đó. Cột này hệ thống làm chủ — luôn ghi. */
   it('ghi QC Check = QC Failed', () => {
-    expect(dungPayloadSauQcKhongDat()['QC Check']).toBe('QC Failed');
+    expect(dungPayloadSauQcKhongDat(TRONG, { lyDo: 'Bẩn', anh: [] })['QC Check']).toBe('QC Failed');
   });
 
-  /* "Gửi trả Vendor (QC fail)" mang nghĩa ĐÃ GỬI TRẢ. QC hỏng chưa chắc đã gửi
-   * trả ngay, đặt hộ là báo sai một việc chưa ai làm. */
-  it('KHÔNG đụng WH - Action — việc gửi trả để kho tự chọn', () => {
-    expect(dungPayloadSauQcKhongDat()).not.toHaveProperty('WH - Action');
+  /* Không đọc được bản ghi thì KHÔNG biết đang có gì — ghi ba cột kia là ghi đè mù. Thiếu một
+     lượt báo còn hơn xoá một tấm ảnh của đội đóng hàng. */
+  it('không đọc được bản ghi → CHỈ ghi QC Check', () => {
+    expect(dungPayloadSauQcKhongDat(null, { lyDo: 'Bẩn', anh: ['tk1'] }))
+      .toEqual({ 'QC Check': 'QC Failed' });
+  });
+
+  describe('WH - Action', () => {
+    /* Bảo báo 03/10/2026: chiếc trượt QC vẫn đứng ở " Chờ QC " trên bảng vận hành. */
+    it('đang " Chờ QC " → đổi sang Lưu kho', () => {
+      expect(dungPayloadSauQcKhongDat(TRONG, { lyDo: '', anh: [] })['WH - Action']).toBe('Lưu kho');
+    });
+
+    it('đang trống → đặt Lưu kho', () => {
+      expect(dungPayloadSauQcKhongDat({}, { lyDo: '', anh: [] })['WH - Action']).toBe('Lưu kho');
+    });
+
+    /* 413/463 dòng QC Failed đã mang "Gửi trả Vendor (QC fail)" do kho tự chọn: họ biết hàng
+       đã đi đâu, mình không biết. Đặt hộ là báo sai một việc chưa ai làm. */
+    it('kho đã chọn giá trị thật → KHÔNG đụng tới', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { 'WH - Action': 'Gửi trả Vendor (QC fail)' }, { lyDo: '', anh: [] });
+      expect(p).not.toHaveProperty('WH - Action');
+    });
+  });
+
+  describe('Lý do QC failed — nối thêm, KHÔNG ghi đè', () => {
+    it('ô trống → ghi câu mô tả', () => {
+      expect(dungPayloadSauQcKhongDat(TRONG, { lyDo: 'Bẩn · Xước vải', anh: [] })['Lý do QC failed'])
+        .toBe('Bẩn · Xước vải');
+    });
+
+    /* 456/463 dòng QC Failed đã có lý do do người dán tay. Ghi đè là mất chữ của họ. */
+    it('người đã điền → giữ nguyên chữ cũ, nối phần chưa có', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Lý do QC failed': 'Bẩn gấu áo, brand đã xác nhận' },
+        { lyDo: 'Bẩn · Xước vải', anh: [] });
+      expect(p['Lý do QC failed']).toBe('Bẩn gấu áo, brand đã xác nhận · Bẩn · Xước vải');
+    });
+
+    /* So theo ĐOẠN, không theo chuỗi con: câu của kho có chữ "Bẩn" bên trong vẫn được nối
+       thêm nhãn `Bẩn`. Thừa một nhãn thì đọc vẫn hiểu; nếu so chuỗi con thì "Không xước" sẽ
+       nuốt mất `Xước vải` mà không ai thấy. */
+    it('nhãn nằm LỌT trong câu của người vẫn được nối — không đoán nghĩa', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Lý do QC failed': 'Không xước, chỉ bẩn nhẹ' }, { lyDo: 'Xước vải', anh: [] });
+      expect(p['Lý do QC failed']).toBe('Không xước, chỉ bẩn nhẹ · Xước vải');
+    });
+
+    /* Đo thật 03/10/2026: dòng #MBLVD30567 kho gõ " sai màu", nhãn của mình là "Sai màu". */
+    it('khác hoa thường thì coi như đã có', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Lý do QC failed': ' sai màu' }, { lyDo: 'Sai màu', anh: [] });
+      expect(p).not.toHaveProperty('Lý do QC failed');
+    });
+
+    it('chạy lại không sinh thêm gì', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Lý do QC failed': 'Bẩn · Xước vải' }, { lyDo: 'Bẩn · Xước vải', anh: [] });
+      expect(p).not.toHaveProperty('Lý do QC failed');
+    });
+
+    /* Lý do rỗng KHÔNG gửi: ô trống thì không có gì để ghi, ô có chữ người thì không được xoá.
+       Đây là chỗ bản đầu sai — gửi chuỗi rỗng để "xoá lý do cũ" là xoá luôn chữ của kho. */
+    it('lý do rỗng → không đụng ô', () => {
+      expect(dungPayloadSauQcKhongDat({ ...TRONG, 'Lý do QC failed': 'Kho ghi tay' },
+        { lyDo: '', anh: [] })).not.toHaveProperty('Lý do QC failed');
+    });
+  });
+
+  describe('Ảnh chụp lỗi QC fail — hợp hai tập, KHÔNG gỡ ảnh đang có', () => {
+    it('ô trống → ghi token theo đúng dạng Lark', () => {
+      expect(dungPayloadSauQcKhongDat(TRONG, { lyDo: '', anh: ['tk1', 'tk2'] })['Ảnh chụp lỗi QC fail'])
+        .toEqual([{ file_token: 'tk1' }, { file_token: 'tk2' }]);
+    });
+
+    /* 429/463 dòng QC Failed đã có ảnh đội đóng hàng dán tay từ Zalo. */
+    it('người đã dán ảnh → giữ cả, thêm ảnh của mình vào sau', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Ảnh chụp lỗi QC fail': [{ file_token: 'nguoi1', name: 'zalo.jpg' }] },
+        { lyDo: '', anh: ['tk1'] });
+      expect(p['Ảnh chụp lỗi QC fail'])
+        .toEqual([{ file_token: 'nguoi1' }, { file_token: 'tk1' }]);
+    });
+
+    it('token đã có đủ → không đụng ô', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Ảnh chụp lỗi QC fail': [{ file_token: 'tk1' }] }, { lyDo: '', anh: ['tk1'] });
+      expect(p).not.toHaveProperty('Ảnh chụp lỗi QC fail');
+    });
+
+    it('không có ảnh nào bên mình → không đụng ô', () => {
+      const p = dungPayloadSauQcKhongDat(
+        { ...TRONG, 'Ảnh chụp lỗi QC fail': [{ file_token: 'nguoi1' }] }, { lyDo: '', anh: [] });
+      expect(p).not.toHaveProperty('Ảnh chụp lỗi QC fail');
+    });
   });
 });
-
 
 describe('cột Warehouse — thiếu là record VÔ HÌNH trên mọi view', () => {
   const luc = new Date('2026-09-24T10:00:00Z');

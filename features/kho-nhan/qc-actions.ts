@@ -106,6 +106,11 @@ export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise
  * Chỉ nhận chiếc đang `fail`: thêm dòng lỗi cho chiếc `pass` là ghi bằng chứng lỗi vào hàng đã
  * vào tồn — hai sự thật ngược nhau trên cùng một chiếc. Chiếc `pending` thì đi đường
  * `qcKhongDat` để trạng thái và Lark được cập nhật đúng.
+ *
+ * CÓ báo Lark (sửa 03/10/2026). Bản đầu ghi "không báo Lark lần hai" vì lúc đó lượt báo chỉ
+ * đổi `QC Check` — thêm dòng lỗi không đổi gì nên gọi lại là thừa. Từ khi lượt báo mang theo
+ * LÝ DO và ẢNH thì ngược lại: không gọi lại là lỗi và ảnh kho bổ sung sau KHÔNG BAO GIỜ tới
+ * bảng vận hành. Lượt báo ghi đè toàn bộ dòng lỗi hiện có nên gọi nhiều lần vẫn đúng.
  */
 export async function themDongLoiQc(itemId: string, dongLoi: DongLoiVao[]): Promise<{ ok: boolean; loi?: string }> {
   const actor = await requirePerm('manage_qc');
@@ -121,6 +126,9 @@ export async function themDongLoiQc(itemId: string, dongLoi: DongLoiVao[]): Prom
       receiptItemId: itemId, lyDo: d.lyDo,
       anhKey: d.anhKey, ghiChu: d.ghiChu.trim() || null, taoBoi: actor,
     })));
+    // Đẩy lại LÝ DO + ẢNH sang Lark: lượt báo ghi đè toàn bộ dòng lỗi hiện có, nên gọi lại ở
+    // đây là cách duy nhất để phần kho bổ sung sau tới được bảng vận hành.
+    await danhDauQcKhongDatTrenLark(itemId, actor);
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true };
   } catch (e) {

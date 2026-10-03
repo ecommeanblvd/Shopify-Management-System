@@ -21,7 +21,8 @@ const COT_THEO_LOAI: Record<LoaiAnhNhan, string> = {
   bb_ban_giao: 'BB Giao Nhận',
 };
 
-function kieuTheoTen(ten: string): string {
+/** Kiểu MIME suy từ đuôi tên file. Dùng chung với đường đẩy ảnh lỗi QC. */
+export function kieuTheoTen(ten: string): string {
   const d = ten.toLowerCase().split('.').pop() ?? '';
   return ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
     gif: 'image/gif', heic: 'image/heic', pdf: 'application/pdf' } as Record<string, string>)[d]
