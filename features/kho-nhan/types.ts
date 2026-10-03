@@ -86,6 +86,8 @@ export interface DongSoNhap {
   storeFinal: string | null;
   vendorFinal: string | null;
   qcCheck: string | null;
+  /** Chữ NGƯỜI gõ trên Lark, giữ nguyên — không quy về enum (xem migration 0198). */
+  lyDoFail: string | null;
   whAction: string | null;
   uniqueCode: string | null;
   soLuong: number | null;
@@ -94,6 +96,8 @@ export interface DongSoNhap {
   /** File đính kèm trên Lark — token để tải qua /api/kho-nhan/anh-lark. */
   anhHangDen: FileLark[];
   bbBanGiao: FileLark[];
+  /** Ảnh chụp lỗi QC — cùng dạng, nên dùng chung ô xem ảnh `OAnhLark`. */
+  anhLoiQc: FileLark[];
   /** Dòng do CHÍNH hệ thống này tạo, không phải đội kho gõ thẳng trên Lark. */
   cuaHeThong: boolean;
 }

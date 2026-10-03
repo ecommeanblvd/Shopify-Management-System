@@ -19,6 +19,7 @@ import { coLech } from '@/features/kho-nhan/doi-chieu-logic';
 import type { DongSoNhap } from '@/features/kho-nhan/types';
 import { LichNgay } from './LichNgay';
 import { OAnhLark } from './OAnhLark';
+import { COT_SO_NHAP, LUOI_SO_NHAP, RONG_TOI_THIEU } from '@/features/kho-nhan/cot-so-nhap';
 
 const THU = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 const GIAI_THICH = 'Sổ ghi mọi chiếc đã nhận, dựng theo đúng hình bảng Lark WH - Inventory. '
@@ -39,12 +40,6 @@ const CHU_KHO: Record<string, string> = {
   khac: 'text-muted-foreground',
 };
 
-/**
- * Lưới cột dùng chung cho hàng tiêu đề và mọi dòng — lệch một chỗ là lệch cả
- * bảng. ĐỦ trường của bảng Lark (CEO 26/09), không rút gọn.
- */
-const COT = '104px 92px minmax(220px,1fr) minmax(180px,250px) '
-  + '32px 74px 86px 112px 128px 138px 52px 52px 76px 78px';
 
 function ngayVn(s: string): string {
   const [y, m, d] = s.split('-');
@@ -92,7 +87,8 @@ export function BangSoNhap({
       if (locBbgn && r.coBbBanGiao) return false;
       if (trangThai !== 'tat-ca' && ((r.whAction ?? '').trim() || '(chưa có)') !== trangThai) return false;
       if (!tu) return true;
-      return `${r.orderNumber ?? ''}${r.lineitemName ?? ''}${r.sku ?? ''}${r.vendorFinal ?? ''}`
+      // Lý do lỗi nằm trong ô tìm (03/10/2026): gõ "bẩn" ra ngay mọi chiếc lỗi bẩn trong ngày.
+      return `${r.orderNumber ?? ''}${r.lineitemName ?? ''}${r.sku ?? ''}${r.vendorFinal ?? ''}${r.lyDoFail ?? ''}`
         .toLowerCase().includes(tu);
     }));
   }, [dong, q, trangThai, locBbgn]);
@@ -237,16 +233,15 @@ export function BangSoNhap({
       {ket && <KhoiLech ket={ket} />}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-[10px] border border-border bg-card">
-        <div className="min-w-[1500px]">
+        <div style={{ minWidth: RONG_TOI_THIEU }}>
           <div
             className="sticky top-0 z-[2] grid h-[34px] items-center gap-3 border-b border-border bg-muted px-3.5 text-[11px] font-medium text-muted-foreground"
-            style={{ gridTemplateColumns: COT }}
+            style={{ gridTemplateColumns: LUOI_SO_NHAP }}
           >
-            <span>Đơn</span><span>Brand</span><span>Sản phẩm</span>
-            <span>SKU</span><span className="text-center">SL</span><span>Store</span>
-            <span>Kho</span><span>Loại nhập</span><span>QC</span><span>Xử lý kho</span>
-            <span className="text-center">Ảnh</span><span className="text-center">BBGN</span>
-            <span>Mã WH</span><span>Nguồn</span>
+            {/* Tiêu đề dựng TỪ `COT_SO_NHAP`, cùng chỗ khai lưới cột — xem `cot-so-nhap.ts`. */}
+            {COT_SO_NHAP.map((c) => (
+              <span key={c.ten} className={c.giua ? 'text-center' : undefined}>{c.ten}</span>
+            ))}
           </div>
 
           {hienThi.length === 0 ? (
@@ -264,7 +259,7 @@ export function BangSoNhap({
                 className={`grid h-[38px] items-center gap-3 px-3.5 text-[13px] hover:bg-muted/50 ${
                   r.noiTiep ? '' : 'border-t border-border'
                 } ${mq === 'hong' ? 'bg-red-500/[0.07]' : ''}`}
-                style={{ gridTemplateColumns: COT }}
+                style={{ gridTemplateColumns: LUOI_SO_NHAP }}
               >
                 {/* Dòng nối tiếp cùng đơn bỏ trống ô mã đơn và ẩn đường kẻ — mắt
                     đọc ra ngay đây là mấy chiếc của CÙNG một đơn. */}
@@ -289,6 +284,16 @@ export function BangSoNhap({
                   <span className={`size-1.5 shrink-0 rounded-full ${MAU_QC[mq]}`} />
                   {(r.qcCheck ?? '').trim() || '—'}
                 </span>
+                {/* Lý do + ảnh lỗi QC, kẹp giữa QC và Xử lý kho ĐÚNG như thứ tự bên Lark.
+                    Cột hẹp nên chữ cụt — `title` để đọc đủ mà không phải mở gì. Giữ nguyên chữ
+                    người gõ: "xước chỉ, bẩn", "Ố vàng", "rách vải, bung chỉ". */}
+                <span className="truncate text-xs text-muted-foreground" title={r.lyDoFail ?? undefined}>
+                  {(r.lyDoFail ?? '').trim() || '—'}
+                </span>
+                {/* Cùng ô xem ảnh với ảnh hàng đến — KHÔNG có nút bổ sung: ảnh lỗi đi vào hệ
+                    thống qua bước QC, thêm một đường tải ảnh thứ hai ở đây là hai nguồn cho
+                    một việc. Ô tự hiện gạch ngang khi không có ảnh. */}
+                <OAnhLark ds={r.anhLoiQc} nhan={`Ảnh lỗi QC · ${r.orderNumber ?? ''}`} />
                 <span className={`truncate text-xs ${CHU_KHO[mk]}`}>{(r.whAction ?? '').trim() || '—'}</span>
                 {/* Thiếu file thì cho tải ngay tại dòng, áp cho cả đơn trong ngày
                     (CEO 29/09/2026). Dòng đã có thì giữ nguyên ô xem ảnh. */}

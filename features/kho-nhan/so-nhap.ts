@@ -28,8 +28,9 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
   const r = await db.execute(sql`
     SELECT w.record_id, w.ngay_import, w.dinh_danh, w.warehouse, w.inventory_type,
            w.order_number, w.sku, w.lineitem_name, w.store_final, w.vendor_final,
-           w.qc_check, w.wh_action, w.unique_code, w.so_luong,
+           w.qc_check, w.ly_do_fail, w.wh_action, w.unique_code, w.so_luong,
            w.co_anh_hang_den, w.co_bb_ban_giao, w.anh_hang_den, w.bb_ban_giao,
+           w.anh_loi_qc,
            EXISTS (SELECT 1 FROM goods_receipt_items gi
                     WHERE gi.lark_record_id = w.record_id) AS cua_he_thong
     FROM lark_wh_inventory w
@@ -49,6 +50,7 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
     storeFinal: (x.store_final as string) ?? null,
     vendorFinal: (x.vendor_final as string) ?? null,
     qcCheck: (x.qc_check as string) ?? null,
+    lyDoFail: (x.ly_do_fail as string) ?? null,
     whAction: (x.wh_action as string) ?? null,
     uniqueCode: (x.unique_code as string) ?? null,
     soLuong: x.so_luong == null ? null : Number(x.so_luong),
@@ -56,6 +58,7 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
     coBbBanGiao: Boolean(x.co_bb_ban_giao),
     anhHangDen: (x.anh_hang_den as FileLark[]) ?? [],
     bbBanGiao: (x.bb_ban_giao as FileLark[]) ?? [],
+    anhLoiQc: (x.anh_loi_qc as FileLark[]) ?? [],
     cuaHeThong: Boolean(x.cua_he_thong),
   }));
 }
