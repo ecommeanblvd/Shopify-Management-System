@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ChiTietDong, NoiDungChiTiet } from './ChiTietDong';
+import { ChiTietDong, KhungXemAnh, NoiDungChiTiet } from './ChiTietDong';
 import type { DongSoNhap } from '@/features/kho-nhan/types';
 
 const d: DongSoNhap = {
@@ -44,9 +44,10 @@ describe('ChiTietDong', () => {
     expect(html).toContain('aria-label="Xem to loi.jpg"');
   });
 
-  /* PDF thì ngược lại: trình duyệt có sẵn trình đọc, dựng lại một cái là việc khác hẳn. */
-  it('PDF vẫn là liên kết mở tab mới', () => {
-    expect(/<a[^>]*anh-lark\/loi2[^>]*target="_blank"/.test(html)).toBe(true);
+  /* CEO 03/10/2026: "PDF cũng xem tại chỗ luôn" — nên PDF cũng là nút, không phải liên kết. */
+  it('PDF cũng là nút mở tại chỗ', () => {
+    expect(/<a[^>]*anh-lark\/loi2/.test(html)).toBe(false);
+    expect(html).toContain('aria-label="Xem to bb.pdf"');
   });
 
   it('PDF không vẽ thẻ ảnh hỏng', () => {
@@ -62,5 +63,44 @@ describe('ChiTietDong', () => {
 
   it('nói rõ dòng này của Lark hay của hệ thống', () => {
     expect(html).toContain('Lark');
+  });
+});
+
+describe('KhungXemAnh', () => {
+  const ve = (ds: typeof d.anhLoiQc, i = 0) =>
+    renderToStaticMarkup(createElement(KhungXemAnh, { ds, i, onDoi: () => {}, onDong: () => {} }));
+
+  it('ảnh vẽ bằng thẻ img, kéo bản GỐC chứ không phải bản thu nhỏ', () => {
+    const html = ve([{ token: 'a1', ten: 'a.jpg' }]);
+    expect(html).toContain('<img src="/api/kho-nhan/anh-lark/a1"');
+    expect(html).not.toContain('?w=');
+  });
+
+  /* PDF nhúng bằng iframe để dùng trình đọc sẵn có; route đặt Content-Disposition: inline. */
+  it('PDF nhúng bằng iframe, kèm đường lùi mở tab mới', () => {
+    const html = ve([{ token: 'p1', ten: 'bb.pdf' }]);
+    expect(html).toContain('<iframe src="/api/kho-nhan/anh-lark/p1"');
+    expect(html).toContain('Mở ở tab mới');
+  });
+
+  it('ảnh thì KHÔNG bày đường mở tab mới', () => {
+    expect(ve([{ token: 'a1', ten: 'a.jpg' }])).not.toContain('Mở ở tab mới');
+  });
+
+  /* Một tệp thì không có gì để lật — bày mũi tên là mời người ta bấm vào chỗ không làm gì. */
+  it('một tệp thì không có mũi tên lật và không đếm', () => {
+    const html = ve([{ token: 'a1', ten: 'a.jpg' }]);
+    expect(html).not.toContain('Ảnh trước');
+    expect(html).not.toContain('1/1');
+  });
+
+  it('nhiều tệp thì có mũi tên và số đếm đúng vị trí đang xem', () => {
+    const html = ve([{ token: 'a1', ten: 'a.jpg' }, { token: 'a2', ten: 'b.jpg' }], 1);
+    expect(html).toContain('Ảnh trước');
+    expect(html).toContain('2/2');
+  });
+
+  it('chỉ số lạc ra ngoài danh sách thì không vẽ gì, không nổ', () => {
+    expect(ve([{ token: 'a1', ten: 'a.jpg' }], 5)).toBe('');
   });
 });

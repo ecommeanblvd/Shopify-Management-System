@@ -63,7 +63,13 @@ export async function GET(
       });
     }
 
-    return new Response(r.body, { headers: { 'Content-Type': kieu, 'Cache-Control': cache } });
+    /* `inline` ghi RÕ, dù mình vốn không chuyển tiếp header của Lark: Lark trả PDF kèm
+     * `Content-Disposition: attachment`, và modal chi tiết nhúng PDF bằng <iframe> để xem tại
+     * chỗ (CEO 03/10/2026). Ai đó sau này bê nguyên header của Lark sang là PDF lập tức rơi
+     * thành hộp tải xuống, hỏng âm thầm. */
+    return new Response(r.body, {
+      headers: { 'Content-Type': kieu, 'Content-Disposition': 'inline', 'Cache-Control': cache },
+    });
   } catch (e) {
     console.error('[kho-nhan] tải ảnh Lark lỗi:', e);
     return new Response('Không tải được file', { status: 502 });

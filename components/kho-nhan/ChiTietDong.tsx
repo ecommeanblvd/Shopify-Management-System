@@ -57,8 +57,8 @@ const hoacGach = (s: string | null) => (s ?? '').trim() || '—';
  * 03/10/2026: "bấm vào thì mở modal ảnh luôn tại tab url đó thay vì bị đổi sang tab khác").
  * Nhảy tab là mất chỗ đang đứng: quay lại thì modal chi tiết đã đóng, phải tìm lại dòng từ đầu.
  *
- * PDF thì VẪN mở tab mới — trình duyệt có sẵn trình đọc PDF, dựng lại một cái trong khung ảnh
- * là việc khác hẳn và không ai cần.
+ * PDF cũng mở tại chỗ (CEO 03/10/2026), nhúng bằng <iframe> để dùng trình đọc sẵn có của trình
+ * duyệt. Vẫn chừa một đường mở tab mới trong khung xem, cho trình duyệt nào chặn nhúng PDF.
  */
 function NhomAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: number) => void }) {
   if (ds.length === 0) return null;
@@ -69,21 +69,20 @@ function NhomAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: num
         {ten} · {ds.length}
       </p>
       <div className="flex flex-wrap gap-2">
-        {ds.map((f, i) => (laAnh(f) ? (
+        {ds.map((f, i) => (
           <button key={f.token} type="button" title={f.ten} onClick={() => onMo(i)}
                   aria-label={`Xem to ${f.ten}`} className={vien}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- ảnh qua route nội bộ có kiểm quyền, không qua optimiser của Next */}
-            <img src={`${duong(f)}?w=320`} alt={f.ten} loading="lazy"
-                 className="size-28 rounded-lg object-cover" />
+            {laAnh(f) ? (
+              // eslint-disable-next-line @next/next/no-img-element -- ảnh qua route nội bộ có kiểm quyền, không qua optimiser của Next
+              <img src={`${duong(f)}?w=320`} alt={f.ten} loading="lazy"
+                   className="size-28 rounded-lg object-cover" />
+            ) : (
+              <span className="grid size-28 place-items-center rounded-lg text-xs text-muted-foreground">
+                PDF
+              </span>
+            )}
           </button>
-        ) : (
-          <a key={f.token} href={duong(f)} target="_blank" rel="noreferrer" title={f.ten}
-             className={vien}>
-            <span className="grid size-28 place-items-center rounded-lg text-xs text-muted-foreground">
-              PDF
-            </span>
-          </a>
-        )))}
+        ))}
       </div>
     </div>
   );
@@ -99,7 +98,7 @@ function NhomAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: num
  * khi nó tới người nghe ở cấp tài liệu của Radix. Người đang xem ảnh bấm Esc là muốn quay về
  * danh sách ảnh, không phải mất cả trang chi tiết.
  */
-function KhungXemAnh({ ds, i, onDoi, onDong }: {
+export function KhungXemAnh({ ds, i, onDoi, onDong }: {
   ds: FileLark[]; i: number; onDoi: (i: number) => void; onDong: () => void;
 }) {
   const f = ds[i];
@@ -124,15 +123,29 @@ function KhungXemAnh({ ds, i, onDoi, onDong }: {
         {ds.length > 1 && (
           <span className="ml-auto text-xs tabular-nums text-white/70">{i + 1}/{ds.length}</span>
         )}
-        <button type="button" onClick={onDong} aria-label="Đóng ảnh"
+        {/* Đường lùi cho trình duyệt chặn nhúng PDF — và cho người muốn giữ tệp lại để đọc kỹ. */}
+        {!laAnh(f) && (
+          <a href={duong(f)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+             className="cursor-pointer text-xs text-white/70 underline hover:text-white">
+            Mở ở tab mới
+          </a>
+        )}
+        <button type="button" onClick={onDong} aria-label="Đóng"
                 className={`${ds.length > 1 ? '' : 'ml-auto'} grid size-9 cursor-pointer place-items-center rounded-full hover:bg-white/15`}>
           <XIcon className="size-5" />
         </button>
       </div>
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element -- như trên */}
-        <img src={duong(f)} alt={f.ten} onClick={(e) => e.stopPropagation()}
-             className="max-h-full max-w-full object-contain" />
+        {laAnh(f) ? (
+          // eslint-disable-next-line @next/next/no-img-element -- như trên
+          <img src={duong(f)} alt={f.ten} onClick={(e) => e.stopPropagation()}
+               className="max-h-full max-w-full object-contain" />
+        ) : (
+          /* PDF: dùng trình đọc sẵn có của trình duyệt. Route phục vụ file đặt
+             `Content-Disposition: inline` nên tệp hiện ra chứ không rơi xuống thư mục tải về. */
+          <iframe src={duong(f)} title={f.ten} onClick={(e) => e.stopPropagation()}
+                  className="h-full w-full rounded-lg bg-white" />
+        )}
         {ds.length > 1 && (
           <>
             <button type="button" aria-label="Ảnh trước"
