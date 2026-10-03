@@ -3193,6 +3193,8 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   vendorFinal: text('vendor_final'),
   qcCheck: text('qc_check'),
   whAction: text('wh_action'),
+  /** Chữ NGƯỜI gõ trên Lark, giữ nguyên — không quy về enum, xem migration 0198. */
+  lyDoFail: text('ly_do_fail'),
   uniqueCode: text('unique_code'),
   soLuong: integer('so_luong'),
   coAnhHangDen: boolean('co_anh_hang_den').notNull().default(false),
@@ -3200,6 +3202,8 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   /** [{ token, ten }] — token để tải file qua API Lark, tên để phân biệt ảnh/PDF. */
   anhHangDen: jsonb('anh_hang_den').notNull().default([]),
   bbBanGiao: jsonb('bb_ban_giao').notNull().default([]),
+  /** Ảnh chụp lỗi QC. KHÔNG có cờ `co_anh_loi_qc` kèm — độ dài mảng đã trả lời. */
+  anhLoiQc: jsonb('anh_loi_qc').notNull().default([]),
   capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
 }, (t) => [
   index('lark_wh_inventory_ngay_idx').on(t.ngayImport),
