@@ -113,7 +113,7 @@ export function KhoiLoi({
                 <ONhanAnh
                   name={`anh-loi-${i + 1}`}
                   onChon={(f) => void chonAnh(d.key, f)}
-                  goiY="Dán (Ctrl/Cmd+V), kéo thả, hay bấm chọn"
+                  goiY="Copy từ Zalo rồi Ctrl/Cmd+V — không cần bấm vào đâu"
                   className="w-44 cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded file:border file:border-input file:bg-background file:px-2 file:py-1"
                 />
               </div>
