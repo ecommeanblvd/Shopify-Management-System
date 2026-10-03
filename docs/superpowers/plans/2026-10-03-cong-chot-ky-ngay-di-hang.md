@@ -783,16 +783,18 @@ không qua hàm riêng — nên không có chỗ nào để viết unit test thu
 dựng lại payload của một kỳ THẬT và soi bốn đơn đã biết. `ngayDiHang` đã có test riêng ở Task 1.
 
 **Tệp:**
-- Sửa: `features/ship-ho/statement-core.ts` — `getShipHoStatement` (thêm cột) và
-  `banBangKeSangMmp` (dùng `ngayDiHang`)
+- Sửa: `features/ship-ho/statement-queries.ts` — `getShipHoStatement` (thêm cột `pickedUpAt`)
+- Sửa: `features/ship-ho/statement-core.ts` — `banBangKeSangMmp` (dùng `ngayDiHang`)
 - Sửa: `docs/integrations/mmp-ship-ho-api.md`
 
 **Giao diện — Consumes:** `ngayDiHang` (Task 1).
 
 - [ ] **Bước 1: cho `getShipHoStatement` lấy thêm cột**
 
+`getShipHoStatement` nằm ở `features/ship-ho/statement-queries.ts:41`, KHÔNG ở `statement-core.ts`.
+
 ```bash
-grep -n "shippedAt: " features/ship-ho/statement-core.ts
+grep -n "shippedAt" features/ship-ho/statement-queries.ts
 ```
 Thêm `pickedUpAt: schema.shipHoOrders.pickedUpAt` vào đúng mệnh đề `select` đang lấy
 `shippedAt` của `ship_ho_orders`.
@@ -841,7 +843,7 @@ vào, nghĩa trường cũ không đổi, nên MMP không phải sửa gì để
 - [ ] **Bước 6: commit**
 
 ```bash
-git add features/ship-ho/statement-core.ts docs/integrations/mmp-ship-ho-api.md
+git add features/ship-ho/statement-core.ts features/ship-ho/statement-queries.ts docs/integrations/mmp-ship-ho-api.md
 git commit -m "feat(ship-ho): bảng kê mang ngày đi hàng và nguồn của nó"
 ```
 
