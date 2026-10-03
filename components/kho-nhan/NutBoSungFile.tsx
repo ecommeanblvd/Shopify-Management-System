@@ -12,9 +12,9 @@ import { KIEU_CHO_PHEP, TEN_LOAI, type LoaiFile } from '@/features/kho-nhan/bo-s
  * Chỉ hiện ở dòng ĐANG THIẾU loại file đó — dòng đã có thì không cho tải nữa
  * (CEO chốt), nên không có đường nào để máy đè file đội kho đã đưa lên.
  *
- * Tải xong áp cho CẢ ĐƠN trong NGÀY đó: một đơn nhiều SKU nhưng chụp chung một
- * bộ ảnh. Số dòng thật sự được gắn hiện trong thông báo để người tải biết nó
- * vừa chạm tới bao nhiêu dòng, không phải đoán.
+ * Ảnh hàng đến / biên bản: tải xong áp cho CẢ ĐƠN trong NGÀY đó — một đơn nhiều SKU nhưng chụp
+ * chung một bộ ảnh. Ảnh LỖI QC thì chỉ đúng dòng đó, vì lỗi là chuyện của từng chiếc. Số dòng
+ * thật sự được gắn hiện trong thông báo để người tải biết nó vừa chạm tới đâu, không phải đoán.
  */
 export function NutBoSungFile({ recordId, loai, maDon }: {
   recordId: string; loai: LoaiFile; maDon: string | null;
@@ -59,7 +59,8 @@ export function NutBoSungFile({ recordId, loai, maDon }: {
         onPaste={(e) => { if (dangDay) return; const f = e.clipboardData?.files; if (f?.length) { e.preventDefault(); chon(f); } }}
         onDragOver={(e) => { if (!dangDay) e.preventDefault(); }}
         onDrop={(e) => { if (dangDay) return; const f = e.dataTransfer?.files; if (f?.length) { e.preventDefault(); chon(f); } }}
-        title={`Thiếu ${TEN_LOAI[loai].toLowerCase()} — bấm để tải lên, dán (Ctrl/Cmd+V) hoặc kéo thả cũng được; áp cho cả đơn trong ngày`}
+        title={`Chưa có ${TEN_LOAI[loai].toLowerCase()} — bấm để tải lên, dán (Ctrl/Cmd+V) hoặc kéo thả cũng được; ${
+          loai === 'loi_qc' ? 'chỉ gắn vào đúng dòng này' : 'áp cho cả đơn trong ngày'}`}
         aria-label={`Bổ sung ${TEN_LOAI[loai].toLowerCase()}`}
         className="mx-auto grid size-7 cursor-pointer place-items-center rounded border border-dashed border-border text-muted-foreground transition hover:border-foreground/40 hover:text-foreground disabled:cursor-default disabled:opacity-50"
       >

@@ -313,7 +313,12 @@ export function BangSoNhap({
                 {/* Cùng ô xem ảnh với ảnh hàng đến — KHÔNG có nút bổ sung: ảnh lỗi đi vào hệ
                     thống qua bước QC, thêm một đường tải ảnh thứ hai ở đây là hai nguồn cho
                     một việc. Ô tự hiện gạch ngang khi không có ảnh. */}
-                <OAnhLark ds={r.anhLoiQc} nhan={`Ảnh lỗi QC · ${r.orderNumber ?? ''}`} />
+                {/* Dòng trượt QC mà chưa có ảnh thì cho dán/tải ngay tại đây (CEO 03/10/2026) —
+                    đội đóng hàng copy ảnh từ Zalo, không lưu về máy. Dòng KHÔNG trượt QC thì
+                    không bày nút: gắn ảnh lỗi vào chiếc đạt là ghi một lỗi không có thật. */}
+                {r.anhLoiQc.length === 0 && mq === 'hong'
+                  ? <NutBoSungFile recordId={r.recordId} loai="loi_qc" maDon={r.orderNumber} />
+                  : <OAnhLark ds={r.anhLoiQc} nhan={`Ảnh lỗi QC · ${r.orderNumber ?? ''}`} />}
                 <span className={`truncate text-xs ${CHU_KHO[mk]}`}>{(r.whAction ?? '').trim() || '—'}</span>
                 {/* Thiếu file thì cho tải ngay tại dòng, áp cho cả đơn trong ngày
                     (CEO 29/09/2026). Dòng đã có thì giữ nguyên ô xem ảnh. */}

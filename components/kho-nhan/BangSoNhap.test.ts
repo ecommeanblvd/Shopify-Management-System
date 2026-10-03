@@ -81,3 +81,25 @@ describe('BangSoNhap — lưới cột', () => {
     expect(html).toContain('/api/kho-nhan/anh-lark/tk1');
   });
 });
+
+describe('cột Ảnh lỗi — chỗ dán ảnh lỗi QC (CEO 03/10/2026)', () => {
+  const html = (p: Partial<DongSoNhap>) => ve([dong({ ...p })]);
+
+  /* Đội đóng hàng copy ảnh từ Zalo, không lưu về máy — nên ô phải dán được, như hai cột kia. */
+  it('dòng trượt QC chưa có ảnh lỗi → hiện ô tải/dán', () => {
+    expect(html({ qcCheck: 'QC Failed', anhLoiQc: [] }))
+      .toContain('aria-label="Bổ sung ảnh lỗi qc"');
+  });
+
+  /* Gắn ảnh lỗi vào một chiếc ĐẠT là ghi một lỗi không có thật. */
+  it('dòng QC Pass thì KHÔNG bày ô tải ảnh lỗi', () => {
+    expect(html({ qcCheck: 'QC Pass', anhLoiQc: [] }))
+      .not.toContain('aria-label="Bổ sung ảnh lỗi qc"');
+  });
+
+  it('dòng đã có ảnh lỗi thì hiện ảnh, không hiện ô tải', () => {
+    const h = html({ qcCheck: 'QC Failed', anhLoiQc: [{ token: 'tk1', ten: 'loi.jpg' }] });
+    expect(h).toContain('/api/kho-nhan/anh-lark/tk1');
+    expect(h).not.toContain('aria-label="Bổ sung ảnh lỗi qc"');
+  });
+});
