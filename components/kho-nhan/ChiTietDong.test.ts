@@ -37,6 +37,18 @@ describe('ChiTietDong', () => {
     expect(html).toContain('size-28');
   });
 
+  /* CEO 03/10/2026: bấm ảnh KHÔNG được nhảy tab. Ảnh phải là nút mở khung xem tại chỗ. */
+  it('ảnh là NÚT mở tại chỗ, không phải liên kết sang tab khác', () => {
+    const anh = /<(button|a)[^>]*>\s*<img[^>]*anh-lark\/loi1/.exec(html);
+    expect(anh?.[1]).toBe('button');
+    expect(html).toContain('aria-label="Xem to loi.jpg"');
+  });
+
+  /* PDF thì ngược lại: trình duyệt có sẵn trình đọc, dựng lại một cái là việc khác hẳn. */
+  it('PDF vẫn là liên kết mở tab mới', () => {
+    expect(/<a[^>]*anh-lark\/loi2[^>]*target="_blank"/.test(html)).toBe(true);
+  });
+
   it('PDF không vẽ thẻ ảnh hỏng', () => {
     expect(html).not.toContain('/api/kho-nhan/anh-lark/loi2?w=320');
     expect(html).toContain('PDF');

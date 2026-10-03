@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { nhomQc, nhomKho, tenBrand, tachTenBienThe } from '@/features/kho-nhan/dong-so-nhap';
 import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
@@ -48,31 +50,103 @@ function O({ nhan, children }: { nhan: string; children: React.ReactNode }) {
 
 const hoacGach = (s: string | null) => (s ?? '').trim() || '—';
 
-/** Một nhóm ảnh. Rỗng thì KHÔNG vẽ gì — khối trống chỉ làm modal dài ra. */
-function NhomAnh({ ten, ds }: { ten: string; ds: FileLark[] }) {
+/**
+ * Một nhóm ảnh. Rỗng thì KHÔNG vẽ gì — khối trống chỉ làm modal dài ra.
+ *
+ * Ảnh là NÚT mở khung xem ngay trong trang, không phải liên kết `target="_blank"` (CEO
+ * 03/10/2026: "bấm vào thì mở modal ảnh luôn tại tab url đó thay vì bị đổi sang tab khác").
+ * Nhảy tab là mất chỗ đang đứng: quay lại thì modal chi tiết đã đóng, phải tìm lại dòng từ đầu.
+ *
+ * PDF thì VẪN mở tab mới — trình duyệt có sẵn trình đọc PDF, dựng lại một cái trong khung ảnh
+ * là việc khác hẳn và không ai cần.
+ */
+function NhomAnh({ ten, ds, onMo }: { ten: string; ds: FileLark[]; onMo: (i: number) => void }) {
   if (ds.length === 0) return null;
+  const vien = 'block cursor-pointer rounded-lg border border-border transition-colors hover:border-ring';
   return (
     <div>
       <p className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
         {ten} · {ds.length}
       </p>
       <div className="flex flex-wrap gap-2">
-        {ds.map((f) => (
-          <a
-            key={f.token} href={duong(f)} target="_blank" rel="noreferrer" title={f.ten}
-            className="block cursor-pointer rounded-lg border border-border transition-colors hover:border-ring"
-          >
-            {laAnh(f) ? (
-              // eslint-disable-next-line @next/next/no-img-element -- ảnh qua route nội bộ có kiểm quyền, không qua optimiser của Next
-              <img src={`${duong(f)}?w=320`} alt={f.ten} loading="lazy"
-                   className="size-28 rounded-lg object-cover" />
-            ) : (
-              <span className="grid size-28 place-items-center rounded-lg text-xs text-muted-foreground">
-                PDF
-              </span>
-            )}
+        {ds.map((f, i) => (laAnh(f) ? (
+          <button key={f.token} type="button" title={f.ten} onClick={() => onMo(i)}
+                  aria-label={`Xem to ${f.ten}`} className={vien}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- ảnh qua route nội bộ có kiểm quyền, không qua optimiser của Next */}
+            <img src={`${duong(f)}?w=320`} alt={f.ten} loading="lazy"
+                 className="size-28 rounded-lg object-cover" />
+          </button>
+        ) : (
+          <a key={f.token} href={duong(f)} target="_blank" rel="noreferrer" title={f.ten}
+             className={vien}>
+            <span className="grid size-28 place-items-center rounded-lg text-xs text-muted-foreground">
+              PDF
+            </span>
           </a>
-        ))}
+        )))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Khung xem ảnh to, phủ lên modal chi tiết — KHÔNG phải một `Dialog` thứ hai.
+ *
+ * Vì sao không lồng `Dialog`: hai lớp Radix chồng nhau tranh nhau tiêu điểm và phím Esc, lớp
+ * ngoài hay đóng theo lớp trong. Một lớp phủ `fixed` tự quản ba phím là đủ và đoán được.
+ *
+ * Esc đóng ĐÚNG khung ảnh, không đóng luôn modal chi tiết: `stopPropagation` chặn sự kiện trước
+ * khi nó tới người nghe ở cấp tài liệu của Radix. Người đang xem ảnh bấm Esc là muốn quay về
+ * danh sách ảnh, không phải mất cả trang chi tiết.
+ */
+function KhungXemAnh({ ds, i, onDoi, onDong }: {
+  ds: FileLark[]; i: number; onDoi: (i: number) => void; onDong: () => void;
+}) {
+  const f = ds[i];
+  if (!f) return null;
+  const doi = (b: number) => onDoi((i + b + ds.length) % ds.length);
+  return (
+    <div
+      role="dialog" aria-modal="true" aria-label={`Ảnh ${i + 1} trên ${ds.length}: ${f.ten}`}
+      tabIndex={-1}
+      ref={(el) => { el?.focus(); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') { e.stopPropagation(); onDong(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); doi(-1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); doi(1); }
+      }}
+      /* Bấm ra nền thì đóng; bấm vào chính tấm ảnh thì không. */
+      onClick={onDong}
+      className="fixed inset-0 z-[60] flex flex-col bg-black/90 outline-none"
+    >
+      <div className="flex shrink-0 items-center gap-3 px-4 py-3 text-white">
+        <span className="truncate text-sm">{f.ten}</span>
+        {ds.length > 1 && (
+          <span className="ml-auto text-xs tabular-nums text-white/70">{i + 1}/{ds.length}</span>
+        )}
+        <button type="button" onClick={onDong} aria-label="Đóng ảnh"
+                className={`${ds.length > 1 ? '' : 'ml-auto'} grid size-9 cursor-pointer place-items-center rounded-full hover:bg-white/15`}>
+          <XIcon className="size-5" />
+        </button>
+      </div>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element -- như trên */}
+        <img src={duong(f)} alt={f.ten} onClick={(e) => e.stopPropagation()}
+             className="max-h-full max-w-full object-contain" />
+        {ds.length > 1 && (
+          <>
+            <button type="button" aria-label="Ảnh trước"
+                    onClick={(e) => { e.stopPropagation(); doi(-1); }}
+                    className="absolute left-3 top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/15 text-white hover:bg-white/25">
+              <ChevronLeftIcon className="size-5" />
+            </button>
+            <button type="button" aria-label="Ảnh sau"
+                    onClick={(e) => { e.stopPropagation(); doi(1); }}
+                    className="absolute right-3 top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white/15 text-white hover:bg-white/25">
+              <ChevronRightIcon className="size-5" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -90,6 +164,10 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
   const mq = nhomQc(dong.qcCheck);
   const mk = nhomKho(dong.whAction);
   const brand = tenBrand(dong.vendorFinal, dong.sku);
+  /* Nhóm ảnh đang mở và vị trí trong nhóm. Giữ cả MẢNG chứ không giữ tên nhóm: ba nhóm ảnh là
+   * ba danh sách rời, lật qua lại chỉ nên quanh quẩn trong nhóm người vừa bấm. */
+  const [xemAnh, setXemAnh] = useState<{ ds: FileLark[]; i: number } | null>(null);
+  const mo = (ds: FileLark[]) => (i: number) => setXemAnh({ ds, i });
 
   return (
     <div className="space-y-5">
@@ -149,16 +227,24 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
         {/* Chữ NGƯỜI gõ trên Lark, giữ nguyên xuống dòng — không rút gọn, không sửa chính tả. */}
         <span className="whitespace-pre-wrap">{hoacGach(dong.lyDoFail)}</span>
       </O>
-      <NhomAnh ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} />
+      <NhomAnh ten="Ảnh chụp lỗi QC" ds={dong.anhLoiQc} onMo={mo(dong.anhLoiQc)} />
     </div>
 
-    <NhomAnh ten="Ảnh thực tế sản phẩm" ds={dong.anhHangDen} />
-    <NhomAnh ten="Biên bản bàn giao" ds={dong.bbBanGiao} />
+    <NhomAnh ten="Ảnh thực tế sản phẩm" ds={dong.anhHangDen} onMo={mo(dong.anhHangDen)} />
+    <NhomAnh ten="Biên bản bàn giao" ds={dong.bbBanGiao} onMo={mo(dong.bbBanGiao)} />
 
     {dong.dinhDanh && (
       <O nhan="Định danh">
         <span className="font-mono text-xs text-muted-foreground">{dong.dinhDanh}</span>
       </O>
+    )}
+
+    {xemAnh && (
+      <KhungXemAnh
+        ds={xemAnh.ds} i={xemAnh.i}
+        onDoi={(k) => setXemAnh({ ds: xemAnh.ds, i: k })}
+        onDong={() => setXemAnh(null)}
+      />
     )}
   </div>
   );
