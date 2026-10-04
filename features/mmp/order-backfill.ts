@@ -11,6 +11,19 @@ import { pickBackfillOrderIds } from '@/features/mmp/backfill-select';
 import { BRAND_STATUSES } from '@/features/fulfillment/brand-statuses';
 import { BRAND_OWNED_STORES } from '@/features/mmp/brand-stores';
 
+/**
+ * Điều kiện "đơn đặt TỪ ngày này trở đi", theo `created_at_shopify` — mốc KHÁCH đặt đơn, không
+ * phải lúc mình nhận dữ liệu về.
+ *
+ * Thêm 04/10/2026 khi CEO yêu cầu đẩy lại cho MMP các đơn từ 2026: trước đó `forcePushAllBrandOrders`
+ * không có mốc nào, đẩy là đẩy sạch 12.807 đơn từ 2020. Lọc ngày phải nằm TRONG hàm đẩy chứ
+ * không nằm trong script gọi nó — script có truy vấn riêng là bản thứ hai của cùng một câu hỏi,
+ * đúng loại lỗi đã bỏ sót 5 đơn UPS ngày 03/10.
+ */
+function tuNgayTroDi(tuNgay?: string) {
+  return tuNgay ? gte(schema.shopifyOrders.createdAtShopify, new Date(`${tuNgay}T00:00:00Z`)) : undefined;
+}
+
 /** Đẩy lại các đơn ĐÃ có dòng brand sang MMP (tồn đọng). pushOrderToMmp tự bỏ qua
  *  đơn đã sent-không-đổi (dedup phía mình) → chạy lại không flood; MMP dedupe là backstop.
  *  `limit` → chỉ đẩy N đơn đầu (để test trước khi chạy full); để trống = tất cả.
@@ -119,13 +132,17 @@ export async function pushOwnedStoreOrders(opts?: {
   force?: boolean;
   refresh?: boolean;
   dryRun?: boolean;
+  /** 'YYYY-MM-DD' — chỉ đơn đặt từ ngày này. Để trống = mọi đời. */
+  tuNgay?: string;
   onProgress?: (done: number, total: number, pushed: number, failed: number) => void;
 }): Promise<BackfillResult> {
+  const ngay = tuNgayTroDi(opts?.tuNgay);
   const cond = opts?.force || opts?.refresh
-    ? inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES))
+    ? and(inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)), ngay)
     : and(
         inArray(schema.stores.name, Object.keys(BRAND_OWNED_STORES)),
         or(isNull(schema.mmpOrderPushes.status), ne(schema.mmpOrderPushes.status, 'sent')),
+        ngay,
       );
   const rows = await db
     .selectDistinct({ orderId: schema.orderFulfillment.orderId })
@@ -156,16 +173,24 @@ export async function pushOwnedStoreOrders(opts?: {
  *  để script in tiến độ. */
 export async function forcePushAllBrandOrders(opts?: {
   limit?: number;
+  /** 'YYYY-MM-DD' — chỉ đơn đặt từ ngày này. Để trống = MỌI ĐỜI (12.807 đơn từ 2020). */
+  tuNgay?: string;
+  /** Chỉ ĐẾM, không gửi gì. Luôn chạy một lượt này trước khi đẩy thật. */
+  dryRun?: boolean;
   onProgress?: (done: number, total: number, pushed: number, failed: number) => void;
 }): Promise<BackfillResult> {
   const rows = await db
     .selectDistinct({ orderId: schema.orderFulfillment.orderId })
     .from(schema.orderFulfillmentLines)
     .innerJoin(schema.orderFulfillment, eq(schema.orderFulfillmentLines.fulfillmentId, schema.orderFulfillment.id))
-    .where(inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]));
+    // Nối sang đơn để lọc được theo ngày đặt. Khoá ngoại nên không mất dòng nào.
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.orderFulfillment.orderId))
+    .where(and(inArray(schema.orderFulfillmentLines.status, [...BRAND_STATUSES]), tuNgayTroDi(opts?.tuNgay)));
 
   const orderIds = pickBackfillOrderIds(rows.map((r) => r.orderId), opts?.limit);
   const total = orderIds.length;
+  if (opts?.dryRun) return { pushed: 0, skipped: 0, failed: 0, total };
+
   let pushed = 0, skipped = 0, failed = 0, done = 0;
   for (const oid of orderIds) {
     const r = await pushOrderToMmp(oid, { force: true });
