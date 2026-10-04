@@ -44,9 +44,21 @@ describe('OAnhLark — ô đính kèm trên bảng', () => {
     expect(html).toContain('3 file"');
   });
 
-  it('tệp đầu là PDF thì vẽ nhãn PDF, không vẽ thẻ ảnh hỏng', () => {
+  /* CEO 04/10/2026: tấm sau phải là ảnh THẬT, không phải ô xám. */
+  it('tấm phía sau là ảnh thật của tệp thứ hai và thứ ba', () => {
+    const html = ve(anh(3));
+    for (const t of ['tk0', 'tk1', 'tk2']) expect(html).toContain(`/api/kho-nhan/anh-lark/${t}?w=56`);
+  });
+
+  it('chỉ tấm ĐẦU mang nhãn cho trình đọc màn hình, tấm sau bị ẩn', () => {
+    const html = ve(anh(3));
+    expect(html.match(/alt="Ảnh lỗi QC · #MBLVD1"/g) ?? []).toHaveLength(1);
+    expect(html.match(/alt=""/g) ?? []).toHaveLength(2);
+  });
+
+  it('tệp đầu là PDF thì vẽ nhãn PDF, tấm sau vẫn là ảnh thật', () => {
     const html = ve([{ token: 'p1', ten: 'bb.pdf' }, { token: 'a1', ten: 'a.jpg' }]);
     expect(html).toContain('PDF');
-    expect(html).not.toContain('<img');
+    expect(html).toContain('/api/kho-nhan/anh-lark/a1?w=56');
   });
 });

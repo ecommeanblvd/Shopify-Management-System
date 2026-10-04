@@ -20,6 +20,30 @@ const duongNho = (f: FileLark) => `${duong(f)}?w=56`;
  * rộng hơn ô một ảnh, nên cả cột lệch theo từng dòng. Số file vẫn đọc được ở `title` và nhãn
  * trợ năng — thông tin không mất, chỉ thôi chiếm chỗ.
  */
+/**
+ * Một tấm 26px trong chồng ảnh.
+ *
+ * `sau` = tấm nằm phía sau: `aria-hidden` và `alt` rỗng, vì nó chỉ là dấu hiệu "còn nữa" —
+ * trình đọc màn hình đọc lại tên nhóm ba lần thì chỉ gây nhiễu, số file đã nằm ở nhãn của nút.
+ *
+ * PDF không có ảnh xem trước nên vẽ ô chữ; ở lớp sau thì bỏ cả chữ, 26px không đọc nổi.
+ */
+function Tam({ f, lop, nhan, sau }: { f: FileLark; lop: string; nhan?: string; sau?: boolean }) {
+  const chung = `absolute ${lop} size-[26px] rounded-[3px] border border-border`;
+  if (!laAnh(f)) {
+    return (
+      <span aria-hidden={sau} className={`${chung} grid place-items-center bg-background text-[9px] text-muted-foreground`}>
+        {sau ? '' : 'PDF'}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- ảnh đi qua route nội bộ có kiểm quyền, không qua optimiser của Next
+    <img src={duongNho(f)} alt={sau ? '' : nhan} aria-hidden={sau} loading="lazy"
+         className={`${chung} bg-background object-cover`} />
+  );
+}
+
 export function OAnhLark({ ds, nhan }: { ds: FileLark[]; nhan: string }) {
   const [mo, setMo] = useState(false);
   const [i, setI] = useState(0);
@@ -41,21 +65,11 @@ export function OAnhLark({ ds, nhan }: { ds: FileLark[]; nhan: string }) {
             Trước đó là ảnh + chữ "+2" nằm cạnh, làm ô rộng hơn các ô một ảnh nên cả cột lệch.
             Khung ngoài LUÔN 32px dù một hay năm file, nên mọi dòng thẳng hàng tuyệt đối. */}
         <span className="relative block size-8">
-          {ds.length > 2 && (
-            <span aria-hidden className="absolute right-0 top-0 size-[26px] rounded-[3px] border border-border bg-muted" />
-          )}
-          {ds.length > 1 && (
-            <span aria-hidden className="absolute right-[3px] top-[3px] size-[26px] rounded-[3px] border border-border bg-muted" />
-          )}
-          {laAnh(ds[0]!) ? (
-            // eslint-disable-next-line @next/next/no-img-element -- ảnh đi qua route nội bộ có kiểm quyền, không qua optimiser của Next
-            <img src={duongNho(ds[0]!)} alt={nhan} loading="lazy"
-                 className="absolute bottom-0 left-0 size-[26px] rounded-[3px] border border-border object-cover" />
-          ) : (
-            <span className="absolute bottom-0 left-0 grid size-[26px] place-items-center rounded-[3px] border border-border bg-background text-[9px] text-muted-foreground">
-              PDF
-            </span>
-          )}
+          {/* Tấm sau là ẢNH THẬT, không phải ô xám (CEO 04/10/2026) — nhìn chồng ảnh là đoán
+              được bên trong có gì. Thứ tự vẽ: xa nhất trước, tấm đầu đè lên trên cùng. */}
+          {ds[2] && <Tam f={ds[2]} lop="right-0 top-0" sau />}
+          {ds[1] && <Tam f={ds[1]} lop="right-[3px] top-[3px]" sau />}
+          <Tam f={ds[0]!} lop="bottom-0 left-0" nhan={nhan} />
         </span>
       </button>
 
