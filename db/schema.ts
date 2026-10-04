@@ -1819,6 +1819,9 @@ export const mmpProducts = pgTable('mmp_products', {
   description: text('description'),
   collection: text('collection'),
   productType: text('product_type'),
+  /** Tên vendor cho sản phẩm trên Shopify, do MMP chọn (04/10/2026). Lưu NGUYÊN VĂN.
+   *  NULL = gói chưa gửi trường này, KHÁC với chuỗi rỗng — xem migration 0199. */
+  vendor: text('vendor'),
   status: mmpProductStatusEnum('status').notNull(),
   /** Origin of the row: 'mmp' (pushed from Mean Merchant Portal) or 'shopify'
    *  (backfilled history from an existing Shopify catalog). */

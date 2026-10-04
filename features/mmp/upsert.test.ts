@@ -189,3 +189,49 @@ localOnly('upsertMmpEnvelope', () => {
     expect(r.rejected).toBe(0);
   });
 });
+
+localOnly('vendor — MMP chọn, SMS giữ nguyên văn (04/10/2026)', () => {
+  it('lưu nguyên văn chuỗi vendor', async () => {
+    const p = makeProduct({ vendor: 'TINH Atelier' });
+    await upsertMmpEnvelope({ products: [p] });
+    const [row] = await db.select().from(schema.mmpProducts)
+      .where(eq(schema.mmpProducts.portalProductId, p.portalProductId));
+    expect(row?.vendor).toBe('TINH Atelier');
+  });
+
+  /* MMP chốt: "nếu gói không có trường vendor thì giữ nguyên vendor đang có, không ghi rỗng".
+     Đây là chỗ dễ sai nhất — viết `vendor: vendor ?? null` trong SET là xoá sạch mà không ai
+     thấy, vì lượt đẩy nào của MMP cũng chạy qua đúng dòng đó. */
+  it('gói sau KHÔNG có vendor → giữ nguyên giá trị cũ, không ghi rỗng', async () => {
+    const p = makeProduct({ vendor: 'Mirer' });
+    await upsertMmpEnvelope({ products: [p] });
+
+    const sau = { ...p, name: `${p.name} (đổi tên)` };
+    delete (sau as { vendor?: string }).vendor;
+    await upsertMmpEnvelope({ products: [sau] });
+
+    const [row] = await db.select().from(schema.mmpProducts)
+      .where(eq(schema.mmpProducts.portalProductId, p.portalProductId));
+    expect(row?.vendor).toBe('Mirer');          // vẫn còn
+    expect(row?.name).toBe(sau.name);           // trường khác vẫn cập nhật bình thường
+  });
+
+  it('gói sau có vendor MỚI → ghi đè bằng giá trị mới', async () => {
+    const p = makeProduct({ vendor: 'Mirer' });
+    await upsertMmpEnvelope({ products: [p] });
+    await upsertMmpEnvelope({ products: [{ ...p, vendor: 'Mirer Mirer' }] });
+    const [row] = await db.select().from(schema.mmpProducts)
+      .where(eq(schema.mmpProducts.portalProductId, p.portalProductId));
+    expect(row?.vendor).toBe('Mirer Mirer');
+  });
+
+  /* Chuỗi rỗng không phải một quyết định — xem `vendorTuGoi`. */
+  it('vendor rỗng → coi như vắng, giữ nguyên giá trị cũ', async () => {
+    const p = makeProduct({ vendor: 'Mirer' });
+    await upsertMmpEnvelope({ products: [p] });
+    await upsertMmpEnvelope({ products: [{ ...p, vendor: '   ' }] });
+    const [row] = await db.select().from(schema.mmpProducts)
+      .where(eq(schema.mmpProducts.portalProductId, p.portalProductId));
+    expect(row?.vendor).toBe('Mirer');
+  });
+});

@@ -109,6 +109,25 @@ describe('mmpProductSchema', () => {
   });
 });
 
+describe('vendor — MMP chọn, SMS nhận nguyên văn (04/10/2026)', () => {
+  it('nhận trường vendor và giữ nguyên văn', () => {
+    const r = mmpProductSchema.safeParse({ ...VALID_PRODUCT, vendor: 'TINH Atelier' });
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.vendor).toBe('TINH Atelier');
+  });
+
+  /* MMP chốt trường này TUỲ CHỌN — gói cũ không có vendor vẫn phải qua được. */
+  it('vắng vendor vẫn hợp lệ', () => {
+    const r = mmpProductSchema.safeParse(VALID_PRODUCT);
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.vendor).toBeUndefined();
+  });
+
+  it('vendor sai kiểu thì báo lỗi rõ, không âm thầm bỏ qua', () => {
+    expect(mmpProductSchema.safeParse({ ...VALID_PRODUCT, vendor: 123 }).success).toBe(false);
+  });
+});
+
 describe('mmpEnvelopeSchema', () => {
   it('accepts a batch envelope { products: [...] }', () => {
     const r = mmpEnvelopeSchema.safeParse({ products: [VALID_PRODUCT] });

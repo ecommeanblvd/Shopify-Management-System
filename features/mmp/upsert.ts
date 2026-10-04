@@ -17,6 +17,7 @@
  */
 
 import { normalizeBrandDisplayName } from './brand-name';
+import { vendorTuGoi } from './vendor-san-pham';
 import crypto from 'node:crypto';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -62,6 +63,9 @@ async function ensureBrand(slug: string): Promise<void> {
  *  Throws on DB error so the caller can record a per-item failure. */
 async function upsertOne(p: MmpProduct): Promise<UpsertItemResult> {
   const hash = canonicalHash(p);
+  /* `null` = gói không nói gì về vendor → lượt cập nhật KHÔNG đụng tới cột, giữ nguyên giá trị
+   * đang có. Xem `vendorTuGoi` và migration 0199. */
+  const vendor = vendorTuGoi(p.vendor);
 
   await ensureBrand(p.brandSlug);
 
@@ -79,6 +83,7 @@ async function upsertOne(p: MmpProduct): Promise<UpsertItemResult> {
         description: p.description ?? null,
         collection: p.collection ?? null,
         productType: p.productType ?? null,
+        vendor,
         status: p.status,
         basePrice: String(p.basePrice),
         currency: 'VND',
@@ -103,6 +108,9 @@ async function upsertOne(p: MmpProduct): Promise<UpsertItemResult> {
           description: p.description ?? null,
           collection: p.collection ?? null,
           productType: p.productType ?? null,
+          /* Vắng `vendor` thì KHÔNG đưa khoá vào SET — cột giữ nguyên giá trị cũ. Viết
+           * `vendor: vendor ?? null` là ghi đè thành rỗng, đúng thứ MMP dặn không được làm. */
+          ...(vendor !== null ? { vendor } : {}),
           status: p.status,
           basePrice: String(p.basePrice),
           currency: 'VND',

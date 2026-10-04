@@ -1,0 +1,14 @@
+-- Tên vendor cho sản phẩm trên Shopify, do MMP CHỌN (MMP chốt 04/10/2026).
+--
+-- MMP là bên quyết định chuỗi vendor; SMS nhận và lưu nguyên văn — không đổi hoa thường, không
+-- bỏ dấu. Chuỗi này sau đó dùng để đặt `product.vendor` khi có đường đẩy sản phẩm lên Shopify.
+--
+-- LƯU Ý trạng thái thật ngày thêm cột: SMS CHƯA có đường đẩy sản phẩm lên Shopify. Cột
+-- `pushed_to_shopify_at` và trạng thái `curation_status = 'pushed'` tồn tại từ trước nhưng
+-- KHÔNG chỗ nào trong mã ghi vào chúng — SMS chỉ NỐI sản phẩm MMP vào biến thể Shopify đã có
+-- sẵn, khớp theo SKU. Cột này là chỗ chứa sẵn cho việc đó, không phải bằng chứng việc đã có.
+--
+-- NULL = gói không gửi `vendor`. Khác hẳn chuỗi rỗng: MMP chốt "gói không có trường vendor thì
+-- giữ nguyên vendor đang có, không ghi rỗng", nên chỗ nào đọc cột này cũng phải phân biệt
+-- "chưa biết" với "cố ý để trống".
+ALTER TABLE mmp_products ADD COLUMN IF NOT EXISTS vendor text;

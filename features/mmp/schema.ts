@@ -62,6 +62,12 @@ export const mmpProductSchema = z
     description: z.string().optional(),
     collection: z.string().optional(),
     productType: z.string().optional(),
+    /* Tên vendor cho sản phẩm trên Shopify, do MMP chọn (MMP chốt 04/10/2026).
+     *
+     * Khai TƯỜNG MINH dù `.passthrough()` vốn đã cho lọt: trường lọt qua thì không có kiểu,
+     * không ai đọc schema mà biết nó tồn tại, và đổi `.passthrough()` thành `.strict()` sau này
+     * là lặng lẽ chặn mất gói của MMP. */
+    vendor: z.string().optional(),
     status: z.enum(['live', 'draft', 'archived']),
     basePrice: moneyVnd,
     currency: z.literal('VND', { error: 'currency must be "VND"' }),
