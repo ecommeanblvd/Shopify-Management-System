@@ -15,6 +15,10 @@ const duongNho = (f: FileLark) => `${duong(f)}?w=56`;
  *
  * File nằm trên Lark Drive và chỉ tải được kèm token của app, nên ảnh đi vòng
  * qua `/api/kho-nhan/anh-lark` — route đó tự kiểm quyền xem kho.
+ *
+ * Nhiều file thì xếp CHỒNG chứ không bày "+2" cạnh ảnh (CEO 04/10/2026): chữ nằm cạnh làm ô
+ * rộng hơn ô một ảnh, nên cả cột lệch theo từng dòng. Số file vẫn đọc được ở `title` và nhãn
+ * trợ năng — thông tin không mất, chỉ thôi chiếm chỗ.
  */
 export function OAnhLark({ ds, nhan }: { ds: FileLark[]; nhan: string }) {
   const [mo, setMo] = useState(false);
@@ -30,16 +34,29 @@ export function OAnhLark({ ds, nhan }: { ds: FileLark[]; nhan: string }) {
       <button
         type="button" onClick={() => { setI(0); setMo(true); }}
         title={`${ds.length} file — bấm để xem to`}
-        className="flex cursor-pointer items-center justify-center gap-1"
+        aria-label={`${nhan} — ${ds.length} file`}
+        className="mx-auto block cursor-pointer"
       >
-        {laAnh(ds[0]!) ? (
-          // eslint-disable-next-line @next/next/no-img-element -- ảnh đi qua route nội bộ có kiểm quyền, không qua optimiser của Next
-          <img src={duongNho(ds[0]!)} alt={nhan} loading="lazy"
-               className="size-7 rounded border border-border object-cover" />
-        ) : (
-          <span className="grid size-7 place-items-center rounded border border-border text-[9px] text-muted-foreground">PDF</span>
-        )}
-        {ds.length > 1 && <span className="text-[10px] text-muted-foreground">+{ds.length - 1}</span>}
+        {/* Nhiều file thì xếp CHỒNG, mép tấm sau hé ra phía trên-phải (CEO 04/10/2026).
+            Trước đó là ảnh + chữ "+2" nằm cạnh, làm ô rộng hơn các ô một ảnh nên cả cột lệch.
+            Khung ngoài LUÔN 32px dù một hay năm file, nên mọi dòng thẳng hàng tuyệt đối. */}
+        <span className="relative block size-8">
+          {ds.length > 2 && (
+            <span aria-hidden className="absolute right-0 top-0 size-[26px] rounded-[3px] border border-border bg-muted" />
+          )}
+          {ds.length > 1 && (
+            <span aria-hidden className="absolute right-[3px] top-[3px] size-[26px] rounded-[3px] border border-border bg-muted" />
+          )}
+          {laAnh(ds[0]!) ? (
+            // eslint-disable-next-line @next/next/no-img-element -- ảnh đi qua route nội bộ có kiểm quyền, không qua optimiser của Next
+            <img src={duongNho(ds[0]!)} alt={nhan} loading="lazy"
+                 className="absolute bottom-0 left-0 size-[26px] rounded-[3px] border border-border object-cover" />
+          ) : (
+            <span className="absolute bottom-0 left-0 grid size-[26px] place-items-center rounded-[3px] border border-border bg-background text-[9px] text-muted-foreground">
+              PDF
+            </span>
+          )}
+        </span>
       </button>
 
       <Dialog open={mo} onOpenChange={(v) => { if (!v) setMo(false); }}>
