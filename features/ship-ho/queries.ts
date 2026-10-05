@@ -23,6 +23,10 @@ export interface ShipHoOrderRow {
   source: string;
   createdAt: Date;
   customerRef: string | null;
+  /** Cột "Brand Reference" trên Lark — mã BRAND dùng gọi đơn. Xem `maDonBrand`. */
+  brandReference: string | null;
+  /** Order Number của LOG trên Lark — mã VẬN HÀNH, không phải mã brand. */
+  larkOrderNumber: string | null;
   trackingNumber: string | null;
   deliveryStatus: string | null;
   reconcileStatus: string | null;
@@ -59,6 +63,8 @@ export async function listShipHoOrders(filter?: {
       source: schema.shipHoOrders.source,
       createdAt: schema.shipHoOrders.createdAt,
       customerRef: schema.shipHoOrders.customerRef,
+      brandReference: schema.shipHoOrders.brandReference,
+      larkOrderNumber: schema.shipHoOrders.larkOrderNumber,
       trackingNumber: schema.shipHoOrders.trackingNumber,
       deliveryStatus: schema.shipHoOrders.deliveryStatus,
       reconcileStatus: schema.shipHoOrders.reconcileStatus,

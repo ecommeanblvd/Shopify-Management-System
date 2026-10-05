@@ -19,6 +19,7 @@ import { SmsMeasureCard } from './SmsMeasureCard';
 import { CopyField } from './CopyField';
 import { AddTrackingButton } from './AddTrackingButton';
 import { CustomerRefEditor } from './CustomerRefEditor';
+import { maDonBrand } from '@/features/ship-ho/ma-don-brand';
 import { ShipHoCarrierPanel } from './ShipHoCarrierPanel';
 import { MeasureButton } from './MeasureButton';
 import { ManualStatusControl } from './ManualStatusControl';
@@ -142,9 +143,16 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           <span>Ngày đi hàng: <b className="text-foreground">{o.shippedAt
             ? new Date(`${o.shippedAt}T00:00:00`).toLocaleDateString('vi-VN')
             : '—'}</b>{canManage && o.trackingNumber ? <span className="ml-1 text-[10px]">(sửa qua “✎ Sửa tracking”)</span> : null}</span>
+          {/* Mã BRAND lấy qua `maDonBrand` — nơi duy nhất trả lời câu này, và nó loại mã vận
+              hành ở đầu ra. Trước 05/10/2026 ô này đọc thẳng `customerRef`, mà 29 đơn đồng bộ
+              từ Lark có `customerRef` là bản sao mã Lark, nên nhãn "(brand)" hiện ra mã của
+              LOG. Ô sửa vẫn sửa `customerRef` — đó là chỗ người nhập tay. */}
           <span>Mã đơn gốc (brand): {canManage
-            ? <CustomerRefEditor orderId={o.id} customerRef={o.customerRef ?? null} />
-            : <b className="text-foreground">{o.customerRef ?? '—'}</b>}</span>
+            ? <CustomerRefEditor orderId={o.id} customerRef={maDonBrand(o)} />
+            : <b className="text-foreground">{maDonBrand(o) ?? '—'}</b>}</span>
+          {o.larkOrderNumber && (
+            <span>Mã Lark (LOG): <b className="text-foreground">{o.larkOrderNumber}</b></span>
+          )}
         </div>
 
         {/* Các trường thông tin theo form carrier — mỗi field 1 nút copy */}

@@ -6,7 +6,8 @@ const base = { id: '1', code: '26-INSLG-SV-0001', partnerBrandSlug: 'kalisa', br
   actualWeightKg: null, chargedVnd: null, actualChargedVnd: null, actualDutyVnd: null, marginVnd: null,
   deliveryStatus: null, reconcileStatus: null, reconcileDecision: null,
   status: 'draft', source: 'mmp', createdAt: new Date(0),
-  customerRef: 'KLS-9001', trackingNumber: '7712345', recipientName: 'Jaque' } as const;
+  customerRef: 'KLS-9001', brandReference: null, larkOrderNumber: null,
+  trackingNumber: '7712345', recipientName: 'Jaque' } as const;
 
 describe('filterShipHoOrders', () => {
   const rows = [

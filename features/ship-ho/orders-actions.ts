@@ -6,6 +6,7 @@ import { db, schema } from '@/db/client';
 import { validateAddressExtra } from '@/lib/geo/address-requirements';
 import { emitShipHoEvent } from './mmp-events';
 import { internalCodePrefix } from './internal-code';
+import { laMaNoiBo } from './ma-don-brand';
 import { computeOffer } from './offer-pricing';
 import { markupTheoBac } from './tier-pricing';
 import { payloadOrderReceived } from './order-received-payload';
@@ -194,7 +195,8 @@ export async function updateShipHoCustomerRef(
 ): Promise<{ ok: boolean; error?: string }> {
   try { await requireManageShipHo(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   const ref = customerRef.trim();
-  if (/-INS(LG|MS)-/i.test(ref)) {
+  // Cùng luật với chỗ hiển thị — xem `ma-don-brand.ts`. Trước đây mỗi nơi một biểu thức.
+  if (laMaNoiBo(ref)) {
     return { ok: false, error: 'Đây là mã vận hành nội bộ — Mã đơn gốc phải là mã từ phía brand (vd #KLS2001).' };
   }
   const [o] = await db.select().from(schema.shipHoOrders).where(eq(schema.shipHoOrders.id, orderId)).limit(1);
