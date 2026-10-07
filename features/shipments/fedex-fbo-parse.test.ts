@@ -146,3 +146,30 @@ describe('classifyFboCharge — nhãn bắt thêm 21/07', () => {
     expect(classifyFboCharge('Third Party Billing Surcharge')).toBe('other');
   });
 });
+
+describe('classifyFboCharge — thuế nhập khẩu của NƯỚC ĐẾN (CEO 07/10/2026)', () => {
+  /* Đơn 26-INSLG-SV-0158 (AWB 877737149702): hoá đơn thuế 736062060 có hai nhãn —
+   *   Canada HST            172.995
+   *   Duty Disbursement Fee 225.891
+   * Trên bill là MỘT khoản "duty and tax" 398.886, nhưng "Canada HST" không khớp luật nào nên
+   * rơi vào `other`, và bảng kê gửi brand tách thành "Phụ phí khác (chưa phân loại)" + "Thuế /
+   * hải quan". HST là thuế tiêu thụ khi NHẬP, cùng bản chất "VAT/Consumption Tax" vốn đã xếp
+   * vào `duty` — không phải VAT cước. */
+  it('thuế tiêu thụ của nước đến → duty, không rơi vào chưa phân loại', () => {
+    expect(classifyFboCharge('Canada HST')).toBe('duty');
+    expect(classifyFboCharge('Canada GST')).toBe('duty');
+    expect(classifyFboCharge('QST')).toBe('duty');
+  });
+
+  /* VAT CƯỚC vẫn phải ở `vat` — đây là khoản mình trả cho FedEx trên chính cước, khác hẳn thuế
+     nhập khẩu thu hộ người nhận. */
+  it('VAT cước không bị kéo sang duty', () => {
+    expect(classifyFboCharge('Vietnam VAT')).toBe('vat');
+    expect(classifyFboCharge('UAE Freight VAT')).toBe('vat');
+  });
+
+  /* Không nuốt nhầm chữ khác có chứa 3 ký tự đó. */
+  it('không khớp nhầm nhãn chỉ TÌNH CỜ chứa hst/gst', () => {
+    expect(classifyFboCharge('Ghost Package Handling')).not.toBe('duty');
+  });
+});

@@ -15,6 +15,16 @@ export function classifyFboCharge(label: string): FboBucket {
   // DUTY/customs kiểm TRƯỚC vat: "VAT/Consumption Tax" = thuế tiêu thụ/NK
   // (customs, pass-through người nhập trả) — KHÁC "Vietnam VAT" (VAT cước 8%).
   if (t.includes('consumption') || t.includes('duty') || t.includes('customs') || t.includes('disbursement')) return 'duty';
+  /* Thuế tiêu thụ của NƯỚC ĐẾN: Canada HST/GST, QST (Québec), PST. Cùng họ với
+   * "VAT/Consumption Tax" đã xếp vào `duty` ở trên — người NHẬP trả, pass-through, không phải
+   * VAT trên cước của mình. Quan sát thật: hoá đơn 736062060 (AWB 877737149702, đơn
+   * 26-INSLG-SV-0158) có "Canada HST" 172.995 đi cạnh "Duty Disbursement Fee" 225.891; trên
+   * bill là MỘT khoản duty-and-tax 398.886, nhưng HST rơi vào `other` nên bảng kê gửi brand
+   * tách làm hai dòng, một dòng mang tên "chưa phân loại" (CEO bắt 07/10/2026).
+   *
+   * So theo TỪ ĐỨNG RIÊNG (`\b`), không phải chuỗi con: "Ghost", "Gstaad" không được tính.
+   * Chỉ "Canada HST" là nhãn đã thấy thật; ba cái còn lại thêm theo cùng họ thuế, chưa gặp. */
+  if (/\b(hst|gst|qst|pst)\b/.test(t)) return 'duty';
   // VAT cước (Vietnam VAT / UAE Freight VAT / Vietnam VAT Freight).
   if (t.includes('vat')) return 'vat';
   if (t.includes('freight') || t.includes('transportation')) return 'base';
