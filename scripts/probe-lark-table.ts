@@ -137,4 +137,30 @@ async function main() {
   }
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+/**
+ * Thử lại khi mạng chớp. Đo 08/10/2026: hai lượt dò chết vì `UND_ERR_CONNECT_TIMEOUT` tới
+ * endpoint Lark, lượt chạy lại thì xong ngay — một lệnh CHỈ ĐỌC không có lý gì bắt người dùng
+ * tự chạy lại. Chỉ thử lại lỗi KẾT NỐI; lỗi Lark trả về (sai mã bảng, thiếu quyền) thì dừng
+ * ngay, vì thử lại một câu trả lời dứt khoát là vô nghĩa và làm chậm chẩn đoán.
+ */
+const LA_LOI_MANG = (e: unknown): boolean => {
+  const s = `${(e as { message?: string })?.message ?? ''} ${(e as { cause?: { code?: string } })?.cause?.code ?? ''}`;
+  return /fetch failed|TIMEOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(s);
+};
+
+async function chay(): Promise<void> {
+  const SO_LAN = 4;
+  for (let i = 1; i <= SO_LAN; i++) {
+    try {
+      await main();
+      return;
+    } catch (e) {
+      if (i === SO_LAN || !LA_LOI_MANG(e)) throw e;
+      const cho = i * 3000;
+      console.error(`[dò] lỗi mạng lần ${i}/${SO_LAN}, thử lại sau ${cho / 1000}s…`);
+      await new Promise((r) => setTimeout(r, cho));
+    }
+  }
+}
+
+chay().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
