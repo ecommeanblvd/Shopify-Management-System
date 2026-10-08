@@ -22,6 +22,15 @@ import { docCanNhap } from './can-chiec';
 import { docCheDoGhi, duocGhi, type CheDoGhi } from './day-lark';
 
 export interface KetQuaDayCan {
+  /**
+   * Chế độ ghi lượt này chạy ở — 'dry' chạy thử, 'chon' chỉ vài dòng khai tên, 'that' toàn bộ.
+   *
+   * Vì sao phải ghi lại: 08/10/2026 em đọc `job_runs` của việc này để kết luận biến
+   * `WH_GHI_CAN_LARK` đang bật hay tắt, và KHÔNG kết luận được — khi mọi ô Lark đã có số thì
+   * không dòng nào đi tới bước kiểm chế độ, nên `dry: 0, ghi: 0` ra giống hệt nhau ở cả ba chế
+   * độ. Một lượt chạy phải tự khai nó chạy ở chế độ nào, thay vì để người đọc suy từ bộ đếm.
+   */
+  cheDo: CheDoGhi['kieu'];
   /** Chiếc trong SMS có cân VÀ có nối dòng Lark. */
   ungVien: number;
   /** Bỏ qua vì ô Lark ĐÃ có số — không đụng tới. */
@@ -81,7 +90,14 @@ export function chonUngVienDayCan(
  * vừa điền cân, và ghi theo ảnh cũ là đè mất số vừa điền.
  */
 export async function dayCanLenLark(daTai?: LarkRecord[]): Promise<KetQuaDayCan> {
+  /* Biến RIÊNG, không dùng chung `WH_GHI_LARK`: bật ghi thật cho đường nhận-KCS không có nghĩa
+   * là đồng ý ghi cân, và ngược lại. Chung một biến là một cái bật mở hai cửa.
+   *
+   * Đọc NGAY ĐẦU lượt, không đọc giữa vòng lặp: chế độ là thuộc tính của LƯỢT CHẠY, nên lượt
+   * không có ứng viên nào cũng phải khai được nó đang ở chế độ gì. */
+  const cheDo: CheDoGhi = docCheDoGhi(process.env.WH_GHI_CAN_LARK);
   const ra: KetQuaDayCan = {
+    cheDo: cheDo.kieu,
     ungVien: 0, larkDaCo: 0, canVoLy: 0, khongThayDong: 0, dry: 0, vuaBiDien: 0, ghi: 0, loi: 0,
   };
   const smsCan = await db.select({
@@ -95,9 +111,6 @@ export async function dayCanLenLark(daTai?: LarkRecord[]): Promise<KetQuaDayCan>
   const loc = chonUngVienDayCan(smsCan as { recordId: string; canKg: string | null }[], dong);
   ra.larkDaCo = loc.larkDaCo; ra.canVoLy = loc.canVoLy; ra.khongThayDong = loc.khongThayDong;
 
-  // Biến RIÊNG, không dùng chung `WH_GHI_LARK`: bật ghi thật cho đường nhận-KCS không có
-  // nghĩa là đồng ý ghi cân, và ngược lại. Chung một biến là một cái bật mở hai cửa.
-  const cheDo: CheDoGhi = docCheDoGhi(process.env.WH_GHI_CAN_LARK);
   for (const u of loc.chon) {
     if (!duocGhi(cheDo, u.recordId)) {
       ra.dry++;

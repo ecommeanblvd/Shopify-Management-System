@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { oCanLarkTrong, chonUngVienDayCan } from './day-can-lark';
+import { readFile } from 'node:fs/promises';
+import { oCanLarkTrong, chonUngVienDayCan, type KetQuaDayCan } from './day-can-lark';
 import { COT_CAN_LARK, CAN_TOI_DA_KG } from './can-tu-lark';
 import type { LarkRecord } from '@/features/lark/client';
 
@@ -63,5 +64,32 @@ describe('chonUngVienDayCan', () => {
     expect(r.chon.map((x) => x.recordId)).toEqual(['ok']);
     expect({ larkDaCo: r.larkDaCo, canVoLy: r.canVoLy, khongThayDong: r.khongThayDong })
       .toEqual({ larkDaCo: 1, canVoLy: 1, khongThayDong: 1 });
+  });
+});
+
+/* 08/10/2026: đọc `job_runs` của việc này để biết `WH_GHI_CAN_LARK` đang bật hay tắt thì KHÔNG
+ * kết luận được — mọi ô Lark đã có số nên không dòng nào tới bước kiểm chế độ, và `dry: 0,
+ * ghi: 0` ra giống hệt nhau ở cả ba chế độ. Lượt chạy phải TỰ KHAI chế độ. */
+describe('KetQuaDayCan.cheDo', () => {
+  it('có trường `cheDo` trong kiểu kết quả — nếu không, không ai đọc được lượt chạy ở chế độ nào', () => {
+    const mau: KetQuaDayCan = {
+      cheDo: 'that',
+      ungVien: 0, larkDaCo: 0, canVoLy: 0, khongThayDong: 0, dry: 0, vuaBiDien: 0, ghi: 0, loi: 0,
+    };
+    expect(mau.cheDo).toBe('that');
+  });
+
+  /* Hàng rào đọc nguồn: `cheDo` phải được gán khi DỰNG `ra`, trước mọi lối thoát sớm. Gán ở
+     giữa vòng lặp ghi là lượt "không có ứng viên nào" lại không khai được chế độ — đúng ca đã
+     làm em đoán sai. */
+  it('gán chế độ TRƯỚC mọi lối thoát sớm', async () => {
+    const src = await readFile(new URL('./day-can-lark.ts', import.meta.url), 'utf8');
+    const iDoc = src.indexOf('docCheDoGhi(process.env.WH_GHI_CAN_LARK)');
+    const iRa = src.indexOf('const ra: KetQuaDayCan = {');
+    const iThoat = src.indexOf('if (smsCan.length === 0) return ra;');
+    expect(iDoc).toBeGreaterThan(-1);
+    expect(iRa).toBeGreaterThan(iDoc);
+    expect(iThoat).toBeGreaterThan(iRa);
+    expect(src.slice(iRa, iThoat)).toContain('cheDo: cheDo.kieu');
   });
 });
