@@ -5,19 +5,28 @@
  * VĂN — sai một ký tự là Lark trả `undefined` và im lặng bỏ qua cả bảng, không báo lỗi. Khoá
  * Lark chỉ nằm trên Railway nên lệnh này chạy ở đó, không chạy trên máy lập trình.
  *
- * Dùng:
- *   npm run probe:lark-table -- <tableId> [appToken]
- *   npm run probe:lark-table              # không tham số: liệt kê MỌI bảng trong base
+ * Dùng (khoá lấy từ Railway, KHÔNG ghi xuống đĩa):
+ *   railway run npm run probe:lark-table                      # liệt kê MỌI bảng trong base
+ *   railway run npm run probe:lark-table -- <tableId>         # cột + 3 dòng mẫu
+ *   railway run npm run probe:lark-table -- <tableId> --cot   # CHỈ cột
+ *   railway run npm run probe:lark-table -- <tableId> --dong  # CHỈ dòng mẫu
  *
- * `appToken` để trống thì dùng base mặc định (`LARK_BASE_APP_TOKEN`).
+ * `--cot` có vì bảng nhiều cột thì output dài hơn khung cuộn của terminal và phần ĐẦU bị cắt —
+ * đúng phần cần đọc (đo 08/10/2026 với bảng `LOG - Import`).
+ *
+ * Tham số không bắt đầu bằng `--` thứ hai là `appToken`; để trống thì dùng base WH.
  */
 import { listTableFields, listBaseTables, peekTableRecords } from '@/features/lark/client';
 
 const BASE_WH = 'HxfAw0iRViHiNgkSlbBltpVkg3f';
 
 async function main() {
-  const [tableId, appToken] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const co = args.filter((a) => a.startsWith('--'));
+  const [tableId, appToken] = args.filter((a) => !a.startsWith('--'));
   const token = appToken || BASE_WH;
+  const chiCot = co.includes('--cot');
+  const chiDong = co.includes('--dong');
 
   if (!tableId) {
     console.log(`=== BẢNG trong base ${token} ===`);
@@ -25,17 +34,22 @@ async function main() {
     return;
   }
 
-  console.log(`=== CỘT của ${tableId} (base ${token}) ===`);
-  for (const f of await listTableFields(tableId, token)) {
-    const opts = (f as { property?: { options?: { name: string }[] } }).property?.options;
-    const them = opts?.length ? `  [${opts.map((o) => o.name).join(' | ')}]` : '';
-    console.log(`type=${String(f.type).padStart(3)}  ${f.field_name}${them}`);
+  if (!chiDong) {
+    const cot = await listTableFields(tableId, token);
+    console.log(`=== ${cot.length} CỘT của ${tableId} (base ${token}) ===`);
+    for (const f of cot) {
+      const opts = (f as { property?: { options?: { name: string }[] } }).property?.options;
+      const them = opts?.length ? `  [${opts.map((o) => o.name).join(' | ')}]` : '';
+      console.log(`type=${String(f.type).padStart(3)}  ${f.field_name}${them}`);
+    }
   }
 
-  console.log(`\n=== 3 DÒNG MẪU ===`);
-  for (const r of await peekTableRecords(tableId, 3, token)) {
-    console.log(`--- ${r.record_id}`);
-    console.log(JSON.stringify(r.fields, null, 1));
+  if (!chiCot) {
+    console.log(`\n=== 3 DÒNG MẪU ===`);
+    for (const r of await peekTableRecords(tableId, 3, token)) {
+      console.log(`--- ${r.record_id}`);
+      console.log(JSON.stringify(r.fields, null, 1));
+    }
   }
 }
 
