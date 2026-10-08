@@ -51,8 +51,13 @@ export function OAnhLoiQc({ itemId, anh, coStorage, daFail = false, sauKhiLuu }:
       )}
 
       <Dialog open={mo} onOpenChange={setMo}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogTitle className="text-base">Lỗi QC của chiếc này</DialogTitle>
+        {/* Bảo báo 09/10/2026: nhiều chỗ lỗi thì hộp thoại dài quá màn hình và NÚT LƯU bị đẩy
+            ra ngoài, không cuộn tới được. Trần chiều cao + cho cuộn phần thân; tiêu đề đứng
+            yên để người kiểm luôn biết đang ở đâu. `min-h-0` là bắt buộc: con của flex mặc
+            định không co dưới nội dung nên `overflow-y-auto` sẽ không bao giờ kích hoạt. */}
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
+          <DialogTitle className="shrink-0 text-base">Lỗi QC của chiếc này</DialogTitle>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
           {anh.length > 0 && (
             <ul className="space-y-1 text-xs">
               {anh.map((a) => (
@@ -69,6 +74,7 @@ export function OAnhLoiQc({ itemId, anh, coStorage, daFail = false, sauKhiLuu }:
             onXong={() => { setMo(false); sauKhiLuu(); }}
             onHuy={() => setMo(false)}
           />
+          </div>
         </DialogContent>
       </Dialog>
     </>
