@@ -11,9 +11,15 @@ import type { DongThuocTinh } from './thuoc-tinh-shopify';
 import type { SoDoMayDo } from './so-do-may-do';
 
 export interface KetQuaTim {
-  /** `shopify` = dòng đơn khách; `po` = dòng hàng đặt PO nhập kho bán dần. */
-  nguon: 'shopify' | 'po';
-  /** Dòng đơn Shopify, hoặc `record_id` dòng PO trên Lark khi `nguon = 'po'`. */
+  /**
+   * `shopify` = dòng đơn khách; `po` = dòng hàng đặt PO nhập kho bán dần;
+   * `mon` = kênh KHÔNG-Shopify trên bảng món Lark (đơn TQ `#MTB`/`#MXHS`, CEO 08/10/2026).
+   */
+  nguon: 'shopify' | 'po' | 'mon';
+  /**
+   * `shopify` → id dòng đơn Shopify; `po` → `record_id` dòng PO trên Lark;
+   * `mon` → `dinh_danh` dòng món (khoá chính `lark_mon_don`, KHÔNG phải record_id).
+   */
   lineId: string;
   /** PO không thuộc đơn Shopify nào nên ba trường này rỗng. */
   orderId: string | null; storeId: string | null; shopifyOrderId: string | null;

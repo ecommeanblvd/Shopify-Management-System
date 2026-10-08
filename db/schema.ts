@@ -2193,6 +2193,11 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
    *  Giữ mã PO để đếm "đã nhận", và `record_id` dòng PO để truy ngược về Lark. */
   poOrderNumber: text('po_order_number'),
   poRecordId: text('po_record_id'),
+  /** Hàng của kênh KHÔNG-Shopify nhận qua bảng món Lark (CEO 08/10/2026): đơn Trung Quốc
+   *  `#MTB`/`#MXHS` không có trong `shopify_orders`. `mon_dinh_danh` là khoá chính của
+   *  `lark_mon_don` (đếm đã nhận), `mon_record_id` để nối `Import (select order)`. */
+  monDinhDanh: text('mon_dinh_danh'),
+  monRecordId: text('mon_record_id'),
   domPrice: numeric('dom_price', { precision: 14, scale: 2 }),
   domPriceCurrency: text('dom_price_currency'),
   globalPrice: numeric('global_price', { precision: 14, scale: 2 }),
@@ -2218,6 +2223,7 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   index('goods_receipt_items_line_idx').on(t.fulfillmentLineId),
   index('goods_receipt_items_disposition_idx').on(t.disposition),
   index('gri_stock_pick_idx').on(t.sku, t.stockStatus, t.currentWarehouseCode),
+  index('goods_receipt_items_mon_idx').on(t.monDinhDanh),
 ]);
 
 /** Nhật ký mỗi lần sync Lark → shipments. Bản ghi mới nhất cấp dữ liệu cho

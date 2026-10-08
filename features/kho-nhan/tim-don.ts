@@ -1,7 +1,8 @@
 'use server';
 
 import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
-import { STORE_NHAN_HANG } from './pham-vi';
+import { STORE_NHAN_HANG, STORE_MON_LARK, nhanQuaMonLark } from './pham-vi';
+import { monConNhanDuoc } from './mon-lark-con-nhan';
 import { db, schema } from '@/db/client';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { requirePerm } from '@/features/receiving/perm';
@@ -22,8 +23,9 @@ const GIOI_HAN = 20;
  * Hai sự thật ngược nhau trên cùng một chiếc: không phải hàng, mà vẫn là một lượt nhận. Ô tìm
  * trả lời câu "còn phải nhận gì nữa" nên nó phải đếm HÀNG, không đếm lượt.
  *
- * BA nguồn đếm, cùng một luật. Khai cạnh nhau để ai sửa một vế thì thấy ngay phải sửa cả ba —
- * hai bản của một câu hỏi thì sớm muộn cũng phân kỳ.
+ * BỐN nguồn đếm, cùng một luật (vế thứ tư — kênh món Lark — thêm 08/10/2026). Khai cạnh nhau
+ * để ai sửa một vế thì thấy ngay phải sửa cả bốn — hai bản của một câu hỏi thì sớm muộn cũng
+ * phân kỳ. Có `tim-don-dem.test.ts` đọc chính tệp này và đếm số chỗ.
  *
  * Đo trước khi mở (03/10/2026): vế SMS của PO +0 món, vế Lark +4 món còn nhập được trên 1.128
  * dòng đã tick Báo đơn — luật "đơn đã đủ thì chặn cả đơn" hấp thụ 419/423 cặp có chiếc fail.
@@ -108,7 +110,11 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
   /* Hàng đặt PO xếp SAU hàng của đơn khách: đơn khách có người đang đợi, PO là
    * hàng nhập về bán dần. Cùng một trần `GIOI_HAN` cho cả hai nguồn. */
   const po = shopify.length >= GIOI_HAN ? [] : await timMonPo(q, GIOI_HAN - shopify.length);
-  return [...shopify, ...po].slice(0, GIOI_HAN);
+  /* Kênh KHÔNG-Shopify (đơn TQ) xếp CUỐI: đơn khách Shopify trước, rồi PO, rồi kênh Lark.
+   * Thứ tự này là thứ tự người đang đợi — không phải thứ tự tiện code. */
+  const daCo = shopify.length + po.length;
+  const mon = daCo >= GIOI_HAN ? [] : await timMonLark(q, GIOI_HAN - daCo);
+  return [...shopify, ...po, ...mon].slice(0, GIOI_HAN);
 }
 
 /**
@@ -192,4 +198,68 @@ async function demDaNhanPo(cacDon: readonly string[]): Promise<Map<string, numbe
     m.set(k, (m.get(k) ?? 0) + Number(r.n));
   }
   return m;
+}
+
+/**
+ * Món của kênh KHÔNG-Shopify còn chờ về (CEO 08/10/2026) — đơn Trung Quốc `#MTB`/`#MXHS`.
+ *
+ * Bảo báo "không nhập được đơn TQ". Đơn TQ không có trong `shopify_orders` (đo 08/10: 0 đơn) và
+ * cũng không ở bảng PO; chúng ở bảng món `lark_mon_don`, 211 dòng, cập nhật theo thời gian thật.
+ *
+ * MỘT DÒNG MÓN = MỘT CHIẾC — luật ở `mon-lark-con-nhan.ts`, khác hẳn luật PO (dòng PO mang số
+ * lượng và phải gom theo đơn).
+ *
+ * Chỉ các kênh trong `STORE_MON_LARK`. Lọc ngay trong câu truy vấn chứ không lọc sau: bảng món
+ * có 8.034 dòng của 13 kênh, kéo hết về rồi lọc trong Node là trả giá cho dữ liệu không dùng.
+ */
+async function timMonLark(q: string, gioiHan: number): Promise<KetQuaTim[]> {
+  const maDon = chuanHoaMaDon(q);
+  const khongDau = `%${boDauTiengViet(q)}%`;
+
+  const dong = await db.select({
+    dinhDanh: schema.larkMonDon.dinhDanh,
+    orderNumber: schema.larkMonDon.orderNumber,
+    sku: schema.larkMonDon.sku,
+    store: schema.larkMonDon.store,
+    huy: schema.larkMonDon.huy,
+    recordId: schema.larkMonDon.recordId,
+    ten: schema.larkMonDon.lineitemName,
+    vendor: schema.larkMonDon.vendor,
+    /* Chiếc trượt QC KHÔNG tính là đã nhận — CÙNG luật với hai nguồn kia (xem khối ghi chú ở
+     * đầu tệp). Thiếu mệnh đề này là chiếc TQ fail vẫn bị tính, món biến mất khỏi ô tìm, và
+     * vendor gửi hàng thay thì kho gõ mã ra ô trống — đúng việc Bảo báo ở ý #6. */
+    daNhan: sql<number>`(SELECT count(*)::int FROM goods_receipt_items gi
+      WHERE gi.mon_dinh_danh = ${schema.larkMonDon.dinhDanh}
+        AND gi.${KHONG_TINH_FAIL})`,
+  }).from(schema.larkMonDon).where(and(
+    inArray(schema.larkMonDon.store, [...STORE_MON_LARK]),
+    eq(schema.larkMonDon.huy, false),
+    or(
+      sql`regexp_replace(coalesce(${schema.larkMonDon.orderNumber}, ''), '^#', '') ILIKE ${`%${maDon}%`}`,
+      sql`${schema.larkMonDon.sku} ILIKE ${`%${q}%`}`,
+      sql`EXISTS (SELECT 1 FROM shopify_variants v WHERE v.sku = ${schema.larkMonDon.sku}
+            AND v.tim_kiem LIKE ${khongDau})`,
+    ),
+  )).limit(gioiHan * 3);
+
+  const ra: KetQuaTim[] = [];
+  for (const d of dong) {
+    const duoc = monConNhanDuoc(
+      { dinhDanh: d.dinhDanh, orderNumber: d.orderNumber, sku: d.sku, store: d.store,
+        huy: d.huy, coRecordId: !!d.recordId },
+      d.daNhan, nhanQuaMonLark(d.store),
+    );
+    if (!duoc.ok) continue;
+    ra.push({
+      nguon: 'mon', lineId: d.dinhDanh,
+      orderId: null, storeId: null, shopifyOrderId: null,
+      // Bảng món lưu mã đơn KHÔNG có `#` (đo: `MXHS1560`), còn bảng vận hành thì có. Thêm lại ở
+      // đây để kho đọc đúng mã mình thấy trên Lark.
+      maDon: `#${d.orderNumber.replace(/^#/, '')}`, sku: d.sku,
+      tenSanPham: d.ten, tenBienThe: null, vendor: d.vendor,
+      datSl: 1, daNhan: d.daNhan,
+    });
+    if (ra.length >= gioiHan) break;
+  }
+  return ra;
 }

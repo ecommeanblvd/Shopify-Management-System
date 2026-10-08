@@ -25,3 +25,28 @@ export function nhanHangDuoc(shopDomain: string | null | undefined): boolean {
   const d = shopDomain?.trim().toLowerCase();
   return !!d && STORE_NHAN_HANG.includes(d);
 }
+
+/**
+ * THUẦN: kênh KHÔNG-SHOPIFY nào được nhận hàng qua bảng món Lark (CEO 08/10/2026).
+ *
+ * Bảo báo "không nhập được đơn TQ". Nguyên nhân: ô tìm chỉ đọc `shopify_orders` và bảng PO, mà
+ * đơn Trung Quốc không nằm ở đâu trong hai chỗ đó — 0 đơn `MTB`/`MXHS` trong `shopify_orders`.
+ * Chúng nằm ở bảng món (`lark_mon_don`), 211 dòng, cập nhật theo thời gian thật.
+ *
+ * CEO xác nhận ý nghĩa tiền tố 08/10/2026:
+ *   #MTB  = MEAN Taobao
+ *   #MXHS = MEAN Xiao Hong Shu
+ *   #TA   = Tinh Atelier   → ĐÃ có đủ trong `shopify_orders` (646/646), không cần đường này
+ *   #HC   = Happy Clothing → có trong SMS nhưng store cố ý ngoài `STORE_NHAN_HANG`
+ *
+ * CHỈ hai kênh Trung Quốc. Bảng món còn `MIRER` (253), `MCN` (70), `MOS` (52), `MER-` (88) —
+ * tổng 463 dòng chưa rõ là kênh gì. Mở bừa là cho kho nhận hàng không ai duyệt; thêm kênh về
+ * sau chỉ là thêm một dòng vào đây. Cùng lý lẽ "danh sách cho phép" như `STORE_NHAN_HANG`.
+ */
+export const STORE_MON_LARK: readonly string[] = ['#MTB', '#MXHS'];
+
+/** Kênh này có được nhận qua bảng món Lark không. Giá trị lạ → KHÔNG, không đoán. */
+export function nhanQuaMonLark(store: string | null | undefined): boolean {
+  const s = store?.trim();
+  return !!s && STORE_MON_LARK.includes(s);
+}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { timMonChuaNhan } from '@/features/kho-nhan/tim-don';
 import type { KetQuaTim } from '@/features/kho-nhan/types';
-import { ghiNhanChiec, ghiNhanChiecPo } from '@/features/kho-nhan/nhan-actions';
+import { ghiNhanChiec, ghiNhanChiecPo, ghiNhanChiecMonLark } from '@/features/kho-nhan/nhan-actions';
 
 const TOI_THIEU = 2;
 const DEBOUNCE_MS = 250;
@@ -62,8 +62,12 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
 
   function nhan(m: KetQuaTim) {
     start(async () => {
-      // Hàng đặt PO đi đường riêng: nó không thuộc đơn Shopify nào.
-      const r = m.nguon === 'po' ? await ghiNhanChiecPo(m.lineId) : await ghiNhanChiec(m.lineId);
+      /* Ba nguồn, ba lệnh. Hàng PO và hàng kênh Lark (đơn TQ) không thuộc đơn Shopify nào, và
+       * mỗi nguồn có luật "còn nhận được không" riêng — gộp một lệnh rồi đoán nguồn bên trong
+       * là chỗ sớm muộn cũng nhận sai nguồn. */
+      const r = m.nguon === 'po' ? await ghiNhanChiecPo(m.lineId)
+        : m.nguon === 'mon' ? await ghiNhanChiecMonLark(m.lineId)
+        : await ghiNhanChiec(m.lineId);
       if (!r.ok) { toast.error(r.loi ?? 'Ghi nhận thất bại.', { duration: 10000 }); return; }
       toast.success(`Đã nhận 1 chiếc ${m.sku ?? ''} — đang chờ kiểm.`, { duration: 3000 });
       setQ('');
@@ -116,6 +120,15 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
                         {m.nguon === 'po' && (
                           <span className="mr-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300">
                             PO
+                          </span>
+                        )}
+                        {/* Kênh không-Shopify: nhãn đọc ngay ra tên kênh, vì mã `#MXHS1560` thì
+                            chỉ người trong nghề mới biết là Xiao Hong Shu. Màu khác PO để quét
+                            bảng không phải đọc chữ. */}
+                        {m.nguon === 'mon' && (
+                          <span className="mr-1 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                            {m.maDon.startsWith('#MTB') ? 'Taobao'
+                              : m.maDon.startsWith('#MXHS') ? 'Xiao Hong Shu' : 'Kênh Lark'}
                           </span>
                         )}
                         {m.maDon} · <span className="font-mono">{m.sku}</span>

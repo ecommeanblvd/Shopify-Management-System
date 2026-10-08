@@ -58,6 +58,13 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     maDon: schema.shopifyOrders.shopifyOrderNumber,
     poOrderNumber: schema.goodsReceiptItems.poOrderNumber,
     poRecordId: schema.goodsReceiptItems.poRecordId,
+    /* Món Lark: mã đơn và record_id đọc từ CHÍNH bản sao bảng món, không đọc bản chép trên
+     * chiếc hàng — bảng món là nguồn sự thật, và nếu dòng món đã biến mất thì `quyetDinhGui`
+     * phải thấy là thiếu để bỏ qua có lý do, chứ không ghi theo bản chép cũ. */
+    monOrderNumber: schema.larkMonDon.orderNumber,
+    monRecordId: schema.larkMonDon.recordId,
+    monTen: schema.larkMonDon.lineitemName,
+    monVendor: schema.larkMonDon.vendor,
     tenMonPhieu: schema.goodsReceiptItems.productTitle,
     taoLuc: schema.goodsReceiptItems.createdAt,
     kho: schema.goodsReceipts.warehouseCode,
@@ -65,6 +72,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     .from(schema.goodsReceiptItems)
     .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
+    .leftJoin(schema.larkMonDon, eq(schema.larkMonDon.dinhDanh, schema.goodsReceiptItems.monDinhDanh))
     .where(inArray(schema.goodsReceiptItems.id, itemIds));
 
   /* Đọc một lần cho cả lượt gửi. Hỏng thì coi như không có lựa chọn nào hợp lệ
@@ -111,7 +119,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
       skuFinal = mon.sku ?? duong.sku;
       tenMon = mon.tenMon;
       vendorTho = mon.vendor;
-    } else {
+    } else if (duong.kieu === 'po') {
       /* Hàng PO: KHÔNG tra bảng món (từ PO22 trở đi nó không có dòng nào ở đó), tra thẳng dòng
        * PO bằng `po_record_id` đã ghim lúc nhận. Tra lại theo mã đơn + SKU là tự mở đường chọn
        * nhầm dòng: một PO có nhiều dòng cùng SKU (PO52 có ba dòng cùng một SKU). */
@@ -122,6 +130,13 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
         if (po) { tenMon = po.tenMon ?? c.tenMonPhieu; vendorTho = po.vendor; }
       }
       nguon = { kieu: 'po' };
+    } else {
+      /* Kênh không-Shopify (đơn TQ): dòng món ĐÃ có trong bản sao nên không tra thêm lượt nào.
+       * Payload giống y đường đơn — `Retail` kèm liên kết `Import (select order)`, khớp 183 dòng
+       * MTB/MXHS đội kho đang có trên bảng vận hành. */
+      nguon = { kieu: 'don', larkMonRecordId: duong.monRecordId };
+      tenMon = c.monTen ?? c.tenMonPhieu;
+      vendorTho = c.monVendor;
     }
 
     try {
@@ -189,9 +204,12 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
     larkRecordId: schema.goodsReceiptItems.larkRecordId,
     maDon: schema.shopifyOrders.shopifyOrderNumber,
     poOrderNumber: schema.goodsReceiptItems.poOrderNumber,
+    monOrderNumber: schema.larkMonDon.orderNumber,
+    monRecordId: schema.larkMonDon.recordId,
     sku: schema.goodsReceiptItems.sku,
   }).from(schema.goodsReceiptItems)
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
+    .leftJoin(schema.larkMonDon, eq(schema.larkMonDon.dinhDanh, schema.goodsReceiptItems.monDinhDanh))
     .where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
 
   if (!c) return { ok: false, loi: 'Không tìm thấy chiếc hàng.' };

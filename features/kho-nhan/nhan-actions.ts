@@ -1,7 +1,7 @@
 'use server';
 
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { nhanHangDuoc } from './pham-vi';
+import { nhanHangDuoc, nhanQuaMonLark } from './pham-vi';
 import { revalidatePath } from 'next/cache';
 import { goKhoiLark } from './day-wh-lark';
 import { db, schema } from '@/db/client';
@@ -9,6 +9,7 @@ import { ngayKinhDoanh, sqlGioKinhDoanh } from '@/lib/timezone';
 import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
 import { khoa, monPoConNhan } from './po-con-nhan';
+import { monConNhanDuoc } from './mon-lark-con-nhan';
 import { layIdBienThe } from './shopify-qc';
 
 /** Kho làm việc của người đang thao tác. Chưa gán thì rơi về GVM (kho chính). */
@@ -171,6 +172,80 @@ export async function ghiNhanChiecPo(poRecordId: string): Promise<{ ok: boolean;
     return { ok: true, itemId: item.id };
   } catch (e) {
     console.error('[kho-nhan] ghiNhanChiecPo lỗi:', e);
+    return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
+  }
+}
+
+/**
+ * Nhận MỘT chiếc của kênh KHÔNG-Shopify qua bảng món Lark (CEO 08/10/2026).
+ *
+ * Bảo báo "không nhập được đơn TQ": đơn `#MTB` (MEAN Taobao) và `#MXHS` (MEAN Xiao Hong Shu)
+ * không có trong `shopify_orders` — đo 08/10 là 0 đơn — nên ô tìm không thấy gì để nhận.
+ *
+ * `order_id` để NULL như hàng PO, và ghim `mon_dinh_danh` + `mon_record_id`: cái đầu để đếm
+ * "món này đã nhận chưa", cái sau để nối `Import (select order)` lúc đẩy lên bảng vận hành.
+ *
+ * Kiểm lại điều kiện NGAY TRƯỚC KHI GHI thay vì tin kết quả tìm — cùng lý lẽ `ghiNhanChiecPo`:
+ * ô tìm có thể mở từ mười phút trước, trong lúc đó dòng món đã bị đánh huỷ hoặc đã có người
+ * nhận. Luật ở `mon-lark-con-nhan.ts`, KHÔNG viết lại ở đây.
+ */
+export async function ghiNhanChiecMonLark(
+  dinhDanh: string,
+): Promise<{ ok: boolean; loi?: string; itemId?: string }> {
+  const actor = await requirePerm('manage_qc');
+  try {
+    const [mon] = await db.select().from(schema.larkMonDon)
+      .where(eq(schema.larkMonDon.dinhDanh, dinhDanh)).limit(1);
+    if (!mon) return { ok: false, loi: 'Không tìm thấy dòng món trên bản sao bảng Lark.' };
+
+    const [dem] = await db.select({ n: sql<number>`count(*)::int` })
+      .from(schema.goodsReceiptItems)
+      .where(eq(schema.goodsReceiptItems.monDinhDanh, dinhDanh));
+
+    const duoc = monConNhanDuoc(
+      { dinhDanh: mon.dinhDanh, orderNumber: mon.orderNumber, sku: mon.sku, store: mon.store,
+        huy: mon.huy, coRecordId: !!mon.recordId },
+      dem?.n ?? 0, nhanQuaMonLark(mon.store),
+    );
+    if (!duoc.ok) return { ok: false, loi: `Không nhận được: ${duoc.lyDo}.` };
+
+    const kho = await khoCuaNguoiDung(actor);
+    const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, mon.vendor, kho);
+    let [phieu] = await db.select().from(schema.goodsReceipts)
+      .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+    if (!phieu) {
+      try {
+        [phieu] = await db.insert(schema.goodsReceipts).values({
+          code: maPhieu, warehouseCode: kho, sourceType: 'retail_for_order',
+          vendor: mon.vendor, receivedAt: new Date(), receivedBy: actor,
+        }).returning();
+      } catch {
+        [phieu] = await db.select().from(schema.goodsReceipts)
+          .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+      }
+    }
+    if (!phieu) return { ok: false, loi: 'Không dựng được phiếu nhận.' };
+
+    const item = await withUniqueRetry(async () => {
+      const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
+      const [row] = await db.insert(schema.goodsReceiptItems).values({
+        receiptId: phieu!.id,
+        unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
+        sku: mon.sku,
+        productTitle: mon.lineitemName,
+        orderId: null,
+        monDinhDanh: mon.dinhDanh,
+        monRecordId: mon.recordId,
+        qcResult: 'pending',
+        disposition: 'pending',
+      }).returning({ id: schema.goodsReceiptItems.id });
+      return row;
+    });
+
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true, itemId: item.id };
+  } catch (e) {
+    console.error('[kho-nhan] ghiNhanChiecMonLark lỗi:', e);
     return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
   }
 }

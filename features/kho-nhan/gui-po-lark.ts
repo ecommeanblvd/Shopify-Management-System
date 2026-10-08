@@ -10,17 +10,23 @@
 import { COT_SELECT_ORDER, COT_ORDER_FINAL, COT_SKU_FINAL } from './wh-lark-payload';
 
 export interface ChiecDeGui {
-  /** `shopify_orders.shopify_order_number` — null với hàng PO. */
+  /** `shopify_orders.shopify_order_number` — null với hàng PO và hàng kênh Lark. */
   maDon: string | null;
   /** `goods_receipt_items.po_order_number` — null với hàng đi đơn. */
   poOrderNumber: string | null;
+  /** `lark_mon_don.order_number` tra qua `mon_dinh_danh` — kênh không-Shopify (đơn TQ). */
+  monOrderNumber: string | null;
+  /** `lark_mon_don.record_id` — để nối `Import (select order)`. */
+  monRecordId: string | null;
   sku: string | null;
 }
 
 export type QuyetDinhGui =
   | { ok: false; lyDo: string }
   | { ok: true; kieu: 'don'; maDon: string; sku: string }
-  | { ok: true; kieu: 'po'; maDon: string; sku: string };
+  | { ok: true; kieu: 'po'; maDon: string; sku: string }
+  /** Kênh không-Shopify. Payload giống y đường `don` — chỉ khác nguồn của mã đơn và của liên kết. */
+  | { ok: true; kieu: 'mon'; maDon: string; sku: string; monRecordId: string };
 
 /**
  * THUẦN: chiếc này đi đường nào.
@@ -37,13 +43,21 @@ export function quyetDinhGui(c: ChiecDeGui): QuyetDinhGui {
   const sku = (c.sku ?? '').trim();
   const don = (c.maDon ?? '').trim();
   const po = (c.poOrderNumber ?? '').trim();
+  const mon = (c.monOrderNumber ?? '').trim();
+  const monRec = (c.monRecordId ?? '').trim();
   if (sku === '') return { ok: false, lyDo: 'thiếu SKU' };
-  if (don !== '' && po !== '') {
-    return { ok: false, lyDo: 'vừa có mã đơn vừa có mã PO — cần người kiểm tay' };
-  }
+  const coMay = [don, po, mon].filter((x) => x !== '').length;
+  if (coMay > 1) return { ok: false, lyDo: 'chiếc này mang nhiều nguồn cùng lúc — cần người kiểm tay' };
   if (don !== '') return { ok: true, kieu: 'don', maDon: don, sku };
   if (po !== '') return { ok: true, kieu: 'po', maDon: po, sku };
-  return { ok: false, lyDo: 'thiếu mã đơn và mã PO' };
+  if (mon !== '') {
+    /* Thiếu `record_id` thì KHÔNG rơi về payload không liên kết: dòng kênh Lark trên bảng vận
+     * hành vẫn phải nối `Import (select order)` như đơn MBLVD (183 dòng MTB/MXHS đang có đều là
+     * `Retail` có liên kết). Bỏ liên kết là dòng trông y hệt dòng PO và mất đường truy về món. */
+    if (monRec === '') return { ok: false, lyDo: 'món Lark chưa có record_id — không nối được liên kết đơn' };
+    return { ok: true, kieu: 'mon', maDon: mon, sku, monRecordId: monRec };
+  }
+  return { ok: false, lyDo: 'thiếu mã đơn, mã PO và món Lark' };
 }
 
 /** Giá trị ô TEXT trên Lark: chuỗi thường, hoặc mảng đoạn chữ của ô nhiều định dạng. */
