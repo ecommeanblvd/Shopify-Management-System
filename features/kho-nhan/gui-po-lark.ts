@@ -18,6 +18,8 @@ export interface ChiecDeGui {
   monOrderNumber: string | null;
   /** `lark_mon_don.record_id` — để nối `Import (select order)`. */
   monRecordId: string | null;
+  /** `lark_log_import.order_number` tra qua `return_record_id` — đồ khách trả về. */
+  returnOrderNumber: string | null;
   sku: string | null;
 }
 
@@ -26,7 +28,9 @@ export type QuyetDinhGui =
   | { ok: true; kieu: 'don'; maDon: string; sku: string }
   | { ok: true; kieu: 'po'; maDon: string; sku: string }
   /** Kênh không-Shopify. Payload giống y đường `don` — chỉ khác nguồn của mã đơn và của liên kết. */
-  | { ok: true; kieu: 'mon'; maDon: string; sku: string; monRecordId: string };
+  | { ok: true; kieu: 'mon'; maDon: string; sku: string; monRecordId: string }
+  /** Đồ khách trả về. Loại nhập `Tồn kho (Return)`, không liên kết đơn. */
+  | { ok: true; kieu: 'return'; maDon: string; sku: string };
 
 /**
  * THUẦN: chiếc này đi đường nào.
@@ -45,8 +49,9 @@ export function quyetDinhGui(c: ChiecDeGui): QuyetDinhGui {
   const po = (c.poOrderNumber ?? '').trim();
   const mon = (c.monOrderNumber ?? '').trim();
   const monRec = (c.monRecordId ?? '').trim();
+  const ret = (c.returnOrderNumber ?? '').trim();
   if (sku === '') return { ok: false, lyDo: 'thiếu SKU' };
-  const coMay = [don, po, mon].filter((x) => x !== '').length;
+  const coMay = [don, po, mon, ret].filter((x) => x !== '').length;
   if (coMay > 1) return { ok: false, lyDo: 'chiếc này mang nhiều nguồn cùng lúc — cần người kiểm tay' };
   if (don !== '') return { ok: true, kieu: 'don', maDon: don, sku };
   if (po !== '') return { ok: true, kieu: 'po', maDon: po, sku };
@@ -57,7 +62,8 @@ export function quyetDinhGui(c: ChiecDeGui): QuyetDinhGui {
     if (monRec === '') return { ok: false, lyDo: 'món Lark chưa có record_id — không nối được liên kết đơn' };
     return { ok: true, kieu: 'mon', maDon: mon, sku, monRecordId: monRec };
   }
-  return { ok: false, lyDo: 'thiếu mã đơn, mã PO và món Lark' };
+  if (ret !== '') return { ok: true, kieu: 'return', maDon: ret, sku };
+  return { ok: false, lyDo: 'thiếu mã đơn, mã PO, món Lark và dòng return' };
 }
 
 /** Giá trị ô TEXT trên Lark: chuỗi thường, hoặc mảng đoạn chữ của ô nhiều định dạng. */
@@ -83,7 +89,9 @@ const boThang = (s: string) => s.replace(/^#/, '');
  */
 export function duocXoaRecord(
   fields: Record<string, unknown> | null | undefined,
-  mong: { kieu: 'don' } | { kieu: 'po'; maDon: string; sku: string },
+  /* Đồ return dùng CÙNG hàng rào định danh với hàng PO: dòng của nó cũng không có liên kết đơn.
+   * Khai `kieu: 'po' | 'return'` chung một nhánh chứ không viết hai nhánh giống nhau. */
+  mong: { kieu: 'don' } | { kieu: 'po' | 'return'; maDon: string; sku: string },
 ): { ok: true } | { ok: false; loi: string } {
   const f = fields ?? {};
   if (mong.kieu === 'don') {
@@ -97,7 +105,7 @@ export function duocXoaRecord(
   const donLark = boThang(docChu(f[COT_ORDER_FINAL]));
   const skuLark = docChu(f[COT_SKU_FINAL]);
   if (donLark === '' || skuLark === '') {
-    return { ok: false, loi: 'Record PO trên Lark trống mã đơn hoặc SKU — KHÔNG xoá, cần người kiểm tay.' };
+    return { ok: false, loi: 'Record trên Lark trống mã đơn hoặc SKU — KHÔNG xoá, cần người kiểm tay.' };
   }
   if (donLark !== boThang(mong.maDon.trim()) || skuLark !== mong.sku.trim()) {
     return { ok: false, loi: `Record trên Lark là "${donLark} / ${skuLark}", không phải chiếc đang xoá — KHÔNG xoá.` };

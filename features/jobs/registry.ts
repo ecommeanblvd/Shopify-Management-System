@@ -111,6 +111,9 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'Việc kho đã làm trên SMS không lên bảng kho Lark' },
   { key: 'lark-pack-webhook', ten: 'Nhận kiện đóng xong từ Lark (webhook)', chuKyPhut: 1 * NGAY,
     hauQua: 'Kiện đóng xong không về SMS tức thì — Đức phải chọn line trên Lark' },
+  // Chạy LỒNG trong scripts/cron/sync-lark.ts, sau `dong-bo-po-lark`. CHỈ ĐỌC Lark.
+  { key: 'dong-bo-log-import', ten: 'Kéo bảng Lark LOG - Import (đồ return) về bản sao', chuKyPhut: 6 * GIO,
+    hauQua: 'Đồ khách trả về không hiện ở ô tìm màn Nhận hàng — kho không nhận được hàng return' },
   { key: 'prune-logs', ten: 'Dọn bảng log', chuKyPhut: 7 * NGAY,
     hauQua: 'Database phình tới trần dung lượng' },
   { key: 'sync-unit-cost', ten: 'Đọc Cost per item từ Shopify', chuKyPhut: 1 * NGAY,

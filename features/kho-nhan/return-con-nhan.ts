@@ -1,0 +1,70 @@
+/**
+ * THUẦN: dòng đồ return nào kho còn nhận được (CEO 08/10/2026). Không I/O.
+ *
+ * CEO chốt cửa vào sau khi đo 666 dòng bảng `LOG - Import`: chưa có dòng WH - Inventory nào
+ * khớp, VÀ trạng thái đường về của LOG cho thấy hàng đã tới kho hoặc đang được xử lý trả.
+ *
+ * Vì sao không mở theo mỗi "chưa có dòng WH": tập đó có 422 dòng, trong đó **324 dòng trống
+ * luôn `LOG-IP-Return Status`** — dòng cũ từ trước khi có cột trạng thái. Mở ra là kho gõ một
+ * mã đơn rồi thấy món từ năm ngoái, và nhận nhầm thì không có đường nào biết.
+ *
+ * Vì sao `Return Status` KHÔNG phải cửa: đó là trạng thái duyệt hoàn tiền của CX. Trong 244
+ * dòng kho đã nhận có 135 `Refunded` và cả 1 `Rejected` — hàng bị từ chối hoàn tiền vẫn về kho
+ * thật. Lọc theo nó là bỏ sót hàng có thật. (Lưu ý cột đó còn có HAI lựa chọn trùng nghĩa khác
+ * hoa/thường: `Approved` 384 dòng và `APPROVED` 89 dòng — bất cứ luật nào khớp một trong hai là
+ * bỏ sót 89 dòng, im lặng.)
+ */
+
+/**
+ * Trạng thái đường về được coi là "hàng đã tới kho hoặc đang xử lý trả".
+ *
+ * Số đo trong 422 dòng chưa nhận: `Warehouse Received` 40, `Return-Processing` 36,
+ * `Pakago Received` 6 — tổng 82.
+ *
+ * `Warehouse Received` NẰM TRONG danh sách dù nghe như đã xong: 40 dòng mang trạng thái đó mà
+ * bên WH - Inventory KHÔNG có dòng nào khớp, tức LOG bảo đã tới kho còn hệ thống kho chưa có
+ * hồ sơ. Đó chính là tập đang lệch giữa hai bảng, và là tập cần nhận nhất.
+ *
+ * CỐ Ý ĐỨNG NGOÀI: `A31 - Held by Customs` (7), `H11 Form Processing` (3),
+ * `Waiting for Payment` (4) — hàng còn ở hải quan, chưa tới kho; sẽ hiện khi LOG đổi trạng
+ * thái. `Package Lost` (2) — hàng mất, không bao giờ về. 324 dòng trống trạng thái — dòng cũ.
+ */
+export const TRANG_THAI_CHO_NHAN: ReadonlySet<string> = new Set([
+  'Warehouse Received',
+  'Return-Processing',
+  'Pakago Received',
+]);
+
+export interface DongReturn {
+  recordId: string;
+  orderNumber: string | null;
+  sku: string | null;
+  soLuong: number;
+  /** Lookup `WH - Tiếp nhận & QC` trên Lark: có giá trị = đội kho đã có dòng WH khớp. */
+  whTiepNhanQc: string | null;
+  logStatus: string | null;
+}
+
+/**
+ * THUẦN: dòng này còn nhận được không. Trả LÝ DO khi không, để chỗ gọi nói được vì sao thay vì
+ * im lặng bỏ qua.
+ *
+ * @param daNhanSms số chiếc SMS đã nhận gắn vào đúng `record_id` này.
+ */
+export function returnConNhanDuoc(
+  d: DongReturn, daNhanSms: number,
+): { ok: true; con: number } | { ok: false; lyDo: string } {
+  if (!d.orderNumber) return { ok: false, lyDo: 'dòng return thiếu mã đơn' };
+  if (!d.sku || d.sku.trim() === '') return { ok: false, lyDo: 'dòng return thiếu SKU' };
+  /* Đội kho đã có dòng WH khớp rồi. Nhận thêm là hai dòng cho một món trả về, mà bốn cột lookup
+   * bên `LOG - Import` thì gộp cả hai nên số hiện ra không còn nói được dòng nào là dòng nào. */
+  if (d.whTiepNhanQc != null && d.whTiepNhanQc.trim() !== '') {
+    return { ok: false, lyDo: 'đội kho đã có dòng WH cho món này' };
+  }
+  if (!d.logStatus || !TRANG_THAI_CHO_NHAN.has(d.logStatus)) {
+    return { ok: false, lyDo: `trạng thái đường về chưa tới kho (${d.logStatus ?? 'trống'})` };
+  }
+  const con = d.soLuong - daNhanSms;
+  if (con <= 0) return { ok: false, lyDo: 'SMS đã nhận đủ số lượng của dòng này' };
+  return { ok: true, con };
+}

@@ -4,32 +4,32 @@ import { COT_SELECT_ORDER, COT_ORDER_FINAL, COT_SKU_FINAL } from './wh-lark-payl
 
 describe('quyetDinhGui', () => {
   it('có mã đơn Shopify → đường ĐƠN', () => {
-    expect(quyetDinhGui({ maDon: '#MBLVD30711', poOrderNumber: null, monOrderNumber: null, monRecordId: null, sku: 'A-1' }))
+    expect(quyetDinhGui({ maDon: '#MBLVD30711', poOrderNumber: null, monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: 'A-1' }))
       .toEqual({ ok: true, kieu: 'don', maDon: '#MBLVD30711', sku: 'A-1' });
   });
 
   /* Chính ca Bảo báo 09/10/2026. Hàng PO cố ý để `order_id` NULL (xem `ghiNhanChiecPo`), nên
      bản cũ đòi mã đơn Shopify làm mọi món PO rơi vào "thiếu mã đơn hoặc SKU". */
   it('không có mã đơn nhưng có mã PO → đường PO, KHÔNG còn bị bỏ qua', () => {
-    expect(quyetDinhGui({ maDon: null, poOrderNumber: '#MBLVDPO52', monOrderNumber: null, monRecordId: null, sku: 'A-1' }))
+    expect(quyetDinhGui({ maDon: null, poOrderNumber: '#MBLVDPO52', monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: 'A-1' }))
       .toEqual({ ok: true, kieu: 'po', maDon: '#MBLVDPO52', sku: 'A-1' });
   });
 
   it('thiếu SKU → từ chối, vì `Lineitem SKU final` trống là Định danh cụt', () => {
-    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: null, monOrderNumber: null, monRecordId: null, sku: null }))
+    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: null, monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: null }))
       .toEqual({ ok: false, lyDo: 'thiếu SKU' });
-    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: null, monOrderNumber: null, monRecordId: null, sku: '   ' }))
+    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: null, monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: '   ' }))
       .toEqual({ ok: false, lyDo: 'thiếu SKU' });
   });
 
-  it('không có mã nào → từ chối, và nói rõ thiếu CẢ HAI', () => {
-    expect(quyetDinhGui({ maDon: null, poOrderNumber: null, monOrderNumber: null, monRecordId: null, sku: 'A-1' }))
-      .toEqual({ ok: false, lyDo: 'thiếu mã đơn, mã PO và món Lark' });
+  it('không có mã nào → từ chối, và kể đủ MỌI nguồn', () => {
+    expect(quyetDinhGui({ maDon: null, poOrderNumber: null, monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: 'A-1' }))
+      .toEqual({ ok: false, lyDo: 'thiếu mã đơn, mã PO, món Lark và dòng return' });
   });
 
   /* Đoán hộ ở đây là ghi một dòng sai nguồn lên bảng vận hành rồi không truy lại được. */
   it('nhiều nguồn cùng lúc → TỪ CHỐI, không tự chọn bên nào', () => {
-    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: '#MBLVDPO52', monOrderNumber: null, monRecordId: null, sku: 'A-1' }))
+    expect(quyetDinhGui({ maDon: '#MBLVD1', poOrderNumber: '#MBLVDPO52', monOrderNumber: null, monRecordId: null, returnOrderNumber: null, sku: 'A-1' }))
       .toEqual({ ok: false, lyDo: 'chiếc này mang nhiều nguồn cùng lúc — cần người kiểm tay' });
   });
 });
@@ -100,7 +100,7 @@ describe('duocXoaRecord — đường PO', () => {
    `shopify_orders`. Payload giống y đường đơn — chỉ khác nguồn của mã đơn và của liên kết. */
 describe('quyetDinhGui — kênh món Lark', () => {
   const mon = (p: Partial<Parameters<typeof quyetDinhGui>[0]> = {}) => quyetDinhGui({
-    maDon: null, poOrderNumber: null,
+    maDon: null, poOrderNumber: null, returnOrderNumber: null,
     monOrderNumber: '#MXHS1560', monRecordId: 'reczz28KpiFLcTyn', sku: 'Beloved-FW25-S', ...p,
   });
 
@@ -129,7 +129,7 @@ describe('quyetDinhGui — kênh món Lark', () => {
 
   it('không nguồn nào → câu lỗi kể đủ ba nguồn', () => {
     expect(mon({ monOrderNumber: null, monRecordId: null })).toEqual({
-      ok: false, lyDo: 'thiếu mã đơn, mã PO và món Lark',
+      ok: false, lyDo: 'thiếu mã đơn, mã PO, món Lark và dòng return',
     });
   });
 
@@ -138,5 +138,40 @@ describe('quyetDinhGui — kênh món Lark', () => {
   it('hàng rào xoá của kênh Lark dùng luật liên kết như đường đơn', () => {
     expect(duocXoaRecord(lienKet(['recX']), { kieu: 'don' })).toEqual({ ok: true });
     expect(duocXoaRecord(lienKet([]), { kieu: 'don' }).ok).toBe(false);
+  });
+});
+
+/* Đồ khách trả về (CEO 08/10/2026): loại nhập `Tồn kho (Return)`, không liên kết đơn. */
+describe('quyetDinhGui — đồ khách trả về', () => {
+  const ret = (p: Partial<Parameters<typeof quyetDinhGui>[0]> = {}) => quyetDinhGui({
+    maDon: null, poOrderNumber: null, monOrderNumber: null, monRecordId: null,
+    returnOrderNumber: '#MBLVD29466', sku: 'Raffine-2000150000133-M-BLA', ...p,
+  });
+
+  it('chỉ có dòng return → đường `return`, giữ nguyên dấu `#`', () => {
+    expect(ret()).toEqual({
+      ok: true, kieu: 'return', maDon: '#MBLVD29466', sku: 'Raffine-2000150000133-M-BLA',
+    });
+  });
+
+  /* Dòng return mang ĐÚNG mã đơn Shopify của lượt bán lúc đầu. Nếu chiếc hàng mang cả hai thì
+     không ai biết nó là hàng mới của đơn hay hàng khách trả — từ chối thay vì đoán. */
+  it('vừa có mã đơn Shopify vừa có dòng return → TỪ CHỐI', () => {
+    expect(ret({ maDon: '#MBLVD29466' })).toEqual({
+      ok: false, lyDo: 'chiếc này mang nhiều nguồn cùng lúc — cần người kiểm tay',
+    });
+  });
+
+  /* Dòng WH của đồ return KHÔNG có liên kết đơn, nên hàng rào xoá là hàng rào định danh —
+     giống đường PO. Dùng hàng rào liên kết là từ chối xoá mọi dòng return. */
+  it('hàng rào xoá dùng luật định danh, mã đơn + SKU phải khớp', () => {
+    const mong = { kieu: 'return' as const, maDon: '#MBLVD29466', sku: 'Raffine-2000150000133-M-BLA' };
+    expect(duocXoaRecord({
+      [COT_ORDER_FINAL]: '#MBLVD29466', [COT_SKU_FINAL]: 'Raffine-2000150000133-M-BLA',
+    }, mong)).toEqual({ ok: true });
+    expect(duocXoaRecord({
+      [COT_ORDER_FINAL]: '#MBLVD29466', [COT_SKU_FINAL]: 'SKU-KHAC',
+    }, mong).ok).toBe(false);
+    expect(duocXoaRecord({}, mong).ok).toBe(false);
   });
 });

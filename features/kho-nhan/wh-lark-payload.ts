@@ -27,6 +27,18 @@ export const INVENTORY_TYPE_RETAIL = 'Retail';
  */
 export const INVENTORY_TYPE_PO = 'Tồn kho (PO)';
 
+/**
+ * Đồ khách trả về (CEO 08/10/2026). Nguyên văn đọc từ bảng vận hành: 637 dòng mang lựa chọn này.
+ *
+ * Giá trị này KHÔNG phải chọn cho gọn — nó là điều kiện để bốn cột lookup `WH -` trên bảng
+ * `LOG - Import` sáng. Bốn cột đó khớp dòng WH - Inventory theo mã đơn + SKU + loại nhập ∈
+ * {Tồn kho (Return), Đồ lỗi (k bán), Tồn kho (Consignment), LG Service}. Mà dòng đồ return mang
+ * ĐÚNG mã đơn và ĐÚNG SKU với dòng retail đã gửi đi lúc đầu, nên loại nhập là thứ DUY NHẤT
+ * phân biệt hai dòng. Ghi sai loại là bốn cột kia hoặc không sáng, hoặc sáng bằng số của dòng
+ * gửi đi — sai mà Lark không báo gì.
+ */
+export const INVENTORY_TYPE_RETURN = 'Tồn kho (Return)';
+
 export const COT_NGAY_IMPORT = 'Ngày Import - tiếp nhận đồ tại kho';
 export const COT_INVENTORY_TYPE = 'Import - Inventory type';
 export const COT_SELECT_ORDER = 'Import (select order)';
@@ -181,6 +193,13 @@ export type NguonNhan =
   /** Hàng brand gửi để đi đơn Shopify. `larkMonRecordId` = `lark_mon_don.record_id`. */
   | { kieu: 'don'; larkMonRecordId: string }
   /**
+   * Đồ khách trả về. KHÔNG nối `Import (select order)`: bốn cột lookup bên `LOG - Import` khớp
+   * theo GIÁ TRỊ (mã đơn + SKU + loại nhập), không qua liên kết nào — nên liên kết là thứ không
+   * cần, và nối vào dòng món của lượt BÁN lúc đầu thì các lookup của dòng món đó sẽ gộp thêm số
+   * của lượt trả về. Để Bảo xác nhận trên dòng thử đầu tiên.
+   */
+  | { kieu: 'return' }
+  /**
    * Hàng đặt PO. KHÔNG có liên kết đơn, và đó là trạng thái ĐÚNG, không phải thiếu sót: bảng
    * món (`lark_mon_don`) chỉ còn dòng PO tới PO21, trong khi PO đang chạy là PO52 — không có
    * dòng nào để trỏ tới. Hai cột `… final` giữ mã, đúng như ghi chú ở trên.
@@ -197,7 +216,9 @@ export function dungPayloadNhan(
   if (!kho) throw new Error(`Kho "${d.kho}" chưa có tên tương ứng trên Lark.`);
   return {
     [COT_NGAY_IMPORT]: d.nhanLuc.getTime(),
-    [COT_INVENTORY_TYPE]: d.nguon.kieu === 'po' ? INVENTORY_TYPE_PO : INVENTORY_TYPE_RETAIL,
+    [COT_INVENTORY_TYPE]: d.nguon.kieu === 'po' ? INVENTORY_TYPE_PO
+      : d.nguon.kieu === 'return' ? INVENTORY_TYPE_RETURN
+      : INVENTORY_TYPE_RETAIL,
     ...(d.nguon.kieu === 'don' ? { [COT_SELECT_ORDER]: [d.nguon.larkMonRecordId] } : {}),
     [COT_ORDER_FINAL]: d.maDon,
     [COT_SKU_FINAL]: d.sku,
@@ -216,9 +237,20 @@ export function dungPayloadNhan(
   };
 }
 
-/** Nội dung sửa sau khi QC ĐẠT — đổi đúng hai cột kết quả, không đụng gì khác. */
-export function dungPayloadSauQcDat(): Record<string, unknown> {
-  return { [COT_WH_ACTION]: WH_ACTION_TAM_NHAP, [COT_QC_CHECK]: QC_CHECK_PASS };
+/**
+ * Nội dung sửa sau khi QC ĐẠT — đổi đúng hai cột kết quả, không đụng gì khác.
+ *
+ * `laDoReturn`: đồ khách trả về thì đi `Lưu kho`, KHÔNG phải `Tạm nhập (đi đơn)`. Đo bảng vận
+ * hành 08/10/2026 trên 637 dòng `Tồn kho (Return)`: 546 dòng (86%) mang `Lưu kho`, còn
+ * `Tạm nhập (đi đơn)` chỉ 5 dòng và cũ (mới nhất 30/03). Đúng nghiệp vụ: hàng trả về nằm lại
+ * kho, không phải hàng vừa nhận để đi một đơn đang đợi. Ghi `Tạm nhập (đi đơn)` cho đồ return
+ * là nói với bảng vận hành rằng món đó sắp đi đơn — sai mà không ai báo.
+ */
+export function dungPayloadSauQcDat(laDoReturn = false): Record<string, unknown> {
+  return {
+    [COT_WH_ACTION]: laDoReturn ? WH_ACTION_LUU_KHO : WH_ACTION_TAM_NHAP,
+    [COT_QC_CHECK]: QC_CHECK_PASS,
+  };
 }
 
 /**

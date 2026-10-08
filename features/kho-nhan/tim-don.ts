@@ -1,8 +1,9 @@
 'use server';
 
-import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { STORE_NHAN_HANG, STORE_MON_LARK, nhanQuaMonLark } from './pham-vi';
 import { monConNhanDuoc } from './mon-lark-con-nhan';
+import { returnConNhanDuoc, TRANG_THAI_CHO_NHAN } from './return-con-nhan';
 import { db, schema } from '@/db/client';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 import { requirePerm } from '@/features/receiving/perm';
@@ -23,9 +24,9 @@ const GIOI_HAN = 20;
  * Hai sự thật ngược nhau trên cùng một chiếc: không phải hàng, mà vẫn là một lượt nhận. Ô tìm
  * trả lời câu "còn phải nhận gì nữa" nên nó phải đếm HÀNG, không đếm lượt.
  *
- * BỐN nguồn đếm, cùng một luật (vế thứ tư — kênh món Lark — thêm 08/10/2026). Khai cạnh nhau
- * để ai sửa một vế thì thấy ngay phải sửa cả bốn — hai bản của một câu hỏi thì sớm muộn cũng
- * phân kỳ. Có `tim-don-dem.test.ts` đọc chính tệp này và đếm số chỗ.
+ * NĂM nguồn đếm, cùng một luật (vế thứ tư — kênh món Lark — và thứ năm — đồ return — thêm
+ * 08/10/2026). Khai cạnh nhau để ai sửa một vế thì thấy ngay phải sửa cả năm — hai bản của một
+ * câu hỏi thì sớm muộn cũng phân kỳ. Có `tim-don-dem.test.ts` đọc chính tệp này và đếm số chỗ.
  *
  * Đo trước khi mở (03/10/2026): vế SMS của PO +0 món, vế Lark +4 món còn nhập được trên 1.128
  * dòng đã tick Báo đơn — luật "đơn đã đủ thì chặn cả đơn" hấp thụ 419/423 cặp có chiếc fail.
@@ -114,7 +115,11 @@ export async function timMonChuaNhan(tuKhoa: string): Promise<KetQuaTim[]> {
    * Thứ tự này là thứ tự người đang đợi — không phải thứ tự tiện code. */
   const daCo = shopify.length + po.length;
   const mon = daCo >= GIOI_HAN ? [] : await timMonLark(q, GIOI_HAN - daCo);
-  return [...shopify, ...po, ...mon].slice(0, GIOI_HAN);
+  /* Đồ khách trả về xếp CUỐI: ba nguồn trên là hàng đang có người đợi, đồ return là hàng đã
+   * giao xong rồi quay lại. Thứ tự này là thứ tự người đang đợi. */
+  const daCo2 = daCo + mon.length;
+  const ret = daCo2 >= GIOI_HAN ? [] : await timMonReturn(q, GIOI_HAN - daCo2);
+  return [...shopify, ...po, ...mon, ...ret].slice(0, GIOI_HAN);
 }
 
 /**
@@ -269,6 +274,70 @@ async function timMonLark(q: string, gioiHan: number): Promise<KetQuaTim[]> {
       maDon: `#${d.orderNumber.replace(/^#/, '')}`, sku: d.sku,
       tenSanPham: d.ten, tenBienThe: null, vendor: d.vendor,
       datSl: 1, daNhan: d.daNhan,
+    });
+    if (ra.length >= gioiHan) break;
+  }
+  return ra;
+}
+
+/**
+ * Đồ khách trả về còn chờ nhận (CEO 08/10/2026) — bảng Lark `LOG - Import`.
+ *
+ * Luật cửa vào ở `return-con-nhan.ts`, KHÔNG viết lại ở đây. Lọc trạng thái ngay trong câu truy
+ * vấn cho rẻ (bảng 666 dòng, chỉ 82 ở cửa), rồi `returnConNhanDuoc` kiểm đủ luật trên từng dòng
+ * — hai lớp cùng một luật, lớp trong là lớp quyết định.
+ *
+ * Tên hàng tra từ `shopify_order_lines` theo đơn + SKU: bảng Lark KHÔNG có cột tên sản phẩm
+ * (đã dò đủ 48 cột). Tra được 413/637 dòng; số còn lại ô tìm hiện SKU.
+ */
+async function timMonReturn(q: string, gioiHan: number): Promise<KetQuaTim[]> {
+  const maDon = chuanHoaMaDon(q);
+  const khongDau = `%${boDauTiengViet(q)}%`.toLowerCase();
+
+  const dong = await db.select({
+    recordId: schema.larkLogImport.recordId,
+    orderNumber: schema.larkLogImport.orderNumber,
+    sku: schema.larkLogImport.sku,
+    soLuong: schema.larkLogImport.soLuong,
+    whTiepNhanQc: schema.larkLogImport.whTiepNhanQc,
+    logStatus: schema.larkLogImport.logStatus,
+    daNhan: sql<number>`(SELECT count(*)::int FROM goods_receipt_items gi
+      WHERE gi.return_record_id = ${schema.larkLogImport.recordId}
+        AND gi.${KHONG_TINH_FAIL})`,
+    ten: sql<string | null>`(SELECT l.product_title FROM shopify_order_lines l
+      JOIN shopify_orders o ON o.id = l.order_id
+      WHERE regexp_replace(o.shopify_order_number, '^#', '')
+          = regexp_replace(coalesce(${schema.larkLogImport.orderNumber}, ''), '^#', '')
+        AND l.sku = ${schema.larkLogImport.sku} LIMIT 1)`,
+    bienThe: sql<string | null>`(SELECT l.variant_title FROM shopify_order_lines l
+      JOIN shopify_orders o ON o.id = l.order_id
+      WHERE regexp_replace(o.shopify_order_number, '^#', '')
+          = regexp_replace(coalesce(${schema.larkLogImport.orderNumber}, ''), '^#', '')
+        AND l.sku = ${schema.larkLogImport.sku} LIMIT 1)`,
+  }).from(schema.larkLogImport).where(and(
+    inArray(schema.larkLogImport.logStatus, [...TRANG_THAI_CHO_NHAN]),
+    isNull(schema.larkLogImport.whTiepNhanQc),
+    or(
+      sql`regexp_replace(coalesce(${schema.larkLogImport.orderNumber}, ''), '^#', '') ILIKE ${`%${maDon}%`}`,
+      sql`${schema.larkLogImport.sku} ILIKE ${`%${q}%`}`,
+      sql`${schema.larkLogImport.timKiem} LIKE ${khongDau}`,
+    ),
+  )).limit(gioiHan * 3);
+
+  const ra: KetQuaTim[] = [];
+  for (const d of dong) {
+    const duoc = returnConNhanDuoc(
+      { recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
+        whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus },
+      d.daNhan,
+    );
+    if (!duoc.ok) continue;
+    ra.push({
+      nguon: 'return', lineId: d.recordId,
+      orderId: null, storeId: null, shopifyOrderId: null,
+      maDon: d.orderNumber ?? '', sku: d.sku,
+      tenSanPham: d.ten, tenBienThe: d.bienThe, vendor: null,
+      datSl: d.soLuong, daNhan: d.daNhan,
     });
     if (ra.length >= gioiHan) break;
   }

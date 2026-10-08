@@ -2198,6 +2198,10 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
    *  `lark_mon_don` (đếm đã nhận), `mon_record_id` để nối `Import (select order)`. */
   monDinhDanh: text('mon_dinh_danh'),
   monRecordId: text('mon_record_id'),
+  /** Chiếc nhận cho một dòng đồ return (`lark_log_import.record_id`, CEO 08/10/2026).
+   *  KHÔNG dùng `order_id`: đơn gốc đã giao xong, gắn vào đó là chiếc return bị tính vào
+   *  "đã nhận" của đơn và món biến mất khỏi ô tìm hàng đi đơn. */
+  returnRecordId: text('return_record_id'),
   domPrice: numeric('dom_price', { precision: 14, scale: 2 }),
   domPriceCurrency: text('dom_price_currency'),
   globalPrice: numeric('global_price', { precision: 14, scale: 2 }),
@@ -2224,6 +2228,35 @@ export const goodsReceiptItems = pgTable('goods_receipt_items', {
   index('goods_receipt_items_disposition_idx').on(t.disposition),
   index('gri_stock_pick_idx').on(t.sku, t.stockStatus, t.currentWarehouseCode),
   index('goods_receipt_items_mon_idx').on(t.monDinhDanh),
+  index('goods_receipt_items_return_idx').on(t.returnRecordId),
+]);
+
+/**
+ * Bản sao bảng Lark `LOG - Import` — đồ khách trả về (CEO 08/10/2026). CHỈ ĐỌC từ Lark.
+ *
+ * Bảng Lark KHÔNG có cột tên sản phẩm (đã dò đủ 48 cột), nên tên tra từ `shopify_order_lines`
+ * theo đơn + SKU lúc hiện ra.
+ */
+export const larkLogImport = pgTable('lark_log_import', {
+  recordId: text('record_id').primaryKey(),
+  /** `Order number` / `SKU` trên Lark là cột LOOKUP. Giữ nguyên dấu `#`: bốn cột lookup `WH -`
+   *  khớp theo đúng chuỗi này. */
+  orderNumber: text('order_number'),
+  sku: text('sku'),
+  requestId: text('request_id'),
+  /** Trạng thái duyệt hoàn tiền của CX — KHÔNG phải cửa kho (xem migration 0202). */
+  returnStatus: text('return_status'),
+  /** Trạng thái đường về của LOG — ĐÂY là cửa kho. */
+  logStatus: text('log_status'),
+  returnCategory: text('return_category'),
+  soLuong: integer('so_luong').notNull().default(1),
+  /** Lookup `WH - Tiếp nhận & QC`: có giá trị = đã có dòng WH - Inventory khớp. */
+  whTiepNhanQc: text('wh_tiep_nhan_qc'),
+  timKiem: text('tim_kiem'),
+  capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+}, (t) => [
+  index('lark_log_import_don_sku_idx').on(t.orderNumber, t.sku),
+  index('lark_log_import_log_status_idx').on(t.logStatus),
 ]);
 
 /** Nhật ký mỗi lần sync Lark → shipments. Bản ghi mới nhất cấp dữ liệu cho

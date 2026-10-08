@@ -65,6 +65,9 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     monRecordId: schema.larkMonDon.recordId,
     monTen: schema.larkMonDon.lineitemName,
     monVendor: schema.larkMonDon.vendor,
+    /* Đồ return: mã đơn đọc từ chính bản sao bảng `LOG - Import`, cùng lý lẽ với món Lark. */
+    returnOrderNumber: schema.larkLogImport.orderNumber,
+    returnSku: schema.larkLogImport.sku,
     tenMonPhieu: schema.goodsReceiptItems.productTitle,
     taoLuc: schema.goodsReceiptItems.createdAt,
     kho: schema.goodsReceipts.warehouseCode,
@@ -73,6 +76,7 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     .innerJoin(schema.goodsReceipts, eq(schema.goodsReceipts.id, schema.goodsReceiptItems.receiptId))
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .leftJoin(schema.larkMonDon, eq(schema.larkMonDon.dinhDanh, schema.goodsReceiptItems.monDinhDanh))
+    .leftJoin(schema.larkLogImport, eq(schema.larkLogImport.recordId, schema.goodsReceiptItems.returnRecordId))
     .where(inArray(schema.goodsReceiptItems.id, itemIds));
 
   /* Đọc một lần cho cả lượt gửi. Hỏng thì coi như không có lựa chọn nào hợp lệ
@@ -130,13 +134,26 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
         if (po) { tenMon = po.tenMon ?? c.tenMonPhieu; vendorTho = po.vendor; }
       }
       nguon = { kieu: 'po' };
-    } else {
+    } else if (duong.kieu === 'mon') {
       /* Kênh không-Shopify (đơn TQ): dòng món ĐÃ có trong bản sao nên không tra thêm lượt nào.
        * Payload giống y đường đơn — `Retail` kèm liên kết `Import (select order)`, khớp 183 dòng
        * MTB/MXHS đội kho đang có trên bảng vận hành. */
       nguon = { kieu: 'don', larkMonRecordId: duong.monRecordId };
       tenMon = c.monTen ?? c.tenMonPhieu;
       vendorTho = c.monVendor;
+    } else {
+      /* Đồ khách trả về: loại nhập `Tồn kho (Return)`, KHÔNG liên kết đơn — bốn cột lookup bên
+       * `LOG - Import` khớp theo giá trị (mã đơn + SKU + loại nhập), không qua liên kết nào.
+       *
+       * SKU lấy từ bản sao `LOG - Import` và rơi về SKU của chiếc hàng: cột `Lineitem SKU final`
+       * là MỘT trong ba khoá khớp, trống nó là bốn cột kia vĩnh viễn không sáng.
+       *
+       * Vendor để trống: bảng `LOG - Import` không có cột vendor (đã dò đủ 48 cột), và đoán
+       * vendor từ SKU là ghi một cái tên không ai xác nhận lên bảng vận hành. */
+      nguon = { kieu: 'return' };
+      skuFinal = c.returnSku ?? duong.sku;
+      tenMon = c.tenMonPhieu;
+      vendorTho = null;
     }
 
     try {
@@ -206,10 +223,12 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
     poOrderNumber: schema.goodsReceiptItems.poOrderNumber,
     monOrderNumber: schema.larkMonDon.orderNumber,
     monRecordId: schema.larkMonDon.recordId,
+    returnOrderNumber: schema.larkLogImport.orderNumber,
     sku: schema.goodsReceiptItems.sku,
   }).from(schema.goodsReceiptItems)
     .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
     .leftJoin(schema.larkMonDon, eq(schema.larkMonDon.dinhDanh, schema.goodsReceiptItems.monDinhDanh))
+    .leftJoin(schema.larkLogImport, eq(schema.larkLogImport.recordId, schema.goodsReceiptItems.returnRecordId))
     .where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
 
   if (!c) return { ok: false, loi: 'Không tìm thấy chiếc hàng.' };
@@ -223,8 +242,8 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
       /* Hàng PO không bao giờ có liên kết đơn, nên hàng rào liên kết phải đổi sang hàng rào
        * định danh — `duocXoaRecord` giữ cả hai luật, chặt tương đương. */
       const duong = quyetDinhGui(c);
-      const mong = duong.ok && duong.kieu === 'po'
-        ? { kieu: 'po' as const, maDon: duong.maDon, sku: duong.sku }
+      const mong = duong.ok && (duong.kieu === 'po' || duong.kieu === 'return')
+        ? { kieu: duong.kieu, maDon: duong.maDon, sku: duong.sku }
         : { kieu: 'don' as const };
       const cho = duocXoaRecord(rec.fields, mong);
       if (!cho.ok) {
@@ -257,12 +276,18 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
  * Lượt hỏng vẫn vào nhật ký để còn biết mà chữa.
  */
 export async function danhDauQcDatTrenLark(itemId: string, actor: string): Promise<void> {
-  const [c] = await db.select({ larkRecordId: schema.goodsReceiptItems.larkRecordId })
-    .from(schema.goodsReceiptItems).where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
+  const [c] = await db.select({
+    larkRecordId: schema.goodsReceiptItems.larkRecordId,
+    /* Đồ khách trả về đi `Lưu kho`, không phải `Tạm nhập (đi đơn)` — xem `dungPayloadSauQcDat`.
+     * Đọc cờ ở đây chứ không đoán từ loại nhập trên Lark: `return_record_id` là sự thật bên
+     * mình, còn đọc ngược Lark là thêm một lượt gọi và một chỗ có thể lệch. */
+    returnRecordId: schema.goodsReceiptItems.returnRecordId,
+  }).from(schema.goodsReceiptItems).where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
   if (!c?.larkRecordId) return;
+  const laDoReturn = c.returnRecordId != null;
   try {
-    await updateWhInventoryRecord(c.larkRecordId, dungPayloadSauQcDat());
-    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: true, chiTiet: 'WH - Action → Tạm nhập (đi đơn)', actor });
+    await updateWhInventoryRecord(c.larkRecordId, dungPayloadSauQcDat(laDoReturn));
+    await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: true, chiTiet: `WH - Action → ${laDoReturn ? 'Lưu kho' : 'Tạm nhập (đi đơn)'}`, actor });
   } catch (e) {
     const chiTiet = e instanceof Error ? e.message : String(e);
     await ghiNhatKy({ hanhDong: 'sua', larkRecordId: c.larkRecordId, receiptItemId: itemId, thanhCong: false, chiTiet, actor });

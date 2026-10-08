@@ -373,3 +373,43 @@ describe('dungPayloadNhan — hàng PO', () => {
     expect(p['Import (select order)']).toEqual(['recABC']);
   });
 });
+
+/* Đồ khách trả về (CEO 08/10/2026). */
+describe('dungPayloadNhan — đồ khách trả về', () => {
+  const luc = new Date('2026-10-08T03:00:00Z');
+  const ret = () => dungPayloadNhan({
+    nguon: { kieu: 'return' }, maDon: '#MBLVD29466', sku: 'Raffine-2000150000133-M-BLA',
+    tenMon: null, vendor: null, nhanLuc: luc, kho: 'GVM',
+  });
+
+  /* Loại nhập là điều kiện để bốn cột lookup `WH -` bên bảng `LOG - Import` sáng — không phải
+     chọn cho gọn. Dòng return mang ĐÚNG mã đơn và SKU với dòng retail đã gửi đi, nên loại nhập
+     là thứ DUY NHẤT phân biệt hai dòng. */
+  it('loại nhập là "Tồn kho (Return)"', () => {
+    expect(ret()['Import - Inventory type']).toBe('Tồn kho (Return)');
+  });
+
+  it('KHÔNG gửi cột liên kết đơn', () => {
+    expect('Import (select order)' in ret()).toBe(false);
+  });
+
+  it('mã đơn và SKU vào hai cột `… final` — ba khoá khớp của lookup', () => {
+    expect(ret()['Order Number final']).toBe('#MBLVD29466');
+    expect(ret()['Lineitem SKU final']).toBe('Raffine-2000150000133-M-BLA');
+  });
+});
+
+describe('dungPayloadSauQcDat', () => {
+  /* Đo 637 dòng `Tồn kho (Return)` ngày 08/10/2026: 546 dòng (86%) mang `Lưu kho`, còn
+     `Tạm nhập (đi đơn)` chỉ 5 dòng và cũ nhất 30/03. Hàng trả về nằm lại kho, không phải hàng
+     vừa nhận để đi một đơn đang đợi. */
+  it('đồ return QC đạt → `Lưu kho`, KHÔNG phải `Tạm nhập (đi đơn)`', () => {
+    expect(dungPayloadSauQcDat(true)['WH - Action']).toBe('Lưu kho');
+    expect(dungPayloadSauQcDat(true)['QC Check']).toBe('QC Pass');
+  });
+
+  it('hàng đi đơn QC đạt → vẫn `Tạm nhập (đi đơn)` như cũ', () => {
+    expect(dungPayloadSauQcDat()['WH - Action']).toBe('Tạm nhập (đi đơn)');
+    expect(dungPayloadSauQcDat(false)['WH - Action']).toBe('Tạm nhập (đi đơn)');
+  });
+});

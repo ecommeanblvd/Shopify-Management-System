@@ -251,6 +251,13 @@ export async function listPoRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(PO_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);
 }
 
+/** Bảng `LOG - Import` — đồ khách trả về (CEO 08/10/2026). CHỈ ĐỌC. */
+const LOG_IMPORT_TABLE_ID = process.env.LARK_LOG_IMPORT_TABLE_ID ?? 'tbl84nMP8vQwxXfX';
+
+export async function listLogImportRecords(): Promise<LarkRecord[]> {
+  return searchAllRecords(LOG_IMPORT_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);
+}
+
 /** Đọc TẤT CẢ record bảng brand-received (đơn × SKU × ngày MEAN nhận). Phân trang. */
 export async function listBrandReceivedRecords(): Promise<LarkRecord[]> {
   return searchAllRecords(BRAND_RECV_TABLE_ID, { automatic_fields: true, page_size: 500 }, BRAND_RECV_APP_TOKEN);

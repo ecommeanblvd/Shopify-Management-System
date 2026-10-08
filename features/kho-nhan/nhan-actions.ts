@@ -10,6 +10,7 @@ import { requirePerm, withUniqueRetry } from '@/features/receiving/perm';
 import { maChiec, maPhieuNhan } from './nhan-logic';
 import { khoa, monPoConNhan } from './po-con-nhan';
 import { monConNhanDuoc } from './mon-lark-con-nhan';
+import { returnConNhanDuoc } from './return-con-nhan';
 import { layIdBienThe } from './shopify-qc';
 
 /** Kho làm việc của người đang thao tác. Chưa gán thì rơi về GVM (kho chính). */
@@ -246,6 +247,77 @@ export async function ghiNhanChiecMonLark(
     return { ok: true, itemId: item.id };
   } catch (e) {
     console.error('[kho-nhan] ghiNhanChiecMonLark lỗi:', e);
+    return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
+  }
+}
+
+/**
+ * Nhận MỘT món đồ khách trả về (CEO 08/10/2026).
+ *
+ * `order_id` để NULL dù dòng return mang mã đơn Shopify thật: đơn đó ĐÃ GIAO XONG. Gắn vào
+ * `order_id` là chiếc return bị tính vào "đã nhận" của đơn, và món đang chờ về của đơn đó biến
+ * mất khỏi ô tìm — đúng loại lỗi đã sửa ở việc #6 hôm nay.
+ *
+ * Kiểm lại điều kiện NGAY TRƯỚC KHI GHI thay vì tin kết quả tìm: ô tìm có thể mở từ mười phút
+ * trước, trong lúc đó đội kho đã nhập tay dòng WH bên Lark (cột lookup `WH - Tiếp nhận & QC` có
+ * giá trị) hoặc LOG đã đổi trạng thái. Luật ở `return-con-nhan.ts`, KHÔNG viết lại ở đây.
+ */
+export async function ghiNhanChiecReturn(
+  recordId: string,
+): Promise<{ ok: boolean; loi?: string; itemId?: string }> {
+  const actor = await requirePerm('manage_qc');
+  try {
+    const [dong] = await db.select().from(schema.larkLogImport)
+      .where(eq(schema.larkLogImport.recordId, recordId)).limit(1);
+    if (!dong) return { ok: false, loi: 'Không tìm thấy dòng đồ return trên bản sao bảng Lark.' };
+
+    const [dem] = await db.select({ n: sql<number>`count(*)::int` })
+      .from(schema.goodsReceiptItems)
+      .where(eq(schema.goodsReceiptItems.returnRecordId, recordId));
+
+    const duoc = returnConNhanDuoc({
+      recordId: dong.recordId, orderNumber: dong.orderNumber, sku: dong.sku,
+      soLuong: dong.soLuong, whTiepNhanQc: dong.whTiepNhanQc, logStatus: dong.logStatus,
+    }, dem?.n ?? 0);
+    if (!duoc.ok) return { ok: false, loi: `Không nhận được: ${duoc.lyDo}.` };
+
+    const kho = await khoCuaNguoiDung(actor);
+    /* Vendor để NULL: bảng `LOG - Import` không có cột vendor (đã dò đủ 48 cột). Mã phiếu nhận
+     * vì thế không mang tên vendor — đúng hơn là bịa một cái tên vào mã phiếu. */
+    const maPhieu = maPhieuNhan(ngayKinhDoanh(new Date())!, null, kho);
+    let [phieu] = await db.select().from(schema.goodsReceipts)
+      .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+    if (!phieu) {
+      try {
+        [phieu] = await db.insert(schema.goodsReceipts).values({
+          code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
+          vendor: null, receivedAt: new Date(), receivedBy: actor,
+        }).returning();
+      } catch {
+        [phieu] = await db.select().from(schema.goodsReceipts)
+          .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
+      }
+    }
+    if (!phieu) return { ok: false, loi: 'Không dựng được phiếu nhận.' };
+
+    const item = await withUniqueRetry(async () => {
+      const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
+      const [row] = await db.insert(schema.goodsReceiptItems).values({
+        receiptId: phieu!.id,
+        unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
+        sku: dong.sku,
+        orderId: null,
+        returnRecordId: dong.recordId,
+        qcResult: 'pending',
+        disposition: 'pending',
+      }).returning({ id: schema.goodsReceiptItems.id });
+      return row;
+    });
+
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true, itemId: item.id };
+  } catch (e) {
+    console.error('[kho-nhan] ghiNhanChiecReturn lỗi:', e);
     return { ok: false, loi: 'Ghi nhận thất bại, thử lại.' };
   }
 }

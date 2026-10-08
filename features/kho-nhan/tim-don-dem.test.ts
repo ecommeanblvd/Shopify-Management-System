@@ -20,10 +20,10 @@ function cacCauDem(src: string): string[] {
 
 describe('tim-don: đếm đã nhận', () => {
   /* Con số này là CHỐT CHẶN, không phải mô tả: thêm một nguồn nhận hàng mà quên lọc chiếc fail
-     thì bài test đỏ ở đây trước. Vế thứ tư (kênh món Lark, đơn TQ) thêm 08/10/2026 — và đúng
-     lúc thêm, nó đã quên mệnh đề lọc; test này là chỗ bắt được. */
-  it('có đúng bốn chỗ đếm', () => {
-    expect(cacCauDem(NGUON)).toHaveLength(4);
+     thì bài test đỏ ở đây trước. Vế thứ tư (kênh món Lark, đơn TQ) và thứ năm (đồ return) thêm
+     08/10/2026 — và đúng lúc thêm vế thứ tư, nó đã quên mệnh đề lọc; test này là chỗ bắt được. */
+  it('có đúng năm chỗ đếm', () => {
+    expect(cacCauDem(NGUON)).toHaveLength(5);
   });
 
   it('mọi lượt đếm trên goods_receipt_items đều loại chiếc fail', () => {

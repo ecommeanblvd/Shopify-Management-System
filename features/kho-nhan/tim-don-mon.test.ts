@@ -42,3 +42,35 @@ describe('tim-don: nguồn món Lark', () => {
     expect(than).not.toMatch(/'#MTB'|'#MXHS'/);
   });
 });
+
+/** Thân hàm `timMonReturn` — nguồn thứ tư, đồ khách trả về. */
+function thanTimMonReturn(src: string): string {
+  const i = src.indexOf('async function timMonReturn');
+  expect(i).toBeGreaterThan(-1);
+  return src.slice(i);
+}
+
+describe('tim-don: nguồn đồ khách trả về', () => {
+  /* Cửa vào CEO chốt 08/10/2026. Đọc từ `TRANG_THAI_CHO_NHAN` chứ không viết cứng tên trạng
+     thái vào câu truy vấn — hai bản của một phạm vi là thêm trạng thái ở một chỗ mà quên chỗ
+     kia, rồi ô tìm và lệnh nhận bất đồng ý. */
+  it('lọc trạng thái đọc từ TRANG_THAI_CHO_NHAN, không viết cứng', () => {
+    const than = thanTimMonReturn(NGUON);
+    expect(than).toMatch(/TRANG_THAI_CHO_NHAN/);
+    expect(than).not.toMatch(/'Warehouse Received'|'Return-Processing'|'Pakago Received'/);
+  });
+
+  /* Đội kho nhập tay dòng WH bên Lark thì cột lookup `WH - Tiếp nhận & QC` có giá trị. Bỏ mệnh
+     đề này là hai dòng WH cho một món trả về, mà bốn cột lookup bên `LOG - Import` gộp cả hai
+     nên số hiện ra không nói được dòng nào là dòng nào. */
+  it('loại dòng đội kho đã có WH ngay trong câu truy vấn', () => {
+    expect(thanTimMonReturn(NGUON)).toMatch(/isNull\(schema\.larkLogImport\.whTiepNhanQc\)/);
+  });
+
+  /* `Return Status` là trạng thái duyệt hoàn tiền của CX, KHÔNG phải cửa kho: trong 244 dòng
+     kho đã nhận có 135 `Refunded` và cả 1 `Rejected` — hàng bị từ chối hoàn tiền vẫn về kho
+     thật. Lọc theo nó là bỏ sót hàng có thật. */
+  it('KHÔNG lọc theo trạng thái hoàn tiền của CX', () => {
+    expect(thanTimMonReturn(NGUON)).not.toMatch(/returnStatus/);
+  });
+});

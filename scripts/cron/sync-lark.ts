@@ -26,6 +26,7 @@ import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
 import { listAllWhInventoryRecords, type LarkRecord } from '@/features/lark/client';
 import { dienStoreFinal } from '@/features/kho-nhan/dien-store-final';
 import { dongBoPoLark } from '@/features/kho-nhan/dong-bo-po-lark';
+import { dongBoLogImport } from '@/features/kho-nhan/dong-bo-log-import';
 import { dayProductionTime } from '@/features/shopify-orders/day-production-time-lark';
 import { backfillCourierLark } from '@/features/lark/courier-backfill';
 import { ghiNguocLark } from '@/features/lark/ghi-nguoc/ghi-nguoc';
@@ -120,6 +121,8 @@ async function main(): Promise<void> {
   await chayMotJob('day-production-time-cx', () => dayProductionTime());
   // Bảng PO cho màn Nhận hàng (CEO 29/09/2026) — CHỈ ĐỌC từ Lark.
   await chayMotJob('dong-bo-po-lark', dongBoPoLark);
+  // Bảng đồ khách trả về (CEO 08/10/2026) — CHỈ ĐỌC từ Lark, cùng màn Nhận hàng.
+  await chayMotJob('dong-bo-log-import', dongBoLogImport);
 }
 
 chayCron('sync-lark', main);

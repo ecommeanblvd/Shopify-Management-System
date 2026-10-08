@@ -13,12 +13,14 @@ import type { SoDoMayDo } from './so-do-may-do';
 export interface KetQuaTim {
   /**
    * `shopify` = dòng đơn khách; `po` = dòng hàng đặt PO nhập kho bán dần;
-   * `mon` = kênh KHÔNG-Shopify trên bảng món Lark (đơn TQ `#MTB`/`#MXHS`, CEO 08/10/2026).
+   * `mon` = kênh KHÔNG-Shopify trên bảng món Lark (đơn TQ `#MTB`/`#MXHS`, CEO 08/10/2026);
+   * `return` = đồ khách trả về, bảng Lark `LOG - Import` (CEO 08/10/2026).
    */
-  nguon: 'shopify' | 'po' | 'mon';
+  nguon: 'shopify' | 'po' | 'mon' | 'return';
   /**
    * `shopify` → id dòng đơn Shopify; `po` → `record_id` dòng PO trên Lark;
-   * `mon` → `dinh_danh` dòng món (khoá chính `lark_mon_don`, KHÔNG phải record_id).
+   * `mon` → `dinh_danh` dòng món (khoá chính `lark_mon_don`, KHÔNG phải record_id);
+   * `return` → `record_id` dòng `LOG - Import`.
    */
   lineId: string;
   /** PO không thuộc đơn Shopify nào nên ba trường này rỗng. */

@@ -4,7 +4,9 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { timMonChuaNhan } from '@/features/kho-nhan/tim-don';
 import type { KetQuaTim } from '@/features/kho-nhan/types';
-import { ghiNhanChiec, ghiNhanChiecPo, ghiNhanChiecMonLark } from '@/features/kho-nhan/nhan-actions';
+import {
+  ghiNhanChiec, ghiNhanChiecPo, ghiNhanChiecMonLark, ghiNhanChiecReturn,
+} from '@/features/kho-nhan/nhan-actions';
 
 const TOI_THIEU = 2;
 const DEBOUNCE_MS = 250;
@@ -62,11 +64,13 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
 
   function nhan(m: KetQuaTim) {
     start(async () => {
-      /* Ba nguồn, ba lệnh. Hàng PO và hàng kênh Lark (đơn TQ) không thuộc đơn Shopify nào, và
-       * mỗi nguồn có luật "còn nhận được không" riêng — gộp một lệnh rồi đoán nguồn bên trong
-       * là chỗ sớm muộn cũng nhận sai nguồn. */
+      /* Bốn nguồn, bốn lệnh. Ba nguồn ngoài Shopify không thuộc đơn Shopify nào (đồ return thì
+       * có mã đơn, nhưng đơn ĐÃ GIAO XONG nên không được gắn vào `order_id`), và mỗi nguồn có
+       * luật "còn nhận được không" riêng — gộp một lệnh rồi đoán nguồn bên trong là chỗ sớm
+       * muộn cũng nhận sai nguồn. */
       const r = m.nguon === 'po' ? await ghiNhanChiecPo(m.lineId)
         : m.nguon === 'mon' ? await ghiNhanChiecMonLark(m.lineId)
+        : m.nguon === 'return' ? await ghiNhanChiecReturn(m.lineId)
         : await ghiNhanChiec(m.lineId);
       if (!r.ok) { toast.error(r.loi ?? 'Ghi nhận thất bại.', { duration: 10000 }); return; }
       toast.success(`Đã nhận 1 chiếc ${m.sku ?? ''} — đang chờ kiểm.`, { duration: 3000 });
@@ -125,6 +129,14 @@ export function OTimMonChoVe({ onDaNhan }: { onDaNhan: () => void }) {
                         {/* Kênh không-Shopify: nhãn đọc ngay ra tên kênh, vì mã `#MXHS1560` thì
                             chỉ người trong nghề mới biết là Xiao Hong Shu. Màu khác PO để quét
                             bảng không phải đọc chữ. */}
+                        {/* Đồ khách trả về: nhãn phải đọc ra NGAY, vì mã đơn của nó trông y hệt
+                            đơn bán bình thường (`#MBLVD29466`) — không có nhãn thì kho tưởng
+                            đang nhận hàng mới của đơn đó. */}
+                        {m.nguon === 'return' && (
+                          <span className="mr-1 rounded bg-rose-500/15 px-1 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
+                            Khách trả
+                          </span>
+                        )}
                         {m.nguon === 'mon' && (
                           <span className="mr-1 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                             {m.maDon.startsWith('#MTB') ? 'Taobao'
