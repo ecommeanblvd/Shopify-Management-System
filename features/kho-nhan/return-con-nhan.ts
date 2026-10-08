@@ -16,21 +16,32 @@
  */
 
 /**
- * Trạng thái đường về được coi là "hàng đã tới kho hoặc đang xử lý trả".
+ * Trạng thái đường về được coi là "hàng ĐANG TRÊN ĐƯỜNG VỀ, chưa tới kho".
  *
- * Số đo trong 422 dòng chưa nhận: `Warehouse Received` 40, `Return-Processing` 36,
- * `Pakago Received` 6 — tổng 82.
+ * Số đo trong 422 dòng chưa có hồ sơ WH: `Return-Processing` 36, `Pakago Received` 6 — tổng 42.
  *
- * `Warehouse Received` NẰM TRONG danh sách dù nghe như đã xong: 40 dòng mang trạng thái đó mà
- * bên WH - Inventory KHÔNG có dòng nào khớp, tức LOG bảo đã tới kho còn hệ thống kho chưa có
- * hồ sơ. Đó chính là tập đang lệch giữa hai bảng, và là tập cần nhận nhất.
+ * `Warehouse Received` CỐ Ý ĐỨNG NGOÀI (CEO 08/10/2026: "kiểm lại xem danh sách này có đúng là
+ * hàng đang đợi return về không chứ không phải hàng đã return về và cất vào kho rồi").
  *
- * CỐ Ý ĐỨNG NGOÀI: `A31 - Held by Customs` (7), `H11 Form Processing` (3),
- * `Waiting for Payment` (4) — hàng còn ở hải quan, chưa tới kho; sẽ hiện khi LOG đổi trạng
- * thái. `Package Lost` (2) — hàng mất, không bao giờ về. 324 dòng trống trạng thái — dòng cũ.
+ * Bản đầu của hàm này CÓ nó, với lý lẽ "40 dòng mang trạng thái đó mà bên WH không có dòng nào
+ * khớp, nên đó là tập cần nhận nhất". Lý lẽ đó SAI, và chính số liệu đã có bác bỏ: toàn bộ 244
+ * dòng ĐÃ có hồ sơ WH đều mang `Warehouse Received` (243/244). Nghĩa là đó là trạng thái LOG đặt
+ * KHI KHO ĐÃ NHẬN, không phải khi hàng đang đi. Nên 40 dòng kia gần như chắc là hàng ĐÃ VỀ RỒI,
+ * chỉ thiếu hồ sơ — và bày chúng ở ô tìm là để kho bấm nhận một món đang nằm trên kệ, sinh ra
+ * một chiếc ẢO thứ hai trong tồn.
+ *
+ * Càng chắc hơn vì lookup `WH - Tiếp nhận & QC` chỉ soi 4 loại nhập; hàng quay về ghi dưới
+ * `Tồn kho (Cancel/ Sai địa chỉ)` (54 dòng, ngoài 4 loại đó) thì lookup KHÔNG thấy, trong khi
+ * hàng đã nằm trong kho thật.
+ *
+ * 40 dòng đó là việc ĐỐI SOÁT, không phải việc nhận hàng: cần người xác định hàng đang trên kệ
+ * (thì ghi bù hồ sơ) hay mất thật. Lẫn hai việc vào một ô tìm là chỗ sinh tồn ảo.
+ *
+ * CỐ Ý ĐỨNG NGOÀI nốt: `A31 - Held by Customs` (7), `H11 Form Processing` (3),
+ * `Waiting for Payment` (4) — hàng còn ở hải quan; sẽ hiện khi LOG đổi trạng thái.
+ * `Package Lost` (2) — hàng mất. 324 dòng trống trạng thái — dòng cũ từ trước khi có cột đó.
  */
 export const TRANG_THAI_CHO_NHAN: ReadonlySet<string> = new Set([
-  'Warehouse Received',
   'Return-Processing',
   'Pakago Received',
 ]);
