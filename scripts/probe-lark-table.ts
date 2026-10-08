@@ -53,9 +53,14 @@ async function main() {
         console.log(JSON.stringify(f, null, 1));
         continue;
       }
-      const opts = (f as { property?: { options?: { name: string }[] } }).property?.options;
-      const them = opts?.length ? `  [${opts.map((o) => o.name).join(' | ')}]` : '';
-      console.log(`type=${String(f.type).padStart(3)}  ${f.field_name}${them}`);
+      /* In kèm `field_id` và MÃ lựa chọn: công thức lookup/formula của Lark chỉ nhắc tới id
+       * (`fldieyuRe2`, `optbMU1739`), không nhắc tên — không có bảng tra id→tên thì đọc công
+       * thức ra chỉ biết "khớp một cột nào đó với một lựa chọn nào đó". */
+      const opts = (f as { property?: { options?: { id?: string; name: string }[] } })
+        .property?.options;
+      const them = opts?.length
+        ? `  [${opts.map((o) => `${o.id ?? '?'}:${o.name}`).join(' | ')}]` : '';
+      console.log(`${(f.field_id ?? '').padEnd(12)} type=${String(f.type).padStart(3)}  ${f.field_name}${them}`);
     }
   }
 

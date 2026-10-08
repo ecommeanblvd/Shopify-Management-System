@@ -355,7 +355,9 @@ export async function searchWhInventoryByNgay(mocMs: number): Promise<LarkRecord
 export interface LarkField {
   field_name: string;
   type?: number;
-  property?: { options?: { name?: string }[] } | null;
+  /** Mã cột. Công thức lookup/formula của Lark chỉ nhắc tới mã này, không nhắc tên. */
+  field_id?: string;
+  property?: { options?: { id?: string; name?: string }[] } | null;
 }
 
 /**
