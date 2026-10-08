@@ -12,6 +12,8 @@
  *   railway run npm run probe:lark-table -- <tableId> --dong  # CHỈ dòng mẫu
  *   railway run npm run probe:lark-table -- <tableId> --cot --chitiet --loc=WH
  *       # CHỈ cột có tên chứa "WH", in NGUYÊN cấu hình cột
+ *   railway run npm run probe:lark-table -- <tableId> --dem="Return Status"
+ *       # ĐẾM số dòng theo từng giá trị của cột đó (lặp `--dem=` được nhiều cột)
  *
  * `--chitiet` cần cho cột LOOKUP (type 19) và cột liên kết (18/21): tên cột không nói nó lấy dữ
  * liệu qua liên kết nào, mà ghi sai hướng liên kết là bảng vận hành hiện số của bản ghi khác.
@@ -23,7 +25,9 @@
  *
  * Tham số không bắt đầu bằng `--` thứ hai là `appToken`; để trống thì dùng base WH.
  */
-import { listTableFields, listBaseTables, peekTableRecords } from '@/features/lark/client';
+import {
+  listTableFields, listBaseTables, peekTableRecords, listTableRecords,
+} from '@/features/lark/client';
 
 const BASE_WH = 'HxfAw0iRViHiNgkSlbBltpVkg3f';
 
@@ -40,6 +44,30 @@ async function main() {
   if (!tableId) {
     console.log(`=== BẢNG trong base ${token} ===`);
     for (const t of await listBaseTables(token)) console.log(`${t.table_id}  ${t.name}`);
+    return;
+  }
+
+  const demCot = co.filter((a) => a.startsWith('--dem=')).map((a) => a.slice(6));
+  if (demCot.length > 0) {
+    const ds = await listTableRecords(tableId, token);
+    console.log(`=== ${ds.length} dòng của ${tableId} ===`);
+    for (const ten of demCot) {
+      const dem = new Map<string, number>();
+      for (const r of ds) {
+        const v = r.fields?.[ten];
+        const k = v == null ? '(trống)'
+          : typeof v === 'string' ? v
+          : Array.isArray(v) ? (v.map((x) => (x as { text?: string })?.text ?? String(x)).join('') || '(trống)')
+          : typeof v === 'object' && 'value' in (v as object)
+            ? String(((v as { value?: unknown[] }).value ?? []).join(',') || '(trống)')
+          : String(v);
+        dem.set(k, (dem.get(k) ?? 0) + 1);
+      }
+      console.log(`\n--- ${ten}`);
+      for (const [k, n] of [...dem].sort((a, b) => b[1] - a[1])) {
+        console.log(`${String(n).padStart(5)}  ${k}`);
+      }
+    }
     return;
   }
 

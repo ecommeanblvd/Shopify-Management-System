@@ -419,6 +419,19 @@ export async function peekTableRecords(
   return j.data?.items ?? [];
 }
 
+/**
+ * TOÀN BỘ record của một bảng bất kỳ trong base. Chỉ ĐỌC.
+ *
+ * Dùng để ĐẾM phân bố giá trị một cột trước khi chọn luật — ví dụ "dòng nào thì kho được nhận"
+ * trên bảng đồ return: hai cột trạng thái cho vài cách đọc đều hợp lý, mà con số thì chỉ ra
+ * đúng một cách. Đoán luật rồi mới đo là chỗ đã trả giá nhiều lần.
+ */
+export async function listTableRecords(
+  tableId: string, appTokenOverride?: string,
+): Promise<LarkRecord[]> {
+  return searchAllRecords(tableId, { automatic_fields: true, page_size: 500 }, appTokenOverride ?? env('LARK_BASE_APP_TOKEN'));
+}
+
 /** Danh sách BẢNG trong base — để tìm mã bảng khi link người gửi bị mất phần `?table=`. */
 export async function listBaseTables(appTokenOverride?: string): Promise<{ table_id: string; name: string }[]> {
   const token = await getTenantToken();
