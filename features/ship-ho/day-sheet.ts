@@ -14,6 +14,7 @@ import { goiSheets } from '@/lib/google/sheets';
 import { getShipHoStatement } from './statement-queries';
 import { shipHoPriceStructure } from './price-structure';
 import { ngayDiHang } from './ngay-di-hang';
+import { ghiLenSheet } from './dong-sheet-loc';
 import {
   COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty,
   type DonSheet, type DonSheetDuty,
@@ -71,6 +72,9 @@ async function dungDonSheet(statementId: string): Promise<DonSheet[]> {
     /* `shipHoPriceStructure` trả null khi breakdown báo giá thiếu — đơn đó BỎ QUA thay vì ghi
      * một hàng toàn số 0 lên bảng brand đọc. Thiếu dòng thì thấy ngay; hàng 0 thì không. */
     if (!ps) continue;
+    /* Đơn MIỄN THU không lên bảng brand đọc — xem `ghiLenSheet`. Bảng kê trong hệ thống vẫn
+     * giữ nguyên dòng 0đ để còn dấu vết và để bản điều chỉnh gửi MMP dựa vào. */
+    if (!ghiLenSheet({ tongThu: n(o.giaThuVnd) })) continue;
     const lay = (nhan: string) => ps.rows.find((x) => x.label.startsWith(nhan))?.chargeVnd ?? 0;
     const f = ps.rows.find((x) => x.label === 'Phụ phí xăng dầu');
     ra.push({
