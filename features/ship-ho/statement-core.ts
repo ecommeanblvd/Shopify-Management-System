@@ -429,7 +429,8 @@ export async function chayCongChotKy(statementId: string): Promise<LoiCong[]> {
         bill: ab == null ? null : {
           base: n(ab.base), discount: n(ab.discount), remote: n(ab.remote), demand: n(ab.demand),
           signature: n(ab.signature), residential: n(ab.residential),
-          addressCorrection: n(ab.addressCorrection), fuel: n(ab.fuel),
+          addressCorrection: n(ab.addressCorrection), additionalHandling: n(ab.additionalHandling),
+          fuel: n(ab.fuel),
         },
       };
     });

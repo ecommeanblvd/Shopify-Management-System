@@ -23,7 +23,10 @@ export interface DonKiemCong {
   /** `null` = chưa có hoá đơn hãng → hai phép kiểm fuel không áp dụng. */
   bill: {
     base: number; discount: number; remote: number; demand: number;
-    signature: number; residential: number; addressCorrection: number; fuel: number;
+    signature: number; residential: number; addressCorrection: number;
+    /** CHỊU fuel — thiếu nó thì mẫu số hụt và %suy ra sai (xem `gocFuelTrenBill`). */
+    additionalHandling?: number;
+    fuel: number;
   } | null;
 }
 

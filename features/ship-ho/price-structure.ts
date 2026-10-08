@@ -241,6 +241,14 @@ export function shipHoPriceStructure(input: {
       quoteChargeVnd: 0, chargeVnd: chDuty,
     },
     {
+      /* Phụ phí xử lý đặc biệt: quá cân, quá khổ, đóng gói không đúng chuẩn. CHỊU fuel nên
+         KHÔNG được gộp vào "chưa phân loại" — xem `gocFuelTrenBill` và migration 0200. */
+      label: 'Phụ phí xử lý đặc biệt',
+      costVnd: null,
+      billVnd: hasBill ? Math.round(num(ab!.additionalHandling)) : null,
+      quoteChargeVnd: 0, chargeVnd: sell ? S(sell.additionalHandlingVnd ?? 0) : 0,
+    },
+    {
       label: 'Phụ phí khác (chưa phân loại)',
       costVnd: R(b.perKg) + R(b.perStep) + R(b.peak),
       billVnd: hasBill && ab!.importHandling != null ? Math.round(num(ab!.other)) : null, // bill cũ: other đã hiện ở dòng NK
@@ -258,6 +266,7 @@ export function shipHoPriceStructure(input: {
           remote: num(ab!.remote), demand: num(ab!.demand),
           signature: num(ab!.signature), residential: num(ab!.residential),
           addressCorrection: num(ab!.addressCorrection),
+          additionalHandling: num(ab!.additionalHandling),
         }));
         if (!(base > 0)) return null;
         const pct = Math.round((fuelBill / base) * 100 * 1000) / 1000;

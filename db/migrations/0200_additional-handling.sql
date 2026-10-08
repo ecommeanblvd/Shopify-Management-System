@@ -1,0 +1,15 @@
+-- Phụ phí xử lý đặc biệt (Additional Handling) — CỘT RIÊNG (CEO 08/10/2026).
+--
+-- Trước đây nhãn này rơi vào `other` ("chưa phân loại"). Quyết định 21/07 là CỐ Ý, lý do ghi
+-- trong test: "đã nhận diện, chưa đủ tần suất tách cột". Tần suất là tiêu chí sai: khoản này
+-- CHỊU phụ phí xăng dầu, nên để ngoài gốc tính fuel thì tỉ lệ ra sai bất kể gặp mấy lần.
+--
+-- Bằng chứng, đối chiếu mức FedEx công bố tuần đi hàng:
+--   873356889943 (#MBLVD28701, đi 22/06, công bố 41,5%)  — cộng AH: 41,500% · bỏ ra: 65,475%
+--   877674305295 (TA2337,       đi 24/09, công bố 51,75%) — cộng AH: 51,750%
+-- Đáng chú ý: 65,475% VẪN lọt lưới 0,25% (gần nấc 65,5%), nên hàng rào lưới không bắt được ca
+-- này — chỉ đối chiếu mức công bố mới bắt được.
+--
+-- Hai ca thật: AHS-Packaging (đóng gói không đúng chuẩn, có cuốn thêm màng bọc ngoài) và
+-- AHS-Dimensions (FedEx liệt kê đơn hơn 20kg; MEAN đang khiếu nại hãng).
+ALTER TABLE carrier_bill_lines ADD COLUMN IF NOT EXISTS additional_handling numeric(14,2);

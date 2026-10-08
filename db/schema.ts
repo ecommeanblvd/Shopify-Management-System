@@ -726,6 +726,9 @@ export const carrierBillLines = pgTable('carrier_bill_lines', {
   // KHÔNG fuel KHÔNG VAT). 'other' chỉ còn nhãn chưa phân loại.
   importHandling: numeric('import_handling', { precision: 14, scale: 2 }),
   duty: numeric('duty', { precision: 14, scale: 2 }),
+  /** Additional Handling (quá cân / quá khổ / đóng gói không chuẩn). CHỊU fuel — xem
+   *  `gocFuelTrenBill` và migration 0200. NULL = dòng nhập trước khi có cột. */
+  additionalHandling: numeric('additional_handling', { precision: 14, scale: 2 }),
   total: numeric('total', { precision: 14, scale: 2 }),
   // Breakdown chi tiết từng khoản phí của carrier (DHL: [{code,name,charge,tax,total}]).
   // Null cho dòng nhập tay/cũ → UI fallback về cột gộp base/fuel/other.

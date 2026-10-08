@@ -35,7 +35,7 @@ export interface FboApLine {
    *  → reconcile rơi về fuel hôm nay, lệch giá thu vài nghìn — bug bắt 22/07). */
   shipDate: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
-  signature: number; residential: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; total: number;
+  signature: number; residential: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; additionalHandling: number; total: number;
 }
 
 /** 1 FboBilledRow → dòng AP. Mỗi khoản MỘT CỘT, không gộp: address_correction /
@@ -55,6 +55,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     other: r.other,
     addressCorrection: r.addressCorrection,
     importHandling: r.importHandling, duty: r.duty,
+    additionalHandling: r.additionalHandling,
     total: r.total,
   };
 }
@@ -63,7 +64,8 @@ export function fboApLine(r: FboBilledRow): FboApLine {
  *  billed (shipment_charges). AP thì gồm duty; đối soát thì không. */
 export function fboShippingTotal(r: FboBilledRow): number {
   return r.base + r.discount + r.fuel + r.demand + r.remote
-    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.other;
+    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat
+    + r.additionalHandling + r.other;
 }
 
 export interface FboBill {

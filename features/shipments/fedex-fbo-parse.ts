@@ -6,7 +6,8 @@
 
 export type FboBucket =
   | 'base' | 'discount' | 'fuel' | 'demand' | 'remote'
-  | 'signature' | 'residential' | 'addressCorrection' | 'importHandling' | 'vat' | 'duty' | 'other';
+  | 'signature' | 'residential' | 'addressCorrection' | 'importHandling' | 'vat' | 'duty'
+  | 'additionalHandling' | 'other';
 
 /** Map nhãn phí FedEx (FBO) → mục của hệ thống. Khớp theo từ khoá, không phụ
  *  thuộc vị trí cột nên không bị silent-drop như LOG-Export tay. */
@@ -31,6 +32,11 @@ export function classifyFboCharge(label: string): FboBucket {
   if (t.includes('discount') || t.includes('automation bonus')) return 'discount';
   if (t.includes('fuel')) return 'fuel';
   if (t.includes('demand')) return 'demand';
+  /* Phụ phí xử lý đặc biệt (quá cân / quá khổ / đóng gói không đúng chuẩn). THÙNG RIÊNG vì nó
+   * CHỊU fuel — nằm trong `other` thì mẫu số tính %fuel thiếu và tỉ lệ ra sai (vận đơn
+   * 873356889943 ra 65,475% thay vì 41,5% hãng công bố). Đứng SAU 'demand' nên biến thể mùa
+   * cao điểm "Demand - Additional Handling Surcharge" vẫn về `demand` như trước. */
+  if (t.includes('additional handling')) return 'additionalHandling';
   if (t.includes('delivery area')) return 'remote'; // Out of Delivery Area Tier A/B/C
   if (t.includes('pickup area')) return 'remote';   // Out of Pickup Area Tier A/B/C (phía lấy hàng — bắt 21/07)
   if (t.includes('signature')) return 'signature';
@@ -119,7 +125,7 @@ export interface FboBilledRow {
   podName: string | null;
   base: number; discount: number; fuel: number; demand: number; remote: number;
   signature: number; residential: number; addressCorrection: number; importHandling: number; vat: number;
-  duty: number; other: number;
+  duty: number; additionalHandling: number; other: number;
   total: number;
 }
 
@@ -215,7 +221,8 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
     podAt: parseFboPod(str(row, cols.meta.podDate), str(row, cols.meta.podTime)),
     podName: str(row, cols.meta.podName),
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0,
+    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0,
+    additionalHandling: 0, other: 0, total: 0,
   };
   for (const c of cols.chargeLabelCols) {
     const label = String(row[c] ?? '').trim();
@@ -226,12 +233,14 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
   const awbTotal = cols.meta.awbTotal >= 0 ? parseFboAmount(row[cols.meta.awbTotal]) : 0;
   // Tổng: ưu tiên cột "Tổng số tiền trong vận đơn"; rỗng → cộng các mục.
   r.total = awbTotal || (r.base + r.discount + r.fuel + r.demand + r.remote
-    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.duty + r.other);
+    + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.duty
+    + r.additionalHandling + r.other);
   return r;
 }
 
 const SUM_KEYS = ['base', 'discount', 'fuel', 'demand', 'remote', 'signature',
-  'residential', 'addressCorrection', 'importHandling', 'vat', 'duty', 'other', 'total'] as const;
+  'residential', 'addressCorrection', 'importHandling', 'vat', 'duty',
+  'additionalHandling', 'other', 'total'] as const;
 
 /** Hợp nhất các dòng FBO cùng AWB cho ĐỐI SOÁT CƯỚC: 1 AWB có thể có 2 dòng —
  *  dòng CƯỚC (duty=0) và dòng THUẾ/HẢI QUAN (duty>0, customs pass-through người

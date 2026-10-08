@@ -3,7 +3,7 @@ import { normalizeBilledLine, costToVndFactor, billImpliedFuelPercent, aggregate
 
 const raw: RawBillLine = {
   weightKg: '2.500', base: '1000000', discount: '-50000', fuel: '180000', remote: '0',
-  demand: '25000', signature: '0', vat: '150000', other: '0', addressCorrection: null, importHandling: null, duty: null, total: '1305000', shipDate: '2026-07-02',
+  demand: '25000', signature: '0', vat: '150000', other: '0', addressCorrection: null, importHandling: null, duty: null, additionalHandling: null, total: '1305000', shipDate: '2026-07-02',
 };
 
 describe('costToVndFactor', () => {
@@ -29,7 +29,7 @@ describe('normalizeBilledLine', () => {
     expect(b.surcharges.fuel).toBe(234_000); // 9 × 26,000
   });
   it('null/rỗng → 0 cho phụ phí, weight null', () => {
-    const empty: RawBillLine = { weightKg: null, base: null, discount: null, fuel: null, remote: null, demand: null, signature: null, vat: null, other: null, addressCorrection: null, importHandling: null, duty: null, total: '0', shipDate: null };
+    const empty: RawBillLine = { weightKg: null, base: null, discount: null, fuel: null, remote: null, demand: null, signature: null, vat: null, other: null, addressCorrection: null, importHandling: null, duty: null, additionalHandling: null, total: '0', shipDate: null };
     const b = normalizeBilledLine(empty, 1, null);
     expect(b.weightKg).toBeNull();
     expect(b.totalVnd).toBe(0);
@@ -41,7 +41,7 @@ describe('normalizeBilledLine', () => {
 describe('billImpliedFuelPercent — fuel % FedEx THỰC ÁP suy từ chính bill', () => {
   const s = (over: Partial<BilledSurcharges>): BilledSurcharges => ({
     base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0, vat: 0,
-    other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, ...over,
+    other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, additionalHandling: 0, ...over,
   });
   it('SV-0016 thật: fuel 393.038 / (4.470.300 − 3.522.149 + demand 79.400) = 38,25%', () => {
     expect(billImpliedFuelPercent(s({ base: 4_470_300, discount: -3_522_149, fuel: 393_038, demand: 79_400 }))).toBe(38.25);
@@ -67,7 +67,7 @@ describe('billImpliedFuelPercent — fuel % FedEx THỰC ÁP suy từ chính bil
 describe('aggregateBilledLines — 1 lô hàng có NHIỀU dòng bill (cước 734xxx + duty 736xxx)', () => {
   const mk = (over: Partial<BilledLookup['surcharges']>, extra?: Partial<BilledLookup>): BilledLookup => ({
     weightKg: null, totalVnd: 0, billNumber: null, shipDate: null,
-    surcharges: { base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0, vat: 0, other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, ...over },
+    surcharges: { base: 0, discount: 0, fuel: 0, remote: 0, demand: 0, signature: 0, vat: 0, other: 0, residential: 0, addressCorrection: 0, importHandling: 0, duty: 0, additionalHandling: 0, ...over },
     ...extra,
   });
   it('SV-0029 thật: dòng duty đứng trước + dòng cước — gộp đủ cả hai', () => {

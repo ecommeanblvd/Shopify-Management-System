@@ -29,7 +29,7 @@ function mkRow(p: Partial<FboBilledRow>): FboBilledRow {
     shipDate: null, service: null, recipientCountry: null, recipientStreet1: null,
     recipientStreet2: null, recipientCity: null, recipientState: null, recipientPostcode: null,
     weightKg: null, base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, other: 0, total: 0, ...p,
+    residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, additionalHandling: 0, other: 0, total: 0, ...p,
   };
 }
 
@@ -141,8 +141,12 @@ describe('classifyFboCharge — nhãn bắt thêm 21/07', () => {
   it('Out of Pickup Area → remote (mirror của Out of Delivery Area)', () => {
     expect(classifyFboCharge('Out of Pickup Area Tier B')).toBe('remote');
   });
-  it('Additional Handling / Third Party Billing → other (đã nhận diện, chưa đủ tần suất tách cột)', () => {
-    expect(classifyFboCharge('Additional Handling Chg - Packaging')).toBe('other');
+  /* ĐẢO quyết định 21/07 cho riêng Additional Handling (08/10/2026). Hồi đó nhãn này được
+     nhận diện và CỐ Ý để ở `other` vì "chưa đủ tần suất tách cột" — tần suất là tiêu chí sai ở
+     đây: khoản này CHỊU fuel, nên nằm ngoài gốc tính fuel thì tỉ lệ ra sai bất kể gặp mấy lần.
+     Đo lại trên hai vận đơn thật, xem `goc-fuel-bill.test.ts`. Third Party Billing giữ nguyên
+     ở `other` — chưa có bằng chứng nó chịu fuel. */
+  it('Third Party Billing vẫn → other, chưa có bằng chứng về fuel', () => {
     expect(classifyFboCharge('Third Party Billing Surcharge')).toBe('other');
   });
 });
@@ -192,5 +196,21 @@ describe('classifyFboCharge — phí thông quan hàng TRẢ VỀ (CEO 08/10/202
     expect(classifyFboCharge('Customs Fee')).toBe('duty');
     expect(classifyFboCharge('Duty Disbursement Fee')).toBe('duty');
     expect(classifyFboCharge('Vietnam VAT')).toBe('vat');
+  });
+});
+
+describe('classifyFboCharge — Additional Handling (CEO 08/10/2026)', () => {
+  /* Hai ca thật: AHS-Packaging 679.700 trên #MBLVD28701 (đóng gói không đúng chuẩn — có cuốn
+   * thêm màng bọc ngoài), và AHS-Dimensions 679.700 trên TA2337 (FedEx liệt kê đơn hơn 20kg
+   * nên áp phụ phí; đang khiếu nại hãng). Khoản này CHỊU fuel — xem `goc-fuel-bill`. */
+  it('Additional Handling có thùng riêng, không rơi vào chưa phân loại', () => {
+    expect(classifyFboCharge('Additional Handling Chg - Packaging')).toBe('additionalHandling');
+    expect(classifyFboCharge('Additional Handling Chg - Dimensions')).toBe('additionalHandling');
+  });
+
+  /* FedEx còn một biến thể mùa cao điểm gộp vào phụ phí nhu cầu — giữ nguyên chỗ cũ, vì nó
+     đứng tên "Demand" và vốn đã nằm trong gốc fuel qua thùng `demand`. */
+  it('biến thể Demand vẫn ở thùng demand như cũ', () => {
+    expect(classifyFboCharge('Demand - Additional Handling Surcharge')).toBe('demand');
   });
 });

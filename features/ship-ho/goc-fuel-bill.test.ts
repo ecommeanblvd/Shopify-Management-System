@@ -54,3 +54,38 @@ describe('phanTramFuelDangTin — chốt chặn mẫu số sai', () => {
     for (const p of [0, -5, 120, NaN, Infinity]) expect(phanTramFuelDangTin(p)).toBe(false);
   });
 });
+
+describe('Additional Handling nằm TRONG gốc tính fuel (CEO 08/10/2026)', () => {
+  /* Hai vận đơn thật, kiểm bằng chính %fuel FedEx công bố tuần đó:
+   *
+   *  877674305295 (TA2337, đi 24/09, FedEx công bố 51,75%)
+   *    base 37.596.000 · discount −28.151.885 · demand 1.718.900 · signature 92.700 · AH 679.700
+   *    fuel 6.176.578
+   *
+   *  873356889943 (#MBLVD28701, đi 22/06, FedEx công bố 41,5%)
+   *    base 5.079.100 · discount −4.001.823 · demand 99.250 · AH 679.700
+   *    fuel 770.335
+   *
+   * Bỏ AH ra khỏi mẫu số thì vận đơn thứ hai ra 65,475% — không phải mức nào FedEx từng công
+   * bố. Cùng cơ chế đã làm #KLS1998 hiện 52,65% hồi 20/07. */
+  const TA2337 = { base: 37_596_000, discount: -28_151_885, remote: 0, demand: 1_718_900,
+    signature: 92_700, residential: 0, addressCorrection: 0, additionalHandling: 679_700 };
+  const MBLVD28701 = { base: 5_079_100, discount: -4_001_823, remote: 0, demand: 99_250,
+    signature: 0, residential: 0, addressCorrection: 0, additionalHandling: 679_700 };
+
+  it('%fuel khớp mức FedEx công bố khi CÓ tính Additional Handling', () => {
+    expect((6_176_578 / gocFuelTrenBill(TA2337)) * 100).toBeCloseTo(51.75, 1);
+    expect((770_335 / gocFuelTrenBill(MBLVD28701)) * 100).toBeCloseTo(41.5, 1);
+  });
+
+  /* Bỏ AH ra thì ra 65,475% — và LƯỚI 0,25% VẪN CHO QUA (gần nấc 65,5%, lệch 0,025 < sai số
+     0,05). Nên lưới KHÔNG bắt được ca này; chỉ đối chiếu mức FedEx công bố mới bắt được. Ghi
+     lại đúng giới hạn đó thay vì khẳng định một hàng rào mình không có. */
+  it('bỏ Additional Handling ra thì %fuel sai hẳn mức công bố, dù lưới vẫn cho qua', () => {
+    const thieu = gocFuelTrenBill({ ...MBLVD28701, additionalHandling: 0 });
+    const pct = (770_335 / thieu) * 100;
+    expect(pct).toBeCloseTo(65.475, 2);
+    expect(Math.abs(pct - 41.5)).toBeGreaterThan(20);
+    expect(phanTramFuelDangTin(pct)).toBe(true);
+  });
+});

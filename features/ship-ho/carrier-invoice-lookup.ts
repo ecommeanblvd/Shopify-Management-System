@@ -24,6 +24,8 @@ export interface BilledSurcharges {
   importHandling: number;
   /** Thuế/hải quan FedEx ứng hộ — pass-through thuần, KHÔNG fuel KHÔNG VAT. */
   duty: number;
+  /** Additional Handling (quá cân / quá khổ / đóng gói không chuẩn) — CHỊU fuel. */
+  additionalHandling: number;
 }
 
 export interface BilledLookup {
@@ -42,6 +44,7 @@ export interface RawBillLine {
   addressCorrection: string | null;
   importHandling: string | null;
   duty: string | null;
+  additionalHandling: string | null;
   total: string | null;
   shipDate: string | null;
   /** Residential (Giao nhà dân) từ shipment_charges — carrier_bill_lines.signature
@@ -77,6 +80,7 @@ export function normalizeBilledLine(raw: RawBillLine, vndFactor: number, billNum
       demand: s(raw.demand), signature, residential, vat: s(raw.vat), other: s(raw.other),
       addressCorrection: s(raw.addressCorrection),
       importHandling: s(raw.importHandling), duty: s(raw.duty),
+      additionalHandling: s(raw.additionalHandling),
     },
     billNumber,
     shipDate: raw.shipDate,
@@ -171,6 +175,7 @@ export async function getBilledByTracking(trackingNumber: string): Promise<Bille
       vat: schema.carrierBillLines.vat, other: schema.carrierBillLines.other,
       addressCorrection: schema.carrierBillLines.addressCorrection,
       importHandling: schema.carrierBillLines.importHandling, duty: schema.carrierBillLines.duty,
+      additionalHandling: schema.carrierBillLines.additionalHandling,
       total: schema.carrierBillLines.total, shipDate: schema.carrierBillLines.shipDate,
       billNumber: schema.carrierBills.billNumber,
       billCurrency: schema.carrierBills.currency,

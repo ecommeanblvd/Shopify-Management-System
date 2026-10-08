@@ -21,6 +21,9 @@ export interface KhoanChiuFuel {
   signature: number;
   residential: number;
   addressCorrection: number;
+  /** Phụ phí xử lý đặc biệt (Additional Handling: quá cân, quá khổ, đóng gói không chuẩn).
+   *  CHỊU fuel — chứng minh bằng hai vận đơn thật, xem test. NULL/vắng ở dòng bill cũ = 0. */
+  additionalHandling?: number;
 }
 
 /**
@@ -28,9 +31,15 @@ export interface KhoanChiuFuel {
  *
  * KHÔNG gồm VAT (tính sau cùng), duty và phí xử lý hàng nhập (hai khoản pass-through mà hoá đơn
  * FedEx thật cho thấy nằm ngoài gốc fuel — xem 845 dòng đo ngày 02/10/2026).
+ *
+ * CÓ gồm `additionalHandling` (08/10/2026). Kiểm bằng chính mức FedEx công bố: vận đơn
+ * 873356889943 đi 22/06 (công bố 41,5%) — cộng AH vào ra đúng 41,500%, bỏ ra ra 65,475%. Vận
+ * đơn 877674305295 đi 24/09 (công bố 51,75%) — cộng vào ra đúng 51,750%. Đáng chú ý: 65,475%
+ * VẪN lọt lưới 0,25%, nên hàng rào lưới không bắt được ca này; chỉ mức công bố mới bắt được.
  */
 export function gocFuelTrenBill(s: KhoanChiuFuel): number {
-  return s.base + s.discount + s.remote + s.demand + s.signature + s.residential + s.addressCorrection;
+  return s.base + s.discount + s.remote + s.demand + s.signature + s.residential
+    + s.addressCorrection + (s.additionalHandling ?? 0);
 }
 
 /** Hãng công bố phụ phí xăng dầu theo nấc 0,25% — FedEx, UPS, DHL đều vậy. */
