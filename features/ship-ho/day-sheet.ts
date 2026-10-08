@@ -17,7 +17,7 @@ import { ngayDiHang } from './ngay-di-hang';
 import { ghiLenSheet } from './dong-sheet-loc';
 import {
   COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty,
-  COT_TIEN, COT_TIEN_DUTY, dongTong,
+  COT_TIEN, COT_TIEN_DUTY, dongTong, viTriTabMoi,
   type DonSheet, type DonSheetDuty,
 } from './hang-sheet';
 
@@ -148,8 +148,17 @@ export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: bool
     await goiSheets(dt.sheetId, ':batchUpdate', { method: 'POST',
       body: JSON.stringify({ requests: [{ deleteSheet: { sheetId: cu } }] }) });
   }
+  /* Vị trí tab: kỳ theo thứ tự, trong một kỳ thì CƯỚC trước THUẾ sau (CEO 08/10/2026). Google
+   * xếp tab mới vào cuối sổ, nên phát hành bảng thuế trước bảng cước cùng kỳ sẽ ra thứ tự
+   * ngược. Đọc lại danh sách SAU khi xoá tab cũ để vị trí tính trên sổ thật lúc chèn. */
+  const soHienCo = ((await goiSheets(dt.sheetId, '?fields=sheets.properties(title,index)')).sheets as
+    { properties: { title: string; index: number } }[])
+    .sort((a1, b1) => a1.properties.index - b1.properties.index)
+    .map((x) => x.properties.title);
   const them = await goiSheets(dt.sheetId, ':batchUpdate', { method: 'POST',
-    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tenTab } } }] }) });
+    body: JSON.stringify({ requests: [{ addSheet: { properties: {
+      title: tenTab, index: viTriTabMoi(soHienCo, tenTab),
+    } } }] }) });
   const idTab = ((them.replies as { addSheet: { properties: { sheetId: number } } }[])[0]).addSheet.properties.sheetId;
 
   /* Locale `vi_VN` và định dạng cột ngày phải đặt TRƯỚC khi ghi: sheet mặc định `en_US` đọc
@@ -197,14 +206,17 @@ export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: bool
       range: { sheetId: idTab, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 },
       cell: { userEnteredFormat: { numberFormat: { type: 'CURRENCY', pattern: '#,##0" đ"' } } },
       fields: 'userEnteredFormat.numberFormat' } })),
-    // Dòng TỔNG: in đậm, có đường kẻ trên để tách khỏi phần dữ liệu.
+    /* Dòng TỔNG: nền VÀNG #FFF2CC phủ cả hàng + in đậm + kẻ trên. Màu đọc từ chính tab 7.26 và
+       8.26 của sheet Kalisa (08/10/2026) — theo nếp brand đã quen mắt, không tự chọn màu mới. */
     { repeatCell: {
-      range: { sheetId: idTab, startRowIndex: hangTong - 1, endRowIndex: hangTong },
+      range: { sheetId: idTab, startRowIndex: hangTong - 1, endRowIndex: hangTong,
+               startColumnIndex: 0, endColumnIndex: dau.length },
       cell: { userEnteredFormat: {
+        backgroundColor: { red: 1, green: 0.9490196, blue: 0.8 },
         textFormat: { bold: true },
         borders: { top: { style: 'SOLID', width: 2 } },
       } },
-      fields: 'userEnteredFormat(textFormat,borders)' } },
+      fields: 'userEnteredFormat(backgroundColor,textFormat,borders)' } },
     { autoResizeDimensions: {
       dimensions: { sheetId: idTab, dimension: 'COLUMNS', startIndex: 0, endIndex: dau.length } } },
   ] }) });

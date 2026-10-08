@@ -36,6 +36,34 @@ export const COT_TIEN = [7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19] as const;
 /** Cột tiền của bảng thuế: chỉ "Duty/Tax (Nước tới)". */
 export const COT_TIEN_DUTY = [6] as const;
 
+/**
+ * THUẦN: vị trí tab MỚI trong sổ, để sheet luôn xếp theo kỳ và trong một kỳ thì CƯỚC trước,
+ * THUẾ sau (CEO 08/10/2026).
+ *
+ * Vì sao cần: lệnh đẩy sheet tạo tab bằng `addSheet` và Google xếp tab mới vào CUỐI sổ. Kỳ
+ * tháng 10 phát hành bảng thuế trước bảng cước thì sổ ra thứ tự "10.26 Duty" rồi mới "10.26" —
+ * brand mở sheet thấy bảng thuế đứng trước bảng cước của cùng tháng.
+ *
+ * Tab KHÔNG đọc được tên kỳ (vd "Ghi chú") giữ nguyên chỗ: chen tab kỳ vào giữa chúng là tự
+ * sắp xếp lại sổ của brand, việc không ai nhờ.
+ */
+export function viTriTabMoi(tenHienCo: readonly string[], tenMoi: string): number {
+  const khoa = (t: string): number | null => {
+    const m = /^(\d{1,2})\.(\d{2})( Duty)?$/.exec(t.trim());
+    if (!m) return null;
+    const thang = Number(m[1]), nam = Number(m[2]), duty = m[3] ? 1 : 0;
+    if (!(thang >= 1 && thang <= 12)) return null;
+    return nam * 100 + thang * 2 + duty;   // năm → tháng → cước trước thuế
+  };
+  const k = khoa(tenMoi);
+  if (k == null) return tenHienCo.length;
+  for (let i = 0; i < tenHienCo.length; i++) {
+    const ki = khoa(tenHienCo[i]!);
+    if (ki != null && ki > k) return i;
+  }
+  return tenHienCo.length;
+}
+
 /** Chữ cột kiểu A1 từ chỉ số 0-based: 0→A, 25→Z, 26→AA. */
 export function chuCot(i: number): string {
   let s = '', k = i;
@@ -53,7 +81,10 @@ export function chuCot(i: number): string {
  */
 export function dongTong(soCot: number, cotTien: readonly number[], soDong: number): (string | number)[] {
   const ra: (string | number)[] = Array.from({ length: soCot }, () => '');
-  ra[0] = 'TỔNG';
+  /* Chữ "Tổng" ở cột B (Mã đơn), KHÔNG phải cột A — đọc từ chính tab 7.26 và 8.26 của sheet
+   * Kalisa ngày 08/10/2026. Cột A để trống. Theo nếp sẵn có thay vì đặt nếp mới: brand đã quen
+   * mắt với bố cục đó suốt mấy kỳ. */
+  ra[1] = 'Tổng';
   if (soDong <= 0) return ra;
   for (const c of cotTien) {
     const ch = chuCot(c);

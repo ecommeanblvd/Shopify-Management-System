@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty,
-  COT_TIEN, COT_TIEN_DUTY, chuCot, dongTong, type DonSheet,
+  COT_TIEN, COT_TIEN_DUTY, chuCot, dongTong, viTriTabMoi, type DonSheet,
 } from './hang-sheet';
 import { tenTabKy } from './day-sheet';
 
@@ -143,7 +143,8 @@ describe('chuCot', () => {
 describe('dongTong', () => {
   it('ô tiền là công thức SUM trên đúng dải dữ liệu', () => {
     const t = dongTong(COT_SHEET.length, COT_TIEN, 74);
-    expect(t[0]).toBe('TỔNG');
+    expect(t[0]).toBe('');
+    expect(t[1]).toBe('Tổng');
     expect(t[7]).toBe('=SUM(H2:H75)');
     expect(t[19]).toBe('=SUM(T2:T75)');
   });
@@ -151,7 +152,7 @@ describe('dongTong', () => {
   /* Công thức chứ không phải số tính sẵn: brand lọc/sửa một dòng thì tổng phải đổi theo. */
   it('không ô nào là số tính sẵn', () => {
     for (const v of dongTong(COT_SHEET.length, COT_TIEN, 10)) {
-      if (v !== '' && v !== 'TỔNG') expect(String(v).startsWith('=SUM(')).toBe(true);
+      if (v !== '' && v !== 'Tổng') expect(String(v).startsWith('=SUM(')).toBe(true);
     }
   });
 
@@ -164,6 +165,39 @@ describe('dongTong', () => {
 
   /* Bảng rỗng: không dựng SUM trên dải A2:A1 — công thức đó trả lỗi trên sheet. */
   it('không có dòng dữ liệu nào thì không sinh công thức', () => {
-    expect(dongTong(COT_SHEET.length, COT_TIEN, 0).every((v) => v === '' || v === 'TỔNG')).toBe(true);
+    expect(dongTong(COT_SHEET.length, COT_TIEN, 0).every((v) => v === '' || v === 'Tổng')).toBe(true);
+  });
+});
+
+describe('viTriTabMoi — cước trước, thuế sau, theo kỳ (CEO 08/10/2026)', () => {
+  const SO = ['7.26', '8.26', '8.26 Duty', '9.26', '9.26 Duty'];
+
+  /* Google xếp tab mới vào CUỐI sổ. Phát hành bảng thuế T10 trước bảng cước T10 thì sổ ra
+     "10.26 Duty" đứng trước "10.26" — brand mở sheet thấy thuế trước cước. */
+  it('tab thuế của kỳ chen ĐÚNG SAU tab cước cùng kỳ', () => {
+    expect(viTriTabMoi(['7.26', '8.26', '9.26'], '8.26 Duty')).toBe(2);
+  });
+
+  it('tab cước của kỳ mới đứng SAU mọi kỳ cũ', () => {
+    expect(viTriTabMoi(SO, '10.26')).toBe(5);
+  });
+
+  it('tab cước chen TRƯỚC tab thuế cùng kỳ nếu thuế tạo trước', () => {
+    expect(viTriTabMoi(['9.26', '10.26 Duty'], '10.26')).toBe(1);
+  });
+
+  it('kỳ cũ chen lên trước kỳ mới', () => {
+    expect(viTriTabMoi(['9.26', '10.26'], '8.26')).toBe(0);
+  });
+
+  it('sang năm thì xếp sau, không so theo số tháng', () => {
+    expect(viTriTabMoi(['11.26', '12.26'], '1.27')).toBe(2);
+    expect(viTriTabMoi(['1.27'], '12.26')).toBe(0);
+  });
+
+  /* Tab không đọc được tên kỳ giữ nguyên chỗ — chen vào giữa chúng là tự sắp xếp lại sổ brand. */
+  it('tab lạ thì thêm vào cuối, không chen', () => {
+    expect(viTriTabMoi(['Ghi chú', '9.26'], 'Bảng giá')).toBe(2);
+    expect(viTriTabMoi(['Ghi chú', '9.26'], '8.26')).toBe(1);
   });
 });
