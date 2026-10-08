@@ -1,49 +1,61 @@
 import { describe, it, expect } from 'vitest';
-import { kiemTraSecret, docBodyPack, laBienChuaThay, GIOI_HAN_BODY } from './xac-thuc';
+import { moTaTuChoi, nenGhiTuChoi, TRAN_TU_CHOI } from './xac-thuc';
 
-describe('kiemTraSecret', () => {
-  it('đúng secret → ok', () => expect(kiemTraSecret('abc123', 'abc123')).toEqual({ ok: true }));
-  it('sai / thiếu header → 401', () => {
-    expect(kiemTraSecret('abc124', 'abc123')).toEqual({ ok: false, status: 401, error: 'sai secret' });
-    expect(kiemTraSecret(null, 'abc123')).toEqual({ ok: false, status: 401, error: 'sai secret' });
-    expect(kiemTraSecret('abc12', 'abc123').ok).toBe(false); // khác độ dài, không throw
+describe('moTaTuChoi', () => {
+  /* Nhật ký nhiều người đọc được. Độ dài đủ để chẩn đoán (lệch độ dài là nguyên nhân phổ biến
+     nhất: thừa khoảng trắng, thiếu ký tự khi dán), còn giá trị thì không được rò ra. */
+  it('KHÔNG BAO GIỜ giữ giá trị secret, chỉ giữ độ dài', () => {
+    const m = moTaTuChoi({
+      tuChoi: 'secret', header: 'bi-mat-that-cua-lark', secret: 'bi-mat-tren-railway',
+      contentLength: '42', userAgent: 'Lark-Automation/1.0', loi: 'sai secret',
+    });
+    expect(JSON.stringify(m)).not.toContain('bi-mat-that-cua-lark');
+    expect(JSON.stringify(m)).not.toContain('bi-mat-tren-railway');
+    expect(m.doDaiHeader).toBe(20);
+    expect(m.doDaiCanCo).toBe(19);
   });
-  it('thiếu env → 503', () => {
-    expect(kiemTraSecret('abc', undefined)).toEqual({ ok: false, status: 503, error: 'chưa cấu hình LARK_PACK_WEBHOOK_SECRET' });
-    expect(kiemTraSecret('abc', '')).toEqual({ ok: false, status: 503, error: 'chưa cấu hình LARK_PACK_WEBHOOK_SECRET' });
+
+  /* Hai ca trông giống nhau trên màn hình nhưng cần hai cách sửa khác hẳn: automation KHÔNG gửi
+     header (phải thêm vào rule), và gửi header SAI (phải sửa giá trị). */
+  it('phân biệt "không gửi header" với "gửi header sai"', () => {
+    const khong = moTaTuChoi({
+      tuChoi: 'secret', header: null, secret: 'abc', contentLength: null, userAgent: null,
+      loi: 'sai secret',
+    });
+    expect(khong.coHeader).toBe(false);
+    expect(khong.doDaiHeader).toBe(0);
+
+    const sai = moTaTuChoi({
+      tuChoi: 'secret', header: 'xyz', secret: 'abc', contentLength: null, userAgent: null,
+      loi: 'sai secret',
+    });
+    expect(sai.coHeader).toBe(true);
+    expect(sai.doDaiHeader).toBe(3);
+  });
+
+  it('cắt user agent, không giữ chuỗi dài vô hạn', () => {
+    const m = moTaTuChoi({
+      tuChoi: 'body', header: null, secret: undefined, contentLength: null,
+      userAgent: 'x'.repeat(500), loi: 'body không phải JSON',
+    });
+    expect(m.userAgent).toHaveLength(80);
+  });
+
+  it('content-length thiếu hoặc rác → 0, không phải NaN', () => {
+    expect(moTaTuChoi({ tuChoi: 'body', header: null, secret: undefined, contentLength: null,
+      userAgent: null, loi: '' }).contentLength).toBe(0);
+    expect(moTaTuChoi({ tuChoi: 'body', header: null, secret: undefined, contentLength: 'abc',
+      userAgent: null, loi: '' }).contentLength).toBe(0);
   });
 });
 
-describe('docBodyPack', () => {
-  it('record_id → nhận diện theo record', () => {
-    expect(docBodyPack('{"record_id":"recXYZ"}')).toEqual({ ok: true, nhanDien: { kieu: 'record', giaTri: 'recXYZ' } });
-  });
-
-  it('không có record_id nhưng có mã kiện / mã đơn → vẫn nhận', () => {
-    expect(docBodyPack('{"log_unique_code":"PK-21997"}')).toEqual({ ok: true, nhanDien: { kieu: 'log_code', giaTri: 'PK-21997' } });
-    expect(docBodyPack('{"order_number":"#MBLVD30508"}')).toEqual({ ok: true, nhanDien: { kieu: 'don', giaTri: '#MBLVD30508' } });
-  });
-
-  it('rule Lark gõ tay biến → báo đúng lý do, không lặng lẽ bỏ qua', () => {
-    const r = docBodyPack('{"record_id":"{{record_id}}"}');
-    expect(r).toEqual({ ok: false, status: 400, error: 'rule Lark gửi nguyên chữ {{...}} — phải chèn biến từ menu, không gõ tay' });
-  });
-
-  it('biến chưa thay ở record_id nhưng mã đơn thật → vẫn chạy được', () => {
-    expect(docBodyPack('{"record_id":"{{record_id}}","order_number":"#MBLVD30508"}'))
-      .toEqual({ ok: true, nhanDien: { kieu: 'don', giaTri: '#MBLVD30508' } });
-  });
-
-  it('không có gì / không phải JSON / quá 4KB', () => {
-    expect(docBodyPack('{}')).toEqual({ ok: false, status: 400, error: 'cần record_id, log_unique_code hoặc order_number' });
-    expect(docBodyPack('xx')).toEqual({ ok: false, status: 400, error: 'body không phải JSON' });
-    expect(docBodyPack('{"record_id":"' + 'a'.repeat(GIOI_HAN_BODY) + '"}')).toEqual({ ok: false, status: 413, error: 'body quá 4KB' });
-  });
-});
-
-describe('laBienChuaThay', () => {
-  it('nhận chuỗi còn nguyên dấu ngoặc kép của Lark', () => {
-    expect(laBienChuaThay('{{record_id}}')).toBe(true);
-    expect(laBienChuaThay('recvvUMlyvRdlf')).toBe(false);
+describe('nenGhiTuChoi', () => {
+  /* Endpoint chỉ chắn bằng secret, ai biết đường dẫn cũng gọi được — ghi mọi lượt từ chối là mở
+     đường cho một vòng lặp bên ngoài làm phình `job_runs`. */
+  it('ghi tới trần rồi thôi', () => {
+    expect(nenGhiTuChoi(0)).toBe(true);
+    expect(nenGhiTuChoi(TRAN_TU_CHOI - 1)).toBe(true);
+    expect(nenGhiTuChoi(TRAN_TU_CHOI)).toBe(false);
+    expect(nenGhiTuChoi(TRAN_TU_CHOI + 500)).toBe(false);
   });
 });

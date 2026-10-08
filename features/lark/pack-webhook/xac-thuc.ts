@@ -54,3 +54,64 @@ export function docBodyPack(raw: string): KetQuaBody {
   if (logCode && !laBienChuaThay(logCode)) return { ok: true, nhanDien: { kieu: 'log_code', giaTri: logCode } };
   return { ok: true, nhanDien: { kieu: 'don', giaTri: don } };
 }
+
+/**
+ * THUẦN: mô tả một lượt gọi BỊ TỪ CHỐI, để ghi vào nhật ký. Không I/O.
+ *
+ * Vì sao cần (08/10/2026): route kiểm secret rồi trả lỗi TRƯỚC khi mở nhật ký, nên một cú gọi
+ * sai secret không để lại dấu nào. Hệ quả thật: Lark Automation chạy đều và báo Success suốt
+ * 16 ngày (ảnh Activity Log 08/10: 10 lượt trong một buổi, lượt nào cũng xanh), trong khi SMS
+ * có ĐÚNG 0 dòng nhật ký — và không ai kết luận được vì sao, vì "không có dữ liệu" trông y hệt
+ * "không ai gọi". Em đã kết luận sai một lần từ chính chỗ mù này.
+ *
+ * KHÔNG BAO GIỜ ghi giá trị secret. Chỉ ghi ĐỘ DÀI header: lệch độ dài là nguyên nhân phổ biến
+ * nhất (thừa khoảng trắng, thiếu ký tự khi dán) và biết độ dài là đủ để chẩn đoán, trong khi
+ * giá trị thì rò ra nhật ký mà nhật ký thì nhiều người đọc được.
+ */
+export interface MoTaTuChoi {
+  tuChoi: 'secret' | 'body' | 'qua-lon';
+  /** Có gửi header secret không. */
+  coHeader: boolean;
+  /** ĐỘ DÀI header, không phải giá trị. 0 = không gửi. */
+  doDaiHeader: number;
+  /** Độ dài secret đang cấu hình — để so với `doDaiHeader` mà không lộ giá trị nào. */
+  doDaiCanCo: number;
+  contentLength: number;
+  /** Ai gọi — đủ để biết có phải Lark không. Cắt ngắn, không giữ nguyên chuỗi dài. */
+  userAgent: string;
+  loi: string;
+}
+
+export function moTaTuChoi(d: {
+  tuChoi: MoTaTuChoi['tuChoi'];
+  header: string | null;
+  secret: string | undefined;
+  contentLength: string | null;
+  userAgent: string | null;
+  loi: string;
+}): MoTaTuChoi {
+  return {
+    tuChoi: d.tuChoi,
+    coHeader: d.header != null && d.header !== '',
+    doDaiHeader: (d.header ?? '').length,
+    doDaiCanCo: (d.secret ?? '').length,
+    contentLength: Number(d.contentLength ?? 0) || 0,
+    userAgent: (d.userAgent ?? '').slice(0, 80),
+    loi: d.loi,
+  };
+}
+
+/**
+ * THUẦN: có nên ghi lượt từ chối này vào nhật ký không.
+ *
+ * Endpoint không đòi đăng nhập, chỉ chắn bằng secret — ai biết đường dẫn cũng gọi được. Ghi mọi
+ * lượt từ chối là mở đường cho một vòng lặp bên ngoài làm phình bảng `job_runs`. Chặn trần: quá
+ * `TRAN_TU_CHOI` dòng trong cửa sổ gần đây thì thôi ghi, vì lúc đó nhật ký đã đủ để chẩn đoán
+ * rồi — thêm dòng thứ 21 không nói thêm điều gì.
+ */
+export const TRAN_TU_CHOI = 20;
+export const CUA_SO_TU_CHOI_PHUT = 10;
+
+export function nenGhiTuChoi(soDongGanDay: number): boolean {
+  return soDongGanDay < TRAN_TU_CHOI;
+}
