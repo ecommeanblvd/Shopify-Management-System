@@ -19,7 +19,7 @@ import type { ShipHoPriceStructure } from './price-structure';
 export type MaKhoanPhi =
   | 'base' | 'fuel' | 'signature' | 'demand' | 'remote' | 'residential'
   | 'import_handling' | 'address_correction' | 'vat' | 'processing'
-  | 'weight_adjust' | 'other_surcharge' | 'duty';
+  | 'weight_adjust' | 'other_surcharge' | 'duty' | 'waived';
 
 /**
  * Nhãn trong `price-structure.ts` → mã ổn định.
@@ -134,4 +134,29 @@ export function bocKhoanPhi(
   }
   if (fees.length === 0 && nhanLa.length === 0) return tuCot();
   return { fees, totalVnd: fees.reduce((t, f) => t + f.amountVnd, 0), nhanLa };
+}
+
+/** Nhãn khoản miễn thu — dùng đúng chữ MMP hiện trên sổ của họ. */
+export const NHAN_MIEN_THU = 'Miễn thu (MEAN chịu)';
+
+/**
+ * THUẦN: cân bằng khoản phí cho dòng MIỄN THU.
+ *
+ * Bối cảnh (CEO + MMP chốt 08–09/10/2026): đơn `#KLS2053` gửi hai lần, lần đầu LOG gửi sai địa
+ * chỉ nên MEAN chịu. Dòng đó có phí THẬT (MEAN vẫn trả FedEx 1.892.043đ) nhưng thu brand 0đ,
+ * trong khi MMP ràng `Σ fees = amountVnd` và trả 422 nếu lệch. MMP đã mở mã `waived` (giá trị
+ * phải ≤ 0), nên SMS gửi đủ phân rã phí gốc cộng một dòng âm đúng bằng tổng đó.
+ *
+ * CHỈ áp cho đúng ca `amountVnd === 0` mà phí > 0. Mọi lệch khác KHÔNG tự bù: lệch là dấu hiệu
+ * có lỗi ở chỗ khác, và bù im lặng thì MMP nhận một con số khớp giả còn bên mình mất tín hiệu.
+ * Thà để MMP trả 422 — lỗi ồn ào còn hơn sổ sai lặng lẽ.
+ */
+export function canBangMienThu(
+  fees: readonly KhoanPhiMmp[], feesTotalVnd: number, amountVnd: number,
+): { fees: KhoanPhiMmp[]; feesTotalVnd: number } {
+  if (amountVnd !== 0 || feesTotalVnd <= 0) return { fees: [...fees], feesTotalVnd };
+  return {
+    fees: [...fees, { code: 'waived', label: NHAN_MIEN_THU, amountVnd: -feesTotalVnd }],
+    feesTotalVnd: 0,
+  };
 }

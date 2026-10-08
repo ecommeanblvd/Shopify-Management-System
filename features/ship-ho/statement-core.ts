@@ -17,6 +17,7 @@ import { payloadStatementIssued, payloadStatementAdjustment, type DongBangKeMmp 
 import { docDongDieuChinh, docAnhChup, tinhDongDieuChinh } from './dieu-chinh';
 import { banSuKienBangKe } from './statement-outbox';
 import { khoanPhiChoBangKe } from './bang-ke-khoan-phi-queries';
+import { canBangMienThu } from './bang-ke-khoan-phi';
 import { kiemCongChotKy, type DonKiemCong, type LoiCong } from './cong-chot-ky';
 import { ngayDiHang } from './ngay-di-hang';
 import type { TuanFuel } from './tuan-fuel';
@@ -354,10 +355,14 @@ export async function banBangKeSangMmp(id: string): Promise<{ ok: boolean; detai
     /* NGÀY ĐI HÀNG, không phải ngày tạo nhãn: brand đối chiếu %xăng dầu theo tuần của ngày
      * này. Kèm nguồn để kế toán MMP biết dòng nào có mốc hãng xác nhận. */
     const ngay = ngayDiHang(r);
+    /* Dòng MIỄN THU: phí thật vẫn gửi đủ, cộng thêm một khoản `waived` âm để `Σ fees =
+     * amountVnd` — ràng buộc MMP giữ nguyên và sẽ trả 422 nếu lệch. Xem `canBangMienThu`. */
+    const p0 = phi.get(r.code);
+    const p = p0 ? { ...p0, ...canBangMienThu(p0.fees, p0.feesTotalVnd, r.giaThuVnd) } : undefined;
     dong.push({
       code: r.code, mmpRef: r.mmpRef, brandReference: r.brandReference, trackingNumber: r.trackingNumber,
       shippedAt: ngay.ngay, nguonNgayDi: ngay.nguon, amountVnd: r.giaThuVnd,
-      ...(phi.get(r.code) ?? {}),
+      ...(p ?? {}),
       ...(data.statement.type === 'duty' ? { fedexInvoiceNumber: r.billNumber ?? null, invoiceDate: r.issueDate ?? null } : {}),
     });
   }
