@@ -15,8 +15,8 @@ import { db, schema } from '@/db/client';
 import { listLogImportRecords, type LarkRecord } from '@/features/lark/client';
 import { docChuO, docSoO } from '@/features/lark/doc-o';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
-/* Luật cửa vào khai MỘT chỗ ở `return-con-nhan.ts`; ở đây chỉ đếm để lượt chạy tự khai con số. */
-import { TRANG_THAI_CHO_NHAN } from './return-con-nhan';
+/* Luật cửa vào khai MỘT chỗ ở `return-con-nhan.ts`; ở đây gọi lại nó để đếm, không chép điều kiện. */
+import { returnConNhanDuoc } from './return-con-nhan';
 
 /**
  * THUẦN: một record Lark → một dòng bản sao.
@@ -66,8 +66,18 @@ export async function dongBoLogImport(): Promise<{ doc: number; ghi: number; cho
     ghi += lo.length;
   }
   /* Đếm số dòng đang ở cửa nhận, để lượt chạy tự khai con số thay vì phải đi hỏi CSDL. Cùng lý
-   * lẽ trường `cheDo` của `day-can-lark`: một lượt chạy phải nói được nó thấy gì. */
-  const choNhan = dong.filter((d) => d.whTiepNhanQc == null && d.logStatus != null
-    && TRANG_THAI_CHO_NHAN.has(d.logStatus)).length;
+   * lẽ trường `cheDo` của `day-can-lark`: một lượt chạy phải nói được nó thấy gì.
+   *
+   * Gọi CHÍNH `returnConNhanDuoc` chứ không chép lại điều kiện. Bản đầu chỉ xét trạng thái +
+   * cột lookup nên báo 42 trong khi ô tìm hiện 25 — thiếu điều kiện "phải có mã đơn và SKU",
+   * mà bảng có 205/666 dòng trống một trong hai. Một bộ đếm nói khác màn hình thì tệ hơn không
+   * có bộ đếm: người đọc tin nó rồi đi tìm 17 dòng không tồn tại.
+   *
+   * `daNhanSms = 0` nên đây là GIỚI HẠN TRÊN: chưa trừ số chiếc SMS đã nhận cho từng dòng. Bộ
+   * đếm này để chẩn đoán, không phải để đối soát; muốn số chính xác thì đọc ô tìm. */
+  const choNhan = dong.filter((d) => returnConNhanDuoc({
+    recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
+    whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus,
+  }, 0).ok).length;
   return { doc: ds.length, ghi, choNhan };
 }

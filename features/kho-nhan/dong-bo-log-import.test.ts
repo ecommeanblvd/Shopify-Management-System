@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import { dungDongLogImport } from './dong-bo-log-import';
 
 /* Hình dạng thật, chép từ lượt dò bảng `LOG - Import` ngày 08/10/2026. Ba cột cần đọc đều là
@@ -61,5 +62,17 @@ describe('dungDongLogImport', () => {
 
   it('dựng chữ tìm không dấu từ mã đơn + SKU', () => {
     expect(dungDongLogImport(REC).timKiem).toBe('#mblvd29442 kal-25t1c2-purple-m');
+  });
+});
+
+/* Bộ đếm `choNhan` phải nói ĐÚNG số ô tìm hiện. Bản đầu chỉ xét trạng thái + cột lookup nên báo
+   42 trong khi ô tìm hiện 25 — thiếu điều kiện "phải có mã đơn và SKU", mà bảng thật có 205/666
+   dòng trống một trong hai. Bài test canh việc bộ đếm gọi lại đúng hàm luật. */
+describe('dongBoLogImport — bộ đếm choNhan', () => {
+  it('gọi lại `returnConNhanDuoc`, không chép điều kiện', async () => {
+    const src = await readFile(new URL('./dong-bo-log-import.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/returnConNhanDuoc\(/);
+    // Chép lại tên trạng thái vào đây là hai bản của một luật.
+    expect(src).not.toMatch(/'Warehouse Received'|'Return-Processing'|'Pakago Received'/);
   });
 });
