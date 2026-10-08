@@ -39,9 +39,21 @@ export function nhanHangDuoc(shopDomain: string | null | undefined): boolean {
  *   #TA   = Tinh Atelier   → ĐÃ có đủ trong `shopify_orders` (646/646), không cần đường này
  *   #HC   = Happy Clothing → có trong SMS nhưng store cố ý ngoài `STORE_NHAN_HANG`
  *
- * CHỈ hai kênh Trung Quốc. Bảng món còn `MIRER` (253), `MCN` (70), `MOS` (52), `MER-` (88) —
- * tổng 463 dòng chưa rõ là kênh gì. Mở bừa là cho kho nhận hàng không ai duyệt; thêm kênh về
- * sau chỉ là thêm một dòng vào đây. Cùng lý lẽ "danh sách cho phép" như `STORE_NHAN_HANG`.
+ * CHỈ hai kênh Trung Quốc. Cùng lý lẽ "danh sách cho phép" như `STORE_NHAN_HANG`: thêm kênh về
+ * sau là thêm một dòng vào đây, còn mở bừa là cho kho nhận hàng không ai duyệt.
+ *
+ * `#MIRER` (253 dòng `MIRER135`–`MIRER200`) CỐ Ý ĐỨNG NGOÀI — CEO chốt 08/10/2026: "MIRER đã
+ * dừng rồi, không mở, Mirer là lấy trực tiếp từ trên Shopify về". Khớp với số đo: lượt nhận
+ * cuối của mã `MIRER…` lên WH - Inventory là 31/10/2025, và loại nhập của chúng là
+ * `Tồn kho (Consignment)` chứ không phải `Retail`. Đơn Mirer đang chạy là `MIR1001`–`MIR1028`,
+ * đã có đủ trong `shopify_orders` dưới store `mirermirer-official` (nằm trong
+ * `STORE_NHAN_HANG`) nên vào ô tìm qua đường Shopify, không qua đường này.
+ *
+ * Lưu ý cái bẫy: cột `store` của CẢ HAI nhóm đều là `#MIRER`. Thêm `'#MIRER'` vào đây là kéo
+ * theo 28 dòng `MIR…` vốn đã có ở nguồn Shopify — `timMonLark` có mệnh đề `NOT EXISTS` chặn,
+ * nhưng đừng dựa vào đó: dòng đó chỉ chặn trùng, không làm `Tồn kho (Consignment)` thành đúng.
+ *
+ * `MCN` (70), `MOS` (52), `MER-` (88) vẫn chưa rõ là kênh gì — chưa hỏi, chưa mở.
  */
 export const STORE_MON_LARK: readonly string[] = ['#MTB', '#MXHS'];
 
