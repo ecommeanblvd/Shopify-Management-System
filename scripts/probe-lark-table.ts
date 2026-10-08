@@ -10,6 +10,13 @@
  *   railway run npm run probe:lark-table -- <tableId>         # cột + 3 dòng mẫu
  *   railway run npm run probe:lark-table -- <tableId> --cot   # CHỈ cột
  *   railway run npm run probe:lark-table -- <tableId> --dong  # CHỈ dòng mẫu
+ *   railway run npm run probe:lark-table -- <tableId> --cot --chitiet --loc=WH
+ *       # CHỈ cột có tên chứa "WH", in NGUYÊN cấu hình cột
+ *
+ * `--chitiet` cần cho cột LOOKUP (type 19) và cột liên kết (18/21): tên cột không nói nó lấy dữ
+ * liệu qua liên kết nào, mà ghi sai hướng liên kết là bảng vận hành hiện số của bản ghi khác.
+ * `--loc` để output không dài hơn khung cuộn rồi bị cắt mất phần đầu (bảng `LOG - Import` có 48
+ * cột; in nguyên cấu hình cả 48 là mất sạch).
  *
  * `--cot` có vì bảng nhiều cột thì output dài hơn khung cuộn của terminal và phần ĐẦU bị cắt —
  * đúng phần cần đọc (đo 08/10/2026 với bảng `LOG - Import`).
@@ -27,6 +34,8 @@ async function main() {
   const token = appToken || BASE_WH;
   const chiCot = co.includes('--cot');
   const chiDong = co.includes('--dong');
+  const chiTiet = co.includes('--chitiet');
+  const loc = (co.find((a) => a.startsWith('--loc='))?.slice(6) ?? '').toLowerCase();
 
   if (!tableId) {
     console.log(`=== BẢNG trong base ${token} ===`);
@@ -35,9 +44,15 @@ async function main() {
   }
 
   if (!chiDong) {
-    const cot = await listTableFields(tableId, token);
-    console.log(`=== ${cot.length} CỘT của ${tableId} (base ${token}) ===`);
+    const tatCa = await listTableFields(tableId, token);
+    const cot = loc ? tatCa.filter((f) => f.field_name.toLowerCase().includes(loc)) : tatCa;
+    console.log(`=== ${cot.length}/${tatCa.length} CỘT của ${tableId} (base ${token}) ===`);
     for (const f of cot) {
+      if (chiTiet) {
+        console.log(`--- type=${f.type}  ${f.field_name}`);
+        console.log(JSON.stringify(f, null, 1));
+        continue;
+      }
       const opts = (f as { property?: { options?: { name: string }[] } }).property?.options;
       const them = opts?.length ? `  [${opts.map((o) => o.name).join(' | ')}]` : '';
       console.log(`type=${String(f.type).padStart(3)}  ${f.field_name}${them}`);
