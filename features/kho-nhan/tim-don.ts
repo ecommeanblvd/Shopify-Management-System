@@ -234,6 +234,17 @@ async function timMonLark(q: string, gioiHan: number): Promise<KetQuaTim[]> {
   }).from(schema.larkMonDon).where(and(
     inArray(schema.larkMonDon.store, [...STORE_MON_LARK]),
     eq(schema.larkMonDon.huy, false),
+    /* Món của đơn ĐÃ CÓ trong `shopify_orders` thì nguồn Shopify ở trên đã trả về — hiện lần
+     * nữa ở đây là một món đứng hai dòng trong ô tìm, và hai dòng đó đếm "đã nhận" theo hai
+     * khoá khác nhau nên kho nhận được HAI chiếc cho một món.
+     *
+     * Hôm nay chưa xảy ra vì `#MTB`/`#MXHS` có 0 đơn trong `shopify_orders`. Nhưng cột `store`
+     * không hứa điều đó: `#MIRER` phủ cả 253 dòng `MIRER…` (không có trong Shopify) LẪN 28
+     * dòng `MIR1004–1028` (có đủ trong Shopify). Thêm một kênh như vậy vào danh sách cho phép
+     * là lỗi hiện ra ngay — nên chặn ở đây, không dựa vào việc người thêm kênh nhớ ra. */
+    sql`NOT EXISTS (SELECT 1 FROM shopify_orders o
+          WHERE regexp_replace(o.shopify_order_number, '^#', '')
+              = regexp_replace(${schema.larkMonDon.orderNumber}, '^#', ''))`,
     or(
       sql`regexp_replace(coalesce(${schema.larkMonDon.orderNumber}, ''), '^#', '') ILIKE ${`%${maDon}%`}`,
       sql`${schema.larkMonDon.sku} ILIKE ${`%${q}%`}`,
