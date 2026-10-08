@@ -1,9 +1,16 @@
 /**
  * THUẦN: dựng hàng ghi lên sheet đối soát. Không I/O.
  *
- * Thứ tự và kiểu dữ liệu lấy từ CHÍNH sheet Kalisa đang dùng (đọc ô thật 02/10/2026): tiền là
- * CHUỖI `"996.240 đ"`, phần trăm là chuỗi `"38,25%"`, còn ngày là SỐ serial. Ghi sai kiểu thì
- * cột mất định dạng, hoặc mất khả năng sắp xếp — sheet đó từng có 34 ô ngày lưu thành văn bản.
+ * Ngày là SỐ serial — cột không có định dạng ngày thì serial hiện ra như 46209, nên `day-sheet`
+ * đặt định dạng TRƯỚC khi ghi. Sheet Kalisa từng có 34 ô ngày lưu thành văn bản.
+ *
+ * TIỀN là SỐ, không phải chuỗi (CEO 08/10/2026: "để số number thôi, còn format cột đó thành
+ * currency VNĐ để có thể tính toán được"). Bản đầu ghi chuỗi `"996.240 đ"` cho giống y hệt ô
+ * thật trên sheet cũ — giống về mắt nhưng brand không cộng được cột nào, và dòng TỔNG cũng
+ * không dựng được. Định dạng tiền do `day-sheet` đặt ở cấp cột.
+ *
+ * PHẦN TRĂM vẫn là chuỗi `"38,25%"`: nó không nằm trong phép cộng nào, và đổi sang số thì phải
+ * lưu dạng phân số (0,3825) — một lần đọc nhầm là sai 100 lần.
  */
 import { serialNgay } from '@/lib/google/sheets';
 
@@ -22,7 +29,38 @@ export interface DonSheet {
   vat: number; xuLyDon: number; tongThu: number; maSms: string;
 }
 
-const tien = (n: number) => `${Math.round(n).toLocaleString('vi-VN')} đ`;
+const tien = (n: number) => Math.round(n);
+
+/** Chỉ số (0-based) các cột TIỀN của bảng cước — `day-sheet` dùng để đặt định dạng và dựng TỔNG. */
+export const COT_TIEN = [7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19] as const;
+/** Cột tiền của bảng thuế: chỉ "Duty/Tax (Nước tới)". */
+export const COT_TIEN_DUTY = [6] as const;
+
+/** Chữ cột kiểu A1 từ chỉ số 0-based: 0→A, 25→Z, 26→AA. */
+export function chuCot(i: number): string {
+  let s = '', k = i;
+  do { s = String.fromCharCode(65 + (k % 26)) + s; k = Math.floor(k / 26) - 1; } while (k >= 0);
+  return s;
+}
+
+/**
+ * THUẦN: dòng TỔNG cuối bảng. Ô tiền là CÔNG THỨC `=SUM(...)`, không phải số tính sẵn.
+ *
+ * Vì sao công thức: brand sửa/lọc một dòng thì tổng phải đổi theo. Một con số tính sẵn sẽ đứng
+ * yên và nói dối ngay lần đầu ai đó đụng vào bảng.
+ *
+ * `soDong` = số dòng DỮ LIỆU; dữ liệu bắt đầu ở hàng 2 vì hàng 1 là tiêu đề.
+ */
+export function dongTong(soCot: number, cotTien: readonly number[], soDong: number): (string | number)[] {
+  const ra: (string | number)[] = Array.from({ length: soCot }, () => '');
+  ra[0] = 'TỔNG';
+  if (soDong <= 0) return ra;
+  for (const c of cotTien) {
+    const ch = chuCot(c);
+    ra[c] = `=SUM(${ch}2:${ch}${soDong + 1})`;
+  }
+  return ra;
+}
 const pct = (n: number | null) =>
   n == null ? '' : `${n.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 

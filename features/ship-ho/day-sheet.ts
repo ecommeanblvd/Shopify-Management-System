@@ -17,6 +17,7 @@ import { ngayDiHang } from './ngay-di-hang';
 import { ghiLenSheet } from './dong-sheet-loc';
 import {
   COT_SHEET, hangSheet, COT_SHEET_DUTY, hangSheetDuty,
+  COT_TIEN, COT_TIEN_DUTY, dongTong,
   type DonSheet, type DonSheetDuty,
 } from './hang-sheet';
 
@@ -162,8 +163,51 @@ export async function dayBangKeLenSheet(statementId: string): Promise<{ ok: bool
       fields: 'userEnteredFormat.numberFormat' } },
   ] }) });
 
+  /* Dữ liệu ghi RAW, KHÔNG phải USER_ENTERED: mã tracking là chuỗi 12 chữ số, để Sheets tự
+   * đoán kiểu thì nó thành SỐ và hiện ra 8,76409E+11 — mất luôn khả năng tra cứu. */
   await goiSheets(dt.sheetId, `/values/${encodeURIComponent(tenTab)}!A1?valueInputOption=RAW`, {
     method: 'PUT', body: JSON.stringify({ values: [[...dau], ...hang] }),
   });
-  return { ok: true, detail: `ghi ${hang.length} dòng vào tab ${tenTab}` };
+
+  /* Dòng TỔNG ghi RIÊNG bằng USER_ENTERED để `=SUM(...)` thành công thức thật. Ghi chung với
+   * dữ liệu thì phải chọn một kiểu cho cả bảng: RAW biến công thức thành chữ, USER_ENTERED
+   * phá mã tracking. Hai lượt ghi là cách duy nhất giữ được cả hai. */
+  const cotTien: readonly number[] = laDuty ? COT_TIEN_DUTY : COT_TIEN;
+  const hangTong = hang.length + 2;
+  await goiSheets(dt.sheetId, `/values/${encodeURIComponent(tenTab)}!A${hangTong}?valueInputOption=USER_ENTERED`, {
+    method: 'PUT', body: JSON.stringify({ values: [dongTong(dau.length, cotTien, hang.length)] }),
+  });
+
+  await goiSheets(dt.sheetId, ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [
+    // Cố định hàng tiêu đề và hai cột đầu (STT + Mã đơn) — cuộn ngang vẫn biết đang xem đơn nào.
+    { updateSheetProperties: {
+      properties: { sheetId: idTab, gridProperties: { frozenRowCount: 1, frozenColumnCount: 2 } },
+      fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount' } },
+    // Tiêu đề: nền đậm, chữ trắng, canh giữa, xuống dòng — tên cột dài không bị cắt.
+    { repeatCell: {
+      range: { sheetId: idTab, startRowIndex: 0, endRowIndex: 1 },
+      cell: { userEnteredFormat: {
+        backgroundColor: { red: 0.12, green: 0.22, blue: 0.39 },
+        horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP',
+        textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+      } },
+      fields: 'userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,wrapStrategy,textFormat)' } },
+    // Tiền: định dạng ở CẤP CỘT (phủ cả dòng TỔNG và dòng brand thêm sau này).
+    ...cotTien.map((c) => ({ repeatCell: {
+      range: { sheetId: idTab, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 },
+      cell: { userEnteredFormat: { numberFormat: { type: 'CURRENCY', pattern: '#,##0" đ"' } } },
+      fields: 'userEnteredFormat.numberFormat' } })),
+    // Dòng TỔNG: in đậm, có đường kẻ trên để tách khỏi phần dữ liệu.
+    { repeatCell: {
+      range: { sheetId: idTab, startRowIndex: hangTong - 1, endRowIndex: hangTong },
+      cell: { userEnteredFormat: {
+        textFormat: { bold: true },
+        borders: { top: { style: 'SOLID', width: 2 } },
+      } },
+      fields: 'userEnteredFormat(textFormat,borders)' } },
+    { autoResizeDimensions: {
+      dimensions: { sheetId: idTab, dimension: 'COLUMNS', startIndex: 0, endIndex: dau.length } } },
+  ] }) });
+
+  return { ok: true, detail: `ghi ${hang.length} dòng + dòng tổng vào tab ${tenTab}` };
 }
