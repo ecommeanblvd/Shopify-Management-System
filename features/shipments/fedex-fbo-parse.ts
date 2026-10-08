@@ -38,7 +38,18 @@ export function classifyFboCharge(label: string): FboBucket {
   // Phí FedEx sửa địa chỉ sai (Address Correction) — pass-through hợp lệ khi
   // khách nhập địa chỉ thiếu/sai. Bóc riêng để đối soát không coi là "thu sai".
   if (t.includes('correction')) return 'addressCorrection';
-  if (t.includes('inbound') || t.includes('hàng nhập')) return 'importHandling';
+  /* Phí xử lý hàng NHẬP: 'inbound'/'hàng nhập', và 'clearance' — phí thông quan FedEx thu khi
+   * làm thủ tục cho hàng vào. Ví dụ thật: hoá đơn 734119505 gom 4 vận đơn hàng TRẢ VỀ Hà Nội
+   * (ref `#MBLVD...._R`, đơn gốc đã hoàn tiền), mỗi vận đơn có "Informal Clearance" 250.000.
+   *
+   * Vì sao `importHandling` chứ không `duty`: VAT trên hoá đơn đó là 32.000 = ĐÚNG 8% ×
+   * (Disbursement 150.000 + Informal Clearance 250.000) — VAT đánh trên hai khoản DỊCH VỤ của
+   * FedEx, không đánh trên Duty & Tax hay Customs Fee. `duty` là pass-through thuần KHÔNG VAT;
+   * `importHandling` là phí xử lý hàng nhập CÓ VAT. Chính phép thử VAT ấy xếp chỗ, không phải
+   * tên gọi nghe giống nhau.
+   *
+   * Đứng SAU phép kiểm duty/customs ở trên nên "Customs Clearance" vẫn về `duty` như cũ. */
+  if (t.includes('inbound') || t.includes('hàng nhập') || t.includes('clearance')) return 'importHandling';
   return 'other';
 }
 

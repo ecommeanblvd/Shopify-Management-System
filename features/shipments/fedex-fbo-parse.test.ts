@@ -173,3 +173,24 @@ describe('classifyFboCharge — thuế nhập khẩu của NƯỚC ĐẾN (CEO 0
     expect(classifyFboCharge('Ghost Package Handling')).not.toBe('duty');
   });
 });
+
+describe('classifyFboCharge — phí thông quan hàng TRẢ VỀ (CEO 08/10/2026)', () => {
+  /* Hoá đơn 734119505 gom 4 vận đơn hàng trả về Hà Nội (ref `#MBLVD...._R`, đơn gốc đã hoàn
+   * tiền). Mỗi vận đơn có: Duty & Tax 385.836 · Duty Disbursement Fee 150.000 · Customs Fee
+   * 10.000 · Informal Clearance 250.000 · Vietnam VAT 32.000.
+   *
+   * VAT 32.000 = ĐÚNG 8% × (150.000 + 250.000) → VAT đánh trên hai khoản DỊCH VỤ của FedEx,
+   * không đánh trên thuế. Trong hệ thống `duty` là pass-through thuần KHÔNG VAT, còn
+   * `importHandling` là phí xử lý hàng nhập CÓ VAT — nên Informal Clearance thuộc nhóm sau. */
+  it('Informal Clearance → importHandling, không còn rơi vào chưa phân loại', () => {
+    expect(classifyFboCharge('Informal Clearance')).toBe('importHandling');
+  });
+
+  /* Các khoản cùng hoá đơn phải giữ nguyên chỗ cũ — sửa một nhãn không được kéo nhãn khác đi. */
+  it('không xê dịch các khoản thông quan khác', () => {
+    expect(classifyFboCharge('Duty  Tax')).toBe('duty');
+    expect(classifyFboCharge('Customs Fee')).toBe('duty');
+    expect(classifyFboCharge('Duty Disbursement Fee')).toBe('duty');
+    expect(classifyFboCharge('Vietnam VAT')).toBe('vat');
+  });
+});
