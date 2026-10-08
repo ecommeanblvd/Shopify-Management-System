@@ -365,17 +365,74 @@ export interface LarkField {
  * bộ lọc/báo cáo của cả đội (spec §5). Chỉ ĐỌC, không sửa gì.
  */
 export async function listWhInventoryFields(): Promise<LarkField[]> {
+  return listTableFields(WH_INVENTORY_TABLE_ID, env('LARK_BASE_APP_TOKEN'));
+}
+
+/**
+ * Danh sách cột của MỘT bảng bất kỳ trong base, kèm lựa chọn của các cột CHỌN. Chỉ ĐỌC.
+ *
+ * Tách ra khỏi `listWhInventoryFields` (08/10/2026) để dò được bảng MỚI trước khi viết lượt
+ * đồng bộ cho nó: tên cột sai một ký tự là Lark trả `undefined` và im lặng bỏ qua cả bảng, nên
+ * phải đọc tên thật chứ không đoán. Dùng cho bảng đồ return và danh sách đơn TQ.
+ */
+export async function listTableFields(tableId: string, appTokenOverride?: string): Promise<LarkField[]> {
   const token = await getTenantToken();
-  const appToken = env('LARK_BASE_APP_TOKEN');
+  const appToken = appTokenOverride ?? env('LARK_BASE_APP_TOKEN');
   const out: LarkField[] = [];
   let pageToken: string | undefined;
   do {
-    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${WH_INVENTORY_TABLE_ID}/fields`);
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/fields`);
     url.searchParams.set('page_size', '100');
     if (pageToken) url.searchParams.set('page_token', pageToken);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
     const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkField[]; page_token?: string; has_more?: boolean } };
     if (j.code !== 0) throw new Error(`[lark] fields fail: code=${j.code} msg=${j.msg}`);
+    out.push(...(j.data?.items ?? []));
+    pageToken = j.data?.has_more ? j.data?.page_token : undefined;
+  } while (pageToken);
+  return out;
+}
+
+/**
+ * Vài record ĐẦU của một bảng, MỘT trang, để xem cột thật mang giá trị gì. Chỉ ĐỌC.
+ *
+ * Một trang chứ không kéo hết: bảng dò có thể hàng nghìn dòng, mà xem kiểu dữ liệu thì ba dòng
+ * là đủ. Bảng WH - Inventory kéo hết mất ~2 phút — không trả giá đó để trả lời một câu hỏi về
+ * tên cột.
+ */
+export async function peekTableRecords(
+  tableId: string, pageSize = 3, appTokenOverride?: string,
+): Promise<LarkRecord[]> {
+  const token = await getTenantToken();
+  const appToken = appTokenOverride ?? env('LARK_BASE_APP_TOKEN');
+  const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/search`);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ automatic_fields: true, page_size: pageSize }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const j = (await res.json()) as { code: number; msg: string; data?: { items?: LarkRecord[] } };
+  if (j.code !== 0) throw new Error(`[lark] peek fail: code=${j.code} msg=${j.msg}`);
+  return j.data?.items ?? [];
+}
+
+/** Danh sách BẢNG trong base — để tìm mã bảng khi link người gửi bị mất phần `?table=`. */
+export async function listBaseTables(appTokenOverride?: string): Promise<{ table_id: string; name: string }[]> {
+  const token = await getTenantToken();
+  const appToken = appTokenOverride ?? env('LARK_BASE_APP_TOKEN');
+  const out: { table_id: string; name: string }[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL(`${DOMAIN}/open-apis/bitable/v1/apps/${appToken}/tables`);
+    url.searchParams.set('page_size', '100');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+    const j = (await res.json()) as {
+      code: number; msg: string;
+      data?: { items?: { table_id: string; name: string }[]; page_token?: string; has_more?: boolean };
+    };
+    if (j.code !== 0) throw new Error(`[lark] tables fail: code=${j.code} msg=${j.msg}`);
     out.push(...(j.data?.items ?? []));
     pageToken = j.data?.has_more ? j.data?.page_token : undefined;
   } while (pageToken);
