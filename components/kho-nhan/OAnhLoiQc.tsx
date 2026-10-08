@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { KhoiLoi } from './KhoiLoi';
+import { gomAnhLoi } from '@/features/kho-nhan/gom-anh-loi';
 import type { AnhLoiQc } from '@/features/kho-nhan/anh-loi-qc';
 
 /**
@@ -59,12 +60,22 @@ export function OAnhLoiQc({ itemId, anh, coStorage, daFail = false, sauKhiLuu }:
           <DialogTitle className="shrink-0 text-base">Lỗi QC của chiếc này</DialogTitle>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
           {anh.length > 0 && (
+            /* Gom theo CHỖ LỖI, không liệt kê từng dòng: một chỗ lỗi nhiều ảnh vẫn là một dòng
+               lưu một ảnh, nên liệt kê thô thì ba tấm của cùng vết bẩn in ra ba dòng y hệt. */
             <ul className="space-y-1 text-xs">
-              {anh.map((a) => (
-                <li key={a.id} className="flex items-center gap-2">
-                  <b>{a.nhanLyDo}</b>
-                  {a.ghiChu && <span className="text-muted-foreground">{a.ghiChu}</span>}
-                  {a.url && <a href={a.url} target="_blank" rel="noreferrer" className="cursor-pointer underline">xem ảnh</a>}
+              {gomAnhLoi(anh).map((n) => (
+                <li key={n.khoa} className="flex flex-wrap items-center gap-x-2">
+                  <b>{n.nhanLyDo}</b>
+                  {n.ghiChu && <span className="text-muted-foreground">{n.ghiChu}</span>}
+                  {n.anh.map((a, k) => (a.url ? (
+                    <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
+                       className="cursor-pointer underline">
+                      {n.anh.length > 1 ? `ảnh ${k + 1}` : 'xem ảnh'}
+                    </a>
+                  ) : (
+                    /* Ký hỏng: vẫn phải hiện là CÓ một tấm, mất ảnh khác hẳn không có ảnh. */
+                    <span key={a.id} className="text-muted-foreground">(ảnh lỗi link)</span>
+                  )))}
                 </li>
               ))}
             </ul>
