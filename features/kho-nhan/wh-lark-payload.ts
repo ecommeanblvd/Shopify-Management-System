@@ -17,6 +17,16 @@ export const WH_ACTION_LUU_KHO = 'Lưu kho';
 /** Hàng nhập từ brand để đi đơn (CEO 24/09). */
 export const INVENTORY_TYPE_RETAIL = 'Retail';
 
+/**
+ * Hàng đặt PO về nằm tồn, KHÔNG thuộc đơn Shopify nào (Bảo báo 09/10/2026: món PO nhận ở SMS
+ * không lên Lark).
+ *
+ * Nguyên văn đọc từ chính bảng vận hành: 531 dòng đội kho nhập tay mang đúng lựa chọn này, dòng
+ * mới nhất 05/10/2026. KHÔNG tự đặt tên mới — sai một ký tự là Lark đẻ ra lựa chọn thứ hai trên
+ * bảng vận hành chứ không báo lỗi (D-045).
+ */
+export const INVENTORY_TYPE_PO = 'Tồn kho (PO)';
+
 export const COT_NGAY_IMPORT = 'Ngày Import - tiếp nhận đồ tại kho';
 export const COT_INVENTORY_TYPE = 'Import - Inventory type';
 export const COT_SELECT_ORDER = 'Import (select order)';
@@ -160,9 +170,26 @@ export const KHO_SANG_LARK: Record<string, string> = {
  *
  * `vendor` caller đã lọc qua `chonVendorHopLe`.
  */
+/**
+ * Nguồn của chiếc hàng — quyết định hai cột, và CHỈ hai cột: loại nhập và liên kết đơn.
+ *
+ * Kiểu phân biệt chứ không phải `larkMonRecordId: string | null`: nhận null là mở đường cho một
+ * chiếc hàng ĐƠN lọt qua mà không có liên kết, và dòng đó trên Lark thì không ai nhận ra là
+ * thiếu — cột look up rỗng trông y hệt dòng PO bình thường.
+ */
+export type NguonNhan =
+  /** Hàng brand gửi để đi đơn Shopify. `larkMonRecordId` = `lark_mon_don.record_id`. */
+  | { kieu: 'don'; larkMonRecordId: string }
+  /**
+   * Hàng đặt PO. KHÔNG có liên kết đơn, và đó là trạng thái ĐÚNG, không phải thiếu sót: bảng
+   * món (`lark_mon_don`) chỉ còn dòng PO tới PO21, trong khi PO đang chạy là PO52 — không có
+   * dòng nào để trỏ tới. Hai cột `… final` giữ mã, đúng như ghi chú ở trên.
+   */
+  | { kieu: 'po' };
+
 export function dungPayloadNhan(
   d: {
-    larkMonRecordId: string; maDon: string; sku: string;
+    nguon: NguonNhan; maDon: string; sku: string;
     tenMon: string | null; vendor: string | null; nhanLuc: Date; kho: string;
   },
 ): Record<string, unknown> {
@@ -170,8 +197,8 @@ export function dungPayloadNhan(
   if (!kho) throw new Error(`Kho "${d.kho}" chưa có tên tương ứng trên Lark.`);
   return {
     [COT_NGAY_IMPORT]: d.nhanLuc.getTime(),
-    [COT_INVENTORY_TYPE]: INVENTORY_TYPE_RETAIL,
-    [COT_SELECT_ORDER]: [d.larkMonRecordId],
+    [COT_INVENTORY_TYPE]: d.nguon.kieu === 'po' ? INVENTORY_TYPE_PO : INVENTORY_TYPE_RETAIL,
+    ...(d.nguon.kieu === 'don' ? { [COT_SELECT_ORDER]: [d.nguon.larkMonRecordId] } : {}),
     [COT_ORDER_FINAL]: d.maDon,
     [COT_SKU_FINAL]: d.sku,
     ...(d.tenMon?.trim() ? { [COT_LINEITEM_NAME]: d.tenMon.trim() } : {}),

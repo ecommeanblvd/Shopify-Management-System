@@ -14,8 +14,9 @@ import { moTaLoiQc } from './mo-ta-loi-qc';
 import type { LyDoLoi } from './loi-qc';
 import {
   dungPayloadNhan, dungPayloadSauQcDat, dungPayloadSauQcKhongDat, chonVendorHopLe,
-  COT_SELECT_ORDER, COT_UNIQUE_CODE,
+  COT_UNIQUE_CODE, type NguonNhan,
 } from './wh-lark-payload';
+import { quyetDinhGui, duocXoaRecord } from './gui-po-lark';
 
 async function ghiNhatKy(d: {
   hanhDong: 'tao' | 'xoa' | 'sua'; larkRecordId: string | null;
@@ -55,6 +56,9 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
     sku: schema.goodsReceiptItems.sku,
     larkRecordId: schema.goodsReceiptItems.larkRecordId,
     maDon: schema.shopifyOrders.shopifyOrderNumber,
+    poOrderNumber: schema.goodsReceiptItems.poOrderNumber,
+    poRecordId: schema.goodsReceiptItems.poRecordId,
+    tenMonPhieu: schema.goodsReceiptItems.productTitle,
     taoLuc: schema.goodsReceiptItems.createdAt,
     kho: schema.goodsReceipts.warehouseCode,
   })
@@ -72,39 +76,63 @@ export async function guiLenLark(itemIds: string[]): Promise<KetQuaGui> {
 
   for (const c of dsChiec) {
     if (c.larkRecordId) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'đã vào chờ QC rồi' }); continue; }
-    if (!c.maDon || !c.sku) { ket.boQua.push({ unitCode: c.unitCode, lyDo: 'thiếu mã đơn hoặc SKU' }); continue; }
+    const duong = quyetDinhGui(c);
+    if (!duong.ok) { ket.boQua.push({ unitCode: c.unitCode, lyDo: duong.lyDo }); continue; }
 
-    // Chuẩn hoá `#` cả hai phía — quên là truy vấn trả rỗng mà không báo lỗi.
-    const [mon] = await db.select({
-      recordId: schema.larkMonDon.recordId,
-      maDon: schema.larkMonDon.orderNumber,
-      sku: schema.larkMonDon.sku,
-      tenMon: schema.larkMonDon.lineitemName,
-      vendor: schema.larkMonDon.vendor,
-    })
-      .from(schema.larkMonDon)
-      .where(and(
-        sql`regexp_replace(${schema.larkMonDon.orderNumber}, '^#', '') = regexp_replace(${c.maDon}, '^#', '')`,
-        eq(schema.larkMonDon.sku, c.sku),
-      ))
-      .limit(1);
+    /* Hai đường, một đích. Khác nhau đúng ba thứ: bảng nào cấp tên hàng và vendor, có liên kết
+     * đơn hay không, và loại nhập — `quyetDinhGui` đã chọn, `dungPayloadNhan` lo hai cột cuối. */
+    let nguon: NguonNhan;
+    let skuFinal = duong.sku;
+    let tenMon: string | null = c.tenMonPhieu;
+    let vendorTho: string | null = null;
 
-    if (!mon?.recordId) {
-      ket.boQua.push({ unitCode: c.unitCode, lyDo: 'món này chưa có dòng trên bảng Lark' });
-      continue;
+    if (duong.kieu === 'don') {
+      // Chuẩn hoá `#` cả hai phía — quên là truy vấn trả rỗng mà không báo lỗi.
+      const [mon] = await db.select({
+        recordId: schema.larkMonDon.recordId,
+        sku: schema.larkMonDon.sku,
+        tenMon: schema.larkMonDon.lineitemName,
+        vendor: schema.larkMonDon.vendor,
+      })
+        .from(schema.larkMonDon)
+        .where(and(
+          sql`regexp_replace(${schema.larkMonDon.orderNumber}, '^#', '') = regexp_replace(${duong.maDon}, '^#', '')`,
+          eq(schema.larkMonDon.sku, duong.sku),
+        ))
+        .limit(1);
+
+      if (!mon?.recordId) {
+        ket.boQua.push({ unitCode: c.unitCode, lyDo: 'món này chưa có dòng trên bảng Lark' });
+        continue;
+      }
+      nguon = { kieu: 'don', larkMonRecordId: mon.recordId };
+      // `sku` bên lark_mon_don cho phép rỗng; rơi về SKU của chiếc hàng để cột
+      // `Lineitem SKU final` không bao giờ trống — trống là `Định danh` cụt.
+      skuFinal = mon.sku ?? duong.sku;
+      tenMon = mon.tenMon;
+      vendorTho = mon.vendor;
+    } else {
+      /* Hàng PO: KHÔNG tra bảng món (từ PO22 trở đi nó không có dòng nào ở đó), tra thẳng dòng
+       * PO bằng `po_record_id` đã ghim lúc nhận. Tra lại theo mã đơn + SKU là tự mở đường chọn
+       * nhầm dòng: một PO có nhiều dòng cùng SKU (PO52 có ba dòng cùng một SKU). */
+      if (c.poRecordId) {
+        const [po] = await db.select({
+          tenMon: schema.larkPoDong.lineitemName, vendor: schema.larkPoDong.vendor,
+        }).from(schema.larkPoDong).where(eq(schema.larkPoDong.recordId, c.poRecordId)).limit(1);
+        if (po) { tenMon = po.tenMon ?? c.tenMonPhieu; vendorTho = po.vendor; }
+      }
+      nguon = { kieu: 'po' };
     }
-    // `sku` bên lark_mon_don cho phép rỗng; rơi về SKU của chiếc hàng để cột
-    // `Lineitem SKU final` không bao giờ trống — trống là `Định danh` cụt.
-    const skuFinal = mon.sku ?? c.sku;
 
     try {
       const recordId = await createWhInventoryRecord(
         dungPayloadNhan({
-          larkMonRecordId: mon.recordId,
-          // Số đơn của Shopify — giữ dấu `#` đúng quy ước store; bản mirror
-          // `lark_mon_don` đã strip sạch `#` nên không dùng được cho cột này.
-          maDon: c.maDon, sku: skuFinal, tenMon: mon.tenMon,
-          vendor: chonVendorHopLe(mon.vendor, vendorHopLe),
+          nguon,
+          // Giữ dấu `#` đúng quy ước bảng Lark. Với đường đơn, số lấy từ `shopify_orders`
+          // chứ không từ mirror `lark_mon_don` (mirror đã strip sạch `#`); với đường PO,
+          // `po_order_number` chép nguyên từ bảng PO nên đã có `#`.
+          maDon: duong.maDon, sku: skuFinal, tenMon,
+          vendor: chonVendorHopLe(vendorTho, vendorHopLe),
           nhanLuc: c.taoLuc, kho: c.kho,
         }),
       );
@@ -159,7 +187,12 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
     id: schema.goodsReceiptItems.id,
     unitCode: schema.goodsReceiptItems.unitCode,
     larkRecordId: schema.goodsReceiptItems.larkRecordId,
-  }).from(schema.goodsReceiptItems).where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
+    maDon: schema.shopifyOrders.shopifyOrderNumber,
+    poOrderNumber: schema.goodsReceiptItems.poOrderNumber,
+    sku: schema.goodsReceiptItems.sku,
+  }).from(schema.goodsReceiptItems)
+    .leftJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.goodsReceiptItems.orderId))
+    .where(eq(schema.goodsReceiptItems.id, itemId)).limit(1);
 
   if (!c) return { ok: false, loi: 'Không tìm thấy chiếc hàng.' };
   // HÀNG RÀO 1
@@ -169,12 +202,16 @@ export async function goKhoiLark(itemId: string): Promise<{ ok: boolean; loi?: s
     // HÀNG RÀO 3 — record đã biến mất thì coi như xong, chỉ dọn cờ bên mình.
     const rec = await getWhInventoryRecord(c.larkRecordId);
     if (rec) {
-      const lien = rec.fields?.[COT_SELECT_ORDER] as { record_ids?: string[] }[] | undefined;
-      const coLien = Array.isArray(lien) && lien.some((x) => (x.record_ids ?? []).length > 0);
-      if (!coLien) {
-        const loi = 'Record trên Lark không còn liên kết món — KHÔNG xoá, cần người kiểm tay.';
-        await ghiNhatKy({ hanhDong: 'xoa', larkRecordId: c.larkRecordId, receiptItemId: c.id, thanhCong: false, chiTiet: loi, actor });
-        return { ok: false, loi };
+      /* Hàng PO không bao giờ có liên kết đơn, nên hàng rào liên kết phải đổi sang hàng rào
+       * định danh — `duocXoaRecord` giữ cả hai luật, chặt tương đương. */
+      const duong = quyetDinhGui(c);
+      const mong = duong.ok && duong.kieu === 'po'
+        ? { kieu: 'po' as const, maDon: duong.maDon, sku: duong.sku }
+        : { kieu: 'don' as const };
+      const cho = duocXoaRecord(rec.fields, mong);
+      if (!cho.ok) {
+        await ghiNhatKy({ hanhDong: 'xoa', larkRecordId: c.larkRecordId, receiptItemId: c.id, thanhCong: false, chiTiet: cho.loi, actor });
+        return { ok: false, loi: cho.loi };
       }
       await deleteWhInventoryRecord(c.larkRecordId);
     }

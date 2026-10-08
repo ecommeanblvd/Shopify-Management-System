@@ -24,7 +24,7 @@ describe('dungPayloadNhan', () => {
   const luc = new Date('2026-09-24T10:00:00Z');
 
   it('đủ mười cột, không thừa cột nào', () => {
-    const p = dungPayloadNhan({ larkMonRecordId: 'recABC', maDon: '#MBLVD30542', sku: 'TomFried-TS2644-S-KPTT-PLA', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
+    const p = dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'recABC' }, maDon: '#MBLVD30542', sku: 'TomFried-TS2644-S-KPTT-PLA', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
     expect(Object.keys(p).sort()).toEqual([
       'Import (select order)', 'Import - Inventory type', 'Lineitem Name',
       'Lineitem SKU final', 'Ngày Import - tiếp nhận đồ tại kho',
@@ -34,24 +34,24 @@ describe('dungPayloadNhan', () => {
   });
 
   it('cột liên kết nhận MẢNG record_id, không phải chuỗi', () => {
-    const p = dungPayloadNhan({ larkMonRecordId: 'recABC', maDon: '#MBLVD30542', sku: 'TomFried-TS2644-S-KPTT-PLA', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
+    const p = dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'recABC' }, maDon: '#MBLVD30542', sku: 'TomFried-TS2644-S-KPTT-PLA', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
     expect(p['Import (select order)']).toEqual(['recABC']);
   });
 
   it('ngày ghi bằng mốc thời gian epoch, đúng kiểu date của Lark', () => {
-    const p = dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
+    const p = dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
     expect(p['Ngày Import - tiếp nhận đồ tại kho']).toBe(luc.getTime());
   });
 
   it('lúc NHẬN là "Chờ QC", KHÔNG phải "Tạm nhập" — hàng chưa kiểm thì chưa nhập kho', () => {
-    const p = dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
+    const p = dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
     expect(p['WH - Action']).toBe(' Chờ QC ');
   });
 
   /* Cột `… (look up)` Lark tự sinh từ liên kết — điền tay vào là Lark từ chối.
    * Khác hẳn cột `… final`, vốn là Text và PHẢI điền (xem nhóm test cuối file). */
   it('KHÔNG điền tay các cột Lark tự lookup', () => {
-    const p = dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
+    const p = dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' });
     for (const k of ['Lineitem SKU (look up)', 'Order number (look up)', 'Brand', 'Định danh', 'WH - Unique code (k xóa)']) {
       expect(p).not.toHaveProperty(k);
     }
@@ -177,12 +177,12 @@ describe('dungPayloadSauQcKhongDat', () => {
 describe('cột Warehouse — thiếu là record VÔ HÌNH trên mọi view', () => {
   const luc = new Date('2026-09-24T10:00:00Z');
   it('ba kho của hệ thống map đúng tên lựa chọn trên Lark', () => {
-    expect(dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' }).Warehouse).toBe('HN | GVM');
-    expect(dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'AP' }).Warehouse).toBe('SG | AP');
-    expect(dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'DM' }).Warehouse).toBe('SG | DM');
+    expect(dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM' }).Warehouse).toBe('HN | GVM');
+    expect(dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'AP' }).Warehouse).toBe('SG | AP');
+    expect(dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'DM' }).Warehouse).toBe('SG | DM');
   });
   it('kho lạ thì NÉM, không ghi record vô hình', () => {
-    expect(() => dungPayloadNhan({ larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'XYZ' })).toThrow();
+    expect(() => dungPayloadNhan({ nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'SKU-1', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'XYZ' })).toThrow();
   });
 });
 
@@ -193,7 +193,7 @@ describe('hai cột nuôi công thức Định danh', () => {
    * đúng lỗi của record thử 24/09. Lark KHÔNG tự chép từ cột look up sang. */
   it('điền cả mã đơn lẫn SKU, nguyên văn', () => {
     const p = dungPayloadNhan({
-      larkMonRecordId: 'rec1', maDon: '#MBLVD30542',
+      nguon: { kieu: 'don', larkMonRecordId: 'rec1' }, maDon: '#MBLVD30542',
       sku: 'TomFried-TS2644-S-KPTT-PLA', tenMon: 'Eiren Lace Maxi Dress - Lapis Blue / 3XL', vendor: null,
       nhanLuc: luc, kho: 'GVM',
     });
@@ -203,7 +203,7 @@ describe('hai cột nuôi công thức Định danh', () => {
 
   it('không tự thêm/bớt dấu # — giữ đúng thứ bảng liên kết đang có', () => {
     const p = dungPayloadNhan({
-      larkMonRecordId: 'rec1', maDon: 'TA2337', sku: 'S', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM',
+      nguon: { kieu: 'don', larkMonRecordId: 'rec1' }, maDon: 'TA2337', sku: 'S', tenMon: 'Ao dai - Ivory / M', vendor: null, nhanLuc: luc, kho: 'GVM',
     });
     expect(p['Order Number final']).toBe('TA2337');
   });
@@ -214,7 +214,7 @@ describe('QC Check lúc TẠO', () => {
    * đang dùng — họ điền cột này 100%. */
   it('tạo dòng là điền luôn "Tiếp nhận - chưa QC"', () => {
     const p = dungPayloadNhan({
-      larkMonRecordId: 'r', maDon: '#MBLVD1', sku: 'S1', tenMon: 'X', vendor: null,
+      nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD1', sku: 'S1', tenMon: 'X', vendor: null,
       nhanLuc: new Date('2026-09-25T03:00:00Z'), kho: 'GVM',
     });
     expect(p['QC Check']).toBe('Tiếp nhận - chưa QC');
@@ -224,7 +224,7 @@ describe('QC Check lúc TẠO', () => {
 describe('Lineitem Name và Quantity', () => {
   const luc = new Date('2026-09-25T03:00:00Z');
   const co = (tenMon: string | null) => dungPayloadNhan({
-    larkMonRecordId: 'r', maDon: '#MBLVD30465', sku: 'S1', tenMon, vendor: null,
+    nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon: '#MBLVD30465', sku: 'S1', tenMon, vendor: null,
     nhanLuc: luc, kho: 'GVM',
   });
 
@@ -262,7 +262,7 @@ describe('dấu # của Order Number final', () => {
    * từ `lark_mon_don`, nơi mình đã strip sạch `#` (0/7752 dòng còn dấu). */
   it('giữ NGUYÊN VĂN số đơn truyền vào, không thêm không bớt', () => {
     const goi = (maDon: string) => dungPayloadNhan({
-      larkMonRecordId: 'r', maDon, sku: 'S1', tenMon: null, vendor: null, nhanLuc: luc, kho: 'GVM',
+      nguon: { kieu: 'don', larkMonRecordId: 'r' }, maDon, sku: 'S1', tenMon: null, vendor: null, nhanLuc: luc, kho: 'GVM',
     })['Order Number final'];
     expect(goi('#MBLVD30465')).toBe('#MBLVD30465');
     // TINH không dùng `#` (1.320/1.340 đơn) — tự thêm vào là sai cả store đó.
@@ -326,5 +326,50 @@ describe('chonVendorHopLe', () => {
   /* Đọc lựa chọn từ Lark hỏng → mảng rỗng → bỏ trống cột, KHÔNG ghi bừa. */
   it('danh sách lựa chọn rỗng thì không ghi gì', () => {
     expect(chonVendorHopLe('TOM FRIED', [])).toBeNull();
+  });
+});
+
+/* Bảo 09/10/2026: món PO nhận ở SMS không lên Lark. Hai cột khác nhau giữa hai đường. */
+describe('dungPayloadNhan — hàng PO', () => {
+  const luc = new Date('2026-10-08T03:00:00Z');
+  const po = () => dungPayloadNhan({
+    nguon: { kieu: 'po' }, maDon: '#MBLVDPO52', sku: 'Lamai-LM-26V086-L-NLAT-PLA',
+    tenMon: 'Lamai dress - Nude / L', vendor: null, nhanLuc: luc, kho: 'GVM',
+  });
+
+  /* Nguyên văn đọc từ bảng vận hành: 531 dòng đội kho nhập tay mang đúng lựa chọn này. Sai một
+     ký tự là Lark đẻ ra lựa chọn thứ hai chứ không báo lỗi (D-045). */
+  it('loại nhập là "Tồn kho (PO)", KHÔNG phải "Retail"', () => {
+    expect(po()['Import - Inventory type']).toBe('Tồn kho (PO)');
+  });
+
+  /* Bảng món chỉ còn dòng PO tới PO21, PO đang chạy là PO52 — không có dòng nào để trỏ tới.
+     Ghi một mảng rỗng hay một id bừa vào cột liên kết là tệ hơn bỏ trống. */
+  it('KHÔNG có cột liên kết đơn — không phải để rỗng, mà là không gửi khoá đó', () => {
+    expect('Import (select order)' in po()).toBe(false);
+  });
+
+  /* Hai cột `… final` là thứ DUY NHẤT giữ được mã trên dòng PO: cột look up rỗng vì không có
+     liên kết, nên trống hai cột này là `Định danh` ra cụt ngủn "Tồn kho (PO)-WH-xxxxx". */
+  it('mã PO và SKU vẫn vào hai cột `… final`, giữ nguyên dấu `#`', () => {
+    expect(po()['Order Number final']).toBe('#MBLVDPO52');
+    expect(po()['Lineitem SKU final']).toBe('Lamai-LM-26V086-L-NLAT-PLA');
+  });
+
+  it('phần còn lại giống y đường đơn — kho, số lượng, hai cột trạng thái', () => {
+    const p = po();
+    expect(p.Warehouse).toBe('HN | GVM');
+    expect(p['Quantity tiếp nhận trước QC']).toBe(1);
+    expect(p['WH - Action']).toBe(' Chờ QC ');
+    expect(p['QC Check']).toBe('Tiếp nhận - chưa QC');
+  });
+
+  it('đường đơn KHÔNG bị kéo theo: vẫn Retail và vẫn có liên kết', () => {
+    const p = dungPayloadNhan({
+      nguon: { kieu: 'don', larkMonRecordId: 'recABC' }, maDon: '#MBLVD30711', sku: 'A-1',
+      tenMon: null, vendor: null, nhanLuc: luc, kho: 'GVM',
+    });
+    expect(p['Import - Inventory type']).toBe('Retail');
+    expect(p['Import (select order)']).toEqual(['recABC']);
   });
 });
