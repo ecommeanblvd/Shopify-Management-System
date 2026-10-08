@@ -14,6 +14,9 @@
  *       # CHỈ cột có tên chứa "WH", in NGUYÊN cấu hình cột
  *   railway run npm run probe:lark-table -- <tableId> --dem="Return Status"
  *       # ĐẾM số dòng theo từng giá trị của cột đó (lặp `--dem=` được nhiều cột)
+ *   railway run npm run probe:lark-table -- <tableId> --cheo="Cột A|Cột B"
+ *       # BẢNG CHÉO: với mỗi giá trị cột A, phân bố cột B. Để chọn luật lọc bằng số thay vì
+ *       # bằng suy đoán — một cột lẻ không đủ, phải biết chúng đi cùng nhau thế nào.
  *
  * `--chitiet` cần cho cột LOOKUP (type 19) và cột liên kết (18/21): tên cột không nói nó lấy dữ
  * liệu qua liên kết nào, mà ghi sai hướng liên kết là bảng vận hành hiện số của bản ghi khác.
@@ -30,6 +33,26 @@ import {
 } from '@/features/lark/client';
 
 const BASE_WH = 'HxfAw0iRViHiNgkSlbBltpVkg3f';
+
+/**
+ * Giá trị một ô về dạng CHỮ để gộp nhóm. Lark trả bốn hình dạng khác nhau cho cùng một khái
+ * niệm "ô có chữ gì": chuỗi thường (cột chọn), mảng đoạn chữ (cột text nhiều định dạng), bọc
+ * `{type, value}` (cột lookup/công thức), hoặc thiếu hẳn khoá. Trộn lẫn bốn hình dạng đó là
+ * đếm ra bốn nhóm cho một giá trị.
+ */
+function giaTri(fields: Record<string, unknown> | undefined, ten: string): string {
+  const v = fields?.[ten];
+  if (v == null) return '(trống)';
+  if (typeof v === 'string') return v.trim() || '(trống)';
+  if (Array.isArray(v)) {
+    return v.map((x) => (x as { text?: string })?.text ?? String(x)).join('').trim() || '(trống)';
+  }
+  if (typeof v === 'object' && 'value' in (v as object)) {
+    const ds = (v as { value?: unknown[] }).value ?? [];
+    return ds.map((x) => (x as { text?: string })?.text ?? String(x)).join(',').trim() || '(trống)';
+  }
+  return String(v);
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -48,24 +71,37 @@ async function main() {
   }
 
   const demCot = co.filter((a) => a.startsWith('--dem=')).map((a) => a.slice(6));
-  if (demCot.length > 0) {
+  const cheoCot = co.filter((a) => a.startsWith('--cheo=')).map((a) => a.slice(7));
+  if (demCot.length > 0 || cheoCot.length > 0) {
     const ds = await listTableRecords(tableId, token);
     console.log(`=== ${ds.length} dòng của ${tableId} ===`);
+
     for (const ten of demCot) {
       const dem = new Map<string, number>();
-      for (const r of ds) {
-        const v = r.fields?.[ten];
-        const k = v == null ? '(trống)'
-          : typeof v === 'string' ? v
-          : Array.isArray(v) ? (v.map((x) => (x as { text?: string })?.text ?? String(x)).join('') || '(trống)')
-          : typeof v === 'object' && 'value' in (v as object)
-            ? String(((v as { value?: unknown[] }).value ?? []).join(',') || '(trống)')
-          : String(v);
-        dem.set(k, (dem.get(k) ?? 0) + 1);
-      }
+      for (const r of ds) dem.set(giaTri(r.fields, ten), (dem.get(giaTri(r.fields, ten)) ?? 0) + 1);
       console.log(`\n--- ${ten}`);
       for (const [k, n] of [...dem].sort((a, b) => b[1] - a[1])) {
         console.log(`${String(n).padStart(5)}  ${k}`);
+      }
+    }
+
+    for (const cap of cheoCot) {
+      const [a, b] = cap.split('|');
+      if (!a || !b) { console.log(`\n--- BỎ QUA "${cap}": cần dạng "Cột A|Cột B"`); continue; }
+      const bang = new Map<string, Map<string, number>>();
+      for (const r of ds) {
+        const ka = giaTri(r.fields, a), kb = giaTri(r.fields, b);
+        const hang = bang.get(ka) ?? new Map<string, number>();
+        hang.set(kb, (hang.get(kb) ?? 0) + 1);
+        bang.set(ka, hang);
+      }
+      console.log(`\n--- CHÉO: ${a}  ×  ${b}`);
+      const tong = (m: Map<string, number>) => [...m.values()].reduce((x, y) => x + y, 0);
+      for (const [ka, hang] of [...bang].sort((x, y) => tong(y[1]) - tong(x[1]))) {
+        console.log(`${String(tong(hang)).padStart(5)}  ${ka}`);
+        for (const [kb, n] of [...hang].sort((x, y) => y[1] - x[1])) {
+          console.log(`        ${String(n).padStart(5)}  ${kb}`);
+        }
       }
     }
     return;
