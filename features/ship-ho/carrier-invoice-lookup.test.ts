@@ -81,6 +81,30 @@ describe('aggregateBilledLines — 1 lô hàng có NHIỀU dòng bill (cước 7
     expect(agg.shipDate).toBe('2026-07-20'); // lấy từ dòng có ship date
     expect(agg.billNumber).toBe('736056168 + 734110283');
   });
+  /**
+   * Lô NHIỀU KIỆN: FedEx liệt kê từng kiện kèm cân, tiền đặt ở dòng tổng. Trình phân tích dựng
+   * cả hai loại, nên bảng có dòng `total = 0` mang cân lẻ — KHÔNG phải rác, KHÔNG được xoá.
+   *
+   * Số thật (soát 09/10/2026, 4 dòng trên 2 vận đơn):
+   *   875136041254 → cước 2.114.499đ cân 3,1 · duty 368.577đ cân 3,1 · hai dòng 0đ cân 1,7 + 1,4
+   *   875975277179 → cước 3.300.793đ cân 7,0 · duty 858.109đ cân 7,0 · hai dòng 0đ cân 3,1 + 3,9
+   * Cân các dòng 0đ CỘNG LẠI đúng bằng cân dòng tính tiền — đó là dấu nhận ra chúng.
+   *
+   * `Math.max` là thứ giữ cho phép gộp đúng: cộng cân sẽ ra 9,3 kg cho một kiện 3,1 kg, và cân
+   * là mẫu số của re-quote nên sai cân là sai cước. Lọc bỏ dòng 0đ cũng không đúng — mất dữ
+   * liệu cân từng kiện có thật trên hoá đơn, đổi lấy không gì cả.
+   */
+  it('lô nhiều kiện: dòng 0đ mang cân lẻ KHÔNG làm sai cân gộp', () => {
+    const cuoc = mk({ base: 6_118_700, fuel: 598_238 }, { totalVnd: 2_114_499, weightKg: 3.1, shipDate: '2026-07-31', billNumber: 'B-cuoc' });
+    const duty = mk({ duty: 368_577 }, { totalVnd: 368_577, weightKg: 3.1, billNumber: 'B-duty' });
+    const kien1 = mk({}, { totalVnd: 0, weightKg: 1.7 });
+    const kien2 = mk({}, { totalVnd: 0, weightKg: 1.4 });
+    const agg = aggregateBilledLines([cuoc, duty, kien1, kien2]);
+    expect(agg.weightKg).toBe(3.1);          // max, KHÔNG phải 1,7+1,4+3,1+3,1 = 9,3
+    expect(agg.totalVnd).toBe(2_483_076);    // cước + duty; hai dòng kiện cộng 0
+    expect(agg.shipDate).toBe('2026-07-31');
+  });
+
   it('1 dòng duy nhất → giữ nguyên', () => {
     const one = mk({ base: 100, discount: -20 }, { totalVnd: 80, billNumber: 'B1', weightKg: 1 });
     expect(aggregateBilledLines([one])).toEqual(one);
