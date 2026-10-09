@@ -15,6 +15,7 @@ import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { db, schema } from '@/db/client';
 import { listShipHoDonRecords } from '@/features/lark/client';
 import { docDongLark, ghepBrand, duDeTao, type DongLarkDon } from './lark-don';
+import { countryNameToIso } from '@/features/shipments/country-name-to-iso';
 
 export interface KetQuaSyncLark {
   doc: number;
@@ -25,6 +26,16 @@ export interface KetQuaSyncLark {
   lyDoBoQua: Record<string, number>;
   /** Vài ví dụ đổi ngày để đối chiếu bằng mắt. */
   viDu: string[];
+  /**
+   * Dòng có ô Quốc gia KHÔNG đọc được ra mã ISO-2 — giữ nguyên chữ gốc, nhưng phải hiện ra.
+   *
+   * Vì sao (09/10/2026): đơn `26-INSLG-SV-0123` mang `country = "United Arab Aramex"` — ai đó
+   * gõ tên HÃNG vào ô quốc gia. Engine đòi ISO-2 nên mọi lượt re-quote trả `bad_input`, đơn
+   * không có giá cước, và bảng kê loại nó ra. Kết quả: kiện đã gửi, đã thu 199.581đ thuế của
+   * brand, mà **chưa bao giờ tính cước** — ước 1.455.976đ. Lỗi nằm im từ 11/09 tới 09/10 vì
+   * không chỗ nào kêu lên.
+   */
+  nuocKhongDocDuoc: { code: string; nuoc: string }[];
   dryRun: boolean;
 }
 
@@ -67,7 +78,10 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
     if (o.larkRecordId) theoRecord.set(o.larkRecordId, o);
   }
 
-  const kq: KetQuaSyncLark = { doc: dong.length, suaNgayGui: 0, taoMoi: 0, boQua: 0, lyDoBoQua: {}, viDu: [], dryRun };
+  const kq: KetQuaSyncLark = {
+    doc: dong.length, suaNgayGui: 0, taoMoi: 0, boQua: 0, lyDoBoQua: {}, viDu: [],
+    nuocKhongDocDuoc: [], dryRun,
+  };
   const boQua = (ly: string) => { kq.boQua += 1; kq.lyDoBoQua[ly] = (kq.lyDoBoQua[ly] ?? 0) + 1; };
 
   for (const d of dong) {
@@ -101,6 +115,12 @@ export async function syncLarkDonShipHo(opts: TuyChonSyncLark = {}): Promise<Ket
     if (thieu) { boQua(thieu); continue; }
     kq.taoMoi += 1;
     if (kq.viDu.length < 10) kq.viDu.push(`TẠO ${d.maLark} · ${slug} · ${d.nuoc} · ${d.canKg}kg · gửi ${d.ngayGui}`);
+    /* Ô Quốc gia trên Lark là chữ tự do. `countryNameToIso` đọc được mã ISO-2 sẵn, tên tiếng
+     * Anh, và chuỗi lặp do công thức nối — KHÔNG đoán mò, nên chuỗi lạ trả null. Giữ nguyên chữ
+     * gốc (cột NOT NULL, và xoá dữ liệu người gõ là tệ hơn), nhưng ghi lại để có người sửa. */
+    if (countryNameToIso(d.nuoc) == null) {
+      kq.nuocKhongDocDuoc.push({ code: d.maLark ?? d.recordId, nuoc: d.nuoc ?? '' });
+    }
     if (!dryRun) await taoDon(d, slug!);
   }
   return kq;
@@ -138,7 +158,10 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     recipientName: d.nguoiNhan,
     recipientPhone: d.dienThoai,
     recipientEmail: d.email,
-    country: d.nuoc!,
+    /* Chuẩn hoá về ISO-2 khi đọc được; không đọc được thì giữ nguyên chữ gốc và lượt đồng bộ
+     * đã ghi lại ở `nuocKhongDocDuoc`. Engine cước đòi ISO-2, nên ghi thẳng chữ tự do vào đây
+     * là đơn vĩnh viễn không có giá — xem `26-INSLG-SV-0123`. */
+    country: countryNameToIso(d.nuoc) ?? d.nuoc!,
     city: d.thanhPho,
     postcode: d.maBuuChinh,
     address1: d.diaChi,
@@ -183,7 +206,7 @@ async function taoDon(d: DongLarkDon, brandSlug: string): Promise<void> {
     payloadOrderReceived({
       partnerBrandSlug: brandSlug, brandReference: d.brandReference,
       recipientName: d.nguoiNhan, recipientPhone: d.dienThoai,
-      country: d.nuoc!, city: d.thanhPho, postcode: d.maBuuChinh,
+      country: countryNameToIso(d.nuoc) ?? d.nuoc!, city: d.thanhPho, postcode: d.maBuuChinh,
       address1: d.diaChi, houseNumber: d.soNha, weightKg: d.canKg,
     }),
   );
