@@ -62,3 +62,31 @@ export function nhanQuaMonLark(store: string | null | undefined): boolean {
   const s = store?.trim();
   return !!s && STORE_MON_LARK.includes(s);
 }
+
+/**
+ * THUẦN: store nào có đồ khách trả về THỰC SỰ vào kho WH (CEO/Bảo 09/10/2026).
+ *
+ * KHÔNG dùng chung `STORE_NHAN_HANG`: hai câu hỏi khác nhau. `STORE_NHAN_HANG` trả lời "hàng
+ * brand gửi tới có được nhận không"; danh sách này trả lời "hàng khách trả về có đi vào kho WH
+ * không". Một store có thể đúng ở vế đầu mà sai ở vế sau.
+ *
+ * Bằng chứng cho từng store:
+ *  - `meanblvd` — CÓ. Luồng chính: 637 dòng `Tồn kho (Return)` trên bảng vận hành gần như toàn
+ *    bộ mang mã `#MBLVD`, và 24/25 dòng đang ở cửa nhận là của store này.
+ *  - `tinhatelier` — KHÔNG, dù nó NẰM TRONG `STORE_NHAN_HANG`. Bảo 09/10/2026: *"Hàng của Tinh
+ *    về không nhập vào kho của WH. Nhận và auto gửi về GA"*. Bày đồ return của Tinh ở ô tìm là
+ *    mời kho nhận thứ họ sẽ không bao giờ thấy.
+ *  - `happy-clothing-global` — KHÔNG. Store này CỐ Ý nằm ngoài `STORE_NHAN_HANG` (CEO
+ *    29/09/2026); mời nhận đồ return của nó là tự mâu thuẫn với chính quyết định đó.
+ *  - `mirermirer-official` — chưa có bằng chứng nào về đường đồ return, nên chưa mở.
+ *
+ * Danh sách CHO PHÉP, cùng lý lẽ `STORE_NHAN_HANG`: store mới thì KHÔNG tìm thấy hàng và kho
+ * báo ngay, thay vì tự lọt vào rồi không ai hay.
+ */
+export const STORE_RETURN_VE_KHO: readonly string[] = ['meanblvd.myshopify.com'];
+
+/** Đồ return của store này có vào kho WH không. Domain lạ → KHÔNG, không đoán. */
+export function returnVeKhoDuoc(shopDomain: string | null | undefined): boolean {
+  const d = shopDomain?.trim().toLowerCase();
+  return !!d && STORE_RETURN_VE_KHO.includes(d);
+}

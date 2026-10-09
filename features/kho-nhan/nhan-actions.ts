@@ -1,7 +1,7 @@
 'use server';
 
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { nhanHangDuoc, nhanQuaMonLark } from './pham-vi';
+import { nhanHangDuoc, nhanQuaMonLark, returnVeKhoDuoc } from './pham-vi';
 import { revalidatePath } from 'next/cache';
 import { goKhoiLark } from './day-wh-lark';
 import { db, schema } from '@/db/client';
@@ -275,10 +275,20 @@ export async function ghiNhanChiecReturn(
       .from(schema.goodsReceiptItems)
       .where(eq(schema.goodsReceiptItems.returnRecordId, recordId));
 
+    /* Store của đơn gốc — tra ở ĐÂY chứ không tin kết quả tìm: ô tìm có thể mở từ mười phút
+     * trước. Xem `STORE_RETURN_VE_KHO` vì sao danh sách này khác `STORE_NHAN_HANG`. */
+    const [st] = await db.execute<{ shop_domain: string | null }>(sql`
+      SELECT st.shop_domain FROM shopify_orders so
+        JOIN stores st ON st.id = so.store_id
+       WHERE regexp_replace(btrim(so.shopify_order_number), '^#', '')
+           = regexp_replace(btrim(coalesce(${dong.orderNumber}, '')), '^#', '')
+       LIMIT 1`).then((r) => r.rows);
+
     const duoc = returnConNhanDuoc({
       recordId: dong.recordId, orderNumber: dong.orderNumber, sku: dong.sku,
       soLuong: dong.soLuong, whTiepNhanQc: dong.whTiepNhanQc, logStatus: dong.logStatus,
-    }, dem?.n ?? 0);
+      shopDomain: st?.shop_domain ?? null,
+    }, dem?.n ?? 0, returnVeKhoDuoc(st?.shop_domain ?? null));
     if (!duoc.ok) return { ok: false, loi: `Không nhận được: ${duoc.lyDo}.` };
 
     const kho = await khoCuaNguoiDung(actor);

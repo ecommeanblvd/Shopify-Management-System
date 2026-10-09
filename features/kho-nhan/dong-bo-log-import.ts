@@ -17,6 +17,7 @@ import { docChuO, docSoO } from '@/features/lark/doc-o';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 /* Luật cửa vào khai MỘT chỗ ở `return-con-nhan.ts`; ở đây gọi lại nó để đếm, không chép điều kiện. */
 import { returnConNhanDuoc, TRANG_THAI_CHO_NHAN } from './return-con-nhan';
+import { returnVeKhoDuoc } from './pham-vi';
 
 /**
  * THUẦN: một record Lark → một dòng bản sao.
@@ -77,10 +78,25 @@ export async function dongBoLogImport(): Promise<{
    *
    * `daNhanSms = 0` nên đây là GIỚI HẠN TRÊN: chưa trừ số chiếc SMS đã nhận cho từng dòng. Bộ
    * đếm này để chẩn đoán, không phải để đối soát; muốn số chính xác thì đọc ô tìm. */
-  const choNhan = dong.filter((d) => returnConNhanDuoc({
-    recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
-    whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus,
-  }, 0).ok).length;
+  /* Store của từng đơn — MỘT lượt truy vấn cho cả bảng, rồi dựng map. Hỏi từng dòng là 667
+   * lượt đi CSDL cho một con số chẩn đoán. Dùng ĐÚNG phép tra của ô tìm (join `shopify_orders`),
+   * không đoán theo tiền tố mã, để bộ đếm không nói khác màn hình. */
+  const storeTheoDon = new Map<string, string>();
+  for (const r of (await db.execute<{ ma: string; shop_domain: string }>(sql`
+    SELECT regexp_replace(btrim(so.shopify_order_number), '^#', '') AS ma, st.shop_domain
+      FROM shopify_orders so JOIN stores st ON st.id = so.store_id`)).rows) {
+    storeTheoDon.set(r.ma, r.shop_domain);
+  }
+  const storeCua = (don: string | null) =>
+    storeTheoDon.get((don ?? '').trim().replace(/^#/, '')) ?? null;
+
+  const choNhan = dong.filter((d) => {
+    const store = storeCua(d.orderNumber);
+    return returnConNhanDuoc({
+      recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
+      whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus, shopDomain: store,
+    }, 0, returnVeKhoDuoc(store)).ok;
+  }).length;
 
   /* Dòng ĐÚNG CỬA mà THIẾU KHOÁ — phải đếm riêng, không gộp vào "không nhận được".
    *

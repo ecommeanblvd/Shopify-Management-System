@@ -48,6 +48,8 @@ export const TRANG_THAI_CHO_NHAN: ReadonlySet<string> = new Set([
 
 export interface DongReturn {
   recordId: string;
+  /** Store suy từ `shopify_orders` theo mã đơn — tra được 461/461 dòng (đo 09/10/2026). */
+  shopDomain: string | null;
   orderNumber: string | null;
   sku: string | null;
   soLuong: number;
@@ -63,8 +65,14 @@ export interface DongReturn {
  * @param daNhanSms số chiếc SMS đã nhận gắn vào đúng `record_id` này.
  */
 export function returnConNhanDuoc(
-  d: DongReturn, daNhanSms: number,
+  d: DongReturn, daNhanSms: number, duocPhepStore: boolean,
 ): { ok: true; con: number } | { ok: false; lyDo: string } {
+  /* Store trước mọi thứ khác: đồ return của store không đi vào kho WH thì mọi điều kiện còn lại
+   * đều vô nghĩa. Bảo 09/10/2026 về Tinh: "về không nhập vào kho của WH, nhận và auto gửi về
+   * GA" — bày ra ô tìm là mời kho nhận thứ họ sẽ không bao giờ thấy. Xem `STORE_RETURN_VE_KHO`. */
+  if (!duocPhepStore) {
+    return { ok: false, lyDo: `đồ return của store này không vào kho WH (${d.shopDomain ?? 'không tra được store'})` };
+  }
   if (!d.orderNumber) return { ok: false, lyDo: 'dòng return thiếu mã đơn' };
   if (!d.sku || d.sku.trim() === '') return { ok: false, lyDo: 'dòng return thiếu SKU' };
   /* Đội kho đã có dòng WH khớp rồi. Nhận thêm là hai dòng cho một món trả về, mà bốn cột lookup

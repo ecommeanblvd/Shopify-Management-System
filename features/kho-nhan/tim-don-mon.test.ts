@@ -74,3 +74,16 @@ describe('tim-don: nguồn đồ khách trả về', () => {
     expect(thanTimMonReturn(NGUON)).not.toMatch(/returnStatus/);
   });
 });
+
+describe('tim-don: phạm vi store của đồ return', () => {
+  /* Nguồn đồ return ban đầu KHÔNG có phạm vi brand nào, nên nó mời kho nhận `#HC1317` trong khi
+     `happy-clothing-global` cố ý nằm ngoài `STORE_NHAN_HANG` từ 29/09. Store phải suy từ
+     `shopify_orders` — CHÍNH XÁC (461/461 dòng tra được), không đoán theo tiền tố mã đơn. */
+  it('tra store từ shopify_orders và lọc qua returnVeKhoDuoc', () => {
+    const than = thanTimMonReturn(NGUON);
+    expect(than).toMatch(/shopify_orders so/);
+    expect(than).toMatch(/returnVeKhoDuoc\(d\.shopDomain\)/);
+    // Không viết cứng tên store vào câu truy vấn — phạm vi khai một chỗ ở `pham-vi.ts`.
+    expect(than).not.toMatch(/meanblvd|tinhatelier|happy-clothing/);
+  });
+});

@@ -1,7 +1,7 @@
 'use server';
 
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import { STORE_NHAN_HANG, STORE_MON_LARK, nhanQuaMonLark } from './pham-vi';
+import { STORE_NHAN_HANG, STORE_MON_LARK, nhanQuaMonLark, returnVeKhoDuoc } from './pham-vi';
 import { monConNhanDuoc } from './mon-lark-con-nhan';
 import { returnConNhanDuoc, TRANG_THAI_CHO_NHAN } from './return-con-nhan';
 import { db, schema } from '@/db/client';
@@ -304,6 +304,14 @@ async function timMonReturn(q: string, gioiHan: number): Promise<KetQuaTim[]> {
     daNhan: sql<number>`(SELECT count(*)::int FROM goods_receipt_items gi
       WHERE gi.return_record_id = ${schema.larkLogImport.recordId}
         AND gi.${KHONG_TINH_FAIL})`,
+    /* Store suy từ `shopify_orders` theo mã đơn — CHÍNH XÁC, không đoán theo tiền tố mã. Đo
+     * 09/10/2026: 461/461 dòng có mã đơn đều tra ra store. Đồ return của store không đi vào kho
+     * WH thì không được bày ở ô tìm — xem `STORE_RETURN_VE_KHO`. */
+    shopDomain: sql<string | null>`(SELECT st.shop_domain FROM shopify_orders so
+      JOIN stores st ON st.id = so.store_id
+      WHERE regexp_replace(btrim(so.shopify_order_number), '^#', '')
+          = regexp_replace(btrim(coalesce(${schema.larkLogImport.orderNumber}, '')), '^#', '')
+      LIMIT 1)`,
     ten: sql<string | null>`(SELECT l.product_title FROM shopify_order_lines l
       JOIN shopify_orders o ON o.id = l.order_id
       WHERE regexp_replace(o.shopify_order_number, '^#', '')
@@ -328,8 +336,8 @@ async function timMonReturn(q: string, gioiHan: number): Promise<KetQuaTim[]> {
   for (const d of dong) {
     const duoc = returnConNhanDuoc(
       { recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
-        whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus },
-      d.daNhan,
+        whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus, shopDomain: d.shopDomain },
+      d.daNhan, returnVeKhoDuoc(d.shopDomain),
     );
     if (!duoc.ok) continue;
     ra.push({
