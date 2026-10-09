@@ -76,3 +76,16 @@ describe('dongBoLogImport — bộ đếm choNhan', () => {
     expect(src).not.toMatch(/'Warehouse Received'|'Return-Processing'|'Pakago Received'/);
   });
 });
+
+/* Dòng ĐÚNG CỬA mà thiếu khoá phải đếm RIÊNG, không gộp vào "không nhận được" — nếu không thì
+   nó biến mất lặng lẽ. Đo 09/10/2026 con số này là 0; nó khác 0 mới là lúc cần dựng đường cứu
+   từ cột `(From CX File)`. */
+describe('dongBoLogImport — đếm riêng dòng ở cửa mà thiếu khoá', () => {
+  it('có đếm `thieuKhoa`, dùng chính danh sách trạng thái của luật', async () => {
+    const src = await readFile(new URL('./dong-bo-log-import.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/thieuKhoa/);
+    expect(src).toMatch(/TRANG_THAI_CHO_NHAN\.has/);
+    // Không chép tên trạng thái ra đây — hai bản của một luật.
+    expect(src).not.toMatch(/'Return-Processing'|'Pakago Received'|'Warehouse Received'/);
+  });
+});

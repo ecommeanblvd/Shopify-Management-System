@@ -16,7 +16,7 @@ import { listLogImportRecords, type LarkRecord } from '@/features/lark/client';
 import { docChuO, docSoO } from '@/features/lark/doc-o';
 import { boDauTiengViet } from '@/features/kol/bo-dau';
 /* Luật cửa vào khai MỘT chỗ ở `return-con-nhan.ts`; ở đây gọi lại nó để đếm, không chép điều kiện. */
-import { returnConNhanDuoc } from './return-con-nhan';
+import { returnConNhanDuoc, TRANG_THAI_CHO_NHAN } from './return-con-nhan';
 
 /**
  * THUẦN: một record Lark → một dòng bản sao.
@@ -46,7 +46,9 @@ export function dungDongLogImport(r: LarkRecord) {
   };
 }
 
-export async function dongBoLogImport(): Promise<{ doc: number; ghi: number; choNhan: number }> {
+export async function dongBoLogImport(): Promise<{
+  doc: number; ghi: number; choNhan: number; thieuKhoa: number;
+}> {
   const ds = await listLogImportRecords();
   const dong = ds.map(dungDongLogImport);
   let ghi = 0;
@@ -79,5 +81,22 @@ export async function dongBoLogImport(): Promise<{ doc: number; ghi: number; cho
     recordId: d.recordId, orderNumber: d.orderNumber, sku: d.sku, soLuong: d.soLuong,
     whTiepNhanQc: d.whTiepNhanQc, logStatus: d.logStatus,
   }, 0).ok).length;
-  return { doc: ds.length, ghi, choNhan };
+
+  /* Dòng ĐÚNG CỬA mà THIẾU KHOÁ — phải đếm riêng, không gộp vào "không nhận được".
+   *
+   * Bảng Lark có BA cặp cột mã đơn/SKU: cột lookup (bản sao này đọc), cột `(tay)`, và cột
+   * `(From CX File)`. Lookup rỗng khi dòng không có liên kết đơn. Đo 09/10/2026: 206/667 dòng
+   * rỗng cả hai cột lookup, trong đó 114 dòng CÓ dữ liệu ở cột `(From CX File)` — nhưng **0
+   * dòng nào trong số đó nằm trong cửa nhận** (103 dòng trống trạng thái, 11 dòng đã
+   * `Warehouse Received`). Nên KHÔNG dựng đường cứu từ cột đó: nó không thêm được món nào cho
+   * kho, mà dòng không có liên kết thì cột lookup `WH - Tiếp nhận & QC` VĨNH VIỄN rỗng — đội
+   * kho nhập tay một dòng WH là SMS không biết, rồi mời kho nhận lần hai.
+   *
+   * Nhưng con số này phải HIỆN RA: nếu nó khác 0 thì có dòng đang ở cửa mà biến mất lặng lẽ,
+   * và lúc đó mới đáng dựng đường cứu. Im lặng thì không ai biết mà xét lại. */
+  const thieuKhoa = dong.filter((d) =>
+    d.whTiepNhanQc == null && d.logStatus != null && TRANG_THAI_CHO_NHAN.has(d.logStatus)
+    && (d.orderNumber == null || d.sku == null)).length;
+
+  return { doc: ds.length, ghi, choNhan, thieuKhoa };
 }
