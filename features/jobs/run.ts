@@ -56,7 +56,9 @@ export async function chayMotJob(
     const summary = await Promise.race([fn(), hetHan(han, jobKey)]);
     const loi = kiemTra?.(summary) ?? null;
     await ketThucJob(id, { ok: loi == null, summary, batDau, error: loi ?? undefined });
-    process.stdout.write(`  ${loi == null ? '✓' : '✗'} ${jobKey} (${Date.now() - batDau}ms) ${summary ? JSON.stringify(summary).slice(0, 160) : ''}${loi ? ` — ${loi}` : ''}\n`);
+    /* In kèm bộ nhớ đang dùng: nếu tiến trình chết vì hết bộ nhớ thì dòng cuối cùng trước lúc
+     * chết sẽ cho thấy con số leo thang — thứ duy nhất đọc được khi không có tín hiệu nào. */
+    process.stdout.write(`  ${loi == null ? '✓' : '✗'} ${jobKey} (${Date.now() - batDau}ms, rss ${Math.round(process.memoryUsage().rss / 1048576)}MB) ${summary ? JSON.stringify(summary).slice(0, 160) : ''}${loi ? ` — ${loi}` : ''}\n`);
     return loi == null;
   } catch (err) {
     const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
@@ -72,6 +74,45 @@ export async function chayMotJob(
  * và câu lý do đó PHẢI gọi tên thứ hỏng (hãng nào, đơn nào) — exit code trần
  * chỉ nói "có lỗi" chứ không nói lỗi ở đâu, nên không ai biết mà sửa.
  */
+/**
+ * THUẦN: câu ghi vào nhật ký khi tiến trình bị dừng từ ngoài.
+ *
+ * Tách ra để test được, và để câu chữ nói đúng điều suy ra được: nhận tín hiệu nghĩa là có
+ * người/nền tảng CHỦ ĐỘNG dừng, khác hẳn với bị giết thẳng tay.
+ */
+export function moTaTinHieu(sig: string): string {
+  return `bị dừng từ ngoài: nhận ${sig}. Tiến trình KHÔNG tự chết — nền tảng chủ động dừng nó `
+    + '(hết hạn chạy, deploy, hoặc lịch chồng lượt).';
+}
+
+/**
+ * Ghi nhận tiến trình bị dừng từ ngoài, rồi thoát.
+ *
+ * Vì sao cần (09/10/2026): đo 14 ngày thấy `sync-lark` kẹt `running` 15/337 lượt và
+ * `sync-orders` 6/323 — tiến trình chết mà không nhánh `try`/`catch` nào chạy, nên nhật ký
+ * đứng im ở "đang chạy" vĩnh viễn và không ai biết vì sao. Mọi lượt chết đều TRONG 4,5 PHÚT
+ * đầu (sớm nhất 1 giây), tức KHÔNG phải chạm hạn 15 hay 90 phút.
+ *
+ * Còn đúng hai khả năng, và việc bắt tín hiệu phân biệt được chúng:
+ *  - nền tảng chủ động dừng → gửi `SIGTERM`/`SIGINT`, hàm này ghi lại được;
+ *  - hết bộ nhớ → `SIGKILL`, KHÔNG bắt được — nên **không thấy dòng nào** chính là bằng chứng
+ *    nghiêng về hướng đó.
+ *
+ * Ghi xong thoát ngay bằng mã 143 (quy ước 128+SIGTERM) để không kéo dài lượt dừng.
+ */
+function batTinHieuDung(id: string | null, jobKey: string, batDau: number): void {
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(sig, () => {
+      void (async () => {
+        const mo = moTaTinHieu(sig);
+        process.stderr.write(`${jobKey}: ${mo}\n`);
+        await ketThucJob(id, { ok: false, error: mo, batDau });
+        process.exit(143);
+      })();
+    });
+  }
+}
+
 export function chayCron(
   jobKey: string,
   fn: () => Promise<unknown>,
@@ -80,6 +121,7 @@ export function chayCron(
   const batDau = Date.now();
   void (async () => {
     const id = await batDauJob(jobKey);
+    batTinHieuDung(id, jobKey, batDau);
     try {
       const summary = await fn();
       // Script tự đặt process.exitCode khi có lỗi CỤC BỘ (vài đơn hỏng nhưng
