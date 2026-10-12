@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseUpsInvoiceXml, thungChoKhoanUps, laHoaDonUpsXml } from './ups-invoice-xml';
+import { parseUpsInvoiceXml, thungChoKhoanUps, laHoaDonUpsXml, dongVatUpsDangNghi, gocChiuVatUps, VAT_UPS } from './ups-invoice-xml';
+import type { FboBilledRow } from '@/features/shipments/fedex-fbo-parse';
 
 /**
  * Trích từ hoá đơn UPS THẬT 100000813108 (06/10/2026): giữ nguyên mọi con SỐ, đổi tên và
@@ -217,5 +218,46 @@ describe('parseUpsInvoiceXml — ghép vào cột', () => {
       'internationalProcessing', 'vat', 'other'] as const;
     const sumCot = p.rows.reduce((s, r) => s + cot.reduce((a, k) => a + r[k], 0), 0);
     expect(sumCot).toBe(p.rows.reduce((s, r) => s + r.total, 0));
+  });
+});
+
+const dong = (o: Partial<FboBilledRow>): FboBilledRow => ({
+  awb: '1Z0000000000000000', orderRef: null, invoiceNumber: null, invoiceDate: null, dueDate: null,
+  shipDate: null, service: null, recipientCountry: null, recipientStreet1: null, recipientStreet2: null,
+  recipientCity: null, recipientState: null, recipientPostcode: null, weightKg: null,
+  podAt: null, podName: null,
+  base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0, residential: 0,
+  addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, additionalHandling: 0, other: 0,
+  internationalProcessing: 0, total: 0, ...o,
+});
+
+describe('gocChiuVatUps', () => {
+  it('cộng khoản dịch vụ, TRỪ chính VAT và TRỪ thuế nhập khẩu', () => {
+    const r = dong({ base: 1000, discount: -200, fuel: 100, importHandling: 50, vat: 76, duty: 9999 });
+    expect(gocChiuVatUps(r)).toBe(950);
+  });
+});
+
+describe('dongVatUpsDangNghi', () => {
+  /* Dòng thật của tờ 100000813108: 37/37 dòng có %VAT trong 7,97–8,00%. */
+  it('dòng VAT 8% bình thường thì KHÔNG báo', () => {
+    const goc = 1_883_984;
+    expect(dongVatUpsDangNghi([dong({ base: goc, vat: Math.round(goc * VAT_UPS) })])).toEqual([]);
+  });
+  it('làm tròn 7,97% vẫn trong ngưỡng', () => {
+    expect(dongVatUpsDangNghi([dong({ base: 1_000_000, vat: 79_700 })])).toEqual([]);
+  });
+  /* Hình của tờ Duty & Tax: một khoản thuế đứng một mình, không có cước nào. */
+  it('có VAT mà không có khoản dịch vụ nào → báo, tyLe null', () => {
+    const r = dongVatUpsDangNghi([dong({ awb: '1ZDUTY', vat: 825_839 })]);
+    expect(r).toEqual([{ awb: '1ZDUTY', vat: 825_839, gocChiuVat: 0, tyLe: null }]);
+  });
+  it('thuế nhập khẩu cộng lẫn vào ô VAT của dòng có cước → báo', () => {
+    const r = dongVatUpsDangNghi([dong({ awb: '1ZLAN', base: 1_000_000, vat: 80_000 + 500_000 })]);
+    expect(r).toHaveLength(1);
+    expect(r[0].awb).toBe('1ZLAN');
+  });
+  it('dòng không có VAT thì bỏ qua, không chia cho 0', () => {
+    expect(dongVatUpsDangNghi([dong({ base: 1000 }), dong({ duty: 500 })])).toEqual([]);
   });
 });

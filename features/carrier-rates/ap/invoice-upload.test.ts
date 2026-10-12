@@ -195,3 +195,21 @@ describe('nhacFileDungBill — tải PDF trước thì nhắc đúng file dựng
     expect(nhacFileDungBill(null)).not.toMatch(/CSV|XLSX|XML/);
   });
 });
+
+describe('canhBaoUps: khoản xếp vào VAT mà không phải VAT', () => {
+  it('nêu rõ là nghi THUẾ NHẬP KHẨU khi dòng không có gì chịu thuế', () => {
+    const w = canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: [],
+      vatLa: [{ awb: '1ZDUTY', vat: 825_839, gocChiuVat: 0, tyLe: null }] });
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('1ZDUTY');
+    expect(w[0]).toContain('THUẾ NHẬP KHẨU');
+  });
+  it('nêu %VAT thật khi lệch ngưỡng', () => {
+    const w = canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: [],
+      vatLa: [{ awb: '1ZLAN', vat: 580_000, gocChiuVat: 1_000_000, tyLe: 0.58 }] });
+    expect(w[0]).toContain('58.00%');
+  });
+  it('không truyền vatLa thì không đổi hành vi cũ', () => {
+    expect(canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: [] })).toEqual([]);
+  });
+});

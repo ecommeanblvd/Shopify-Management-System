@@ -135,6 +135,64 @@ export interface UpsHoaDon {
   maLa: string[];
   /** Số dòng `ChargeInformation` đã đọc (gồm cả dòng INF bị bỏ) — để đối chiếu với file. */
   soKhoan: number;
+  /** Dòng có khoản `vat` KHÔNG phải VAT Việt Nam — xem `dongVatUpsDangNghi`. Không rỗng thì
+   *  CHẶN nhập, vì xếp thuế nhập khẩu thành VAT làm sai cả giá vốn lẫn giá thu brand. */
+  vatLa: DongVatLa[];
+}
+
+/**
+ * %VAT Việt Nam trên hoá đơn UPS. Đo 37/37 dòng tờ `100000813108`: 7,97%–8,00%.
+ * Ngưỡng 0,5 điểm % đủ chỗ cho làm tròn từng dòng (chênh cấp hoá đơn đã có `taxVariance`).
+ */
+export const VAT_UPS = 0.08;
+export const NGUONG_VAT_UPS = 0.005;
+
+export interface DongVatLa {
+  awb: string;
+  vat: number;
+  /** Tổng các khoản DỊCH VỤ chịu VAT của dòng (không gồm chính VAT và không gồm thuế NK). */
+  gocChiuVat: number;
+  /** vat ÷ gocChiuVat. `null` khi gốc = 0 — tức có VAT mà không có gì để tính thuế lên. */
+  tyLe: number | null;
+}
+
+/** Gốc chịu VAT của một dòng: mọi khoản dịch vụ, trừ chính VAT và trừ thuế nhập khẩu
+ *  (thuế là khoản thu hộ, UPS không tính VAT lên nó). */
+export function gocChiuVatUps(r: FboBilledRow): number {
+  return r.base + r.discount + r.fuel + r.remote + r.demand + r.signature + r.residential
+    + r.addressCorrection + r.additionalHandling + r.importHandling + r.internationalProcessing
+    + r.other;
+}
+
+/**
+ * THUẦN: các dòng mà khoản xếp vào `vat` KHÔNG phải VAT Việt Nam.
+ *
+ * Vì sao cần: `thungChoKhoanUps` xếp mọi khoản `lop = 'TAX'` vào `vat`, và bảng mã UPS
+ * (`ACC_THEO_MA`) KHÔNG có mã nào vào nhóm `duty`. UPS cho ghi thuế nhập khẩu về tài khoản
+ * người gửi (vì vậy mới có phí `F/D`), nên tờ Duty & Tax của UPS sẽ về sau — và nếu thuế đó
+ * mang `lop = 'TAX'` thì nó bị ghi thành VAT. Hệ quả: thuế KHÔNG chảy vào `actual_duty_vnd`
+ * của đơn ship hộ (brand không bị thu hộ), lại bị cộng vào VAT của mình và còn nằm trong gốc
+ * tính VAT của giá thu. Sai cả hai đầu, và sai lặng lẽ.
+ *
+ * Hai dạng bắt được:
+ *   1. Có VAT mà gốc chịu VAT = 0 — một khoản thuế đứng một mình, đúng hình tờ Duty & Tax.
+ *   2. %VAT lệch ngoài ngưỡng — thuế NK bị cộng gộp vào ô VAT của dòng có cước.
+ */
+export function dongVatUpsDangNghi(
+  rows: FboBilledRow[],
+  opts: { tyLe?: number; nguong?: number } = {},
+): DongVatLa[] {
+  const tyLe = opts.tyLe ?? VAT_UPS;
+  const nguong = opts.nguong ?? NGUONG_VAT_UPS;
+  const out: DongVatLa[] = [];
+  for (const r of rows) {
+    if (r.vat <= 0) continue;
+    const goc = gocChiuVatUps(r);
+    if (goc <= 0) { out.push({ awb: r.awb, vat: r.vat, gocChiuVat: goc, tyLe: null }); continue; }
+    const t = r.vat / goc;
+    if (Math.abs(t - tyLe) > nguong) out.push({ awb: r.awb, vat: r.vat, gocChiuVat: goc, tyLe: t });
+  }
+  return out;
 }
 
 /** '20260903' → '2026-09-03'. Khác định dạng → null. */
@@ -292,5 +350,6 @@ export function parseUpsInvoiceXml(text: string): UpsHoaDon | null {
     rows,
     maLa: [...maLa],
     soKhoan,
+    vatLa: dongVatUpsDangNghi(rows),
   };
 }

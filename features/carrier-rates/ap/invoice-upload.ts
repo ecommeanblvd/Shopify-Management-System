@@ -240,7 +240,12 @@ async function nhapHoaDonVn(
  *    Σ dòng khác số hoá đơn và người đọc tưởng parser rơi mất tiền;
  *  - mã phí UPS chưa biết xếp cột nào — nằm im trong "chưa phân loại" thì không ai thấy.
  */
-export function canhBaoUps(p: { amount: number; taxVariance: number; rows: { total: number }[]; maLa: string[] }): string[] {
+export function canhBaoUps(p: {
+  amount: number; taxVariance: number; rows: { total: number }[]; maLa: string[];
+  /** Dòng có khoản `vat` không phải VAT Việt Nam (`dongVatUpsDangNghi`). Tuỳ chọn để chỗ gọi
+   *  cũ và test cũ không phải đổi. */
+  vatLa?: { awb: string; vat: number; gocChiuVat: number; tyLe: number | null }[];
+}): string[] {
   const w: string[] = [];
   const tongDong = p.rows.reduce((a, r) => a + r.total, 0);
   const lech = Math.round((p.amount - tongDong) * 100) / 100;
@@ -250,6 +255,11 @@ export function canhBaoUps(p: { amount: number; taxVariance: number; rows: { tot
       : `Σ dòng lệch số hoá đơn ${lech.toLocaleString('vi-VN')}đ (chênh thuế tờ này ghi ${p.taxVariance.toLocaleString('vi-VN')}đ) — kiểm lại trước khi lưu.`);
   }
   if (p.maLa.length) w.push(`Mã phí UPS chưa phân loại: ${p.maLa.join(', ')} — đang nằm ở cột "Khác".`);
+  for (const d of p.vatLa ?? []) {
+    w.push(d.tyLe === null
+      ? `${d.awb}: có ${d.vat.toLocaleString('vi-VN')}đ xếp vào VAT nhưng dòng KHÔNG có khoản dịch vụ nào chịu thuế — gần như chắc đây là THUẾ NHẬP KHẨU, không phải VAT.`
+      : `${d.awb}: khoản xếp vào VAT là ${(d.tyLe * 100).toFixed(2)}% gốc chịu thuế (${d.vat.toLocaleString('vi-VN')}đ trên ${d.gocChiuVat.toLocaleString('vi-VN')}đ), không phải 8% — nghi có thuế nhập khẩu cộng lẫn vào.`);
+  }
   return w;
 }
 
@@ -472,6 +482,15 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         const p = parseUpsInvoiceXml(td(f.bytes));
         if (!p || p.rows.length === 0) {
           out.push({ ...base, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(f.bytes)))}, không phải Billing Data XML của UPS` });
+          continue;
+        }
+        /* CHẶN khi có khoản xếp vào VAT mà không phải VAT: `thungChoKhoanUps` đưa mọi
+         * `lop='TAX'` vào `vat` và bảng mã UPS chưa có mã nào vào `duty`, nên tờ Duty & Tax
+         * của UPS sẽ bị ghi thành VAT — sai giá vốn, và brand không bị thu hộ thuế. Thà
+         * không nhập còn hơn nhập sai rồi không ai biết. */
+        if (p.vatLa.length > 0) {
+          out.push({ ...base, billNumber: p.billNumber, amount: p.amount || null,
+            message: ['CHƯA NHẬP — cần phân loại khoản thuế trước:', ...canhBaoUps(p)].join(' · ') });
           continue;
         }
         /* Dùng lại nguyên pipeline FBO — dòng bill cùng hình, và nhờ vậy UPS được luôn phần
