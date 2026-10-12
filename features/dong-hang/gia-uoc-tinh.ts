@@ -28,29 +28,43 @@ export interface GiaUocTinh {
 }
 
 /**
- * Engine (bảng giá nội bộ) luôn có ý kiến về MỌI khoản — không khớp dòng phụ phí
- * nào thì engine tự ra 0, không phải "không biết" — nên tuEngine không bao giờ
- * đẻ ra null, chỉ map thẳng.
+ * Engine (bảng giá nội bộ) → hình chung.
  *
- * Ký nhận lấy `addonReference` (addon when_billed của FedEx) — đây là giá THAM
- * CHIẾU, không phải `addons` (addon apply_mode='always', đã vào total): lấy nhầm
- * `addons` là lấy một khoản KHÁC đã cộng dồn trong `total`, sai hẳn ý nghĩa cột.
- * Phí xử lý hàng nhập ưu tiên `countryFixed`; `countryFixed` = 0 (không nước nào
- * áp dụng ở lô này) mới rơi về `countryFixedReference` — giá tham chiếu khi nước
- * đích không nằm trong phạm vi country_fixed hiện hành.
+ * ĐƠN VỊ TIỀN là cái bẫy chính ở đây. `QuoteBreakdown` nằm ở **cost currency của
+ * account** (quote.ts: *"in the carrier's cost currency"*), còn MỌI cột chi phí
+ * trên Lark là **VND**. `cost_currency` của Aramex HN là USD (đo thật), nên bản
+ * đầu ghi `base = 50` (USD) cạnh ô Tổng 1.877.160 (VND) — hai đơn vị trong một
+ * khối ô, không ai sửa lại được. Vì vậy mọi khoản phải đi qua `heSoVnd`, lấy
+ * đúng hệ số mà `vndCost` dùng (xem `heSoVnd` ở quote-order-carriers.ts — KHÔNG
+ * tự chế hệ số thứ hai). `heSoVnd == null` = không biết quy thế nào ⇒ trả `null`
+ * HẾT, kể cả `total`: thà không ghi gì còn hơn ghi một con số sai đơn vị.
+ *
+ * `signature` LUÔN `null` ở nguồn này. `QuoteBreakdown` chỉ có hai số gộp:
+ * `addons` (apply_mode='always', ĐÃ nằm trong total) và `addonReference` (tổng
+ * MỌI dòng addon_fixed when_billed chưa vào total) — không tách được riêng
+ * khoản ký nhận. Bản đầu lấy `addonReference` và với Aramex ra **552,5 USD**:
+ * pallet không xếp chồng 315 + quá cân 110 + ngoại cỡ 82,5 + DDP 30 + sai địa
+ * chỉ 15 — toàn phí THEO CA chưa ai thu, cộng lại gọi là "phí ký nhận". Chính
+ * `quote-order-carriers.ts:81-84` đã cảnh báo đúng bẫy này (bug 09/07). Không
+ * tách được khoản đúng thì trả "không biết", KHÔNG trả một con số gộp sai.
+ *
+ * `importHandling` chỉ lấy `countryFixed` (dòng đã vào total), KHÔNG rơi về
+ * `countryFixedReference` — cùng một lý do: reference là *giá tham chiếu chưa
+ * thu*, ghi nó vào ô chi phí là biến một khoản chưa phát sinh thành khoản đã có.
  */
-export function tuEngine(b: QuoteBreakdown, total: number): GiaUocTinh {
+export function tuEngine(b: QuoteBreakdown, totalVnd: number, heSoVnd: number | null): GiaUocTinh {
+  const vnd = (x: number): number | null => (heSoVnd == null ? null : x * heSoVnd);
   return {
     nguon: 'bang-gia',
-    base: b.base,
-    fuel: b.fuel,
-    remote: b.remote,
-    demand: b.demand,
-    signature: b.addonReference,
-    residential: b.residential,
-    importHandling: b.countryFixed !== 0 ? b.countryFixed : b.countryFixedReference,
-    vat: b.vat,
-    total,
+    base: vnd(b.base),
+    fuel: vnd(b.fuel),
+    remote: vnd(b.remote),
+    demand: vnd(b.demand),
+    signature: null,
+    residential: vnd(b.residential),
+    importHandling: vnd(b.countryFixed),
+    vat: vnd(b.vat),
+    total: heSoVnd == null ? null : totalVnd,
     maLa: [],
   };
 }
@@ -80,16 +94,21 @@ const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
 };
 
 /**
- * UPS Rating API không trả `base` trong danh sách khoản (nó nằm ở
- * `DongBaoGiaUps.base`, một field riêng không đi qua hàm này) và không trả VAT
- * thành khoản riêng (xem chú thích lib/ups/rate.ts: "Tiền trả về là CHƯA VAT") —
- * nên `base` và `vat` luôn là `null`, không phải suy từ khoan[].
+ * UPS Rating API không trả `base` trong DANH SÁCH khoản — nó nằm ở
+ * `DongBaoGiaUps.base`, một field riêng — nên `base` phải được caller truyền
+ * vào. Bản đầu không truyền và để `base: null`: ô "Mức giá cơ sở" của UPS không
+ * bao giờ được điền, mà gốc tính VAT cũng mất phần lớn nhất nên VAT suy ra nhỏ
+ * hơn thực tế nhiều lần (test cũ xanh vì nó tự truyền `base: 1000`).
+ *
+ * `vat` vẫn `null` ở đây: UPS không trả VAT thành khoản riêng (lib/ups/rate.ts:
+ * "Tiền trả về là CHƯA VAT") — caller cộng VAT theo %VAT CỦA TÀI KHOẢN, không
+ * phải một con số 8% cứng ở tệp này.
  *
  * Mã không nhận ra được gom vào `maLa` thay vì bỏ qua lặng lẽ — một khoản tiền
  * thật của UPS mà không ai biết nó rơi đâu là lỗi âm thầm, giống cách `maLa` ở
  * features/carrier-rates/ap/ups-invoice-xml.ts nêu mã lạ cho người nhập thấy.
  */
-export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number): GiaUocTinh {
+export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number | null): GiaUocTinh {
   const congDon: Partial<Record<NhomUps, number>> = {};
   const maLa: string[] = [];
   for (const k of khoan) {
@@ -99,7 +118,7 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number): GiaUocTinh {
   }
   return {
     nguon: 'ups-api',
-    base: null,
+    base,
     fuel: congDon.fuel ?? null,
     remote: congDon.remote ?? null,
     demand: congDon.demand ?? null,
@@ -117,11 +136,18 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number): GiaUocTinh {
  * trường sang hình chung, KHÔNG tính lại gì. Tính lại (vd suy base từ total trừ
  * phụ phí) là đẻ ra con số thứ hai cho cùng một kiện, trong khi `fedexImpliedBase`
  * đã tồn tại riêng cho mục đích đối soát — không nhân bản logic đó ở đây.
+ *
+ * `base` ĐỌC từ cột `fedex_rate_quotes.base_charge` (caller truyền vào — nó không
+ * nằm trong `FedexQuoteSnap`, kiểu dùng chung với đối soát). Bản đầu để `null`
+ * nên ô "Mức giá cơ sở" KHÔNG BAO GIỜ được điền cho FedEx — hãng chiếm 2.809/4.276
+ * kiện, tức nhân sự vẫn phải gõ tay đúng ô quan trọng nhất của hãng lớn nhất.
+ * Vẫn KHÔNG dùng `fedexImpliedBase` ở đây: đó là số SUY RA cho đối soát, lấy nó
+ * làm số ghi lên Lark là trộn hai định nghĩa "base" vào cùng một ô.
  */
-export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
+export function tuFedexQuote(q: FedexQuoteSnap, base: number | null): GiaUocTinh {
   return {
     nguon: 'fedex-api',
-    base: null,
+    base,
     fuel: q.fuel,
     remote: q.remote,
     demand: q.demand,
@@ -132,24 +158,4 @@ export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
     total: q.totalNetCharge,
     maLa: [],
   };
-}
-
-/** %VAT dùng khi nguồn không tự báo VAT — đo trên hoá đơn UPS (xem vatSuyRa). */
-export const VAT_PHAN_TRAM = 0.08;
-
-/**
- * VAT đã có thì giữ nguyên (ngay cả khi bằng 0 — hãng có tính, chỉ là bằng không).
- * Chưa có thì suy ra = VAT_PHAN_TRAM × tổng mọi khoản DỊCH VỤ đã biết (base, fuel,
- * remote, demand, signature, residential, importHandling) — GiaUocTinh không có
- * cột thuế nhập khẩu riêng để trừ ra, nên "mọi khoản dịch vụ" ở đây là toàn bộ các
- * khoản khác ngoài vat/total. Không có khoản nào biết → null, không ra 0 (0 sẽ bị
- * hiểu lầm là "VAT bằng không" ở bước ghi Lark).
- */
-export function vatSuyRa(g: GiaUocTinh): number | null {
-  if (g.vat !== null && g.vat !== undefined) return g.vat;
-  const khoanDichVu = [g.base, g.fuel, g.remote, g.demand, g.signature, g.residential, g.importHandling];
-  const daBiet = khoanDichVu.filter((v): v is number => v !== null && v !== undefined);
-  if (daBiet.length === 0) return null;
-  const goc = daBiet.reduce((a, b) => a + b, 0);
-  return Math.round(goc * VAT_PHAN_TRAM);
 }

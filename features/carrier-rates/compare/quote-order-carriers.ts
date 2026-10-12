@@ -6,7 +6,7 @@
  * So sánh theo `carrierCostDisplay` (cước gốc pre-markup, all-in fuel+VAT, ở
  * displayCurrency — tất cả account hiện để VND nên so trực tiếp được).
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quote, isApplicable, type QuoteBreakdown, type CarrierAccountSnapshot } from '../engine/quote';
 import { loadAccountSnapshot } from '../engine/load';
@@ -59,6 +59,9 @@ export interface CarrierQuoteRow {
   dichVu?: string;
   /** Câu cảnh báo khi phải rơi về bảng giá. Vắng = số đáng tin. */
   canhBaoGia?: string;
+  /** Hệ số quy một khoản của `breakdown` (cost currency) về VND — xem `heSoVnd`. `null` =
+   *  không biết quy thế nào. Chỉ có ở hàng quote được. */
+  heSoVnd?: number | null;
 }
 
 /** Cước VND của account: costCurrency=VND → carrierCost; else display=VND →
@@ -69,6 +72,24 @@ function toVnd(costCcy: string, dispCcy: string, cost: number, display: number):
   if (dispCcy === 'VND') return display;
   return display; // fallback best-effort
 }
+
+/**
+ * Hệ số nhân để quy MỘT khoản thành phần của `QuoteBreakdown` (đơn vị cost currency) về VND —
+ * ĐÚNG phép quy đổi mà `toVnd` dùng cho `vndCost`, để không có hệ số thứ hai trong repo.
+ *
+ * `null` = KHÔNG biết quy thế nào (account không có VND ở cả hai đầu, hoặc fx vô nghĩa). Chỗ
+ * ghi ra ngoài (Lark) phải coi đó là "không biết" và KHÔNG ghi gì: nhánh fallback của `toVnd`
+ * là best-effort cho bảng so cước xem bằng mắt, không đủ để ghi vào một ô tiền VND.
+ */
+export function heSoVnd(costCcy: string, dispCcy: string, fxCostPerDisplay: number): number | null {
+  if (costCcy === 'VND') return 1;
+  if (dispCcy === 'VND' && Number.isFinite(fxCostPerDisplay) && fxCostPerDisplay > 0) return 1 / fxCostPerDisplay;
+  return null;
+}
+
+/** Cộng VAT vào một con số CHƯA VAT. MỘT công thức duy nhất cho mọi chỗ cần nó (bảng so cước
+ *  lẫn giá ước tính ghi Lark) — hai nơi làm tròn khác nhau là hai con số cho cùng một kiện. */
+export const congVat = (tien: number, phanTram: number): number => Math.round(tien * (1 + phanTram / 100));
 
 export interface AccountSnap {
   carrierKey: string; carrierName: string; accountId: string; snap: CarrierAccountSnapshot;
@@ -103,7 +124,11 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
     };
     if (q.ok) {
       const vndCost = toVnd(e.snap.costCurrency, e.snap.displayCurrency, q.breakdown.carrierCost, q.breakdown.carrierCostDisplay);
-      return { ...common, ok: true, carrierCostDisplay: q.breakdown.carrierCostDisplay, vndCost, breakdown: q.breakdown, zone: q.zone, tierUpperKg: q.tier.upperKg, notes: q.notes };
+      return {
+        ...common, ok: true, carrierCostDisplay: q.breakdown.carrierCostDisplay, vndCost,
+        heSoVnd: heSoVnd(e.snap.costCurrency, e.snap.displayCurrency, e.snap.fxCostPerDisplay),
+        breakdown: q.breakdown, zone: q.zone, tierUpperKg: q.tier.upperKg, notes: q.notes,
+      };
     }
     return { ...common, ok: false, error: q.code };
   });
@@ -150,7 +175,7 @@ export function apDungGiaLive(
 }
 
 /** %VAT đang hiệu lực của account — cùng cách engine cộng (`vat_percent`, đúng cửa sổ ngày). */
-function phanTramVat(snap: CarrierAccountSnapshot, ngay: Date): number {
+export function phanTramVat(snap: CarrierAccountSnapshot, ngay: Date): number {
   return snap.surcharges
     .filter((x) => isApplicable(x, ngay) && x.kind === 'vat_percent')
     .reduce((a, x) => a + x.value, 0);
@@ -201,7 +226,7 @@ async function giaLiveUps(
       /* UPS trả tiền CHƯA VAT ở MỌI mức. Quy cả danh sách về CÙNG thước (đã VAT) trước khi
        * hiện: bản đầu in mức đã chọn kèm VAT nhưng các mức khác chưa VAT, nên ghi chú đọc ra
        * như thể mức rẻ hơn đã bị bỏ qua (AU: chọn 1.614.929 mà note ghi còn mức 1.560.870). */
-      const coVat = (x: number) => Math.round(x * (1 + vat / 100));
+      const coVat = (x: number) => congVat(x, vat);
       const vnd = coVat(re.tong);
       gia = {
         vndCost: vnd,
@@ -222,8 +247,16 @@ async function giaLiveUps(
   return gia;
 }
 
-/** Load mọi carrier account đang bật + snapshot rồi rank. */
-export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): Promise<CarrierQuoteRow[]> {
+/**
+ * Load snapshot của các carrier account đang BẬT. `chiHang` khác null thì chỉ load account của
+ * hãng đó — tách ra để người cần MỘT hãng không phải nạp snapshot của mọi hãng rồi vứt đi.
+ */
+async function napAccountSnapshots(
+  input: Pick<OrderCarrierQuoteInput, 'country' | 'postcode'>, chiHang: string | null,
+): Promise<AccountSnap[]> {
+  const dieuKien = chiHang == null
+    ? eq(schema.carrierAccounts.enabled, true)
+    : and(eq(schema.carrierAccounts.enabled, true), eq(schema.carriers.key, chiHang));
   const accounts = await db
     .select({
       id: schema.carrierAccounts.id, name: schema.carrierAccounts.name, carrierKey: schema.carriers.key,
@@ -231,7 +264,7 @@ export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): P
     })
     .from(schema.carrierAccounts)
     .leftJoin(schema.carriers, eq(schema.carriers.id, schema.carrierAccounts.carrierId))
-    .where(eq(schema.carrierAccounts.enabled, true));
+    .where(dieuKien);
 
   const entries: AccountSnap[] = [];
   for (const a of accounts) {
@@ -241,6 +274,42 @@ export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): P
     });
     if (snap) entries.push({ carrierKey: a.carrierKey ?? '?', carrierName: a.name, accountId: a.id, snap, suspendedAt: a.suspendedAt, suspendReason: a.suspendReason });
   }
+  return entries;
+}
+
+/**
+ * Báo giá BẢNG GIÁ cho ĐÚNG MỘT hãng. Trả hàng rẻ nhất của hãng đó, `null` khi hãng không có
+ * account bật / không báo giá được.
+ *
+ * Vì sao không dùng `quoteOrderAcrossCarriers` cho việc này: hàm đó LUÔN gọi báo giá SỐNG của
+ * UPS cho mọi account UPS đang bật rồi vứt kết quả đi nếu người gọi không cần UPS. Cron điền
+ * bù giá ước tính quét hàng loạt kiện Aramex/DHL ⇒ nhân đúng số lượt gọi UPS thừa đó lên theo
+ * từng kiện. Ở đây KHÔNG gọi API hãng nào: chỉ engine + bảng giá.
+ */
+export async function baoGiaBangGiaMotHang(
+  carrierKey: string, input: OrderCarrierQuoteInput,
+): Promise<CarrierQuoteRow | null> {
+  const entries = await napAccountSnapshots(input, carrierKey);
+  if (entries.length === 0) return null;
+  return rankCarrierQuotes(entries, input).find((r) => r.ok) ?? null;
+}
+
+/**
+ * %VAT đang hiệu lực của hãng `carrierKey` (account bật đầu tiên có snapshot). `null` = không
+ * tra được account nào — người gọi phải coi VAT là KHÔNG BIẾT, không được rơi về một con số
+ * cứng: 8% gõ cứng ở chỗ khác là nguồn sự thật thứ hai, lệch cấu hình account mà không ai thấy.
+ */
+export async function phanTramVatCuaHang(
+  carrierKey: string, ngay: Date, input: Pick<OrderCarrierQuoteInput, 'country' | 'postcode'>,
+): Promise<number | null> {
+  const entries = await napAccountSnapshots(input, carrierKey);
+  const e = entries[0];
+  return e ? phanTramVat(e.snap, ngay) : null;
+}
+
+/** Load mọi carrier account đang bật + snapshot rồi rank. */
+export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): Promise<CarrierQuoteRow[]> {
+  const entries = await napAccountSnapshots(input, null);
   const rows = rankCarrierQuotes(entries, input);
 
   /* Giá live cho UPS. Chạy sau khi xếp theo bảng giá rồi THAY SỐ và xếp lại — làm vậy để khi

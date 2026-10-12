@@ -121,7 +121,8 @@ describe('dungPatch — chi phí (chỉ điền ô trống)', () => {
   });
   it('total_amount = 0 hoặc không có charge → không ghi khoản nào', () => {
     const r = dungPatch(kien(), charge({ totalAmount: 0 }), {});
-    expect(Object.keys(r.patch).some((k) => Object.values(COT_CHI_PHI).includes(k))).toBe(false);
+    const tenCotChiPhi: readonly string[] = Object.values(COT_CHI_PHI);
+    expect(Object.keys(r.patch).some((k) => tenCotChiPhi.includes(k))).toBe(false);
     expect(dungPatch(kien(), null, {}).nhom.chiPhi).toBe(0);
   });
   it('sai lệch làm tròn ≤ 1đ coi như bằng', () => {

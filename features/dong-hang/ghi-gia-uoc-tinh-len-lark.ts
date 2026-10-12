@@ -88,10 +88,11 @@ export async function ghiGiaUocTinhLenLark(shipmentId: string): Promise<KetQuaGh
       };
     }
 
-    const patch = patchGiaUocTinh(gia, rec.fields, k.trackingNumber);
+    const { patch, canhBao } = patchGiaUocTinh(gia, rec.fields, k.trackingNumber);
     if (Object.keys(patch).length > 0) {
       await updateLogRecordFields(k.larkRecordId, patch);
     }
+    const loiNhan = canhBao.length > 0 ? canhBao.join(' · ') : undefined;
 
     /* Đóng dấu NGAY CẢ KHI patch rỗng (mọi ô đích đã có số từ trước): "đã xử lý
      * xong vòng này" khác với "có ghi gì mới" — thiếu dấu ở nhánh patch rỗng thì
@@ -103,11 +104,12 @@ export async function ghiGiaUocTinhLenLark(shipmentId: string): Promise<KetQuaGh
       // là THÀNH CÔNG, kèm cảnh báo phụ (I2).
       return {
         giaDaGhi: true,
-        canhBao: 'đã ghi giá lên Lark, nhưng đóng dấu thất bại — cron có thể gọi lại Lark thêm một lượt (vô hại: ô đích đã có số nên không ghi đè gì mới)',
+        canhBao: ['đã ghi giá lên Lark, nhưng đóng dấu thất bại — cron có thể gọi lại Lark thêm một lượt (vô hại: ô đích đã có số nên không ghi đè gì mới)', loiNhan]
+          .filter(Boolean).join(' · '),
       };
     }
 
-    return { giaDaGhi: true };
+    return loiNhan ? { giaDaGhi: true, canhBao: loiNhan } : { giaDaGhi: true };
   } catch (e) {
     console.error('[dong-hang] ghiGiaUocTinhLenLark lỗi:', e);
     return { giaDaGhi: false, canhBao: 'ghi giá lên Lark thất bại, cron sẽ thử lại' };

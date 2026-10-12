@@ -10,66 +10,133 @@ describe('patchGiaUocTinh', () => {
   } as GiaUocTinh;
 
   it('ô trống thì điền', () => {
-    expect(patchGiaUocTinh(g, {}, null)[COT_CHI_PHI.base]).toBe(100);
+    expect(patchGiaUocTinh(g, {}, null).patch[COT_CHI_PHI.base]).toBe(100);
   });
   /* Anti-goal của spec: không bao giờ đè số người gõ tay. */
   it('ô ĐÃ CÓ số thì KHÔNG đụng', () => {
-    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: 999 }, null);
-    expect(COT_CHI_PHI.base in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: 999 }, null);
+    expect(COT_CHI_PHI.base in patch).toBe(false);
   });
   it('ô có số 0 cũng là ĐÃ CÓ, không đè', () => {
-    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: 0 }, null);
-    expect(COT_CHI_PHI.base in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: 0 }, null);
+    expect(COT_CHI_PHI.base in patch).toBe(false);
   });
   /* Review Focus #3: khoản null = KHÔNG BIẾT → không được ghi 0 vào ô. */
   it('khoản null thì bỏ hẳn khỏi patch, không ghi 0', () => {
-    const p = patchGiaUocTinh(g, {}, null);
-    expect(COT_CHI_PHI.remote in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, {}, null);
+    expect(COT_CHI_PHI.remote in patch).toBe(false);
   });
   it('ghi mã vận đơn khi ô trống', () => {
-    expect(patchGiaUocTinh(g, {}, 'T1')[COT.trackingNumber]).toBe('T1');
+    expect(patchGiaUocTinh(g, {}, 'T1').patch[COT.trackingNumber]).toBe('T1');
   });
   it('Lark đã có mã vận đơn KHÁC thì không đè', () => {
-    const p = patchGiaUocTinh(g, { [COT.trackingNumber]: 'T-CU' }, 'T-MOI');
-    expect(COT.trackingNumber in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT.trackingNumber]: 'T-CU' }, 'T-MOI');
+    expect(COT.trackingNumber in patch).toBe(false);
   });
   /* CEO đính chính: ô "INS | Chi phí Tổng (đ)" xưa nay là TỔNG ƯỚC TÍNH nhân sự tự gõ tay,
    * không phải số hoá đơn — nên tổng ước tính cũng theo đúng luật chỉ-điền-ô-trống như mọi
    * khoản khác, không bị loại riêng. */
   it('ô tổng trống thì điền', () => {
-    expect(patchGiaUocTinh(g, {}, null)[COT_CHI_PHI.totalAmount]).toBe(130);
+    expect(patchGiaUocTinh(g, {}, null).patch[COT_CHI_PHI.totalAmount]).toBe(130);
   });
   it('ô tổng ĐÃ CÓ số thì KHÔNG đụng', () => {
-    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.totalAmount]: 999 }, null);
-    expect(COT_CHI_PHI.totalAmount in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.totalAmount]: 999 }, null);
+    expect(COT_CHI_PHI.totalAmount in patch).toBe(false);
   });
   it('tổng null thì bỏ hẳn khỏi patch, không ghi 0', () => {
-    const gKhongTong = { ...g, total: null } as GiaUocTinh;
-    const p = patchGiaUocTinh(gKhongTong, {}, null);
-    expect(COT_CHI_PHI.totalAmount in p).toBe(false);
+    const { patch } = patchGiaUocTinh({ ...g, total: null } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.totalAmount in patch).toBe(false);
   });
   it('không có gì để ghi thì patch rỗng', () => {
-    expect(Object.keys(patchGiaUocTinh(g, {
+    const { patch } = patchGiaUocTinh(g, {
       [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.fuel]: 1, [COT_CHI_PHI.vat]: 1, [COT_CHI_PHI.totalAmount]: 1,
-    }, null))).toEqual([]);
+    }, null);
+    expect(Object.keys(patch)).toEqual([]);
   });
 
   /* C1 (review coordinator): `getLogRecordById` (GET records/:id) trả ô số dạng CHUỖI,
    * khác `records/search` (dùng SỐ) — đo thật trên record Lark `recv34I1lMBDBt`, ô "Mức
-   * giá cơ sở": search → int 4747300, GET records/:id → str '4747300'. `docSo` (dùng
-   * trong patchGiaUocTinh) phải coi ô CHUỖI SỐ là ĐÃ CÓ, không chỉ ô kiểu number — thiếu
-   * bao dung này thì đọc qua GET records/:id sẽ tưởng mọi ô đã điền là TRỐNG và ĐÈ số
-   * thật của Đức bằng giá ước tính. */
+   * giá cơ sở": search → int 4747300, GET records/:id → str '4747300'. Lá chắn phải coi ô
+   * CHUỖI SỐ là ĐÃ CÓ, không chỉ ô kiểu number — thiếu bao dung này thì đọc qua
+   * GET records/:id sẽ tưởng mọi ô đã điền là TRỐNG và ĐÈ số thật của Đức. */
   it('ô số dạng CHUỖI (đọc qua GET records/:id) vẫn là ĐÃ CÓ, không đè', () => {
-    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '4747300' }, null);
-    expect(COT_CHI_PHI.base in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '4747300' }, null);
+    expect(COT_CHI_PHI.base in patch).toBe(false);
   });
   it('chuỗi "0" vẫn là ĐÃ CÓ (hãng có tính, bằng không), không đè', () => {
-    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '0' }, null);
-    expect(COT_CHI_PHI.base in p).toBe(false);
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '0' }, null);
+    expect(COT_CHI_PHI.base in patch).toBe(false);
   });
   it('chuỗi rỗng hoặc chỉ khoảng trắng mới là TRỐNG thật, vẫn điền được', () => {
-    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '' }, null)[COT_CHI_PHI.base]).toBe(100);
-    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '   ' }, null)[COT_CHI_PHI.base]).toBe(100);
+    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '' }, null).patch[COT_CHI_PHI.base]).toBe(100);
+    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '   ' }, null).patch[COT_CHI_PHI.base]).toBe(100);
+  });
+
+  /* I2: với một LÁ CHẮN, "không phân tích được" phải nghĩa là CÓ, ĐỪNG CHẠM. Mọi hình dưới
+   * đây đều làm `docSo` trả null — xét ô trống bằng `docSo` là ĐÈ hết, mà Lark không có undo. */
+  it.each([
+    ['1.000 phân cách kiểu người gõ', '4,747,300'],
+    ['có khoảng trắng', '4 747 300'],
+    ['có đuôi đơn vị', '4747300đ'],
+    ['mảng rich-text', [{ text: '4747300' }]],
+    ['object có value', { value: 4747300 }],
+    ['chữ, không phải số', 'chưa rõ'],
+  ])('ô không đọc được thành số (%s) vẫn là ĐÃ CÓ, không đè', (_ten, oLark) => {
+    const { patch } = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: oLark }, null);
+    expect(COT_CHI_PHI.base in patch).toBe(false);
+  });
+
+  /* C2: `tuEngine` không bao giờ trả null cho khoản engine không mô hình hoá — nó trả 0. Ghi
+   * 0 vào ô "Phí kí nhận trực tiếp" của DHL (hãng thu 150.000đ/kiện) là khoá ô ở 0 VĨNH VIỄN:
+   * `dungPatch` sau này đọc `docSo = 0 ≠ null` nên không bao giờ ghi số hoá đơn thật vào được. */
+  it('khoản bằng 0 KHÔNG ghi — ghi 0 là khoá ô vĩnh viễn, hoá đơn thật sau này không vào được', () => {
+    const { patch } = patchGiaUocTinh({ ...g, signature: 0 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.directSignature in patch).toBe(false);
+  });
+  it('khoản âm cũng không ghi', () => {
+    const { patch } = patchGiaUocTinh({ ...g, remote: -5 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.remote in patch).toBe(false);
+  });
+
+  /* Cột tiền trên Lark là VND — quy đổi tiền ra số thập phân (đo thật: tổng 1.877.160,2). */
+  it('làm tròn trước khi ghi vào cột tiền VND', () => {
+    const { patch } = patchGiaUocTinh({ ...g, total: 1_877_160.2, base: 50.21 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.totalAmount]).toBe(1_877_160);
+    expect(patch[COT_CHI_PHI.base]).toBe(50);
+  });
+  it('khoản nhỏ hơn nửa đồng tròn thành 0 thì không ghi, không khoá ô ở 0', () => {
+    const { patch } = patchGiaUocTinh({ ...g, remote: 0.3 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.remote in patch).toBe(false);
+  });
+
+  /* I5: Lark giữ T1, nhân sự dán T2 ⇒ DB thành T2 mà Lark vẫn T1, rồi lượt `sync-lark` kế
+   * tiếp ghi T1 TRỞ LẠI DB. Im lặng ở đây là thao tác của nhân sự bốc hơi sau một toast xanh. */
+  it('Lark đang có mã KHÁC thì cảnh báo rõ, không im lặng', () => {
+    const { canhBao } = patchGiaUocTinh(g, { [COT.trackingNumber]: 'T1' }, 'T2');
+    expect(canhBao.join(' ')).toContain('T1');
+    expect(canhBao.join(' ')).toContain('T2');
+  });
+  it('Lark có đúng mã đó (khác hoa thường) thì không cảnh báo gì', () => {
+    const { canhBao, patch } = patchGiaUocTinh(g, { [COT.trackingNumber]: '1z999aa' }, '1Z999AA');
+    expect(COT.trackingNumber in patch).toBe(false);
+    expect(canhBao).toEqual([]);
+  });
+  it('ô tracking có dữ liệu không đọc được thì cảnh báo, KHÔNG ghi đè', () => {
+    const { canhBao, patch } = patchGiaUocTinh(g, { [COT.trackingNumber]: { la: 1 } }, 'T2');
+    expect(COT.trackingNumber in patch).toBe(false);
+    expect(canhBao.join(' ')).toContain('không đọc được');
+  });
+
+  /* Patch rỗng mà báo "đã ghi giá" là nói sai việc đã làm. */
+  it('patch rỗng vì mọi ô đã có số thì nói rõ ô nào đã có', () => {
+    const { canhBao } = patchGiaUocTinh(g, {
+      [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.fuel]: 1, [COT_CHI_PHI.vat]: 1, [COT_CHI_PHI.totalAmount]: 1,
+    }, null);
+    expect(canhBao.join(' ')).toContain(COT_CHI_PHI.base);
+  });
+  it('tổng ≤ 0 thì không ghi ô Tổng và nói rõ vì sao', () => {
+    const { patch, canhBao } = patchGiaUocTinh({ ...g, total: 0 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.totalAmount in patch).toBe(false);
+    expect(canhBao.join(' ')).toContain('Tổng');
   });
 });

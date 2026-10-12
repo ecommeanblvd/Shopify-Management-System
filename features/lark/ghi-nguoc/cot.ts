@@ -24,8 +24,12 @@ export const LUA_CHON_STATUS: readonly string[] = [
 ];
 
 /** Khoá `shipment_charges` → cột tiền trên Lark (VND). `discount` không ghi: Lark có công thức
- *  "Giá chiết khấu". `address_correction`, `non_conveyable` không có cột. */
-export const COT_CHI_PHI: Record<string, string> = {
+ *  "Giá chiết khấu". `address_correction`, `non_conveyable` không có cột.
+ *
+ *  `as const` chứ KHÔNG `Record<string, string>`: kiểu rộng cho phép tra một khoá không tồn tại
+ *  mà vẫn qua được type-check, nên đổi tên một khoá ở đây sẽ gửi `patch["undefined"]` lên Lark
+ *  (tên cột rỗng ⇒ PUT là all-or-nothing nên chặn cả bản vá). Khoá hẹp bắt lỗi đó lúc biên dịch. */
+export const COT_CHI_PHI = {
   totalAmount: 'INS | Chi phí Tổng (đ)',
   base: 'Mức giá cơ sở',
   fuel: 'Phụ phí nhiên liệu',
@@ -37,4 +41,7 @@ export const COT_CHI_PHI: Record<string, string> = {
   elevatedRisk: 'Phí rủi ro gia tăng',
   importHandling: 'Phí xử lý hàng nhập',
   residential: 'Phụ Phí Residential',
-};
+} as const;
+
+/** Khoá hợp lệ của `COT_CHI_PHI` — dùng để bảng map khoản→cột của nơi khác được type-check. */
+export type KhoaCotChiPhi = keyof typeof COT_CHI_PHI;

@@ -48,6 +48,26 @@ const SAI_SO_DONG = 1;
  * điền thêm, không có đường undo). Nhánh `number` giữ nguyên ở trên để `dungPatch` (đọc
  * qua `records/search`, đã đúng từ trước) không đổi hành vi.
  */
+/**
+ * LÁ CHẮN "chỉ điền ô trống": ô Lark này có ĐANG TRỐNG hay không.
+ *
+ * Tách khỏi `docSo` vì hai câu hỏi khác nhau: `docSo` cần một CON SỐ để tính `lech`, còn lá
+ * chắn chỉ cần biết "có ai điền gì vào đây chưa". Dùng `docSo` làm lá chắn là biến mọi ô
+ * KHÔNG ĐỌC ĐƯỢC SỐ thành "trống" ⇒ ĐÈ: đã thử thật, `'4,747,300'` · `'4 747 300'` ·
+ * `'4747300đ'` · `[{text:'4747300'}]` · `{value:4747300}` · `'chưa rõ'` đều ra `null`. Lark
+ * chỉ cho điền thêm, không có undo — đè một ô là số gốc của Ops mất vĩnh viễn.
+ *
+ * Vì vậy luật ở đây là: "không phân tích được" nghĩa là CÓ, ĐỪNG CHẠM. Chỉ đúng ba hình được
+ * coi là trống — vắng mặt (`null`/`undefined`), chuỗi trim rỗng, mảng rỗng (Lark trả `[]` cho
+ * ô chữ chưa điền). Mọi hình còn lại (số, object lạ, mảng có phần tử) là CÓ.
+ */
+export const oLarkTrong = (v: unknown): boolean => {
+  if (v == null) return true;
+  if (typeof v === 'string') return v.trim() === '';
+  if (Array.isArray(v)) return v.length === 0;
+  return false;
+};
+
 export const docSo = (v: unknown): number | null => {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string') {
@@ -101,6 +121,12 @@ export function dungPatch(kien: KienGhiNguoc, charge: ChargeGhiNguoc | null, oLa
       const cu = docSo(oLark[cot]);
       if (cu != null) {
         if (Math.abs(cu - moi) > SAI_SO_DONG) kq.lech.push(`${cot}: Lark ${cu} ≠ hoá đơn ${moi} (không ghi đè)`);
+        continue;
+      }
+      /* Ô có dữ liệu nhưng `docSo` không ra số (vd `'4,747,300'`, `'chưa rõ'`): KHÔNG phải ô
+       * trống — nêu vào `lech` để người đọc nhật ký đi xem, nhưng tuyệt đối không ghi lên. */
+      if (!oLarkTrong(oLark[cot])) {
+        kq.lech.push(`${cot}: Lark có dữ liệu không đọc được thành số (${JSON.stringify(oLark[cot])}) ≠ hoá đơn ${moi} (không ghi đè)`);
         continue;
       }
       kq.patch[cot] = moi; kq.nhom.chiPhi++;

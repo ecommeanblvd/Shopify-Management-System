@@ -11,12 +11,12 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { quoteShipmentToCache } from '@/features/carrier-rates/fedex-quote-cache';
 import { baoGiaUpsShop, chonMucReNhat } from '@/lib/ups/rate';
-import { quoteOrderAcrossCarriers } from '@/features/carrier-rates/compare/quote-order-carriers';
+import { baoGiaBangGiaMotHang, congVat, phanTramVatCuaHang } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-signature';
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
-import { tuEngine, tuKhoanUps, tuFedexQuote, vatSuyRa, type GiaUocTinh } from './gia-uoc-tinh';
+import { tuEngine, tuKhoanUps, tuFedexQuote, type GiaUocTinh } from './gia-uoc-tinh';
 
 /**
  * THUẦN: hãng nào có API giá sống thì đi API, còn lại (gồm hãng `null`/chưa biết)
@@ -34,12 +34,16 @@ const num = (v: string | null): number | null => (v === null ? null : Number(v))
 /**
  * Cùng cách `reconcile-view.ts` đọc `fedex_rate_quotes` sang `FedexQuoteSnap` —
  * chỉ đổi tên cột, KHÔNG tính lại gì, để một con số FedEx chỉ có đúng một công
- * thức suy ra nó.
+ * thức suy ra nó. Kèm `base` (cột `base_charge`, không nằm trong `FedexQuoteSnap`
+ * dùng chung) và `tienTe` để caller tự gác đơn vị tiền.
  */
-async function docFedexQuoteSnap(shipmentId: string): Promise<FedexQuoteSnap | null> {
+async function docFedexQuoteSnap(
+  shipmentId: string,
+): Promise<{ snap: FedexQuoteSnap; base: number | null; tienTe: string } | null> {
   const [q] = await db.select({
-    service: schema.fedexRateQuotes.service,
+    service: schema.fedexRateQuotes.service, currency: schema.fedexRateQuotes.currency,
     totalNetCharge: schema.fedexRateQuotes.totalNetCharge, fuel: schema.fedexRateQuotes.fuel,
+    baseCharge: schema.fedexRateQuotes.baseCharge,
     fuelPercent: schema.fedexRateQuotes.fuelPercent, remote: schema.fedexRateQuotes.remote,
     demand: schema.fedexRateQuotes.demand, residential: schema.fedexRateQuotes.residential,
     signature: schema.fedexRateQuotes.signature, countryFixed: schema.fedexRateQuotes.countryFixed,
@@ -48,10 +52,14 @@ async function docFedexQuoteSnap(shipmentId: string): Promise<FedexQuoteSnap | n
   }).from(schema.fedexRateQuotes).where(eq(schema.fedexRateQuotes.shipmentId, shipmentId)).limit(1);
   if (!q) return null;
   return {
-    service: q.service, totalNetCharge: num(q.totalNetCharge), fuel: num(q.fuel),
-    fuelPercent: num(q.fuelPercent), remote: num(q.remote), demand: num(q.demand),
-    residential: num(q.residential), signature: num(q.signature), countryFixed: num(q.countryFixed),
-    vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
+    snap: {
+      service: q.service, totalNetCharge: num(q.totalNetCharge), fuel: num(q.fuel),
+      fuelPercent: num(q.fuelPercent), remote: num(q.remote), demand: num(q.demand),
+      residential: num(q.residential), signature: num(q.signature), countryFixed: num(q.countryFixed),
+      vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
+    },
+    base: num(q.baseCharge),
+    tienTe: q.currency,
   };
 }
 
@@ -108,18 +116,31 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
     const nguon = nguonGiaCho(carrierKey);
 
     if (nguon === 'fedex-api') {
-      const r = await quoteShipmentToCache({
-        shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
-        weightKg, dims, shipDate,
-        // D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
-        // countrySupportsDirectSignature đã gói đúng luật đó. KHÔNG hardcode false.
-        signatureOptIn: countrySupportsDirectSignature(k.country),
-        recipientResidential: isResidential,
-      });
-      if (!r.ok) return null;
-      const snap = await docFedexQuoteSnap(shipmentId);
-      if (!snap) return null;
-      return tuFedexQuote(snap);
+      /* ĐỌC LẠI dòng cache trước, chỉ quote khi CHƯA có. `quoteShipmentToCache`
+       * `onConflictDoUpdate` theo `shipmentId` ⇒ gọi vô điều kiện là GHI ĐÈ dòng
+       * quote đã lưu bằng input khác hẳn (script backfill ưu tiên `billingWeightKg`
+       * của hoá đơn và lấy cờ từ `shipment_charges`; đường này dùng cân đã đóng +
+       * `countrySupportsDirectSignature`) — 1.224 kiện đã đối soát sẽ đổi mốc so
+       * sánh mà không ai biết. `scripts/backfill-fedex-quotes.ts` khai đúng luật
+       * này: "Bỏ qua đơn đã cache trừ khi --refresh". */
+      const daCo = await docFedexQuoteSnap(shipmentId);
+      if (!daCo) {
+        const r = await quoteShipmentToCache({
+          shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
+          weightKg, dims, shipDate,
+          // D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
+          // countrySupportsDirectSignature đã gói đúng luật đó. KHÔNG hardcode false.
+          signatureOptIn: countrySupportsDirectSignature(k.country),
+          recipientResidential: isResidential,
+        });
+        if (!r.ok) return null;
+      }
+      const q = daCo ?? await docFedexQuoteSnap(shipmentId);
+      if (!q) return null;
+      // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
+      // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.
+      if (q.tienTe !== 'VND') return null;
+      return tuFedexQuote(q.snap, q.base);
     }
 
     if (nguon === 'ups-api') {
@@ -133,22 +154,33 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
       if (!r.ok) return null;
       const re = chonMucReNhat(r.ds);
       if (!re) return null;
-      // UPS không trả VAT thành khoản riêng (xem lib/ups/rate.ts) → suy ra bằng vatSuyRa.
-      const g = tuKhoanUps(re.khoan, re.tong);
-      return { ...g, vat: vatSuyRa(g) };
+      if (re.tienTe !== 'VND') return null; // như nhánh FedEx: sai đơn vị thì không ghi
+      /* UPS trả tiền CHƯA VAT ở MỌI mức (lib/ups/rate.ts) nên `re.tong` KHÔNG thể
+       * ghi thẳng vào ô Tổng: FedEx ghi `totalNetCharge` (gồm VAT) và engine ghi
+       * total gồm VAT — ba nguồn vào CÙNG một ô thì phải cùng một nghĩa. %VAT lấy
+       * của ACCOUNT (`phanTramVatCuaHang`), đúng cách bảng so cước đang làm; không
+       * tra được account thì VAT là KHÔNG BIẾT ⇒ không ghi gì cho kiện này. */
+      const phanTram = await phanTramVatCuaHang('ups', shipDate, { country: k.country, postcode: k.postcode });
+      if (phanTram == null) return null;
+      const tongCoVat = congVat(re.tong, phanTram);
+      const g = tuKhoanUps(re.khoan, tongCoVat, re.base);
+      // VAT = chênh giữa tổng đã VAT và tổng chưa VAT, để ô VAT và ô Tổng khớp nhau
+      // tuyệt đối (suy VAT từ tổng các khoản đã nhóm sẽ lệch khi có mã lạ — xem maLa).
+      return { ...g, vat: tongCoVat - Math.round(re.tong) };
     }
 
-    // bang-gia: cùng cách baoGiaKien gọi quoteOrderAcrossCarriers, không mở
-    // thêm addon when_billed nào (mặc định đã đúng cho so sánh bằng bảng giá).
-    const rows = await quoteOrderAcrossCarriers({
+    // bang-gia: gọi ĐÚNG hãng của kiện, KHÔNG qua quoteOrderAcrossCarriers — hàm
+    // đó luôn kèm một lượt báo giá SỐNG UPS bị vứt đi (chi phí ẩn, lượt soát Task 4),
+    // nhân lên theo từng kiện khi cron quét hàng loạt kiện Aramex/DHL.
+    if (!carrierKey) return null;
+    const row = await baoGiaBangGiaMotHang(carrierKey, {
       country: k.country, weightKg, postcode: k.postcode, city: k.city,
       dimensions: dims ? { lengthCm: dims.length, widthCm: dims.width, heightCm: dims.height } : null,
       effectiveDate: shipDate,
       isResidential,
     });
-    const row = carrierKey ? rows.find((r) => r.carrierKey === carrierKey) : undefined;
     if (!row || !row.ok || !row.breakdown || row.vndCost == null) return null;
-    return tuEngine(row.breakdown, row.vndCost);
+    return tuEngine(row.breakdown, row.vndCost, row.heSoVnd ?? null);
   } catch {
     return null;
   }
