@@ -31,9 +31,11 @@ Tính năng này là một phần của việc chuyển đó — nó khiến mà
   Lark tự tính từ các khoản thành phần. Ghi vào là lỗi API.
 - **Không** đụng `Mức giá chênh lệch (Sau đối soát)` — đó là việc của vòng đối soát hoá đơn,
   không phải của giá ước tính.
-- **Không** hỗ trợ Aramex và DHL ở vòng này: hai hãng chưa nối Rate API. Ô chi phí để trống,
-  nhân sự điền tay như cũ. Đo 60 ngày gần nhất: FedEx 622 + UPS 55 = **81%** số kiện được phủ;
-  Aramex 154 (18,5%); DHL 1.
+- **Không** giới hạn ở hãng có API. CEO đính chính 12/10/2026: Aramex đã có bảng giá trong
+  engine (**2 bảng, 1.800 ô giá**) và cách tính của hệ thống **đã được kiểm chứng khớp bill
+  Aramex**, nên báo giá của engine dùng làm giá ước tính được. DHL cũng có sẵn (1.520 ô).
+  → Nguồn giá: **API sống ở đâu có (FedEx `Rate`, UPS `Rating`), engine ở chỗ còn lại**.
+  Phủ ~99% thay vì 81%.
 - **Không** tạo hay xoá record Lark. Chỉ sửa trường của record đã có (D-045).
 - **Không** thay thế đối soát theo hoá đơn. Đây là **giá ƯỚC TÍNH**; chính FedEx ghi "chi phí
   cuối cùng được xác định bởi trọng lượng và kích thước theo số liệu đo lường của FedEx".
@@ -79,6 +81,12 @@ chỉ ghi vào nhật ký `lech`.
 **Hệ quả:** ước tính lấp đầy ô vài giờ sau khi tạo nhãn; hoá đơn thật về sau vài tuần sẽ thấy
 ô đã có số và **không bao giờ ghi lên Lark nữa**. Lark giữ ƯỚC TÍNH vĩnh viễn cho các kiện đi
 qua luồng này.
+
+**SỬA (CEO đính chính 12/10/2026): đây KHÔNG phải xung đột.** Khối ô này **xưa nay vẫn là giá
+ước tính do nhân sự điền sau khi tạo vận đơn**, chưa bao giờ là số hoá đơn. Luồng mới chỉ tự
+động hoá đúng việc nhân sự đang làm tay. Đảo lại: `ghi-nguoc` mới là bên đang đổ **số hoá đơn
+thật** vào ô mang nghĩa "ước tính" — nên việc nhánh đó hiếm khi ghi được nữa là **đúng hơn**,
+không phải mất mát. Không gỡ nhánh đó ở vòng này.
 
 **CEO chốt 12/10/2026: chấp nhận, tạm thời giữ "không đè".** Số hoá đơn thật vẫn đầy đủ trong
 hệ thống (màn Đối soát phí ship, `carrier_bill_lines`, `shipment_charges`); Lark thành nơi xem
@@ -145,7 +153,8 @@ Lưu ý: app_token để gọi API fields là **`PnFJb4IDPaIkCAssi2VlD0jNgng`** 
 
 ## Hai chỗ PHẢI ĐO, không được đoán
 
-**VAT cho báo giá UPS.** FedEx Rate API trả `vat` thành khoản riêng (`fedex_rate_quotes.vat`),
+**VAT cho báo giá UPS.** (UPS Rating API trả `ItemizedCharges` kèm mã từng khoản — bóc được
+cơ sở/fuel/residential/ký nhận/demand/vùng sâu xa như FedEx. Riêng VAT thì không có.) FedEx Rate API trả `vat` thành khoản riêng (`fedex_rate_quotes.vat`),
 dùng thẳng được. **UPS Rating API không trả VAT thành khoản riêng** — code hiện có chỉ cộng VAT
 vào TỔNG để so sánh hiển thị. Đoán sai "base chịu thuế" là sai đúng ô `VAT/Thuế phí khác` —
 chính ô Đức dùng để đối soát. Phải đo trên hoá đơn UPS thật (tờ `100000813108`: 37/37 dòng có
