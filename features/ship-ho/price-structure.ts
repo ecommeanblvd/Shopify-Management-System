@@ -249,6 +249,17 @@ export function shipHoPriceStructure(input: {
       quoteChargeVnd: 0, chargeVnd: sell ? S(sell.additionalHandlingVnd ?? 0) : 0,
     },
     {
+      /* Phí xử lý quốc tế của UPS — giữ ĐÚNG tên hãng (CEO 12/10/2026). Không cần kiểm
+         "đơn này có phải UPS không": FedEx/DHL không có khoản này nên billVnd = 0 và bộ
+         `.filter` ở cuối tự bỏ dòng. Chưa có mục thu tương ứng ở bảng giá bán, nên cột thu
+         là 0 — và đó là thông tin ĐÁNG hiện: tháng 9 UPS thu mình 1.938.750đ khoản này mà
+         bảng giá gửi brand không có dòng nào gánh. */
+      label: 'International Processing Fee (UPS)',
+      costVnd: null,
+      billVnd: hasBill ? Math.round(num(ab!.internationalProcessing)) : null,
+      quoteChargeVnd: 0, chargeVnd: 0,
+    },
+    {
       label: 'Phụ phí khác (chưa phân loại)',
       costVnd: R(b.perKg) + R(b.perStep) + R(b.peak),
       billVnd: hasBill && ab!.importHandling != null ? Math.round(num(ab!.other)) : null, // bill cũ: other đã hiện ở dòng NK

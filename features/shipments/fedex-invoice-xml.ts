@@ -85,7 +85,8 @@ export function parseFedexInvoiceXml(text: string): FboBilledRow[] {
       recipientPostcode: s(TAG.recipientPostcode),
       weightKg: wRaw ? (fboWeightToKg(parseFboAmount(wRaw), tag(b, TAG.weightUnit) || null) || null) : null,
       base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
-      residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, additionalHandling: 0, other: 0, total: 0,
+      residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0, additionalHandling: 0, other: 0,
+      internationalProcessing: 0, total: 0,
     };
     const labels = allTags(b, TAG.chargeLabel);
     const amounts = allTags(b, TAG.chargeAmount);
@@ -93,7 +94,7 @@ export function parseFedexInvoiceXml(text: string): FboBilledRow[] {
     const awbTotal = parseFboAmount(tag(b, TAG.awbTotal));
     row.total = awbTotal || (row.base + row.discount + row.fuel + row.demand + row.remote
       + row.signature + row.residential + row.addressCorrection + row.importHandling + row.vat
-      + row.duty + row.additionalHandling + row.other);
+      + row.duty + row.additionalHandling + row.other + row.internationalProcessing);
     out.push(row);
   }
   return out;

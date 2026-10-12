@@ -35,7 +35,10 @@ export interface FboApLine {
    *  → reconcile rơi về fuel hôm nay, lệch giá thu vài nghìn — bug bắt 22/07). */
   shipDate: string | null;
   base: number; discount: number; fuel: number; remote: number; demand: number;
-  signature: number; residential: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; additionalHandling: number; total: number;
+  signature: number; residential: number; vat: number; other: number; addressCorrection: number; importHandling: number; duty: number; additionalHandling: number;
+  /** Phí xử lý quốc tế của UPS — 0 ở mọi dòng FedEx. Xem `ups-invoice-xml.ts`. */
+  internationalProcessing: number;
+  total: number;
 }
 
 /** 1 FboBilledRow → dòng AP. Mỗi khoản MỘT CỘT, không gộp: address_correction /
@@ -56,6 +59,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
     addressCorrection: r.addressCorrection,
     importHandling: r.importHandling, duty: r.duty,
     additionalHandling: r.additionalHandling,
+    internationalProcessing: r.internationalProcessing,
     total: r.total,
   };
 }
@@ -65,7 +69,7 @@ export function fboApLine(r: FboBilledRow): FboApLine {
 export function fboShippingTotal(r: FboBilledRow): number {
   return r.base + r.discount + r.fuel + r.demand + r.remote
     + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat
-    + r.additionalHandling + r.other;
+    + r.additionalHandling + r.internationalProcessing + r.other;
 }
 
 export interface FboBill {

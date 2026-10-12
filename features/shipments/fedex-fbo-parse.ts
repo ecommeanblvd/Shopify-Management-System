@@ -126,6 +126,9 @@ export interface FboBilledRow {
   base: number; discount: number; fuel: number; demand: number; remote: number;
   signature: number; residential: number; addressCorrection: number; importHandling: number; vat: number;
   duty: number; additionalHandling: number; other: number;
+  /** Phí xử lý quốc tế của UPS (`ACC/FIP`). CHỈ hoá đơn UPS có khoản này — parser FedEx
+   *  luôn để 0, nên dòng FedEx không hiện phí lạ. Xem `ups-invoice-xml.ts`. */
+  internationalProcessing: number;
   total: number;
 }
 
@@ -222,7 +225,7 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
     podName: str(row, cols.meta.podName),
     base: 0, discount: 0, fuel: 0, demand: 0, remote: 0, signature: 0,
     residential: 0, addressCorrection: 0, importHandling: 0, vat: 0, duty: 0,
-    additionalHandling: 0, other: 0, total: 0,
+    additionalHandling: 0, other: 0, internationalProcessing: 0, total: 0,
   };
   for (const c of cols.chargeLabelCols) {
     const label = String(row[c] ?? '').trim();
@@ -234,13 +237,13 @@ export function parseFboRow(row: ReadonlyArray<unknown>, cols: FboColumns): FboB
   // Tổng: ưu tiên cột "Tổng số tiền trong vận đơn"; rỗng → cộng các mục.
   r.total = awbTotal || (r.base + r.discount + r.fuel + r.demand + r.remote
     + r.signature + r.residential + r.addressCorrection + r.importHandling + r.vat + r.duty
-    + r.additionalHandling + r.other);
+    + r.additionalHandling + r.other + r.internationalProcessing);
   return r;
 }
 
 const SUM_KEYS = ['base', 'discount', 'fuel', 'demand', 'remote', 'signature',
   'residential', 'addressCorrection', 'importHandling', 'vat', 'duty',
-  'additionalHandling', 'other', 'total'] as const;
+  'additionalHandling', 'other', 'internationalProcessing', 'total'] as const;
 
 /** Hợp nhất các dòng FBO cùng AWB cho ĐỐI SOÁT CƯỚC: 1 AWB có thể có 2 dòng —
  *  dòng CƯỚC (duty=0) và dòng THUẾ/HẢI QUAN (duty>0, customs pass-through người

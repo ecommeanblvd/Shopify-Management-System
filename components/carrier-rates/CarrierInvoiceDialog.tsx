@@ -8,8 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button';
 import type { InvoicePreview, InvoiceImportResult } from '@/features/carrier-rates/ap/invoice-upload';
 
+/** Tên hãng hiện trên tiêu đề và dòng xem trước. Bản trước viết tay hai nhánh ba
+ *  lần nên hoá đơn Aramex vẫn hiện "DHL" ở dòng Carrier — gom về một bảng. */
+const TEN_HANG: Record<'fedex' | 'dhl' | 'aramex' | 'ups', string> = {
+  fedex: 'FedEx', dhl: 'DHL', aramex: 'Aramex', ups: 'UPS',
+};
+
 interface Props {
-  carrierKey: 'fedex' | 'dhl' | 'aramex';
+  carrierKey: 'fedex' | 'dhl' | 'aramex' | 'ups';
   currency: string;
   previewAction: (fd: FormData) => Promise<{ ok: true; preview: InvoicePreview } | { ok: false; message: string }>;
   importAction: (fd: FormData) => Promise<InvoiceImportResult[]>;
@@ -85,12 +91,14 @@ export function CarrierInvoiceDialog({ carrierKey, currency, previewAction, impo
 
   const isSingle = files.length === 1;
   const isMulti = files.length > 1;
-  const carrierLabel = carrierKey === 'fedex' ? 'FedEx' : carrierKey === 'aramex' ? 'Aramex' : 'DHL';
+  const carrierLabel = TEN_HANG[carrierKey];
   // Aramex Việt Nam (Hợp Nhất) phát hành hoá đơn điện tử: bản XML và bản in PDF
   // có cùng nội dung nên tải file nào cũng dựng được hoá đơn.
   const goiYDinhDang = carrierKey === 'aramex'
     ? 'Tải BỘ hai file: bảng kê cước Excel (.xls) + hoá đơn XML. Bảng kê giữ cân nặng, nước đến và phụ phí; hoá đơn giữ số hoá đơn và thuế. PDF không cần.'
-    : 'Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều';
+    : carrierKey === 'ups'
+      ? 'Kéo file Billing Data XML tải từ ups.com (Billing Center → Invoice → Download → XML). PDF chỉ để đính chứng từ.'
+      : 'Kéo file hoá đơn (DHL XML/CSV · FedEx XML/XLSX · PDF hoá đơn) — 1 hoặc nhiều';
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
@@ -195,7 +203,7 @@ function PreviewBlock({ preview, fmt }: { preview: InvoicePreview; fmt: (v: numb
   }
 
   const rows: { label: string; value: string }[] = [
-    { label: 'Carrier', value: preview.carrier === 'fedex' ? 'FedEx' : 'DHL' },
+    { label: 'Carrier', value: TEN_HANG[preview.carrier] },
     { label: 'Số hoá đơn', value: preview.billNumber ?? '—' },
     { label: 'Số tiền', value: fmt(preview.amount) },
     { label: 'Kỳ', value: preview.periodStart ? `${preview.periodStart}${preview.periodEnd && preview.periodEnd !== preview.periodStart ? ` → ${preview.periodEnd}` : ''}` : '—' },

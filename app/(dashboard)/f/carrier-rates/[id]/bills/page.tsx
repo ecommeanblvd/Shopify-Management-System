@@ -181,7 +181,7 @@ export default async function CarrierBillsPage({ params }: { params: Promise<{ i
         </div>
         {canAddInvoice && (
           <div className="flex items-center gap-2">
-            <CarrierInvoiceDialog carrierKey={account.carrierKey as 'fedex' | 'dhl' | 'aramex'} currency={currency} previewAction={previewInvoiceAction} importAction={importInvoicesAction} />
+            <CarrierInvoiceDialog carrierKey={account.carrierKey as 'fedex' | 'dhl' | 'aramex' | 'ups'} currency={currency} previewAction={previewInvoiceAction} importAction={importInvoicesAction} />
           </div>
         )}
       </header>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase, thongBaoSaiDinhDang } from './invoice-upload';
+import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase, thongBaoSaiDinhDang, canhBaoUps } from './invoice-upload';
 
 describe('detectInvoiceFormat', () => {
   it('dhl + .csv → dhl_csv', () => { expect(detectInvoiceFormat('dhl', 'HANR1.csv')).toBe('dhl_csv'); });
@@ -131,13 +131,52 @@ describe('thongBaoSaiDinhDang', () => {
   // Trước đây mọi hãng chưa hỗ trợ đều nhận câu "sai định dạng DHL" — tải file
   // FedEx nhầm tài khoản thì được bảo là sai định dạng DHL, không hiểu vì sao.
   it('hãng chưa hỗ trợ thì nói rõ là chưa hỗ trợ, không đổ cho DHL', () => {
-    const m = thongBaoSaiDinhDang('ups');
+    // Ví dụ cũ ở đây là 'ups' — UPS đã hỗ trợ từ 12/10/2026 nên đổi sang hãng chưa có
+    // đường nhập hoá đơn (tài khoản SF Express đã tồn tại trong hệ thống).
+    const m = thongBaoSaiDinhDang('sf-express');
     expect(m).toMatch(/chưa hỗ trợ/i);
-    expect(m).toMatch(/ups/);
+    expect(m).toMatch(/sf-express/);
     expect(m).not.toMatch(/định dạng hoá đơn DHL/);
   });
 
   it('nhắc kiểm tra đang mở đúng tài khoản carrier', () => {
     expect(thongBaoSaiDinhDang('sf-express')).toMatch(/đúng tài khoản/i);
+  });
+});
+
+describe('detectInvoiceFormat — UPS', () => {
+  it('ups + .xml → ups_xml (Billing Data XML, dạng máy đọc duy nhất UPS phát hành)', () => {
+    expect(detectInvoiceFormat('ups', 'Invoice_100000813108_100626.xml')).toBe('ups_xml');
+    expect(detectInvoiceFormat('ups', 'a.XML')).toBe('ups_xml');
+  });
+  it('PDF của UPS chỉ để đính chứng từ, không dựng bill', () => {
+    expect(detectInvoiceFormat('ups', 'UPS bill T9.pdf')).toBe('invoice_pdf');
+  });
+  it('ups_xml đi vào PHA spreadsheet — bill phải tồn tại trước khi đính PDF', () => {
+    const r = splitByPhase([{ filename: 'a.xml' }, { filename: 'b.pdf' }], 'ups');
+    expect(r.spreadsheets.map((f) => f.filename)).toEqual(['a.xml']);
+    expect(r.pdfs.map((f) => f.filename)).toEqual(['b.pdf']);
+  });
+  it('câu báo sai định dạng nói đúng file UPS cần tải', () => {
+    expect(thongBaoSaiDinhDang('ups')).toContain('Billing Data XML');
+  });
+});
+
+describe('canhBaoUps', () => {
+  it('chênh đúng bằng TaxVarianceAmount → nói rõ là KHỚP, không để người đọc tưởng rơi tiền', () => {
+    const w = canhBaoUps({ amount: 69_119_131, taxVariance: 7_746, rows: [{ total: 69_111_385 }], maLa: [] });
+    expect(w).toHaveLength(1);
+    expect(w[0]).toContain('đúng số hoá đơn');
+  });
+  it('chênh KHÁC chênh thuế → bắt kiểm lại trước khi lưu', () => {
+    const w = canhBaoUps({ amount: 100_000, taxVariance: 0, rows: [{ total: 90_000 }], maLa: [] });
+    expect(w[0]).toContain('kiểm lại');
+  });
+  it('Σ dòng khớp số hoá đơn và không mã lạ → không cảnh báo gì', () => {
+    expect(canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: [] })).toEqual([]);
+  });
+  it('mã phí lạ được nêu tên', () => {
+    const w = canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: ['ACC/ZZZ'] });
+    expect(w[0]).toContain('ACC/ZZZ');
   });
 });

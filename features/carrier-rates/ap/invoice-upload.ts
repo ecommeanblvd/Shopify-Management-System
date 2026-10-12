@@ -1,5 +1,6 @@
 import { parseDhlInvoiceCsv, dhlShipmentToBillLine } from './dhl-invoice-csv';
 import { parseDhlInvoiceXml } from './dhl-invoice-xml';
+import { parseUpsInvoiceXml } from './ups-invoice-xml';
 import { parsePdfInvoiceTotals } from './pdf-invoice-totals';
 import { createBill } from './bills-actions';
 import { reconcileDhlBill } from './dhl-reconcile-actions';
@@ -21,7 +22,7 @@ import { db, schema } from '@/db/client';
 import { eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
-export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'fedex_xml' | 'aramex_xlsx' | 'aramex_xml' | 'aramex_pdf' | 'invoice_pdf' | 'unsupported';
+export type InvoiceFormat = 'dhl_csv' | 'dhl_xml' | 'fbo_xlsx' | 'fedex_xml' | 'ups_xml' | 'aramex_xlsx' | 'aramex_xml' | 'aramex_pdf' | 'invoice_pdf' | 'unsupported';
 
 /** Nhận dạng định dạng theo carrier + đuôi file. DHL=CSV/XML, FedEx=XLSX/XML,
  *  Aramex=XML/PDF hoá đơn điện tử Việt Nam. PDF các carrier khác chỉ để đính kèm. */
@@ -31,6 +32,9 @@ export function detectInvoiceFormat(carrierKey: string | null, filename: string)
   if (carrierKey === 'dhl' && ext === '.xml') return 'dhl_xml';
   if (carrierKey === 'fedex' && (ext === '.xlsx' || ext === '.xls')) return 'fbo_xlsx';
   if (carrierKey === 'fedex' && ext === '.xml') return 'fedex_xml';
+  // UPS chỉ phát hành MỘT dạng máy đọc được: Billing Data XML (`UPS_EBR_BILL`) tải từ
+  // ups.com. Bản PDF đi kèm là bản in của cùng tờ đó nên chỉ để đính chứng từ.
+  if (carrierKey === 'ups' && ext === '.xml') return 'ups_xml';
   // Aramex Việt Nam (Hợp Nhất) phát hành hoá đơn điện tử: bản XML và bản in
   // PDF chứa CÙNG nội dung, nên PDF ở đây dựng được bill chứ không chỉ đính
   // kèm như PDF của FedEx/DHL.
@@ -45,7 +49,7 @@ export function detectInvoiceFormat(carrierKey: string | null, filename: string)
 }
 
 export interface InvoicePreview {
-  carrier: 'fedex' | 'dhl' | 'aramex'; format: InvoiceFormat; billNumber: string | null; amount: number | null; currency: string;
+  carrier: 'fedex' | 'dhl' | 'aramex' | 'ups'; format: InvoiceFormat; billNumber: string | null; amount: number | null; currency: string;
   periodStart: string | null; periodEnd: string | null; issueDate: string | null; dueDate: string | null;
   lineCount: number; warnings: string[];
 }
@@ -97,7 +101,7 @@ export function splitByPhase<T extends { filename: string }>(files: T[], carrier
   const spreadsheets: T[] = [], pdfs: T[] = [], unsupported: T[] = [];
   for (const f of files) {
     const fmt = detectInvoiceFormat(carrierKey, f.filename);
-    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx' || fmt === 'fedex_xml' || fmt === 'aramex_xml' || fmt === 'aramex_xlsx') spreadsheets.push(f);
+    if (fmt === 'dhl_csv' || fmt === 'dhl_xml' || fmt === 'fbo_xlsx' || fmt === 'fedex_xml' || fmt === 'ups_xml' || fmt === 'aramex_xml' || fmt === 'aramex_xlsx') spreadsheets.push(f);
     else if (fmt === 'invoice_pdf' || fmt === 'aramex_pdf') pdfs.push(f);
     else unsupported.push(f);
   }
@@ -136,7 +140,8 @@ export function thongBaoSaiDinhDang(carrierKey: string | null): string {
   if (carrierKey === 'fedex') return 'File không khớp định dạng hoá đơn FedEx (XLSX hoặc XML của FedEx Billing Online).';
   if (carrierKey === 'dhl') return 'File không khớp định dạng hoá đơn DHL (CSV hoặc XML).';
   if (carrierKey === 'aramex') return 'File không khớp định dạng hoá đơn Aramex (bảng kê Excel + hoá đơn XML của Hợp Nhất).';
-  return `Chưa hỗ trợ nhập hoá đơn cho hãng này${carrierKey ? ` (${carrierKey})` : ''} — hiện chỉ nhận FedEx, DHL và Aramex. Kiểm tra xem có đang mở đúng tài khoản carrier không.`;
+  if (carrierKey === 'ups') return 'File không khớp định dạng hoá đơn UPS (Billing Data XML tải từ ups.com).';
+  return `Chưa hỗ trợ nhập hoá đơn cho hãng này${carrierKey ? ` (${carrierKey})` : ''} — hiện chỉ nhận FedEx, DHL, UPS và Aramex. Kiểm tra xem có đang mở đúng tài khoản carrier không.`;
 }
 
 /**
@@ -216,6 +221,25 @@ async function nhapHoaDonVn(
   };
 }
 
+/**
+ * Câu cảnh báo cho hoá đơn UPS. Nêu đúng hai thứ người đối soát cần biết ngay:
+ *  - chênh làm tròn thuế ở cấp hoá đơn (không thuộc vận đơn nào) — nếu không nói ra thì
+ *    Σ dòng khác số hoá đơn và người đọc tưởng parser rơi mất tiền;
+ *  - mã phí UPS chưa biết xếp cột nào — nằm im trong "chưa phân loại" thì không ai thấy.
+ */
+export function canhBaoUps(p: { amount: number; taxVariance: number; rows: { total: number }[]; maLa: string[] }): string[] {
+  const w: string[] = [];
+  const tongDong = p.rows.reduce((a, r) => a + r.total, 0);
+  const lech = Math.round((p.amount - tongDong) * 100) / 100;
+  if (lech !== 0) {
+    w.push(lech === p.taxVariance
+      ? `Σ dòng ${tongDong.toLocaleString('vi-VN')} + chênh làm tròn thuế ${p.taxVariance.toLocaleString('vi-VN')} = đúng số hoá đơn.`
+      : `Σ dòng lệch số hoá đơn ${lech.toLocaleString('vi-VN')}đ (chênh thuế tờ này ghi ${p.taxVariance.toLocaleString('vi-VN')}đ) — kiểm lại trước khi lưu.`);
+  }
+  if (p.maLa.length) w.push(`Mã phí UPS chưa phân loại: ${p.maLa.join(', ')} — đang nằm ở cột "Khác".`);
+  return w;
+}
+
 export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Array; filename: string; contentType: string }) {
   const fmt = detectInvoiceFormat(ctx.carrierKey, file.filename);
   if (fmt === 'dhl_csv' || fmt === 'dhl_xml') {
@@ -245,6 +269,16 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
       return { ok: false as const, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(file.bytes)))}, không phải file tải từ FedEx Billing Online.` };
     }
     return { ok: true as const, preview: fboPreviewFrom(fbo.bills, ctx.currency) };
+  }
+  if (fmt === 'ups_xml') {
+    const p = parseUpsInvoiceXml(td(file.bytes));
+    if (!p) return { ok: false as const, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(file.bytes)))}, không phải Billing Data XML của UPS.` };
+    return { ok: true as const, preview: {
+      carrier: 'ups' as const, format: fmt, billNumber: p.billNumber, amount: p.amount || null, currency: p.currency,
+      periodStart: p.periodStart, periodEnd: p.periodEnd, issueDate: p.issueDate, dueDate: p.dueDate,
+      lineCount: p.rows.length,
+      warnings: canhBaoUps(p),
+    } };
   }
   if (fmt === 'aramex_xlsx') {
     const m = docBangKeHnc(file.bytes);
@@ -418,6 +452,28 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         seen.add(p.billNumber);
         const r = lines.length ? await reconcileDhlBill(billId) : null;
         out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amountInclVat, matched: r?.matched ?? null, freight: r?.freightLines ?? null, message: null });
+      } else if (ctx.carrierKey === 'ups') {
+        const p = parseUpsInvoiceXml(td(f.bytes));
+        if (!p || p.rows.length === 0) {
+          out.push({ ...base, message: `Không đọc được: đây là ${moTaLoaiXml(nhanDangXmlHoaDon(td(f.bytes)))}, không phải Billing Data XML của UPS` });
+          continue;
+        }
+        /* Dùng lại nguyên pipeline FBO — dòng bill cùng hình, và nhờ vậy UPS được luôn phần
+         * nối shipment + nối duty đơn ship hộ mà FedEx đã có. `tongTheoSoHoaDon` để
+         * `carrier_bills.amount` lấy số của CHÍNH tờ hoá đơn (gồm chênh làm tròn thuế). */
+        const res = await applyFboBill({
+          carrierAccountId: ctx.carrierAccountId, currency: ctx.currency, userId: ctx.userId,
+          bytes: f.bytes, filename: f.filename, contentType: f.contentType,
+          rows: p.rows, hang: 'ups',
+          tongTheoSoHoaDon: new Map([[p.billNumber, p.amount]]),
+        });
+        seen.add(p.billNumber);
+        out.push({ filename: f.filename, ok: true, billNumber: p.billNumber, amount: p.amount || null,
+          matched: res.matchedAwb, freight: res.totalAwb, shipHo: res.shipHoAwb, shipHoNoiDuty: res.shipHoNoiDuty,
+          message: [`Tạo ${res.billsCreated}, cập nhật ${res.billsUpdated} hoá đơn`,
+            res.shipHoAwb > 0 ? `${res.shipHoAwb} dòng ship hộ — đã nối duty ${res.shipHoNoiDuty} đơn` : null,
+            res.khongBietAwb > 0 ? `${res.khongBietAwb} mã không tìm thấy` : null,
+            ...canhBaoUps(p)].filter(Boolean).join(' · ') });
       } else if (ctx.carrierKey === 'fedex') {
         // XML (FedEx Billing Online "Download") hay XLSX (FBO) — cùng pipeline FboBilledRow.
         const laXml = detectInvoiceFormat('fedex', f.filename) === 'fedex_xml';

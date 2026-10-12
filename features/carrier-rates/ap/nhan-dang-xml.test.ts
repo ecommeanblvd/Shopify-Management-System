@@ -18,6 +18,16 @@ describe('nhanDangXmlHoaDon', () => {
     expect(nhanDangXmlHoaDon('<Invoice><ID>HANR1</ID></Invoice>').loai).toBe('dhl');
   });
 
+  /* UPS phải thắng luật DHL: hoá đơn UPS cũng có thẻ <Invoice> (lồng trong
+   * <InvoiceDetails>), nên trước đây file UPS bị đẩy sang parser DHL và người tải chỉ
+   * nhận câu "không đúng định dạng hoá đơn DHL". */
+  it('nhận hoá đơn UPS, dù file cũng có thẻ <Invoice>', () => {
+    const xml = '<UPS_EBR_BILL><InvoiceDetails><Invoice><InvoiceNumber>100000813108</InvoiceNumber></Invoice></InvoiceDetails></UPS_EBR_BILL>';
+    const r = nhanDangXmlHoaDon(xml);
+    expect(r.loai).toBe('ups');
+    expect(r.theGoc).toBe('UPS_EBR_BILL');
+  });
+
   // Thông báo cụt "không đúng định dạng" không cho biết gì; nêu thẻ gốc để
   // người dùng gửi đúng thông tin khi báo lỗi.
   it('XML lạ thì nêu thẻ gốc để dễ báo lỗi', () => {

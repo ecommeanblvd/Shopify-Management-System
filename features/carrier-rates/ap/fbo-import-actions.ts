@@ -141,6 +141,10 @@ export interface ApplyFboInput {
   contentType: string;
   /** Rows đã parse sẵn (vd từ XML). Nếu có → bỏ qua parseWorkbook(bytes). */
   rows?: FboBilledRow[];
+  /** Hãng phát hành (mặc định fedex) — xem `importFboToDatabase`. */
+  hang?: 'fedex' | 'ups';
+  /** Số tiền theo chính tờ hoá đơn — xem `importFboToDatabase`. */
+  tongTheoSoHoaDon?: Map<string, number>;
 }
 export interface FboApplyResult extends FboPreview {
   billsCreated: number;
@@ -167,12 +171,29 @@ export interface FboFileMeta {
  *  fileMeta optional — đính chứng từ vào bill khi có. */
 export async function importFboToDatabase(
   rows: FboBilledRow[],
-  opts: { carrierAccountId: string; currency: string; userId: string; fileMeta?: FboFileMeta | null },
+  opts: {
+    carrierAccountId: string; currency: string; userId: string; fileMeta?: FboFileMeta | null;
+    /** Hãng phát hành file. Chỉ đổi NHÃN nguồn ghi vào dữ liệu (note bill, `source`), không
+     *  đổi logic — UPS dùng lại nguyên đường này vì hình dòng bill giống hệt FedEx. */
+     hang?: 'fedex' | 'ups';
+    /** Số tiền hoá đơn theo CHÍNH tờ hoá đơn, tra theo số hoá đơn. Có thì ghi số này vào
+     *  `carrier_bills.amount` thay cho Σ dòng.
+     *
+     *  Vì sao cần: hoá đơn UPS có `TaxVarianceAmount` ở cấp hoá đơn (7.746đ ở tờ tháng 9) —
+     *  chênh làm tròn thuế, không thuộc vận đơn nào nên không nằm trong dòng nào được. Lấy
+     *  Σ dòng làm số phải trả thì AP thiếu đúng khoản đó và tờ hoá đơn không bao giờ khớp
+     *  thanh toán. DHL/Aramex vẫn lấy số từ đầu hoá đơn (xem `createBill`) — đây là đưa FBO
+     *  về cùng quy ước khi file có nói số tổng. */
+    tongTheoSoHoaDon?: Map<string, number>;
+  },
 ): Promise<FboApplyResult> {
-  if (rows.length === 0) throw new Error('File FBO không có dòng vận đơn hợp lệ.');
+  if (rows.length === 0) throw new Error('File hoá đơn không có dòng vận đơn hợp lệ.');
   const bills = groupFboIntoBills(rows);
   const awbMap = await resolveAwbStoreMap(rows.map((r) => r.awb));
   const { carrierAccountId, currency, userId, fileMeta } = opts;
+  const hang = opts.hang ?? 'fedex';
+  const nhanNguon = hang === 'ups' ? 'UPS Billing XML' : 'FedEx FBO';
+  const maNguon = hang === 'ups' ? 'ups_ebr' : 'fedex_fbo';
   // Ngày VIỆT NAM (lib/timezone.ts): toISOString() trả ngày UTC nên 00:00–07:00 giờ VN lệch một ngày.
   const today = ngayKinhDoanh(new Date())!;
 
@@ -200,9 +221,10 @@ export async function importFboToDatabase(
         periodStart: start,
         periodEnd: b.periodEnd ?? start,
         issueDate: b.issueDate, dueDate: b.dueDate,
-        amount: numStr(b.amount), currency: currency,
+        amount: numStr((b.billNumber ? opts.tongTheoSoHoaDon?.get(b.billNumber) : undefined) ?? b.amount),
+        currency: currency,
         ...(fileMeta ?? {}),
-        note: `FedEx FBO · ${b.lines.length} vận đơn`,
+        note: `${nhanNguon} · ${b.lines.length} vận đơn`,
         createdBy: userId,
       };
 
@@ -225,6 +247,7 @@ export async function importFboToDatabase(
         addressCorrection: numStr(l.addressCorrection),
         importHandling: numStr(l.importHandling), duty: numStr(l.duty),
         additionalHandling: numStr(l.additionalHandling),
+        internationalProcessing: numStr(l.internationalProcessing),
         total: numStr(l.total),
         podAt: l.podAt ? new Date(l.podAt) : null, podName: l.podName,
         shipDate: l.shipDate,
@@ -262,7 +285,7 @@ export async function importFboToDatabase(
         // tính cước — xem ghi chú đã đo ở `fedex-fbo-parse.ts`. Giữ tên cột (đổi tên cột là
         // migration + mọi chỗ đọc), ghi rõ ở đây để không ai đọc nhầm nghĩa lần nữa.
         billingWeightKg: r.weightKg != null ? numStr(r.weightKg) : null,
-        source: 'fedex_fbo', sourceHash: `fbo:${r.awb}`,
+        source: maNguon, sourceHash: `${hang === 'ups' ? 'ups' : 'fbo'}:${r.awb}`,
       };
       const prev = existingByShipment.get(hit.shipmentId);
       // KHÔNG đổi → bỏ qua (giữ nguyên đối soát). Vẫn điền label nếu thiếu.
@@ -288,13 +311,14 @@ export async function importFboToDatabase(
       const inv = {
         storeId: hit.storeId, carrierAccountId: carrierAccountId, trackingNumber: r.awb,
         invoicePeriodStart: fileStart, invoicePeriodEnd: fileEnd,
-        actualCost: numStr(shipTotal), currency: currency, source: 'carrier_bill:fbo',
+        actualCost: numStr(shipTotal), currency: currency, source: `carrier_bill:${hang === 'ups' ? 'ups' : 'fbo'}`,
       };
       await tx.insert(schema.shippingInvoices).values(inv).onConflictDoUpdate({
         target: [schema.shippingInvoices.storeId, schema.shippingInvoices.trackingNumber],
         set: {
           carrierAccountId: carrierAccountId, actualCost: numStr(shipTotal), currency: currency,
-          invoicePeriodStart: fileStart, invoicePeriodEnd: fileEnd, source: 'carrier_bill:fbo', uploadedAt: new Date(),
+          invoicePeriodStart: fileStart, invoicePeriodEnd: fileEnd,
+          source: `carrier_bill:${hang === 'ups' ? 'ups' : 'fbo'}`, uploadedAt: new Date(),
         },
       });
     }
@@ -359,10 +383,11 @@ async function noiDutyChoShipHo(trackings: readonly string[]): Promise<number> {
 export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult> {
   const rows = input.rows ?? parseWorkbook(input.bytes);
   const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
-  const fileKey = `carrier-bills/${input.carrierAccountId}/fbo-${randomUUID()}${ext}`;
+  const fileKey = `carrier-bills/${input.carrierAccountId}/${input.hang === 'ups' ? 'ups' : 'fbo'}-${randomUUID()}${ext}`;
   await putObject(fileKey, input.bytes, input.contentType);
   const result = await importFboToDatabase(rows, {
     carrierAccountId: input.carrierAccountId, currency: input.currency, userId: input.userId,
+    hang: input.hang, tongTheoSoHoaDon: input.tongTheoSoHoaDon,
     fileMeta: { fileKey, filename: input.filename, contentType: input.contentType, byteSize: input.bytes.length },
   });
   // Áp POD (ngày giao chính thức trên bill) ngay sau import — best-effort, cron hourly là backstop.
