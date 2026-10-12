@@ -10,7 +10,7 @@
  *
  * KHÔNG tự kiểm quyền: caller (action hoặc cron) chịu trách nhiệm đó.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { layGiaUocTinh } from './lay-gia-uoc-tinh';
 import { patchGiaUocTinh } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
@@ -24,29 +24,59 @@ export interface KetQuaGhiGiaUocTinh {
 }
 
 /**
- * Đóng dấu `gia_uoc_tinh_ghi_luc = now()` — TÁCH RIÊNG khỏi try/catch của lệnh ghi
- * Lark (I2, review coordinator): ca thực tế nhất là deploy trước khi migration 0204
- * được áp tay (cột chưa tồn tại trên CSDL) → lệnh UPDATE này hỏng, nhưng Lark THẬT
- * SỰ ĐÃ GHI RỒI ở bước trước. Gộp chung một try sẽ báo sai thành "ghi giá lên Lark
- * thất bại" trong khi Lark không hề thất bại — gây hiểu lầm khi debug và có thể
- * khiến người xử lý thử ghi lại một thao tác đã xong.
+ * GIÀNH VIỆC bằng chính dấu `gia_uoc_tinh_ghi_luc`: đóng dấu NGAY TỪ ĐẦU, và chỉ
+ * khi dấu còn trống (`UPDATE … WHERE … IS NULL RETURNING` — mẫu claim của
+ * `features/packing/push-fulfillment.ts:14-22`). `false` = kiện này đã có người
+ * khác giành, hoặc đã xử lý xong.
+ *
+ * Vì sao phải giành TRƯỚC khi làm việc: dấu đóng ở CUỐI thì trong cửa sổ vài giây
+ * của 1 lượt Rate API + 2 lượt Lark, kiện vẫn thoả `canDienBu` ⇒ cron bắt đúng nó
+ * ⇒ hai bên cùng thấy ô Lark trống ⇒ bên sau ghi lên ô mà bên trước vừa điền. Hai
+ * lượt cron chồng nhau cũng vậy. Lark chỉ cho điền thêm, không có undo.
+ *
+ * Lệnh này hỏng (ca thực tế nhất: deploy trước khi migration 0204 được áp tay nên
+ * cột chưa tồn tại) ⇒ coi như KHÔNG giành được ⇒ KHÔNG ghi gì lên Lark. Fail-closed
+ * có chủ ý: không có dấu thì không có cách nào chặn lượt thứ hai ghi trùng.
  */
-async function dongDauGhiLuc(shipmentId: string): Promise<boolean> {
+async function giuViecGhiGia(shipmentId: string): Promise<boolean> {
   try {
-    await db.update(schema.shipments)
+    const giu = await db.update(schema.shipments)
       .set({ giaUocTinhGhiLuc: new Date() })
-      .where(eq(schema.shipments.id, shipmentId));
-    return true;
+      .where(and(eq(schema.shipments.id, shipmentId), isNull(schema.shipments.giaUocTinhGhiLuc)))
+      .returning({ id: schema.shipments.id });
+    return giu.length > 0;
   } catch (e) {
-    console.error('[dong-hang] ghiGiaUocTinhLenLark: đóng dấu gia_uoc_tinh_ghi_luc lỗi:', e);
+    console.error('[dong-hang] ghiGiaUocTinhLenLark: giành việc (gia_uoc_tinh_ghi_luc) lỗi:', e);
     return false;
   }
 }
 
 /**
- * Thứ tự CỐ Ý: lấy giá TRƯỚC khi đòi `larkRecordId` — brief xếp "chưa lấy được
- * giá" (bước 3) trước "kiện chưa có dòng Lark" (bước 4), nên cảnh báo trả về
- * đúng theo thứ tự đó khi cả hai đều thiếu.
+ * NHẢ việc đã giành: xoá dấu để lượt sau (cron) còn thử lại được.
+ *
+ * Chỉ nhả ở những nhánh CÒN CÓ THỂ THỬ LẠI (chưa lấy được giá, kiện chưa có dòng Lark, lỗi
+ * mạng/Lark). KHÔNG nhả khi đã ghi xong, và KHÔNG nhả khi biết chắc sẽ không bao giờ ghi được
+ * (dòng Lark đã bị xoá) — hai ca đó dấu phải giữ, nếu không cron gọi lại mãi mãi.
+ *
+ * Nhả thất bại thì kiện mang dấu mà chưa ghi gì: cron sẽ bỏ qua nó. Chấp nhận có chủ ý —
+ * hướng an toàn là KHÔNG ghi, và cách chữa đã có sẵn (xoá dấu rồi chạy lại).
+ */
+async function nhaViecGhiGia(shipmentId: string): Promise<void> {
+  try {
+    await db.update(schema.shipments)
+      .set({ giaUocTinhGhiLuc: null })
+      .where(eq(schema.shipments.id, shipmentId));
+  } catch (e) {
+    console.error('[dong-hang] ghiGiaUocTinhLenLark: nhả việc (gia_uoc_tinh_ghi_luc) lỗi:', e);
+  }
+}
+
+/**
+ * Thứ tự CỐ Ý: GIÀNH VIỆC trước (xem `giuViecGhiGia`), rồi lấy giá, rồi mới đòi
+ * `larkRecordId` — brief xếp "chưa lấy được giá" (bước 3) trước "kiện chưa có dòng
+ * Lark" (bước 4), nên cảnh báo trả về đúng theo thứ tự đó khi cả hai đều thiếu.
+ * Giành việc xếp trước cả hai vì nó là thứ RẺ NHẤT (một UPDATE) và vì mục đích của
+ * nó là chặn lượt thứ hai TRƯỚC khi lượt đó kịp gọi API báo giá.
  *
  * KHÔNG ném lỗi ở MỌI nhánh: toàn thân hàm nằm trong một `try` (sửa theo review —
  * bản trước chỉ bọc từ `getLogRecordById` xuống, để `db.select` phía trên ngoài
@@ -57,19 +87,36 @@ async function dongDauGhiLuc(shipmentId: string): Promise<boolean> {
  * chưa ghi được giá lên Lark.
  */
 export async function ghiGiaUocTinhLenLark(shipmentId: string): Promise<KetQuaGhiGiaUocTinh> {
+  if (!await giuViecGhiGia(shipmentId)) {
+    return {
+      giaDaGhi: false,
+      canhBao: 'kiện này đã được ghi giá, hoặc đang có một lượt khác xử lý — không ghi chồng (nếu dấu gia_uoc_tinh_ghi_luc chưa tồn tại trên CSDL thì áp migration 0204 trước)',
+    };
+  }
+
   try {
     const gia = await layGiaUocTinh(shipmentId);
     if (!gia) {
+      await nhaViecGhiGia(shipmentId);
       return { giaDaGhi: false, canhBao: 'chưa lấy được giá ước tính, cron sẽ thử lại' };
     }
+    /* I8: `maLa` là khoản tiền THẬT của hãng mà hình chung không có cột để đựng (vd mã UPS
+     * '110'/'190'). Nó vừa rơi khỏi khối ô thành phần, vừa rơi khỏi gốc tính VAT, nhưng VẪN
+     * nằm trong ô Tổng — không nói ra thì không ai biết vì sao tổng ≠ cộng các ô. Khử trùng
+     * bằng Set: một mã xuất hiện nhiều dòng chỉ cần kể một lần. */
+    const maLa = [...new Set(gia.maLa)];
 
     const [k] = await db.select({
       trackingNumber: schema.shipments.trackingNumber,
       larkRecordId: schema.shipments.larkRecordId,
     }).from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
-    if (!k) return { giaDaGhi: false, canhBao: 'Không tìm thấy kiện.' };
+    if (!k) {
+      await nhaViecGhiGia(shipmentId);
+      return { giaDaGhi: false, canhBao: 'Không tìm thấy kiện.' };
+    }
 
     if (!k.larkRecordId) {
+      await nhaViecGhiGia(shipmentId);
       return { giaDaGhi: false, canhBao: 'kiện chưa có dòng Lark tương ứng' };
     }
 
@@ -77,41 +124,44 @@ export async function ghiGiaUocTinhLenLark(shipmentId: string): Promise<KetQuaGh
     if (!rec) {
       /* I3 (phán quyết coordinator): dòng Lark đã bị XOÁ sẽ không tự quay lại —
        * thử lại vô hạn chỉ đốt tiền gọi API báo giá mà không bao giờ thành công.
-       * VẪN đóng dấu ở nhánh này để cron (Task 7) không bốc lại kiện này mãi
-       * mãi; muốn chạy lại thì xoá dấu `gia_uoc_tinh_ghi_luc` là đủ. */
-      const dongDauOk = await dongDauGhiLuc(shipmentId);
+       * GIỮ dấu ở nhánh này (không nhả) để cron (Task 7) không bốc lại kiện này
+       * mãi mãi; muốn chạy lại thì xoá dấu `gia_uoc_tinh_ghi_luc` là đủ. */
       return {
         giaDaGhi: false,
-        canhBao: dongDauOk
-          ? 'dòng Lark của kiện không còn tồn tại (đã bị xoá bên Lark) — đã đóng dấu để không tự thử lại; xoá dấu nếu cần chạy lại'
-          : 'dòng Lark của kiện không còn tồn tại (đã bị xoá bên Lark); đóng dấu cũng thất bại nên cron sẽ còn gọi lại',
+        canhBao: 'dòng Lark của kiện không còn tồn tại (đã bị xoá bên Lark) — đã đóng dấu để không tự thử lại; xoá dấu nếu cần chạy lại',
       };
     }
 
     const { patch, canhBao } = patchGiaUocTinh(gia, rec.fields, k.trackingNumber);
     if (Object.keys(patch).length > 0) {
-      await updateLogRecordFields(k.larkRecordId, patch);
+      try {
+        await updateLogRecordFields(k.larkRecordId, patch);
+      } catch (e) {
+        /* Nêu NGUYÊN VĂN lỗi Lark (đã mang `code=`/`msg=`) kèm tên cột đã gửi: PUT của Lark
+         * là all-or-nothing, nên một cột bị đổi tên bên Lark chặn cả bản vá — không có mã
+         * lỗi và tên cột thì người xử lý không biết bắt đầu từ đâu. */
+        await nhaViecGhiGia(shipmentId);
+        return {
+          giaDaGhi: false,
+          canhBao: `Lark từ chối bản vá (${e instanceof Error ? e.message : String(e)}); cột đã gửi: ${Object.keys(patch).join(', ')}`,
+        };
+      }
     }
-    const loiNhan = canhBao.length > 0 ? canhBao.join(' · ') : undefined;
 
-    /* Đóng dấu NGAY CẢ KHI patch rỗng (mọi ô đích đã có số từ trước): "đã xử lý
-     * xong vòng này" khác với "có ghi gì mới" — thiếu dấu ở nhánh patch rỗng thì
+    /* GIỮ dấu NGAY CẢ KHI patch rỗng (mọi ô đích đã có số từ trước): "đã xử lý
+     * xong vòng này" khác với "có ghi gì mới" — nhả dấu ở nhánh patch rỗng thì
      * cron vẫn gọi lại Lark mãi mãi cho một kiện vốn chẳng còn ô trống nào để
      * điền (Ruling 2, người điều phối). */
-    const dongDauOk = await dongDauGhiLuc(shipmentId);
-    if (!dongDauOk) {
-      // Lark ĐÃ ghi xong (hoặc không cần ghi gì) — chỉ riêng dấu thất bại. Vẫn
-      // là THÀNH CÔNG, kèm cảnh báo phụ (I2).
-      return {
-        giaDaGhi: true,
-        canhBao: ['đã ghi giá lên Lark, nhưng đóng dấu thất bại — cron có thể gọi lại Lark thêm một lượt (vô hại: ô đích đã có số nên không ghi đè gì mới)', loiNhan]
-          .filter(Boolean).join(' · '),
-      };
-    }
-
-    return loiNhan ? { giaDaGhi: true, canhBao: loiNhan } : { giaDaGhi: true };
+    const loiNhan = [
+      ...canhBao,
+      ...(maLa.length > 0
+        ? [`khoản hãng chưa có cột để đựng: ${maLa.join(', ')} — nằm trong ô Tổng nhưng không nằm ở ô thành phần nào, kiểm lại bằng mắt`]
+        : []),
+    ];
+    return loiNhan.length > 0 ? { giaDaGhi: true, canhBao: loiNhan.join(' · ') } : { giaDaGhi: true };
   } catch (e) {
     console.error('[dong-hang] ghiGiaUocTinhLenLark lỗi:', e);
+    await nhaViecGhiGia(shipmentId);
     return { giaDaGhi: false, canhBao: 'ghi giá lên Lark thất bại, cron sẽ thử lại' };
   }
 }
