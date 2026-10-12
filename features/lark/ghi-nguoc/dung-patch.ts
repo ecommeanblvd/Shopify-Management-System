@@ -32,7 +32,9 @@ export interface KetQuaPatch {
 export const QUY_UOC_BASE: 'niem_yet' | 'sau_chiet_khau' = 'niem_yet';
 
 const SAI_SO_DONG = 1;
-const docSo = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+/** Export để `patch-gia-uoc-tinh.ts` dùng lại đúng một định nghĩa "ô số đã có giá trị" —
+ *  hai bản sao dễ lệch nhau (vd quên loại NaN) mà không ai phát hiện bằng mắt trên Lark. */
+export const docSo = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 export function dungPatch(kien: KienGhiNguoc, charge: ChargeGhiNguoc | null, oLark: Record<string, unknown>): KetQuaPatch {
   const kq: KetQuaPatch = { patch: {}, lech: [], nhom: { trangThai: 0, ngay: 0, chiPhi: 0 } };

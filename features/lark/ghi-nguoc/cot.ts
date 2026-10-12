@@ -9,6 +9,9 @@ export const COT = {
   status: 'LOG-EP-Dispatch Status',
   ngayGiaoThucTe: 'Ngày giao thực tế',
   ngayGiaoDuKien: 'Ngày giao dự kiến',
+  /** Khớp đúng tên field Lark mà `parse-pack-row.ts` đang đọc (`fields['Tracking Number']`) —
+   *  dùng khoá có sẵn thay vì bịa tên mới, tránh hai chỗ trỏ vào hai cột khác nhau. */
+  trackingNumber: 'Tracking Number',
 } as const;
 
 export const LUA_CHON_CATEGORY: readonly string[] = [
