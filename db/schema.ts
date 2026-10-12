@@ -1216,10 +1216,13 @@ export const shipments = pgTable('shipments', {
   shopifyPushStatus: shopifyPushStatusEnum('shopify_push_status'),
   shopifyPushError: text('shopify_push_error'),
   shopifyPushedAt: timestamp('shopify_pushed_at'),
-  /** Lúc gần nhất `ghiGiaUocTinhLenLark` xử lý kiện này (ghi được hoặc không — miễn đã
-   *  thử xong vòng gồm lấy giá + tìm dòng Lark + patch). NULL = chưa xử lý lần nào.
-   *  Cron điền bù (Task 7) đọc cột này để KHÔNG gọi lại Lark mãi mãi cho kiện đã ghi
-   *  xong — thiếu dấu này là lặp vô hạn, không phải chỉ chậm. */
+  /** Lúc `ghiGiaUocTinhLenLark` ghi giá lên Lark THÀNH CÔNG, HOẶC xác định kiện này
+   *  sẽ KHÔNG BAO GIỜ ghi được (dòng Lark tương ứng đã bị xoá bên Lark, không tự
+   *  quay lại) — KHÔNG đóng dấu ở hai nhánh còn-có-thể-thử-lại ("chưa lấy được giá",
+   *  "kiện chưa có dòng Lark"), vì cron điền bù (Task 7) còn phải thử lại đúng những
+   *  kiện đó khi điều kiện đổi. NULL = chưa xử lý lần nào, hoặc đang ở một trong hai
+   *  nhánh còn-có-thể-thử-lại. Thiếu dấu ở nhánh đã-xong (hoặc không-thể-xong) là
+   *  cron gọi lại Lark/API báo giá mãi mãi — lặp vô hạn, không phải chỉ chậm. */
   giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

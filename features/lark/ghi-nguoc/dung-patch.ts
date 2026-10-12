@@ -32,9 +32,32 @@ export interface KetQuaPatch {
 export const QUY_UOC_BASE: 'niem_yet' | 'sau_chiet_khau' = 'niem_yet';
 
 const SAI_SO_DONG = 1;
-/** Export để `patch-gia-uoc-tinh.ts` dùng lại đúng một định nghĩa "ô số đã có giá trị" —
- *  hai bản sao dễ lệch nhau (vd quên loại NaN) mà không ai phát hiện bằng mắt trên Lark. */
-export const docSo = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+/**
+ * Export để `patch-gia-uoc-tinh.ts` dùng lại đúng một định nghĩa "ô số đã có giá trị" —
+ * hai bản sao dễ lệch nhau (vd quên loại NaN) mà không ai phát hiện bằng mắt trên Lark.
+ *
+ * PHẢI bao dung cả chuỗi số, không chỉ `typeof v === 'number'` — đo trực tiếp trên MỘT
+ * record Lark thật (`recv34I1lMBDBt`, ô "Mức giá cơ sở") qua hai endpoint khác nhau của
+ * cùng một API:
+ *   - `records/search` (đường `dungPatch` đang đọc, qua cron sync-lark) → trả SỐ: `4747300`
+ *   - `GET records/:id` (đường `ghiGiaUocTinhLenLark` đọc, qua `getLogRecordById`)
+ *     → trả CHUỖI: `'4747300'`
+ * Cùng một ô, hai kiểu dữ liệu tuỳ endpoint. Chỉ nhận `typeof === 'number'` thì nhánh đọc
+ * qua `GET records/:id` sẽ thấy MỌI ô đã điền số là `null` = TRỐNG, và lượt ghi giá ước
+ * tính sẽ ĐÈ LÊN số thật của Đức — loại hỏng không sửa lại được bằng máy (Lark chỉ cho
+ * điền thêm, không có đường undo). Nhánh `number` giữ nguyên ở trên để `dungPatch` (đọc
+ * qua `records/search`, đã đúng từ trước) không đổi hành vi.
+ */
+export const docSo = (v: unknown): number | null => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (s === '') return null; // chuỗi rỗng (hoặc chỉ khoảng trắng) — TRỐNG thật
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null; // '0' → 0 (ĐÃ CÓ); chuỗi không phải số → TRỐNG
+  }
+  return null;
+};
 
 export function dungPatch(kien: KienGhiNguoc, charge: ChargeGhiNguoc | null, oLark: Record<string, unknown>): KetQuaPatch {
   const kq: KetQuaPatch = { patch: {}, lech: [], nhom: { trangThai: 0, ngay: 0, chiPhi: 0 } };

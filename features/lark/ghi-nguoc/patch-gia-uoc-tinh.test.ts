@@ -53,4 +53,23 @@ describe('patchGiaUocTinh', () => {
       [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.fuel]: 1, [COT_CHI_PHI.vat]: 1, [COT_CHI_PHI.totalAmount]: 1,
     }, null))).toEqual([]);
   });
+
+  /* C1 (review coordinator): `getLogRecordById` (GET records/:id) trả ô số dạng CHUỖI,
+   * khác `records/search` (dùng SỐ) — đo thật trên record Lark `recv34I1lMBDBt`, ô "Mức
+   * giá cơ sở": search → int 4747300, GET records/:id → str '4747300'. `docSo` (dùng
+   * trong patchGiaUocTinh) phải coi ô CHUỖI SỐ là ĐÃ CÓ, không chỉ ô kiểu number — thiếu
+   * bao dung này thì đọc qua GET records/:id sẽ tưởng mọi ô đã điền là TRỐNG và ĐÈ số
+   * thật của Đức bằng giá ước tính. */
+  it('ô số dạng CHUỖI (đọc qua GET records/:id) vẫn là ĐÃ CÓ, không đè', () => {
+    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '4747300' }, null);
+    expect(COT_CHI_PHI.base in p).toBe(false);
+  });
+  it('chuỗi "0" vẫn là ĐÃ CÓ (hãng có tính, bằng không), không đè', () => {
+    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '0' }, null);
+    expect(COT_CHI_PHI.base in p).toBe(false);
+  });
+  it('chuỗi rỗng hoặc chỉ khoảng trắng mới là TRỐNG thật, vẫn điền được', () => {
+    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '' }, null)[COT_CHI_PHI.base]).toBe(100);
+    expect(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: '   ' }, null)[COT_CHI_PHI.base]).toBe(100);
+  });
 });

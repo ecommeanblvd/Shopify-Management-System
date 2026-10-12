@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, ne } from 'drizzle-orm';
+import { eq, or, sql } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth/auth';
@@ -289,7 +289,10 @@ export type KetQuaLuuTracking =
  * `view_fulfillment` như bản đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không
  * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
  * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
- * `viewer` (chỉ-xem) cũng có. Cùng mức `ghiDongThung`/đóng-mở kiện phía trên.
+ * `viewer` (chỉ-xem) cũng có. Mốc đúng trong CHÍNH file này là `nguoiDuocDongKien`
+ * (đóng/mở kiện, phía trên) — KHÔNG phải `ghiDongThung`: hàm đó đang gác lỏng ở
+ * `view_fulfillment`, một việc coordinator đã biết và sẽ sửa RIÊNG, không thuộc
+ * phạm vi Task này. Đừng lấy `ghiDongThung` làm cớ "hạ cho khớp" ở đây.
  *
  * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
  *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
@@ -313,28 +316,52 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   // ghi sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho
   // máy đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-
   // được-xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB +
-  // gọi API tính cước hãng + ghi Lark. Cùng mức `ghiDongThung` (đóng kiện) ở
-  // trên — việc này còn nặng hơn vì nó đẩy dữ liệu ra ngoài hệ thống.
+  // gọi API tính cước hãng + ghi Lark.
   if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
 
-  // Bóc tạm để tra trùng kiện — kiemTraTracking bóc LẠI bên trong để tự quyết
-  // định lỗi "không bóc được" có ưu tiên hơn lỗi "trùng kiện" hay không; ở đây
-  // chỉ cần biết CÓ kiện khác đang dùng cùng mã, không cần xử lý lỗi bóc mã.
+  // Bóc tạm để tra trùng — kiemTraTracking bóc LẠI bên trong để tự quyết định lỗi
+  // "không bóc được" có ưu tiên hơn lỗi "trùng kiện" hay không.
+  //
+  // MỘT truy vấn tra cả hai việc (I5/I6, review coordinator):
+  //   (a) kiện NÀY đang có mã gì — để phát hiện GHI ĐÈ lên mã đã có: kiện có T1
+  //       (Lark đã điền T1) mà nhân sự dán T2 đè lên thì DB thành T2 trong khi
+  //       Lark giữ T1 — lượt đồng bộ Lark kế tiếp (`patch-kien.ts` → `patchFrom`)
+  //       ghi T1 trở lại, THAO TÁC MẤT TRẮNG không một lời cảnh báo.
+  //   (b) có kiện KHÁC đang dùng mã này không (Review Focus #4).
+  // So khớp bằng `upper()` CẢ HAI PHÍA (I6): `macVanDonTu` luôn trả mã đã viết
+  // hoa, nhưng tracking lưu trong DB có thể verbatim từ nguồn khác (vd đồng bộ
+  // Lark) — so bằng `eq()` thường bỏ lọt mã viết thường ở kiện khác.
   const macThu = macVanDonTu(raw);
-  let dangDungOKienKhac = false;
-  if (macThu) {
-    const [kienKhac] = await db.select({ id: schema.shipments.id })
-      .from(schema.shipments)
-      .where(and(eq(schema.shipments.trackingNumber, macThu), ne(schema.shipments.id, shipmentId)))
-      .limit(1);
-    dangDungOKienKhac = !!kienKhac;
+  const dkTraTrung = macThu
+    ? or(eq(schema.shipments.id, shipmentId), sql`upper(${schema.shipments.trackingNumber}) = ${macThu}`)
+    : eq(schema.shipments.id, shipmentId);
+  const hang = await db.select({ id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber })
+    .from(schema.shipments).where(dkTraTrung);
+
+  // I8: kiện không tồn tại → CHẶN ở đây, không được tiếp tục rồi báo `ok: true`
+  // cho một thao tác chưa ghi được gì (mẫu đúng: `verifyDiaChiKien` trả `ok: false`).
+  const kienHienTai = hang.find((r) => r.id === shipmentId);
+  if (!kienHienTai) return { ok: false, loi: 'Không tìm thấy kiện' };
+
+  const macHienTai = kienHienTai.trackingNumber?.toUpperCase() ?? null;
+  // I5: kiện đã có một mã KHÁC rồi — chặn, không âm thầm ghi đè (dán lại ĐÚNG mã
+  // cũ vẫn qua, vì đó không phải ghi đè, chỉ là lặp tay).
+  if (macThu && macHienTai && macHienTai !== macThu) {
+    return {
+      ok: false,
+      loi: `Kiện này đã có mã vận đơn khác (${kienHienTai.trackingNumber}) — không được ghi đè âm thầm. Kiểm tra lại trước khi đổi mã.`,
+    };
   }
+
+  const dangDungOKienKhac = macThu != null
+    && hang.some((r) => r.id !== shipmentId && r.trackingNumber?.toUpperCase() === macThu);
 
   const kt = kiemTraTracking(raw, dangDungOKienKhac);
   if (!kt.ok) return { ok: false, loi: kt.loi };
 
   // Bước 2: LƯU NGAY. Từ đây mọi thứ là best-effort — hỏng ở dưới không được
-  // xoá công của bước lưu này.
+  // xoá công của bước lưu này. Kiện đã xác nhận TỒN TẠI ở trên nên không cần
+  // kiểm `returning()` ở đây nữa.
   try {
     await db.update(schema.shipments)
       .set({ trackingNumber: kt.tracking, updatedAt: new Date() })
