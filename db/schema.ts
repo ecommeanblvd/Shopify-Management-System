@@ -1216,6 +1216,11 @@ export const shipments = pgTable('shipments', {
   shopifyPushStatus: shopifyPushStatusEnum('shopify_push_status'),
   shopifyPushError: text('shopify_push_error'),
   shopifyPushedAt: timestamp('shopify_pushed_at'),
+  /** Lúc gần nhất `ghiGiaUocTinhLenLark` xử lý kiện này (ghi được hoặc không — miễn đã
+   *  thử xong vòng gồm lấy giá + tìm dòng Lark + patch). NULL = chưa xử lý lần nào.
+   *  Cron điền bù (Task 7) đọc cột này để KHÔNG gọi lại Lark mãi mãi cho kiện đã ghi
+   *  xong — thiếu dấu này là lặp vô hạn, không phải chỉ chậm. */
+  giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [

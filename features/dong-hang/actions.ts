@@ -1,6 +1,6 @@
 'use server';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth/auth';
@@ -12,6 +12,9 @@ import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { assignOrderCarrier } from '@/features/shopify-orders/carrier-select-actions';
 import { kiemDongKien, type DongKienVao } from './dong-kien';
 import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
+import { kiemTraTracking } from './luu-tracking';
+import { macVanDonTu } from './ma-van-don';
+import { ghiGiaUocTinhLenLark } from './ghi-gia-uoc-tinh-len-lark';
 import { xepQuote } from './logic';
 import { thoiGianGiaoTheoHang } from './thoi-gian-giao';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
@@ -272,4 +275,69 @@ export async function verifyDiaChiKien(shipmentId: string): Promise<{ ok: boolea
   cacheVanDon.delete(shipmentId);
   revalidatePath('/f/dong-hang');
   return r.ok ? { ok: true } : { ok: false, loi: r.error ?? 'Verify thất bại' };
+}
+
+export type KetQuaLuuTracking =
+  | { ok: true; tracking: string; giaDaGhi: boolean; canhBao?: string }
+  | { ok: false; loi: string };
+
+/**
+ * Nhân sự dán mã vận đơn vào kiện → lưu mã → GHI GIÁ ƯỚC TÍNH lên dòng Lark của
+ * kiện đó (tầng hành động nối Task 1-4 lại, spec 2026-10-12).
+ *
+ * Gác `view_fulfillment` — CÙNG MỨC với `ghiDongThung` phía trên: cả hai là
+ * việc nhập dữ liệu thường ngày của nhân sự logistics tại chính màn Đóng hàng,
+ * không phải quyết định quản lý như đóng/mở kiện (`manage_fulfillment`).
+ *
+ * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
+ *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
+ *      dừng ở đây, CHƯA ghi gì.
+ *   2. Lưu `shipments.tracking_number` NGAY — mọi bước sau là best-effort.
+ *   3-5. `ghiGiaUocTinhLenLark` (lấy giá → đọc record Lark → patch → ghi, chỉ
+ *      ô trống) — dùng CHUNG với cron điền bù (Task 7), không viết lại logic ghi
+ *      Lark lần thứ hai ở đây (D-045).
+ *
+ * Mọi nhánh từ bước 3 trở đi đều trả `ok: true` kèm `canhBao` khi có vấn đề —
+ * mã vận đơn đã nằm trong CSDL rồi, không được coi thao tác là thất bại chỉ vì
+ * chưa ghi được giá hoặc kiện chưa có dòng Lark (Review Focus #2: phải NÓI RA,
+ * không im lặng coi như xong).
+ */
+export async function luuTrackingChoKien(shipmentId: string, raw: string): Promise<KetQuaLuuTracking> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'view_fulfillment')) return { ok: false, loi: 'Không có quyền nhập mã vận đơn' };
+
+  // Bóc tạm để tra trùng kiện — kiemTraTracking bóc LẠI bên trong để tự quyết
+  // định lỗi "không bóc được" có ưu tiên hơn lỗi "trùng kiện" hay không; ở đây
+  // chỉ cần biết CÓ kiện khác đang dùng cùng mã, không cần xử lý lỗi bóc mã.
+  const macThu = macVanDonTu(raw);
+  let dangDungOKienKhac = false;
+  if (macThu) {
+    const [kienKhac] = await db.select({ id: schema.shipments.id })
+      .from(schema.shipments)
+      .where(and(eq(schema.shipments.trackingNumber, macThu), ne(schema.shipments.id, shipmentId)))
+      .limit(1);
+    dangDungOKienKhac = !!kienKhac;
+  }
+
+  const kt = kiemTraTracking(raw, dangDungOKienKhac);
+  if (!kt.ok) return { ok: false, loi: kt.loi };
+
+  // Bước 2: LƯU NGAY. Từ đây mọi thứ là best-effort — hỏng ở dưới không được
+  // xoá công của bước lưu này.
+  try {
+    await db.update(schema.shipments)
+      .set({ trackingNumber: kt.tracking, updatedAt: new Date() })
+      .where(eq(schema.shipments.id, shipmentId));
+  } catch (e) {
+    console.error('[dong-hang] luuTrackingChoKien: lưu tracking lỗi:', e);
+    return { ok: false, loi: 'Lưu mã vận đơn thất bại.' };
+  }
+
+  duongDongHang();
+
+  // Bước 3-5: ghi giá ước tính lên Lark — đường ghi CHUNG với cron Task 7.
+  const g = await ghiGiaUocTinhLenLark(shipmentId);
+  return { ok: true, tracking: kt.tracking, giaDaGhi: g.giaDaGhi, canhBao: g.canhBao };
 }
