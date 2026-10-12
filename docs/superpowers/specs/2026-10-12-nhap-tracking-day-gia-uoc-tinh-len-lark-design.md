@@ -55,22 +55,38 @@ Tính năng này là một phần của việc chuyển đó — nó khiến mà
 - **Bảng đích chính là bảng LOG đang dùng**: `LARK_LOG_TABLE_ID = tblF32k3qUhEcK5x`,
   `LARK_BASE_APP_TOKEN = HxfAw0iRViHiNgkSlbBltpVkg3f`. Không phải nối bảng mới.
 
-## Chặn đường: `record_id` chưa bao giờ được lưu
+## Điều kiện cần — ĐÃ LÀM (commit `4bfff8c5`)
 
-`updateLogRecordFields` cần **record_id của Lark**. Đo 12/10/2026:
+`updateLogRecordFields` chỉ nhận **record_id**, không nhận `Log Unique code`. Đo 12/10/2026:
+6.312/6.312 kiện có PK-xxxxx, nhưng `lark_record_id` **0/6.312**. Lượt đồng bộ vẫn đọc
+record_id về, chỉ là chưa ai lưu.
 
-| | |
-|---|---|
-| Kiện có `log_unique_code` (PK-xxxxx) | **6.312 / 6.312 — 100%** |
-| Kiện có `lark_record_id` | **0** |
-| Kiện có `hop_lark_record_id` | **0** |
+Đã sửa: `PackRow.recordId`, truyền ở **cả hai** đường vào (cron `sync-lark` + webhook
+`/api/lark/pack`), `patchFrom` chỉ ghi khi CÓ. Đã nạp `larkRecordId` vào truy vấn `existing`
+ở cả hai chỗ — thiếu bước đó thì `coThayDoi` luôn thấy "khác" và ghi lại mọi dòng mọi lượt
+(hồi quy 3.770 lệnh/lượt đã sửa 05/09). Có test chốt bộ khoá `patchFrom` sinh ra.
 
-Lượt đồng bộ **vẫn đọc được** record_id từ Lark (`listAllRecords` trả về nó), chỉ là chưa ai
-lưu xuống. Vậy việc đầu tiên, trước mọi việc khác: **lưu `record_id` xuống `shipments` trong
-lượt đồng bộ**. Đây là điều kiện cần cho mọi việc ghi ngược Lark về sau, không riêng việc này.
+**Còn lại:** record_id được điền dần theo nhịp cron. Người thực hiện **đo độ phủ trước**;
+nếu còn thấp thì cần một lượt backfill riêng.
 
-Trước khi làm, người thực hiện phải **đo lại** con số 0% ở trên — nếu một lượt sync nào đó đã
-bắt đầu lưu thì phần này rút gọn.
+## XUNG ĐỘT đã biết và đã chấp nhận: `features/lark/ghi-nguoc/`
+
+**Đã có sẵn một đường ghi khác lên ĐÚNG khối ô chi phí này.** `features/lark/ghi-nguoc/cot.ts`
+giữ `COT_CHI_PHI` map đúng các cột dưới đây; `dung-patch.ts` ghi chúng từ `shipment_charges`
+— tức **hoá đơn hãng THẬT**, không phải ước tính — cũng theo luật "chỉ điền ô trống", lệch thì
+chỉ ghi vào nhật ký `lech`.
+
+**Hệ quả:** ước tính lấp đầy ô vài giờ sau khi tạo nhãn; hoá đơn thật về sau vài tuần sẽ thấy
+ô đã có số và **không bao giờ ghi lên Lark nữa**. Lark giữ ƯỚC TÍNH vĩnh viễn cho các kiện đi
+qua luồng này.
+
+**CEO chốt 12/10/2026: chấp nhận, tạm thời giữ "không đè".** Số hoá đơn thật vẫn đầy đủ trong
+hệ thống (màn Đối soát phí ship, `carrier_bill_lines`, `shipment_charges`); Lark thành nơi xem
+nhanh chứ không phải nơi đối soát. Đây là **đánh đổi có chủ đích**, không phải chỗ hở — ai sửa
+sau này đừng "sửa" nó mà chưa hỏi.
+
+**Không đụng gì tới `ghi-nguoc` ở vòng này.** Nhánh chi phí của nó sẽ gần như không còn ghi
+được cho những kiện mới; đó là hệ quả đã biết của quyết định trên.
 
 ## Luồng
 
@@ -106,6 +122,11 @@ Cột ghi được (dạng Currency) ↔ dữ liệu mình có:
 **Không ghi:** `Giá chiết khấu`, `% Phụ phí Nhiên liệu` (Formula) · `Tracking link`,
 `Couriers (look up)`, mọi cột Lookup · `Log Unique code` (AutoNumber).
 
+**Dùng lại `COT_CHI_PHI` trong `features/lark/ghi-nguoc/cot.ts` làm nơi DUY NHẤT giữ tên cột
+Lark — không khai lại bảng tên cột thứ hai.** Chính file đó đã ghi lý do: *"Đổi tên cột bên
+Lark là hỏng — nên để MỘT chỗ."* Hai nơi giữ tên cột thì Ops đổi tên cột chỉ sửa được một bên.
+(Quyết định của người viết thiết kế, 12/10/2026.)
+
 Người thực hiện **phải đọc lại danh sách cột trước khi code** (bảng có 92 cột và người vận
 hành có thể đổi tên). Đọc bằng `railway run` + API `bitable/v1/apps/{app}/tables/{table}/fields`.
 Lưu ý: app_token để gọi API fields là **`PnFJb4IDPaIkCAssi2VlD0jNgng`** (phân giải từ node wiki
@@ -121,6 +142,21 @@ Lưu ý: app_token để gọi API fields là **`PnFJb4IDPaIkCAssi2VlD0jNgng`** 
   hành vi này; không đảo chiều quyền ưu tiên khi đọc.
 - **Rate API hỏng không chặn nhân sự.** Lưu tracking trước, giá để trống, cron thử lại.
 - **Giá lấy theo cân/kích thước ĐÃ ĐÓNG**, không theo số brand khai.
+
+## Hai chỗ PHẢI ĐO, không được đoán
+
+**VAT cho báo giá UPS.** FedEx Rate API trả `vat` thành khoản riêng (`fedex_rate_quotes.vat`),
+dùng thẳng được. **UPS Rating API không trả VAT thành khoản riêng** — code hiện có chỉ cộng VAT
+vào TỔNG để so sánh hiển thị. Đoán sai "base chịu thuế" là sai đúng ô `VAT/Thuế phí khác` —
+chính ô Đức dùng để đối soát. Phải đo trên hoá đơn UPS thật (tờ `100000813108`: 37/37 dòng có
+VAT nằm trong 7,97%–8,00% của gốc chịu thuế; gốc = mọi khoản dịch vụ, TRỪ chính VAT và TRỪ
+thuế nhập khẩu — xem `gocChiuVatUps` trong `ups-invoice-xml.ts`).
+
+**Cờ `signatureOptIn` / `recipientResidential` lúc quote.** Script backfill FedEx lấy hai cờ
+này từ `shipment_charges` — tức từ hoá đơn THẬT, chưa tồn tại lúc vừa dán mã vận đơn. Đường
+quote gần nhất (`baoGiaKien` trong `features/dong-hang/actions.ts`) đang hardcode
+`signatureOptIn: false`. Nếu bỏ qua, ước tính sẽ thiếu đúng hai khoản đó. Người thực hiện phải
+chốt nguồn cho hai cờ này và **nói rõ giới hạn trên màn hình**, không để sai âm thầm.
 
 ## Để người thực hiện quyết
 
