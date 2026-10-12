@@ -109,7 +109,8 @@ export interface ReconcileSummary {
 
 interface ReconcileOptions {
   /** Filter by carrier key — undefined = all. */
-  carrierKey?: 'fedex' | 'dhl' | 'aramex';
+  /** Khoá hãng bất kỳ. Union cứng ở đây từng làm UPS không lọc được. */
+  carrierKey?: string;
   /** Restrict to a date range on `shipments.label_created_at`. */
   fromDate?: Date;
   toDate?: Date;

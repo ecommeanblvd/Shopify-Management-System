@@ -8,7 +8,7 @@ import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { reconcileShipmentsWithStatus, pdfBillByShipment } from '@/features/shipments/reconcile-view';
-import { filterReconcileRows, reconcileSummary, paginate, countByEffStatus, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
+import { filterReconcileRows, reconcileSummary, paginate, countByEffStatus, hangTrongDoiSoat, type ReconcileFilters } from '@/features/shipments/reconcile-filter';
 import { listIssueReports } from '@/features/shipments/issue-report-actions';
 import { listCarrierErrors, summariseCarrierErrors } from '@/features/shipments/carrier-error-report';
 import { listInternalErrors, summariseInternalErrors } from '@/features/shipments/internal-error-report';
@@ -45,9 +45,12 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
   const internalErrors = await listInternalErrors();
   const internalErrorGroups = summariseInternalErrors(internalErrors);
 
+  // Danh sách hãng để lọc: SUY TỪ dữ liệu đang có, không gõ cứng (UPS từng bị bỏ sót).
+  const hangCo = hangTrongDoiSoat(rows);
+
   // Lọc + summary + phân trang PHÍA SERVER (chỉ gửi trang đang xem xuống client).
   const filters: ReconcileFilters = {
-    carrier: (sp.carrier === 'fedex' || sp.carrier === 'dhl' || sp.carrier === 'aramex') ? sp.carrier : 'all',
+    carrier: sp.carrier && hangCo.includes(sp.carrier) ? sp.carrier : 'all',
     status: (['pending', 'reconciled', 'ignored', 'carrier_error', 'disputing', 'internal_error', 'credited', 'accepted', 'awaiting_measurement', 'awaiting_billed'] as const).includes(sp.status as never)
       ? (sp.status as ReconcileFilters['status']) : 'all',
     country: sp.country ?? '', minPct: sp.minPct ?? '', q: sp.q ?? '',
@@ -121,7 +124,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
       />
       <ReconcileTable
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
-        filters={filters} openIssues={openIssues}
+        filters={filters} hangCo={hangCo} openIssues={openIssues}
         reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups}
         pdfMap={pdfMap} preBilledCounts={preBilledCounts}
       />

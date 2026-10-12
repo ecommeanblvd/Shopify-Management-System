@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReconcileViewRow, ReconcileStatus } from '@/features/shipments/reconcile-view';
 import { isAutoReconciled, MATCH_TOLERANCE_VND, effStatus, type ReconcileFilters, type ReconcileSummaryStat } from '@/features/shipments/reconcile-filter';
 import { carrierWeightCell } from '@/features/shipments/reconcile-cells';
+import { tenHang } from '@/lib/carriers/ten-hang';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
@@ -84,6 +85,8 @@ function CountryCell({ r }: { r: ReconcileViewRow }) {
 const PAGE_SIZE = 100;
 
 interface Props {
+  /** Các hãng có thật trong dữ liệu, để dựng ô lọc. */
+  hangCo: string[];
   /** Dòng của TRANG đang xem (đã lọc + slice phía server). */
   rows: ReconcileViewRow[];
   summary: ReconcileSummaryStat;
@@ -113,7 +116,7 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap, preBilledCounts }: Props) {
+export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, hangCo, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap, preBilledCounts }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -163,9 +166,8 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
       <div className={`flex flex-wrap items-center gap-2 text-sm ${isPending ? 'opacity-60' : ''}`}>
         <select value={filters.carrier} onChange={(e) => pushParams({ carrier: e.target.value === 'all' ? '' : e.target.value })} className="rounded border border-border bg-background px-2 py-1">
           <option value="all">Tất cả carrier</option>
-          <option value="fedex">FedEx</option>
-          <option value="dhl">DHL</option>
-          <option value="aramex">Aramex</option>
+          {/* Danh sách suy từ dữ liệu (xem `hangTrongDoiSoat`) — gõ cứng ở đây làm UPS biến mất. */}
+          {hangCo.map((k) => <option key={k} value={k}>{tenHang(k)}</option>)}
         </select>
         <select value={filters.status} onChange={(e) => pushParams({ status: e.target.value === 'all' ? '' : e.target.value })} className="rounded border border-border bg-background px-2 py-1">
           <option value="all">Mọi trạng thái</option>
@@ -311,7 +313,7 @@ function FragmentRow({
       <tr className="cursor-pointer border-t border-border hover:bg-muted/30" onClick={onToggle}>
         <td className="px-3 py-2 font-sans">{r.orderNumber}</td>
         <td className="px-3 py-2">{r.trackingNumber}</td>
-        <td className="px-3 py-2 font-sans">{r.carrierKey}</td>
+        <td className="px-3 py-2 font-sans">{r.carrierKey ? tenHang(r.carrierKey) : '—'}</td>
         <CountryCell r={r} />
         <td className="px-3 py-2 whitespace-nowrap tabular-nums">{r.labelDate ? new Date(r.labelDate).toLocaleDateString('vi-VN') : '—'}</td>
         <td className="px-3 py-2 text-right text-muted-foreground">{r.shopifyWeightKg ?? '—'}</td>

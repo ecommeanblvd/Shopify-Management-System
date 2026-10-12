@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAutoReconciled, effStatus, filterReconcileRows, reconcileSummary, paginate, countByEffStatus } from './reconcile-filter';
+import { isAutoReconciled, effStatus, filterReconcileRows, reconcileSummary, paginate, countByEffStatus, hangTrongDoiSoat } from './reconcile-filter';
 import type { ReconcileViewRow } from './reconcile-view';
 
 const row = (o: Partial<ReconcileViewRow> = {}): ReconcileViewRow => ({
@@ -135,5 +135,23 @@ describe('paginate', () => {
     expect(paginate(r, 2, 100).pageRows.length).toBe(50);
     expect(paginate(r, 9, 100).safePage).toBe(2);
     expect(paginate(r, 0, 100).totalPages).toBe(3);
+  });
+});
+
+describe('hangTrongDoiSoat', () => {
+  /* Lỗi thật đã gặp: ô lọc gõ cứng fedex|dhl|aramex nên UPS đã nhập hoá đơn xong vẫn
+   * không chọn được. Danh sách phải suy từ dữ liệu. */
+  it('trả về hãng CÓ THẬT, nhiều dòng nhất trước', () => {
+    const rows = [
+      row({ carrierKey: 'ups' }), row({ carrierKey: 'fedex' }),
+      row({ carrierKey: 'fedex' }), row({ carrierKey: 'ups' }), row({ carrierKey: 'fedex' }),
+    ];
+    expect(hangTrongDoiSoat(rows)).toEqual(['fedex', 'ups']);
+  });
+  it('bỏ khoá rỗng/thiếu, không trả chuỗi rỗng làm một "hãng"', () => {
+    expect(hangTrongDoiSoat([row({ carrierKey: '' }), row({ carrierKey: '  ' }), row({ carrierKey: 'dhl' })])).toEqual(['dhl']);
+  });
+  it('bằng số dòng thì sắp theo tên để danh sách không nhảy mỗi lần tải', () => {
+    expect(hangTrongDoiSoat([row({ carrierKey: 'ups' }), row({ carrierKey: 'dhl' })])).toEqual(['dhl', 'ups']);
   });
 });

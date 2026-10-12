@@ -39,9 +39,9 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const carrierParam = url.searchParams.get('carrier');
-  const carrier = carrierParam === 'fedex' || carrierParam === 'dhl' || carrierParam === 'aramex'
-    ? carrierParam : undefined;
+  // Nhận MỌI khoá hãng. Whitelist cũ (fedex|dhl|aramex) làm ?carrier=ups rơi về `undefined`,
+  // tức là XUẤT TOÀN BỘ hãng thay vì xuất riêng UPS — sai lặng lẽ, tệ hơn ra 0 dòng.
+  const carrier = url.searchParams.get('carrier')?.trim() || undefined;
   const country = url.searchParams.get('country')?.toUpperCase() || undefined;
   // Khoảng NGÀY SHIP (label_created_at) — 'YYYY-MM-DD', bao trọn 2 đầu.
   const range = presetRange(

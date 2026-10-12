@@ -29,11 +29,30 @@ export function effStatus(r: ReconcileViewRow): ReconcileStatus {
 }
 
 export interface ReconcileFilters {
-  carrier: 'all' | 'fedex' | 'dhl' | 'aramex';
+  /** Khoá hãng, hoặc 'all'. KHÔNG phải union cứng: danh sách hãng suy từ dữ liệu
+   *  (`hangTrongDoiSoat`) — gõ cứng ở đây là chỗ UPS từng biến mất khỏi bộ lọc. */
+  carrier: string;
   status: 'all' | 'pending' | 'reconciled' | 'ignored' | 'carrier_error' | 'disputing' | 'internal_error' | 'credited' | 'accepted' | 'awaiting_measurement' | 'awaiting_billed';
   country: string;
   minPct: string;
   q: string;
+}
+
+/**
+ * THUẦN: các hãng CÓ THẬT trong dữ liệu đối soát, nhiều dòng nhất đứng trước.
+ *
+ * Dùng để dựng bộ lọc thay vì gõ cứng. Trước đây ô lọc liệt kê cứng fedex/dhl/aramex ở SÁU
+ * chỗ khác nhau (ô select, bộ lọc tham số URL của page, hai kiểu `carrierKey`, kiểu
+ * `ReconcileFilters`, và whitelist của export.csv) nên UPS không bao giờ hiện dù dữ liệu có —
+ * và chọn UPS ở đường CSV còn rơi về "không lọc", xuất ra mọi hãng thay vì báo không có.
+ */
+export function hangTrongDoiSoat(rows: ReconcileViewRow[]): string[] {
+  const dem = new Map<string, number>();
+  for (const r of rows) {
+    const k = (r.carrierKey ?? '').trim();
+    if (k) dem.set(k, (dem.get(k) ?? 0) + 1);
+  }
+  return [...dem.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
 }
 
 /** Thời điểm để sort "mới nhất" — ngày ship/label. null → cũ nhất (−∞). */

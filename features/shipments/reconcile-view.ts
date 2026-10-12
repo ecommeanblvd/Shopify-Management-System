@@ -110,7 +110,8 @@ export function mergeStatus(
 }
 
 interface ReconcileViewOptions {
-  carrierKey?: 'fedex' | 'dhl' | 'aramex';
+  /** Khoá hãng bất kỳ. Union cứng ở đây từng làm UPS không lọc được. */
+  carrierKey?: string;
   fromDate?: Date;
   toDate?: Date;
 }
