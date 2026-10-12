@@ -7,6 +7,7 @@ import { LY_DO_DONG, kiemDongKien, nhanLyDoDong } from '@/features/dong-hang/don
 import { toast } from 'sonner';
 import { canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
+import { HopThoaiVanDon } from './HopThoaiVanDon';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
@@ -408,6 +409,13 @@ function DongKien({
         )}
       </div>
 
+      {/* Bước sau khi chọn line: gom thông tin để dán sang form hãng. Hệ thống không tạo nhãn. */}
+      <div className="pr-4">
+        {khongDiHang ? null : (
+          <HopThoaiVanDon shipmentId={k.shipmentId} maKien={k.logUniqueCode} coQuyenChon={coQuyenChon} />
+        )}
+      </div>
+
       <div className="min-w-0 space-y-1">
         {k.dong ? (
           <Chip mau="xam">Đã đóng · {nhanLyDoDong(k.dong.lyDo)}</Chip>
@@ -479,6 +487,7 @@ function DongKien({
           onDong2={() => setMoDong(false)}
         />
       )}
+
     </div>
   );
 }
