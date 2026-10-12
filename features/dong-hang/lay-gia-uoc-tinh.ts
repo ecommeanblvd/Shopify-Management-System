@@ -66,11 +66,19 @@ async function docFedexQuoteSnap(shipmentId: string): Promise<FedexQuoteSnap | n
  * cân — kiện đã dán mã vận đơn nghĩa là đã đóng xong, số brand khai luôn bị
  * thổi lên so với số đã đo thật.
  *
- * Hãng của kiện suy theo DẠNG mã vận đơn vừa dán (`hangTheoMaVanDon`), không
- * theo hãng nhân sự CHỌN TAY (`shopifyOrders.selectedCarrierKey`): đây đúng là
- * lý do hàm đó tồn tại (CEO 19/09/2026) — chọn tay có thể sai (mã 1Z… từng bị
- * ghi nhầm FedEx), còn mã vận đơn hãng đã phát hành thì không thể sai dạng.
- * Dạng mã lạ/chưa dán mã mới rơi về hãng đã chọn tay.
+ * Hãng của kiện suy theo thứ tự ba bậc, mỗi bậc đáng tin kém hơn bậc trước:
+ *   1. DẠNG mã vận đơn vừa dán (`hangTheoMaVanDon`) — bằng chứng mạnh nhất vì
+ *      đó là mã HÃNG ĐÃ PHÁT HÀNH thật; không thể sai dạng (FedEx 12 số, DHL
+ *      10 số, Aramex 11 số, UPS "1Z"+16 ký tự, tách bạch hoàn toàn).
+ *   2. `shipments.carrierKey` — cột cả hệ thống đang khoá theo (đối soát, bộ
+ *      lọc, nối dòng hoá đơn đều đọc nó), đồng bộ từ cột `Couriers` do đội
+ *      logistics tự điền trên Lark: ghi nhận của người vận hành về hãng đã
+ *      gửi thật, đáng tin hơn `selectedCarrierKey` vì đó là việc đã xảy ra,
+ *      không phải ý định lúc so cước.
+ *   3. `shopifyOrders.selectedCarrierKey` — hãng nhân sự CHỌN TAY lúc so cước,
+ *      chỉ dùng khi cả hai bậc trên đều không có (mã lạ/chưa dán VÀ Lark chưa
+ *      ghi `Couriers`). Chọn tay có thể sai (mã 1Z… từng bị ghi nhầm FedEx,
+ *      CEO 19/09/2026) nên luôn xếp cuối.
  */
 export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | null> {
   try {
@@ -82,6 +90,7 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
       labelCreatedAt: schema.shipments.labelCreatedAt, createdAt: schema.shipments.createdAt,
       country: schema.shopifyOrders.shipCountry, postcode: schema.shopifyOrders.shipPostcode,
       city: schema.shopifyOrders.shipCity, addrClass: schema.shopifyOrders.addrClass,
+      carrierKey: schema.shipments.carrierKey,
       selectedCarrierKey: schema.shopifyOrders.selectedCarrierKey,
     }).from(schema.shipments)
       .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
@@ -95,7 +104,7 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
       ? { length: Number(k.l), width: Number(k.w), height: Number(k.h) } : undefined;
     const shipDate = k.labelCreatedAt ?? k.createdAt;
     const isResidential = laNhaDan(k.addrClass, k.country);
-    const carrierKey = hangTheoMaVanDon(k.trackingNumber) ?? k.selectedCarrierKey ?? null;
+    const carrierKey = hangTheoMaVanDon(k.trackingNumber) ?? k.carrierKey ?? k.selectedCarrierKey ?? null;
     const nguon = nguonGiaCho(carrierKey);
 
     if (nguon === 'fedex-api') {
