@@ -240,6 +240,15 @@ export async function importFboToDatabase(
 
       await tx.insert(schema.carrierBillLines).values(b.lines.map((l) => ({
         billId: billId!,
+        /* FK về kiện đã khớp. Trước đây đường FBO KHÔNG ghi cột này: 0/3.525 dòng FedEx và
+         * 0/37 dòng UPS có liên kết, trong khi đường DHL/Aramex (`napShipmentChoDongBill`)
+         * thì có. Ba chỗ vì thế mù với FedEx/UPS: tỉ giá theo hoá đơn lúc đối soát
+         * (`reconcile.ts`), link xem PDF hoá đơn theo vận đơn (`pdfBillByShipment` — chưa bao
+         * giờ hiện), và phép suy mã đơn từ kiện cho dòng bill thiếu mã (`bills-actions`).
+         * `awbMap` đã dựng sẵn ở trên cho việc ghi shipment_charges — chỉ là chưa ai dùng nó
+         * ở đây. Khớp theo mã vận đơn là 1:1: đo 12/10/2026 trên toàn bộ dữ liệu thật, 0 mã
+         * trùng trong `shipments` và 0 dòng bill khớp nhiều kiện. */
+        shipmentId: awbMap.get(l.awb)?.shipmentId ?? null,
         trackingNumber: l.awb, orderNumber: l.orderRef, weightKg: l.weightKg != null ? numStr(l.weightKg) : null,
         base: numStr(l.base), discount: numStr(l.discount), fuel: numStr(l.fuel), remote: numStr(l.remote),
         demand: numStr(l.demand), signature: numStr(l.signature), residential: numStr(l.residential),
