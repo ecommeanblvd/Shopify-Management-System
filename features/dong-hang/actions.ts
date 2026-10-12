@@ -285,9 +285,11 @@ export type KetQuaLuuTracking =
  * Nhân sự dán mã vận đơn vào kiện → lưu mã → GHI GIÁ ƯỚC TÍNH lên dòng Lark của
  * kiện đó (tầng hành động nối Task 1-4 lại, spec 2026-10-12).
  *
- * Gác `view_fulfillment` — CÙNG MỨC với `ghiDongThung` phía trên: cả hai là
- * việc nhập dữ liệu thường ngày của nhân sự logistics tại chính màn Đóng hàng,
- * không phải quyết định quản lý như đóng/mở kiện (`manage_fulfillment`).
+ * Gác `manage_fulfillment` (sửa theo review bảo mật của coordinator, không phải
+ * `view_fulfillment` như bản đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không
+ * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
+ * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
+ * `viewer` (chỉ-xem) cũng có. Cùng mức `ghiDongThung`/đóng-mở kiện phía trên.
  *
  * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
  *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
@@ -306,7 +308,14 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
-  if (!hasPermission(role, 'view_fulfillment')) return { ok: false, loi: 'Không có quyền nhập mã vận đơn' };
+  // Gác `manage_fulfillment`, KHÔNG phải `view_fulfillment`: hàm này ghi ra một
+  // hệ thống NGOÀI (dòng Lark vận hành thật) mà máy không tự sửa lại được —
+  // ghi sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho
+  // máy đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-
+  // được-xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB +
+  // gọi API tính cước hãng + ghi Lark. Cùng mức `ghiDongThung` (đóng kiện) ở
+  // trên — việc này còn nặng hơn vì nó đẩy dữ liệu ra ngoài hệ thống.
+  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
 
   // Bóc tạm để tra trùng kiện — kiemTraTracking bóc LẠI bên trong để tự quyết
   // định lỗi "không bóc được" có ưu tiên hơn lỗi "trùng kiện" hay không; ở đây
