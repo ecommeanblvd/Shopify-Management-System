@@ -13,6 +13,9 @@ export function patchFrom(row: PackRow): Record<string, unknown> {
     p.dimLengthCm = String(row.dims.l); p.dimWidthCm = String(row.dims.w);
     if (row.dims.h != null) p.dimHeightCm = String(row.dims.h);
   }
+  // record_id: đường GHI của Lark chỉ nhận nó. Chỉ ghi khi CÓ, để lượt đồng bộ nào gọi
+  // parsePackRow mà không truyền record (test cũ) không xoá mất giá trị đang lưu.
+  if (row.recordId) p.larkRecordId = row.recordId;
   if (row.trackingNumber) p.trackingNumber = row.trackingNumber;
   if (row.carrierKey) p.carrierKey = row.carrierKey;
   if (row.labelDate) p.labelCreatedAt = row.labelDate;
@@ -37,6 +40,7 @@ export function giaTriTaoKien(row: PackRow, orderId: string): typeof schema.ship
   return {
     orderId,
     logUniqueCode: row.logUniqueCode,
+    larkRecordId: row.recordId,
     trackingNumber: row.trackingNumber,
     carrierKey: row.carrierKey,
     actualWeightKg: row.weightKg != null ? String(row.weightKg) : null,

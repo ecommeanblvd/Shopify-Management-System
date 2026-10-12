@@ -67,7 +67,7 @@ function chunk<T>(arr: T[], n: number): T[][] {
 export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<LarkSyncSummary> {
   try {
     const records = await listAllRecords();
-    const rows = records.map((r) => parsePackRow(r.fields)).filter((r) => r.orderNumber || r.logUniqueCode);
+    const rows = records.map((r) => parsePackRow(r.fields, r.record_id)).filter((r) => r.orderNumber || r.logUniqueCode);
 
     // Maps đối chiếu
     // Nạp CẢ các cột mà patchFrom sẽ ghi, để bỏ qua lệnh ghi không đổi gì.
@@ -76,6 +76,10 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
     const existing = await db
       .select({
         id: schema.shipments.id, logUniqueCode: schema.shipments.logUniqueCode,
+        // PHẢI nạp: `coThayDoi` so patch với các cột nạp ở đây. Thiếu cột nào thì giá trị
+        // hiện tại là `undefined`, không bao giờ bằng patch → ghi lại MỌI lượt, mãi mãi
+        // (đúng hồi quy 3.770 lệnh/lượt đã sửa 05/09).
+        larkRecordId: schema.shipments.larkRecordId,
         trackingNumber: schema.shipments.trackingNumber,
         actualWeightKg: schema.shipments.actualWeightKg,
         dimLengthCm: schema.shipments.dimLengthCm, dimWidthCm: schema.shipments.dimWidthCm,

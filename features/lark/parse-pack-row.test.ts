@@ -213,3 +213,12 @@ describe('parsePackRow.ghiChuDon', () => {
     expect(parsePackRow({}).ghiChuDon).toBeNull();
   });
 });
+
+describe('parsePackRow: record_id', () => {
+  it('mang record_id khi chỗ gọi truyền vào', () => {
+    expect(parsePackRow({ 'Log Unique code': 'PK-1' }, 'recXYZ').recordId).toBe('recXYZ');
+  });
+  it('không truyền thì null, không phải undefined', () => {
+    expect(parsePackRow({ 'Log Unique code': 'PK-1' }).recordId).toBeNull();
+  });
+});

@@ -72,7 +72,7 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   };
   if (!rec) return boQua(null, 'record không còn trên Lark');
 
-  const row = parsePackRow(rec.fields);
+  const row = parsePackRow(rec.fields, rec.record_id);
   // Tên hộp nằm ở bảng kho, cột "Select VTĐG1" chỉ có mã liên kết. Best-effort: hỏng thì
   // kiện vẫn về, chỉ thiếu tên hộp (ô chỉ để Đức nhìn, không dùng để tính cước).
   if (!row.hop && row.hopRecordId) row.hop = tenHopGon(await getTenHopVtdg(row.hopRecordId));
@@ -86,6 +86,8 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   // Nạp CẢ các cột patchFrom sẽ ghi → bỏ được lệnh UPDATE không đổi gì (giống cron).
   const daCo = await db.select({
     id: schema.shipments.id, logUniqueCode: schema.shipments.logUniqueCode,
+    // Nạp cùng lý do với cron: thiếu cột thì `coThayDoi` luôn thấy "khác" → ghi vô ích.
+    larkRecordId: schema.shipments.larkRecordId,
     trackingNumber: schema.shipments.trackingNumber,
     actualWeightKg: schema.shipments.actualWeightKg,
     dimLengthCm: schema.shipments.dimLengthCm, dimWidthCm: schema.shipments.dimWidthCm,

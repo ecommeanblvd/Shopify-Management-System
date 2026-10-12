@@ -3,6 +3,7 @@ import { classifyPackRows } from './classify';
 import type { PackRow } from './parse-pack-row';
 
 const mk = (o: Partial<PackRow>): PackRow => ({
+  recordId: null,
   orderNumber: '', orderNumbers: [], logUniqueCode: null, weightKg: null, dims: null,
   trackingNumber: null, carrierKey: null, labelDate: null,
   base: null, ngayDiDuKien: null, ghiChuDon: null, hop: null, hopRecordId: null, skuText: null, pieces: null, warnings: [], ...o,

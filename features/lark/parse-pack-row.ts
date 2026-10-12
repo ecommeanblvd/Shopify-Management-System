@@ -7,6 +7,13 @@ import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 export const MAX_WEIGHT_KG = 100;
 
 export interface PackRow {
+  /**
+   * `record_id` của chính dòng Lark này. Bắt buộc phải lưu xuống kiện: đường GHI của Lark
+   * (`updateLogRecordFields`) chỉ nhận record_id, không nhận `Log Unique code`. Trước
+   * 12/10/2026 không ai lưu nên 0/6.312 kiện ghi ngược được, dù 100% có PK-xxxxx.
+   * `null` khi chỗ gọi chỉ có `fields` (vài test cũ) — không chặn luồng.
+   */
+  recordId: string | null;
   /** Đơn CHÍNH của kiện (đơn đầu tiên khi Lark gộp nhiều đơn đi chung). */
   orderNumber: string;
   /** Mọi đơn Lark ghi trên dòng này — gộp đơn thì có từ 2 mã trở lên. */
@@ -171,7 +178,7 @@ export function tachMaDon(orderNumber: string | null, lookUp: string | null): st
   return [...new Set(ds)];
 }
 
-export function parsePackRow(fields: Record<string, unknown>): PackRow {
+export function parsePackRow(fields: Record<string, unknown>, recordId?: string | null): PackRow {
   const warnings: string[] = [];
   const orderNumbers = tachMaDon(larkText(fields['Order Number']), larkText(fields['Order number (look up)']));
   const orderNumber = orderNumbers[0] ?? '';
@@ -248,5 +255,5 @@ export function parsePackRow(fields: Record<string, unknown>): PackRow {
   const piecesRaw = larkText(fields['Total pieces per pack']);
   const piecesNum = piecesRaw != null ? Number(piecesRaw) : NaN;
   const pieces = Number.isInteger(piecesNum) && piecesNum > 0 ? piecesNum : null;
-  return { orderNumber, orderNumbers, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, ghiChuDon, hop, hopRecordId, skuText, pieces, warnings };
+  return { recordId: recordId ?? null, orderNumber, orderNumbers, logUniqueCode, weightKg, dims, trackingNumber, carrierKey, labelDate, base, ngayDiDuKien, ghiChuDon, hop, hopRecordId, skuText, pieces, warnings };
 }
