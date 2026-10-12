@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kiemTraTracking } from './luu-tracking';
+import { canhBaoLechHang, kiemTraTracking } from './luu-tracking';
 
 describe('kiemTraTracking', () => {
   it('mã hợp lệ thì qua', () => {
@@ -32,5 +32,24 @@ describe('kiemTraTracking', () => {
     const r = kiemTraTracking('abc xyz', true);
     expect(r.ok).toBe(false);
     expect((r as { loi: string }).loi).toContain('mã vận đơn');
+  });
+});
+
+describe('canhBaoLechHang', () => {
+  /* I6: dán nhãn của kiện BÊN CẠNH (mã DHL 10 số) vào một kiện đi FedEx vẫn qua `macVanDonTu`
+   * (nó nhận mọi chuỗi 8–35 ký tự chữ-số). Hai bên lệch chính là dấu hiệu dán nhầm dòng. */
+  it('dạng mã chỉ hãng khác với hãng của kiện → cảnh báo nói rõ cả hai bên', () => {
+    const c = canhBaoLechHang('1234567890', 'fedex');
+    expect(c).toContain('DHL');
+    expect(c).toContain('FEDEX');
+  });
+  it('khớp hãng → không nói gì', () => {
+    expect(canhBaoLechHang('876817928550', 'fedex')).toBeNull();
+  });
+  /* Dạng mã lạ (không suy ra hãng) hay kiện chưa ghi hãng thì KHÔNG có gì để so — cảnh báo
+   * bừa ở hai ca này là dạy nhân sự bỏ qua cảnh báo. */
+  it('không suy ra được hãng từ mã, hoặc kiện chưa có hãng → không nói gì', () => {
+    expect(canhBaoLechHang('ABC12345678', 'fedex')).toBeNull();
+    expect(canhBaoLechHang('876817928550', null)).toBeNull();
   });
 });

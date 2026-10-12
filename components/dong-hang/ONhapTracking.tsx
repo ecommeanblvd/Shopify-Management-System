@@ -32,7 +32,20 @@ export function ONhapTracking({ shipmentId }: { shipmentId: string }) {
     // `useEffect` — dự án bật `react-hooks/set-state-in-effect`, và việc này
     // ghi CSDL + đẩy số lên Lark nên phải xảy ra vì người dùng bấm.
     start(async () => {
-      const r = await luuTrackingChoKien(shipmentId, raw);
+      /* MỌI đường đều phải dẫn tới một toast. Không có try/catch này thì một promise bị
+       * reject (transport đứt giữa lượt gọi hãng, hạn chờ FedEx, action ném) lặng lẽ chết
+       * trong `start(async …)`: KHÔNG toast nào cả, dù mã vận đơn có thể ĐÃ lưu xong — nhân
+       * sự chỉ thấy nút trở lại bình thường và không biết thao tác đã vào hay chưa. */
+      let r: Awaited<ReturnType<typeof luuTrackingChoKien>>;
+      try {
+        r = await luuTrackingChoKien(shipmentId, raw);
+      } catch (e) {
+        toast.error(
+          `Không rõ mã đã lưu hay chưa — lượt gọi hỏng giữa đường (${e instanceof Error ? e.message : String(e)}). Tải lại trang để xem dòng kiện trước khi dán lại.`,
+          { duration: 15000 },
+        );
+        return;
+      }
       if (!r.ok) { toast.error(r.loi, { duration: 10000 }); return; }
       setRaw('');
       // Có cảnh báo = giá chưa ghi được lên Lark — đây là NƠI DUY NHẤT nói

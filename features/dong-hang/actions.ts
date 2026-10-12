@@ -12,7 +12,7 @@ import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { assignOrderCarrier } from '@/features/shopify-orders/carrier-select-actions';
 import { kiemDongKien, type DongKienVao } from './dong-kien';
 import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
-import { kiemTraTracking } from './luu-tracking';
+import { canhBaoLechHang, kiemTraTracking } from './luu-tracking';
 import { macVanDonTu } from './ma-van-don';
 import { ghiGiaUocTinhLenLark } from './ghi-gia-uoc-tinh-len-lark';
 import { xepQuote } from './logic';
@@ -335,8 +335,10 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   const dkTraTrung = macThu
     ? or(eq(schema.shipments.id, shipmentId), sql`upper(${schema.shipments.trackingNumber}) = ${macThu}`)
     : eq(schema.shipments.id, shipmentId);
-  const hang = await db.select({ id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber })
-    .from(schema.shipments).where(dkTraTrung);
+  const hang = await db.select({
+    id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber,
+    carrierKey: schema.shipments.carrierKey,
+  }).from(schema.shipments).where(dkTraTrung);
 
   // I8: kiện không tồn tại → CHẶN ở đây, không được tiếp tục rồi báo `ok: true`
   // cho một thao tác chưa ghi được gì (mẫu đúng: `verifyDiaChiKien` trả `ok: false`).
@@ -375,5 +377,9 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
 
   // Bước 3-5: ghi giá ước tính lên Lark — đường ghi CHUNG với cron Task 7.
   const g = await ghiGiaUocTinhLenLark(shipmentId);
-  return { ok: true, tracking: kt.tracking, giaDaGhi: g.giaDaGhi, canhBao: g.canhBao };
+  /* I6: gộp cảnh báo lệch hãng vào cùng một câu với cảnh báo ghi giá — ô nhập chỉ hiện MỘT
+   * toast, nói ra một việc rồi nuốt việc kia cũng là im lặng. */
+  const canhBao = [canhBaoLechHang(kt.tracking, kienHienTai.carrierKey), g.canhBao]
+    .filter((c): c is string => c != null && c !== '').join(' · ');
+  return { ok: true, tracking: kt.tracking, giaDaGhi: g.giaDaGhi, canhBao: canhBao || undefined };
 }

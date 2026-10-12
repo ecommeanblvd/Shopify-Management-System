@@ -97,6 +97,16 @@ export function dungKhoaTrackRieng(): boolean {
   return Boolean(process.env.FEDEX_TRACK_CLIENT_ID && process.env.FEDEX_TRACK_CLIENT_SECRET);
 }
 
+/**
+ * Hạn chờ FedEx, theo mẫu client UPS (15s token / 8s báo giá) và Lark (30s).
+ *
+ * Vì sao bắt buộc: `fetch` không `AbortSignal.timeout` thì một kết nối treo treo VĨNH VIỄN.
+ * Đường này giờ nằm TRÊN đường nhân sự đang chờ (`luuTrackingChoKien` await cả chuỗi trước
+ * khi trả) nên FedEx treo = nút "Lưu" treo, không phải chỉ một job chậm.
+ */
+const HET_HAN_TOKEN_MS = 15_000;
+const HET_HAN_GOI_MS = 20_000;
+
 async function layToken(bo: BoKhoaFedex): Promise<FedexTokenResponse> {
   const { base, clientId, clientSecret } = fedexConfig(bo);
   const res = await fetch(`${base}/oauth/token`, {
@@ -107,6 +117,7 @@ async function layToken(bo: BoKhoaFedex): Promise<FedexTokenResponse> {
       client_id: clientId,
       client_secret: clientSecret,
     }),
+    signal: AbortSignal.timeout(HET_HAN_TOKEN_MS),
   });
   if (!res.ok) throw new Error(`FedEx OAuth ${res.status}: ${await res.text()}`);
   return (await res.json()) as FedexTokenResponse;
@@ -145,6 +156,8 @@ export async function fedexFetch<T>(
       ...(headers as Record<string, string> | undefined),
     },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
+    // `rest` có thể mang signal riêng của caller — chỉ đặt hạn chờ mặc định khi caller không có.
+    signal: rest.signal ?? AbortSignal.timeout(HET_HAN_GOI_MS),
   });
   const text = await res.text();
   if (!res.ok) {

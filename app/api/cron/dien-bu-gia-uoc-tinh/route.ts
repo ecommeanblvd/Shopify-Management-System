@@ -73,7 +73,14 @@ export async function GET(request: Request): Promise<Response> {
   if (authHeader !== `Bearer ${expected}`) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
 
   try {
-    const summary = await chayJobApi('dien-bu-gia-uoc-tinh', dienBuGiaUocTinh);
+    /* `kiemTra`: tác vụ chạy xong KHÔNG có nghĩa là làm được việc. Thiếu nó thì một lượt mà
+     * 20/20 kiện thất bại vẫn ghi `ok` và trang giám sát báo xanh — đúng cách phụ phí xăng
+     * dầu UPS đứng im 11 tuần. Xét hỏng khi có kiện xét duyệt mà KHÔNG kiện nào ghi được. */
+    const summary = await chayJobApi('dien-bu-gia-uoc-tinh', dienBuGiaUocTinh, (s) => (
+      s.tongSoXetDuyet > 0 && s.ghiDuoc === 0
+        ? `0/${s.tongSoXetDuyet} kiện ghi được giá lên Lark${s.canhBaos.length > 0 ? ` — ${s.canhBaos[0]}` : ''}`
+        : null
+    ));
     return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });

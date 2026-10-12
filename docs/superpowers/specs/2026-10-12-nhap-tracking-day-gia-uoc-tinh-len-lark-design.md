@@ -117,7 +117,7 @@ Cột ghi được (dạng Currency) ↔ dữ liệu mình có:
 
 | Cột Lark | Nguồn |
 |---|---|
-| `Mức giá cơ sở` | cước cơ bản đã trừ chiết khấu |
+| `Mức giá cơ sở` | cước cơ bản **giá niêm yết** (chưa trừ chiết khấu) — đúng quy ước sẵn có `QUY_UOC_BASE = 'niem_yet'` ở `features/lark/ghi-nguoc/dung-patch.ts`, cùng nghĩa với số mà đường ghi hoá đơn đã dùng cho ô này. Bản đầu của tài liệu ghi "đã trừ chiết khấu" là SAI: hai nghĩa trong một ô thì không ai đối soát được |
 | `Phụ phí nhiên liệu` | fuel |
 | `Phụ phí vùng sâu xa` | remote |
 | `EES / Theo nhu cầu` | demand |
