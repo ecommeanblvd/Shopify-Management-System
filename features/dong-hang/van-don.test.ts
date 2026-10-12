@@ -51,3 +51,44 @@ describe('canhBaoDiaChi', () => {
     expect(canhBaoDiaChi({ addrIssue: null })).toMatchObject({ muc: 'khong', cau: null, batXacNhan: false });
   });
 });
+
+import { nguonCanKien, moTaHangHoa } from './van-don';
+
+const sms = { hop: 'A3', canKg: 2.4, dai: 40, rong: 30, cao: 20, luc: '2026-10-12T03:00:00.000Z' };
+const lark = { hop: 'B1', canKg: 2.1, dai: 38, rong: 28, cao: 18 };
+
+describe('nguonCanKien', () => {
+  it('có bước Đóng thùng của SMS → lấy SMS (lần cân cuối)', () => {
+    const r = nguonCanKien({ sms, lark });
+    expect(r).toMatchObject({ canKg: 2.4, dai: 40, rong: 30, cao: 20, hop: 'A3', nguon: 'sms', thieu: [] });
+    expect(r.nhan).toMatch(/Đóng thùng/);
+  });
+  it('chưa đóng thùng trong SMS → rơi về Lark, nói rõ nguồn', () => {
+    const r = nguonCanKien({ sms: null, lark });
+    expect(r).toMatchObject({ canKg: 2.1, hop: 'B1', nguon: 'lark', thieu: [] });
+    expect(r.nhan).toMatch(/Lark/);
+  });
+  it('không có nguồn nào → thiếu cả cân và kích thước', () => {
+    const r = nguonCanKien({ sms: null, lark: null });
+    expect(r).toMatchObject({ canKg: null, nguon: null });
+    expect(r.thieu).toEqual(['cân', 'kích thước']);
+  });
+  it('có cân nhưng THIẾU một chiều → vẫn tính là thiếu kích thước', () => {
+    const r = nguonCanKien({ sms: null, lark: { ...lark, cao: null } });
+    expect(r.thieu).toEqual(['kích thước']);
+  });
+  it('cân 0 không phải cân → tính là thiếu', () => {
+    const r = nguonCanKien({ sms: null, lark: { ...lark, canKg: 0 } });
+    expect(r.thieu).toEqual(['cân']);
+  });
+});
+
+describe('moTaHangHoa', () => {
+  it('có chất liệu → ghép tên — chất liệu', () => {
+    expect(moTaHangHoa('Amy Dress', 'Silk')).toBe('Amy Dress — Silk');
+  });
+  it('thiếu chất liệu → chỉ tên, KHÔNG để dấu gạch lơ lửng', () => {
+    expect(moTaHangHoa('Amy Dress', null)).toBe('Amy Dress');
+    expect(moTaHangHoa('Amy Dress', '   ')).toBe('Amy Dress');
+  });
+});

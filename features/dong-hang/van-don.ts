@@ -77,3 +77,47 @@ export function canhBaoDiaChi(
     cau: `Hãng đánh dấu địa chỉ: ${d.addrIssue} — kiểm lại trước khi lên vận đơn.`,
   };
 }
+
+export interface CanKienVao {
+  /** Bước ĐÓNG THÙNG của SMS (`sms_*`, migration 0187) — cột SMS sở hữu. */
+  sms: { hop: string | null; canKg: number | null; dai: number | null; rong: number | null; cao: number | null; luc: string } | null;
+  /** Số Lark ghi (`actual_weight_kg`, `dim_*`) — đường lùi khi SMS chưa đóng thùng. */
+  lark: { hop: string | null; canKg: number | null; dai: number | null; rong: number | null; cao: number | null } | null;
+}
+
+/**
+ * Cân + kích thước nên dán, kèm nguồn.
+ *
+ * SMS THẮNG Lark: bước Đóng thùng là lần cân cuối và là cột SMS sở hữu (đồng bộ Lark không
+ * đụng). Hai số có thể khác nhau nên LUÔN nói ra đang lấy từ đâu.
+ *
+ * KHÔNG BAO GIỜ rơi về cân dự kiến của các món: nó cộng cân từng món đã tính một hộp mỗi món,
+ * nên nhiều món gộp một thùng thì nó CAO HƠN cân kiện thật — xem `NHAN_DU_KIEN` trong
+ * `can-du-kien.ts`. Thiếu thì nói thiếu, không điền số gần đúng.
+ */
+export function nguonCanKien(v: CanKienVao): {
+  canKg: number | null; dai: number | null; rong: number | null; cao: number | null;
+  hop: string | null; nguon: 'sms' | 'lark' | null; nhan: string; thieu: string[];
+} {
+  const nguon: 'sms' | 'lark' | null = v.sms ? 'sms' : v.lark ? 'lark' : null;
+  const chon = v.sms ?? v.lark;
+  const nhan = nguon === 'sms'
+    ? 'cân + kích thước từ bước Đóng thùng của SMS'
+    : nguon === 'lark'
+      ? 'cân + kích thước Lark ghi (SMS chưa đóng thùng)'
+      : 'chưa có cân và kích thước';
+  const thieu: string[] = [];
+  if (!chon || chon.canKg == null || !(chon.canKg > 0)) thieu.push('cân');
+  if (!chon || chon.dai == null || chon.rong == null || chon.cao == null) thieu.push('kích thước');
+  return {
+    canKg: chon?.canKg ?? null, dai: chon?.dai ?? null, rong: chon?.rong ?? null,
+    cao: chon?.cao ?? null, hop: chon?.hop ?? null, nguon, nhan, thieu,
+  };
+}
+
+/** Ô "Description of goods" của form hãng: `<tên> — <chất liệu>`; thiếu chất liệu thì chỉ tên. */
+export function moTaHangHoa(tenSanPham: string, chatLieu: string | null): string {
+  const t = tenSanPham.trim();
+  const c = (chatLieu ?? '').trim();
+  return c === '' ? t : `${t} — ${c}`;
+}
