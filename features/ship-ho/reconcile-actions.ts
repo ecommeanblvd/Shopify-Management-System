@@ -95,8 +95,10 @@ export interface RebillSummary {
   /** Số đơn ghi được duty (mới hoặc tổng đổi) trong lượt chạy — độc lập với cước. */
   dutyGhi?: number;
   /** Cước net FedEx trên bill KHÔNG trùng ô nào của bảng giá cố định → ops soi rate card / dòng bill. */
-  baseLech: Array<{ code: string; netVnd: number; lechVnd: number | null; ganNhat: string | null }>;
-  errors: Array<{ code: string; reason: string }>;
+  /** `maLog` đi kèm vì danh sách này đọc khi đang cầm HOÁ ĐƠN carrier, mà hoá đơn ghi mã
+   *  bảng LOG chứ không ghi `code` (D-238). */
+  baseLech: Array<{ code: string; maLog: string | null; netVnd: number; lechVnd: number | null; ganNhat: string | null }>;
+  errors: Array<{ code: string; maLog: string | null; reason: string }>;
 }
 
 /** Nút operator (auth) → đối soát ship hộ từ hoá đơn carrier. */
@@ -123,6 +125,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     .select({
       id: schema.shipHoOrders.id,
       code: schema.shipHoOrders.code,
+      larkOrderNumber: schema.shipHoOrders.larkOrderNumber,
       source: schema.shipHoOrders.source,
       mmpRef: schema.shipHoOrders.mmpRef,
       shippedAt: schema.shipHoOrders.shippedAt,
@@ -230,7 +233,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // Net bill KHÔNG trùng ô nào của bảng giá → dữ liệu lệch (rate card / dòng bill), báo ops.
         const kiemO = khopOBangGia(billNetFreight, await layOBangGia(est.internal.carrierAccountId, o.country, shipDateStr ?? null));
         canTuBangGia = canTinhCuocTuO(kiemO, null);
-        if (!kiemO.khop) summary.baseLech.push({ code: o.code, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
+        if (!kiemO.khop) summary.baseLech.push({ code: o.code, maLog: o.larkOrderNumber, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
         const rc = reconciledBrandCharge({
           baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
           // Markup theo BẬC hiện tại của brand (CEO 30/09, thay quyết định 08/09) — cùng
@@ -259,7 +262,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           ...(kiemO.khop ? {} : { baseLechVnd: kiemO.lechVnd ?? 0 }),
         };
         summary.requoted += 1;
-      } else summary.errors.push({ code: o.code, reason: `re-quote ${est.code}` });
+      } else summary.errors.push({ code: o.code, maLog: o.larkOrderNumber, reason: `re-quote ${est.code}` });
     }
 
     const quotedCharged = o.chargedVnd == null ? null : Number(o.chargedVnd);

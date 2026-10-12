@@ -11,6 +11,7 @@ import { filterShipHoOrders, docMucDoiSoat } from '@/features/ship-ho/filter-ord
 import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
 import { displayCharged, displayChargedWithDuty, displayMarginWithDuty } from '@/features/ship-ho/pnl';
 import { MaDon } from '@/components/ship-ho/MaDon';
+import { maHienThi } from '@/features/ship-ho/ma-hien-thi';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
@@ -189,7 +190,7 @@ export default async function ShipHoListPage({
                 });
                 const rec = reconMap.get(o.id);
                 const modalData: ReconcileModalData = {
-                  id: o.id, code: o.code,
+                  id: o.id, code: o.code, larkOrderNumber: o.larkOrderNumber,
                   reconcileStatus: o.reconcileStatus,
                   reconcileDecision: rec?.reconcileDecision ?? null,
                   hasTracking: o.trackingNumber != null,
@@ -200,8 +201,10 @@ export default async function ShipHoListPage({
                   actualChargedVnd: rec?.actualChargedVnd ?? num(o.actualChargedVnd),
                   structure: rec?.structure ?? null,
                 };
+                // Tên cho trình đọc màn hình phải KHỚP mã đang hiện (mã LOG), không phải mã
+                // hệ thống — lệch nhau thì người dùng bàn phím nghe một mã, thấy một mã khác.
                 return (
-                <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
+                <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${maHienThi(o).chinh.ma}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-2 xl:[&>td]:p-3 [&>td]:align-top">
                   <td>
                     {/* Mã LOG đứng trước (CEO 12/10/2026, hướng A) — đó là mã vận hành nói chuyện

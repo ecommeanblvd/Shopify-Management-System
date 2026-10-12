@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { reconcileShipHoFromCarrierBills, type RebillSummary } from '@/features/ship-ho/reconcile-actions';
+import { MaDon } from '@/components/ship-ho/MaDon';
 
 /**
  * Nút "Đối soát từ hóa đơn carrier": kéo cân/cước/phụ phí thực từ carrier_bill_lines
@@ -35,13 +36,15 @@ export function ReconcileBillsButton() {
           {result.baseLech.length > 0 && (
             <div className="mt-1 border-t border-border pt-1 text-amber-600 dark:text-amber-400">
               <div className="font-medium">Cước net bill lệch bảng giá ({result.baseLech.length})</div>
-              {result.baseLech.slice(0, 5).map((b) => <div key={b.code}>{b.code}: net {b.netVnd.toLocaleString('vi-VN')}{b.ganNhat ? ` · gần nhất ${b.ganNhat}` : ''}{b.lechVnd != null ? ` (${b.lechVnd > 0 ? '+' : ''}${b.lechVnd.toLocaleString('vi-VN')})` : ''}</div>)}
+              {/* Dẫn bằng mã LOG: danh sách này đọc khi đang cầm hoá đơn carrier, mà hoá đơn
+                  ghi mã bảng LOG (D-238). */}
+              {result.baseLech.slice(0, 5).map((b) => <div key={b.code}><MaDon code={b.code} larkOrderNumber={b.maLog} />: net {b.netVnd.toLocaleString('vi-VN')}{b.ganNhat ? ` · gần nhất ${b.ganNhat}` : ''}{b.lechVnd != null ? ` (${b.lechVnd > 0 ? '+' : ''}${b.lechVnd.toLocaleString('vi-VN')})` : ''}</div>)}
             </div>
           )}
           <div className="flex justify-between"><span className="text-muted-foreground">Chưa có hóa đơn</span><span>{result.unmatched}</span></div>
           {result.errors.length > 0 && (
             <div className="mt-1 border-t border-border pt-1 text-amber-600 dark:text-amber-400">
-              {result.errors.slice(0, 5).map((e, i) => <div key={i}>{e.code}: {e.reason}</div>)}
+              {result.errors.slice(0, 5).map((e, i) => <div key={i}><MaDon code={e.code} larkOrderNumber={e.maLog} />: {e.reason}</div>)}
             </div>
           )}
           <button type="button" onClick={() => setResult(null)} className="mt-2 text-muted-foreground underline">Đóng</button>

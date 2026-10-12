@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { reconcileCellState } from '@/features/ship-ho/reconcile-decision';
+import { MaDon } from '@/components/ship-ho/MaDon';
 import {
   shipHoFreightAndDutyRows, shipHoFreightSubtotal, shipHoFinalTotal,
   type ShipHoPriceStructure, type PriceStructureRow,
@@ -15,6 +16,8 @@ import {
 export interface ReconcileModalData {
   id: string;
   code: string;
+  /** Mã bảng LOG — mã chuẩn hiển thị (D-238). Tuỳ chọn để chỗ gọi cũ không phải đổi hết. */
+  larkOrderNumber?: string | null;
   reconcileStatus: string | null;   // 'reconciled' | null
   reconcileDecision: string | null; // null | pending_review | accepted | claiming | claim_credited | claim_rejected
   hasTracking: boolean;
@@ -99,7 +102,12 @@ export function DecisionModal({ row, onClose, actions }: {
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setReason(''); setError(null); onClose(); } }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{resolveMode ? 'Kết luận claim' : 'Đối soát'} — đơn {row?.code}</DialogTitle>
+          {/* Dẫn bằng mã LOG: đây là chỗ người ta CẦM HOÁ ĐƠN mà đối chiếu, mà hoá đơn
+              carrier ghi mã LOG (D-238). */}
+          <DialogTitle>
+            {resolveMode ? 'Kết luận claim' : 'Đối soát'} — đơn{' '}
+            {row ? <MaDon code={row.code} larkOrderNumber={row.larkOrderNumber} /> : null}
+          </DialogTitle>
           <DialogDescription>
             {resolveMode ? (
               <>Đơn đang chờ claim carrier. <b>Được credit</b> = carrier hoàn tiền chênh; <b>Bị từ chối</b> =

@@ -13,6 +13,7 @@ import { ReconcileUploader } from './ReconcileUploader';
 import { ReconcileBillsButton } from '../ReconcileBillsButton';
 import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
 import { ReconciledRowsTable, type ReconciledRowData } from './ReconciledRowsTable';
+import { MaDon } from '@/components/ship-ho/MaDon';
 import { layDanhSachBrandShipHo } from '@/features/ship-ho/queries';
 import { docMucDoiSoat, locTheoBrand, locTheoDoiSoat, NHAN_DOI_SOAT } from '@/features/ship-ho/filter-orders';
 import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
@@ -167,7 +168,14 @@ export default async function ShipHoReconcilePage({ searchParams }: { searchPara
               <tbody>
                 {waiting.map((r) => (
                   <tr key={r.id} className="border-t border-border/60 [&>td]:px-2 [&>td]:py-2 xl:[&>td]:px-3">
-                    <td className="text-left"><Link href={`/f/ship-ho/${r.id}`} className="font-medium text-primary underline-offset-2 hover:underline">{r.code}</Link></td>
+                    <td className="text-left">
+                      <Link href={`/f/ship-ho/${r.id}`} className="font-medium text-primary underline-offset-2 hover:underline">
+                        <MaDon code={r.code} larkOrderNumber={r.larkOrderNumber} hienMaPhu={false} />
+                      </Link>
+                      <div className="text-[10px] leading-tight text-muted-foreground">
+                        <MaDon code={r.code} larkOrderNumber={r.larkOrderNumber} />
+                      </div>
+                    </td>
                     <td className="text-left truncate">{r.brandName ?? r.partnerBrandSlug}</td>
                     <td className="text-left font-mono text-xs">{r.trackingNumber}</td>
                     <td className="text-left uppercase text-xs">{r.carrierKey ?? '—'}</td>
