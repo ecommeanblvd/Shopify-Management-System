@@ -34,8 +34,17 @@ export function locTheoBrand<T extends { partnerBrandSlug: string }>(rows: T[], 
   return b ? rows.filter((r) => r.partnerBrandSlug === b) : rows;
 }
 
-/** THUẦN: lọc đơn theo source (nút "Chỉ đơn MMP"), brand, trạng thái đối soát và q
- *  (ILIKE trên code, mã đơn gốc, tracking, tên brand, người nhận). Rỗng → không lọc. */
+/** THUẦN: lọc đơn theo source (nút "Chỉ đơn MMP"), brand, trạng thái đối soát và q.
+ *
+ *  `q` quét MỌI mã mà một đơn ship hộ có thể được gọi bằng, vì bốn hệ đánh số song song
+ *  (xem `ma-don-brand.ts`): `code` của SMS, `larkOrderNumber` của bảng LOG, `brandReference`
+ *  của brand, `customerRef`, cộng mã vận đơn / tên brand / người nhận.
+ *
+ *  Mã Lark và `brandReference` TỪNG BỊ BỎ SÓT ở đây. Hai bên đánh số độc lập và 0/180 đơn
+ *  có hai mã trùng nhau, nên gõ số Lark (vd `26-INSLG-SV-0954`) vào ô tìm trả về 0 kết quả
+ *  dù đơn có thật trong hệ thống — và hoá đơn carrier lại ghi đúng cái số Lark đó, vì nhân
+ *  viên chép mã tham chiếu từ bảng LOG lúc tạo nhãn. Bỏ sót ở ô tìm nghĩa là người đối soát
+ *  kết luận "đơn không tồn tại". */
 export function filterShipHoOrders(
   rows: ShipHoOrderRow[],
   opts: { q?: string; source?: 'mmp'; brand?: string; doiSoat?: ReconcileCellKind },
@@ -48,6 +57,7 @@ export function filterShipHoOrders(
   if (!q) return out;
   const has = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q);
   return out.filter((r) =>
-    has(r.code) || has(r.customerRef) || has(r.trackingNumber) || has(r.brandName) ||
+    has(r.code) || has(r.larkOrderNumber) || has(r.brandReference) || has(r.customerRef) ||
+    has(r.trackingNumber) || has(r.brandName) ||
     has(r.partnerBrandSlug) || has(r.recipientName));
 }

@@ -67,3 +67,28 @@ describe('bộ lọc brand + trạng thái đối soát (cho Đức đối soát
     expect(Object.keys(NHAN_DOI_SOAT)).toHaveLength(5);
   });
 });
+
+describe('filterShipHoOrders: tra được theo MỌI mã của đơn', () => {
+  /* Lỗi thật (12/10/2026): hoá đơn UPS ghi mã tham chiếu `26-INSLG-SV-0954` — đó là mã của
+   * bảng LOG, không phải `code`. Ô tìm chỉ quét `code` nên trả 0 kết quả, và người đối soát
+   * kết luận "vận đơn không có trong hệ thống". 0/180 đơn có hai mã trùng nhau. */
+  const rows = [
+    { ...base, id: 'a', code: '26-INSLG-SV-0145', larkOrderNumber: '26-INSLG-SV-0954',
+      brandReference: '#KLS2073', customerRef: null, trackingNumber: '1Z2050VDD919649050', recipientName: 'A' },
+    { ...base, id: 'b', code: '26-INSLG-SV-0146', larkOrderNumber: '26-INSLG-SV-0960',
+      brandReference: '#KLS2080', customerRef: null, trackingNumber: '876817928550', recipientName: 'B' },
+  ] as unknown as Parameters<typeof filterShipHoOrders>[0];
+
+  it('tra theo mã LOG (Lark) ra đúng đơn', () => {
+    expect(filterShipHoOrders(rows, { q: '26-INSLG-SV-0954' }).map((r) => r.id)).toEqual(['a']);
+  });
+  it('tra theo mã brand ra đúng đơn', () => {
+    expect(filterShipHoOrders(rows, { q: 'kls2080' }).map((r) => r.id)).toEqual(['b']);
+  });
+  it('mã hệ thống vẫn tra được như cũ', () => {
+    expect(filterShipHoOrders(rows, { q: '26-INSLG-SV-0145' }).map((r) => r.id)).toEqual(['a']);
+  });
+  it('số đuôi dùng chung không nuốt mất đơn nào', () => {
+    expect(filterShipHoOrders(rows, { q: 'INSLG' }).map((r) => r.id)).toEqual(['a', 'b']);
+  });
+});
