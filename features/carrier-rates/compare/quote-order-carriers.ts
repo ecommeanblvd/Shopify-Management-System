@@ -6,10 +6,11 @@
  * So sánh theo `carrierCostDisplay` (cước gốc pre-markup, all-in fuel+VAT, ở
  * displayCurrency — tất cả account hiện để VND nên so trực tiếp được).
  */
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { quote, type QuoteBreakdown, type CarrierAccountSnapshot } from '../engine/quote';
+import { quote, isApplicable, type QuoteBreakdown, type CarrierAccountSnapshot } from '../engine/quote';
 import { loadAccountSnapshot } from '../engine/load';
+import { baoGiaUpsShop, chonMucReNhat, tenKhoanUps } from '@/lib/ups/rate';
 
 export interface OrderCarrierQuoteInput {
   country: string;
@@ -48,6 +49,16 @@ export interface CarrierQuoteRow {
   /** Tạm ngưng CHỌN từ ngày này (ISO). null = chọn được. Vẫn báo giá. */
   suspendedAt?: string | null;
   suspendReason?: string | null;
+  /**
+   * Con số này từ đâu. `live` = hỏi thẳng API của hãng (hiện chỉ UPS); `bang` = bảng giá nội
+   * bộ. Vắng = hãng không có đường live, bảng giá là nguồn duy nhất nên không cần nói.
+   */
+  nguonGia?: 'live' | 'bang';
+  /** Mức dịch vụ của giá live (vd "Worldwide Express Saver") — người chọn line phải chọn đúng
+   *  mức này bên cổng hãng, không thì giá thật khác giá đã so. */
+  dichVu?: string;
+  /** Câu cảnh báo khi phải rơi về bảng giá. Vắng = số đáng tin. */
+  canhBaoGia?: string;
 }
 
 /** Cước VND của account: costCurrency=VND → carrierCost; else display=VND →
@@ -96,9 +107,119 @@ export function rankCarrierQuotes(entries: AccountSnap[], input: OrderCarrierQuo
     }
     return { ...common, ok: false, error: q.code };
   });
-  rows.sort((x, y) => (x.ok ? 0 : 1) - (y.ok ? 0 : 1)
+  return xepTheoCuoc(rows);
+}
+
+/** Xếp: hãng báo giá được lên trước, rồi cước tăng dần. Tách ra vì áp giá live xong phải xếp lại. */
+export function xepTheoCuoc(rows: CarrierQuoteRow[]): CarrierQuoteRow[] {
+  return [...rows].sort((x, y) => (x.ok ? 0 : 1) - (y.ok ? 0 : 1)
     || (x.vndCost ?? Infinity) - (y.vndCost ?? Infinity));
-  return rows;
+}
+
+export interface GiaLive {
+  vndCost: number; displayCost: number;
+  dichVu: string; zone: string | null; notes: string[];
+}
+
+/**
+ * THUẦN: thay số của những account có giá LIVE, rồi xếp lại.
+ *
+ * Account có `loi` thì GIỮ số bảng giá và gắn nhãn cảnh báo (CEO chốt 12/10/2026) — bảng so
+ * cước luôn có một con số để so, nhưng người đọc phải thấy nó là số bảng.
+ *
+ * Account không nằm trong `live` thì không đụng tới, và KHÔNG gắn `nguonGia`: hãng đó không có
+ * đường live nên bảng giá là nguồn duy nhất, nói ra chỉ thêm nhiễu.
+ */
+export function apDungGiaLive(
+  rows: CarrierQuoteRow[],
+  live: ReadonlyMap<string, GiaLive | { loi: string }>,
+): CarrierQuoteRow[] {
+  return xepTheoCuoc(rows.map((r) => {
+    const g = live.get(r.accountId);
+    if (!g) return r;
+    if ('loi' in g) {
+      return { ...r, nguonGia: 'bang' as const, canhBaoGia: `giá bảng, có thể lệch — không gọi được giá live (${g.loi})` };
+    }
+    return {
+      ...r, ok: true as const, error: undefined,
+      nguonGia: 'live' as const, dichVu: g.dichVu,
+      vndCost: g.vndCost, carrierCostDisplay: g.displayCost,
+      zone: g.zone ?? r.zone, notes: [...(r.notes ?? []), ...g.notes],
+    };
+  }));
+}
+
+/** %VAT đang hiệu lực của account — cùng cách engine cộng (`vat_percent`, đúng cửa sổ ngày). */
+function phanTramVat(snap: CarrierAccountSnapshot, ngay: Date): number {
+  return snap.surcharges
+    .filter((x) => isApplicable(x, ngay) && x.kind === 'vat_percent')
+    .reduce((a, x) => a + x.value, 0);
+}
+
+/** Bộ nhớ đệm giá live — một tuyến/cân/kích thước hỏi lại trong 10 phút thì dùng lại. */
+const CACHE_LIVE_MS = 10 * 60 * 1000;
+const cacheLive = new Map<string, { gia: GiaLive | { loi: string }; luc: number }>();
+
+/**
+ * Giá LIVE của UPS cho một đơn. Trả `{ loi }` khi không hỏi được — chỗ gọi rơi về bảng giá.
+ *
+ * Vì sao chỉ UPS: bảng giá UPS sai ở 4 tuyến vì số zone của UPS không phải bảng nước→zone
+ * thuần (xem `lib/ups/rate.ts`). FedEx/DHL/Aramex đo trên cùng 56 nước thì bảng khớp, nên
+ * chưa cần gọi mạng cho chúng.
+ */
+async function giaLiveUps(
+  snap: CarrierAccountSnapshot, input: OrderCarrierQuoteInput, ngay: Date,
+): Promise<GiaLive | { loi: string }> {
+  const soTaiKhoan = process.env.UPS_ACCOUNT_NUMBER;
+  if (!soTaiKhoan) return { loi: 'chưa khai UPS_ACCOUNT_NUMBER' };
+  const kt = input.dimensions
+    ? { dai: input.dimensions.lengthCm, rong: input.dimensions.widthCm, cao: input.dimensions.heightCm }
+    : null;
+  const khoa = JSON.stringify([
+    snap.id, input.country, input.postcode ?? '', input.city ?? '', input.weightKg, kt,
+    input.isResidential ?? false, input.directSignature !== false,
+  ]);
+  const hit = cacheLive.get(khoa);
+  if (hit && Date.now() - hit.luc < CACHE_LIVE_MS) return hit.gia;
+
+  const r = await baoGiaUpsShop({
+    soTaiKhoan, nuocDen: input.country, maBuuChinh: input.postcode, thanhPho: input.city,
+    canKg: input.weightKg, kichThuocCm: kt,
+    nhaDan: input.isResidential ?? false, kyNhan: input.directSignature !== false,
+  });
+  let gia: GiaLive | { loi: string };
+  if (!r.ok) {
+    gia = { loi: r.loi };
+  } else {
+    const re = chonMucReNhat(r.ds);
+    if (!re) {
+      gia = { loi: 'ups_khong_co_muc_nao' };
+    } else {
+      // UPS trả tiền CHƯA VAT (hoá đơn tính 8% trên tổng chịu thuế — xem D-234); engine thì
+      // tính VAT vào `carrierCost`, nên phải cộng vào mới so được cùng thước với FedEx/DHL.
+      const vat = phanTramVat(snap, ngay);
+      /* UPS trả tiền CHƯA VAT ở MỌI mức. Quy cả danh sách về CÙNG thước (đã VAT) trước khi
+       * hiện: bản đầu in mức đã chọn kèm VAT nhưng các mức khác chưa VAT, nên ghi chú đọc ra
+       * như thể mức rẻ hơn đã bị bỏ qua (AU: chọn 1.614.929 mà note ghi còn mức 1.560.870). */
+      const coVat = (x: number) => Math.round(x * (1 + vat / 100));
+      const vnd = coVat(re.tong);
+      gia = {
+        vndCost: vnd,
+        displayCost: Math.round((vnd / snap.fxCostPerDisplay) * 100) / 100,
+        dichVu: re.tenDichVu, zone: re.zone,
+        notes: [
+          `giá live UPS · ${re.tenDichVu}${vat > 0 ? ` · đã gồm VAT ${vat}%` : ''}`,
+          `nền ${Math.round(re.base).toLocaleString('vi-VN')}đ`
+            + re.khoan.map((k) => ` · ${k.phu ? k.phu : tenKhoanUps(k.ma)} ${Math.round(k.tien).toLocaleString('vi-VN')}đ`).join(''),
+          r.ds.length > 1
+            ? `mức khác (đã gồm VAT): ${r.ds.filter((d) => d !== re).sort((a, b) => a.tong - b.tong).map((d) => `${d.tenDichVu} ${coVat(d.tong).toLocaleString('vi-VN')}đ`).join(' · ')}`
+            : 'UPS chỉ có một mức cho tuyến này',
+        ],
+      };
+    }
+  }
+  cacheLive.set(khoa, { gia, luc: Date.now() });
+  return gia;
 }
 
 /** Load mọi carrier account đang bật + snapshot rồi rank. */
@@ -120,5 +241,20 @@ export async function quoteOrderAcrossCarriers(input: OrderCarrierQuoteInput): P
     });
     if (snap) entries.push({ carrierKey: a.carrierKey ?? '?', carrierName: a.name, accountId: a.id, snap, suspendedAt: a.suspendedAt, suspendReason: a.suspendReason });
   }
-  return rankCarrierQuotes(entries, input);
+  const rows = rankCarrierQuotes(entries, input);
+
+  /* Giá live cho UPS. Chạy sau khi xếp theo bảng giá rồi THAY SỐ và xếp lại — làm vậy để khi
+   * UPS không trả lời thì bảng vẫn còn nguyên thứ tự cũ, không trống một hãng. */
+  const ups = entries.filter((e) => e.carrierKey === 'ups');
+  if (ups.length === 0) return rows;
+  const ngay = input.effectiveDate ?? new Date();
+  const live = new Map<string, GiaLive | { loi: string }>();
+  await Promise.all(ups.map(async (e) => {
+    try { live.set(e.accountId, await giaLiveUps(e.snap, input, ngay)); }
+    catch (err) {
+      console.error('[compare] giá live UPS hỏng:', err);
+      live.set(e.accountId, { loi: err instanceof Error ? err.message : String(err) });
+    }
+  }));
+  return apDungGiaLive(rows, live);
 }

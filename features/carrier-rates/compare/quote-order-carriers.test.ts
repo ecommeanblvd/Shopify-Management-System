@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankCarrierQuotes, type AccountSnap } from './quote-order-carriers';
+import { rankCarrierQuotes, apDungGiaLive, type AccountSnap, type CarrierQuoteRow } from './quote-order-carriers';
 import type { CarrierAccountSnapshot } from '../engine/quote';
 
 function snap(id: string, thRate: number | null): CarrierAccountSnapshot {
@@ -112,5 +112,47 @@ describe('rankCarrierQuotes — phí giao nhà dân', () => {
     const bat = rankCarrierQuotes([entry('fedex', snapRes('a'))], { country: 'US', weightKg: 1, isResidential: true });
     expect(bat[0].breakdown?.residential).toBe(84_400);
     expect(bat[0].vndCost!).toBeGreaterThan(tat[0].vndCost!);
+  });
+});
+
+describe('apDungGiaLive', () => {
+  const dong = (over: Partial<CarrierQuoteRow> = {}): CarrierQuoteRow => ({
+    carrierKey: 'ups', carrierName: 'UPS', accountId: 'acc-ups', ok: true,
+    vndCost: 796_642, carrierCostDisplay: 796_642, notes: ['pak_fallback_to_package'], ...over,
+  });
+  const fedex = dong({ carrierKey: 'fedex', carrierName: 'FedEx', accountId: 'acc-fdx', vndCost: 1_486_469, notes: [] });
+
+  it('có giá live → thay số, gắn nguồn + tên dịch vụ, giữ note cũ và thêm note live', () => {
+    const r = apDungGiaLive([dong(), fedex], new Map([['acc-ups', {
+      vndCost: 1_615_183, displayCost: 1_615_183, dichVu: 'Worldwide Express Saver', zone: '3',
+      notes: ['giá live UPS · Worldwide Express Saver'],
+    }]]));
+    const ups = r.find((x) => x.accountId === 'acc-ups')!;
+    expect(ups).toMatchObject({ vndCost: 1_615_183, nguonGia: 'live', dichVu: 'Worldwide Express Saver', zone: '3' });
+    expect(ups.notes).toEqual(['pak_fallback_to_package', 'giá live UPS · Worldwide Express Saver']);
+  });
+  /* Đây là lý do cả việc này: bảng giá báo UPS 796.642đ rẻ nhất cho AU 3kg trong khi UPS thật
+   * thu ~1,61tr — tức FedEx mới rẻ nhất. Áp giá live thì thứ tự phải ĐẢO. */
+  it('thay số xong XẾP LẠI — UPS không còn rẻ nhất nữa', () => {
+    const r = apDungGiaLive([dong(), fedex], new Map([['acc-ups', {
+      vndCost: 1_615_183, displayCost: 1_615_183, dichVu: 'Worldwide Express Saver', zone: null, notes: [],
+    }]]));
+    expect(r.map((x) => x.carrierKey)).toEqual(['fedex', 'ups']);
+  });
+  it('bảng giá không có zone mà live có → dòng chuyển sang báo giá được', () => {
+    const r = apDungGiaLive([dong({ ok: false, error: 'no_zone', vndCost: undefined })], new Map([['acc-ups', {
+      vndCost: 1_300_000, displayCost: 1_300_000, dichVu: 'Worldwide Expedited', zone: '6', notes: [],
+    }]]));
+    expect(r[0]).toMatchObject({ ok: true, error: undefined, vndCost: 1_300_000, nguonGia: 'live' });
+  });
+  it('live hỏng → GIỮ số bảng giá, gắn nhãn cảnh báo kèm lý do', () => {
+    const r = apDungGiaLive([dong()], new Map([['acc-ups', { loi: 'ups_rate_http_500' }]]));
+    expect(r[0]).toMatchObject({ vndCost: 796_642, nguonGia: 'bang' });
+    expect(r[0].canhBaoGia).toContain('ups_rate_http_500');
+  });
+  it('hãng không có đường live → không đụng tới, KHÔNG gắn nguonGia', () => {
+    const r = apDungGiaLive([fedex], new Map());
+    expect(r[0].nguonGia).toBeUndefined();
+    expect(r[0].canhBaoGia).toBeUndefined();
   });
 });

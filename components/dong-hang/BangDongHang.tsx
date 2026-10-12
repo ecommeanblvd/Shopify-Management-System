@@ -732,14 +732,23 @@ function ModalSoCuoc({
                           {r.carrierKey === bao.reNhatKey && <NhanNho mau="xanh">RẺ NHẤT</NhanNho>}
                           {r.carrierKey === nhanhNhat && <NhanNho mau="lam">NHANH NHẤT</NhanNho>}
                           {daChon === r.carrierKey && <NhanNho mau="xam">ĐANG CHỌN</NhanNho>}
+                          {r.nguonGia === 'live' && <NhanNho mau="lam">GIÁ LIVE</NhanNho>}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {!r.ok
                             ? `không báo giá được (${r.error ?? 'không rõ'})`
                             : !chonDuoc
                               ? `${r.suspendReason || 'Tạm ngưng'}${ngayNgung ? ` · từ ${ngayNgung}` : ''}`
-                              : r.carrierName}
+                              : r.dichVu
+                                ? `${r.carrierName} · ${r.dichVu}`
+                                : r.carrierName}
                         </span>
+                        {/* Rơi về bảng giá: phải nói ra, vì bảng giá UPS đang sai ở AU/NZ/SG. */}
+                        {r.canhBaoGia && (
+                          <span className="mt-0.5 block truncate text-[11px] text-amber-600 dark:text-amber-400">
+                            {r.canhBaoGia}
+                          </span>
+                        )}
                       </span>
                       <span className="min-w-0">
                         <span className="block text-[15px] font-semibold tabular-nums">{r.ok ? vnd(r.vndCost) : '—'}</span>
@@ -755,7 +764,7 @@ function ModalSoCuoc({
                       </span>
                     </button>
 
-                    {r.ok && r.breakdown && (
+                    {r.ok && (r.breakdown || r.nguonGia === 'live') && (
                       <div className="pl-[38px]">
                         <button
                           type="button"
@@ -765,7 +774,9 @@ function ModalSoCuoc({
                         >
                           {chiTiet === r.accountId ? 'thu gọn cách tính' : 'xem cách tính cước'}
                         </button>
-                        {chiTiet === r.accountId && <ChiTietPhi row={r} />}
+                        {chiTiet === r.accountId && (
+                          r.nguonGia === 'live' ? <ChiTietLive row={r} /> : <ChiTietPhi row={r} />
+                        )}
                       </div>
                     )}
                   </Fragment>
@@ -839,6 +850,28 @@ function NhanNho({ mau, children }: { mau: 'xanh' | 'lam' | 'xam'; children: Rea
  * Chi tiết cước của MỘT hãng cho kiện này: cước gốc, phụ phí, nhiên liệu, thuế.
  * Là tiền TRẢ CARRIER, chưa gồm đóng gói và markup của shop.
  */
+/**
+ * Cách tính cước khi số đến từ API của hãng.
+ *
+ * KHÔNG dùng `ChiTietPhi` cho dòng giá live: bảng phân rã của nó dựng từ BẢNG GIÁ nội bộ, mà
+ * đầu dòng đang hiện số LIVE — hai thứ cộng ra khác nhau, mở ra là người đọc tưởng mình tính
+ * sai. Giá live thì hãng đã nói từng khoản, in đúng cái hãng nói.
+ */
+function ChiTietLive({ row }: { row: CarrierQuoteRow }) {
+  const dong = row.notes ?? [];
+  if (dong.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1 rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-medium text-foreground">{row.carrierName}</span>
+        {row.zone && <span>Zone {row.zone}</span>}
+        <span>số do hãng trả về, không phải bảng giá nội bộ</span>
+      </div>
+      {dong.map((d) => <p key={d} className="leading-snug">{d}</p>)}
+    </div>
+  );
+}
+
 function ChiTietPhi({ row }: { row: CarrierQuoteRow }) {
   const b = row.breakdown;
   if (!b) return null;

@@ -31,6 +31,26 @@ const TEN_DICH_VU: Record<string, string> = {
 
 export const tenDichVuUps = (ma: string): string => TEN_DICH_VU[ma] ?? `Dịch vụ ${ma}`;
 
+/**
+ * Mã KHOẢN PHÍ của Rating API → tên đọc được. Khác mã trên hoá đơn (hoá đơn dùng `FSC`, `FIP`,
+ * `RES`…; Rating API dùng số). Chốt bằng cách so với chính hoá đơn 100000813108: `375` ra đúng
+ * số tiền nhiên liệu, `573` ra đúng 58.750đ phí xử lý quốc tế, `270` ra 95.410đ giao nhà dân.
+ * Mã lạ giữ nguyên số — thà hiện `412` còn hơn gán sai tên.
+ */
+const TEN_KHOAN: Record<string, string> = {
+  '110': 'Xác nhận giao hàng',
+  '121': 'Ký nhận',
+  '190': 'Phụ phí xử lý',
+  '270': 'Giao nhà dân',
+  '375': 'Nhiên liệu',
+  '376': 'Vùng mở rộng',
+  '377': 'Vùng sâu vùng xa',
+  '434': 'Phụ phí cao điểm',
+  '573': 'Phí xử lý quốc tế',
+};
+
+export const tenKhoanUps = (ma: string): string => TEN_KHOAN[ma] ?? ma;
+
 /** Một khoản phí UPS trả kèm báo giá (mã của UPS, không phải cột của mình). */
 export interface KhoanBaoGiaUps { ma: string; tien: number; phu?: string }
 
