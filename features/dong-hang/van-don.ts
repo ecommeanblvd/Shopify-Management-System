@@ -7,6 +7,8 @@
  * là luật không ai canh. Hộp thoại chỉ việc vẽ những gì module này trả ra.
  */
 
+import { canQuyDoi } from './logic';
+
 export interface DiaChiDon {
   shipName: string | null; shipCompany: string | null;
   shipAddress1: string | null; shipAddress2: string | null;
@@ -120,4 +122,136 @@ export function moTaHangHoa(tenSanPham: string, chatLieu: string | null): string
   const t = tenSanPham.trim();
   const c = (chatLieu ?? '').trim();
   return c === '' ? t : `${t} — ${c}`;
+}
+
+export interface O {
+  nhan: string;
+  giaTri: string | null;
+  /** Câu giải thích hiện cạnh ô — vì sao giá trị là thế này, hoặc vì sao nó trống. */
+  vi?: string;
+  /** Ô tham khảo, KHÔNG vào văn bản "copy cả khối" (dán sang form hãng là rác). */
+  chiDeXem?: boolean;
+}
+
+export interface Khoi {
+  ten: string;
+  o: O[];
+  chanCopy: boolean;
+  lyDoChan: string | null;
+  canhBao: { muc: 'do' | 'vang' | 'khong'; cau: string | null; batXacNhan: boolean } | null;
+}
+
+export interface MonHang {
+  /** `product_title` (+ `variant_title` khi có) của dòng đơn. */
+  tenSanPham: string;
+  sku: string | null;
+  soLuong: number;
+  /** Metafield `custom.materials_v2` qua `locThuocTinh`; null khi Shopify không trả được. */
+  chatLieu: string | null;
+}
+
+export interface VaoKhoiVanDon {
+  diaChi: DiaChiDon;
+  /** null = không gọi được Shopify → ô SĐT/email nói rõ thay vì để trống im lặng. */
+  tuShopify: { phone: string | null; email: string | null } | null;
+  can: CanKienVao;
+  mon: MonHang[];
+  /** `n/N` của kiện trong đơn; null khi kiện chưa có mã Lark. */
+  soKien: { n: number; tong: number } | null;
+}
+
+const KHONG_LAY_DUOC = 'không lấy được từ Shopify — thử lại';
+const GO_TAY = 'gõ tay bên cổng hãng';
+const so = (n: number | null): string | null => (n == null ? null : String(n));
+
+/** Bốn khối của hộp thoại Lên vận đơn, theo đúng thứ tự người lên vận đơn điền form. */
+export function dungKhoiVanDon(vao: VaoKhoiVanDon): Khoi[] {
+  const d = vao.diaChi;
+  const zip = chonZip(d);
+  const can = nguonCanKien(vao.can);
+  const qd = canQuyDoi(can.canKg, can.dai != null && can.rong != null ? { l: can.dai, w: can.rong, h: can.cao } : null);
+
+  const nguoiNhan: Khoi = {
+    ten: 'Người nhận',
+    o: [
+      { nhan: 'Tên', giaTri: d.shipName },
+      { nhan: 'Công ty', giaTri: d.shipCompany },
+      { nhan: 'Địa chỉ 1', giaTri: d.shipAddress1 },
+      { nhan: 'Địa chỉ 2', giaTri: d.shipAddress2 },
+      { nhan: 'Thành phố', giaTri: d.shipCity },
+      // Mã bang Shopify mang tiền tố nước ("US-FL") — form hãng chỉ nhận phần sau.
+      { nhan: 'Bang / Tỉnh', giaTri: d.shipProvinceCode ? (d.shipProvinceCode.split('-').pop() ?? null) : null },
+      { nhan: 'ZIP', giaTri: zip.zip, vi: zip.vi },
+      { nhan: 'Nước', giaTri: d.shipCountry },
+      { nhan: 'SĐT', giaTri: vao.tuShopify?.phone ?? null, ...(vao.tuShopify ? {} : { vi: KHONG_LAY_DUOC }) },
+      { nhan: 'Email', giaTri: vao.tuShopify?.email ?? null, ...(vao.tuShopify ? {} : { vi: KHONG_LAY_DUOC }) },
+    ],
+    chanCopy: d.addrVerifiedAt == null,
+    lyDoChan: d.addrVerifiedAt == null ? 'Địa chỉ chưa verify — bấm "Verify ngay" trước khi copy' : null,
+    canhBao: canhBaoDiaChi(d),
+  };
+
+  const kienHang: Khoi = {
+    ten: 'Kiện hàng',
+    o: [
+      { nhan: 'Cân thực (kg)', giaTri: so(can.canKg), vi: can.nhan },
+      { nhan: 'Dài (cm)', giaTri: so(can.dai) },
+      { nhan: 'Rộng (cm)', giaTri: so(can.rong) },
+      { nhan: 'Cao (cm)', giaTri: so(can.cao) },
+      { nhan: 'Loại hộp', giaTri: can.hop },
+      {
+        nhan: 'Số kiện',
+        giaTri: vao.soKien ? `${vao.soKien.n}/${vao.soKien.tong}` : null,
+        ...(vao.soKien ? {} : { vi: 'kiện chưa có mã Lark nên không biết thứ tự' }),
+      },
+      {
+        nhan: 'Cân quy đổi', giaTri: so(qd.quyDoi), chiDeXem: true,
+        vi: qd.tinhCuoc != null ? `hãng tính cước theo ${qd.tinhCuoc} kg` : 'chưa đủ số để tính',
+      },
+    ],
+    chanCopy: can.thieu.length > 0,
+    lyDoChan: can.thieu.length > 0
+      ? `Thiếu ${can.thieu.join(' và ')} — phải cân lại trước khi lên vận đơn`
+      : null,
+    canhBao: null,
+  };
+
+  const hangHoa: Khoi = {
+    ten: 'Hàng hoá',
+    o: vao.mon.flatMap((m, i) => [
+      { nhan: `Món ${i + 1} — mô tả`, giaTri: moTaHangHoa(m.tenSanPham, m.chatLieu) },
+      { nhan: `Món ${i + 1} — SKU`, giaTri: m.sku },
+      { nhan: `Món ${i + 1} — số lượng`, giaTri: String(m.soLuong) },
+    ]),
+    chanCopy: false,
+    lyDoChan: null,
+    canhBao: (vao.soKien?.tong ?? 1) > 1
+      ? {
+          muc: 'vang', batXacNhan: false,
+          cau: `Đơn này có ${vao.soKien!.tong} kiện — tự chọn món nào thuộc kiện này.`,
+        }
+      : null,
+  };
+
+  /* Năm ô này có đúng một điểm chung đáng kể với người dùng: ô nào cũng phải GÕ TAY bên cổng
+   * hãng. "Loại dịch vụ" không phải khoản hải quan, nhưng gom cùng chỗ thì người lên vận đơn
+   * quét một lượt là biết còn gì phải tự điền (CEO chốt 12/10/2026). */
+  const haiQuan: Khoi = {
+    ten: 'Khai hải quan',
+    o: [
+      { nhan: 'Giá trị khai', giaTri: null, vi: GO_TAY },
+      { nhan: 'Đơn vị tiền', giaTri: null, vi: GO_TAY },
+      { nhan: 'HS code', giaTri: null, vi: GO_TAY },
+      { nhan: 'Nước xuất xứ', giaTri: null, vi: GO_TAY },
+      { nhan: 'Loại dịch vụ', giaTri: null, vi: GO_TAY },
+    ],
+    chanCopy: false, lyDoChan: null, canhBao: null,
+  };
+
+  return [nguoiNhan, kienHang, hangHoa, haiQuan];
+}
+
+/** Văn bản cho nút "copy cả khối". Bỏ ô chỉ-để-xem; ô trống hiện `—`. */
+export function vanBanKhoi(k: Khoi): string {
+  return k.o.filter((x) => !x.chiDeXem).map((x) => `${x.nhan}: ${x.giaTri ?? '—'}`).join('\n');
 }
