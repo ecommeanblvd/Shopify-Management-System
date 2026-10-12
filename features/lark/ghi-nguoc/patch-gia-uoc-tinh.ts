@@ -18,17 +18,19 @@ import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 type KhoanSo = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'vat' | 'total';
 
 /** Khoá `COT_CHI_PHI` → tên trường `GiaUocTinh`. Tên lệch vì `COT_CHI_PHI` giữ tên gốc của
- *  `shipment_charges` (`directSignature`) còn `GiaUocTinh` dùng tên ngắn gọn chung cho mọi
- *  nguồn (`signature`). `gogreen` và `elevatedRisk` không có khoản tương ứng ở `GiaUocTinh`
- *  (không hãng nào trong 3 nguồn hiện có báo hai khoản này) nên không xuất hiện ở đây — không
- *  bịa khoá để map đủ danh sách. `totalAmount` ("INS | Chi phí Tổng (đ)") CŨNG không map: cột
- *  đó là tổng THEO HOÁ ĐƠN THẬT do `dungPatch` (ghi ngược từ hãng) điền — `g.total` ở đây là
- *  ước tính trước khi có hoá đơn, ghi nhầm vào sẽ biến ước tính thành "giá đã chốt" trên bảng
- *  vận hành. */
+ *  `shipment_charges` (`directSignature`, `totalAmount`) còn `GiaUocTinh` dùng tên ngắn gọn
+ *  chung cho mọi nguồn (`signature`, `total`). `gogreen` và `elevatedRisk` không có khoản
+ *  tương ứng ở `GiaUocTinh` (không hãng nào trong 3 nguồn hiện có báo hai khoản này) nên
+ *  không xuất hiện ở đây — không bịa khoá để map đủ danh sách.
+ *
+ *  `totalAmount` ("INS | Chi phí Tổng (đ)") CÓ map — đính chính của CEO: ô này xưa nay là
+ *  TỔNG ƯỚC TÍNH nhân sự tự gõ tay sau khi tạo vận đơn, không phải số hoá đơn thật. Mục tiêu
+ *  của tính năng chính là bỏ bước gõ tay đó (gồm cả tracking lẫn các giá dự tính, kể cả tổng);
+ *  để trống ô tổng thì nhân sự vẫn phải mở Lark gõ một ô, coi như tính năng chưa xong việc. */
 const KHOAN_THEO_COT: Partial<Record<string, KhoanSo>> = {
   base: 'base', fuel: 'fuel', remote: 'remote', demand: 'demand',
   directSignature: 'signature', residential: 'residential', importHandling: 'importHandling',
-  vat: 'vat',
+  vat: 'vat', totalAmount: 'total',
 };
 
 export function patchGiaUocTinh(g: GiaUocTinh, oHienCo: Record<string, unknown>, tracking: string | null): Record<string, unknown> {

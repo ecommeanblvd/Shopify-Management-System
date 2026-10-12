@@ -33,7 +33,24 @@ describe('patchGiaUocTinh', () => {
     const p = patchGiaUocTinh(g, { [COT.trackingNumber]: 'T-CU' }, 'T-MOI');
     expect(COT.trackingNumber in p).toBe(false);
   });
+  /* CEO đính chính: ô "INS | Chi phí Tổng (đ)" xưa nay là TỔNG ƯỚC TÍNH nhân sự tự gõ tay,
+   * không phải số hoá đơn — nên tổng ước tính cũng theo đúng luật chỉ-điền-ô-trống như mọi
+   * khoản khác, không bị loại riêng. */
+  it('ô tổng trống thì điền', () => {
+    expect(patchGiaUocTinh(g, {}, null)[COT_CHI_PHI.totalAmount]).toBe(130);
+  });
+  it('ô tổng ĐÃ CÓ số thì KHÔNG đụng', () => {
+    const p = patchGiaUocTinh(g, { [COT_CHI_PHI.totalAmount]: 999 }, null);
+    expect(COT_CHI_PHI.totalAmount in p).toBe(false);
+  });
+  it('tổng null thì bỏ hẳn khỏi patch, không ghi 0', () => {
+    const gKhongTong = { ...g, total: null } as GiaUocTinh;
+    const p = patchGiaUocTinh(gKhongTong, {}, null);
+    expect(COT_CHI_PHI.totalAmount in p).toBe(false);
+  });
   it('không có gì để ghi thì patch rỗng', () => {
-    expect(Object.keys(patchGiaUocTinh(g, { [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.fuel]: 1, [COT_CHI_PHI.vat]: 1 }, null))).toEqual([]);
+    expect(Object.keys(patchGiaUocTinh(g, {
+      [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.fuel]: 1, [COT_CHI_PHI.vat]: 1, [COT_CHI_PHI.totalAmount]: 1,
+    }, null))).toEqual([]);
   });
 });
