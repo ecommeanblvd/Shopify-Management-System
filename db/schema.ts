@@ -1216,13 +1216,22 @@ export const shipments = pgTable('shipments', {
   shopifyPushStatus: shopifyPushStatusEnum('shopify_push_status'),
   shopifyPushError: text('shopify_push_error'),
   shopifyPushedAt: timestamp('shopify_pushed_at'),
-  /** Lúc `ghiGiaUocTinhLenLark` ghi giá lên Lark THÀNH CÔNG, HOẶC xác định kiện này
-   *  sẽ KHÔNG BAO GIỜ ghi được (dòng Lark tương ứng đã bị xoá bên Lark, không tự
-   *  quay lại) — KHÔNG đóng dấu ở hai nhánh còn-có-thể-thử-lại ("chưa lấy được giá",
-   *  "kiện chưa có dòng Lark"), vì cron điền bù (Task 7) còn phải thử lại đúng những
-   *  kiện đó khi điều kiện đổi. NULL = chưa xử lý lần nào, hoặc đang ở một trong hai
-   *  nhánh còn-có-thể-thử-lại. Thiếu dấu ở nhánh đã-xong (hoặc không-thể-xong) là
-   *  cron gọi lại Lark/API báo giá mãi mãi — lặp vô hạn, không phải chỉ chậm. */
+  /** Dấu GIÀNH VIỆC + ĐÃ XONG của `ghiGiaUocTinhLenLark` (một cột làm cả hai việc).
+   *
+   *  Đóng NGAY TỪ ĐẦU mỗi lượt, bằng `UPDATE … WHERE gia_uoc_tinh_ghi_luc IS NULL
+   *  RETURNING` (mẫu claim của push-fulfillment): không giành được = kiện đã xong
+   *  hoặc đang có lượt khác xử lý, lượt này KHÔNG ghi gì. Dấu đóng ở cuối thì trong
+   *  cửa sổ 1 lượt Rate API + 2 lượt Lark, action và cron cùng thấy ô Lark trống rồi
+   *  cùng ghi — bên sau đè lên số bên trước vừa điền, mà Lark không có undo.
+   *
+   *  XOÁ LẠI (nhả việc) ở các nhánh còn-có-thể-thử-lại: chưa lấy được giá, kiện chưa
+   *  có dòng Lark, Lark/mạng hỏng — cron còn phải thử lại đúng những kiện đó. GIỮ dấu
+   *  khi đã ghi xong, khi không còn ô trống nào để điền, và khi biết chắc sẽ không
+   *  bao giờ ghi được (dòng Lark đã bị xoá bên Lark); giữ dấu ở ba ca đó là thứ duy
+   *  nhất chặn cron gọi lại Lark/API báo giá mãi mãi.
+   *
+   *  NULL = chưa lượt nào giành, hoặc lượt trước đã nhả. Muốn chạy lại một kiện thì
+   *  xoá dấu là đủ. */
   giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

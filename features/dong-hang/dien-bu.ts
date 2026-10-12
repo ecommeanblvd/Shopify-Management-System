@@ -2,12 +2,13 @@
  * Phần THUẦN của cron điền bù (Task 7): chọn kiện nào còn cần thử ghi lại giá
  * ước tính lên Lark, và khoá giới hạn số kiện mỗi lượt.
  *
- * `canDienBu` lặp lại đúng ba điều kiện mà `ghiGiaUocTinhLenLark` đã tự gác —
- * xem bình luận cột `gia_uoc_tinh_ghi_luc` trong db/schema.ts: có mã vận đơn
- * (chưa dán thì chưa tới lượt gửi), có dòng Lark tương ứng (chưa có thì chưa
- * biết ghi vào ô nào) và CHƯA bị đóng dấu (đã đóng dấu nghĩa là ghi xong, hoặc
- * xác định sẽ không bao giờ ghi được — cả hai trường hợp cron không cần đụng
- * lại). Tách hàm riêng để tự kiểm (test) được mà không cần DB.
+ * `canDienBu` lặp lại ba điều kiện mà `ghiGiaUocTinhLenLark` đã tự gác — xem bình
+ * luận cột `gia_uoc_tinh_ghi_luc` trong db/schema.ts: có mã vận đơn (chưa dán thì
+ * chưa tới lượt gửi), có dòng Lark tương ứng (chưa có thì chưa biết ghi vào ô nào)
+ * và dấu CÒN TRỐNG (có dấu nghĩa là ghi xong, đang có người giành việc, hoặc xác
+ * định sẽ không bao giờ ghi được — cả ba cron không được đụng vào) — CỘNG một điều
+ * kiện riêng của cron: kiện phải tạo từ `MOC_DIEN_BU` trở đi (xem dưới). Tách hàm
+ * riêng để tự kiểm (test) được mà không cần DB.
  */
 import { and, asc, gte, isNotNull, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -15,13 +16,12 @@ import { db, schema } from '@/db/client';
 /**
  * Giới hạn số kiện xử lý MỖI LƯỢT cron.
  *
- * Vì sao cần: với hãng đi đường bảng giá (Aramex, DHL…), `layGiaUocTinh` gọi
- * `quoteOrderAcrossCarriers`, mà hàm đó LUÔN thử báo giá SỐNG của UPS cho MỌI
- * tài khoản UPS đang bật rồi vứt kết quả đi nếu kiện không phải hàng UPS (chi
- * phí ẩn do lượt soát Task 4 phát hiện). Chạy lẻ một kiện (action nhập
- * tracking) thì vô hại, nhưng cron quét một loạt kiện lỡ nhịp (vd sau một
- * ngày Lark lỗi, nợ đọng dồn lại) sẽ nhân số lượt gọi UPS thừa đó lên theo
- * từng kiện — giới hạn số kiện mỗi lượt để không vô tình dội API UPS.
+ * Vì sao cần: mỗi kiện là một lượt gọi API giá của hãng (FedEx/UPS) hoặc một lượt
+ * nạp snapshot bảng giá, cộng hai lượt Lark. Cron quét một loạt kiện lỡ nhịp (vd
+ * sau một ngày Lark lỗi, nợ đọng dồn lại) mà không có trần là dội API hãng theo
+ * từng kiện. (Lượt gọi UPS THỪA cho kiện Aramex/DHL mà lượt soát Task 4 phát hiện
+ * đã hết: `layGiaUocTinh` gọi `baoGiaBangGiaMotHang` cho đúng hãng của kiện, không
+ * còn qua `quoteOrderAcrossCarriers`.)
  */
 export const SO_KIEN_MOI_LUOT = 20;
 

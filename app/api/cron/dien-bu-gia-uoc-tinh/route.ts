@@ -11,10 +11,10 @@
  * ghi Lark. Tự nhân bản logic ghi ở đây là đúng thứ D-045 cấm (bài học cột
  * `Couriers` ghi sai qua hai đường).
  *
- * CHẠY TUẦN TỰ, không `Promise.all`: `layGiaUocTinh` cho hãng đi đường bảng
- * giá (Aramex, DHL…) luôn kèm một lượt báo giá SỐNG UPS bị vứt đi (chi phí ẩn,
- * lượt soát Task 4) — bắn song song hàng loạt sẽ nhân luôn số lượt gọi UPS
- * cùng lúc. `SO_KIEN_MOI_LUOT` giới hạn quy mô mỗi lượt vì cùng lý do.
+ * CHẠY TUẦN TỰ, không `Promise.all`: mỗi kiện là một lượt gọi API giá của hãng
+ * cộng hai lượt Lark — bắn song song hàng loạt là dội cả hai bên cùng lúc.
+ * `SO_KIEN_MOI_LUOT` giới hạn quy mô mỗi lượt vì cùng lý do, và `MOC_DIEN_BU`
+ * giữ cron khỏi 4 tháng kiện lịch sử (xem features/dong-hang/dien-bu.ts).
  *
  * Vùng chạy: route này nằm trong service Next.js chính
  * (`ShopifyManagementSystem` trong .railway/railway.ts), đã đặt sẵn
