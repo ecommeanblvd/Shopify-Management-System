@@ -1,11 +1,12 @@
 /** Truy vấn màn "Đóng hàng": mỗi dòng một kiện Lark (shipments có log_unique_code). */
-import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
+import type { CanKienVao, DiaChiDon, MonHang } from './van-don';
 
 /** Số kiện tối đa một lượt tải — UI báo "chỉ hiện 500 đầu" khi chạm trần để không cắt âm thầm. */
 export const GIOI_HAN_KIEN = 500;
@@ -142,4 +143,91 @@ export async function listKienChoKhop(): Promise<KienChoKhop[]> {
     dims: r.dims, hop: r.hop, skuText: r.skuText, pieces: r.pieces,
     lyDo: r.lyDo, nhanLuc: r.nhanLuc.toISOString(),
   }));
+}
+
+export interface NenVanDon {
+  storeId: string; shopDomain: string; apiVersion: string;
+  shopifyOrderId: string; orderId: string;
+  diaChi: DiaChiDon; can: CanKienVao; mon: MonHang[];
+  soKien: { n: number; tong: number } | null;
+}
+
+const soHoacNull = (v: string | null): number | null => (v == null ? null : Number(v));
+
+/**
+ * Mọi thứ hộp thoại Lên vận đơn cần mà CSDL đã có. Không gọi mạng.
+ *
+ * `soKien`: `tong` đếm kiện của đơn CÓ mã Lark; `n` là thứ tự của kiện này khi sắp mã Lark
+ * tăng dần — chọn cách sắp này vì mã kiện Lark (`PK-…`) là khoá duy nhất và ổn định, không
+ * phụ thuộc thứ tự truy vấn. Kiện chưa có mã Lark → null, KHÔNG đoán thứ tự.
+ */
+export async function docNenVanDon(shipmentId: string): Promise<NenVanDon | null> {
+  const [r] = await db.select({
+    orderId: schema.shopifyOrders.id,
+    storeId: schema.shopifyOrders.storeId,
+    shopifyOrderId: schema.shopifyOrders.shopifyOrderId,
+    shopDomain: schema.stores.shopDomain,
+    apiVersion: schema.stores.apiVersion,
+    logUniqueCode: schema.shipments.logUniqueCode,
+    shipName: schema.shopifyOrders.shipName, shipCompany: schema.shopifyOrders.shipCompany,
+    shipAddress1: schema.shopifyOrders.shipAddress1, shipAddress2: schema.shopifyOrders.shipAddress2,
+    shipCity: schema.shopifyOrders.shipCity, shipProvinceCode: schema.shopifyOrders.shipProvinceCode,
+    shipPostcode: schema.shopifyOrders.shipPostcode, shipCountry: schema.shopifyOrders.shipCountry,
+    addrIssue: schema.shopifyOrders.addrIssue, addrStandardized: schema.shopifyOrders.addrStandardized,
+    addrDeliverable: schema.shopifyOrders.addrDeliverable, addrVerifiedAt: schema.shopifyOrders.addrVerifiedAt,
+    smsHop: schema.shipments.smsHop, smsCan: schema.shipments.smsWeightKg,
+    smsL: schema.shipments.smsDimLengthCm, smsW: schema.shipments.smsDimWidthCm,
+    smsH: schema.shipments.smsDimHeightCm, smsLuc: schema.shipments.smsPackedAt,
+    larkHop: schema.shipments.larkHop, larkCan: schema.shipments.actualWeightKg,
+    larkL: schema.shipments.dimLengthCm, larkW: schema.shipments.dimWidthCm, larkH: schema.shipments.dimHeightCm,
+  })
+    .from(schema.shipments)
+    .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
+    .innerJoin(schema.stores, eq(schema.stores.id, schema.shopifyOrders.storeId))
+    .where(eq(schema.shipments.id, shipmentId))
+    .limit(1);
+  if (!r) return null;
+
+  const dong = await db.select({
+    productTitle: schema.shopifyOrderLines.productTitle,
+    variantTitle: schema.shopifyOrderLines.variantTitle,
+    sku: schema.shopifyOrderLines.sku,
+    quantity: schema.shopifyOrderLines.quantity,
+  }).from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, r.orderId));
+
+  const maKien = await db.select({ ma: schema.shipments.logUniqueCode })
+    .from(schema.shipments)
+    .where(and(eq(schema.shipments.orderId, r.orderId), isNotNull(schema.shipments.logUniqueCode)))
+    .orderBy(asc(schema.shipments.logUniqueCode));
+  const ds = maKien.map((x) => x.ma).filter((x): x is string => !!x);
+  const viTri = r.logUniqueCode ? ds.indexOf(r.logUniqueCode) : -1;
+
+  return {
+    storeId: r.storeId, shopDomain: r.shopDomain, apiVersion: r.apiVersion,
+    shopifyOrderId: r.shopifyOrderId, orderId: r.orderId,
+    diaChi: {
+      shipName: r.shipName, shipCompany: r.shipCompany,
+      shipAddress1: r.shipAddress1, shipAddress2: r.shipAddress2,
+      shipCity: r.shipCity, shipProvinceCode: r.shipProvinceCode,
+      shipPostcode: r.shipPostcode, shipCountry: r.shipCountry,
+      addrIssue: r.addrIssue, addrStandardized: r.addrStandardized,
+      addrDeliverable: r.addrDeliverable,
+      addrVerifiedAt: r.addrVerifiedAt ? r.addrVerifiedAt.toISOString() : null,
+    },
+    can: {
+      sms: r.smsLuc != null ? {
+        hop: r.smsHop, canKg: soHoacNull(r.smsCan), dai: soHoacNull(r.smsL),
+        rong: soHoacNull(r.smsW), cao: soHoacNull(r.smsH), luc: r.smsLuc.toISOString(),
+      } : null,
+      lark: {
+        hop: r.larkHop, canKg: soHoacNull(r.larkCan), dai: soHoacNull(r.larkL),
+        rong: soHoacNull(r.larkW), cao: soHoacNull(r.larkH),
+      },
+    },
+    mon: dong.map((l) => ({
+      tenSanPham: [l.productTitle, l.variantTitle].filter(Boolean).join(' · '),
+      sku: l.sku, soLuong: l.quantity, chatLieu: null,
+    })),
+    soKien: viTri >= 0 ? { n: viTri + 1, tong: ds.length } : null,
+  };
 }

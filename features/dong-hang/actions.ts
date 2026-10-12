@@ -14,6 +14,11 @@ import { kiemDongKien, type DongKienVao } from './dong-kien';
 import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
 import { xepQuote } from './logic';
 import { thoiGianGiaoTheoHang } from './thoi-gian-giao';
+import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
+import { locThuocTinh, type MetafieldTho } from '@/features/kho-nhan/thuoc-tinh-shopify';
+import { verifyAndStoreOrderAddress } from '@/features/shopify-orders/address-verify';
+import { docNenVanDon } from './queries';
+import { dungKhoiVanDon, type Khoi } from './van-don';
 import type { BaoGiaKien } from './types';
 
 const CACHE_MS = 10 * 60 * 1000;
@@ -173,4 +178,98 @@ export async function ghiDongThung(shipmentId: string, vao: NhapDongThung): Prom
 
   revalidatePath('/f/dong-hang');
   return { ok: true };
+}
+
+const TRUY_VAN_VAN_DON = `query($id: ID!) {
+  order(id: $id) {
+    email
+    shippingAddress { phone }
+    lineItems(first: 50) { nodes {
+      sku
+      product { metafields(first: 50) { nodes {
+        namespace key value
+        reference { ... on Metaobject { displayName } }
+        references(first: 10) { nodes { ... on Metaobject { displayName } } } } } } } } }
+}`;
+
+interface DongShopify { sku?: string | null; product?: { metafields?: { nodes?: MetafieldTho[] } | null } | null }
+
+const cacheVanDon = new Map<string, { khoi: Khoi[]; luc: string }>();
+
+/**
+ * Khối thông tin cho bước LÊN VẬN ĐƠN của một kiện.
+ *
+ * Một lượt gọi Shopify lấy đúng ba thứ CSDL không có: SĐT (bộ sync không kéo field `phone`,
+ * 0/13.125 đơn), email, và chất liệu (`custom.materials_v2`). Lấy live chứ không backfill vì
+ * chỉ cần đơn đang lên vận đơn, và live thì luôn là số mới nhất.
+ *
+ * Shopify hỏng thì KHÔNG ném: `tuShopify = null`, hộp thoại vẫn mở với địa chỉ + cân + SKU từ
+ * CSDL, ô SĐT/email nói rõ "không lấy được". Đi theo đúng nguyên tắc của `layDuLieuQc` bên QC —
+ * mất ảnh/thuộc tính thì mất, không chặn kho làm việc.
+ */
+export async function layKhoiVanDon(
+  shipmentId: string,
+): Promise<{ ok: true; khoi: Khoi[]; luc: string } | { ok: false; loi: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'view_fulfillment')) return { ok: false, loi: 'Không có quyền' };
+
+  const hit = cacheVanDon.get(shipmentId);
+  if (hit && Date.now() - new Date(hit.luc).getTime() < CACHE_MS) return { ok: true, ...hit };
+
+  const nen = await docNenVanDon(shipmentId);
+  if (!nen) return { ok: false, loi: 'Không tìm thấy kiện' };
+
+  let tuShopify: { phone: string | null; email: string | null } | null = null;
+  let theoSku = new Map<string, string | null>();
+  try {
+    const token = await getStoreToken(nen.storeId);
+    const r = await graphqlCall({
+      shopDomain: nen.shopDomain, apiVersion: nen.apiVersion, token,
+      query: TRUY_VAN_VAN_DON, variables: { id: nen.shopifyOrderId },
+    }) as { data?: { order?: { email?: string | null; shippingAddress?: { phone?: string | null } | null; lineItems?: { nodes?: DongShopify[] } } | null } };
+    const don = r.data?.order;
+    if (don) {
+      tuShopify = { phone: don.shippingAddress?.phone ?? null, email: don.email ?? null };
+      theoSku = new Map((don.lineItems?.nodes ?? []).map((l) => [
+        (l.sku ?? '').trim(),
+        locThuocTinh(l.product?.metafields?.nodes ?? []).hien.find((x) => x.nhan === 'Chất liệu')?.giaTri ?? null,
+      ]));
+    }
+  } catch (e) {
+    console.error('[dong-hang] layKhoiVanDon: Shopify lỗi:', e);
+  }
+
+  const khoi = dungKhoiVanDon({
+    diaChi: nen.diaChi, tuShopify, can: nen.can, soKien: nen.soKien,
+    mon: nen.mon.map((m) => ({ ...m, chatLieu: theoSku.get((m.sku ?? '').trim()) ?? null })),
+  });
+  const kq = { khoi, luc: new Date().toISOString() };
+  cacheVanDon.set(shipmentId, kq);
+  return { ok: true, ...kq };
+}
+
+/**
+ * Verify lại địa chỉ NGAY tại bước lên vận đơn.
+ *
+ * Gác `chon_line_ship`, KHÔNG dùng `verifyOrderAddressAction` của features/fulfillment: hàm đó
+ * đòi `manage_fulfillment` mà vai trò `logistics` không có. Lõi verify thì dùng lại nguyên,
+ * không viết luật thứ hai.
+ */
+export async function verifyDiaChiKien(shipmentId: string): Promise<{ ok: boolean; loi?: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'chon_line_ship')) return { ok: false, loi: 'Không có quyền verify địa chỉ' };
+
+  const [k] = await db.select({ orderId: schema.shipments.orderId })
+    .from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
+  if (!k) return { ok: false, loi: 'Không tìm thấy kiện' };
+
+  const r = await verifyAndStoreOrderAddress(k.orderId);
+  // Khối đã dựng mang kết quả verify cũ — bỏ đi để lượt mở sau đọc lại.
+  cacheVanDon.delete(shipmentId);
+  revalidatePath('/f/dong-hang');
+  return r.ok ? { ok: true } : { ok: false, loi: r.error ?? 'Verify thất bại' };
 }
