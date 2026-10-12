@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { luuTrackingChoKien, type KetQuaLuuTracking } from '@/features/dong-hang/actions';
+import { toast } from 'sonner';
+import { luuTrackingChoKien } from '@/features/dong-hang/actions';
 
 /**
  * Ô dán mã vận đơn ngay trên dòng kiện, hiện ra NGAY SAU khi nhân sự quay lại
@@ -11,18 +12,17 @@ import { luuTrackingChoKien, type KetQuaLuuTracking } from '@/features/dong-hang
  * (có test riêng), nên component này chỉ hứng chuỗi gõ và gửi nguyên văn đi,
  * không tự bóc lại ở đây.
  *
- * KHÔNG tự hiển thị kết quả: trả nguyên kết quả ra qua `onKetQua` để cha
- * (`DongKien` trong BangDongHang.tsx) giữ hộ. Lý do: lưu thành công thì action
- * `revalidatePath` ngay trong CÙNG lượt gọi này — props `k.trackingNumber` của
- * cha có thể đổi và gỡ `canhBao` nếu hàm con này cố tự giữ kết quả, state sẽ bị
- * tháo cây cùng lúc. Cha không bị tháo theo props đó nên giữ được hộ.
+ * Báo kết quả bằng TOAST (`sonner`), KHÔNG tự vẽ kết quả tại chỗ và KHÔNG báo
+ * qua state/callback cho cha giữ hộ — review coordinator chỉ ra bản trước đó
+ * (nâng state lên `DongKien`) vẫn hỏng: lưu thành công thì `luuTrackingChoKien`
+ * `revalidatePath` ngay trong CÙNG lượt gọi, mà các tab mặc định (`cho_chon_line`
+ * — tab mở màn chính, xem `queries.ts`) lọc `trackingNumber IS NULL`, nên chính
+ * DÒNG KIỆN này rụng khỏi kết quả truy vấn kế tiếp — không chỉ con của nó bị
+ * tháo, cả `DongKien` biến mất theo, mang bất cứ state nào nó giữ theo luôn.
+ * Toast sống ở cây riêng (`<Toaster/>` cấp layout), không phụ thuộc dòng kiện
+ * còn tồn tại hay không nên sống sót qua cú rụng dòng đó.
  */
-export function ONhapTracking({
-  shipmentId, onKetQua,
-}: {
-  shipmentId: string;
-  onKetQua: (ketQua: KetQuaLuuTracking) => void;
-}) {
+export function ONhapTracking({ shipmentId }: { shipmentId: string }) {
   const [raw, setRaw] = useState('');
   const [pending, start] = useTransition();
 
@@ -33,8 +33,13 @@ export function ONhapTracking({
     // ghi CSDL + đẩy số lên Lark nên phải xảy ra vì người dùng bấm.
     start(async () => {
       const r = await luuTrackingChoKien(shipmentId, raw);
-      onKetQua(r);
-      if (r.ok) setRaw('');
+      if (!r.ok) { toast.error(r.loi, { duration: 10000 }); return; }
+      setRaw('');
+      // Có cảnh báo = giá chưa ghi được lên Lark — đây là NƠI DUY NHẤT nói
+      // điều đó cho nhân sự, nên để sống lâu hơn hẳn toast thường (3s): một
+      // toast cảnh báo chớp tắt nhanh cũng là nuốt mất, chỉ chậm hơn im lặng.
+      if (r.canhBao) toast.warning(`Đã lưu mã ${r.tracking} — ${r.canhBao}`, { duration: 15000 });
+      else toast.success(`Đã lưu mã ${r.tracking}.`, { duration: 3000 });
     });
   };
 

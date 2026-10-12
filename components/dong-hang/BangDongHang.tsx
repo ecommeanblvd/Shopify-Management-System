@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { baoGiaKien, chonHangChoDon, dongKienKhongVanDon, moLaiKien, type KetQuaLuuTracking } from '@/features/dong-hang/actions';
+import { baoGiaKien, chonHangChoDon, dongKienKhongVanDon, moLaiKien } from '@/features/dong-hang/actions';
 import { LY_DO_DONG, kiemDongKien, nhanLyDoDong } from '@/features/dong-hang/dong-kien';
 import { toast } from 'sonner';
 import { canNhapTracking, canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
@@ -324,12 +324,6 @@ function DongKien({
   moSoCuoc: () => void;
 }) {
   const [moDong, setMoDong] = useState(false);
-  // Giữ kết quả lưu tracking Ở ĐÂY (cha của ô nhập), KHÔNG để ô nhập tự giữ:
-  // lưu thành công thì `luuTrackingChoKien` revalidate ngay trong lượt gọi đó,
-  // props `k.trackingNumber` đổi làm điều kiện hiện ô nhập tắt CÙNG lúc — nếu
-  // ô nhập tự giữ state thì nó bị tháo khỏi cây mang luôn `canhBao` theo.
-  // `DongKien` không tháo theo prop đó nên giữ được hộ, không nuốt mất.
-  const [ketQuaTracking, setKetQuaTracking] = useState<KetQuaLuuTracking | null>(null);
   const [dangDong, start] = useTransition();
   const moLai = () => start(async () => {
     const r = await moLaiKien(k.shipmentId);
@@ -423,27 +417,13 @@ function DongKien({
         )}
 
         {/* Chỗ nhân sự QUAY LẠI ngay sau khi tạo nhãn ở cổng hãng — cùng cột với
-            nút "Lên vận đơn" phía trên vì đó là nơi họ vừa copy thông tin sang. */}
-        {coQuyenDong && canNhapTracking(k) && !ketQuaTracking?.ok && (
-          <ONhapTracking shipmentId={k.shipmentId} onKetQua={setKetQuaTracking} />
-        )}
-
-        {ketQuaTracking && (
-          ketQuaTracking.ok ? (
-            <div className="space-y-0.5">
-              <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                Đã lưu mã {ketQuaTracking.tracking}
-              </p>
-              {/* KHÔNG nuốt cảnh báo — đây là chỗ duy nhất nói cho nhân sự biết giá
-                  chưa ghi được lên Lark, phải đọc được dù hàng vừa đổi sang "đã lên nhãn". */}
-              {ketQuaTracking.canhBao && (
-                <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">{ketQuaTracking.canhBao}</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-[11px] leading-snug text-destructive">{ketQuaTracking.loi}</p>
-          )
-        )}
+            nút "Lên vận đơn" phía trên vì đó là nơi họ vừa copy thông tin sang.
+            Kết quả báo bằng TOAST (trong ONhapTracking), KHÔNG vẽ tại chỗ: lưu
+            thành công thì tab mặc định (`cho_chon_line`) lọc `trackingNumber IS
+            NULL`, nên chính DÒNG KIỆN này rụng khỏi danh sách ở lượt revalidate
+            kế — bất cứ state gắn vào sự tồn tại của dòng cũng rụng theo (review
+            coordinator, vòng sửa 1). Toast sống ở cây riêng nên không rụng theo. */}
+        {coQuyenDong && canNhapTracking(k) && <ONhapTracking shipmentId={k.shipmentId} />}
       </div>
 
       <div className="min-w-0 space-y-1">
