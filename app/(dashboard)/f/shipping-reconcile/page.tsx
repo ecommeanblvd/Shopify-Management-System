@@ -16,6 +16,8 @@ import { listUnmatchedBilledTracking, summariseUnmatched } from '@/features/ship
 import { issueInfo } from '@/components/shipping-reconcile/issue-label';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
 import { UnmatchedBilledBanner } from '@/components/shipping-reconcile/UnmatchedBilledBanner';
+import { GiaoTruocNgayGuiBanner } from '@/components/shipping-reconcile/GiaoTruocNgayGuiBanner';
+import { listGiaoTruocNgayGui, tomTatGiaoTruoc } from '@/features/shipments/giao-truoc-ngay-gui';
 import { getLatestLarkRun } from '@/features/lark/sync';
 import type { OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
 
@@ -41,6 +43,8 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
     listUnmatchedBilledTracking(),
     getLatestLarkRun(),
   ]);
+  // Kiện ghi giao TRƯỚC ngày gửi — dữ liệu sai, thường do dòng Lark ghi nhầm mã đơn.
+  const giaoTruoc = await listGiaoTruocNgayGui();
   const carrierErrorGroups = summariseCarrierErrors(carrierErrors.filter((r) => r.state === 'approved'));
   const internalErrors = await listInternalErrors();
   const internalErrorGroups = summariseInternalErrors(internalErrors);
@@ -114,6 +118,7 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
+      <GiaoTruocNgayGuiBanner rows={giaoTruoc} tomTat={tomTatGiaoTruoc(giaoTruoc)} />
       <CreditNoteCard rows={creditNotes} tongThang={creditNoteThang} />
       <UnmatchedBilledBanner
         lark={latestLarkRun}
