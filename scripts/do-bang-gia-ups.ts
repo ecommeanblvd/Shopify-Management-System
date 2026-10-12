@@ -26,7 +26,6 @@ import { db } from '@/db/client';
 import { sql } from 'drizzle-orm';
 import { baoGiaUpsShop } from '@/lib/ups/rate';
 
-const UPS = '46fa242a-d9e6-4bbc-a0ae-2549b84c9ade';
 /** Biểu mà bảng giá nội bộ đang dùng — tên tài khoản là "UPS Worldwide Expedited". */
 const DICH_VU = '08';
 const BAC = Array.from({ length: 20 }, (_, i) => i + 1);
