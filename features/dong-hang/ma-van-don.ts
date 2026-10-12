@@ -6,7 +6,7 @@ const INVISIBLE_CHARS = /[\s​‌‍﻿]/g;
 /** Mã vận đơn hợp lệ: 8-35 ký tự, chữ hoa + số. */
 const VALID_CODE_REGEX = /^[A-Z0-9]{8,35}$/;
 
-/** Tham số truy vấn biết trong URL để bóc mã (case-insensitive). */
+/** Tên tham số truy vấn biết để bóc mã từ URL, không phân biệt hoa thường. */
 const KNOWN_PARAMS = ['trknbr', 'tracknum', 'tracknumbers', 'trackingnumber', 'awb'];
 
 /**
@@ -14,46 +14,38 @@ const KNOWN_PARAMS = ['trknbr', 'tracknum', 'tracknumbers', 'trackingnumber', 'a
  * - Số trần: "876817928550" → trả như là
  * - URL có tham số biết: "https://fedex.com/?trknbr=876817928550" → bóc từ tham số
  * - Chuỗi khác: null (không đoán)
+ *
+ * Review Focus #1: URL lạ không có tham số mã → KHÔNG được đoán bừa một đoạn số
+ * trong đường dẫn, vì mã sai trông y hệt mã đúng.
  */
 export function macVanDonTu(raw: string): string | null {
-  // Chuẩn hoá: bỏ khoảng trắng + ký tự vô hình
   const cleaned = raw.replace(INVISIBLE_CHARS, '');
-
-  // Rỗng sau khi chuẩn hoá → null
   if (!cleaned) return null;
 
-  // Viết hoa để so sánh
   const upper = cleaned.toUpperCase();
-
-  // Nếu toàn bộ là mã hợp lệ → trả luôn
   if (VALID_CODE_REGEX.test(upper)) {
     return upper;
   }
 
-  // Kiểm tra xem có phải URL không
   if (!cleaned.toLowerCase().startsWith('http://') && !cleaned.toLowerCase().startsWith('https://')) {
-    // Không phải URL, không phải mã trần → null
     return null;
   }
 
-  // Là URL → chỉ đọc tham số biết, không moi từ đường dẫn
   try {
     const url = new URL(cleaned);
-    for (const param of KNOWN_PARAMS) {
-      const value = url.searchParams.get(param);
-      if (value) {
-        const codeUpper = value.toUpperCase().replace(INVISIBLE_CHARS, '');
-        // Kiểm tra xem giá trị tham số có phải là mã hợp lệ không
+    /* Duyệt tất cả tham số URL, so khớp tên tham số không phân biệt hoa thường
+     * với KNOWN_PARAMS. searchParams.get() là case-sensitive nên phải duyệt entries(). */
+    for (const [paramName, paramValue] of url.searchParams.entries()) {
+      if (KNOWN_PARAMS.includes(paramName.toLowerCase())) {
+        const codeUpper = paramValue.toUpperCase().replace(INVISIBLE_CHARS, '');
         if (VALID_CODE_REGEX.test(codeUpper)) {
           return codeUpper;
         }
       }
     }
   } catch {
-    // URL không hợp lệ → null
     return null;
   }
 
-  // URL không có tham số biết → null
   return null;
 }

@@ -12,6 +12,12 @@ describe('macVanDonTu', () => {
   it('bóc từ URL UPS', () => {
     expect(macVanDonTu('https://www.ups.com/track?tracknum=1Z2050VDD919649050')).toBe('1Z2050VDD919649050');
   });
+  it('tên tham số toàn chữ hoa cũng được', () => {
+    expect(macVanDonTu('https://www.fedex.com/fedextrack/?TRKNBR=876817928550')).toBe('876817928550');
+  });
+  it('tên tham số hỗn hợp hoa thường cũng được', () => {
+    expect(macVanDonTu('https://www.fedex.com/fedextrack/?TrkNbr=876817928550')).toBe('876817928550');
+  });
   it('bỏ khoảng trắng và ký tự vô hình khi copy', () => {
     expect(macVanDonTu('  876817928550​ ')).toBe('876817928550');
   });
