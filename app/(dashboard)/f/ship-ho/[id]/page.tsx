@@ -20,6 +20,7 @@ import { CopyField } from './CopyField';
 import { AddTrackingButton } from './AddTrackingButton';
 import { CustomerRefEditor } from './CustomerRefEditor';
 import { maDonBrand } from '@/features/ship-ho/ma-don-brand';
+import { MaDon } from '@/components/ship-ho/MaDon';
 import { ShipHoCarrierPanel } from './ShipHoCarrierPanel';
 import { MeasureButton } from './MeasureButton';
 import { ManualStatusControl } from './ManualStatusControl';
@@ -109,7 +110,9 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">{o.code}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          <MaDon code={o.code} larkOrderNumber={o.larkOrderNumber} hienMaPhu={false} />
+        </h1>
         <Link href="/f/ship-ho" className={buttonVariants({ variant: 'outline' })}>← Danh sách</Link>
       </div>
 
@@ -150,8 +153,10 @@ export default async function ShipHoDetailPage({ params }: { params: Promise<{ i
           <span>Mã đơn gốc (brand): {canManage
             ? <CustomerRefEditor orderId={o.id} customerRef={maDonBrand(o)} />
             : <b className="text-foreground">{maDonBrand(o) ?? '—'}</b>}</span>
+          {/* Tiêu đề đã dẫn bằng mã LOG → dòng này giữ mã HỆ THỐNG (khoá kỹ thuật, mã MMP
+              khoá công nợ theo nó) để vẫn tra chéo được. */}
           {o.larkOrderNumber && (
-            <span>Mã Lark (LOG): <b className="text-foreground">{o.larkOrderNumber}</b></span>
+            <span>Mã hệ thống: <b className="font-mono text-foreground">{o.code}</b></span>
           )}
         </div>
 

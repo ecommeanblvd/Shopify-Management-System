@@ -38,6 +38,7 @@ export default async function ShipHoReconcilePage({ searchParams }: { searchPara
   const rowsAll = await db.select({
     id: schema.shipHoOrders.id,
     code: schema.shipHoOrders.code,
+    larkOrderNumber: schema.shipHoOrders.larkOrderNumber,
     partnerBrandSlug: schema.shipHoOrders.partnerBrandSlug,
     brandName: schema.mmpBrands.displayName,
     trackingNumber: schema.shipHoOrders.trackingNumber,
@@ -97,6 +98,7 @@ export default async function ShipHoReconcilePage({ searchParams }: { searchPara
       return {
         id: r.id,
         code: r.code,
+        larkOrderNumber: r.larkOrderNumber,
         brandName: r.brandName ?? r.partnerBrandSlug,
         trackingNumber: r.trackingNumber,
         billNumber: r.billNumber,

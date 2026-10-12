@@ -5,9 +5,12 @@ import {
   ReconcileStatusCell, StructureDetail, vnd, signed,
   type ReconcileModalData, type ReconcileActions,
 } from '@/components/ship-ho/reconcile-decision-ui';
+import { MaDon } from '@/components/ship-ho/MaDon';
 
 /** Row bảng đối soát = dữ liệu modal (ReconcileModalData) + vài cột hiển thị riêng. */
 export interface ReconciledRowData extends ReconcileModalData {
+  /** Mã bảng LOG — mã chuẩn hiển thị (hướng A, CEO 12/10/2026). */
+  larkOrderNumber: string | null;
   /** Tên brand đối tác — hiện dưới mã đơn để lọc theo brand đọc được ngay. */
   brandName: string | null;
   trackingNumber: string | null;
@@ -70,8 +73,11 @@ function RowGroup({ r, open, kgDiff, onToggle, actions }: {
             onClick={(e) => e.stopPropagation()}
             className="font-medium text-primary underline-offset-2 hover:underline"
           >
-            {r.code}
+            <MaDon code={r.code} larkOrderNumber={r.larkOrderNumber} hienMaPhu={false} />
           </Link>
+          <div className="text-[10px] leading-tight text-muted-foreground">
+            <MaDon code={r.code} larkOrderNumber={r.larkOrderNumber} />
+          </div>
           <div className="text-[10px] leading-tight text-muted-foreground">{r.brandName}</div>
           <div className="font-mono text-[10px] text-muted-foreground">{r.trackingNumber}</div>
         </td>

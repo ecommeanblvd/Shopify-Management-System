@@ -10,6 +10,7 @@ import { listShipHoOrders, layDanhSachBrandShipHo } from '@/features/ship-ho/que
 import { filterShipHoOrders, docMucDoiSoat } from '@/features/ship-ho/filter-orders';
 import { BoLocDonShipHo } from '@/components/ship-ho/BoLocDonShipHo';
 import { displayCharged, displayChargedWithDuty, displayMarginWithDuty } from '@/features/ship-ho/pnl';
+import { MaDon } from '@/components/ship-ho/MaDon';
 import { deriveShipHoStage, type ShipHoTone } from '@/features/ship-ho/order-stage';
 import { shipHoPriceStructure } from '@/features/ship-ho/price-structure';
 import { acceptShipHoDiscrepancy, claimShipHoWithCarrier, resolveShipHoClaim } from '@/features/ship-ho/reconcile-decision-actions';
@@ -203,10 +204,15 @@ export default async function ShipHoListPage({
                 <OrderRow key={o.id} href={`/f/ship-ho/${o.id}`} ariaLabel={`Mở đơn ${o.code}`}
                   className="border-b hover:bg-muted/40 [&>td]:p-2 xl:[&>td]:p-3 [&>td]:align-top">
                   <td>
-                    <Link href={`/f/ship-ho/${o.id}`} className="block whitespace-nowrap font-medium underline-offset-2 hover:underline">{o.code}</Link>
+                    {/* Mã LOG đứng trước (CEO 12/10/2026, hướng A) — đó là mã vận hành nói chuyện
+                        bằng và là mã hoá đơn carrier ghi; mã hệ thống xuống dòng phụ. */}
+                    <Link href={`/f/ship-ho/${o.id}`} className="block whitespace-nowrap font-medium underline-offset-2 hover:underline">
+                      <MaDon code={o.code} larkOrderNumber={o.larkOrderNumber} hienMaPhu={false} />
+                    </Link>
                     {/* Dòng 2: mã đơn gốc + label nguồn (MMP/SMS) ngay sau — không đè cột bên */}
                     <div className="truncate text-[10px] leading-tight text-muted-foreground">
-                      {o.customerRef ? `${o.customerRef} ` : ''}
+                      <MaDon code={o.code} larkOrderNumber={o.larkOrderNumber} />
+                      {o.customerRef ? ` ${o.customerRef} ` : ' '}
                       <span className={`rounded px-1 py-px font-medium ${o.source === 'mmp' ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' : 'bg-muted text-muted-foreground'}`}>{o.source === 'mmp' ? 'MMP' : 'SMS'}</span>
                     </div>
                   </td>
