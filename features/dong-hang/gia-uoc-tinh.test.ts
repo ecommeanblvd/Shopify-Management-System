@@ -13,14 +13,22 @@ describe('tuEngine', () => {
 
 describe('tuKhoanUps', () => {
   it('cộng dồn khoản trùng mã', () => {
-    expect(tuKhoanUps([{ ma: 'FUEL SURCHARGE', tien: 10 }, { ma: 'FUEL SURCHARGE', tien: 5 }], 15).fuel).toBe(15);
+    // '375' = Nhiên liệu (mã số thật của Rating API, xem TEN_KHOAN ở lib/ups/rate.ts).
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }, { ma: '375', tien: 5 }], 15).fuel).toBe(15);
   });
   /* Review Focus #3: UPS KHÔNG trả VAT thành khoản riêng. Phải là null, không phải 0. */
   it('UPS không có VAT → vat là null, KHÔNG phải 0', () => {
-    expect(tuKhoanUps([{ ma: 'FUEL SURCHARGE', tien: 10 }], 10).vat).toBeNull();
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10).vat).toBeNull();
   });
   it('khoản UPS không biết xếp đâu thì bỏ qua, không làm hỏng các khoản khác', () => {
-    expect(tuKhoanUps([{ ma: 'KHOAN_LA', tien: 99 }, { ma: 'FUEL SURCHARGE', tien: 10 }], 109).fuel).toBe(10);
+    expect(tuKhoanUps([{ ma: 'KHOAN_LA', tien: 99 }, { ma: '375', tien: 10 }], 109).fuel).toBe(10);
+  });
+  /* '190' (Phụ phí xử lý chung) là mã THẬT của UPS nhưng không có nhóm tương ứng trong
+   * GiaUocTinh — phải nêu ra ở maLa, không được biến mất lặng lẽ như tiền không ai biết. */
+  it('mã thật nhưng chưa có nhóm (190) đi vào maLa, không làm hỏng khoản khác', () => {
+    const g = tuKhoanUps([{ ma: '190', tien: 50 }, { ma: '375', tien: 10 }], 60);
+    expect(g.maLa).toEqual(['190']);
+    expect(g.fuel).toBe(10);
   });
 });
 
@@ -41,7 +49,7 @@ describe('vatSuyRa', () => {
    * gốc = mọi khoản dịch vụ, TRỪ chính VAT và TRỪ thuế nhập khẩu. */
   it('8% trên tổng các khoản dịch vụ', () => {
     expect(vatSuyRa({ base: 1000, fuel: 100, remote: null, demand: null, signature: null,
-      residential: null, importHandling: 400, vat: null, total: null, nguon: 'ups-api' })).toBe(120);
+      residential: null, importHandling: 400, vat: null, total: null, nguon: 'ups-api', maLa: [] })).toBe(120);
   });
   it('đã có vat thì giữ nguyên, không tính lại', () => {
     expect(vatSuyRa({ vat: 77, base: 1000 } as GiaUocTinh)).toBe(77);

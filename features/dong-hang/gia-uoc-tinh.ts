@@ -21,6 +21,10 @@ export interface GiaUocTinh {
   importHandling: number | null;
   vat: number | null;
   total: number | null;
+  /** Mã khoản của nguồn mà không có nhóm tương ứng ở trên — nêu ra để người nhập
+   *  thấy tiền chưa rơi vào đâu, thay vì để nó lặng lẽ biến mất khỏi bảng phân rã
+   *  (xem `maLa` ở features/carrier-rates/ap/ups-invoice-xml.ts, cùng cách làm). */
+  maLa: string[];
 }
 
 /**
@@ -47,25 +51,26 @@ export function tuEngine(b: QuoteBreakdown, total: number): GiaUocTinh {
     importHandling: b.countryFixed !== 0 ? b.countryFixed : b.countryFixedReference,
     vat: b.vat,
     total,
+    maLa: [],
   };
 }
 
 type NhomUps = 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling';
 
 /**
- * Mã khoản UPS → nhóm của GiaUocTinh. Nhận cả mã số của Rating API (xem TEN_KHOAN
- * ở lib/ups/rate.ts — '375' Nhiên liệu, '377' Vùng sâu vùng xa…) và tên mô tả viết
- * hoa mà một số luồng khác trong repo dùng làm `ma` (ví dụ 'FUEL SURCHARGE', cùng
- * quy ước với các parser hoá đơn khác). So khớp không phân biệt hoa thường.
+ * Mã khoản UPS (Rating API, số — xem TEN_KHOAN ở lib/ups/rate.ts) → nhóm của
+ * GiaUocTinh. So khớp không phân biệt hoa thường / khoảng trắng thừa (`ma` do
+ * UPS trả, phòng khi có đệm) — nhưng UPS chỉ thật sự trả MÃ SỐ, không trả mô tả
+ * chữ, nên bảng này chỉ chứa mã số.
  *
  * '434' (Phụ phí cao điểm) xếp vào `demand` — cùng họ với Demand Surcharge của
- * FedEx, GiaUocTinh không có cột "peak" riêng. '110' (Xác nhận giao hàng) và '190'
- * (Phụ phí xử lý chung, không theo nước) không có nhóm tương ứng — mã nào không có
- * trong bảng này thì tuKhoanUps bỏ qua, không suy ra 0 cho nhóm nào.
+ * FedEx, GiaUocTinh không có cột "peak" riêng. '110' (Xác nhận giao hàng) và
+ * '190' (Phụ phí xử lý chung, không theo nước) không có nhóm tương ứng — mã nào
+ * không có trong bảng này bị tuKhoanUps gom vào `maLa` (xem dưới), KHÔNG lặng lẽ
+ * bỏ qua.
  */
 const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
   '375': 'fuel',
-  'FUEL SURCHARGE': 'fuel',
   '376': 'remote',
   '377': 'remote',
   '434': 'demand',
@@ -79,12 +84,17 @@ const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
  * `DongBaoGiaUps.base`, một field riêng không đi qua hàm này) và không trả VAT
  * thành khoản riêng (xem chú thích lib/ups/rate.ts: "Tiền trả về là CHƯA VAT") —
  * nên `base` và `vat` luôn là `null`, không phải suy từ khoan[].
+ *
+ * Mã không nhận ra được gom vào `maLa` thay vì bỏ qua lặng lẽ — một khoản tiền
+ * thật của UPS mà không ai biết nó rơi đâu là lỗi âm thầm, giống cách `maLa` ở
+ * features/carrier-rates/ap/ups-invoice-xml.ts nêu mã lạ cho người nhập thấy.
  */
 export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number): GiaUocTinh {
   const congDon: Partial<Record<NhomUps, number>> = {};
+  const maLa: string[] = [];
   for (const k of khoan) {
     const nhom = NHOM_THEO_MA_UPS[k.ma.trim().toUpperCase()];
-    if (!nhom) continue; // mã lạ: bỏ qua, không làm hỏng các khoản đã nhận ra
+    if (!nhom) { maLa.push(k.ma); continue; }
     congDon[nhom] = (congDon[nhom] ?? 0) + k.tien;
   }
   return {
@@ -98,6 +108,7 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number): GiaUocTinh {
     importHandling: congDon.importHandling ?? null,
     vat: null,
     total,
+    maLa,
   };
 }
 
@@ -119,6 +130,7 @@ export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
     importHandling: q.countryFixed,
     vat: q.vat,
     total: q.totalNetCharge,
+    maLa: [],
   };
 }
 
