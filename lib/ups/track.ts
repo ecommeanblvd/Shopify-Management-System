@@ -1,18 +1,15 @@
 /**
  * UPS Tracking API (OAuth client credentials) — client + parser thuần.
  *
- * Cấu hình qua env (đặt trên Railway, KHÔNG commit):
- *   UPS_CLIENT_ID / UPS_CLIENT_SECRET — app trên developer.ups.com có bật sản phẩm "Tracking".
- *   UPS_API_BASE — mặc định https://onlinetools.ups.com (môi trường thử: https://wwwcie.ups.com).
+ * OAuth + header dùng chung ở `lib/ups/client.ts` (Rating cũng dùng).
  *
  * Trả cùng shape với FedEx/DHL để `trackAny` xử lý đồng nhất; lịch sử quét đổi sang `SuKienQuet`
  * để đối chiếu lý do chậm (features/shipments/doi-chieu-ups.ts). Chỉ các hàm có `fetch` chạm mạng.
  */
-import { randomUUID } from 'node:crypto';
+import { headerUps, layTokenUps, upsBase, xoaTokenUps } from './client';
 import type { DeliveryStatus, LichSuQuet } from '@/lib/fedex/track';
 import type { SuKienQuet } from '@/features/shipments/doi-chieu-fedex';
 
-const DEFAULT_BASE = 'https://onlinetools.ups.com';
 const OUT_FOR_DELIVERY_RE = /out for delivery/i;
 
 export interface UpsTrackResult {
@@ -151,45 +148,17 @@ export function parseUpsLichSu(raw: unknown): LichSuQuet {
   return { suKien };
 }
 
-let token: { value: string; het: number } | null = null;
-
-async function layToken(base: string): Promise<string> {
-  if (token && token.het > Date.now() + 60_000) return token.value;
-  const id = process.env.UPS_CLIENT_ID;
-  const secret = process.env.UPS_CLIENT_SECRET;
-  if (!id || !secret) throw new Error('no_ups_key');
-  const res = await fetch(`${base}/security/v1/oauth/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error(`ups_oauth_http_${res.status} — kiểm tra UPS_CLIENT_ID/UPS_CLIENT_SECRET`);
-  const j = (await res.json()) as { access_token?: string; expires_in?: string | number };
-  if (!j.access_token) throw new Error('ups_oauth_khong_co_token');
-  token = { value: j.access_token, het: Date.now() + Number(j.expires_in ?? 3600) * 1000 };
-  return token.value;
-}
-
 /** Gọi Track API cho một mã. 404 (mã không tồn tại) → null. Chạm mạng. */
 async function goiUps(trackingNumber: string): Promise<unknown | null> {
-  const base = process.env.UPS_API_BASE || DEFAULT_BASE;
-  const bearer = await layToken(base);
+  const base = upsBase();
+  const bearer = await layTokenUps();
   const tk = trackingNumber.replace(/\s+/g, '').toUpperCase();
   const res = await fetch(`${base}/api/track/v1/details/${encodeURIComponent(tk)}?locale=en_US&returnSignature=false`, {
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      transId: randomUUID().replace(/-/g, '').slice(0, 32),
-      transactionSrc: 'mean-blvd-ops',
-      Accept: 'application/json',
-    },
+    headers: headerUps(bearer),
     signal: AbortSignal.timeout(15_000),
   });
   if (res.status === 404) return null;
-  if (res.status === 401) { token = null; throw new Error('ups_unauthorized'); }
+  if (res.status === 401) { xoaTokenUps(); throw new Error('ups_unauthorized'); }
   if (res.status === 429) throw new Error('ups_rate_limited');
   if (!res.ok) throw new Error(`ups_track_http_${res.status}`);
   return res.json();
