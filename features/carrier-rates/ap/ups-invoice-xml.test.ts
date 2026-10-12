@@ -112,7 +112,11 @@ describe('thungChoKhoanUps — khoản phí UPS rơi vào cột nào', () => {
     expect(thungChoKhoanUps({ lop: 'ACC', ma: 'PFR', ten: 'Surge Emergency Fee - Resi' })).toBe('demand');
     expect(thungChoKhoanUps({ lop: 'ACC', ma: 'PFC', ten: 'Surge Emergency Fee - Com' })).toBe('demand');
     expect(thungChoKhoanUps({ lop: 'ACC', ma: 'ESD', ten: 'Extended Area Surcharge-Destination' })).toBe('remote');
-    expect(thungChoKhoanUps({ lop: 'ACC', ma: 'F/D', ten: 'D&T Forwarding Surcharge' })).toBe('duty');
+    /* PHÍ DỊCH VỤ khi UPS ứng và làm thủ tục thuế, KHÔNG phải chính khoản thuế: hoá đơn ghi
+     * TaxIndicator=1 (có VAT 8%) — đúng phép thử `classifyFboCharge` dùng cho FedEx. Để ở
+     * `duty` thì nó chảy vào actual_duty_vnd của đơn ship hộ, tức thu lại của brand như thuế
+     * ứng hộ, và `consolidateFboShipping` bỏ cả dòng khỏi đối soát cước. */
+    expect(thungChoKhoanUps({ lop: 'ACC', ma: 'F/D', ten: 'D&T Forwarding Surcharge' })).toBe('importHandling');
   });
   it('mã ACC chưa biết → Khác, không im lặng nhét vào cột có nghĩa', () => {
     expect(thungChoKhoanUps({ lop: 'ACC', ma: 'ZZZ', ten: 'Phi la' })).toBe('other');
@@ -157,7 +161,8 @@ describe('parseUpsInvoiceXml — gộp theo VẬN ĐƠN', () => {
     expect(r.discount).toBe(-2_130_745);
     expect(r.vat).toBe(11_045);
     expect(r.addressCorrection).toBe(289_200);
-    expect(r.duty).toBe(600_425);
+    expect(r.importHandling).toBe(600_425);
+    expect(r.duty).toBe(0);
     expect(r.remote).toBe(646_720);
   });
   it('cân lấy MAX qua các kiện, KHÔNG cộng (kiện INF 0đ và lượt điều chỉnh)', () => {

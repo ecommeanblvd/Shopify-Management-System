@@ -78,12 +78,18 @@ export type ThungUps =
  *                                        khác mức, nên cùng cột)
  *  - ESD Extended Area Surcharge-Dest  → `remote` (vùng xa điểm đến)
  *  - FIP International Processing Fee  → cột RIÊNG, giữ tên UPS (CEO 12/10/2026)
- *  - F/D D&T Forwarding Surcharge      → `duty` (CEO chốt 12/10/2026)
+ *  - F/D D&T Forwarding Surcharge      → `importHandling`
  *
- * CẦN BIẾT về F/D: hoá đơn ghi `TaxIndicator = 1`, tức UPS CÓ tính 8% VAT lên khoản này.
- * Theo phép thử VAT mà `classifyFboCharge` đang dùng cho FedEx (có VAT = phí dịch vụ →
- * `importHandling`; không VAT = pass-through thuần → `duty`) thì nó thuộc `importHandling`.
- * Giữ `duty` vì CEO đã chốt, nhưng ghi lại bằng chứng ở đây để đổi được bằng một dòng.
+ * Vì sao F/D là `importHandling` chứ không `duty` (CEO chốt lại 12/10/2026 sau khi xem bằng
+ * chứng): đây là PHÍ DỊCH VỤ của UPS khi họ ứng và làm thủ tục thuế, không phải chính khoản
+ * thuế. Hai dấu hiệu cùng chỉ một hướng:
+ *   1. Hoá đơn ghi `TaxIndicator = 1`, tức UPS CÓ tính 8% VAT lên khoản này. Đúng phép thử mà
+ *      `classifyFboCharge` dùng cho FedEx: có VAT = phí dịch vụ → `importHandling`; không VAT
+ *      = pass-through thuần → `duty`.
+ *   2. Để ở `duty` thì khoản này chảy vào `actual_duty_vnd` của đơn ship hộ qua
+ *      `getDutyLinesByTracking`, tức THU LẠI CỦA BRAND như một khoản thuế ứng hộ — trong khi
+ *      nó là phí của hãng. Và `consolidateFboShipping` bỏ nguyên dòng có `duty > 0` khỏi
+ *      đối soát cước, nên lô ấy mất luôn chi phí thật.
  */
 const ACC_THEO_MA: Record<string, ThungUps> = {
   DCS: 'signature',
@@ -92,7 +98,7 @@ const ACC_THEO_MA: Record<string, ThungUps> = {
   PFC: 'demand',
   ESD: 'remote',
   FIP: 'internationalProcessing',
-  'F/D': 'duty',
+  'F/D': 'importHandling',
 };
 
 /** Một khoản phí UPS rơi vào cột nào. THUẦN. */
