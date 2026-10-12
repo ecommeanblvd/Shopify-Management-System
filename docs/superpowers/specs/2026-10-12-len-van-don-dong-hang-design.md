@@ -159,8 +159,12 @@ dính liền (một ô thật chứa 16 SKU nối nhau `LaLING-LL-MNC25-01-M-BRZ
 
 ### Khối 4 — Khai hải quan
 
-Ô: Giá trị khai + đơn vị tiền · HS code · Nước xuất xứ · Loại dịch vụ. **Hiện ô, để dấu `—`**,
-kèm câu "gõ tay bên cổng hãng". Không lưu, không cột mới, không form nhập.
+Năm ô: Giá trị khai · Đơn vị tiền · HS code · Nước xuất xứ · Loại dịch vụ. **Hiện ô, để dấu
+`—`**, kèm câu "gõ tay bên cổng hãng". Không lưu, không cột mới, không form nhập.
+
+"Loại dịch vụ" không phải khoản hải quan, nhưng xếp cùng khối này vì cả năm ô có đúng một điểm
+chung đáng kể với người dùng: **ô nào cũng phải gõ tay bên cổng hãng**. Gom một chỗ thì quét
+một lượt là biết còn gì phải tự điền.
 
 CEO chốt 12/10/2026: để optional vì chưa có dữ liệu. Hiện ô (chứ không ẩn) để người mới vào
 việc biết cổng hãng còn đòi những ô đó. Khi nào có dữ liệu thì ô tự đầy, không phải sửa UI.
@@ -284,7 +288,7 @@ Test đặt ở `features/dong-hang/van-don.test.ts` (`.ts` — bộ test của 
   `thieu` nêu đúng thứ thiếu · thiếu kích thước nhưng có cân → vẫn chặn
 - `moTaHangHoa`: có chất liệu → `tên — chất liệu` · không chất liệu → chỉ tên, không gạch
 - `dungKhoiVanDon`: đủ 4 khối theo thứ tự · `chanCopy` bật đúng khối đúng lý do · khối Khai hải
-  quan luôn 4 ô và luôn `null` giá trị
+  quan luôn 5 ô và luôn `null` giá trị
 - `dungKhoiVanDon` — số kiện: `tong = 1` → `1/1` · `tong = 2` → `n/2` · `soKien` null → `—`
   kèm câu "kiện chưa có mã Lark"
 - `dungKhoiVanDon` — `tuShopify` null → ô SĐT và email ghi câu "không lấy được từ Shopify",
