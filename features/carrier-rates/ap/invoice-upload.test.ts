@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase, thongBaoSaiDinhDang, canhBaoUps } from './invoice-upload';
+import { detectInvoiceFormat, toInvoicePreview, fboPreviewFrom, splitByPhase, thongBaoSaiDinhDang, canhBaoUps, nhacFileDungBill } from './invoice-upload';
 
 describe('detectInvoiceFormat', () => {
   it('dhl + .csv → dhl_csv', () => { expect(detectInvoiceFormat('dhl', 'HANR1.csv')).toBe('dhl_csv'); });
@@ -178,5 +178,20 @@ describe('canhBaoUps', () => {
   it('mã phí lạ được nêu tên', () => {
     const w = canhBaoUps({ amount: 100, taxVariance: 0, rows: [{ total: 100 }], maLa: ['ACC/ZZZ'] });
     expect(w[0]).toContain('ACC/ZZZ');
+  });
+});
+
+describe('nhacFileDungBill — tải PDF trước thì nhắc đúng file dựng bill', () => {
+  it('UPS nhắc Billing Data XML, KHÔNG nhắc CSV/XLSX (hai thứ UPS không phát hành)', () => {
+    const m = nhacFileDungBill('ups');
+    expect(m).toContain('XML');
+    expect(m).not.toMatch(/CSV|XLSX/);
+  });
+  it('mỗi hãng nhắc đúng file của hãng đó', () => {
+    expect(nhacFileDungBill('dhl')).toMatch(/CSV/);
+    expect(nhacFileDungBill('fedex')).toMatch(/XLSX/);
+  });
+  it('hãng lạ thì nói chung, không bịa tên file', () => {
+    expect(nhacFileDungBill(null)).not.toMatch(/CSV|XLSX|XML/);
   });
 });

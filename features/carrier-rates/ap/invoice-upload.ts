@@ -136,6 +136,19 @@ const td = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
  * đơn DHL" — tải file FedEx nhầm chỗ thì được bảo là sai định dạng DHL, không
  * hiểu vì sao. Nêu đúng tên hãng đang mở và nhắc kiểm tra chỗ đứng.
  */
+/**
+ * PDF chỉ ĐÍNH vào bill đã có, không dựng được bill (nó là bản in, không có bảng kê máy
+ * đọc được). Câu nhắc phải nói đúng file nào dựng bill cho HÃNG ĐANG MỞ — câu cũ nói
+ * "import CSV/XLSX" cho mọi hãng, mà UPS không có CSV cũng không có XLSX; người tải PDF
+ * UPS trước sẽ đi tìm một file không tồn tại.
+ */
+export function nhacFileDungBill(carrierKey: string | null): string {
+  if (carrierKey === 'ups') return 'Không khớp bill nào — tải file Billing Data XML của UPS trước, rồi PDF mới có bill để đính vào';
+  if (carrierKey === 'dhl') return 'Không khớp bill nào — tải file CSV/XML của DHL trước';
+  if (carrierKey === 'fedex') return 'Không khớp bill nào — tải file XLSX/XML của FedEx Billing Online trước';
+  return 'Không khớp bill nào — tải file hoá đơn máy đọc được của hãng lên trước';
+}
+
 export function thongBaoSaiDinhDang(carrierKey: string | null): string {
   if (carrierKey === 'fedex') return 'File không khớp định dạng hoá đơn FedEx (XLSX hoặc XML của FedEx Billing Online).';
   if (carrierKey === 'dhl') return 'File không khớp định dạng hoá đơn DHL (CSV hoặc XML).';
@@ -316,11 +329,14 @@ export async function previewOneInvoice(ctx: InvoiceCtx, file: { bytes: Uint8Arr
       .from(schema.carrierBills).where(eq(schema.carrierBills.carrierAccountId, ctx.carrierAccountId));
     const known = new Set(billRows.map((b) => b.billNumber).filter((n): n is string => !!n));
     const invoices = matchInvoiceNumbers(text, known);
-    const carrier = (ctx.carrierKey === 'fedex' ? 'fedex' : 'dhl') as 'fedex' | 'dhl';
+    const carrier = (['fedex', 'dhl', 'aramex', 'ups'].includes(ctx.carrierKey ?? '')
+      ? ctx.carrierKey : 'dhl') as 'fedex' | 'dhl' | 'aramex' | 'ups';
     return { ok: true as const, preview: {
       carrier, format: 'invoice_pdf' as const, billNumber: null, amount: null, currency: ctx.currency,
       periodStart: null, periodEnd: null, issueDate: null, dueDate: null, lineCount: invoices.length,
-      warnings: invoices.length ? [`PDF sẽ đính vào ${invoices.length} bill: ${invoices.join(', ')}`] : ['Không khớp bill nào — import CSV/XLSX trước'],
+      warnings: invoices.length
+        ? [`PDF sẽ đính vào ${invoices.length} bill: ${invoices.join(', ')}`]
+        : [nhacFileDungBill(ctx.carrierKey)],
     } };
   }
   return { ok: false as const, message: thongBaoSaiDinhDang(ctx.carrierKey) };
@@ -525,7 +541,7 @@ export async function importCarrierInvoices(ctx: InvoiceCtx, files: { bytes: Uin
         try { text = await extractPdfText(f.bytes); }
         catch { out.push({ ...base, message: 'Không đọc được PDF' }); continue; }
         const invoices = matchInvoiceNumbers(text, known);
-        if (invoices.length === 0) { out.push({ ...base, message: 'Không khớp bill nào — import CSV/XLSX trước' }); continue; }
+        if (invoices.length === 0) { out.push({ ...base, message: nhacFileDungBill(ctx.carrierKey) }); continue; }
         const carrier = ctx.carrierKey === 'fedex' ? 'fedex' : 'dhl';
         const totals = parsePdfInvoiceTotals(text, carrier);
         const ct = f.contentType || 'application/pdf';
