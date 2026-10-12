@@ -25,6 +25,25 @@ export function trangThaiKien(k: { trackingNumber: string | null; selectedCarrie
   return { ma: 'cho_chon' };
 }
 
+/**
+ * Còn chỗ cho ô dán mã vận đơn hay không: đây là LUẬT hiển thị (đã cân/đóng
+ * thật, chưa có mã, còn đi hàng) nên tách ra đây để có test — nhét điều kiện
+ * này thẳng vào BangDongHang.tsx thì không ai canh được (vitest không chạy
+ * `.tsx`, xem `task-6-brief.md`).
+ *
+ * Không xét `selectedCarrierKey`: nhân sự có thể lên nhãn trước khi SMS kịp
+ * ghi nhận chọn line, ô dán mã không nên phụ thuộc bước đó.
+ */
+export function canNhapTracking(k: {
+  weightKg: number | null;
+  trackingNumber: string | null;
+  dong: unknown | null;
+  huy: { loai: 'khong' | 'mot_phan' | 'toan_bo' };
+  larkMatDong: boolean;
+}): boolean {
+  return k.weightKg != null && !k.trackingNumber && !k.dong && k.huy.loai !== 'toan_bo' && !k.larkMatDong;
+}
+
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 export function ngayVn(iso: string): string {
   return new Date(new Date(iso).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);

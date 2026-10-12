@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canQuyDoi, trangThaiKien, laNgayTuongLai, nhomTheoNgay, nhomTheoNgayVaBase, tenNguoiDung, xepQuote } from './logic';
+import { canNhapTracking, canQuyDoi, trangThaiKien, laNgayTuongLai, nhomTheoNgay, nhomTheoNgayVaBase, tenNguoiDung, xepQuote } from './logic';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 
 describe('canQuyDoi', () => {
@@ -34,6 +34,26 @@ describe('trangThaiKien', () => {
   it('đã chọn hãng → da_chon kèm người/giờ; chưa gì → cho_chon', () => {
     expect(trangThaiKien({ trackingNumber: null, selectedCarrierKey: 'ups', selectedCarrierBy: 'duc', selectedCarrierAt: '2026-09-22T03:00:00Z' })).toEqual({ ma: 'da_chon', hang: 'ups', nguoi: 'duc', luc: '2026-09-22T03:00:00Z' });
     expect(trangThaiKien({ trackingNumber: null, selectedCarrierKey: null, selectedCarrierBy: null, selectedCarrierAt: null })).toEqual({ ma: 'cho_chon' });
+  });
+});
+
+describe('canNhapTracking', () => {
+  const goc = { weightKg: 1.2, trackingNumber: null, dong: null, huy: { loai: 'khong' as const }, larkMatDong: false };
+  it('đã cân, chưa có mã, còn đi hàng → được nhập', () => {
+    expect(canNhapTracking(goc)).toBe(true);
+  });
+  it('chưa đóng (chưa có cân thật) → chưa cho nhập', () => {
+    expect(canNhapTracking({ ...goc, weightKg: null })).toBe(false);
+  });
+  it('đã có mã rồi → không cho nhập lại', () => {
+    expect(canNhapTracking({ ...goc, trackingNumber: '1Z1' })).toBe(false);
+  });
+  it('đã đóng kiện (không vận đơn) → không cho nhập', () => {
+    expect(canNhapTracking({ ...goc, dong: { luc: '', lyDo: '', ghiChu: null, kienThayThe: null, boi: null } })).toBe(false);
+  });
+  it('huỷ toàn bộ hoặc Lark đã xoá dòng → không cho nhập', () => {
+    expect(canNhapTracking({ ...goc, huy: { loai: 'toan_bo' } })).toBe(false);
+    expect(canNhapTracking({ ...goc, larkMatDong: true })).toBe(false);
   });
 });
 
