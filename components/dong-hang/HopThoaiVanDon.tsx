@@ -393,7 +393,7 @@ export function HopThoaiVanDon({
           else { setDaXacNhan(false); setDaCopy(new Set()); }
         }}
       >
-        <DialogTrigger className={`whitespace-nowrap rounded-lg border border-border px-3 py-2 text-[13px] font-medium transition hover:border-foreground/40 ${VIEN_NUT} focus-visible:ring-ring/60`}>
+        <DialogTrigger className={`w-full rounded-lg border border-border px-3 py-2 text-[13px] font-medium whitespace-nowrap transition hover:border-foreground/40 hover:bg-muted ${VIEN_NUT} focus-visible:ring-ring/60`}>
           Lên vận đơn
         </DialogTrigger>
         <DialogContent

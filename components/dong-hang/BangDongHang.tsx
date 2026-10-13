@@ -53,7 +53,7 @@ const coNuoc = (iso: string | null) => {
 
 /** MỘT khai báo lưới dùng cho cả hàng tiêu đề lẫn mọi dòng — cột thẳng hàng toàn trang. */
 const LUOI =
-  'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(132px,auto)_minmax(186px,1.2fr)]';
+  'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(168px,auto)_minmax(186px,1.2fr)]';
 
 export function BangDongHang({
   kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan,
@@ -393,44 +393,47 @@ function DongKien({
         )}
       </div>
 
-      <div className="pr-4">
+      {/* MỘT ô cho cả cột "Thao tác". Lưới khai SÁU cột; trước đây cột này tách làm hai ô
+          nên hàng có bảy ô, ô "Trạng thái" bị đẩy xuống một hàng ngầm dưới cột "Đơn" —
+          đúng chỗ CEO thấy lệch lạc (13/10/2026).
+          Ba nút cùng chiều rộng, cùng cỡ chữ, cùng chiều cao, xếp theo ĐÚNG thứ tự thao
+          tác: so cước → lên vận đơn → quay lại nhập mã. */}
+      <div className="flex flex-col gap-1.5 pr-4">
         {khongDiHang ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
-          <button
-            type="button" onClick={moSoCuoc}
-            className={`whitespace-nowrap rounded-lg px-4 py-2 text-[13px] transition ${
-              daChon
-                ? 'border border-border font-medium hover:border-foreground/40'
-                : 'bg-amber-500 font-semibold text-amber-950 hover:bg-amber-400'
-            }`}
-          >
-            {daChon ? 'Xem / đổi line' : coQuyenChon ? 'So cước & chọn' : 'So cước'}
-          </button>
-        )}
-      </div>
+          <>
+            <button
+              type="button" onClick={moSoCuoc}
+              className={`w-full rounded-lg px-3 py-2 text-[13px] transition ${
+                daChon
+                  ? 'border border-border font-medium hover:border-foreground/40 hover:bg-muted'
+                  : 'border border-amber-300 bg-amber-100 font-semibold text-amber-900 hover:bg-amber-200 dark:border-amber-800 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/70'
+              }`}
+            >
+              {daChon ? 'Xem / đổi line' : coQuyenChon ? 'So cước & chọn' : 'So cước'}
+            </button>
 
-      {/* Bước sau khi chọn line: gom thông tin để dán sang form hãng. Hệ thống không tạo nhãn. */}
-      <div className="space-y-1.5 pr-4">
-        {khongDiHang ? null : (
-          <HopThoaiVanDon
-            shipmentId={k.shipmentId} maKien={k.logUniqueCode}
-            coQuyenChon={coQuyenChon} coQuyenDong={coQuyenDong}
-          />
-        )}
+            {/* Bước sau khi chọn line: gom thông tin để dán sang form hãng. Hệ thống không tạo nhãn. */}
+            <HopThoaiVanDon
+              shipmentId={k.shipmentId} maKien={k.logUniqueCode}
+              coQuyenChon={coQuyenChon} coQuyenDong={coQuyenDong}
+            />
 
-        {/* Chỗ nhân sự QUAY LẠI ngay sau khi tạo nhãn ở cổng hãng — cùng cột với
-            nút "Lên vận đơn" phía trên vì đó là nơi họ vừa copy thông tin sang.
-            Nút này mở ĐÚNG hộp thoại xác nhận mà nút "Tạo vận đơn thành công" bên
-            trong hộp thoại trên mở: không được còn đường nào ghi lên Lark mà không
-            qua bảng xem trước (CEO 14/10/2026).
-            Kết quả báo bằng TOAST, KHÔNG vẽ tại chỗ: lưu thành công thì tab mặc
-            định (`cho_chon_line`) lọc `trackingNumber IS NULL`, nên chính DÒNG
-            KIỆN này rụng khỏi danh sách ở lượt revalidate kế — bất cứ state gắn
-            vào sự tồn tại của dòng cũng rụng theo (review coordinator, vòng sửa
-            1). Toast sống ở cây riêng nên không rụng theo. */}
-        {coQuyenDong && canNhapTracking(k) && (
-          <NutNhapTracking shipmentId={k.shipmentId} maKien={k.logUniqueCode} />
+            {/* Chỗ nhân sự QUAY LẠI ngay sau khi tạo nhãn ở cổng hãng — cùng cột với
+                nút "Lên vận đơn" phía trên vì đó là nơi họ vừa copy thông tin sang.
+                Nút này mở ĐÚNG hộp thoại xác nhận mà nút "Tạo vận đơn thành công" bên
+                trong hộp thoại trên mở: không được còn đường nào ghi lên Lark mà không
+                qua bảng xem trước (CEO 14/10/2026).
+                Kết quả báo bằng TOAST, KHÔNG vẽ tại chỗ: lưu thành công thì tab mặc
+                định (`cho_chon_line`) lọc `trackingNumber IS NULL`, nên chính DÒNG
+                KIỆN này rụng khỏi danh sách ở lượt revalidate kế — bất cứ state gắn
+                vào sự tồn tại của dòng cũng rụng theo (review coordinator, vòng sửa
+                1). Toast sống ở cây riêng nên không rụng theo. */}
+            {coQuyenDong && canNhapTracking(k) && (
+              <NutNhapTracking shipmentId={k.shipmentId} maKien={k.logUniqueCode} />
+            )}
+          </>
         )}
       </div>
 

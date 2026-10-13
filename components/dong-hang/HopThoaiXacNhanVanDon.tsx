@@ -269,7 +269,7 @@ export function NutNhapTracking({ shipmentId, maKien }: { shipmentId: string; ma
     <>
       <button
         type="button" onClick={() => setMo(true)}
-        className={`w-full rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium transition hover:border-foreground/40 hover:bg-muted ${VIEN_NUT} focus-visible:ring-ring/60`}
+        className={`w-full rounded-lg border border-border px-3 py-2 text-[13px] font-medium whitespace-nowrap transition hover:border-foreground/40 hover:bg-muted ${VIEN_NUT} focus-visible:ring-ring/60`}
       >
         Nhập mã vận đơn
       </button>
