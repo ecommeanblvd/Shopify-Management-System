@@ -37,9 +37,9 @@ const VIEN_NUT = 'cursor-pointer focus-visible:outline-none focus-visible:ring-2
 /** Một dòng của bảng xem trước: tên ô Lark + số + câu vì sao. */
 function DongO({ d, mau }: { d: DongXemTruoc; mau: 'luc' | 'hoPhach' | 'xam' }) {
   const vien = mau === 'luc'
-    ? 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/40'
+    ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/60 dark:bg-emerald-950/25'
     : mau === 'hoPhach'
-      ? 'border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/40'
+      ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/25'
       : 'border-border bg-muted/40';
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border px-2.5 py-1.5 ${vien}`}>
@@ -200,7 +200,7 @@ export function HopThoaiXacNhanVanDon({
               </div>
 
               {kq.canhBao.map((c) => (
-                <p key={c} className="flex items-start gap-1.5 rounded-lg bg-amber-500/15 px-2.5 py-2 text-[11.5px] text-amber-800 dark:text-amber-300">
+                <p key={c} className="flex items-start gap-1.5 rounded-lg bg-amber-100/70 px-2.5 py-2 text-[11.5px] text-amber-900 dark:bg-amber-900/25 dark:text-amber-200">
                   <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                   <span>{c}</span>
                 </p>
@@ -245,7 +245,7 @@ export function HopThoaiXacNhanVanDon({
           <button
             type="button" onClick={xacNhan} disabled={pending || !kq}
             title={kq ? undefined : 'Phân tích mã vận đơn trước đã'}
-            className={`rounded-lg bg-emerald-600 px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-emerald-500 ${VIEN_NUT} focus-visible:ring-emerald-500/60 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400`}
+            className={`rounded-lg border border-emerald-300 bg-emerald-100 px-3.5 py-2 text-[13px] font-semibold text-emerald-900 transition hover:bg-emerald-200 ${VIEN_NUT} focus-visible:ring-emerald-400/60 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100 dark:hover:bg-emerald-900/70`}
           >
             {pending && kq ? 'Đang ghi…' : 'Xác nhận & ghi lên Lark'}
           </button>

@@ -28,6 +28,11 @@ import { HopThoaiXacNhanVanDon } from './HopThoaiXacNhanVanDon';
  * dịch sang thang màu Tailwind có biến thể `dark:` (lam/hổ phách/lục/tím — đúng bốn sắc của
  * thiết kế) chứ không dán nguyên số oklch: dán nguyên là mục nào cũng tối đen giữa giao diện
  * sáng, chữ chìm vào nền.
+ *
+ * Độ đậm: PASTEL (CEO 13/10/2026 — "màu rất solid, anh muốn nhạt hơn pastel"). Nền thang 50/100
+ * pha loãng, viền thang 200, ô số và nút chính dùng nền 100-200 với chữ cùng sắc thang 700-900
+ * thay cho nền 500-600 chữ trắng. Giữ nguyên hai thứ vì chúng mang NGHĨA chứ không phải trang
+ * trí: chữ nhãn (thang 700/800 — nhãn 11.5px cần tương phản) và băng cảnh báo đỏ `destructive`.
  */
 
 /** Lớp CSS theo sắc của khối. Phải khai bằng chuỗi HẰNG (không ghép `bg-${mau}-50`): Tailwind
@@ -37,48 +42,48 @@ const MAU: Record<MauKhoi, {
   hang: string; daCopy: string; vienO: string; dauTich: string;
 }> = {
   lam: {
-    the: 'border-blue-300 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/40',
-    dau: 'bg-blue-100/80 dark:bg-blue-900/40',
-    huy: 'bg-blue-600 text-white dark:bg-blue-400 dark:text-blue-950',
+    the: 'border-blue-200 bg-blue-50/50 dark:border-blue-900/60 dark:bg-blue-950/25',
+    dau: 'bg-blue-100/55 dark:bg-blue-900/25',
+    huy: 'bg-blue-200/80 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200',
     nhan: 'text-blue-700 dark:text-blue-300',
-    nut: 'border-blue-400 text-blue-800 hover:bg-blue-200/70 dark:border-blue-700 dark:text-blue-200 dark:hover:bg-blue-900/70',
-    hang: 'hover:bg-blue-100 dark:hover:bg-blue-900/50 focus-visible:ring-blue-500/60',
-    daCopy: 'bg-blue-200/60 dark:bg-blue-900/60',
-    vienO: 'border-blue-200 dark:border-blue-900',
-    dauTich: 'text-blue-700 dark:text-blue-300',
+    nut: 'border-blue-200 text-blue-700 hover:bg-blue-100/70 dark:border-blue-800/70 dark:text-blue-200 dark:hover:bg-blue-900/50',
+    hang: 'hover:bg-blue-100/60 dark:hover:bg-blue-900/35 focus-visible:ring-blue-400/50',
+    daCopy: 'bg-blue-200/45 dark:bg-blue-900/45',
+    vienO: 'border-blue-200/70 dark:border-blue-900/60',
+    dauTich: 'text-blue-600 dark:text-blue-300',
   },
   hoPhach: {
-    the: 'border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/40',
-    dau: 'bg-amber-100/80 dark:bg-amber-900/40',
-    huy: 'bg-amber-600 text-white dark:bg-amber-400 dark:text-amber-950',
+    the: 'border-amber-200 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/25',
+    dau: 'bg-amber-100/55 dark:bg-amber-900/25',
+    huy: 'bg-amber-200/80 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200',
     nhan: 'text-amber-800 dark:text-amber-300',
-    nut: 'border-amber-400 text-amber-900 hover:bg-amber-200/70 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/70',
-    hang: 'hover:bg-amber-100 dark:hover:bg-amber-900/50 focus-visible:ring-amber-500/60',
-    daCopy: 'bg-amber-200/60 dark:bg-amber-900/60',
-    vienO: 'border-amber-200 dark:border-amber-900',
-    dauTich: 'text-amber-800 dark:text-amber-300',
+    nut: 'border-amber-200 text-amber-700 hover:bg-amber-100/70 dark:border-amber-800/70 dark:text-amber-200 dark:hover:bg-amber-900/50',
+    hang: 'hover:bg-amber-100/60 dark:hover:bg-amber-900/35 focus-visible:ring-amber-400/50',
+    daCopy: 'bg-amber-200/45 dark:bg-amber-900/45',
+    vienO: 'border-amber-200/70 dark:border-amber-900/60',
+    dauTich: 'text-amber-600 dark:text-amber-300',
   },
   luc: {
-    the: 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/40',
-    dau: 'bg-emerald-100/80 dark:bg-emerald-900/40',
-    huy: 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-emerald-950',
+    the: 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/60 dark:bg-emerald-950/25',
+    dau: 'bg-emerald-100/55 dark:bg-emerald-900/25',
+    huy: 'bg-emerald-200/80 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200',
     nhan: 'text-emerald-800 dark:text-emerald-300',
-    nut: 'border-emerald-400 text-emerald-900 hover:bg-emerald-200/70 dark:border-emerald-700 dark:text-emerald-200 dark:hover:bg-emerald-900/70',
-    hang: 'hover:bg-emerald-100 dark:hover:bg-emerald-900/50 focus-visible:ring-emerald-500/60',
-    daCopy: 'bg-emerald-200/60 dark:bg-emerald-900/60',
-    vienO: 'border-emerald-200 dark:border-emerald-900',
-    dauTich: 'text-emerald-800 dark:text-emerald-300',
+    nut: 'border-emerald-200 text-emerald-700 hover:bg-emerald-100/70 dark:border-emerald-800/70 dark:text-emerald-200 dark:hover:bg-emerald-900/50',
+    hang: 'hover:bg-emerald-100/60 dark:hover:bg-emerald-900/35 focus-visible:ring-emerald-400/50',
+    daCopy: 'bg-emerald-200/45 dark:bg-emerald-900/45',
+    vienO: 'border-emerald-200/70 dark:border-emerald-900/60',
+    dauTich: 'text-emerald-600 dark:text-emerald-300',
   },
   tim: {
-    the: 'border-violet-300 bg-violet-50/70 dark:border-violet-900 dark:bg-violet-950/40',
-    dau: 'bg-violet-100/80 dark:bg-violet-900/40',
-    huy: 'bg-violet-600 text-white dark:bg-violet-400 dark:text-violet-950',
+    the: 'border-violet-200 bg-violet-50/50 dark:border-violet-900/60 dark:bg-violet-950/25',
+    dau: 'bg-violet-100/55 dark:bg-violet-900/25',
+    huy: 'bg-violet-200/80 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200',
     nhan: 'text-violet-800 dark:text-violet-300',
-    nut: 'border-violet-400 text-violet-900 hover:bg-violet-200/70 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-900/70',
-    hang: 'hover:bg-violet-100 dark:hover:bg-violet-900/50 focus-visible:ring-violet-500/60',
-    daCopy: 'bg-violet-200/60 dark:bg-violet-900/60',
-    vienO: 'border-violet-200 dark:border-violet-900',
-    dauTich: 'text-violet-800 dark:text-violet-300',
+    nut: 'border-violet-200 text-violet-700 hover:bg-violet-100/70 dark:border-violet-800/70 dark:text-violet-200 dark:hover:bg-violet-900/50',
+    hang: 'hover:bg-violet-100/60 dark:hover:bg-violet-900/35 focus-visible:ring-violet-400/50',
+    daCopy: 'bg-violet-200/45 dark:bg-violet-900/45',
+    vienO: 'border-violet-200/70 dark:border-violet-900/60',
+    dauTich: 'text-violet-600 dark:text-violet-300',
   },
 };
 
@@ -202,7 +207,7 @@ function BangCanhBao({
     <div className={`mx-2 flex items-start gap-2 rounded-md p-2 text-[11.5px] ${
       canhBao.muc === 'do'
         ? 'bg-destructive/10 text-destructive'
-        : 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+        : 'bg-amber-100/70 text-amber-900 dark:bg-amber-900/25 dark:text-amber-200'
     }`}>
       {canhBao.muc === 'do'
         ? <ShieldAlert className="mt-0.5 size-4 shrink-0" />
@@ -412,7 +417,7 @@ export function HopThoaiVanDon({
                 </span>
                 <div className="h-1 w-32 overflow-hidden rounded-full bg-foreground/15">
                   <div
-                    className="h-full rounded-full bg-emerald-500 transition-all dark:bg-emerald-400"
+                    className="h-full rounded-full bg-emerald-400 transition-all dark:bg-emerald-300/80"
                     style={{ width: `${td.phanTram}%` }}
                   />
                 </div>
@@ -464,7 +469,7 @@ export function HopThoaiVanDon({
                                 <div className="mx-2 mt-2">
                                   <button
                                     type="button" onClick={verify} disabled={pending}
-                                    className={`rounded-md bg-amber-500 px-2.5 py-1 text-[11.5px] font-semibold text-amber-950 transition hover:bg-amber-400 ${VIEN_NUT} focus-visible:ring-amber-600/60`}
+                                    className={`rounded-md border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11.5px] font-semibold text-amber-900 transition hover:bg-amber-200 ${VIEN_NUT} focus-visible:ring-amber-400/60 dark:border-amber-800 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/70`}
                                   >
                                     {pending ? 'Đang verify…' : 'Verify ngay'}
                                   </button>
@@ -503,7 +508,7 @@ export function HopThoaiVanDon({
               disabled={!coQuyenDong}
               title={coQuyenDong ? undefined : 'Cần quyền quản lý đóng hàng để nhập mã vận đơn'}
               onClick={() => { setMo(false); setMoXacNhan(true); }}
-              className={`rounded-lg bg-emerald-600 px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-emerald-500 ${VIEN_NUT} focus-visible:ring-emerald-500/60 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400`}
+              className={`rounded-lg border border-emerald-300 bg-emerald-100 px-3.5 py-2 text-[13px] font-semibold text-emerald-900 transition hover:bg-emerald-200 ${VIEN_NUT} focus-visible:ring-emerald-400/60 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100 dark:hover:bg-emerald-900/70`}
             >
               Tạo vận đơn thành công
             </button>
