@@ -42,6 +42,48 @@ export interface GiaUocTinh {
   residential: number | null;
   importHandling: number | null;
   /**
+   * International Processing Fee → ô Lark `Phí xử lý quốc tế` (CEO đổi tên ô này 14/10/2026,
+   * trước là `Phí xử lý International`).
+   *
+   * Nguồn DUY NHẤT hôm nay: UPS Rating API mã `573` (hoá đơn gọi là `FIP`, 58.750đ/lô).
+   * Trước 14/10/2026 mã này bị dồn vào `importHandling` cùng phí chuyển thuế `F/D` của UPS —
+   * mà luật ghi chỉ điền ô TRỐNG, nên trên kiện có cả hai khoản thì khoản thứ hai bị bỏ qua
+   * **không báo gì** (đo trên `1Z2050VDD919649050`). Tách trường là để hai khoản vào hai ô.
+   *
+   * `null` ở engine và FedEx, CÓ CHỦ Ý — không phải sót:
+   *  - engine gộp khoản này vào `countryFixed` cùng 4 khoản khác bản chất, 0/12 dòng
+   *    `country_fixed` có `service_key` ⇒ không tách được; số gộp đó ĐÃ vào `importHandling`,
+   *    lấy sang đây nữa là cộng HAI LẦN.
+   *  - `FedexQuoteSnap` không có trường nào tương ứng (`countryFixed` của FedEx là US/EU
+   *    Inbound Processing Fee — phí xử lý hàng NHẬP, đúng ô cũ).
+   */
+  internationalProcessing: number | null;
+  /**
+   * Additional Handling → ô Lark `Phụ phí xử lý hàng` (UPS mã `190`, hoá đơn `ADH`).
+   *
+   * ⚠️ **CHƯA CÓ BẰNG CHỨNG NGUỒN BÁO GIÁ NÀO TRẢ KHOẢN NÀY** (đo 13/10/2026) — ô Lark sẽ
+   * trống dài, và đó KHÔNG phải bug. FedEx Rate API: `ADDITIONAL_HANDLING` 0/1.310 phản hồi
+   * thô còn lưu trữ. UPS Rating API: không có phản hồi nào được lưu để đếm, mà hoá đơn UPS
+   * 0/37 dòng có khoản này. Engine: dòng Additional Handling 423.940đ của UPS là
+   * `when_billed` ⇒ nằm trong số GỘP `addonReference`, ngoài `carrierCost`, không tách được.
+   * Map sẵn vì mã `190` đã có tên ở `lib/ups/rate.ts` và nguồn có thể trả trong tương lai —
+   * lúc đó ô tự đúng, không phải nhớ sửa thêm một chỗ.
+   */
+  additionalHandling: number | null;
+  /**
+   * Address Correction → ô Lark `Phí sửa địa chỉ` (CEO đổi tên 14/10/2026, trước là
+   * `Phí Address Correction`).
+   *
+   * ⚠️ **LUÔN `null` Ở CẢ BA NGUỒN HÔM NAY — KHÔNG phải bug.** Bản chất khoản này phát sinh
+   * SAU khi hãng giao hụt vì địa chỉ sai, nên báo giá lúc tạo vận đơn không thể biết. Số đo
+   * 13/10/2026: `ADDRESS_CORRECTION` 0/1.310 phản hồi FedEx Rate API; UPS Rating API không có
+   * mã nào cho khoản này trong `TEN_KHOAN` (9 mã); engine để dòng sai địa chỉ của Aramex (15$)
+   * và UPS (300.800đ) ở `when_billed` ⇒ gộp trong `addonReference`, ngoài `carrierCost`.
+   * Giữ trường để ngày nào một nguồn trả thì có chỗ đổ, và để ô Lark có khoá map thật thay vì
+   * một cột không ai biết thuộc về đâu.
+   */
+  addressCorrection: number | null;
+  /**
    * GoGreen Plus (SAF) của DHL → ô Lark `GoGreen Plus-Basic`. Nguồn là
    * `QuoteBreakdown.perStep` (`per_step_fixed`, 1.900đ/0,5kg bậc cân).
    *
@@ -127,6 +169,14 @@ export function tuEngine(b: QuoteBreakdown, totalVnd: number, heSoVnd: number | 
     signature: null,
     residential: vnd(b.residential),
     importHandling: vnd(b.countryFixed),
+    /* Ba ô mới đều `null` ở engine — xem bình luận của từng trường trong `GiaUocTinh`.
+     * Tóm lại: phần "phí xử lý quốc tế" nằm trong số GỘP `countryFixed` (đã vào
+     * `importHandling`) nên lấy lại là cộng hai lần; còn Additional Handling và Address
+     * Correction là dòng `when_billed` ⇒ engine nhốt trong `addonReference`, ngoài
+     * `carrierCost`, không tách được khoản nào. */
+    internationalProcessing: null,
+    additionalHandling: null,
+    addressCorrection: null,
     gogreen: vnd(b.perStep),
     vat: vnd(b.vat),
     total: heSoVnd == null ? null : totalVnd,
@@ -134,7 +184,8 @@ export function tuEngine(b: QuoteBreakdown, totalVnd: number, heSoVnd: number | 
   };
 }
 
-type NhomUps = 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling';
+type NhomUps = 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling'
+  | 'internationalProcessing' | 'additionalHandling';
 
 /**
  * Mã khoản UPS (Rating API, số — xem TEN_KHOAN ở lib/ups/rate.ts) → nhóm của
@@ -143,10 +194,22 @@ type NhomUps = 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'imp
  * chữ, nên bảng này chỉ chứa mã số.
  *
  * '434' (Phụ phí cao điểm) xếp vào `demand` — cùng họ với Demand Surcharge của
- * FedEx, GiaUocTinh không có cột "peak" riêng. '110' (Xác nhận giao hàng) và
- * '190' (Phụ phí xử lý chung, không theo nước) không có nhóm tương ứng — mã nào
- * không có trong bảng này bị tuKhoanUps gom vào `maLa` (xem dưới), KHÔNG lặng lẽ
- * bỏ qua.
+ * FedEx, GiaUocTinh không có cột "peak" riêng. '110' (Xác nhận giao hàng) vẫn
+ * KHÔNG có nhóm tương ứng — mã nào không có trong bảng này bị tuKhoanUps gom vào
+ * `maLa` (xem dưới), KHÔNG lặng lẽ bỏ qua.
+ *
+ * HAI THAY ĐỔI ngày 14/10/2026, cả hai vì CEO tạo ô riêng trên Lark:
+ *  - '573' (International Processing Fee, `FIP`) chuyển từ `importHandling` sang
+ *    `internationalProcessing`. Trước đó nó dùng CHUNG ô `Phí xử lý hàng nhập` với phí chuyển
+ *    thuế `F/D` của UPS; luật "chỉ điền ô trống" khiến khoản thứ hai bị bỏ qua không báo gì
+ *    (kiện `1Z2050VDD919649050`). Để nguyên map cũ sau khi CEO tạo ô mới thì hoặc ô mới trống
+ *    mãi, hoặc ai đó map thêm và cùng một 58.750đ được cộng hai lần ở hai ô.
+ *  - '190' (Additional Handling) từ `maLa` thành `additionalHandling`. CHƯA có bằng chứng
+ *    Rating API thật sự trả mã này (hoá đơn UPS 0/37 dòng) — map trước để khi nó xuất hiện
+ *    thì tiền vào đúng ô, chứ không nằm trong `maLa` chờ người đọc nhật ký.
+ *
+ * KHÔNG có mã nào cho Address Correction: `TEN_KHOAN` ở lib/ups/rate.ts có đúng 9 mã và không
+ * mã nào là khoản đó ⇒ `addressCorrection` của nguồn UPS luôn `null`.
  */
 const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
   '375': 'fuel',
@@ -154,8 +217,9 @@ const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
   '377': 'remote',
   '434': 'demand',
   '121': 'signature',
+  '190': 'additionalHandling',
   '270': 'residential',
-  '573': 'importHandling',
+  '573': 'internationalProcessing',
 };
 
 /**
@@ -198,7 +262,18 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number 
     demand: congDon.demand ?? null,
     signature: congDon.signature ?? null,
     residential: congDon.residential ?? null,
+    /* `importHandling` KHÔNG còn nhận mã `573` từ 14/10/2026 (nó sang
+     * `internationalProcessing`). Không mã UPS nào còn trỏ vào nhóm này, nên ô
+     * `Phí xử lý hàng nhập` của kiện UPS từ nay LUÔN trống — đúng ý: khoản UPS thật sự thu
+     * tên là *International Processing*, và `Phí xử lý hàng nhập` là ô của phí nhập US/EU
+     * (FedEx) + phí hải quan đầu xuất (Aramex). Giữ dòng này (thay vì bỏ hẳn khỏi `NhomUps`)
+     * để ngày nào UPS trả một mã đúng nghĩa "xử lý hàng nhập" thì có chỗ đổ. */
     importHandling: congDon.importHandling ?? null,
+    internationalProcessing: congDon.internationalProcessing ?? null,
+    additionalHandling: congDon.additionalHandling ?? null,
+    /* UPS Rating API không có mã nào cho Address Correction (`TEN_KHOAN`: 9 mã) ⇒ nguồn KHÔNG
+     * NÓI GÌ. `null` chứ không 0, cùng lý do như `gogreen` dưới đây. */
+    addressCorrection: null,
     /* GoGreen là khoản riêng của DHL — `TEN_KHOAN` của UPS (9 mã) không có mã SAF nào, nên
      * nguồn này KHÔNG NÓI GÌ về khoản đó. `null` chứ không 0: ghi 0 lên Lark là khoá ô ở 0
      * vĩnh viễn, đường ghi từ hoá đơn sau đó không điền được số thật vào nữa. */
@@ -252,6 +327,16 @@ export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
     signature: q.signature,
     residential: q.residential,
     importHandling: q.countryFixed,
+    /* Ba ô mới đều `null` ở FedEx. `countryFixed` của FedEx là `ANCILLARY_FEE` = US/EU Inbound
+     * Processing Fee ⇒ thuộc ô `Phí xử lý hàng nhập`, KHÔNG phải `Phí xử lý quốc tế` (ô đó là
+     * khoản `FIP` của UPS). Còn Additional Handling và Address Correction thì
+     * `FedexQuoteSnap` không có trường nào, và đếm trên 1.310 phản hồi Rate API thô còn lưu
+     * trữ: `ADDITIONAL_HANDLING` 0 lần, `ADDRESS_CORRECTION` 0 lần — Rate API chưa bao giờ
+     * trả hai khoản này. Cũng vì vậy chúng KHÔNG được lọt vào `fedexImpliedBase`: thêm một
+     * khoản FedEx không thu vào phép trừ là làm ô `Mức giá cơ sở` nhỏ đi đúng bằng số bịa. */
+    internationalProcessing: null,
+    additionalHandling: null,
+    addressCorrection: null,
     /* `FedexQuoteSnap` không có trường GoGreen/SAF nào (`reconcile-diagnose.ts`: *"DHL GoGreen
      * is a `per_step_fixed` surcharge — FedEx has none"*). Thêm khoản này vào
      * `fedexImpliedBase` sẽ làm ô `Mức giá cơ sở` nhỏ đi đúng bằng một khoản FedEx không thu. */

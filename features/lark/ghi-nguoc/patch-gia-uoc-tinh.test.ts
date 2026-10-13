@@ -250,4 +250,115 @@ describe('patchGiaUocTinh', () => {
   it('cột "Phí rủi ro gia tăng" vẫn được khai để đường hoá đơn dùng', () => {
     expect(COT_CHI_PHI.elevatedRisk).toBe('Phí rủi ro gia tăng');
   });
+
+  /* ═════ BA Ô MỚI — CEO ĐỔI TÊN 14/10/2026 ═════
+   *
+   * Ba cột này do CEO tạo 13/10/2026 rồi ĐỔI TÊN 14/10 (cùng `field_id`, tên khác hẳn):
+   *   `fldBxLDfUJ`  `Phí xử lý International` → `Phí xử lý quốc tế`
+   *   `fldx5cOZJu`  `Phí Address Correction`  → `Phí sửa địa chỉ`
+   *   `fldD7GpfWz`  `Phí xử lý hàng hóa`      → `Phụ phí xử lý hàng`
+   * Tên dưới đây là NGUYÊN VĂN đọc từ API fields ngày 14/10/2026. */
+
+  /* ───── ô `Phí xử lý quốc tế` (fldBxLDfUJ) — ô DUY NHẤT trong ba ô có số thật hôm nay ─────
+   * Nguồn: UPS mã `573` (`FIP`), 58.750đ/lô, 33/37 dòng hoá đơn UPS. */
+  it('ô "Phí xử lý quốc tế" trống thì điền', () => {
+    const { patch } = patchGiaUocTinh(
+      { ...g, internationalProcessing: 58_750 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.internationalProcessing]).toBe(58_750);
+  });
+  it('ô "Phí xử lý quốc tế" ĐÃ CÓ số thì KHÔNG đụng', () => {
+    const { patch } = patchGiaUocTinh({ ...g, internationalProcessing: 58_750 } as GiaUocTinh,
+      { [COT_CHI_PHI.internationalProcessing]: 99_000 }, null);
+    expect(COT_CHI_PHI.internationalProcessing in patch).toBe(false);
+  });
+  /* Engine và FedEx đều trả `null` cho khoản này ⇒ ô phải VẮNG khỏi bản vá. Ghi 0 là khoá ô ở
+   * 0 vĩnh viễn: `dungPatch` sau đó đọc `docSo = 0 ≠ null` nên không bao giờ điền được số hoá
+   * đơn thật vào nữa. */
+  it('"Phí xử lý quốc tế" null (engine/FedEx) thì bỏ hẳn khỏi patch, không ghi 0', () => {
+    const { patch } = patchGiaUocTinh(g, {}, null);
+    expect(COT_CHI_PHI.internationalProcessing in patch).toBe(false);
+  });
+
+  /* ĐÚNG LÝ DO TỒN TẠI của ô mới: trước 14/10/2026 cả `FIP` lẫn phí chuyển thuế `F/D` của UPS
+   * cùng nhắm vào ô `Phí xử lý hàng nhập`; luật chỉ-điền-ô-trống khiến khoản thứ hai bị bỏ qua
+   * KHÔNG BÁO GÌ (kiện `1Z2050VDD919649050`: ô đã có 600.425đ ⇒ 58.750đ mất). Test này dựng
+   * đúng hình kiện đó và đòi HAI ô, HAI số khác nhau. */
+  it('hai khoản "xử lý" cùng có số thì vào HAI ô khác nhau, không khoản nào bị mất', () => {
+    const { patch } = patchGiaUocTinh(
+      { ...g, importHandling: 600_425, internationalProcessing: 58_750 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.importHandling]).toBe(600_425);
+    expect(patch[COT_CHI_PHI.internationalProcessing]).toBe(58_750);
+    expect(COT_CHI_PHI.importHandling).not.toBe(COT_CHI_PHI.internationalProcessing);
+  });
+
+  /* ───── ô `Phụ phí xử lý hàng` + `Phí sửa địa chỉ` — ⚠️ SẼ TRỐNG DÀI, KHÔNG PHẢI BUG ─────
+   *
+   * Đã map nhưng hôm nay KHÔNG nguồn báo giá nào được quan sát thấy trả hai khoản này (đo
+   * 13/10/2026): `ADDRESS_CORRECTION` 0/1.310 phản hồi FedEx Rate API thô còn lưu trữ — bản
+   * chất khoản này phát sinh SAU khi giao hụt nên báo giá lúc tạo vận đơn không thể biết;
+   * `ADDITIONAL_HANDLING` cũng 0/1.310, còn UPS thì chưa có phản hồi Rating nào được lưu để
+   * đếm và hoá đơn UPS 0/37 dòng có khoản. Engine để cả hai ở `when_billed` ⇒ trong số GỘP
+   * `addonReference`, ngoài `carrierCost`.
+   *
+   * Hai test dưới khoá lại HAI nửa của chủ ý đó: (a) nguồn `null` thì ô VẮNG — không ghi 0,
+   * vì ghi 0 là khoá ô vĩnh viễn và đường hoá đơn sau này không điền số thật vào được;
+   * (b) khi nào nguồn CÓ trả thì đường đi đã sẵn, không phải sửa thêm chỗ nào. */
+  it('hai ô "theo ca" null ở mọi nguồn → VẮNG khỏi bản vá (ô trống là ĐÚNG, không phải bug)', () => {
+    const { patch } = patchGiaUocTinh(g, {}, null);
+    expect(COT_CHI_PHI.additionalHandling in patch).toBe(false);
+    expect(COT_CHI_PHI.addressCorrection in patch).toBe(false);
+  });
+  it('ngày nguồn trả số thì hai ô đó điền được ngay, không phải sửa thêm chỗ nào', () => {
+    const { patch } = patchGiaUocTinh(
+      { ...g, additionalHandling: 423_940, addressCorrection: 289_200 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.additionalHandling]).toBe(423_940);
+    expect(patch[COT_CHI_PHI.addressCorrection]).toBe(289_200);
+  });
+
+  /* ───── KHOÁ TÊN CỘT TỪNG BYTE ─────
+   * Lark ghi theo TÊN cột và PUT là all-or-nothing ⇒ lệch MỘT dấu tiếng Việt là **cả bản vá bị
+   * từ chối**, kể cả những ô chẳng liên quan (lỗi hiện ở `ghi-gia-uoc-tinh-len-lark.ts` kèm
+   * `code=`/`msg=` của Lark). Ba tên này vừa bị đổi một lần rồi, nên khả năng bị đổi lần nữa
+   * là có thật — test phải đỏ NGAY khi tên lệch.
+   *
+   * So cả hai mặt: (1) đúng chuỗi nguyên văn, (2) đúng dạng **NFC** (dựng sẵn). Gõ lại bằng bộ
+   * gõ khác có thể ra dạng TỔ HỢP (`y` + U+0301 thay vì `ý` U+00FD) — nhìn giống y hệt trên màn
+   * hình, `toBe` vẫn đỏ nhưng người đọc sẽ không hiểu vì sao, nên khẳng định NFC riêng để
+   * thông điệp rõ. Số BYTE chốt thêm một lớp: đổi `hoá`↔`hóa` hay `quốc tế`↔`Quốc Tế` đều lệch
+   * ít nhất một byte. */
+  it('tên cột "Phí xử lý quốc tế" đúng từng byte (NFC, 25 byte UTF-8)', () => {
+    const ten = COT_CHI_PHI.internationalProcessing;
+    expect(ten).toBe('Phí xử lý quốc tế');
+    expect(ten).toBe(ten.normalize('NFC'));
+    expect(Buffer.from(ten, 'utf8')).toHaveLength(25);
+    /* Tên CŨ đã chết — ai dán lại nó là bản vá bị Lark từ chối toàn bộ. */
+    expect(ten).not.toBe('Phí xử lý International');
+  });
+  it('tên cột "Phụ phí xử lý hàng" đúng từng byte (NFC, 25 byte UTF-8)', () => {
+    const ten = COT_CHI_PHI.additionalHandling;
+    expect(ten).toBe('Phụ phí xử lý hàng');
+    expect(ten).toBe(ten.normalize('NFC'));
+    expect(Buffer.from(ten, 'utf8')).toHaveLength(25);
+    /* Tên cũ `Phí xử lý hàng hóa` dễ bị dán lại vì CEO từng gọi nó là "Phí xử lý hàng hoá" —
+     * và nó chỉ khác ô `Phí xử lý hàng nhập` ĐÚNG MỘT TỪ CUỐI. Chặn cả ba. */
+    expect(ten).not.toBe('Phí xử lý hàng hóa');
+    expect(ten).not.toBe('Phí xử lý hàng hoá');
+    expect(ten).not.toBe(COT_CHI_PHI.importHandling);
+  });
+  it('tên cột "Phí sửa địa chỉ" đúng từng byte (NFC, 23 byte UTF-8)', () => {
+    const ten = COT_CHI_PHI.addressCorrection;
+    expect(ten).toBe('Phí sửa địa chỉ');
+    expect(ten).toBe(ten.normalize('NFC'));
+    expect(Buffer.from(ten, 'utf8')).toHaveLength(23);
+    expect(ten).not.toBe('Phí Address Correction');
+  });
+
+  /* Lá chắn cuối: không hai khoá nào được trỏ vào CÙNG một tên cột. Ba ô mới đọc na ná ba ô
+   * cũ (`Phí xử lý quốc tế` / `Phí xử lý hàng nhập` / `Phụ phí xử lý hàng`); một lần sao chép
+   * dòng rồi quên sửa chuỗi là hai khoản ghi chồng vào một ô — khoản sau bị luật "ô đã có số"
+   * bỏ qua LẶNG LẼ, đúng kiểu lỗi không ai thấy bằng mắt trên Lark. */
+  it('mỗi khoá trỏ một cột RIÊNG — không ô nào bị hai khoản ghi chồng', () => {
+    const ds = Object.values(COT_CHI_PHI);
+    expect(new Set(ds).size).toBe(ds.length);
+  });
 });

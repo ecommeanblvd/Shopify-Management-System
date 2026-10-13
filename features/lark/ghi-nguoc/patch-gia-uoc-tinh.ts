@@ -21,7 +21,9 @@ import { docSo, oLarkTrong } from './dung-patch';
 import { COT, COT_CHI_PHI, type KhoaCotChiPhi } from './cot';
 import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 
-type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'gogreen' | 'vat' | 'total';
+type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential'
+  | 'importHandling' | 'internationalProcessing' | 'additionalHandling' | 'addressCorrection'
+  | 'gogreen' | 'vat' | 'total';
 
 /** Khoá `COT_CHI_PHI` → tên trường `GiaUocTinh`. Tên lệch vì `COT_CHI_PHI` giữ tên gốc của
  *  `shipment_charges` (`directSignature`, `totalAmount`) còn `GiaUocTinh` dùng tên ngắn gọn
@@ -55,11 +57,28 @@ type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' 
  *  như mọi khoản ở đây: `null` (UPS — Rating API không trả khoản chiết khấu nào) và `<= 0`
  *  (engine, vì `contract_discount_pct` hiện 0 dòng) đều KHÔNG ghi. Vì thế `GiaUocTinh.discount`
  *  phải là số DƯƠNG: theo quy ước ÂM của `shipment_charges.discount` thì mọi kiện đều rơi vào
- *  nhánh `<= 0` và ô này không bao giờ được điền, mà nhìn vào code thì tưởng là đã làm xong. */
+ *  nhánh `<= 0` và ô này không bao giờ được điền, mà nhìn vào code thì tưởng là đã làm xong.
+ *
+ *  BA Ô MỚI (CEO đổi tên 14/10/2026 — xem `cot.ts` để biết tên cũ và dạng byte):
+ *
+ *  `internationalProcessing` ("Phí xử lý quốc tế") nhận UPS mã `573`. Đây là khoản DUY NHẤT
+ *  trong ba ô mới thật sự có số hôm nay (33/37 dòng hoá đơn UPS, 58.750đ/lô). Nó vừa được TÁCH
+ *  khỏi `importHandling`: giữ chung một ô thì trên kiện có cả `FIP` lẫn phí chuyển thuế `F/D`,
+ *  luật "chỉ điền ô trống" bỏ qua khoản thứ hai KHÔNG BÁO GÌ.
+ *
+ *  `additionalHandling` ("Phụ phí xử lý hàng") và `addressCorrection` ("Phí sửa địa chỉ") map
+ *  sẵn nhưng ⚠️ **SẼ TRỐNG DÀI — ĐỪNG COI LÀ BUG.** Đo 13/10/2026: `ADDRESS_CORRECTION` 0/1.310
+ *  phản hồi FedEx Rate API thô còn lưu trữ (bản chất khoản này phát sinh SAU khi giao hụt nên
+ *  báo giá không thể biết); `ADDITIONAL_HANDLING` cũng 0/1.310, còn UPS thì chưa có phản hồi
+ *  Rating nào được lưu để đếm và hoá đơn UPS 0/37 dòng có khoản này. Nguồn nào cũng trả `null`
+ *  ⇒ luật đầu vòng lặp bỏ hẳn khỏi patch. Map trước là để ngày nguồn trả thì ô tự đúng, không
+ *  phải nhớ sửa thêm một chỗ — và để người sau không tạo ô thứ hai cho cùng một khoản. */
 const KHOAN_THEO_COT = [
   ['base', 'base'], ['discountApi', 'discount'],
   ['fuel', 'fuel'], ['remote', 'remote'], ['demand', 'demand'],
   ['directSignature', 'signature'], ['residential', 'residential'], ['importHandling', 'importHandling'],
+  ['internationalProcessing', 'internationalProcessing'],
+  ['additionalHandling', 'additionalHandling'], ['addressCorrection', 'addressCorrection'],
   ['gogreen', 'gogreen'],
   ['vat', 'vat'], ['totalAmount', 'total'],
 ] as const satisfies ReadonlyArray<readonly [KhoaCotChiPhi, KhoanSo]>;

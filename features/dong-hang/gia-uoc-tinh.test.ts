@@ -104,6 +104,26 @@ describe('tuEngine', () => {
     expect(g.importHandling).toBe(11);
     expect(Object.values(g).filter((v) => v === 11)).toHaveLength(1);
   });
+
+  /* Ô mới `Phí xử lý quốc tế` KHÔNG được lấy từ `countryFixed`. Engine gộp phần "phí xử lý
+   * quốc tế UPS 58.750đ" vào đúng số `countryFixed` đó cùng 4 khoản khác bản chất và 0/12 dòng
+   * `country_fixed` có `service_key` ⇒ không trường nào tách ra được. `countryFixed` ĐÃ vào
+   * `importHandling`, nên đổ nó sang ô mới nữa là cộng HAI LẦN — đúng cái bẫy mà việc tách ô
+   * này sinh ra, nên phải có test chặn. */
+  it('ba ô mới đều null ở engine — KHÔNG lấy lại countryFixed (sẽ cộng hai lần)', () => {
+    const g = tuEngine(b, 155, 1);
+    expect([g.internationalProcessing, g.additionalHandling, g.addressCorrection])
+      .toEqual([null, null, null]);
+  });
+
+  /* Address Correction và Additional Handling của engine nằm trong `addonReference` — số GỘP
+   * MỌI dòng `when_billed` (với Aramex là 552,5 USD gồm pallet/quá cân/ngoại cỡ/DDP/sai địa
+   * chỉ), KHÔNG vào `carrierCost`. Lấy nó ra là biến phí CHƯA AI THU thành khoản đã phát sinh,
+   * đúng lỗi mà `quote-order-carriers.ts:81-84` đã cảnh báo (bug 09/07). */
+  it('KHÔNG rơi về addonReference cho hai ô "theo ca" — đó là giá tham chiếu chưa thu', () => {
+    const g = tuEngine(b, 155, 1);
+    expect(Object.values(g).filter((v) => v === 9)).toHaveLength(0); // addonReference = 9
+  });
 });
 
 describe('tuKhoanUps', () => {
@@ -118,12 +138,54 @@ describe('tuKhoanUps', () => {
   it('khoản UPS không biết xếp đâu thì bỏ qua, không làm hỏng các khoản khác', () => {
     expect(tuKhoanUps([{ ma: 'KHOAN_LA', tien: 99 }, { ma: '375', tien: 10 }], 109, null).fuel).toBe(10);
   });
-  /* '190' (Phụ phí xử lý chung) là mã THẬT của UPS nhưng không có nhóm tương ứng trong
-   * GiaUocTinh — phải nêu ra ở maLa, không được biến mất lặng lẽ như tiền không ai biết. */
-  it('mã thật nhưng chưa có nhóm (190) đi vào maLa, không làm hỏng khoản khác', () => {
-    const g = tuKhoanUps([{ ma: '190', tien: 50 }, { ma: '375', tien: 10 }], 60, null);
-    expect(g.maLa).toEqual(['190']);
+  /* '110' (Xác nhận giao hàng) là mã THẬT của UPS nhưng không có nhóm tương ứng trong
+   * GiaUocTinh — phải nêu ra ở maLa, không được biến mất lặng lẽ như tiền không ai biết.
+   * (Trước 14/10/2026 test này dùng mã '190'; '190' nay đã có ô riêng trên Lark nên phải
+   * chọn một mã KHÁC còn vô chủ, nếu không ta mất hẳn lá chắn cho cơ chế `maLa`.) */
+  it('mã thật nhưng chưa có nhóm (110) đi vào maLa, không làm hỏng khoản khác', () => {
+    const g = tuKhoanUps([{ ma: '110', tien: 50 }, { ma: '375', tien: 10 }], 60, null);
+    expect(g.maLa).toEqual(['110']);
     expect(g.fuel).toBe(10);
+  });
+
+  /* ───── Ba ô mới trên Lark (CEO đổi tên 14/10/2026) ─────
+   *
+   * Mã `573` (International Processing Fee / `FIP`, 58.750đ/lô) TRƯỚC ĐÂY chảy vào
+   * `importHandling` — tức dùng CHUNG ô `Phí xử lý hàng nhập` với phí chuyển thuế `F/D` của
+   * UPS. Luật ghi "chỉ điền ô trống" khiến trên kiện có cả hai khoản thì khoản thứ hai bị bỏ
+   * qua KHÔNG BÁO GÌ (đo thật trên `1Z2050VDD919649050`: ô đã có 600.425đ nên 58.750đ biến
+   * mất). Test này khoá việc tách ô lại. */
+  it('mã 573 vào `internationalProcessing`, KHÔNG còn vào `importHandling`', () => {
+    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }, { ma: '375', tien: 10 }], 58_760, null);
+    expect(g.internationalProcessing).toBe(58_750);
+    expect(g.importHandling).toBeNull();
+  });
+
+  /* CHỐNG TÍNH TRÙNG — hậu quả tệ nhất của việc tách ô này: nếu ai map `573` vào CẢ HAI nhóm
+   * (vì "ô cũ đang có số, giữ cho khỏi hụt") thì cùng một 58.750đ được ghi vào hai ô Lark và
+   * người cộng tay ra tổng lớn hơn hoá đơn. Đếm số lần giá trị xuất hiện là cách bắt trực
+   * tiếp, giống test `countryFixed` của engine ở trên. */
+  it('một khoản 573 chỉ xuất hiện ĐÚNG MỘT nhóm, không nhân bản', () => {
+    // `total` cố ý KHÁC 58.750 để phép đếm chỉ bắt các NHÓM KHOẢN, không đếm cả ô Tổng.
+    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }], 1_000_000, null);
+    expect(Object.values(g).filter((v) => v === 58_750)).toHaveLength(1);
+  });
+
+  /* Mã `190` (Additional Handling) từ `maLa` thành một nhóm thật. ⚠️ Lưu ý cho người đọc sau:
+   * CHƯA CÓ BẰNG CHỨNG Rating API thật sự trả mã này — hoá đơn UPS 0/37 dòng có khoản, và
+   * không có phản hồi Rating nào được lưu để đếm. Test dựng khoản bằng tay để khoá ĐƯỜNG ĐI
+   * (mã → ô nào) chứ không khẳng định nguồn có trả; ô Lark trống là chuyện bình thường. */
+  it('mã 190 vào `additionalHandling` và KHÔNG còn bị gom vào maLa', () => {
+    const g = tuKhoanUps([{ ma: '190', tien: 423_940 }, { ma: '375', tien: 10 }], 423_950, null);
+    expect(g.additionalHandling).toBe(423_940);
+    expect(g.maLa).toEqual([]);
+  });
+
+  /* `TEN_KHOAN` ở lib/ups/rate.ts có đúng 9 mã và KHÔNG mã nào là Address Correction ⇒ nguồn
+   * UPS không nói gì về khoản đó. `null` chứ không 0: ghi 0 lên Lark là khoá ô ở 0 vĩnh viễn,
+   * đường ghi từ hoá đơn sau này không điền được số thật vào nữa. */
+  it('UPS không có mã Address Correction → addressCorrection là null, KHÔNG phải 0', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10, null).addressCorrection).toBeNull();
   });
   /* I1: `base` của UPS nằm ở một field RIÊNG (`DongBaoGiaUps.base`), không trong danh sách
    * khoản. Bỏ rơi nó là ô "Mức giá cơ sở" của UPS không bao giờ được điền. */
@@ -218,5 +280,31 @@ describe('tuFedexQuote', () => {
     const g = tuFedexQuote(q);
     expect(g.gogreen).toBeNull();
     expect(g.base).toBe(450);
+  });
+
+  /* Ba ô mới (14/10/2026) đều `null` ở FedEx, và base suy ra KHÔNG được đổi.
+   *
+   * Vì sao `null`: `countryFixed` của FedEx là `ANCILLARY_FEE` = US/EU **Inbound** Processing
+   * Fee ⇒ thuộc ô `Phí xử lý hàng nhập`, KHÔNG phải ô `Phí xử lý quốc tế` (ô đó dành cho khoản
+   * `FIP` của UPS — hai khoản tên na ná, khác hãng khác nghĩa). Hai khoản còn lại: đếm trên
+   * 1.310 phản hồi Rate API THÔ còn lưu trữ thì `ADDITIONAL_HANDLING` 0 lần và
+   * `ADDRESS_CORRECTION` 0 lần — `FedexQuoteSnap` vì vậy không có trường nào.
+   *
+   * Phần `base` quan trọng không kém: base của FedEx là số SUY RA bằng `tổng − mọi phụ phí −
+   * VAT`. Ai thêm một trong ba khoản mới vào `fedexImpliedBase` là làm ô `Mức giá cơ sở` nhỏ
+   * đi đúng bằng khoản FedEx không thu. Chốt base vẫn 450. */
+  it('ba ô mới đều null ở FedEx và base suy ra vẫn 450 (không khoản nào lọt vào phép trừ)', () => {
+    const g = tuFedexQuote(q);
+    expect([g.internationalProcessing, g.additionalHandling, g.addressCorrection])
+      .toEqual([null, null, null]);
+    expect(g.base).toBe(450);
+  });
+
+  /* `countryFixed` của FedEx chỉ được vào MỘT ô. Nếu ai "giúp" bằng cách đổ nó sang ô
+   * `Phí xử lý quốc tế` cho khỏi trống thì 30 đồng đó nằm ở hai ô và tổng cộng tay sai. */
+  it('countryFixed của FedEx chỉ vào importHandling, không nhân bản sang ô mới', () => {
+    const g = tuFedexQuote(q);
+    expect(g.importHandling).toBe(30);
+    expect(Object.values(g).filter((v) => v === 30)).toHaveLength(1);
   });
 });
