@@ -10,8 +10,9 @@ màn "Phân tích chi phí" của cổng hãng sau khi tạo nhãn. Đức đọ
 chiếu khi hoá đơn hãng về.
 
 Việc gõ tay này bỏ được: hệ thống đã có đúng những con số đó qua Rate API của hãng
-(`fedex_rate_quotes` đang giữ cơ sở, chiết khấu, fuel + %fuel, ký nhận, VAT, residential,
-remote, demand cho 1.310 kiện FedEx). Nhân sự chỉ cần **dán mã vận đơn**; phần còn lại máy làm.
+(`fedex_rate_quotes` đang giữ chiết khấu, fuel + %fuel, ký nhận, VAT, residential, remote,
+demand cho 1.310 kiện FedEx — riêng cột `base_charge` NULL cả 1.310 dòng nên cước nền phải
+suy ra, xem mục `Mức giá cơ sở` dưới). Nhân sự chỉ cần **dán mã vận đơn**; phần còn lại máy làm.
 
 **Bối cảnh lớn hơn:** CEO đang chuyển nhân sự từ làm thẳng trên Lark sang làm trên hệ thống.
 Tính năng này là một phần của việc chuyển đó — nó khiến màn Đóng hàng đáng dùng hơn bảng Lark.
@@ -27,8 +28,10 @@ Tính năng này là một phần của việc chuyển đó — nó khiến mà
 
 ## Không làm (non-goals)
 
-- **Không** ghi `Giá chiết khấu` và `% Phụ phí Nhiên liệu` — hai ô đó là **công thức Lark**,
-  Lark tự tính từ các khoản thành phần. Ghi vào là lỗi API.
+- **Không** ghi `Giá chiết khấu` và `% Phụ phí Nhiên liệu` — hai ô đó là **công thức Lark**
+  (đọc API fields 13/10/2026: `fldlEbi91K` / `fld9U9d2jn`, type=20), Lark tự tính từ các khoản
+  thành phần. Ghi vào là lỗi API. Số chiết khấu đi vào ô **riêng, ghi được**
+  `Chiết khấu || API` (CEO chốt 13/10/2026) — xem Bản đồ cột Lark.
 - **Không** đụng `Mức giá chênh lệch (Sau đối soát)` — đó là việc của vòng đối soát hoá đơn,
   không phải của giá ước tính.
 - **Không** giới hạn ở hãng có API. CEO đính chính 12/10/2026: Aramex đã có bảng giá trong
@@ -117,7 +120,8 @@ Cột ghi được (dạng Currency) ↔ dữ liệu mình có:
 
 | Cột Lark | Nguồn |
 |---|---|
-| `Mức giá cơ sở` | cước cơ bản **giá niêm yết** (chưa trừ chiết khấu) — đúng quy ước sẵn có `QUY_UOC_BASE = 'niem_yet'` ở `features/lark/ghi-nguoc/dung-patch.ts`, cùng nghĩa với số mà đường ghi hoá đơn đã dùng cho ô này. Bản đầu của tài liệu ghi "đã trừ chiết khấu" là SAI: hai nghĩa trong một ô thì không ai đối soát được |
+| `Mức giá cơ sở` | cước cơ bản **GIÁ GỐC, CHƯA trừ chiết khấu** (CEO chốt 13/10/2026 — xem mục dưới) |
+| `Chiết khấu \|\| API` | số chiết khấu hãng cắt khỏi cước nền, **DƯƠNG** (ô MỚI, Currency, ghi được) |
 | `Phụ phí nhiên liệu` | fuel |
 | `Phụ phí vùng sâu xa` | remote |
 | `EES / Theo nhu cầu` | demand |
@@ -129,6 +133,69 @@ Cột ghi được (dạng Currency) ↔ dữ liệu mình có:
 
 **Không ghi:** `Giá chiết khấu`, `% Phụ phí Nhiên liệu` (Formula) · `Tracking link`,
 `Couriers (look up)`, mọi cột Lookup · `Log Unique code` (AutoNumber).
+
+⚠️ **Tên cột `Chiết khấu || API` có HAI dấu gạch đứng**, mỗi bên một khoảng trắng. Đọc nguyên
+văn từ API fields 13/10/2026: `fldY1E45DQ`, type=2 (ô số, ghi được). Nó dễ bị ai dọn bảng sửa
+thành một gạch cho giống `INS | Chi phí Tổng (đ)` — mà Lark ghi theo **TÊN** cột và PUT là
+**all-or-nothing**, nên lệch một ký tự là *cả bản vá* bị từ chối, kể cả những ô chẳng liên
+quan. Lúc đó cảnh báo của `ghi-gia-uoc-tinh-len-lark.ts` nêu `code=`/`msg=` của Lark kèm danh
+sách cột đã gửi — đó là chỗ bắt đầu truy. Test
+`features/lark/ghi-nguoc/patch-gia-uoc-tinh.test.ts` khoá tên này lại từng ký tự.
+
+### `Mức giá cơ sở` = giá GỐC, không phải net (CEO chốt 13/10/2026)
+
+Một vòng sửa trước đã làm ô này thành giá **net** (đã trừ chiết khấu). **SAI — nhánh đó đã bị
+xoá.** Lý do đảo chiều:
+
+- Ô `Giá chiết khấu` là **công thức của Lark**; với FedEx nó tính
+  `Tổng − base − fuel − ký nhận − …`. Tức bảng được thiết kế để nhận **base GỐC**: đưa base net
+  vào là làm công thức đó ra một số chiết khấu vô nghĩa.
+- Đo trên **4.591 bản ghi** đã điền cả base lẫn tổng: **2.878 dòng gõ base > tổng** (tức gốc —
+  ĐÚNG) vs **1.251 dòng gõ net**.
+
+Base gốc theo từng nguồn (số đo 13/10/2026, đọc `fedex_rate_quotes` + `shipment_charges`):
+
+| Nguồn | base gốc | `Chiết khấu \|\| API` |
+|---|---|---|
+| FedEx | `fedexImpliedBase(q) + \|discount\|` | `\|fedex_rate_quotes.discount\|` |
+| UPS | `DongBaoGiaUps.base` (*"cước nền theo giá HỢP ĐỒNG"*) | **để trống** — Rating API không trả khoản chiết khấu nào |
+| Engine (Aramex/DHL) | `QuoteBreakdown.base` — đã là giá niêm yết (`QUY_UOC_BASE = 'niem_yet'`) | `QuoteBreakdown.discount` (dương), quy về VND cùng hệ số |
+
+- **FedEx không trả base gốc.** Cột `fedex_rate_quotes.base_charge` **NULL 1.310/1.310 dòng**,
+  nên tham số `base` của `tuFedexQuote` đã bị **bỏ hẳn**. Không rơi về cột đó khi nào nó có số:
+  với rate ACCOUNT, FedEx trả base **đã chiết khấu**, tức một ngày API điền cột đó là ô Lark
+  lặng lẽ quay về nghĩa NET — đúng cái sai vừa gỡ.
+- `fedexImpliedBase(q)` = `totalNetCharge − mọi phụ phí − vat` ra base **NET** (vì
+  `totalNetCharge` đã sau chiết khấu). Kiểm trên dòng có cả quote lẫn hoá đơn:
+  `impliedBase` == `shipment_charges.base + discount` (hoá đơn lưu chiết khấu ÂM) khớp **từng
+  đồng**, và `impliedBase + |discount|` == `shipment_charges.base` (base gốc hoá đơn) khớp từng
+  đồng **5/8 dòng mẫu**, lệch 0,1–5 % ở 3 dòng còn lại (quote và hoá đơn khác ngày / khác cân
+  tính cước).
+- **Thiếu `totalNetCharge` hoặc thiếu `discount` ⇒ base `null`**, không đoán: thiếu tổng thì
+  chẳng có gì để trừ; thiếu chiết khấu thì `impliedBase` là số NET và ghi nó vào ô gốc là lặp
+  lại lỗi vòng trước. Ô trống còn sửa tay được, ô đã ghi sai thì không.
+
+**Dấu của `discount` — đo từng bảng, KHÔNG suy từ bảng khác:**
+
+| Bảng | Dấu | Số đo |
+|---|---|---|
+| `fedex_rate_quotes.discount` | **DƯƠNG** | 1.309 dòng dương, 1 dòng = 0, **0 dòng âm** (NULL 0/1.310); khớp khai báo `lib/fedex/rate.ts`: *"totalFreightDiscount (số dương = đã giảm)"* |
+| `shipment_charges.discount` (hoá đơn) | **ÂM** | 2.898/2.898 dòng có chiết khấu đều âm |
+| `QuoteBreakdown.discount` (engine) | **DƯƠNG** | quote.ts: *"surfaced as a positive number"*; `contract_discount_pct` **0 dòng** trên cả 5 account ⇒ thực tế bằng 0 |
+
+Hai bảng cùng hệ lưu hai dấu khác nhau, nên `tuFedexQuote` bọc `Math.abs`: nếu một lượt import
+đổi dấu bên `fedex_rate_quotes` thì phép `impliedBase + discount` sẽ **trừ** đi và ra base net.
+
+`GiaUocTinh.discount` phải là số **DƯƠNG** vì luật ghi ô trống bỏ mọi khoản `<= 0`: theo quy
+ước ÂM của hoá đơn thì ô `Chiết khấu || API` **không bao giờ** được ghi, mà nhìn vào code thì
+tưởng đã làm xong việc.
+
+**Ranh giới với `QUY_UOC_BASE = 'niem_yet'`:** hằng đó áp cho `dungPatch` — đường ghi từ **hoá
+đơn**. Nay hai đường **cùng** một nghĩa cho ô `Mức giá cơ sở` (giá gốc/niêm yết), nên ô không
+còn mang hai nghĩa. Khoá `discountApi` cố ý **không** trùng tên cột nào của `shipment_charges`:
+vòng lặp `Object.entries(COT_CHI_PHI)` trong `dung-patch.ts` tra `khoan[khoa]` nên khoá này ra
+`undefined` ⇒ đường ghi từ hoá đơn bỏ qua ô, đúng ý muốn (ô tên "|| API" dành cho số API báo
+giá trả về).
 
 **Dùng lại `COT_CHI_PHI` trong `features/lark/ghi-nguoc/cot.ts` làm nơi DUY NHẤT giữ tên cột
 Lark — không khai lại bảng tên cột thứ hai.** Chính file đó đã ghi lý do: *"Đổi tên cột bên
