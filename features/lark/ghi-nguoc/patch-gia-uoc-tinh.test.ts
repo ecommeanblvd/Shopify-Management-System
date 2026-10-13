@@ -5,7 +5,7 @@ import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 
 describe('patchGiaUocTinh', () => {
   const g = {
-    nguon: 'bang-gia', base: 100, fuel: 20, remote: null, demand: null,
+    nguon: 'bang-gia', base: 100, discount: null, fuel: 20, remote: null, demand: null,
     signature: null, residential: null, importHandling: null, vat: 10, total: 130,
   } as GiaUocTinh;
 
@@ -138,5 +138,57 @@ describe('patchGiaUocTinh', () => {
     const { patch, canhBao } = patchGiaUocTinh({ ...g, total: 0 } as GiaUocTinh, {}, null);
     expect(COT_CHI_PHI.totalAmount in patch).toBe(false);
     expect(canhBao.join(' ')).toContain('Tổng');
+  });
+
+  /* ───── Ô `Chiết khấu || API` (CEO chốt 13/10/2026, D-245 bản 2) ───── */
+
+  it('chiết khấu ghi vào ô "Chiết khấu || API" khi ô đó trống', () => {
+    const { patch } = patchGiaUocTinh({ ...g, discount: 7_657_402 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.discountApi]).toBe(7_657_402);
+  });
+
+  /* Luật ô trống áp cho ô này y như mọi ô khác — Lark không có undo. */
+  it('ô chiết khấu ĐÃ CÓ số thì KHÔNG đụng', () => {
+    const { patch } = patchGiaUocTinh({ ...g, discount: 500 } as GiaUocTinh,
+      { [COT_CHI_PHI.discountApi]: 999 }, null);
+    expect(COT_CHI_PHI.discountApi in patch).toBe(false);
+  });
+
+  /* UPS: Rating API không trả khoản chiết khấu nào ⇒ `null` = KHÔNG BIẾT. Ghi 0 vào đây là
+   * khoá ô ở 0 vĩnh viễn, sau này không điền được số thật vào nữa. */
+  it('chiết khấu null (UPS) thì bỏ hẳn khỏi patch, không ghi 0', () => {
+    const { patch } = patchGiaUocTinh(g, {}, null);
+    expect(COT_CHI_PHI.discountApi in patch).toBe(false);
+  });
+
+  /* Engine: `contract_discount_pct` hiện 0 dòng trên cả 5 account ⇒ discount = 0. */
+  it('chiết khấu 0 (engine chưa có dòng chiết khấu) cũng không ghi', () => {
+    const { patch } = patchGiaUocTinh({ ...g, discount: 0 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.discountApi in patch).toBe(false);
+  });
+
+  /* Cái bẫy chính của ô này: nếu `GiaUocTinh.discount` theo quy ước ÂM của
+   * `shipment_charges.discount` (đo 13/10/2026: 2.898/2.898 dòng có chiết khấu đều âm) thì MỌI
+   * kiện rơi vào nhánh `<= 0` và ô không bao giờ được điền — nhìn code thì tưởng đã xong việc.
+   * Test này ghim hậu quả đó lại để ai đổi dấu ở nguồn sẽ thấy ngay vì sao không được. */
+  it('chiết khấu ÂM không ghi — nguồn PHẢI đưa số dương, nếu không ô này im lặng rỗng mãi', () => {
+    const { patch } = patchGiaUocTinh({ ...g, discount: -7_657_402 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.discountApi in patch).toBe(false);
+  });
+
+  /* Lark ghi theo TÊN cột, PUT là all-or-nothing ⇒ lệch MỘT ký tự ở tên này là cả bản vá bị
+   * từ chối, kể cả những ô chẳng liên quan. Tên dưới đây là nguyên văn đọc từ API fields của
+   * bảng LOG ngày 13/10/2026 (`fldY1E45DQ`, type=2): HAI dấu gạch đứng, mỗi bên một khoảng
+   * trắng. Ai "dọn" nó thành một gạch cho giống `INS | Chi phí Tổng (đ)` sẽ gãy ở đây trước. */
+  it('tên cột đúng từng ký tự: hai dấu gạch đứng, không phải một', () => {
+    expect(COT_CHI_PHI.discountApi).toBe('Chiết khấu || API');
+    expect(COT_CHI_PHI.discountApi.split('|')).toHaveLength(3); // "Chiết khấu ", "", " API"
+  });
+
+  /* Ô `Giá chiết khấu` là Formula của Lark (type=20) — tự tính từ base + các phụ phí. Ghi vào
+   * ô công thức là Lark từ chối cả bản vá; và chính vì có công thức đó mà `Mức giá cơ sở` phải
+   * là base GỐC. Không được có khoá nào trỏ tới tên ô này. */
+  it('KHÔNG có cột nào trỏ tới ô Formula "Giá chiết khấu"', () => {
+    expect(Object.values(COT_CHI_PHI)).not.toContain('Giá chiết khấu');
   });
 });

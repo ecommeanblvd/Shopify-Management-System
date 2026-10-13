@@ -21,7 +21,7 @@ import { docSo, oLarkTrong } from './dung-patch';
 import { COT, COT_CHI_PHI, type KhoaCotChiPhi } from './cot';
 import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 
-type KhoanSo = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'vat' | 'total';
+type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'vat' | 'total';
 
 /** Khoá `COT_CHI_PHI` → tên trường `GiaUocTinh`. Tên lệch vì `COT_CHI_PHI` giữ tên gốc của
  *  `shipment_charges` (`directSignature`, `totalAmount`) còn `GiaUocTinh` dùng tên ngắn gọn
@@ -40,9 +40,17 @@ type KhoanSo = 'base' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residentia
  *  `totalAmount` ("INS | Chi phí Tổng (đ)") CÓ map — đính chính của CEO: ô này xưa nay là
  *  TỔNG ƯỚC TÍNH nhân sự tự gõ tay sau khi tạo vận đơn, không phải số hoá đơn thật. Mục tiêu
  *  của tính năng chính là bỏ bước gõ tay đó (gồm cả tracking lẫn các giá dự tính, kể cả tổng);
- *  để trống ô tổng thì nhân sự vẫn phải mở Lark gõ một ô, coi như tính năng chưa xong việc. */
+ *  để trống ô tổng thì nhân sự vẫn phải mở Lark gõ một ô, coi như tính năng chưa xong việc.
+ *
+ *  `discountApi` ("Chiết khấu || API") là ô MỚI của CEO chốt 13/10/2026 — ô số, ghi được, KHÁC
+ *  hẳn ô `Giá chiết khấu` (Formula của Lark, KHÔNG bao giờ ghi). Nó đi theo ĐÚNG luật ô trống
+ *  như mọi khoản ở đây: `null` (UPS — Rating API không trả khoản chiết khấu nào) và `<= 0`
+ *  (engine, vì `contract_discount_pct` hiện 0 dòng) đều KHÔNG ghi. Vì thế `GiaUocTinh.discount`
+ *  phải là số DƯƠNG: theo quy ước ÂM của `shipment_charges.discount` thì mọi kiện đều rơi vào
+ *  nhánh `<= 0` và ô này không bao giờ được điền, mà nhìn vào code thì tưởng là đã làm xong. */
 const KHOAN_THEO_COT = [
-  ['base', 'base'], ['fuel', 'fuel'], ['remote', 'remote'], ['demand', 'demand'],
+  ['base', 'base'], ['discountApi', 'discount'],
+  ['fuel', 'fuel'], ['remote', 'remote'], ['demand', 'demand'],
   ['directSignature', 'signature'], ['residential', 'residential'], ['importHandling', 'importHandling'],
   ['vat', 'vat'], ['totalAmount', 'total'],
 ] as const satisfies ReadonlyArray<readonly [KhoaCotChiPhi, KhoanSo]>;
