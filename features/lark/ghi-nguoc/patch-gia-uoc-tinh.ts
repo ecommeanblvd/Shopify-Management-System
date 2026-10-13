@@ -21,7 +21,7 @@ import { docSo, oLarkTrong } from './dung-patch';
 import { COT, COT_CHI_PHI, type KhoaCotChiPhi } from './cot';
 import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 
-type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'vat' | 'total';
+type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' | 'residential' | 'importHandling' | 'gogreen' | 'vat' | 'total';
 
 /** Khoá `COT_CHI_PHI` → tên trường `GiaUocTinh`. Tên lệch vì `COT_CHI_PHI` giữ tên gốc của
  *  `shipment_charges` (`directSignature`, `totalAmount`) còn `GiaUocTinh` dùng tên ngắn gọn
@@ -32,10 +32,18 @@ type KhoanSo = 'base' | 'discount' | 'fuel' | 'remote' | 'demand' | 'signature' 
  *  patch mang khoá `"undefined"` lên Lark. PUT của Lark là all-or-nothing nên MỘT khoá sai
  *  chặn cả bản vá.
  *
- *  `gogreen` KHÔNG có ở đây dù Lark có cột `GoGreen Plus-Basic` và DHL có 3 dòng
- *  `per_step_fixed` GoGreen: `QuoteBreakdown` gộp chúng vào `perStep` cùng mọi dòng
- *  per_step khác, không tách riêng được khoản GoGreen ⇒ không biết con số ⇒ không ghi.
- *  `elevatedRisk` cũng vậy (nằm trong `countryFixed` của DHL).
+ *  `gogreen` ("GoGreen Plus-Basic") ĐÃ map. Vòng trước bỏ nó vì tưởng `perStep` là số gộp
+ *  nhiều khoản khác bản chất; đo lại `carrier_surcharges` 13/10/2026 thì **3/3 dòng
+ *  `per_step_fixed` đều là GoGreen Plus (SAF)** của DHL và là ba BẢN PHIÊN NGÀY của cùng một
+ *  khoản (`isApplicable` chỉ cho MỘT dòng áp tại một ngày) ⇒ `perStep` CHÍNH LÀ số GoGreen,
+ *  không cần sửa engine. Bịt ~3.800đ/kiện ở 3.033/3.033 kiện DHL.
+ *
+ *  `elevatedRisk` ("Phí rủi ro gia tăng") CỐ Ý KHÔNG map — xem test khoá lại chủ ý này. Engine
+ *  gộp Elevated Risk vào `countryFixed` cùng 4 khoản khác bản chất và 12 dòng `country_fixed`
+ *  có **0 dòng `service_key`** ⇒ không tách được bằng trường cấu trúc nào. `countryFixed` ĐÃ
+ *  vào ô `Phí xử lý hàng nhập`, nên map thêm là cộng 918.000đ HAI LẦN trên 370 kiện DHL —
+ *  ngay ô dùng để đối soát. Khoá vẫn phải giữ trong `COT_CHI_PHI` cho đường ghi từ HOÁ ĐƠN
+ *  (`dung-patch.ts` có số Elevated Risk thật và vẫn điền ô này).
  *
  *  `totalAmount` ("INS | Chi phí Tổng (đ)") CÓ map — đính chính của CEO: ô này xưa nay là
  *  TỔNG ƯỚC TÍNH nhân sự tự gõ tay sau khi tạo vận đơn, không phải số hoá đơn thật. Mục tiêu
@@ -52,6 +60,7 @@ const KHOAN_THEO_COT = [
   ['base', 'base'], ['discountApi', 'discount'],
   ['fuel', 'fuel'], ['remote', 'remote'], ['demand', 'demand'],
   ['directSignature', 'signature'], ['residential', 'residential'], ['importHandling', 'importHandling'],
+  ['gogreen', 'gogreen'],
   ['vat', 'vat'], ['totalAmount', 'total'],
 ] as const satisfies ReadonlyArray<readonly [KhoaCotChiPhi, KhoanSo]>;
 

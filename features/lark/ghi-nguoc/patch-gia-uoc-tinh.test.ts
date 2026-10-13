@@ -191,4 +191,63 @@ describe('patchGiaUocTinh', () => {
   it('KHÔNG có cột nào trỏ tới ô Formula "Giá chiết khấu"', () => {
     expect(Object.values(COT_CHI_PHI)).not.toContain('Giá chiết khấu');
   });
+
+  /* ───────── ô `GoGreen Plus-Basic` (fldXrp2NRG, type=2 — ghi được) ─────────
+   * Cột có sẵn trên bảng nhưng đường GIÁ ƯỚC TÍNH chưa bao giờ điền ⇒ ~3.800đ/kiện nằm trong
+   * ô Tổng mà không ô thành phần nào đựng, ở 3.033/3.033 kiện DHL. Luật ô trống áp y nguyên. */
+  it('ô GoGreen trống thì điền', () => {
+    const { patch } = patchGiaUocTinh({ ...g, gogreen: 3_800 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.gogreen]).toBe(3_800);
+  });
+  it('ô GoGreen ĐÃ CÓ số thì KHÔNG đụng', () => {
+    const { patch } = patchGiaUocTinh({ ...g, gogreen: 3_800 } as GiaUocTinh,
+      { [COT_CHI_PHI.gogreen]: 28_500 }, null);
+    expect(COT_CHI_PHI.gogreen in patch).toBe(false);
+  });
+  /* FedEx và UPS không có khoản GoGreen nào ⇒ `null` = KHÔNG BIẾT. Ghi 0 là khoá ô ở 0 vĩnh
+   * viễn, đường ghi từ HOÁ ĐƠN (`dungPatch`) sau đó không điền được số thật vào nữa. */
+  it('GoGreen null (FedEx/UPS) thì bỏ hẳn khỏi patch, không ghi 0', () => {
+    const { patch } = patchGiaUocTinh(g, {}, null);
+    expect(COT_CHI_PHI.gogreen in patch).toBe(false);
+  });
+  /* Hãng trên bảng giá mà không có dòng `per_step_fixed` ⇒ engine trả 0. Cùng lý do trên. */
+  it('GoGreen 0 (hãng không có dòng per_step) cũng không ghi', () => {
+    const { patch } = patchGiaUocTinh({ ...g, gogreen: 0 } as GiaUocTinh, {}, null);
+    expect(COT_CHI_PHI.gogreen in patch).toBe(false);
+  });
+  /* Tên nguyên văn đọc từ API fields 13/10/2026. Lark ghi theo TÊN và PUT là all-or-nothing
+   * nên lệch một ký tự (dấu gạch nối, khoảng trắng quanh nó) là cả bản vá bị từ chối. */
+  it('tên cột GoGreen đúng từng ký tự', () => {
+    expect(COT_CHI_PHI.gogreen).toBe('GoGreen Plus-Basic');
+  });
+
+  /* ───────── ô `Phí rủi ro gia tăng` (fld2USMcZo) — CỐ Ý KHÔNG MAP ─────────
+   * Đường giá ước tính KHÔNG được ghi ô này, và đây là test khoá chủ ý đó lại chứ không phải
+   * việc còn sót.
+   *
+   * Lý do: nguồn duy nhất có Elevated Risk là engine, và engine phơi nó ra trong MỘT số gộp
+   * `countryFixed` cùng 4 khoản khác bản chất (Restricted Destination, phí xử lý hàng nhập
+   * US/EU của FedEx, phí xử lý quốc tế UPS, phí hải quan đầu xuất Aramex). Đo
+   * `carrier_surcharges` 13/10/2026: 12 dòng `country_fixed`, **0 dòng có `service_key`** —
+   * không có trường CẤU TRÚC nào tách được, chỉ còn `note` là chữ người gõ tay.
+   *
+   * `countryFixed` ĐÃ đi vào ô `Phí xử lý hàng nhập`. Ghi nó vào ô này nữa là cộng 918.000đ
+   * HAI LẦN trên 370 kiện DHL — và chính ô này là ô Đức dùng đối chiếu, nên số sai ở đây còn
+   * tệ hơn ô để trống (Lark không có undo, phải vào xoá tay từng ô).
+   *
+   * `reconcile-diagnose.ts` đã chốt cùng quy ước: engine `countryFixed` đối chiếu với TỔNG
+   * `elevatedRisk + importHandling` của hoá đơn, tức hệ thống vốn coi đây là một khối không
+   * tách. Muốn map đúng thì phải thêm `service_key` cho các dòng `country_fixed` trước. */
+  it('đường giá ước tính KHÔNG BAO GIỜ ghi ô "Phí rủi ro gia tăng" (countryFixed là số GỘP)', () => {
+    const { patch } = patchGiaUocTinh(
+      { ...g, importHandling: 918_000, gogreen: 3_800 } as GiaUocTinh, {}, null);
+    expect(patch[COT_CHI_PHI.importHandling]).toBe(918_000);
+    expect(COT_CHI_PHI.elevatedRisk in patch).toBe(false);
+  });
+  /* Cột vẫn PHẢI khai trong `COT_CHI_PHI`: đường ghi từ HOÁ ĐƠN (`dungPatch` lặp
+   * `Object.entries(COT_CHI_PHI)` theo tên cột `shipment_charges`) có số Elevated Risk thật và
+   * vẫn điền ô này. Xoá khoá đi là làm hỏng đường đó. */
+  it('cột "Phí rủi ro gia tăng" vẫn được khai để đường hoá đơn dùng', () => {
+    expect(COT_CHI_PHI.elevatedRisk).toBe('Phí rủi ro gia tăng');
+  });
 });

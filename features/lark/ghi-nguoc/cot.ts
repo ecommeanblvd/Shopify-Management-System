@@ -60,7 +60,15 @@ export const COT_CHI_PHI = {
   demand: 'EES / Theo nhu cầu',
   directSignature: 'Phí kí nhận trực tiếp',
   vat: 'VAT/Thuế phí khác',
+  /** DHL GoGreen Plus (SAF). CẢ HAI đường ghi đều điền ô này: đường hoá đơn lấy
+   *  `shipment_charges.gogreen`, đường giá ước tính lấy `QuoteBreakdown.perStep` (3/3 dòng
+   *  `per_step_fixed` đều là GoGreen, xem `gia-uoc-tinh.ts`). */
   gogreen: 'GoGreen Plus-Basic',
+  /** CHỈ đường HOÁ ĐƠN điền ô này (`shipment_charges.elevated_risk` — số thật, tách sẵn).
+   *  Đường GIÁ ƯỚC TÍNH cố ý KHÔNG ghi: engine chỉ có số GỘP `countryFixed` (Elevated Risk +
+   *  Restricted Destination + phí nhập US/EU + phí xử lý quốc tế UPS + hải quan đầu xuất
+   *  Aramex; 12 dòng `country_fixed`, 0 dòng có `service_key` ⇒ không tách được), và số gộp đó
+   *  ĐÃ vào ô `Phí xử lý hàng nhập` — ghi tiếp vào đây là cộng 918.000đ hai lần. */
   elevatedRisk: 'Phí rủi ro gia tăng',
   importHandling: 'Phí xử lý hàng nhập',
   residential: 'Phụ Phí Residential',

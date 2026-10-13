@@ -41,6 +41,18 @@ export interface GiaUocTinh {
   signature: number | null;
   residential: number | null;
   importHandling: number | null;
+  /**
+   * GoGreen Plus (SAF) của DHL → ô Lark `GoGreen Plus-Basic`. Nguồn là
+   * `QuoteBreakdown.perStep` (`per_step_fixed`, 1.900đ/0,5kg bậc cân).
+   *
+   * Chỉ engine có khoản này; FedEx (`FedexQuoteSnap` không có trường nào — xem
+   * `reconcile-diagnose.ts`: *"FedEx has none"*) và UPS (`TEN_KHOAN` 9 mã, không
+   * mã SAF nào) đều trả `null` = KHÔNG BIẾT, khác `0` ("hãng có tính, bằng không").
+   *
+   * Ô Lark đã có sẵn nhưng đường giá ước tính chưa bao giờ điền, nên ~3.800đ/kiện
+   * nằm trong ô Tổng mà không ô thành phần nào đựng — 3.033/3.033 kiện DHL.
+   */
+  gogreen: number | null;
   vat: number | null;
   total: number | null;
   /** Mã khoản của nguồn mà không có nhóm tương ứng ở trên — nêu ra để người nhập
@@ -74,6 +86,27 @@ export interface GiaUocTinh {
  * `countryFixedReference` — cùng một lý do: reference là *giá tham chiếu chưa
  * thu*, ghi nó vào ô chi phí là biến một khoản chưa phát sinh thành khoản đã có.
  *
+ * `gogreen` lấy `perStep`. `perStep` là số GỘP mọi dòng `per_step_fixed`, nên map
+ * thẳng sang ô GoGreen chỉ đúng khi mọi dòng per_step đều LÀ GoGreen — và đó đúng
+ * là hiện trạng: đo `carrier_surcharges` 13/10/2026 có **3/3 dòng `per_step_fixed`**
+ * đều là `GoGreen Plus (SAF)` của DHL (1.900đ/0,5kg), và ba dòng là ba BẢN PHIÊN
+ * NGÀY của cùng một khoản (2025-01-01→2025-09-29, 2025-09-29→2026-01-01,
+ * 2026-01-01→∞) nên `isApplicable` chỉ cho MỘT dòng áp tại một ngày. Hãng khác: 0
+ * dòng ⇒ `perStep` = 0 ⇒ luật `<= 0` để ô trống. Ngày nào ai thêm một dòng
+ * `per_step_fixed` KHÁC bản chất (không phải GoGreen) thì phải tách `QuoteBreakdown`
+ * trước, chứ không để nó lặng lẽ chảy vào ô GoGreen.
+ *
+ * KHÔNG map ô Lark `Phí rủi ro gia tăng` (Elevated Risk) — CỐ Ý, không phải sót.
+ * Engine gộp Elevated Risk vào `countryFixed` cùng 4 khoản khác bản chất (Restricted
+ * Destination, phí xử lý hàng nhập US/EU của FedEx, phí xử lý quốc tế UPS, phí hải
+ * quan đầu xuất Aramex); đo 12 dòng `country_fixed` thì **0 dòng có `service_key`**,
+ * tức không có trường cấu trúc nào tách được — chỉ còn `note` là chữ người gõ tay.
+ * Mà `countryFixed` ĐÃ đi vào `importHandling`, nên ghi nó vào ô kia nữa là cộng
+ * 918.000đ hai lần trên 370 kiện DHL, đúng vào ô dùng để đối soát. `reconcile-
+ * diagnose.ts` chốt cùng quy ước: engine `countryFixed` đối chiếu với TỔNG
+ * `elevatedRisk + importHandling` của hoá đơn. Muốn map đúng thì thêm `service_key`
+ * cho các dòng `country_fixed` trước.
+ *
  * `base` dùng THẲNG `b.base` vì mô hình engine coi nó là giá **NIÊM YẾT**
  * (`QUY_UOC_BASE = 'niem_yet'`, quote.ts: *"Contract volume discount applies to the PUBLISHED
  * base only"*) — đúng nghĩa "base gốc" mà ô Lark cần, không phải trừ gì thêm. `b.discount` là
@@ -94,6 +127,7 @@ export function tuEngine(b: QuoteBreakdown, totalVnd: number, heSoVnd: number | 
     signature: null,
     residential: vnd(b.residential),
     importHandling: vnd(b.countryFixed),
+    gogreen: vnd(b.perStep),
     vat: vnd(b.vat),
     total: heSoVnd == null ? null : totalVnd,
     maLa: [],
@@ -165,6 +199,10 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number 
     signature: congDon.signature ?? null,
     residential: congDon.residential ?? null,
     importHandling: congDon.importHandling ?? null,
+    /* GoGreen là khoản riêng của DHL — `TEN_KHOAN` của UPS (9 mã) không có mã SAF nào, nên
+     * nguồn này KHÔNG NÓI GÌ về khoản đó. `null` chứ không 0: ghi 0 lên Lark là khoá ô ở 0
+     * vĩnh viễn, đường ghi từ hoá đơn sau đó không điền được số thật vào nữa. */
+    gogreen: null,
     vat: null,
     total,
     maLa,
@@ -214,6 +252,10 @@ export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
     signature: q.signature,
     residential: q.residential,
     importHandling: q.countryFixed,
+    /* `FedexQuoteSnap` không có trường GoGreen/SAF nào (`reconcile-diagnose.ts`: *"DHL GoGreen
+     * is a `per_step_fixed` surcharge — FedEx has none"*). Thêm khoản này vào
+     * `fedexImpliedBase` sẽ làm ô `Mức giá cơ sở` nhỏ đi đúng bằng một khoản FedEx không thu. */
+    gogreen: null,
     vat: q.vat,
     total: q.totalNetCharge,
     maLa: [],

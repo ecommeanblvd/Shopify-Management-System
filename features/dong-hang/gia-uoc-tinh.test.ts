@@ -4,7 +4,7 @@ import type { QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 
 describe('tuEngine', () => {
   const b = { base: 100, fuel: 20, remote: 5, demand: 3, residential: 7, vat: 13,
-    addonReference: 9, countryFixed: 11, countryFixedReference: 77, discount: 0,
+    addonReference: 9, countryFixed: 11, countryFixedReference: 77, discount: 0, perStep: 4,
     /* …phần còn lại của QuoteBreakdown */ } as QuoteBreakdown;
 
   it('account tính bằng VND (hệ số 1) thì map thẳng từng khoản', () => {
@@ -67,6 +67,43 @@ describe('tuEngine', () => {
   it('không biết hệ số quy đổi → chiết khấu cũng null', () => {
     expect(tuEngine({ ...b, discount: 30 } as QuoteBreakdown, 155, null).discount).toBeNull();
   });
+
+  /* GoGreen Plus (SAF) của DHL — ô Lark `GoGreen Plus-Basic` đã có sẵn, trước đây KHÔNG được
+   * điền nên ~3.800đ/kiện nằm trong ô Tổng mà không ô thành phần nào đựng (3.033/3.033 kiện
+   * DHL có khoản này). Nguồn là `QuoteBreakdown.perStep`.
+   *
+   * `perStep` GỘP mọi dòng `per_step_fixed`, nên map thẳng nó sang ô GoGreen chỉ đúng khi mọi
+   * dòng per_step ĐỀU là GoGreen. Đo `carrier_surcharges` 13/10/2026: **3/3 dòng
+   * `per_step_fixed`** đều là `GoGreen Plus (SAF)` của DHL, 1.900đ/0,5kg, và chúng là ba BẢN
+   * PHIÊN NGÀY của cùng một khoản (cửa sổ 2025-01-01→2025-09-29, 2025-09-29→2026-01-01,
+   * 2026-01-01→∞) nên `isApplicable` chỉ cho MỘT dòng áp tại một ngày — không có chuyện cộng
+   * dồn hai phiên bản. Hãng khác: 0 dòng. */
+  it('GoGreen lấy từ perStep và quy về VND cùng hệ số', () => {
+    expect(tuEngine(b, 155, 1).gogreen).toBe(4);
+    expect(tuEngine(b, 2_600_000, 26_000).gogreen).toBe(4 * 26_000);
+  });
+  it('không biết hệ số quy đổi → GoGreen cũng null, không ghi', () => {
+    expect(tuEngine(b, 155, null).gogreen).toBeNull();
+  });
+
+  /* Hãng không có dòng `per_step_fixed` nào (FedEx/Aramex/UPS trên bảng giá) ⇒ `perStep` = 0.
+   * 0 là thông tin THẬT ("engine không tính khoản này"), nhưng luật ghi ô trống của
+   * `patch-gia-uoc-tinh.ts` bỏ mọi khoản `<= 0` nên ô vẫn để trống — đúng ý. Test khoá lại để
+   * không ai "sửa" thành `null` rồi tưởng là khác nhau. */
+  it('hãng không có dòng per_step → gogreen = 0 (ô vẫn không được ghi vì luật <= 0)', () => {
+    expect(tuEngine({ ...b, perStep: 0 } as QuoteBreakdown, 155, 1).gogreen).toBe(0);
+  });
+
+  /* CHỐNG TÍNH TRÙNG: `countryFixed` phải chỉ đi vào `importHandling`, KHÔNG được nhân bản
+   * sang ô `Phí rủi ro gia tăng`. Engine gộp cả Elevated Risk, Restricted Destination, phí xử
+   * lý hàng nhập US/EU, phí xử lý quốc tế UPS và phí hải quan đầu xuất Aramex vào MỘT số
+   * `countryFixed` (12 dòng `country_fixed`, **0 dòng có `service_key`** ⇒ không có trường cấu
+   * trúc nào tách được), nên ghi nó vào hai ô là cộng 918.000đ hai lần. */
+  it('countryFixed chỉ vào importHandling, KHÔNG nhân bản sang khoản nào khác', () => {
+    const g = tuEngine(b, 155, 1);
+    expect(g.importHandling).toBe(11);
+    expect(Object.values(g).filter((v) => v === 11)).toHaveLength(1);
+  });
 });
 
 describe('tuKhoanUps', () => {
@@ -99,6 +136,14 @@ describe('tuKhoanUps', () => {
    * Lark là khoá ô ở 0 vĩnh viễn. Suy ngược bằng một lượt giá niêm yết là bịa số. */
   it('UPS không trả chiết khấu riêng → discount là null, KHÔNG phải 0', () => {
     expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).discount).toBeNull();
+  });
+
+  /* GoGreen là khoản RIÊNG CỦA DHL. `TEN_KHOAN` của UPS (lib/ups/rate.ts) có 9 mã và không mã
+   * nào là SAF/GoGreen, nên Rating API KHÔNG NÓI GÌ về khoản này ⇒ `null`, không phải 0: 0 là
+   * khẳng định "UPS có tính, bằng không", mà ghi 0 lên Lark là khoá ô ở 0 vĩnh viễn
+   * (`dungPatch` sau đó đọc `docSo = 0 ≠ null` nên không bao giờ ghi số hoá đơn thật vào nữa). */
+  it('UPS không có khoản GoGreen → gogreen là null, KHÔNG phải 0', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).gogreen).toBeNull();
   });
 });
 
@@ -160,5 +205,18 @@ describe('tuFedexQuote', () => {
     const g = tuFedexQuote({ ...q, discount: 0 });
     expect(g.base).toBe(350);
     expect(g.discount).toBe(0);
+  });
+
+  /* `FedexQuoteSnap` không có trường GoGreen/SAF nào, và `reconcile-diagnose.ts` đã khẳng định
+   * cùng điều ("DHL GoGreen is a `per_step_fixed` surcharge — FedEx has none"). Nguồn không
+   * nói gì ⇒ `null`.
+   *
+   * Quan trọng hơn: `gogreen` KHÔNG được lọt vào `fedexImpliedBase`. Base của FedEx là số SUY
+   * RA bằng `tổng − mọi phụ phí − VAT`; thêm một khoản vào phép trừ đó mà FedEx không thật sự
+   * thu là làm ô `Mức giá cơ sở` nhỏ đi đúng bằng khoản bịa thêm. Test chốt base vẫn là 450. */
+  it('FedEx không có khoản GoGreen → gogreen null và base suy ra KHÔNG bị trừ thêm', () => {
+    const g = tuFedexQuote(q);
+    expect(g.gogreen).toBeNull();
+    expect(g.base).toBe(450);
   });
 });

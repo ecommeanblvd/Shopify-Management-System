@@ -49,6 +49,8 @@ import { getLogRecordById, updateLogRecordFields } from '@/features/lark/client'
 const gia = {
   nguon: 'fedex-api' as const, base: 9_512_300, discount: 7_657_402, fuel: 500_000,
   remote: null, demand: null, signature: null, residential: null, importHandling: null,
+  /* FedEx không có khoản GoGreen nào (chỉ DHL có) ⇒ `null` = nguồn không nói gì. */
+  gogreen: null,
   vat: 100_000, total: 3_026_880, maLa: [],
 };
 
