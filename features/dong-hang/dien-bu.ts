@@ -6,9 +6,10 @@
  * luận cột `gia_uoc_tinh_ghi_luc` trong db/schema.ts: có mã vận đơn (chưa dán thì
  * chưa tới lượt gửi), có dòng Lark tương ứng (chưa có thì chưa biết ghi vào ô nào)
  * và dấu CÒN TRỐNG (có dấu nghĩa là ghi xong, đang có người giành việc, hoặc xác
- * định sẽ không bao giờ ghi được — cả ba cron không được đụng vào) — CỘNG một điều
- * kiện riêng của cron: kiện phải tạo từ `MOC_DIEN_BU` trở đi (xem dưới). Tách hàm
- * riêng để tự kiểm (test) được mà không cần DB.
+ * định sẽ không bao giờ ghi được — cả ba cron không được đụng vào) — CỘNG hai điều
+ * kiện riêng của cron: mã vận đơn phải do NHÂN SỰ NHẬP QUA HỆ THỐNG (dấu
+ * `tracking_nhap_luc`, xem `DAU_NHAP_QUA_HE_THONG` dưới) và kiện phải tạo từ
+ * `MOC_DIEN_BU` trở đi. Tách hàm riêng để tự kiểm (test) được mà không cần DB.
  */
 import { and, asc, gte, isNotNull, isNull } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -40,16 +41,42 @@ export const SO_KIEN_MOI_LUOT = 20;
  */
 export const MOC_DIEN_BU = new Date('2026-10-12T00:00:00.000Z');
 
+/**
+ * PHẠM VI do CEO chốt 14/10/2026: tính năng CHỈ chạy cho kiện mà nhân sự nhập mã vận đơn
+ * QUA HỆ THỐNG, từ nay trở đi. Dấu phân biệt là `shipments.tracking_nhap_luc` — chỉ
+ * `luuTrackingChoKien` ghi nó (cùng lệnh UPDATE lưu mã), nên dấu CÓ ⇔ mã do action nhập.
+ *
+ * Vì sao `MOC_DIEN_BU` một mình KHÔNG đủ: mốc lọc theo `created_at` của KIỆN, không nói gì
+ * về việc mã vận đơn tới từ đâu. Kiện do đồng bộ Lark tạo sau 12/10 và mang tracking do
+ * chính lượt đồng bộ đó ghi (`features/lark/sync.ts` / webhook `nhan-mot-dong.ts` →
+ * `patch-kien.ts`) vẫn thoả đủ bốn điều kiện cũ ⇒ cron bốc nó và đổ giá ước tính lên dòng
+ * Lark mà KHÔNG ai ở đây từng chạm vào kiện đó. Kiện nhập từ hoá đơn/XLSX
+ * (`features/shipments/import-actions.ts`) cũng vậy. Dấu này chặn đúng hai đường đó.
+ *
+ * GIỮ cả `MOC_DIEN_BU` (hai điều kiện AND, không thay thế): dấu là khoá chính, mốc là khoá
+ * thứ hai cho ca ai đó backfill `tracking_nhap_luc` bằng tay — migration 0205 nói rõ KHÔNG
+ * backfill, nhưng một cột trống chỉ cần một câu UPDATE là mất tác dụng, còn mốc thì không
+ * backfill được. Giá của việc giữ mốc: kiện tạo TRƯỚC 12/10 mà nhân sự nhập mã hôm nay thì
+ * cron không thử lại giúp (bản thân action vẫn ghi ngay và vẫn báo `canhBao`) — CEO muốn bỏ
+ * mốc thì xoá điều kiện `taoLuc` ở dưới là đủ, dấu này một mình đã chặn hết kiện lịch sử.
+ */
+export const DAU_NHAP_QUA_HE_THONG = 'shipments.tracking_nhap_luc';
+
 export interface KienCanDienBu {
   id: string;
   trackingNumber: string | null;
   larkRecordId: string | null;
   daGhiGiaLuc: Date | null;
   taoLuc: Date | null;
+  /** Dấu `tracking_nhap_luc`: null = mã KHÔNG do nhân sự nhập qua hệ thống ⇒ ngoài phạm vi. */
+  trackingNhapLuc: Date | null;
 }
 
 /**
  * THUẦN: kiện này còn cần cron thử ghi lại giá ước tính lên Lark không.
+ *
+ * `trackingNhapLuc` null → KHÔNG: mã vận đơn không do nhân sự nhập qua hệ thống (đồng bộ
+ * Lark, nhập hoá đơn/XLSX, hoặc chưa có mã) ⇒ ngoài phạm vi, xem `DAU_NHAP_QUA_HE_THONG`.
  *
  * `taoLuc` trước `MOC_DIEN_BU` → KHÔNG: đó là kiện lịch sử, xem `MOC_DIEN_BU`. `taoLuc` null
  * (không đọc được) cũng KHÔNG — không biết kiện thuộc thời nào thì không ghi, giống mọi lựa
@@ -60,14 +87,16 @@ export function canDienBu(k: {
   larkRecordId: string | null;
   daGhiGiaLuc: Date | null;
   taoLuc: Date | null;
+  trackingNhapLuc: Date | null;
 }): boolean {
   return k.trackingNumber != null && k.larkRecordId != null && k.daGhiGiaLuc == null
+    && k.trackingNhapLuc != null
     && k.taoLuc != null && k.taoLuc.getTime() >= MOC_DIEN_BU.getTime();
 }
 
 /**
  * I/O: lấy tối đa `SO_KIEN_MOI_LUOT` kiện có khả năng cần điền bù. Lọc sẵn ở
- * SQL đúng ba điều kiện của `canDienBu` để không kéo cả bảng `shipments` về —
+ * SQL đúng các điều kiện của `canDienBu` để không kéo cả bảng `shipments` về —
  * nhưng caller (route cron) VẪN phải chạy lại `canDienBu` trên từng dòng
  * trước khi xử lý, vì xử lý chạy tuần tự nên dữ liệu có thể đổi giữa lúc đọc
  * danh sách và lúc xử lý tới dòng đó.
@@ -80,6 +109,7 @@ export async function layKienCanDienBu(): Promise<KienCanDienBu[]> {
       larkRecordId: schema.shipments.larkRecordId,
       daGhiGiaLuc: schema.shipments.giaUocTinhGhiLuc,
       taoLuc: schema.shipments.createdAt,
+      trackingNhapLuc: schema.shipments.trackingNhapLuc,
     })
     .from(schema.shipments)
     .where(
@@ -87,6 +117,11 @@ export async function layKienCanDienBu(): Promise<KienCanDienBu[]> {
         isNotNull(schema.shipments.trackingNumber),
         isNotNull(schema.shipments.larkRecordId),
         isNull(schema.shipments.giaUocTinhGhiLuc),
+        /* PHẠM VI: chỉ mã do nhân sự nhập qua hệ thống — xem DAU_NHAP_QUA_HE_THONG. Điều
+         * kiện này PHẢI có ở cả SQL và `canDienBu`: thiếu ở SQL thì 20 suất của
+         * `SO_KIEN_MOI_LUOT` bị kiện đồng bộ-từ-Lark chiếm hết rồi `canDienBu` loại sạch,
+         * lượt cron thành rỗng mà kiện thật vẫn nằm chờ. */
+        isNotNull(schema.shipments.trackingNhapLuc),
         // Mốc thời gian: xem MOC_DIEN_BU. Lọc ngay ở SQL để không kéo 4.276 dòng lịch sử về.
         gte(schema.shipments.createdAt, MOC_DIEN_BU),
       ),

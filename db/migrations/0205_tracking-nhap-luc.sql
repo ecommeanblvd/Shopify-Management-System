@@ -1,0 +1,24 @@
+-- Dấu "mã vận đơn của kiện này do NHÂN SỰ nhập qua hệ thống", không phải do đồng bộ Lark.
+--
+-- Vì sao cần: `shipments.tracking_number` có BA đường ghi khác nhau — action nhập tracking
+-- (`luuTrackingChoKien`), đồng bộ Lark (`features/lark/sync.ts` + webhook
+-- `features/lark/nhan-mot-dong.ts`, qua `patch-kien.ts`), và nhập hoá đơn/XLSX
+-- (`features/shipments/import-actions.ts`). Nhìn vào cột `tracking_number` KHÔNG phân biệt
+-- được đường nào ghi. Cron điền bù giá ước tính trước đây lọc bằng mốc thời gian
+-- (`MOC_DIEN_BU`, 12/10/2026) nên kiện có tracking do ĐỒNG BỘ LARK vẫn lọt vào phạm vi nếu
+-- nó được tạo sau mốc — mà CEO chốt 14/10/2026: tính năng chỉ chạy cho kiện nhân sự nhập mã
+-- QUA HỆ THỐNG từ nay trở đi.
+--
+-- Timestamp chứ không phải boolean: cùng giá (8 byte, nullable), nhưng còn trả lời được "nhập
+-- lúc nào" khi soát lại một lượt ghi lên Lark.
+--
+-- NULL = tracking không do action nhập (đồng bộ Lark / nhập hoá đơn / chưa có mã) ⇒ NGOÀI
+-- phạm vi điền bù. Cột để NULL cho toàn bộ kiện lịch sử là CÓ CHỦ Ý — KHÔNG backfill: backfill
+-- là kéo đúng 4.276 kiện lịch sử vào phạm vi mà mốc thời gian sinh ra để chặn.
+--
+-- ⚠ ÁP CỘT NÀY TRƯỚC KHI DEPLOY mã đọc nó. `luuTrackingChoKien` ghi cột này trong CÙNG lệnh
+-- UPDATE lưu mã vận đơn (cố ý: mã và dấu của nó không bao giờ lệch nhau), nên cột chưa tồn tại
+-- là CẢ thao tác nhập mã vận đơn đổ lỗi. Xem db/migrations/README.md: `npm run db:migrate` in
+-- thành công mà KHÔNG áp gì — phải chạy tệp này thẳng vào CSDL rồi kiểm `information_schema`.
+ALTER TABLE shipments
+  ADD COLUMN IF NOT EXISTS tracking_nhap_luc timestamp;

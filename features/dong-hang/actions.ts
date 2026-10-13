@@ -364,9 +364,17 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   // Bước 2: LƯU NGAY. Từ đây mọi thứ là best-effort — hỏng ở dưới không được
   // xoá công của bước lưu này. Kiện đã xác nhận TỒN TẠI ở trên nên không cần
   // kiểm `returning()` ở đây nữa.
+  //
+  // `trackingNhapLuc` đóng trong CÙNG lệnh này, không phải một UPDATE riêng: đó là dấu
+  // "mã này do NHÂN SỰ nhập qua hệ thống" và là điều kiện PHẠM VI của cron điền bù
+  // (`DAU_NHAP_QUA_HE_THONG` trong dien-bu.ts — CEO 14/10/2026). Cùng một lệnh thì mã và
+  // dấu của nó KHÔNG BAO GIỜ lệch nhau; đóng dấu riêng mà lệnh đó hỏng là kiện có mã
+  // nhưng vô hình với cron, im lặng không ai biết. Đổi lại: cột `tracking_nhap_luc`
+  // (migration 0205) PHẢI được áp tay TRƯỚC khi deploy — chưa có cột thì lệnh này đổ và
+  // cả thao tác nhập mã vận đơn thất bại (hỏng ỒN ÀO, thấy ngay, thay vì âm thầm).
   try {
     await db.update(schema.shipments)
-      .set({ trackingNumber: kt.tracking, updatedAt: new Date() })
+      .set({ trackingNumber: kt.tracking, trackingNhapLuc: new Date(), updatedAt: new Date() })
       .where(eq(schema.shipments.id, shipmentId));
   } catch (e) {
     console.error('[dong-hang] luuTrackingChoKien: lưu tracking lỗi:', e);

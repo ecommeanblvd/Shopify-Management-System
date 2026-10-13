@@ -1112,6 +1112,21 @@ export const shipments = pgTable('shipments', {
   orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
   /** Per-pack tracking number. NULL while label not yet generated. */
   trackingNumber: text('tracking_number'),
+  /** Thời điểm NHÂN SỰ nhập `tracking_number` QUA HỆ THỐNG (`luuTrackingChoKien`).
+   *
+   *  Cột `tracking_number` có BA đường ghi: action nhập tracking, đồng bộ Lark
+   *  (`features/lark/sync.ts` + webhook `nhan-mot-dong.ts` → `patch-kien.ts`) và nhập hoá
+   *  đơn/XLSX (`features/shipments/import-actions.ts`). Nhìn vào `tracking_number` KHÔNG
+   *  phân biệt được đường nào ghi — cột này là dấu phân biệt đó, và là ĐIỀU KIỆN PHẠM VI
+   *  của tính năng ghi giá ước tính lên Lark (CEO 14/10/2026: chỉ chạy cho kiện nhân sự
+   *  nhập mã qua hệ thống từ nay trở đi, xem `features/dong-hang/dien-bu.ts`).
+   *
+   *  NULL = mã không do action nhập, hoặc chưa có mã ⇒ cron điền bù KHÔNG đụng. Toàn bộ
+   *  kiện lịch sử để NULL là CÓ CHỦ Ý; KHÔNG backfill (xem migration 0205).
+   *
+   *  Ghi trong CÙNG lệnh UPDATE lưu mã vận đơn để mã và dấu của nó không bao giờ lệch
+   *  nhau ⇒ cột PHẢI được áp tay TRƯỚC khi deploy, nếu không cả thao tác nhập mã đổ lỗi. */
+  trackingNhapLuc: timestamp('tracking_nhap_luc'),
   /** Carrier the pack ships under ('fedex' | 'dhl' | …). Defaults via
    *  the order's `shippingCarrierKey` when NULL — same FedEx-default
    *  policy. Operator can override per pack when ops switches carrier. */
