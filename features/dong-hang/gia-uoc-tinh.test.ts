@@ -4,7 +4,7 @@ import type { QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 
 describe('tuEngine', () => {
   const b = { base: 100, fuel: 20, remote: 5, demand: 3, residential: 7, vat: 13,
-    addonReference: 9, countryFixed: 11, countryFixedReference: 77,
+    addonReference: 9, countryFixed: 11, countryFixedReference: 77, discount: 0,
     /* …phần còn lại của QuoteBreakdown */ } as QuoteBreakdown;
 
   it('account tính bằng VND (hệ số 1) thì map thẳng từng khoản', () => {
@@ -41,6 +41,32 @@ describe('tuEngine', () => {
     const g = tuEngine({ ...b, countryFixed: 0 } as QuoteBreakdown, 155, 1);
     expect(g.importHandling).toBe(0);
   });
+
+  /* D-245 bản 2 (CEO 13/10/2026): ô `Mức giá cơ sở` nhận giá GỐC. Với engine không phải tính
+   * gì — `QuoteBreakdown.base` ĐÃ là giá niêm yết (`QUY_UOC_BASE = 'niem_yet'`; quote.ts:
+   * "Contract volume discount applies to the PUBLISHED base only"), chiết khấu nằm ở một
+   * trường riêng. Test này khoá đúng điều đó lại: vòng sửa trước ghi `base − discount` vào ô
+   * và đã bị xoá, nên phải có cái chặn nếu ai định trừ lần nữa. */
+  it('base là giá NIÊM YẾT, KHÔNG trừ chiết khấu khỏi nó', () => {
+    const g = tuEngine({ ...b, discount: 30 } as QuoteBreakdown, 155, 1);
+    expect(g.base).toBe(100); // 100, không phải 70
+  });
+
+  /* Chiết khấu của engine phơi ra DƯƠNG (quote.ts: "surfaced as a positive number"), và ô
+   * `Chiết khấu || API` cần dương vì luật ghi bỏ mọi khoản `<= 0`. */
+  it('chiết khấu ghi nguyên số DƯƠNG của engine', () => {
+    expect(tuEngine({ ...b, discount: 30 } as QuoteBreakdown, 155, 1).discount).toBe(30);
+  });
+
+  /* `discount` cũng là TIỀN nên phải đi qua cùng hệ số quy đổi như mọi khoản khác — Aramex HN
+   * tính bằng USD, để nguyên là ghi 30 (USD) vào ô VND cạnh base 2.600.000 (VND). */
+  it('chiết khấu quy về VND cùng hệ số với các khoản khác', () => {
+    expect(tuEngine({ ...b, discount: 30 } as QuoteBreakdown, 2_600_000, 26_000).discount)
+      .toBe(30 * 26_000);
+  });
+  it('không biết hệ số quy đổi → chiết khấu cũng null', () => {
+    expect(tuEngine({ ...b, discount: 30 } as QuoteBreakdown, 155, null).discount).toBeNull();
+  });
 });
 
 describe('tuKhoanUps', () => {
@@ -67,23 +93,72 @@ describe('tuKhoanUps', () => {
   it('base do caller truyền vào (UPS trả ở field riêng), không bị bỏ rơi', () => {
     expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).base).toBe(1_000);
   });
+  /* Rating API chỉ trả `NegotiatedRateCharges` (TotalCharge / BaseServiceCharge /
+   * ItemizedCharges) — KHÔNG có trường chiết khấu, và base đã là giá hợp đồng. Trả 0 ở đây là
+   * khẳng định "hãng không cắt chiết khấu" trong khi thực ra MÌNH KHÔNG BIẾT; mà ghi 0 lên
+   * Lark là khoá ô ở 0 vĩnh viễn. Suy ngược bằng một lượt giá niêm yết là bịa số. */
+  it('UPS không trả chiết khấu riêng → discount là null, KHÔNG phải 0', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).discount).toBeNull();
+  });
 });
 
 describe('tuFedexQuote', () => {
-  /* `fedex_rate_quotes` đã giữ sẵn từng khoản (xem FedexQuoteSnap); chỉ đổi tên trường,
-   * KHÔNG tính lại gì — tính lại là đẻ ra con số thứ hai cho cùng một kiện. */
-  it('map thẳng từ dòng quote đã lưu, nguồn là fedex-api', () => {
-    const g = tuFedexQuote({ totalNetCharge: 500, fuel: 50, fuelPercent: 47.75, remote: 0,
-      demand: 10, residential: 0, signature: 20, countryFixed: 30, vat: 40, discount: -100,
-      service: 'IP', rateZone: 'H' }, 350);
-    expect(g).toMatchObject({ nguon: 'fedex-api', fuel: 50, demand: 10, signature: 20,
-      importHandling: 30, vat: 40, total: 500 });
+  /** Dòng `fedex_rate_quotes` đủ khoản; mỗi test chỉ đổi phần mình nói tới. */
+  const q = { totalNetCharge: 500, fuel: 50, fuelPercent: 47.75, remote: 0, demand: 10,
+    residential: 0, signature: 20, countryFixed: 30, vat: 40, discount: 100,
+    service: 'IP', rateZone: 'H' } as const;
+
+  /* Các khoản PHỤ PHÍ đã có sẵn trong dòng quote — chỉ đổi tên trường, KHÔNG tính lại gì. */
+  it('map thẳng các khoản phụ phí đã lưu, nguồn là fedex-api', () => {
+    expect(tuFedexQuote(q)).toMatchObject({ nguon: 'fedex-api', fuel: 50, demand: 10,
+      signature: 20, importHandling: 30, vat: 40, total: 500 });
   });
-  /* I7: `fedex_rate_quotes.base_charge` ĐÃ lưu sẵn — để base null là 2.809/4.276 kiện (hãng
-   * lớn nhất) vẫn phải gõ tay đúng ô quan trọng nhất. Lấy số đã lưu, KHÔNG tính lại. */
-  it('base lấy từ cột base_charge đã lưu, không tính lại', () => {
-    expect(tuFedexQuote({ totalNetCharge: 500, fuel: 50, fuelPercent: null, remote: null,
-      demand: null, residential: null, signature: null, countryFixed: null, vat: 40,
-      discount: null, service: 'IP', rateZone: null }, 350).base).toBe(350);
+
+  /* D-245 bản 2: ô `Mức giá cơ sở` nhận base GỐC. FedEx không trả nó (`base_charge` NULL
+   * 1.310/1.310 dòng) nên phải suy: `impliedBase` = 500 − 50 − 0 − 10 − 0 − 20 − 30 − 40 = 350
+   * là base NET (vì `totalNetCharge` đã sau chiết khấu); cộng chiết khấu 100 ra GỐC = 450.
+   * Kiểm trên dữ liệu thật: `impliedBase + |discount|` == `shipment_charges.base` khớp từng
+   * đồng 5/8 dòng mẫu có cả quote lẫn hoá đơn. */
+  it('base = cước nền suy ra CỘNG chiết khấu → ra giá GỐC, không phải net', () => {
+    const g = tuFedexQuote(q);
+    expect(g.base).toBe(450);
+    expect(g.base).toBeGreaterThan(350); // chặn việc ai đó đổi ngược về net
+  });
+
+  /* Chiết khấu FedEx lưu DƯƠNG (đo: 1.309 dòng dương, 1 dòng = 0, 0 dòng âm) và ô Lark cần
+   * dương (luật ghi bỏ `<= 0`). */
+  it('discount ghi số DƯƠNG', () => {
+    expect(tuFedexQuote(q).discount).toBe(100);
+  });
+
+  /* Hai bảng cùng hệ lưu chiết khấu hai dấu KHÁC NHAU (`shipment_charges.discount` âm
+   * 2.898/2.898 dòng). Nếu một lượt import nào đổi dấu bên `fedex_rate_quotes` thì phép
+   * `base + discount` sẽ TRỪ đi — ra base net, đúng cái sai vừa gỡ. `Math.abs` chặn cả hai
+   * hậu quả đó, nên phải có test khoá lại. */
+  it('chiết khấu lưu ÂM vẫn ra cùng base gốc và cùng số chiết khấu dương', () => {
+    const g = tuFedexQuote({ ...q, discount: -100 });
+    expect(g.base).toBe(450);
+    expect(g.discount).toBe(100);
+  });
+
+  /* Thiếu chiết khấu thì `impliedBase` chỉ là base NET — ghi nó vào ô gốc là lặp lại lỗi của
+   * vòng trước, mà số đã ghi lên Lark thì không sửa lại được bằng máy. Thà ô trống. */
+  it('discount null → base null (KHÔNG ghi base net vào ô giá gốc)', () => {
+    const g = tuFedexQuote({ ...q, discount: null });
+    expect(g.base).toBeNull();
+    expect(g.discount).toBeNull();
+  });
+
+  /* Không có tổng thì không có gì để trừ ra base — `fedexImpliedBase` trả null, đừng đoán. */
+  it('totalNetCharge null → base null', () => {
+    expect(tuFedexQuote({ ...q, totalNetCharge: null }).base).toBeNull();
+  });
+
+  /* Chiết khấu = 0 là thông tin THẬT ("hãng không cắt gì"), khác hẳn `null`: base vẫn suy
+   * được, chỉ ô `Chiết khấu || API` là không có gì để ghi (luật `<= 0` lo việc đó). */
+  it('discount = 0 vẫn suy được base (0 là biết, khác null)', () => {
+    const g = tuFedexQuote({ ...q, discount: 0 });
+    expect(g.base).toBe(350);
+    expect(g.discount).toBe(0);
   });
 });

@@ -8,11 +8,33 @@
  */
 import type { QuoteBreakdown } from '@/features/carrier-rates/engine/quote';
 import type { KhoanBaoGiaUps } from '@/lib/ups/rate';
-import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
+import { fedexImpliedBase, type FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
 
 export interface GiaUocTinh {
   nguon: 'fedex-api' | 'ups-api' | 'bang-gia';
+  /**
+   * Cước nền **GIÁ GỐC — CHƯA trừ chiết khấu** (CEO chốt 13/10/2026, D-245 bản 2).
+   *
+   * Vòng sửa trước đặt ô này là giá NET (đã trừ chiết khấu) và đã bị xoá. Lý do đảo chiều:
+   * ô Lark `Giá chiết khấu` là **công thức của Lark**, với FedEx nó tính
+   * `Tổng − base − fuel − ký nhận − …`; bảng được thiết kế để nhận base GỐC, nên đưa base net
+   * vào là làm công thức đó ra một số chiết khấu vô nghĩa. Đo trên 4.591 bản ghi đã điền cả
+   * base lẫn tổng: **2.878 dòng gõ base > tổng (tức gốc — ĐÚNG)** vs 1.251 dòng gõ net.
+   */
   base: number | null;
+  /**
+   * Số CHIẾT KHẤU hãng cắt khỏi cước nền, **DƯƠNG**, ghi vào ô Lark `Chiết khấu || API`.
+   *
+   * Dương chứ không âm vì hai lẽ: (1) cả hai nguồn API đều trả dương —
+   * `lib/fedex/rate.ts` khai `discount: totalFreightDiscount (số dương = đã giảm)` và
+   * `QuoteBreakdown.discount` là *"a positive number"*; (2) luật ghi ô trống bỏ mọi khoản
+   * `<= 0` (xem patch-gia-uoc-tinh.ts), nên nếu theo quy ước ÂM của `shipment_charges.discount`
+   * (đo thật: 2.898/2.898 dòng có chiết khấu đều âm) thì ô này sẽ KHÔNG BAO GIỜ được ghi mà
+   * chẳng ai thấy gì sai.
+   *
+   * `null` = nguồn không nói gì về chiết khấu (UPS) — khác `0` ("hãng có cắt, bằng không").
+   */
+  discount: number | null;
   fuel: number | null;
   remote: number | null;
   demand: number | null;
@@ -51,12 +73,21 @@ export interface GiaUocTinh {
  * `importHandling` chỉ lấy `countryFixed` (dòng đã vào total), KHÔNG rơi về
  * `countryFixedReference` — cùng một lý do: reference là *giá tham chiếu chưa
  * thu*, ghi nó vào ô chi phí là biến một khoản chưa phát sinh thành khoản đã có.
+ *
+ * `base` dùng THẲNG `b.base` vì mô hình engine coi nó là giá **NIÊM YẾT**
+ * (`QUY_UOC_BASE = 'niem_yet'`, quote.ts: *"Contract volume discount applies to the PUBLISHED
+ * base only"*) — đúng nghĩa "base gốc" mà ô Lark cần, không phải trừ gì thêm. `b.discount` là
+ * khoản cắt khỏi đúng base đó, engine phơi ra DƯƠNG nên ghi thẳng sang `discount`.
+ * `contract_discount_pct` hiện **0 dòng** trên cả 5 account (đo thật) ⇒ hôm nay số này là 0 ⇒
+ * ô `Chiết khấu || API` không được ghi (luật `<= 0`); map vẫn phải có để ngày ai thêm dòng
+ * chiết khấu thì ô tự đúng, không phải nhớ sửa thêm một chỗ.
  */
 export function tuEngine(b: QuoteBreakdown, totalVnd: number, heSoVnd: number | null): GiaUocTinh {
   const vnd = (x: number): number | null => (heSoVnd == null ? null : x * heSoVnd);
   return {
     nguon: 'bang-gia',
     base: vnd(b.base),
+    discount: vnd(b.discount),
     fuel: vnd(b.fuel),
     remote: vnd(b.remote),
     demand: vnd(b.demand),
@@ -107,6 +138,14 @@ const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
  * Mã không nhận ra được gom vào `maLa` thay vì bỏ qua lặng lẽ — một khoản tiền
  * thật của UPS mà không ai biết nó rơi đâu là lỗi âm thầm, giống cách `maLa` ở
  * features/carrier-rates/ap/ups-invoice-xml.ts nêu mã lạ cho người nhập thấy.
+ *
+ * `discount` LUÔN `null`: Rating API chỉ trả khối `NegotiatedRateCharges` (xem `LoUps` ở
+ * lib/ups/rate.ts) gồm `TotalCharge` / `BaseServiceCharge` / `ItemizedCharges` — không có
+ * trường chiết khấu nào, và `BaseServiceCharge` ĐÃ là *"cước nền theo giá HỢP ĐỒNG"*, tức
+ * UPS đưa luôn giá sau thương lượng chứ không đưa cặp (niêm yết, trừ bao nhiêu). Suy ngược
+ * chiết khấu bằng cách gọi thêm một lượt giá niêm yết rồi trừ là BỊA ra một con số không có
+ * trong nguồn — ô `Chiết khấu || API` của UPS để TRỐNG, và base của UPS vì vậy là base gốc
+ * *theo nghĩa của UPS* (không còn gì để trừ ra nữa).
  */
 export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number | null): GiaUocTinh {
   const congDon: Partial<Record<NhomUps, number>> = {};
@@ -119,6 +158,7 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number 
   return {
     nguon: 'ups-api',
     base,
+    discount: null,
     fuel: congDon.fuel ?? null,
     remote: congDon.remote ?? null,
     demand: congDon.demand ?? null,
@@ -132,22 +172,42 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number 
 }
 
 /**
- * `fedex_rate_quotes` đã giữ sẵn từng khoản (Rate API, giá hợp đồng) — chỉ đổi tên
- * trường sang hình chung, KHÔNG tính lại gì. Tính lại (vd suy base từ total trừ
- * phụ phí) là đẻ ra con số thứ hai cho cùng một kiện, trong khi `fedexImpliedBase`
- * đã tồn tại riêng cho mục đích đối soát — không nhân bản logic đó ở đây.
+ * `fedex_rate_quotes` đã giữ sẵn từng PHỤ PHÍ (Rate API, giá hợp đồng) — các khoản đó chỉ đổi
+ * tên trường sang hình chung, KHÔNG tính lại gì. Riêng `base` phải SUY RA, vì FedEx không trả:
  *
- * `base` ĐỌC từ cột `fedex_rate_quotes.base_charge` (caller truyền vào — nó không
- * nằm trong `FedexQuoteSnap`, kiểu dùng chung với đối soát). Bản đầu để `null`
- * nên ô "Mức giá cơ sở" KHÔNG BAO GIỜ được điền cho FedEx — hãng chiếm 2.809/4.276
- * kiện, tức nhân sự vẫn phải gõ tay đúng ô quan trọng nhất của hãng lớn nhất.
- * Vẫn KHÔNG dùng `fedexImpliedBase` ở đây: đó là số SUY RA cho đối soát, lấy nó
- * làm số ghi lên Lark là trộn hai định nghĩa "base" vào cùng một ô.
+ *   base GỐC = `fedexImpliedBase(q)` + |`q.discount`|
+ *
+ * Từng mảnh của công thức, kèm số đo (13/10/2026, đọc `fedex_rate_quotes` + `shipment_charges`):
+ *   - Cột `base_charge` (`srd.totalBaseCharge` của Rate API) **NULL 1.310/1.310 dòng** — Rate
+ *     API không trả base cho giá ACCOUNT. Vì vậy tham số `base` của bản trước đã bị BỎ: nó
+ *     luôn `null` nên ô "Mức giá cơ sở" của FedEx không bao giờ được điền, mà hãng chiếm
+ *     2.809/4.276 kiện — nhân sự vẫn phải gõ tay đúng ô quan trọng nhất của hãng lớn nhất.
+ *     Không rơi về nó khi nào nó có số: với rate ACCOUNT, FedEx trả base ĐÃ chiết khấu, tức
+ *     một ngày API điền cột đó là ô Lark lặng lẽ quay về nghĩa NET — đúng cái sai vừa gỡ.
+ *   - `fedexImpliedBase(q)` = `totalNetCharge − mọi phụ phí − vat` ra base **NET**, vì
+ *     `totalNetCharge` vốn đã sau chiết khấu. Kiểm trên dòng có cả quote lẫn hoá đơn:
+ *     `impliedBase` == `shipment_charges.base + discount` (hoá đơn lưu chiết khấu ÂM) **khớp
+ *     từng đồng**, và `impliedBase + |discount|` == `shipment_charges.base` (base gốc của hoá
+ *     đơn) khớp từng đồng 5/8 dòng mẫu, lệch 0,1–5 % ở 3 dòng còn lại (quote và hoá đơn khác
+ *     ngày/khác cân tính cước).
+ *   - `|q.discount|`: `fedex_rate_quotes.discount` lưu **DƯƠNG** — đo 1.309 dòng dương,
+ *     1 dòng bằng 0, **0 dòng âm**; `lib/fedex/rate.ts` khai cùng nghĩa
+ *     (`totalFreightDiscount (số dương = đã giảm)`). Vẫn bọc `Math.abs` vì quy ước dấu KHÁC
+ *     NHAU giữa hai bảng cùng hệ (`shipment_charges.discount` âm 2.898/2.898) — nhánh này
+ *     phải đúng dù dấu có bị đảo sau một lượt import khác.
+ *
+ * Thiếu `totalNetCharge` hoặc thiếu `discount` ⇒ `base` là **`null`**, KHÔNG đoán: thiếu
+ * `totalNetCharge` thì chẳng có gì để trừ; thiếu `discount` thì `impliedBase` là số NET và ghi
+ * nó vào ô gốc là lặp lại đúng lỗi của vòng trước. Ô trống còn sửa được bằng tay, ô đã ghi sai
+ * thì không.
  */
-export function tuFedexQuote(q: FedexQuoteSnap, base: number | null): GiaUocTinh {
+export function tuFedexQuote(q: FedexQuoteSnap): GiaUocTinh {
+  const baseNet = fedexImpliedBase(q);
+  const discount = q.discount == null ? null : Math.abs(q.discount);
   return {
     nguon: 'fedex-api',
-    base,
+    base: baseNet == null || discount == null ? null : baseNet + discount,
+    discount,
     fuel: q.fuel,
     remote: q.remote,
     demand: q.demand,

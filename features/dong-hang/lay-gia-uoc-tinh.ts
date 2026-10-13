@@ -34,16 +34,19 @@ const num = (v: string | null): number | null => (v === null ? null : Number(v))
 /**
  * Cùng cách `reconcile-view.ts` đọc `fedex_rate_quotes` sang `FedexQuoteSnap` —
  * chỉ đổi tên cột, KHÔNG tính lại gì, để một con số FedEx chỉ có đúng một công
- * thức suy ra nó. Kèm `base` (cột `base_charge`, không nằm trong `FedexQuoteSnap`
- * dùng chung) và `tienTe` để caller tự gác đơn vị tiền.
+ * thức suy ra nó. Kèm `tienTe` để caller tự gác đơn vị tiền.
+ *
+ * KHÔNG đọc cột `base_charge` nữa (bỏ 13/10/2026): nó NULL 1.310/1.310 dòng và với rate
+ * ACCOUNT thì FedEx trả base đã chiết khấu, nên base GỐC được suy trong `tuFedexQuote`
+ * (`impliedBase + |discount|`) — xem bình luận ở đó. Chọn một đường duy nhất ra ô
+ * "Mức giá cơ sở", không để hai nghĩa "base" cùng chảy vào một ô.
  */
 async function docFedexQuoteSnap(
   shipmentId: string,
-): Promise<{ snap: FedexQuoteSnap; base: number | null; tienTe: string } | null> {
+): Promise<{ snap: FedexQuoteSnap; tienTe: string } | null> {
   const [q] = await db.select({
     service: schema.fedexRateQuotes.service, currency: schema.fedexRateQuotes.currency,
     totalNetCharge: schema.fedexRateQuotes.totalNetCharge, fuel: schema.fedexRateQuotes.fuel,
-    baseCharge: schema.fedexRateQuotes.baseCharge,
     fuelPercent: schema.fedexRateQuotes.fuelPercent, remote: schema.fedexRateQuotes.remote,
     demand: schema.fedexRateQuotes.demand, residential: schema.fedexRateQuotes.residential,
     signature: schema.fedexRateQuotes.signature, countryFixed: schema.fedexRateQuotes.countryFixed,
@@ -58,7 +61,6 @@ async function docFedexQuoteSnap(
       residential: num(q.residential), signature: num(q.signature), countryFixed: num(q.countryFixed),
       vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
     },
-    base: num(q.baseCharge),
     tienTe: q.currency,
   };
 }
@@ -140,7 +142,7 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
       // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
       // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.
       if (q.tienTe !== 'VND') return null;
-      return tuFedexQuote(q.snap, q.base);
+      return tuFedexQuote(q.snap);
     }
 
     if (nguon === 'ups-api') {
