@@ -93,7 +93,10 @@ describe('moTaHangHoa', () => {
   });
 });
 
-import { dungKhoiVanDon, vanBanKhoi, type VaoKhoiVanDon } from './van-don';
+import {
+  copyCaMuc, coTheCopy, dungKhoiVanDon, khoaO, moTaHaiQuan, oCopyDuoc, tienDo, tienDoKhoi,
+  type VaoKhoiVanDon,
+} from './van-don';
 
 const DIA_CHI = {
   shipName: 'Jane Doe', shipCompany: null,
@@ -160,10 +163,33 @@ describe('dungKhoiVanDon', () => {
     expect(o.giaTri).toBeNull();
     expect(o.vi).toMatch(/chưa có mã Lark/);
   });
-  it('mỗi món ba ô: mô tả, SKU, số lượng', () => {
+  /* Thiết kế 13/10/2026 tách "Mô tả" khỏi "Material" (hai ô khác nhau của form hãng nên phải
+   * copy được riêng) và thêm "Tên đầy đủ" — xem bình luận ở `dungKhoiVanDon`. */
+  it('mỗi món năm ô: mô tả, tên đầy đủ, material, SKU, số lượng', () => {
     const k = dungKhoiVanDon(vao())[2];
-    expect(k.o.map((x) => x.nhan)).toEqual(['Món 1 — mô tả', 'Món 1 — SKU', 'Món 1 — số lượng']);
-    expect(k.o[0].giaTri).toBe('Amy Dress — Silk');
+    expect(k.o.map((x) => x.nhanNgan))
+      .toEqual(['Mô tả', 'Tên đầy đủ', 'Material', 'SKU', 'Số lượng']);
+    expect(k.o[0].giaTri).toBe("Woman's Dress");
+    expect(k.o[1].giaTri).toBe('Amy Dress');
+    expect(k.o[2].giaTri).toBe('Silk');
+  });
+  /* `mon` phải là CHÍNH các ô của `o`, không phải bản sao: hai nguồn thì dấu "đã copy" treo
+   * vào bản này mà hộp thoại vẽ bản kia. */
+  it('nhóm theo món dùng CÙNG tham chiếu ô với danh sách phẳng', () => {
+    const k = dungKhoiVanDon(vao({
+      mon: [
+        { tenSanPham: 'Amy Dress', sku: 'A', soLuong: 1, chatLieu: 'Silk' },
+        { tenSanPham: 'Uri Turtle Neck Bodysuit · Beige / S', sku: 'B', soLuong: 2, chatLieu: null },
+      ],
+    }))[2];
+    expect(k.mon?.map((m) => m.thuTu)).toEqual([1, 2]);
+    expect(k.mon?.flatMap((m) => m.o)).toEqual(k.o);
+    expect(k.mon![0].o[0]).toBe(k.o[0]);
+    expect(k.mon![1].o[0].giaTri).toBe("Woman's Turtle Neck Bodysuit");
+  });
+  it('ô SKU vẽ bằng phông đơn cách để đọc được từng ký tự', () => {
+    const k = dungKhoiVanDon(vao())[2];
+    expect(k.o.find((x) => x.nhanNgan === 'SKU')?.donCach).toBe(true);
   });
   /* Đơn nhiều kiện: không đoán món nào thuộc kiện nào (sku_text Lark là chuỗi dính liền và
    * null ở 6/12 kiện mẫu) — liệt kê đủ và để người đóng tự chọn. */
@@ -179,14 +205,81 @@ describe('dungKhoiVanDon', () => {
     expect(k.o.every((x) => x.giaTri === null && /gõ tay/.test(x.vi ?? ''))).toBe(true);
     expect(k.chanCopy).toBe(false);
   });
+
+  /* Bộ bàn giao đề nghị GỠ ô "Loại hộp". Giữ lại vì CEO chốt không bỏ trường nào đang hiện —
+   * test này là chỗ chặn ai đó "làm cho giống thiết kế" bằng cách xoá ô. */
+  it('ô "Loại hộp" VẪN còn và vẫn copy được (thiết kế đề nghị gỡ, CEO giữ)', () => {
+    const o = dungKhoiVanDon(vao())[1].o.find((x) => x.nhan === 'Loại hộp')!;
+    expect(o.giaTri).toBe('A3');
+    expect(coTheCopy(o)).toBe(true);
+  });
+
+  /* Bốn sắc + bốn số là cách thiết kế chống copy lẫn ô giữa các mục; `hinh` quyết định hộp
+   * thoại vẽ hàng, ô vuông, khối theo món hay khối chỉ-đọc. */
+  it('mỗi khối mang số, hình và sắc riêng cho hộp thoại vẽ', () => {
+    expect(dungKhoiVanDon(vao()).map((k) => [k.so, k.hinh, k.mau])).toEqual([
+      [1, 'dong', 'lam'], [2, 'o-vuong', 'hoPhach'], [3, 'mon', 'luc'], [4, 'chi-doc', 'tim'],
+    ]);
+  });
 });
 
-describe('vanBanKhoi', () => {
-  it('mỗi dòng `Nhãn: giá trị`, ô trống hiện —, bỏ ô chỉ-để-xem', () => {
-    const t = vanBanKhoi(dungKhoiVanDon(vao())[1]);
-    expect(t).toContain('Cân thực (kg): 2.4');
-    expect(t).toContain('Loại hộp: A3');
-    expect(t).not.toContain('Cân quy đổi');
-    expect(vanBanKhoi(dungKhoiVanDon(vao())[3])).toContain('HS code: —');
+describe('moTaHaiQuan', () => {
+  /* Ví dụ nguyên văn của bộ bàn giao: bỏ tên riêng ("Uri") và bỏ biến thể màu/size. */
+  it('bỏ từ đầu và phần biến thể, thêm tiền tố Woman’s', () => {
+    expect(moTaHaiQuan('Uri Turtle Neck Bodysuit · Beige / S')).toBe("Woman's Turtle Neck Bodysuit");
+  });
+  it('không có biến thể thì chỉ bỏ từ đầu', () => {
+    expect(moTaHaiQuan('Theas Draped Skirt')).toBe("Woman's Draped Skirt");
+  });
+  /* Bỏ từ duy nhất là còn chuỗi rỗng — ô mô tả trống tệ hơn ô mang tên riêng. */
+  it('tên chỉ một từ thì GIỮ từ đó, không trả về mô tả rỗng', () => {
+    expect(moTaHaiQuan('Bodysuit')).toBe("Woman's Bodysuit");
+  });
+  it('tên rỗng thì trả rỗng, không ra chuỗi "Woman’s" lơ lửng', () => {
+    expect(moTaHaiQuan('   ')).toBe('');
+  });
+});
+
+describe('copyCaMuc', () => {
+  /* Dán `Công ty: —` sang form hãng là gõ hai ký tự rác vào ô của hãng. */
+  it('chỉ ô CÓ giá trị, bỏ ô trống và ô chỉ-để-xem', () => {
+    const { text, khoa } = copyCaMuc(dungKhoiVanDon(vao())[1]);
+    expect(text).toContain('Cân thực (kg): 2.4');
+    expect(text).toContain('Loại hộp: A3');
+    expect(text).not.toContain('Cân quy đổi');
+    expect(khoa).toHaveLength(text.split('\n').length);
+  });
+  it('khối Khai hải quan không có gì để copy', () => {
+    expect(copyCaMuc(dungKhoiVanDon(vao())[3])).toEqual({ text: '', khoa: [] });
+  });
+});
+
+describe('tienDo', () => {
+  const khoi = dungKhoiVanDon(vao());
+  /* Đếm cả ô trống thì thanh tiến độ không bao giờ đầy (đơn nào cũng thiếu Công ty / Địa chỉ
+   * 2) và người dùng mất cách biết mình đã copy hết chưa. */
+  it('chỉ đếm ô có giá trị; chưa copy gì thì 0%', () => {
+    const t = tienDo(khoi, new Set());
+    expect(t.xong).toBe(0);
+    expect(t.tong).toBe(khoi.reduce((n, k) => n + oCopyDuoc(k).length, 0));
+    expect(t.phanTram).toBe(0);
+  });
+  it('copy hết thì đầy 100%', () => {
+    const tatCa = new Set(khoi.flatMap((k) => oCopyDuoc(k).map((o) => khoaO(k.ten, o.nhan))));
+    expect(tienDo(khoi, tatCa)).toMatchObject({ phanTram: 100 });
+  });
+  it('tiến độ từng khối đếm riêng theo khối đó', () => {
+    const k = khoi[1];
+    const daCopy = new Set([khoaO(k.ten, 'Cân thực (kg)')]);
+    expect(tienDoKhoi(k, daCopy)).toEqual({ xong: 1, tong: oCopyDuoc(k).length });
+    expect(tienDoKhoi(khoi[0], daCopy).xong).toBe(0);
+  });
+});
+
+describe('khoaO', () => {
+  /* Nhãn ô chỉ duy nhất TRONG khối — khoá phải mang cả tên khối, nếu không một cú copy đánh
+   * dấu luôn ô cùng tên ở khối khác. */
+  it('hai khối có ô cùng nhãn thì hai khoá khác nhau', () => {
+    expect(khoaO('Người nhận', 'ZIP')).not.toBe(khoaO('Kiện hàng', 'ZIP'));
   });
 });

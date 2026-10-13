@@ -15,6 +15,10 @@ import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
 import { canhBaoLechHang, kiemTraTracking } from './luu-tracking';
 import { macVanDonTu } from './ma-van-don';
 import { ghiGiaUocTinhLenLark } from './ghi-gia-uoc-tinh-len-lark';
+import { layGiaUocTinh } from './lay-gia-uoc-tinh';
+import { xemTruocGhiGia } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
+import { getLogRecordById } from '@/features/lark/client';
+import type { KetQuaPhanTichVanDon } from './xem-truoc-van-don';
 import { xepQuote } from './logic';
 import { thoiGianGiaoTheoHang } from './thoi-gian-giao';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
@@ -281,56 +285,46 @@ export type KetQuaLuuTracking =
   | { ok: true; tracking: string; giaDaGhi: boolean; canhBao?: string }
   | { ok: false; loi: string };
 
-/**
- * Nhân sự dán mã vận đơn vào kiện → lưu mã → GHI GIÁ ƯỚC TÍNH lên dòng Lark của
- * kiện đó (tầng hành động nối Task 1-4 lại, spec 2026-10-12).
+/** Người đang đăng nhập nếu được phép GHI mã vận đơn; ngược lại lý do từ chối.
  *
- * Gác `manage_fulfillment` (sửa theo review bảo mật của coordinator, không phải
- * `view_fulfillment` như bản đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không
- * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
- * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
- * `viewer` (chỉ-xem) cũng có. Mốc đúng trong CHÍNH file này là `nguoiDuocDongKien`
- * (đóng/mở kiện, phía trên) — KHÔNG phải `ghiDongThung`: hàm đó đang gác lỏng ở
- * `view_fulfillment`, một việc coordinator đã biết và sẽ sửa RIÊNG, không thuộc
- * phạm vi Task này. Đừng lấy `ghiDongThung` làm cớ "hạ cho khớp" ở đây.
- *
- * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
- *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
- *      dừng ở đây, CHƯA ghi gì.
- *   2. Lưu `shipments.tracking_number` NGAY — mọi bước sau là best-effort.
- *   3-5. `ghiGiaUocTinhLenLark` (lấy giá → đọc record Lark → patch → ghi, chỉ
- *      ô trống) — dùng CHUNG với cron điền bù (Task 7), không viết lại logic ghi
- *      Lark lần thứ hai ở đây (D-045).
- *
- * Mọi nhánh từ bước 3 trở đi đều trả `ok: true` kèm `canhBao` khi có vấn đề —
- * mã vận đơn đã nằm trong CSDL rồi, không được coi thao tác là thất bại chỉ vì
- * chưa ghi được giá hoặc kiện chưa có dòng Lark (Review Focus #2: phải NÓI RA,
- * không im lặng coi như xong).
- */
-export async function luuTrackingChoKien(shipmentId: string, raw: string): Promise<KetQuaLuuTracking> {
+ *  Gác `manage_fulfillment` cho CẢ hai bước (phân tích và ghi), KHÔNG phải `view_fulfillment`:
+ *  bước phân tích đã gọi API báo giá của hãng (tốn tiền, có hạn mức) và ĐỌC dòng Lark vận
+ *  hành thật. Để vai trò `viewer` (chỉ-được-xem) bấm được là mở cửa cho người chỉ-xem đốt hạn
+ *  mức Rate API; mà bước phân tích chỉ có nghĩa với người sắp bấm ghi, nên hai bước phải cùng
+ *  một mức quyền — gác lỏng bước đầu rồi chặn ở bước sau là bày ra một nút vô dụng. */
+async function nguoiDuocGhiVanDon(): Promise<{ ok: true } | { ok: false; loi: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
-  // Gác `manage_fulfillment`, KHÔNG phải `view_fulfillment`: hàm này ghi ra một
-  // hệ thống NGOÀI (dòng Lark vận hành thật) mà máy không tự sửa lại được —
-  // ghi sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho
-  // máy đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-
-  // được-xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB +
-  // gọi API tính cước hãng + ghi Lark.
-  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
+  if (!hasPermission(role, 'manage_fulfillment')) {
+    return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
+  }
+  return { ok: true };
+}
 
+/**
+ * Kiểm chuỗi nhân sự dán vào ô mã vận đơn — DÙNG CHUNG cho bước phân tích và bước ghi.
+ *
+ * Phải là MỘT hàm cho cả hai bước: nếu bước phân tích kiểm lỏng hơn, nhân sự sẽ xem xong một
+ * bảng giá đẹp rồi bấm xác nhận và nhận lỗi đỏ ở bước cuối — còn nếu kiểm CHẶT hơn thì ngược
+ * lại, có mã qua được bước ghi mà chưa ai xem trước. Hai bộ luật cho cùng một ô nhập là loại
+ * lệch chỉ hiện ra trên tay người dùng.
+ *
+ * MỘT truy vấn tra cả hai việc (I5/I6, review coordinator):
+ *   (a) kiện NÀY đang có mã gì — để phát hiện GHI ĐÈ lên mã đã có: kiện có T1 (Lark đã điền
+ *       T1) mà nhân sự dán T2 đè lên thì DB thành T2 trong khi Lark giữ T1 — lượt đồng bộ
+ *       Lark kế tiếp (`patch-kien.ts` → `patchFrom`) ghi T1 trở lại, THAO TÁC MẤT TRẮNG không
+ *       một lời cảnh báo.
+ *   (b) có kiện KHÁC đang dùng mã này không (Review Focus #4).
+ * So khớp bằng `upper()` CẢ HAI PHÍA (I6): `macVanDonTu` luôn trả mã đã viết hoa, nhưng
+ * tracking lưu trong DB có thể verbatim từ nguồn khác (vd đồng bộ Lark) — so bằng `eq()`
+ * thường bỏ lọt mã viết thường ở kiện khác.
+ */
+async function kiemMaChoKien(
+  shipmentId: string, raw: string,
+): Promise<{ ok: true; tracking: string; carrierKey: string | null } | { ok: false; loi: string }> {
   // Bóc tạm để tra trùng — kiemTraTracking bóc LẠI bên trong để tự quyết định lỗi
   // "không bóc được" có ưu tiên hơn lỗi "trùng kiện" hay không.
-  //
-  // MỘT truy vấn tra cả hai việc (I5/I6, review coordinator):
-  //   (a) kiện NÀY đang có mã gì — để phát hiện GHI ĐÈ lên mã đã có: kiện có T1
-  //       (Lark đã điền T1) mà nhân sự dán T2 đè lên thì DB thành T2 trong khi
-  //       Lark giữ T1 — lượt đồng bộ Lark kế tiếp (`patch-kien.ts` → `patchFrom`)
-  //       ghi T1 trở lại, THAO TÁC MẤT TRẮNG không một lời cảnh báo.
-  //   (b) có kiện KHÁC đang dùng mã này không (Review Focus #4).
-  // So khớp bằng `upper()` CẢ HAI PHÍA (I6): `macVanDonTu` luôn trả mã đã viết
-  // hoa, nhưng tracking lưu trong DB có thể verbatim từ nguồn khác (vd đồng bộ
-  // Lark) — so bằng `eq()` thường bỏ lọt mã viết thường ở kiện khác.
   const macThu = macVanDonTu(raw);
   const dkTraTrung = macThu
     ? or(eq(schema.shipments.id, shipmentId), sql`upper(${schema.shipments.trackingNumber}) = ${macThu}`)
@@ -360,6 +354,135 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
 
   const kt = kiemTraTracking(raw, dangDungOKienKhac);
   if (!kt.ok) return { ok: false, loi: kt.loi };
+  return { ok: true, tracking: kt.tracking, carrierKey: kienHienTai.carrierKey };
+}
+
+export type KetQuaPhanTich =
+  | ({ ok: true } & KetQuaPhanTichVanDon)
+  | { ok: false; loi: string };
+
+/**
+ * BƯỚC 1 của luồng mới (CEO 14/10/2026): nhận mã vận đơn, nói trước sẽ ghi gì — **KHÔNG GHI
+ * GÌ CẢ**.
+ *
+ * Không lưu `tracking_number`, không chạm Lark, không đóng dấu `gia_uoc_tinh_ghi_luc`. Nhân
+ * sự huỷ ở bước này thì hệ thống phải y nguyên như trước lúc họ bấm — đó là cả lý do tồn tại
+ * của bước này: Lark KHÔNG CÓ UNDO (luật chỉ-điền-ô-trống chỉ cho điền thêm, ghi sai là người
+ * phải vào xoá tay từng ô), nên con mắt người là lá chắn cuối trước khi ghi.
+ *
+ * CÓ hai tác dụng phụ không tránh được, và cả hai đều KHÔNG phải "ghi" theo nghĩa trên:
+ *   - gọi Rate API của hãng (FedEx/UPS) — tốn một lượt hạn mức;
+ *   - với FedEx, `layGiaUocTinh` ghi dòng cache `fedex_rate_quotes` nếu kiện chưa có. Đó là
+ *     cache nội bộ, và chính nhờ nó mà bước xác nhận dùng lại ĐÚNG con số nhân sự vừa xem
+ *     (hàm đó đọc cache trước, chỉ quote khi chưa có).
+ *
+ * Truyền `tracking` vào `layGiaUocTinh`: xem bình luận tham số `trackingDuTinh` ở đó — không
+ * truyền thì bảng xem trước và lượt ghi có thể suy ra hai hãng khác nhau.
+ */
+export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Promise<KetQuaPhanTich> {
+  const ai = await nguoiDuocGhiVanDon();
+  if (!ai.ok) return { ok: false, loi: ai.loi };
+
+  const ma = await kiemMaChoKien(shipmentId, raw);
+  if (!ma.ok) return { ok: false, loi: ma.loi };
+
+  const canhBao: string[] = [];
+  const lech = canhBaoLechHang(ma.tracking, ma.carrierKey);
+  if (lech) canhBao.push(lech);
+
+  /** Trả về cho giao diện khi KHÔNG dựng được bảng — vẫn `ok` vì mã vận đơn vẫn lưu được,
+   *  chỉ là chưa ghi giá; `lyDoTrong` nói thẳng vì sao. */
+  const trong = (lyDo: string): { ok: true } & KetQuaPhanTichVanDon => ({
+    ok: true, tracking: ma.tracking, nguon: null, xem: null, lyDoTrong: lyDo, canhBao,
+  });
+
+  let gia: Awaited<ReturnType<typeof layGiaUocTinh>>;
+  try {
+    gia = await layGiaUocTinh(shipmentId, ma.tracking);
+  } catch (e) {
+    console.error('[dong-hang] phanTichTruocKhiGhi: lấy giá lỗi:', e);
+    return trong('lấy giá ước tính hỏng giữa đường — vẫn lưu được mã vận đơn, cron sẽ thử ghi giá sau');
+  }
+  if (!gia) {
+    return trong('chưa lấy được giá ước tính cho kiện này (thiếu cân/nước, hãng không trả lời, hoặc sai đơn vị tiền) — vẫn lưu được mã vận đơn, cron sẽ thử lại');
+  }
+
+  /* `maLa` là khoản tiền THẬT của hãng mà hình chung không có cột để đựng (vd mã UPS
+   * '110'/'190'). Nó nằm trong ô Tổng nhưng không nằm ở ô thành phần nào — không nói ra thì
+   * không ai biết vì sao tổng ≠ cộng các ô. Khử trùng: một mã nhiều dòng chỉ kể một lần. */
+  const maLa = [...new Set(gia.maLa)];
+  if (maLa.length > 0) {
+    canhBao.push(`khoản hãng chưa có cột để đựng: ${maLa.join(', ')} — nằm trong ô Tổng nhưng không nằm ở ô thành phần nào, kiểm lại bằng mắt`);
+  }
+
+  const [k] = await db.select({ larkRecordId: schema.shipments.larkRecordId })
+    .from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
+  if (!k?.larkRecordId) {
+    return { ...trong('kiện chưa có dòng Lark tương ứng — không ghi giá được, nhưng mã vận đơn vẫn lưu vào SMS'), nguon: gia.nguon };
+  }
+
+  let rec: Awaited<ReturnType<typeof getLogRecordById>>;
+  try {
+    rec = await getLogRecordById(k.larkRecordId);
+  } catch (e) {
+    console.error('[dong-hang] phanTichTruocKhiGhi: đọc dòng Lark lỗi:', e);
+    return { ...trong(`không đọc được dòng Lark (${e instanceof Error ? e.message : String(e)}) — chưa biết ô nào trống, cron sẽ thử lại sau`), nguon: gia.nguon };
+  }
+  if (!rec) {
+    return { ...trong('dòng Lark của kiện không còn tồn tại (đã bị xoá bên Lark)'), nguon: gia.nguon };
+  }
+
+  const xem = xemTruocGhiGia(gia, rec.fields, ma.tracking);
+  return {
+    ok: true, tracking: ma.tracking, nguon: gia.nguon, xem, lyDoTrong: null,
+    canhBao: [...canhBao, ...xem.canhBao],
+  };
+}
+
+/**
+ * BƯỚC 2 của luồng mới: nhân sự ĐÃ xem bảng `phanTichTruocKhiGhi` và BẤM XÁC NHẬN → lưu mã →
+ * GHI GIÁ ƯỚC TÍNH lên dòng Lark của kiện đó (spec 2026-10-12, chẻ hai bước 14/10/2026).
+ *
+ * Hàm này KHÔNG tự đòi bằng chứng "đã xem trước": không có trạng thái nào giữa hai lượt gọi
+ * để đòi, và dựng một dấu phiên chỉ để tự bịt mình thì vừa thêm một ca hỏng vừa không chặn
+ * được ai gọi thẳng. Việc chặn nằm ở giao diện: không có nút nào ghi mà không qua bảng xem
+ * trước (xem `components/dong-hang/HopThoaiXacNhanVanDon.tsx`). Luật kiểm mã thì dùng CHUNG
+ * `kiemMaChoKien` với bước phân tích, nên thứ nhân sự xem và thứ được ghi không lệch nhau.
+ *
+ * Gác `manage_fulfillment` (sửa theo review bảo mật của coordinator, không phải
+ * `view_fulfillment` như bản đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không
+ * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
+ * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
+ * `viewer` (chỉ-xem) cũng có. Mốc đúng trong CHÍNH file này là `nguoiDuocDongKien`
+ * (đóng/mở kiện, phía trên) — KHÔNG phải `ghiDongThung`: hàm đó đang gác lỏng ở
+ * `view_fulfillment`, một việc coordinator đã biết và sẽ sửa RIÊNG, không thuộc
+ * phạm vi Task này. Đừng lấy `ghiDongThung` làm cớ "hạ cho khớp" ở đây.
+ *
+ * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
+ *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
+ *      dừng ở đây, CHƯA ghi gì.
+ *   2. Lưu `shipments.tracking_number` NGAY — mọi bước sau là best-effort.
+ *   3-5. `ghiGiaUocTinhLenLark` (lấy giá → đọc record Lark → patch → ghi, chỉ
+ *      ô trống) — dùng CHUNG với cron điền bù (Task 7), không viết lại logic ghi
+ *      Lark lần thứ hai ở đây (D-045).
+ *
+ * Mọi nhánh từ bước 3 trở đi đều trả `ok: true` kèm `canhBao` khi có vấn đề —
+ * mã vận đơn đã nằm trong CSDL rồi, không được coi thao tác là thất bại chỉ vì
+ * chưa ghi được giá hoặc kiện chưa có dòng Lark (Review Focus #2: phải NÓI RA,
+ * không im lặng coi như xong).
+ */
+export async function luuTrackingChoKien(shipmentId: string, raw: string): Promise<KetQuaLuuTracking> {
+  // Gác `manage_fulfillment`, KHÔNG phải `view_fulfillment`: hàm này ghi ra một
+  // hệ thống NGOÀI (dòng Lark vận hành thật) mà máy không tự sửa lại được —
+  // ghi sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho
+  // máy đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-
+  // được-xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB +
+  // gọi API tính cước hãng + ghi Lark.
+  const ai = await nguoiDuocGhiVanDon();
+  if (!ai.ok) return { ok: false, loi: ai.loi };
+
+  const kt = await kiemMaChoKien(shipmentId, raw);
+  if (!kt.ok) return { ok: false, loi: kt.loi };
 
   // Bước 2: LƯU NGAY. Từ đây mọi thứ là best-effort — hỏng ở dưới không được
   // xoá công của bước lưu này. Kiện đã xác nhận TỒN TẠI ở trên nên không cần
@@ -387,7 +510,7 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   const g = await ghiGiaUocTinhLenLark(shipmentId);
   /* I6: gộp cảnh báo lệch hãng vào cùng một câu với cảnh báo ghi giá — ô nhập chỉ hiện MỘT
    * toast, nói ra một việc rồi nuốt việc kia cũng là im lặng. */
-  const canhBao = [canhBaoLechHang(kt.tracking, kienHienTai.carrierKey), g.canhBao]
+  const canhBao = [canhBaoLechHang(kt.tracking, kt.carrierKey), g.canhBao]
     .filter((c): c is string => c != null && c !== '').join(' · ');
   return { ok: true, tracking: kt.tracking, giaDaGhi: g.giaDaGhi, canhBao: canhBao || undefined };
 }

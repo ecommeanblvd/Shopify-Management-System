@@ -91,56 +91,135 @@ export interface KetQuaPatchGiaUocTinh {
   canhBao: string[];
 }
 
-export function patchGiaUocTinh(
+/**
+ * Số phận của MỘT ô đích:
+ *  - `se-ghi`: ô Lark trống và nguồn có số dương ⇒ bản vá sẽ điền.
+ *  - `da-co-so`: ô Lark đã có gì đó ⇒ KHÔNG đè (luật chỉ-điền-ô-trống).
+ *  - `nguon-khong-co`: nguồn báo giá không nói gì về khoản này (`null`) ⇒ không quy về 0.
+ *  - `bang-khong`: nguồn trả 0 hoặc số âm ⇒ không ghi, vì ghi 0 là khoá ô ở 0 vĩnh viễn.
+ */
+export type TrangThaiODich = 'se-ghi' | 'da-co-so' | 'nguon-khong-co' | 'bang-khong';
+
+export interface DongXemTruoc {
+  /** Tên ô trên Lark, nguyên văn. */
+  cot: string;
+  khoan: KhoanSo;
+  trangThai: TrangThaiODich;
+  /** Số (đã làm tròn VND) sẽ ghi, hoặc nguồn trả ra — `null` khi nguồn không nói gì. */
+  soNguon: number | null;
+  /** Số Lark ĐANG giữ, khi đọc được thành số. */
+  soLarkDangCo: number | null;
+  /** Nguyên văn thứ Lark đang giữ khi KHÔNG đọc được thành số — ca phải kiểm bằng mắt. */
+  larkKhongDocDuoc: string | null;
+}
+
+export type TrangThaiOTracking = 'se-ghi' | 'khop' | 'lark-co-ma-khac' | 'khong-doc-duoc' | 'khong-co-ma';
+
+export interface KetQuaXemTruoc {
+  dong: DongXemTruoc[];
+  oTracking: {
+    cot: string;
+    trangThai: TrangThaiOTracking;
+    maSeGhi: string | null;
+    maLarkDangCo: string | null;
+  };
+  canhBao: string[];
+}
+
+/**
+ * XEM TRƯỚC toàn bộ quyết định ghi, KHÔNG chạm Lark.
+ *
+ * `patchGiaUocTinh` được suy RA TỪ hàm này chứ không tính song song: bước "cho nhân sự xem
+ * trước rồi mới ghi" (CEO 14/10/2026) chỉ có nghĩa khi thứ họ thấy đúng bằng thứ sẽ ghi. Hai
+ * phép tính riêng cho cùng một quyết định là loại lệch không ai phát hiện được bằng mắt —
+ * người bấm xác nhận một bảng, hệ thống ghi một bảng khác.
+ */
+export function xemTruocGhiGia(
   g: GiaUocTinh, oHienCo: Record<string, unknown>, tracking: string | null,
-): KetQuaPatchGiaUocTinh {
-  const patch: Record<string, unknown> = {};
+): KetQuaXemTruoc {
+  const dong: DongXemTruoc[] = [];
   const canhBao: string[] = [];
   const daCoSan: string[] = [];
 
   for (const [khoaCot, khoaGia] of KHOAN_THEO_COT) {
     const cot = COT_CHI_PHI[khoaCot];
     const tho = g[khoaGia];
-    if (tho == null) continue; // không biết — không quy về 0
+    const chung = { cot, khoan: khoaGia, soLarkDangCo: null, larkKhongDocDuoc: null };
+    if (tho == null) { // không biết — không quy về 0
+      dong.push({ ...chung, trangThai: 'nguon-khong-co', soNguon: null });
+      continue;
+    }
     /* Làm tròn TRƯỚC khi xét `<= 0`: mọi cột tiền trên Lark là VND, mà quy đổi tiền có thể ra
      * số thập phân (đo thật: tổng 1.877.160,2). Và một khoản 0,3đ sau khi tròn thành 0 thì
      * đúng là "không có gì để ghi" — ghi 0 vào đó là khoá ô ở 0 vĩnh viễn. */
     const moi = Math.round(tho);
     if (moi <= 0) {
       if (khoaCot === 'totalAmount') canhBao.push(`tổng ước tính ra ${moi} (≤ 0) — không ghi lên ô Tổng`);
+      dong.push({ ...chung, trangThai: 'bang-khong', soNguon: moi });
       continue;
     }
     if (!oLarkTrong(oHienCo[cot])) {
       const cu = docSo(oHienCo[cot]);
       daCoSan.push(cu != null ? `${cot}=${cu}` : `${cot}=${JSON.stringify(oHienCo[cot])} (không đọc được thành số)`);
-      continue; // ô đã có gì đó (kể cả 0, kể cả thứ không đọc được) — KHÔNG đè
+      // ô đã có gì đó (kể cả 0, kể cả thứ không đọc được) — KHÔNG đè
+      dong.push({
+        cot, khoan: khoaGia, trangThai: 'da-co-so', soNguon: moi,
+        soLarkDangCo: cu, larkKhongDocDuoc: cu == null ? JSON.stringify(oHienCo[cot]) : null,
+      });
+      continue;
     }
-    patch[cot] = moi;
+    dong.push({ ...chung, trangThai: 'se-ghi', soNguon: moi });
   }
 
   const oTracking = oHienCo[COT.trackingNumber];
+  let ttTracking: TrangThaiOTracking = 'khong-co-ma';
+  let maLarkDangCo: string | null = null;
   if (tracking != null) {
     if (oLarkTrong(oTracking)) {
-      patch[COT.trackingNumber] = tracking;
+      ttTracking = 'se-ghi';
     } else {
       /* Lark ĐANG giữ một mã khác: không đè (đúng luật), nhưng PHẢI nói ra. Im lặng ở đây là
        * thao tác của nhân sự bốc hơi: DB thành mã mới, Lark giữ mã cũ, rồi lượt `sync-lark`
        * kế tiếp (`patch-kien.ts`) ghi mã cũ của Lark TRỞ LẠI DB — trong khi toast đã báo
        * "Đã lưu mã mới". */
       const cu = larkText(oTracking);
+      maLarkDangCo = cu;
       if (cu == null) {
+        ttTracking = 'khong-doc-duoc';
         canhBao.push(`ô "${COT.trackingNumber}" trên Lark có dữ liệu không đọc được (${JSON.stringify(oTracking)}) — KHÔNG ghi mã ${tracking} lên Lark, vào Lark kiểm bằng mắt`);
       } else if (cu.trim().toUpperCase() !== tracking.trim().toUpperCase()) {
+        ttTracking = 'lark-co-ma-khac';
         canhBao.push(`Lark đang có mã vận đơn KHÁC (${cu}) — mã ${tracking} chỉ nằm trong SMS; lượt đồng bộ Lark kế tiếp sẽ ghi ${cu} trở lại, vào Lark sửa tay trước`);
+      } else {
+        ttTracking = 'khop';
       }
     }
   }
 
   /* Patch rỗng mà vẫn báo "đã ghi giá" là nói sai việc đã làm. Nêu ra ô nào đã có số từ
    * trước để người đọc biết đây là "không còn gì để điền", không phải "ghi xong". */
-  if (Object.keys(patch).length === 0 && daCoSan.length > 0) {
+  const seGhi = dong.some((d) => d.trangThai === 'se-ghi') || ttTracking === 'se-ghi';
+  if (!seGhi && daCoSan.length > 0) {
     canhBao.push(`không ô nào còn trống để điền — các ô đích đã có số từ trước: ${daCoSan.join(', ')}`);
   }
 
-  return { patch, canhBao };
+  return {
+    dong,
+    oTracking: { cot: COT.trackingNumber, trangThai: ttTracking, maSeGhi: tracking, maLarkDangCo },
+    canhBao,
+  };
+}
+
+/** Bản vá thật gửi lên Lark — suy nguyên từ `xemTruocGhiGia` để thứ nhân sự xác nhận và thứ
+ *  được ghi KHÔNG THỂ lệch nhau. */
+export function patchGiaUocTinh(
+  g: GiaUocTinh, oHienCo: Record<string, unknown>, tracking: string | null,
+): KetQuaPatchGiaUocTinh {
+  const xem = xemTruocGhiGia(g, oHienCo, tracking);
+  const patch: Record<string, unknown> = {};
+  for (const d of xem.dong) {
+    if (d.trangThai === 'se-ghi') patch[d.cot] = d.soNguon;
+  }
+  if (xem.oTracking.trangThai === 'se-ghi') patch[xem.oTracking.cot] = xem.oTracking.maSeGhi;
+  return { patch, canhBao: xem.canhBao };
 }

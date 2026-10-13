@@ -90,7 +90,19 @@ async function docFedexQuoteSnap(
  *      ghi `Couriers`). Chọn tay có thể sai (mã 1Z… từng bị ghi nhầm FedEx,
  *      CEO 19/09/2026) nên luôn xếp cuối.
  */
-export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | null> {
+export async function layGiaUocTinh(
+  shipmentId: string,
+  /**
+   * Mã vận đơn nhân sự VỪA DÁN, dùng cho bước XEM TRƯỚC (chưa lưu vào CSDL).
+   *
+   * Thiếu tham số này thì bảng xem trước và lượt ghi thật có thể ra HAI con số khác nhau:
+   * bậc 1 của phép suy hãng là DẠNG mã vận đơn, mà lúc xem trước `shipments.tracking_number`
+   * còn trống ⇒ xem trước suy hãng theo `carrier_key`/`selected_carrier_key`, còn lượt ghi
+   * (sau khi lưu mã) suy theo dạng mã. Kiện ghi hãng sai (mã 1Z… mà cột ghi fedex — đã xảy
+   * ra, CEO 19/09/2026) sẽ cho nhân sự xem giá FedEx rồi ghi giá UPS lên Lark.
+   */
+  trackingDuTinh?: string | null,
+): Promise<GiaUocTinh | null> {
   try {
     const [k] = await db.select({
       trackingNumber: schema.shipments.trackingNumber,
@@ -114,7 +126,8 @@ export async function layGiaUocTinh(shipmentId: string): Promise<GiaUocTinh | nu
       ? { length: Number(k.l), width: Number(k.w), height: Number(k.h) } : undefined;
     const shipDate = k.labelCreatedAt ?? k.createdAt;
     const isResidential = laNhaDan(k.addrClass, k.country);
-    const carrierKey = hangTheoMaVanDon(k.trackingNumber) ?? k.carrierKey ?? k.selectedCarrierKey ?? null;
+    const carrierKey = hangTheoMaVanDon(trackingDuTinh ?? k.trackingNumber)
+      ?? k.carrierKey ?? k.selectedCarrierKey ?? null;
     const nguon = nguonGiaCho(carrierKey);
 
     if (nguon === 'fedex-api') {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { patchGiaUocTinh } from './patch-gia-uoc-tinh';
+import { patchGiaUocTinh, xemTruocGhiGia } from './patch-gia-uoc-tinh';
 import { COT_CHI_PHI, COT } from './cot';
 import type { GiaUocTinh } from '@/features/dong-hang/gia-uoc-tinh';
 
@@ -360,5 +360,73 @@ describe('patchGiaUocTinh', () => {
   it('mỗi khoá trỏ một cột RIÊNG — không ô nào bị hai khoản ghi chồng', () => {
     const ds = Object.values(COT_CHI_PHI);
     expect(new Set(ds).size).toBe(ds.length);
+  });
+});
+
+/* ═════ XEM TRƯỚC: bảng nhân sự thấy TRƯỚC khi bấm xác nhận (CEO 14/10/2026) ═════
+ *
+ * Luồng mới tách làm hai bước — phân tích rồi mới ghi — nên bước phân tích phải nói đúng
+ * từng ô: ô nào sẽ điền, ô nào Lark đã có số (và số đó là bao nhiêu), ô nào nguồn không có.
+ * Lark không có undo, nên nhân sự là lá chắn cuối: họ chỉ chặn được cái họ ĐƯỢC THẤY. */
+describe('xemTruocGhiGia', () => {
+  const g = {
+    nguon: 'bang-gia', base: 100, discount: null, fuel: 20, remote: null, demand: null,
+    signature: null, residential: null, importHandling: null, vat: 10, total: 130,
+  } as GiaUocTinh;
+  const timO = (kq: ReturnType<typeof xemTruocGhiGia>, cot: string) => kq.dong.find((d) => d.cot === cot)!;
+
+  it('ô trống + nguồn có số → "sẽ ghi", kèm số sẽ ghi', () => {
+    expect(timO(xemTruocGhiGia(g, {}, null), COT_CHI_PHI.base))
+      .toMatchObject({ trangThai: 'se-ghi', soNguon: 100 });
+  });
+  /* Nói "ô đã có 999" khác hẳn nói "không ghi": người đọc cần thấy SỐ CŨ để biết có phải vào
+   * Lark sửa tay hay không. */
+  it('ô Lark đã có số → "đã có số" và NÊU RA số cũ', () => {
+    expect(timO(xemTruocGhiGia(g, { [COT_CHI_PHI.base]: 999 }, null), COT_CHI_PHI.base))
+      .toMatchObject({ trangThai: 'da-co-so', soLarkDangCo: 999, soNguon: 100 });
+  });
+  it('ô Lark có thứ không đọc được thành số → nêu nguyên văn để kiểm bằng mắt', () => {
+    const d = timO(xemTruocGhiGia(g, { [COT_CHI_PHI.base]: '4,747,300' }, null), COT_CHI_PHI.base);
+    expect(d.trangThai).toBe('da-co-so');
+    expect(d.soLarkDangCo).toBeNull();
+    expect(d.larkKhongDocDuoc).toContain('4,747,300');
+  });
+  it('nguồn trả null → "nguồn không có", KHÔNG phải số 0', () => {
+    expect(timO(xemTruocGhiGia(g, {}, null), COT_CHI_PHI.remote))
+      .toMatchObject({ trangThai: 'nguon-khong-co', soNguon: null });
+  });
+  it('nguồn trả 0 → "bằng không", tách khỏi ca nguồn không có', () => {
+    expect(timO(xemTruocGhiGia({ ...g, remote: 0 } as GiaUocTinh, {}, null), COT_CHI_PHI.remote))
+      .toMatchObject({ trangThai: 'bang-khong', soNguon: 0 });
+  });
+  it('kể đủ MỌI ô đích, không chỉ ô sẽ ghi', () => {
+    expect(xemTruocGhiGia(g, {}, null).dong.map((d) => d.cot).sort())
+      .toEqual([...new Set(xemTruocGhiGia(g, {}, null).dong.map((d) => d.cot))].sort());
+    expect(xemTruocGhiGia(g, {}, null).dong).toHaveLength(14);
+  });
+
+  it('ô tracking: Lark trống → sẽ ghi; khớp → khớp; khác → nêu cả hai mã', () => {
+    expect(xemTruocGhiGia(g, {}, 'T1').oTracking).toMatchObject({ trangThai: 'se-ghi', maSeGhi: 'T1' });
+    expect(xemTruocGhiGia(g, { [COT.trackingNumber]: '1z9' }, '1Z9').oTracking.trangThai).toBe('khop');
+    expect(xemTruocGhiGia(g, { [COT.trackingNumber]: 'T1' }, 'T2').oTracking)
+      .toMatchObject({ trangThai: 'lark-co-ma-khac', maLarkDangCo: 'T1', maSeGhi: 'T2' });
+  });
+
+  /* LÁ CHẮN CHÍNH của luồng hai bước: bảng nhân sự xác nhận và bản vá gửi đi phải là MỘT.
+   * Hai phép tính song song cho cùng một quyết định là loại lệch không ai thấy bằng mắt. */
+  it.each([
+    ['ô trống hết', {}, 'T1'],
+    ['vài ô đã có số', { [COT_CHI_PHI.base]: 1, [COT_CHI_PHI.vat]: '2' }, 'T1'],
+    ['Lark giữ mã khác', { [COT.trackingNumber]: 'T-CU' }, 'T-MOI'],
+    ['không có mã', {}, null],
+  ])('bản vá suy đúng từ bảng xem trước (%s)', (_ten, oLark, tracking) => {
+    const xem = xemTruocGhiGia(g, oLark as Record<string, unknown>, tracking as string | null);
+    const { patch, canhBao } = patchGiaUocTinh(g, oLark as Record<string, unknown>, tracking as string | null);
+    const theoXem = Object.fromEntries([
+      ...xem.dong.filter((d) => d.trangThai === 'se-ghi').map((d) => [d.cot, d.soNguon]),
+      ...(xem.oTracking.trangThai === 'se-ghi' ? [[xem.oTracking.cot, xem.oTracking.maSeGhi]] : []),
+    ]);
+    expect(patch).toEqual(theoXem);
+    expect(canhBao).toEqual(xem.canhBao);
   });
 });

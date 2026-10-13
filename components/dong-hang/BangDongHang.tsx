@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { canNhapTracking, canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
 import { HopThoaiVanDon } from './HopThoaiVanDon';
-import { ONhapTracking } from './ONhapTracking';
+import { NutNhapTracking } from './HopThoaiXacNhanVanDon';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
 import type { CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
@@ -413,17 +413,25 @@ function DongKien({
       {/* Bước sau khi chọn line: gom thông tin để dán sang form hãng. Hệ thống không tạo nhãn. */}
       <div className="space-y-1.5 pr-4">
         {khongDiHang ? null : (
-          <HopThoaiVanDon shipmentId={k.shipmentId} maKien={k.logUniqueCode} coQuyenChon={coQuyenChon} />
+          <HopThoaiVanDon
+            shipmentId={k.shipmentId} maKien={k.logUniqueCode}
+            coQuyenChon={coQuyenChon} coQuyenDong={coQuyenDong}
+          />
         )}
 
         {/* Chỗ nhân sự QUAY LẠI ngay sau khi tạo nhãn ở cổng hãng — cùng cột với
             nút "Lên vận đơn" phía trên vì đó là nơi họ vừa copy thông tin sang.
-            Kết quả báo bằng TOAST (trong ONhapTracking), KHÔNG vẽ tại chỗ: lưu
-            thành công thì tab mặc định (`cho_chon_line`) lọc `trackingNumber IS
-            NULL`, nên chính DÒNG KIỆN này rụng khỏi danh sách ở lượt revalidate
-            kế — bất cứ state gắn vào sự tồn tại của dòng cũng rụng theo (review
-            coordinator, vòng sửa 1). Toast sống ở cây riêng nên không rụng theo. */}
-        {coQuyenDong && canNhapTracking(k) && <ONhapTracking shipmentId={k.shipmentId} />}
+            Nút này mở ĐÚNG hộp thoại xác nhận mà nút "Tạo vận đơn thành công" bên
+            trong hộp thoại trên mở: không được còn đường nào ghi lên Lark mà không
+            qua bảng xem trước (CEO 14/10/2026).
+            Kết quả báo bằng TOAST, KHÔNG vẽ tại chỗ: lưu thành công thì tab mặc
+            định (`cho_chon_line`) lọc `trackingNumber IS NULL`, nên chính DÒNG
+            KIỆN này rụng khỏi danh sách ở lượt revalidate kế — bất cứ state gắn
+            vào sự tồn tại của dòng cũng rụng theo (review coordinator, vòng sửa
+            1). Toast sống ở cây riêng nên không rụng theo. */}
+        {coQuyenDong && canNhapTracking(k) && (
+          <NutNhapTracking shipmentId={k.shipmentId} maKien={k.logUniqueCode} />
+        )}
       </div>
 
       <div className="min-w-0 space-y-1">
