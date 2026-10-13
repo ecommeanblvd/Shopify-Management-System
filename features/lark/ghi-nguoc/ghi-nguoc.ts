@@ -50,16 +50,24 @@ type DongKien = {
   totalAmount: string | null; base: string | null; discount: string | null; fuel: string | null; remote: string | null;
   demand: string | null; directSignature: string | null; vat: string | null; gogreen: string | null;
   elevatedRisk: string | null; importHandling: string | null; residential: string | null;
+  addressCorrection: string | null;
 };
 
 const so = (v: string | null): number | null => (v == null ? null : Number(v));
 
-function chargeTu(r: DongKien): ChargeGhiNguoc | null {
+/**
+ * Dòng SQL → `ChargeGhiNguoc`. Export để test được: đây là chỗ một khoản phí BỊ RƠI mà không ai
+ * thấy — khoá nào không dựng ra thì `dungPatch` tra `khoan[khoa]` ra `undefined` và bỏ qua ô
+ * ĐÚNG NHƯ KHI HÃNG KHÔNG THU (không lỗi, không cảnh báo, ô trống trên Lark trông y hệt).
+ * `address_correction` đã nằm im như vậy tới 14/10/2026.
+ */
+export function chargeTu(r: DongKien): ChargeGhiNguoc | null {
   if (r.totalAmount == null) return null;
   return {
     totalAmount: Number(r.totalAmount), base: so(r.base), discount: so(r.discount), fuel: so(r.fuel), remote: so(r.remote),
     demand: so(r.demand), directSignature: so(r.directSignature), vat: so(r.vat), gogreen: so(r.gogreen),
     elevatedRisk: so(r.elevatedRisk), importHandling: so(r.importHandling), residential: so(r.residential),
+    addressCorrection: so(r.addressCorrection),
   };
 }
 
@@ -75,7 +83,8 @@ export async function ghiNguocLark(records: readonly LarkRecord[]): Promise<TomT
            s.delivered_at AS "deliveredAt", s.label_created_at AS "labelCreatedAt", o.ship_country AS "shipCountry",
            c.total_amount AS "totalAmount", c.base, c.discount, c.fuel, c.remote, c.demand,
            c.direct_signature AS "directSignature", c.vat, c.gogreen, c.elevated_risk AS "elevatedRisk",
-           c.import_handling AS "importHandling", c.residential
+           c.import_handling AS "importHandling", c.residential,
+           c.address_correction AS "addressCorrection"
       FROM shipments s
       JOIN shopify_orders o ON o.id = s.order_id
       LEFT JOIN LATERAL (SELECT * FROM shipment_charges x WHERE x.shipment_id = s.id ORDER BY x.imported_at DESC NULLS LAST LIMIT 1) c ON true

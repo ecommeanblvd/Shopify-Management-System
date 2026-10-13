@@ -21,6 +21,12 @@ export interface ChargeGhiNguoc {
   totalAmount: number; base: number | null; discount: number | null; fuel: number | null; remote: number | null;
   demand: number | null; directSignature: number | null; vat: number | null; gogreen: number | null;
   elevatedRisk: number | null; importHandling: number | null; residential: number | null;
+  /** Address Correction (`shipment_charges.address_correction`) → ô Lark `Phí sửa địa chỉ`.
+   *  CHỈ đường hoá đơn có số này: khoản phát sinh SAU khi hãng giao hụt vì địa chỉ sai, báo giá
+   *  lúc tạo vận đơn không thể biết. Tên trường PHẢI trùng khoá `addressCorrection` của
+   *  `COT_CHI_PHI` — vòng `Object.entries(COT_CHI_PHI)` dưới đây tra `khoan[khoa]`, lệch tên là
+   *  ra `undefined` ⇒ khoản bị bỏ qua IM LẶNG, giống hệt khi hãng không thu. */
+  addressCorrection: number | null;
 }
 export interface KetQuaPatch {
   patch: Record<string, unknown>;

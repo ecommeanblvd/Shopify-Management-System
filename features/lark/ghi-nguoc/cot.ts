@@ -24,8 +24,7 @@ export const LUA_CHON_STATUS: readonly string[] = [
 ];
 
 /** Khoá `shipment_charges` → cột tiền trên Lark (VND). `non_conveyable` vẫn không có cột;
- *  `address_correction` thì ĐÃ CÓ từ 13/10/2026 (ô `Phí sửa địa chỉ`, xem dưới) nhưng đường
- *  HOÁ ĐƠN chưa nối — `chargeTu` ở `ghi-nguoc.ts` chưa SELECT cột đó.
+ *  `address_correction` ĐÃ NỐI XONG đường HOÁ ĐƠN (14/10/2026): ô `Phí sửa địa chỉ`, xem dưới.
  *
  *  Ô `Giá chiết khấu` KHÔNG BAO GIỜ được ghi — đó là **Formula của Lark** (đọc API fields
  *  13/10/2026: `fldlEbi91K` type=20), nó tự tính `Tổng − base − fuel − ký nhận − …`. Số chiết
@@ -141,10 +140,16 @@ export const COT_CHI_PHI = {
    * trả thì ô tự đúng.
    *
    * Khoá `addressCorrection` TRÙNG tên cột `shipment_charges.address_correction` (63/6.027
-   * dòng có số thật) — CỐ Ý: ngày ai thêm trường đó vào `ChargeGhiNguoc` + câu SELECT của
-   * `chargeTu` (`ghi-nguoc.ts`) thì đường HOÁ ĐƠN tự điền ô này, không phải sửa thêm chỗ nào.
-   * Tới hôm nay `chargeTu` CHƯA select cột đó ⇒ `khoan['addressCorrection']` là `undefined` ⇒
-   * đường hoá đơn vẫn bỏ qua. Đây là việc còn để dở, không phải thiết kế.
+   * dòng có số thật) — CỐ Ý, và từ **14/10/2026 đường HOÁ ĐƠN ĐÃ NỐI**: `ChargeGhiNguoc` có
+   * trường `addressCorrection` và câu SELECT của `chargeTu` (`ghi-nguoc.ts`) lấy
+   * `c.address_correction AS "addressCorrection"`, nên vòng `Object.entries(COT_CHI_PHI)` của
+   * `dung-patch.ts` tra ra SỐ THẬT và tự điền ô này. Luật không đổi: chỉ điền ô trống, khoản
+   * `<= 0`/`null` không ghi (ghi `0` là khoá ô ở 0 vĩnh viễn, Lark không có undo).
+   *
+   * Đổi tên trường ở `ChargeGhiNguoc` hoặc bỏ cột khỏi câu SELECT là khoản này IM LẶNG mất lại
+   * (tra ra `undefined` ⇒ bỏ qua ô y như khi hãng không thu, không lỗi không cảnh báo). Lá chắn:
+   * test "mọi trường của `ChargeGhiNguoc` đều có cột tương ứng trong câu SELECT"
+   * (`ghi-nguoc.test.ts`) đỏ ngay khi hai nơi lệch nhau.
    */
   addressCorrection: 'Phí sửa địa chỉ',
   residential: 'Phụ Phí Residential',

@@ -9,7 +9,8 @@ const kien = (p: Partial<KienGhiNguoc> = {}): KienGhiNguoc => ({
 });
 const charge = (p: Partial<ChargeGhiNguoc> = {}): ChargeGhiNguoc => ({
   totalAmount: 1438453, base: 2244600, discount: -1541142, fuel: 383043, remote: 0, demand: 0,
-  directSignature: 92700, vat: 106552, gogreen: 0, elevatedRisk: 0, importHandling: 68300, residential: 84400, ...p,
+  directSignature: 92700, vat: 106552, gogreen: 0, elevatedRisk: 0, importHandling: 68300, residential: 84400,
+  addressCorrection: 0, ...p,
 });
 
 describe('dungPatch — nguồn (cổng chỉ áp cho trạng thái + ngày giao thực tế)', () => {
@@ -128,5 +129,72 @@ describe('dungPatch — chi phí (chỉ điền ô trống)', () => {
   it('sai lệch làm tròn ≤ 1đ coi như bằng', () => {
     const r = dungPatch(kien(), charge(), { [COT_CHI_PHI.totalAmount]: 1438453.4 });
     expect(r.lech).toEqual([]);
+  });
+});
+
+/* ═════ Ô `Phí sửa địa chỉ` — đường HOÁ ĐƠN (fldx5cOZJu, type=2, ghi được) ═════
+ *
+ * Khoản Address Correction phát sinh SAU khi hãng giao hụt vì địa chỉ sai, nên BÁO GIÁ lúc tạo
+ * vận đơn không thể biết (đo 13/10/2026: `ADDRESS_CORRECTION` 0/1.310 phản hồi FedEx Rate API
+ * còn lưu trữ) ⇒ đường GIÁ ƯỚC TÍNH để ô này trống là đúng. HOÁ ĐƠN thì CÓ số thật:
+ * `shipment_charges.address_correction` 63/6.027 dòng. Trước hôm nay khoản đó không vào Lark
+ * bằng đường nào cả — `chargeTu` chưa SELECT cột, nên `khoan['addressCorrection']` là
+ * `undefined` và vòng lặp bỏ qua ô y như khi hãng không thu.
+ *
+ * Nhóm test này khoá lại ba điều, theo đúng luật đang có của `dungPatch` (KHÔNG nới):
+ * điền khi trống · không đụng khi đã có số · bỏ qua khi `<= 0` hoặc `null`. */
+describe('dungPatch — Phí sửa địa chỉ (đường hoá đơn)', () => {
+  it('ô trống + hoá đơn có số → điền ô `Phí sửa địa chỉ`, và đếm vào nhóm chi phí', () => {
+    const r = dungPatch(kien(), charge({ addressCorrection: 289_200 }), {});
+    expect(r.patch[COT_CHI_PHI.addressCorrection]).toBe(289_200);
+    // 7 khoản của `charge()` mặc định + khoản mới ⇒ 8. Con số này bắt luôn ca ghi CHỒNG:
+    // nếu khoá `addressCorrection` bị trỏ trùng tên cột với một khoản khác thì `patch` chỉ có
+    // 7 ô mà `chiPhi` vẫn 8 — lệch ngay.
+    expect(r.nhom.chiPhi).toBe(8);
+    expect(Object.values(COT_CHI_PHI).filter((c) => c in r.patch)).toHaveLength(8);
+    expect(r.lech).toEqual([]);
+  });
+  it('ô ĐÃ CÓ số khác → KHÔNG ghi đè, chỉ nêu lệch để người đọc nhật ký đi xem', () => {
+    // Lark chỉ cho điền thêm, không có undo — đè một ô là số Ops gõ mất vĩnh viễn (D-045).
+    const r = dungPatch(kien(), charge({ addressCorrection: 289_200 }),
+      { [COT_CHI_PHI.addressCorrection]: 150_000 });
+    expect(COT_CHI_PHI.addressCorrection in r.patch).toBe(false);
+    expect(r.lech.filter((l) => l.includes(COT_CHI_PHI.addressCorrection))).toHaveLength(1);
+  });
+  it('khoản `null` hoặc `<= 0` → ô VẮNG khỏi bản vá, không ghi `0`', () => {
+    // Ghi `0` là khoá ô ở 0 VĨNH VIỄN: lượt sau `docSo` đọc ra `0 ≠ null` tức "ĐÃ CÓ", nên
+    // số hoá đơn thật về sau không bao giờ điền được vào nữa. 0 không phải "chưa biết".
+    for (const v of [null, 0, -289_200]) {
+      const r = dungPatch(kien(), charge({ addressCorrection: v }), {});
+      expect(COT_CHI_PHI.addressCorrection in r.patch, `addressCorrection = ${v}`).toBe(false);
+    }
+  });
+  it('ô có dữ liệu không đọc được thành số (vd `"289,200"`) → coi là CÓ, không chạm', () => {
+    // `docSo('289,200')` ra `null`; nếu lấy đó làm lá chắn thì ô này bị coi là trống ⇒ ĐÈ.
+    // `oLarkTrong` mới là lá chắn: "không phân tích được" nghĩa là CÓ, đừng chạm.
+    const r = dungPatch(kien(), charge({ addressCorrection: 289_200 }),
+      { [COT_CHI_PHI.addressCorrection]: '289,200' });
+    expect(COT_CHI_PHI.addressCorrection in r.patch).toBe(false);
+    expect(r.lech.some((l) => l.includes(COT_CHI_PHI.addressCorrection))).toBe(true);
+  });
+
+  /* ───── KHOÁ TÊN CỘT TỪNG BYTE ─────
+   * Lark ghi theo TÊN cột và PUT là all-or-nothing ⇒ lệch MỘT dấu tiếng Việt là **cả bản vá bị
+   * từ chối**, kể cả những ô chẳng liên quan. Tên này vừa bị CEO đổi một lần (`Phí Address
+   * Correction` → `Phí sửa địa chỉ`, cùng `field_id` `fldx5cOZJu`) nên khả năng đổi lần nữa là
+   * có thật. Đọc lại nguyên văn qua API fields 14/10/2026: type=2, 15 ký tự, 23 byte UTF-8.
+   *
+   * Khẳng định NFC riêng vì dạng TỔ HỢP (`i` + U+0301 thay vì `í` U+00ED) nhìn GIỐNG Y HỆT trên
+   * màn hình: `toBe` vẫn đỏ nhưng người đọc sẽ không hiểu vì sao. Đây là test đối xứng với test
+   * cùng tên ở `patch-gia-uoc-tinh.test.ts` — hai đường ghi dùng CHUNG một khoá, nên đường nào
+   * cũng phải có lá chắn, ai sửa `cot.ts` cũng thấy đỏ. */
+  it('tên cột "Phí sửa địa chỉ" đúng từng byte (NFC, 23 byte UTF-8)', () => {
+    const ten = COT_CHI_PHI.addressCorrection;
+    expect(ten).toBe('Phí sửa địa chỉ');
+    expect(ten).toBe(ten.normalize('NFC'));
+    expect(Buffer.from(ten, 'utf8')).toHaveLength(23);
+    expect([...ten]).toHaveLength(15);
+    /* Tên CŨ đã chết — ai dán lại nó là bản vá bị Lark từ chối toàn bộ. */
+    expect(ten).not.toBe('Phí Address Correction');
   });
 });
