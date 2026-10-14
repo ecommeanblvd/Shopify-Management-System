@@ -145,4 +145,42 @@ describe('gomBox', () => {
       caoCm: null,
     });
   });
+
+  it('loại khác với kích thước hợp lệ → boLai (không phải container)', () => {
+    const r = gomBox([
+      {
+        recordId: 'r1',
+        lineitemName: 'Tag Mirer',
+        dinhDanh: 'TAG-001',
+        kichThuoc: '10x5',
+      },
+    ]);
+    expect(r.box).toHaveLength(0);
+    expect(r.boLai).toHaveLength(1);
+    expect(r.boLai[0]).toMatchObject({
+      ten: 'Tag Mirer',
+      recordIds: ['r1'],
+    });
+    expect(r.boLai[0].lyDo).toContain('Không phải container');
+  });
+
+  it('dòng đầu không có kích thước, dòng thứ hai có → ma từ dòng thứ hai', () => {
+    const r = gomBox([
+      {
+        recordId: 'r1',
+        lineitemName: 'Thùng Carton 5kg',
+        dinhDanh: 'MEAN-CAR-BATCH-1-WH-1',
+        kichThuoc: null,
+      },
+      {
+        recordId: 'r2',
+        lineitemName: 'Thùng Carton 5kg',
+        dinhDanh: 'MEAN-CAR-40x25x25-VTĐG1-WH-2',
+        kichThuoc: '40x25x25',
+      },
+    ]);
+    expect(r.box).toHaveLength(1);
+    expect(r.box[0].ma).toBe('MEAN-CAR-40x25x25-VTĐG1-WH-2');
+    expect(r.box[0].larkRecordIds).toEqual(['r2']);
+  });
 });

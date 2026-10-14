@@ -109,7 +109,11 @@ export function gomBox(rows: DongKho[]): { box: Box[]; boLai: BoLai[] } {
       continue;
     }
 
-    // Tạo box chính từ dòng đầu tiên có kích thước
+    // Tạo box chính từ dòng đầu tiên có kích thước.
+    // Chú ý: box.ma lấy từ cùng dòng với kichThuoc (mainBox.row.dinhDanh).
+    // Lý do: ma và kichThuoc phải mô tả cùng một dòng kho để giữ tính nhất quán —
+    // các chữ cái trong ma quyết định hóa đơn sẽ được tính là BOX/PAK/BAG,
+    // nên pairing ma từ batch này + kichThuoc từ batch khác sẽ sai lệch billing.
     const mainRecordIds = [mainBox.row.recordId];
 
     // Kiểm tra các dòng còn lại
