@@ -25,18 +25,22 @@ import { ChonBox } from './ChonBox';
  * sẵn dài-rộng-cao, SỬA ĐƯỢC. Giữ nguyên ba ô dài/rộng/cao và ô hộp ở dạng gõ tay: box lạ
  * (chưa có trong danh mục) KHÔNG được chặn việc đóng hàng (CEO chốt).
  *
- * `dsBox` do trang `/f/dong-hang` tải (`danhSachBox()`) và truyền xuống qua `BangDongHang` —
- * nơi gọi thật LUÔN có giá trị. `= []` vẫn là lưới an toàn thật, không phải code chết: database
- * mới dựng, hay mọi dòng kho đều thiếu kích thước, thì `danhSachBox()` trả về rỗng hợp lệ — khối
- * này vẫn phải đứng vững và còn đường gõ tay, không phải màn hình vỡ.
+ * `dsBox` do trang `/f/dong-hang` tải (`danhSachBox()`) và truyền xuống qua `BangDongHang`.
+ * BẮT BUỘC (không có giá trị mặc định) — một bản vá trước từng để prop này tuỳ chọn với
+ * `= []`, khối render "bình thường" với lưới rỗng mà không ai nhận ra chẳng có gì nối tới nó.
+ * Danh mục rỗng vẫn là một trạng thái THẬT (database mới dựng, hay mọi dòng kho thiếu kích
+ * thước) — nhưng phải do nơi gọi TRUYỀN `[]` một cách có ý, để thiếu dây là `tsc` báo lỗi
+ * ngay, không phải lặng lẽ "chạy được".
  */
-export function KhoiDongThung({ k, dsBox = [] }: { k: KienDongHang; dsBox?: BoxHien[] }) {
+export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] }) {
   const router = useRouter();
   const [hop, setHop] = useState(k.dongThung?.hop ?? k.hop ?? '');
   const [canKg, setCanKg] = useState(k.dongThung?.canKg != null ? String(k.dongThung.canKg) : '');
   const [dai, setDai] = useState(k.dongThung?.dims ? String(k.dongThung.dims.l) : '');
   const [rong, setRong] = useState(k.dongThung?.dims ? String(k.dongThung.dims.w) : '');
-  const [cao, setCao] = useState(k.dongThung?.dims ? String(k.dongThung.dims.h) : '');
+  // `dims.h = null` HỢP LỆ (túi không có chiều cao) — `?? ''` để ô Cao trống, không phải
+  // literal "null" chui vào ô (bug reopening kiện túi: mất luôn dài+rộng VÀ báo sai "đã sửa").
+  const [cao, setCao] = useState(k.dongThung?.dims ? String(k.dongThung.dims.h ?? '') : '');
   // Box đang chọn trong lưới — dùng để biết đang so "đã sửa" với số đo của box nào, và để
   // tô sáng đúng thẻ. Khớp lúc khởi tạo theo `hop` hiện có (ô hộp đã ghi từ trước, nếu trùng
   // mã một box trong danh mục) để dấu "đã sửa" đúng ngay cả khi mở lại kiện đã đóng thùng.

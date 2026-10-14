@@ -5,6 +5,7 @@ import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
+import { dimsDongThungTuCot } from './dong-thung';
 import { gomBox, type LoaiBox } from './danh-muc-box';
 import { tronBox, type BoxHien, type BoxSms } from './tron-box';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
@@ -100,8 +101,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     canDuKienKg: r.canDuKien != null ? Number(r.canDuKien) : null,
     dongThung: r.smsDongLuc != null ? {
       hop: r.smsHop, canKg: r.smsCan != null ? Number(r.smsCan) : null,
-      dims: r.smsL != null && r.smsW != null && r.smsH != null
-        ? { l: Number(r.smsL), w: Number(r.smsW), h: Number(r.smsH) } : null,
+      dims: dimsDongThungTuCot(r.smsL, r.smsW, r.smsH),
       luc: r.smsDongLuc.toISOString(),
     } : null,
     canMon: {
@@ -244,19 +244,29 @@ export async function docNenVanDon(shipmentId: string): Promise<NenVanDon | null
  */
 export async function danhSachBox(): Promise<BoxHien[]> {
   const w = schema.larkWhInventory;
+  // `dinh_danh IS NOT NULL` — cùng guard với `vatTuDongGoi` ở features/dong-goi/queries.ts.
+  // `gomBox` ghi `ma: dinhDanh ?? ''` cho dòng thiếu định danh; một box `ma = ''` vẫn lên được
+  // lưới, người chọn nó thì `hop` rỗng và `kiemNhapDongThung` chặn lưu với "Chưa chọn thùng đã
+  // dùng" — ngay sau khi họ vừa chọn. Một box không dùng được thì không được mời chọn.
   const whRows = await db.select({
     recordId: w.recordId, lineitemName: w.lineitemName, dinhDanh: w.dinhDanh, kichThuoc: w.kichThuoc,
-  }).from(w).where(eq(w.inventoryType, 'VTĐG1'));
+  }).from(w).where(and(eq(w.inventoryType, 'VTĐG1'), isNotNull(w.dinhDanh)));
 
   const { box } = gomBox(whRows);
 
   const b = schema.boxDongGoi;
   const smsRows = await db.select().from(b);
-  const tuSms: BoxSms[] = smsRows.map((r) => ({
-    id: r.id, ten: r.ten, ma: r.ma, loai: r.loai as LoaiBox,
-    daiCm: Number(r.daiCm), rongCm: Number(r.rongCm), caoCm: r.caoCm != null ? Number(r.caoCm) : null,
-    suaTay: r.suaTay, an: r.an,
-  }));
+  const tuSms: BoxSms[] = smsRows
+    // `dai_cm`/`rong_cm` là numeric NULLABLE. `Number(null)` → `0`, và bản sửa tay THẮNG Lark
+    // (`tronBox`) — chọn một dòng thiếu dài/rộng sẽ điền `dai = '0'`/`rong = '0'` vào ô, đúng
+    // kiểu "0 là dữ liệu xấu" mà tính năng này đã cấm cho chiều cao. Bỏ hẳn dòng thiếu, không
+    // vá bằng 0.
+    .filter((r) => r.daiCm != null && r.rongCm != null)
+    .map((r) => ({
+      id: r.id, ten: r.ten, ma: r.ma, loai: r.loai as LoaiBox,
+      daiCm: Number(r.daiCm), rongCm: Number(r.rongCm), caoCm: r.caoCm != null ? Number(r.caoCm) : null,
+      suaTay: r.suaTay, an: r.an,
+    }));
 
   return tronBox(box, tuSms);
 }

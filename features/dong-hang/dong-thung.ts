@@ -97,6 +97,22 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
  */
 export const NGUONG_CANH_BAO = 0.5;
 
+/**
+ * Dựng `dims` để hiện lại khi MỞ LẠI bước Đóng thùng, từ ba cột `sms_dim_*` (chuỗi số của cột
+ * numeric, hoặc null).
+ *
+ * Chỉ ĐÒI dài + rộng — KHÔNG đòi cao. Túi lưu `cao = null` (xem `kiemNhapDongThung`); đòi đủ cả
+ * ba sẽ coi mọi túi là "chưa đóng", làm mất luôn dài+rộng đã lưu khi mở lại kiện (bug thật: kho
+ * có bốn cỡ túi, 28×42/38×52/25×35/35×45, nên đây là đường ĐI THƯỜNG, không phải cạnh hiếm).
+ * Thiếu dài HOẶC rộng thì cả bộ coi như chưa đóng — một chiều lẻ không tính được cân quy đổi.
+ */
+export function dimsDongThungTuCot(
+  smsL: string | null, smsW: string | null, smsH: string | null,
+): { l: number; w: number; h: number | null } | null {
+  if (smsL == null || smsW == null) return null;
+  return { l: Number(smsL), w: Number(smsW), h: smsH != null ? Number(smsH) : null };
+}
+
 export function canhBaoLechCan(canThuc: number, tongDuKien: number | null): string | null {
   if (tongDuKien == null || tongDuKien <= 0) return null;
   const lech = (canThuc - tongDuKien) / tongDuKien;

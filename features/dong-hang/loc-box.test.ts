@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { locBox, daSuaDim } from './loc-box';
+import { dimsDongThungTuCot } from './dong-thung';
 import type { BoxHien } from './tron-box';
 
 /** Box dựng tay cho test — chỉ điền những trường mà `locBox`/`daSuaDim` cần tới. */
@@ -30,12 +31,23 @@ const DS: BoxHien[] = [
 
 describe('locBox', () => {
   test('tìm theo tên, bỏ dấu, không phân biệt hoa thường', () => {
-    expect(locBox(DS, 'fedex').map((b) => b.ten)).toContain('Túi FedEx Nhỏ');
-    expect(locBox(DS, 'THUNG CARTON 5').map((b) => b.ten)).toContain('Thùng Carton 5kg');
+    // `toContain` một chiều không chứng minh có LỌC: box còn lại trong danh sách không lọc
+    // cũng "chứa" kết quả mong đợi. Phải khẳng định luôn box KHÔNG khớp từ khoá bị loại ra.
+    const timFedex = locBox(DS, 'fedex').map((b) => b.ten);
+    expect(timFedex).toContain('Túi FedEx Nhỏ');
+    expect(timFedex).not.toContain('Thùng Carton 5kg');
+
+    const timThung = locBox(DS, 'THUNG CARTON 5').map((b) => b.ten);
+    expect(timThung).toContain('Thùng Carton 5kg');
+    expect(timThung).not.toContain('Túi FedEx Nhỏ');
   });
 
   test('tìm theo số đo', () => {
-    expect(locBox(DS, '40x25').map((b) => b.ten)).toContain('Thùng Carton 5kg');
+    const r = locBox(DS, '40x25');
+    // Độ dài CHÍNH XÁC (không chỉ `toContain`) — nếu `locBox` trả nguyên `hien` mà không lọc
+    // gì cả, test kiểu `toContain` vẫn xanh vì box mong đợi vẫn nằm trong đó.
+    expect(r).toHaveLength(1);
+    expect(r[0].ten).toBe('Thùng Carton 5kg');
   });
 
   test('từ khoá rỗng → nguyên danh sách trừ box ẩn và box loai="khac"', () => {
@@ -66,5 +78,22 @@ describe('daSuaDim', () => {
 
   test('box=null (gõ tay, chưa chọn từ danh mục) → false', () => {
     expect(daSuaDim(null, { dai: '10', rong: '10', cao: '10' })).toBe(false);
+  });
+});
+
+describe('vòng lặp lưu rồi mở lại kiện đóng bằng túi (round trip)', () => {
+  test('lưu túi 28×42 (cao null) → mở lại còn đủ dài+rộng, ô Cao trống, KHÔNG báo "đã sửa"', () => {
+    // `kiemNhapDongThung` lưu cao = null cho túi → ba cột DB sau khi lưu: '28', '42', null.
+    const dims = dimsDongThungTuCot('28', '42', null);
+    expect(dims).toEqual({ l: 28, w: 42, h: null });
+
+    // KhoiDongThung điền lại ô khi mở lại dialog — `h ?? ''` để ô Cao TRỐNG, không phải 'null'.
+    const dang = { dai: String(dims!.l), rong: String(dims!.w), cao: String(dims!.h ?? '') };
+    expect(dang).toEqual({ dai: '28', rong: '42', cao: '' });
+
+    // Box đã chọn khớp theo `ma` chính là túi này — so lại KHÔNG được báo "đã sửa" dù chưa ai
+    // gõ gì, vì đây đúng là số của box đó (bug cũ: '' != 28 khiến daSuaDim báo sai 'true').
+    const tuiDaChon = DS.find((b) => b.ten === 'Túi FedEx Nhỏ')!;
+    expect(daSuaDim(tuiDaChon.kichThuoc, dang)).toBe(false);
   });
 });
