@@ -21,6 +21,7 @@ import { LichNgay } from './LichNgay';
 import { OAnhLark } from './OAnhLark';
 import { ChiTietDong } from './ChiTietDong';
 import { OSuaQc } from './OSuaQc';
+import { dongDuocXuLy } from '@/lib/ui/su-kien-trong-dong';
 import { COT_SO_NHAP, LUOI_SO_NHAP, RONG_TOI_THIEU } from '@/features/kho-nhan/cot-so-nhap';
 
 const THU = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -268,16 +269,16 @@ export function BangSoNhap({
                 /* Bấm vào dòng mở chi tiết (CEO 03/10/2026). Ô ảnh và nút bổ sung file có việc
                    riêng của chúng — bấm vào đó KHÔNG được mở modal, nếu không người đang muốn
                    xem ảnh lại bị ném sang một hộp thoại khác. */
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('button,a,input,select')) return;
-                  setXemId(r.recordId);
-                }}
+                onClick={(e) => { if (dongDuocXuLy(e)) setXemId(r.recordId); }}
                 /* Bàn phím đi được đúng đường đó: dòng là một nút thật, không phải div bắt chuột. */
                 role="button"
                 tabIndex={0}
                 aria-label={`Xem chi tiết ${r.orderNumber ?? ''} ${r.sku ?? ''}`}
+                /* Phím cũng phải qua chốt chặn như chuột: bản trước chỉ chặn `onClick`, nên
+                   gõ dấu cách vào ô sửa QC ngay trên dòng là mở luôn hộp chi tiết. */
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
+                  if (!dongDuocXuLy(e)) return;
                   e.preventDefault();
                   setXemId(r.recordId);
                 }}
