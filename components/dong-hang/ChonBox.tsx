@@ -6,9 +6,15 @@ import { locBox } from '@/features/dong-hang/loc-box';
 import type { BoxHien } from '@/features/dong-hang/tron-box';
 
 /**
- * Lưới chọn box: ô tìm trên, dưới là lưới thẻ chia khối Thùng / Túi — CEO chọn layout này
- * sau khi duyệt ba mockup (14/10/2026). Gõ vài ký tự lọc nhanh cho người quen việc, đọc cả
- * lưới cho người mới — cùng một màn phục vụ cả hai.
+ * Chọn box: ô tìm, BẤM VÀO MỚI BUNG danh sách Thùng / Túi (CEO 14/10/2026 — bản trước mở
+ * sẵn, chiếm chỗ của mấy ô cân/kích thước ngay dưới). Gõ vài ký tự lọc nhanh cho người quen
+ * việc, đọc cả lưới cho người mới — cùng một ô phục vụ cả hai.
+ *
+ * Danh sách bung THEO DÒNG chứ không thả nổi tuyệt đối: khối này nằm trong hộp thoại có
+ * thanh cuộn riêng, panel tuyệt đối sẽ bị cắt mất ở mép hộp thoại.
+ *
+ * Đóng lại khi: chọn xong một box, bấm Esc, hoặc tiêu điểm rời khỏi cả cụm (kiểm bằng
+ * `relatedTarget` thay vì nghe click toàn trang — không cần gỡ listener, không rò).
  *
  * Mọi luật lọc nằm ở `features/dong-hang/loc-box.ts` (thuần, có test) — ở đây chỉ còn việc vẽ.
  */
@@ -16,24 +22,44 @@ export function ChonBox({
   ds, chon, onChon,
 }: { ds: BoxHien[]; chon: string | null; onChon: (b: BoxHien) => void }) {
   const [tuKhoa, setTuKhoa] = useState('');
+  const [mo, setMo] = useState(false);
 
   const ketQua = useMemo(() => locBox(ds, tuKhoa), [ds, tuKhoa]);
   const thung = ketQua.filter((b) => b.loai === 'thung');
   const tui = ketQua.filter((b) => b.loai === 'tui');
+  const boxDangChon = chon != null ? ds.find((b) => b.ma === chon) ?? null : null;
+
+  const chonXong = (b: BoxHien) => {
+    onChon(b);
+    setTuKhoa('');
+    setMo(false);
+  };
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      onBlur={(e) => {
+        // Tiêu điểm nhảy sang một nút BÊN TRONG cụm (thẻ box) thì giữ nguyên; rời hẳn mới đóng.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setMo(false);
+      }}
+    >
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           className="h-9 w-full rounded-lg border border-input bg-background pl-7 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={tuKhoa}
-          onChange={(e) => setTuKhoa(e.target.value)}
-          placeholder="Tìm box theo tên hoặc số đo…"
+          onChange={(e) => { setTuKhoa(e.target.value); setMo(true); }}
+          onFocus={() => setMo(true)}
+          onClick={() => setMo(true)}
+          onKeyDown={(e) => { if (e.key === 'Escape') { setMo(false); e.stopPropagation(); } }}
+          role="combobox"
+          aria-expanded={mo}
+          aria-controls="danh-sach-box"
+          placeholder={boxDangChon ? `${boxDangChon.ten} — bấm để đổi box` : 'Bấm để chọn box, hoặc gõ tên / số đo…'}
         />
       </div>
 
-      {ketQua.length === 0 ? (
+      {!mo ? null : ketQua.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
           {ds.length === 0
             // Danh mục rỗng (kho mới dựng, hoặc toàn bộ dòng kho thiếu kích thước) — vẫn phải
@@ -42,9 +68,9 @@ export function ChonBox({
             : 'Không thấy box khớp từ khoá này — gõ mã vào ô "Thùng đã dùng" ở dưới nếu đây là box chưa có trong danh mục.'}
         </p>
       ) : (
-        <div className="max-h-56 space-y-3 overflow-y-auto rounded-lg border border-border p-2">
-          {thung.length > 0 && <NhomBox nhan="Thùng" ds={thung} chon={chon} onChon={onChon} />}
-          {tui.length > 0 && <NhomBox nhan="Túi" ds={tui} chon={chon} onChon={onChon} />}
+        <div id="danh-sach-box" className="max-h-56 space-y-3 overflow-y-auto rounded-lg border border-border p-2">
+          {thung.length > 0 && <NhomBox nhan="Thùng" ds={thung} chon={chon} onChon={chonXong} />}
+          {tui.length > 0 && <NhomBox nhan="Túi" ds={tui} chon={chon} onChon={chonXong} />}
         </div>
       )}
     </div>
