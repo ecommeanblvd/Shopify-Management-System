@@ -7,11 +7,22 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { createRole, setRolePermissions, deleteRole } from '@/features/users/role-actions';
+import { ACTIONS, type Action } from '@/lib/auth/permissions';
 import type { ScopeDef } from '@/lib/auth/permissions';
 
 // Column order for the matrix header — only render a cell if the scope has that action
-const ACTION_ORDER = ['view', 'create', 'edit', 'delete', 'apply', 'push'] as const;
-type ActionCol = (typeof ACTION_ORDER)[number];
+/**
+ * Cột action đọc THẲNG từ `ACTIONS` của bảng quyền trung tâm (`lib/auth/permissions.ts`).
+ *
+ * Trước 14/10/2026 chỗ này chép cứng một danh sách riêng. Hệ quả: thêm action `override` cho
+ * phạm vi `warehouse.qc` xong, cột đó KHÔNG BAO GIỜ hiện trên màn phân quyền — quyền có
+ * trong mã, có trong catalog, nhưng không ai cấp được. Mất đúng một vòng "sao tôi không thấy".
+ *
+ * `Record<Action, string>` chứ không phải `Record<string, string>`: thêm action mới mà quên
+ * đặt nhãn là LỖI BIÊN DỊCH, không phải một cột trống không ai để ý.
+ */
+const ACTION_ORDER = ACTIONS;
+type ActionCol = Action;
 
 const ACTION_LABELS: Record<ActionCol, string> = {
   view: 'Xem',
@@ -20,6 +31,7 @@ const ACTION_LABELS: Record<ActionCol, string> = {
   delete: 'Xoá',
   apply: 'Áp dụng',
   push: 'Đẩy',
+  override: 'Sửa đè',
 };
 
 interface RoleRow {
