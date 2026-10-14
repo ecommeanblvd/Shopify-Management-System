@@ -69,6 +69,7 @@ export function dungDongMirror(r: LarkRecord) {
     vendorFinal: chuoi(f['Vendor final']),
     qcCheck: chuoi(f['QC Check']),
     whAction: chuoi(f['WH - Action']),
+    kichThuoc: chuoi(f['Kích thước']),
     /* Lý do + ảnh lỗi QC: hai cột này nằm ngoài bản sao cho tới 03/10/2026, nên 456 lý do và
      * 429 tấm ảnh của gần ba năm vận hành chỉ có trên Lark. `chuoi` giữ nguyên chữ người gõ. */
     lyDoFail: chuoi(f['Lý do QC failed']),
@@ -106,10 +107,10 @@ export async function dongBoWhInventory(daTai?: LarkRecord[]): Promise<KetQuaDon
         orderNumber: sql`excluded.order_number`, sku: sql`excluded.sku`,
         lineitemName: sql`excluded.lineitem_name`, storeFinal: sql`excluded.store_final`,
         vendorFinal: sql`excluded.vendor_final`, qcCheck: sql`excluded.qc_check`,
-        whAction: sql`excluded.wh_action`, uniqueCode: sql`excluded.unique_code`,
-        lyDoFail: sql`excluded.ly_do_fail`, anhLoiQc: sql`excluded.anh_loi_qc`,
-        soLuong: sql`excluded.so_luong`, coAnhHangDen: sql`excluded.co_anh_hang_den`,
-        coBbBanGiao: sql`excluded.co_bb_ban_giao`,
+        whAction: sql`excluded.wh_action`, kichThuoc: sql`excluded.kich_thuoc`,
+        uniqueCode: sql`excluded.unique_code`, lyDoFail: sql`excluded.ly_do_fail`,
+        anhLoiQc: sql`excluded.anh_loi_qc`, soLuong: sql`excluded.so_luong`,
+        coAnhHangDen: sql`excluded.co_anh_hang_den`, coBbBanGiao: sql`excluded.co_bb_ban_giao`,
         anhHangDen: sql`excluded.anh_hang_den`, bbBanGiao: sql`excluded.bb_ban_giao`,
         capNhatLuc: sql`excluded.cap_nhat_luc`,
       },

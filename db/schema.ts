@@ -3276,6 +3276,7 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   /** Chữ NGƯỜI gõ trên Lark, giữ nguyên — không quy về enum, xem migration 0198. */
   lyDoFail: text('ly_do_fail'),
   uniqueCode: text('unique_code'),
+  kichThuoc: text('kich_thuoc'),
   soLuong: integer('so_luong'),
   coAnhHangDen: boolean('co_anh_hang_den').notNull().default(false),
   coBbBanGiao: boolean('co_bb_ban_giao').notNull().default(false),
