@@ -197,7 +197,10 @@ export function KhoiLoi({
 
       {loi && <p className="text-sm text-destructive">{loi}</p>}
 
-      <div className="flex justify-end gap-2">
+      {/* Hàng nút DÍNH ĐÁY vùng cuộn: danh sách chỗ lỗi dài bao nhiêu thì nút Lưu vẫn luôn
+          nhìn thấy và bấm được. Trước đây nó nằm cuối luồng nên lỗi thứ năm trở đi là nó
+          trôi khỏi hộp thoại (CEO báo 14/10/2026). Nền mờ để không che mất hàng đang cuộn. */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur">
         <Button type="button" variant="outline" size="lg" onClick={onHuy}>Quay lại</Button>
         <Button
           type="button" variant="destructive" size="lg"

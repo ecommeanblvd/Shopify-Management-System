@@ -97,7 +97,10 @@ function NoiDungQc({
         {chiec.maDon && <span className="text-xs text-muted-foreground">· {chiec.maDon}</span>}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {/* `min-h-[180px]`: tầng ảnh ĐƯỢC co nhưng không được co về 0. Trước đây khối nhập lỗi
+          ở tầng đáy là `shrink-0` nên thêm vài chỗ lỗi là nó bóp tầng này mất hẳn — ảnh sản
+          phẩm biến mất đúng lúc nhân sự cần nhìn để tả lỗi (CEO báo 14/10/2026). */}
+      <div className="flex min-h-[180px] flex-1 flex-col md:flex-row">
         {dangTai || soAnh === 0 ? (
           <div className="flex min-h-0 flex-1 items-center justify-center bg-muted">
             {dangTai ? (
@@ -171,7 +174,10 @@ function NoiDungQc({
         </div>
       </div>
 
-      <div className="shrink-0 space-y-3 border-t border-border p-4">
+      {/* Khối đáy: khi mở khối nhập lỗi thì nó CÓ THỂ dài hơn màn hình (mỗi chỗ lỗi một hàng,
+          mỗi hàng lại nhiều ô ảnh). Cho nó cuộn riêng và chặn trần ở 62vh, thay vì để nó đẩy
+          mọi thứ khác ra khỏi hộp thoại `overflow-hidden`. */}
+      <div className={`shrink-0 space-y-3 border-t border-border p-4 ${moKhoiLoi ? 'max-h-[62vh] overflow-y-auto' : ''}`}>
         {loi && <p className="text-sm text-red-600 dark:text-red-400">{loi}</p>}
         {moKhoiLoi ? (
           <KhoiLoi itemId={chiec.id} coStorage={coStorage} onXong={onXong} onHuy={() => setMoKhoiLoi(false)} />
