@@ -41,6 +41,13 @@ export const TU_CO_VIEC =
  */
 export function dongDuocXuLy(e: { currentTarget: unknown; target: unknown }): boolean {
   if (!tuTrongPhanTuNay(e)) return false;
-  if (coClosest(e.target) && e.target.closest(TU_CO_VIEC) != null) return false;
+  if (coClosest(e.target)) {
+    const coViec = e.target.closest(TU_CO_VIEC);
+    // `!== currentTarget` là phần BẮT BUỘC, không phải tinh chỉnh: chính cái dòng thường
+    // mang `role="link"`/`role="button"` để bàn phím đi được, nên `closest` leo lên sẽ gặp
+    // CHÍNH NÓ và kết luận "đã có người lo" — dòng không bao giờ mở ra nữa. Chỉ con cháu
+    // mới được quyền giành cú bấm khỏi dòng.
+    if (coViec != null && coViec !== e.currentTarget) return false;
+  }
   return true;
 }
