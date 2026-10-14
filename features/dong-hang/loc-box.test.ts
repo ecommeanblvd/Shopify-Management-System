@@ -5,7 +5,7 @@ import type { BoxHien } from './tron-box';
 
 /** Box dựng tay cho test — chỉ điền những trường mà `locBox`/`daSuaDim` cần tới. */
 function box(p: Partial<BoxHien> & Pick<BoxHien, 'ten' | 'ma' | 'loai' | 'kichThuoc'>): BoxHien {
-  return { larkRecordIds: [], id: null, suaTay: false, an: false, lech: null, ...p };
+  return { larkRecordIds: [], id: null, suaTay: false, an: false, lech: null, lechMa: null, ...p };
 }
 
 const DS: BoxHien[] = [

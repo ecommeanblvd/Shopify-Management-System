@@ -1,4 +1,4 @@
-import { Box, LoaiBox } from './danh-muc-box';
+import { Box, BoLai, LoaiBox } from './danh-muc-box';
 import { BaChieu } from './kich-thuoc-box';
 
 /** Một dòng box của hệ thống (bảng `box_dong_goi`), đã tách ba chiều thành số. */
@@ -21,6 +21,17 @@ export interface BoxHien extends Box {
   an: boolean;
   /** Số Lark đang ghi, chỉ khi nó khác số SMS đã khoá. Chỉ để báo, KHÔNG dùng để ghi đè. */
   lech: BaChieu | null;
+  /**
+   * Mã Lark đang ghi, chỉ khi nó khác `ma` SMS đã khoá — cùng tinh thần `lech` nhưng cho
+   * `ma`, KHÔNG gộp vào `lech` (`lech` chỉ tả kích thước, giữ nguyên nghĩa đó).
+   *
+   * `ma`/`loai` bị khoá cùng kích thước vì lý do CEO chốt là "một lô đổi mã Lark sau đó vẫn
+   * SẼ LỘ ra qua `lech`" — nhưng `lech` chỉ so kích thước, nên một lô re-code mã (ví dụ
+   * `INS-BAG-…` → `MEAN-BOX-…`) mà kích thước không đổi sẽ không lộ qua `lech`, và box khoá
+   * cứ thế im lặng dùng mã cũ dù Lark đã đổi mã. `lechMa` là tín hiệu RIÊNG cho đúng trường hợp
+   * đó — Lark đổi gì cũng chỉ hiện ra đây, KHÔNG ghi đè `ma` đã khoá.
+   */
+  lechMa: string | null;
 }
 
 function cungKichThuoc(a: BaChieu, b: BaChieu): boolean {
@@ -66,6 +77,7 @@ export function tronBox(tuLark: Box[], tuSms: BoxSms[]): BoxHien[] {
         suaTay: false,
         an: false,
         lech: null,
+        lechMa: null,
       });
       continue;
     }
@@ -82,15 +94,17 @@ export function tronBox(tuLark: Box[], tuSms: BoxSms[]): BoxHien[] {
         suaTay: false,
         an: smsBox.an,
         lech: null,
+        lechMa: null,
       });
       continue;
     }
 
     // Đã khoá — ma, loai, kích thước đi cùng nhau từ SMS: ba cái này tả MỘT thùng vật lý,
     // ghép mã hiện tại của Lark với số đo cũ của người là đúng cái sai mà luật này chặn.
-    // Lark đổi gì cũng chỉ hiện qua `lech`, không ghi đè.
+    // Lark đổi gì cũng chỉ hiện qua `lech`/`lechMa`, không ghi đè.
     const kichThuocSms: BaChieu = { daiCm: smsBox.daiCm, rongCm: smsBox.rongCm, caoCm: smsBox.caoCm };
     const lech = cungKichThuoc(larkBox.kichThuoc, kichThuocSms) ? null : larkBox.kichThuoc;
+    const lechMa = larkBox.ma === smsBox.ma ? null : larkBox.ma;
 
     ketQua.push({
       ten: larkBox.ten,
@@ -102,6 +116,7 @@ export function tronBox(tuLark: Box[], tuSms: BoxSms[]): BoxHien[] {
       suaTay: true,
       an: smsBox.an,
       lech,
+      lechMa,
     });
   }
 
@@ -118,8 +133,25 @@ export function tronBox(tuLark: Box[], tuSms: BoxSms[]): BoxHien[] {
       suaTay: smsBox.suaTay,
       an: smsBox.an,
       lech: null,
+      lechMa: null,
     });
   }
 
   return ketQua;
+}
+
+/**
+ * Lọc khỏi `boLai` những dòng kho mà tên đã có một dòng `box_dong_goi` DÙNG ĐƯỢC (`tuSms`, đã
+ * qua lọc dài/rộng/ma trong `docDanhMucBox`) — nghĩa là ai đó đã điền tay và lưu box này vào
+ * danh mục rồi, dù dòng kho GỐC vẫn còn xung đột (kích thước không đọc được, hoặc hai dòng
+ * cùng tên khác kích thước — lý do `gomBox` đẩy nó vào `boLai` ngay từ đầu, và lý do đó không
+ * tự hết chỉ vì người ta đã sửa).
+ *
+ * KHÔNG lọc thì một reject đã sửa vẫn nằm lại "chưa dùng được" MÃI MÃI (bản thân dòng kho thô
+ * không đổi), và vật này hiện ĐÚP — vừa ở đây vừa ở khối box dùng được của `tronBox` (chính nó
+ * đã lên `box` qua nhánh "box chỉ còn ở SMS", vì `box_dong_goi.ten` khớp tên dòng kho này).
+ */
+export function locBoLaiDaSua(boLai: BoLai[], tuSms: BoxSms[]): BoLai[] {
+  const daCoTrongHeThong = new Set(tuSms.map((b) => b.ten));
+  return boLai.filter((r) => !daCoTrongHeThong.has(r.ten));
 }

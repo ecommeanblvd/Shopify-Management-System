@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { tronBox } from './tron-box';
-import { Box } from './danh-muc-box';
+import { tronBox, locBoLaiDaSua } from './tron-box';
+import { Box, BoLai } from './danh-muc-box';
 import { BoxSms } from './tron-box';
 
 describe('tronBox', () => {
@@ -165,6 +165,35 @@ describe('tronBox', () => {
     expect(r[0].id).toBe('y');
   });
 
+  it('box đã khoá, Lark đổi MÃ nhưng kích thước giữ nguyên → lech null, lechMa báo mã Lark', () => {
+    // Reviewer round: `lech` chỉ so kích thước — một lô re-code mã (INS-BAG-… → MEAN-BOX-…)
+    // mà kích thước không đổi sẽ KHÔNG lộ qua `lech`, nên cần tín hiệu RIÊNG cho `ma`.
+    const r = tronBox(
+      [{ ten: 'Thùng Carton 5kg', ma: 'MEAN-BOX-40x25x28', loai: 'thung', kichThuoc: { daiCm: 40, rongCm: 25, caoCm: 28 }, larkRecordIds: ['r1'] }],
+      [{ id: 'x', ten: 'Thùng Carton 5kg', ma: 'INS-BAG-40x25x28', loai: 'thung', daiCm: 40, rongCm: 25, caoCm: 28, suaTay: true, an: false }],
+    );
+    expect(r[0]!.lech).toBeNull();
+    expect(r[0]!.lechMa).toBe('MEAN-BOX-40x25x28');
+    expect(r[0]!.ma).toBe('INS-BAG-40x25x28'); // ma đã khoá vẫn thắng, không bị Lark ghi đè.
+  });
+
+  it('box đã khoá, Lark KHÔNG đổi mã → lechMa null', () => {
+    const r = tronBox(
+      [{ ten: 'Thùng Carton 5kg', ma: 'M1', loai: 'thung', kichThuoc: { daiCm: 40, rongCm: 25, caoCm: 28 }, larkRecordIds: ['r1'] }],
+      [{ id: 'x', ten: 'Thùng Carton 5kg', ma: 'M1', loai: 'thung', daiCm: 40, rongCm: 25, caoCm: 28, suaTay: true, an: false }],
+    );
+    expect(r[0]!.lechMa).toBeNull();
+  });
+
+  it('box chưa khoá (suaTay=false) → lechMa null dù Lark/SMS khác mã (Lark vẫn là nguồn)', () => {
+    const r = tronBox(
+      [{ ten: 'Thùng Carton 5kg', ma: 'M-MOI', loai: 'thung', kichThuoc: { daiCm: 40, rongCm: 25, caoCm: 28 }, larkRecordIds: ['r1'] }],
+      [{ id: 'x', ten: 'Thùng Carton 5kg', ma: 'M-CU', loai: 'thung', daiCm: 40, rongCm: 25, caoCm: 28, suaTay: false, an: false }],
+    );
+    expect(r[0]!.lechMa).toBeNull();
+    expect(r[0]!.ma).toBe('M-MOI');
+  });
+
   it('box bị ẩn không biến mất, chỉ mang cờ an=true', () => {
     const tuLark: Box[] = [
       {
@@ -193,5 +222,39 @@ describe('tronBox', () => {
 
     expect(r).toHaveLength(1);
     expect(r[0].an).toBe(true);
+  });
+});
+
+describe('locBoLaiDaSua — reject đã sửa (đã có dòng box_dong_goi dùng được) phải RỜI boLai', () => {
+  const reject = (p: Partial<BoLai> = {}): BoLai => ({
+    ten: 'Hộp Lạ Chưa Đo', lyDo: 'Không đọc được kích thước', recordIds: ['r1'], ...p,
+  });
+  const sms = (p: Partial<BoxSms> = {}): BoxSms => ({
+    id: 'x', ten: 'Hộp Lạ Chưa Đo', ma: 'MEAN-LA-30x20x10', loai: 'thung',
+    daiCm: 30, rongCm: 20, caoCm: 10, suaTay: false, an: false, ...p,
+  });
+
+  it('ten đã có dòng box_dong_goi (tuSms) → loại khỏi boLai', () => {
+    const r = locBoLaiDaSua([reject()], [sms()]);
+    expect(r).toHaveLength(0);
+  });
+
+  it('ten CHƯA có dòng nào trong tuSms → giữ nguyên trong boLai', () => {
+    const r = locBoLaiDaSua([reject()], [sms({ ten: 'Hộp Khác' })]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.ten).toBe('Hộp Lạ Chưa Đo');
+  });
+
+  it('nhiều boLai, chỉ một cái đã sửa → lọc đúng MỘT, giữ lại cái còn lại', () => {
+    const r = locBoLaiDaSua(
+      [reject({ ten: 'A' }), reject({ ten: 'B' })],
+      [sms({ ten: 'A' })],
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0]!.ten).toBe('B');
+  });
+
+  it('boLai rỗng → trả rỗng', () => {
+    expect(locBoLaiDaSua([], [sms()])).toEqual([]);
   });
 });

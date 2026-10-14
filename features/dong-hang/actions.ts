@@ -254,14 +254,14 @@ export async function luuBox(v: {
   const dsTenKhac = dong.filter((r) => r.id !== v.id).map((r) => r.ten);
 
   const kq = kiemBox(
-    { ten: v.ten, daiCm: String(v.daiCm), rongCm: String(v.rongCm), caoCm: v.caoCm != null ? String(v.caoCm) : '' },
+    { ten: v.ten, ma: v.ma, daiCm: String(v.daiCm), rongCm: String(v.rongCm), caoCm: v.caoCm != null ? String(v.caoCm) : '' },
     dsTenKhac,
   );
   if (!kq.ok) return { ok: false, loi: kq.loi };
 
   const gia = {
     ten: kq.sach!.ten,
-    ma: v.ma.trim(),
+    ma: kq.sach!.ma,
     loai: v.loai,
     daiCm: String(kq.sach!.daiCm),
     rongCm: String(kq.sach!.rongCm),

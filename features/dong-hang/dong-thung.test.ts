@@ -121,18 +121,26 @@ describe('dimsDongThungTuCot — dựng dims để MỞ LẠI bước Đóng th�
 // nghĩa trong dong-thung.ts); mặc định `[]` chỉ sống ở đây, trong test helper, để các test
 // không kiểm trùng tên không phải lặp lại `[]` ở mọi lời gọi.
 const box = (p: Partial<Parameters<typeof kiemBox>[0]> = {}, dsTenDaCo: string[] = []) =>
-  kiemBox({ ten: 'Thùng Carton 5kg', daiCm: '40', rongCm: '25', caoCm: '25', ...p }, dsTenDaCo);
+  kiemBox({ ten: 'Thùng Carton 5kg', ma: 'MEAN-CAR-40x25x25', daiCm: '40', rongCm: '25', caoCm: '25', ...p }, dsTenDaCo);
 
 describe('kiemBox — kiểm ô nhập của màn quản lý danh mục box (QuanLyBox)', () => {
   it('đủ ba chiều → hợp lệ, trả đúng số đã chuẩn hoá', () => {
     const r = box();
     expect(r.ok).toBe(true);
-    expect(r.sach).toEqual({ ten: 'Thùng Carton 5kg', daiCm: 40, rongCm: 25, caoCm: 25 });
+    expect(r.sach).toEqual({ ten: 'Thùng Carton 5kg', ma: 'MEAN-CAR-40x25x25', daiCm: 40, rongCm: 25, caoCm: 25 });
   });
 
   it('BẮT BUỘC có tên', () => {
     expect(box({ ten: '' }).ok).toBe(false);
     expect(box({ ten: '   ' }).loi).toContain('Chưa nhập tên box');
+  });
+
+  // Reviewer round: `kiemBox` KHÔNG kiểm `ma` — box lưu với `ma = ''` vẫn lên lưới `ChonBox`,
+  // người chọn nó thì ô "Thùng đã dùng" bị điền rỗng và lập tức bị báo "Chưa chọn thùng đã
+  // dùng" ngay sau khi vừa chọn. Chặn ngay ở biên, trước khi nó kịp lưu.
+  it('BẮT BUỘC có mã vật tư — box ma rỗng không được mời chọn ở ChonBox', () => {
+    expect(box({ ma: '' }).ok).toBe(false);
+    expect(box({ ma: '   ' }).loi).toContain('Chưa nhập mã vật tư');
   });
 
   it('số âm → lỗi', () => {

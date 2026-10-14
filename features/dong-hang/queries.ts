@@ -7,7 +7,7 @@ import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
 import { dimsDongThungTuCot } from './dong-thung';
 import { gomBox, type LoaiBox, type BoLai, type Box } from './danh-muc-box';
-import { tronBox, type BoxHien, type BoxSms } from './tron-box';
+import { tronBox, locBoLaiDaSua, type BoxHien, type BoxSms } from './tron-box';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 import type { CanKienVao, DiaChiDon, MonHang } from './van-don';
 
@@ -259,7 +259,12 @@ async function docDanhMucBox(): Promise<{ box: Box[]; boLai: BoLai[]; tuSms: Box
     // (`tronBox`) — chọn một dòng thiếu dài/rộng sẽ điền `dai = '0'`/`rong = '0'` vào ô, đúng
     // kiểu "0 là dữ liệu xấu" mà tính năng này đã cấm cho chiều cao. Bỏ hẳn dòng thiếu, không
     // vá bằng 0.
-    .filter((r) => r.daiCm != null && r.rongCm != null)
+    //
+    // `ma` rỗng cùng một lỗi: `kiemBox` nay chặn `ma` rỗng TẠI BIÊN lúc lưu (xem dong-thung.ts),
+    // nhưng dòng cũ ghi từ TRƯỚC khi luật đó có vẫn có thể còn `ma = ''` trong CSDL — lọc lại ở
+    // đây để một box không dùng được không lên lưới `ChonBox`, cùng guard
+    // `isNotNull(dinh_danh)` phía kho ngay trên.
+    .filter((r) => r.daiCm != null && r.rongCm != null && r.ma.trim() !== '')
     .map((r) => ({
       id: r.id, ten: r.ten, ma: r.ma, loai: r.loai as LoaiBox,
       daiCm: Number(r.daiCm), rongCm: Number(r.rongCm), caoCm: r.caoCm != null ? Number(r.caoCm) : null,
@@ -287,8 +292,13 @@ export async function danhSachBox(): Promise<BoxHien[]> {
  * được, hoặc cùng tên mà kích thước xung đột giữa các dòng). `danhSachBox` chỉ cần nửa đầu vì
  * lưới `ChonBox` không có chỗ hiện một box không có kích thước; màn quản lý thì CHÍNH LÀ chỗ
  * sửa những dòng đó, nên phải thấy cả hai.
+ *
+ * `boLai` được lọc qua `locBoLaiDaSua` trước khi trả: một reject mà ai đó đã điền tay (đã có
+ * dòng `box_dong_goi` dùng được, tức đã lên `tuSms`) thì bỏ khỏi đây — nó đã lên `box` ở trên
+ * rồi (`tronBox` tự thêm qua nhánh "box chỉ còn ở SMS"), giữ cả hai nơi sẽ hiện ĐÚP cùng một
+ * box, và mục "chưa dùng được" sẽ không bao giờ tắt dù đã sửa xong (xem `QuanLyBox.tsx`).
  */
 export async function danhMucBoxQuanLy(): Promise<{ box: BoxHien[]; boLai: BoLai[] }> {
   const { box, boLai, tuSms } = await docDanhMucBox();
-  return { box: tronBox(box, tuSms), boLai };
+  return { box: tronBox(box, tuSms), boLai: locBoLaiDaSua(boLai, tuSms) };
 }

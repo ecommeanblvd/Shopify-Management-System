@@ -117,7 +117,7 @@ export interface KetQuaKiemBox {
   ok: boolean;
   loi: string[];
   /** Chỉ có khi `ok` — số đã chuẩn hoá để ghi vào `box_dong_goi`. */
-  sach?: { ten: string; daiCm: number; rongCm: number; caoCm: number | null };
+  sach?: { ten: string; ma: string; daiCm: number; rongCm: number; caoCm: number | null };
 }
 
 /**
@@ -135,15 +135,24 @@ export interface KetQuaKiemBox {
  * một bản vá lỡ gọi `kiemBox(v)` thiếu tham số này sẽ ÂM THẦM tắt luật kiểm trùng tên (không
  * lỗi kiểu, không crash, chỉ là luật ngưng áp dụng mà không ai nhận ra). Buộc truyền tay để
  * thiếu dây là `tsc` báo lỗi NGAY tại chỗ gọi.
+ *
+ * `ma` cũng BẮT BUỘC — cùng guard `isNotNull(dinh_danh)` mà truy vấn phía kho đã có
+ * (`docDanhMucBox`, features/dong-hang/queries.ts): một box `ma = ''` vẫn lên được lưới
+ * `ChonBox`, người chọn nó thì ô "Thùng đã dùng" bị điền rỗng và bị báo "Chưa chọn thùng đã
+ * dùng" ngay sau khi vừa chọn — một box không dùng được thì không được mời chọn, chặn ngay ở
+ * đây, trước khi nó kịp lưu vào danh mục.
  */
 export function kiemBox(
-  v: { ten: string; daiCm: string; rongCm: string; caoCm: string },
+  v: { ten: string; ma: string; daiCm: string; rongCm: string; caoCm: string },
   dsTenDaCo: string[],
 ): KetQuaKiemBox {
   const loi: string[] = [];
   const ten = v.ten.trim();
   if (!ten) loi.push('Chưa nhập tên box');
   else if (dsTenDaCo.some((t) => t.trim() === ten)) loi.push('Tên box này đã có trong danh mục');
+
+  const ma = v.ma.trim();
+  if (!ma) loi.push('Chưa nhập mã vật tư');
 
   const dai = so(v.daiCm);
   const rong = so(v.rongCm);
@@ -163,7 +172,7 @@ export function kiemBox(
   if (loi.length > 0) return { ok: false, loi };
   return {
     ok: true, loi: [],
-    sach: { ten, daiCm: dai as number, rongCm: rong as number, caoCm: cao },
+    sach: { ten, ma, daiCm: dai as number, rongCm: rong as number, caoCm: cao },
   };
 }
 
