@@ -13,6 +13,7 @@ import { emitShipHoEvent } from './mmp-events';
 import { banGiaCuoiNeuDoi, giaCuoiDaGuiTheoDon } from './final-charge-emit';
 import { decideReconcile, donDaDongBang } from './reconcile-decision';
 import { khopOBangGia, layOBangGia, canTinhCuocTuO } from './bill-base-check';
+import { oTheoCan } from './o-theo-can';
 import { ghiDutyChoDon } from './duty';
 import { giaCuoiVaDelta } from './gia-cuoi-mmp';
 
@@ -230,12 +231,21 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
         // của brand mà không lo đơn khai sai loại gói hay thiếu kích thước.
         // Ratecard nội bộ chỉ còn là fallback khi dòng bill thiếu cột base.
         const billNetFreight = s.base + s.discount;
+        const oBangGia = await layOBangGia(est.internal.carrierAccountId, o.country, shipDateStr ?? null);
         // Net bill KHÔNG trùng ô nào của bảng giá → dữ liệu lệch (rate card / dòng bill), báo ops.
-        const kiemO = khopOBangGia(billNetFreight, await layOBangGia(est.internal.carrierAccountId, o.country, shipDateStr ?? null));
-        canTuBangGia = canTinhCuocTuO(kiemO, null);
+        // TỪ 14/10/2026 đây CHỈ còn là cảnh báo cho ops, KHÔNG còn quyết định tiền brand trả.
+        const kiemO = khopOBangGia(billNetFreight, oBangGia);
+        // CƯỚC CƠ BẢN = ô bảng giá CỐ ĐỊNH của brand tại cân bill (làm tròn lên bậc) — CEO
+        // chốt 14/10/2026, đảo D-022. Số đo đằng sau quyết định nằm ở `o-theo-can.ts`.
+        const oTheoCanBill = oTheoCan(oBangGia, billed.weightKg ?? 0);
+        // Cân tính cước: lấy bậc của ô vừa tra. Không tra được ô thì mới suy ngược từ tiền.
+        canTuBangGia = oTheoCanBill?.kg ?? canTinhCuocTuO(kiemO, null);
         if (!kiemO.khop) summary.baseLech.push({ code: o.code, maLog: o.larkOrderNumber, netVnd: Math.round(billNetFreight), lechVnd: kiemO.lechVnd, ganNhat: kiemO.ganNhat ? `${kiemO.ganNhat.loaiGoi} ${kiemO.ganNhat.kg} kg = ${Math.round(kiemO.ganNhat.vnd)}` : null });
         const rc = reconciledBrandCharge({
-          baseVnd: billNetFreight > 0 ? billNetFreight : est.internal.baseVnd,
+          // Thứ tự rơi về: ô bảng giá tại cân bill → net bill → engine. Hai nấc sau chỉ chạy
+          // khi KHÔNG tra được ô (cân vượt bậc cao nhất, hoặc bảng giá chưa phủ nước này);
+          // `baseTuBangGia` dưới ghi lại để ops biết đơn nào không tính theo bảng giá.
+          baseVnd: oTheoCanBill?.vnd ?? (billNetFreight > 0 ? billNetFreight : est.internal.baseVnd),
           // Markup theo BẬC hiện tại của brand (CEO 30/09, thay quyết định 08/09) — cùng
           // nguồn với báo giá, nên Dự tính và Thực luôn một thước. KHÔNG đọc cột
           // `markup_percent` trên đơn: đơn cũ mang giá trị legacy trước hệ bậc (kalisa 30,
@@ -259,6 +269,10 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
           chargedVnd: rc.chargedVnd,
           // 1 = net bill trùng ô bảng giá cố định; 0 = lệch (kèm số lệch so ô gần nhất).
           baseKhopBangGia: kiemO.khop ? 1 : 0,
+          // Nguồn THẬT của cước cơ bản: 1 = ô bảng giá tại cân bill (đường chuẩn),
+          // 0 = phải rơi về net bill hoặc engine vì không tra được ô.
+          baseTuBangGia: oTheoCanBill ? 1 : 0,
+          ...(oTheoCanBill ? { baseOKg: oTheoCanBill.kg } : {}),
           ...(kiemO.khop ? {} : { baseLechVnd: kiemO.lechVnd ?? 0 }),
         };
         summary.requoted += 1;

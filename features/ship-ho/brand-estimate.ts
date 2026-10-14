@@ -63,8 +63,11 @@ export function neutralNotes(): string[] {
   ];
 }
 
-/** Quy field breakdown (cost currency) về VND theo currency của account. */
-function toVndFactor(snap: { costCurrency: string; displayCurrency: string; fxCostPerDisplay: number }): number | null {
+/** Quy field breakdown (cost currency) về VND theo currency của account.
+ *  EXPORT vì `layOBangGia` (bill-base-check) cũng phải quy ô bảng giá về VND: bảng giá
+ *  Aramex lưu bằng USD (ô 7–441) còn FedEx/DHL lưu VND (ô hàng trăm nghìn). Viết bản thứ
+ *  hai của luật này là mở đường cho hai nơi hiểu khác nhau về cùng một con số. */
+export function toVndFactor(snap: { costCurrency: string; displayCurrency: string; fxCostPerDisplay: number }): number | null {
   if (snap.costCurrency === 'VND') return 1;
   if (snap.displayCurrency === 'VND') return 1 / snap.fxCostPerDisplay;
   return null;

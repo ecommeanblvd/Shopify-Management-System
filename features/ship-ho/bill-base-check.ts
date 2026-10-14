@@ -9,6 +9,7 @@
 import { sql } from 'drizzle-orm';
 import { ngayKinhDoanh } from '@/lib/timezone';
 import { db } from '@/db/client';
+import { toVndFactor } from './brand-estimate';
 
 export interface OBangGia { kg: number; loaiGoi: string; vnd: number }
 
@@ -54,16 +55,35 @@ export function canTinhCuocTuO(ket: KetQuaKhopO, roiVe: number | null): number |
 export async function layOBangGia(carrierAccountId: string, countryCode: string, ngay: string | null): Promise<OBangGia[]> {
   const d = ngay ?? ngayKinhDoanh(new Date())!;
   const rows = await db.execute(sql`
-    select t.upper_kg as kg, c.package_type as loai_goi, c.cost_amount as vnd
+    select t.upper_kg as kg, c.package_type as loai_goi, c.cost_amount as so_tien,
+           a.cost_currency, a.display_currency, a.fx_cost_per_display
     from carrier_rate_cells c
     join carrier_rate_cards rc on rc.id = c.rate_card_id
+    join carrier_accounts a on a.id = rc.carrier_account_id
     join carrier_weight_tiers t on t.id = c.carrier_weight_tier_id
     join carrier_zone_countries zc on zc.carrier_zone_id = c.carrier_zone_id
     where rc.carrier_account_id = ${carrierAccountId}
       and rc.effective_from <= ${d}::date and (rc.effective_to is null or rc.effective_to >= ${d}::date)
       and zc.country_code = ${countryCode}
   `);
-  return (rows.rows as Array<{ kg: unknown; loai_goi: unknown; vnd: unknown }>).map((r) => ({
-    kg: Number(r.kg), loaiGoi: String(r.loai_goi ?? 'package'), vnd: Number(r.vnd),
-  }));
+  type Dong = { kg: unknown; loai_goi: unknown; so_tien: unknown; cost_currency: unknown; display_currency: unknown; fx_cost_per_display: unknown };
+  const out: OBangGia[] = [];
+  for (const r of rows.rows as Dong[]) {
+    // `cost_amount` nằm trong TIỀN TỆ CHI PHÍ của account, không phải luôn luôn VND:
+    // bảng giá Aramex lưu USD (ô 7–441), FedEx/DHL lưu VND (ô hàng trăm nghìn). Quy ngay
+    // tại nguồn để KHÔNG người gọi nào phải nhớ hộ — đưa thẳng ô USD vào công thức tính
+    // tiền brand là thu 200 đồng thay vì 5 triệu.
+    const heSo = toVndFactor({
+      costCurrency: String(r.cost_currency ?? ''),
+      displayCurrency: String(r.display_currency ?? ''),
+      fxCostPerDisplay: Number(r.fx_cost_per_display),
+    });
+    // Không quy được (account không có vế nào là VND, hoặc tỷ giá hỏng) → BỎ ô đó đi.
+    // Thà không tra được ô và rơi về đường cũ, còn hơn tính tiền bằng một con số lẫn đơn vị.
+    if (heSo == null || !Number.isFinite(heSo) || heSo <= 0) continue;
+    const vnd = Number(r.so_tien) * heSo;
+    if (!Number.isFinite(vnd) || vnd <= 0) continue;
+    out.push({ kg: Number(r.kg), loaiGoi: String(r.loai_goi ?? 'package'), vnd });
+  }
+  return out;
 }
