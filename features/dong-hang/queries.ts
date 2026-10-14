@@ -5,6 +5,9 @@ import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
+import { dimsDongThungTuCot } from './dong-thung';
+import { gomBox, type LoaiBox, type BoLai, type Box } from './danh-muc-box';
+import { tronBox, locBoLaiDaSua, type BoxHien, type BoxSms } from './tron-box';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 import type { CanKienVao, DiaChiDon, MonHang } from './van-don';
 
@@ -98,8 +101,7 @@ export async function listKienDongHang(loc: BoLocDongHang, q?: string): Promise<
     canDuKienKg: r.canDuKien != null ? Number(r.canDuKien) : null,
     dongThung: r.smsDongLuc != null ? {
       hop: r.smsHop, canKg: r.smsCan != null ? Number(r.smsCan) : null,
-      dims: r.smsL != null && r.smsW != null && r.smsH != null
-        ? { l: Number(r.smsL), w: Number(r.smsW), h: Number(r.smsH) } : null,
+      dims: dimsDongThungTuCot(r.smsL, r.smsW, r.smsH),
       luc: r.smsDongLuc.toISOString(),
     } : null,
     canMon: {
@@ -230,4 +232,73 @@ export async function docNenVanDon(shipmentId: string): Promise<NenVanDon | null
     })),
     soKien: viTri >= 0 ? { n: viTri + 1, tong: ds.length } : null,
   };
+}
+
+/**
+ * Đọc kho (`lark_wh_inventory`, dòng vật tư `VTĐG1`) + bảng `box_dong_goi` của SMS MỘT lần,
+ * dùng chung cho `danhSachBox` (lưới chọn `ChonBox`) và `danhMucBoxQuanLy` (màn quản lý danh
+ * mục, liệt kê cả `boLai`) — hai nơi cần đúng cùng dữ liệu kho này, tách thành hàm riêng để
+ * không phải `SELECT lark_wh_inventory` hai lần cho hai màn.
+ */
+async function docDanhMucBox(): Promise<{ box: Box[]; boLai: BoLai[]; tuSms: BoxSms[] }> {
+  const w = schema.larkWhInventory;
+  // `dinh_danh IS NOT NULL` — cùng guard với `vatTuDongGoi` ở features/dong-goi/queries.ts.
+  // `gomBox` ghi `ma: dinhDanh ?? ''` cho dòng thiếu định danh; một box `ma = ''` vẫn lên được
+  // lưới, người chọn nó thì `hop` rỗng và `kiemNhapDongThung` chặn lưu với "Chưa chọn thùng đã
+  // dùng" — ngay sau khi họ vừa chọn. Một box không dùng được thì không được mời chọn.
+  const whRows = await db.select({
+    recordId: w.recordId, lineitemName: w.lineitemName, dinhDanh: w.dinhDanh, kichThuoc: w.kichThuoc,
+  }).from(w).where(and(eq(w.inventoryType, 'VTĐG1'), isNotNull(w.dinhDanh)));
+
+  const { box, boLai } = gomBox(whRows);
+
+  const b = schema.boxDongGoi;
+  const smsRows = await db.select().from(b);
+  const tuSms: BoxSms[] = smsRows
+    // `dai_cm`/`rong_cm` là numeric NULLABLE. `Number(null)` → `0`, và bản sửa tay THẮNG Lark
+    // (`tronBox`) — chọn một dòng thiếu dài/rộng sẽ điền `dai = '0'`/`rong = '0'` vào ô, đúng
+    // kiểu "0 là dữ liệu xấu" mà tính năng này đã cấm cho chiều cao. Bỏ hẳn dòng thiếu, không
+    // vá bằng 0.
+    //
+    // `ma` rỗng cùng một lỗi: `kiemBox` nay chặn `ma` rỗng TẠI BIÊN lúc lưu (xem dong-thung.ts),
+    // nhưng dòng cũ ghi từ TRƯỚC khi luật đó có vẫn có thể còn `ma = ''` trong CSDL — lọc lại ở
+    // đây để một box không dùng được không lên lưới `ChonBox`, cùng guard
+    // `isNotNull(dinh_danh)` phía kho ngay trên.
+    .filter((r) => r.daiCm != null && r.rongCm != null && r.ma.trim() !== '')
+    .map((r) => ({
+      id: r.id, ten: r.ten, ma: r.ma, loai: r.loai as LoaiBox,
+      daiCm: Number(r.daiCm), rongCm: Number(r.rongCm), caoCm: r.caoCm != null ? Number(r.caoCm) : null,
+      suaTay: r.suaTay, an: r.an,
+    }));
+
+  return { box, boLai, tuSms };
+}
+
+/**
+ * Danh mục box cho lưới chọn ở khối Đóng thùng (`ChonBox`): gom kho về một box mỗi loại, trộn
+ * với bản sửa tay của SMS (luật bản-sửa-tay-thắng ở `tronBox`).
+ *
+ * Không cần chặn quyền riêng: màn Đóng hàng đã gác ở `view_fulfillment` (xem `actions.ts`),
+ * đọc danh mục box không phải việc nhạy hơn đọc chính kiện hàng.
+ */
+export async function danhSachBox(): Promise<BoxHien[]> {
+  const { box, tuSms } = await docDanhMucBox();
+  return tronBox(box, tuSms);
+}
+
+/**
+ * Danh mục box CHO MÀN QUẢN LÝ (`QuanLyBox`, `/f/dong-hang/box`) — cùng `box` như
+ * `danhSachBox`, CỘNG `boLai`: những dòng kho `gomBox` phải loại ra (kích thước không đọc
+ * được, hoặc cùng tên mà kích thước xung đột giữa các dòng). `danhSachBox` chỉ cần nửa đầu vì
+ * lưới `ChonBox` không có chỗ hiện một box không có kích thước; màn quản lý thì CHÍNH LÀ chỗ
+ * sửa những dòng đó, nên phải thấy cả hai.
+ *
+ * `boLai` được lọc qua `locBoLaiDaSua` trước khi trả: một reject mà ai đó đã điền tay (đã có
+ * dòng `box_dong_goi` dùng được, tức đã lên `tuSms`) thì bỏ khỏi đây — nó đã lên `box` ở trên
+ * rồi (`tronBox` tự thêm qua nhánh "box chỉ còn ở SMS"), giữ cả hai nơi sẽ hiện ĐÚP cùng một
+ * box, và mục "chưa dùng được" sẽ không bao giờ tắt dù đã sửa xong (xem `QuanLyBox.tsx`).
+ */
+export async function danhMucBoxQuanLy(): Promise<{ box: BoxHien[]; boLai: BoLai[] }> {
+  const { box, boLai, tuSms } = await docDanhMucBox();
+  return { box: tronBox(box, tuSms), boLai: locBoLaiDaSua(boLai, tuSms) };
 }

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
-import { listKienDongHang, listKienChoKhop, demKienChuaCan, GIOI_HAN_KIEN } from '@/features/dong-hang/queries';
+import { listKienDongHang, listKienChoKhop, demKienChuaCan, danhSachBox, GIOI_HAN_KIEN } from '@/features/dong-hang/queries';
 import { BO_LOC, type BoLocDongHang } from '@/features/dong-hang/types';
 import { BangDongHang } from '@/components/dong-hang/BangDongHang';
 
@@ -24,7 +24,9 @@ export default async function DongHangPage({
   const loc: BoLocDongHang = (BO_LOC as readonly string[]).includes(locRaw) ? (locRaw as BoLocDongHang) : 'cho_chon_line';
   const q = typeof sp.q === 'string' ? sp.q : '';
 
-  const [kien, choKhop, soKienChuaCan] = await Promise.all([listKienDongHang(loc, q), listKienChoKhop(), demKienChuaCan()]);
+  const [kien, choKhop, soKienChuaCan, dsBox] = await Promise.all([
+    listKienDongHang(loc, q), listKienChoKhop(), demKienChuaCan(), danhSachBox(),
+  ]);
 
   return (
     <div className="space-y-4 p-6">
@@ -43,6 +45,7 @@ export default async function DongHangPage({
         coQuyenDong={hasPermission(role, 'manage_fulfillment')}
         gioiHan={GIOI_HAN_KIEN}
         soKienChuaCan={soKienChuaCan}
+        dsBox={dsBox}
       />
     </div>
   );

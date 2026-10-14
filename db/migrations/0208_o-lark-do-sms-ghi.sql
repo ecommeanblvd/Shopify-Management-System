@@ -1,0 +1,29 @@
+-- Dấu "những cột Lark nào hệ thống (SMS) ĐÃ GHI" cho tính năng đẩy cân/kích thước đóng thùng
+-- lên dòng Lark (Task 9, spec 2026-10-14 §3b.3).
+--
+-- Vì sao cần: luật chuẩn cho MỌI lượt ghi Lark là "chỉ điền ô trống, không bao giờ đè"
+-- (`oLarkTrong`, `features/lark/ghi-nguoc/dung-patch.ts`) — Lark không có undo, đè sai là
+-- người phải vào xoá tay từng ô. Nhưng CEO chốt một NGOẠI LỆ riêng cho khối Đóng thùng: hệ
+-- thống được phép ghi ĐÈ LẠI đúng những ô NÓ đã từng ghi, vì nếu không thì lượt ghi đầu tiên
+-- khoá ô `Weights`/`Dimension ( điền tay)` vĩnh viễn — một con số cân gõ nhầm, hay cân lại sau
+-- khi đóng thùng khác, sẽ không bao giờ sửa được trên Lark nữa, trong khi phí ship của hãng
+-- lại tính thẳng từ ô đó.
+--
+-- Vì sao phải LƯU LẠI thành bằng chứng, không suy ra bằng cách so giá trị: hai người (nhân sự
+-- gõ tay trên Lark và hệ thống) gõ TRÙNG một số không phải là bằng chứng ai ghi — so giá trị
+-- để quyết định "được đè hay không" sẽ coi nhầm một trùng hợp thành "đây là của mình", rồi đè
+-- lên đúng số người khác vừa gõ. Cột này ghi lại SỰ THẬT "lượt ghi nào từ hệ thống đã từng gửi
+-- cột nào", để lượt ghi SAU chỉ cần tra danh sách, không đoán.
+--
+-- `jsonb` mảng tên cột (vd `["Weights", "Dimension ( điền tay)"]`) — DEFAULT `[]`, NOT NULL để
+-- mọi kiện lịch sử (chưa từng được hệ thống ghi) đọc ra mảng rỗng thay vì NULL phải xử tay ở
+-- mọi nơi đọc cột này. Nối thêm tên cột MỖI LẦN `ghiCanDimLenLark` (features/dong-hang) gửi
+-- patch thành công — xem hàm đó để biết chỗ ghi.
+--
+-- ⚠ ÁP TAY TRƯỚC KHI DEPLOY mã đọc/ghi cột này (xem db/migrations/README.md — `npm run
+-- db:migrate` KHÔNG áp dụng gì, chỉ in giả thành công). Thiếu cột thì `ghiCanDimLenLark` đổ lỗi
+-- SQL mỗi lượt gọi — nhưng vì hàm đó bắt buộc chạy NGOÀI transaction của `ghiDongThung` trong
+-- một try/catch riêng (Lark/CSDL hỏng không được chặn việc lưu đóng thùng), lỗi đó chỉ hiện ra
+-- như một cảnh báo toast, không chặn thao tác đóng thùng.
+ALTER TABLE shipments
+  ADD COLUMN IF NOT EXISTS o_lark_do_sms_ghi jsonb NOT NULL DEFAULT '[]'::jsonb;

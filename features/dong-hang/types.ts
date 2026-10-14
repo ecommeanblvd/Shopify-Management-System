@@ -12,7 +12,8 @@ export interface KienDongHang {
   /** Cân dự kiến theo Shopify — dùng so cước khi chưa cân thực. */
   canDuKienKg: number | null; dims: { l: number; w: number; h: number | null } | null;
   /** Kết quả bước ĐÓNG THÙNG ghi từ SMS (CEO 30/09/2026). null = chưa đóng trong SMS. */
-  dongThung: { hop: string | null; canKg: number | null; dims: { l: number; w: number; h: number } | null; luc: string } | null;
+  /** `dims.h = null` là HỢP LỆ (túi không có chiều cao) — KHÔNG đổi về số, xem `dimsDongThungTuCot`. */
+  dongThung: { hop: string | null; canKg: number | null; dims: { l: number; w: number; h: number | null } | null; luc: string } | null;
   /** Tổng cân DỰ KIẾN SAU ĐÓNG THÙNG của các món (đội kho điền lúc QC, kéo từ Lark về).
    *  Thiếu cân một món là `tongKg` không dùng được — xem `tongCanMon`. */
   canMon: { tongKg: number | null; soMonThieuCan: number; soMon: number };

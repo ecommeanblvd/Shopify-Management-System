@@ -1248,6 +1248,24 @@ export const shipments = pgTable('shipments', {
    *  NULL = chưa lượt nào giành, hoặc lượt trước đã nhả. Muốn chạy lại một kiện thì
    *  xoá dấu là đủ. */
   giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
+  /** BIÊN NHẬN giá trị mà `ghiCanDimLenLark` (Task 9) đã từng gửi lên dòng Lark của kiện này —
+   *  object khoá = tên cột, giá trị = SỐ/CHUỖI đã gửi, vd
+   *  `{"Weights": 2.4, "Dimension ( điền tay)": "40x30x12"}`. Migration 0208 (tạo cột, mảng
+   *  tên cột) + 0209 (đổi sang object giá trị, vòng sửa sau review 14/10/2026).
+   *
+   *  Dùng để phân biệt "ô trống" khỏi "ô hệ thống tự ghi, giá trị vẫn còn nguyên": luật chung
+   *  mọi lượt ghi Lark là CHỈ ĐIỀN Ô TRỐNG (`oLarkTrong`, `dung-patch.ts`), nhưng CEO chốt
+   *  ngoại lệ cho khối Đóng thùng — hệ thống được phép ĐÈ LẠI đúng những ô NÓ đã từng ghi (cân
+   *  gõ nhầm/cân lại vẫn sửa được). Bản đầu (0208) chỉ lưu TÊN CỘT đã ghi — review phát hiện
+   *  lỗi: tên cột không chứng minh được giá trị trên Lark còn là của hệ thống hay đã bị người
+   *  sửa lại; đè theo tên cột là đè LUÔN CẢ số người vừa sửa, không cảnh báo. Nay lưu CẢ GIÁ
+   *  TRỊ, và lượt ghi sau chỉ được đè khi Lark còn khớp đúng giá trị ở đây — ô NGƯỜI gõ tay
+   *  (hoặc hệ thống ghi rồi người sửa lại) thì tuyệt đối không đè. Vẫn là bằng chứng lưu lại,
+   *  không phải so sánh hai con số của hai người: so Lark với CHÍNH biên nhận của hệ thống.
+   *
+   *  `{}` (mặc định từ 0209) = kiện lịch sử/chưa từng được hệ thống ghi. Không bao giờ bị XOÁ
+   *  bớt, chỉ được GHI/nối thêm (xem `features/dong-hang/ghi-can-dim-len-lark.ts`). */
+  oLarkDoSmsGhi: jsonb('o_lark_do_sms_ghi').notNull().default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
@@ -3276,6 +3294,7 @@ export const larkWhInventory = pgTable('lark_wh_inventory', {
   /** Chữ NGƯỜI gõ trên Lark, giữ nguyên — không quy về enum, xem migration 0198. */
   lyDoFail: text('ly_do_fail'),
   uniqueCode: text('unique_code'),
+  kichThuoc: text('kich_thuoc'),
   soLuong: integer('so_luong'),
   coAnhHangDen: boolean('co_anh_hang_den').notNull().default(false),
   coBbBanGiao: boolean('co_bb_ban_giao').notNull().default(false),
@@ -3536,4 +3555,33 @@ export const danhGia = pgTable('danh_gia', {
   index('danh_gia_sao_idx').on(t.soSao),
   index('danh_gia_vendor_idx').on(t.vendor),
   index('danh_gia_trang_thai_idx').on(t.trangThai),
+]);
+
+/**
+ * Bảng box của HỆ THỐNG (SMS) cho việc chọn box khi đóng hàng — không phải mirror Lark
+ * (migration 0207).
+ *
+ * Luật bản-sửa-tay-thắng (CEO chốt): khi `sua_tay = true`, kích thước ở đây THẮNG và
+ * KHOÁ — lần đồng bộ Lark sau không ghi đè, chỉ dùng để báo lệch lúc đọc
+ * (`features/dong-hang/tron-box.ts`, hàm `tronBox`). Khớp với `lark_wh_inventory` theo
+ * `ten` (unique), KHÔNG theo record_id: mirror kho xoá dòng của lô cũ, record_id biến mất
+ * theo lô còn tên box thì ổn định.
+ *
+ * `an` chỉ ẩn khỏi màn chọn box, không xoá dòng — xoá sẽ mất số đã khoá và để box "ẩn"
+ * tự mọc lại nếu Lark còn lô cũ cùng tên.
+ */
+export const boxDongGoi = pgTable('box_dong_goi', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ten: text('ten').notNull().unique(),
+  ma: text('ma').notNull(),
+  loai: text('loai').notNull(),
+  daiCm: numeric('dai_cm'),
+  rongCm: numeric('rong_cm'),
+  caoCm: numeric('cao_cm'),
+  suaTay: boolean('sua_tay').notNull().default(false),
+  an: boolean('an').notNull().default(false),
+  capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+  nguoiSua: text('nguoi_sua').references(() => user.id, { onDelete: 'set null' }),
+}, (t) => [
+  index('box_dong_goi_an_idx').on(t.an),
 ]);

@@ -35,8 +35,16 @@ const so = (v: string): number | null => {
  * Cân là BẮT BUỘC — đó là lý do bước này tồn tại. Kích thước tuỳ chọn: nhiều kiện dùng túi,
  * không có kích thước nào để đo, và bắt nhập là bắt người ta bịa số.
  *
- * Kích thước nhập thì phải nhập ĐỦ BA chiều: một chiều lẻ không tính được cân quy đổi, mà
- * lưu nửa vời thì màn sau tưởng có dữ liệu.
+ * Kích thước nhập thì phải đủ CẢ BA chiều — HOẶC đủ dài + rộng mà bỏ trống cao (túi niêm
+ * phong/túi zip trong kho chỉ có hai số, không có "cao" để đo). Thiếu dài hoặc rộng thì vẫn
+ * là lỗi trong mọi trường hợp, có hay không có cao — một chiều lẻ kiểu đó không tính được
+ * cân quy đổi, mà lưu nửa vời thì màn sau tưởng có dữ liệu.
+ *
+ * Cao bỏ trống được ghi là `null` (xem `sach` bên dưới) — đó CHÍNH LÀ tín hiệu mà
+ * `inferPackagingFromDims` (features/shipments/parse-packaging.ts) dùng để chọn hạng cước
+ * Pak thay vì Package. Đây là CỐ Ý, không phải tai nạn — ĐỪNG "dọn" null thành 0 ở đây hay
+ * bất cứ đâu khác đọc lại giá trị này. Vì vậy cao = 0 KHÔNG được coi là "bỏ trống": không có
+ * kiện nào mỏng 0 cm, đó là gõ nhầm, nên vẫn phải báo lỗi như mọi kích thước ≤ 0 khác.
  */
 export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
   const loi: string[] = [];
@@ -49,10 +57,16 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
   else if (can <= 0) loi.push('Cân phải lớn hơn 0');
   else if (can > CAN_KIEN_TOI_DA_KG) loi.push(`Cân ${can} kg vượt ${CAN_KIEN_TOI_DA_KG} kg — kiểm lại xem có gõ nhầm không`);
 
-  const ba = [so(v.dai), so(v.rong), so(v.cao)];
+  const dai = so(v.dai);
+  const rong = so(v.rong);
+  const cao = so(v.cao);
+  const ba = [dai, rong, cao];
   const soONhap = ba.filter((x) => x != null).length;
-  if (soONhap > 0 && soONhap < 3) {
-    loi.push('Nhập kích thước thì phải đủ cả ba chiều — thiếu một chiều thì không tính được cân quy đổi');
+
+  const duDaiRong = dai != null && rong != null;
+  const chiThieuCao = duDaiRong && cao == null;
+  if (soONhap > 0 && soONhap < 3 && !chiThieuCao) {
+    loi.push('Nhập kích thước thì phải đủ cả ba chiều, hoặc đủ dài + rộng cho thùng dạng túi — thiếu dài hoặc rộng thì không tính được cân quy đổi');
   }
   for (const x of ba) {
     if (x == null) continue;
@@ -66,9 +80,11 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
     sach: {
       hop,
       canKg: Math.round((can as number) * 1000) / 1000,
-      dai: soONhap === 3 ? (ba[0] as number) : null,
-      rong: soONhap === 3 ? (ba[1] as number) : null,
-      cao: soONhap === 3 ? (ba[2] as number) : null,
+      // Tới đây soONhap chỉ còn 0, 2 (đủ dài+rộng, thiếu cao) hoặc 3 — mọi tổ hợp lẻ khác
+      // đã bị chặn ở trên.
+      dai: soONhap >= 2 ? dai : null,
+      rong: soONhap >= 2 ? rong : null,
+      cao: soONhap === 3 ? cao : null,
     },
   };
 }
@@ -80,6 +96,85 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
  * hơn cân thật một cách hợp lệ. Chỉ nhắc khi lệch quá lớn theo cả hai chiều.
  */
 export const NGUONG_CANH_BAO = 0.5;
+
+/**
+ * Dựng `dims` để hiện lại khi MỞ LẠI bước Đóng thùng, từ ba cột `sms_dim_*` (chuỗi số của cột
+ * numeric, hoặc null).
+ *
+ * Chỉ ĐÒI dài + rộng — KHÔNG đòi cao. Túi lưu `cao = null` (xem `kiemNhapDongThung`); đòi đủ cả
+ * ba sẽ coi mọi túi là "chưa đóng", làm mất luôn dài+rộng đã lưu khi mở lại kiện (bug thật: kho
+ * có bốn cỡ túi, 28×42/38×52/25×35/35×45, nên đây là đường ĐI THƯỜNG, không phải cạnh hiếm).
+ * Thiếu dài HOẶC rộng thì cả bộ coi như chưa đóng — một chiều lẻ không tính được cân quy đổi.
+ */
+export function dimsDongThungTuCot(
+  smsL: string | null, smsW: string | null, smsH: string | null,
+): { l: number; w: number; h: number | null } | null {
+  if (smsL == null || smsW == null) return null;
+  return { l: Number(smsL), w: Number(smsW), h: smsH != null ? Number(smsH) : null };
+}
+
+export interface KetQuaKiemBox {
+  ok: boolean;
+  loi: string[];
+  /** Chỉ có khi `ok` — số đã chuẩn hoá để ghi vào `box_dong_goi`. */
+  sach?: { ten: string; ma: string; daiCm: number; rongCm: number; caoCm: number | null };
+}
+
+/**
+ * Kiểm ô nhập của màn quản lý danh mục box (`QuanLyBox`) trước khi `luuBox` ghi — cùng khuôn
+ * với `kiemNhapDongThung` ở trên để hai màn đọc giống nhau: chiều cao bỏ trống vẫn hợp lệ (đó
+ * là tín hiệu "box không có cao", tức túi — xem `KICH_THUOC_TOI_DA_CM`/ghi chú phía trên), còn
+ * gõ 0 hoặc số âm luôn là lỗi.
+ *
+ * `dsTenDaCo`: tên các box KHÁC đã có trong danh mục. Trùng tên là lỗi vì `box_dong_goi.ten`
+ * là cột UNIQUE (khớp Lark theo tên — xem `tron-box.ts`); nơi gọi (`luuBox`) tự loại tên của
+ * chính box đang sửa ra khỏi danh sách này trước khi gọi, để sửa một box mà không đổi tên
+ * không bị báo trùng với chính nó.
+ *
+ * BẮT BUỘC (không có giá trị mặc định) — cùng lý do `dsBox` ở `KhoiDongThung` không có `= []`:
+ * một bản vá lỡ gọi `kiemBox(v)` thiếu tham số này sẽ ÂM THẦM tắt luật kiểm trùng tên (không
+ * lỗi kiểu, không crash, chỉ là luật ngưng áp dụng mà không ai nhận ra). Buộc truyền tay để
+ * thiếu dây là `tsc` báo lỗi NGAY tại chỗ gọi.
+ *
+ * `ma` cũng BẮT BUỘC — cùng guard `isNotNull(dinh_danh)` mà truy vấn phía kho đã có
+ * (`docDanhMucBox`, features/dong-hang/queries.ts): một box `ma = ''` vẫn lên được lưới
+ * `ChonBox`, người chọn nó thì ô "Thùng đã dùng" bị điền rỗng và bị báo "Chưa chọn thùng đã
+ * dùng" ngay sau khi vừa chọn — một box không dùng được thì không được mời chọn, chặn ngay ở
+ * đây, trước khi nó kịp lưu vào danh mục.
+ */
+export function kiemBox(
+  v: { ten: string; ma: string; daiCm: string; rongCm: string; caoCm: string },
+  dsTenDaCo: string[],
+): KetQuaKiemBox {
+  const loi: string[] = [];
+  const ten = v.ten.trim();
+  if (!ten) loi.push('Chưa nhập tên box');
+  else if (dsTenDaCo.some((t) => t.trim() === ten)) loi.push('Tên box này đã có trong danh mục');
+
+  const ma = v.ma.trim();
+  if (!ma) loi.push('Chưa nhập mã vật tư');
+
+  const dai = so(v.daiCm);
+  const rong = so(v.rongCm);
+  const cao = so(v.caoCm);
+
+  // Dài và rộng là BẮT BUỘC — một box không đo được hai chiều này thì không lên lưới chọn
+  // được. Cao tuỳ chọn (túi).
+  if (dai == null) loi.push('Chưa nhập chiều dài');
+  if (rong == null) loi.push('Chưa nhập chiều rộng');
+
+  for (const x of [dai, rong, cao]) {
+    if (x == null) continue;
+    if (Number.isNaN(x) || x <= 0) { loi.push('Kích thước phải là số lớn hơn 0'); break; }
+    if (x > KICH_THUOC_TOI_DA_CM) { loi.push(`Kích thước vượt ${KICH_THUOC_TOI_DA_CM} cm — kiểm lại`); break; }
+  }
+
+  if (loi.length > 0) return { ok: false, loi };
+  return {
+    ok: true, loi: [],
+    sach: { ten, ma, daiCm: dai as number, rongCm: rong as number, caoCm: cao },
+  };
+}
 
 export function canhBaoLechCan(canThuc: number, tongDuKien: number | null): string | null {
   if (tongDuKien == null || tongDuKien <= 0) return null;
