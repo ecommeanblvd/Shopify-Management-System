@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, test, expect } from 'vitest';
 import { kiemNhapDongThung, canhBaoLechCan, CAN_KIEN_TOI_DA_KG, NGUONG_CANH_BAO } from './dong-thung';
 
 const nhap = (p: Partial<Parameters<typeof kiemNhapDongThung>[0]> = {}) =>
@@ -32,10 +32,37 @@ describe('kiemNhapDongThung', () => {
     expect(r.loi.join(' ')).toContain('gõ nhầm');
   });
 
-  it('kích thước nhập thì phải ĐỦ BA chiều', () => {
-    /* Một chiều lẻ không tính được cân quy đổi, mà lưu nửa vời thì màn sau tưởng có dữ liệu. */
-    expect(nhap({ dai: '30', rong: '25' }).ok).toBe(false);
+  it('đủ ba chiều → hợp lệ, lưu đúng cả ba số', () => {
     expect(nhap({ dai: '30', rong: '25', cao: '20' }).sach).toMatchObject({ dai: 30, rong: 25, cao: 20 });
+  });
+
+  it('thiếu dài hoặc rộng → vẫn là lỗi, có hay không có cao', () => {
+    /* Một chiều lẻ (ngoài cao) không tính được cân quy đổi, mà lưu nửa vời thì màn sau tưởng có dữ liệu. */
+    expect(nhap({ dai: '30' }).ok).toBe(false);
+    expect(nhap({ rong: '25' }).ok).toBe(false);
+    expect(nhap({ dai: '30', cao: '20' }).ok).toBe(false); // thiếu rộng
+    expect(nhap({ rong: '25', cao: '20' }).ok).toBe(false); // thiếu dài
+  });
+
+  // Túi niêm phong / túi zip trong kho (Túi niêm phong nhỏ 28x42, to 38x52, Túi zip nhỏ
+  // 25x35, to 35x45) chỉ có HAI số — không có "cao" để đo. Nới riêng trường hợp này.
+  test('dài+rộng, KHÔNG cao → hợp lệ, cao giữ null', () => {
+    const r = kiemNhapDongThung({ hop: 'Túi niêm phong nhỏ', canKg: '1', dai: '28', rong: '42', cao: '' });
+    expect(r.ok).toBe(true);
+    expect(r.sach?.dai).toBe(28);
+    expect(r.sach?.rong).toBe(42);
+    expect(r.sach?.cao).toBeNull();
+  });
+
+  test('chỉ có cao mà thiếu dài hoặc rộng → vẫn là lỗi', () => {
+    expect(nhap({ cao: '20' }).ok).toBe(false);
+    expect(nhap({ dai: '30', cao: '20' }).ok).toBe(false);
+    expect(nhap({ rong: '25', cao: '20' }).ok).toBe(false);
+  });
+
+  test('cao = 0 → lỗi, không được coi là "bỏ trống"', () => {
+    const r = nhap({ dai: '28', rong: '42', cao: '0' });
+    expect(r.ok).toBe(false);
   });
 
   it('gom HẾT lỗi một lượt, không bắt sửa từng cái một', () => {

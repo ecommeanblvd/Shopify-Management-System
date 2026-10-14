@@ -35,8 +35,16 @@ const so = (v: string): number | null => {
  * Cân là BẮT BUỘC — đó là lý do bước này tồn tại. Kích thước tuỳ chọn: nhiều kiện dùng túi,
  * không có kích thước nào để đo, và bắt nhập là bắt người ta bịa số.
  *
- * Kích thước nhập thì phải nhập ĐỦ BA chiều: một chiều lẻ không tính được cân quy đổi, mà
- * lưu nửa vời thì màn sau tưởng có dữ liệu.
+ * Kích thước nhập thì phải đủ CẢ BA chiều — HOẶC đủ dài + rộng mà bỏ trống cao (túi niêm
+ * phong/túi zip trong kho chỉ có hai số, không có "cao" để đo). Thiếu dài hoặc rộng thì vẫn
+ * là lỗi trong mọi trường hợp, có hay không có cao — một chiều lẻ kiểu đó không tính được
+ * cân quy đổi, mà lưu nửa vời thì màn sau tưởng có dữ liệu.
+ *
+ * Cao bỏ trống được ghi là `null` (xem `sach` bên dưới) — đó CHÍNH LÀ tín hiệu mà
+ * `inferPackagingFromDims` (features/shipments/parse-packaging.ts) dùng để chọn hạng cước
+ * Pak thay vì Package. Đây là CỐ Ý, không phải tai nạn — ĐỪNG "dọn" null thành 0 ở đây hay
+ * bất cứ đâu khác đọc lại giá trị này. Vì vậy cao = 0 KHÔNG được coi là "bỏ trống": không có
+ * kiện nào mỏng 0 cm, đó là gõ nhầm, nên vẫn phải báo lỗi như mọi kích thước ≤ 0 khác.
  */
 export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
   const loi: string[] = [];
@@ -49,10 +57,16 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
   else if (can <= 0) loi.push('Cân phải lớn hơn 0');
   else if (can > CAN_KIEN_TOI_DA_KG) loi.push(`Cân ${can} kg vượt ${CAN_KIEN_TOI_DA_KG} kg — kiểm lại xem có gõ nhầm không`);
 
-  const ba = [so(v.dai), so(v.rong), so(v.cao)];
+  const dai = so(v.dai);
+  const rong = so(v.rong);
+  const cao = so(v.cao);
+  const ba = [dai, rong, cao];
   const soONhap = ba.filter((x) => x != null).length;
-  if (soONhap > 0 && soONhap < 3) {
-    loi.push('Nhập kích thước thì phải đủ cả ba chiều — thiếu một chiều thì không tính được cân quy đổi');
+
+  const duDaiRong = dai != null && rong != null;
+  const chiThieuCao = duDaiRong && cao == null;
+  if (soONhap > 0 && soONhap < 3 && !chiThieuCao) {
+    loi.push('Nhập kích thước thì phải đủ cả ba chiều, hoặc đủ dài + rộng cho thùng dạng túi — thiếu dài hoặc rộng thì không tính được cân quy đổi');
   }
   for (const x of ba) {
     if (x == null) continue;
@@ -66,9 +80,11 @@ export function kiemNhapDongThung(v: NhapDongThung): KetQuaKiemNhap {
     sach: {
       hop,
       canKg: Math.round((can as number) * 1000) / 1000,
-      dai: soONhap === 3 ? (ba[0] as number) : null,
-      rong: soONhap === 3 ? (ba[1] as number) : null,
-      cao: soONhap === 3 ? (ba[2] as number) : null,
+      // Tới đây soONhap chỉ còn 0, 2 (đủ dài+rộng, thiếu cao) hoặc 3 — mọi tổ hợp lẻ khác
+      // đã bị chặn ở trên.
+      dai: soONhap >= 2 ? dai : null,
+      rong: soONhap >= 2 ? rong : null,
+      cao: soONhap === 3 ? cao : null,
     },
   };
 }
