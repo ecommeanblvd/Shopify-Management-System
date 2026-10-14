@@ -20,6 +20,7 @@ import type { DongSoNhap } from '@/features/kho-nhan/types';
 import { LichNgay } from './LichNgay';
 import { OAnhLark } from './OAnhLark';
 import { ChiTietDong } from './ChiTietDong';
+import { OSuaQc } from './OSuaQc';
 import { COT_SO_NHAP, LUOI_SO_NHAP, RONG_TOI_THIEU } from '@/features/kho-nhan/cot-so-nhap';
 
 const THU = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -304,10 +305,12 @@ export function BangSoNhap({
                     vẫn hiện đủ nên màu chỉ là kênh thứ hai. `title` vì cột hẹp cắt chữ. */}
                 <ONhanMau giaTri={r.warehouse} mau={mauKho(r.warehouse)} />
                 <ONhanMau giaTri={r.inventoryType} mau={mauLoaiNhap(r.inventoryType)} />
-                <span className={`flex items-center gap-1.5 truncate text-xs ${CHU_QC[mq]}`}>
-                  <span className={`size-1.5 shrink-0 rounded-full ${MAU_QC[mq]}`} />
-                  {(r.qcCheck ?? '').trim() || '—'}
-                </span>
+                <OSuaQc dong={r} suaDuocQc={suaDuocQc} chuQc={CHU_QC[mq]} mauQc={MAU_QC[mq]}>
+                  <span className={`flex items-center gap-1.5 truncate text-xs ${CHU_QC[mq]}`}>
+                    <span className={`size-1.5 shrink-0 rounded-full ${MAU_QC[mq]}`} />
+                    {(r.qcCheck ?? '').trim() || '—'}
+                  </span>
+                </OSuaQc>
                 {/* Lý do + ảnh lỗi QC, kẹp giữa QC và Xử lý kho ĐÚNG như thứ tự bên Lark.
                     Cột hẹp nên chữ cụt — `title` để đọc đủ mà không phải mở gì. Giữ nguyên chữ
                     người gõ: "xước chỉ, bẩn", "Ố vàng", "rách vải, bung chỉ". */}
@@ -346,7 +349,7 @@ export function BangSoNhap({
         </div>
       </div>
 
-      <ChiTietDong dong={xem} onDong={() => setXemId(null)} suaDuocQc={suaDuocQc} />
+      <ChiTietDong dong={xem} onDong={() => setXemId(null)} />
     </div>
   );
 }
