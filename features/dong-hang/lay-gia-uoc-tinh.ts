@@ -17,6 +17,7 @@ import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
 import { tuEngine, tuKhoanUps, tuFedexQuote, type GiaUocTinh } from './gia-uoc-tinh';
+import { nguonCanDim } from './nguon-can-dim';
 
 /**
  * THUẦN: hãng nào có API giá sống thì đi API, còn lại (gồm hãng `null`/chưa biết)
@@ -71,10 +72,17 @@ async function docFedexQuoteSnap(
  * gọi (Task 5) phải lưu được mã vận đơn kể cả khi chưa lấy được giá; cron sẽ
  * thử lại sau.
  *
- * Cân + kích thước lấy từ CỘT ĐÃ ĐÓNG của kiện (`shipments.actual_weight_kg` /
- * `dim_*`), KHÔNG rơi về cân Shopify brand khai như `baoGiaKien` làm khi chưa
- * cân — kiện đã dán mã vận đơn nghĩa là đã đóng xong, số brand khai luôn bị
- * thổi lên so với số đã đo thật.
+ * Cân + kích thước lấy từ CỘT ĐÃ ĐÓNG của kiện (`shipments.sms_*` ưu tiên,
+ * rơi về `actual_weight_kg` / `dim_*` của Lark qua `nguonCanDim` — xem
+ * `nguon-can-dim.ts`), KHÔNG rơi về cân Shopify brand khai như `baoGiaKien`
+ * làm khi chưa cân — kiện đã dán mã vận đơn nghĩa là đã đóng xong, số brand
+ * khai luôn bị thổi lên so với số đã đo thật.
+ *
+ * SMS thắng Lark: số gõ trong hệ thống dùng được NGAY, không chờ cron Lark
+ * (tới 1 giờ) đồng bộ ngược lên — CEO chốt 14/10/2026, cùng chủ đích với
+ * `nguonCanKien` (`van-don.ts:100`) cho hộp thoại Lên vận đơn, nhưng `nguonCanDim`
+ * chọn theo TỪNG Ô (cân/dài/rộng/cao) độc lập chứ không theo nguyên khối — một
+ * cân gõ SMS có thể đi cùng kích thước Lark nếu dim SMS chưa có.
  *
  * Hãng của kiện suy theo thứ tự ba bậc, mỗi bậc đáng tin kém hơn bậc trước:
  *   1. DẠNG mã vận đơn vừa dán (`hangTheoMaVanDon`) — bằng chứng mạnh nhất vì
@@ -108,6 +116,8 @@ export async function layGiaUocTinh(
       trackingNumber: schema.shipments.trackingNumber,
       weightKg: schema.shipments.actualWeightKg,
       l: schema.shipments.dimLengthCm, w: schema.shipments.dimWidthCm, h: schema.shipments.dimHeightCm,
+      smsWeightKg: schema.shipments.smsWeightKg,
+      smsL: schema.shipments.smsDimLengthCm, smsW: schema.shipments.smsDimWidthCm, smsH: schema.shipments.smsDimHeightCm,
       originHub: schema.shipments.originHub,
       labelCreatedAt: schema.shipments.labelCreatedAt, createdAt: schema.shipments.createdAt,
       country: schema.shopifyOrders.shipCountry, postcode: schema.shopifyOrders.shipPostcode,
@@ -119,11 +129,17 @@ export async function layGiaUocTinh(
       .where(eq(schema.shipments.id, shipmentId)).limit(1);
     if (!k) return null;
 
-    const weightKg = k.weightKg != null ? Number(k.weightKg) : null;
+    const canDim = nguonCanDim(
+      { canKg: k.smsWeightKg, daiCm: k.smsL, rongCm: k.smsW, caoCm: k.smsH },
+      { canKg: k.weightKg, daiCm: k.l, rongCm: k.w, caoCm: k.h },
+    );
+    const weightKg = canDim.canKg;
     if (!k.country || !weightKg) return null; // chưa đóng xong (thiếu cân thật) hoặc thiếu nước
 
-    const dims = k.l != null && k.w != null && k.h != null
-      ? { length: Number(k.l), width: Number(k.w), height: Number(k.h) } : undefined;
+    // Cao thiếu (ở cả SMS và Lark) → KHÔNG dựng `dims`, giống hệt cách cũ khi `k.h` null: thiếu
+    // cao là dấu hiệu chọn giá Pak thay Package ở bước tính cước, không phải lỗi vá bằng 0.
+    const dims = canDim.daiCm != null && canDim.rongCm != null && canDim.caoCm != null
+      ? { length: canDim.daiCm, width: canDim.rongCm, height: canDim.caoCm } : undefined;
     const shipDate = k.labelCreatedAt ?? k.createdAt;
     const isResidential = laNhaDan(k.addrClass, k.country);
     const carrierKey = hangTheoMaVanDon(trackingDuTinh ?? k.trackingNumber)
