@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, inArray, isNotNull } from 'drizzle-orm';
+import { eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { requireManageShipHo } from './require-manage';
@@ -93,6 +93,9 @@ export interface RebillSummary {
   dutyOnly: number;
   /** Đã đối soát và bill không đổi → GIỮ NGUYÊN giá đã chốt, không tính lại (CEO 08/09). */
   frozen: number;
+  /** Đơn nằm trong bảng kê CƯỚC đã PHÁT HÀNH → giữ nguyên giá thu đã gửi brand, không tính
+   *  lại theo luật mới (CEO 14/10/2026: áp từ kỳ này trở đi, không làm lại kỳ cũ). */
+  giuNguyenDaChot: number;
   /** Số đơn ghi được duty (mới hoặc tổng đổi) trong lượt chạy — độc lập với cước. */
   dutyGhi?: number;
   /** Cước net FedEx trên bill KHÔNG trùng ô nào của bảng giá cố định → ops soi rate card / dòng bill. */
@@ -120,7 +123,7 @@ export async function reconcileShipHoFromCarrierBills(): Promise<RebillSummary> 
  * Đơn ĐÃ đối soát mà bill không đổi → đóng băng (không tính lại) — xem donDaDongBang.
  */
 export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSummary> {
-  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, frozen: 0, baseLech: [], errors: [] };
+  const summary: RebillSummary = { totalWithTracking: 0, matched: 0, requoted: 0, unmatched: 0, dutyOnly: 0, frozen: 0, giuNguyenDaChot: 0, baseLech: [], errors: [] };
 
   const orders = await db
     .select({
@@ -143,6 +146,7 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
       actualChargedVnd: schema.shipHoOrders.actualChargedVnd,
       actualCarrierCostVnd: schema.shipHoOrders.actualCarrierCostVnd,
       actualBillBreakdown: schema.shipHoOrders.actualBillBreakdown,
+      statementId: schema.shipHoOrders.statementId,
       dimLengthCm: schema.shipHoOrders.dimLengthCm,
       dimWidthCm: schema.shipHoOrders.dimWidthCm,
       dimHeightCm: schema.shipHoOrders.dimHeightCm,
@@ -157,6 +161,24 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
   summary.totalWithTracking = orders.length;
   // Giá cuối đã gửi MMP của từng đơn — nạp 1 lượt để vòng lặp không query lẻ.
   const daGuiTheoDon = await giaCuoiDaGuiTheoDon(orders.map((o) => o.id));
+  /**
+   * Bảng kê CƯỚC đã PHÁT HÀNH — đơn nằm trong đó thì KHÔNG được tính lại giá thu.
+   *
+   * Vì sao cần (CEO 14/10/2026, cùng lượt đổi base sang bảng giá cố định): hàm này quét MỌI
+   * đơn có mã vận đơn và ghi đè `actual_charged_vnd`. Không có chốt chặn thì lượt chạy kế
+   * tiếp sẽ âm thầm tính lại 75 đơn của kỳ tháng 9 Kalisa — bảng kê 149 triệu đã gửi brand —
+   * theo luật mới. CEO chốt: ÁP TỪ KỲ NÀY TRỞ ĐI, không làm lại kỳ cũ.
+   *
+   * Chỉ chặn bảng kê `freight` (cước). Duty đi đường riêng (`ghiDutyChoDon`) và vốn độc lập
+   * với cước — hoá đơn thuế về sau cước 3–6 tuần.
+   */
+  const kyDaChot = new Set(
+    ((await db.execute(sql`
+      select o.id from ship_ho_orders o
+      join ship_ho_statements st on st.id = o.statement_id
+      where st.status = 'issued' and st.type = 'freight'
+    `)).rows as Array<{ id: unknown }>).map((r) => String(r.id)),
+  );
 
   for (const o of orders) {
     const billed = await getBilledByTracking(o.trackingNumber ?? '');
@@ -303,16 +325,27 @@ export async function reconcileShipHoFromCarrierBillsCore(): Promise<RebillSumma
     // khi đẩy giá; khớp → tự đẩy như cũ. Quyết định đã chốt → giữ (không ghi đè).
     const { decision: nextDecision, shouldEmitCharge } = decideReconcile(deltaVnd, o.prevDecision);
 
+    // Đơn đã nằm trong bảng kê cước ĐÃ PHÁT HÀNH: giữ nguyên giá thu và breakdown giá thu
+    // đã gửi brand. Vẫn cập nhật các SỰ THẬT từ bill (cước carrier, cân) vì đó là dữ liệu
+    // hoá đơn, không phải số mình tính ra.
+    const daChotKy = kyDaChot.has(o.id);
+    if (daChotKy) summary.giuNguyenDaChot += 1;
+    const sellGiuNguyen = daChotKy
+      ? ((o.actualBillBreakdown as Record<string, unknown> | null)?.sell ?? null)
+      : sellBreakdown;
+
     await db.update(schema.shipHoOrders).set({
       actualCarrierCostVnd: String(billed.totalVnd),
       actualWeightKg: kgToStore == null ? null : String(kgToStore),
-      actualChargedVnd: actualChargedVnd == null ? null : String(actualChargedVnd),
+      actualChargedVnd: daChotKy
+        ? (o.actualChargedVnd == null ? null : String(o.actualChargedVnd))
+        : (actualChargedVnd == null ? null : String(actualChargedVnd)),
       deltaVnd: deltaVnd == null ? null : String(deltaVnd),
       marginVnd: margin.vnd == null ? null : String(margin.vnd),
       actualBillBreakdown: {
         ...billed.surcharges, billNumber: billed.billNumber, shipDate: billed.shipDate,
         scaleWeightKg: billed.weightKg,
-        sell: sellBreakdown, // breakdown giá thu THỰC (để bảng đối soát hiện cột thu đúng phụ phí bill).
+        sell: sellGiuNguyen, // breakdown giá thu THỰC (để bảng đối soát hiện cột thu đúng phụ phí bill).
       },
       reconcileStatus: 'reconciled',
       reconcileDecision: nextDecision,
