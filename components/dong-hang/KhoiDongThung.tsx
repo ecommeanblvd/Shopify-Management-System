@@ -77,7 +77,15 @@ export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] 
     setLoi([]);
     batDau(async () => {
       const r = await ghiDongThung(k.shipmentId, { hop, canKg, dai, rong, cao });
-      if (r.ok) { toast.success('Đã ghi đóng thùng'); router.refresh(); return; }
+      if (r.ok) {
+        // Cảnh báo Lark (ô người khác gõ, chưa có dòng Lark, Lark sập…) sống lâu hơn toast
+        // thường: im lặng ở đây là thao tác đóng thùng ĐÃ LƯU nhưng nhân sự tưởng mọi thứ
+        // đã lên Lark, trong khi phí ship của hãng tính thẳng từ ô đó.
+        if (r.canhBaoLark) toast.warning(`Đã ghi đóng thùng — ${r.canhBaoLark}`, { duration: 15000 });
+        else toast.success('Đã ghi đóng thùng');
+        router.refresh();
+        return;
+      }
       if (r.loi) setLoi(r.loi); else toast.error(r.error ?? 'Không lưu được');
     });
   };

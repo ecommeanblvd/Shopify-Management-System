@@ -12,6 +12,24 @@ export const COT = {
   /** Khớp đúng tên field Lark mà `parse-pack-row.ts` đang đọc (`fields['Tracking Number']`) —
    *  dùng khoá có sẵn thay vì bịa tên mới, tránh hai chỗ trỏ vào hai cột khác nhau. */
   trackingNumber: 'Tracking Number',
+  /**
+   * Cân cả kiện đóng thùng (Task 9). Dò kiểu thật qua API fields: `fldZk1Bh9i`, **type 2
+   * (Number)**, formatter `0.00` — PHẢI gửi một JavaScript **number**, không phải chuỗi. Gửi
+   * sai kiểu là Lark từ chối CẢ bản vá (PUT all-or-nothing), kể cả ô `dimensionDienTay` đi
+   * cùng patch.
+   */
+  weights: 'Weights',
+  /**
+   * Kích thước đóng thùng dạng chữ, gõ tay bên Lark trước đây (Task 9). ⚠️ TÊN CỘT CÓ KHOẢNG
+   * TRẮNG SAU DẤU MỞ NGOẶC: `Dimension ( điền tay)` — không phải `Dimension (điền tay)`. Dò
+   * kiểu thật qua API fields: `fldp9whpBn`, type 1 (Text) — gửi CHUỖI (`"40x30x12"`), khác hẳn
+   * `weights` ở trên là số.
+   *
+   * Chuỗi thiếu chiều cao có đúng HAI số (`"28x42"`) — không chèn `0` giả cho chiều thứ ba:
+   * chiều cao thiếu là tín hiệu để engine chọn hạng Pak của hãng, chèn số giả vào đó là đổi
+   * sai hạng cước.
+   */
+  dimensionDienTay: 'Dimension ( điền tay)',
 } as const;
 
 export const LUA_CHON_CATEGORY: readonly string[] = [

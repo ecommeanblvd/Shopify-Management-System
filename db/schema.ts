@@ -1248,6 +1248,19 @@ export const shipments = pgTable('shipments', {
    *  NULL = chưa lượt nào giành, hoặc lượt trước đã nhả. Muốn chạy lại một kiện thì
    *  xoá dấu là đủ. */
   giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
+  /** Danh sách TÊN CỘT Lark mà `ghiCanDimLenLark` (Task 9) đã từng ghi lên dòng Lark của kiện
+   *  này — vd `["Weights", "Dimension ( điền tay)"]`. Migration 0208.
+   *
+   *  Dùng để phân biệt "ô trống" khỏi "ô hệ thống tự ghi": luật chung mọi lượt ghi Lark là
+   *  CHỈ ĐIỀN Ô TRỐNG (`oLarkTrong`, `dung-patch.ts`), nhưng CEO chốt ngoại lệ cho khối Đóng
+   *  thùng — hệ thống được phép ĐÈ LẠI đúng những ô NÓ đã từng ghi (cân gõ nhầm/cân lại vẫn
+   *  sửa được), còn ô NGƯỜI gõ tay thì tuyệt đối không đè. Quyết định dựa vào MẢNG này —
+   *  BẰNG CHỨNG lưu lại — không dựa vào so sánh giá trị: hai người gõ trùng một số không phải
+   *  bằng chứng ai ghi.
+   *
+   *  `[]` (mặc định) = kiện lịch sử/chưa từng được hệ thống ghi. Không bao giờ bị XOÁ bớt, chỉ
+   *  được nối thêm (xem `features/dong-hang/ghi-can-dim-len-lark.ts`). */
+  oLarkDoSmsGhi: jsonb('o_lark_do_sms_ghi').notNull().default([]),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [

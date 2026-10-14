@@ -15,6 +15,7 @@ import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
 import { canhBaoLechHang, kiemTraTracking } from './luu-tracking';
 import { macVanDonTu } from './ma-van-don';
 import { ghiGiaUocTinhLenLark } from './ghi-gia-uoc-tinh-len-lark';
+import { ghiCanDimLenLark } from './ghi-can-dim-len-lark';
 import { layGiaUocTinh } from './lay-gia-uoc-tinh';
 import { xemTruocGhiGia } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
 import { getLogRecordById } from '@/features/lark/client';
@@ -162,8 +163,15 @@ export async function moLaiKien(shipmentId: string): Promise<{ ok: boolean; loi?
  * Ghi vào cột SMS SỞ HỮU (`sms_*`), KHÔNG ghi vào `lark_hop`/`actual_weight_kg`: hai cột kia
  * do lượt đồng bộ Lark ghi đè mỗi lượt, ghi vào đó là mất dữ liệu im lặng. Khi đội Lark làm
  * xong cột bên đó thì đẩy sang từ đây — `sms_packed_at` có index để tìm kiện chưa đẩy.
+ *
+ * Sau khi lưu CSDL xong mới đẩy cân/dim lên dòng Lark của kiện (`ghiCanDimLenLark`, Task 9,
+ * spec §3b.3) — CỐ Ý gọi NGOÀI lệnh `db.update` phía trên, trong try/catch RIÊNG: người đóng
+ * hàng đang cầm kiện trên tay, Lark sập không được làm hỏng lượt lưu cân/dim vào CSDL. Kết quả
+ * (ghi được hay không, và vì sao) trả ra để giao diện báo bằng toast, không im lặng nuốt mất.
  */
-export async function ghiDongThung(shipmentId: string, vao: NhapDongThung): Promise<{ ok: boolean; error?: string; loi?: string[] }> {
+export async function ghiDongThung(
+  shipmentId: string, vao: NhapDongThung,
+): Promise<{ ok: boolean; error?: string; loi?: string[]; canhBaoLark?: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
@@ -188,7 +196,17 @@ export async function ghiDongThung(shipmentId: string, vao: NhapDongThung): Prom
   if (r.length === 0) return { ok: false, error: 'Không tìm thấy kiện' };
 
   revalidatePath('/f/dong-hang');
-  return { ok: true };
+
+  let canhBaoLark: string | undefined;
+  try {
+    const g = await ghiCanDimLenLark(shipmentId);
+    if (!g.daGhi || g.canhBao) canhBaoLark = g.canhBao;
+  } catch (e) {
+    console.error('[dong-hang] ghiDongThung: đẩy cân/dim lên Lark lỗi:', e);
+    canhBaoLark = 'đẩy cân/kích thước lên Lark thất bại — đã lưu trong hệ thống, kiểm lại Lark bằng tay';
+  }
+
+  return { ok: true, canhBaoLark };
 }
 
 const TRUY_VAN_VAN_DON = `query($id: ID!) {
