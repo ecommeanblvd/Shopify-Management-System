@@ -5,6 +5,8 @@ import { inArray } from 'drizzle-orm';
 import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
+import { gomBox, type LoaiBox } from './danh-muc-box';
+import { tronBox, type BoxHien, type BoxSms } from './tron-box';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 import type { CanKienVao, DiaChiDon, MonHang } from './van-don';
 
@@ -230,4 +232,31 @@ export async function docNenVanDon(shipmentId: string): Promise<NenVanDon | null
     })),
     soKien: viTri >= 0 ? { n: viTri + 1, tong: ds.length } : null,
   };
+}
+
+/**
+ * Danh mục box cho lưới chọn ở khối Đóng thùng (`ChonBox`): kho (`lark_wh_inventory`, dòng vật
+ * tư `VTĐG1`) gom về một box mỗi loại (`gomBox`), trộn với bản sửa tay của SMS (`box_dong_goi`,
+ * luật bản-sửa-tay-thắng ở `tronBox`).
+ *
+ * Không cần chặn quyền riêng: màn Đóng hàng đã gác ở `view_fulfillment` (xem `actions.ts`),
+ * đọc danh mục box không phải việc nhạy hơn đọc chính kiện hàng.
+ */
+export async function danhSachBox(): Promise<BoxHien[]> {
+  const w = schema.larkWhInventory;
+  const whRows = await db.select({
+    recordId: w.recordId, lineitemName: w.lineitemName, dinhDanh: w.dinhDanh, kichThuoc: w.kichThuoc,
+  }).from(w).where(eq(w.inventoryType, 'VTĐG1'));
+
+  const { box } = gomBox(whRows);
+
+  const b = schema.boxDongGoi;
+  const smsRows = await db.select().from(b);
+  const tuSms: BoxSms[] = smsRows.map((r) => ({
+    id: r.id, ten: r.ten, ma: r.ma, loai: r.loai as LoaiBox,
+    daiCm: Number(r.daiCm), rongCm: Number(r.rongCm), caoCm: r.caoCm != null ? Number(r.caoCm) : null,
+    suaTay: r.suaTay, an: r.an,
+  }));
+
+  return tronBox(box, tuSms);
 }

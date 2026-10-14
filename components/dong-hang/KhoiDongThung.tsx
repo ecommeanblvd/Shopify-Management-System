@@ -6,8 +6,11 @@ import { useRouter } from 'next/navigation';
 import { ghiDongThung } from '@/features/dong-hang/actions';
 import { canhBaoLechCan } from '@/features/dong-hang/dong-thung';
 import { tongCanMon, moTaTongCan } from '@/features/dong-hang/can-du-kien';
+import { daSuaDim } from '@/features/dong-hang/loc-box';
 import { Button } from '@/components/ui/button';
 import type { KienDongHang } from '@/features/dong-hang/types';
+import type { BoxHien } from '@/features/dong-hang/tron-box';
+import { ChonBox } from './ChonBox';
 
 /**
  * Bước ĐÓNG THÙNG: chọn thùng đã dùng rồi cân CẢ KIỆN (CEO 30/09/2026).
@@ -16,19 +19,40 @@ import type { KienDongHang } from '@/features/dong-hang/types';
  * điền cân DỰ KIẾN SAU ĐÓNG cho từng món lên Lark. Tới bước này mới chọn thùng thật và cân cả
  * kiện — việc này trước nay KHÔNG có chỗ nhập ở đâu cả, kể cả Lark.
  *
- * Ô thùng để GÕ TỰ DO có chủ ý: hệ thống chưa có danh mục thùng (đo 30/09: 90 ngày chỉ 3/1.279
- * kiện có ghi thùng, và mã thùng là dòng vật tư bên Lark). Bịa ra một danh sách cứng là ép đội
- * kho chọn sai, rồi dữ liệu sai còn khó sửa hơn ô trống. Có danh sách thật thì đổi thành ô chọn.
+ * Từng GÕ TỰ DO vì hệ thống chưa có danh mục thùng (đo 30/09: 90 ngày chỉ 3/1.279 kiện có ghi
+ * thùng). Danh mục nay dựng được từ kho (`lark_wh_inventory` + `box_dong_goi`, `danhSachBox`
+ * ở `features/dong-hang/queries.ts`) nên đổi sang lưới chọn (`ChonBox`) — chọn một box là có
+ * sẵn dài-rộng-cao, SỬA ĐƯỢC. `dsBox` nhận qua prop (trang gọi `danhSachBox()`), mặc định rỗng
+ * để khối này không vỡ khi chưa nối dữ liệu. Giữ nguyên ba ô dài/rộng/cao và ô hộp ở dạng gõ
+ * tay: box lạ (chưa có trong danh mục) KHÔNG được chặn việc đóng hàng (CEO chốt).
  */
-export function KhoiDongThung({ k }: { k: KienDongHang }) {
+export function KhoiDongThung({ k, dsBox = [] }: { k: KienDongHang; dsBox?: BoxHien[] }) {
   const router = useRouter();
   const [hop, setHop] = useState(k.dongThung?.hop ?? k.hop ?? '');
   const [canKg, setCanKg] = useState(k.dongThung?.canKg != null ? String(k.dongThung.canKg) : '');
   const [dai, setDai] = useState(k.dongThung?.dims ? String(k.dongThung.dims.l) : '');
   const [rong, setRong] = useState(k.dongThung?.dims ? String(k.dongThung.dims.w) : '');
   const [cao, setCao] = useState(k.dongThung?.dims ? String(k.dongThung.dims.h) : '');
+  // Box đang chọn trong lưới — dùng để biết đang so "đã sửa" với số đo của box nào, và để
+  // tô sáng đúng thẻ. Khớp lúc khởi tạo theo `hop` hiện có (ô hộp đã ghi từ trước, nếu trùng
+  // mã một box trong danh mục) để dấu "đã sửa" đúng ngay cả khi mở lại kiện đã đóng thùng.
+  const [boxDaChon, setBoxDaChon] = useState<BoxHien | null>(
+    () => dsBox.find((b) => b.ma === hop) ?? null,
+  );
   const [loi, setLoi] = useState<string[]>([]);
   const [dangLuu, batDau] = useTransition();
+
+  // Đổi box là ĐIỀN LẠI cả ba chiều theo box mới và xoá dấu "đã sửa" (CEO chốt) — chọn box
+  // khác nghĩa là lấy số của box đó, không phải lấy sang lệch cũ. Túi (`caoCm = null`) để ô
+  // Cao CHUỖI RỖNG, không phải '0': '0' là dữ liệu xấu và là tín hiệu SAI cho hạng Pak.
+  const chonBox = (b: BoxHien) => {
+    setBoxDaChon(b);
+    setHop(b.ma); // mã vật tư — KHÔNG phải tên box, vì chữ trong mã quyết định BOX/PAK/BAG.
+    setDai(String(b.kichThuoc.daiCm));
+    setRong(String(b.kichThuoc.rongCm));
+    setCao(b.kichThuoc.caoCm != null ? String(b.kichThuoc.caoCm) : '');
+  };
+  const daSua = boxDaChon != null && daSuaDim(boxDaChon.kichThuoc, { dai, rong, cao });
 
   const duKien = tongCanMon(
     // Dựng lại danh sách món từ con số đã đếm sẵn ở truy vấn: đủ cân thì mỗi món một ô có số,
@@ -63,17 +87,34 @@ export function KhoiDongThung({ k }: { k: KienDongHang }) {
           thì tổng dự kiến (mỗi món tính một hộp) cao hơn cân kiện thật một cách hợp lệ. */}
       <p className="text-[11px] text-muted-foreground">{moTaTongCan(duKien)}</p>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <label className="col-span-2 text-xs">
-          <span className="text-muted-foreground">Thùng đã dùng</span>
-          <input className={o} value={hop} onChange={(e) => setHop(e.target.value)} placeholder="MEAN-BOX-30x25x20…" />
+      <div className="space-y-1.5">
+        <ChonBox ds={dsBox} chon={boxDaChon?.ma ?? null} onChon={chonBox} />
+        {/* Box lạ (chưa có trong danh mục) KHÔNG được chặn việc đóng hàng — luôn có đường gõ
+            mã tay. Gõ khác mã box vừa chọn thì bỏ liên kết với box đó (không còn gì để so
+            "đã sửa" nữa). */}
+        <label className="block text-xs">
+          <span className="text-muted-foreground">Thùng đã dùng (mã vật tư)</span>
+          <input
+            className={o} value={hop}
+            onChange={(e) => {
+              setHop(e.target.value);
+              if (boxDaChon && e.target.value !== boxDaChon.ma) setBoxDaChon(null);
+            }}
+            placeholder="MEAN-BOX-30x25x20… (gõ tay nếu box chưa có trong lưới)"
+          />
         </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <label className="text-xs">
           <span className="text-muted-foreground">Cân cả kiện (kg)</span>
           <input className={o} value={canKg} onChange={(e) => setCanKg(e.target.value)} inputMode="decimal" placeholder="1,2" />
         </label>
         <label className="text-xs">
-          <span className="text-muted-foreground">D × R (cm)</span>
+          <span className="flex items-center gap-1 text-muted-foreground">
+            D × R (cm)
+            {daSua && <span className="rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">đã sửa</span>}
+          </span>
           <div className="flex gap-1">
             <input className={o} value={dai} onChange={(e) => setDai(e.target.value)} inputMode="decimal" placeholder="D" />
             <input className={o} value={rong} onChange={(e) => setRong(e.target.value)} inputMode="decimal" placeholder="R" />
@@ -81,7 +122,7 @@ export function KhoiDongThung({ k }: { k: KienDongHang }) {
         </label>
         <label className="text-xs">
           <span className="text-muted-foreground">Cao (cm)</span>
-          <input className={o} value={cao} onChange={(e) => setCao(e.target.value)} inputMode="decimal" placeholder="C" />
+          <input className={o} value={cao} onChange={(e) => setCao(e.target.value)} inputMode="decimal" placeholder="C (để trống nếu là túi)" />
         </label>
       </div>
 
