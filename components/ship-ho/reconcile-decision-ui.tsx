@@ -50,19 +50,57 @@ const TONE: Record<string, string> = {
  * Ô "Đối soát": badge theo trạng thái. Khi cần xử lý (pending_review/claiming) →
  * là nút mở modal (chặn click-row). Tự quản modal accept/claim/resolve.
  */
-export function ReconcileStatusCell({ row, actions }: { row: ReconcileModalData; actions: ReconcileActions }) {
-  const [open, setOpen] = useState(false);
+export function ReconcileStatusCell({ row, onMo, actions }: {
+  row: ReconcileModalData;
+  /** Bảng tự giữ modal (cách ĐÚNG — xem ghi chú dưới). */
+  onMo?: (row: ReconcileModalData) => void;
+  /** Chế độ tự-dựng-modal, chỉ còn cho trang Ship hộ vốn là server component nên không giữ
+   *  state được. Trang đó dựng bảng bằng HTML thường, không có `onClick` trên dòng, nên
+   *  không dính lỗi nuốt sự kiện. Dời được sang `onMo` thì nên dời. */
+  actions?: ReconcileActions;
+}) {
   const st = reconcileCellState(row.reconcileStatus, row.reconcileDecision, row.hasTracking);
 
   if (!st.actionable) {
     return <span className={`text-xs font-medium whitespace-nowrap ${TONE[st.kind]}`}>{st.label}</span>;
   }
+  /**
+   * CHỈ mở modal, KHÔNG tự dựng modal ở đây (sửa 14/10/2026 — Đức báo: đang gõ mà bấm dấu
+   * cách / Enter / chuột là modal tắt, mất sạch chữ đã gõ).
+   *
+   * Bản trước render `<DecisionModal>` ngay trong ô, tức bên trong `<td>` của một `<tr>` có
+   * `onClick` mở/đóng dòng. Modal đi qua portal nên nằm ngoài DOM của dòng, NHƯNG sự kiện
+   * React vẫn nổi bọt theo CÂY COMPONENT, nên mọi thao tác trong modal vẫn chạy qua tay
+   * `<td>` và `<tr>`. Chỗ đó chỉ chặn `onClick`; mọi sự kiện khác đi lọt. Vá từng sự kiện là
+   * đuổi theo triệu chứng — bỏ hẳn quan hệ cha-con mới hết cả LOẠI lỗi này.
+   *
+   * Kèm theo: trước đây MỖI DÒNG dựng một modal riêng; giờ cả bảng dùng một cái.
+   */
+  if (onMo) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onMo(row); }}
+        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap ${TONE[st.kind]}`}
+      >
+        {st.label}
+      </button>
+    );
+  }
+  return <OTuGiuModal row={row} st={st} actions={actions!} />;
+}
+
+/** Chế độ cũ: ô tự giữ modal. Chỉ dùng ở nơi cha là server component. */
+function OTuGiuModal({ row, st, actions }: {
+  row: ReconcileModalData; st: { kind: string; label: string }; actions: ReconcileActions;
+}) {
+  const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        className={`rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap ${TONE[st.kind]}`}
+        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap ${TONE[st.kind]}`}
       >
         {st.label}
       </button>

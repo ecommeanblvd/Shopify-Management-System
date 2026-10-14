@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  ReconcileStatusCell, StructureDetail, vnd, signed,
+  ReconcileStatusCell, DecisionModal, StructureDetail, vnd, signed,
   type ReconcileModalData, type ReconcileActions,
 } from '@/components/ship-ho/reconcile-decision-ui';
 import { MaDon } from '@/components/ship-ho/MaDon';
@@ -24,6 +24,10 @@ export interface ReconciledRowData extends ReconcileModalData {
  *  Cột "Đối soát" cuối: badge trạng thái + mở modal accept/claim/resolve. */
 export function ReconciledRowsTable({ rows, ...actions }: { rows: ReconciledRowData[] } & ReconcileActions) {
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Dòng đang mở modal đối soát. Giữ ở ĐÂY, ngoài `<table>`: modal dựng trong ô là modal
+   *  nằm dưới một `<tr>` có `onClick`, và sự kiện React nổi bọt theo cây component kể cả khi
+   *  đã qua portal — xem ghi chú ở `ReconcileStatusCell`. */
+  const [dongXuLy, setDongXuLy] = useState<ReconcileModalData | null>(null);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs tabular-nums xl:text-sm">
@@ -47,17 +51,20 @@ export function ReconciledRowsTable({ rows, ...actions }: { rows: ReconciledRowD
             const kgDiff = r.billKg != null && r.billKg !== r.quoteKg;
             return (
               <RowGroup key={r.id} r={r} open={open} kgDiff={kgDiff}
-                onToggle={() => setOpenId(open ? null : r.id)} actions={actions} />
+                onToggle={() => setOpenId(open ? null : r.id)} onMoXuLy={setDongXuLy} />
             );
           })}
         </tbody>
       </table>
+      {/* MỘT modal cho cả bảng, dựng NGOÀI `<table>` — không phải mỗi dòng một cái. */}
+      <DecisionModal row={dongXuLy} onClose={() => setDongXuLy(null)} actions={actions} />
     </div>
   );
 }
 
-function RowGroup({ r, open, kgDiff, onToggle, actions }: {
-  r: ReconciledRowData; open: boolean; kgDiff: boolean; onToggle: () => void; actions: ReconcileActions;
+function RowGroup({ r, open, kgDiff, onToggle, onMoXuLy }: {
+  r: ReconciledRowData; open: boolean; kgDiff: boolean; onToggle: () => void;
+  onMoXuLy: (row: ReconcileModalData) => void;
 }) {
   return (
     <>
@@ -100,7 +107,7 @@ function RowGroup({ r, open, kgDiff, onToggle, actions }: {
           {signed(r.marginVnd)}
         </td>
         <td className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-          <ReconcileStatusCell row={r} actions={actions} />
+          <ReconcileStatusCell row={r} onMo={onMoXuLy} />
         </td>
       </tr>
       {open && (
