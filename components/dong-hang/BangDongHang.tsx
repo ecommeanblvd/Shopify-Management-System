@@ -76,7 +76,16 @@ export function BangDongHang({
   const [ketQua, setKetQua] = useState<Map<string, KetQuaChon>>(new Map());
   // Cặp `orderId|carrierKey` đang gửi — Map để nhiều đơn chọn song song không xoá cờ của nhau.
   const [dangChon, setDangChon] = useState<Map<string, string>>(new Map());
-  const [kienMo, setKienMo] = useState<KienDongHang | null>(null);
+  // Chỉ lưu ID kiện đang mở modal, KHÔNG lưu nguyên object — lưu cả object là chụp một THAM
+  // CHIẾU tại lúc mở, không bao giờ tự đồng bộ lại. Lưu đóng thùng xong gọi `router.refresh()`
+  // (trong `KhoiDongThung`), Next tải lại `kien` từ server với `dongThung` mới, nhưng object
+  // cũ vẫn còn nguyên trong state nên modal đang mở tiếp tục hiện "chưa đóng thùng" ngay sau
+  // khi vừa lưu thành công. Suy ra `kienMo` lại từ `kien` MỖI LẦN RENDER để nó luôn mang dữ
+  // liệu mới nhất — không cần effect đồng bộ, và cũng không đụng gì tới `bao`/cân cước (xem
+  // `baoGiaKien`): quy trình so cước TRƯỚC khi đóng gói là có chủ đích, phần đó vẫn đọc nguyên
+  // cột Lark như cũ.
+  const [kienMoId, setKienMoId] = useState<string | null>(null);
+  const kienMo = kienMoId ? kien.find((k) => k.shipmentId === kienMoId) ?? null : null;
   const [thongBao, setThongBao] = useState('');
   const [, batDauBao] = useTransition();
   const [, batDauChon] = useTransition();
@@ -110,7 +119,7 @@ export function BangDongHang({
           setThongBao(r.lark?.ok
             ? `Đã chốt ${carrierKey} · ghi "${r.lark.ten}" lên cột Couriers của Lark (${r.lark.daGhi} dòng)`
             : `Đã chốt ${carrierKey} — Lark chưa nhận: ${r.lark?.error ?? 'không rõ'}`);
-          if (dongModal) setKienMo(null);
+          if (dongModal) setKienMoId(null);
         }
         setKetQua((m) => new Map(m).set(orderId, r));
       } catch {
@@ -267,7 +276,7 @@ export function BangDongHang({
                       chonCucBo={chonCucBo.get(k.orderId)}
                       ketQua={ketQua.get(k.orderId)}
                       dangChonHang={dangChon.get(k.orderId)}
-                      moSoCuoc={() => setKienMo(k)}
+                      moSoCuoc={() => setKienMoId(k.shipmentId)}
                     />
                   ))}
                 </Fragment>
@@ -284,11 +293,12 @@ export function BangDongHang({
           dangBao={dangBao.has(kienMo.shipmentId)}
           soCuoc={soCuoc}
           coQuyenChon={coQuyenChon}
+          coQuyenDong={coQuyenDong}
           daChon={chonCucBo.get(kienMo.orderId) ?? kienMo.selectedCarrierKey}
           ketQua={ketQua.get(kienMo.orderId)}
           dangChonHang={dangChon.get(kienMo.orderId)}
           chonHang={chonHang}
-          dong={() => setKienMo(null)}
+          dong={() => setKienMoId(null)}
           dsBox={dsBox}
         />
       )}
@@ -620,13 +630,14 @@ function Chip({ mau, cham, children }: { mau: 'vang' | 'xanh' | 'do' | 'xam'; ch
  * chốt — một cú bấm nhầm không gửi thẳng lên Lark.
  */
 function ModalSoCuoc({
-  k, bao, dangBao, soCuoc, coQuyenChon, daChon, ketQua, dangChonHang, chonHang, dong, dsBox,
+  k, bao, dangBao, soCuoc, coQuyenChon, coQuyenDong, daChon, ketQua, dangChonHang, chonHang, dong, dsBox,
 }: {
   k: KienDongHang;
   bao: BaoGiaKien | undefined;
   dangBao: boolean;
   soCuoc: (shipmentId: string) => void;
   coQuyenChon: boolean;
+  coQuyenDong: boolean;
   daChon: string | null | undefined;
   ketQua: KetQuaChon | undefined;
   dangChonHang: string | undefined;
@@ -684,7 +695,7 @@ function ModalSoCuoc({
           <O nhan="HỘP" giaTri={k.hop ?? '—'} />
         </div>
 
-        <KhoiDongThung k={k} dsBox={dsBox} />
+        <KhoiDongThung k={k} dsBox={dsBox} coQuyenDong={coQuyenDong} />
 
         {bao?.theoDuKien && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">

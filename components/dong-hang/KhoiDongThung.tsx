@@ -32,8 +32,12 @@ import { ChonBox } from './ChonBox';
  * Danh mục rỗng vẫn là một trạng thái THẬT (database mới dựng, hay mọi dòng kho thiếu kích
  * thước) — nhưng phải do nơi gọi TRUYỀN `[]` một cách có ý, để thiếu dây là `tsc` báo lỗi
  * ngay, không phải lặng lẽ "chạy được".
+ *
+ * `coQuyenDong`: `ghiDongThung` đòi `manage_fulfillment` — vai `logistics` (người mở màn này
+ * hằng ngày để chọn line ship) KHÔNG có quyền đó. Thiếu cờ này, họ chọn box, gõ cân, bấm lưu,
+ * rồi MỚI biết bị từ chối. Tắt nút Lưu trước, kèm lý do, để không phải gõ lại từ đầu.
  */
-export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] }) {
+export function KhoiDongThung({ k, dsBox, coQuyenDong }: { k: KienDongHang; dsBox: BoxHien[]; coQuyenDong: boolean }) {
   const router = useRouter();
   const [hop, setHop] = useState(k.dongThung?.hop ?? k.hop ?? '');
   const [canKg, setCanKg] = useState(k.dongThung?.canKg != null ? String(k.dongThung.canKg) : '');
@@ -132,19 +136,19 @@ export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] 
           <span className="text-muted-foreground">Cân cả kiện (kg)</span>
           <input className={o} value={canKg} onChange={(e) => setCanKg(e.target.value)} inputMode="decimal" placeholder="1,2" />
         </label>
-        <label className="text-xs">
+        {/* Dấu "đã sửa" đặt ở ĐÂY, trên cả BA chiều (dài/rộng/cao) — `daSua` so sánh cả ba với
+            box đã chọn, nên gắn nó riêng vào nhãn "D × R" (như bản cũ) sẽ báo nhầm: sửa một
+            mình Cao vẫn nhấp nháy "đã sửa" cạnh hai ô người ta không đụng tới. */}
+        <label className="text-xs sm:col-span-3">
           <span className="flex items-center gap-1 text-muted-foreground">
-            D × R (cm)
+            Dài × Rộng × Cao (cm)
             {daSua && <span className="rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">đã sửa</span>}
           </span>
           <div className="flex gap-1">
             <input className={o} value={dai} onChange={(e) => setDai(e.target.value)} inputMode="decimal" placeholder="D" />
             <input className={o} value={rong} onChange={(e) => setRong(e.target.value)} inputMode="decimal" placeholder="R" />
+            <input className={o} value={cao} onChange={(e) => setCao(e.target.value)} inputMode="decimal" placeholder="C (để trống nếu là túi)" />
           </div>
-        </label>
-        <label className="text-xs">
-          <span className="text-muted-foreground">Cao (cm)</span>
-          <input className={o} value={cao} onChange={(e) => setCao(e.target.value)} inputMode="decimal" placeholder="C (để trống nếu là túi)" />
         </label>
       </div>
 
@@ -158,9 +162,16 @@ export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] 
         </ul>
       )}
 
-      <Button type="button" size="sm" onClick={luu} disabled={dangLuu} className="cursor-pointer">
-        {dangLuu ? 'Đang lưu…' : k.dongThung ? 'Cập nhật' : 'Ghi đóng thùng'}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" onClick={luu} disabled={dangLuu || !coQuyenDong} className="cursor-pointer">
+          {dangLuu ? 'Đang lưu…' : k.dongThung ? 'Cập nhật' : 'Ghi đóng thùng'}
+        </Button>
+        {/* Vai `logistics` mở màn này hằng ngày để chọn line ship nhưng không có
+            `manage_fulfillment` — nói rõ lý do thay vì để nút tắt câm lặng. */}
+        {!coQuyenDong && (
+          <span className="text-[11px] text-muted-foreground">Bạn không có quyền đóng thùng (cần quyền quản lý đóng hàng)</span>
+        )}
+      </div>
     </div>
   );
 }

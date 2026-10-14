@@ -36,10 +36,20 @@ const oInput = 'h-8 w-full rounded-lg border border-input bg-background px-2 tex
  *
  * `box`/`boLai` do nơi gọi truyền vào (tải qua `danhSachBox()` + `gomBox()` trên dòng kho thô —
  * xem `features/dong-hang/queries.ts`), component này chỉ còn việc vẽ và gọi `luuBox`/`anBox`.
+ *
+ * `coQuyenSua`: trang gọi (`app/(dashboard)/f/dong-hang/box/page.tsx`) chỉ gác
+ * `view_fulfillment`, nhẹ hơn mốc `manage_fulfillment` mà `luuBox`/`anBox` đòi — thiếu cờ này,
+ * hai nút Lưu/Ẩn vẫn hiện cho người không có quyền, họ điền xong mới biết bị từ chối.
  */
-export function QuanLyBox({ box, boLai }: { box: BoxHien[]; boLai: BoLai[] }) {
+export function QuanLyBox({ box, boLai, coQuyenSua }: { box: BoxHien[]; boLai: BoLai[]; coQuyenSua: boolean }) {
   return (
     <div className="space-y-6">
+      {!coQuyenSua && (
+        <p className="rounded-lg border border-amber-600/40 bg-amber-600/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          Bạn chỉ xem được danh mục này — sửa box cần quyền quản lý đóng hàng (manage_fulfillment).
+        </p>
+      )}
+
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">Box trong danh mục ({box.length})</h3>
         <div className="space-y-2">
@@ -48,7 +58,7 @@ export function QuanLyBox({ box, boLai }: { box: BoxHien[]; boLai: BoLai[] }) {
               Chưa có box nào đọc được từ kho.
             </p>
           )}
-          {box.map((b) => <DongBox key={`${b.id ?? 'lark'}-${b.ten}`} b={b} />)}
+          {box.map((b) => <DongBox key={`${b.id ?? 'lark'}-${b.ten}`} b={b} coQuyenSua={coQuyenSua} />)}
         </div>
       </section>
 
@@ -64,7 +74,7 @@ export function QuanLyBox({ box, boLai }: { box: BoxHien[]; boLai: BoLai[] }) {
               Không có dòng kho nào bị loại.
             </p>
           )}
-          {boLai.map((r) => <DongBoLai key={`${r.ten}-${r.recordIds.join(',')}`} item={r} />)}
+          {boLai.map((r) => <DongBoLai key={`${r.ten}-${r.recordIds.join(',')}`} item={r} coQuyenSua={coQuyenSua} />)}
         </div>
       </section>
     </div>
@@ -72,7 +82,7 @@ export function QuanLyBox({ box, boLai }: { box: BoxHien[]; boLai: BoLai[] }) {
 }
 
 /** Một box đã dùng được — sửa tại chỗ, thấy ngay dấu "đã sửa tay" và cảnh báo lệch với Lark. */
-function DongBox({ b }: { b: BoxHien }) {
+function DongBox({ b, coQuyenSua }: { b: BoxHien; coQuyenSua: boolean }) {
   const router = useRouter();
   const [ma, setMa] = useState(b.ma);
   const [loai, setLoai] = useState<LoaiBox>(b.loai);
@@ -140,6 +150,14 @@ function DongBox({ b }: { b: BoxHien }) {
           Lark đang ghi {chuoiKichThuoc(b.lech)} cm, khác ô này ({chuoiKichThuoc({ daiCm: Number(dai) || b.kichThuoc.daiCm, rongCm: Number(rong) || b.kichThuoc.rongCm, caoCm: cao.trim() === '' ? null : Number(cao) })} cm).
         </p>
       )}
+      {/* Cùng tinh thần `lech` nhưng cho mã vật tư — một lô re-code mã trên Lark (ví dụ
+          INS-BAG-… → MEAN-BOX-…) mà kích thước không đổi sẽ KHÔNG lộ qua `lech`, nên cần tín
+          hiệu riêng để không âm thầm dùng mã cũ dù Lark đã đổi. */}
+      {b.lechMa && (
+        <p className="rounded-lg border border-amber-600/40 bg-amber-600/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+          Lark đang ghi mã &quot;{b.lechMa}&quot;, khác mã đã khoá ở ô bên dưới ({ma || b.ma}).
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
         <label className="text-xs">
@@ -179,15 +197,17 @@ function DongBox({ b }: { b: BoxHien }) {
         </ul>
       )}
 
-      <div className="flex gap-1.5">
-        <Button type="button" size="xs" onClick={luu} disabled={dangLuu} className="cursor-pointer">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button type="button" size="xs" onClick={luu} disabled={dangLuu || !coQuyenSua} className="cursor-pointer">
           {dangLuu ? 'Đang lưu…' : 'Lưu'}
         </Button>
         {b.id && (
-          <Button type="button" size="xs" variant="outline" onClick={doiAn} disabled={dangAn} className="cursor-pointer">
+          <Button type="button" size="xs" variant="outline" onClick={doiAn} disabled={dangAn || !coQuyenSua} className="cursor-pointer">
             {dangAn ? 'Đang đổi…' : b.an ? 'Hiện lại' : 'Ẩn'}
           </Button>
         )}
+        {/* Nút bị tắt mà không nói vì sao thì người bấm tưởng đứng im, bấm lại vài lần. */}
+        {!coQuyenSua && <span className="text-[11px] text-muted-foreground">Cần quyền manage_fulfillment để lưu/ẩn</span>}
       </div>
     </div>
   );
@@ -199,7 +219,7 @@ function DongBox({ b }: { b: BoxHien }) {
  * một `DongBox` thật ở lượt tải lại kế tiếp (`router.refresh()`), vì `box_dong_goi.ten` khớp
  * đúng tên dòng kho này.
  */
-function DongBoLai({ item }: { item: BoLai }) {
+function DongBoLai({ item, coQuyenSua }: { item: BoLai; coQuyenSua: boolean }) {
   const router = useRouter();
   const [ma, setMa] = useState('');
   const [loai, setLoai] = useState<LoaiBox>(loaiTheoTen(item.ten));
@@ -276,9 +296,12 @@ function DongBoLai({ item }: { item: BoLai }) {
         </ul>
       )}
 
-      <Button type="button" size="xs" onClick={luu} disabled={dangLuu} className="cursor-pointer">
-        {dangLuu ? 'Đang lưu…' : 'Lưu vào danh mục'}
-      </Button>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button type="button" size="xs" onClick={luu} disabled={dangLuu || !coQuyenSua} className="cursor-pointer">
+          {dangLuu ? 'Đang lưu…' : 'Lưu vào danh mục'}
+        </Button>
+        {!coQuyenSua && <span className="text-[11px] text-muted-foreground">Cần quyền manage_fulfillment để lưu</span>}
+      </div>
     </div>
   );
 }

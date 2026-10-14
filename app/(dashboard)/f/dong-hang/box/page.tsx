@@ -19,6 +19,10 @@ export const dynamic = 'force-dynamic';
  * Không tự chạy một SELECT riêng cho `box` và một SELECT khác cho `boLai` — cả hai đọc kho
  * (`lark_wh_inventory`) y hệt nhau, nên lấy cùng lúc từ `danhMucBoxQuanLy()`
  * (`features/dong-hang/queries.ts`), hàm dùng chung một lượt đọc kho với `danhSachBox()`.
+ *
+ * Trang chỉ gác `view_fulfillment` (đọc danh mục không nhạy hơn đọc kiện hàng) nhưng
+ * `luuBox`/`anBox` đòi `manage_fulfillment` — tính sẵn `coQuyenSua` ở đây và truyền xuống
+ * `QuanLyBox` để nút Lưu/Ẩn tắt đúng cho người không có quyền, không để họ điền xong mới biết.
  */
 export default async function QuanLyBoxPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -27,6 +31,7 @@ export default async function QuanLyBoxPage() {
   if (!role || !hasPermission(role, 'view_fulfillment')) redirect('/');
 
   const { box, boLai } = await danhMucBoxQuanLy();
+  const coQuyenSua = hasPermission(role, 'manage_fulfillment');
 
   return (
     <div className="space-y-4 p-6">
@@ -42,7 +47,7 @@ export default async function QuanLyBoxPage() {
           ← về Đóng hàng
         </Link>
       </div>
-      <QuanLyBox box={box} boLai={boLai} />
+      <QuanLyBox box={box} boLai={boLai} coQuyenSua={coQuyenSua} />
     </div>
   );
 }
