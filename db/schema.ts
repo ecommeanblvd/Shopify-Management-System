@@ -1248,19 +1248,24 @@ export const shipments = pgTable('shipments', {
    *  NULL = chưa lượt nào giành, hoặc lượt trước đã nhả. Muốn chạy lại một kiện thì
    *  xoá dấu là đủ. */
   giaUocTinhGhiLuc: timestamp('gia_uoc_tinh_ghi_luc'),
-  /** Danh sách TÊN CỘT Lark mà `ghiCanDimLenLark` (Task 9) đã từng ghi lên dòng Lark của kiện
-   *  này — vd `["Weights", "Dimension ( điền tay)"]`. Migration 0208.
+  /** BIÊN NHẬN giá trị mà `ghiCanDimLenLark` (Task 9) đã từng gửi lên dòng Lark của kiện này —
+   *  object khoá = tên cột, giá trị = SỐ/CHUỖI đã gửi, vd
+   *  `{"Weights": 2.4, "Dimension ( điền tay)": "40x30x12"}`. Migration 0208 (tạo cột, mảng
+   *  tên cột) + 0209 (đổi sang object giá trị, vòng sửa sau review 14/10/2026).
    *
-   *  Dùng để phân biệt "ô trống" khỏi "ô hệ thống tự ghi": luật chung mọi lượt ghi Lark là
-   *  CHỈ ĐIỀN Ô TRỐNG (`oLarkTrong`, `dung-patch.ts`), nhưng CEO chốt ngoại lệ cho khối Đóng
-   *  thùng — hệ thống được phép ĐÈ LẠI đúng những ô NÓ đã từng ghi (cân gõ nhầm/cân lại vẫn
-   *  sửa được), còn ô NGƯỜI gõ tay thì tuyệt đối không đè. Quyết định dựa vào MẢNG này —
-   *  BẰNG CHỨNG lưu lại — không dựa vào so sánh giá trị: hai người gõ trùng một số không phải
-   *  bằng chứng ai ghi.
+   *  Dùng để phân biệt "ô trống" khỏi "ô hệ thống tự ghi, giá trị vẫn còn nguyên": luật chung
+   *  mọi lượt ghi Lark là CHỈ ĐIỀN Ô TRỐNG (`oLarkTrong`, `dung-patch.ts`), nhưng CEO chốt
+   *  ngoại lệ cho khối Đóng thùng — hệ thống được phép ĐÈ LẠI đúng những ô NÓ đã từng ghi (cân
+   *  gõ nhầm/cân lại vẫn sửa được). Bản đầu (0208) chỉ lưu TÊN CỘT đã ghi — review phát hiện
+   *  lỗi: tên cột không chứng minh được giá trị trên Lark còn là của hệ thống hay đã bị người
+   *  sửa lại; đè theo tên cột là đè LUÔN CẢ số người vừa sửa, không cảnh báo. Nay lưu CẢ GIÁ
+   *  TRỊ, và lượt ghi sau chỉ được đè khi Lark còn khớp đúng giá trị ở đây — ô NGƯỜI gõ tay
+   *  (hoặc hệ thống ghi rồi người sửa lại) thì tuyệt đối không đè. Vẫn là bằng chứng lưu lại,
+   *  không phải so sánh hai con số của hai người: so Lark với CHÍNH biên nhận của hệ thống.
    *
-   *  `[]` (mặc định) = kiện lịch sử/chưa từng được hệ thống ghi. Không bao giờ bị XOÁ bớt, chỉ
-   *  được nối thêm (xem `features/dong-hang/ghi-can-dim-len-lark.ts`). */
-  oLarkDoSmsGhi: jsonb('o_lark_do_sms_ghi').notNull().default([]),
+   *  `{}` (mặc định từ 0209) = kiện lịch sử/chưa từng được hệ thống ghi. Không bao giờ bị XOÁ
+   *  bớt, chỉ được GHI/nối thêm (xem `features/dong-hang/ghi-can-dim-len-lark.ts`). */
+  oLarkDoSmsGhi: jsonb('o_lark_do_sms_ghi').notNull().default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (t) => [
