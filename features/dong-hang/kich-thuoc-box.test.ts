@@ -17,6 +17,17 @@ describe('docKichThuoc', () => {
     expect(docKichThuoc('40X30X20')).toEqual({ daiCm: 40, rongCm: 30, caoCm: 20 });
   });
 
+  test('chấp nhận dấu phẩy thập phân VN', () => {
+    expect(docKichThuoc('37x30x9,5')).toEqual({ daiCm: 37, rongCm: 30, caoCm: 9.5 });
+    expect(docKichThuoc('15x10,7')).toEqual({ daiCm: 15, rongCm: 10.7, caoCm: null });
+  });
+
+  test('ba số: nếu số thứ 3 là 0, âm, hay không phân tích được → null', () => {
+    expect(docKichThuoc('40x30x0')).toBeNull();
+    expect(docKichThuoc('40x30x-5')).toBeNull();
+    expect(docKichThuoc('40x30xabc')).toBeNull();
+  });
+
   test('không đọc được → null', () => {
     for (const x of [null, undefined, '', '  ', 'to', '40', '40x30x20x10', '40xabc', '0x30x20', '-4x3x2']) {
       expect(docKichThuoc(x)).toBeNull();
