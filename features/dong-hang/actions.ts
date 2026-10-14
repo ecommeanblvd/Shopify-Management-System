@@ -167,7 +167,11 @@ export async function ghiDongThung(shipmentId: string, vao: NhapDongThung): Prom
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
-  if (!hasPermission(role, 'view_fulfillment')) return { ok: false, error: 'Không có quyền đóng hàng' };
+  // Ghi đóng thùng là ghi DB SMS (cân + kích thước) — việc ghi, đòi manage_fulfillment. Đo 14/10/2026:
+  // 7 người, 4 vai trò: operator (3, có người đóng hàng), OC, admin đều có manage_fulfillment; vai logistics
+  // (2) KHÔNG có (vì nó còn đòi fulfillment.brand_requests:edit). Logistics mất quyền này → cấp quyền trong
+  // màn phân quyền, KHÔNG nới cổng ở đây.
+  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, error: 'Không có quyền đóng hàng' };
 
   const kq = kiemNhapDongThung(vao);
   if (!kq.ok || !kq.sach) return { ok: false, loi: kq.loi };
@@ -454,9 +458,7 @@ export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Prom
  * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
  * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
  * `viewer` (chỉ-xem) cũng có. Mốc đúng trong CHÍNH file này là `nguoiDuocDongKien`
- * (đóng/mở kiện, phía trên) — KHÔNG phải `ghiDongThung`: hàm đó đang gác lỏng ở
- * `view_fulfillment`, một việc coordinator đã biết và sẽ sửa RIÊNG, không thuộc
- * phạm vi Task này. Đừng lấy `ghiDongThung` làm cớ "hạ cho khớp" ở đây.
+ * (đóng/mở kiện, phía trên), cũng như `ghiDongThung` (ghi đóng thùng, phía dưới).
  *
  * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
  *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
