@@ -6,7 +6,7 @@ import { tinhTrangHuyKien, type MonLark } from '@/features/lark/huy-mon';
 import { tenNguoiDung } from './logic';
 import { laDonInvalid } from './dong-kien';
 import { dimsDongThungTuCot } from './dong-thung';
-import { gomBox, type LoaiBox } from './danh-muc-box';
+import { gomBox, type LoaiBox, type BoLai, type Box } from './danh-muc-box';
 import { tronBox, type BoxHien, type BoxSms } from './tron-box';
 import type { BoLocDongHang, KienDongHang, KienChoKhop } from './types';
 import type { CanKienVao, DiaChiDon, MonHang } from './van-don';
@@ -235,14 +235,12 @@ export async function docNenVanDon(shipmentId: string): Promise<NenVanDon | null
 }
 
 /**
- * Danh mục box cho lưới chọn ở khối Đóng thùng (`ChonBox`): kho (`lark_wh_inventory`, dòng vật
- * tư `VTĐG1`) gom về một box mỗi loại (`gomBox`), trộn với bản sửa tay của SMS (`box_dong_goi`,
- * luật bản-sửa-tay-thắng ở `tronBox`).
- *
- * Không cần chặn quyền riêng: màn Đóng hàng đã gác ở `view_fulfillment` (xem `actions.ts`),
- * đọc danh mục box không phải việc nhạy hơn đọc chính kiện hàng.
+ * Đọc kho (`lark_wh_inventory`, dòng vật tư `VTĐG1`) + bảng `box_dong_goi` của SMS MỘT lần,
+ * dùng chung cho `danhSachBox` (lưới chọn `ChonBox`) và `danhMucBoxQuanLy` (màn quản lý danh
+ * mục, liệt kê cả `boLai`) — hai nơi cần đúng cùng dữ liệu kho này, tách thành hàm riêng để
+ * không phải `SELECT lark_wh_inventory` hai lần cho hai màn.
  */
-export async function danhSachBox(): Promise<BoxHien[]> {
+async function docDanhMucBox(): Promise<{ box: Box[]; boLai: BoLai[]; tuSms: BoxSms[] }> {
   const w = schema.larkWhInventory;
   // `dinh_danh IS NOT NULL` — cùng guard với `vatTuDongGoi` ở features/dong-goi/queries.ts.
   // `gomBox` ghi `ma: dinhDanh ?? ''` cho dòng thiếu định danh; một box `ma = ''` vẫn lên được
@@ -252,7 +250,7 @@ export async function danhSachBox(): Promise<BoxHien[]> {
     recordId: w.recordId, lineitemName: w.lineitemName, dinhDanh: w.dinhDanh, kichThuoc: w.kichThuoc,
   }).from(w).where(and(eq(w.inventoryType, 'VTĐG1'), isNotNull(w.dinhDanh)));
 
-  const { box } = gomBox(whRows);
+  const { box, boLai } = gomBox(whRows);
 
   const b = schema.boxDongGoi;
   const smsRows = await db.select().from(b);
@@ -268,5 +266,29 @@ export async function danhSachBox(): Promise<BoxHien[]> {
       suaTay: r.suaTay, an: r.an,
     }));
 
+  return { box, boLai, tuSms };
+}
+
+/**
+ * Danh mục box cho lưới chọn ở khối Đóng thùng (`ChonBox`): gom kho về một box mỗi loại, trộn
+ * với bản sửa tay của SMS (luật bản-sửa-tay-thắng ở `tronBox`).
+ *
+ * Không cần chặn quyền riêng: màn Đóng hàng đã gác ở `view_fulfillment` (xem `actions.ts`),
+ * đọc danh mục box không phải việc nhạy hơn đọc chính kiện hàng.
+ */
+export async function danhSachBox(): Promise<BoxHien[]> {
+  const { box, tuSms } = await docDanhMucBox();
   return tronBox(box, tuSms);
+}
+
+/**
+ * Danh mục box CHO MÀN QUẢN LÝ (`QuanLyBox`, `/f/dong-hang/box`) — cùng `box` như
+ * `danhSachBox`, CỘNG `boLai`: những dòng kho `gomBox` phải loại ra (kích thước không đọc
+ * được, hoặc cùng tên mà kích thước xung đột giữa các dòng). `danhSachBox` chỉ cần nửa đầu vì
+ * lưới `ChonBox` không có chỗ hiện một box không có kích thước; màn quản lý thì CHÍNH LÀ chỗ
+ * sửa những dòng đó, nên phải thấy cả hai.
+ */
+export async function danhMucBoxQuanLy(): Promise<{ box: BoxHien[]; boLai: BoLai[] }> {
+  const { box, boLai, tuSms } = await docDanhMucBox();
+  return { box: tronBox(box, tuSms), boLai };
 }

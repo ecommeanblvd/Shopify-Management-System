@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ghiDongThung } from '@/features/dong-hang/actions';
 import { canhBaoLechCan } from '@/features/dong-hang/dong-thung';
 import { tongCanMon, moTaTongCan } from '@/features/dong-hang/can-du-kien';
@@ -97,6 +98,11 @@ export function KhoiDongThung({ k, dsBox }: { k: KienDongHang; dsBox: BoxHien[] 
       <div className="flex flex-wrap items-baseline gap-2">
         <h4 className="text-sm font-semibold">Đóng thùng</h4>
         {k.dongThung && <span className="text-[11px] text-muted-foreground">đã ghi lúc {new Date(k.dongThung.luc).toLocaleString('vi-VN')}</span>}
+        {/* Lối ra cho người hít đúng kiện nhưng box trong lưới sai số đo — không có đường này
+            thì phải biết URL mới sửa được danh mục (xem QuanLyBox.tsx). */}
+        <Link href="/f/dong-hang/box" className="text-[11px] text-muted-foreground underline hover:text-foreground">
+          Box sai số đo? Sửa danh mục →
+        </Link>
       </div>
 
       {/* Số dự kiến là THAM CHIẾU, không phải số điền sẵn vào ô cân: nhiều món gộp một thùng

@@ -130,10 +130,15 @@ export interface KetQuaKiemBox {
  * là cột UNIQUE (khớp Lark theo tên — xem `tron-box.ts`); nơi gọi (`luuBox`) tự loại tên của
  * chính box đang sửa ra khỏi danh sách này trước khi gọi, để sửa một box mà không đổi tên
  * không bị báo trùng với chính nó.
+ *
+ * BẮT BUỘC (không có giá trị mặc định) — cùng lý do `dsBox` ở `KhoiDongThung` không có `= []`:
+ * một bản vá lỡ gọi `kiemBox(v)` thiếu tham số này sẽ ÂM THẦM tắt luật kiểm trùng tên (không
+ * lỗi kiểu, không crash, chỉ là luật ngưng áp dụng mà không ai nhận ra). Buộc truyền tay để
+ * thiếu dây là `tsc` báo lỗi NGAY tại chỗ gọi.
  */
 export function kiemBox(
   v: { ten: string; daiCm: string; rongCm: string; caoCm: string },
-  dsTenDaCo: string[] = [],
+  dsTenDaCo: string[],
 ): KetQuaKiemBox {
   const loi: string[] = [];
   const ten = v.ten.trim();

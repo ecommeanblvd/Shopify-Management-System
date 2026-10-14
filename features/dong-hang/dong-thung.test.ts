@@ -117,7 +117,10 @@ describe('dimsDongThungTuCot — dựng dims để MỞ LẠI bước Đóng th�
   });
 });
 
-const box = (p: Partial<Parameters<typeof kiemBox>[0]> = {}, dsTenDaCo?: string[]) =>
+// `kiemBox` tự nó KHÔNG có giá trị mặc định cho `dsTenDaCo` (cố ý — xem ghi chú tại định
+// nghĩa trong dong-thung.ts); mặc định `[]` chỉ sống ở đây, trong test helper, để các test
+// không kiểm trùng tên không phải lặp lại `[]` ở mọi lời gọi.
+const box = (p: Partial<Parameters<typeof kiemBox>[0]> = {}, dsTenDaCo: string[] = []) =>
   kiemBox({ ten: 'Thùng Carton 5kg', daiCm: '40', rongCm: '25', caoCm: '25', ...p }, dsTenDaCo);
 
 describe('kiemBox — kiểm ô nhập của màn quản lý danh mục box (QuanLyBox)', () => {
