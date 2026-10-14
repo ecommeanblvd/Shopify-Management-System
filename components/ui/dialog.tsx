@@ -23,6 +23,16 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
+/**
+ * Lớp phủ PHẢI thấp hơn hộp thoại (14/10/2026 — Đức báo modal đối soát tắt khi gõ hoặc khi
+ * click bất kỳ đâu).
+ *
+ * Trước đây cả hai cùng `z-50` và lớp phủ còn `isolate` (tạo ngữ cảnh xếp lớp riêng): thứ tự
+ * chỉ còn dựa vào vị trí trong DOM — một thế hoà. Hoà mà nghiêng sai bên thì lớp phủ nằm
+ * trên, mọi cú click kể cả click vào ô nhập đều rơi vào lớp phủ, và thư viện đóng hộp thoại.
+ * Nay lớp phủ `z-50`, hộp thoại `z-[60]`: thứ tự đúng theo cấu trúc, không phụ thuộc DOM.
+ * `isolate` bỏ đi vì nó không phục vụ gì cho một lớp phủ phủ kín màn hình.
+ */
 function DialogOverlay({
   className,
   ...props
@@ -31,7 +41,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -53,7 +63,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-[60] grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
