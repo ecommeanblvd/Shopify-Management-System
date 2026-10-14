@@ -13,6 +13,50 @@ export function chuyenDuocQc(tu: KetQuaQc): boolean {
 }
 
 /**
+ * THUẦN: quản lý có ĐỔI LẠI được kết quả QC đã chốt không (CEO 14/10/2026).
+ *
+ * Vì sao cần: nhân sự bấm nhầm "không đạt", hoặc kiểm lại thì thấy vẫn dùng được. Trước đây
+ * QC là một chiều tuyệt đối (`chuyenDuocQc` chỉ cho `pending → …`), nên cách duy nhất là sửa
+ * tay trong CSDL.
+ *
+ * Hai chiều KHÔNG đối xứng:
+ *   - `fail → pass`: luôn cho. Hàng lỗi chưa bao giờ vào tồn, đổi lại chỉ là nhập nó vào.
+ *   - `pass → fail`: chỉ khi hàng CHƯA ĐI. Chiếc đã gửi sang Mỹ thì bấm "không đạt" không
+ *     kéo nó về được, mà trừ tồn một chiếc không còn ở đó là làm sổ kho sai thêm. CEO chốt
+ *     14/10: hàng đã đi thì khoá, còn lại thì cho.
+ *
+ * "Đã đi" đọc ở TRẠNG THÁI DÒNG HÀNG, không phải ở việc kiện có mã vận đơn. Đo 14/10/2026:
+ * 344 chiếc `allocated` đều có dòng fulfillment nhưng KHÔNG dòng nào gắn với kiện có mã vận
+ * đơn, trong khi 311 dòng trong số đó đã ở trạng thái `shipped`. Hệ thống ghi "hàng đã đi" ở
+ * dòng hàng; lấy mã vận đơn làm thước là khoá nhầm gần như không ai.
+ *
+ * Bằng chứng lỗi cũ (`wh_loi_qc`: ảnh + lý do) KHÔNG BAO GIỜ bị xoá khi đổi sang đạt — CEO
+ * chốt giữ để đối chiếu về sau. Việc đó thuộc hàm gọi, ghi ở đây để không ai "dọn" nhầm.
+ */
+export function doiDuocKetQuaQc(v: {
+  tu: KetQuaQc; den: 'pass' | 'fail'; stockStatus: string | null; lineStatus: string | null;
+}): { ok: true } | { ok: false; loi: string } {
+  if (v.tu === 'pending') {
+    return { ok: false, loi: 'Chiếc này chưa kiểm — dùng màn QC để kiểm lần đầu.' };
+  }
+  if (v.tu === v.den) {
+    return { ok: false, loi: `Chiếc này đã ở trạng thái ${v.den === 'pass' ? 'ĐẠT' : 'KHÔNG ĐẠT'} rồi.` };
+  }
+  if (v.den === 'pass') return { ok: true };
+  // pass → fail
+  if (v.stockStatus === 'shipped' || v.lineStatus === 'shipped') {
+    return { ok: false, loi: 'Chiếc này đã gửi đi rồi — không đổi được sang KHÔNG ĐẠT. Hàng đã đi mà lỗi thì xử bằng khiếu nại với brand.' };
+  }
+  // Đang giữ cho một đơn: nhả hàng khỏi đơn là việc của thủ tục cấp phát (nó còn tính lại
+  // reserved trên sổ tồn và rollup của dòng hàng). Gọi lẻ một nửa ở đây là để sổ kho lệch,
+  // nên CHẶN và chỉ đường, thay vì tự làm nửa vời.
+  if (v.stockStatus === 'allocated' || v.stockStatus === 'staging') {
+    return { ok: false, loi: 'Chiếc này đang được giữ cho một đơn — gỡ khỏi đơn trước, rồi đổi kết quả QC.' };
+  }
+  return { ok: true };
+}
+
+/**
  * THUẦN: chiếc ở trạng thái này có THÊM được dòng lỗi (bổ sung bằng chứng) không.
  *
  * Chỉ `fail`. Thêm lỗi cho chiếc `pass` là ghi bằng chứng lỗi vào hàng ĐÃ VÀO TỒN — hai sự thật

@@ -43,6 +43,7 @@ export default async function DongBoPage({
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col p-5">
       <BangSoNhap
+        suaDuocQc={hasPermission(role, 'sua_ket_qua_qc')}
         dong={dong} kho={kho} ngay={ngay} homNay={homNay}
         cacNgay={cacNgay} capNhatLuc={capNhatLuc}
       />

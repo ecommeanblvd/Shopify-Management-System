@@ -94,6 +94,14 @@ export interface DongSoNhap {
   storeFinal: string | null;
   vendorFinal: string | null;
   qcCheck: string | null;
+  /** Chiếc tương ứng bên mình (`goods_receipt_items.id`) — null khi dòng Lark chưa có chiếc
+   *  nào trong hệ thống. Quản lý chỉ đổi được kết quả QC khi có chiếc này. */
+  chiecId: string | null;
+  /** Kết quả QC BÊN MÌNH (`pending|pass|fail`). Khác `qcCheck` vốn là chữ trên Lark. */
+  qcHeThong: string | null;
+  trangThaiKho: string | null;
+  /** Trạng thái dòng hàng của đơn — chỗ ghi "hàng đã đi" (xem `doiDuocKetQuaQc`). */
+  trangThaiDong: string | null;
   /** Chữ NGƯỜI gõ trên Lark, giữ nguyên — không quy về enum (xem migration 0198). */
   lyDoFail: string | null;
   whAction: string | null;

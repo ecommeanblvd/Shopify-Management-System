@@ -6,11 +6,12 @@ import { db, schema } from '@/db/client';
 import { applyMovement } from '@/features/warehouse/ledger';
 import { isStorageConfigured } from '@/lib/storage/s3';
 import { requirePerm } from '@/features/receiving/perm';
-import { chuyenDuocQc, themDuocLoi, kiemLoQc, type DongLoiVao, type KetQuaQc } from './qc-logic';
+import { chuyenDuocQc, themDuocLoi, kiemLoQc, type DongLoiVao, type KetQuaQc, doiDuocKetQuaQc } from './qc-logic';
 import { danhDauQcDatTrenLark, danhDauQcKhongDatTrenLark } from './day-wh-lark';
 import type { DangKiem } from './types';
 import { docCanNhap } from './can-chiec';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
+import { recordAudit } from '@/lib/logging/audit';
 
 /**
  * QC ĐẠT → chiếc vào tồn. Đây là chỗ DUY NHẤT trong luồng này gọi `applyMovement`.
@@ -210,4 +211,102 @@ export async function datCanChiec(id: string, tho: string): Promise<{ ok: boolea
   if (n.length === 0) return { ok: false, loi: 'Không tìm thấy chiếc này' };
   revalidatePath('/f/warehouse/nhan-kcs');
   return { ok: true };
+}
+
+
+/**
+ * Quản lý ĐỔI LẠI kết quả QC đã chốt (CEO 14/10/2026).
+ *
+ * Luật ai-đổi-được nằm ở `doiDuocKetQuaQc` (thuần, có test). Ở đây là phần có hệ quả thật:
+ * tồn kho và Lark.
+ *
+ * Quyền `sua_ket_qua_qc`, KHÔNG phải `manage_qc`: đo 14/10/2026, `manage_qc` do cả vai
+ * `operator` — ba người đang trực tiếp QC — nắm, nên gộp vào đó là người bấm sai tự gỡ được
+ * cho chính mình. Quyền mới cấp cho quản lý (`OC`, `admin`).
+ *
+ * BẰNG CHỨNG LỖI CŨ GIỮ NGUYÊN. Đổi sang ĐẠT không xoá một dòng `wh_loi_qc` nào — CEO chốt
+ * giữ ảnh và lý do để đối chiếu về sau. Hàng vào tồn mà hồ sơ lỗi vẫn còn là CỐ Ý, không
+ * phải sót; đừng "dọn" nó.
+ */
+export async function doiKetQuaQc(
+  itemId: string, den: 'pass' | 'fail', kho: string | null, ghiChu: string,
+): Promise<{ ok: boolean; loi?: string }> {
+  const actor = await requirePerm('sua_ket_qua_qc');
+  const ly = ghiChu.trim();
+  if (ly.length < 3) return { ok: false, loi: 'Ghi rõ lý do đổi kết quả (ít nhất 3 ký tự).' };
+  try {
+    await db.transaction(async (tx) => {
+      const [it] = await tx.select().from(schema.goodsReceiptItems)
+        .where(eq(schema.goodsReceiptItems.id, itemId)).for('update');
+      if (!it) throw new Error('Không tìm thấy chiếc hàng.');
+
+      // Trạng thái DÒNG HÀNG mới là chỗ ghi "hàng đã đi" (xem ghi chú ở `doiDuocKetQuaQc`).
+      let lineStatus: string | null = null;
+      if (it.fulfillmentLineId) {
+        const [l] = await tx.select({ status: schema.orderFulfillmentLines.status })
+          .from(schema.orderFulfillmentLines)
+          .where(eq(schema.orderFulfillmentLines.id, it.fulfillmentLineId)).limit(1);
+        lineStatus = l?.status ?? null;
+      }
+
+      const duoc = doiDuocKetQuaQc({
+        tu: it.qcResult as 'pending' | 'pass' | 'fail', den,
+        stockStatus: it.stockStatus, lineStatus,
+      });
+      if (!duoc.ok) throw new Error(duoc.loi);
+
+      if (den === 'pass') {
+        const khoNhap = (kho ?? '').trim();
+        if (!khoNhap) throw new Error('Chọn kho nhập vào trước khi đổi sang ĐẠT.');
+        if (!it.sku) throw new Error('Chiếc này chưa có SKU, không nhập kho được.');
+        await tx.update(schema.goodsReceiptItems).set({
+          qcResult: 'pass', disposition: 'store', currentWarehouseCode: khoNhap,
+          stockStatus: 'in_stock', qcCheckedBy: actor, qcCheckedAt: new Date(), updatedAt: new Date(),
+        }).where(eq(schema.goodsReceiptItems.id, itemId));
+        // Cùng `reason` với đường QC đạt bình thường: sổ tồn đọc ra một câu chuyện, không
+        // phải hai loại "nhập" khác nhau cho cùng một việc.
+        await applyMovement(tx, {
+          sku: it.sku, warehouseCode: khoNhap, deltaOnHand: 1, deltaReserved: 0,
+          reason: 'receipt_consignment', refType: 'receipt_item', refId: itemId, actor,
+          createIfMissing: { productTitle: it.productTitle, variantTitle: it.variantTitle },
+        });
+      } else {
+        await tx.update(schema.goodsReceiptItems).set({
+          qcResult: 'fail', disposition: 'return_to_brand', stockStatus: 'qc_failed',
+          qcCheckedBy: actor, qcCheckedAt: new Date(), updatedAt: new Date(),
+        }).where(eq(schema.goodsReceiptItems.id, itemId));
+        // Rút khỏi tồn ĐÚNG BẰNG cái đã cộng vào lúc QC đạt. `doiDuocKetQuaQc` đã chặn mọi
+        // trạng thái khác `in_stock`, nên ở đây chiếc chắc chắn đang nằm trong kho.
+        if (it.sku && it.currentWarehouseCode) {
+          await applyMovement(tx, {
+            sku: it.sku, warehouseCode: it.currentWarehouseCode, deltaOnHand: -1, deltaReserved: 0,
+            // `manual_adjust`: sổ tồn không có lý do riêng cho "QC đổi ý". Dùng lý do điều
+            // chỉnh tay là đúng bản chất — một người có quyền đã quyết rút chiếc này ra —
+            // và `refId` trỏ về chính chiếc đó nên vẫn truy ngược được.
+            reason: 'manual_adjust', refType: 'receipt_item', refId: itemId, actor,
+          });
+        }
+      }
+    });
+
+    try {
+      await recordAudit({
+        userId: actor, action: 'qc_doi_ket_qua', target: itemId,
+        requestSummary: `den=${den} kho=${kho ?? '-'} lyDo=${ly}`, result: 'success',
+      });
+    } catch (e) { console.error('[kho-nhan] audit doiKetQuaQc lỗi:', e); }
+
+    // Báo Lark SAU khi ghi xong bên mình, best-effort: Lark hỏng không được làm hỏng việc đã xong.
+    try {
+      if (den === 'pass') await danhDauQcDatTrenLark(itemId, actor);
+      else await danhDauQcKhongDatTrenLark(itemId, actor);
+    } catch (e) { console.error('[kho-nhan] báo Lark sau khi đổi kết quả QC lỗi:', e); }
+
+    revalidatePath('/f/warehouse/dong-bo');
+    revalidatePath('/f/warehouse/nhan-kcs');
+    return { ok: true };
+  } catch (e) {
+    console.error('[kho-nhan] doiKetQuaQc lỗi:', e);
+    return { ok: false, loi: e instanceof Error ? e.message : 'Đổi kết quả QC thất bại, thử lại.' };
+  }
 }

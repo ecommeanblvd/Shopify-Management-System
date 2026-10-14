@@ -32,8 +32,18 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
            w.co_anh_hang_den, w.co_bb_ban_giao, w.anh_hang_den, w.bb_ban_giao,
            w.anh_loi_qc,
            EXISTS (SELECT 1 FROM goods_receipt_items gi
-                    WHERE gi.lark_record_id = w.record_id) AS cua_he_thong
+                    WHERE gi.lark_record_id = w.record_id) AS cua_he_thong,
+           gi.id AS chiec_id, gi.qc_result AS qc_he_thong, gi.stock_status AS trang_thai_kho,
+           ofl.status AS trang_thai_dong
     FROM lark_wh_inventory w
+    /* Chiếc tương ứng bên mình — để quản lý đổi lại kết quả QC ngay trên màn này (CEO
+       14/10/2026). LATERAL + LIMIT 1 vì một dòng Lark chỉ ứng MỘT chiếc; JOIN thường mà dữ
+       liệu lỡ có hai chiếc cùng record_id thì dòng Lark nhân đôi trên màn. */
+    LEFT JOIN LATERAL (
+      SELECT g.id, g.qc_result, g.stock_status, g.fulfillment_line_id
+      FROM goods_receipt_items g WHERE g.lark_record_id = w.record_id LIMIT 1
+    ) gi ON true
+    LEFT JOIN order_fulfillment_lines ofl ON ofl.id = gi.fulfillment_line_id
     WHERE w.ngay_import = ${loc.ngay}::date
       AND (${khoLark}::text IS NULL OR w.warehouse = ${khoLark})
     ORDER BY w.order_number NULLS LAST, w.unique_code`);
@@ -50,6 +60,10 @@ export async function soNhap(loc: { kho?: string; ngay: string }): Promise<DongS
     storeFinal: (x.store_final as string) ?? null,
     vendorFinal: (x.vendor_final as string) ?? null,
     qcCheck: (x.qc_check as string) ?? null,
+    chiecId: (x.chiec_id as string | null | undefined) ?? null,
+    qcHeThong: (x.qc_he_thong as string | null | undefined) ?? null,
+    trangThaiKho: (x.trang_thai_kho as string | null | undefined) ?? null,
+    trangThaiDong: (x.trang_thai_dong as string | null | undefined) ?? null,
     lyDoFail: (x.ly_do_fail as string) ?? null,
     whAction: (x.wh_action as string) ?? null,
     uniqueCode: (x.unique_code as string) ?? null,

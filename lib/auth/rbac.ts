@@ -36,6 +36,7 @@ export type Permission =
   | 'manage_receiving'
   | 'view_qc'
   | 'manage_qc'
+  | 'sua_ket_qua_qc'
   | 'view_pack_check'
   | 'check_packed'
   | 'view_ship_ho'

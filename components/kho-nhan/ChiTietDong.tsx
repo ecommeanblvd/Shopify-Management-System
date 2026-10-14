@@ -1,12 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { nhomQc, nhomKho, tenBrand, tachTenBienThe } from '@/features/kho-nhan/dong-so-nhap';
 import { mauKho, mauLoaiNhap } from '@/features/kho-nhan/mau-nhan';
 import type { DongSoNhap, FileLark } from '@/features/kho-nhan/types';
 import { NutBoSungFile } from './NutBoSungFile';
+import { doiKetQuaQc } from '@/features/kho-nhan/qc-actions';
+import { WAREHOUSE_PRIORITY } from '@/features/warehouse/allocation-logic';
+import { nhanKho } from '@/features/warehouse/ten-kho';
 
 /**
  * Chi tiết MỘT dòng Sổ nhập (CEO 03/10/2026: "chưa click vào record dòng nào để mở modal ra xem
@@ -291,7 +295,12 @@ export function NoiDungChiTiet({ dong }: { dong: DongSoNhap }) {
   );
 }
 
-export function ChiTietDong({ dong, onDong }: { dong: DongSoNhap | null; onDong: () => void }) {
+export function ChiTietDong({ dong, onDong, suaDuocQc = false }: {
+  dong: DongSoNhap | null; onDong: () => void;
+  /** Quyền `sua_ket_qua_qc`. Mặc định false: thiếu quyền thì KHÔNG hiện ô đổi, chứ không
+   *  hiện rồi để action từ chối — người ta bấm xong mới biết là tệ hơn không thấy gì. */
+  suaDuocQc?: boolean;
+}) {
   if (!dong) return null;
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onDong(); }}>
@@ -304,7 +313,102 @@ export function ChiTietDong({ dong, onDong }: { dong: DongSoNhap | null; onDong:
           Chi tiết một dòng của Sổ nhập kho, dựng từ bản sao bảng Lark WH - Inventory.
         </DialogDescription>
         <NoiDungChiTiet dong={dong} />
+        {suaDuocQc && <DoiKetQuaQc dong={dong} />}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Ô đổi lại kết quả QC — CHỈ hiện cho người có quyền `sua_ket_qua_qc` (quản lý).
+ *
+ * Luật ai-đổi-được nằm ở `doiDuocKetQuaQc` (thuần, có test) và được action kiểm lại lần nữa
+ * ở máy chủ. Ở đây chỉ đoán trước để KHÔNG mời người ta bấm một nút chắc chắn bị từ chối, và
+ * nói thẳng lý do thay vì làm nút xám câm.
+ *
+ * Bằng chứng lỗi cũ (ảnh + lý do) GIỮ NGUYÊN khi đổi sang ĐẠT — CEO chốt 14/10/2026. Câu đó
+ * viết ngay trên nút để người bấm biết mình không xoá mất gì.
+ */
+function DoiKetQuaQc({ dong }: { dong: DongSoNhap }) {
+  const [kho, setKho] = useState('');
+  const [ghiChu, setGhiChu] = useState('');
+  const [loi, setLoi] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+
+  if (!dong.chiecId || dong.qcHeThong == null || dong.qcHeThong === 'pending') {
+    return (
+      <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+        {dong.chiecId == null
+          ? 'Dòng Lark này chưa gắn với chiếc nào trong hệ thống — không đổi kết quả QC ở đây được.'
+          : 'Chiếc này chưa kiểm lần nào — dùng màn QC để kiểm.'}
+      </p>
+    );
+  }
+
+  const dangDat = dong.qcHeThong === 'pass';
+  const den: 'pass' | 'fail' = dangDat ? 'fail' : 'pass';
+  const chan = dangDat
+    ? (dong.trangThaiKho === 'shipped' || dong.trangThaiDong === 'shipped'
+        ? 'Chiếc này đã gửi đi rồi — không đổi sang KHÔNG ĐẠT được.'
+        : (dong.trangThaiKho === 'allocated' || dong.trangThaiKho === 'staging'
+            ? 'Chiếc này đang được giữ cho một đơn — gỡ khỏi đơn trước đã.'
+            : null))
+    : null;
+
+  const gui = () => start(async () => {
+    setLoi(null);
+    const r = await doiKetQuaQc(dong.chiecId!, den, den === 'pass' ? kho : null, ghiChu);
+    if (!r.ok) { setLoi(r.loi ?? 'Không đổi được.'); return; }
+    router.refresh();
+  });
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <p className="text-xs font-medium">
+        Kết quả QC trong hệ thống: <span className={dangDat ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>{dangDat ? 'ĐẠT' : 'KHÔNG ĐẠT'}</span>
+      </p>
+      {chan ? (
+        <p className="text-xs text-muted-foreground">{chan}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end gap-2">
+            {den === 'pass' && (
+              <label className="text-xs">
+                <span className="mb-1 block text-muted-foreground">Nhập vào kho</span>
+                <select
+                  value={kho} onChange={(e) => setKho(e.target.value)} aria-label="Kho nhập vào"
+                  className="h-9 cursor-pointer rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">— chọn kho —</option>
+                  {WAREHOUSE_PRIORITY.map((k) => <option key={k} value={k}>{nhanKho(k)}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="min-w-[220px] flex-1 text-xs">
+              <span className="mb-1 block text-muted-foreground">Lý do đổi *</span>
+              <input
+                value={ghiChu} onChange={(e) => setGhiChu(e.target.value)}
+                placeholder={den === 'pass' ? 'Kiểm lại thấy vẫn dùng được…' : 'Bấm nhầm, hàng thật ra lỗi…'}
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              />
+            </label>
+            <button
+              type="button" onClick={gui}
+              disabled={pending || ghiChu.trim().length < 3 || (den === 'pass' && kho === '')}
+              className="h-9 cursor-pointer rounded-lg border border-border px-3 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pending ? 'Đang đổi…' : den === 'pass' ? 'Đổi sang ĐẠT' : 'Đổi sang KHÔNG ĐẠT'}
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {den === 'pass'
+              ? 'Ảnh và lý do lỗi cũ được GIỮ NGUYÊN để đối chiếu sau — đổi sang ĐẠT không xoá gì.'
+              : 'Chiếc sẽ bị rút khỏi tồn kho và chuyển sang hàng trả brand.'}
+          </p>
+        </>
+      )}
+      {loi && <p className="text-xs text-destructive">{loi}</p>}
+    </div>
   );
 }

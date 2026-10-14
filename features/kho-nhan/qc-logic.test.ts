@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  chuyenDuocQc, themDuocLoi, kiemLoQc, moRongDongLoi, kiemChoLoi,
+  chuyenDuocQc, themDuocLoi, kiemLoQc, moRongDongLoi, kiemChoLoi, doiDuocKetQuaQc,
 } from './qc-logic';
 
 describe('chuyenDuocQc', () => {
@@ -132,5 +132,43 @@ describe('kiemChoLoi', () => {
 
   it('thiếu ảnh KHÔNG phải lỗi — ảnh bổ sung sau', () => {
     expect(kiemChoLoi([{ lyDo: 'ban', ghiChu: '', anhKey: [] }])).toEqual({ ok: true });
+  });
+});
+
+describe('doiDuocKetQuaQc', () => {
+  const v = (o: Partial<Parameters<typeof doiDuocKetQuaQc>[0]> = {}) =>
+    doiDuocKetQuaQc({ tu: 'fail', den: 'pass', stockStatus: 'qc_failed', lineStatus: null, ...o });
+
+  it('không đạt → đạt: luôn cho, kể cả dòng hàng đã gửi', () => {
+    expect(v()).toEqual({ ok: true });
+    expect(v({ lineStatus: 'shipped' })).toEqual({ ok: true });
+  });
+  it('đạt → không đạt: cho khi hàng CÒN TRONG KHO, chưa giữ cho đơn nào', () => {
+    expect(v({ tu: 'pass', den: 'fail', stockStatus: 'in_stock' })).toEqual({ ok: true });
+  });
+  it('đạt → không đạt: CHẶN khi đang giữ cho một đơn, và chỉ đường gỡ', () => {
+    for (const st of ['allocated', 'staging']) {
+      const r = v({ tu: 'pass', den: 'fail', stockStatus: st, lineStatus: 'in_stock' });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.loi).toMatch(/gỡ khỏi đơn/);
+    }
+  });
+  it('đạt → không đạt: CHẶN khi chiếc đã gửi', () => {
+    const r = v({ tu: 'pass', den: 'fail', stockStatus: 'shipped' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.loi).toMatch(/đã gửi đi/);
+  });
+  it('đạt → không đạt: CHẶN khi DÒNG HÀNG đã gửi dù chiếc còn ghi allocated', () => {
+    const r = v({ tu: 'pass', den: 'fail', stockStatus: 'allocated', lineStatus: 'shipped' });
+    expect(r.ok).toBe(false);
+  });
+  it('chưa kiểm thì không dùng đường này', () => {
+    const r = v({ tu: 'pending', den: 'pass' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.loi).toMatch(/chưa kiểm/);
+  });
+  it('đổi sang đúng trạng thái đang có → báo lỗi, không im lặng', () => {
+    expect(v({ tu: 'pass', den: 'pass' }).ok).toBe(false);
+    expect(v({ tu: 'fail', den: 'fail' }).ok).toBe(false);
   });
 });

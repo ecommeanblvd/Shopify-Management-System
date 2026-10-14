@@ -48,10 +48,12 @@ function ngayVn(s: string): string {
 }
 
 export function BangSoNhap({
-  dong, kho, ngay, homNay, cacNgay, capNhatLuc,
+  dong, kho, ngay, homNay, cacNgay, capNhatLuc, suaDuocQc = false,
 }: {
   dong: DongSoNhap[]; kho: string; ngay: string; homNay: string;
   cacNgay: string[]; capNhatLuc: Date | null;
+  /** Quyền `sua_ket_qua_qc` — chỉ quản lý mới đổi lại được kết quả QC đã chốt. */
+  suaDuocQc?: boolean;
 }) {
   const router = useRouter();
   const [ket, setKet] = useState<KetQuaDoiChieu | null>(null);
@@ -344,7 +346,7 @@ export function BangSoNhap({
         </div>
       </div>
 
-      <ChiTietDong dong={xem} onDong={() => setXemId(null)} />
+      <ChiTietDong dong={xem} onDong={() => setXemId(null)} suaDuocQc={suaDuocQc} />
     </div>
   );
 }

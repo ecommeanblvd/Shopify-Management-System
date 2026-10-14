@@ -13,6 +13,7 @@ const dong = (p: Partial<DongSoNhap>): DongSoNhap => ({
   recordId: 'r1', ngayImport: '2026-10-01', dinhDanh: 'x', warehouse: 'HN | GVM',
   inventoryType: 'Retail', orderNumber: '#MBLVD1', sku: 'SKU-1', lineitemName: 'Áo - Đen / S',
   storeFinal: '#MBLVD', vendorFinal: 'Esmee', qcCheck: 'QC Failed', lyDoFail: 'xước chỉ, bẩn',
+  chiecId: null, qcHeThong: null, trangThaiKho: null, trangThaiDong: null,
   whAction: 'Lưu kho', uniqueCode: 'WH-1', soLuong: 1,
   coAnhHangDen: false, coBbBanGiao: false, anhHangDen: [], bbBanGiao: [],
   anhLoiQc: [{ token: 'tk1', ten: 'loi.jpg' }], cuaHeThong: true, ...p,

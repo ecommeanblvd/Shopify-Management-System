@@ -6,7 +6,7 @@
  * with `can(perms, '<scope>:<action>')`. The role-matrix UI picks it up
  * automatically — no DB migration needed (keys are validated strings, not enums).
  */
-export const ACTIONS = ['view', 'create', 'edit', 'delete', 'apply', 'push'] as const;
+export const ACTIONS = ['view', 'create', 'edit', 'delete', 'apply', 'push', 'override'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export interface ScopeDef {
@@ -22,7 +22,9 @@ export const CATALOG: ScopeDef[] = [
   { key: 'fulfillment.logistics', label: 'Vận hành — logistics (tracking)', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'fulfillment.warehouse', label: 'Kho MEAN', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'warehouse.receiving', label: 'Kho — Nhập hàng', actions: ['view', 'create', 'edit'] },
-  { key: 'warehouse.qc', label: 'Kho — QC', actions: ['view', 'create', 'edit'] },
+  /** `override` = SỬA LẠI kết quả QC người khác đã chốt (quản lý duyệt lại). Tách khỏi
+   *  `edit` vì `edit` do cả nhân sự QC nắm — người bấm sai không được tự gỡ cho mình. */
+  { key: 'warehouse.qc', label: 'Kho — QC', actions: ['view', 'create', 'edit', 'override'] },
   { key: 'fulfillment.pack_check', label: 'Vận hành — kiểm tra đóng gói', actions: ['view', 'create'] },
   { key: 'fulfillment.brand_requests', label: 'Yêu cầu brand', actions: ['view', 'edit'] },
   { key: 'carrier_rates', label: 'Carrier rates', actions: ['view', 'create', 'edit', 'delete'] },

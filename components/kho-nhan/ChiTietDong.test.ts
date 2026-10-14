@@ -14,6 +14,7 @@ const d: DongSoNhap = {
   anhHangDen: [{ token: 'hang1', ten: 'hang.jpg' }],
   bbBanGiao: [], anhLoiQc: [{ token: 'loi1', ten: 'loi.jpg' }, { token: 'loi2', ten: 'bb.pdf' }],
   cuaHeThong: false,
+  chiecId: null, qcHeThong: null, trangThaiKho: null, trangThaiDong: null,
 };
 
 /* Kết xuất NỘI DUNG, không phải lớp vỏ Radix: `Dialog` vẽ qua Portal nên SSR trả chuỗi rỗng. */

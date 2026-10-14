@@ -38,6 +38,10 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   manage_receiving: ['warehouse.receiving:view', 'warehouse.receiving:create', 'warehouse.receiving:edit'],
   view_qc: ['warehouse.qc:view'],
   manage_qc: ['warehouse.qc:view', 'warehouse.qc:create', 'warehouse.qc:edit'],
+  /** Sửa kết quả QC đã chốt. CỐ Ý KHÔNG nằm trong `manage_qc`: đo 14/10/2026, `manage_qc`
+   *  do cả vai `operator` (3 người đang trực tiếp QC) nắm, nên gộp vào đó là người bấm sai
+   *  tự gỡ được cho mình. Quyền này cấp cho quản lý — vai `OC` và `admin`. */
+  sua_ket_qua_qc: ['warehouse.qc:override'],
   view_pack_check: ['fulfillment.pack_check:view'],
   check_packed: ['fulfillment.pack_check:view', 'fulfillment.pack_check:create'],
   // KPI logistics: quyền RIÊNG, không dùng chung 'fulfillment.logistics:view' — role OC cũng có quyền đó nhưng không
