@@ -37,9 +37,12 @@ function cungKichThuoc(a: BaChieu, b: BaChieu): boolean {
  * đổi lô, đúng cái luật này sinh ra để ngăn.
  *
  * Luật bản-sửa-tay-thắng (CEO chốt): khi một box đã bị sửa tay trong SMS (`suaTay = true`),
- * số đo của SMS THẮNG và KHOÁ — Lark đổi số sau đó không ghi đè, chỉ lộ ra ở `lech` để
- * người xem biết kho đang báo số khác. Box chưa ai sửa tay thì Lark vẫn là nguồn số đo
- * (vì Lark luôn có bản mới nhất từ lô nhập gần nhất, còn SMS lúc đó chỉ là bản mirror cũ).
+ * `ma`, `loai` VÀ kích thước của SMS cùng THẮNG và KHOÁ — cả ba tả MỘT thùng vật lý, nên
+ * không được ghép `ma`/`loai` hiện tại của Lark với số đo cũ của người (reviewer round 1:
+ * `ma` quyết định tính phí BOX/PAK/BAG, ghép sai làm lệch tiền). Lark đổi gì sau đó không
+ * ghi đè, chỉ lộ ra ở `lech` để người xem biết kho đang báo số khác. Box chưa ai sửa tay
+ * thì Lark vẫn là nguồn cho mọi trường (vì Lark luôn có bản mới nhất từ lô nhập gần nhất,
+ * còn SMS lúc đó chỉ là bản mirror cũ).
  *
  * Box chỉ còn ở một bên (Lark đã xoá lô, hoặc người tự thêm box trong SMS) vẫn phải hiện —
  * không được biến mất. `an` chỉ là cờ ẩn trên màn hình, không loại box khỏi kết quả.
@@ -83,14 +86,16 @@ export function tronBox(tuLark: Box[], tuSms: BoxSms[]): BoxHien[] {
       continue;
     }
 
-    // Đã khoá — số SMS thắng; Lark đổi số chỉ hiện qua `lech`.
+    // Đã khoá — ma, loai, kích thước đi cùng nhau từ SMS: ba cái này tả MỘT thùng vật lý,
+    // ghép mã hiện tại của Lark với số đo cũ của người là đúng cái sai mà luật này chặn.
+    // Lark đổi gì cũng chỉ hiện qua `lech`, không ghi đè.
     const kichThuocSms: BaChieu = { daiCm: smsBox.daiCm, rongCm: smsBox.rongCm, caoCm: smsBox.caoCm };
     const lech = cungKichThuoc(larkBox.kichThuoc, kichThuocSms) ? null : larkBox.kichThuoc;
 
     ketQua.push({
       ten: larkBox.ten,
-      ma: larkBox.ma,
-      loai: larkBox.loai,
+      ma: smsBox.ma,
+      loai: smsBox.loai,
       kichThuoc: kichThuocSms,
       larkRecordIds: larkBox.larkRecordIds,
       id: smsBox.id,
