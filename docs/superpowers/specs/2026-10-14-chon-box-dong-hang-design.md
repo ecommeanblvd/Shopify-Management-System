@@ -41,31 +41,39 @@ Túi **chỉ có hai số**: niêm phong nhỏ `28x42` · to `38x52` · zip nh�
 
 Trong `VTĐG1` còn lẫn thứ không phải box — `Giấy Nến Trắng 160x60`, các tag và decal. Lọc chúng ra là việc của người dựng (§7).
 
-## 3. Màn hình đã có sẵn — đây là NÂNG CẤP, không phải dựng mới
+## 3. BA chỗ đang nhập cân/kích thước — chọn một, bỏ phần còn lại
 
-Kiểm 14/10/2026 (sau khi CEO hỏi "chỗ chọn box nằm ở phần nào trên SMS"): màn đóng kiện **đã tồn tại**.
+Soát lại 14/10/2026 (người soát tài liệu bắt được; bản trước của mục này sai): hôm nay có **ba** chỗ nhận cân và kích thước, không phải một.
 
-`/f/warehouse/dong-goi` → "ĐÓNG HÀNG — kho đóng kiện" (`app/(dashboard)/f/warehouse/dong-goi/page.tsx`, spec `2026-09-26-dong-hang-design.md`). Bấm một đơn thì mở `components/dong-goi/ModalDongKien.tsx`, trong đó **đã có đủ**:
+| Chỗ | Ghi vào cột | Thực tế dùng |
+|---|---|---|
+| Lark `Weights` / `Dimension ( điền tay)` → cron/webhook kéo về | `actual_weight_kg`, `dim_*` | **416/418 kiện** |
+| `/f/dong-hang` → khối **"Đóng thùng"** (`components/dong-hang/KhoiDongThung.tsx`, render tại `BangDongHang.tsx:682`, action `ghiDongThung`) | `sms_hop`, `sms_weight_kg`, `sms_dim_*`, `sms_packed_at/by` | 2 kiện |
+| `/f/warehouse/dong-goi` → `ModalDongKien` (action `dongKien`) | `actual_weight_kg`, `dim_*`, `lark_hop`, `hop_lark_record_id` | ~0; **0 kiện từng chọn hộp** |
 
-- ô **Cân nặng (kg)**
-- ba ô **kích thước (cm)**
-- dropdown **"Hộp / vật tư đóng gói"**, đọc đúng nguồn đề xuất ở §2: `vatTuDongGoi()` trong `features/dong-goi/queries.ts` chạy `SELECT … FROM lark_wh_inventory WHERE inventory_type IN ('VTĐG1','VTĐG2')`
+**CEO chốt: làm trên khối "Đóng thùng" của `/f/dong-hang`.** Đó là màn nhân sự đang mở hằng ngày, và ô "Thùng đã dùng" ở đó vốn gõ tự do — chú thích trong `KhoiDongThung.tsx` ghi sẵn ý định *"có danh sách thật thì đổi thành ô chọn"*.
 
-`dongKien()` (`features/dong-goi/actions.ts`) ghi `actualWeightKg`, `dimLengthCm/WidthCm/HeightCm`, `larkHop`, `hopLarkRecordId` vào `shipments`.
-
-**Nhưng không ai dùng.** Toàn hệ thống có đúng **2 kiện** từng đóng qua màn này (`sms_packed_at IS NOT NULL`), lần cuối 12/10/2026, và **0 kiện chọn hộp**. Đúng y chuyện `Select VTĐG1` bên Lark ở §1: công cụ có, không ai dùng.
+Hai chỗ còn lại **không được để song song**: ba con số vào hai bộ cột khác nhau là hỏng im lặng. Ô nhập cân/dim trong `ModalDongKien` phải gỡ hoặc trỏ về cùng một đường ghi.
 
 ### Năm việc còn thiếu — đây là toàn bộ phạm vi
 
-1. **Chọn hộp không tự điền kích thước.** Đây là yêu cầu gốc của CEO.
-2. **Dropdown hiện mã kho dài** (`MEAN-OCV-40x30x10-APP-02-VTĐG2-WH-25954`) chứ không phải tên người đọc được kèm số đo (`Hộp MEAN Ver 2 · 42×30×10`).
+1. **Chọn hộp không tự điền kích thước.** Yêu cầu gốc của CEO. Ô thùng hiện là ô gõ tự do.
+2. **Chưa có danh mục box** — không có gì để chọn.
 3. **Chưa có ô tìm + lưới thẻ** tách khối Thùng / khối Túi (cách bày CEO đã chọn).
 4. **Không đẩy ngược cân và kích thước lên Lark.**
 5. **Danh mục box chưa sửa/thêm được trong SMS.**
 
-Việc đầu tiên của người dựng **không phải viết mã** mà là hỏi kho vì sao họ chưa dùng màn này. Nếu lý do nằm ngoài năm việc trên thì làm xong vẫn không ai dùng, và cả tài liệu này sai mục tiêu.
+Việc đầu tiên của người dựng **không phải viết mã** mà là hỏi kho vì sao hai chỗ nhập đã có lại gần như không ai dùng. Nếu lý do nằm ngoài năm việc trên thì làm xong vẫn không ai dùng.
 
-## 4. Cái sẽ làm
+## 3b. Năm quyết định CEO chốt 14/10/2026
+
+1. **Khối "Đóng thùng" của `/f/dong-hang`** là chỗ làm.
+2. **Cân và kích thước gõ trong SMS phải dùng được NGAY để báo giá.** Hôm nay `layGiaUocTinh` chỉ đọc `actual_weight_kg`/`dim_*` (cột do Lark sở hữu), nên số gõ trong SMS phải đi vòng qua Lark rồi quay về mới dùng được — đúng độ trễ một tiếng mà `da7af6e5` ghi lại. Phải cho `layGiaUocTinh` ưu tiên `sms_*`, theo đúng cách `nguonCanKien` trong `features/dong-hang/van-don.ts` đã làm cho modal vận đơn. **Không sửa chỗ này thì cả tính năng chỉ là đổi chỗ gõ.**
+3. **SMS được ĐÈ LẠI đúng ô chính nó đã ghi** trên Lark. Luật chỉ-điền-ô-trống vẫn giữ cho ô người khác gõ; riêng ô do SMS điền thì SMS sửa lại được, vì nếu không thì lần đẩy đầu khoá ô đó vĩnh viễn và cước tính theo số sai. Cần dấu lưu vết theo từng ô để biết ô nào do SMS điền.
+4. **Chỉ đẩy kiện mới**, tính từ khi cả năm việc xong. Không đẩy bù 418 kiện lịch sử.
+5. **Quyền: `manage_fulfillment`.** Đo 14/10: 7 người, 4 vai — `operator` (3, có Tuấn Phong), `logistics` (2, có Bá Đức), `OC` (1), `admin` (1); không ai mang vai `viewer`. `manage_fulfillment` phủ 5/7, **thiếu đúng vai `logistics`** vì quyền đó đòi thêm `fulfillment.brand_requests:edit`. Người đóng hàng là `operator` nên không ảnh hưởng. Muốn Đức sửa được cân thì cấp quyền cho vai `logistics` trong màn phân quyền, KHÔNG nới cổng trong mã.
+
+## 5. Cái sẽ làm
 
 Nhân sự đóng xong một kiện, mở kiện đó trong SMS và làm **trọn vẹn tại đây**:
 
@@ -94,20 +102,20 @@ Kéo từ Lark (`lark_wh_inventory`, `inventory_type = VTĐG1`, cột `Kích th�
 
 Lý do: người ngồi trong SMS là người vừa cầm cái thùng mà đo, còn ô trên Lark là chữ gõ tay từ lúc nhập kho. Đây cũng đúng tinh thần "không đè cái người khác đã gõ", chỉ là chiều ngược lại.
 
-## 5. Không làm
+## 6. Không làm
 
 - **Không** tạo nhãn vận chuyển. D-691 giữ việc đó ở Ops.
 - **Không** đẩy lựa chọn box lên Lark. Hai cột `Select VTĐG1` và `Dimension lookup` bên Lark vẫn trống như hiện nay.
 - **Không** đụng bước Đức chọn line, cũng không đụng cron `sync-lark` một tiếng một lượt.
 - **Không** bắt nhân sự khai box mới trước khi đóng được hàng. Box lạ thì vẫn gõ tay ba số như cũ.
 
-## 6. Hỏng kể cả khi chạy đúng
+## 7. Hỏng kể cả khi chạy đúng
 
 - **Đè mất số người khác đã gõ** — dù trên Lark hay trong SMS. Lark không có undo.
 - **Chậm hơn gõ ba số.** Nhân sự đóng vài chục kiện một ngày. Chọn box mà mất nhiều thao tác hơn gõ `40x30x20` thì họ bỏ, và tính năng này chết đúng kiểu `Select VTĐG1` trên Lark đang chết.
 - **Số của box thành số của kiện.** Box là cái bấm cho nhanh, không phải số cuối cùng. Kiện phồng lên mà vẫn gửi đi số của box thì sai cước, và sai về phía hãng tính thêm tiền.
 
-## 7. Ràng buộc kỹ thuật
+## 8. Ràng buộc kỹ thuật
 
 - Next.js 16.2.6, React 19.2.4, Drizzle + Postgres, Tailwind 4, vitest 4.
 - **vitest chỉ bắt `.ts`, không bắt `.tsx`.** Mọi luật — phân tích chuỗi kích thước, luật khoá bản sửa tay, dựng bản vá gửi Lark — phải nằm trong module `.ts` có test. File `.tsx` chỉ còn việc vẽ.
@@ -115,9 +123,11 @@ Lý do: người ngồi trong SMS là người vừa cầm cái thùng mà đo, 
 - Khoá Lark **chỉ có trên Railway**. Muốn dò bảng thì `railway run npm run probe:lark-table`.
 - Di trú chạy **bằng tay** — `npm run db:migrate` báo thành công nhưng không làm gì. Thủ tục ở `db/migrations/README.md`.
 - Đường ghi ngược Lark đã có sẵn và **chỉ có một đường**: `features/lark/ghi-nguoc/` (`dung-patch.ts` giữ luật chỉ-điền-ô-trống, `cot.ts` giữ tên cột). Thêm cột mới thì thêm vào đó, không mở đường thứ hai.
-- Màn phải sửa là `components/dong-goi/ModalDongKien.tsx` + `features/dong-goi/{queries,actions,logic}.ts` (xem §3). KHÔNG phải `components/dong-hang/BangDongHang.tsx` — đó là màn chọn line của Đức, việc khác.
+- Màn phải sửa là `components/dong-hang/KhoiDongThung.tsx` + `features/dong-hang/{dong-thung,actions}.ts` (xem §3). Luật thuần và trần kiểm số ĐÃ CÓ ở `features/dong-hang/dong-thung.ts`: `kiemNhapDongThung`, `CAN_KIEN_TOI_DA_KG = 70`, `KICH_THUOC_TOI_DA_CM = 300`, `canhBaoLechCan` (ngưỡng 0,5kg, nhắc chứ không chặn) — dùng lại, đừng viết luật thứ hai.
+- `kiemNhapDongThung` hiện bắt **đủ ba chiều hoặc không chiều nào**. Túi chỉ có hai số nên luật này phải nới, và nới có hậu quả tiền: `inferPackagingFromDims` (`features/shipments/parse-packaging.ts`) lấy "thiếu cao" làm tín hiệu chọn hạng **Pak** thay vì **Package**.
+- Ô hộp phải giữ nguyên dạng mã vật tư: `parsePackagingType` suy BOX/PAK/BAG từ chữ trong mã, đổi sang tên thân thiện là hỏng chỗ chọn hạng giá. Ô "Loại hộp" trong modal vận đơn đọc ô này và có test khoá chủ ý (D-247).
 
-## 8. Để người dựng tự quyết
+## 9. Để người dựng tự quyết
 
 - Hình dạng bảng box trong SMS, và chỗ đặt màn quản lý danh mục.
 - Cách đọc chuỗi kích thước tự do thành số: `40x30x20`, `37x30x9.5`, `28x42` (hai số), `15x10.7`. Chuỗi không đọc được thì box đó không hiện trong lưới chọn, nhưng phải liệt kê ra đâu đó cho người ta sửa.
