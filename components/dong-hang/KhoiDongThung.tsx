@@ -22,9 +22,13 @@ import { ChonBox } from './ChonBox';
  * Từng GÕ TỰ DO vì hệ thống chưa có danh mục thùng (đo 30/09: 90 ngày chỉ 3/1.279 kiện có ghi
  * thùng). Danh mục nay dựng được từ kho (`lark_wh_inventory` + `box_dong_goi`, `danhSachBox`
  * ở `features/dong-hang/queries.ts`) nên đổi sang lưới chọn (`ChonBox`) — chọn một box là có
- * sẵn dài-rộng-cao, SỬA ĐƯỢC. `dsBox` nhận qua prop (trang gọi `danhSachBox()`), mặc định rỗng
- * để khối này không vỡ khi chưa nối dữ liệu. Giữ nguyên ba ô dài/rộng/cao và ô hộp ở dạng gõ
- * tay: box lạ (chưa có trong danh mục) KHÔNG được chặn việc đóng hàng (CEO chốt).
+ * sẵn dài-rộng-cao, SỬA ĐƯỢC. Giữ nguyên ba ô dài/rộng/cao và ô hộp ở dạng gõ tay: box lạ
+ * (chưa có trong danh mục) KHÔNG được chặn việc đóng hàng (CEO chốt).
+ *
+ * `dsBox` do trang `/f/dong-hang` tải (`danhSachBox()`) và truyền xuống qua `BangDongHang` —
+ * nơi gọi thật LUÔN có giá trị. `= []` vẫn là lưới an toàn thật, không phải code chết: database
+ * mới dựng, hay mọi dòng kho đều thiếu kích thước, thì `danhSachBox()` trả về rỗng hợp lệ — khối
+ * này vẫn phải đứng vững và còn đường gõ tay, không phải màn hình vỡ.
  */
 export function KhoiDongThung({ k, dsBox = [] }: { k: KienDongHang; dsBox?: BoxHien[] }) {
   const router = useRouter();

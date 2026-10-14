@@ -7,6 +7,7 @@ import { LY_DO_DONG, kiemDongKien, nhanLyDoDong } from '@/features/dong-hang/don
 import { toast } from 'sonner';
 import { canNhapTracking, canQuyDoi, conChonDuoc, laNgayTuongLai, nhomTheoNgayVaBase, trangThaiKien } from '@/features/dong-hang/logic';
 import { BO_LOC, type BaoGiaKien, type BoLocDongHang, type KienChoKhop, type KienDongHang } from '@/features/dong-hang/types';
+import type { BoxHien } from '@/features/dong-hang/tron-box';
 import { HopThoaiVanDon } from './HopThoaiVanDon';
 import { NutNhapTracking } from './HopThoaiXacNhanVanDon';
 import { chiTietCuoc, dichGhiChu } from '@/features/carrier-rates/compare/chi-tiet-cuoc';
@@ -56,7 +57,7 @@ const LUOI =
   'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(168px,auto)_minmax(186px,1.2fr)]';
 
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan,
+  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan, dsBox,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
@@ -66,6 +67,8 @@ export function BangDongHang({
   coQuyenDong: boolean;
   gioiHan: number;
   soKienChuaCan: number;
+  /** Danh mục box cho lưới chọn ở khối Đóng thùng (`danhSachBox()`, trang gọi). */
+  dsBox: BoxHien[];
 }) {
   const [bao, setBao] = useState<Map<string, BaoGiaKien>>(new Map());
   const [dangBao, setDangBao] = useState<Set<string>>(new Set());
@@ -286,6 +289,7 @@ export function BangDongHang({
           dangChonHang={dangChon.get(kienMo.orderId)}
           chonHang={chonHang}
           dong={() => setKienMo(null)}
+          dsBox={dsBox}
         />
       )}
 
@@ -616,7 +620,7 @@ function Chip({ mau, cham, children }: { mau: 'vang' | 'xanh' | 'do' | 'xam'; ch
  * chốt — một cú bấm nhầm không gửi thẳng lên Lark.
  */
 function ModalSoCuoc({
-  k, bao, dangBao, soCuoc, coQuyenChon, daChon, ketQua, dangChonHang, chonHang, dong,
+  k, bao, dangBao, soCuoc, coQuyenChon, daChon, ketQua, dangChonHang, chonHang, dong, dsBox,
 }: {
   k: KienDongHang;
   bao: BaoGiaKien | undefined;
@@ -628,6 +632,7 @@ function ModalSoCuoc({
   dangChonHang: string | undefined;
   chonHang: (orderId: string, carrierKey: string, dongModal?: boolean) => void;
   dong: () => void;
+  dsBox: BoxHien[];
 }) {
   const [chiTiet, setChiTiet] = useState<string | null>(null);
   const [xep, setXep] = useState<'cuoc' | 'nhanh'>('cuoc');
@@ -679,7 +684,7 @@ function ModalSoCuoc({
           <O nhan="HỘP" giaTri={k.hop ?? '—'} />
         </div>
 
-        <KhoiDongThung k={k} />
+        <KhoiDongThung k={k} dsBox={dsBox} />
 
         {bao?.theoDuKien && (
           <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">

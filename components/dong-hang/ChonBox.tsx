@@ -35,7 +35,11 @@ export function ChonBox({
 
       {ketQua.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-          Không thấy box khớp — gõ mã vào ô &quot;Thùng đã dùng&quot; ở dưới nếu đây là box chưa có trong danh mục.
+          {ds.length === 0
+            // Danh mục rỗng (kho mới dựng, hoặc toàn bộ dòng kho thiếu kích thước) — vẫn phải
+            // đóng được hàng, không được chờ ai điền danh mục trước.
+            ? 'Chưa có box nào trong danh mục — gõ mã vào ô "Thùng đã dùng" ở dưới để đóng hàng ngay.'
+            : 'Không thấy box khớp từ khoá này — gõ mã vào ô "Thùng đã dùng" ở dưới nếu đây là box chưa có trong danh mục.'}
         </p>
       ) : (
         <div className="max-h-56 space-y-3 overflow-y-auto rounded-lg border border-border p-2">
