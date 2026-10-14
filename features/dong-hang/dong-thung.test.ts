@@ -1,5 +1,8 @@
 import { describe, it, test, expect } from 'vitest';
-import { kiemNhapDongThung, canhBaoLechCan, dimsDongThungTuCot, CAN_KIEN_TOI_DA_KG, NGUONG_CANH_BAO } from './dong-thung';
+import {
+  kiemNhapDongThung, canhBaoLechCan, dimsDongThungTuCot, kiemBox,
+  CAN_KIEN_TOI_DA_KG, NGUONG_CANH_BAO, KICH_THUOC_TOI_DA_CM,
+} from './dong-thung';
 
 const nhap = (p: Partial<Parameters<typeof kiemNhapDongThung>[0]> = {}) =>
   kiemNhapDongThung({ hop: 'MEAN-BOX-30x25x20', canKg: '1.2', dai: '', rong: '', cao: '', ...p });
@@ -111,5 +114,70 @@ describe('dimsDongThungTuCot — dựng dims để MỞ LẠI bước Đóng th�
     expect(dimsDongThungTuCot(null, '42', '10')).toBeNull();
     expect(dimsDongThungTuCot('28', null, '10')).toBeNull();
     expect(dimsDongThungTuCot(null, null, null)).toBeNull();
+  });
+});
+
+const box = (p: Partial<Parameters<typeof kiemBox>[0]> = {}, dsTenDaCo?: string[]) =>
+  kiemBox({ ten: 'Thùng Carton 5kg', daiCm: '40', rongCm: '25', caoCm: '25', ...p }, dsTenDaCo);
+
+describe('kiemBox — kiểm ô nhập của màn quản lý danh mục box (QuanLyBox)', () => {
+  it('đủ ba chiều → hợp lệ, trả đúng số đã chuẩn hoá', () => {
+    const r = box();
+    expect(r.ok).toBe(true);
+    expect(r.sach).toEqual({ ten: 'Thùng Carton 5kg', daiCm: 40, rongCm: 25, caoCm: 25 });
+  });
+
+  it('BẮT BUỘC có tên', () => {
+    expect(box({ ten: '' }).ok).toBe(false);
+    expect(box({ ten: '   ' }).loi).toContain('Chưa nhập tên box');
+  });
+
+  it('số âm → lỗi', () => {
+    expect(box({ daiCm: '-4' }).ok).toBe(false);
+    expect(box({ rongCm: '-1' }).ok).toBe(false);
+    expect(box({ caoCm: '-10' }).ok).toBe(false);
+  });
+
+  it('số 0 → lỗi, không được coi là "bỏ trống"', () => {
+    expect(box({ daiCm: '0' }).ok).toBe(false);
+    expect(box({ rongCm: '0' }).ok).toBe(false);
+    expect(box({ caoCm: '0' }).ok).toBe(false);
+  });
+
+  it(`quá KICH_THUOC_TOI_DA_CM (${KICH_THUOC_TOI_DA_CM}) → lỗi`, () => {
+    const r = box({ daiCm: String(KICH_THUOC_TOI_DA_CM + 1) });
+    expect(r.ok).toBe(false);
+    expect(r.loi.join(' ')).toContain(`${KICH_THUOC_TOI_DA_CM} cm`);
+  });
+
+  it('trùng tên (so với danh sách tên đã có) → lỗi đọc được bằng tiếng Việt', () => {
+    const r = box({}, ['Thùng Carton 5kg', 'Túi FedEx Nhỏ']);
+    expect(r.ok).toBe(false);
+    expect(r.loi).toContain('Tên box này đã có trong danh mục');
+  });
+
+  it('KHÔNG trùng tên với chính nó khi nơi gọi đã tự loại tên cũ ra khỏi danh sách', () => {
+    // luuBox tự loại tên của box đang sửa trước khi gọi kiemBox — xem features/dong-hang/actions.ts.
+    const r = box({ ten: 'Thùng Carton 5kg' }, ['Túi FedEx Nhỏ']);
+    expect(r.ok).toBe(true);
+  });
+
+  it('dài+rộng, KHÔNG cao → hợp lệ (túi — cao giữ null, không phải 0)', () => {
+    const r = box({ caoCm: '' });
+    expect(r.ok).toBe(true);
+    expect(r.sach?.caoCm).toBeNull();
+  });
+
+  it('thiếu dài hoặc rộng → vẫn là lỗi, có hay không có cao', () => {
+    expect(box({ daiCm: '' }).ok).toBe(false);
+    expect(box({ rongCm: '' }).ok).toBe(false);
+    expect(box({ daiCm: '', caoCm: '' }).ok).toBe(false);
+    expect(box({ rongCm: '', caoCm: '' }).ok).toBe(false);
+  });
+
+  it('gom hết lỗi một lượt', () => {
+    const r = box({ ten: '', daiCm: '' });
+    expect(r.ok).toBe(false);
+    expect(r.loi.length).toBeGreaterThanOrEqual(2);
   });
 });

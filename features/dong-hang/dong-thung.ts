@@ -113,6 +113,55 @@ export function dimsDongThungTuCot(
   return { l: Number(smsL), w: Number(smsW), h: smsH != null ? Number(smsH) : null };
 }
 
+export interface KetQuaKiemBox {
+  ok: boolean;
+  loi: string[];
+  /** Chỉ có khi `ok` — số đã chuẩn hoá để ghi vào `box_dong_goi`. */
+  sach?: { ten: string; daiCm: number; rongCm: number; caoCm: number | null };
+}
+
+/**
+ * Kiểm ô nhập của màn quản lý danh mục box (`QuanLyBox`) trước khi `luuBox` ghi — cùng khuôn
+ * với `kiemNhapDongThung` ở trên để hai màn đọc giống nhau: chiều cao bỏ trống vẫn hợp lệ (đó
+ * là tín hiệu "box không có cao", tức túi — xem `KICH_THUOC_TOI_DA_CM`/ghi chú phía trên), còn
+ * gõ 0 hoặc số âm luôn là lỗi.
+ *
+ * `dsTenDaCo`: tên các box KHÁC đã có trong danh mục. Trùng tên là lỗi vì `box_dong_goi.ten`
+ * là cột UNIQUE (khớp Lark theo tên — xem `tron-box.ts`); nơi gọi (`luuBox`) tự loại tên của
+ * chính box đang sửa ra khỏi danh sách này trước khi gọi, để sửa một box mà không đổi tên
+ * không bị báo trùng với chính nó.
+ */
+export function kiemBox(
+  v: { ten: string; daiCm: string; rongCm: string; caoCm: string },
+  dsTenDaCo: string[] = [],
+): KetQuaKiemBox {
+  const loi: string[] = [];
+  const ten = v.ten.trim();
+  if (!ten) loi.push('Chưa nhập tên box');
+  else if (dsTenDaCo.some((t) => t.trim() === ten)) loi.push('Tên box này đã có trong danh mục');
+
+  const dai = so(v.daiCm);
+  const rong = so(v.rongCm);
+  const cao = so(v.caoCm);
+
+  // Dài và rộng là BẮT BUỘC — một box không đo được hai chiều này thì không lên lưới chọn
+  // được. Cao tuỳ chọn (túi).
+  if (dai == null) loi.push('Chưa nhập chiều dài');
+  if (rong == null) loi.push('Chưa nhập chiều rộng');
+
+  for (const x of [dai, rong, cao]) {
+    if (x == null) continue;
+    if (Number.isNaN(x) || x <= 0) { loi.push('Kích thước phải là số lớn hơn 0'); break; }
+    if (x > KICH_THUOC_TOI_DA_CM) { loi.push(`Kích thước vượt ${KICH_THUOC_TOI_DA_CM} cm — kiểm lại`); break; }
+  }
+
+  if (loi.length > 0) return { ok: false, loi };
+  return {
+    ok: true, loi: [],
+    sach: { ten, daiCm: dai as number, rongCm: rong as number, caoCm: cao },
+  };
+}
+
 export function canhBaoLechCan(canThuc: number, tongDuKien: number | null): string | null {
   if (tongDuKien == null || tongDuKien <= 0) return null;
   const lech = (canThuc - tongDuKien) / tongDuKien;

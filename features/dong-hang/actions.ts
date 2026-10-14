@@ -11,7 +11,8 @@ import { quoteOrderAcrossCarriers } from '@/features/carrier-rates/compare/quote
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { assignOrderCarrier } from '@/features/shopify-orders/carrier-select-actions';
 import { kiemDongKien, type DongKienVao } from './dong-kien';
-import { kiemNhapDongThung, type NhapDongThung } from './dong-thung';
+import { kiemNhapDongThung, kiemBox, type NhapDongThung } from './dong-thung';
+import type { LoaiBox } from './danh-muc-box';
 import { canhBaoLechHang, kiemTraTracking } from './luu-tracking';
 import { macVanDonTu } from './ma-van-don';
 import { ghiGiaUocTinhLenLark } from './ghi-gia-uoc-tinh-len-lark';
@@ -207,6 +208,107 @@ export async function ghiDongThung(
   }
 
   return { ok: true, canhBaoLark };
+}
+
+/** `v.loai` đến từ một server action — chữ ký TS khai `LoaiBox` không ngăn được request tay
+ * gửi chuỗi khác. Cột `loai` của `box_dong_goi` là `text` THUẦN, không có CHECK — một giá trị
+ * ngoài ba chữ này sẽ ghi lọt, rồi BIẾN MẤT khỏi lưới `ChonBox` không một lời báo, vì lưới chia
+ * khối cứng theo đúng ba chữ này (`ChonBox.tsx`: `b.loai === 'thung'` / `'tui'`). Tham số khai
+ * `unknown` (không phải `LoaiBox`) để TS không coi việc kiểm này là dư — nó so khớp CHUỖI THẬT
+ * lúc chạy, không phải kiểu lúc biên dịch. */
+function loaiHopLe(x: unknown): x is LoaiBox {
+  return x === 'thung' || x === 'tui' || x === 'khac';
+}
+
+/**
+ * LƯU một box vào danh mục `box_dong_goi` — màn `QuanLyBox` (CEO 14/10/2026, spec §3 việc 5,
+ * §5 "Danh mục box").
+ *
+ * LUÔN đặt `sua_tay = true`, bất kể box này mới tạo hay đang sửa: đây CHÍNH LÀ cái khoá của
+ * luật bản-sửa-tay-thắng (§3b.3, `tronBox`) — ai sửa ở đây là người vừa cầm cái thùng thật mà
+ * đo, còn số trên Lark chỉ là chữ gõ một lần lúc nhập kho. Khoá rồi thì lượt kéo Lark sau không
+ * được ghi đè nữa, chỉ còn hiện qua `lech` để người xem tự quyết.
+ *
+ * Khớp theo TÊN (`ten`, UNIQUE) — không theo `id` khi ghi: `onConflictDoUpdate` trên `ten` để
+ * một box hôm nay chỉ có ở Lark (chưa có dòng `box_dong_goi`, `id = null` trên `BoxHien`) vẫn
+ * tạo được dòng SMS đầu tiên của nó mà không cần biết `id` trước. Đổi TÊN một box đã có dòng SMS
+ * (`v.id` khác null) thì cập nhật THEO `id` — nếu đổi theo `ten` mới, một upsert-theo-ten sẽ tạo
+ * dòng mới và bỏ mồ côi dòng cũ.
+ */
+export async function luuBox(v: {
+  id?: string; ten: string; ma: string; loai: LoaiBox;
+  daiCm: number; rongCm: number; caoCm: number | null;
+}): Promise<{ ok: boolean; loi?: string[] }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, loi: ['Chưa đăng nhập'] };
+  const role = await getRole(session.user.id);
+  // Cùng mốc quyền với `ghiDongThung`: ghi danh mục box là ghi DB SMS, đòi `manage_fulfillment`.
+  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false, loi: ['Không có quyền sửa danh mục box'] };
+
+  if (!loaiHopLe(v.loai)) return { ok: false, loi: ['Loại box không hợp lệ'] };
+
+  const b = schema.boxDongGoi;
+  // Tên của mọi box KHÁC box đang sửa — tự loại tên của chính nó ra trước khi đưa vào `kiemBox`,
+  // để sửa một box mà giữ nguyên tên không bị báo "trùng tên" với chính mình.
+  const dong = await db.select({ id: b.id, ten: b.ten }).from(b);
+  const dsTenKhac = dong.filter((r) => r.id !== v.id).map((r) => r.ten);
+
+  const kq = kiemBox(
+    { ten: v.ten, daiCm: String(v.daiCm), rongCm: String(v.rongCm), caoCm: v.caoCm != null ? String(v.caoCm) : '' },
+    dsTenKhac,
+  );
+  if (!kq.ok) return { ok: false, loi: kq.loi };
+
+  const gia = {
+    ten: kq.sach!.ten,
+    ma: v.ma.trim(),
+    loai: v.loai,
+    daiCm: String(kq.sach!.daiCm),
+    rongCm: String(kq.sach!.rongCm),
+    caoCm: kq.sach!.caoCm != null ? String(kq.sach!.caoCm) : null,
+    suaTay: true,
+    capNhatLuc: new Date(),
+    nguoiSua: session.user.id,
+  };
+
+  try {
+    if (v.id) {
+      const r = await db.update(b).set(gia).where(eq(b.id, v.id)).returning({ id: b.id });
+      if (r.length === 0) return { ok: false, loi: ['Không tìm thấy box'] };
+    } else {
+      await db.insert(b).values(gia).onConflictDoUpdate({ target: b.ten, set: gia });
+    }
+  } catch (e) {
+    console.error('[dong-hang] luuBox lỗi:', e);
+    return { ok: false, loi: ['Lưu box thất bại'] };
+  }
+
+  revalidatePath('/f/dong-hang');
+  return { ok: true };
+}
+
+/**
+ * ẨN/HIỆN một box khỏi lưới `ChonBox` — KHÔNG xoá dòng: xoá sẽ mất luôn số đã khoá bằng
+ * `sua_tay`, và nếu Lark còn lô cũ cùng tên thì box "ẩn" sẽ tự mọc lại không kiểm soát
+ * (`tronBox` khớp theo tên). Cùng mốc quyền `manage_fulfillment` như `luuBox`.
+ */
+export async function anBox(id: string, an: boolean): Promise<{ ok: boolean }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false };
+  const role = await getRole(session.user.id);
+  if (!hasPermission(role, 'manage_fulfillment')) return { ok: false };
+
+  try {
+    const r = await db.update(schema.boxDongGoi).set({ an, capNhatLuc: new Date(), nguoiSua: session.user.id })
+      .where(eq(schema.boxDongGoi.id, id)).returning({ id: schema.boxDongGoi.id });
+    if (r.length === 0) return { ok: false };
+  } catch (e) {
+    console.error('[dong-hang] anBox lỗi:', e);
+    return { ok: false };
+  }
+
+  revalidatePath('/f/dong-hang');
+  return { ok: true };
 }
 
 const TRUY_VAN_VAN_DON = `query($id: ID!) {
