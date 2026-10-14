@@ -3538,3 +3538,32 @@ export const danhGia = pgTable('danh_gia', {
   index('danh_gia_vendor_idx').on(t.vendor),
   index('danh_gia_trang_thai_idx').on(t.trangThai),
 ]);
+
+/**
+ * Bảng box của HỆ THỐNG (SMS) cho việc chọn box khi đóng hàng — không phải mirror Lark
+ * (migration 0207).
+ *
+ * Luật bản-sửa-tay-thắng (CEO chốt): khi `sua_tay = true`, kích thước ở đây THẮNG và
+ * KHOÁ — lần đồng bộ Lark sau không ghi đè, chỉ dùng để báo lệch lúc đọc
+ * (`features/dong-hang/tron-box.ts`, hàm `tronBox`). Khớp với `lark_wh_inventory` theo
+ * `ten` (unique), KHÔNG theo record_id: mirror kho xoá dòng của lô cũ, record_id biến mất
+ * theo lô còn tên box thì ổn định.
+ *
+ * `an` chỉ ẩn khỏi màn chọn box, không xoá dòng — xoá sẽ mất số đã khoá và để box "ẩn"
+ * tự mọc lại nếu Lark còn lô cũ cùng tên.
+ */
+export const boxDongGoi = pgTable('box_dong_goi', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ten: text('ten').notNull().unique(),
+  ma: text('ma').notNull(),
+  loai: text('loai').notNull(),
+  daiCm: numeric('dai_cm'),
+  rongCm: numeric('rong_cm'),
+  caoCm: numeric('cao_cm'),
+  suaTay: boolean('sua_tay').notNull().default(false),
+  an: boolean('an').notNull().default(false),
+  capNhatLuc: timestamp('cap_nhat_luc').notNull().defaultNow(),
+  nguoiSua: text('nguoi_sua').references(() => user.id, { onDelete: 'set null' }),
+}, (t) => [
+  index('box_dong_goi_an_idx').on(t.an),
+]);
