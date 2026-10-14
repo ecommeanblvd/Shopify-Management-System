@@ -110,7 +110,12 @@ export function nguonCanKien(v: CanKienVao): {
       : 'chưa có cân và kích thước';
   const thieu: string[] = [];
   if (!chon || chon.canKg == null || !(chon.canKg > 0)) thieu.push('cân');
-  if (!chon || chon.dai == null || chon.rong == null || chon.cao == null) thieu.push('kích thước');
+  // Thiếu CHIỀU CAO không phải là thiếu kích thước: kho có bốn cỡ túi chỉ ghi hai số
+  // (28x42, 38x52, 25x35, 35x45) và `kiemNhapDongThung` cho lưu đúng như vậy từ 14/10/2026.
+  // Cao rỗng chính là tín hiệu `inferPackagingFromDims` dùng để chọn hạng Pak thay vì Package.
+  // Đòi đủ ba chiều ở đây là CHẶN mọi kiện đóng bằng túi ngay trước lúc lên vận đơn, với câu
+  // "phải cân lại" vô nghĩa — người ta cân rồi, cái túi không có chiều thứ ba để mà đo.
+  if (!chon || chon.dai == null || chon.rong == null) thieu.push('kích thước');
   return {
     canKg: chon?.canKg ?? null, dai: chon?.dai ?? null, rong: chon?.rong ?? null,
     cao: chon?.cao ?? null, hop: chon?.hop ?? null, nguon, nhan, thieu,

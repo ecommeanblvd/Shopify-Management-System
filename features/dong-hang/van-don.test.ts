@@ -73,9 +73,14 @@ describe('nguonCanKien', () => {
     expect(r).toMatchObject({ canKg: null, nguon: null });
     expect(r.thieu).toEqual(['cân', 'kích thước']);
   });
-  it('có cân nhưng THIẾU một chiều → vẫn tính là thiếu kích thước', () => {
-    const r = nguonCanKien({ sms: null, lark: { ...lark, cao: null } });
-    expect(r.thieu).toEqual(['kích thước']);
+  it('TÚI hai chiều (cao rỗng) → KHÔNG tính là thiếu kích thước, không chặn lên vận đơn', () => {
+    const r = nguonCanKien({ sms: { ...sms, dai: 28, rong: 42, cao: null }, lark: null });
+    expect(r.thieu).toEqual([]);
+    expect(r).toMatchObject({ dai: 28, rong: 42, cao: null });
+  });
+  it('thiếu DÀI hoặc RỘNG → vẫn tính là thiếu kích thước', () => {
+    expect(nguonCanKien({ sms: null, lark: { ...lark, dai: null } }).thieu).toEqual(['kích thước']);
+    expect(nguonCanKien({ sms: null, lark: { ...lark, rong: null } }).thieu).toEqual(['kích thước']);
   });
   it('cân 0 không phải cân → tính là thiếu', () => {
     const r = nguonCanKien({ sms: null, lark: { ...lark, canKg: 0 } });
@@ -147,10 +152,17 @@ describe('dungKhoiVanDon', () => {
     expect(ks[0].chanCopy).toBe(false);
   });
   it('thiếu kích thước → CHẶN copy khối Kiện hàng', () => {
-    const ks = dungKhoiVanDon(vao({ can: { sms: null, lark: { hop: 'B1', canKg: 2, dai: 38, rong: 28, cao: null } } }));
+    // Thiếu DÀI mới là thiếu thật. Trước 14/10/2026 test này dùng `cao: null` làm đại diện cho
+    // "thiếu kích thước", nhưng từ khi kho đóng bằng túi hai chiều thì cao rỗng là chuyện BÌNH
+    // THƯỜNG, không phải thiếu — xem test của `nguonCanKien` ngay trên.
+    const ks = dungKhoiVanDon(vao({ can: { sms: null, lark: { hop: 'B1', canKg: 2, dai: null, rong: 28, cao: 10 } } }));
     expect(ks[1]).toMatchObject({ chanCopy: true });
     expect(ks[1].lyDoChan).toMatch(/kích thước/);
     expect(ks[0].chanCopy).toBe(false);
+  });
+  it('TÚI hai chiều → KHÔNG chặn copy khối Kiện hàng', () => {
+    const ks = dungKhoiVanDon(vao({ can: { sms: null, lark: { hop: 'Túi FedEx Nhỏ', canKg: 1.1, dai: 28, rong: 42, cao: null } } }));
+    expect(ks[1]).toMatchObject({ chanCopy: false, lyDoChan: null });
   });
   it('khối Kiện hàng có cân quy đổi và nó CHỈ ĐỂ XEM', () => {
     const o = dungKhoiVanDon(vao())[1].o.find((x) => x.nhan === 'Cân quy đổi')!;
