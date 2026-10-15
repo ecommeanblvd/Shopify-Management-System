@@ -30,6 +30,11 @@ export interface QuoteShipmentInput {
   /** Địa chỉ nhà dân (US/CA) → quote kèm RESIDENTIAL_DELIVERY để cột API có phí
    *  residential. Suy từ billed có residential (hoặc classify = RESIDENTIAL). */
   recipientResidential?: boolean;
+  /** Loại bao gói FedEx — xem `RateQuoteInput.packagingType`. Bỏ trống là hãng tính thang
+   *  HỘP, nên kiện túi phải khai 'FEDEX_PAK'. */
+  packagingType?: string;
+  /** Dịch vụ thật của vận đơn. Bỏ trống → hỏi mọi dịch vụ rồi lấy dịch vụ mặc định. */
+  serviceType?: string;
 }
 
 export interface QuoteWeightInput {
@@ -84,16 +89,25 @@ export function pickQuote(quotes: RateQuoteResult[], service: string): RateQuote
  * của 1.224 kiện — quote lại là đổi mốc so sánh mà không ai biết.
  */
 export interface DauVaoQuote {
+  /** Phiên bản của dấu. Dấu phiên bản khác (hoặc không có) = KHÔNG BIẾT đầu vào, vì bản cũ
+   *  thiếu trường và so thiếu trường là kết luận "còn dùng được" cho một dòng có thể đã sai.
+   *  Bản 2 (15/10/2026) thêm `packagingType` + `serviceType`. */
+  v: number;
   weightKg: number;
   dims: { length: number; width: number; height: number } | null;
   /** YYYY-MM-DD — đúng chuỗi đã gửi cho Rate API. */
   shipDate: string;
   signatureOptIn: boolean;
   recipientResidential: boolean;
+  packagingType: string | null;
+  serviceType: string | null;
 }
 
 /** Khoá đóng dấu trong `raw`. Một tên, một chỗ. */
 export const KHOA_DAU_VAO_QUOTE = 'dauVaoQuote';
+
+/** Phiên bản dấu hiện hành. Tăng khi thêm/bớt trường đầu vào. */
+export const PHIEN_BAN_DAU_VAO = 2;
 
 /**
  * `QuoteShipmentInput` → dấu đầu vào. Người đọc cache PHẢI dựng dấu bằng CHÍNH hàm này từ
@@ -102,11 +116,14 @@ export const KHOA_DAU_VAO_QUOTE = 'dauVaoQuote';
  */
 export function dauVaoTuInput(input: QuoteShipmentInput): DauVaoQuote {
   return {
+    v: PHIEN_BAN_DAU_VAO,
     weightKg: input.weightKg,
     dims: input.dims ?? null,
     shipDate: input.shipDate.toISOString().slice(0, 10),
     signatureOptIn: input.signatureOptIn === true,
     recipientResidential: input.recipientResidential === true,
+    packagingType: input.packagingType ?? null,
+    serviceType: input.serviceType ?? null,
   };
 }
 
@@ -119,6 +136,7 @@ function docDauVao(raw: unknown): DauVaoQuote | null {
   const d = (raw as Record<string, unknown>)[KHOA_DAU_VAO_QUOTE];
   if (d == null || typeof d !== 'object') return null;
   const o = d as Record<string, unknown>;
+  if (o.v !== PHIEN_BAN_DAU_VAO) return null; // dấu đời khác → không so được, coi như không biết
   if (typeof o.weightKg !== 'number' || typeof o.shipDate !== 'string') return null;
   let dims: DauVaoQuote['dims'] = null;
   if (o.dims != null && typeof o.dims === 'object') {
@@ -130,11 +148,14 @@ function docDauVao(raw: unknown): DauVaoQuote | null {
     }
   }
   return {
+    v: PHIEN_BAN_DAU_VAO,
     weightKg: o.weightKg,
     dims,
     shipDate: o.shipDate,
     signatureOptIn: o.signatureOptIn === true,
     recipientResidential: o.recipientResidential === true,
+    packagingType: typeof o.packagingType === 'string' ? o.packagingType : null,
+    serviceType: typeof o.serviceType === 'string' ? o.serviceType : null,
   };
 }
 
@@ -157,6 +178,8 @@ export function xetCacheQuote(raw: unknown, hienTai: DauVaoQuote): PhanXetCacheQ
   if (luu.shipDate !== hienTai.shipDate) return 'lech-dau-vao';
   if (luu.signatureOptIn !== hienTai.signatureOptIn) return 'lech-dau-vao';
   if (luu.recipientResidential !== hienTai.recipientResidential) return 'lech-dau-vao';
+  if (luu.packagingType !== hienTai.packagingType) return 'lech-dau-vao';
+  if (luu.serviceType !== hienTai.serviceType) return 'lech-dau-vao';
   return 'con-dung';
 }
 
@@ -178,8 +201,13 @@ export async function quoteShipmentToCache(
     shipDate: input.shipDate.toISOString().slice(0, 10),
     signatureOptIn: input.signatureOptIn,
     recipientResidential: input.recipientResidential,
+    packagingType: input.packagingType,
+    serviceType: input.serviceType,
   });
-  const q = pickQuote(quotes, FEDEX_DEFAULT_SERVICE);
+  /* Khai dịch vụ nào thì chọn đúng dịch vụ đó. Để `FEDEX_DEFAULT_SERVICE` cứng ở đây thì vận
+   * đơn đi INTERNATIONAL_ECONOMY sẽ rơi vào nhánh `acc[0]` của `pickQuote` — đúng tình cờ
+   * (FedEx chỉ trả một dịch vụ khi mình khai), nhưng đúng tình cờ không phải đúng. */
+  const q = pickQuote(quotes, input.serviceType ?? FEDEX_DEFAULT_SERVICE);
   if (!q) return { ok: false };
 
   const row = {

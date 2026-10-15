@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  dauVaoTuInput, KHOA_DAU_VAO_QUOTE, pickQuote, xetCacheQuote,
+  dauVaoTuInput, KHOA_DAU_VAO_QUOTE, PHIEN_BAN_DAU_VAO, pickQuote, xetCacheQuote,
   type DauVaoQuote, type QuoteShipmentInput,
 } from './fedex-quote-cache';
 import type { RateQuoteResult } from '@/lib/fedex/rate';
@@ -32,11 +32,14 @@ describe('pickQuote', () => {
 });
 
 const dauVao: DauVaoQuote = {
+  v: PHIEN_BAN_DAU_VAO,
   weightKg: 0.7,
   dims: { length: 40, width: 31, height: 2 },
   shipDate: '2026-10-14',
   signatureOptIn: true,
   recipientResidential: true,
+  packagingType: 'FEDEX_PAK',
+  serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
 };
 /** Dòng `raw` như CSDL thật giữ: phản hồi hãng + dấu đầu vào cạnh nó. */
 const raw = (d: unknown): unknown => ({ output: { rateReplyDetails: [] }, [KHOA_DAU_VAO_QUOTE]: d });
@@ -47,6 +50,7 @@ describe('dauVaoTuInput', () => {
     weightKg: 0.7, dims: { length: 40, width: 31, height: 2 },
     shipDate: new Date('2026-10-14T00:00:00Z'),
     signatureOptIn: true, recipientResidential: true,
+    packagingType: 'FEDEX_PAK', serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
   };
   it('lấy đúng ngày YYYY-MM-DD như lượt gọi Rate API', () => {
     expect(dauVaoTuInput(input).shipDate).toBe('2026-10-14');
@@ -87,6 +91,23 @@ describe('xetCacheQuote', () => {
   });
   it('ngày gửi đổi → phải quote lại (giá và %nhiên liệu theo ngày)', () => {
     expect(xetCacheQuote(raw(dauVao), { ...dauVao, shipDate: '2026-10-15' })).toBe('lech-dau-vao');
+  });
+  /* Lỗi CEO bắt 15/10/2026: thiếu `packagingType` thì FedEx tính thang HỘP cho kiện TÚI. Dấu
+   * phải chứa trường này, nếu không một dòng quote theo thang hộp sẽ đọc ra "còn dùng được". */
+  it('loại bao gói đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, packagingType: null })).toBe('lech-dau-vao');
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, packagingType: 'YOUR_PACKAGING' })).toBe('lech-dau-vao');
+  });
+  it('dịch vụ đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, serviceType: 'INTERNATIONAL_ECONOMY' })).toBe('lech-dau-vao');
+  });
+  /* Dấu đời 1 (trước 15/10/2026) thiếu hẳn hai trường trên. So kiểu "trường vắng coi như
+   * null" sẽ kết luận "còn dùng được" cho đúng những dòng tính sai thang giá. */
+  it('dấu đời cũ → không-biết, KHÔNG phải còn-dùng-được', () => {
+    const doiCu: Record<string, unknown> = { ...dauVao };
+    delete doiCu.v; delete doiCu.packagingType; delete doiCu.serviceType;
+    expect(xetCacheQuote(raw({ ...doiCu, v: 1 }), dauVao)).toBe('khong-biet-dau-vao');
+    expect(xetCacheQuote(raw(doiCu), dauVao)).toBe('khong-biet-dau-vao');
   });
   it('cờ ký nhận / nhà dân đổi → phải quote lại', () => {
     expect(xetCacheQuote(raw(dauVao), { ...dauVao, signatureOptIn: false })).toBe('lech-dau-vao');

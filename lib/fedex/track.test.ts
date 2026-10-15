@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, parseLichSuQuet, docMocFedex, trangThaiSauKhiTrack, TOI_DA_MOI_LO } from './track';
+import { mapFedexStatus, parseFedexTrack, parseFedexTrackBatch, parseLichSuQuet, parseThongSoVanDon, docMocFedex, trangThaiSauKhiTrack, TOI_DA_MOI_LO } from './track';
 
 describe('mapFedexStatus', () => {
   it('các mã đã đối chiếu thật trên sandbox FedEx', () => {
@@ -236,5 +236,106 @@ describe('awaiting_pickup — cùng nấc với out_for_delivery, cả hai chi�
   it('FedEx HL tách khỏi exception sang nấc mới', () => {
     expect(mapFedexStatus('HL')).toBe('awaiting_pickup');
     expect(mapFedexStatus('DE')).toBe('exception');
+  });
+});
+
+/* Phản hồi THẬT của FedEx cho `878631025811` (cắt bớt phần không liên quan), chụp 15/10/2026.
+ * Giữ nguyên hình dạng gốc — kể cả chỗ FedEx trả cả CM lẫn INCH trong cùng một mảng — vì đúng
+ * những chỗ đó mới sinh lỗi. */
+const PHAN_HOI_THAT = {
+  output: {
+    completeTrackResults: [{
+      trackingNumber: '878631025811',
+      trackResults: [{
+        recipientInformation: { address: { city: 'SHORELINE', stateOrProvinceCode: 'WA', countryCode: 'US', residential: false } },
+        specialHandlings: [
+          { type: 'DELIVER_WEEKDAY', description: 'Deliver Weekday' },
+          { type: 'DIRECT_SIGNATURE_REQUIRED', description: 'Direct Signature Required' },
+        ],
+        packageDetails: {
+          packagingDescription: { type: 'FEDEX_PAK', description: 'FedEx Pak' },
+          weightAndDimensions: {
+            weight: [{ value: '0.7', unit: 'KG' }, { value: '1.54', unit: 'LB' }],
+            dimensions: [
+              { length: 36, width: 27, height: 6, units: 'CM' },
+              { length: 14, width: 10, height: 2, units: 'IN' },
+            ],
+          },
+        },
+        serviceDetail: { type: 'FEDEX_INTERNATIONAL_PRIORITY', description: 'FedEx International Priority' },
+        additionalTrackingInfo: { packageIdentifiers: [{ type: 'SHIPPER_REFERENCE', values: ['#MBLVD30251'] }] },
+        dateAndTimes: [
+          { type: 'COMMITMENT', dateTime: '2026-10-16T20:00:00-07:00' },
+          { type: 'ACTUAL_PICKUP', dateTime: '2026-10-14T14:46:00+07:00' },
+          { type: 'SHIP', dateTime: '2026-10-14T00:00:00+00:00' },
+        ],
+      }],
+    }],
+  },
+};
+
+describe('parseThongSoVanDon', () => {
+  const t = parseThongSoVanDon(PHAN_HOI_THAT)!;
+
+  /* Đây là trường đã thiếu và làm lệch giá: không khai bao gói thì FedEx báo theo thang HỘP,
+   * trong khi nhãn này là Túi FedEx. Đo trên hoá đơn thật: kiện túi 17/17 khớp thang PAK. */
+  it('đọc LOẠI BAO GÓI của chính nhãn', () => {
+    expect(t.loaiBaoGoi).toBe('FEDEX_PAK');
+    expect(t.dichVu).toBe('FEDEX_INTERNATIONAL_PRIORITY');
+  });
+
+  /* FedEx trả kích thước ở CẢ hai đơn vị trong một mảng, thứ tự không cam kết. Lấy nhầm bản
+   * INCH là thu nhỏ kiện 2,54 lần rồi báo một giá rẻ bịa ra. */
+  it('lấy kích thước bản CM, không lấy bản INCH', () => {
+    expect(t.kichThuocCm).toEqual({ dai: 36, rong: 27, cao: 6 });
+    expect(t.canKg).toBe(0.7);
+  });
+
+  /* Cờ của HÃNG trên chính nhãn này thắng phép suy của mình: cột `addr_class` của hệ thống ghi
+   * RESIDENTIAL, hãng ghi false và không thu 84.400 + nhiên liệu trên đó. */
+  it('đọc cờ nhà dân của hãng, kể cả khi là false', () => {
+    expect(t.nhaDan).toBe(false);
+  });
+
+  it('ký nhận trực tiếp suy từ specialHandlings, không suy theo nước', () => {
+    expect(t.kyNhanTrucTiep).toBe(true);
+  });
+
+  it('ngày gửi lấy mốc SHIP, không lấy COMMITMENT hay ACTUAL_PICKUP', () => {
+    expect(t.ngayGui).toBe('2026-10-14');
+  });
+
+  it('mã tham chiếu của người gửi để đối chiếu đúng đơn', () => {
+    expect(t.maThamChieu).toBe('#MBLVD30251');
+  });
+
+  /* Track API KHÔNG trả tiền — đã soát sạch cây phản hồi. Nếu một ngày FedEx thêm trường tiền
+   * thì hình dữ liệu này phải được xem lại, chứ không lặng lẽ bỏ qua. */
+  it('hình dữ liệu KHÔNG có trường tiền nào', () => {
+    expect(Object.keys(t)).toEqual([
+      'loaiBaoGoi', 'dichVu', 'canKg', 'kichThuocCm', 'nhaDan', 'kyNhanTrucTiep', 'ngayGui', 'maThamChieu',
+    ]);
+  });
+
+  /* Nhãn vừa tạo thì FedEx chưa có dữ liệu. Phải trả null để tầng trên rơi về dữ liệu của mình
+   * VÀ nói ra, chứ không ném cho cả thao tác nhập mã vận đơn chết theo. */
+  it('hãng trả lỗi cho mã → null, không ném', () => {
+    expect(parseThongSoVanDon({ output: { completeTrackResults: [{ trackResults: [{ error: { code: 'TRACKING.TRACKINGNUMBER.NOTFOUND' } }] }] } })).toBeNull();
+    expect(parseThongSoVanDon({ output: { completeTrackResults: [] } })).toBeNull();
+    expect(parseThongSoVanDon(null)).toBeNull();
+  });
+
+  /* Thiếu từng ô là chuyện thường (FedEx che tuỳ kiện) — người gọi rơi về nguồn của mình cho
+   * ĐÚNG Ô thiếu. Thiếu một chiều thì bỏ cả khối kích thước, vì ba chiều mới là một kiện. */
+  it('thiếu từng ô → null riêng ô đó, không kéo cả khối', () => {
+    const t2 = parseThongSoVanDon({ output: { completeTrackResults: [{ trackResults: [{
+      packageDetails: { packagingDescription: { type: 'YOUR_PACKAGING' },
+        weightAndDimensions: { dimensions: [{ length: 36, width: 27, units: 'CM' }] } },
+    }] }] } })!;
+    expect(t2.loaiBaoGoi).toBe('YOUR_PACKAGING');
+    expect(t2.kichThuocCm).toBeNull();
+    expect(t2.canKg).toBeNull();
+    expect(t2.nhaDan).toBeNull();
+    expect(t2.kyNhanTrucTiep).toBe(false);
   });
 });

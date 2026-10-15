@@ -259,3 +259,121 @@ export function trangThaiSauKhiTrack(hienTai: string | null | undefined, moi: De
 
   return moi;
 }
+
+/**
+ * THÔNG SỐ THẬT của một vận đơn đã phát hành, đọc từ Track API — tức khoá theo MÃ VẬN ĐƠN,
+ * không phải dựng lại từ dữ liệu của mình.
+ *
+ * Vì sao cần (CEO 15/10/2026): đường lấy giá ước tính vốn tự dựng lại lô hàng từ cột cân/kích
+ * thước trong CSDL rồi hỏi Rate API, nên nó ra một con số KHÁC con số hãng hiện trên cổng cho
+ * chính mã đó. Đo trên `878631025811`: cổng FedEx báo tổng **1.378.588đ**, hệ thống báo
+ * 1.496.487đ. Ba đầu vào sai cùng lúc — loại bao gói (hệ thống không khai nên hãng tính thang
+ * hộp, thật ra là Túi FedEx), cờ nhà dân (hệ thống suy từ `addr_class` là RESIDENTIAL nên cộng
+ * thêm 84.400 + nhiên liệu, hãng KHÔNG thu), và kích thước (CSDL giữ 40×31×2 của danh mục vật
+ * tư, nhãn ghi 36×27×6).
+ *
+ * Lấy đúng sáu thông số dưới đây rồi hỏi lại Rate API thì **khớp từng đồng** với màn hình
+ * hãng: base 2.244.600 · nhiên liệu 412.012 · ký nhận 92.700 · xử lý hàng nhập 68.300 · VAT
+ * 102.118 · chiết khấu 1.541.142 (VOLUME 1.384.020 + BONUS 157.122) · tổng 1.378.588.
+ *
+ * ⚠️ Track API **KHÔNG trả tiền**. Đã soát toàn bộ cây phản hồi bằng bộ lọc
+ * `charge|amount|rate|cost|price|discount|surcharge|fee|currency|total|freight`: **không một
+ * trường nào**. Nó trả ĐẦU VÀO, còn tiền vẫn phải hỏi Rate API — nhưng hỏi bằng đúng đầu vào
+ * của vận đơn thì không còn là "dựng lại", mà là tái lập chính lượt tính giá của hãng.
+ */
+export interface ThongSoVanDonFedex {
+  /** `packageDetails.packagingDescription.type`, vd 'FEDEX_PAK' / 'YOUR_PACKAGING'. */
+  loaiBaoGoi: string | null;
+  /** `serviceDetail.type`, vd 'FEDEX_INTERNATIONAL_PRIORITY'. */
+  dichVu: string | null;
+  canKg: number | null;
+  kichThuocCm: { dai: number; rong: number; cao: number } | null;
+  /** `recipientInformation.address.residential` — phân loại CỦA HÃNG trên chính nhãn này.
+   *  Đáng tin hơn `addr_class` của mình: trên `878631025811` cột mình ghi RESIDENTIAL mà hãng
+   *  ghi false và không thu phí nhà dân. `null` = phản hồi không nói. */
+  nhaDan: boolean | null;
+  /** `specialHandlings` có `DIRECT_SIGNATURE_REQUIRED` — dịch vụ ĐÃ MUA trên nhãn, thay cho
+   *  phép suy theo nước (`countrySupportsDirectSignature`). */
+  kyNhanTrucTiep: boolean;
+  /** `dateAndTimes` loại `SHIP` → YYYY-MM-DD. Ngày hãng dùng để chốt bảng giá và %nhiên liệu. */
+  ngayGui: string | null;
+  /** `additionalTrackingInfo.packageIdentifiers` loại `SHIPPER_REFERENCE` — mã đơn nhân sự
+   *  khai lúc tạo nhãn, để đối chiếu nhãn có đúng đơn không. */
+  maThamChieu: string | null;
+}
+
+/** Hình phần `packageDetails` ta thật sự đọc — khai rõ thay vì `any`, để đổi tên trường là
+ *  trình biên dịch kêu chứ không im lặng trả null. */
+interface BocGoi {
+  packagingDescription?: { type?: unknown };
+  weightAndDimensions?: {
+    weight?: Array<Record<string, unknown>>;
+    dimensions?: Array<Record<string, unknown>>;
+  };
+}
+
+const so = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * THUẦN: bóc thông số vận đơn từ phản hồi Track API. `null` khi phản hồi không có kết quả
+ * hoặc FedEx trả lỗi cho mã đó (nhãn vừa tạo chưa lên hệ thống, mã sai, quá 90 ngày).
+ *
+ * Mọi trường đều có thể `null` RIÊNG LẺ: FedEx che bớt thông tin tuỳ kiện (vd không trả mã bưu
+ * chính người nhận bao giờ). Người gọi phải rơi về nguồn của mình cho ĐÚNG Ô thiếu, chứ không
+ * vứt cả khối — thiếu kích thước không có nghĩa là loại bao gói cũng sai.
+ */
+export function parseThongSoVanDon(raw: unknown): ThongSoVanDonFedex | null {
+  const tr = (raw as { output?: { completeTrackResults?: Array<{ trackResults?: unknown[] }> } })
+    ?.output?.completeTrackResults?.[0]?.trackResults?.[0] as Record<string, unknown> | undefined;
+  if (!tr || tr.error != null) return null;
+
+  const pkg = tr.packageDetails as BocGoi | undefined;
+  /* FedEx trả kích thước ở CẢ CM LẪN INCH trong cùng một mảng. Phải lọc theo `units`, không
+   * lấy phần tử đầu: thứ tự không được cam kết, và lấy nhầm bản inch là thu nhỏ kiện 2,54 lần
+   * rồi báo một giá rẻ bịa ra. */
+  const kt = pkg?.weightAndDimensions?.dimensions
+    ?.find((d) => String(d.units ?? '').toUpperCase() === 'CM');
+  const can = pkg?.weightAndDimensions?.weight
+    ?.find((w) => String(w.unit ?? '').toUpperCase() === 'KG');
+
+  const dai = so(kt?.length), rong = so(kt?.width), cao = so(kt?.height);
+  const ngay = (tr.dateAndTimes as Array<Record<string, unknown>> | undefined)
+    ?.find((d) => String(d.type ?? '') === 'SHIP')?.dateTime;
+  const ref = ((tr.additionalTrackingInfo as { packageIdentifiers?: Array<{ type?: unknown; values?: unknown[] }> } | undefined)
+    ?.packageIdentifiers ?? []).find((p) => String(p.type ?? '') === 'SHIPPER_REFERENCE')?.values?.[0];
+  const resi = (tr.recipientInformation as { address?: { residential?: unknown } } | undefined)?.address?.residential;
+
+  const dichVu = (tr.serviceDetail as { type?: unknown } | undefined)?.type;
+  const baoGoi = pkg?.packagingDescription?.type;
+  return {
+    loaiBaoGoi: typeof baoGoi === 'string' && baoGoi.trim() !== '' ? baoGoi : null,
+    dichVu: typeof dichVu === 'string' && dichVu.trim() !== '' ? dichVu : null,
+    canKg: so(can?.value),
+    // Thiếu MỘT chiều là không dựng khối — ba chiều phải đi cùng nhau mới là một kiện.
+    kichThuocCm: dai != null && rong != null && cao != null ? { dai, rong, cao } : null,
+    nhaDan: typeof resi === 'boolean' ? resi : null,
+    kyNhanTrucTiep: ((tr.specialHandlings as Array<Record<string, unknown>> | undefined) ?? [])
+      .some((s) => String(s.type ?? '').toUpperCase().includes('SIGNATURE')),
+    ngayGui: typeof ngay === 'string' && ngay.length >= 10 ? ngay.slice(0, 10) : null,
+    maThamChieu: typeof ref === 'string' && ref.trim() !== '' ? ref.trim() : null,
+  };
+}
+
+/** Gọi Track API lấy thông số thật của MỘT vận đơn. `null` khi hãng chưa có dữ liệu cho mã đó
+ *  (nhãn vừa tạo), hoặc lượt gọi hỏng — người gọi rơi về dữ liệu của mình và PHẢI nói ra. */
+export async function layThongSoVanDon(trackingNumber: string): Promise<ThongSoVanDonFedex | null> {
+  try {
+    const raw = await fedexFetch<unknown>('/track/v1/trackingnumbers', {
+      method: 'POST',
+      headers: HEADER_LOCALE,
+      boKhoa: 'track',
+      json: { includeDetailedScans: false, trackingInfo: [{ trackingNumberInfo: { trackingNumber } }] },
+    });
+    return parseThongSoVanDon(raw);
+  } catch {
+    return null;
+  }
+}

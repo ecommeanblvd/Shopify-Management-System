@@ -539,6 +539,15 @@ export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Prom
     canhBao.push(`khoản hãng chưa có cột để đựng: ${maLa.join(', ')} — nằm trong ô Tổng nhưng không nằm ở ô thành phần nào, kiểm lại bằng mắt`);
   }
 
+  /* Giá FedEx chỉ khớp con số hãng hiện trên cổng khi hỏi bằng ĐÚNG thông số của vận đơn (loại
+   * bao gói, cân, kích thước, cờ nhà dân, ký nhận, ngày gửi — xem `theoVanDon` ở
+   * gia-uoc-tinh.ts). Nhãn vừa tạo thì FedEx chưa có dữ liệu để tra, đường giá phải dựng lại
+   * từ cột của mình, và chênh có thể tới cả trăm nghìn một kiện. Im lặng ở đây là đưa nhân sự
+   * một con số trông y hệt số chuẩn mà họ không có cách nào biết là nó dựng lại. */
+  if (gia.nguon === 'fedex-api' && gia.theoVanDon === false) {
+    canhBao.push('FedEx chưa có dữ liệu tra cứu cho mã này (nhãn vừa tạo) — giá đang DỰNG LẠI từ cân/kích thước trong hệ thống, có thể lệch với số hãng hiện trên cổng; chờ ít phút rồi phân tích lại sẽ khớp');
+  }
+
   const [k] = await db.select({ larkRecordId: schema.shipments.larkRecordId })
     .from(schema.shipments).where(eq(schema.shipments.id, shipmentId)).limit(1);
   if (!k?.larkRecordId) {

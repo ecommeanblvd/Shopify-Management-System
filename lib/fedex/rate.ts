@@ -20,6 +20,24 @@ export interface RateQuoteInput {
   dimsCm?: { length: number; width: number; height: number };
   /** Dịch vụ cụ thể (vd 'INTERNATIONAL_PRIORITY'); bỏ trống → FedEx trả mọi dịch vụ khả dụng. */
   serviceType?: string;
+  /**
+   * Loại bao gói FedEx ('FEDEX_PAK', 'YOUR_PACKAGING', 'FEDEX_BOX'…).
+   *
+   * BỎ TRỐNG LÀ CHỌN NHẦM, không phải trung lập: thiếu trường này FedEx mặc định
+   * `YOUR_PACKAGING` và báo giá theo thang `CUSTOMER_PACKAGING` — thang của HỘP. Shop gửi
+   * rất nhiều kiện bằng Túi FedEx (Pak), và hãng bill chúng theo thang `FEDEX_PAK`, rẻ hơn
+   * hẳn ở cước nền.
+   *
+   * Đo 15/10/2026 trên hoá đơn FBO thật, so `base` gốc từng kiện với báo giá cả hai thang:
+   * **kiện túi 17/17 khớp thang PAK và 0/17 khớp PACKAGE**; nhóm đối chứng kiện hộp **6/6
+   * khớp PACKAGE**. Trước khi có trường này, 1.366 kiện FedEx hình túi đều bị báo giá theo
+   * thang hộp — cước nền cao hơn thực 2.400 đến 332.700đ mỗi kiện.
+   *
+   * Nguồn đáng tin nhất cho trường này là CHÍNH VẬN ĐƠN: `packageDetails.
+   * packagingDescription.type` của Track API (xem `layThongSoVanDon` ở ./track.ts), vì đó là
+   * thứ nhân sự đã khai lúc tạo nhãn ở cổng hãng.
+   */
+  packagingType?: string;
   shipDate?: string; // YYYY-MM-DD
   /** Trị giá khai hải quan (bắt buộc với hàng quốc tế). Mặc định 100 USD nếu thiếu. */
   customsValue?: { amount: number; currency: string };
@@ -78,6 +96,7 @@ export function buildRateRequest(input: RateQuoteInput, accountNumber: string): 
       },
       ...(input.shipDate ? { shipDateStamp: input.shipDate } : {}),
       ...(input.serviceType ? { serviceType: input.serviceType } : {}),
+      ...(input.packagingType ? { packagingType: input.packagingType } : {}),
       ...(customsClearanceDetail ? { customsClearanceDetail } : {}),
       pickupType: 'USE_SCHEDULED_PICKUP',
       // ACCOUNT = giá hợp đồng; LIST = giá niêm yết → so được cả hai.

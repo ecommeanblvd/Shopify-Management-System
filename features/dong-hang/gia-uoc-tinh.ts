@@ -101,6 +101,18 @@ export interface GiaUocTinh {
    *  thấy tiền chưa rơi vào đâu, thay vì để nó lặng lẽ biến mất khỏi bảng phân rã
    *  (xem `maLa` ở features/carrier-rates/ap/ups-invoice-xml.ts, cùng cách làm). */
   maLa: string[];
+  /**
+   * Giá có được hỏi bằng ĐÚNG thông số của vận đơn không (CEO 15/10/2026).
+   *
+   * `true` = đã đọc loại bao gói / cân / kích thước / cờ nhà dân / ký nhận / ngày gửi từ chính
+   * mã vận đơn qua Track API rồi mới hỏi Rate API ⇒ khớp con số hãng hiện trên cổng.
+   * `false` = hãng chưa có dữ liệu cho mã (nhãn vừa tạo) nên đã phải DỰNG LẠI lô hàng từ cột
+   * của mình — số vẫn dùng được nhưng có thể lệch, và tầng trên PHẢI nói ra.
+   *
+   * Vắng mặt ở nguồn engine/UPS: chúng vốn không có khái niệm này (bảng giá nội bộ không hỏi
+   * hãng, UPS Rating API không tra theo mã vận đơn).
+   */
+  theoVanDon?: boolean;
 }
 
 /**

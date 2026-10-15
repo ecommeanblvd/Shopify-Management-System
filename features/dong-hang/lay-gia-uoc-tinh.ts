@@ -17,6 +17,7 @@ import { baoGiaBangGiaMotHang, congVat, phanTramVatCuaHang } from '@/features/ca
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-signature';
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
+import { layThongSoVanDon } from '@/lib/fedex/track';
 import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
 import { tuEngine, tuKhoanUps, tuFedexQuote, type GiaUocTinh } from './gia-uoc-tinh';
 import { nguonCanDim } from './nguon-can-dim';
@@ -151,15 +152,42 @@ export async function layGiaUocTinh(
     const nguon = nguonGiaCho(carrierKey);
 
     if (nguon === 'fedex-api') {
+      /* ĐỌC THÔNG SỐ THẬT CỦA VẬN ĐƠN TRƯỚC (CEO 15/10/2026). Trước đây đường này dựng lại lô
+       * hàng từ cột của mình rồi hỏi giá, nên ra một số KHÁC số hãng hiện trên cổng cho chính
+       * mã đó — `878631025811`: cổng 1.378.588đ, hệ thống 1.496.487đ. Sai ba đầu vào cùng lúc:
+       *   - loại bao gói: không khai ⇒ hãng tính thang HỘP, mà nhãn khai Túi FedEx (FEDEX_PAK);
+       *   - cờ nhà dân: suy từ `addr_class` = RESIDENTIAL ⇒ cộng 84.400 + nhiên liệu, hãng ghi
+       *     `residential: false` trên chính nhãn đó và KHÔNG thu;
+       *   - kích thước: CSDL giữ 40×31×2 của danh mục vật tư, nhãn ghi 36×27×6.
+       * Hỏi lại Rate API bằng đúng sáu thông số của nhãn thì khớp TỪNG ĐỒNG với màn hình hãng.
+       *
+       * Track API KHÔNG trả tiền (đã soát sạch cây phản hồi — xem `ThongSoVanDonFedex`), nên
+       * vẫn phải qua Rate API; nhưng hỏi bằng đầu vào của chính vận đơn thì không còn là dựng
+       * lại, mà là tái lập lượt tính giá của hãng.
+       *
+       * Rơi về dữ liệu của mình theo TỪNG Ô, không vứt cả khối: FedEx che bớt thông tin tuỳ
+       * kiện, và thiếu kích thước không có nghĩa loại bao gói cũng sai. Hãng chưa có dữ liệu
+       * cho mã (nhãn vừa tạo) ⇒ `thongSo` null ⇒ chạy y như cũ, nhưng `theoVanDon: false` để
+       * tầng trên NÓI RA là số này dựng lại. */
+      const maTra = trackingDuTinh ?? k.trackingNumber;
+      const thongSo = maTra ? await layThongSoVanDon(maTra) : null;
+
       /* Dựng đầu vào MỘT LẦN rồi dùng cho cả phép so dấu lẫn lượt quote — hai chỗ tự dựng
        * riêng là mở đường cho chúng lệch nhau (`shipDate` chẳng hạn). */
       const dauVao: QuoteShipmentInput = {
         shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
-        weightKg, dims, shipDate,
-        // D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
-        // countrySupportsDirectSignature đã gói đúng luật đó. KHÔNG hardcode false.
-        signatureOptIn: countrySupportsDirectSignature(k.country),
-        recipientResidential: isResidential,
+        weightKg: thongSo?.canKg ?? weightKg,
+        dims: thongSo?.kichThuocCm
+          ? { length: thongSo.kichThuocCm.dai, width: thongSo.kichThuocCm.rong, height: thongSo.kichThuocCm.cao }
+          : dims,
+        shipDate: thongSo?.ngayGui ? new Date(`${thongSo.ngayGui}T00:00:00Z`) : shipDate,
+        /* D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
+         * `countrySupportsDirectSignature` gói đúng luật đó, nhưng nó là phép SUY THEO NƯỚC.
+         * `specialHandlings` của nhãn là dịch vụ ĐÃ MUA THẬT, nên thắng. */
+        signatureOptIn: thongSo ? thongSo.kyNhanTrucTiep : countrySupportsDirectSignature(k.country),
+        recipientResidential: thongSo?.nhaDan ?? isResidential,
+        packagingType: thongSo?.loaiBaoGoi ?? undefined,
+        serviceType: thongSo?.dichVu ?? undefined,
       };
 
       /* ĐỌC LẠI dòng cache trước. `quoteShipmentToCache` `onConflictDoUpdate` theo
@@ -203,7 +231,7 @@ export async function layGiaUocTinh(
       // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
       // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.
       if (q.tienTe !== 'VND') return null;
-      return tuFedexQuote(q.snap);
+      return { ...tuFedexQuote(q.snap), theoVanDon: thongSo != null };
     }
 
     if (nguon === 'ups-api') {
