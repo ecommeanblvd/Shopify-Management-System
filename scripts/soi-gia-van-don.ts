@@ -20,42 +20,66 @@ import { xemTruocGhiGia } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
 import { layGiaUocTinh } from '@/features/dong-hang/lay-gia-uoc-tinh';
 import { moTaODich, nhanLarkDangCo, soInDam, tongUocTinh, vnd } from '@/features/dong-hang/xem-truoc-van-don';
 import { layThongSoVanDon } from '@/lib/fedex/track';
+import { layThongSoVanDonUps } from '@/lib/ups/track';
 
 const args = process.argv.slice(2);
 const soMoi = Number(args.find((a) => a.startsWith('--moi='))?.slice(6) ?? 0);
 const chuaGhi = args.includes('--chua-ghi');
 const maTay = args.filter((a) => !a.startsWith('--'));
 
-async function danhSach(): Promise<Array<{ id: string; tracking: string; maDon: string | null }>> {
-  const dk = [eq(schema.shipments.carrierKey, 'fedex'), isNotNull(schema.shipments.trackingNumber)];
+async function danhSach(): Promise<Array<{ id: string; tracking: string; hang: string | null; maDon: string | null }>> {
+  /* Gõ thẳng mã thì KHÔNG lọc hãng — lọc cứng 'fedex' ở đây từng nuốt mất 3/4 mã người dùng
+   * đưa vào mà chỉ in "Soi 1 vận đơn", không nói mã nào bị bỏ. */
+  const dk = [isNotNull(schema.shipments.trackingNumber)];
   if (maTay.length > 0) dk.push(inArray(schema.shipments.trackingNumber, maTay));
+  else dk.push(eq(schema.shipments.carrierKey, 'fedex'));
   if (chuaGhi) dk.push(isNull(schema.shipments.giaUocTinhGhiLuc));
   const r = await db.select({
     id: schema.shipments.id,
     tracking: schema.shipments.trackingNumber,
+    hang: schema.shipments.carrierKey,
     maDon: schema.shopifyOrders.shopifyOrderNumber,
   }).from(schema.shipments)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .where(and(...dk))
     .orderBy(desc(schema.shipments.createdAt))
     .limit(maTay.length > 0 ? maTay.length : Math.max(soMoi, 1));
-  return r.map((x) => ({ id: x.id, tracking: x.tracking as string, maDon: x.maDon }));
+  return r.map((x) => ({ id: x.id, tracking: x.tracking as string, hang: x.hang, maDon: x.maDon }));
 }
 
-async function mot(k: { id: string; tracking: string; maDon: string | null }) {
-  console.log(`\n${'='.repeat(78)}\n${k.tracking}  ${k.maDon ?? ''}`);
+async function mot(k: { id: string; tracking: string; hang: string | null; maDon: string | null }) {
+  console.log(`\n${'='.repeat(78)}\n${k.tracking}  ${k.maDon ?? ''}  [${k.hang ?? 'chưa rõ hãng'}]`);
 
-  const ts = await layThongSoVanDon(k.tracking);
-  if (!ts) {
-    console.log('  ⚠️  FedEx CHƯA có dữ liệu tra cứu cho mã này — giá dưới đây là DỰNG LẠI từ');
-    console.log('      cân/kích thước trong hệ thống, có thể lệch với số hãng hiện trên cổng.');
+  /* Tra thông số nhãn theo ĐÚNG hãng của kiện. Bản đầu gọi Track của FedEx cho mọi mã, nên
+   * kiện Aramex/DHL nào cũng in "FedEx CHƯA có dữ liệu tra cứu" — một câu vừa sai vừa làm
+   * người đọc tưởng FedEx hỏng. Hãng không có đường đọc nhãn thì nói thẳng là không có. */
+  if (k.hang === 'fedex') {
+    const ts = await layThongSoVanDon(k.tracking);
+    if (!ts) {
+      console.log('  ⚠️  FedEx CHƯA có dữ liệu tra cứu cho mã này — giá dưới đây là DỰNG LẠI từ');
+      console.log('      cân/kích thước trong hệ thống, có thể lệch với số hãng hiện trên cổng.');
+    } else {
+      const kt = ts.kichThuocCm;
+      console.log(`  thông số NHÃN: ${ts.loaiBaoGoi ?? '?'} · ${ts.dichVu ?? '?'} · ${ts.canKg ?? '?'} kg · `
+        + `${kt ? `${kt.dai}x${kt.rong}x${kt.cao} cm` : 'không có dim'} · `
+        + `nhà dân ${ts.nhaDan === null ? '?' : ts.nhaDan ? 'CÓ' : 'KHÔNG'} · `
+        + `ký nhận ${ts.kyNhanTrucTiep ? 'CÓ' : 'KHÔNG'} · gửi ${ts.ngayGui ?? '?'}`
+        + (ts.maThamChieu ? ` · ref ${ts.maThamChieu}` : ''));
+    }
+  } else if (k.hang === 'ups') {
+    const ts = await layThongSoVanDonUps(k.tracking);
+    if (!ts) {
+      console.log('  ⚠️  UPS CHƯA có dữ liệu tra cứu cho mã này — giá dưới đây là DỰNG LẠI từ');
+      console.log('      cân/kích thước trong hệ thống, có thể lệch với số hãng hiện trên cổng.');
+    } else {
+      const kt = ts.kichThuocCm;
+      console.log(`  thông số NHÃN: dịch vụ ${ts.maDichVu ?? '?'} (${ts.tenDichVu ?? '?'}) · ${ts.canKg ?? '?'} kg · `
+        + `${kt ? `${kt.dai}x${kt.rong}x${kt.cao} cm` : 'không có dim'} · city "${ts.thanhPho ?? '?'}" · `
+        + `ký nhận ${ts.kyNhanTrucTiep ? 'CÓ' : 'KHÔNG'}`);
+    }
   } else {
-    const kt = ts.kichThuocCm;
-    console.log(`  thông số NHÃN: ${ts.loaiBaoGoi ?? '?'} · ${ts.dichVu ?? '?'} · ${ts.canKg ?? '?'} kg · `
-      + `${kt ? `${kt.dai}x${kt.rong}x${kt.cao} cm` : 'không có dim'} · `
-      + `nhà dân ${ts.nhaDan === null ? '?' : ts.nhaDan ? 'CÓ' : 'KHÔNG'} · `
-      + `ký nhận ${ts.kyNhanTrucTiep ? 'CÓ' : 'KHÔNG'} · gửi ${ts.ngayGui ?? '?'}`
-      + (ts.maThamChieu ? ` · ref ${ts.maThamChieu}` : ''));
+    console.log(`  (hãng ${k.hang ?? '?'} không có đường đọc thông số nhãn — giá lấy từ BẢNG GIÁ NỘI BỘ,`);
+    console.log('   không phải số hãng báo; đối chiếu được bằng hoá đơn, không bằng màn hình cổng.)');
   }
 
   /* Kiện ĐÃ CÓ HOÁ ĐƠN thì `layGiaUocTinh` giữ nguyên dòng quote cũ — đó là mốc đối soát,
