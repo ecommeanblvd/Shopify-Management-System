@@ -1,8 +1,10 @@
 /**
  * ĐỐI CHIẾU giá hệ thống tính ra với số ĐANG ĐIỀN TAY trên Lark — để kiểm chứng công thức.
  *
- *   railway run npx tsx scripts/doi-chieu-gia-lark.ts            # 7 ngày gần đây
+ *   railway run npx tsx scripts/doi-chieu-gia-lark.ts                   # FedEx, 7 ngày
  *   railway run npx tsx scripts/doi-chieu-gia-lark.ts --ngay=30
+ *   railway run npx tsx scripts/doi-chieu-gia-lark.ts --hang=ups --ngay=60
+ *   railway run npx tsx scripts/doi-chieu-gia-lark.ts --hang=aramex --ngay=60
  *
  * Số trên Lark là số nhân sự đọc từ cổng hãng rồi gõ tay, nên nó là MỐC THẬT để soi công
  * thức. Chỉ so những ô Lark ĐÃ CÓ số — ô trống không nói lên điều gì.
@@ -19,6 +21,7 @@ import { layGiaUocTinh } from '@/features/dong-hang/lay-gia-uoc-tinh';
 import { layThongSoVanDon } from '@/lib/fedex/track';
 
 const soNgay = Number(process.argv.find((a) => a.startsWith('--ngay='))?.slice(7) ?? 7);
+const hang = process.argv.find((a) => a.startsWith('--hang='))?.slice(7) ?? 'fedex';
 const tien = (n: number) => n.toLocaleString('vi-VN');
 
 interface ODoi { cot: string; heThong: number; lark: number }
@@ -32,7 +35,7 @@ async function main() {
   }).from(schema.shipments)
     .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
     .where(and(
-      eq(schema.shipments.carrierKey, 'fedex'),
+      eq(schema.shipments.carrierKey, hang),
       isNotNull(schema.shipments.trackingNumber),
       isNotNull(schema.shipments.larkRecordId),
       gte(sql`coalesce(${schema.shipments.labelCreatedAt}, ${schema.shipments.createdAt})`,
@@ -40,7 +43,7 @@ async function main() {
     ))
     .orderBy(desc(schema.shipments.createdAt));
 
-  console.log(`Đối chiếu ${ds.length} kiện FedEx ${soNgay} ngày gần đây.\n`);
+  console.log(`Đối chiếu ${ds.length} kiện ${hang.toUpperCase()} ${soNgay} ngày gần đây.\n`);
 
   const theoO = new Map<string, { khop: number; lech: number }>();
   let soSoSanh = 0, soKhopHet = 0, soLechO = 0, khongTra = 0, khongGia = 0, khongOnao = 0;
@@ -48,10 +51,10 @@ async function main() {
 
   for (const k of ds) {
     const nhan = `${k.tracking} ${k.maDon ?? ''}`.trim();
-    const ts = await layThongSoVanDon(k.tracking as string);
+    const ts = hang === 'fedex' ? await layThongSoVanDon(k.tracking as string) : null;
     const gia = await layGiaUocTinh(k.id, k.tracking);
     if (!gia) { console.log(`✗ ${nhan} — không lấy được giá`); khongGia++; continue; }
-    if (!ts) khongTra++;
+    if (hang === 'fedex' && !ts) khongTra++;
 
     const rec = await getLogRecordById(k.rid as string);
     if (!rec) { console.log(`✗ ${nhan} — không đọc được dòng Lark`); continue; }
@@ -76,10 +79,10 @@ async function main() {
 
     if (lech.length === 0) {
       soKhopHet++;
-      console.log(`✓ ${nhan} — khớp cả ${soDoi.length} ô${ts ? '' : '  (hãng chưa có dữ liệu tra cứu)'}`);
+      console.log(`✓ ${nhan} — khớp cả ${soDoi.length} ô${hang === 'fedex' && !ts ? '  (hãng chưa có dữ liệu tra cứu)' : ''}`);
     } else {
       soLechO += lech.length;
-      console.log(`✗ ${nhan} — lệch ${lech.length}/${soDoi.length} ô${ts ? '' : '  (hãng chưa có dữ liệu tra cứu)'}`);
+      console.log(`✗ ${nhan} — lệch ${lech.length}/${soDoi.length} ô${hang === 'fedex' && !ts ? '  (hãng chưa có dữ liệu tra cứu)' : ''}`);
       for (const o of lech) {
         console.log(`     ${o.cot.padEnd(26)} hệ thống ${tien(o.heThong).padStart(11)} | Lark ${tien(o.lark).padStart(11)} | lệch ${tien(o.heThong - o.lark)}`);
       }
