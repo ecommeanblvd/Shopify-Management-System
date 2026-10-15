@@ -544,6 +544,10 @@ export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Prom
    * gia-uoc-tinh.ts). Nhãn vừa tạo thì FedEx chưa có dữ liệu để tra, đường giá phải dựng lại
    * từ cột của mình, và chênh có thể tới cả trăm nghìn một kiện. Im lặng ở đây là đưa nhân sự
    * một con số trông y hệt số chuẩn mà họ không có cách nào biết là nó dựng lại. */
+  /* Khoản vùng sâu xa có thể bị hãng bỏ qua vì tra theo tên thành phố khác — nêu ra TRƯỚC
+   * khi nhân sự bấm ghi, vì sau khi ghi thì ô Lark không đè lại được. */
+  if (gia.canhBaoVungXa) canhBao.push(gia.canhBaoVungXa);
+
   if (gia.nguon === 'fedex-api' && gia.theoVanDon === false) {
     canhBao.push('FedEx chưa có dữ liệu tra cứu cho mã này (nhãn vừa tạo) — giá đang DỰNG LẠI từ cân/kích thước trong hệ thống, có thể lệch với số hãng hiện trên cổng; chờ ít phút rồi phân tích lại sẽ khớp');
   }

@@ -113,6 +113,12 @@ export interface GiaUocTinh {
    * hãng, UPS Rating API không tra theo mã vận đơn).
    */
   theoVanDon?: boolean;
+  /**
+   * Câu cảnh báo khi báo giá KHÔNG có phụ phí vùng sâu xa mà bảng ODA của mình nói đích đến
+   * LÀ vùng sâu xa — xem `features/dong-hang/soat-vung-xa.ts`. `null`/vắng = không có gì để
+   * nói. KHÔNG đổi con số nào, chỉ để tầng trên nêu lên trước khi nhân sự bấm ghi.
+   */
+  canhBaoVungXa?: string | null;
 }
 
 /**

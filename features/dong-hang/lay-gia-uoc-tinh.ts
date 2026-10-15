@@ -19,6 +19,7 @@ import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { layThongSoVanDon } from '@/lib/fedex/track';
 import { layThongSoVanDonUps } from '@/lib/ups/track';
+import { soatVungXa } from './soat-vung-xa';
 import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
 import { tuEngine, tuKhoanUps, tuFedexQuote, type GiaUocTinh } from './gia-uoc-tinh';
 import { nguonCanDim } from './nguon-can-dim';
@@ -249,7 +250,18 @@ export async function layGiaUocTinh(
       // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
       // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.
       if (q.tienTe !== 'VND') return null;
-      return { ...tuFedexQuote(q.snap), theoVanDon: thongSo != null };
+      const gFedex = tuFedexQuote(q.snap);
+      return {
+        ...gFedex,
+        theoVanDon: thongSo != null,
+        /* Lá chắn cho cửa sổ hãng chưa có dữ liệu tra cứu: lúc đó thành phố rơi về tên
+         * Shopify, và FedEx tra phụ phí vùng xa theo TÊN CỦA NÓ nên khoản tiền có thể biến
+         * mất không báo gì (ca `#MIR1028`, 898.425đ). Chỉ cảnh báo, không đổi số. */
+        canhBaoVungXa: await soatVungXa({
+          carrierKey: 'fedex', country: k.country, postcode: k.postcode,
+          thanhPho: dauVao.city ?? null, remoteDaBao: gFedex.remote, ngay: dauVao.shipDate,
+        }),
+      };
     }
 
     if (nguon === 'ups-api') {
@@ -299,9 +311,14 @@ export async function layGiaUocTinh(
       /* KHÔNG cộng VAT. Ô VAT của kiện UPS trên Lark để TRỐNG, và tổng HỢP ĐỒNG khớp ô Tổng
        * của Lark y nguyên khi không cộng gì (1.268.060 và 1.652.990 trên hai kiện đo). Bản
        * trước cộng %VAT của tài khoản vào ô Tổng — một trong bốn lỗi làm UPS lệch 37/37. */
+      const gUps = tuKhoanUps(re.khoanNiemYet, Math.round(re.tong), re.baseNiemYet || null, re.tongNiemYet || null);
       return {
-        ...tuKhoanUps(re.khoanNiemYet, Math.round(re.tong), re.baseNiemYet || null, re.tongNiemYet || null),
+        ...gUps,
         theoVanDon: ts != null,
+        canhBaoVungXa: await soatVungXa({
+          carrierKey: 'ups', country: k.country, postcode: k.postcode,
+          thanhPho: ts?.thanhPho ?? k.city, remoteDaBao: gUps.remote, ngay: shipDate,
+        }),
       };
     }
 
