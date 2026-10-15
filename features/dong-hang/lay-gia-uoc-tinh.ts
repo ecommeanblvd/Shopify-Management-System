@@ -266,9 +266,23 @@ export async function layGiaUocTinh(
         /* Tên thành phố HÃNG chuẩn hoá — cùng lý do như FedEx: hãng tra phụ phí theo tên của
          * nó, tên khách gõ trên Shopify có thể trượt bảng. */
         thanhPho: ts?.thanhPho ?? k.city,
-        /* CÂN và KÍCH THƯỚC vẫn của MÌNH (số khai lúc tạo nhãn), không lấy số hãng ghi nhận —
-         * cùng ruling với FedEx: ô Lark cần GIÁ LÚC TẠO VẬN ĐƠN. */
-        canKg: weightKg, kichThuocCm: dims ? { dai: dims.length, rong: dims.width, cao: dims.height } : null,
+        /* CÂN của mình; KÍCH THƯỚC lấy của NHÃN — và đây là chỗ UPS làm KHÁC FedEx, có lý do
+         * đo được chứ không phải tuỳ tiện:
+         *
+         *   UPS  : 40/40 kiện cân trên nhãn TRÙNG cân hệ thống  ⇒ Track trả số KHAI BÁO
+         *   FedEx: 14/40 kiện KHÁC (0,45 · 1,68 · 0,59 · 1,4 kg) ⇒ Track trả số hãng ĐO LẠI
+         *
+         * UPS không cân đo lại (hoặc không công bố), nên thứ Track trả chính là thứ nhân sự
+         * gõ ở cổng UPS — tức đúng đầu vào của con số hãng hiện lên lúc tạo vận đơn. Đo 60
+         * ngày: 22/55 kiện có dim nhãn KHÁC dim hệ thống, 5 ca trong đó ĐỔI BẬC CÂN và cả 5
+         * đều cùng một cặp — hệ thống ghi 40×31×2 (số danh mục vật tư) còn nhãn ghi 41×33×3.
+         * Lấy dim hệ thống là tính thiếu một bậc cho đúng 5 kiện đó.
+         *
+         * Cân vẫn của mình vì hai bên luôn bằng nhau (40/40) — không có gì để tranh, và giữ
+         * nguồn cân một chỗ thì khi UPS bắt đầu cân lại ta không âm thầm đổi nghĩa con số. */
+        canKg: weightKg,
+        kichThuocCm: ts?.kichThuocCm
+          ?? (dims ? { dai: dims.length, rong: dims.width, cao: dims.height } : null),
         nhaDan: isResidential,
       });
       if (!r.ok) return null;
