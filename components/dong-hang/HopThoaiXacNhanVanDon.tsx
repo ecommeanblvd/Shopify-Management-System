@@ -8,7 +8,8 @@ import {
 } from '@/components/ui/dialog';
 import { luuTrackingChoKien, phanTichTruocKhiGhi } from '@/features/dong-hang/actions';
 import {
-  cauTomTat, moTaODich, moTaOTracking, nhomXemTruoc, tenNguon, tongUocTinh, vnd,
+  cauTomTat, moTaODich, moTaOTracking, nhanLarkDangCo, nhomXemTruoc, soInDam, tenNguon,
+  tongUocTinh, vnd,
   type KetQuaPhanTichVanDon,
 } from '@/features/dong-hang/xem-truoc-van-don';
 import type { DongXemTruoc } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
@@ -34,22 +35,34 @@ import type { DongXemTruoc } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh'
 
 const VIEN_NUT = 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50';
 
-/** Một dòng của bảng xem trước: tên ô Lark + số + câu vì sao. */
+/**
+ * Một dòng của bảng xem trước: tên ô Lark + số HÃNG BÁO + (số Lark đang giữ) + câu vì sao.
+ *
+ * Số in đậm LUÔN là số nguồn báo giá trả về (`soInDam`), KHÔNG bao giờ là số Lark đang giữ.
+ * Bản trước đổi nghĩa cột số theo trạng thái ô — xem `soInDam` ở
+ * `features/dong-hang/xem-truoc-van-don.ts` để biết nó đã sai thế nào (CEO 15/10/2026).
+ */
 function DongO({ d, mau }: { d: DongXemTruoc; mau: 'luc' | 'hoPhach' | 'xam' }) {
   const vien = mau === 'luc'
     ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/60 dark:bg-emerald-950/25'
     : mau === 'hoPhach'
       ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/25'
       : 'border-border bg-muted/40';
+  const nhanLark = nhanLarkDangCo(d);
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border px-2.5 py-1.5 ${vien}`}>
       <div className="min-w-0">
         <p className="text-[12.5px] font-medium break-words">{d.cot}</p>
         <p className="text-[11px] leading-snug text-muted-foreground">{moTaODich(d)}</p>
       </div>
-      <span className="shrink-0 text-right text-[13px] font-semibold tabular-nums">
-        {d.trangThai === 'se-ghi' ? vnd(d.soNguon) : d.trangThai === 'da-co-so' ? vnd(d.soLarkDangCo) : '—'}
-      </span>
+      <div className="shrink-0 text-right">
+        <span className="block text-[13px] font-semibold tabular-nums">{soInDam(d)}</span>
+        {nhanLark && (
+          <span className="mt-0.5 block text-[10.5px] whitespace-nowrap text-amber-800 tabular-nums dark:text-amber-300">
+            {nhanLark}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

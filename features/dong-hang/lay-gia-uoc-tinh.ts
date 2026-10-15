@@ -9,7 +9,9 @@
  */
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { quoteShipmentToCache } from '@/features/carrier-rates/fedex-quote-cache';
+import {
+  dauVaoTuInput, quoteShipmentToCache, xetCacheQuote, type QuoteShipmentInput,
+} from '@/features/carrier-rates/fedex-quote-cache';
 import { baoGiaUpsShop, chonMucReNhat } from '@/lib/ups/rate';
 import { baoGiaBangGiaMotHang, congVat, phanTramVatCuaHang } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
@@ -44,9 +46,10 @@ const num = (v: string | null): number | null => (v === null ? null : Number(v))
  */
 async function docFedexQuoteSnap(
   shipmentId: string,
-): Promise<{ snap: FedexQuoteSnap; tienTe: string } | null> {
+): Promise<{ snap: FedexQuoteSnap; tienTe: string; raw: unknown } | null> {
   const [q] = await db.select({
     service: schema.fedexRateQuotes.service, currency: schema.fedexRateQuotes.currency,
+    raw: schema.fedexRateQuotes.raw,
     totalNetCharge: schema.fedexRateQuotes.totalNetCharge, fuel: schema.fedexRateQuotes.fuel,
     fuelPercent: schema.fedexRateQuotes.fuelPercent, remote: schema.fedexRateQuotes.remote,
     demand: schema.fedexRateQuotes.demand, residential: schema.fedexRateQuotes.residential,
@@ -63,6 +66,7 @@ async function docFedexQuoteSnap(
       vat: num(q.vat), discount: num(q.discount), rateZone: q.rateZone,
     },
     tienTe: q.currency,
+    raw: q.raw,
   };
 }
 
@@ -147,26 +151,54 @@ export async function layGiaUocTinh(
     const nguon = nguonGiaCho(carrierKey);
 
     if (nguon === 'fedex-api') {
-      /* ĐỌC LẠI dòng cache trước, chỉ quote khi CHƯA có. `quoteShipmentToCache`
-       * `onConflictDoUpdate` theo `shipmentId` ⇒ gọi vô điều kiện là GHI ĐÈ dòng
-       * quote đã lưu bằng input khác hẳn (script backfill ưu tiên `billingWeightKg`
-       * của hoá đơn và lấy cờ từ `shipment_charges`; đường này dùng cân đã đóng +
-       * `countrySupportsDirectSignature`) — 1.224 kiện đã đối soát sẽ đổi mốc so
-       * sánh mà không ai biết. `scripts/backfill-fedex-quotes.ts` khai đúng luật
-       * này: "Bỏ qua đơn đã cache trừ khi --refresh". */
+      /* Dựng đầu vào MỘT LẦN rồi dùng cho cả phép so dấu lẫn lượt quote — hai chỗ tự dựng
+       * riêng là mở đường cho chúng lệch nhau (`shipDate` chẳng hạn). */
+      const dauVao: QuoteShipmentInput = {
+        shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
+        weightKg, dims, shipDate,
+        // D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
+        // countrySupportsDirectSignature đã gói đúng luật đó. KHÔNG hardcode false.
+        signatureOptIn: countrySupportsDirectSignature(k.country),
+        recipientResidential: isResidential,
+      };
+
+      /* ĐỌC LẠI dòng cache trước. `quoteShipmentToCache` `onConflictDoUpdate` theo
+       * `shipmentId` ⇒ gọi vô điều kiện là GHI ĐÈ dòng quote đã lưu bằng input khác hẳn
+       * (script backfill ưu tiên `billingWeightKg` của hoá đơn và lấy cờ từ
+       * `shipment_charges`; đường này dùng cân đã đóng + `countrySupportsDirectSignature`) —
+       * 1.224 kiện đã đối soát sẽ đổi mốc so sánh mà không ai biết.
+       *
+       * NHƯNG dùng lại VÔ ĐIỀU KIỆN cũng sai, và sai âm thầm (CEO báo 15/10/2026): dòng cache
+       * đóng băng con số của lần quote ĐẦU TIÊN, nên chạy phân tích lúc cân/kích thước chưa
+       * chốt là kiện đó mang giá của cân cũ mãi mãi — cân sửa sau không bao giờ vào giá, mà
+       * màn hình vẫn nói "API giá sống của FedEx".
+       *
+       * Luật hiện tại, hai vế:
+       *   1. Dấu đầu vào trong `raw` còn KHỚP (`con-dung`, xem `DauVaoQuote`) → dùng lại,
+       *      không gọi hãng.
+       *   2. Lệch dấu, HOẶC không có dấu (mọi dòng tạo trước 15/10/2026) → quote lại, NHƯNG
+       *      CHỈ KHI kiện chưa có dòng hoá đơn nào. Có hoá đơn nghĩa là dòng quote này đang
+       *      là MỐC ĐỐI SOÁT; đổi mốc để làm đẹp một ô Lark là đổi đúng thứ dùng để bắt lỗi
+       *      hãng. Đo 15/10/2026: 1.314 dòng cache thì **1.310 dòng thuộc kiện ĐÃ có hoá
+       *      đơn** (toàn bộ phần backfill tính từ cân tính phí của hoá đơn) ⇒ vế này không
+       *      chạm dòng nào trong số đó; 4 dòng còn lại đúng là 4 dòng do màn Đóng hàng tạo,
+       *      và chúng được quote lại một lần để có dấu, từ đó về sau đi theo vế 1. */
       const daCo = await docFedexQuoteSnap(shipmentId);
-      if (!daCo) {
-        const r = await quoteShipmentToCache({
-          shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
-          weightKg, dims, shipDate,
-          // D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
-          // countrySupportsDirectSignature đã gói đúng luật đó. KHÔNG hardcode false.
-          signatureOptIn: countrySupportsDirectSignature(k.country),
-          recipientResidential: isResidential,
-        });
+      let dungLai = daCo != null;
+      if (daCo && xetCacheQuote(daCo.raw, dauVaoTuInput(dauVao)) !== 'con-dung') {
+        const [coHoaDon] = await db.select({ id: schema.shipmentCharges.id })
+          .from(schema.shipmentCharges)
+          .where(eq(schema.shipmentCharges.shipmentId, shipmentId)).limit(1);
+        dungLai = coHoaDon != null;
+      }
+      if (!dungLai) {
+        const r = await quoteShipmentToCache(dauVao);
+        /* Quote lại hỏng mà dòng cũ không chứng minh được là tính cho đúng đầu vào này ⇒
+         * KHÔNG rơi về dòng cũ: trả "chưa lấy được giá" (nhân sự vẫn lưu được mã vận đơn,
+         * cron thử lại sau) còn hơn đưa họ một con số của cân khác mà không nói gì. */
         if (!r.ok) return null;
       }
-      const q = daCo ?? await docFedexQuoteSnap(shipmentId);
+      const q = dungLai ? daCo : await docFedexQuoteSnap(shipmentId);
       if (!q) return null;
       // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
       // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.

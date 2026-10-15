@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { pickQuote } from './fedex-quote-cache';
+import {
+  dauVaoTuInput, KHOA_DAU_VAO_QUOTE, pickQuote, xetCacheQuote,
+  type DauVaoQuote, type QuoteShipmentInput,
+} from './fedex-quote-cache';
 import type { RateQuoteResult } from '@/lib/fedex/rate';
 
 const q = (over: Partial<RateQuoteResult>): RateQuoteResult => ({
@@ -25,5 +28,88 @@ describe('pickQuote', () => {
   });
   it('không có ACCOUNT → null', () => {
     expect(pickQuote([q({ rateType: 'LIST' })], 'X')).toBeNull();
+  });
+});
+
+const dauVao: DauVaoQuote = {
+  weightKg: 0.7,
+  dims: { length: 40, width: 31, height: 2 },
+  shipDate: '2026-10-14',
+  signatureOptIn: true,
+  recipientResidential: true,
+};
+/** Dòng `raw` như CSDL thật giữ: phản hồi hãng + dấu đầu vào cạnh nó. */
+const raw = (d: unknown): unknown => ({ output: { rateReplyDetails: [] }, [KHOA_DAU_VAO_QUOTE]: d });
+
+describe('dauVaoTuInput', () => {
+  const input: QuoteShipmentInput = {
+    shipmentId: 'S1', originHub: 'HN', country: 'US', postcode: '98133',
+    weightKg: 0.7, dims: { length: 40, width: 31, height: 2 },
+    shipDate: new Date('2026-10-14T00:00:00Z'),
+    signatureOptIn: true, recipientResidential: true,
+  };
+  it('lấy đúng ngày YYYY-MM-DD như lượt gọi Rate API', () => {
+    expect(dauVaoTuInput(input).shipDate).toBe('2026-10-14');
+  });
+  /* Cờ `undefined` và `false` phải ra CÙNG một dấu: `quoteRate` đối xử với chúng như nhau
+   * (không gửi special service), nên coi chúng khác nhau là quote lại một cách vô cớ. */
+  it('cờ thiếu quy về false, không để undefined', () => {
+    const d = dauVaoTuInput({ ...input, signatureOptIn: undefined, recipientResidential: undefined });
+    expect(d.signatureOptIn).toBe(false);
+    expect(d.recipientResidential).toBe(false);
+    expect(xetCacheQuote(raw(d), dauVaoTuInput({ ...input, signatureOptIn: false, recipientResidential: false })))
+      .toBe('con-dung');
+  });
+  it('thiếu dims → null, không phải undefined (để so được với dòng đã lưu)', () => {
+    expect(dauVaoTuInput({ ...input, dims: undefined }).dims).toBeNull();
+  });
+});
+
+describe('xetCacheQuote', () => {
+  it('đầu vào y nguyên → còn dùng được, không gọi hãng lần nữa', () => {
+    expect(xetCacheQuote(raw(dauVao), dauVao)).toBe('con-dung');
+  });
+
+  /* Chính ca CEO báo 15/10/2026: chạy phân tích lúc cân chưa chốt thì dòng cache đóng băng giá
+   * của cân cũ, cân sửa sau không bao giờ vào giá. */
+  it('cân đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, weightKg: 2 })).toBe('lech-dau-vao');
+  });
+  it('kích thước đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, dims: { length: 40, width: 31, height: 9 } }))
+      .toBe('lech-dau-vao');
+  });
+  /* Thiếu CHIỀU CAO là mất cả khối dims (luật `lay-gia-uoc-tinh.ts`) ⇒ FedEx tính theo cân
+   * thực thay vì max(thực, thể tích) — đổi hẳn cách tính, không được dùng lại dòng cũ. */
+  it('có dims ↔ không dims → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, dims: null })).toBe('lech-dau-vao');
+    expect(xetCacheQuote(raw({ ...dauVao, dims: null }), dauVao)).toBe('lech-dau-vao');
+  });
+  it('ngày gửi đổi → phải quote lại (giá và %nhiên liệu theo ngày)', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, shipDate: '2026-10-15' })).toBe('lech-dau-vao');
+  });
+  it('cờ ký nhận / nhà dân đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, signatureOptIn: false })).toBe('lech-dau-vao');
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, recipientResidential: false })).toBe('lech-dau-vao');
+  });
+  /* Sai số dấu phẩy động của numeric/jsonb không được tính là "đổi cân": quote lại mỗi lượt
+   * là nhân lượt gọi hãng lên theo từng kiện khi cron quét hàng loạt. */
+  it('lệch vụn dưới ngưỡng → vẫn còn dùng được', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, weightKg: 0.7000001 })).toBe('con-dung');
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, dims: { length: 40.001, width: 31, height: 2 } }))
+      .toBe('con-dung');
+  });
+
+  /* "Không biết" KHÁC "lệch", và người gọi đối xử với hai thứ đó khác nhau: dòng cũ không có
+   * dấu (gồm 1.310 dòng trước 15/10/2026, phần lớn do backfill tạo từ cân tính phí của HOÁ
+   * ĐƠN và đang là mốc đối soát của 1.224 kiện) phải được GIỮ NGUYÊN, không quote lại. */
+  it('dòng cũ không có dấu đầu vào → không-biết, KHÔNG phải lệch', () => {
+    expect(xetCacheQuote({ output: {} }, dauVao)).toBe('khong-biet-dau-vao');
+    expect(xetCacheQuote(null, dauVao)).toBe('khong-biet-dau-vao');
+    expect(xetCacheQuote('chuỗi lạ', dauVao)).toBe('khong-biet-dau-vao');
+  });
+  it('dấu méo (thiếu cân / dims không ra ba số) → không-biết, không đoán', () => {
+    expect(xetCacheQuote(raw({ shipDate: '2026-10-14' }), dauVao)).toBe('khong-biet-dau-vao');
+    expect(xetCacheQuote(raw({ ...dauVao, dims: { length: 40 } }), dauVao)).toBe('khong-biet-dau-vao');
   });
 });

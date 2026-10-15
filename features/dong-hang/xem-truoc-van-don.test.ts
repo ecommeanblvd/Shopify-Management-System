@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { xemTruocGhiGia } from '@/features/lark/ghi-nguoc/patch-gia-uoc-tinh';
 import { COT, COT_CHI_PHI } from '@/features/lark/ghi-nguoc/cot';
 import type { GiaUocTinh } from './gia-uoc-tinh';
-import { cauTomTat, moTaODich, moTaOTracking, nhomXemTruoc, tenNguon, tongUocTinh, vnd } from './xem-truoc-van-don';
+import {
+  cauTomTat, moTaODich, moTaOTracking, nhanLarkDangCo, nhomXemTruoc, soInDam, tenNguon,
+  tongUocTinh, vnd,
+} from './xem-truoc-van-don';
 
 const g = {
   nguon: 'bang-gia', base: 100, discount: null, fuel: 20, remote: 0, demand: null,
@@ -66,6 +69,53 @@ describe('moTaODich', () => {
   it('nguồn trả 0 → giải thích vì sao vẫn không ghi', () => {
     const d = xemTruocGhiGia(g, {}, null).dong.find((x) => x.cot === COT_CHI_PHI.remote)!;
     expect(moTaODich(d)).toMatch(/khoá ô/);
+  });
+});
+
+/* Lỗi CEO bắt được 15/10/2026: cột số đổi NGHĨA theo trạng thái ô — ô Lark trống thì hiện số
+ * API, ô Lark đã có số thì hiện số của LARK. Nhân sự chạy "phân tích giá API" mà nhận lại
+ * chính con số mình gõ tay, không có gì nói là khác nghĩa. Bộ test này khoá lại: một cột, một
+ * nghĩa. */
+describe('soInDam', () => {
+  it('ô Lark trống → số API', () => {
+    const d = xemTruocGhiGia(g, {}, null).dong.find((x) => x.cot === COT_CHI_PHI.base)!;
+    expect(soInDam(d)).toMatch(/100/);
+  });
+  it('ô Lark ĐÃ CÓ SỐ → VẪN là số API, KHÔNG phải số Lark', () => {
+    const d = xemTruocGhiGia(g, { [COT_CHI_PHI.base]: 999 }, null).dong
+      .find((x) => x.cot === COT_CHI_PHI.base)!;
+    expect(soInDam(d)).toMatch(/100/);
+    expect(soInDam(d)).not.toMatch(/999/);
+  });
+  /* Ô Tổng in đậm và dòng "Tổng ước tính" ở đầu hộp thoại PHẢI là cùng một số, kể cả khi ô
+   * Tổng trên Lark đã có số khác — hai số đá nhau trên một màn hình là chỗ sinh ra báo lỗi. */
+  it('ô Tổng khớp dòng "Tổng ước tính" dù Lark đã có số khác', () => {
+    const xem = xemTruocGhiGia(g, { [COT_CHI_PHI.totalAmount]: 1_200_000 }, null);
+    const d = xem.dong.find((x) => x.khoan === 'total')!;
+    expect(soInDam(d)).toBe(vnd(tongUocTinh(xem)));
+  });
+  it('nguồn không nói gì → — chứ không phải 0', () => {
+    const d = xemTruocGhiGia(g, {}, null).dong.find((x) => x.cot === COT_CHI_PHI.demand)!;
+    expect(soInDam(d)).toBe('—');
+  });
+});
+
+describe('nhanLarkDangCo', () => {
+  it('ô Lark trống → không có nhãn phụ nào', () => {
+    const d = xemTruocGhiGia(g, {}, null).dong.find((x) => x.cot === COT_CHI_PHI.base)!;
+    expect(nhanLarkDangCo(d)).toBeNull();
+  });
+  it('ô đã có số → nhãn phụ nêu số Lark đang giữ', () => {
+    const d = xemTruocGhiGia(g, { [COT_CHI_PHI.base]: 999 }, null).dong
+      .find((x) => x.cot === COT_CHI_PHI.base)!;
+    expect(nhanLarkDangCo(d)).toMatch(/999/);
+  });
+  /* Ca này cũng KHÔNG bị ghi đè, và là ca duy nhất buộc phải mở Lark xem bằng mắt — nhãn
+   * phụ không được im lặng chỉ vì đọc không ra số. */
+  it('ô Lark không đọc được thành số → vẫn có nhãn phụ', () => {
+    const d = xemTruocGhiGia(g, { [COT_CHI_PHI.base]: '4,747,300' }, null).dong
+      .find((x) => x.cot === COT_CHI_PHI.base)!;
+    expect(nhanLarkDangCo(d)).toMatch(/không đọc được/);
   });
 });
 

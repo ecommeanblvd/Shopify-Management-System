@@ -48,6 +48,38 @@ export function nhomXemTruoc(xem: KetQuaXemTruoc): {
   };
 }
 
+/**
+ * Số IN ĐẬM của một dòng — LUÔN là số NGUỒN BÁO GIÁ trả về, không bao giờ là số Lark đang giữ.
+ *
+ * Đây là chỗ đã sai và CEO bắt được (15/10/2026): bản trước hiện `soNguon` khi ô Lark trống
+ * nhưng đổi sang `soLarkDangCo` khi ô Lark đã có số. Hệ quả: chạy phân tích trên kiện mà nhân
+ * sự đã gõ tay các ô thì bảng "phân tích giá API" **vang lại chính số của Lark**, số API bị
+ * đẩy xuống dòng chữ xám; chạy trên kiện ô trống thì ra số API — cùng một kiện, cùng một giá
+ * hãng, hai con số khác nhau trên màn hình. Tệ hơn: dòng "Tổng ước tính" ở đầu hộp thoại vẫn
+ * lấy `soNguon`, nên nó và ô Tổng ngay dưới nói hai số đá nhau mà không gì chỉ ra là khác
+ * nghĩa (đo thật kiện `878631025811`: tiêu đề 1.496.487 đ, ô Tổng 1.200.000 đ của Lark).
+ *
+ * Màn này tên là PHÂN TÍCH — việc của nó là nói giá hãng là bao nhiêu. Số Lark đang giữ vẫn
+ * phải thấy, nhưng ở vai phụ: `nhanLarkDangCo`.
+ */
+export function soInDam(d: DongXemTruoc): string {
+  return vnd(d.soNguon);
+}
+
+/**
+ * Nhãn phụ cạnh số in đậm: Lark ĐANG giữ gì ở ô đó. `null` khi ô Lark trống (không có gì để
+ * nói) hoặc khi nguồn im lặng.
+ *
+ * Phải nêu cả ca "không đọc được thành số": ô đó cũng KHÔNG bị ghi đè, và nó là ca duy nhất
+ * bắt buộc người ta phải mở Lark xem bằng mắt.
+ */
+export function nhanLarkDangCo(d: DongXemTruoc): string | null {
+  if (d.trangThai !== 'da-co-so') return null;
+  return d.soLarkDangCo != null
+    ? `Lark đang có ${vnd(d.soLarkDangCo)}`
+    : 'Lark đang có dữ liệu không đọc được thành số';
+}
+
 /** Câu "vì sao" của MỘT ô — người đọc phải hiểu được số phận của ô mà không cần hỏi ai. */
 export function moTaODich(d: DongXemTruoc): string {
   switch (d.trangThai) {
@@ -55,8 +87,8 @@ export function moTaODich(d: DongXemTruoc): string {
       return `ô Lark đang trống → sẽ ghi ${vnd(d.soNguon)}`;
     case 'da-co-so':
       return d.soLarkDangCo != null
-        ? `Lark đã có ${vnd(d.soLarkDangCo)} → KHÔNG ghi đè (ước tính ${vnd(d.soNguon)})`
-        : `Lark đang giữ dữ liệu không đọc được thành số (${d.larkKhongDocDuoc}) → KHÔNG ghi đè, vào Lark kiểm bằng mắt`;
+        ? `hãng báo ${vnd(d.soNguon)} — Lark đã có ${vnd(d.soLarkDangCo)} nên KHÔNG ghi đè`
+        : `hãng báo ${vnd(d.soNguon)} — Lark đang giữ dữ liệu không đọc được thành số (${d.larkKhongDocDuoc}) nên KHÔNG ghi đè, vào Lark kiểm bằng mắt`;
     case 'bang-khong':
       return 'nguồn báo giá trả 0 → không ghi (ghi 0 là khoá ô ở 0 vĩnh viễn, hoá đơn thật sau này không vào được)';
     case 'nguon-khong-co':
@@ -107,7 +139,8 @@ export function tenNguon(nguon: KetQuaPhanTichVanDon['nguon']): string {
   }
 }
 
-/** Tổng ước tính sẽ ghi (hoặc đang có) — con số nhân sự soi đầu tiên. */
+/** Tổng NGUỒN BÁO GIÁ trả về — con số nhân sự soi đầu tiên, cùng nghĩa với `soInDam` của ô
+ *  Tổng (không phải số Lark đang giữ, kể cả khi ô đó đã có số). */
 export function tongUocTinh(xem: KetQuaXemTruoc): number | null {
   const d = xem.dong.find((x) => x.khoan === 'total');
   return d?.soNguon ?? null;

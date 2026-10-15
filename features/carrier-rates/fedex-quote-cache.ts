@@ -64,6 +64,102 @@ export function pickQuote(quotes: RateQuoteResult[], service: string): RateQuote
   return acc.find((q) => q.serviceType === service) ?? acc[0] ?? null;
 }
 
+/**
+ * ĐẦU VÀO đã dùng để quote, đóng dấu NGAY TRONG `raw` dưới khoá `dauVaoQuote`.
+ *
+ * Vì sao cần: `fedex_rate_quotes` chỉ có một dòng cho mỗi kiện và người đọc nó (vd
+ * `lay-gia-uoc-tinh.ts`) không có cách nào biết dòng đó được tính cho cân/kích thước NÀO.
+ * `billing_weight_kg` KHÔNG trả lời được câu đó: đấy là cân TÍNH PHÍ do FedEx trả về, đã làm
+ * tròn lên bậc và đã lấy max với cân thể tích — đo thật kiện `878637519277` cân 0,3 kg mà
+ * `billing_weight_kg` là 0,5. So cân hiện tại với nó thì kiện nào cũng "lệch".
+ *
+ * Nằm trong `raw` (jsonb) chứ không thành cột riêng: thêm cột là thêm một di trú PHẢI áp tay
+ * lên CSDL thật trước khi deploy, cho một việc chỉ cần đọc-ghi thẳng. Không có gì trong hệ
+ * thống đọc `raw` ngoài chỗ này (đã soát), nên thêm một khoá cạnh phản hồi hãng là cộng thêm,
+ * không phá ai.
+ *
+ * Dòng CŨ (trước 15/10/2026) không có dấu này ⇒ `xetCacheQuote` trả `khong-biet-dau-vao` và
+ * người gọi phải GIỮ NGUYÊN dòng đó. Đúng chủ ý: 1.310 dòng cũ phần lớn do
+ * `scripts/backfill-fedex-quotes.ts` tạo từ cân tính phí của HOÁ ĐƠN và đang là mốc đối soát
+ * của 1.224 kiện — quote lại là đổi mốc so sánh mà không ai biết.
+ */
+export interface DauVaoQuote {
+  weightKg: number;
+  dims: { length: number; width: number; height: number } | null;
+  /** YYYY-MM-DD — đúng chuỗi đã gửi cho Rate API. */
+  shipDate: string;
+  signatureOptIn: boolean;
+  recipientResidential: boolean;
+}
+
+/** Khoá đóng dấu trong `raw`. Một tên, một chỗ. */
+export const KHOA_DAU_VAO_QUOTE = 'dauVaoQuote';
+
+/**
+ * `QuoteShipmentInput` → dấu đầu vào. Người đọc cache PHẢI dựng dấu bằng CHÍNH hàm này từ
+ * CHÍNH object sẽ truyền cho `quoteShipmentToCache`, để dấu lúc ghi và dấu lúc so không bao
+ * giờ lệch nhau (`shipDate` chẳng hạn: cùng một phép `toISOString().slice(0, 10)`).
+ */
+export function dauVaoTuInput(input: QuoteShipmentInput): DauVaoQuote {
+  return {
+    weightKg: input.weightKg,
+    dims: input.dims ?? null,
+    shipDate: input.shipDate.toISOString().slice(0, 10),
+    signatureOptIn: input.signatureOptIn === true,
+    recipientResidential: input.recipientResidential === true,
+  };
+}
+
+export type PhanXetCacheQuote = 'con-dung' | 'lech-dau-vao' | 'khong-biet-dau-vao';
+
+const gan = (a: number, b: number, saiSo: number): boolean => Math.abs(a - b) <= saiSo;
+
+function docDauVao(raw: unknown): DauVaoQuote | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const d = (raw as Record<string, unknown>)[KHOA_DAU_VAO_QUOTE];
+  if (d == null || typeof d !== 'object') return null;
+  const o = d as Record<string, unknown>;
+  if (typeof o.weightKg !== 'number' || typeof o.shipDate !== 'string') return null;
+  let dims: DauVaoQuote['dims'] = null;
+  if (o.dims != null && typeof o.dims === 'object') {
+    const k = o.dims as Record<string, unknown>;
+    if (typeof k.length === 'number' && typeof k.width === 'number' && typeof k.height === 'number') {
+      dims = { length: k.length, width: k.width, height: k.height };
+    } else {
+      return null; // có dims mà đọc không ra ba số → coi như không biết, đừng đoán
+    }
+  }
+  return {
+    weightKg: o.weightKg,
+    dims,
+    shipDate: o.shipDate,
+    signatureOptIn: o.signatureOptIn === true,
+    recipientResidential: o.recipientResidential === true,
+  };
+}
+
+/**
+ * THUẦN: dòng quote đã lưu còn tính cho ĐÚNG đầu vào hiện tại không.
+ *
+ * `khong-biet-dau-vao` KHÁC `lech-dau-vao`, và khác một cách quan trọng: "không biết" thì
+ * người gọi giữ nguyên dòng cũ (xem `DauVaoQuote`), còn "lệch" mới được quote lại.
+ */
+export function xetCacheQuote(raw: unknown, hienTai: DauVaoQuote): PhanXetCacheQuote {
+  const luu = docDauVao(raw);
+  if (!luu) return 'khong-biet-dau-vao';
+  if (!gan(luu.weightKg, hienTai.weightKg, 0.0005)) return 'lech-dau-vao';
+  if ((luu.dims == null) !== (hienTai.dims == null)) return 'lech-dau-vao';
+  if (luu.dims != null && hienTai.dims != null) {
+    if (!gan(luu.dims.length, hienTai.dims.length, 0.005)) return 'lech-dau-vao';
+    if (!gan(luu.dims.width, hienTai.dims.width, 0.005)) return 'lech-dau-vao';
+    if (!gan(luu.dims.height, hienTai.dims.height, 0.005)) return 'lech-dau-vao';
+  }
+  if (luu.shipDate !== hienTai.shipDate) return 'lech-dau-vao';
+  if (luu.signatureOptIn !== hienTai.signatureOptIn) return 'lech-dau-vao';
+  if (luu.recipientResidential !== hienTai.recipientResidential) return 'lech-dau-vao';
+  return 'con-dung';
+}
+
 const num = (n: number | null): string | null => (n === null ? null : n.toString());
 
 export async function quoteShipmentToCache(
@@ -95,7 +191,10 @@ export async function quoteShipmentToCache(
     demand: q.components.demand.toString(),
     signature: q.components.signature.toString(), countryFixed: q.components.countryFixed.toString(),
     vat: q.vat.toString(), discount: q.discount.toString(),
-    billingWeightKg: num(q.billingWeightKg), rateZone: q.rateZone, raw: raw as object,
+    billingWeightKg: num(q.billingWeightKg), rateZone: q.rateZone,
+    /* Đóng dấu ĐẦU VÀO cạnh phản hồi hãng — xem `DauVaoQuote`. Người đọc cache sau này cần
+     * biết dòng này tính cho cân/kích thước nào mới dám quyết định có dùng lại hay không. */
+    raw: { ...(raw as object), [KHOA_DAU_VAO_QUOTE]: dauVaoTuInput(input) },
   };
   await db.insert(schema.fedexRateQuotes)
     .values({ shipmentId: input.shipmentId, ...row })
