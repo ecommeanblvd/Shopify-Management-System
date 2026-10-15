@@ -129,21 +129,21 @@ describe('tuEngine', () => {
 describe('tuKhoanUps', () => {
   it('cộng dồn khoản trùng mã', () => {
     // '375' = Nhiên liệu (mã số thật của Rating API, xem TEN_KHOAN ở lib/ups/rate.ts).
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }, { ma: '375', tien: 5 }], 15, null).fuel).toBe(15);
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }, { ma: '375', tien: 5 }], 15, null, null).fuel).toBe(15);
   });
   /* Review Focus #3: UPS KHÔNG trả VAT thành khoản riêng. Phải là null, không phải 0. */
   it('UPS không có VAT → vat là null, KHÔNG phải 0', () => {
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10, null).vat).toBeNull();
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10, null, null).vat).toBeNull();
   });
   it('khoản UPS không biết xếp đâu thì bỏ qua, không làm hỏng các khoản khác', () => {
-    expect(tuKhoanUps([{ ma: 'KHOAN_LA', tien: 99 }, { ma: '375', tien: 10 }], 109, null).fuel).toBe(10);
+    expect(tuKhoanUps([{ ma: 'KHOAN_LA', tien: 99 }, { ma: '375', tien: 10 }], 109, null, null).fuel).toBe(10);
   });
   /* '110' (Xác nhận giao hàng) là mã THẬT của UPS nhưng không có nhóm tương ứng trong
    * GiaUocTinh — phải nêu ra ở maLa, không được biến mất lặng lẽ như tiền không ai biết.
    * (Trước 14/10/2026 test này dùng mã '190'; '190' nay đã có ô riêng trên Lark nên phải
    * chọn một mã KHÁC còn vô chủ, nếu không ta mất hẳn lá chắn cho cơ chế `maLa`.) */
   it('mã thật nhưng chưa có nhóm (110) đi vào maLa, không làm hỏng khoản khác', () => {
-    const g = tuKhoanUps([{ ma: '110', tien: 50 }, { ma: '375', tien: 10 }], 60, null);
+    const g = tuKhoanUps([{ ma: '110', tien: 50 }, { ma: '375', tien: 10 }], 60, null, null);
     expect(g.maLa).toEqual(['110']);
     expect(g.fuel).toBe(10);
   });
@@ -156,7 +156,7 @@ describe('tuKhoanUps', () => {
    * qua KHÔNG BÁO GÌ (đo thật trên `1Z2050VDD919649050`: ô đã có 600.425đ nên 58.750đ biến
    * mất). Test này khoá việc tách ô lại. */
   it('mã 573 vào `internationalProcessing`, KHÔNG còn vào `importHandling`', () => {
-    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }, { ma: '375', tien: 10 }], 58_760, null);
+    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }, { ma: '375', tien: 10 }], 58_760, null, null);
     expect(g.internationalProcessing).toBe(58_750);
     expect(g.importHandling).toBeNull();
   });
@@ -167,7 +167,7 @@ describe('tuKhoanUps', () => {
    * tiếp, giống test `countryFixed` của engine ở trên. */
   it('một khoản 573 chỉ xuất hiện ĐÚNG MỘT nhóm, không nhân bản', () => {
     // `total` cố ý KHÁC 58.750 để phép đếm chỉ bắt các NHÓM KHOẢN, không đếm cả ô Tổng.
-    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }], 1_000_000, null);
+    const g = tuKhoanUps([{ ma: '573', tien: 58_750 }], 1_000_000, null, null);
     expect(Object.values(g).filter((v) => v === 58_750)).toHaveLength(1);
   });
 
@@ -176,7 +176,7 @@ describe('tuKhoanUps', () => {
    * không có phản hồi Rating nào được lưu để đếm. Test dựng khoản bằng tay để khoá ĐƯỜNG ĐI
    * (mã → ô nào) chứ không khẳng định nguồn có trả; ô Lark trống là chuyện bình thường. */
   it('mã 190 vào `additionalHandling` và KHÔNG còn bị gom vào maLa', () => {
-    const g = tuKhoanUps([{ ma: '190', tien: 423_940 }, { ma: '375', tien: 10 }], 423_950, null);
+    const g = tuKhoanUps([{ ma: '190', tien: 423_940 }, { ma: '375', tien: 10 }], 423_950, null, null);
     expect(g.additionalHandling).toBe(423_940);
     expect(g.maLa).toEqual([]);
   });
@@ -185,19 +185,33 @@ describe('tuKhoanUps', () => {
    * UPS không nói gì về khoản đó. `null` chứ không 0: ghi 0 lên Lark là khoá ô ở 0 vĩnh viễn,
    * đường ghi từ hoá đơn sau này không điền được số thật vào nữa. */
   it('UPS không có mã Address Correction → addressCorrection là null, KHÔNG phải 0', () => {
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10, null).addressCorrection).toBeNull();
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 10, null, null).addressCorrection).toBeNull();
   });
   /* I1: `base` của UPS nằm ở một field RIÊNG (`DongBaoGiaUps.base`), không trong danh sách
    * khoản. Bỏ rơi nó là ô "Mức giá cơ sở" của UPS không bao giờ được điền. */
   it('base do caller truyền vào (UPS trả ở field riêng), không bị bỏ rơi', () => {
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).base).toBe(1_000);
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000, null).base).toBe(1_000);
   });
-  /* Rating API chỉ trả `NegotiatedRateCharges` (TotalCharge / BaseServiceCharge /
-   * ItemizedCharges) — KHÔNG có trường chiết khấu, và base đã là giá hợp đồng. Trả 0 ở đây là
-   * khẳng định "hãng không cắt chiết khấu" trong khi thực ra MÌNH KHÔNG BIẾT; mà ghi 0 lên
-   * Lark là khoá ô ở 0 vĩnh viễn. Suy ngược bằng một lượt giá niêm yết là bịa số. */
-  it('UPS không trả chiết khấu riêng → discount là null, KHÔNG phải 0', () => {
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).discount).toBeNull();
+  /* ĐÍNH CHÍNH 16/10/2026 — ghi chú cũ của tệp này viết "UPS không trả chiết khấu, suy ngược
+   * là bịa". SAI: Rating API trả CẢ hai khối trong CÙNG một phản hồi (`BaseServiceCharge` /
+   * `TotalCharges` niêm yết ở cấp ngoài, `NegotiatedRateCharges` hợp đồng ở trong). Chiết
+   * khấu là hiệu hai con số CÓ THẬT. Đo `1Z2050VDD900243620`: niêm yết 4.949.570 − hợp đồng
+   * 1.268.060 = 3.681.510. */
+  it('chiết khấu = tổng niêm yết − tổng hợp đồng, DƯƠNG', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_268_060, 3_028_915, 4_949_570).discount)
+      .toBe(3_681_510);
+  });
+  /* Thiếu khối niêm yết thì KHÔNG BIẾT, không phải "không có chiết khấu": ghi 0 lên Lark là
+   * khoá ô ở 0 vĩnh viễn. */
+  it('thiếu tổng niêm yết → discount là null, KHÔNG phải 0', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000, null).discount).toBeNull();
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000, 0).discount).toBeNull();
+  });
+  /* Ô base phải là giá NIÊM YẾT (quy ước Lark, cùng D-245 của FedEx): Lark điền 3.028.915 cho
+   * kiện mà base hợp đồng chỉ 614.760. */
+  it('base là giá NIÊM YẾT do caller truyền, không phải giá hợp đồng', () => {
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_268_060, 3_028_915, 4_949_570).base)
+      .toBe(3_028_915);
   });
 
   /* GoGreen là khoản RIÊNG CỦA DHL. `TEN_KHOAN` của UPS (lib/ups/rate.ts) có 9 mã và không mã
@@ -205,7 +219,7 @@ describe('tuKhoanUps', () => {
    * khẳng định "UPS có tính, bằng không", mà ghi 0 lên Lark là khoá ô ở 0 vĩnh viễn
    * (`dungPatch` sau đó đọc `docSo = 0 ≠ null` nên không bao giờ ghi số hoá đơn thật vào nữa). */
   it('UPS không có khoản GoGreen → gogreen là null, KHÔNG phải 0', () => {
-    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000).gogreen).toBeNull();
+    expect(tuKhoanUps([{ ma: '375', tien: 10 }], 1_100, 1_000, null).gogreen).toBeNull();
   });
 });
 

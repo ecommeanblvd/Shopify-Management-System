@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapUpsStatus, mapUpsCode, parseUpsTrack, parseUpsLichSu } from './track';
+import { mapUpsStatus, mapUpsCode, parseUpsTrack, parseUpsLichSu , parseThongSoVanDonUps } from './track';
 
 const mau = (activity: unknown[], extra: Record<string, unknown> = {}) => ({
   trackResponse: { shipment: [{ package: [{ trackingNumber: '1Z2050VDDG23324091', activity, ...extra }] }] },
@@ -123,5 +123,59 @@ describe('parseUpsTrack — ca thật đã gây lỗi', () => {
   it('mã lạ → dùng type của lần quét như trước', () => {
     expect(parseUpsTrack(goi({ code: '999', description: 'Weird' }, 'D', 'Delivered')).status).toBe('delivered');
     expect(parseUpsTrack(goi({ code: '999', description: 'Weird' }, 'RS', 'Returning')).status).toBe('returning');
+  });
+});
+
+/* Phản hồi THẬT của UPS Track cho `1Z2050VDD900243620` (cắt bớt), chụp 16/10/2026. */
+const GOI_THAT = {
+  trackResponse: { shipment: [{ package: [{
+    trackingNumber: '1Z2050VDD900243620',
+    service: { code: '566', levelCode: '065', description: 'UPS Worldwide Express Saver®' },
+    weight: { unitOfMeasurement: 'KGS', weight: '0.70' },
+    dimension: { height: '3.00', length: '41.00', width: '33.00', unitOfDimension: 'CM' },
+    additionalServices: ['SIGNATURE_REQUIRED'],
+    packageAddress: [
+      { type: 'ORIGIN', address: { city: 'PHUONG BINH TRUNG', countryCode: 'VN' } },
+      { type: 'DESTINATION', address: { city: 'COLUMBUS', countryCode: 'US' } },
+    ],
+  }] }] },
+};
+
+describe('parseThongSoVanDonUps', () => {
+  const t = parseThongSoVanDonUps(GOI_THAT)!;
+
+  /* BẪY ĐÃ DÍNH 16/10/2026: Track trả `code: '566'` còn Rating API gọi cùng dịch vụ đó là
+   * `65`. Ghép bằng `code` thì không mức nào khớp, rơi về mức đầu tiên và ra giá của một dịch
+   * vụ khác hẳn — không có dấu hiệu gì. Mã dùng được là `levelCode`, bỏ số 0 đầu. */
+  it('mã dịch vụ lấy levelCode đã bỏ số 0 đầu, KHÔNG lấy code', () => {
+    expect(t.maDichVu).toBe('65');
+    expect(t.maDichVu).not.toBe('566');
+  });
+
+  it('thành phố lấy đầu ĐÍCH, không lấy đầu gửi', () => {
+    expect(t.thanhPho).toBe('COLUMBUS');
+  });
+
+  it('ký nhận đọc từ dịch vụ đã mua trên nhãn', () => {
+    expect(t.kyNhanTrucTiep).toBe(true);
+  });
+
+  it('cân và kích thước đọc được (dùng để ĐỐI SOÁT, không dựng giá)', () => {
+    expect(t.canKg).toBe(0.7);
+    expect(t.kichThuocCm).toEqual({ dai: 41, rong: 33, cao: 3 });
+  });
+
+  /* UPS trả kích thước kèm đơn vị. Nhận bừa bản IN là thu nhỏ kiện 2,54 lần rồi báo giá rẻ
+   * hơn thực — phải chỉ nhận khi hãng nói rõ CM. */
+  it('đơn vị không phải CM → bỏ cả khối kích thước, không quy đổi bừa', () => {
+    const t2 = parseThongSoVanDonUps({ trackResponse: { shipment: [{ package: [{
+      dimension: { height: '2', length: '14', width: '10', unitOfDimension: 'IN' },
+    }] }] } })!;
+    expect(t2.kichThuocCm).toBeNull();
+  });
+
+  it('hãng chưa có dữ liệu → null, không ném', () => {
+    expect(parseThongSoVanDonUps({ trackResponse: { shipment: [] } })).toBeNull();
+    expect(parseThongSoVanDonUps(null)).toBeNull();
   });
 });

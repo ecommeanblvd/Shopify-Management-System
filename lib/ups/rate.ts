@@ -64,6 +64,21 @@ export interface DongBaoGiaUps {
   /** Tổng theo giá HỢP ĐỒNG, chưa VAT — gồm nền + mọi phụ phí UPS trả về. */
   tong: number;
   khoan: KhoanBaoGiaUps[];
+  /**
+   * Cước nền theo giá NIÊM YẾT (khối ngoài `NegotiatedRateCharges`).
+   *
+   * Cần vì ô "Mức giá cơ sở" trên Lark là giá GỐC, không phải giá sau chiết khấu — cùng quy
+   * ước với FedEx (D-245). Đo 16/10/2026 trên `1Z2050VDD900243620`: Lark điền 3.028.915 đúng
+   * bằng base NIÊM YẾT của mức 65, còn base hợp đồng chỉ 614.760 — lệch gần 5 lần.
+   *
+   * 0 khi UPS không trả khối niêm yết.
+   */
+  baseNiemYet: number;
+  /** Tổng theo giá NIÊM YẾT. Chiết khấu = `tongNiemYet - tong`; UPS trả CẢ HAI khối trong
+   *  CÙNG một phản hồi nên không phải gọi thêm lượt nào, cũng không phải suy bừa. */
+  tongNiemYet: number;
+  /** Các khoản theo giá NIÊM YẾT — nguồn cho mọi ô phụ phí trên Lark. */
+  khoanNiemYet: KhoanBaoGiaUps[];
   /** Tiền tệ UPS trả (tài khoản VN trả VND). */
   tienTe: string;
 }
@@ -94,9 +109,13 @@ interface LoUps {
  * `RatedShipment` là MẢNG ở `Shop` nhưng UPS trả OBJECT khi chỉ có một mức — nhận cả hai, vì
  * bản đầu chỉ nhận mảng thì mọi con số ra 0 mà không báo lỗi gì (gặp thật 12/10/2026).
  *
- * Lấy `NegotiatedRateCharges` (giá hợp đồng). KHÔNG rơi về giá niêm yết khi thiếu: giá niêm
- * yết cao gấp ~4 lần, hiện nó lên bảng so cước là đẩy UPS xuống cuối một cách sai — thiếu thì
- * bỏ dòng đó và để chỗ gọi báo "không báo giá được".
+ * Lấy `NegotiatedRateCharges` (giá hợp đồng) làm `base`/`tong`/`khoan`. KHÔNG rơi về giá niêm
+ * yết khi thiếu: giá niêm yết cao gấp ~4 lần, hiện nó lên bảng so cước là đẩy UPS xuống cuối
+ * một cách sai — thiếu thì bỏ dòng đó và để chỗ gọi báo "không báo giá được".
+ *
+ * Giá NIÊM YẾT đọc THÊM vào `baseNiemYet`/`tongNiemYet`/`khoanNiemYet`, không thay thế gì.
+ * Hai khối nằm sẵn trong cùng một phản hồi; bỏ khối niêm yết đi là tự tay vứt mất cả ô "Mức
+ * giá cơ sở" lẫn ô "Chiết khấu" của Lark (xem `baseNiemYet`).
  */
 export function docPhanHoiShop(json: unknown): DongBaoGiaUps[] {
   const tho = (json as { RateResponse?: { RatedShipment?: LoUps[] | LoUps } } | null)?.RateResponse?.RatedShipment;
@@ -118,10 +137,32 @@ export function docPhanHoiShop(json: unknown): DongBaoGiaUps[] {
         tien: soTien(k.MonetaryValue),
         ...(k.SubType ? { phu: k.SubType.trim() } : {}),
       })).filter((k) => k.tien !== 0),
+      baseNiemYet: soTien(lo.BaseServiceCharge?.MonetaryValue),
+      tongNiemYet: soTien(lo.TotalCharges?.MonetaryValue),
+      khoanNiemYet: dsCua(lo.ItemizedCharges).map((k) => ({
+        ma: (k.Code ?? '').trim(),
+        tien: soTien(k.MonetaryValue),
+        ...(k.SubType ? { phu: k.SubType.trim() } : {}),
+      })).filter((k) => k.tien !== 0),
       tienTe: (ng.TotalCharge?.CurrencyCode ?? 'VND').trim(),
     });
   }
   return out;
+}
+
+/**
+ * THUẦN: mức dịch vụ ĐÚNG BẰNG mã của vận đơn, hoặc null khi UPS không trả mức đó.
+ *
+ * Bẫy đã dính 16/10/2026: Track API trả `service.code` = `566` còn Rating API dùng `65` —
+ * HAI HỆ MÃ KHÁC NHAU. Mã khớp được với Rating là `service.levelCode` (`065`), và phải bỏ số
+ * 0 đầu. Ghép bằng `code` thì không mức nào khớp, rơi về mức đầu tiên, ra giá của một dịch vụ
+ * khác hẳn mà không báo gì.
+ */
+export function chonMucTheoMa(ds: readonly DongBaoGiaUps[], maDichVu: string | null): DongBaoGiaUps | null {
+  if (!maDichVu) return null;
+  const chuan = (c: string) => c.trim().replace(/^0+/, '');
+  const m = chuan(maDichVu);
+  return ds.find((d) => chuan(d.maDichVu) === m) ?? null;
 }
 
 /** THUẦN: mức RẺ NHẤT theo tổng hợp đồng. Mảng rỗng → null. */

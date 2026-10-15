@@ -235,29 +235,43 @@ const NHOM_THEO_MA_UPS: Record<string, NhomUps> = {
 };
 
 /**
- * UPS Rating API không trả `base` trong DANH SÁCH khoản — nó nằm ở
- * `DongBaoGiaUps.base`, một field riêng — nên `base` phải được caller truyền
- * vào. Bản đầu không truyền và để `base: null`: ô "Mức giá cơ sở" của UPS không
- * bao giờ được điền, mà gốc tính VAT cũng mất phần lớn nhất nên VAT suy ra nhỏ
- * hơn thực tế nhiều lần (test cũ xanh vì nó tự truyền `base: 1000`).
+ * UPS → hình chung, theo ĐÚNG quy ước Lark đang dùng (đo 16/10/2026, chốt bằng số liệu chứ
+ * không phải bằng ý thích).
  *
- * `vat` vẫn `null` ở đây: UPS không trả VAT thành khoản riêng (lib/ups/rate.ts:
- * "Tiền trả về là CHƯA VAT") — caller cộng VAT theo %VAT CỦA TÀI KHOẢN, không
- * phải một con số 8% cứng ở tệp này.
+ * Mọi Ô KHOẢN lấy giá NIÊM YẾT, ô TỔNG lấy giá HỢP ĐỒNG, chiết khấu là hiệu hai tổng:
  *
- * Mã không nhận ra được gom vào `maLa` thay vì bỏ qua lặng lẽ — một khoản tiền
- * thật của UPS mà không ai biết nó rơi đâu là lỗi âm thầm, giống cách `maLa` ở
- * features/carrier-rates/ap/ups-invoice-xml.ts nêu mã lạ cho người nhập thấy.
+ *   kiện `1Z2050VDD900243620`, dịch vụ 65:
+ *     base niêm yết 3.028.915   = Lark "Mức giá cơ sở"        3.028.915 ✓
+ *     nhiên liệu     1.661.215   = Lark "Phụ phí nhiên liệu"   1.661.215 ✓
+ *     demand/resi/ký nhận/FIP    = Lark, khớp từng đồng         ✓
+ *     tổng HỢP ĐỒNG  1.268.060   = Lark "INS | Chi phí Tổng"   1.268.060 ✓
+ *   kiểm chéo `1Z2050VDD901552400` khớp cả 6 khoản.
  *
- * `discount` LUÔN `null`: Rating API chỉ trả khối `NegotiatedRateCharges` (xem `LoUps` ở
- * lib/ups/rate.ts) gồm `TotalCharge` / `BaseServiceCharge` / `ItemizedCharges` — không có
- * trường chiết khấu nào, và `BaseServiceCharge` ĐÃ là *"cước nền theo giá HỢP ĐỒNG"*, tức
- * UPS đưa luôn giá sau thương lượng chứ không đưa cặp (niêm yết, trừ bao nhiêu). Suy ngược
- * chiết khấu bằng cách gọi thêm một lượt giá niêm yết rồi trừ là BỊA ra một con số không có
- * trong nguồn — ô `Chiết khấu || API` của UPS để TRỐNG, và base của UPS vì vậy là base gốc
- * *theo nghĩa của UPS* (không còn gì để trừ ra nữa).
+ * Bản trước ghi base HỢP ĐỒNG (614.760 cho chính kiện trên) — lệch gần 5 lần, và đó là một
+ * trong bốn lý do UPS khớp Lark **0/37 kiện**. Cùng quy ước với FedEx (D-245: ô base là giá
+ * GỐC, chưa trừ chiết khấu), không phải quy ước riêng cho UPS.
+ *
+ * `vat` LUÔN `null` và người gọi KHÔNG được cộng VAT vào tổng: ô VAT của kiện UPS trên Lark
+ * để TRỐNG, và tổng hợp đồng khớp Lark y nguyên khi không cộng gì. Bản trước cộng 8% VAT của
+ * tài khoản vào ô Tổng — lỗi thứ tư.
+ *
+ * `discount` = `tongNiemYet - tong`, DƯƠNG. UPS trả cả hai khối trong CÙNG một phản hồi nên
+ * đây là phép trừ hai con số có thật, không phải suy bừa (đính chính ghi chú cũ của chính tệp
+ * này, vốn viết là "bịa" — sai).
+ *
+ * Mã không nhận ra được gom vào `maLa` thay vì bỏ qua lặng lẽ — một khoản tiền thật của UPS
+ * mà không ai biết nó rơi đâu là lỗi âm thầm.
  */
-export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number | null): GiaUocTinh {
+export function tuKhoanUps(
+  /** Khoản theo giá NIÊM YẾT (`khoanNiemYet`), KHÔNG phải khoản hợp đồng. */
+  khoan: KhoanBaoGiaUps[],
+  /** Tổng theo giá HỢP ĐỒNG — số cuối cùng phải trả, cũng là số Lark điền ở ô Tổng. */
+  total: number,
+  /** Cước nền theo giá NIÊM YẾT (`baseNiemYet`). */
+  base: number | null,
+  /** Tổng theo giá NIÊM YẾT — để suy chiết khấu. `null` = UPS không trả khối niêm yết. */
+  tongNiemYet: number | null,
+): GiaUocTinh {
   const congDon: Partial<Record<NhomUps, number>> = {};
   const maLa: string[] = [];
   for (const k of khoan) {
@@ -265,10 +279,13 @@ export function tuKhoanUps(khoan: KhoanBaoGiaUps[], total: number, base: number 
     if (!nhom) { maLa.push(k.ma); continue; }
     congDon[nhom] = (congDon[nhom] ?? 0) + k.tien;
   }
+  /* Chiết khấu chỉ có nghĩa khi CÓ CẢ HAI tổng. Thiếu khối niêm yết thì `null` = không biết,
+   * KHÔNG phải 0 — ghi 0 vào ô là khoá ô ở 0 vĩnh viễn (luật dựng patch). */
+  const discount = tongNiemYet == null || tongNiemYet <= 0 ? null : tongNiemYet - total;
   return {
     nguon: 'ups-api',
     base,
-    discount: null,
+    discount,
     fuel: congDon.fuel ?? null,
     remote: congDon.remote ?? null,
     demand: congDon.demand ?? null,

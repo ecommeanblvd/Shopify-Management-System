@@ -12,12 +12,13 @@ import { db, schema } from '@/db/client';
 import {
   dauVaoTuInput, quoteShipmentToCache, xetCacheQuote, type QuoteShipmentInput,
 } from '@/features/carrier-rates/fedex-quote-cache';
-import { baoGiaUpsShop, chonMucReNhat } from '@/lib/ups/rate';
-import { baoGiaBangGiaMotHang, congVat, phanTramVatCuaHang } from '@/features/carrier-rates/compare/quote-order-carriers';
+import { baoGiaUpsShop, chonMucReNhat, chonMucTheoMa } from '@/lib/ups/rate';
+import { baoGiaBangGiaMotHang } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { countrySupportsDirectSignature } from '@/features/carrier-rates/direct-signature';
 import { hangTheoMaVanDon } from '@/lib/ma-van-don';
 import { layThongSoVanDon } from '@/lib/fedex/track';
+import { layThongSoVanDonUps } from '@/lib/ups/track';
 import type { FedexQuoteSnap } from '@/features/shipments/fedex-quote-compare';
 import { tuEngine, tuKhoanUps, tuFedexQuote, type GiaUocTinh } from './gia-uoc-tinh';
 import { nguonCanDim } from './nguon-can-dim';
@@ -254,27 +255,40 @@ export async function layGiaUocTinh(
     if (nguon === 'ups-api') {
       const soTaiKhoan = process.env.UPS_ACCOUNT_NUMBER;
       if (!soTaiKhoan) return null;
+
+      /* Đọc thông số THẬT của nhãn trước, đúng như nhánh FedEx. Đo 16/10/2026: giá UPS khớp
+       * số điền tay trên Lark **0/37 kiện**, và ba trong bốn nguyên nhân nằm ở đây. */
+      const maTraUps = trackingDuTinh ?? k.trackingNumber;
+      const ts = maTraUps ? await layThongSoVanDonUps(maTraUps) : null;
+
       const r = await baoGiaUpsShop({
-        soTaiKhoan, nuocDen: k.country, maBuuChinh: k.postcode, thanhPho: k.city,
+        soTaiKhoan, nuocDen: k.country, maBuuChinh: k.postcode,
+        /* Tên thành phố HÃNG chuẩn hoá — cùng lý do như FedEx: hãng tra phụ phí theo tên của
+         * nó, tên khách gõ trên Shopify có thể trượt bảng. */
+        thanhPho: ts?.thanhPho ?? k.city,
+        /* CÂN và KÍCH THƯỚC vẫn của MÌNH (số khai lúc tạo nhãn), không lấy số hãng ghi nhận —
+         * cùng ruling với FedEx: ô Lark cần GIÁ LÚC TẠO VẬN ĐƠN. */
         canKg: weightKg, kichThuocCm: dims ? { dai: dims.length, rong: dims.width, cao: dims.height } : null,
         nhaDan: isResidential,
       });
       if (!r.ok) return null;
-      const re = chonMucReNhat(r.ds);
+
+      /* ĐÚNG DỊCH VỤ CỦA NHÃN, không phải mức rẻ nhất. `chonMucReNhat` chỉ còn là lối thoát
+       * khi hãng chưa có dữ liệu tra cứu — và khi đó `theoVanDon: false` để tầng trên nói ra.
+       * Đo trên `1Z2050VDD900243620`: UPS trả bốn mức có base niêm yết 3.210.570 / 2.099.725 /
+       * 3.210.570 / 3.028.915; Lark điền 3.028.915 — đúng mức 65 của nhãn, KHÔNG phải mức rẻ
+       * nhất (08). Lấy nhầm mức là sai giá của cả kiện mà không có dấu hiệu gì. */
+      const re = chonMucTheoMa(r.ds, ts?.maDichVu ?? null) ?? chonMucReNhat(r.ds);
       if (!re) return null;
       if (re.tienTe !== 'VND') return null; // như nhánh FedEx: sai đơn vị thì không ghi
-      /* UPS trả tiền CHƯA VAT ở MỌI mức (lib/ups/rate.ts) nên `re.tong` KHÔNG thể
-       * ghi thẳng vào ô Tổng: FedEx ghi `totalNetCharge` (gồm VAT) và engine ghi
-       * total gồm VAT — ba nguồn vào CÙNG một ô thì phải cùng một nghĩa. %VAT lấy
-       * của ACCOUNT (`phanTramVatCuaHang`), đúng cách bảng so cước đang làm; không
-       * tra được account thì VAT là KHÔNG BIẾT ⇒ không ghi gì cho kiện này. */
-      const phanTram = await phanTramVatCuaHang('ups', shipDate, { country: k.country, postcode: k.postcode });
-      if (phanTram == null) return null;
-      const tongCoVat = congVat(re.tong, phanTram);
-      const g = tuKhoanUps(re.khoan, tongCoVat, re.base);
-      // VAT = chênh giữa tổng đã VAT và tổng chưa VAT, để ô VAT và ô Tổng khớp nhau
-      // tuyệt đối (suy VAT từ tổng các khoản đã nhóm sẽ lệch khi có mã lạ — xem maLa).
-      return { ...g, vat: tongCoVat - Math.round(re.tong) };
+
+      /* KHÔNG cộng VAT. Ô VAT của kiện UPS trên Lark để TRỐNG, và tổng HỢP ĐỒNG khớp ô Tổng
+       * của Lark y nguyên khi không cộng gì (1.268.060 và 1.652.990 trên hai kiện đo). Bản
+       * trước cộng %VAT của tài khoản vào ô Tổng — một trong bốn lỗi làm UPS lệch 37/37. */
+      return {
+        ...tuKhoanUps(re.khoanNiemYet, Math.round(re.tong), re.baseNiemYet || null, re.tongNiemYet || null),
+        theoVanDon: ts != null,
+      };
     }
 
     // bang-gia: gọi ĐÚNG hãng của kiện, KHÔNG qua quoteOrderAcrossCarriers — hàm

@@ -174,3 +174,87 @@ export async function layLichSuQuetUps(trackingNumber: string): Promise<LichSuQu
   const raw = await goiUps(trackingNumber);
   return raw == null ? { loi: 'UPS không tìm thấy mã vận đơn' } : parseUpsLichSu(raw);
 }
+
+/**
+ * THÔNG SỐ THẬT của một vận đơn UPS, đọc từ Track API — khoá theo MÃ VẬN ĐƠN.
+ *
+ * Cùng mục đích với `ThongSoVanDonFedex`: thôi dựng lại lô hàng từ cột của mình. Đo 16/10/2026
+ * trên 37 kiện UPS, giá hệ thống khớp số điền tay trên Lark **0/37** — ô base 0/37, nhiên liệu
+ * 0/37. Ba nguyên nhân, trường dưới đây gỡ hai:
+ *   - đường cũ lấy mức RẺ NHẤT (`chonMucReNhat`) thay vì dịch vụ THẬT của nhãn;
+ *   - cờ ký nhận suy theo nước thay vì đọc dịch vụ đã mua trên nhãn.
+ * (Nguyên nhân thứ ba — ô base ghi giá hợp đồng thay vì niêm yết — nằm ở `lib/ups/rate.ts`.)
+ *
+ * ⚠️ Track API UPS **KHÔNG trả tiền**, y như FedEx: đã soát cả cây phản hồi, chỉ có dịch vụ,
+ * cân, kích thước, địa chỉ, dịch vụ cộng thêm. Tiền vẫn phải hỏi Rating API — nhưng hỏi bằng
+ * đúng thông số của nhãn.
+ */
+export interface ThongSoVanDonUps {
+  /**
+   * Mã dịch vụ DÙNG ĐƯỢC VỚI RATING API, lấy từ `service.levelCode` và đã bỏ số 0 đầu.
+   *
+   * KHÔNG phải `service.code`: Track trả `code: '566'` cho cùng dịch vụ mà Rating gọi là `65`
+   * (`levelCode: '065'`) — hai hệ mã khác nhau, ghép bằng `code` thì không bao giờ khớp.
+   */
+  maDichVu: string | null;
+  tenDichVu: string | null;
+  /** ⚠️ Cân UPS ghi nhận — dùng để ĐỐI SOÁT, KHÔNG dùng dựng giá lúc tạo vận đơn (cùng lý do
+   *  như `ThongSoVanDonFedex.canKg`: hãng cân đo lại thì số này đổi). */
+  canKg: number | null;
+  /** ⚠️ Kích thước UPS ghi nhận — cùng cảnh báo như `canKg`. */
+  kichThuocCm: { dai: number; rong: number; cao: number } | null;
+  /** Thành phố đích UPS đã chuẩn hoá (viết hoa). Gửi tên này thay tên khách gõ, cùng lý do
+   *  như FedEx: hãng tra phụ phí theo tên của nó. */
+  thanhPho: string | null;
+  /** `additionalServices` có mục ký nhận — dịch vụ ĐÃ MUA trên nhãn. */
+  kyNhanTrucTiep: boolean;
+}
+
+const soDuong = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/** THUẦN: bóc thông số vận đơn UPS. `null` khi phản hồi không có gói nào. */
+export function parseThongSoVanDonUps(raw: unknown): ThongSoVanDonUps | null {
+  const p = goiDau(raw) as (UpsPackage & {
+    service?: { code?: unknown; levelCode?: unknown; description?: unknown };
+    weight?: { weight?: unknown };
+    dimension?: { length?: unknown; width?: unknown; height?: unknown; unitOfDimension?: unknown };
+    additionalServices?: unknown[];
+    packageAddress?: Array<{ type?: unknown; address?: { city?: unknown } }>;
+  }) | null;
+  if (!p) return null;
+
+  const lv = typeof p.service?.levelCode === 'string' ? p.service.levelCode.trim().replace(/^0+/, '') : '';
+  const kt = p.dimension;
+  /* Chỉ nhận kích thước khi UPS nói rõ đơn vị là CM — nhận bừa bản IN là thu nhỏ kiện 2,54
+   * lần. Thiếu một chiều thì bỏ cả khối: ba chiều mới là một kiện. */
+  const laCm = String(kt?.unitOfDimension ?? '').trim().toUpperCase() === 'CM';
+  const dai = laCm ? soDuong(kt?.length) : null;
+  const rong = laCm ? soDuong(kt?.width) : null;
+  const cao = laCm ? soDuong(kt?.height) : null;
+  const dich = (p.packageAddress ?? []).find((a) => String(a.type ?? '').toUpperCase() === 'DESTINATION');
+  const tp = dich?.address?.city;
+
+  return {
+    maDichVu: lv !== '' ? lv : null,
+    tenDichVu: typeof p.service?.description === 'string' && p.service.description.trim() !== ''
+      ? p.service.description.trim() : null,
+    canKg: soDuong(p.weight?.weight),
+    kichThuocCm: dai != null && rong != null && cao != null ? { dai, rong, cao } : null,
+    thanhPho: typeof tp === 'string' && tp.trim() !== '' ? tp.trim() : null,
+    kyNhanTrucTiep: (p.additionalServices ?? []).some((s) => /SIGNATURE/i.test(String(s))),
+  };
+}
+
+/** Gọi Track API lấy thông số thật của một vận đơn UPS. `null` khi hãng chưa có dữ liệu hoặc
+ *  lượt gọi hỏng — người gọi rơi về dữ liệu của mình và PHẢI nói ra. */
+export async function layThongSoVanDonUps(trackingNumber: string): Promise<ThongSoVanDonUps | null> {
+  try {
+    const raw = await goiUps(trackingNumber);
+    return raw == null ? null : parseThongSoVanDonUps(raw);
+  } catch {
+    return null;
+  }
+}
