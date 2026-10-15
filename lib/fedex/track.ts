@@ -286,7 +286,18 @@ export interface ThongSoVanDonFedex {
   loaiBaoGoi: string | null;
   /** `serviceDetail.type`, vd 'FEDEX_INTERNATIONAL_PRIORITY'. */
   dichVu: string | null;
+  /**
+   * ⚠️ Cân FedEx ĐO LẠI ở trạm, KHÔNG phải cân khai lúc tạo nhãn — đừng dùng để dựng lại giá
+   * lúc tạo vận đơn. Đo 16/10/2026: nhãn ghi 1,77kg / 0,45kg / 1,68kg trong khi kho khai 1,8 /
+   * 0,8 / 1,7. Hỏi giá bằng số này thì lệch hẳn bậc cân: trên 7 kiện lệch, khớp ô base 1/7;
+   * lấy cân khai báo khớp 7/7.
+   *
+   * Trường vẫn giữ vì nó CHÍNH LÀ thứ cần cho cảnh báo đối soát sau này — hãng cân đo lại rồi
+   * đổi bậc giá, hoặc đổi bao gói từ PAK sang Package (CEO 15/10/2026).
+   */
   canKg: number | null;
+  /** ⚠️ Kích thước FedEx đo lại — cùng cảnh báo như `canKg`. Nhãn ghi 43×33×12 trong khi kho
+   *  khai 42×30×10. Dùng cho đối soát, KHÔNG dùng để dựng giá lúc tạo vận đơn. */
   kichThuocCm: { dai: number; rong: number; cao: number } | null;
   /** `recipientInformation.address.residential` — phân loại CỦA HÃNG trên chính nhãn này.
    *  Đáng tin hơn `addr_class` của mình: trên `878631025811` cột mình ghi RESIDENTIAL mà hãng

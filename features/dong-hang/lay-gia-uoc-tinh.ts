@@ -159,7 +159,10 @@ export async function layGiaUocTinh(
        *   - cờ nhà dân: suy từ `addr_class` = RESIDENTIAL ⇒ cộng 84.400 + nhiên liệu, hãng ghi
        *     `residential: false` trên chính nhãn đó và KHÔNG thu;
        *   - kích thước: CSDL giữ 40×31×2 của danh mục vật tư, nhãn ghi 36×27×6.
-       * Hỏi lại Rate API bằng đúng sáu thông số của nhãn thì khớp TỪNG ĐỒNG với màn hình hãng.
+       * Hỏi lại Rate API bằng đúng thông số của nhãn thì khớp TỪNG ĐỒNG với màn hình hãng.
+       *
+       * ĐÍNH CHÍNH 16/10/2026 — lấy của Track BỐN thứ thôi (bao gói, dịch vụ, cờ nhà dân, ký
+       * nhận) cộng ngày gửi; CÂN và KÍCH THƯỚC vẫn của mình. Lý do ở ngay dưới, chỗ `weightKg`.
        *
        * Track API KHÔNG trả tiền (đã soát sạch cây phản hồi — xem `ThongSoVanDonFedex`), nên
        * vẫn phải qua Rate API; nhưng hỏi bằng đầu vào của chính vận đơn thì không còn là dựng
@@ -176,10 +179,18 @@ export async function layGiaUocTinh(
        * riêng là mở đường cho chúng lệch nhau (`shipDate` chẳng hạn). */
       const dauVao: QuoteShipmentInput = {
         shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
-        weightKg: thongSo?.canKg ?? weightKg,
-        dims: thongSo?.kichThuocCm
-          ? { length: thongSo.kichThuocCm.dai, width: thongSo.kichThuocCm.rong, height: thongSo.kichThuocCm.cao }
-          : dims,
+        /* CÂN và KÍCH THƯỚC lấy của MÌNH, KHÔNG lấy của Track — đây là chỗ đã sai một vòng
+         * (16/10/2026). Track trả số FedEx ĐÃ CÂN ĐO LẠI ở trạm, không phải số khai lúc tạo
+         * nhãn: đo trên 7 kiện lệch thì nhãn ghi 1,77kg / 0,45kg / 43×33×12 trong khi kho khai
+         * 1,8kg / 0,8kg / 42×30×10. Mà con số cần điền lên Lark là GIÁ LÚC TẠO VẬN ĐƠN (CEO
+         * chốt 15/10/2026) — giá sau cân đo lại là việc của đối soát hoá đơn, không phải của
+         * màn Đóng hàng.
+         *
+         * Thử cả hai đường trên 7 kiện lệch: lấy cân/dim của Track khớp ô base 1/7, lấy cân/dim
+         * khai báo khớp 7/7. `thongSo.canKg` và `thongSo.kichThuocCm` vẫn giữ trong hình dữ
+         * liệu vì chúng chính là thứ cần cho cảnh báo "hãng đo lại, PAK thành Package" sau này. */
+        weightKg,
+        dims,
         shipDate: thongSo?.ngayGui ? new Date(`${thongSo.ngayGui}T00:00:00Z`) : shipDate,
         /* D-044: phí ký nhận FedEx khai apply_mode='always' trừ nước được miễn —
          * `countrySupportsDirectSignature` gói đúng luật đó, nhưng nó là phép SUY THEO NƯỚC.
