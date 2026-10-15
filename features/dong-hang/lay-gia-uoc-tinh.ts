@@ -178,7 +178,13 @@ export async function layGiaUocTinh(
       /* Dựng đầu vào MỘT LẦN rồi dùng cho cả phép so dấu lẫn lượt quote — hai chỗ tự dựng
        * riêng là mở đường cho chúng lệch nhau (`shipDate` chẳng hạn). */
       const dauVao: QuoteShipmentInput = {
-        shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode, city: k.city,
+        shipmentId, originHub: k.originHub, country: k.country, postcode: k.postcode,
+        /* Thành phố lấy TÊN HÃNG ĐÃ CHUẨN HOÁ trên nhãn, không lấy tên khách gõ trên Shopify.
+         * FedEx tra phụ phí VÙNG SÂU XA theo tên của nó: cùng mã bưu chính 52728, "Al
+         * Bukayriyah" (Shopify) ra 1.678.505 không có khoản vùng xa, còn "BUKAYRIYAH" (nhãn)
+         * ra 2.576.930 kèm OUT_OF_DELIVERY_AREA 550.000 — đúng số nhân sự đọc từ cổng rồi gõ
+         * lên Lark (đo `878423234737`, 16/10/2026). Một chữ "Al" thừa ăn mất 898.425đ. */
+        city: thongSo?.thanhPho ?? k.city,
         /* CÂN và KÍCH THƯỚC lấy của MÌNH, KHÔNG lấy của Track — đây là chỗ đã sai một vòng
          * (16/10/2026). Track trả số FedEx ĐÃ CÂN ĐO LẠI ở trạm, không phải số khai lúc tạo
          * nhãn: đo trên 7 kiện lệch thì nhãn ghi 1,77kg / 0,45kg / 43×33×12 trong khi kho khai

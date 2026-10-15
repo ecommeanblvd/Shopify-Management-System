@@ -101,13 +101,18 @@ export interface DauVaoQuote {
   recipientResidential: boolean;
   packagingType: string | null;
   serviceType: string | null;
+  /** Thành phố người nhận ĐÚNG CHUỖI đã gửi cho hãng. Trong dấu vì nó đổi tiền: FedEx tra phụ
+   *  phí vùng sâu xa theo tên thành phố, và "Al Bukayriyah" vs "BUKAYRIYAH" chênh 550.000đ
+   *  cùng nhiên liệu và VAT trên đó (đo `878423234737`, 16/10/2026). */
+  city: string | null;
 }
 
 /** Khoá đóng dấu trong `raw`. Một tên, một chỗ. */
 export const KHOA_DAU_VAO_QUOTE = 'dauVaoQuote';
 
-/** Phiên bản dấu hiện hành. Tăng khi thêm/bớt trường đầu vào. */
-export const PHIEN_BAN_DAU_VAO = 2;
+/** Phiên bản dấu hiện hành. Tăng khi thêm/bớt trường đầu vào.
+ *  Bản 2 (15/10/2026): thêm `packagingType` + `serviceType`. Bản 3 (16/10/2026): thêm `city`. */
+export const PHIEN_BAN_DAU_VAO = 3;
 
 /**
  * `QuoteShipmentInput` → dấu đầu vào. Người đọc cache PHẢI dựng dấu bằng CHÍNH hàm này từ
@@ -124,6 +129,7 @@ export function dauVaoTuInput(input: QuoteShipmentInput): DauVaoQuote {
     recipientResidential: input.recipientResidential === true,
     packagingType: input.packagingType ?? null,
     serviceType: input.serviceType ?? null,
+    city: input.city ?? null,
   };
 }
 
@@ -156,6 +162,7 @@ function docDauVao(raw: unknown): DauVaoQuote | null {
     recipientResidential: o.recipientResidential === true,
     packagingType: typeof o.packagingType === 'string' ? o.packagingType : null,
     serviceType: typeof o.serviceType === 'string' ? o.serviceType : null,
+    city: typeof o.city === 'string' ? o.city : null,
   };
 }
 
@@ -180,6 +187,7 @@ export function xetCacheQuote(raw: unknown, hienTai: DauVaoQuote): PhanXetCacheQ
   if (luu.recipientResidential !== hienTai.recipientResidential) return 'lech-dau-vao';
   if (luu.packagingType !== hienTai.packagingType) return 'lech-dau-vao';
   if (luu.serviceType !== hienTai.serviceType) return 'lech-dau-vao';
+  if (luu.city !== hienTai.city) return 'lech-dau-vao';
   return 'con-dung';
 }
 

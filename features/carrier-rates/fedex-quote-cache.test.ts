@@ -40,6 +40,7 @@ const dauVao: DauVaoQuote = {
   recipientResidential: true,
   packagingType: 'FEDEX_PAK',
   serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
+  city: 'BUKAYRIYAH',
 };
 /** Dòng `raw` như CSDL thật giữ: phản hồi hãng + dấu đầu vào cạnh nó. */
 const raw = (d: unknown): unknown => ({ output: { rateReplyDetails: [] }, [KHOA_DAU_VAO_QUOTE]: d });
@@ -50,7 +51,7 @@ describe('dauVaoTuInput', () => {
     weightKg: 0.7, dims: { length: 40, width: 31, height: 2 },
     shipDate: new Date('2026-10-14T00:00:00Z'),
     signatureOptIn: true, recipientResidential: true,
-    packagingType: 'FEDEX_PAK', serviceType: 'FEDEX_INTERNATIONAL_PRIORITY',
+    packagingType: 'FEDEX_PAK', serviceType: 'FEDEX_INTERNATIONAL_PRIORITY', city: 'BUKAYRIYAH',
   };
   it('lấy đúng ngày YYYY-MM-DD như lượt gọi Rate API', () => {
     expect(dauVaoTuInput(input).shipDate).toBe('2026-10-14');
@@ -98,6 +99,14 @@ describe('xetCacheQuote', () => {
     expect(xetCacheQuote(raw(dauVao), { ...dauVao, packagingType: null })).toBe('lech-dau-vao');
     expect(xetCacheQuote(raw(dauVao), { ...dauVao, packagingType: 'YOUR_PACKAGING' })).toBe('lech-dau-vao');
   });
+  /* Tên thành phố ĐỔI TIỀN: FedEx tra phụ phí vùng sâu xa theo tên của nó. Cùng mã bưu chính
+   * 52728, "Al Bukayriyah" ra 1.678.505 còn "BUKAYRIYAH" ra 2.576.930 kèm OUT_OF_DELIVERY_AREA
+   * 550.000 (đo `878423234737`). Thiếu nó trong dấu thì dòng quote tính theo tên cũ đọc ra
+   * "còn dùng được". */
+  it('thành phố đổi → phải quote lại', () => {
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, city: 'Al Bukayriyah' })).toBe('lech-dau-vao');
+    expect(xetCacheQuote(raw(dauVao), { ...dauVao, city: null })).toBe('lech-dau-vao');
+  });
   it('dịch vụ đổi → phải quote lại', () => {
     expect(xetCacheQuote(raw(dauVao), { ...dauVao, serviceType: 'INTERNATIONAL_ECONOMY' })).toBe('lech-dau-vao');
   });
@@ -105,7 +114,7 @@ describe('xetCacheQuote', () => {
    * null" sẽ kết luận "còn dùng được" cho đúng những dòng tính sai thang giá. */
   it('dấu đời cũ → không-biết, KHÔNG phải còn-dùng-được', () => {
     const doiCu: Record<string, unknown> = { ...dauVao };
-    delete doiCu.v; delete doiCu.packagingType; delete doiCu.serviceType;
+    delete doiCu.v; delete doiCu.packagingType; delete doiCu.serviceType; delete doiCu.city;
     expect(xetCacheQuote(raw({ ...doiCu, v: 1 }), dauVao)).toBe('khong-biet-dau-vao');
     expect(xetCacheQuote(raw(doiCu), dauVao)).toBe('khong-biet-dau-vao');
   });

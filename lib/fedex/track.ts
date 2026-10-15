@@ -299,6 +299,19 @@ export interface ThongSoVanDonFedex {
   /** ⚠️ Kích thước FedEx đo lại — cùng cảnh báo như `canKg`. Nhãn ghi 43×33×12 trong khi kho
    *  khai 42×30×10. Dùng cho đối soát, KHÔNG dùng để dựng giá lúc tạo vận đơn. */
   kichThuocCm: { dai: number; rong: number; cao: number } | null;
+  /**
+   * `recipientInformation.address.city` — tên thành phố HÃNG ĐÃ CHUẨN HOÁ, viết hoa.
+   *
+   * Nhỏ mà quyết định tiền: FedEx tra phụ phí VÙNG SÂU XA theo tên của NÓ, không theo tên
+   * khách gõ. Đo 16/10/2026 trên `878423234737` (SA), cùng mã bưu chính 52728, chỉ đổi tên:
+   *   city "Al Bukayriyah" (khách gõ trên Shopify) → tổng 1.678.505, KHÔNG có khoản vùng xa
+   *   city "BUKAYRIYAH"    (hãng ghi trên nhãn)    → tổng 2.576.930, OUT_OF_DELIVERY_AREA 550.000
+   * Số thứ hai đúng bằng số nhân sự đọc từ cổng rồi gõ lên Lark.
+   */
+  thanhPho: string | null;
+  /** `recipientInformation.address.stateOrProvinceCode` — giữ để dùng sau; chưa đưa vào lượt
+   *  hỏi giá vì chưa đo được nó đổi gì. */
+  tinhBang: string | null;
   /** `recipientInformation.address.residential` — phân loại CỦA HÃNG trên chính nhãn này.
    *  Đáng tin hơn `addr_class` của mình: trên `878631025811` cột mình ghi RESIDENTIAL mà hãng
    *  ghi false và không thu phí nhà dân. `null` = phản hồi không nói. */
@@ -355,7 +368,12 @@ export function parseThongSoVanDon(raw: unknown): ThongSoVanDonFedex | null {
     ?.find((d) => String(d.type ?? '') === 'SHIP')?.dateTime;
   const ref = ((tr.additionalTrackingInfo as { packageIdentifiers?: Array<{ type?: unknown; values?: unknown[] }> } | undefined)
     ?.packageIdentifiers ?? []).find((p) => String(p.type ?? '') === 'SHIPPER_REFERENCE')?.values?.[0];
-  const resi = (tr.recipientInformation as { address?: { residential?: unknown } } | undefined)?.address?.residential;
+  const diaChiNhan = (tr.recipientInformation as
+    { address?: { residential?: unknown; city?: unknown; stateOrProvinceCode?: unknown } } | undefined)?.address;
+  const resi = diaChiNhan?.residential;
+  const thanhPho = typeof diaChiNhan?.city === 'string' && diaChiNhan.city.trim() !== '' ? diaChiNhan.city.trim() : null;
+  const tinhBang = typeof diaChiNhan?.stateOrProvinceCode === 'string' && diaChiNhan.stateOrProvinceCode.trim() !== ''
+    ? diaChiNhan.stateOrProvinceCode.trim() : null;
 
   const dichVu = (tr.serviceDetail as { type?: unknown } | undefined)?.type;
   const baoGoi = pkg?.packagingDescription?.type;
@@ -365,6 +383,8 @@ export function parseThongSoVanDon(raw: unknown): ThongSoVanDonFedex | null {
     canKg: so(can?.value),
     // Thiếu MỘT chiều là không dựng khối — ba chiều phải đi cùng nhau mới là một kiện.
     kichThuocCm: dai != null && rong != null && cao != null ? { dai, rong, cao } : null,
+    thanhPho,
+    tinhBang,
     nhaDan: typeof resi === 'boolean' ? resi : null,
     kyNhanTrucTiep: ((tr.specialHandlings as Array<Record<string, unknown>> | undefined) ?? [])
       .some((s) => String(s.type ?? '').toUpperCase().includes('SIGNATURE')),

@@ -297,6 +297,14 @@ describe('parseThongSoVanDon', () => {
     expect(t.nhaDan).toBe(false);
   });
 
+  /* Tên thành phố HÃNG CHUẨN HOÁ, không phải tên khách gõ — FedEx tra phụ phí vùng sâu xa
+   * theo tên của nó. Trên `878423234737` hãng ghi 'BUKAYRIYAH' còn Shopify giữ
+   * 'Al Bukayriyah'; gửi tên khách thì khoản 550.000đ biến mất khỏi báo giá. */
+  it('đọc tên thành phố + tỉnh/bang hãng đã chuẩn hoá', () => {
+    expect(t.thanhPho).toBe('SHORELINE');
+    expect(t.tinhBang).toBe('WA');
+  });
+
   it('ký nhận trực tiếp suy từ specialHandlings, không suy theo nước', () => {
     expect(t.kyNhanTrucTiep).toBe(true);
   });
@@ -313,7 +321,8 @@ describe('parseThongSoVanDon', () => {
    * thì hình dữ liệu này phải được xem lại, chứ không lặng lẽ bỏ qua. */
   it('hình dữ liệu KHÔNG có trường tiền nào', () => {
     expect(Object.keys(t)).toEqual([
-      'loaiBaoGoi', 'dichVu', 'canKg', 'kichThuocCm', 'nhaDan', 'kyNhanTrucTiep', 'ngayGui', 'maThamChieu',
+      'loaiBaoGoi', 'dichVu', 'canKg', 'kichThuocCm', 'thanhPho', 'tinhBang', 'nhaDan',
+      'kyNhanTrucTiep', 'ngayGui', 'maThamChieu',
     ]);
   });
 
@@ -336,6 +345,7 @@ describe('parseThongSoVanDon', () => {
     expect(t2.kichThuocCm).toBeNull();
     expect(t2.canKg).toBeNull();
     expect(t2.nhaDan).toBeNull();
+    expect(t2.thanhPho).toBeNull();
     expect(t2.kyNhanTrucTiep).toBe(false);
   });
 });
