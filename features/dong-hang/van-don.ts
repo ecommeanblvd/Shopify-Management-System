@@ -161,6 +161,16 @@ export interface O {
   chiDeXem?: boolean;
   /** Vẽ bằng phông đơn cách: SKU phải đọc được từng ký tự khi so với cổng hãng. */
   donCach?: boolean;
+  /**
+   * Ô này chiếm CẢ HÀNG của lưới ô vuông.
+   *
+   * Dành cho giá trị dài hơn hẳn phần còn lại — mã vật tư kiểu
+   * `MEAN-CAR-39x28x9-VTĐG1-WH-32085` nhét vào một cột bằng 1/5 bề ngang thì bị bẻ thành sáu
+   * dòng, trong khi cả hàng dưới bỏ trống (CEO báo 19/10/2026). Khai ở đây chứ không để chỗ
+   * vẽ tự đoán theo độ dài chuỗi: đoán theo độ dài thì một mã ngắn bất thường sẽ nhảy bố cục
+   * giữa chừng, và không ai biết vì sao.
+   */
+  rongCaHang?: boolean;
 }
 
 /**
@@ -263,7 +273,9 @@ export function dungKhoiVanDon(vao: VaoKhoiVanDon): Khoi[] {
         giaTri: vao.soKien ? `${vao.soKien.n}/${vao.soKien.tong}` : null,
         ...(vao.soKien ? {} : { vi: 'kiện chưa có mã Lark nên không biết thứ tự' }),
       },
-      { nhan: 'Loại hộp', giaTri: can.hop },
+      /* Mã vật tư dài gấp nhiều lần mọi ô khác trong hàng — cho chiếm cả hàng để nó nằm một
+       * dòng, thay vì bị bẻ sáu dòng trong một cột hẹp (xem `rongCaHang`). */
+      { nhan: 'Loại hộp', giaTri: can.hop, rongCaHang: true },
       {
         nhan: 'Cân quy đổi', giaTri: so(qd.quyDoi), chiDeXem: true,
         vi: qd.tinhCuoc != null

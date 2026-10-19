@@ -220,6 +220,17 @@ describe('dungKhoiVanDon', () => {
 
   /* Bộ bàn giao đề nghị GỠ ô "Loại hộp". Giữ lại vì CEO chốt không bỏ trường nào đang hiện —
    * test này là chỗ chặn ai đó "làm cho giống thiết kế" bằng cách xoá ô. */
+  /* Mã vật tư dài gấp nhiều lần mọi ô khác trong hàng (`MEAN-CAR-39x28x9-VTĐG1-WH-32085`).
+   * Nằm trong một cột bằng 1/5 bề ngang thì nó bị bẻ SÁU DÒNG trong khi cả hàng dưới bỏ
+   * trống — CEO báo 19/10/2026. Cờ này là thứ giữ nó nằm một dòng; mất cờ là lặp lại lỗi. */
+  it('ô "Loại hộp" chiếm CẢ HÀNG, còn năm ô số thì không', () => {
+    const o = dungKhoiVanDon(vao())[1].o;
+    expect(o.find((x) => x.nhan === 'Loại hộp')!.rongCaHang).toBe(true);
+    for (const nhan of ['Cân thực (kg)', 'Dài (cm)', 'Rộng (cm)', 'Cao (cm)', 'Số kiện']) {
+      expect(o.find((x) => x.nhan === nhan)!.rongCaHang).toBeUndefined();
+    }
+  });
+
   it('ô "Loại hộp" VẪN còn và vẫn copy được (thiết kế đề nghị gỡ, CEO giữ)', () => {
     const o = dungKhoiVanDon(vao())[1].o.find((x) => x.nhan === 'Loại hộp')!;
     expect(o.giaTri).toBe('A3');

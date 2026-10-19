@@ -180,7 +180,11 @@ function OVuong({
       </span>
     </>
   );
-  const khung = `relative flex min-h-[58px] flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 pr-8 ${MAU[mau].vienO}`;
+  /* `col-span-full` cho ô khai `rongCaHang`: mã vật tư dài nằm gọn một dòng thay vì bị bẻ
+   * trong một cột bằng 1/5 bề ngang. `break-all` để mã quá dài vẫn xuống dòng trong ô chứ
+   * không đẩy tràn cả lưới. */
+  const khung = `relative flex min-h-[58px] flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 pr-8 ${MAU[mau].vienO}`
+    + (o.rongCaHang ? ' col-span-full break-all' : '');
   if (trong || tat) {
     return <div className={`${khung} ${trong ? '' : 'opacity-60'}`}>{noiDung}</div>;
   }
