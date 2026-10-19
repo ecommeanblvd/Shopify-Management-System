@@ -7,8 +7,133 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+/**
+ * KHAI "đang có thay đổi chưa lưu" từ bên trong hộp thoại.
+ *
+ * Bấm ra ngoài hộp thoại vốn ĐÃ đóng nó (Base UI `disablePointerDismissal` mặc định `false`)
+ * — và đó là đúng ý CEO: không có gì đang sửa thì bấm ra ngoài là tắt, nhanh gọn. Nhưng khi
+ * đang gõ dở thì một cú bấm trượt làm bay hết chữ, không hoàn lại được. Đã xảy ra thật với
+ * Đức ở modal đối soát (14/10/2026).
+ *
+ * Vì sao khai TAY chứ không tự dò các ô `input` trong hộp: dò tự động thì hoặc hỏi thừa (ô
+ * điền sẵn bị React vẽ lại cũng tính là "đã đổi") — hỏng đúng cái CEO muốn là "không có thay
+ * đổi thì cứ tắt" — hoặc bỏ sót với ô không phải `input` (chọn box, chọn ảnh, danh sách).
+ * Một dòng khai ở nơi biết rõ mình có gì chưa lưu thì đúng, và hộp thoại nào chưa khai vẫn
+ * chạy y như trước.
+ */
+type DatChuaLuu = (co: boolean) => void
+const NgCanhChuaLuu = React.createContext<DatChuaLuu | null>(null)
+
+/** Gọi trong hộp thoại: `coThayDoi` đúng khi có thứ chưa lưu sẽ mất nếu đóng bây giờ. */
+function useChuaLuu(coThayDoi: boolean) {
+  const dat = React.useContext(NgCanhChuaLuu)
+  React.useEffect(() => {
+    dat?.(coThayDoi)
+    // Rời khỏi cây (hộp thoại đóng/đổi nội dung) thì KHÔNG để lại cờ bẩn — lượt mở sau sẽ
+    // hỏi một câu vô duyên và người dùng mất tin vào cảnh báo.
+    return () => dat?.(false)
+  }, [dat, coThayDoi])
+}
+
+/**
+ * Thẻ khai "đang có thay đổi chưa lưu", đặt BÊN TRONG `DialogContent`.
+ *
+ * Phải là một thẻ con chứ không gọi `useChuaLuu` thẳng ở component dựng `<Dialog>`: ngữ cảnh
+ * React đọc từ provider Ở TRÊN, mà component đó nằm trên `<Dialog>` nên sẽ đọc ra `null` và
+ * cảnh báo im lặng không bao giờ chạy — hỏng kiểu không ai thấy.
+ */
+function KhaiChuaLuu({ co }: { co: boolean }) {
+  useChuaLuu(co)
+  return null
+}
+
+function Dialog({ onOpenChange, children, ...props }: DialogPrimitive.Root.Props) {
+  const chuaLuu = React.useRef(false)
+  const [hoi, setHoi] = React.useState(false)
+  const thaoTac = React.useRef<DialogPrimitive.Root.Actions | null>(null)
+  const dat = React.useCallback<DatChuaLuu>((co) => { chuaLuu.current = co }, [])
+
+  const xuLyDong = React.useCallback(
+    (open: boolean, chiTiet: DialogPrimitive.Root.ChangeEventDetails) => {
+      /* `imperative-action` là lượt đóng do CHÍNH ta gọi sau khi người dùng đã xác nhận bỏ —
+       * chặn nó nữa thì thành vòng lặp không bao giờ đóng được. */
+      if (!open && chuaLuu.current && chiTiet.reason !== "imperative-action") {
+        chiTiet.cancel()
+        setHoi(true)
+        return
+      }
+      onOpenChange?.(open, chiTiet)
+    },
+    [onOpenChange]
+  )
+
+  /* `children` của Base UI còn có thể là HÀM dựng (dạng payload). Không chen câu hỏi vào ca
+   * đó — chen là vỡ kiểu, mà hộp thoại dạng hàm cũng không dùng `useChuaLuu`. */
+  const noiDung: DialogPrimitive.Root.Props["children"] =
+    typeof children === "function" ? (
+      children
+    ) : (
+      <>
+        {children}
+        <HoiBoThayDoi
+          mo={hoi}
+          doiMo={setHoi}
+          onBo={() => {
+            chuaLuu.current = false
+            setHoi(false)
+            thaoTac.current?.close()
+          }}
+        />
+      </>
+    )
+
+  return (
+    <NgCanhChuaLuu.Provider value={dat}>
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        actionsRef={thaoTac}
+        onOpenChange={xuLyDong}
+        {...props}
+      >
+        {noiDung}
+      </DialogPrimitive.Root>
+    </NgCanhChuaLuu.Provider>
+  )
+}
+
+/**
+ * Hỏi lại trước khi bỏ thay đổi. Nằm TRONG `Dialog.Root` cha để Base UI biết đây là hộp thoại
+ * lồng và nhường bẫy tiêu điểm; dựng ngoài thì hộp cha giữ tiêu điểm và không bấm được nút nào.
+ *
+ * Lớp phủ/hộp dùng z-[70]/z-[80] — phải TRÊN hộp cha (z-50/z-[60]), nếu không câu hỏi nằm dưới
+ * chính cái hộp nó đang hỏi về.
+ */
+function HoiBoThayDoi({
+  mo, doiMo, onBo,
+}: { mo: boolean; doiMo: (v: boolean) => void; onBo: () => void }) {
+  return (
+    <DialogPrimitive.Root open={mo} onOpenChange={doiMo}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-[70] bg-black/20 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
+        <DialogPrimitive.Popup className="fixed top-1/2 left-1/2 z-[80] grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 outline-none sm:max-w-sm">
+          <DialogPrimitive.Title className="text-base leading-none font-medium">
+            Đóng mà chưa lưu?
+          </DialogPrimitive.Title>
+          <DialogPrimitive.Description className="text-sm text-muted-foreground">
+            Có thay đổi chưa được lưu. Đóng bây giờ là mất, không lấy lại được.
+          </DialogPrimitive.Description>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => doiMo(false)}>
+              Ở lại, tiếp tục sửa
+            </Button>
+            <Button variant="destructive" onClick={onBo}>
+              Đóng và bỏ thay đổi
+            </Button>
+          </div>
+        </DialogPrimitive.Popup>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -207,6 +332,8 @@ function DialogDescription({
 
 export {
   Dialog,
+  KhaiChuaLuu,
+  useChuaLuu,
   DialogClose,
   DialogContent,
   DialogDescription,

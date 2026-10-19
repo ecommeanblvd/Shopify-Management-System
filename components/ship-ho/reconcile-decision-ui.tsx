@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  KhaiChuaLuu,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { reconcileCellState } from '@/features/ship-ho/reconcile-decision';
@@ -139,6 +140,8 @@ export function DecisionModal({ row, onClose, actions }: {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { setReason(''); setError(null); onClose(); } }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        {/* Đúng chỗ Đức mất chữ đang gõ (14/10/2026): bấm ra ngoài khi đã gõ lí do thì hỏi lại. */}
+        <KhaiChuaLuu co={reason.trim() !== ''} />
         <DialogHeader>
           {/* Dẫn bằng mã LOG: đây là chỗ người ta CẦM HOÁ ĐƠN mà đối chiếu, mà hoá đơn
               carrier ghi mã LOG (D-238). */}

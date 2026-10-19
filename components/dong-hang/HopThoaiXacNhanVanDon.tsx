@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Check, CircleAlert, CircleSlash, TriangleAlert } from 'lucide-react';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, KhaiChuaLuu,
 } from '@/components/ui/dialog';
 import { luuTrackingChoKien, phanTichTruocKhiGhi } from '@/features/dong-hang/actions';
 import {
@@ -165,6 +165,8 @@ export function HopThoaiXacNhanVanDon({
         showCloseButton={false}
         className="top-8 flex max-h-[calc(100vh-4rem)] w-[calc(100vw-2rem)] translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
+        {/* Đã dán mã hoặc đã phân tích xong mà bấm ra ngoài → hỏi lại, đừng để mất công gõ. */}
+        <KhaiChuaLuu co={raw.trim() !== '' || kq !== null} />
         <DialogHeader className="shrink-0 gap-0.5 border-b border-border px-5 pt-4 pb-3.5">
           <DialogTitle className="text-[15px] font-semibold">
             Mã vận đơn{maKien ? ` · ${maKien}` : ''}
