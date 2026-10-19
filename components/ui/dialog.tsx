@@ -49,6 +49,24 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Hộp thoại nào ĐỂ CHÍNH NÓ cuộn (truyền `overflow-y-auto`/`overflow-auto` vào `className`)?
+ *
+ * Phải biết, vì nút đóng là `absolute` bên trong hộp: khi chính hộp là vùng cuộn thì phần tử
+ * `absolute` cuộn THEO nội dung, nên kéo xuống một đoạn là nút X biến mất và người dùng không
+ * còn cách nào đóng bằng chuột (Bảo báo 19/10/2026 — "để trong box lúc kéo xuống thì mất dấu
+ * x không ấn được", gặp ở MỌI hộp thoại loại này; đếm được 17 chỗ).
+ *
+ * Nhận bằng chuỗi `className` nghe thô, nhưng đó đúng là nơi 132 chỗ gọi khai ý định cuộn, và
+ * đổi hết 132 chỗ để thêm một cờ là đổi nhiều thứ không cần đổi. Chỗ nào KHÔNG khai cuộn thì
+ * giữ nguyên cấu trúc cũ — nhiều hộp thoại tự dựng bố cục flex với thanh nút dính đáy và
+ * trông chờ con của chúng là con TRỰC TIẾP của popup (xem HopThoaiXacNhanVanDon).
+ */
+const RE_TU_CUON = /\boverflow-(y-)?auto\b/
+/** Hộp thoại tự CẮT nội dung (`overflow-hidden`) — chúng tự dựng bố cục cuộn bên trong, và
+ *  nút đóng nằm ngoài mép sẽ BỊ CẮT MẤT, nên những hộp này giữ nút ở trong. */
+const RE_TU_CAT = /\boverflow-hidden\b/
+
 function DialogContent({
   className,
   children,
@@ -57,6 +75,9 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const lop = typeof className === "string" ? className : ""
+  const tuCuon = RE_TU_CUON.test(lop)
+  const tuCat = RE_TU_CAT.test(lop)
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -64,25 +85,53 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-[60] grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
+          className,
+          /* Chuyển việc cuộn XUỐNG lớp trong, trả popup về không-cuộn. Đặt SAU `className` để
+           * thắng `overflow-y-auto` của chỗ gọi (tailwind-merge lấy lớp sau cùng).
+           *
+           * `flex flex-col` chứ KHÔNG giữ `grid`: đã dựng trang thử và đo bằng mắt — với
+           * `grid`, ô lưới không co lại dưới chiều cao nội dung nên `max-h` của chỗ gọi mất
+           * tác dụng và nội dung TRÀN RA NGOÀI hộp thay vì sinh thanh cuộn. Flex thì ép đúng.
+           *
+           * `overflow-visible` chứ không `hidden`: nút đóng nay nằm NGOÀI mép hộp. */
+          tuCuon && "flex flex-col overflow-visible"
         )}
         {...props}
       >
-        {children}
+        {tuCuon ? (
+          /* `min-h-0` BẮT BUỘC (mặc định `min-height: auto` không co được dưới chiều cao nội
+           * dung). Giữ `grid gap-4` ở ĐÂY để các con vẫn cách nhau đúng như khi chúng còn là
+           * con trực tiếp của popup — nếu không, 17 hộp thoại mất hết khoảng cách. */
+          <div data-slot="dialog-scroll" className="grid min-h-0 flex-1 gap-4 overflow-y-auto">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                /* NGOÀI mép hộp, như Bảo xin (19/10/2026): nút không còn đè lên tiêu đề, và
+                 * vì nằm ngoài lớp cuộn nên kéo bao nhiêu cũng không mất. Nền đặc + viền để
+                 * đọc được trên mọi nền phía sau; lệch 0,75rem, vẫn nằm trong lề 1rem của
+                 * `max-w-[calc(100%-2rem)]` nên màn hình hẹp không bị đẩy khỏi khung nhìn.
+                 *
+                 * Hộp thoại tự cắt (`overflow-hidden`, vd HopThoaiXacNhanVanDon) thì GIỮ nút
+                 * ở trong — ra ngoài là bị cắt mất, thành đúng cái lỗi đang sửa. Những hộp đó
+                 * tự dựng vùng cuộn riêng nên nút vốn đã không bị cuộn theo. */
+                className={cn(
+                  "z-10 absolute rounded-full bg-popover text-foreground shadow-sm ring-1 ring-foreground/15 hover:bg-muted",
+                  tuCat ? "top-2 right-2" : "-top-3 -right-3"
+                )}
                 size="icon-sm"
               />
             }
           >
-            <XIcon
-            />
-            <span className="sr-only">Close</span>
+            <XIcon />
+            <span className="sr-only">Đóng</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
