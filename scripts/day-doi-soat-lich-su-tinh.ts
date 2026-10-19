@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { goiSheets, serialNgay } from '@/lib/google/sheets';
-import { chuCot } from '@/features/ship-ho/hang-sheet';
+import { dayLoatTab, khoiThang, nhayTab, type TabLichSu } from '@/features/ship-ho/day-tab-lich-su';
 
 const AP = process.argv.includes('--ap-dung');
 const BRAND = 'tinh';
@@ -98,39 +98,6 @@ function hangWs(ds: readonly DonWs[]): (string | number)[][] {
   ]);
 }
 
-/** Dòng TỔNG: ô tiền là `=SUM(...)` thật, để brand lọc/sửa một dòng thì tổng đổi theo. */
-function dongTong(soCot: number, cotTien: readonly number[], soDong: number): (string | number)[] {
-  const ra: (string | number)[] = Array.from({ length: soCot }, () => '');
-  ra[1] = 'Tổng';
-  if (soDong <= 0) return ra;
-  for (const c of cotTien) {
-    const ch = chuCot(c);
-    ra[c] = `=SUM(${ch}2:${ch}${soDong + 1})`;
-  }
-  return ra;
-}
-
-/**
- * Khối hàng liền nhau của từng tháng trong một danh sách ĐÃ SẮP THEO NGÀY.
- *
- * Vì sao cần: tổng theo tháng ở tab tổng hợp phải là CÔNG THỨC, nhưng `SUMIFS` có nhiều tham
- * số và dấu phân tách tham số đổi theo locale của sổ (sổ đặt `vi_VN`) — viết dấu phẩy có thể
- * thành `#ERROR!`. Mỗi tháng là một khối liền nhau nên `=SUM(T2:T3)` một tham số là đủ, không
- * phụ thuộc locale.
- */
-function khoiThang(ds: ReadonlyArray<{ ngay: string | null }>): Map<string, { tu: number; den: number }> {
-  const ra = new Map<string, { tu: number; den: number }>();
-  ds.forEach((d, i) => {
-    if (!d.ngay) throw new Error(`đơn thứ ${i + 1} thiếu ngày — không dựng được tổng theo tháng`);
-    const k = d.ngay.slice(0, 7);
-    const hang = i + 2;                               // hàng 1 là tiêu đề
-    const co = ra.get(k);
-    if (!co) ra.set(k, { tu: hang, den: hang });
-    else { if (hang < co.tu) co.tu = hang; if (hang > co.den) co.den = hang; }
-  });
-  return ra;
-}
-
 /**
  * Nhãn kỳ có chữ "Tháng" ở đầu, KHÔNG phải "7/2025" trần.
  *
@@ -145,10 +112,18 @@ const COT_TH = [
 ] as const;
 const TIEN_TH = [2, 4, 6] as const;
 
+/** Lọc ra ngày đã chắc chắn có — `khoiThang` không chịu được ô ngày trống. */
+function ngayDu(ds: ReadonlyArray<{ ma: string; ngay: string | null }>): Array<{ ngay: string }> {
+  return ds.map((x) => {
+    if (!x.ngay) throw new Error(`${x.ma} thiếu ngày — không dựng được tổng theo tháng`);
+    return { ngay: x.ngay };
+  });
+}
+
 function bangTongHop(bl: readonly DonBanLe[], ws: readonly DonWs[]): (string | number)[][] {
-  const kBl = khoiThang(bl), kWs = khoiThang(ws);
+  const kBl = khoiThang(ngayDu(bl)), kWs = khoiThang(ngayDu(ws));
   const moiKy = [...new Set([...kBl.keys(), ...kWs.keys()])].sort();
-  const q = (tab: string) => `'${tab.replace(/'/g, "''")}'`;
+  const q = nhayTab;
   const dong: (string | number)[][] = [[...COT_TH]];
   moiKy.forEach((k, i) => {
     const h = i + 2;
@@ -181,116 +156,6 @@ const GHI_CHU: readonly string[] = [
   'Các kỳ từ 7/2026 trở đi nằm ở tab 8.26 và 9.26, chạy trên hệ thống.',
 ];
 
-async function ghiTab(
-  sheetId: string, ten: string,
-  dau: readonly string[], hang: (string | number)[][],
-  cotTien: readonly number[], cotNgay: number | null, tong: boolean, ghiChu: readonly string[],
-  kieu: 'RAW' | 'USER_ENTERED', cotChu: readonly number[] = [],
-): Promise<string> {
-  const meta = await goiSheets(sheetId, '?fields=sheets.properties(sheetId,title)');
-  const cu = (meta.sheets as { properties: { sheetId: number; title: string } }[])
-    .find((s) => s.properties.title === ten)?.properties.sheetId;
-  if (cu != null) {
-    await goiSheets(sheetId, ':batchUpdate', { method: 'POST',
-      body: JSON.stringify({ requests: [{ deleteSheet: { sheetId: cu } }] }) });
-  }
-  const them = await goiSheets(sheetId, ':batchUpdate', { method: 'POST',
-    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: ten } } }] }) });
-  const idTab = ((them.replies as { addSheet: { properties: { sheetId: number } } }[])[0]).addSheet.properties.sheetId;
-
-  /* Locale và định dạng cột ngày đặt TRƯỚC khi ghi: sổ mặc định `en_US` đọc "03/07" thành 7
-   * tháng 3, và cột không có định dạng ngày thì serial hiện ra như 46209. */
-  const truoc: unknown[] = [
-    { updateSpreadsheetProperties: { properties: { locale: 'vi_VN' }, fields: 'locale' } },
-  ];
-  if (cotNgay != null) {
-    truoc.push({ repeatCell: {
-      range: { sheetId: idTab, startRowIndex: 1, startColumnIndex: cotNgay, endColumnIndex: cotNgay + 1 },
-      cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd/mm/yyyy' } } },
-      fields: 'userEnteredFormat.numberFormat' } });
-  }
-  /* Cột CHỮ phải ép định dạng TEXT trước khi ghi, nếu không `USER_ENTERED` đoạt lấy nó: locale
-   * `vi_VN` đọc "Tháng 7/2025" thành NGÀY và lưu serial 45839 — nhìn vẫn đúng vì Sheets giữ
-   * mặt hiện, nhưng ai đổi định dạng cột là lộ ra số. Mắc đúng lỗi này lúc đẩy 19/10/2026. */
-  for (const c of cotChu) {
-    truoc.push({ repeatCell: {
-      range: { sheetId: idTab, startColumnIndex: c, endColumnIndex: c + 1 },
-      cell: { userEnteredFormat: { numberFormat: { type: 'TEXT' } } },
-      fields: 'userEnteredFormat.numberFormat' } });
-  }
-  await goiSheets(sheetId, ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: truoc }) });
-
-  /* Bảng chi tiết ghi RAW: mã tracking là chuỗi 12 chữ số, để Sheets tự đoán kiểu thì nó thành
-   * SỐ và hiện ra 8,76409E+11 — mất luôn khả năng tra cứu. Bảng tổng hợp thì ngược lại, ghi
-   * USER_ENTERED vì mọi ô số của nó là `=SUM(...)` — RAW sẽ biến công thức thành chữ. */
-  await goiSheets(sheetId, `/values/${encodeURIComponent(ten)}!A1?valueInputOption=${kieu}`, {
-    method: 'PUT', body: JSON.stringify({ values: [[...dau], ...hang] }),
-  });
-
-  let hangCuoi = hang.length + 1;
-  if (tong) {
-    hangCuoi = hang.length + 2;
-    await goiSheets(sheetId, `/values/${encodeURIComponent(ten)}!A${hangCuoi}?valueInputOption=USER_ENTERED`, {
-      method: 'PUT', body: JSON.stringify({ values: [dongTong(dau.length, cotTien, hang.length)] }),
-    });
-  }
-  if (ghiChu.length > 0) {
-    await goiSheets(sheetId, `/values/${encodeURIComponent(ten)}!A${hangCuoi + 2}?valueInputOption=RAW`, {
-      method: 'PUT', body: JSON.stringify({ values: ghiChu.map((x) => [x]) }),
-    });
-  }
-
-  const yc: unknown[] = [
-    { updateSheetProperties: {
-      properties: { sheetId: idTab, gridProperties: { frozenRowCount: 1, frozenColumnCount: 2 } },
-      fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount' } },
-    { repeatCell: {
-      range: { sheetId: idTab, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: dau.length },
-      cell: { userEnteredFormat: {
-        backgroundColor: { red: 0.12, green: 0.22, blue: 0.39 },
-        horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP',
-        textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
-      } },
-      fields: 'userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,wrapStrategy,textFormat)' } },
-    ...cotTien.map((c) => ({ repeatCell: {
-      range: { sheetId: idTab, startRowIndex: 1, endRowIndex: hangCuoi, startColumnIndex: c, endColumnIndex: c + 1 },
-      cell: { userEnteredFormat: { numberFormat: { type: 'CURRENCY', pattern: '#,##0" đ"' } } },
-      fields: 'userEnteredFormat.numberFormat' } })),
-    { repeatCell: {
-      range: { sheetId: idTab, startRowIndex: hangCuoi - 1, endRowIndex: hangCuoi, startColumnIndex: 0, endColumnIndex: dau.length },
-      cell: { userEnteredFormat: {
-        backgroundColor: { red: 1, green: 0.9490196, blue: 0.8 },
-        textFormat: { bold: true },
-        borders: { top: { style: 'SOLID', width: 2 } },
-      } },
-      fields: 'userEnteredFormat(backgroundColor,textFormat,borders)' } },
-    { autoResizeDimensions: {
-      dimensions: { sheetId: idTab, dimension: 'COLUMNS', startIndex: 0, endIndex: dau.length } } },
-  ];
-  await goiSheets(sheetId, ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: yc }) });
-  return `${hang.length} dòng${tong ? ' + dòng tổng' : ''}`;
-}
-
-/**
- * Xếp tab về đúng thứ tự thời gian, SAU khi cả ba tab đã ghi xong.
- *
- * Vì sao tách khỏi lúc tạo tab: ô của tab tổng hợp là `=SUM('Bán lẻ ...'!T2:T3)`, và Google
- * chốt tham chiếu chéo NGAY LÚC GHI — ghi tổng hợp trước khi tab chi tiết tồn tại thì mọi ô
- * thành `#REF!` vĩnh viễn, không tự lành khi tab kia xuất hiện sau. Lần đẩy đầu 19/10/2026 mắc
- * đúng lỗi đó. Nên: ghi chi tiết trước, tổng hợp sau, rồi mới xếp chỗ.
- */
-async function xepTab(sheetId: string, thuTu: readonly string[]): Promise<void> {
-  for (let i = 0; i < thuTu.length; i++) {
-    const meta = await goiSheets(sheetId, '?fields=sheets.properties(sheetId,title)');
-    const id = (meta.sheets as { properties: { sheetId: number; title: string } }[])
-      .find((x) => x.properties.title === thuTu[i])?.properties.sheetId;
-    if (id == null) continue;
-    await goiSheets(sheetId, ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [
-      { updateSheetProperties: { properties: { sheetId: id, index: i }, fields: 'index' } },
-    ] }) });
-  }
-}
-
 async function main(): Promise<void> {
   const d = JSON.parse(readFileSync(NGUON, 'utf8')) as { banLe: DonBanLe[]; wholeSale: DonWs[]; chot: string };
   const bl = d.banLe, ws = d.wholeSale;
@@ -322,10 +187,14 @@ async function main(): Promise<void> {
   }
 
   console.log('');
-  console.log(`✓ ${TAB_BL}: ${await ghiTab(dt.sheetId, TAB_BL, COT_BL, hangBanLe(bl), TIEN_BL, NGAY_BL, true, [], 'RAW')}`);
-  console.log(`✓ ${TAB_WS}: ${await ghiTab(dt.sheetId, TAB_WS, COT_WS, hangWs(ws), TIEN_WS, NGAY_WS, true, [], 'RAW')}`);
-  console.log(`✓ ${TAB_TH}: ${await ghiTab(dt.sheetId, TAB_TH, COT_TH, th.slice(1), TIEN_TH, null, false, GHI_CHU, 'USER_ENTERED', [0])}`);
-  await xepTab(dt.sheetId, [TAB_TH, TAB_BL, TAB_WS]);
+  /* Tab tổng hợp ghi SAU hai tab chi tiết: ô của nó tham chiếu chéo sang chúng, và Google chốt
+   * tham chiếu ngay lúc ghi — xem bẫy 1 trong `day-tab-lich-su.ts`. */
+  const tabs: TabLichSu[] = [
+    { ten: TAB_BL, dau: COT_BL, hang: hangBanLe(bl), cotTien: TIEN_BL, cotNgay: NGAY_BL, tong: true, kieu: 'RAW' },
+    { ten: TAB_WS, dau: COT_WS, hang: hangWs(ws), cotTien: TIEN_WS, cotNgay: NGAY_WS, tong: true, kieu: 'RAW' },
+    { ten: TAB_TH, dau: COT_TH, hang: th.slice(1), cotTien: TIEN_TH, cotChu: [0], tong: false, kieu: 'USER_ENTERED', ghiChu: GHI_CHU },
+  ];
+  await dayLoatTab(dt.sheetId, tabs, [TAB_TH, TAB_BL, TAB_WS], (x) => console.log(x));
   console.log('✓ đã xếp 3 tab lên đầu sổ, trước 8.26');
   console.log(`\nXong. https://docs.google.com/spreadsheets/d/${dt.sheetId}/edit`);
   process.exit(0);

@@ -1,0 +1,70 @@
+{
+ "brand": "mirer",
+ "chot": "2026-10-19",
+ "don": [
+  {
+   "ma": "26-INSLG-SV-0467",
+   "ngay": "2026-03-05",
+   "brandRef": "MIRER186",
+   "hang": "DHL",
+   "tracking": "6495730463",
+   "nuocRaw": "Saudi Arabia",
+   "nuoc": "SA",
+   "nhan": "CAZORINA TRADING EST",
+   "canKg": 19,
+   "giao": "Delivery Completed",
+   "cuocTinh": 7288629.6,
+   "thuVnd": 10225800.627999999,
+   "vonVnd": 8640524
+  },
+  {
+   "ma": "26-INSLG-SV-0463",
+   "ngay": "2026-03-06",
+   "brandRef": "MIRER185",
+   "hang": "DHL",
+   "tracking": "7215518505",
+   "nuocRaw": "Saudi Arabia",
+   "nuoc": "SA",
+   "nhan": "Corset Boutique",
+   "canKg": 24,
+   "giao": "Delivery Completed",
+   "cuocTinh": 8578424.4,
+   "thuVnd": 13053501.842,
+   "vonVnd": 11467685
+  },
+  {
+   "ma": "26-INSLG-SV-0572",
+   "ngay": "2026-04-28",
+   "brandRef": "KSA & UAE WholeSale",
+   "hang": "FEDEX",
+   "tracking": "871146060358",
+   "nuocRaw": "United Arab Emirates",
+   "nuoc": "AE",
+   "nhan": "Janelle Cordero",
+   "canKg": 0.1,
+   "giao": "Delivery Completed",
+   "cuocTinh": 0,
+   "thuVnd": 77270,
+   "vonVnd": 775174,
+   "giaChuaDu": true
+  },
+  {
+   "ma": "26-INSLG-SV-0627",
+   "ngay": "2026-05-12",
+   "brandRef": "MR-GLO20P-OUNASS",
+   "hang": "FEDEX",
+   "tracking": "871633946216",
+   "nuocRaw": "UAE",
+   "nuoc": "AE",
+   "nhan": "Ounass - UAE",
+   "canKg": 1,
+   "giao": "Delivery Completed",
+   "cuocTinh": 0,
+   "thuVnd": 123220,
+   "vonVnd": 1127519,
+   "giaChuaDu": true,
+   "maSms": "26-INSLG-SV-0116",
+   "thuSms": 1526913
+  }
+ ]
+}
