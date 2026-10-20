@@ -4,7 +4,7 @@
  * Trigger đọc danh tính bằng `current_setting('app.tac_nhan_id', true)` và
  * `current_setting('app.tac_nhan_nhan', true)`. Hàm này là chỗ DUY NHẤT đặt hai biến đó.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { idTacNhan, nhanTacNhan, type TacNhan } from './tac-nhan';
 
@@ -34,10 +34,22 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  */
 export async function ghiVoi<R>(t: TacNhan, fn: (tx: Tx) => Promise<R>): Promise<R> {
   return db.transaction(async (tx) => {
-    // Rỗng → trigger `nullif(…, '')` biến thành NULL: người thì không có nhãn máy, máy
-    // thì không có id người. Một lệnh cho cả hai biến, bớt một vòng tới CSDL.
-    await tx.execute(sql`SELECT set_config('app.tac_nhan_id', ${idTacNhan(t)}, true),
-                                set_config('app.tac_nhan_nhan', ${nhanTacNhan(t)}, true)`);
+    await tx.execute(cauDatDanhTinh(t));
     return fn(tx);
   });
+}
+
+/**
+ * Câu SQL đặt danh tính — tách riêng và THUẦN để `ghi-voi.test.ts` ghim được hai điều mà
+ * chú thích ở trên không ghim nổi: tham số thứ ba của **cả hai** lời gọi `set_config` là
+ * `true`, và giá trị đi qua **tham số** chứ không nối vào chuỗi.
+ *
+ * Chú thích không đỏ khi ai đó sửa `true` thành `false`; test thì đỏ. Đây là hàng rào thật
+ * cho cái bẫy "sửa cho gọn" nói ở trên.
+ *
+ * Một câu cho cả hai biến, bớt được một vòng tới CSDL. Rỗng → trigger `nullif(…, '')` biến
+ * thành NULL: người thì không có nhãn máy, máy thì không có id người.
+ */
+export function cauDatDanhTinh(t: TacNhan): SQL {
+  return sql`SELECT set_config('app.tac_nhan_id', ${idTacNhan(t)}, true), set_config('app.tac_nhan_nhan', ${nhanTacNhan(t)}, true)`;
 }
