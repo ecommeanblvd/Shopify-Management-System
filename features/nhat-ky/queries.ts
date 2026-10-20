@@ -12,6 +12,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import { QUYEN_DO_NHAY } from './che-gia-tri';
 import { gomKhoi, type DongTho, type KhoiNhatKy } from './gom-dong';
+import type { Tx } from './ghi-voi';
 
 /**
  * Trần số DÒNG THÔ mỗi lượt đọc. Một lượt bấm sinh 3-4 dòng nên 500 dòng ≈ 150 hành động
@@ -68,8 +69,11 @@ type HangTho = {
 };
 
 /** Nhãn MÁY thắng tên người: dòng của cron không có id người, và dòng của người không có
- *  nhãn máy (xem `nhanTacNhan`), nên hai ô này không bao giờ cùng có giá trị. */
-function thanhDongTho(r: HangTho): DongTho {
+ *  nhãn máy (xem `nhanTacNhan`), nên hai ô này không bao giờ cùng có giá trị.
+ *
+ *  Xuất ra ngoài cùng `docDongCua*`: ai chạy một trong hai câu đó trên một `tx` phải đi
+ *  qua ĐÚNG phép đổi này, không tự nhập tên người theo cách khác. */
+export function thanhDongTho(r: HangTho): DongTho {
   return {
     bang: r.bang,
     banGhiId: r.banGhiId,
@@ -81,6 +85,22 @@ function thanhDongTho(r: HangTho): DongTho {
     luc: r.luc,
   };
 }
+
+/** `db`, hoặc một giao dịch ĐANG MỞ. */
+type NguonDoc = typeof db | Tx;
+
+/* ⚠ HAI HÀM `docDongCua*` DƯỚI ĐÂY KHÔNG GÁC QUYỀN VÀ KHÔNG CHE GIÁ TRỊ.
+ *
+ * Chúng là SQL trần. Hàng rào phân quyền của nhật ký gồm hai lớp — `quyenNguoiXem()`
+ * (ai được mở) và `cheNeuCan` qua `gomKhoi` (ô nào được thấy) — và cả hai nằm ở
+ * `nhatKyCuaBanGhi` / `nhatKyCuaBang`, KHÔNG ở đây. Một `page.tsx` gọi thẳng vào
+ * `docDongCua*` là bỏ qua cả hai lớp, và dòng nhật ký nhìn vẫn bình thường nên không ai
+ * nghi ngờ gì để đi kiểm (xem `che-gia-tri.ts`: nhật ký chứa bản sao của chính những ô mà
+ * `orders.cogs:view` / `ship_ho:view` đang cố ý chặn).
+ *
+ * Người gọi được phép: hai hàm `nhatKy*` ngay dưới đây, và `scripts/nhat-ky-kiem-duong.ts`
+ * (chạy tay, không có người xem nào để gác quyền cho). Thêm người gọi thứ tư thì phải đi
+ * qua `nhatKy*`. */
 
 /**
  * Lịch sử của MỘT bản ghi — tab "Lịch sử" trên màn chi tiết.
@@ -100,7 +120,21 @@ export async function nhatKyCuaBanGhi(
   gioiHan?: number,
 ): Promise<KhoiNhatKy[]> {
   const quyen = await quyenNguoiXem();
-  const rows = await db.select(COT)
+  const rows = await docDongCuaBanGhi(db, bang, banGhiId, gioiHan);
+  return gomKhoi(rows.map(thanhDongTho), quyen);
+}
+
+/**
+ * Chính câu SQL mà `nhatKyCuaBanGhi` chạy — cùng lý do tách như `docDongCuaBang` bên dưới:
+ * `scripts/nhat-ky-kiem-duong.ts` phải đọc được trong một `BEGIN … ROLLBACK`.
+ *
+ * Tách RIÊNG câu này dù đã có `docDongCuaBang`: nhánh `OR` cuốn dòng con lên bản ghi cha là
+ * chỗ dễ sai nhất của cả spec §6 (nó trả lời "ai QC lô nhập kho hôm nay"), và nó không có
+ * test nào — `vitest` không chạm được SQL. Không tách thì chỗ đó không có cách nào được
+ * chạy thử trước khi CEO mở màn hình.
+ */
+export function docDongCuaBanGhi(nguon: NguonDoc, bang: string, banGhiId: string, gioiHan?: number) {
+  return nguon.select(COT)
     .from(schema.nhatKyThayDoi)
     .leftJoin(schema.user, eq(schema.user.id, schema.nhatKyThayDoi.tacNhanId))
     .where(or(
@@ -109,7 +143,6 @@ export async function nhatKyCuaBanGhi(
     ))
     .orderBy(desc(schema.nhatKyThayDoi.luc), asc(schema.nhatKyThayDoi.truong))
     .limit(gioiHanAnToan(gioiHan));
-  return gomKhoi(rows.map(thanhDongTho), quyen);
 }
 
 /** Bộ lọc của trang nhật ký cả bảng. Ô nào bỏ trống thì không lọc theo ô đó. */
@@ -132,18 +165,36 @@ export interface LocNhatKy {
  */
 export async function nhatKyCuaBang(bang: string, loc: LocNhatKy = {}): Promise<KhoiNhatKy[]> {
   const quyen = await quyenNguoiXem();
+  const rows = await docDongCuaBang(db, bang, loc);
+  return gomKhoi(rows.map(thanhDongTho), quyen);
+}
+
+/**
+ * Chính câu SQL mà `nhatKyCuaBang` chạy, tách ra để chạy được trên một `tx` đang mở.
+ *
+ * VÌ SAO cần tách: hệ thống chỉ có đăng nhập Google, nên tới 20/10/2026 chưa ai mở được hai
+ * màn hình nhật ký bằng trình duyệt để soát. Thay cho soát pixel,
+ * `scripts/nhat-ky-kiem-duong.ts` sửa thật một ô trong `BEGIN … ROLLBACK` rồi đọc lại — mà
+ * thay đổi chưa commit thì CHỈ giao dịch đó thấy, nên câu đọc phải chạy trên `tx`.
+ *
+ * Và nó phải là ĐÚNG câu này, không phải một câu viết lại cho script: một bản thứ hai thì
+ * lượt kiểm chứng đi kiểm chính nó, còn câu mà màn hình dùng thật không ai chạm tới.
+ *
+ * CỐ Ý không nhận quyền và không gọi `quyenNguoiXem()`: đây chỉ là SQL. Phần phân quyền
+ * nằm nguyên ở `nhatKyCuaBang` — chỗ duy nhất màn hình gọi.
+ */
+export function docDongCuaBang(nguon: NguonDoc, bang: string, loc: LocNhatKy = {}) {
   const dieuKien = [eq(schema.nhatKyThayDoi.bang, bang)];
   if (loc.tacNhanId) dieuKien.push(eq(schema.nhatKyThayDoi.tacNhanId, loc.tacNhanId));
   if (loc.truong) dieuKien.push(eq(schema.nhatKyThayDoi.truong, loc.truong));
   if (loc.tuNgay) dieuKien.push(gte(schema.nhatKyThayDoi.luc, loc.tuNgay));
   if (loc.denNgay) dieuKien.push(lte(schema.nhatKyThayDoi.luc, loc.denNgay));
-  const rows = await db.select(COT)
+  return nguon.select(COT)
     .from(schema.nhatKyThayDoi)
     .leftJoin(schema.user, eq(schema.user.id, schema.nhatKyThayDoi.tacNhanId))
     .where(and(...dieuKien))
     .orderBy(desc(schema.nhatKyThayDoi.luc), asc(schema.nhatKyThayDoi.truong))
     .limit(gioiHanAnToan(loc.gioiHan));
-  return gomKhoi(rows.map(thanhDongTho), quyen);
 }
 
 /**
