@@ -52,7 +52,7 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
       <button
         type="button"
         onClick={() => { setTab('issues'); setOpen(true); }}
-        className="rounded border border-border px-3 py-1 text-sm hover:bg-muted"
+        className="inline-flex h-9 items-center rounded border border-border px-3 text-sm hover:bg-muted"
       >
         Vấn đề &amp; Report
         {openIssues.length > 0 && (
@@ -64,7 +64,7 @@ export function ReconcileIssuesModal({ openIssues, reports, carrierErrors = [], 
       <button
         type="button"
         onClick={() => { setTab('carrier'); setOpen(true); }}
-        className="rounded border border-border px-3 py-1 text-sm hover:bg-muted"
+        className="inline-flex h-9 items-center rounded border border-border px-3 text-sm hover:bg-muted"
       >
         Đòi NCC
         {disputingCount > 0 && (

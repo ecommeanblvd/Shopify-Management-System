@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { CreditNoteRow, CreditNoteThang } from './CreditNoteCard';
+import { nhanThangCreditNote } from '@/features/carrier-rates/ap/credit-note-nhan';
 
 const tien = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
 
@@ -14,14 +15,43 @@ const tien = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
  * việc chính của trang — xuống dưới màn hình. Chứng từ điều chỉnh chỉ cần nhìn con số, khi nào
  * muốn soát từng tờ mới mở ra.
  */
-export function CreditNoteDetailDialog({ rows, tongThang }: { rows: CreditNoteRow[]; tongThang: CreditNoteThang[] }) {
+export function CreditNoteDetailDialog({ rows, tongThang, gon = false }: {
+  rows: CreditNoteRow[];
+  tongThang: CreditNoteThang[];
+  /**
+   * Dáng CHIP một dòng, để đứng cùng hàng với mấy chip "cần chú ý" ở màn Đối soát ship
+   * (CEO 20/10/2026 — bảng bị tụt quá sâu). Chỉ đổi cái nút bấm: nội dung modal, các con số
+   * và trạng thái disabled khi chưa có chứng từ giữ y nguyên. Trang Hoá đơn carrier vẫn
+   * dùng dáng thẻ hai dòng mặc định.
+   */
+  gon?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const moiNhat = tongThang[0];
-  const nhanThang = (t: CreditNoteThang) =>
-    `${t.thang}: thu hồi ${tien(t.tong)} (${t.n})${t.tongDebit ? ` · trả thêm ${tien(t.tongDebit)} (${t.nDebit})` : ''}`;
+  const nhanThang = nhanThangCreditNote;
 
   return (
     <>
+      {gon ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={rows.length === 0}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-background"
+        >
+          <span className="font-medium">Hoá đơn điều chỉnh</span>
+          {rows.length === 0 ? (
+            <span className="text-muted-foreground">chưa nhập chứng từ nào</span>
+          ) : (
+            <span className="tabular-nums">
+              {moiNhat && <span className="font-medium text-emerald-600 dark:text-emerald-400">{nhanThang(moiNhat)}</span>}
+              {tongThang.length > 1 && <> · {tongThang.length - 1} tháng trước</>}
+              {' · '}{rows.length} chứng từ
+            </span>
+          )}
+          {rows.length > 0 && <ChevronRight className="size-3.5 shrink-0 opacity-60" />}
+        </button>
+      ) : (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -46,6 +76,7 @@ export function CreditNoteDetailDialog({ rows, tongThang }: { rows: CreditNoteRo
           </span>
         )}
       </button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[85vh] overflow-y-auto">

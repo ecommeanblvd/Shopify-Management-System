@@ -2,7 +2,6 @@ import { headers } from 'next/headers';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { kienCuaChungTu } from '@/features/shipments/credit-note-kien';
-import { CreditNoteCard } from '@/components/carrier-rates/CreditNoteCard';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -15,11 +14,13 @@ import { listInternalErrors, summariseInternalErrors } from '@/features/shipment
 import { listUnmatchedBilledTracking, summariseUnmatched } from '@/features/shipments/unmatched-billed';
 import { issueInfo } from '@/components/shipping-reconcile/issue-label';
 import { ReconcileTable } from '@/components/shipping-reconcile/ReconcileTable';
-import { UnmatchedBilledBanner } from '@/components/shipping-reconcile/UnmatchedBilledBanner';
-import { GiaoTruocNgayGuiBanner } from '@/components/shipping-reconcile/GiaoTruocNgayGuiBanner';
+import { DaiCanChuY } from '@/components/shipping-reconcile/DaiCanChuY';
+import { ReconcileIssuesModal, type OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
+import { ExportCsvMenu } from '@/components/shipping-reconcile/ExportCsvMenu';
+import { NutDongBoLark } from '@/components/shipping-reconcile/NutDongBoLark';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 import { listGiaoTruocNgayGui, tomTatGiaoTruoc } from '@/features/shipments/giao-truoc-ngay-gui';
 import { getLatestLarkRun } from '@/features/lark/sync';
-import type { OpenIssue } from '@/components/shipping-reconcile/ReconcileIssuesModal';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,10 +108,36 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
     thang: r.thang, tong: Number(r.tong), n: Number(r.n), tongDebit: Number(r.tong_debit), nDebit: Number(r.n_debit),
   }));
 
+  const laRows = unmatchedBilled.filter((r) => !r.shipHoCode && !r.returnOfOrderNumber);
+
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Đối soát phí ship</h1>
+    /* `space-y-3`, KHÔNG phải `space-y-6`: bảy khối xếp dọc với 24px giữa mỗi khối là 144px
+       khoảng trắng trước khi thấy bảng — màn này là màn đông số nhất hệ thống, chỗ làm việc
+       phải lên gần đầu (CEO 20/10/2026). */
+    <div className="space-y-3 p-6">
+      {/* Khuôn header chung của mọi module — xem ghi chú ở `f/dong-hang/page.tsx`: tiêu đề
+          bên trái, nhóm nút bên phải, nút Nhật ký là phần tử CUỐI.
+          Nhóm nút này trước nằm ở hàng riêng dưới bộ lọc; đưa lên đây bỏ được trọn một hàng
+          mà không mất nút nào.
+
+          Khác 5 module kia một chỗ: dòng mô tả nằm DƯỚI cả hàng, không nằm trong cột trái.
+          Mô tả màn này dài (nó còn mang giờ engine tính + link "Tính lại"), để chung cột
+          trái thì nó chiếm hết bề ngang và đẩy nhóm nút xuống một hàng nữa — đúng thứ vừa
+          gỡ. Nút Nhật ký vẫn ở y nguyên chỗ cũ: góc phải, thẳng hàng với `<h1>`. */}
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Đối soát phí ship</h1>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ReconcileIssuesModal openIssues={openIssues} reports={reports}
+              carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups}
+              internalErrorGroups={internalErrorGroups} />
+            <ExportCsvMenu carrier={filters.carrier} country={filters.country} />
+            <NutDongBoLark />
+            {/* Cuối nhóm nút bên phải header — cùng vị trí như 5 module kia (xem ghi chú ở
+                `f/dong-hang/page.tsx`). Bảng của màn này là `shipments`. */}
+            <NutNhatKy bang="shipments" />
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground">
           So giá hóa đơn carrier (billed) với giá hệ thống tính, theo từng đơn và từng khoản phí.
           {' '}Số liệu engine tính lúc {computedAt.toLocaleTimeString('vi-VN')}
@@ -118,19 +145,23 @@ export default async function ShippingReconcilePage({ searchParams }: { searchPa
           <a href="/f/shipping-reconcile?refresh=1" className="underline hover:text-foreground">Tính lại</a>
         </p>
       </div>
-      <GiaoTruocNgayGuiBanner rows={giaoTruoc} tomTat={tomTatGiaoTruoc(giaoTruoc)} />
-      <CreditNoteCard rows={creditNotes} tongThang={creditNoteThang} />
-      <UnmatchedBilledBanner
+
+      {/* Ba khối cũ (banner giao-trước, thẻ hoá đơn điều chỉnh, dải tracking chưa khớp) gộp
+          thành MỘT hàng chip: cùng bản chất "việc đang chờ xử lý", nay mặc định thu lại. */}
+      <DaiCanChuY
         lark={latestLarkRun}
-        rows={unmatchedBilled.filter((r) => !r.shipHoCode && !r.returnOfOrderNumber)}
-        summary={summariseUnmatched(unmatchedBilled.filter((r) => !r.shipHoCode && !r.returnOfOrderNumber))}
+        rows={laRows}
+        summary={summariseUnmatched(laRows)}
         shipHoRows={unmatchedBilled.filter((r) => r.shipHoCode)}
         returnRows={unmatchedBilled.filter((r) => r.returnOfOrderNumber)}
+        giaoTruoc={giaoTruoc}
+        tomTatGiaoTruoc={tomTatGiaoTruoc(giaoTruoc)}
+        creditNotes={creditNotes}
+        creditNoteThang={creditNoteThang}
       />
       <ReconcileTable
         rows={pageRows} summary={summary} totalPages={totalPages} safePage={safePage} totalFiltered={filteredRows.length}
-        filters={filters} hangCo={hangCo} openIssues={openIssues}
-        reports={reports} carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups} internalErrorGroups={internalErrorGroups}
+        filters={filters} hangCo={hangCo}
         pdfMap={pdfMap} preBilledCounts={preBilledCounts}
       />
     </div>

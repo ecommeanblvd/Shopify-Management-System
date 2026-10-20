@@ -9,12 +9,6 @@ import { tenHang } from '@/lib/carriers/ten-hang';
 import { isoToCountryName } from '@/features/shipments/country-name-to-iso';
 import { ReconcileDetailPanel } from './ReconcileDetailPanel';
 import { issueInfo } from './issue-label';
-import { ReconcileIssuesModal, type OpenIssue } from './ReconcileIssuesModal';
-import type { IssueReportRecord } from '@/features/shipments/issue-report-actions';
-import type { CarrierErrorRow, CarrierErrorGroup } from '@/features/shipments/carrier-error-report';
-import type { InternalErrorGroup } from '@/features/shipments/internal-error-report';
-import { syncLarkPacksAction } from '@/features/lark/actions';
-import { ExportCsvMenu } from './ExportCsvMenu';
 
 const fmtVnd = (n: number | null): string =>
   n === null
@@ -94,11 +88,6 @@ interface Props {
   safePage: number;
   totalFiltered: number;
   filters: ReconcileFilters;
-  openIssues: OpenIssue[];
-  reports: IssueReportRecord[];
-  carrierErrors: CarrierErrorRow[];
-  carrierErrorGroups: CarrierErrorGroup[];
-  internalErrorGroups: InternalErrorGroup[];
   pdfMap: Record<string, { accountId: string; billId: string }>;
   /** Số dòng tiền-billed (tính trên toàn bộ filteredRows phía server). */
   preBilledCounts: { awaiting_measurement: number; awaiting_billed: number };
@@ -116,12 +105,11 @@ function deltaDirClass(r: ReconcileViewRow): string {
     : 'text-red-600 dark:text-red-400';
 }
 
-export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, hangCo, openIssues, reports, carrierErrors, carrierErrorGroups, internalErrorGroups, pdfMap, preBilledCounts }: Props) {
+export function ReconcileTable({ rows, summary, totalPages, safePage, totalFiltered, filters, hangCo, pdfMap, preBilledCounts }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [larkResult, setLarkResult] = useState<string | null>(null);
   // Ô text: state cục bộ để gõ mượt; đẩy lên URL sau debounce 300ms (tránh
   // round-trip server mỗi ký tự). Dropdown/pager đẩy URL ngay.
   const [country, setCountry] = useState(filters.country);
@@ -142,25 +130,26 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
   }
 
   return (
-    <div className="space-y-4">
-      {/* Summary bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="Σ Billed" value={`${fmtVnd(summary.billed)} đ`} />
-        <Stat label="Σ Hệ thống" value={`${fmtVnd(summary.engine)} đ`} />
-        <Stat label="Σ Lệch" value={`${fmtVnd(summary.delta)} đ`} sub={`${summary.pct.toFixed(2)}%`} />
-        <Stat label="Đơn lệch >10%" value={String(summary.over10)} />
-        <Stat label="Chưa đối soát" value={String(summary.pendingCount)} />
+    <div className="space-y-3">
+      {/* Dải số MỘT HÀNG — trước là năm thẻ lớn `grid` + một hàng riêng cho "chờ cân đo /
+          chờ billed", cộng lại ~110px chỉ để nói bảy con số (CEO 20/10/2026: "chỗ cần làm
+          việc bị tụt hẳn xuống dưới"). Vẫn đủ bảy con số và nhãn của chúng, bỏ khung thẻ và
+          phần đệm. Σ Lệch to hơn bốn cái kia vì đó là con số người ta soi. */}
+      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 rounded-lg border border-border px-3 py-2">
+        <So nhan="Σ Billed" giaTri={`${fmtVnd(summary.billed)} đ`} />
+        <So nhan="Σ Hệ thống" giaTri={`${fmtVnd(summary.engine)} đ`} />
+        <So nhan="Σ Lệch" giaTri={`${fmtVnd(summary.delta)} đ`} sub={`${summary.pct.toFixed(2)}%`} noiBat />
+        <So nhan="Đơn lệch >10%" giaTri={String(summary.over10)} />
+        <So nhan="Chưa đối soát" giaTri={String(summary.pendingCount)} />
+        {/* Hai số tiền-billed: nhập vào dải số chứ không chiếm một hàng riêng. Giữ dáng mờ
+            vì đây là đơn CHƯA có gì để đối soát, không phải số để soi. */}
+        {preBilledCounts.awaiting_measurement > 0 && (
+          <span className="text-xs text-muted-foreground">{preBilledCounts.awaiting_measurement} chờ cân đo</span>
+        )}
+        {preBilledCounts.awaiting_billed > 0 && (
+          <span className="text-xs text-muted-foreground">{preBilledCounts.awaiting_billed} chờ billed</span>
+        )}
       </div>
-      {(preBilledCounts.awaiting_measurement > 0 || preBilledCounts.awaiting_billed > 0) && (
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          {preBilledCounts.awaiting_measurement > 0 && (
-            <span>{preBilledCounts.awaiting_measurement} chờ cân đo</span>
-          )}
-          {preBilledCounts.awaiting_billed > 0 && (
-            <span>{preBilledCounts.awaiting_billed} chờ billed</span>
-          )}
-        </div>
-      )}
 
       {/* Filters */}
       <div className={`flex flex-wrap items-center gap-2 text-sm ${isPending ? 'opacity-60' : ''}`}>
@@ -185,37 +174,6 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
         <input value={country} onChange={(e) => { setCountry(e.target.value); debouncedPush({ country: e.target.value }); }} placeholder="Nước (vd SA)" className="w-28 rounded border border-border bg-background px-2 py-1" />
         <input value={minPct} onChange={(e) => { setMinPct(e.target.value); debouncedPush({ minPct: e.target.value }); }} placeholder="Lệch ≥ %" className="w-24 rounded border border-border bg-background px-2 py-1" />
         <input value={q} onChange={(e) => { setQ(e.target.value); debouncedPush({ q: e.target.value }); }} placeholder="Tìm order / tracking" className="w-48 rounded border border-border bg-background px-2 py-1" />
-        <div className="ml-auto flex items-center gap-2">
-          <ReconcileIssuesModal openIssues={openIssues} reports={reports}
-            carrierErrors={carrierErrors} carrierErrorGroups={carrierErrorGroups}
-            internalErrorGroups={internalErrorGroups} />
-          <ExportCsvMenu carrier={filters.carrier} country={filters.country} />
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => {
-              setLarkResult(null);
-              startTransition(async () => {
-                try {
-                  const r = await syncLarkPacksAction();
-                  setLarkResult(
-                    r.alreadyRunning
-                      ? 'Đang chạy rồi — chờ chút.'
-                      : 'Đã bắt đầu đồng bộ ở nền — bấm "Tính lại" sau ít phút để xem kết quả ở banner Lark.',
-                  );
-                } catch (err) {
-                  setLarkResult(err instanceof Error ? err.message : 'Lỗi đồng bộ');
-                }
-              });
-            }}
-            className="rounded border border-border px-3 py-1 hover:bg-muted disabled:opacity-40"
-          >
-            {isPending ? 'Đang kích hoạt…' : 'Đồng bộ Lark'}
-          </button>
-          {larkResult !== null && (
-            <span className="text-xs text-muted-foreground">{larkResult}</span>
-          )}
-        </div>
       </div>
 
       {/* Table */}
@@ -275,15 +233,20 @@ export function ReconcileTable({ rows, summary, totalPages, safePage, totalFilte
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+/** Một con số trong dải số: nhãn nhỏ + giá trị, nằm ngang, không khung thẻ. */
+function So({ nhan, giaTri, sub, noiBat = false }: {
+  nhan: string; giaTri: string; sub?: string;
+  /** Σ Lệch — to và đậm hơn, vì đó là con số cả trang này tồn tại để nhìn. */
+  noiBat?: boolean;
+}) {
   return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 whitespace-nowrap font-mono tabular-nums font-semibold">
-        {value}
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{nhan}</span>
+      <span className={`font-mono tabular-nums ${noiBat ? 'text-base font-semibold' : 'text-sm font-medium'}`}>
+        {giaTri}
         {sub && <span className="ml-1 text-xs font-normal text-muted-foreground">({sub})</span>}
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 

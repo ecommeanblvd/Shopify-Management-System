@@ -49,7 +49,10 @@ export function ExportCsvMenu({ carrier, country }: { carrier?: string; country?
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="rounded border border-border px-3 py-1 hover:bg-muted"
+        /* `text-sm` viết THẲNG ở đây: nút giờ đứng ở hàng header, không còn thừa hưởng
+           `text-sm` của hàng bộ lọc như trước — thiếu nó là chữ nhảy lên 16px. `h-9` để cao
+           bằng mấy nút cùng hàng. */
+        className="h-9 rounded border border-border px-3 text-sm hover:bg-muted"
       >
         Export CSV ▾
       </button>
