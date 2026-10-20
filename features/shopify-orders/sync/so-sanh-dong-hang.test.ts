@@ -187,3 +187,86 @@ describe('soSanhDongHang', () => {
     });
   });
 });
+
+/**
+ * I4 của lượt soát cuối: `bangJson` so bằng `JSON.stringify` nên nó phụ thuộc THỨ TỰ KHOÁ,
+ * mà thứ tự khoá của một giá trị đọc lên từ `jsonb` do Postgres quyết (độ dài khoá, rồi
+ * bytewise) — không phải do payload Shopify.
+ */
+describe('bangJson so SÂU, không phụ thuộc thứ tự khoá jsonb', () => {
+  const voi = (soDo: unknown) => ({ ...dongDangCo(), soDo });
+  /**
+   * Phía payload cũng nhận hình dáng TỰ DO trong vài test dưới đây.
+   * `DongHangMoi.soDo` khai `{nhan, giaTri}[]` (mapper hôm nay sinh đúng thế), nhưng cột
+   * CSDL là `jsonb` không ràng buộc và `bangJson` là hàm so JSON chung — nó phải đúng cho
+   * cả object lồng và khoá thiếu, tức những hình dáng mà kiểu của mapper không nói ra được.
+   */
+  const moiVoi = (soDo: unknown) => ({ ...dongMoi(), soDo }) as unknown as DongHangMoi;
+
+  it('cùng nội dung, khoá đảo thứ tự ⇒ KHÔNG đổi', () => {
+    // `jsonb` trả về `{nhan, giaTri}` (nhan ngắn hơn); mapper dựng object literal của nó.
+    const dangCo = voi([{ giaTri: 'Đỏ', nhan: 'Màu' }]);
+    const moi = { ...dongMoi(), soDo: [{ nhan: 'Màu', giaTri: 'Đỏ' }] };
+    expect(soSanhDongHang([dangCo], [moi]).sua).toEqual([]);
+  });
+
+  /**
+   * Ca VỠ của bản cũ: `ghiChu` và `giaTri` CÙNG 6 ký tự, nên `jsonb` sắp bytewise
+   * (`ghiChu` trước `giaTri`) khác thứ tự object literal — `JSON.stringify` ra hai chuỗi
+   * khác nhau và mọi dòng hàng báo "đã đổi" ở mọi lượt đồng bộ.
+   */
+  it('khoá CÙNG ĐỘ DÀI đảo thứ tự vẫn KHÔNG đổi — ca mà so chuỗi làm vỡ', () => {
+    const dangCo = voi([{ nhan: 'Màu', ghiChu: 'x', giaTri: 'Đỏ' }]);
+    const moi = { ...dongMoi(), soDo: [{ nhan: 'Màu', giaTri: 'Đỏ', ghiChu: 'x' }] };
+    expect(soSanhDongHang([dangCo], [moi]).sua).toEqual([]);
+  });
+
+  it('object lồng nhau cũng so sâu', () => {
+    const dangCo = voi([{ nhan: 'A', giaTri: { b: 1, a: 2 } }]);
+    expect(soSanhDongHang([dangCo], [moiVoi([{ giaTri: { a: 2, b: 1 }, nhan: 'A' }])]).sua).toEqual([]);
+  });
+
+  it('object lồng KHÁC một giá trị thì vẫn ra sua', () => {
+    const dangCo = voi([{ nhan: 'A', giaTri: { a: 2, b: 1 } }]);
+    expect(soSanhDongHang([dangCo], [moiVoi([{ nhan: 'A', giaTri: { a: 2, b: 9 } }])]).sua).toHaveLength(1);
+  });
+
+  it('nội dung KHÁC thì vẫn ra sua — so sâu không được nuốt thay đổi thật', () => {
+    const dangCo = voi([{ nhan: 'Màu', giaTri: 'Đỏ' }]);
+    const moi = { ...dongMoi(), soDo: [{ nhan: 'Màu', giaTri: 'Xanh' }] };
+    expect(soSanhDongHang([dangCo], [moi]).sua).toHaveLength(1);
+  });
+
+  it('thiếu/thừa một khoá là đổi', () => {
+    const dangCo = voi([{ nhan: 'Màu', giaTri: 'Đỏ' }]);
+    expect(soSanhDongHang([dangCo], [moiVoi([{ nhan: 'Màu' }])]).sua).toHaveLength(1);
+    expect(soSanhDongHang([voi([{ nhan: 'Màu' }])], [moiVoi([{ nhan: 'Màu', giaTri: 'Đỏ' }])]).sua)
+      .toHaveLength(1);
+  });
+
+  it('object KHÔNG bằng chuỗi, mảng KHÔNG bằng object', () => {
+    expect(soSanhDongHang([voi([{ nhan: 'A', giaTri: { x: 1 } }])],
+      [moiVoi([{ nhan: 'A', giaTri: 'x' }])]).sua).toHaveLength(1);
+    expect(soSanhDongHang([voi({ nhan: 'A' })], [moiVoi([{ nhan: 'A' }])]).sua).toHaveLength(1);
+  });
+
+  // Thứ tự PHẦN TỬ MẢNG là nội dung: đảo hai ô khách nhập là một thay đổi thật.
+  it('đảo thứ tự PHẦN TỬ của mảng LÀ đổi', () => {
+    const dangCo = voi([{ nhan: 'A', giaTri: '1' }, { nhan: 'B', giaTri: '2' }]);
+    const moi = { ...dongMoi(), soDo: [{ nhan: 'B', giaTri: '2' }, { nhan: 'A', giaTri: '1' }] };
+    expect(soSanhDongHang([dangCo], [moi]).sua).toHaveLength(1);
+  });
+
+  /** `null` (dòng cũ, có trước khi cột tồn tại) KHÁC mảng rỗng (khách không nhập ô nào) —
+   *  giữ nguyên nếp của bản cũ. Hệ quả đúng chiều: dòng `null` được ghi lại MỘT lần rồi
+   *  thôi, không phải mỗi lượt đồng bộ. */
+  it('null KHÁC mảng rỗng — ghi lại một lần rồi im, không lặp mỗi lượt', () => {
+    expect(soSanhDongHang([voi(null)], [{ ...dongMoi(), soDo: [] }]).sua).toHaveLength(1);
+    expect(soSanhDongHang([voi([])], [{ ...dongMoi(), soDo: [] }]).sua).toEqual([]);
+  });
+
+  it('số và chuỗi KHÔNG lẫn nhau', () => {
+    expect(soSanhDongHang([voi([{ nhan: 'A', giaTri: 1 }])],
+      [moiVoi([{ nhan: 'A', giaTri: '1' }])]).sua).toHaveLength(1);
+  });
+});

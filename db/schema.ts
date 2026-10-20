@@ -3624,4 +3624,12 @@ export const nhatKyThayDoi = pgTable('nhat_ky_thay_doi', {
   index('nhat_ky_thay_doi_ban_ghi_idx').on(t.bang, t.banGhiId, t.luc.desc()),
   index('nhat_ky_thay_doi_cha_idx').on(t.chaBang, t.chaId, t.luc.desc()),
   index('nhat_ky_thay_doi_bang_luc_idx').on(t.bang, t.luc.desc()),
+  /** `demChuaGanDanhTinh()` — chạy mỗi lượt mở `/f/nhat-ky`. Ba chỉ mục trên đều dẫn đầu
+   *  bằng `bang`/`cha_bang` nên câu đó quét cả bảng (di trú 0211). Điều kiện phải khớp
+   *  đúng từng chữ với câu truy vấn, không thì planner không dùng. */
+  index('nhat_ky_thay_doi_no_danh_tinh_idx').on(t.bang)
+    .where(sql`${t.tacNhanId} IS NULL AND ${t.tacNhanNhan} IS NULL`),
+  /** Lượt dọn 12 tháng (`scripts/nhat-ky-don-cu.ts`) đi từ dòng CŨ NHẤT và không lọc theo
+   *  bảng, nên nó cần `luc` TĂNG DẦN — khác chiều ba chỉ mục trên (di trú 0211). */
+  index('nhat_ky_thay_doi_luc_idx').on(t.luc),
 ]);

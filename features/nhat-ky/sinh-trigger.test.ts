@@ -84,7 +84,10 @@ describe('sinhTrigger', () => {
 
   it('mọi bảng trong CAU_HINH sinh được SQL hợp lệ', () => {
     for (const ch of CAU_HINH) {
-      const sql = sinhTrigger(ch, ['id', ...ch.cot, ...(ch.cotCha ? [ch.cotCha] : [])]);
+      // `cot_duoc_ghi` là một cột THẬT còn lại sau khi trừ: `id` nay cũng nằm trong
+      // `LOAI_TRU_CHUNG`, nên `['id', ...ch.cot]` không còn cột nào cho bảng chế độ `tru`
+      // và `sinhTrigger` đúng ra phải từ chối. Bảng chế độ `cho-phep` bỏ qua cột lạ này.
+      const sql = sinhTrigger(ch, ['id', 'cot_duoc_ghi', ...ch.cot, ...(ch.cotCha ? [ch.cotCha] : [])]);
       expect(sql).toContain(`CREATE TRIGGER nhat_ky_${ch.bang}`);
       expect(sql).toContain(`ON ${ch.bang}`);
     }

@@ -29,7 +29,8 @@ import { ghiVoi, type Tx } from '@/features/nhat-ky/ghi-voi';
 import { docDongCuaBang, docDongCuaBanGhi, thanhDongTho } from '@/features/nhat-ky/queries';
 import { gomKhoi, type KhoiNhatKy } from '@/features/nhat-ky/gom-dong';
 import {
-  catGiaTri, CHE_HIEN, chipGiaTri, kieuTacNhan, LY_DO_CHE, NULL_HIEN,
+  catGiaTri, CHE_HIEN, chipGiaTri, chipThaoTac, hienOThoiGian, kieuTacNhan,
+  LY_DO_CHE, NULL_HIEN,
 } from '@/components/nhat-ky/trinh-bay';
 import { hienNgayGio } from '@/lib/timezone';
 
@@ -44,11 +45,17 @@ const nguoiThamSo = process.argv.find((a) => a.startsWith('--nguoi='))?.slice('-
 const chiecThamSo = process.argv.find((a) => a.startsWith('--chiec='))?.slice('--chiec='.length);
 
 /**
- * CHỈ dùng quyền RỖNG. `goods_receipt_items` không có mặt trong `DO_NHAY` nên mọi cột của
- * nó mở với mọi người (luật 1 của `che-gia-tri.ts`) — quyền rỗng là người xem ÍT quyền
- * nhất, nên thấy được giá trị ở đây nghĩa là ai mở màn nhập kho cũng thấy được.
+ * Quyền của người xem ÍT QUYỀN NHẤT mà vẫn đọc được bảng này.
+ *
+ * `view_fulfillment` chứ không phải danh sách RỖNG (sửa 20/10/2026 cùng C1): `DO_NHAY` nay
+ * CHE MẶC ĐỊNH cả ở mức bảng, và `goods_receipt_items` được khai với `view_fulfillment` —
+ * đúng quyền mà `/f/warehouse` đang gác. Quyền rỗng thì mọi ô ra `•••` và lượt kiểm này
+ * không còn kiểm đường dữ liệu nào cả, chỉ kiểm cái hàng rào.
+ *
+ * `view_fulfillment` là mẫu số chung của cả năm vai trên production (đo 20/10/2026), nên
+ * thấy được giá trị ở đây nghĩa là ai mở màn kho cũng thấy được.
  */
-const QUYEN_IT_NHAT = [] as const;
+const QUYEN_MAN_KHO = ['view_fulfillment'] as const;
 
 async function chonChiec(): Promise<{ id: string; weight: string | null; receiptId: string }> {
   const r = await db.execute<{ id: string; weight_kg: string | null; receipt_id: string }>(sql`
@@ -79,9 +86,10 @@ function cauSuaThu(chiecId: string): SQL {
 
 /* ---------------------------------------------------------------------------
  * In ra ĐÚNG thứ màn hình hiện. Mỗi hàm dưới đây soi một hàm của `BangNhatKy.tsx`:
- * `hienNgayGio` + id bản ghi cho cột Ngày, `kieuTacNhan` cho cột Người dùng, `chipGiaTri`
- * / `NULL_HIEN` / `catGiaTri` / `CHE_HIEN` + `LY_DO_CHE` cho cột Trước → Sau. Dùng CHÍNH
- * các hàm đó, không chép lại luật — chép lại là kiểm bản chép.
+ * `hienNgayGio` + `chipThaoTac` + id bản ghi cho cột Ngày, `kieuTacNhan` cho cột Người
+ * dùng, `chipGiaTri` / `hienOThoiGian` / `NULL_HIEN` / `catGiaTri` / `CHE_HIEN` +
+ * `LY_DO_CHE` cho cột Trước → Sau. Dùng CHÍNH các hàm đó, không chép lại luật — chép lại
+ * là kiểm bản chép.
  * ------------------------------------------------------------------------- */
 
 function oNguoiDung(k: KhoiNhatKy): string {
@@ -95,6 +103,9 @@ function oGiaTri(truong: string, gia: string | null): string {
   const chip = chipGiaTri(truong, gia);
   if (chip) return `${chip.nhan} (chip)`;
   if (gia === '') return '(để trống)';
+  // Cột `*_at` ra ISO UTC thô từ trigger; màn hình quy về giờ nghiệp vụ nên ở đây cũng vậy.
+  const moc = hienOThoiGian(truong, gia);
+  if (moc) return moc;
   const { hien, daCat } = catGiaTri(gia);
   return hien + (daCat ? '…' : '');
 }
@@ -120,7 +131,10 @@ function inBang(khoi: readonly KhoiNhatKy[], banGhiDangMo?: string): void {
     const noiXay = banGhiDangMo
       ? (k.banGhiId === banGhiDangMo ? 'Bản ghi này' : `Dòng con · ${k.banGhiId.slice(0, 8)}`)
       : k.banGhiId.slice(0, 8);
-    console.log(`  ${('└ ' + noiXay).padEnd(22)}`);
+    // Chip THAO TÁC, cùng chỗ và cùng luật với `OThaoTac` của `BangNhatKy.tsx`: `sua` không
+    // có chip, nên dòng này chỉ hiện ở ca `them` / `xoa` / `tron`.
+    const thao = chipThaoTac(k.thaoTac);
+    console.log(`  ${('└ ' + noiXay).padEnd(22)}${thao ? `[${thao.nhan}]` : ''}`);
   }
 }
 
@@ -134,13 +148,13 @@ function inBang(khoi: readonly KhoiNhatKy[], banGhiDangMo?: string): void {
  */
 async function docVaIn(tx: Tx, tuLuc: Date, loId: string): Promise<number> {
   const rows = await docDongCuaBang(tx, BANG, { tuNgay: tuLuc });
-  const khoi = gomKhoi(rows.map(thanhDongTho), QUYEN_IT_NHAT);
+  const khoi = gomKhoi(rows.map(thanhDongTho), QUYEN_MAN_KHO);
   console.log(`\n[1] Trang nhật ký cả bảng — docDongCuaBang('${BANG}'): ` +
     `${rows.length} dòng thô → ${khoi.length} khối\n`);
   inBang(khoi);
 
   const rowsCha = await docDongCuaBanGhi(tx, BANG_CHA, loId);
-  const khoiCha = gomKhoi(rowsCha.map(thanhDongTho), QUYEN_IT_NHAT);
+  const khoiCha = gomKhoi(rowsCha.map(thanhDongTho), QUYEN_MAN_KHO);
   console.log(`\n[2] Tab "Lịch sử" của LÔ ${loId} — docDongCuaBanGhi('${BANG_CHA}'): ` +
     `${rowsCha.length} dòng thô → ${khoiCha.length} khối` +
     ` (cuốn lên từ dòng con nhờ cha_bang/cha_id)\n`);

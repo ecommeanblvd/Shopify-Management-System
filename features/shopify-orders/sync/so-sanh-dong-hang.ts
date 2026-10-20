@@ -74,12 +74,57 @@ function bangSo(a: string | number | null, b: string | number | null): boolean {
 }
 
 /**
- * So `jsonb` theo NỘI DUNG. `so_do` là mảng `{nhan, giaTri}` do khách nhập lúc đặt, thứ tự
- * do Shopify giữ nguyên nên `JSON.stringify` là đủ — và không có cột `jsonb` nào khác ở
- * dòng hàng để phải lo chuẩn hoá sâu hơn.
+ * So `jsonb` theo NỘI DUNG, SÂU — không so chuỗi.
+ *
+ * VÌ SAO không `JSON.stringify` (sửa 20/10/2026, chú thích cũ giải thích SAI nguyên nhân):
+ * bản cũ so hai chuỗi và nói là "thứ tự do Shopify giữ nguyên". Thứ giữ nó đúng tới hôm nay
+ * KHÔNG phải Shopify mà là `jsonb` của Postgres: `jsonb` **tự sắp lại khoá của object**
+ * theo (ĐỘ DÀI khoá, rồi bytewise). `so_do` là mảng `{nhan, giaTri}`, và `'nhan'` (4 ký tự)
+ * ngắn hơn `'giaTri'` (6) nên bản đọc lên tình cờ trùng thứ tự object literal của
+ * `shopify-mapper.ts`. Một sự trùng khớp, không phải một bảo đảm.
+ *
+ * Thêm hoặc đổi MỘT khoá CÙNG ĐỘ DÀI là vỡ ngay: `ghiChu` và `giaTri` đều 6 ký tự, bytewise
+ * `'ghiChu' < 'giaTri'`, nên `jsonb` trả về `{nhan, ghiChu, giaTri}` trong khi mapper dựng
+ * `{nhan, giaTri, ghiChu}`. Hai chuỗi khác nhau ⇒ MỌI dòng hàng của MỌI đơn báo "đã đổi" ở
+ * MỌI lượt đồng bộ — tức dựng lại đúng cái lũ nhiễu mà cả tệp này tồn tại để dẹp, và dựng
+ * lại một cách IM LẶNG (không lỗi, chỉ là nhật ký lại ngập dòng rỗng).
+ *
+ * So sâu thì thứ tự khoá không còn là một giả định nào nữa. Thứ tự PHẦN TỬ MẢNG thì vẫn
+ * được tôn trọng (so theo chỉ số): `jsonb` giữ nguyên thứ tự mảng, và thứ tự các ô khách
+ * nhập là một phần nội dung — đảo hai ô là một thay đổi thật.
  */
 function bangJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return bangSau(a ?? null, b ?? null);
+}
+
+/**
+ * So hai giá trị JSON theo nghĩa: mảng so theo chỉ số, object so theo TẬP KHOÁ (không theo
+ * thứ tự khoá), còn lại so `===`.
+ *
+ * `undefined` đã được gộp về `null` ở `bangJson` trước khi vào đây; bên trong một giá trị
+ * đọc từ `jsonb` thì không có `undefined` (JSON không có kiểu đó).
+ */
+function bangSau(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+
+  const aMang = Array.isArray(a);
+  if (aMang !== Array.isArray(b)) return false;
+  if (aMang) {
+    const x = a as unknown[];
+    const y = b as unknown[];
+    return x.length === y.length && x.every((v, i) => bangSau(v, y[i]));
+  }
+
+  // `Object.keys` chỉ lấy khoá của CHÍNH đối tượng, và giá trị đọc từ `jsonb` là object
+  // thuần — nên không có đường nào để một khoá kế thừa lọt vào phép so.
+  const ka = Object.keys(a as Record<string, unknown>);
+  const kb = Object.keys(b as Record<string, unknown>);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => (
+    Object.hasOwn(b as Record<string, unknown>, k)
+    && bangSau((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])
+  ));
 }
 
 /** Một ô nào khác là cả dòng phải ghi lại — hàm này quyết "khác" cho từng kiểu cột. */
@@ -115,6 +160,16 @@ function coDoi(cu: DongHangDangCo, moi: DongHangMoi): boolean {
  * Shopify ĐÁNH SỐ LẠI `line_item.id` khi đơn bị sửa, nên ca sửa đơn vẫn ra một cặp
  * xoá+chèn. Đó là sự thật đáng ghi (dòng cũ mất, dòng mới có), khác hẳn cái nhiễu của kiểu
  * cũ là xoá+chèn cho dòng KHÔNG đổi gì.
+ *
+ * ⚠ HỆ QUẢ MÀ MỌI NƠI ĐỌC DÒNG HÀNG PHẢI BIẾT: kiểu xoá-rồi-chèn cũ làm thứ tự VẬT LÝ của
+ * hàng trong heap ≈ thứ tự payload, nên một `SELECT` không `ORDER BY` tình cờ ra đúng thứ
+ * tự khách thấy lúc đặt. Sửa tại chỗ thì không: `UPDATE` của Postgres ghi một phiên bản
+ * MỚI của hàng ở cuối heap, nên dòng vừa sửa nhảy xuống cuối danh sách. Thiếu `ORDER BY`
+ * vốn đã là lỗ hổng; thay đổi này biến nó thành có thật. Ba nơi đọc đã được sắp theo
+ * `shopify_line_id` + `id` (khoá tự nhiên của một dòng trong một đơn, cộng một chốt vì bảng
+ * KHÔNG có unique trên `(order_id, shopify_line_id)`): `order-actions.ts` (chi tiết đơn),
+ * `dashboard-actions.ts` (bảng đơn) và `features/customer-account/order-requests.ts` (màn
+ * KHÁCH xem). Thêm nơi đọc thứ tư thì phải sắp như vậy.
  */
 export function soSanhDongHang(
   dangCo: readonly DongHangDangCo[],

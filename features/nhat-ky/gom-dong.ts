@@ -18,6 +18,10 @@ import { nhanCot } from './nhan-cot';
 export interface DongTho {
   bang: string;
   banGhiId: string;
+  /** `them` | `sua` | `xoa` như trigger ghi (migration 0210). Chuỗi, không union: giá trị
+   *  tới từ CSDL nên một hằng lạ phải đi tới được màn hình thay vì bị kiểu ép thành một
+   *  trong ba — hiện nguyên văn thì còn tra ra được. */
+  thaoTac: string;
   truong: string;
   truoc: string | null;
   sau: string | null;
@@ -35,13 +39,48 @@ export interface DongNhatKy {
   biChe: boolean;
 }
 
+/**
+ * Thao tác của CẢ KHỐI: ba hằng của trigger, hoặc `tron` khi một khối lẫn nhiều loại.
+ *
+ * `tron` không phải ca lý thuyết: một giao dịch có thể xoá rồi chèn lại cùng một bản ghi
+ * (kiểu xoá-rồi-chèn cũ của đồng bộ đơn), và mọi dòng của một giao dịch mang CÙNG `luc`
+ * (xem `gomKhoi`) nên chúng vào CÙNG một khối. Trộn lại thành một nhãn duy nhất là nói sai;
+ * `tron` thì màn hình nói đúng là "khối này có nhiều loại" và người đọc đi xem từng dòng.
+ */
+export type ThaoTacKhoi = 'them' | 'sua' | 'xoa' | 'tron' | 'la';
+
 /** Một hành động: cùng người, cùng thời điểm, cùng bản ghi. */
 export interface KhoiNhatKy {
   luc: Date;
   tacNhanId: string | null;
   tacNhanNhan: string;
   banGhiId: string;
+  /**
+   * `them` / `sua` / `xoa` của cả khối — thứ phân biệt "xoá một chiếc" với "xoá trắng
+   * từng ô".
+   *
+   * Vì sao ở mức KHỐI chứ không mức từng ô: một lượt `DELETE` một chiếc sinh 35 dòng, mọi
+   * dòng cùng `thao_tac`; gắn nhãn vào từng dòng là 35 nhãn giống nhau trong một khối, còn
+   * câu trả lời người ta cần ("cái gì đã xảy ra với bản ghi này") là MỘT câu.
+   */
+  thaoTac: ThaoTacKhoi;
   dong: DongNhatKy[];
+}
+
+/** Ba hằng mà trigger `nhat_ky_ghi()` ghi (migration 0210). */
+const THAO_TAC_BIET: readonly string[] = ['them', 'sua', 'xoa'];
+
+/**
+ * Thao tác của khối, gộp từ các dòng của nó.
+ *
+ * Giá trị KHÔNG phải một trong ba hằng ra `la` thay vì bị bỏ qua: cột `thao_tac` là `text`
+ * `NOT NULL` không có `CHECK`, nên một đường ghi khác (hay một bản trigger cũ) nhét được
+ * chuỗi lạ vào. Im lặng coi nó là `sua` là nói sai về bằng chứng.
+ */
+function gopThaoTac(dang: ThaoTacKhoi | undefined, moi: string): ThaoTacKhoi {
+  const chuan: ThaoTacKhoi = THAO_TAC_BIET.includes(moi) ? (moi as ThaoTacKhoi) : 'la';
+  if (dang === undefined) return chuan;
+  return dang === chuan ? dang : 'tron';
 }
 
 /**
@@ -118,9 +157,12 @@ export function gomKhoi(rows: readonly DongTho[], quyen: readonly Permission[]):
         tacNhanId: r.tacNhanId,
         tacNhanNhan: nhanTacNhanHienThi(r.tacNhanId, r.tacNhanNhan),
         banGhiId: r.banGhiId,
+        thaoTac: gopThaoTac(undefined, r.thaoTac),
         dong: [],
       };
       theoKhoa.set(khoa, khoi);
+    } else {
+      khoi.thaoTac = gopThaoTac(khoi.thaoTac, r.thaoTac);
     }
     khoi.dong.push(apQuyen(r, quyen));
   }

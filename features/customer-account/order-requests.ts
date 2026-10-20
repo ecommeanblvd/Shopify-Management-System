@@ -1,6 +1,6 @@
 /** Domain logic Order Journey (db): journey + tạo request + tracking.
  *  Server LUÔN re-check policy — không tin client. Tiền snapshot tại đây. */
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { evaluateOrderPolicy, money } from './order-policy';
 import { OPEN_STATUSES, canTransition, pgErrorCode, validateClaimInput, type RequestStatus } from './request-status';
@@ -34,7 +34,12 @@ async function loadOrderLines(orderId: string) {
     quantity: schema.shopifyOrderLines.quantity,
     unitPrice: schema.shopifyOrderLines.unitPrice,
   }).from(schema.shopifyOrderLines)
-    .where(eq(schema.shopifyOrderLines.orderId, orderId));
+    .where(eq(schema.shopifyOrderLines.orderId, orderId))
+    /* Thứ tự dòng hàng phải ỔN ĐỊNH. Task 8 đổi đồng bộ từ xoá-rồi-chèn sang SỬA TẠI CHỖ, nên
+       thứ tự VẬT LÝ của hàng không còn ≈ thứ tự payload và một `SELECT` thiếu `ORDER BY` xáo
+       lại danh sách mỗi lần một dòng được sửa. Sắp theo `shopify_line_id` + `id` — xem
+       `soSanhDongHang` của `sync/so-sanh-dong-hang.ts` để biết đầy đủ vì sao. */
+    .orderBy(asc(schema.shopifyOrderLines.shopifyLineId), asc(schema.shopifyOrderLines.id));
 }
 
 async function listOrderRequests(storeId: string, orderId: string) {

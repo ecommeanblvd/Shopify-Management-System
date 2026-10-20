@@ -31,10 +31,27 @@ export interface CauHinhBang {
 }
 
 /**
- * Mốc do cron / đồng bộ tự đặt. Đổi liên tục mà không phải quyết định của ai, ghi vào
- * chỉ làm nhật ký ngập rác và chôn mất thay đổi thật của người.
+ * Cột KHÔNG BAO GIỜ vào nhật ký, với bảng chế độ `tru`.
+ *
+ * Phần lớn là mốc do cron / đồng bộ tự đặt: đổi liên tục mà không phải quyết định của ai,
+ * ghi vào chỉ làm nhật ký ngập rác và chôn mất thay đổi thật của người.
  */
 const LOAI_TRU_CHUNG = [
+  /**
+   * KHOÁ CHÍNH. `id` không đổi được, nên nó không bao giờ sinh dòng `sua` — nhưng trigger
+   * ghi MỌI cột có giá trị ở ca `INSERT` và ca `DELETE`, nên mỗi lần thêm/xoá một bản ghi
+   * đẻ thêm một dòng `truong='id'` mà `truoc`/`sau` trùng y nguyên `ban_ghi_id` của chính
+   * dòng đó. Ba cái giá của nó:
+   *  - rác trên màn hình: một dòng "id: – → <uuid>" không nói gì mà `nhan-cot.ts` cũng
+   *    không có nhãn, nên nó hiện `id` thô;
+   *  - LỆCH CHÍNH CON SỐ §8 dùng để quyết mở rộng: `scripts/nhat-ky-do-tai.ts` đếm
+   *    dòng/ngày, và mỗi chiếc nhập kho cộng thêm một dòng vô nghĩa vào tử số;
+   *  - `thao_tac` đã nói đủ việc "bản ghi này vừa được thêm / vừa bị xoá".
+   *
+   * ⚠ Trigger ĐANG SỐNG mang danh sách cột được chốt vào lúc BẬT, nên sửa ở đây chưa có
+   * hiệu lực — phải chạy lại `scripts/nhat-ky-bat-tat.ts --bang=… --ap-dung`.
+   */
+  'id',
   'updated_at',
   'created_at',
   'last_tracked_at',

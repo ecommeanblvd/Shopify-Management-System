@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CHUA_GAN_DANH_TINH } from '@/features/nhat-ky/gom-dong';
-import { catGiaTri, chipGiaTri, CHE_HIEN, kieuTacNhan, NULL_HIEN, TRAN_KY_TU } from './trinh-bay';
+import {
+  catGiaTri, chipGiaTri, chipThaoTac, CHE_HIEN, hienOThoiGian, kieuTacNhan,
+  NULL_HIEN, TRAN_KY_TU,
+} from './trinh-bay';
 
 describe('kieuTacNhan', () => {
   it('có id người → người, dù nhãn là tên hay chính id', () => {
@@ -78,5 +81,60 @@ describe('catGiaTri', () => {
 
   it('đúng trần thì CHƯA cắt (không gắn "…" vào thứ đã đủ)', () => {
     expect(catGiaTri('y'.repeat(TRAN_KY_TU)).daCat).toBe(false);
+  });
+});
+
+// I1 — `thao_tac` được trigger ghi từ đầu nhưng tới lượt soát cuối thì KHÔNG AI ĐỌC.
+describe('chipThaoTac', () => {
+  it('xoá và thêm có chip — hai ca mà cột "Trước → Sau" đọc ra SAI nghĩa nếu không có', () => {
+    expect(chipThaoTac('xoa')?.nhan).toBe('Xoá bản ghi');
+    expect(chipThaoTac('them')?.nhan).toBe('Thêm mới');
+  });
+
+  it('SỬA không có chip — ca áp đảo, cột "Trước → Sau" đã tự nói', () => {
+    expect(chipThaoTac('sua')).toBeNull();
+  });
+
+  it('khối lẫn nhiều loại nói ra là lẫn, không chọn bừa một nhãn', () => {
+    expect(chipThaoTac('tron')?.nhan).toBe('Nhiều loại');
+    expect(chipThaoTac('la')?.nhan).toBe('Thao tác lạ');
+  });
+
+  // `red` đã mang nghĩa "QC hỏng" ở `mau-nhan.ts`; chiếc nhận nhầm bị xoá không phải
+  // chiếc lỗi, nên chip xoá không được mượn màu đó.
+  it('chip xoá KHÔNG mượn màu đỏ của "QC hỏng"', () => {
+    expect(chipThaoTac('xoa')?.mau).not.toMatch(/red/);
+  });
+});
+
+// I2 — cột `*_at` ra ISO UTC thô từ `to_jsonb(...) ->> cot`.
+describe('hienOThoiGian', () => {
+  it('mốc KHÔNG có múi giờ được hiểu là UTC rồi quy về giờ nghiệp vụ (+7)', () => {
+    // 03:00 UTC = 10:00 giờ Bangkok. Lệch 7 tiếng là đúng cái I2 báo.
+    const r = hienOThoiGian('qc_checked_at', '2026-10-20T03:00:00');
+    expect(r).toContain('10:00:00');
+    expect(r).toContain('20/10/2026');
+  });
+
+  it('mốc có sẵn múi giờ không bị cộng thêm lần nữa', () => {
+    expect(hienOThoiGian('addr_verified_at', '2026-10-20T03:00:00+00:00')).toContain('10:00:00');
+  });
+
+  it('phần giây lẻ của timestamp Postgres vẫn đọc được', () => {
+    expect(hienOThoiGian('printed_at', '2026-06-11T16:08:23.235488')).toContain('11/6/2026');
+  });
+
+  it('cột `date` tên *_at KHÔNG bị quy múi giờ — quy là lệch hẳn một ngày', () => {
+    // `ship_ho_orders.shipped_at` kiểu `date`, ra '2026-08-07'.
+    expect(hienOThoiGian('shipped_at', '2026-08-07')).toBeNull();
+  });
+
+  it('cột không phải thời gian giữ nguyên văn', () => {
+    expect(hienOThoiGian('qc_result', 'pass')).toBeNull();
+    expect(hienOThoiGian('location', '2026-10-20T03:00:00')).toBeNull();
+  });
+
+  it('chuỗi hình dáng đúng mà giá trị vô nghĩa thì hiện nguyên văn, không ra "Invalid Date"', () => {
+    expect(hienOThoiGian('qc_checked_at', '2026-99-99T99:00:00')).toBeNull();
   });
 });

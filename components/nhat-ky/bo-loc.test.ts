@@ -70,7 +70,7 @@ describe('homNayVn', () => {
 
 const khoi = (p: Partial<KhoiNhatKy>): KhoiNhatKy => ({
   luc: new Date('2026-10-20T03:00:00Z'), tacNhanId: null, tacNhanNhan: 'Cron',
-  banGhiId: 'r1', dong: [], ...p,
+  banGhiId: 'r1', thaoTac: 'sua', dong: [], ...p,
 });
 const dong = (truong: string, nhan: string) => ({ truong, nhan, truoc: null, sau: 'x', biChe: false });
 

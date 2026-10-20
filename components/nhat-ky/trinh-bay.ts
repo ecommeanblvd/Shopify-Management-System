@@ -5,7 +5,8 @@
  * (xem `vitest.config.ts`) — mà hai luật ở đây là luật dễ sai mà mắt không thấy:
  * phân biệt người / máy / chưa-gắn-danh-tính, và nhãn+màu của giá trị dạng chọn.
  */
-import { CHUA_GAN_DANH_TINH, type KhoiNhatKy } from '@/features/nhat-ky/gom-dong';
+import { CHUA_GAN_DANH_TINH, type KhoiNhatKy, type ThaoTacKhoi } from '@/features/nhat-ky/gom-dong';
+import { hienNgayGio } from '@/lib/timezone';
 
 /**
  * Dấu hiện khi ô vốn là NULL — spec §6 chốt đúng ký tự này (en dash).
@@ -39,6 +40,36 @@ export function kieuTacNhan(khoi: Pick<KhoiNhatKy, 'tacNhanId' | 'tacNhanNhan'>)
 
 /** Nhãn + màu của một giá trị dạng chọn. */
 export interface Chip { nhan: string; mau: string }
+
+/**
+ * Chip THAO TÁC của một khối, hoặc `null` khi không cần chip.
+ *
+ * `sua` trả `null` — CÓ Ý: sửa là ca áp đảo (mọi lượt QC, mọi lượt đổi vị trí kho), và cột
+ * "Trước → Sau" đã tự nói đúng chuyện đó. Gắn một chip "Sửa" lên mỗi khối là dán nhãn vào
+ * 95% số dòng để nói lại điều người đọc đã thấy, và chính vì thế hai ca CẦN phân biệt sẽ
+ * trôi lẫn vào biển nhãn.
+ *
+ * Hai ca cần phân biệt, và vì sao không có chip thì chúng SAI HẲN nghĩa:
+ *  - `xoa`: `goChiecNhanNham` xoá một chiếc nhận nhầm → 35 dòng `giá trị → –`. Không có
+ *    chip thì đọc ra "ai đó xoá trắng 35 ô của chiếc này", tức buộc tội sai một người về
+ *    một việc khác hẳn.
+ *  - `them`: hàng mới vào kho → `– → giá trị`. Không có chip thì đọc ra "ai đó điền 35 ô
+ *    đang trống", tức là chiếc đã tồn tại từ trước — sai về cả thời điểm hàng về.
+ *
+ * Màu theo nếp của `features/kho-nhan/mau-nhan.ts`: `red` đã mang nghĩa "QC hỏng" nên XOÁ
+ * KHÔNG lấy màu đỏ — một chiếc nhận nhầm bị xoá không phải một chiếc lỗi. Mọi class là
+ * CHUỖI LITERAL (Tailwind 4 quét source).
+ */
+const CHIP_THAO_TAC: Record<string, Chip> = {
+  them: { nhan: 'Thêm mới', mau: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300' },
+  xoa: { nhan: 'Xoá bản ghi', mau: 'bg-orange-500/15 text-orange-800 dark:text-orange-300' },
+  tron: { nhan: 'Nhiều loại', mau: 'bg-muted text-muted-foreground' },
+  la: { nhan: 'Thao tác lạ', mau: 'bg-muted text-muted-foreground' },
+};
+
+export function chipThaoTac(thaoTac: ThaoTacKhoi): Chip | null {
+  return Object.hasOwn(CHIP_THAO_TAC, thaoTac) ? CHIP_THAO_TAC[thaoTac] : null;
+}
 
 /* ---------------------------------------------------------------------------
  * Nhãn + màu cho giá trị dạng CHỌN (enum Postgres, boolean).
@@ -127,4 +158,46 @@ export const TRAN_KY_TU = 200;
 export function catGiaTri(v: string): { hien: string; daCat: boolean } {
   if (v.length <= TRAN_KY_TU) return { hien: v, daCat: false };
   return { hien: v.slice(0, TRAN_KY_TU), daCat: true };
+}
+
+/* ---------------------------------------------------------------------------
+ * Cột THỜI GIAN: đưa về giờ nghiệp vụ trước khi hiện.
+ *
+ * Trigger ghi `truoc`/`sau` bằng `to_jsonb(hàng) ->> ten_cot`, nên một cột
+ * `timestamp without time zone` ra nguyên văn ISO KHÔNG có múi giờ
+ * (`'2026-10-20T03:00:00'` — kiểm production 20/10/2026). Hiện thẳng chuỗi đó là cột
+ * "Ngày" của chính dòng ấy chạy qua `hienNgayGio` (giờ Bangkok) còn cột "Trước → Sau" là
+ * UTC — LỆCH 7 TIẾNG TRÊN CÙNG MỘT DÒNG, và không có dấu hiệu nào nói ra.
+ *
+ * Đây là ca THƯỜNG GẶP NHẤT của bảng đang sống, không phải ca hiếm: `qc_checked_at`,
+ * `printed_at`, `confirmed_at` của `goods_receipt_items` đổi ở mỗi lượt QC / in tem / quét.
+ * ------------------------------------------------------------------------- */
+
+/** Cột thời gian nhận ra bằng HẬU TỐ tên cột — nếp đặt tên của cả CSDL này (`*_at`). */
+const HAU_TO_THOI_GIAN = '_at';
+
+/**
+ * Có PHẦN GIỜ thì mới là mốc thời gian. `ship_ho_orders.shipped_at` kiểu `date` cũng tên
+ * `*_at` nhưng ra `'2026-08-07'`; quy nó về múi giờ là dịch cả ngày đi một ngày với mọi
+ * mốc trước 07:00 — tức làm đúng cái lỗi lệch ngày mà `lib/timezone.ts` tồn tại để chặn.
+ * Ngày trần hiện nguyên văn: không có giờ thì không có gì để quy.
+ */
+const DANG_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+
+/** Có `Z` hoặc `±HH:MM` ở cuối = đã nói rõ múi giờ (cột `timestamptz`). */
+const CO_MUI_GIO = /(?:Z|[+-]\d{2}:?\d{2})$/;
+
+/**
+ * Chuỗi giờ nghiệp vụ của một ô thời gian, hoặc `null` khi ô này không phải mốc thời gian
+ * (gọi xong thì hiện nguyên văn).
+ *
+ * Chuỗi KHÔNG có múi giờ được gắn `Z`, không truyền thẳng cho `new Date`: dạng
+ * `'…T03:00:00'` bị JavaScript đọc theo giờ MÁY (ECMA-262), nên cùng một dòng nhật ký hiện
+ * khác nhau giữa máy dev (UTC+7) và máy chủ (UTC). CSDL này lưu `timestamp` ở UTC — cùng
+ * giả định với `sqlGioKinhDoanh` của `lib/timezone.ts`.
+ */
+export function hienOThoiGian(truong: string, gia: string): string | null {
+  if (!truong.endsWith(HAU_TO_THOI_GIAN) || !DANG_MOC.test(gia)) return null;
+  const d = new Date(CO_MUI_GIO.test(gia) ? gia : `${gia}Z`);
+  return Number.isNaN(d.getTime()) ? null : hienNgayGio(d);
 }

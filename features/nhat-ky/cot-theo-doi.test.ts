@@ -76,3 +76,34 @@ describe('CAU_HINH', () => {
     expect([...(ch?.cot ?? [])].sort()).toEqual(['cost_override', 'quantity', 'sku', 'total', 'unit_price']);
   });
 });
+
+/**
+ * Minor #6 của lượt soát cuối: `id` nằm trong danh sách theo dõi.
+ *
+ * `id` không đổi được nên không có dòng `sua` nào, nhưng trigger ghi MỌI cột có giá trị ở
+ * ca `INSERT`/`DELETE` — mỗi lần thêm/xoá một bản ghi là một dòng `truong='id'` trùng y
+ * `ban_ghi_id`. Rác trên màn hình, và nó đội CHÍNH con số dòng/ngày mà §8 dùng để quyết
+ * mở rộng.
+ */
+describe('id không bao giờ vào nhật ký', () => {
+  it('bảng chế độ `tru` loại `id` ra', () => {
+    for (const ch of CAU_HINH) {
+      if (ch.cheDo !== 'tru') continue;
+      expect(cotDuocGhi(ch, ['id', 'unit_code', 'qc_result']), `bảng ${ch.bang}`)
+        .not.toContain('id');
+    }
+  });
+
+  it('bảng chế độ `cho-phep` cũng không khai `id`', () => {
+    for (const ch of CAU_HINH) {
+      if (ch.cheDo !== 'cho-phep') continue;
+      expect([...ch.cot], `bảng ${ch.bang}`).not.toContain('id');
+    }
+  });
+
+  it('loại `id` nhưng KHÔNG loại oan cột khác', () => {
+    const ch = CAU_HINH.find((c) => c.bang === 'goods_receipt_items')!;
+    expect(cotDuocGhi(ch, ['id', 'unit_code', 'qc_result', 'updated_at']))
+      .toEqual(['unit_code', 'qc_result']);
+  });
+});

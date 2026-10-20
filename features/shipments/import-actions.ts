@@ -37,8 +37,19 @@ import { MAY } from '@/features/nhat-ky/tac-nhan';
  */
 const TAC_NHAN_NHAP_FILE = { kieu: 'may', nhan: MAY.NHAP_FILE } as const;
 
-/** Số dòng mỗi giao dịch ghi. Cùng con số `APPLY_CHUNK` của `features/lark/sync.ts`. */
-const LO_GHI = 200;
+/**
+ * Số dòng mỗi giao dịch ghi.
+ *
+ * Hạ 200 → 50 (20/10/2026): lô 200 giữ khoá hàng trên `shipments` 25–35 giây MỘT LÔ, và
+ * giữ luôn một trong ~10 kết nối của pool suốt thời gian đó — trong lúc màn Đóng hàng đang
+ * đọc chính bảng ấy. Tổng thời gian nhập tệp gần như không đổi: cái lô gánh là ba vòng tới
+ * CSDL mỗi giao dịch (`BEGIN` + `set_config` + `COMMIT`), và chia cho 50 thì vẫn gần như
+ * miễn phí (ở độ trễ 61ms đo được: ~0,2s mỗi 50 dòng, tức ~8s cho tệp 2.000 dòng).
+ *
+ * CỐ Ý khác `APPLY_CHUNK = 200` của `features/lark/sync.ts`: cron Lark chạy đêm và không
+ * tranh bảng với người đang bấm, còn bộ nhập này chạy giữa giờ làm.
+ */
+const LO_GHI = 50;
 
 export interface ImportSummary {
   totalRows: number;
@@ -319,11 +330,11 @@ export async function importLogExport(
   // Done sequentially (not parallel) so the unique-index conflict
   // semantics stay deterministic.
   //
-  // Ghi theo LÔ, mỗi lô MỘT giao dịch có gắn danh tính — cùng nếp `APPLY_CHUNK` của
-  // `features/lark/sync.ts`. Vì sao không một giao dịch cho mỗi DÒNG: đo 20/10/2026, một
-  // giao dịch tốn thêm ba vòng tới CSDL (`BEGIN` + `set_config` + `COMMIT`) so với một lệnh
-  // trần, tức 2 → 5 vòng mỗi dòng; ở độ trễ 61ms đo được thì tệp 2.000 dòng đi từ ~237s lên
-  // ~595s. Theo lô 200 thì ba vòng đó chia cho 200 dòng, gần như miễn phí.
+  // Ghi theo LÔ, mỗi lô MỘT giao dịch có gắn danh tính. Vì sao không một giao dịch cho mỗi
+  // DÒNG: đo 20/10/2026, một giao dịch tốn thêm ba vòng tới CSDL (`BEGIN` + `set_config` +
+  // `COMMIT`) so với một lệnh trần, tức 2 → 5 vòng mỗi dòng; ở độ trễ 61ms đo được thì tệp
+  // 2.000 dòng đi từ ~237s lên ~595s. Theo lô thì ba vòng đó chia cho `LO_GHI` dòng — xem
+  // `LO_GHI` để biết vì sao con số là 50 chứ không phải 200.
   // Vì sao cũng KHÔNG một giao dịch cho cả tệp: một dòng hỏng sẽ cuốn ngược cả tệp đã nhập
   // được, và giao dịch dài hàng phút trên `shipments` là đúng cái đã làm pooler rớt kết nối
   // giữa chừng ở cron Lark.

@@ -2,7 +2,8 @@ import { Fragment } from 'react';
 import type { DongNhatKy, KhoiNhatKy } from '@/features/nhat-ky/gom-dong';
 import { hienNgayGio } from '@/lib/timezone';
 import {
-  catGiaTri, CHE_HIEN, chipGiaTri, kieuTacNhan, LY_DO_CHE, NULL_HIEN,
+  catGiaTri, CHE_HIEN, chipGiaTri, chipThaoTac, hienOThoiGian, kieuTacNhan,
+  LY_DO_CHE, NULL_HIEN,
 } from './trinh-bay';
 
 /**
@@ -73,6 +74,7 @@ export function BangNhatKy({ khoi, banGhiDangMo, trong }: {
                     <>
                       <td rowSpan={k.dong.length} className="whitespace-nowrap text-muted-foreground tabular-nums">
                         {hienNgayGio(k.luc)}
+                        <OThaoTac khoi={k} />
                         <ONoiXay khoi={k} banGhiDangMo={banGhiDangMo} />
                       </td>
                       <td rowSpan={k.dong.length}>
@@ -91,6 +93,28 @@ export function BangNhatKy({ khoi, banGhiDangMo, trong }: {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Chip THAO TÁC của khối — `them` / `xoa` / `tron`, và không gì cả cho `sua`.
+ *
+ * Phải có, không được bỏ: trigger ghi một dòng `giá trị → –` cho MỖI cột khi một bản ghi
+ * bị xoá, nên một lượt `goChiecNhanNham` (xoá một chiếc nhận nhầm) hiện ra y hệt một người
+ * ngồi xoá trắng 35 ô — và chiều ngược lại, một chiếc MỚI vào kho hiện y hệt một người điền
+ * vào 35 ô đang trống. Cột "Trước → Sau" không có cách nào phân biệt hai chuyện đó; chỉ
+ * `thao_tac` phân biệt được, và tới lượt soát cuối thì không ai ĐỌC cột đó.
+ *
+ * Nằm dưới cột "Ngày" cùng `ONoiXay` để giữ đúng BỐN cột của mẫu Lark (xem `BangNhatKy`).
+ * Luật chọn chip (và vì sao `sua` không có chip) ở `chipThaoTac`.
+ */
+function OThaoTac({ khoi }: { khoi: KhoiNhatKy }) {
+  const chip = chipThaoTac(khoi.thaoTac);
+  if (!chip) return null;
+  return (
+    <span className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-normal ${chip.mau}`}>
+      {chip.nhan}
+    </span>
   );
 }
 
@@ -193,6 +217,11 @@ function OGiaTri({ truong, gia }: { truong: string; gia: string | null }) {
   if (chip) {
     return <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${chip.mau}`} title={gia}>{chip.nhan}</span>;
   }
+  /* Cột `*_at` ra ISO UTC thô từ `to_jsonb(...) ->> cot`; quy về giờ nghiệp vụ để không
+     lệch 7 tiếng so với cột "Ngày" của CHÍNH dòng này. Nguyên văn ở `title` để đối chiếu
+     với log hệ thống (vốn theo UTC). Xem `hienOThoiGian`. */
+  const moc = hienOThoiGian(truong, gia);
+  if (moc) return <span className="whitespace-nowrap tabular-nums" title={gia}>{moc}</span>;
   /* Chuỗi rỗng KHÁC NULL (migration 0210 giữ hai thứ riêng): xoá trắng một ô là một hành
      động của người, nên phải thấy được — hiện chữ thay vì một ô trông như chưa render. */
   if (gia === '') return <span className="text-[11px] italic text-muted-foreground">(để trống)</span>;

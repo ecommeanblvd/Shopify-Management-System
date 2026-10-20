@@ -52,6 +52,9 @@ async function quyenNguoiXem(): Promise<Permission[]> {
 const COT = {
   bang: schema.nhatKyThayDoi.bang,
   banGhiId: schema.nhatKyThayDoi.banGhiId,
+  /** `them` | `sua` | `xoa`. Phải chọn: không có nó thì một lượt XOÁ một chiếc hiện y hệt
+   *  một người xoá trắng từng ô, và một lượt THÊM hiện y hệt điền vào ô trống. */
+  thaoTac: schema.nhatKyThayDoi.thaoTac,
   truong: schema.nhatKyThayDoi.truong,
   truoc: schema.nhatKyThayDoi.truoc,
   sau: schema.nhatKyThayDoi.sau,
@@ -62,7 +65,7 @@ const COT = {
 };
 
 type HangTho = {
-  bang: string; banGhiId: string; truong: string;
+  bang: string; banGhiId: string; thaoTac: string; truong: string;
   truoc: string | null; sau: string | null;
   tacNhanId: string | null; nhanMay: string | null; tenNguoi: string | null;
   luc: Date;
@@ -77,6 +80,7 @@ export function thanhDongTho(r: HangTho): DongTho {
   return {
     bang: r.bang,
     banGhiId: r.banGhiId,
+    thaoTac: r.thaoTac,
     truong: r.truong,
     truoc: r.truoc,
     sau: r.sau,
