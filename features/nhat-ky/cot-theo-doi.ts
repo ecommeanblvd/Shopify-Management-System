@@ -78,13 +78,15 @@ export const CAU_HINH: readonly CauHinhBang[] = [
       'ship_weight_kg_override',
     ],
   },
-  // Hiện chưa có màn nào sửa dòng đơn; `cost_override` là cột `*_override` duy nhất của
-  // bảng (đã @deprecated, không ai ghi) nên giữ nó để danh sách không rỗng mà không thêm
-  // nhiễu. Có màn sửa dòng đơn mới thì thêm cột đó vào đây.
+  // Chưa có màn nào sửa dòng đơn bằng tay; thay đổi ở đây phần lớn đến từ đồng bộ Shopify.
+  // Vẫn ghi vì số lượng / đơn giá / SKU của một dòng đổi SAU khi khách đặt là việc kho phải
+  // biết lúc nhặt hàng, và CEO chốt "cần thấy hết" cả thay đổi do máy — cột tác nhân của
+  // nhật ký ghi nhãn máy nên không ai nhầm đó là người sửa. Cố ý chỉ liệt kê 5 cột này,
+  // không mở cả bảng: tên/biến thể/metafield dòng đơn đổi theo Shopify là nhiễu.
   {
     bang: 'shopify_order_lines',
     cheDo: 'cho-phep',
-    cot: ['cost_override'],
+    cot: ['quantity', 'unit_price', 'total', 'sku', 'cost_override'],
     cotCha: 'order_id',
     bangCha: 'shopify_orders',
   },

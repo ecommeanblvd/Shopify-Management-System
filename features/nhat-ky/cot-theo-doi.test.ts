@@ -69,4 +69,10 @@ describe('CAU_HINH', () => {
       expect(ch.cot).not.toContain('raw_payload');
     }
   });
+
+  it('shopify_order_lines ghi số lượng, đơn giá, tổng, SKU và cost_override', () => {
+    const ch = CAU_HINH.find((x) => x.bang === 'shopify_order_lines');
+    expect(ch?.cheDo).toBe('cho-phep');
+    expect([...(ch?.cot ?? [])].sort()).toEqual(['cost_override', 'quantity', 'sku', 'total', 'unit_price']);
+  });
 });
