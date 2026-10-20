@@ -62,7 +62,11 @@ export type Permission =
   /** Xem đánh giá Trustpilot / Judge.me. */
   | 'view_cx_review'
   /** Ghi/sửa đánh giá. */
-  | 'manage_cx_review';
+  | 'manage_cx_review'
+  /** Xem nhật ký thay đổi (ai sửa ô nào, từ giá trị nào sang giá trị nào). MỌI vai trò
+   *  đều có — CEO chốt 20/10/2026. Vẫn là quyền RIÊNG để sau này siết được một vai
+   *  trò mà không phải sửa mã. Giá trị nhạy cảm che riêng theo `features/nhat-ky/che-gia-tri.ts`. */
+  | 'view_nhat_ky';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -83,6 +87,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
     'view_cx_review', 'manage_cx_review',
+    'view_nhat_ky',
   ],
   operator: [
     'view', 'run_feature',
@@ -99,6 +104,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
     'view_cx_review', 'manage_cx_review',
+    'view_nhat_ky',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
@@ -106,6 +112,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products',
     'view_fulfillment',
     'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
+    'view_nhat_ky',
   ],
 };
 

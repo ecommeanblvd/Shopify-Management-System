@@ -61,6 +61,7 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   manage_cx_incident: ['cx.incident:view', 'cx.incident:create', 'cx.incident:edit'],
   view_cx_review: ['cx.review:view'],
   manage_cx_review: ['cx.review:view', 'cx.review:create', 'cx.review:edit'],
+  view_nhat_ky: ['nhat_ky:view'],
 };
 
 const OPERATOR_OLD = [
@@ -76,11 +77,13 @@ const OPERATOR_OLD = [
   'view_cx_dispute', 'manage_cx_dispute',
   'view_cx_incident', 'manage_cx_incident',
   'view_cx_review', 'manage_cx_review',
+  'view_nhat_ky',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
   'view_orders', 'view_functions', 'view_mmp_products', 'view_fulfillment',
   'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
+  'view_nhat_ky',
 ];
 
 function expand(oldPerms: string[]): PermissionKey[] {
@@ -111,6 +114,22 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
       // Settings, không nằm trong hạt giống — nên môi trường dựng lại là mất, và không ai đọc
       // mã mà biết được đây là chủ ý. Seed chỉ THÊM nên ghi vào đây không đụng gì đang có.
       'kpi.logistics:view',
+      // Nhật ký thay đổi: CEO chốt 20/10/2026 mọi nhân sự xem được. Giá trị nhạy cảm vẫn
+      // che theo `features/nhat-ky/che-gia-tri.ts`, nên vai này thấy dòng log và tên người
+      // sửa mà không thấy giá vốn.
+      'nhat_ky:view',
     ],
   },
 };
+
+/**
+ * Nền chung: khoá mà MỌI vai trò đều phải có, kể cả vai trò CẤP TAY trong Settings
+ * (production 20/10/2026 đang có vai `OC` không nằm trong `SYSTEM_ROLE_SEEDS`).
+ *
+ * `seedRoles()` cấp danh sách này cho mọi dòng `app_roles`, không riêng vai hạt giống —
+ * thêm vào `SYSTEM_ROLE_SEEDS` thôi là KHÔNG tới được vai cấp tay, mà "mọi nhân sự xem
+ * được nhật ký" (CEO 20/10/2026) thì hụt đúng những người đang dùng vai đó.
+ *
+ * CHỈ dùng cho quyền mà câu trả lời đúng là "ai cũng có". Đừng nhét quyền ghi vào đây.
+ */
+export const QUYEN_MOI_VAI_TRO: readonly PermissionKey[] = ['nhat_ky:view'];
