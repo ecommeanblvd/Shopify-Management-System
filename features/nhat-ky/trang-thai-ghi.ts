@@ -44,6 +44,18 @@ export function dangGhi(tgenabled: string | null | undefined): boolean {
   return typeof tgenabled === 'string' && tgenabled !== 'D';
 }
 
+/**
+ * Câu khi CHÍNH LƯỢT TRA `pg_trigger` lỗi — ca thứ ba, không được gộp vào hai ca kia.
+ *
+ * Không biết thì phải nói là không biết. Rơi về "chưa bật" là vu cho hệ thống đang không
+ * ghi (người ta đi bật lại một trigger đang sống); rơi về "đã bật" là nói với người đọc
+ * rằng im lặng nghĩa là không ai sửa — đúng cái kết luận sai mà cả tính năng này dựng ra
+ * để tránh. Cả hai đều tệ hơn một câu thú nhận.
+ */
+export const CAU_KHONG_TRA_DUOC = 'Không tra được bảng này có đang ghi nhật ký hay không, '
+  + 'nên chưa kết luận được là chưa bật hay đã bật mà chưa ai sửa. '
+  + 'Mở lại; nếu vẫn thế thì báo kỹ thuật.';
+
 function nhanCua(ds: readonly TrangThaiBang[]): string {
   return ds.map((t) => t.nhan).join(', ');
 }

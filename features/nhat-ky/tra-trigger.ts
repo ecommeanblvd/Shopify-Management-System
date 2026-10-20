@@ -13,30 +13,48 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { nhanBang } from '@/components/nhat-ky/bo-loc';
+import type { Tx } from './ghi-voi';
 import { dangGhi, tenTrigger, type TrangThaiBang } from './trang-thai-ghi';
+
+/** `db`, hoặc một giao dịch ĐANG MỞ — cùng kiểu mà `queries.ts` dùng, và cùng lý do. */
+type NguonDoc = typeof db | Tx;
 
 /**
  * Trạng thái ghi của từng bảng, giữ đúng thứ tự người gọi đưa vào.
  *
- * `NOT tgisinternal` để bỏ trigger ràng buộc khoá ngoại do Postgres tự tạo. Ghép theo TÊN
- * TRIGGER (`nhat_ky_<bang>`) chứ không theo tên bảng: một bảng thường có nhiều trigger, và
- * thứ cần biết là trigger CỦA NHẬT KÝ có đó và có đang bật hay không.
+ * Lọc theo CẶP `(tên bảng, tên trigger)`, không chỉ theo tên trigger. Tên trigger trong
+ * Postgres chỉ unique THEO TỪNG BẢNG, nên `nhat_ky_shipments` đặt trên một bảng khác là
+ * chuyện hoàn toàn hợp lệ — mà chỉ khớp tên trigger thì dòng đó cũng vào kết quả và màn
+ * hình báo "đã bật" cho `shipments` trong khi `shipments` chưa bật gì. Đó đúng là kiểu nói
+ * sai mà cả tính năng nhật ký dựng ra để tránh, nên điều kiện phải là cặp: `IN ((a,b), …)`
+ * so cả hai cột một lượt, không có cách nào khớp lệch một nửa.
+ *
+ * `NOT tgisinternal` để bỏ trigger ràng buộc khoá ngoại do Postgres tự tạo.
+ *
+ * `nguon` nhận một giao dịch đang mở để `scripts/nhat-ky-kiem-tra-trigger.ts` chạy được
+ * ĐÚNG câu này trên một trigger mồi tạo trong `BEGIN … ROLLBACK` — `vitest` không chạm
+ * được CSDL, nên đó là cách duy nhất chứng minh điều kiện cặp `(bảng, trigger)` thật sự
+ * loại được trigger trùng tên ở bảng khác. Một câu viết lại cho script thì lượt kiểm đi
+ * kiểm chính nó, còn câu màn hình dùng thật không ai chạm tới.
  */
-export async function trangThaiGhiCua(bang: readonly string[]): Promise<TrangThaiBang[]> {
+export async function trangThaiGhiCua(
+  bang: readonly string[],
+  nguon: NguonDoc = db,
+): Promise<TrangThaiBang[]> {
   if (bang.length === 0) return [];
-  const ten = bang.map(tenTrigger);
-  const r = await db.execute<{ tgname: string; tgenabled: string }>(sql`
-    SELECT t.tgname, t.tgenabled
+  const cap = bang.map((b) => sql`(${b}, ${tenTrigger(b)})`);
+  const r = await nguon.execute<{ relname: string; tgenabled: string }>(sql`
+    SELECT c.relname, t.tgenabled
       FROM pg_trigger t
       JOIN pg_class c ON c.oid = t.tgrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE NOT t.tgisinternal
        AND n.nspname = 'public'
-       AND t.tgname IN (${sql.join(ten.map((x) => sql`${x}`), sql`, `)})`);
-  const theoTen = new Map(r.rows.map((x) => [x.tgname, x.tgenabled]));
+       AND (c.relname, t.tgname) IN (${sql.join(cap, sql`, `)})`);
+  const theoBang = new Map(r.rows.map((x) => [x.relname, x.tgenabled]));
   return bang.map((b) => ({
     bang: b,
     nhan: nhanBang(b),
-    daGhi: dangGhi(theoTen.get(tenTrigger(b))),
+    daGhi: dangGhi(theoBang.get(b)),
   }));
 }

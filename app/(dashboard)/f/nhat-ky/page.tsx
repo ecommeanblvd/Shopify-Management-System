@@ -7,7 +7,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { demChuaGanDanhTinh, nhatKyCuaBang } from '@/features/nhat-ky/queries';
 import { trangThaiGhiCua } from '@/features/nhat-ky/tra-trigger';
-import { cauKhiTrong } from '@/features/nhat-ky/trang-thai-ghi';
+import { cauKhiTrong, CAU_KHONG_TRA_DUOC } from '@/features/nhat-ky/trang-thai-ghi';
 import { BangNhatKy } from '@/components/nhat-ky/BangNhatKy';
 import {
   CAC_BANG, docBang, docChu, docNgay, homNayVn, nguoiTrongKhoi, nhanBang, truongTrongKhoi,
@@ -66,9 +66,28 @@ export default async function NhatKyPage({ searchParams }: { searchParams: Promi
   /* Bảng này CÓ đang ghi nhật ký không — tra `pg_trigger`, không đoán.
      Câu cũ ở đây là "trigger của bảng CÓ THỂ chưa được bật": chữ "có thể" làm người đọc
      không phân biệt được "không ai sửa gì" với "chưa bật nên không ghi gì" — hai kết luận
-     ngược hẳn nhau, và đúng kiểu hỏng mà cả tính năng nhật ký dựng ra để tránh. */
-  const trangThaiGhi = await trangThaiGhiCua([bang]);
-  const chuaBat = trangThaiGhi.every((t) => !t.daGhi);
+     ngược hẳn nhau, và đúng kiểu hỏng mà cả tính năng nhật ký dựng ra để tránh.
+
+     Bọc `catch`: câu này chỉ quyết CÂU CHỮ khi bảng trống, mà trang này là đích của liên kết
+     "Xem đầy đủ" — tức là đường thoát khi panel trong module lỗi. Để một lỗi `pg_trigger`
+     làm sập nó là mất luôn chỗ cuối cùng xem được nhật ký. `null` = chưa biết, và
+     `CAU_KHONG_TRA_DUOC` nói đúng là chưa biết thay vì đoán sang một trong hai câu dứt khoát. */
+  const trangThaiGhi = await trangThaiGhiCua([bang]).catch((e: unknown) => {
+    console.error('[nhat-ky] tra pg_trigger lỗi:', e);
+    return null;
+  });
+  const chuaBat = trangThaiGhi !== null && trangThaiGhi.every((t) => !t.daGhi);
+
+  /* Thứ tự ba nhánh là có chủ ý:
+     - chưa tra được  → nói là chưa tra được, kể cả đang lọc: không khẳng định chiều nào;
+     - chưa bật       → nói là chưa bật, kể cả đang lọc: "không khớp bộ lọc" ngụ ý có dữ liệu
+                        bị lọc ra, trong khi thật ra không có dòng nào để lọc;
+     - đã bật + lọc   → lý do thật là bộ lọc, nói đúng cái đó. */
+  const cauTrong = trangThaiGhi === null
+    ? CAU_KHONG_TRA_DUOC
+    : chuaBat || !dangLoc
+      ? cauKhiTrong(trangThaiGhi)
+      : 'Không có thay đổi nào khớp bộ lọc.';
 
   return (
     <div className="space-y-5 p-6">
@@ -145,12 +164,7 @@ export default async function NhatKyPage({ searchParams }: { searchParams: Promi
           </div>
           <BangNhatKy
             khoi={khoi}
-            /* Bảng CHƯA BẬT thì nói là chưa bật, kể cả khi đang lọc: "không khớp bộ lọc"
-               ngụ ý rằng có dữ liệu mà bộ lọc loại ra, trong khi thật ra không có dòng
-               nào để lọc. */
-            trong={dangLoc && !chuaBat
-              ? 'Không có thay đổi nào khớp bộ lọc.'
-              : cauKhiTrong(trangThaiGhi)}
+            trong={cauTrong}
           />
         </CardContent>
       </Card>

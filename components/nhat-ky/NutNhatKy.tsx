@@ -46,10 +46,15 @@ export function NutNhatKy({ bang }: {
         <History className="size-4" />
         Nhật ký
       </SheetTrigger>
-      {/* Cùng biến thể `data-[side=right]:sm:max-w-*` của `SheetContent` để `twMerge` thay
-          được giá trị mặc định (`sm:max-w-sm`): bảng nhật ký có 4 cột, hẹp hơn thì cột
-          "Trước → Sau" bị bóp còn vài ký tự. */}
-      <SheetContent side="right" className="w-[96vw] gap-0 overflow-hidden data-[side=right]:sm:max-w-3xl">
+      {/* Chiều rộng phải viết KÈM biến thể `data-[side=right]:` — `SheetContent` đặt
+          `data-[side=right]:w-3/4` và `data-[side=right]:sm:max-w-sm`, mà `twMerge` chỉ gộp
+          được hai class CÙNG modifier; một `w-[96vw]` trần thì không gộp, và attribute
+          selector `[data-side=right]` lại thắng specificity nên nó vô tác dụng.
+          Cần rộng vì bảng nhật ký có 4 cột: hẹp hơn thì cột "Trước → Sau" bị bóp còn vài ký tự. */}
+      <SheetContent
+        side="right"
+        className="gap-0 overflow-hidden data-[side=right]:w-[96vw] data-[side=right]:sm:max-w-3xl"
+      >
         <SheetHeader className="pr-12">
           <SheetTitle>Nhật ký thay đổi</SheetTitle>
           <SheetDescription>
@@ -115,7 +120,20 @@ function NoiDung({ bang }: { bang: readonly string[] }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-y border-border px-4 py-2 text-xs text-muted-foreground">
         {kq.khoi.length} khối thay đổi · gom theo người — lúc — bản ghi
+        {/* Nói ra cái TRẦN. Không nói thì "12 khối thay đổi" đọc như "chỉ có 12 thay đổi",
+            trong khi panel vừa cắt ở đúng mép và phần cũ hơn còn nguyên dưới đó. */}
+        {kq.chamTran
+          ? ` · đã cắt ở ${kq.gioiHan} dòng mỗi bảng — còn thay đổi cũ hơn, mở "Xem đầy đủ"`
+          : ` · tối đa ${kq.gioiHan} dòng thô mỗi bảng`}
       </div>
+      {/* Bảng đọc lỗi phải gọi TÊN: phần còn lại trông vẫn bình thường, nên im lặng là để
+          người đọc kết luận "bảng này không ai sửa" từ một lượt đọc đã hỏng mất một nửa. */}
+      {kq.bangLoi.length > 0 && (
+        <p className="border-b border-border bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          Không đọc được: {kq.bangLoi.join(', ')}. Danh sách dưới đây THIẾU thay đổi của
+          {kq.bangLoi.length > 1 ? ' những bảng đó' : ' bảng đó'} — đừng đọc nó như là đủ.
+        </p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <BangNhatKy khoi={kq.khoi} trong={kq.cauTrong} />
       </div>

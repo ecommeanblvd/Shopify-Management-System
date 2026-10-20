@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { cauKhiTrong, dangGhi, tenTrigger, type TrangThaiBang } from './trang-thai-ghi';
+import {
+  cauKhiTrong, CAU_KHONG_TRA_DUOC, dangGhi, tenTrigger, type TrangThaiBang,
+} from './trang-thai-ghi';
 
 const bangNay = (daGhi: boolean): TrangThaiBang[] => [
   { bang: 'shipments', nhan: 'Kiện hàng', daGhi },
@@ -80,5 +82,19 @@ describe('cauKhiTrong', () => {
 
   it('không khai bảng nào: vẫn ra chữ, không để panel trống trơn', () => {
     expect(cauKhiTrong([])).not.toBe('');
+  });
+});
+
+describe('CAU_KHONG_TRA_DUOC', () => {
+  /* Ca "không tra được" phải là ca THỨ BA. Nó mà trùng một trong hai câu dứt khoát là lỗi
+     tra `pg_trigger` biến thành một lời khẳng định — đúng kiểu nói sai đang đi sửa. */
+  it('không trùng câu "đã bật" lẫn câu "chưa bật"', () => {
+    expect(CAU_KHONG_TRA_DUOC).not.toBe(cauKhiTrong(bangNay(true)));
+    expect(CAU_KHONG_TRA_DUOC).not.toBe(cauKhiTrong(bangNay(false)));
+  });
+
+  it('nói thẳng là chưa tra được, không khẳng định chiều nào', () => {
+    expect(CAU_KHONG_TRA_DUOC).toContain('Không tra được');
+    expect(CAU_KHONG_TRA_DUOC).toContain('chưa kết luận được');
   });
 });
