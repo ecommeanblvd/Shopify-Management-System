@@ -26,6 +26,16 @@ import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from 
 import { invalidateReconcileCache } from './reconcile-cache';
 import { classifyCharge } from './charge-classify';
 import { resolveColumns, LEGACY_COLUMN_MAP, expectedHeaderLabel } from './xlsx-columns';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+import { MAY } from '@/features/nhat-ky/tac-nhan';
+
+/*
+ * Nhãn "Nhập file" cho mọi lệnh ghi `shipments` của bộ nhập Excel. Người bấm nhập có danh
+ * tính, nhưng thứ đổi ô KHÔNG phải quyết định của người đó — nó là nội dung một tệp
+ * LOG-Export hãng gửi. Ghi tên người bấm vào đây là buộc tội họ đã sửa con số mà họ chưa
+ * từng thấy; nhãn nguồn mới chỉ đúng chỗ phải đi tìm khi số sai.
+ */
+const TAC_NHAN_NHAP_FILE = { kieu: 'may', nhan: MAY.NHAP_FILE } as const;
 
 export interface ImportSummary {
   totalRows: number;
@@ -356,11 +366,11 @@ export async function importLogExport(
       if (byCode && byCode.trackingNumber !== parsed.trackingNumber) {
         if (byCode.trackingNumber == null) {
           try {
-            await db.update(schema.shipments).set({
+            await ghiVoi(TAC_NHAN_NHAP_FILE, (tx) => tx.update(schema.shipments).set({
               trackingNumber: parsed.trackingNumber, carrierKey: parsed.carrier,
               ...(parsed.labelCreatedAt ? { labelCreatedAt: parsed.labelCreatedAt } : {}),
               updatedAt: new Date(),
-            }).where(eq(schema.shipments.id, byCode.id));
+            }).where(eq(schema.shipments.id, byCode.id)));
             kienTheoLogCode = byCode.id;
           } catch (e) {
             summary.warnings.errors.push({ rowIndex, reason: `không gắn tracking vào kiện ${parsed.logUniqueCode}: ${e instanceof Error ? e.message : String(e)}` });
@@ -377,7 +387,10 @@ export async function importLogExport(
     // fields that may have changed from a re-export — the operator's
     // physical pack data (weight/dim/packaging) shouldn't change
     // post-ship, but label_created_at sometimes does.
-    const shipmentRow = kienTheoLogCode ? [{ id: kienTheoLogCode }] : await db
+    // Giao dịch bọc ĐÚNG lệnh upsert này. Cả vòng lặp ~2k dòng trong một giao dịch là
+    // giao dịch dài hàng chục giây trên bảng kiện đang chạy — đúng cái đã làm pooler rớt
+    // kết nối giữa chừng ở cron Lark, và một dòng hỏng sẽ cuốn ngược cả tệp đã nhập được.
+    const shipmentRow = kienTheoLogCode ? [{ id: kienTheoLogCode }] : await ghiVoi(TAC_NHAN_NHAP_FILE, (tx) => tx
       .insert(schema.shipments)
       .values({
         orderId,
@@ -399,7 +412,7 @@ export async function importLogExport(
           updatedAt: new Date(),
         },
       })
-      .returning({ id: schema.shipments.id });
+      .returning({ id: schema.shipments.id }));
     const shipmentId = shipmentRow[0]?.id;
     if (!shipmentId) {
       summary.warnings.errors.push({ rowIndex, reason: 'shipment upsert returned no id' });

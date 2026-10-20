@@ -12,6 +12,7 @@ import type { DangKiem } from './types';
 import { docCanNhap } from './can-chiec';
 import { MUI_GIO_KINH_DOANH } from '@/lib/timezone';
 import { recordAudit } from '@/lib/logging/audit';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
 
 /**
  * QC ĐẠT → chiếc vào tồn. Đây là chỗ DUY NHẤT trong luồng này gọi `applyMovement`.
@@ -22,7 +23,7 @@ import { recordAudit } from '@/lib/logging/audit';
 export async function qcDat(itemId: string, kho: string): Promise<{ ok: boolean; loi?: string }> {
   const actor = await requirePerm('manage_qc');
   try {
-    await db.transaction(async (tx) => {
+    await ghiVoi({ kieu: 'nguoi', userId: actor }, async (tx) => {
       const [it] = await tx.select().from(schema.goodsReceiptItems)
         .where(eq(schema.goodsReceiptItems.id, itemId)).for('update');
       if (!it) throw new Error('Không tìm thấy chiếc hàng.');
@@ -65,7 +66,7 @@ export async function qcKhongDat(itemId: string, dongLoi: DongLoiVao[]): Promise
   const kiem = kiemLoQc(dongLoi);
   if (!kiem.ok) return { ok: false, loi: kiem.loi };
   try {
-    await db.transaction(async (tx) => {
+    await ghiVoi({ kieu: 'nguoi', userId: actor }, async (tx) => {
       const [it] = await tx.select().from(schema.goodsReceiptItems)
         .where(eq(schema.goodsReceiptItems.id, itemId)).for('update');
       if (!it) throw new Error('Không tìm thấy chiếc hàng.');
@@ -201,13 +202,15 @@ export async function danhSachDangKiem(): Promise<DangKiem[]> {
  * Để trống là XOÁ cân (xem `docCanNhap`) — người gõ nhầm phải rút lại được.
  */
 export async function datCanChiec(id: string, tho: string): Promise<{ ok: boolean; loi?: string }> {
-  await requirePerm('manage_qc');
+  const actor = await requirePerm('manage_qc');
   const kq = docCanNhap(tho);
   if (!kq.ok) return { ok: false, loi: kq.loi };
-  const n = await db.update(schema.goodsReceiptItems)
+  // Bọc để nhật ký biết AI gõ lại cân: cân là con số đi vào cước, sửa nó mà không có tên
+  // thì lúc lệch cước không ai truy được. Giao dịch chỉ quanh đúng lệnh ghi này.
+  const n = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.update(schema.goodsReceiptItems)
     .set({ weightKg: kq.kg == null ? null : String(kq.kg) })
     .where(eq(schema.goodsReceiptItems.id, id))
-    .returning({ id: schema.goodsReceiptItems.id });
+    .returning({ id: schema.goodsReceiptItems.id }));
   if (n.length === 0) return { ok: false, loi: 'Không tìm thấy chiếc này' };
   revalidatePath('/f/warehouse/nhan-kcs');
   return { ok: true };
@@ -235,7 +238,7 @@ export async function doiKetQuaQc(
   const ly = ghiChu.trim();
   if (ly.length < 3) return { ok: false, loi: 'Ghi rõ lý do đổi kết quả (ít nhất 3 ký tự).' };
   try {
-    await db.transaction(async (tx) => {
+    await ghiVoi({ kieu: 'nguoi', userId: actor }, async (tx) => {
       const [it] = await tx.select().from(schema.goodsReceiptItems)
         .where(eq(schema.goodsReceiptItems.id, itemId)).for('update');
       if (!it) throw new Error('Không tìm thấy chiếc hàng.');
