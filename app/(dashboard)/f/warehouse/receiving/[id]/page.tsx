@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
@@ -9,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { QcActions } from '@/components/receiving/QcActions';
+import { TabLichSu } from '@/components/nhat-ky/TabLichSu';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +25,22 @@ async function addItemAction(receiptId: string, formData: FormData) {
 
 const QC_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = { pass: 'default', fail: 'secondary', pending: 'outline' };
 
-export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
+/**
+ * Hai tab trên màn chi tiết lô, chọn bằng `?tab=` — cùng nếp với các màn gộp theo tab khác
+ * của repo (vd Báo cáo ship). Vì sao không render cả hai rồi ẩn bằng CSS: tab "Lịch sử"
+ * là một lượt đọc CSDL riêng, nên ẩn đi mà vẫn đọc là trả tiền cho thứ không ai xem.
+ */
+const TABS = [
+  { gia: 'hang', nhan: 'Đơn vị hàng' },
+  { gia: 'lich-su', nhan: 'Lịch sử' },
+] as const;
+
+export default async function ReceiptDetailPage(
+  { params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> },
+) {
   const { id } = await params;
+  const sp = await searchParams;
+  const tab = sp.tab === 'lich-su' ? 'lich-su' : 'hang';
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect('/sign-in');
   const role = await getRole(session.user.id);
@@ -44,7 +60,26 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
         <p className="text-sm text-muted-foreground">{receipt.sourceType} · {receipt.vendor ?? '—'} · {receipt.warehouseCode}</p>
       </header>
 
-      {canReceive && (
+      <div className="flex gap-1 border-b border-border">
+        {TABS.map((t) => (
+          <Link
+            key={t.gia}
+            href={`/f/warehouse/receiving/${id}?tab=${t.gia}`}
+            className={
+              'border-b-2 px-3 py-2 text-sm transition-colors '
+              + (tab === t.gia
+                ? 'border-foreground font-medium'
+                : 'border-transparent text-muted-foreground hover:text-foreground')
+            }
+          >
+            {t.nhan}
+          </Link>
+        ))}
+      </div>
+
+      {tab === 'lich-su' && <TabLichSu bang="goods_receipts" banGhiId={id} />}
+
+      {tab === 'hang' && canReceive && (
         <Card>
           <CardContent className="p-5 space-y-3">
             <h2 className="text-sm font-semibold">Thêm đơn vị hàng</h2>
@@ -63,38 +98,40 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
         </Card>
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="px-5 py-4 border-b border-border text-sm font-semibold">Đơn vị hàng ({items.length})</div>
-          {items.some((it) => it.printedAt && !it.confirmedAt) && (
-            <p className="px-5 pt-4 pb-2 text-sm text-amber-700">
-              {items.filter((it) => it.printedAt && !it.confirmedAt).length} tem đã in nhưng chưa quét xác nhận — chưa tính là đã nhận.
-            </p>
-          )}
-          <ul className="divide-y divide-border">
-            {items.map((it) => (
-              <li key={it.id} className="px-5 py-4 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{it.unitCode} · {it.sku ?? '—'}</div>
-                    <div className="text-xs text-muted-foreground truncate">{it.productTitle ?? ''} · {it.disposition}</div>
+      {tab === 'hang' && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="px-5 py-4 border-b border-border text-sm font-semibold">Đơn vị hàng ({items.length})</div>
+            {items.some((it) => it.printedAt && !it.confirmedAt) && (
+              <p className="px-5 pt-4 pb-2 text-sm text-amber-700">
+                {items.filter((it) => it.printedAt && !it.confirmedAt).length} tem đã in nhưng chưa quét xác nhận — chưa tính là đã nhận.
+              </p>
+            )}
+            <ul className="divide-y divide-border">
+              {items.map((it) => (
+                <li key={it.id} className="px-5 py-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{it.unitCode} · {it.sku ?? '—'}</div>
+                      <div className="text-xs text-muted-foreground truncate">{it.productTitle ?? ''} · {it.disposition}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={QC_VARIANT[it.qcResult]} className="h-5 text-[10px] uppercase tracking-wider">{it.qcResult}</Badge>
+                      {it.unplanned && <Badge className="h-5 bg-amber-500/15 text-amber-700 text-[10px] uppercase tracking-wider">Ngoài kế hoạch</Badge>}
+                      {it.printedAt && !it.confirmedAt && <Badge variant="outline" className="h-5 border-amber-500 text-amber-700 text-[10px] uppercase tracking-wider">Đã in, chưa xác nhận</Badge>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={QC_VARIANT[it.qcResult]} className="h-5 text-[10px] uppercase tracking-wider">{it.qcResult}</Badge>
-                    {it.unplanned && <Badge className="h-5 bg-amber-500/15 text-amber-700 text-[10px] uppercase tracking-wider">Ngoài kế hoạch</Badge>}
-                    {it.printedAt && !it.confirmedAt && <Badge variant="outline" className="h-5 border-amber-500 text-amber-700 text-[10px] uppercase tracking-wider">Đã in, chưa xác nhận</Badge>}
-                  </div>
-                </div>
-                {it.qcResult === 'fail' && it.qcFailReason && (
-                  <div className="text-xs text-amber-600">Lý do: {it.qcFailReason}</div>
-                )}
-                {canQc && it.qcResult === 'pending' && <QcActions itemId={it.id} />}
-              </li>
-            ))}
-            {items.length === 0 && <li className="px-5 py-6 text-sm text-muted-foreground">Chưa có đơn vị hàng.</li>}
-          </ul>
-        </CardContent>
-      </Card>
+                  {it.qcResult === 'fail' && it.qcFailReason && (
+                    <div className="text-xs text-amber-600">Lý do: {it.qcFailReason}</div>
+                  )}
+                  {canQc && it.qcResult === 'pending' && <QcActions itemId={it.id} />}
+                </li>
+              ))}
+              {items.length === 0 && <li className="px-5 py-6 text-sm text-muted-foreground">Chưa có đơn vị hàng.</li>}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
