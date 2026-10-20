@@ -139,10 +139,19 @@ async function buildOrderRows(
     return amount / storeFx.fxRate;
   };
 
+  /* Thứ tự dòng hàng phải ỔN ĐỊNH. Task 8 đổi đồng bộ từ xoá-rồi-chèn sang SỬA TẠI CHỖ, nên
+     thứ tự VẬT LÝ của hàng không còn ≈ thứ tự payload và một `SELECT` thiếu `ORDER BY` xáo
+     lại danh sách mỗi lần một dòng được sửa. Sắp theo `shopify_line_id` + `id` — xem
+     `soSanhDongHang` của `sync/so-sanh-dong-hang.ts` để biết đầy đủ vì sao. */
   const lines = await db
     .select()
     .from(schema.shopifyOrderLines)
-    .where(inArray(schema.shopifyOrderLines.orderId, orderIds));
+    .where(inArray(schema.shopifyOrderLines.orderId, orderIds))
+    .orderBy(
+      asc(schema.shopifyOrderLines.orderId),
+      asc(schema.shopifyOrderLines.shopifyLineId),
+      asc(schema.shopifyOrderLines.id),
+    );
   const refunds = await db
     .select()
     .from(schema.shopifyOrderRefunds)

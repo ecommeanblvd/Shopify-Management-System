@@ -26,6 +26,30 @@ import { parseXlsxRow, type ParsedShipment, type RawRow, type CarrierKey } from 
 import { invalidateReconcileCache } from './reconcile-cache';
 import { classifyCharge } from './charge-classify';
 import { resolveColumns, LEGACY_COLUMN_MAP, expectedHeaderLabel } from './xlsx-columns';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+import { MAY } from '@/features/nhat-ky/tac-nhan';
+
+/*
+ * Nhãn "Nhập file" cho mọi lệnh ghi `shipments` của bộ nhập Excel. Người bấm nhập có danh
+ * tính, nhưng thứ đổi ô KHÔNG phải quyết định của người đó — nó là nội dung một tệp
+ * LOG-Export hãng gửi. Ghi tên người bấm vào đây là buộc tội họ đã sửa con số mà họ chưa
+ * từng thấy; nhãn nguồn mới chỉ đúng chỗ phải đi tìm khi số sai.
+ */
+const TAC_NHAN_NHAP_FILE = { kieu: 'may', nhan: MAY.NHAP_FILE } as const;
+
+/**
+ * Số dòng mỗi giao dịch ghi.
+ *
+ * Hạ 200 → 50 (20/10/2026): lô 200 giữ khoá hàng trên `shipments` 25–35 giây MỘT LÔ, và
+ * giữ luôn một trong ~10 kết nối của pool suốt thời gian đó — trong lúc màn Đóng hàng đang
+ * đọc chính bảng ấy. Tổng thời gian nhập tệp gần như không đổi: cái lô gánh là ba vòng tới
+ * CSDL mỗi giao dịch (`BEGIN` + `set_config` + `COMMIT`), và chia cho 50 thì vẫn gần như
+ * miễn phí (ở độ trễ 61ms đo được: ~0,2s mỗi 50 dòng, tức ~8s cho tệp 2.000 dòng).
+ *
+ * CỐ Ý khác `APPLY_CHUNK = 200` của `features/lark/sync.ts`: cron Lark chạy đêm và không
+ * tranh bảng với người đang bấm, còn bộ nhập này chạy giữa giờ làm.
+ */
+const LO_GHI = 50;
 
 export interface ImportSummary {
   totalRows: number;
@@ -304,157 +328,175 @@ export async function importLogExport(
 
   // PHASE 3 — per-row upsert into shipments + shipment_charges.
   // Done sequentially (not parallel) so the unique-index conflict
-  // semantics stay deterministic. ~2k rows = single-digit seconds.
-  for (const { rowIndex, parsed } of valid) {
-    const storeId = storeIds.get(parsed.storeHandle);
-    if (!storeId) {
-      // Store handle is connected per `store-prefix.ts` but the store
-      // row doesn't exist on this environment. Surface as orphan.
-      summary.warnings.orphan_orders.push(`${parsed.orderNumber} (no store row for ${parsed.storeHandle})`);
-      continue;
-    }
-    const orderId = orderIds.get(parsed.orderNumber);
-    if (!orderId) {
-      summary.warnings.orphan_orders.push(parsed.orderNumber);
-      continue;
-    }
-    const carrierAccountId = carrierIds.get(parsed.carrier) ?? null;
-
-    // Đụng tracking chéo đơn: tracking đã thuộc shipment của ĐƠN KHÁC → flag.
-    // Không chặn import (upsert giữ liên kết cũ), chỉ cảnh báo để operator sửa nguồn.
-    const conflict = trackingConflict(
-      parsed.trackingNumber,
-      { orderId, orderNumber: parsed.orderNumber },
-      existingShipOrders.get(parsed.trackingNumber),
-    );
-    if (conflict) summary.warnings.tracking_conflicts.push(conflict);
-
-    const newHash = hashCharge(parsed);
-    const decision = classifyCharge(existingHashes.get(parsed.trackingNumber), newHash);
-
-    // Identical re-import → nothing to write (skip the shipment upsert too;
-    // an existing charge implies an existing shipment).
-    if (decision === 'unchanged') {
-      summary.alreadyImported += 1;
-      continue;
-    }
-
-    if (dryRun) {
-      if (decision === 'updated') summary.updated += 1;
-      else summary.imported += 1;
-      continue;
-    }
-
-    // Kiện có thể ĐÃ tồn tại theo Log Unique code mà chưa có tracking (webhook
-    // /api/lark/pack tạo lúc đóng hàng, migration 0149 làm log_unique_code unique).
-    // Khi đó gắn tracking vào kiện đó thay vì insert (insert sẽ vi phạm unique).
-    let logCodeChoInsert = parsed.logUniqueCode;
-    let kienTheoLogCode: string | undefined;
-    if (parsed.logUniqueCode) {
-      const [byCode] = await db.select({ id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber })
-        .from(schema.shipments).where(eq(schema.shipments.logUniqueCode, parsed.logUniqueCode)).limit(1);
-      if (byCode && byCode.trackingNumber !== parsed.trackingNumber) {
-        if (byCode.trackingNumber == null) {
-          try {
-            await db.update(schema.shipments).set({
-              trackingNumber: parsed.trackingNumber, carrierKey: parsed.carrier,
-              ...(parsed.labelCreatedAt ? { labelCreatedAt: parsed.labelCreatedAt } : {}),
-              updatedAt: new Date(),
-            }).where(eq(schema.shipments.id, byCode.id));
-            kienTheoLogCode = byCode.id;
-          } catch (e) {
-            summary.warnings.errors.push({ rowIndex, reason: `không gắn tracking vào kiện ${parsed.logUniqueCode}: ${e instanceof Error ? e.message : String(e)}` });
-            continue;
-          }
-        } else {
-          summary.warnings.errors.push({ rowIndex, reason: `Log code ${parsed.logUniqueCode} đã thuộc kiện ${byCode.trackingNumber} — tạo kiện không log code` });
-          logCodeChoInsert = null;
+  // semantics stay deterministic.
+  //
+  // Ghi theo LÔ, mỗi lô MỘT giao dịch có gắn danh tính. Vì sao không một giao dịch cho mỗi
+  // DÒNG: đo 20/10/2026, một giao dịch tốn thêm ba vòng tới CSDL (`BEGIN` + `set_config` +
+  // `COMMIT`) so với một lệnh trần, tức 2 → 5 vòng mỗi dòng; ở độ trễ 61ms đo được thì tệp
+  // 2.000 dòng đi từ ~237s lên ~595s. Theo lô thì ba vòng đó chia cho `LO_GHI` dòng — xem
+  // `LO_GHI` để biết vì sao con số là 50 chứ không phải 200.
+  // Vì sao cũng KHÔNG một giao dịch cho cả tệp: một dòng hỏng sẽ cuốn ngược cả tệp đã nhập
+  // được, và giao dịch dài hàng phút trên `shipments` là đúng cái đã làm pooler rớt kết nối
+  // giữa chừng ở cron Lark.
+  for (let i = 0; i < valid.length; i += LO_GHI) {
+    const lo = valid.slice(i, i + LO_GHI);
+    await ghiVoi(TAC_NHAN_NHAP_FILE, async (tx) => {
+      for (const { rowIndex, parsed } of lo) {
+        const storeId = storeIds.get(parsed.storeHandle);
+        if (!storeId) {
+          // Store handle is connected per `store-prefix.ts` but the store
+          // row doesn't exist on this environment. Surface as orphan.
+          summary.warnings.orphan_orders.push(`${parsed.orderNumber} (no store row for ${parsed.storeHandle})`);
+          continue;
         }
+        const orderId = orderIds.get(parsed.orderNumber);
+        if (!orderId) {
+          summary.warnings.orphan_orders.push(parsed.orderNumber);
+          continue;
+        }
+        const carrierAccountId = carrierIds.get(parsed.carrier) ?? null;
+
+        // Đụng tracking chéo đơn: tracking đã thuộc shipment của ĐƠN KHÁC → flag.
+        // Không chặn import (upsert giữ liên kết cũ), chỉ cảnh báo để operator sửa nguồn.
+        const conflict = trackingConflict(
+          parsed.trackingNumber,
+          { orderId, orderNumber: parsed.orderNumber },
+          existingShipOrders.get(parsed.trackingNumber),
+        );
+        if (conflict) summary.warnings.tracking_conflicts.push(conflict);
+
+        const newHash = hashCharge(parsed);
+        const decision = classifyCharge(existingHashes.get(parsed.trackingNumber), newHash);
+
+        // Identical re-import → nothing to write (skip the shipment upsert too;
+        // an existing charge implies an existing shipment).
+        if (decision === 'unchanged') {
+          summary.alreadyImported += 1;
+          continue;
+        }
+
+        if (dryRun) {
+          if (decision === 'updated') summary.updated += 1;
+          else summary.imported += 1;
+          continue;
+        }
+
+        // Kiện có thể ĐÃ tồn tại theo Log Unique code mà chưa có tracking (webhook
+        // /api/lark/pack tạo lúc đóng hàng, migration 0149 làm log_unique_code unique).
+        // Khi đó gắn tracking vào kiện đó thay vì insert (insert sẽ vi phạm unique).
+        let logCodeChoInsert = parsed.logUniqueCode;
+        let kienTheoLogCode: string | undefined;
+        if (parsed.logUniqueCode) {
+          const [byCode] = await tx.select({ id: schema.shipments.id, trackingNumber: schema.shipments.trackingNumber })
+            .from(schema.shipments).where(eq(schema.shipments.logUniqueCode, parsed.logUniqueCode)).limit(1);
+          if (byCode && byCode.trackingNumber !== parsed.trackingNumber) {
+            if (byCode.trackingNumber == null) {
+              try {
+                // ĐIỂM LƯU, không phải lệnh trần: đây là lệnh DUY NHẤT của vòng lặp mà một
+                // dòng hỏng được phép không làm hỏng cả tệp (`catch` ngay dưới đã hứa thế từ
+                // trước). Trong Postgres, một lệnh đổ làm đổ CẢ giao dịch, nên không có điểm
+                // lưu thì `catch` bắt được lỗi mà mọi dòng sau của lô vẫn chết theo.
+                await tx.transaction((diem) => diem.update(schema.shipments).set({
+                  trackingNumber: parsed.trackingNumber, carrierKey: parsed.carrier,
+                  ...(parsed.labelCreatedAt ? { labelCreatedAt: parsed.labelCreatedAt } : {}),
+                  updatedAt: new Date(),
+                }).where(eq(schema.shipments.id, byCode.id)));
+                kienTheoLogCode = byCode.id;
+              } catch (e) {
+                summary.warnings.errors.push({ rowIndex, reason: `không gắn tracking vào kiện ${parsed.logUniqueCode}: ${e instanceof Error ? e.message : String(e)}` });
+                continue;
+              }
+            } else {
+              summary.warnings.errors.push({ rowIndex, reason: `Log code ${parsed.logUniqueCode} đã thuộc kiện ${byCode.trackingNumber} — tạo kiện không log code` });
+              logCodeChoInsert = null;
+            }
+          }
+        }
+
+        // Upsert shipment by tracking_number. Conflict updates only the
+        // fields that may have changed from a re-export — the operator's
+        // physical pack data (weight/dim/packaging) shouldn't change
+        // post-ship, but label_created_at sometimes does.
+        const shipmentRow = kienTheoLogCode ? [{ id: kienTheoLogCode }] : await tx
+          .insert(schema.shipments)
+          .values({
+            orderId,
+            trackingNumber: parsed.trackingNumber,
+            carrierKey: parsed.carrier,
+            dimLengthCm: parsed.dimensions?.lengthCm.toString() ?? null,
+            dimWidthCm: parsed.dimensions?.widthCm.toString() ?? null,
+            dimHeightCm: parsed.dimensions?.heightCm.toString() ?? null,
+            actualWeightKg: parsed.actualWeightKg?.toString() ?? null,
+            packagingType: parsed.packagingType,
+            labelCreatedAt: parsed.labelCreatedAt,
+            logUniqueCode: logCodeChoInsert,
+            originHub: parsed.originHub,
+          })
+          .onConflictDoUpdate({
+            target: schema.shipments.trackingNumber,
+            set: {
+              labelCreatedAt: sql`COALESCE(EXCLUDED.label_created_at, ${schema.shipments.labelCreatedAt})`,
+              updatedAt: new Date(),
+            },
+          })
+          .returning({ id: schema.shipments.id });
+        const shipmentId = shipmentRow[0]?.id;
+        if (!shipmentId) {
+          summary.warnings.errors.push({ rowIndex, reason: 'shipment upsert returned no id' });
+          continue;
+        }
+
+        // Upsert the charge keyed on shipment_id (1:1). A corrected re-export
+        // updates the SAME row in place instead of inserting a duplicate that
+        // reconcile would list twice.
+        const chargeValues = {
+          shipmentId,
+          carrierAccountId,
+          trackingNumber: parsed.trackingNumber,
+          totalAmount: parsed.totalAmount.toString(),
+          currency: 'VND',
+          base: parsed.base?.toString() ?? null,
+          fuel: parsed.fuel?.toString() ?? null,
+          remote: parsed.remote?.toString() ?? null,
+          demand: parsed.demand?.toString() ?? null,
+          directSignature: parsed.directSignature?.toString() ?? null,
+          vat: parsed.vat?.toString() ?? null,
+          gogreen: parsed.gogreen?.toString() ?? null,
+          discount: parsed.discount?.toString() ?? null,
+          elevatedRisk: parsed.elevatedRisk?.toString() ?? null,
+          importHandling: parsed.importHandling?.toString() ?? null,
+          source,
+          sourceHash: newHash,
+        };
+        await tx
+          .insert(schema.shipmentCharges)
+          .values(chargeValues)
+          .onConflictDoUpdate({
+            target: schema.shipmentCharges.shipmentId,
+            set: {
+              carrierAccountId: chargeValues.carrierAccountId,
+              trackingNumber: chargeValues.trackingNumber,
+              totalAmount: chargeValues.totalAmount,
+              currency: chargeValues.currency,
+              base: chargeValues.base,
+              fuel: chargeValues.fuel,
+              remote: chargeValues.remote,
+              demand: chargeValues.demand,
+              directSignature: chargeValues.directSignature,
+              vat: chargeValues.vat,
+              gogreen: chargeValues.gogreen,
+              discount: chargeValues.discount,
+              elevatedRisk: chargeValues.elevatedRisk,
+              importHandling: chargeValues.importHandling,
+              source: chargeValues.source,
+              sourceHash: chargeValues.sourceHash,
+            },
+          });
+
+        if (decision === 'updated') summary.updated += 1;
+        else summary.imported += 1;
       }
-    }
-
-    // Upsert shipment by tracking_number. Conflict updates only the
-    // fields that may have changed from a re-export — the operator's
-    // physical pack data (weight/dim/packaging) shouldn't change
-    // post-ship, but label_created_at sometimes does.
-    const shipmentRow = kienTheoLogCode ? [{ id: kienTheoLogCode }] : await db
-      .insert(schema.shipments)
-      .values({
-        orderId,
-        trackingNumber: parsed.trackingNumber,
-        carrierKey: parsed.carrier,
-        dimLengthCm: parsed.dimensions?.lengthCm.toString() ?? null,
-        dimWidthCm: parsed.dimensions?.widthCm.toString() ?? null,
-        dimHeightCm: parsed.dimensions?.heightCm.toString() ?? null,
-        actualWeightKg: parsed.actualWeightKg?.toString() ?? null,
-        packagingType: parsed.packagingType,
-        labelCreatedAt: parsed.labelCreatedAt,
-        logUniqueCode: logCodeChoInsert,
-        originHub: parsed.originHub,
-      })
-      .onConflictDoUpdate({
-        target: schema.shipments.trackingNumber,
-        set: {
-          labelCreatedAt: sql`COALESCE(EXCLUDED.label_created_at, ${schema.shipments.labelCreatedAt})`,
-          updatedAt: new Date(),
-        },
-      })
-      .returning({ id: schema.shipments.id });
-    const shipmentId = shipmentRow[0]?.id;
-    if (!shipmentId) {
-      summary.warnings.errors.push({ rowIndex, reason: 'shipment upsert returned no id' });
-      continue;
-    }
-
-    // Upsert the charge keyed on shipment_id (1:1). A corrected re-export
-    // updates the SAME row in place instead of inserting a duplicate that
-    // reconcile would list twice.
-    const chargeValues = {
-      shipmentId,
-      carrierAccountId,
-      trackingNumber: parsed.trackingNumber,
-      totalAmount: parsed.totalAmount.toString(),
-      currency: 'VND',
-      base: parsed.base?.toString() ?? null,
-      fuel: parsed.fuel?.toString() ?? null,
-      remote: parsed.remote?.toString() ?? null,
-      demand: parsed.demand?.toString() ?? null,
-      directSignature: parsed.directSignature?.toString() ?? null,
-      vat: parsed.vat?.toString() ?? null,
-      gogreen: parsed.gogreen?.toString() ?? null,
-      discount: parsed.discount?.toString() ?? null,
-      elevatedRisk: parsed.elevatedRisk?.toString() ?? null,
-      importHandling: parsed.importHandling?.toString() ?? null,
-      source,
-      sourceHash: newHash,
-    };
-    await db
-      .insert(schema.shipmentCharges)
-      .values(chargeValues)
-      .onConflictDoUpdate({
-        target: schema.shipmentCharges.shipmentId,
-        set: {
-          carrierAccountId: chargeValues.carrierAccountId,
-          trackingNumber: chargeValues.trackingNumber,
-          totalAmount: chargeValues.totalAmount,
-          currency: chargeValues.currency,
-          base: chargeValues.base,
-          fuel: chargeValues.fuel,
-          remote: chargeValues.remote,
-          demand: chargeValues.demand,
-          directSignature: chargeValues.directSignature,
-          vat: chargeValues.vat,
-          gogreen: chargeValues.gogreen,
-          discount: chargeValues.discount,
-          elevatedRisk: chargeValues.elevatedRisk,
-          importHandling: chargeValues.importHandling,
-          source: chargeValues.source,
-          sourceHash: chargeValues.sourceHash,
-        },
-      });
-
-    if (decision === 'updated') summary.updated += 1;
-    else summary.imported += 1;
+    });
   }
 
   summary.durationMs = Date.now() - start;

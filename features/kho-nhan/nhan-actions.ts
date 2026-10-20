@@ -12,6 +12,19 @@ import { khoa, monPoConNhan } from './po-con-nhan';
 import { monConNhanDuoc } from './mon-lark-con-nhan';
 import { returnConNhanDuoc } from './return-con-nhan';
 import { layIdBienThe } from './shopify-qc';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+
+/*
+ * Vì sao mỗi lệnh ghi ở tệp này có giao dịch RIÊNG, bọc đúng một lệnh, thay vì một giao
+ * dịch chung cho cả luồng nhận hàng:
+ *  - cả hai lệnh dựng phiếu và ghi chiếc đều ĐỢI đụng unique (23505) rồi mới xử — lệnh
+ *    dựng phiếu rơi xuống `catch` để ĐỌC LẠI phiếu người khác vừa tạo, lệnh ghi chiếc đi
+ *    qua `withUniqueRetry`. Trong Postgres, một lệnh đổ làm đổ CẢ giao dịch: mọi lệnh sau
+ *    đó nhận `current transaction is aborted`. Gộp chung thì hai đường chữa cháy đó chết,
+ *    và hai người cùng nhận chiếc đầu tiên của một brand lại hỏng như trước;
+ *  - giao dịch chỉ cần dài bằng phần phải gắn danh tính (xem `ghi-voi.ts`). Kéo dài hơn
+ *    là giữ khoá trên `goods_receipt_items` — bảng `allocate.ts` đang đọc liên tục.
+ */
 
 /** Kho làm việc của người đang thao tác. Chưa gán thì rơi về GVM (kho chính). */
 async function khoCuaNguoiDung(userId: string): Promise<string> {
@@ -78,10 +91,10 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
       // Hai người cùng nhận chiếc đầu tiên của một brand trong ngày → cùng dựng
       // một mã phiếu. `code` là unique nên người sau đụng 23505; đọc lại thay vì hỏng.
       try {
-        [phieu] = await db.insert(schema.goodsReceipts).values({
+        [phieu] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceipts).values({
           code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
           vendor: line.vendor, receivedAt: new Date(), receivedBy: actor,
-        }).returning();
+        }).returning());
       } catch {
         [phieu] = await db.select().from(schema.goodsReceipts)
           .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
@@ -92,7 +105,7 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
     const item = await withUniqueRetry(async () => {
       const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
       const unitCode = maChiec(Number(seq.rows[0]?.v), new Date());
-      const [row] = await db.insert(schema.goodsReceiptItems).values({
+      const [row] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceiptItems).values({
         receiptId: phieu!.id,
         unitCode,
         sku: line.sku,
@@ -102,7 +115,7 @@ export async function ghiNhanChiec(lineId: string): Promise<{ ok: boolean; loi?:
         orderId: line.orderId,
         qcResult: 'pending',
         disposition: 'pending',
-      }).returning({ id: schema.goodsReceiptItems.id });
+      }).returning({ id: schema.goodsReceiptItems.id }));
       return row;
     });
 
@@ -142,10 +155,10 @@ export async function ghiNhanChiecPo(poRecordId: string): Promise<{ ok: boolean;
       .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
     if (!phieu) {
       try {
-        [phieu] = await db.insert(schema.goodsReceipts).values({
+        [phieu] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceipts).values({
           code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
           vendor: dong.vendor, receivedAt: new Date(), receivedBy: actor,
-        }).returning();
+        }).returning());
       } catch {
         [phieu] = await db.select().from(schema.goodsReceipts)
           .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
@@ -155,7 +168,7 @@ export async function ghiNhanChiecPo(poRecordId: string): Promise<{ ok: boolean;
 
     const item = await withUniqueRetry(async () => {
       const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
-      const [row] = await db.insert(schema.goodsReceiptItems).values({
+      const [row] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceiptItems).values({
         receiptId: phieu!.id,
         unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
         sku: dong.sku,
@@ -165,7 +178,7 @@ export async function ghiNhanChiecPo(poRecordId: string): Promise<{ ok: boolean;
         poRecordId: dong.recordId,
         qcResult: 'pending',
         disposition: 'pending',
-      }).returning({ id: schema.goodsReceiptItems.id });
+      }).returning({ id: schema.goodsReceiptItems.id }));
       return row;
     });
 
@@ -216,10 +229,10 @@ export async function ghiNhanChiecMonLark(
       .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
     if (!phieu) {
       try {
-        [phieu] = await db.insert(schema.goodsReceipts).values({
+        [phieu] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceipts).values({
           code: maPhieu, warehouseCode: kho, sourceType: 'retail_for_order',
           vendor: mon.vendor, receivedAt: new Date(), receivedBy: actor,
-        }).returning();
+        }).returning());
       } catch {
         [phieu] = await db.select().from(schema.goodsReceipts)
           .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
@@ -229,7 +242,7 @@ export async function ghiNhanChiecMonLark(
 
     const item = await withUniqueRetry(async () => {
       const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
-      const [row] = await db.insert(schema.goodsReceiptItems).values({
+      const [row] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceiptItems).values({
         receiptId: phieu!.id,
         unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
         sku: mon.sku,
@@ -239,7 +252,7 @@ export async function ghiNhanChiecMonLark(
         monRecordId: mon.recordId,
         qcResult: 'pending',
         disposition: 'pending',
-      }).returning({ id: schema.goodsReceiptItems.id });
+      }).returning({ id: schema.goodsReceiptItems.id }));
       return row;
     });
 
@@ -299,10 +312,10 @@ export async function ghiNhanChiecReturn(
       .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
     if (!phieu) {
       try {
-        [phieu] = await db.insert(schema.goodsReceipts).values({
+        [phieu] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceipts).values({
           code: maPhieu, warehouseCode: kho, sourceType: 'consignment',
           vendor: null, receivedAt: new Date(), receivedBy: actor,
-        }).returning();
+        }).returning());
       } catch {
         [phieu] = await db.select().from(schema.goodsReceipts)
           .where(eq(schema.goodsReceipts.code, maPhieu)).limit(1);
@@ -312,7 +325,7 @@ export async function ghiNhanChiecReturn(
 
     const item = await withUniqueRetry(async () => {
       const seq = await db.execute<{ v: string }>("SELECT nextval('wh_chiec_seq') AS v");
-      const [row] = await db.insert(schema.goodsReceiptItems).values({
+      const [row] = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.insert(schema.goodsReceiptItems).values({
         receiptId: phieu!.id,
         unitCode: maChiec(Number(seq.rows[0]?.v), new Date()),
         sku: dong.sku,
@@ -320,7 +333,7 @@ export async function ghiNhanChiecReturn(
         returnRecordId: dong.recordId,
         qcResult: 'pending',
         disposition: 'pending',
-      }).returning({ id: schema.goodsReceiptItems.id });
+      }).returning({ id: schema.goodsReceiptItems.id }));
       return row;
     });
 
@@ -349,15 +362,16 @@ export async function ghiNhanChiecReturn(
  * mọi đường xoá ở đây phải hẹp đến mức không thể chạm hàng cũ.
  */
 export async function goChiecNhanNham(itemId: string): Promise<{ ok: boolean; loi?: string }> {
-  await requirePerm('manage_qc');
+  const actor = await requirePerm('manage_qc');
   try {
-    const xoa = await db.delete(schema.goodsReceiptItems)
+    // Xoá là thao tác KHÔNG lấy lại được, nên nó là dòng nhật ký đáng tên nhất của cả tệp.
+    const xoa = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.delete(schema.goodsReceiptItems)
       .where(and(
         eq(schema.goodsReceiptItems.id, itemId),
         eq(schema.goodsReceiptItems.qcResult, 'pending'),
         isNull(schema.goodsReceiptItems.larkRecordId),
       ))
-      .returning({ id: schema.goodsReceiptItems.id });
+      .returning({ id: schema.goodsReceiptItems.id }));
     if (xoa.length === 0) {
       return { ok: false, loi: 'Không xoá được — chiếc này đã kiểm hoặc đã vào hàng chờ QC.' };
     }
@@ -405,9 +419,9 @@ export async function xoaChiec(itemId: string): Promise<{ ok: boolean; loi?: str
 }
 
 export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; loi?: string }> {
-  await requirePerm('manage_qc');
+  const actor = await requirePerm('manage_qc');
   try {
-    const xoa = await db.delete(schema.goodsReceiptItems)
+    const xoa = await ghiVoi({ kieu: 'nguoi', userId: actor }, (tx) => tx.delete(schema.goodsReceiptItems)
       .where(and(
         eq(schema.goodsReceiptItems.qcResult, 'pending'),
         isNull(schema.goodsReceiptItems.larkRecordId),
@@ -416,7 +430,7 @@ export async function huyNhapChuaGui(): Promise<{ ok: boolean; soXoa: number; lo
         // xoá luôn việc dang dở của hôm qua mà không ai kịp thấy.
         sql`${sql.raw(sqlGioKinhDoanh('created_at'))}::date = (now() AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok')::date`,
       ))
-      .returning({ id: schema.goodsReceiptItems.id });
+      .returning({ id: schema.goodsReceiptItems.id }));
     revalidatePath('/f/warehouse/nhan-kcs');
     return { ok: true, soXoa: xoa.length };
   } catch (e) {

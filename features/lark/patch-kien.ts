@@ -1,6 +1,10 @@
 /**
  * Một chỗ duy nhất biến PackRow (dòng Lark) thành giá trị ghi vào `shipments`.
  * Cron `sync-lark` và webhook `/api/lark/pack` cùng dùng — hai đường vào, một luật.
+ *
+ * Tệp này THUẦN và cố ý KHÔNG biết nhãn tác nhân của nhật ký: hai đường vào mang hai nhãn
+ * khác nhau ("Đồng bộ Lark" và "Lark bắn về"), nên nhãn do nơi GỌI quyết định — xem
+ * `ghiVoi` ở `features/lark/sync.ts` và `features/lark/nhan-mot-dong.ts`.
  */
 import type { schema } from '@/db/client';
 import type { PackRow } from './parse-pack-row';

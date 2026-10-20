@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OLD_TO_NEW, SYSTEM_ROLE_SEEDS } from './permission-map';
+import { OLD_TO_NEW, QUYEN_MOI_VAI_TRO, SYSTEM_ROLE_SEEDS } from './permission-map';
 import { isValidKey, allPermissionKeys } from './permissions';
 
 // Regression — Task 1 fix: orders.cogs (view_cogs/manage_cogs) must be wired
@@ -143,5 +143,29 @@ describe('chọn line ship (màn Đóng hàng)', () => {
     const logistics = new Set(SYSTEM_ROLE_SEEDS['logistics'].keys);
     expect(OLD_TO_NEW['chon_line_ship'].every((k) => logistics.has(k))).toBe(true);
     expect(OLD_TO_NEW['manage_fulfillment'].every((k) => logistics.has(k))).toBe(false);
+  });
+});
+
+// Nhật ký thay đổi (spec §7, Ruling 2 của kế hoạch 20/10/2026): CEO chốt MỌI nhân sự
+// xem được nhật ký, nhưng vẫn qua một quyền riêng để sau này siết được một vai trò.
+describe('quyền xem nhật ký thay đổi', () => {
+  it('view_nhat_ky map sang nhat_ky:view', () => {
+    expect(OLD_TO_NEW['view_nhat_ky']).toEqual(['nhat_ky:view']);
+  });
+
+  it('mọi vai trò hạt giống đều xem được nhật ký', () => {
+    for (const [key, seed] of Object.entries(SYSTEM_ROLE_SEEDS)) {
+      expect(new Set(seed.keys).has('nhat_ky:view'), `vai trò ${key}`).toBe(true);
+    }
+  });
+
+  // Vai trò CẤP TAY trong Settings (production đang có `OC`) không có hạt giống nào, nên
+  // chỉ thêm vào SYSTEM_ROLE_SEEDS là KHÔNG tới được chúng. Nền chung này là đường cấp.
+  it('nhat_ky:view nằm trong nền chung cấp cho mọi vai trò, kể cả vai cấp tay', () => {
+    expect(QUYEN_MOI_VAI_TRO).toContain('nhat_ky:view');
+  });
+
+  it('mọi khoá của nền chung đều hợp lệ', () => {
+    for (const k of QUYEN_MOI_VAI_TRO) expect(isValidKey(k)).toBe(true);
   });
 });

@@ -28,6 +28,7 @@ import { locThuocTinh, type MetafieldTho } from '@/features/kho-nhan/thuoc-tinh-
 import { verifyAndStoreOrderAddress } from '@/features/shopify-orders/address-verify';
 import { docNenVanDon } from './queries';
 import { dungKhoiVanDon, type Khoi } from './van-don';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
 import type { BaoGiaKien } from './types';
 
 const CACHE_MS = 10 * 60 * 1000;
@@ -416,14 +417,16 @@ export type KetQuaLuuTracking =
  *  hành thật. Để vai trò `viewer` (chỉ-được-xem) bấm được là mở cửa cho người chỉ-xem đốt hạn
  *  mức Rate API; mà bước phân tích chỉ có nghĩa với người sắp bấm ghi, nên hai bước phải cùng
  *  một mức quyền — gác lỏng bước đầu rồi chặn ở bước sau là bày ra một nút vô dụng. */
-async function nguoiDuocGhiVanDon(): Promise<{ ok: true } | { ok: false; loi: string }> {
+async function nguoiDuocGhiVanDon(): Promise<{ ok: true; id: string } | { ok: false; loi: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
   if (!hasPermission(role, 'manage_fulfillment')) {
     return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
   }
-  return { ok: true };
+  // Trả luôn `id`: bước lưu mã vận đơn phải gắn danh tính vào nhật ký, và người đã
+  // được gác ở đây chính là người sẽ chịu trách nhiệm cho mã đó.
+  return { ok: true, id: session.user.id };
 }
 
 /**
@@ -630,10 +633,15 @@ export async function luuTrackingChoKien(shipmentId: string, raw: string): Promi
   // nhưng vô hình với cron, im lặng không ai biết. Đổi lại: cột `tracking_nhap_luc`
   // (migration 0205) PHẢI được áp tay TRƯỚC khi deploy — chưa có cột thì lệnh này đổ và
   // cả thao tác nhập mã vận đơn thất bại (hỏng ỒN ÀO, thấy ngay, thay vì âm thầm).
+  //
+  // Giao dịch của `ghiVoi` bọc ĐÚNG lệnh này, không bọc `ghiGiaUocTinhLenLark` bên dưới:
+  // bước đó gọi API Lark hàng giây, giữ khoá `shipments` suốt lượt gọi mạng là chặn cả
+  // màn Đóng hàng; và nó CỐ Ý best-effort — nằm trong giao dịch thì một lỗi Lark sẽ
+  // cuốn ngược cả mã vận đơn vừa lưu, đúng cái thứ tự bắt buộc ở trên cấm.
   try {
-    await db.update(schema.shipments)
+    await ghiVoi({ kieu: 'nguoi', userId: ai.id }, (tx) => tx.update(schema.shipments)
       .set({ trackingNumber: kt.tracking, trackingNhapLuc: new Date(), updatedAt: new Date() })
-      .where(eq(schema.shipments.id, shipmentId));
+      .where(eq(schema.shipments.id, shipmentId)));
   } catch (e) {
     console.error('[dong-hang] luuTrackingChoKien: lưu tracking lỗi:', e);
     return { ok: false, loi: 'Lưu mã vận đơn thất bại.' };

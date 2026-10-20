@@ -3585,3 +3585,51 @@ export const boxDongGoi = pgTable('box_dong_goi', {
 }, (t) => [
   index('box_dong_goi_an_idx').on(t.an),
 ]);
+
+/**
+ * Nhật ký thay đổi MỨC TỪNG Ô cho 10 bảng vận hành (migration 0210, spec 2026-10-20 §3).
+ *
+ * Một dòng = MỘT Ô đổi. Không ghi từ mã TypeScript: dòng ở đây do trigger Postgres
+ * `nhat_ky_ghi()` sinh ra (bật/gỡ bằng `scripts/nhat-ky-bat-tat.ts`, cột được theo dõi khai ở
+ * `features/nhat-ky/cot-theo-doi.ts`). Khai bảng ở đây là để ĐỌC — màn Lịch sử và trang nhật
+ * ký — nên đừng thêm đường ghi thứ hai từ mã: hai nguồn ghi là hai luật, rồi lệch nhau.
+ *
+ * `bang`/`ban_ghi_id` CỐ Ý không phải khoá ngoại thật: nhật ký phải sống sót sau khi bản ghi
+ * gốc bị xoá (ca `DELETE` ghi chính lúc hàng biến mất), nên FK `ON DELETE CASCADE` sẽ xoá
+ * đúng cái bằng chứng cần giữ.
+ *
+ * `truoc`/`sau` là text cho mọi kiểu cột nguồn (numeric, timestamp, enum, jsonb đều ép về
+ * text trong trigger). NULL và chuỗi rỗng là HAI giá trị khác nhau: xoá trắng một ô là hành
+ * động của người, không được nuốt mất.
+ *
+ * Dòng cũ hơn 12 tháng dọn bằng `scripts/nhat-ky-don-cu.ts` (spec §8).
+ */
+export const nhatKyThayDoi = pgTable('nhat_ky_thay_doi', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  bang: text('bang').notNull(),
+  banGhiId: text('ban_ghi_id').notNull(),
+  /** Bản ghi cha, trigger ghi sẵn lúc chạy để màn của cha cuốn được thay đổi của dòng con. */
+  chaBang: text('cha_bang'),
+  chaId: text('cha_id'),
+  /** `them` | `sua` | `xoa` (spec §3). KHÔNG phải `TG_OP` tiếng Anh của Postgres. */
+  thaoTac: text('thao_tac').notNull(),
+  truong: text('truong').notNull(),
+  truoc: text('truoc'),
+  sau: text('sau'),
+  /** NULL khi lệnh ghi không đi qua đường đặt danh tính (cron, psql tay). */
+  tacNhanId: text('tac_nhan_id'),
+  tacNhanNhan: text('tac_nhan_nhan'),
+  luc: timestamp('luc', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('nhat_ky_thay_doi_ban_ghi_idx').on(t.bang, t.banGhiId, t.luc.desc()),
+  index('nhat_ky_thay_doi_cha_idx').on(t.chaBang, t.chaId, t.luc.desc()),
+  index('nhat_ky_thay_doi_bang_luc_idx').on(t.bang, t.luc.desc()),
+  /** `demChuaGanDanhTinh()` — chạy mỗi lượt mở `/f/nhat-ky`. Ba chỉ mục trên đều dẫn đầu
+   *  bằng `bang`/`cha_bang` nên câu đó quét cả bảng (di trú 0211). Điều kiện phải khớp
+   *  đúng từng chữ với câu truy vấn, không thì planner không dùng. */
+  index('nhat_ky_thay_doi_no_danh_tinh_idx').on(t.bang)
+    .where(sql`${t.tacNhanId} IS NULL AND ${t.tacNhanNhan} IS NULL`),
+  /** Lượt dọn 12 tháng (`scripts/nhat-ky-don-cu.ts`) đi từ dòng CŨ NHẤT và không lọc theo
+   *  bảng, nên nó cần `luc` TĂNG DẦN — khác chiều ba chỉ mục trên (di trú 0211). */
+  index('nhat_ky_thay_doi_luc_idx').on(t.luc),
+]);

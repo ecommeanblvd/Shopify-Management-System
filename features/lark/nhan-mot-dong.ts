@@ -17,6 +17,16 @@ import { patchFrom, giaTriTaoKien } from './patch-kien';
 import { resolveOrderIds } from '@/features/shipments/import-actions';
 import { coThayDoi } from '@/lib/khong-doi';
 import type { PackRow } from './parse-pack-row';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+import { MAY } from '@/features/nhat-ky/tac-nhan';
+
+/*
+ * Nhãn riêng "Lark bắn về", KHÔNG dùng chung nhãn của cron `sync-lark` dù hai đường cùng
+ * gọi `patchFrom`/`giaTriTaoKien`: đó chính là lý do `patch-kien.ts` để THUẦN, không tự
+ * biết nhãn. Khi một ô `shipments` bị đổi sai thì nhãn là thứ nói đi tìm ở webhook (Ops
+ * vừa sửa dòng Lark, bắn sang ngay) hay ở lượt cron (đọc lại cả bảng mỗi 15 phút).
+ */
+const TAC_NHAN_WEBHOOK = { kieu: 'may', nhan: MAY.LARK_BAN_VE } as const;
 
 export type KetQuaNhanDong =
   | { ketQua: 'tao' | 'cap_nhat'; shipmentId: string; logUniqueCode: string | null }
@@ -118,7 +128,7 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
   async function vaKien(id: string, hienTai?: Record<string, unknown>): Promise<void> {
     const patch = patchFrom(row);
     if (Object.keys(patch).length > 1 && coThayDoi(hienTai, patch)) {
-      await db.update(schema.shipments).set(patch).where(eq(schema.shipments.id, id));
+      await ghiVoi(TAC_NHAN_WEBHOOK, (tx) => tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, id)));
     }
   }
 
@@ -128,7 +138,8 @@ async function xuLy(recordId: string, dry: boolean): Promise<KetQuaNhanDong> {
     await vaKien(pl.shipmentId, kienTheoId.get(pl.shipmentId));
     shipmentId = pl.shipmentId; ketQua = 'cap_nhat';
   } else {
-    const [ins] = await db.insert(schema.shipments).values(giaTriTaoKien(row, pl.orderId)).onConflictDoNothing().returning({ id: schema.shipments.id });
+    const [ins] = await ghiVoi(TAC_NHAN_WEBHOOK, (tx) => tx.insert(schema.shipments)
+      .values(giaTriTaoKien(row, pl.orderId)).onConflictDoNothing().returning({ id: schema.shipments.id }));
     if (ins) { shipmentId = ins.id; ketQua = 'tao'; }
     else {
       // Đụng unique (log code hoặc tracking) — request song song / cron vừa tạo.

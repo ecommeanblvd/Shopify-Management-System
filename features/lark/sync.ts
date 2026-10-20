@@ -16,6 +16,16 @@ import { coThayDoi } from '@/lib/khong-doi';
 import { canDongTrangThai, canLapNgay, canSuaNgay, chonTrangThaiChoKien, type ShipmentHienTai, type TrangThaiGiaoLark } from './can-freeze';
 import { NGUON_HANG } from './nguon-hang';
 import { soatMatDong } from './mat-dong';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+import { MAY } from '@/features/nhat-ky/tac-nhan';
+
+/*
+ * Mọi lệnh ghi `shipments` của cron này mang nhãn "Đồng bộ Lark" (CEO 20/10/2026: *"Ghi
+ * rõ 'Đồng bộ Lark' luôn, cần thấy hết"*). Không gắn thì ô do cron đổi hiện "Chưa gắn
+ * danh tính" — lẫn đúng vào nhóm "đường ghi của người quên bọc", và hai lỗi khác hẳn nhau
+ * đó không còn cách nào tách ra được nữa.
+ */
+const TAC_NHAN_CRON = { kieu: 'may', nhan: MAY.DONG_BO_LARK } as const;
 
 /** 1 dòng lark_sync_runs đã chuẩn hoá cho UI (ngày = ISO string, JSON đã ép kiểu). */
 export interface LarkRunRow {
@@ -125,14 +135,14 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
       .filter(({ u, patch }) => Object.keys(patch).length > 1 && coThayDoi(shipmentById.get(u.shipmentId), patch));
     const boQuaUpdate = cls.update.length - canUpdate.length;
     for (const batch of chunk(canUpdate, APPLY_CHUNK)) {
-      await db.transaction(async (tx) => {
+      await ghiVoi(TAC_NHAN_CRON, async (tx) => {
         for (const { u, patch } of batch) {
           await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, u.shipmentId));
         }
       });
     }
     for (const batch of chunk(cls.create, APPLY_CHUNK)) {
-      await db.transaction(async (tx) => {
+      await ghiVoi(TAC_NHAN_CRON, async (tx) => {
         for (const c of batch) {
           await tx.insert(schema.shipments).values(giaTriTaoKien(c.row, c.orderId)).onConflictDoNothing();
         }
@@ -303,7 +313,7 @@ export async function syncLarkPacks(opts?: { giuRecords?: boolean }): Promise<La
         }
       }
       for (const batch of chunk(viec, APPLY_CHUNK)) {
-        await db.transaction(async (tx) => {
+        await ghiVoi(TAC_NHAN_CRON, async (tx) => {
           for (const { kien, s } of batch) {
             const mot = [kien];
             const laDelivered = s.deliveryState === 'delivered';
@@ -411,12 +421,14 @@ async function danhDauKienMatDong(logCodeTrenLark: string[]): Promise<{ danhDau:
       console.warn(`[lark] bỏ soát dòng bị xoá: ${kq.soPhatHien} kiện mất dòng cùng lúc (Lark trả ${logCodeTrenLark.length} dòng) — nghi Lark trả thiếu`);
     }
     for (const batch of chunk(kq.canDanhDau, APPLY_CHUNK)) {
-      await db.update(schema.shipments).set({ larkMatDongLuc: new Date(), updatedAt: new Date() })
-        .where(inArray(schema.shipments.logUniqueCode, batch));
+      await ghiVoi(TAC_NHAN_CRON, (tx) => tx.update(schema.shipments)
+        .set({ larkMatDongLuc: new Date(), updatedAt: new Date() })
+        .where(inArray(schema.shipments.logUniqueCode, batch)));
     }
     for (const batch of chunk(kq.canGoDanhDau, APPLY_CHUNK)) {
-      await db.update(schema.shipments).set({ larkMatDongLuc: null, updatedAt: new Date() })
-        .where(inArray(schema.shipments.logUniqueCode, batch));
+      await ghiVoi(TAC_NHAN_CRON, (tx) => tx.update(schema.shipments)
+        .set({ larkMatDongLuc: null, updatedAt: new Date() })
+        .where(inArray(schema.shipments.logUniqueCode, batch)));
     }
     return { danhDau: kq.canDanhDau.length, goDanhDau: kq.canGoDanhDau.length };
   } catch (e) {

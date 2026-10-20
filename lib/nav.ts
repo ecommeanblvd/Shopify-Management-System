@@ -68,6 +68,12 @@ export const NAV: NavItem[] = [
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
   // Customer Account + Style Quiz nằm TRONG hub Functions (không đứng riêng).
   { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions', match: ['/f/customer-account'] },
+  /* Nhật ký thay đổi: ai sửa ô nào, trước → sau. Nằm ở MENU CHÍNH chứ không trong Settings —
+     người đi tìm "ai sửa cái này" đang làm việc ở một màn vận hành, và cùng lý do với KPI
+     Logistics (CEO 30/09/2026): thứ nhân sự cần hằng ngày thì không chôn trong Settings.
+     Mọi vai trò đều có `view_nhat_ky` (CEO 20/10/2026) nên thực tế ai cũng thấy mục này;
+     vẫn gác bằng quyền riêng để sau này siết được một vai mà không phải sửa mã. */
+  { href: '/f/nhat-ky',       label: 'Nhật ký',       icon: History,         requires: 'view_nhat_ky' },
   { href: '/settings',        label: 'Settings',      icon: Settings,        requires: null },
 ];
 

@@ -47,6 +47,9 @@ export const CATALOG: ScopeDef[] = [
   // Đánh giá Trustpilot / Judge.me. Scope riêng vì là DANH TIẾNG, không phải tiền:
   // mở được cho marketing mà không phải mở dữ liệu thiệt hại và tranh chấp.
   { key: 'cx.review', label: 'CX — Đánh giá Trustpilot', actions: ['view', 'create', 'edit'] },
+  // Nhật ký thay đổi mức từng ô. CHỈ có action 'view': nhật ký do trigger Postgres ghi,
+  // không màn nào sửa hay xoá dòng của nó (dọn dòng cũ là việc của cron giữ 12 tháng).
+  { key: 'nhat_ky', label: 'Nhật ký thay đổi', actions: ['view'] },
   { key: 'markets', label: 'Markets', actions: ['view', 'edit', 'apply'] },
   // settings_sync needs 3 distinct non-apply capabilities to mirror the legacy
   // perms exactly: view=xem lịch sử (view_settings_history), create=quản lý

@@ -1,6 +1,6 @@
 'use server';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { giaVonThucTheoDong } from './gia-von-thuc';
 import { ghiChuGiaDuTinh } from '@/features/cogs/gia-du-tinh';
 import { headers } from 'next/headers';
@@ -168,7 +168,13 @@ export async function getOrderDetail(orderId: string): Promise<OrderDetail | nul
     })
     .from(schema.stores)
     .where(eq(schema.stores.id, order.storeId));
-  const lines = await db.select().from(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, orderId));
+  /* Thứ tự dòng hàng phải ỔN ĐỊNH. Task 8 đổi đồng bộ từ xoá-rồi-chèn sang SỬA TẠI CHỖ, nên
+     thứ tự VẬT LÝ của hàng không còn ≈ thứ tự payload và một `SELECT` thiếu `ORDER BY` xáo
+     lại danh sách mỗi lần một dòng được sửa. Sắp theo `shopify_line_id` + `id` — xem
+     `soSanhDongHang` của `sync/so-sanh-dong-hang.ts` để biết đầy đủ vì sao. */
+  const lines = await db.select().from(schema.shopifyOrderLines)
+    .where(eq(schema.shopifyOrderLines.orderId, orderId))
+    .orderBy(asc(schema.shopifyOrderLines.shopifyLineId), asc(schema.shopifyOrderLines.id));
 
   // Giá vốn THỰC từ order_line_cogs (bảng kê brand đã chốt, PO, MMP) — nối vào từng dòng, đối lập giá vốn dự tính sku_costs.
   const cogsRows = await db

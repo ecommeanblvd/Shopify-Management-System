@@ -1,7 +1,8 @@
-import { and, eq, isNotNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { mapShopifyOrder } from './shopify-mapper';
 import { orderContentFingerprint, detectEdit } from './order-fingerprint';
+import { soSanhDongHang } from './so-sanh-dong-hang';
 import type { ShopifyOrderPayload } from '../shopify-types';
 import { ensureFulfillmentForOrder } from '@/features/fulfillment/ensure-fulfillment';
 
@@ -23,8 +24,8 @@ export function normalizeCustomerGid<T extends { customer?: { id?: string | null
 /**
  * Idempotently upsert a Shopify order, its lines, and its refunds in a single
  * transaction. Safe to call from any of the three sync channels — last write
- * wins on the order row, lines are DELETE+INSERT-replaced (Shopify renumbers
- * line ids on edits), and refunds dedup by shopify_refund_id.
+ * wins on the order row, lines are diffed against what is already stored
+ * (see `so-sanh-dong-hang.ts`), and refunds dedup by shopify_refund_id.
  */
 export async function upsertOrder(
   storeId: string,
@@ -113,10 +114,55 @@ export async function upsertOrder(
 
     internalOrderId = row!.id;
 
-    await tx.delete(schema.shopifyOrderLines).where(eq(schema.shopifyOrderLines.orderId, row!.id));
-    if (mapped.lines.length > 0) {
+    /* Dòng hàng: SO rồi ghi đúng phần đổi, KHÔNG xoá sạch rồi chèn lại.
+     *
+     * Kiểu cũ (`DELETE` cả đơn + `INSERT` lại cả đơn) đúng về dữ liệu nhưng mỗi lượt cron
+     * chạm lại một đơn không đổi gì vẫn là N lệnh xoá + N lệnh chèn. Khi trigger nhật ký
+     * được bật cho `shopify_order_lines` (spec §8), mỗi lượt như thế đẻ N dòng `xoa` + N
+     * dòng `them` nội dung y hệt nhau — đủ để chôn mất thay đổi thật của người.
+     *
+     * Đọc TRONG giao dịch (`tx`), không phải `db`: hàng đọc lên phải là hàng mà ba lệnh
+     * ghi bên dưới sẽ đụng tới, và chỉ giao dịch này giữ được điều đó.
+     *
+     * Luật chèn/sửa/xoá nằm ở `soSanhDongHang` (thuần, có test): bộ test tích hợp của tệp
+     * này cần `TEST_DATABASE_URL` nên nó đang SKIP, một test ở đó sẽ xanh giả. */
+    const dangCo = await tx
+      .select({
+        id: schema.shopifyOrderLines.id,
+        shopifyLineId: schema.shopifyOrderLines.shopifyLineId,
+        shopifyVariantId: schema.shopifyOrderLines.shopifyVariantId,
+        shopifyProductId: schema.shopifyOrderLines.shopifyProductId,
+        sku: schema.shopifyOrderLines.sku,
+        vendor: schema.shopifyOrderLines.vendor,
+        productTitle: schema.shopifyOrderLines.productTitle,
+        variantTitle: schema.shopifyOrderLines.variantTitle,
+        quantity: schema.shopifyOrderLines.quantity,
+        unitPrice: schema.shopifyOrderLines.unitPrice,
+        discountAlloc: schema.shopifyOrderLines.discountAlloc,
+        total: schema.shopifyOrderLines.total,
+        processingMinDays: schema.shopifyOrderLines.processingMinDays,
+        processingMaxDays: schema.shopifyOrderLines.processingMaxDays,
+        estimatedDelivery: schema.shopifyOrderLines.estimatedDelivery,
+        eddMin: schema.shopifyOrderLines.eddMin,
+        eddMax: schema.shopifyOrderLines.eddMax,
+        soDo: schema.shopifyOrderLines.soDo,
+      })
+      .from(schema.shopifyOrderLines)
+      .where(eq(schema.shopifyOrderLines.orderId, row!.id));
+
+    const keHoach = soSanhDongHang(dangCo, mapped.lines);
+
+    // XOÁ trước CHÈN: đơn bị Shopify đánh số lại dòng thì bản cũ phải đi trước bản mới,
+    // kẻo giữa hai lệnh có lúc đơn mang gấp đôi số dòng hàng.
+    if (keHoach.xoa.length > 0) {
+      await tx.delete(schema.shopifyOrderLines).where(inArray(schema.shopifyOrderLines.id, keHoach.xoa));
+    }
+    for (const s of keHoach.sua) {
+      await tx.update(schema.shopifyOrderLines).set(s.gia).where(eq(schema.shopifyOrderLines.id, s.id));
+    }
+    if (keHoach.chen.length > 0) {
       await tx.insert(schema.shopifyOrderLines).values(
-        mapped.lines.map((l) => ({ ...l, orderId: row!.id })),
+        keHoach.chen.map((l) => ({ ...l, orderId: row!.id })),
       );
     }
 
