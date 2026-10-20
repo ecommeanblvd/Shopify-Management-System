@@ -9,6 +9,7 @@ import { db, schema } from '@/db/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ShoppingBag, Truck, TrendingUp, FileSpreadsheet } from 'lucide-react';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,11 @@ export default async function OrdersLanding() {
             </Button>
           </Link>
         )}
+        {/* Đứng CUỐI header (xem ghi chú ở `f/dong-hang/page.tsx`): `justify-between` đẩy
+            con cuối sang mép phải, nên nút nằm đúng chỗ như ở 4 module kia — cùng một vị
+            trí là yêu cầu cốt lõi của CEO, không phải chuyện thẩm mỹ.
+            Hai bảng: đơn và dòng hàng của đơn. */}
+        <NutNhatKy bang={['shopify_orders', 'shopify_order_lines']} />
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

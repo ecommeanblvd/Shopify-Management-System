@@ -5,6 +5,7 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { listInventory, getWarehouseSummary } from '@/features/warehouse/queries';
 import { WarehouseBoard } from '@/components/fulfillment/WarehouseBoard';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +26,17 @@ export default async function WarehousePage({ searchParams }: { searchParams: Pr
   const canManage = hasPermission(role, 'manage_warehouse');
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Kho MEAN</h1>
-        <p className="text-sm text-muted-foreground">
-          Tồn theo SKU × kho (GVM/AP/DM). Click vào SKU để xem danh sách từng món và lịch sử biến động.
-        </p>
+      {/* Khuôn header chung của mọi module — xem ghi chú ở `f/dong-hang/page.tsx`. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Kho MEAN</h1>
+          <p className="text-sm text-muted-foreground">
+            Tồn theo SKU × kho (GVM/AP/DM). Click vào SKU để xem danh sách từng món và lịch sử biến động.
+          </p>
+        </div>
+        {/* Hai bảng: phiếu nhập và từng chiếc trong phiếu. Người đứng ở màn kho hỏi "ai sửa
+            gì ở đây", không hỏi theo từng bảng — nên panel gộp cả hai. */}
+        <NutNhatKy bang={['goods_receipts', 'goods_receipt_items']} />
       </div>
       <WarehouseBoard items={items} canManage={canManage} summary={summary} days={days} />
     </div>

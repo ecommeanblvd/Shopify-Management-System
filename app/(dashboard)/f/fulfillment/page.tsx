@@ -14,6 +14,7 @@ import { BackfillButton } from '@/components/fulfillment/BackfillButton';
 import { MmpBackfillButton } from '@/components/fulfillment/MmpBackfillButton';
 import { BrandOverdueBanner } from '@/components/fulfillment/BrandOverdueBanner';
 import { OrderTabs } from '@/components/orders/OrderTabs';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +78,9 @@ export default async function FulfillmentWorklistPage() {
           >
             Yêu cầu brand
           </Link>
+          {/* Cuối nhóm nút bên phải header — cùng vị trí như 4 module kia (xem ghi chú ở
+              `f/dong-hang/page.tsx`). Hai bảng: đơn cần giao và dòng hàng của nó. */}
+          <NutNhatKy bang={['order_fulfillment', 'order_fulfillment_lines']} />
         </div>
       </div>
       <BrandOverdueBanner count={overdue} />

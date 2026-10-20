@@ -6,6 +6,7 @@ import { hasPermission } from '@/lib/auth/rbac';
 import { listKienDongHang, listKienChoKhop, demKienChuaCan, danhSachBox, GIOI_HAN_KIEN } from '@/features/dong-hang/queries';
 import { BO_LOC, type BoLocDongHang } from '@/features/dong-hang/types';
 import { BangDongHang } from '@/components/dong-hang/BangDongHang';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,11 +31,17 @@ export default async function DongHangPage({
 
   return (
     <div className="space-y-4 p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Đóng hàng</h1>
-        <p className="text-sm text-muted-foreground">
-          Kiện đóng xong trên Lark về đây trong vài giây. So cước theo cân thực + kích thước rồi chọn line ship; hãng được ghi lên cột Couriers của Lark.
-        </p>
+      {/* Khuôn header chung của mọi module: tiêu đề + mô tả bên trái, nút Nhật ký canh
+          phải thẳng hàng với <h1>. Vị trí phải GIỐNG HỆT ở cả 5 module (CEO 20/10/2026) —
+          người dùng phải tìm thấy nút ở cùng một chỗ mỗi lần. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Đóng hàng</h1>
+          <p className="text-sm text-muted-foreground">
+            Kiện đóng xong trên Lark về đây trong vài giây. So cước theo cân thực + kích thước rồi chọn line ship; hãng được ghi lên cột Couriers của Lark.
+          </p>
+        </div>
+        <NutNhatKy bang="shipments" />
       </div>
       <BangDongHang
         kien={kien}

@@ -6,6 +6,8 @@ import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
 import { Card, CardContent } from '@/components/ui/card';
 import { demChuaGanDanhTinh, nhatKyCuaBang } from '@/features/nhat-ky/queries';
+import { trangThaiGhiCua } from '@/features/nhat-ky/tra-trigger';
+import { cauKhiTrong } from '@/features/nhat-ky/trang-thai-ghi';
 import { BangNhatKy } from '@/components/nhat-ky/BangNhatKy';
 import {
   CAC_BANG, docBang, docChu, docNgay, homNayVn, nguoiTrongKhoi, nhanBang, truongTrongKhoi,
@@ -60,6 +62,13 @@ export default async function NhatKyPage({ searchParams }: { searchParams: Promi
   const no = await demChuaGanDanhTinh();
   const dangLoc = Boolean(nguoi || truong || tuNgay || denNgay);
   const homNay = homNayVn();
+
+  /* Bảng này CÓ đang ghi nhật ký không — tra `pg_trigger`, không đoán.
+     Câu cũ ở đây là "trigger của bảng CÓ THỂ chưa được bật": chữ "có thể" làm người đọc
+     không phân biệt được "không ai sửa gì" với "chưa bật nên không ghi gì" — hai kết luận
+     ngược hẳn nhau, và đúng kiểu hỏng mà cả tính năng nhật ký dựng ra để tránh. */
+  const trangThaiGhi = await trangThaiGhiCua([bang]);
+  const chuaBat = trangThaiGhi.every((t) => !t.daGhi);
 
   return (
     <div className="space-y-5 p-6">
@@ -136,9 +145,12 @@ export default async function NhatKyPage({ searchParams }: { searchParams: Promi
           </div>
           <BangNhatKy
             khoi={khoi}
-            trong={dangLoc
+            /* Bảng CHƯA BẬT thì nói là chưa bật, kể cả khi đang lọc: "không khớp bộ lọc"
+               ngụ ý rằng có dữ liệu mà bộ lọc loại ra, trong khi thật ra không có dòng
+               nào để lọc. */
+            trong={dangLoc && !chuaBat
               ? 'Không có thay đổi nào khớp bộ lọc.'
-              : 'Chưa có thay đổi nào được ghi cho bảng này — trigger của bảng có thể chưa được bật.'}
+              : cauKhiTrong(trangThaiGhi)}
           />
         </CardContent>
       </Card>

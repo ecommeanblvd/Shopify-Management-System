@@ -68,12 +68,15 @@ export const NAV: NavItem[] = [
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
   // Customer Account + Style Quiz nằm TRONG hub Functions (không đứng riêng).
   { href: '/f/functions',     label: 'Functions',     icon: Sparkles,        requires: 'view_functions', match: ['/f/customer-account'] },
-  /* Nhật ký thay đổi: ai sửa ô nào, trước → sau. Nằm ở MENU CHÍNH chứ không trong Settings —
-     người đi tìm "ai sửa cái này" đang làm việc ở một màn vận hành, và cùng lý do với KPI
-     Logistics (CEO 30/09/2026): thứ nhân sự cần hằng ngày thì không chôn trong Settings.
-     Mọi vai trò đều có `view_nhat_ky` (CEO 20/10/2026) nên thực tế ai cũng thấy mục này;
-     vẫn gác bằng quyền riêng để sau này siết được một vai mà không phải sửa mã. */
-  { href: '/f/nhat-ky',       label: 'Nhật ký',       icon: History,         requires: 'view_nhat_ky' },
+  /* CỐ Ý KHÔNG có mục "Nhật ký" ở đây, và route `/f/nhat-ky` vẫn sống.
+     CEO 20/10/2026: *"anh muốn trong từng module sẽ đều có 1 tab nhật kí hoặc button nhật
+     ở cùng 1 vị trí để xem lại của đúng bảng đó chứ không tách thành 1 phần riêng, vì người
+     dùng đang xem bảng nào sẽ soi luôn log của bảng đó thay vì chuyển sang module khác"*.
+     Một mục trong menu là đúng cái phải bỏ: nó bắt người ta rời màn đang làm rồi tự chọn
+     lại bảng mình vừa ở. Lối vào bây giờ là `NutNhatKy` trong header của từng module.
+     `/f/nhat-ky` giữ lại làm TRANG XEM RỘNG (lọc theo người/trường/ngày, gửi được link) —
+     panel có liên kết "Xem đầy đủ" trỏ sang đó. Thêm nó lại vào menu là quay lại đúng hình
+     mà CEO đã bỏ. */
   { href: '/settings',        label: 'Settings',      icon: Settings,        requires: null },
 ];
 

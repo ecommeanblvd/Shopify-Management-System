@@ -22,6 +22,7 @@ import { CanhBaoHangDoi } from '@/components/ship-ho/CanhBaoHangDoi';
 import { TrackingCell } from './TrackingCell';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
+import { NutNhatKy } from '@/components/nhat-ky/NutNhatKy';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,7 +117,10 @@ export default async function ShipHoListPage({
           <h1 className="text-3xl font-semibold tracking-tight">Đơn ship hộ</h1>
           <p className="text-sm text-muted-foreground">Ship hộ cho đối tác brand ngoài (tách khỏi đơn khách lẻ).</p>
         </div>
-        <div className="flex gap-2">
+        {/* `flex-wrap justify-end`: hàng này đã có 7 nút, thêm nút Nhật ký là 8 — không cho
+            xuống hàng thì ở màn hẹp nó tràn ngang. Xuống hàng vẫn canh phải để nút Nhật ký
+            ở đúng mép phải như 4 module kia. */}
+        <div className="flex flex-wrap justify-end gap-2">
           <Link
             href={sourceFilter ? '/f/ship-ho' : '/f/ship-ho?source=mmp'}
             className={buttonVariants({ variant: sourceFilter ? 'default' : 'outline' })}
@@ -129,6 +133,9 @@ export default async function ShipHoListPage({
           <ReconcileBillsButton />
           <Link href="/f/ship-ho/statements" className={buttonVariants({ variant: 'outline' })}>Bảng kê</Link>
           <Link href="/f/ship-ho/new" className={buttonVariants({})}>+ Tạo đơn</Link>
+          {/* Cuối nhóm nút bên phải header — cùng vị trí như 4 module kia (xem ghi chú ở
+              `f/dong-hang/page.tsx`). */}
+          <NutNhatKy bang="ship_ho_orders" />
         </div>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
