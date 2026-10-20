@@ -31,19 +31,18 @@ export default async function DongHangPage({
 
   return (
     <div className="space-y-4 p-6">
-      {/* Khuôn header chung của mọi module: tiêu đề + mô tả bên trái, nút Nhật ký canh
-          phải thẳng hàng với <h1>. Vị trí phải GIỐNG HỆT ở cả 5 module (CEO 20/10/2026) —
-          người dùng phải tìm thấy nút ở cùng một chỗ mỗi lần. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Đóng hàng</h1>
-          <p className="text-sm text-muted-foreground">
-            Kiện đóng xong trên Lark về đây trong vài giây. So cước theo cân thực + kích thước rồi chọn line ship; hãng được ghi lên cột Couriers của Lark.
-          </p>
-        </div>
-        <NutNhatKy bang="shipments" />
-      </div>
+      {/* Khuôn header chung của mọi module: tiêu đề + MỘT dòng mô tả bên trái, nút Nhật ký
+          là phần tử CUỐI bên phải. Vị trí nút phải GIỐNG HỆT ở cả 5 module (CEO 20/10/2026)
+          — người dùng phải tìm thấy nút ở cùng một chỗ mỗi lần.
+
+          Riêng màn này, hàng header do `BangDongHang` dựng chứ không phải trang: hai thẻ số
+          "chờ / đã chọn line" đếm theo state lạc quan `chonCucBo` bên trong bảng, chọn hãng
+          xong là nhảy ngay chứ không đợi vòng revalidate. Muốn thẻ số đứng CÙNG hàng với
+          tiêu đề mà vẫn giữ được tính đó thì hàng header phải nằm trong bảng, nên trang
+          truyền nút Nhật ký xuống như một slot. Trang vẫn là nơi DUY NHẤT khai tên bảng
+          thật, giống 4 module kia. */}
       <BangDongHang
+        nhatKy={<NutNhatKy bang="shipments" />}
         kien={kien}
         choKhop={choKhop}
         loc={loc}

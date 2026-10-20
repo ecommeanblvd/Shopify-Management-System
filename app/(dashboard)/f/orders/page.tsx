@@ -40,9 +40,10 @@ export default async function OrdersLanding() {
             Orders
           </div>
           <h1 className="text-4xl font-semibold tracking-tight">Revenue dashboard</h1>
+          {/* Một dòng: giữ lại nguồn gốc con số (COGS theo phiên bản thời điểm, cước ship đã
+              đối soát) — xem bảng thì không biết được. */}
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Per-store GMV, net revenue, and margin. Time-versioned cost-of-goods and reconciled
-            shipping cost.
+            Per-store GMV, net revenue and margin — time-versioned cost-of-goods, reconciled shipping cost.
           </p>
         </div>
         {canManageInvoices && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, useTransition } from 'react';
+import { Fragment, useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { baoGiaKien, chonHangChoDon, dongKienKhongVanDon, moLaiKien } from '@/features/dong-hang/actions';
 import { LY_DO_DONG, kiemDongKien, nhanLyDoDong } from '@/features/dong-hang/dong-kien';
@@ -57,7 +57,7 @@ const LUOI =
   'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(168px,auto)_minmax(186px,1.2fr)]';
 
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan, dsBox,
+  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan, dsBox, nhatKy,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
@@ -69,6 +69,15 @@ export function BangDongHang({
   soKienChuaCan: number;
   /** Danh mục box cho lưới chọn ở khối Đóng thùng (`danhSachBox()`, trang gọi). */
   dsBox: BoxHien[];
+  /**
+   * Nút Nhật ký của trang, đặt ở CUỐI hàng header (xem ghi chú ở `f/dong-hang/page.tsx`).
+   * Nhận dưới dạng slot vì chỉ trang biết tên bảng thật, còn hàng header phải nằm trong
+   * bảng để hai thẻ số đứng cùng hàng mà vẫn đếm theo state lạc quan ở đây.
+   *
+   * BẮT BUỘC, không `?`: nút phải có ở cả 5 module: để optional thì một lần sửa trang làm
+   * rơi prop là nút lặng lẽ biến mất, không ai thấy cho tới khi cần soi log.
+   */
+  nhatKy: ReactNode;
 }) {
   const [bao, setBao] = useState<Map<string, BaoGiaKien>>(new Map());
   const [dangBao, setDangBao] = useState<Set<string>>(new Set());
@@ -143,16 +152,33 @@ export function BangDongHang({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0 space-y-1.5">
-          <h1 className="text-2xl font-semibold tracking-tight">Đóng hàng</h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Kiện từ Lark về đây ngay khi đóng xong. Chọn line ship trước để đóng đúng chuẩn bao bì của hãng; hãng đã chọn được ghi lên cột Couriers của Lark.
+      {/* MỘT hàng header cho cả màn (CEO 20/10/2026): trước đây trang và bảng mỗi bên dựng
+          một <h1> "Đóng hàng" kèm một đoạn mô tả riêng, đẩy bảng xuống gần nửa màn. Thẻ số
+          GIỮ NGUYÊN — đó là số liệu vận hành, chỉ dọn sang bên phải, và nút Nhật ký vẫn là
+          phần tử cuối cùng để người dùng tìm thấy nó ở cùng chỗ như 4 module kia.
+          `flex-wrap` ở cả hai cấp: màn hẹp thì nhóm bên phải tụt xuống hàng dưới, rồi tới
+          lượt hai thẻ số tự xếp chồng, không tràn ngang. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        {/* `flex-1` (basis 0), KHÔNG để basis auto: flexbox ngắt dòng theo bề rộng "ước
+            lượng" của từng con, mà bề rộng ước lượng của khối chữ là cả câu mô tả trên MỘT
+            dòng (~740px). Để basis auto thì ở màn ~1040px (viewport 1280 trừ sidebar 240)
+            nhóm thẻ số bị đẩy xuống hàng dưới, header lại cao 127px — đo được ở mẫu thử.
+            Basis 0 cho chữ co lại và tự ngắt dòng, header còn 72px. */}
+        <div className="min-w-0 flex-1 space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Đóng hàng</h1>
+          <p className="text-sm text-muted-foreground">
+            Kiện từ Lark về khi đóng xong; chọn line ship trước khi đóng gói — hãng chốt được ghi lên cột Couriers của Lark.
           </p>
         </div>
-        <div className="flex gap-2.5">
+        {/* `items-start`: nút Nhật ký canh thẳng hàng với <h1> như khuôn chung, không bị
+            hai thẻ số (cao hơn nút) đẩy xuống giữa hàng.
+            KHÔNG `shrink-0`: thử rồi, `min-w-[132px]` × 2 + nút không co được nên màn hẹp
+            tràn ngang 107px. Để co thì màn hẹp hai thẻ xếp chồng — cao hơn nhưng không tràn,
+            và không tràn mới là ràng buộc. */}
+        <div className="flex flex-wrap items-start gap-2.5">
           <ONhin nhan="CHỜ CHỌN LINE" so={kien.length - soDaChon} noiBat />
           <ONhin nhan="ĐÃ CHỌN LINE" so={soDaChon} />
+          {nhatKy}
         </div>
       </div>
 

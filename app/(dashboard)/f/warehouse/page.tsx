@@ -30,8 +30,10 @@ export default async function WarehousePage({ searchParams }: { searchParams: Pr
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Kho MEAN</h1>
+          {/* Một dòng: giữ lại hai thứ mắt KHÔNG thấy — mã kho viết tắt là gì, và SKU bấm
+              được để mở từng món + lịch sử biến động. */}
           <p className="text-sm text-muted-foreground">
-            Tồn theo SKU × kho (GVM/AP/DM). Click vào SKU để xem danh sách từng món và lịch sử biến động.
+            Tồn theo SKU × kho (GVM/AP/DM) — click vào SKU để xem từng món và lịch sử biến động.
           </p>
         </div>
         {/* Hai bảng: phiếu nhập và từng chiếc trong phiếu. Người đứng ở màn kho hỏi "ai sửa
