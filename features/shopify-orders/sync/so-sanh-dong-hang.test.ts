@@ -1,34 +1,36 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { mapShopifyOrder } from './shopify-mapper';
+import type { ShopifyOrderPayload } from '../shopify-types';
 import { soSanhDongHang, type DongHangDangCo, type DongHangMoi } from './so-sanh-dong-hang';
 
-/** Một dòng hàng như Shopify trả về, đủ mọi cột mà `shopify-mapper.ts` sinh ra. */
+/**
+ * Dòng hàng mẫu dựng từ MAPPER THẬT, không phải literal viết tay.
+ *
+ * VÌ SAO quan trọng: vòng test "mọi cột của mapper đều được so" ở dưới lấy danh sách cột
+ * từ `Object.keys(dongMoi())`. Một literal viết tay ở đây sẽ là chỗ THỨ TƯ phải nhớ sửa
+ * khi mapper thêm cột — tức là vòng test đó tự nhận một danh sách cột đã lạc hậu rồi
+ * tuyên bố "không sót cột". Lấy từ `mapShopifyOrder` thì cột mới TỰ có mặt.
+ *
+ * Dùng chính payload mẫu mà `shopify-mapper.test.ts` dùng, không dựng payload riêng.
+ */
+function fixture(name: string): ShopifyOrderPayload {
+  return JSON.parse(
+    readFileSync(join(__dirname, '..', '__fixtures__', `${name}.json`), 'utf8'),
+  ) as ShopifyOrderPayload;
+}
+
+const DONG_MAU: DongHangMoi = mapShopifyOrder(fixture('order-multi-line'), 'store-1').lines[0]!;
+
+/** Một dòng hàng như Shopify trả về, qua đúng phép ánh xạ của `shopify-mapper.ts`. */
 function dongMoi(ghiDe: Partial<DongHangMoi> = {}): DongHangMoi {
-  return {
-    shopifyLineId: 'gid://shopify/LineItem/1',
-    shopifyVariantId: 'gid://shopify/ProductVariant/9',
-    shopifyProductId: 'gid://shopify/Product/8',
-    sku: 'SKU-1',
-    vendor: 'MEAN BLVD',
-    productTitle: 'Áo dài',
-    variantTitle: 'M',
-    quantity: 2,
-    unitPrice: '120.00',
-    discountAlloc: '10.00',
-    total: '230.00',
-    processingMinDays: 8,
-    processingMaxDays: 14,
-    estimatedDelivery: '8 - 14 business days',
-    eddMin: '8',
-    eddMax: '14',
-    soDo: [{ nhan: 'Chiều cao', giaTri: '165' }],
-    ...ghiDe,
-  };
+  return { ...DONG_MAU, ...ghiDe };
 }
 
 /** Cùng dòng đó, nhưng đọc lên từ CSDL: numeric về dạng chuẩn của Postgres. */
 function dongDangCo(ghiDe: Partial<DongHangDangCo> = {}): DongHangDangCo {
-  const m = dongMoi();
-  return { id: 'uuid-1', ...m, ...ghiDe };
+  return { id: 'uuid-1', ...DONG_MAU, ...ghiDe };
 }
 
 describe('soSanhDongHang', () => {
@@ -127,17 +129,25 @@ describe('soSanhDongHang', () => {
    * "không đổi". Biên dịch vẫn sạch. Kiểu cũ (xoá rồi chèn lại) luôn làm mới mọi cột nên
    * che mất hẳn lớp lỗi này; kiểu mới thì không, nên phải có test đứng canh.
    *
-   * Lật TỪNG khoá của `dongMoi()` một, mỗi lần phải ra đúng MỘT `sua`. Chuỗi khoá lấy từ
-   * chính đối tượng nên cột mới vào `shopify-mapper.ts` là tự có mặt ở đây.
+   * Lật TỪNG khoá một, mỗi lần phải ra đúng MỘT `sua`. Danh sách khoá lấy từ
+   * `Object.keys(dongMoi())`, mà `dongMoi()` là đầu ra của `mapShopifyOrder` THẬT — nên
+   * cột mới của mapper tự có mặt ở đây, không ai phải nhớ khai thêm vào test.
+   *
+   * Đây là test LÚC CHẠY, không dựa vào `tsc`: chạy riêng `vitest` cũng đỏ. (Bản vòng sửa 1
+   * lấy khoá từ một literal viết tay trong tệp này — tức là tự nhận một danh sách cột có
+   * thể đã lạc hậu rồi tuyên bố "không sót cột". Vòng soát 2 bắt đúng.)
    *
    * `shopifyLineId` bị loại: nó là KHOÁ GHÉP, đổi nó không phải "sửa một ô" mà là
    * "dòng khác" — ca đó do test "Shopify đánh số lại" ở trên phủ.
    *
-   * Vòng canh được `coDoi`, còn ba chỗ liệt kê cột còn lại do `tsc` nối thành chuỗi: khai
-   * cột trong `coDoi` ⇒ phải có trong `DongHangDangCo` (không thì `cu.X` đỏ) ⇒ câu select
-   * của `upsert-order.ts` phải trả về nó (không thì đối số `dangCo` đỏ). Lỗ còn lại: cột
-   * mới của mapper mà KHÔNG BẮT BUỘC (`foo?: string`) thì `dongMoi()` không đỏ, nên vòng
-   * này không thấy nó. Mapper hôm nay không có cột nào như thế.
+   * Vòng này canh `coDoi`. Ba chỗ liệt kê cột còn lại được `tsc` nối thành chuỗi: khai cột
+   * trong `coDoi` ⇒ phải có trong `DongHangDangCo` (không thì `cu.X` đỏ) ⇒ câu select của
+   * `upsert-order.ts` phải trả về nó (không thì đối số `dangCo` đỏ).
+   *
+   * LỖ CÒN LẠI, hẹp hơn hẳn bản trước: một cột mà mapper chỉ sinh ra với payload KHÁC
+   * (cột tuỳ chọn mà `order-multi-line.json` không điền) thì vẫn không có mặt trong
+   * `Object.keys`. Bịt bằng cách điền cột đó vào payload mẫu, không phải bằng cách thêm
+   * tay vào test.
    */
   describe('mọi cột của mapper đều được so', () => {
     /** Một giá trị CHẮC CHẮN khác `v`. Ném với kiểu chưa biết: thà test đỏ bắt người thêm
@@ -146,7 +156,9 @@ describe('soSanhDongHang', () => {
       if (v === null) return 'ĐÃ ĐIỀN';
       if (typeof v === 'number') return v + 1;
       if (typeof v === 'string') return `${v}-ĐÃ ĐỔI`;
-      if (Array.isArray(v)) return [];
+      // Mảng RỖNG phải lật thành mảng CÓ phần tử: trả `[]` cho một cột đang rỗng là
+      // "lật" mà không đổi gì, và test sẽ đỏ vì lý do sai (`soDo` của payload mẫu rỗng).
+      if (Array.isArray(v)) return v.length === 0 ? [{ nhan: 'ĐÃ ĐIỀN', giaTri: '1' }] : [];
       throw new Error(`khac(): chưa biết lật kiểu ${typeof v} — bổ sung ở đây và trong coDoi()`);
     }
 
@@ -163,8 +175,14 @@ describe('soSanhDongHang', () => {
     });
 
     it('vòng trên có chạy, và chạy đủ số cột của mapper', () => {
-      // Không có khẳng định này thì một `filter` sai biến cả `it.each` ở trên thành 0 test
-      // mà bộ test vẫn xanh. 16 = 17 cột của mapper trừ `shopifyLineId`.
+      // Hai việc, và cả hai đều cố ý:
+      //  1. Không có khẳng định này thì một `filter` sai biến cả `it.each` ở trên thành
+      //     0 test mà bộ test vẫn xanh.
+      //  2. Con số 16 (= 17 cột của mapper trừ `shopifyLineId`) là CHỐT CHẶN CÓ CHỦ Ý,
+      //     không phải con số tình cờ: mapper thêm cột thì test này đỏ TRƯỚC, buộc người
+      //     sửa đọc tới đây và đi khai cột đó trong `coDoi`. Sửa số mà không khai cột thì
+      //     `it.each` ở trên đỏ ngay sau. Đổi số là một hành động có ý thức, không phải
+      //     một việc dọn dẹp.
       expect(khoa).toHaveLength(16);
     });
   });
