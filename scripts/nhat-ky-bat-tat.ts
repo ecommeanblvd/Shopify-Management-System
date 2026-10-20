@@ -41,21 +41,36 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const ch = CAU_HINH.find((c) => c.bang === bang);
-  if (!ch) {
-    // Bảng không khai trong CAU_HINH thì không có danh sách cột để theo dõi — bật trigger
-    // cho nó là bật một trigger không ai quyết định nội dung, nên chết tại đây.
-    console.error(`Bảng ${bang} chưa khai trong CAU_HINH (features/nhat-ky/cot-theo-doi.ts).`);
-    process.exit(2);
-  }
-
   let cauLenh: string[];
   if (tat) {
+    // Nhánh GỠ đi TRƯỚC lượt tra `CAU_HINH`, và CỐ Ý không tra: đây là đường lui khẩn cấp.
+    // Ca cần nó nhất là ca bảng vừa bị rút khỏi `CAU_HINH` mà trigger vẫn còn sống trên
+    // CSDL — chặn ở đây là khoá mất đường lui đúng lúc đang cần. `sinhGoTrigger` chỉ cần
+    // tên bảng, và tự kiểm tên qua `kiemTraTen` nên tên lạ vẫn chết trước khi vào SQL.
     cauLenh = [sinhGoTrigger(bang)];
   } else {
+    const ch = CAU_HINH.find((c) => c.bang === bang);
+    if (!ch) {
+      // Bảng không khai trong CAU_HINH thì không có danh sách cột để theo dõi — bật trigger
+      // cho nó là bật một trigger không ai quyết định nội dung, nên chết tại đây.
+      console.error(`Bảng ${bang} chưa khai trong CAU_HINH (features/nhat-ky/cot-theo-doi.ts).`);
+      process.exit(2);
+    }
     const moiCot = await moiCotCua(bang);
     if (moiCot.length === 0) {
       console.error(`Bảng ${bang} không có cột nào trong information_schema — bảng có thật không?`);
+      process.exit(2);
+    }
+    if (!moiCot.includes('id')) {
+      // Hàng rào ĐẮT NHẤT của tệp này. `nhat_ky_ghi()` lấy khoá chính bằng `j ->> 'id'`;
+      // bảng không có cột `id` thì `ban_ghi_id` ra NULL, vi phạm `NOT NULL`, và hàm trigger
+      // đổ ⇒ MỌI lệnh INSERT/UPDATE/DELETE vào bảng đó đổ theo, tức là module đứng. Thà
+      // script chết ở đây còn hơn phát hiện ra lúc kho không ghi được phiếu.
+      console.error(
+        `Bảng ${bang} không có cột 'id'. Hàm nhat_ky_ghi() lấy ban_ghi_id từ cột 'id', nên ` +
+        `bật trigger sẽ làm mọi lệnh ghi vào bảng này đổ. Sửa hàm cho biết khoá chính khác ` +
+        `trước đã, đừng bật.`,
+      );
       process.exit(2);
     }
     // GỠ trước rồi TẠO: `CREATE TRIGGER` không có dạng `OR REPLACE`, nên muốn lệnh này chạy
@@ -82,7 +97,19 @@ async function main(): Promise<void> {
     SELECT t.tgname FROM pg_trigger t
       JOIN pg_class c ON c.oid = t.tgrelid
      WHERE c.relname = ${bang} AND NOT t.tgisinternal AND t.tgname = ${'nhat_ky_' + bang}`);
-  console.log(`\nĐã chạy. Trigger nhat_ky_${bang} trên CSDL: ${con.rows.length === 1 ? 'CÓ' : 'KHÔNG'}.`);
+
+  // Kiểm theo CHIỀU: bật thì phải CÓ, gỡ thì phải KHÔNG. In ra rồi `exit 0` là không đủ —
+  // vỏ bọc tự động chỉ đọc mã thoát, nên "bật xong mà trigger không có" phải là thất bại
+  // chứ không phải một dòng chữ người ta có thể bỏ qua.
+  const coTrigger = con.rows.length === 1;
+  const mongDoi = !tat;
+  console.log(`\nĐã chạy. Trigger nhat_ky_${bang} trên CSDL: ${coTrigger ? 'CÓ' : 'KHÔNG'}.`);
+  if (coTrigger !== mongDoi) {
+    console.error(
+      `Sai mong đợi: ${tat ? 'vừa GỠ nhưng trigger vẫn còn' : 'vừa BẬT nhưng trigger không có'}.`,
+    );
+    process.exit(1);
+  }
 }
 
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

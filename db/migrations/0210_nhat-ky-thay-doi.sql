@@ -26,7 +26,10 @@ CREATE TABLE IF NOT EXISTS nhat_ky_thay_doi (
   -- nhưng thứ người ta mở là `goods_receipts`). NULL ở bảng không có cha.
   cha_bang    text,
   cha_id      text,
-  -- 'INSERT' | 'UPDATE' | 'DELETE' — nguyên văn `TG_OP` của Postgres.
+  -- 'them' | 'sua' | 'xoa' (spec §3 chốt ba giá trị này). CỐ Ý không dùng nguyên văn `TG_OP`
+  -- của Postgres ('INSERT'/'UPDATE'/'DELETE'): bảng này đặt tên tiếng Việt không dấu suốt
+  -- (`bang`, `truoc`, `sau`, `luc`), nên để lẫn ba chuỗi tiếng Anh vào giữa là màn đọc phải
+  -- dịch qua lại. Mỗi nhánh trong `nhat_ky_ghi()` ghi thẳng hằng của nó.
   thao_tac    text NOT NULL,
   truong      text NOT NULL,
   -- `truoc`/`sau` là TEXT cho mọi kiểu cột (numeric, timestamp, enum, jsonb đều ép về text
@@ -108,7 +111,7 @@ BEGIN
     -- chỉ làm ngập nhật ký, không nói thêm điều gì.
     INSERT INTO nhat_ky_thay_doi
       (bang, ban_ghi_id, cha_bang, cha_id, thao_tac, truong, truoc, sau, tac_nhan_id, tac_nhan_nhan)
-    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, TG_OP, c, NULL, j_moi ->> c, ai, nhan
+    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, 'them', c, NULL, j_moi ->> c, ai, nhan
       FROM unnest(cot) AS c
      WHERE j_moi ->> c IS NOT NULL;
 
@@ -119,14 +122,14 @@ BEGIN
     -- `cot-theo-doi.ts` loại khỏi TG_ARGV[0], mà cột còn lại thì không đổi giá trị.
     INSERT INTO nhat_ky_thay_doi
       (bang, ban_ghi_id, cha_bang, cha_id, thao_tac, truong, truoc, sau, tac_nhan_id, tac_nhan_nhan)
-    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, TG_OP, c, j_cu ->> c, j_moi ->> c, ai, nhan
+    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, 'sua', c, j_cu ->> c, j_moi ->> c, ai, nhan
       FROM unnest(cot) AS c
      WHERE (j_cu ->> c) IS DISTINCT FROM (j_moi ->> c);
 
   ELSE -- DELETE
     INSERT INTO nhat_ky_thay_doi
       (bang, ban_ghi_id, cha_bang, cha_id, thao_tac, truong, truoc, sau, tac_nhan_id, tac_nhan_nhan)
-    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, TG_OP, c, j_cu ->> c, NULL, ai, nhan
+    SELECT TG_TABLE_NAME, ban_ghi, bang_cha, cha, 'xoa', c, j_cu ->> c, NULL, ai, nhan
       FROM unnest(cot) AS c
      WHERE j_cu ->> c IS NOT NULL;
   END IF;

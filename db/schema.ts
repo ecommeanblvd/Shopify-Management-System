@@ -3611,7 +3611,7 @@ export const nhatKyThayDoi = pgTable('nhat_ky_thay_doi', {
   /** Bản ghi cha, trigger ghi sẵn lúc chạy để màn của cha cuốn được thay đổi của dòng con. */
   chaBang: text('cha_bang'),
   chaId: text('cha_id'),
-  /** `INSERT` | `UPDATE` | `DELETE` — nguyên văn `TG_OP` của Postgres. */
+  /** `them` | `sua` | `xoa` (spec §3). KHÔNG phải `TG_OP` tiếng Anh của Postgres. */
   thaoTac: text('thao_tac').notNull(),
   truong: text('truong').notNull(),
   truoc: text('truoc'),
