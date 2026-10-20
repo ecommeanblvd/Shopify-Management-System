@@ -120,4 +120,52 @@ describe('soSanhDongHang', () => {
     expect(ke.chen).toEqual([moi]);
     expect(ke.sua).toEqual([]);
   });
+
+  /**
+   * CANH BẪY BẢO TRÌ: thêm một cột dòng hàng mà quên khai trong `coDoi` thì cột đó IM LẶNG
+   * không bao giờ đồng bộ lên dòng đang có — `coDoi` không biết nó tồn tại nên luôn trả
+   * "không đổi". Biên dịch vẫn sạch. Kiểu cũ (xoá rồi chèn lại) luôn làm mới mọi cột nên
+   * che mất hẳn lớp lỗi này; kiểu mới thì không, nên phải có test đứng canh.
+   *
+   * Lật TỪNG khoá của `dongMoi()` một, mỗi lần phải ra đúng MỘT `sua`. Chuỗi khoá lấy từ
+   * chính đối tượng nên cột mới vào `shopify-mapper.ts` là tự có mặt ở đây.
+   *
+   * `shopifyLineId` bị loại: nó là KHOÁ GHÉP, đổi nó không phải "sửa một ô" mà là
+   * "dòng khác" — ca đó do test "Shopify đánh số lại" ở trên phủ.
+   *
+   * Vòng canh được `coDoi`, còn ba chỗ liệt kê cột còn lại do `tsc` nối thành chuỗi: khai
+   * cột trong `coDoi` ⇒ phải có trong `DongHangDangCo` (không thì `cu.X` đỏ) ⇒ câu select
+   * của `upsert-order.ts` phải trả về nó (không thì đối số `dangCo` đỏ). Lỗ còn lại: cột
+   * mới của mapper mà KHÔNG BẮT BUỘC (`foo?: string`) thì `dongMoi()` không đỏ, nên vòng
+   * này không thấy nó. Mapper hôm nay không có cột nào như thế.
+   */
+  describe('mọi cột của mapper đều được so', () => {
+    /** Một giá trị CHẮC CHẮN khác `v`. Ném với kiểu chưa biết: thà test đỏ bắt người thêm
+     *  cột phải nghĩ về cách so cột đó, còn hơn lặng lẽ coi nó là "không đổi". */
+    function khac(v: unknown): unknown {
+      if (v === null) return 'ĐÃ ĐIỀN';
+      if (typeof v === 'number') return v + 1;
+      if (typeof v === 'string') return `${v}-ĐÃ ĐỔI`;
+      if (Array.isArray(v)) return [];
+      throw new Error(`khac(): chưa biết lật kiểu ${typeof v} — bổ sung ở đây và trong coDoi()`);
+    }
+
+    const khoa = (Object.keys(dongMoi()) as Array<keyof DongHangMoi>)
+      .filter((k) => k !== 'shopifyLineId');
+
+    it.each(khoa)('đổi %s thì ra đúng một sua', (k) => {
+      const moi = { ...dongMoi(), [k]: khac(dongMoi()[k]) } as DongHangMoi;
+      const ke = soSanhDongHang([dongDangCo()], [moi]);
+      expect(ke.sua, `cột ${k} không được coDoi() so — thêm nó vào so-sanh-dong-hang.ts`)
+        .toEqual([{ id: 'uuid-1', gia: moi }]);
+      expect(ke.chen).toEqual([]);
+      expect(ke.xoa).toEqual([]);
+    });
+
+    it('vòng trên có chạy, và chạy đủ số cột của mapper', () => {
+      // Không có khẳng định này thì một `filter` sai biến cả `it.each` ở trên thành 0 test
+      // mà bộ test vẫn xanh. 16 = 17 cột của mapper trừ `shopifyLineId`.
+      expect(khoa).toHaveLength(16);
+    });
+  });
 });
