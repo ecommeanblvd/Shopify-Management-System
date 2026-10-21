@@ -57,14 +57,19 @@ const LUOI =
   'grid grid-cols-[minmax(150px,1.1fr)_minmax(104px,0.7fr)_minmax(0,2fr)_minmax(150px,1.1fr)_minmax(168px,auto)_minmax(186px,1.2fr)]';
 
 export function BangDongHang({
-  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, gioiHan, soKienChuaCan, dsBox, nhatKy,
+  kien, choKhop, loc, q, coQuyenChon, coQuyenDong, coQuyenVanDon, gioiHan, soKienChuaCan, dsBox, nhatKy,
 }: {
   kien: KienDongHang[];
   choKhop: KienChoKhop[];
   loc: BoLocDongHang;
   q: string;
   coQuyenChon: boolean;
+  /** `manage_fulfillment` — ĐÓNG/MỞ kiện và ghi đóng thùng. KHÔNG dùng cho ô mã vận đơn. */
   coQuyenDong: boolean;
+  /** `tao_van_don` — nhập mã vận đơn. Cờ RIÊNG, không dùng lại `coQuyenDong`: từ 21/10/2026
+   *  hai việc hai quyền, và vai `logistics` có cờ này mà KHÔNG có `coQuyenDong` — gộp lại là
+   *  cấp quyền ở máy chủ xong mà nút vẫn ẩn, tức sửa lỗi mà người dùng không thấy gì đổi. */
+  coQuyenVanDon: boolean;
   gioiHan: number;
   soKienChuaCan: number;
   /** Danh mục box cho lưới chọn ở khối Đóng thùng (`danhSachBox()`, trang gọi). */
@@ -299,6 +304,7 @@ export function BangDongHang({
                       bao={bao.get(k.shipmentId)}
                       coQuyenChon={coQuyenChon}
                       coQuyenDong={coQuyenDong}
+                      coQuyenVanDon={coQuyenVanDon}
                       chonCucBo={chonCucBo.get(k.orderId)}
                       ketQua={ketQua.get(k.orderId)}
                       dangChonHang={dangChon.get(k.orderId)}
@@ -352,12 +358,13 @@ function ONhin({ nhan, so, noiBat }: { nhan: string; so: number; noiBat?: boolea
 }
 
 function DongKien({
-  k, bao, coQuyenChon, coQuyenDong, chonCucBo, ketQua, dangChonHang, moSoCuoc,
+  k, bao, coQuyenChon, coQuyenDong, coQuyenVanDon, chonCucBo, ketQua, dangChonHang, moSoCuoc,
 }: {
   k: KienDongHang;
   bao: BaoGiaKien | undefined;
   coQuyenChon: boolean;
   coQuyenDong: boolean;
+  coQuyenVanDon: boolean;
   chonCucBo: string | undefined;
   ketQua: KetQuaChon | undefined;
   dangChonHang: string | undefined;
@@ -457,7 +464,7 @@ function DongKien({
             {/* Bước sau khi chọn line: gom thông tin để dán sang form hãng. Hệ thống không tạo nhãn. */}
             <HopThoaiVanDon
               shipmentId={k.shipmentId} maKien={k.logUniqueCode}
-              coQuyenChon={coQuyenChon} coQuyenDong={coQuyenDong}
+              coQuyenChon={coQuyenChon} coQuyenVanDon={coQuyenVanDon}
             />
 
             {/* Chỗ nhân sự QUAY LẠI ngay sau khi tạo nhãn ở cổng hãng — cùng cột với
@@ -470,7 +477,7 @@ function DongKien({
                 KIỆN này rụng khỏi danh sách ở lượt revalidate kế — bất cứ state gắn
                 vào sự tồn tại của dòng cũng rụng theo (review coordinator, vòng sửa
                 1). Toast sống ở cây riêng nên không rụng theo. */}
-            {coQuyenDong && canNhapTracking(k) && (
+            {coQuyenVanDon && canNhapTracking(k) && (
               <NutNhapTracking shipmentId={k.shipmentId} maKien={k.logUniqueCode} />
             )}
           </>

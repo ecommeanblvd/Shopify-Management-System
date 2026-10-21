@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { QUYEN_MOI_VAI_TRO, SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
+import { QUYEN_MOI_VAI_TRO, QUYEN_THEO_VAI_NGOAI_HAT_GIONG, SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
 
 /** Idempotently create/update seeded roles + their permission keys, and backfill
  *  roles.role_id from the legacy roles.role enum.
@@ -39,6 +39,20 @@ export async function seedRoles(): Promise<void> {
         .values(QUYEN_MOI_VAI_TRO.map((permissionKey) => ({ roleId: r.id, permissionKey })))
         .onConflictDoNothing();
     }
+  }
+
+  // Quyền cho vai CẤP TAY, khai theo đúng tên vai — xem `QUYEN_THEO_VAI_NGOAI_HAT_GIONG`.
+  // Khác `QUYEN_MOI_VAI_TRO` ở trên: cái đó cấp cho MỌI vai, cái này đúng vai được gọi tên,
+  // vì có quyền mà câu trả lời đúng KHÔNG phải "ai cũng có" (vd `tao_van_don` không cấp cho
+  // `viewer`). Vai không tồn tại thì bỏ qua — seed không tạo vai cấp tay.
+  for (const [vai, keys] of Object.entries(QUYEN_THEO_VAI_NGOAI_HAT_GIONG)) {
+    if (!keys.length) continue;
+    const [r] = await db.select({ id: schema.appRoles.id }).from(schema.appRoles)
+      .where(eq(schema.appRoles.key, vai)).limit(1);
+    if (!r) continue;
+    await db.insert(schema.rolePermissions)
+      .values(keys.map((permissionKey) => ({ roleId: r.id, permissionKey })))
+      .onConflictDoNothing();
   }
 
   const roleIdByKey = new Map<string, string>();

@@ -31,6 +31,12 @@ export type Permission =
   | 'manage_fulfillment'
   /** Chọn line ship cho kiện đã đóng (màn Đóng hàng) — đội logistics. */
   | 'chon_line_ship'
+  /** Nhập mã vận đơn cho kiện trên màn Đóng hàng. Quyền RIÊNG, KHÔNG gộp vào
+   *  `manage_fulfillment`: trước 21/10/2026 việc này đi ké `manage_fulfillment` nên không
+   *  có cách nào cho ai nhập mã vận đơn mà không cho họ đóng/mở kiện và sửa danh mục box —
+   *  đúng lý do đội `logistics` (2 người, làm việc hằng ngày trên màn đó) không nhập được.
+   *  CEO 21/10/2026: "Đội logistic cũng có quyền nhập vận đơn lên và đội operator cũng được". */
+  | 'tao_van_don'
   | 'manage_warehouse'
   | 'view_receiving'
   | 'manage_receiving'

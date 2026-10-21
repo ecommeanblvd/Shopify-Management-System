@@ -32,6 +32,11 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   // manage_fulfillment còn đòi 'fulfillment.brand_requests:edit' nên vai trò logistics
   // (Đức) không bấm chọn được — CEO báo 22/09/2026.
   chon_line_ship: ['fulfillment.logistics:edit'],
+  // Nhập mã vận đơn (màn Đóng hàng). Map vào `fulfillment.logistics:create` — ô ĐÃ CÓ trong
+  // danh mục mà trước 21/10/2026 không chỗ nào kiểm (một checkbox trông như quyền thật mà
+  // không mở ra việc gì). Tận dụng đúng ô đó thay vì đẻ khoá mới: vai `logistics` và `admin`
+  // đã tích sẵn, nên không ai phải đi tích lại.
+  tao_van_don: ['fulfillment.logistics:create'],
   manage_fulfillment: ['fulfillment.operations:edit', 'fulfillment.brand_requests:edit'],
   manage_warehouse: ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
   view_receiving: ['warehouse.receiving:view'],
@@ -68,7 +73,12 @@ const OPERATOR_OLD = [
   'view', 'run_feature', 'apply_settings', 'reconcile_store', 'view_settings_history',
   'apply_markets', 'view_markets_history', 'manage_carrier_rates', 'view_carrier_rates',
   'view_orders', 'manage_sku_costs', 'manage_shipping_invoices', 'view_functions',
-  'view_mmp_products', 'manage_mmp_products', 'view_fulfillment', 'manage_fulfillment', 'manage_warehouse',
+  'view_mmp_products', 'manage_mmp_products', 'view_fulfillment', 'manage_fulfillment',
+  // CEO 21/10/2026: "Đội logistic cũng có quyền nhập vận đơn lên và đội operator cũng được".
+  // Phải khai RIÊNG ở đây: từ 21/10/2026 nhập mã vận đơn không còn nằm trong
+  // `manage_fulfillment` nữa, nên vai này không còn thừa hưởng nó qua đó.
+  'tao_van_don',
+  'manage_warehouse',
   'view_receiving', 'manage_receiving', 'view_qc', 'manage_qc',
   'view_pack_check', 'check_packed',
   'view_ship_ho', 'manage_ship_ho',
@@ -145,3 +155,21 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
  * CHỈ dùng cho quyền mà câu trả lời đúng là "ai cũng có". Đừng nhét quyền ghi vào đây.
  */
 export const QUYEN_MOI_VAI_TRO: readonly PermissionKey[] = ['nhat_ky:view'];
+
+/**
+ * Quyền cấp cho một vai trò CẤP TAY trong Settings (không có hạt giống trong
+ * `SYSTEM_ROLE_SEEDS`), khai theo ĐÚNG TÊN VAI.
+ *
+ * Vì sao cần, thay vì nhét vào `QUYEN_MOI_VAI_TRO`: cơ chế đó cấp cho MỌI vai trò, kể cả
+ * `viewer`. Quyền `tao_van_don` thì CỐ Ý không cấp cho `viewer` (CEO 21/10/2026 chỉ nói
+ * logistics và operator) — nên "ai cũng có" là câu trả lời SAI ở đây.
+ *
+ * Vì sao không bỏ qua: vai `OC` (production 21/10/2026, 1 người) tạo vận đơn được hôm nay
+ * nhờ `manage_fulfillment`. Sau khi tách quyền, không khai ở đây thì mỗi lượt dựng lại môi
+ * trường là người đó mất quyền, và không ai đọc mã mà biết được đây là chủ ý.
+ *
+ * `seedRoles()` chỉ cấp khi vai ĐANG TỒN TẠI — không tự tạo vai mới.
+ */
+export const QUYEN_THEO_VAI_NGOAI_HAT_GIONG: Record<string, readonly PermissionKey[]> = {
+  OC: ['fulfillment.logistics:create'],
+};

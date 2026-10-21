@@ -49,6 +49,7 @@ export default async function DongHangPage({
         q={q}
         coQuyenChon={hasPermission(role, 'chon_line_ship')}
         coQuyenDong={hasPermission(role, 'manage_fulfillment')}
+        coQuyenVanDon={hasPermission(role, 'tao_van_don')}
         gioiHan={GIOI_HAN_KIEN}
         soKienChuaCan={soKienChuaCan}
         dsBox={dsBox}

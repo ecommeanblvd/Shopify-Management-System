@@ -83,7 +83,7 @@ vi.mock('@/lib/auth/rbac', () => ({ hasPermission: (...a: unknown[]) => hasPermi
 const ghiCanDimLenLarkMock = vi.fn();
 vi.mock('./ghi-can-dim-len-lark', () => ({ ghiCanDimLenLark: (...a: unknown[]) => ghiCanDimLenLarkMock(...a) }));
 
-import { luuBox, anBox, ghiDongThung } from './actions';
+import { luuBox, anBox, ghiDongThung, luuTrackingChoKien, phanTichTruocKhiGhi } from './actions';
 import type { LoaiBox } from './danh-muc-box';
 
 beforeEach(() => {
@@ -271,5 +271,66 @@ describe('ghiDongThung — lưu CSDL xong PHẢI gọi ghiCanDimLenLark (Task 9,
     const r = await ghiDongThung('ship-khong-ton-tai', nhapDongThungHopLe());
     expect(r.ok).toBe(false);
     expect(ghiCanDimLenLarkMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Nhập mã vận đơn gác `tao_van_don`, KHÔNG phải `manage_fulfillment` (CEO 21/10/2026).
+ *
+ * Vì sao phải có test này, và vì sao nó KHÔNG được chỉ bật/tắt mock chung: trước 21/10/2026
+ * cả hai việc cùng đi qua `manage_fulfillment`, nên một test "không có quyền → từ chối" với
+ * `mockReturnValue(false)` vẫn XANH dù ai đó đổi cổng về quyền cũ — đúng loại test xanh giả.
+ * Vì vậy mock ở đây trả lời THEO TÊN QUYỀN: cấp mọi quyền TRỪ một quyền, rồi đòi hàm vẫn
+ * phải từ chối. Đổi cổng sai là đỏ ngay.
+ */
+const capTruQuyen = (truQuyen: string) => {
+  hasPermissionMock.mockImplementation((_role: unknown, q: unknown) => q !== truQuyen);
+};
+
+describe('tạo vận đơn — gác `tao_van_don`, tách khỏi `manage_fulfillment`', () => {
+  it('luuTrackingChoKien HỎI ĐÚNG quyền `tao_van_don`', async () => {
+    hasPermissionMock.mockReturnValue(false);
+    const r = await luuTrackingChoKien('ship-1', '1Z999AA10123456784');
+    expect(r.ok).toBe(false);
+    expect(hasPermissionMock).toHaveBeenCalledWith(expect.anything(), 'tao_van_don');
+    expect(updateCalls).toBe(0);
+  });
+
+  it('CÓ manage_fulfillment mà THIẾU tao_van_don → luuTrackingChoKien vẫn TỪ CHỐI', async () => {
+    capTruQuyen('tao_van_don');
+    const r = await luuTrackingChoKien('ship-1', '1Z999AA10123456784');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.loi).toContain('Không có quyền tạo vận đơn');
+    expect(updateCalls).toBe(0);
+  });
+
+  it('CÓ manage_fulfillment mà THIẾU tao_van_don → phanTichTruocKhiGhi cũng TỪ CHỐI', async () => {
+    // Bước phân tích phải CÙNG mức quyền với bước ghi: gác lỏng bước đầu là bày ra một nút
+    // vô dụng, và nó còn đốt hạn mức Rate API của hãng.
+    capTruQuyen('tao_van_don');
+    const r = await phanTichTruocKhiGhi('ship-1', '1Z999AA10123456784');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.loi).toContain('Không có quyền tạo vận đơn');
+  });
+
+  it('phanTichTruocKhiGhi HỎI ĐÚNG quyền `tao_van_don`', async () => {
+    hasPermissionMock.mockReturnValue(false);
+    await phanTichTruocKhiGhi('ship-1', '1Z999AA10123456784');
+    expect(hasPermissionMock).toHaveBeenCalledWith(expect.anything(), 'tao_van_don');
+  });
+
+  it('ĐÓNG THÙNG vẫn gác `manage_fulfillment` — hai cổng KHÔNG bị đổi chỗ cho nhau', async () => {
+    capTruQuyen('manage_fulfillment');
+    const r = await ghiDongThung('ship-1', nhapDongThungHopLe());
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('Không có quyền đóng hàng');
+    expect(updateCalls).toBe(0);
+  });
+
+  it('có tao_van_don mà thiếu manage_fulfillment → đóng thùng từ chối (vai `logistics` hôm nay)', async () => {
+    hasPermissionMock.mockImplementation((_r: unknown, q: unknown) => q === 'tao_van_don');
+    const r = await ghiDongThung('ship-1', nhapDongThungHopLe());
+    expect(r.ok).toBe(false);
+    expect(updateCalls).toBe(0);
   });
 });

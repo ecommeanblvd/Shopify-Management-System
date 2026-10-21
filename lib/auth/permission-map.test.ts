@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { OLD_TO_NEW, QUYEN_MOI_VAI_TRO, SYSTEM_ROLE_SEEDS } from './permission-map';
+import {
+  OLD_TO_NEW, QUYEN_MOI_VAI_TRO, QUYEN_THEO_VAI_NGOAI_HAT_GIONG, SYSTEM_ROLE_SEEDS,
+} from './permission-map';
 import { isValidKey, allPermissionKeys } from './permissions';
 
 // Regression — Task 1 fix: orders.cogs (view_cogs/manage_cogs) must be wired
@@ -167,5 +169,73 @@ describe('quyền xem nhật ký thay đổi', () => {
 
   it('mọi khoá của nền chung đều hợp lệ', () => {
     for (const k of QUYEN_MOI_VAI_TRO) expect(isValidKey(k)).toBe(true);
+  });
+});
+
+// Tạo vận đơn (CEO 21/10/2026: "hình như chưa quyền Tạo vận đơn thì phải"). Trước đó việc
+// nhập mã vận đơn đi ké `manage_fulfillment`, nên không có cách nào cho ai nhập mã mà không
+// cho họ đóng/mở kiện và sửa danh mục box — và đội `logistics`, chính người làm việc đó, lại
+// không nhập được. Tách thành quyền riêng `tao_van_don`.
+describe('quyền tạo vận đơn', () => {
+  it('tao_van_don map sang fulfillment.logistics:create — ô ĐÃ CÓ trong danh mục, không đẻ khoá mới', () => {
+    expect(OLD_TO_NEW['tao_van_don']).toEqual(['fulfillment.logistics:create']);
+    expect(isValidKey('fulfillment.logistics:create')).toBe(true);
+  });
+
+  it('KHÔNG còn dùng chung khoá với manage_fulfillment (đóng kiện) — đó là cả lý do tách', () => {
+    for (const k of OLD_TO_NEW['tao_van_don']) {
+      expect(OLD_TO_NEW['manage_fulfillment']).not.toContain(k);
+    }
+    // Và ngược lại: tách rồi thì đóng kiện KHÔNG được tự kéo theo quyền nhập mã.
+    for (const k of OLD_TO_NEW['manage_fulfillment']) {
+      expect(OLD_TO_NEW['tao_van_don']).not.toContain(k);
+    }
+  });
+
+  it('cũng không dùng chung khoá với chon_line_ship — chọn line và nhập mã là hai việc', () => {
+    expect(OLD_TO_NEW['chon_line_ship']).not.toEqual(OLD_TO_NEW['tao_van_don']);
+  });
+
+  it('admin · operator · logistics đều tạo vận đơn được; viewer thì KHÔNG', () => {
+    const co = (vai: string) => {
+      const keys = new Set(SYSTEM_ROLE_SEEDS[vai].keys);
+      return OLD_TO_NEW['tao_van_don'].every((k) => keys.has(k));
+    };
+    expect(co('admin')).toBe(true);
+    expect(co('operator')).toBe(true);
+    // Đây là LỖI được sửa 21/10/2026: vai này có khoá trong hạt giống nhưng cổng cũ lại hỏi
+    // `manage_fulfillment` mà họ không có, nên 2 người làm việc hằng ngày trên màn Đóng hàng
+    // không nhập được mã.
+    expect(co('logistics')).toBe(true);
+    expect(co('viewer')).toBe(false);
+  });
+
+  it('vai logistics tạo vận đơn được NHƯNG vẫn KHÔNG đóng kiện được — đúng chủ ý', () => {
+    const keys = new Set(SYSTEM_ROLE_SEEDS['logistics'].keys);
+    expect(OLD_TO_NEW['tao_van_don'].every((k) => keys.has(k))).toBe(true);
+    expect(OLD_TO_NEW['manage_fulfillment'].every((k) => keys.has(k))).toBe(false);
+  });
+
+  it('viewer vẫn chỉ-đọc: không khoá nào của tao_van_don lọt vào', () => {
+    const keys = new Set(SYSTEM_ROLE_SEEDS.viewer.keys);
+    for (const k of OLD_TO_NEW['tao_van_don']) expect(keys.has(k)).toBe(false);
+  });
+
+  // Vai `OC` cấp TAY trên production, không có hạt giống — `SYSTEM_ROLE_SEEDS` không tới
+  // được nó, mà `QUYEN_MOI_VAI_TRO` thì cấp cho MỌI vai (gồm `viewer`) nên cũng không dùng
+  // được. Đường cấp đúng là map theo tên vai.
+  it('vai OC (cấp tay) được cấp qua QUYEN_THEO_VAI_NGOAI_HAT_GIONG', () => {
+    expect(QUYEN_THEO_VAI_NGOAI_HAT_GIONG['OC']).toEqual(OLD_TO_NEW['tao_van_don']);
+  });
+
+  it('quyền này KHÔNG nằm trong nền chung cấp-cho-mọi-vai (viewer sẽ dính)', () => {
+    for (const k of OLD_TO_NEW['tao_van_don']) expect(QUYEN_MOI_VAI_TRO).not.toContain(k);
+  });
+
+  it('mọi khoá khai theo tên vai đều hợp lệ, và không vai nào trong đó là viewer', () => {
+    for (const [vai, keys] of Object.entries(QUYEN_THEO_VAI_NGOAI_HAT_GIONG)) {
+      expect(vai).not.toBe('viewer');
+      for (const k of keys) expect(isValidKey(k)).toBe(true);
+    }
   });
 });

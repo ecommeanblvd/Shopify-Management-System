@@ -412,17 +412,32 @@ export type KetQuaLuuTracking =
 
 /** Người đang đăng nhập nếu được phép GHI mã vận đơn; ngược lại lý do từ chối.
  *
- *  Gác `manage_fulfillment` cho CẢ hai bước (phân tích và ghi), KHÔNG phải `view_fulfillment`:
+ *  Gác `tao_van_don` cho CẢ hai bước (phân tích và ghi), KHÔNG phải `view_fulfillment`:
  *  bước phân tích đã gọi API báo giá của hãng (tốn tiền, có hạn mức) và ĐỌC dòng Lark vận
  *  hành thật. Để vai trò `viewer` (chỉ-được-xem) bấm được là mở cửa cho người chỉ-xem đốt hạn
  *  mức Rate API; mà bước phân tích chỉ có nghĩa với người sắp bấm ghi, nên hai bước phải cùng
- *  một mức quyền — gác lỏng bước đầu rồi chặn ở bước sau là bày ra một nút vô dụng. */
+ *  một mức quyền — gác lỏng bước đầu rồi chặn ở bước sau là bày ra một nút vô dụng.
+ *
+ *  Quyền RIÊNG `tao_van_don`, KHÔNG phải `manage_fulfillment` như trước 21/10/2026: gác bằng
+ *  `manage_fulfillment` là buộc việc nhập mã vận đơn đi chung một mức với đóng kiện, mở lại
+ *  kiện và sửa danh mục box — không có cách nào cho ai nhập mã mà không cho họ sửa kiện, nên
+ *  đội `logistics` (2 người, chính là người làm trên màn này) không nhập được. CEO 21/10/2026
+ *  chốt logistics và operator đều được nhập, nên cổng phải là một quyền của riêng việc này.
+ *
+ *  ĐÂY KHÔNG PHẢI ĐƯỜNG DUY NHẤT nhập mã vận đơn, và đường kia gác bằng quyền KHÁC — CÓ CHỦ Ý:
+ *  `shipPack` (`features/packing/actions.ts`, ô "Tracking number" + nút Ship trên màn
+ *  `/f/lifecycle/<orderId>`) vẫn gác `manage_fulfillment`. Vì nó làm nhiều hơn ghi một mã:
+ *  đóng dấu kiện đã ship, chuyển mọi dòng sang `shipped`, rồi đẩy fulfillment lên SHOPIFY
+ *  kèm thông báo cho khách — tức NÓI VỚI KHÁCH là đơn đã gửi, không rút lại được, và mã sai
+ *  thì khách A nhận mã của khách B. Nới rộng ai được bấm nút đó là việc phải hỏi CEO riêng,
+ *  không đi kèm lượt tách quyền này (phán quyết người điều phối 21/10/2026). Hệ quả: vai
+ *  `logistics` nhập được mã ở màn Đóng hàng nhưng VẪN KHÔNG ship được từ `/f/lifecycle`. */
 async function nguoiDuocGhiVanDon(): Promise<{ ok: true; id: string } | { ok: false; loi: string }> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, loi: 'Chưa đăng nhập' };
   const role = await getRole(session.user.id);
-  if (!hasPermission(role, 'manage_fulfillment')) {
-    return { ok: false, loi: 'Không có quyền nhập mã vận đơn (cần quyền quản lý đóng hàng).' };
+  if (!hasPermission(role, 'tao_van_don')) {
+    return { ok: false, loi: 'Không có quyền tạo vận đơn.' };
   }
   // Trả luôn `id`: bước lưu mã vận đơn phải gắn danh tính vào nhật ký, và người đã
   // được gác ở đây chính là người sẽ chịu trách nhiệm cho mã đó.
@@ -589,12 +604,13 @@ export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Prom
  * trước (xem `components/dong-hang/HopThoaiXacNhanVanDon.tsx`). Luật kiểm mã thì dùng CHUNG
  * `kiemMaChoKien` với bước phân tích, nên thứ nhân sự xem và thứ được ghi không lệch nhau.
  *
- * Gác `manage_fulfillment` (sửa theo review bảo mật của coordinator, không phải
- * `view_fulfillment` như bản đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không
- * sửa lại được bằng máy khi sai (luật chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi
- * sai phải người vào xoá tay từng ô) — nặng hơn mức `view_fulfillment` mà vai trò
- * `viewer` (chỉ-xem) cũng có. Mốc đúng trong CHÍNH file này là `nguoiDuocDongKien`
- * (đóng/mở kiện, phía trên), cũng như `ghiDongThung` (ghi đóng thùng, phía dưới).
+ * Gác `tao_van_don` (xem `nguoiDuocGhiVanDon` để biết vì sao là quyền RIÊNG chứ không phải
+ * `manage_fulfillment` như trước 21/10/2026, và vì sao KHÔNG phải `view_fulfillment` như bản
+ * đầu): hàm này ghi ra Lark — hệ thống NGOÀI, không sửa lại được bằng máy khi sai (luật
+ * chỉ-điền-ô-trống chỉ cho điền thêm, lỡ ghi sai phải người vào xoá tay từng ô) — nặng hơn
+ * mức `view_fulfillment` mà vai trò `viewer` (chỉ-xem) cũng có. Nhưng nhẹ hơn đóng/mở kiện
+ * (`nguoiDuocDongKien`) và ghi đóng thùng (`ghiDongThung`): hai việc đó sửa CHÍNH kiện hàng,
+ * còn việc này chỉ gắn một mã vào kiện — nên từ 21/10/2026 chúng KHÔNG còn cùng một mốc.
  *
  * Thứ tự BẮT BUỘC, không đổi (Ruling người điều phối):
  *   1. `kiemTraTracking` (có tra DB xem mã đã thuộc kiện KHÁC chưa) — hỏng thì
@@ -610,12 +626,12 @@ export async function phanTichTruocKhiGhi(shipmentId: string, raw: string): Prom
  * không im lặng coi như xong).
  */
 export async function luuTrackingChoKien(shipmentId: string, raw: string): Promise<KetQuaLuuTracking> {
-  // Gác `manage_fulfillment`, KHÔNG phải `view_fulfillment`: hàm này ghi ra một
-  // hệ thống NGOÀI (dòng Lark vận hành thật) mà máy không tự sửa lại được —
-  // ghi sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho
-  // máy đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-
-  // được-xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB +
-  // gọi API tính cước hãng + ghi Lark.
+  // Gác `tao_van_don`, KHÔNG phải `view_fulfillment`: hàm này ghi ra một hệ
+  // thống NGOÀI (dòng Lark vận hành thật) mà máy không tự sửa lại được — ghi
+  // sai một ô thì phải người vào xoá tay (luật chỉ-điền-ô-trống không cho máy
+  // đè lại). `view_fulfillment` còn nằm trong tay vai trò `viewer` (chỉ-được-
+  // xem) — gác ở mức đó là để người chỉ-xem cũng kích hoạt được ghi DB + gọi
+  // API tính cước hãng + ghi Lark.
   const ai = await nguoiDuocGhiVanDon();
   if (!ai.ok) return { ok: false, loi: ai.loi };
 

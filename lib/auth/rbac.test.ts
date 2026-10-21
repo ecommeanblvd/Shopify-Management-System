@@ -152,6 +152,19 @@ describe('hasPermission shim (DB-backed)', () => {
     expect(hasPermission('logistics', 'view_fulfillment')).toBe(true);
     expect(hasPermission('logistics', 'manage_fulfillment')).toBe(false);
   });
+  // CEO 21/10/2026: đội logistics nhập mã vận đơn được. Trước đó việc đó đi ké
+  // `manage_fulfillment` — mà vai này không có — nên 2 người làm trên màn Đóng hàng hằng
+  // ngày lại là người duy nhất không nhập được mã. Hai khẳng định phải đứng CẠNH nhau:
+  // nhập mã thì ĐƯỢC, đóng kiện thì KHÔNG.
+  it('logistics tạo vận đơn được nhưng vẫn KHÔNG đóng kiện được', () => {
+    expect(hasPermission('logistics', 'tao_van_don')).toBe(true);
+    expect(hasPermission('logistics', 'manage_fulfillment')).toBe(false);
+  });
+  it('operator và admin tạo vận đơn được; viewer thì KHÔNG', () => {
+    expect(hasPermission('operator', 'tao_van_don')).toBe(true);
+    expect(hasPermission('admin', 'tao_van_don')).toBe(true);
+    expect(hasPermission('viewer', 'tao_van_don')).toBe(false);
+  });
   it('logistics can manage carrier shipping invoices but NOT full carrier rates', () => {
     expect(hasPermission('logistics', 'manage_shipping_invoices')).toBe(true);
     expect(hasPermission('logistics', 'view_carrier_rates')).toBe(true);

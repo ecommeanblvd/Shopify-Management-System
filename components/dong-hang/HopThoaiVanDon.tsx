@@ -348,9 +348,13 @@ function MucVanDon({
  * phải xảy ra vì người dùng BẤM, không vì component vừa dựng xong.
  */
 export function HopThoaiVanDon({
-  shipmentId, maKien, coQuyenChon, coQuyenDong,
+  shipmentId, maKien, coQuyenChon, coQuyenVanDon,
 }: {
-  shipmentId: string; maKien: string | null; coQuyenChon: boolean; coQuyenDong: boolean;
+  shipmentId: string; maKien: string | null; coQuyenChon: boolean;
+  /** `tao_van_don`, KHÔNG phải `manage_fulfillment`: nút dưới đây mở đường NHẬP MÃ VẬN ĐƠN,
+   *  mà từ 21/10/2026 việc đó có quyền riêng — vai `logistics` được nhập mã nhưng không được
+   *  đóng/mở kiện, nên gác nút này bằng cờ đóng kiện là ẩn nút với đúng người cần nó. */
+  coQuyenVanDon: boolean;
 }) {
   const [mo, setMo] = useState(false);
   const [khoi, setKhoi] = useState<Khoi[] | null>(null);
@@ -509,8 +513,8 @@ export function HopThoaiVanDon({
             </DialogClose>
             <button
               type="button"
-              disabled={!coQuyenDong}
-              title={coQuyenDong ? undefined : 'Cần quyền quản lý đóng hàng để nhập mã vận đơn'}
+              disabled={!coQuyenVanDon}
+              title={coQuyenVanDon ? undefined : 'Cần quyền tạo vận đơn để nhập mã vận đơn'}
               onClick={() => { setMo(false); setMoXacNhan(true); }}
               className={`rounded-lg border border-emerald-300 bg-emerald-100 px-3.5 py-2 text-[13px] font-semibold text-emerald-900 transition hover:bg-emerald-200 ${VIEN_NUT} focus-visible:ring-emerald-400/60 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100 dark:hover:bg-emerald-900/70`}
             >
