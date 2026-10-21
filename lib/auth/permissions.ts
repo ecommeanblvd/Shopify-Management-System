@@ -19,7 +19,12 @@ export const CATALOG: ScopeDef[] = [
   { key: 'orders', label: 'Đơn hàng', actions: ['view', 'edit'] },
   { key: 'orders.cogs', label: 'Đơn hàng — Giá vốn & lãi gộp', actions: ['view', 'edit'] },
   { key: 'fulfillment.operations', label: 'Vận hành — thao tác (pick/pack/ship)', actions: ['view', 'edit'] },
-  { key: 'fulfillment.logistics', label: 'Vận hành — logistics (tracking)', actions: ['view', 'create', 'edit', 'delete'] },
+  // Chỉ còn `create` (nhập mã vận đơn — `tao_van_don`) và `edit` (chọn line ship —
+  // `chon_line_ship`). Bỏ `view` và `delete` ngày 21/10/2026: KHÔNG chỗ nào trong hệ thống
+  // kiểm chúng, nên trên màn Roles & Permissions chúng là hai ô tích được mà không mở ra
+  // việc gì — một checkbox nói sai còn tệ hơn không có ô nào. Dòng `role_permissions` mồ côi
+  // của hai khoá này dọn bằng `scripts/quyen-tao-van-don.ts --don-o-chet`.
+  { key: 'fulfillment.logistics', label: 'Vận hành — logistics (tracking)', actions: ['create', 'edit'] },
   { key: 'fulfillment.warehouse', label: 'Kho MEAN', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'warehouse.receiving', label: 'Kho — Nhập hàng', actions: ['view', 'create', 'edit'] },
   /** `override` = SỬA LẠI kết quả QC người khác đã chốt (quản lý duyệt lại). Tách khỏi

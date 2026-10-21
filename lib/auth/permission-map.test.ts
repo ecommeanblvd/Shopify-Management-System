@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   OLD_TO_NEW, QUYEN_MOI_VAI_TRO, QUYEN_THEO_VAI_NGOAI_HAT_GIONG, SYSTEM_ROLE_SEEDS,
 } from './permission-map';
-import { isValidKey, allPermissionKeys } from './permissions';
+import { CATALOG, isValidKey, allPermissionKeys } from './permissions';
 
 // Regression — Task 1 fix: orders.cogs (view_cogs/manage_cogs) must be wired
 // end-to-end so pages/actions are not Forbidden for admin.
@@ -101,7 +101,7 @@ describe('SYSTEM_ROLE_SEEDS', () => {
     const l = new Set(SYSTEM_ROLE_SEEDS.logistics.keys);
     expect(l.has('fulfillment.operations:view')).toBe(true);
     expect(l.has('fulfillment.logistics:create')).toBe(true);
-    expect(l.has('fulfillment.logistics:delete')).toBe(true);
+    expect(l.has('fulfillment.logistics:edit')).toBe(true);
     expect(l.has('carrier_rates:view')).toBe(true);
     expect(l.has('carrier_rates:create')).toBe(true);
     expect(l.has('carrier_rates.invoices:create')).toBe(true);
@@ -236,6 +236,33 @@ describe('quyền tạo vận đơn', () => {
     for (const [vai, keys] of Object.entries(QUYEN_THEO_VAI_NGOAI_HAT_GIONG)) {
       expect(vai).not.toBe('viewer');
       for (const k of keys) expect(isValidKey(k)).toBe(true);
+    }
+  });
+});
+
+// Hai ô CHẾT bỏ khỏi danh mục 21/10/2026: `fulfillment.logistics:view` và `:delete` tích
+// được trên màn Roles & Permissions mà KHÔNG chỗ nào trong hệ thống kiểm chúng.
+describe('scope fulfillment.logistics — chỉ còn hai hành động có thật', () => {
+  it('danh mục chỉ còn create (nhập mã vận đơn) và edit (chọn line ship)', () => {
+    const scope = CATALOG.find((s) => s.key === 'fulfillment.logistics');
+    expect(scope).toBeDefined();
+    expect(scope!.actions).toEqual(['create', 'edit']);
+  });
+
+  it('hai khoá chết KHÔNG còn hợp lệ — màn phân quyền không dựng được ô cho chúng nữa', () => {
+    expect(isValidKey('fulfillment.logistics:view')).toBe(false);
+    expect(isValidKey('fulfillment.logistics:delete')).toBe(false);
+  });
+
+  it('nhưng hai khoá CÓ THẬT vẫn hợp lệ — đừng xoá nhầm `:create`', () => {
+    expect(isValidKey('fulfillment.logistics:create')).toBe(true);
+    expect(isValidKey('fulfillment.logistics:edit')).toBe(true);
+  });
+
+  it('không hạt giống nào còn cấp hai khoá chết', () => {
+    for (const [vai, seed] of Object.entries(SYSTEM_ROLE_SEEDS)) {
+      expect(seed.keys, `vai ${vai}`).not.toContain('fulfillment.logistics:view');
+      expect(seed.keys, `vai ${vai}`).not.toContain('fulfillment.logistics:delete');
     }
   });
 });

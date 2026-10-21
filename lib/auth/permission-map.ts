@@ -49,8 +49,10 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   sua_ket_qua_qc: ['warehouse.qc:override'],
   view_pack_check: ['fulfillment.pack_check:view'],
   check_packed: ['fulfillment.pack_check:view', 'fulfillment.pack_check:create'],
-  // KPI logistics: quyền RIÊNG, không dùng chung 'fulfillment.logistics:view' — role OC cũng có quyền đó nhưng không
-  // phải người bị chấm KPI này. Chỉ ĐỌC; mọi ô nhập vẫn chỉ admin.
+  // KPI logistics: quyền RIÊNG, không dùng chung khoá nào của scope `fulfillment.logistics` —
+  // vai `OC` cũng làm việc trên scope đó nhưng không phải người bị chấm KPI này. (Bản cũ của
+  // chú thích này nêu 'fulfillment.logistics:view'; khoá đó bỏ khỏi danh mục 21/10/2026 vì
+  // không chỗ nào kiểm nó.) Chỉ ĐỌC; mọi ô nhập vẫn chỉ admin.
   view_kpi_logistics: ['kpi.logistics:view'],
   view_ship_ho: ['ship_ho:view'],
   manage_ship_ho: ['ship_ho:view', 'ship_ho:create', 'ship_ho:edit'],
@@ -110,7 +112,9 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
     name: 'Logistics staff', description: 'Vận hành logistics + carrier rate/invoice', isSystem: false,
     keys: [
       'fulfillment.operations:view',
-      'fulfillment.logistics:view', 'fulfillment.logistics:create', 'fulfillment.logistics:edit', 'fulfillment.logistics:delete',
+      // `:create` = nhập mã vận đơn (`tao_van_don`), `:edit` = chọn line ship. Hai khoá cũ
+      // `:view`/`:delete` bỏ khỏi danh mục 21/10/2026 vì không chỗ nào kiểm chúng.
+      'fulfillment.logistics:create', 'fulfillment.logistics:edit',
       'carrier_rates:view', 'carrier_rates:create',
       'carrier_rates.invoices:view', 'carrier_rates.invoices:create', 'carrier_rates.invoices:edit',
       // Ship hộ: logistics staff toàn quyền vận hành (xem/tạo/sửa, gắn tracking,
