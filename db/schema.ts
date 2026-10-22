@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date, check, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, pgEnum, uniqueIndex, index, integer, primaryKey, numeric, date, check, bigint, serial } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 
@@ -3632,4 +3632,31 @@ export const nhatKyThayDoi = pgTable('nhat_ky_thay_doi', {
   /** Lượt dọn 12 tháng (`scripts/nhat-ky-don-cu.ts`) đi từ dòng CŨ NHẤT và không lọc theo
    *  bảng, nên nó cần `luc` TĂNG DẦN — khác chiều ba chỉ mục trên (di trú 0211). */
   index('nhat_ky_thay_doi_luc_idx').on(t.luc),
+]);
+
+/**
+ * Báo lỗi từ từng module (di trú 0212). Người dùng gửi qua nút ở header; tác vụ xử lý định
+ * kỳ đọc qua `/api/issues` rồi ghi `ghiChuXuLy` / `prUrl` / `trangThai` ngược vào đây, để
+ * admin đọc kết quả ở `/admin/issues` mà không phải hỏi ai.
+ */
+export const issueReports = pgTable('issue_reports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  so: serial('so').notNull(),
+  module: text('module').notNull(),
+  pagePath: text('page_path').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  mucDo: text('muc_do').notNull().default('trung_binh'),
+  trangThai: text('trang_thai').notNull().default('moi'),
+  reporterId: text('reporter_id').references(() => user.id, { onDelete: 'set null' }),
+  reporterEmail: text('reporter_email'),
+  userAgent: text('user_agent'),
+  ghiChuXuLy: text('ghi_chu_xu_ly'),
+  prUrl: text('pr_url'),
+  xuLyLanCuoi: timestamp('xu_ly_lan_cuoi', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('issue_reports_trang_thai_idx').on(t.trangThai, t.createdAt.desc()),
+  index('issue_reports_module_idx').on(t.module, t.createdAt.desc()),
 ]);

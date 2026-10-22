@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
+import { NutBaoLoi } from '@/components/issue-report/NutBaoLoi';
 
 interface TopbarProps { email: string; name: string | null; role: string }
 
@@ -12,6 +13,7 @@ export function Topbar({ email, name, role }: TopbarProps) {
         <span>Shopify Mgmt</span>
       </Link>
       <div className="flex items-center gap-2">
+        <NutBaoLoi />
         <ThemeToggle />
         <UserMenu email={email} name={name} role={role} />
       </div>
