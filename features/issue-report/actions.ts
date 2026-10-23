@@ -11,7 +11,7 @@ import {
   ANH_BYTE_TOI_DA, ANH_TOI_DA, khoaAnh, nhanDangAnh, tenHienThi, type AnhBaoLoi,
 } from './anh';
 import {
-  GIOI_HAN, maBaoLoi, moduleTuDuongDan, mucDoHopLe, trangThaiHopLe,
+  GIOI_HAN, maBaoLoi, moduleHopLe, moduleTuDuongDan, mucDoHopLe, trangThaiHopLe,
 } from './phan-loai';
 
 type Ket = { ok: boolean; loi?: string; ma?: string; canhBao?: string };
@@ -28,6 +28,8 @@ export async function guiBaoLoi(fd: FormData): Promise<Ket> {
   /** `window.location.pathname` lúc bấm — server suy module từ đây, không tin client. */
   const duongDanVao = chuoi('duongDan');
   const mucDoVao = chuoi('mucDo');
+  /** Module người dùng chọn. Không hợp lệ/để trống → suy từ đường dẫn như trước. */
+  const moduleVao = chuoi('module');
   const tieuDe = chuoi('tieuDe').trim();
   const moTa = chuoi('moTa').trim();
   if (tieuDe.length < 3) return { ok: false, loi: 'Tiêu đề quá ngắn.' };
@@ -61,7 +63,7 @@ export async function guiBaoLoi(fd: FormData): Promise<Ket> {
 
   const duongDan = duongDanVao.slice(0, GIOI_HAN.duongDan);
   const [r] = await db.insert(schema.issueReports).values({
-    module: moduleTuDuongDan(duongDan).ma,
+    module: moduleHopLe(moduleVao) ? moduleVao : moduleTuDuongDan(duongDan).ma,
     pagePath: duongDan,
     title: tieuDe,
     description: moTa,

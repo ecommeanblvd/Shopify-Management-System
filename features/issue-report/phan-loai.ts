@@ -32,6 +32,16 @@ const MODULES: ReadonlyArray<{ tienTo: string; ma: string; nhan: string }> = [
 
 export const MODULE_KHAC = { ma: 'khac', nhan: 'Khác' } as const;
 
+/** Danh sách module cho ô chọn: mỗi `ma` một lần (vài tiền tố gom chung), "Khác" ở cuối. */
+export const DANH_SACH_MODULE: ReadonlyArray<{ ma: string; nhan: string }> = [
+  ...MODULES.filter((m, i) => MODULES.findIndex((x) => x.ma === m.ma) === i)
+    .map(({ ma, nhan }) => ({ ma, nhan })),
+  { ...MODULE_KHAC },
+];
+
+export const moduleHopLe = (v: string) => DANH_SACH_MODULE.some((m) => m.ma === v);
+export const nhanModule = (ma: string) => DANH_SACH_MODULE.find((m) => m.ma === ma)?.nhan ?? ma;
+
 export function moduleTuDuongDan(pathname: string): { ma: string; nhan: string } {
   const p = pathname.split('?')[0].split('#')[0];
   let tot: (typeof MODULES)[number] | null = null;
