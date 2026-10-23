@@ -20,6 +20,8 @@ import { syncLarkPacks } from '@/features/lark/sync';
 import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron, chayMotJob } from '@/features/jobs/run';
+import { syncWarehouseFromLark } from '@/features/warehouse/lark-sync';
+import { docCheDoTonKho } from '@/features/warehouse/che-do-ton-kho';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
 import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
@@ -116,6 +118,16 @@ async function main(): Promise<void> {
   // mình vừa kéo về. Mặc định chạy thử (WH_GHI_CAN_LARK), và mỗi lượt ghi còn đọc lại đúng
   // dòng đó một lần nữa vì ảnh chụp bảng đã cũ vài phút.
   await chayMotJob('day-can-lark', () => dayCanLenLark(daiWh.dong ?? undefined));
+  // Tồn on-hand: view "Qly tồn kho tổng hợp" → warehouse_inventory (qua sổ cái). Hàm này có từ
+  // lâu nhưng KHÔNG ai gọi (bỏ khoá `sync-warehouse` 07/09/2026 cùng service cũ) nên tồn đứng
+  // yên từ lần seed. Mặc định CHẠY THỬ — bật ghi thật bằng WH_TON_KHO_LARK=ghi-that SAU khi
+  // đã đọc kế hoạch ở /f/jobs. Đọc view riêng (bộ lọc khác bảng đầy đủ nên không dùng chung `daiWh`).
+  await chayMotJob('dong-bo-ton-kho-lark', () => syncWarehouseFromLark({
+    dryRun: docCheDoTonKho(process.env.WH_TON_KHO_LARK) !== 'ghi',
+  }), (tt) => {
+    const t = tt as { errors?: string[] };
+    return t.errors?.length ? t.errors[0].slice(0, 300) : null;
+  });
   // Điền Store final SAU khi đã đồng bộ, để dòng mới về là điền được ngay.
   await chayMotJob('dien-store-final', () => dienStoreFinal());
   await chayMotJob('day-production-time-cx', () => dayProductionTime());
