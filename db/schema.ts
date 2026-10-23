@@ -3651,6 +3651,8 @@ export const issueReports = pgTable('issue_reports', {
   reporterId: text('reporter_id').references(() => user.id, { onDelete: 'set null' }),
   reporterEmail: text('reporter_email'),
   userAgent: text('user_agent'),
+  /** Ảnh đính kèm (di trú 0213): `[{key, ten, loai, kichThuoc}]`, tối đa 3, file nằm ở kho S3. */
+  anh: jsonb('anh').$type<Array<{ key: string; ten: string; loai: string; kichThuoc: number }>>().notNull().default(sql`'[]'::jsonb`),
   ghiChuXuLy: text('ghi_chu_xu_ly'),
   prUrl: text('pr_url'),
   xuLyLanCuoi: timestamp('xu_ly_lan_cuoi', { withTimezone: true }),

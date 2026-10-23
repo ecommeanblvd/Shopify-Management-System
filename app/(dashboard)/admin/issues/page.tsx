@@ -10,6 +10,7 @@ import { danhSachBaoLoi, demTheoTrangThai } from '@/features/issue-report/querie
 import {
   TRANG_THAI, maBaoLoi, moduleTuDuongDan, nhanMucDo, nhanTrangThai, trangThaiHopLe,
 } from '@/features/issue-report/phan-loai';
+import type { AnhBaoLoi } from '@/features/issue-report/anh';
 import { DoiTrangThai } from './DoiTrangThai';
 
 export const dynamic = 'force-dynamic';
@@ -76,6 +77,17 @@ export default async function IssuesPage({ searchParams }: {
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm">{r.description}</p>
+                {(r.anh as AnhBaoLoi[]).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {(r.anh as AnhBaoLoi[]).map((a, i) => (
+                      <a key={a.key} href={`/admin/issues/${r.id}/anh/${i + 1}`} target="_blank" rel="noreferrer noopener">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/admin/issues/${r.id}/anh/${i + 1}`} alt={a.ten} loading="lazy"
+                          className="h-24 w-auto rounded border object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {r.reporterEmail ?? 'ẩn danh'} · {GIO.format(r.createdAt)} ·{' '}
                   <Link href={r.pagePath} className="underline">{r.pagePath}</Link>
