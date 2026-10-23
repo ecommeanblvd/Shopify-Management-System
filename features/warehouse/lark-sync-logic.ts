@@ -114,3 +114,31 @@ export function reconcilePlan(
   }
   return out;
 }
+
+/** Trần dòng bị ĐẶT VỀ 0 trong một lượt: tối thiểu 20, hoặc 25% số dòng đang có tồn. */
+export const TRAN_VE_0_TOI_THIEU = 20;
+export const TRAN_VE_0_TY_LE = 0.25;
+
+/**
+ * THUẦN: chốt chặn trước khi GHI THẬT. Trả lý do từ chối, hoặc `null` nếu an toàn.
+ *
+ * Vì sao cần: `reconcilePlan` coi dòng vắng trên Lark là "đích = 0". Lark trả rỗng/thiếu
+ * (lỗi API giữa chừng, đổi tên cột, view bị sửa bộ lọc) thì kế hoạch hợp lệ về mặt toán học
+ * nhưng sẽ quét sạch tồn của cả kho trong một giao dịch — và sổ cái ghi nó như một lần điều
+ * chỉnh tay bình thường. Hai dấu hiệu: Lark không có dòng nào, hoặc số dòng về 0 vượt trần.
+ * Từ chối thì lượt chạy đỏ trên /f/jobs để người xem kế hoạch rồi quyết, thay vì tự ghi.
+ */
+export function lyDoTuChoiGhi(
+  larkRows: number,
+  plan: readonly ReconcileItem[],
+  current: readonly CurrentInv[],
+): string | null {
+  if (larkRows === 0) return 'Lark trả 0 dòng — nghi lỗi đọc bảng/đổi cột, KHÔNG ghi để khỏi xoá sạch tồn.';
+  const dangCoTon = current.filter((c) => c.qtyOnHand > 0).length;
+  const veKhong = plan.filter((p) => !p.isNew && p.targetOnHand === 0).length;
+  const tran = Math.max(TRAN_VE_0_TOI_THIEU, Math.ceil(dangCoTon * TRAN_VE_0_TY_LE));
+  if (veKhong > tran) {
+    return `Kế hoạch đặt ${veKhong}/${dangCoTon} dòng tồn về 0 (trần ${tran}) — quá bất thường, KHÔNG ghi. Xem kế hoạch chạy thử rồi quyết.`;
+  }
+  return null;
+}

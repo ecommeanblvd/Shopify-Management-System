@@ -8,6 +8,7 @@ import { applyMovement } from './ledger';
 import {
   larkNumber,
   larkStockCounts,
+  lyDoTuChoiGhi,
   reconcilePlan,
   type CurrentInv,
   type LarkStockRow,
@@ -23,6 +24,10 @@ export interface WarehouseSyncSummary {
   cappedByReserved: number;
   errors: string[];
   dryRun: boolean;
+  /** Lý do chốt chặn từ chối ghi thật (xem `lyDoTuChoiGhi`); chạy thử cũng báo để biết trước. */
+  tuChoi?: string;
+  /** 15 dòng lệch lớn nhất — để người xem kế hoạch chạy thử mà không cần mở DB. */
+  viDu: Array<{ sku: string; kho: string; truoc: number; sau: number; chamTran: boolean }>;
 }
 
 export async function syncWarehouseFromLark(
@@ -66,7 +71,15 @@ export async function syncWarehouseFromLark(
     cappedByReserved,
     errors: [],
     dryRun,
+    viDu: [...plan]
+      .sort((a, b) => Math.abs(b.deltaOnHand) - Math.abs(a.deltaOnHand)).slice(0, 15)
+      .map((p) => ({
+        sku: p.sku, kho: p.warehouseCode, truoc: p.targetOnHand - p.deltaOnHand,
+        sau: p.targetOnHand, chamTran: p.cappedByReserved,
+      })),
   };
+  const tuChoi = lyDoTuChoiGhi(rows.length, plan, current);
+  if (tuChoi) base.tuChoi = tuChoi;
 
   if (dryRun) {
     // Ước lượng phân loại mà KHÔNG ghi.
@@ -75,6 +88,9 @@ export async function syncWarehouseFromLark(
     base.adjusted = plan.length - base.added - base.zeroed;
     return base;
   }
+
+  // Chốt chặn: lượt GHI THẬT mà kế hoạch trông như lỗi đọc Lark thì dừng, báo lỗi ra /f/jobs.
+  if (tuChoi) return { ...base, errors: [tuChoi] };
 
   // 4) Ghi qua sổ cái, mỗi item bọc try/catch để 1 dòng lỗi không phá cả lượt.
   const errors: string[] = [];

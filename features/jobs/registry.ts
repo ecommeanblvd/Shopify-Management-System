@@ -102,6 +102,10 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
   // 01/10/2026). Mặc định CHẠY THỬ — bật bằng biến RIÊNG `WH_GHI_CAN_LARK`, từng bản ghi một.
   { key: 'day-can-lark', ten: 'Đẩy cân nhập ở SMS lên ô Lark còn trống', chuKyPhut: 6 * GIO,
     hauQua: 'Cân kho gõ ở bảng Nhận hôm nay không bao giờ lên Lark — hai bên lệch số vĩnh viễn' },
+  // Chạy LỒNG trong scripts/cron/sync-lark.ts (sau `day-can-lark`). Mặc định CHẠY THỬ — chỉ ghi
+  // tồn thật khi `WH_TON_KHO_LARK=ghi-that`. Chốt chặn từ chối ghi nếu Lark rỗng/quá nhiều dòng về 0.
+  { key: 'dong-bo-ton-kho-lark', ten: 'Đối soát tồn on-hand từ Lark "Qly tồn kho tổng hợp"', chuKyPhut: CHU_KY_SYNC_LARK,
+    hauQua: 'Tồn trong SMS lệch với Lark — allocator cấp hàng theo số cũ, kho thấy có mà thực tế hết (hoặc ngược lại)' },
   // Chạy LỒNG ngay sau `gom-bang-ke-nhap` trong scripts/cron/sync-shopify-orders.ts.
   { key: 'gom-dieu-chinh', ten: 'Gom dòng điều chỉnh cho kỳ đã phát hành', chuKyPhut: 6 * GIO,
     hauQua: 'Giá đổi sau khi chốt kỳ không bao giờ ra tới brand — SMS giữ số mới, brand đã thu số cũ' },

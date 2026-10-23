@@ -129,3 +129,24 @@ describe('reconcilePlan', () => {
     expect(reconcilePlan(lark, current)).toHaveLength(0);
   });
 });
+
+import { lyDoTuChoiGhi } from './lark-sync-logic';
+
+describe('lyDoTuChoiGhi (chốt chặn ghi thật)', () => {
+  const cur = (n: number) => Array.from({ length: n }, (_, i) => ({
+    sku: `S${i}`, warehouseCode: 'GVM', qtyOnHand: 5, qtyReserved: 0,
+  }));
+  const ve0 = (n: number) => Array.from({ length: n }, (_, i) => ({
+    sku: `S${i}`, warehouseCode: 'GVM', deltaOnHand: -5, targetOnHand: 0, cappedByReserved: false, isNew: false,
+  }));
+  it('Lark rỗng → từ chối', () => {
+    expect(lyDoTuChoiGhi(0, [], cur(100))).toMatch(/0 dòng/);
+  });
+  it('về 0 vượt trần → từ chối; dưới trần → cho ghi', () => {
+    expect(lyDoTuChoiGhi(500, ve0(60), cur(100))).toMatch(/quá bất thường/);
+    expect(lyDoTuChoiGhi(500, ve0(20), cur(100))).toBeNull();
+  });
+  it('kho nhỏ vẫn có trần tối thiểu 20', () => {
+    expect(lyDoTuChoiGhi(50, ve0(10), cur(10))).toBeNull();
+  });
+});
