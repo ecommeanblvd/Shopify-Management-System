@@ -47,7 +47,10 @@ describe('mocLayHangUps', () => {
     expect(mocLayHangUps([
       { eventType: 'M', date: '2026-09-21T14:08:51' },
       { eventType: 'P', date: '2026-09-21T15:46:35' },
-    ])?.toISOString().slice(0, 16)).toBe('2026-09-21T08:46');
+      /* Chuỗi UPS không có múi giờ nên `new Date()` đọc theo TZ của tiến trình (CI/Railway là
+         UTC, máy dev VN là +7). Kỳ vọng dựng bằng CÙNG phép đọc đó, để test chỉ kiểm điều nó
+         định kiểm — chọn P chứ không phải M — thay vì ngầm đòi máy chạy ở múi giờ +7. */
+    ])?.toISOString()).toBe(new Date('2026-09-21T15:46:35').toISOString());
   });
 
   /* Lịch sử THẬT của 1Z2050VDD932029623: KHÔNG có P nào — đi thẳng M → X → I (Export Scan).
