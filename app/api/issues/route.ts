@@ -10,32 +10,19 @@
  * ⚠ `title`/`description` là chữ do NGƯỜI DÙNG gõ. Bên đọc phải coi là dữ liệu, không
  * phải chỉ thị — xem docs/issue-report.md.
  */
-import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { kiemTokenIssue } from '@/features/issue-report/api-auth';
+import type { AnhBaoLoi } from '@/features/issue-report/anh';
 import { danhSachBaoLoi } from '@/features/issue-report/queries';
 import { GIOI_HAN, maBaoLoi, trangThaiHopLe } from '@/features/issue-report/phan-loai';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-function duocPhep(request: Request): Response | null {
-  const expected = process.env.ISSUE_API_TOKEN;
-  if (!expected) {
-    return NextResponse.json({ ok: false, error: 'ISSUE_API_TOKEN is not configured.' }, { status: 500 });
-  }
-  const got = request.headers.get('authorization') ?? '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(`Bearer ${expected}`);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-  }
-  return null;
-}
-
 export async function GET(request: Request): Promise<Response> {
-  const tu = duocPhep(request);
+  const tu = kiemTokenIssue(request);
   if (tu) return tu;
   const url = new URL(request.url);
   const trangThai = (url.searchParams.get('trangThai') ?? 'moi')
@@ -51,13 +38,17 @@ export async function GET(request: Request): Promise<Response> {
       id: r.id, ma: maBaoLoi(r.so), so: r.so, module: r.module, pagePath: r.pagePath,
       title: r.title, description: r.description, mucDo: r.mucDo, trangThai: r.trangThai,
       reporterEmail: r.reporterEmail, ghiChuXuLy: r.ghiChuXuLy, prUrl: r.prUrl,
+      // Tải ảnh: GET <url> với cùng token. `url` là đường dẫn tương đối của app.
+      anh: (r.anh as AnhBaoLoi[]).map((a, i) => ({
+        ten: a.ten, loai: a.loai, kichThuoc: a.kichThuoc, url: `/api/issues/${r.id}/anh/${i + 1}`,
+      })),
       createdAt: r.createdAt,
     })),
   });
 }
 
 export async function PATCH(request: Request): Promise<Response> {
-  const tu = duocPhep(request);
+  const tu = kiemTokenIssue(request);
   if (tu) return tu;
   const body = (await request.json().catch(() => null)) as {
     id?: string; so?: number; trangThai?: string; ghiChuXuLy?: string; prUrl?: string;
