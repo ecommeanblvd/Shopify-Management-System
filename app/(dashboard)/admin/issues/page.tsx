@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { danhSachBaoLoi, demTheoTrangThai } from '@/features/issue-report/queries';
 import {
-  TRANG_THAI, maBaoLoi, moduleTuDuongDan, nhanMucDo, nhanTrangThai, trangThaiHopLe,
+  TRANG_THAI, maBaoLoi, nhanModule, nhanMucDo, nhanTrangThai, trangThaiHopLe,
 } from '@/features/issue-report/phan-loai';
 import type { AnhBaoLoi } from '@/features/issue-report/anh';
 import { DoiTrangThai } from './DoiTrangThai';
@@ -67,7 +67,7 @@ export default async function IssuesPage({ searchParams }: {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">{maBaoLoi(r.so)}</span>
                   <span className="font-medium">{r.title}</span>
-                  <Badge variant="outline">{moduleTuDuongDan(r.pagePath).nhan}</Badge>
+                  <Badge variant="outline">{nhanModule(r.module)}</Badge>
                   <Badge variant={r.mucDo === 'cao' || r.mucDo === 'chan_cong_viec' ? 'destructive' : 'secondary'}>
                     {nhanMucDo(r.mucDo)}
                   </Badge>

@@ -14,7 +14,7 @@ import {
 import { FileDrop } from '@/components/ui/file-drop';
 import { guiBaoLoi } from '@/features/issue-report/actions';
 import { ANH_BYTE_TOI_DA, ANH_TOI_DA } from '@/features/issue-report/anh';
-import { MUC_DO, moduleTuDuongDan } from '@/features/issue-report/phan-loai';
+import { DANH_SACH_MODULE, MUC_DO, moduleTuDuongDan } from '@/features/issue-report/phan-loai';
 
 /**
  * Nút "Báo lỗi" ở header — MỘT chỗ cho mọi module, cùng nguyên tắc với `NutNhatKy`
@@ -28,9 +28,13 @@ export function NutBaoLoi() {
   const [tieuDe, setTieuDe] = useState('');
   const [moTa, setMoTa] = useState('');
   const [mucDo, setMucDo] = useState('trung_binh');
+  // null = chưa tự chọn → theo module của trang đang xem (và đổi theo khi người dùng chuyển
+  // trang); đã chọn tay thì giữ lựa chọn của họ cho tới khi gửi xong.
+  const [moduleChon, setModuleChon] = useState<string | null>(null);
   const [anh, setAnh] = useState<File[]>([]);
   const [dangGui, batDauGui] = useTransition();
   const mod = moduleTuDuongDan(pathname);
+  const moduleHienTai = moduleChon ?? mod.ma;
 
   function themAnh(fs: File[]) {
     const anhThoi = fs.filter((f) => f.type.startsWith('image/'));
@@ -51,13 +55,13 @@ export function NutBaoLoi() {
         // suy module từ phần path.
         const duongDan = `${window.location.pathname}${window.location.search}`;
         const fd = new FormData();
-        fd.set('duongDan', duongDan); fd.set('tieuDe', tieuDe); fd.set('moTa', moTa); fd.set('mucDo', mucDo);
+        fd.set('duongDan', duongDan); fd.set('tieuDe', tieuDe); fd.set('moTa', moTa); fd.set('mucDo', mucDo); fd.set('module', moduleHienTai);
         for (const f of anh) fd.append('anh', f);
         const kq = await guiBaoLoi(fd);
         if (!kq.ok) { toast.error(kq.loi ?? 'Không gửi được.'); return; }
         toast.success(`Đã ghi nhận ${kq.ma}. Cảm ơn bạn!`);
         if (kq.canhBao) toast.warning(kq.canhBao);
-        setTieuDe(''); setMoTa(''); setMucDo('trung_binh'); setAnh([]); setMo(false);
+        setTieuDe(''); setMoTa(''); setMucDo('trung_binh'); setAnh([]); setModuleChon(null); setMo(false);
       } catch (e) {
         console.error('[issue-report] gửi lỗi:', e);
         toast.error('Không gửi được. Thử lại sau.');
@@ -73,13 +77,24 @@ export function NutBaoLoi() {
       </SheetTrigger>
       <SheetContent side="right" className="gap-0 data-[side=right]:sm:max-w-md">
         <SheetHeader className="pr-12">
-          <SheetTitle>Báo lỗi — {mod.nhan}</SheetTitle>
+          <SheetTitle>Báo lỗi</SheetTitle>
           <SheetDescription>
             Mô tả bạn đang làm gì và thấy gì. Hệ thống tự ghi lại trang đang xem và tài khoản
             của bạn.
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-4 px-4 pb-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="bl-module">Lỗi xảy ra ở module nào?</Label>
+            <select id="bl-module" value={moduleHienTai} onChange={(e) => setModuleChon(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm">
+              {DANH_SACH_MODULE.map((m) => (
+                <option key={m.ma} value={m.ma}>
+                  {m.nhan}{m.ma === mod.ma ? ' (đang xem)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="bl-tieu-de">Tiêu đề</Label>
             <Input id="bl-tieu-de" value={tieuDe} maxLength={120}

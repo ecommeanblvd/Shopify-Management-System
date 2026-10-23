@@ -16,7 +16,7 @@ import { db, schema } from '@/db/client';
 import { kiemTokenIssue } from '@/features/issue-report/api-auth';
 import type { AnhBaoLoi } from '@/features/issue-report/anh';
 import { danhSachBaoLoi } from '@/features/issue-report/queries';
-import { GIOI_HAN, maBaoLoi, trangThaiHopLe } from '@/features/issue-report/phan-loai';
+import { GIOI_HAN, maBaoLoi, nhanModule, trangThaiHopLe } from '@/features/issue-report/phan-loai';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<Response> {
   return NextResponse.json({
     ok: true,
     issues: rows.map((r) => ({
-      id: r.id, ma: maBaoLoi(r.so), so: r.so, module: r.module, pagePath: r.pagePath,
+      id: r.id, ma: maBaoLoi(r.so), so: r.so, module: r.module, moduleNhan: nhanModule(r.module), pagePath: r.pagePath,
       title: r.title, description: r.description, mucDo: r.mucDo, trangThai: r.trangThai,
       reporterEmail: r.reporterEmail, ghiChuXuLy: r.ghiChuXuLy, prUrl: r.prUrl,
       // Tải ảnh: GET <url> với cùng token. `url` là đường dẫn tương đối của app.

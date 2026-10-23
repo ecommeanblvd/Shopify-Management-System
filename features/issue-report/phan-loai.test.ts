@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  maBaoLoi, moduleTuDuongDan, mucDoHopLe, trangThaiHopLe,
+  DANH_SACH_MODULE, maBaoLoi, moduleHopLe, moduleTuDuongDan, mucDoHopLe, nhanModule, trangThaiHopLe,
 } from './phan-loai';
 
 describe('moduleTuDuongDan', () => {
@@ -30,5 +30,20 @@ describe('giá trị hợp lệ', () => {
   });
   it('mã báo lỗi', () => {
     expect(maBaoLoi(12)).toBe('BL-12');
+  });
+});
+
+describe('danh sách module cho ô chọn', () => {
+  it('mỗi mã một lần, có Khác, và mọi module suy từ đường dẫn đều chọn được', () => {
+    const ma = DANH_SACH_MODULE.map((m) => m.ma);
+    expect(new Set(ma).size).toBe(ma.length);
+    expect(ma).toContain('khac');
+    for (const p of ['/f/orders', '/f/lifecycle', '/f/customer-account', '/admin/issues', '/']) {
+      expect(moduleHopLe(moduleTuDuongDan(p).ma)).toBe(true);
+    }
+  });
+  it('từ chối mã lạ, đọc được nhãn', () => {
+    expect(moduleHopLe('khong-co')).toBe(false);
+    expect(nhanModule('ship-ho')).toBe('Ship hộ');
   });
 });
