@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
-import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
+import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill-core';
 import { chayJobApi } from '@/features/jobs/api-run';
 
 export const dynamic = 'force-dynamic';

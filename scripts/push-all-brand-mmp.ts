@@ -6,7 +6,7 @@
  *   railway run npx tsx scripts/push-all-brand-mmp.ts            # tất cả
  *   railway run npx tsx scripts/push-all-brand-mmp.ts 20         # test 20 đơn đầu
  */
-import { forcePushAllBrandOrders } from '@/features/mmp/order-backfill';
+import { forcePushAllBrandOrders } from '@/features/mmp/order-backfill-core';
 
 async function main(): Promise<void> {
   const limitArg = process.argv[2] ? Math.max(0, Math.floor(Number(process.argv[2]))) : undefined;

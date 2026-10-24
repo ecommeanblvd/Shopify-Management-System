@@ -13,7 +13,7 @@
  * `force` BẬT SẴN: đẩy lại kể cả đơn đã 'sent' — đó chính là việc MMP cần. MMP có dedupe nên
  * không đẻ đơn trùng; bên mình mỗi đơn vẫn một dòng trong `mmp_order_pushes`.
  */
-import { forcePushAllBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill';
+import { forcePushAllBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill-core';
 
 const arg = (ten: string): string | undefined =>
   process.argv.find((x) => x.startsWith(`--${ten}=`))?.split('=')[1];

@@ -14,7 +14,7 @@
  * cần nhanh) và track-shipments (6 giờ/lần). Để lại đây nữa là chạy trùng.
  */
 import { runHourlySync } from '@/features/shopify-orders/cron/hourly-sync';
-import { pushUnsentBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill';
+import { pushUnsentBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/order-backfill-core';
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
 import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
 import { doiChieuLyDoCham } from '@/features/shipments/doi-chieu-ly-do';

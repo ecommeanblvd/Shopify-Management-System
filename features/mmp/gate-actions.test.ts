@@ -171,17 +171,36 @@ describe("features/mmp: mọi export của file 'use server' phải có cổng q
         if (!CO_CONG.test(than)) chuaGac.push(`${relative(GOC_REPO, p)}:${moc[i]!.ten}`);
       }
     }
-    /* Ba hàm này là LÕI KHÔNG-AUTH cố ý, gọi từ cron (`app/api/cron/retry-mmp-orders/route.ts`,
-     * gác bằng `CRON_SECRET`) và từ `scripts/` — thêm `requirePerm` vào là CHẶN NHẦM cron, vì
-     * cron không có phiên đăng nhập. Nhưng chúng đang nằm trong file `'use server'` nên vẫn là
-     * endpoint gọi được: đường vá đúng là DỜI lõi sang một tệp KHÔNG có `'use server'` và chỉ
-     * để lại `backfillMmpOrders` (đã gác) làm action. Việc đó ngoài phạm vi lượt 24/10/2026 —
-     * đã báo controller, chờ quyết phạm vi. */
-    expect(chuaGac).toEqual([
-      'features/mmp/order-backfill.ts:pushUnsentBrandOrders',
-      'features/mmp/order-backfill.ts:pushOwnedStoreOrders',
-      'features/mmp/order-backfill.ts:forcePushAllBrandOrders',
-    ]);
+    /* Danh sách này phải RỖNG. Ba lõi đẩy đơn (`pushUnsentBrandOrders`, `pushOwnedStoreOrders`,
+     * `forcePushAllBrandOrders`) từng nằm trong `order-backfill.ts` mà không có cổng nào — và
+     * cổng quyền KHÔNG phải đường vá cho chúng, vì cron gọi chúng mà không có phiên đăng nhập.
+     * Vá bằng cách DỜI cả ba sang `order-backfill-core.ts`, một tệp không có `'use server'`
+     * (24/10/2026). Hai bài kiểm ngay dưới ghim cả hai nửa của bản vá. */
+    expect(chuaGac).toEqual([]);
+  });
+
+  /** NỬA MỘT của bản vá: tệp lõi không được mang `'use server'`. Thêm chỉ thị đó vào là ba hàm
+   *  đẩy đơn thành endpoint công khai trở lại, và không bài nào khác bắt được —
+   *  `forcePushAllBrandOrders()` không mốc ngày là đẩy sạch 12.807 đơn từ 2020 sang MMP của
+   *  ĐỐI TÁC. Ghim bằng CHÍNH biểu thức mà bài trên dùng để nhận ra tệp action. */
+  it("order-backfill-core.ts KHÔNG mang 'use server'", () => {
+    const s = readFileSync(join(THU_MUC_MMP, 'order-backfill-core.ts'), 'utf8');
+    expect(/^\s*(['"])use server\1\s*;?/.test(s)).toBe(false);
+    // Và ba lõi vẫn phải Ở ĐÂY: dời về lại tệp action thì bài trên bắt, dời sang một tệp thứ
+    // ba (có `'use server'`) thì bài này bắt.
+    for (const ten of ['pushUnsentBrandOrders', 'pushOwnedStoreOrders', 'forcePushAllBrandOrders']) {
+      expect(s).toContain(`export async function ${ten}`);
+    }
+  });
+
+  /** NỬA HAI: tệp action chỉ được có ĐÚNG MỘT export, và nó phải gác quyền trong thân hàm.
+   *  Mỗi export thêm vào tệp đó là một endpoint công khai thêm. */
+  it('order-backfill.ts chỉ có đúng một export, và nó gác quyền', () => {
+    const s = readFileSync(join(THU_MUC_MMP, 'order-backfill.ts'), 'utf8');
+    const ten = [...s.matchAll(/^export\s+async\s+function\s+(\w+)/gm)].map((m) => m[1]);
+    expect(ten).toEqual(['backfillMmpOrders']);
+    expect(s.slice(s.indexOf('export async function backfillMmpOrders')))
+      .toMatch(/requirePerm\('manage_fulfillment'\)/);
   });
 
   /** Hàm vừa vá phải nằm NGOÀI danh sách trên — ghim đích danh cho khỏi lọt lại. */

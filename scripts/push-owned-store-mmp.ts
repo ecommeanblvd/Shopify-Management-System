@@ -8,7 +8,7 @@
  *   railway run npx tsx scripts/push-owned-store-mmp.ts 20          # test 20 đơn đầu
  *   railway run npx tsx scripts/push-owned-store-mmp.ts --force     # gửi lại TẤT CẢ (refresh status)
  */
-import { pushOwnedStoreOrders } from '@/features/mmp/order-backfill';
+import { pushOwnedStoreOrders } from '@/features/mmp/order-backfill-core';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
