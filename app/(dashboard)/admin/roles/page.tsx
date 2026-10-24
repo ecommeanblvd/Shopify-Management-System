@@ -18,7 +18,10 @@ export default async function RolesPage() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold">Roles &amp; Permissions</h1>
-        <p className="text-sm text-muted-foreground">Phân quyền theo module × action cho từng role.</p>
+        <p className="text-sm text-muted-foreground">
+          Phân quyền theo module × action cho từng role. Chữ nhỏ dưới ô tích là NGHĨA THẬT của
+          quyền đó trong module ấy — cùng một cột “Tạo” mang việc khác nhau ở mỗi hàng.
+        </p>
       </div>
       <RoleMatrix
         roles={roles}

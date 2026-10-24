@@ -174,7 +174,7 @@ function RoleCard({
                   const hasAction = (scope.actions as string[]).includes(action);
                   if (!hasAction) {
                     return (
-                      <td key={action} className="px-3 py-2.5 text-center">
+                      <td key={action} className="px-3 py-2.5 text-center align-top">
                         <span className="text-muted-foreground/25 text-xs">—</span>
                       </td>
                     );
@@ -182,16 +182,29 @@ function RoleCard({
                   const permKey = `${scope.key}:${action}`;
                   const isAntiLockout = role.key === 'admin' && permKey === 'users_roles:edit';
                   const checked = localKeys.has(permKey);
+                  const nhan = scope.nhanHanhDong?.[action];
                   return (
-                    <td key={action} className="px-3 py-2.5 text-center">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggle(scope.key, action)}
-                        disabled={!canEdit || isAntiLockout || pending}
-                        className="size-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                        title={isAntiLockout ? 'Không thể bỏ quyền này (anti-lockout)' : permKey}
-                      />
+                    <td key={action} className="px-3 py-2.5 align-top">
+                      <label className="mx-auto flex max-w-[128px] cursor-pointer flex-col items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(scope.key, action)}
+                          disabled={!canEdit || isAntiLockout || pending}
+                          className="size-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                          title={isAntiLockout ? 'Không thể bỏ quyền này (anti-lockout)' : permKey}
+                        />
+                        {/* Nhãn hiện THÀNH CHỮ trong ô, không phải tooltip: người đi tìm quyền
+                            "Tạo vận đơn" phải đọc thấy nó (và Ctrl+F ra nó) mà không cần biết
+                            trước là phải rê chuột vào đúng ô nào — chính chỗ đã làm CEO không
+                            thấy quyền đó ngày 24/10/2026. Tooltip `title` vẫn giữ KHOÁ quyền
+                            cho người cần dán vào mã. */}
+                        {nhan && (
+                          <span className="text-center text-[10px] leading-tight text-muted-foreground">
+                            {nhan}
+                          </span>
+                        )}
+                      </label>
                     </td>
                   );
                 })}

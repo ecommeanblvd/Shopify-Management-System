@@ -5,8 +5,19 @@ import { orderContentFingerprint, detectEdit } from './order-fingerprint';
 import { soSanhDongHang } from './so-sanh-dong-hang';
 import type { ShopifyOrderPayload } from '../shopify-types';
 import { ensureFulfillmentForOrder } from '@/features/fulfillment/ensure-fulfillment';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
+import { MAY } from '@/features/nhat-ky/tac-nhan';
 
 export type UpsertSource = 'webhook' | 'cron' | 'backfill';
+
+/*
+ * Nhãn "Đồng bộ Shopify" cho lượt ghi `shopify_orders` + `shopify_order_lines` bên dưới.
+ *
+ * Không ai BẤM gì ở đây cả: cả ba kênh (webhook, cron hằng giờ, backfill) ghi thay Shopify,
+ * nên nhãn phải là nguồn MÁY. Thiếu nó, ngày trigger nhật ký bật cho hai bảng này (spec §8)
+ * mọi dòng sinh ra sẽ hiện "Chưa gắn danh tính" — không phân biệt được với lỗi quên bọc.
+ */
+const TAC_NHAN_DONG_BO = { kieu: 'may', nhan: MAY.DONG_BO_SHOPIFY } as const;
 
 /**
  * GraphQL trả customer.id dạng gid://shopify/Customer/N — normalize về N
@@ -81,7 +92,13 @@ export async function upsertOrder(
 
   let internalOrderId: string | undefined;
 
-  await db.transaction(async (tx) => {
+  /* `ghiVoi` thay cho `db.transaction` — ĐÚNG MỘT giao dịch như cũ, chỉ thêm một lệnh
+   * `set_config` ở đầu. KHÔNG nới phạm vi: ba lệnh đọc Shopify/DB ở trên (`prev`, `ship`)
+   * và hai việc best-effort ở dưới (`ensureFulfillmentForOrder`, `releaseOrderAllocations`)
+   * cố ý ĐỨNG NGOÀI. Bài học `import-actions.ts` (chú thích `LO_GHI` ở
+   * `features/shipments/import-actions.ts:40`): giao dịch dài là khoá dài trên bảng đang
+   * chạy thật, và kéo lệnh gọi ngoài vào trong là đúng cái đã làm pooler rớt kết nối. */
+  await ghiVoi(TAC_NHAN_DONG_BO, async (tx) => {
     const [row] = await tx
       .insert(schema.shopifyOrders)
       .values({
