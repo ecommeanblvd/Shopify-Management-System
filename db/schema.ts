@@ -1467,3 +1467,51 @@ export const inventoryTransferLines = pgTable('inventory_transfer_lines', {
   productTitle: text('product_title'),
   qty: integer('qty').notNull(),
 }, (t) => [index('inventory_transfer_lines_transfer_idx').on(t.transferId)]);
+
+// ─────────────────────────────────────────────────────────────────────
+// Customer Returns Intake + QC (sub-project F2)
+// ─────────────────────────────────────────────────────────────────────
+
+export const customerReturnStatusEnum = pgEnum('customer_return_status', ['open', 'completed', 'cancelled']);
+
+/** One intake record per physical return delivery, tied to a Shopify order. */
+export const customerReturns = pgTable('customer_returns', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: text('code').notNull().unique(),
+  orderId: uuid('order_id').references(() => shopifyOrders.id, { onDelete: 'cascade' }).notNull(),
+  warehouseCode: text('warehouse_code').notNull().default('HN'),
+  status: customerReturnStatusEnum('status').notNull().default('open'),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  receivedBy: text('received_by').references(() => user.id, { onDelete: 'set null' }),
+  qcDoneAt: timestamp('qc_done_at'),
+  qcDoneBy: text('qc_done_by').references(() => user.id, { onDelete: 'set null' }),
+  note: text('note'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('customer_returns_order_idx').on(t.orderId),
+  index('customer_returns_status_idx').on(t.status),
+]);
+
+/** Per order-line return + QC outcome. passQty restocks; failQty does not. */
+export const customerReturnLines = pgTable('customer_return_lines', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  returnId: uuid('return_id').references(() => customerReturns.id, { onDelete: 'cascade' }).notNull(),
+  shopifyLineId: text('shopify_line_id').notNull(),
+  sku: text('sku'),
+  productTitle: text('product_title'),
+  variantTitle: text('variant_title'),
+  returnedQty: integer('returned_qty').notNull(),
+  passQty: integer('pass_qty').notNull().default(0),
+  failQty: integer('fail_qty').notNull().default(0),
+  failReason: text('fail_reason'),
+  restockedQty: integer('restocked_qty').notNull().default(0),
+  warehouseInventoryId: uuid('warehouse_inventory_id').references(() => warehouseInventory.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (t) => [
+  index('customer_return_lines_return_idx').on(t.returnId),
+  check('customer_return_lines_returned_qty_pos', sql`${t.returnedQty} > 0`),
+  check('customer_return_lines_pass_qty_nonneg', sql`${t.passQty} >= 0`),
+  check('customer_return_lines_fail_qty_nonneg', sql`${t.failQty} >= 0`),
+]);

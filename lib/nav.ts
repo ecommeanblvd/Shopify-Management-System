@@ -1,4 +1,4 @@
-import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, PackageCheck, ArrowLeftRight } from 'lucide-react';
+import { LayoutDashboard, Store, Eye, Settings, History, Users, Globe, ToggleRight, Truck, ShoppingBag, Sparkles, Package, Receipt, ClipboardList, ShieldCheck, PackageCheck, ArrowLeftRight, Undo2 } from 'lucide-react';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import type { LucideIcon } from 'lucide-react';
 
@@ -25,6 +25,7 @@ export const NAV: NavItem[] = [
   { href: '/f/fulfillment',   label: 'Vận hành đơn', icon: ClipboardList,   requires: 'view_fulfillment' },
   { href: '/f/fulfillment/receiving', label: 'Nhập kho & QC', icon: PackageCheck, requires: 'view_receiving' },
   { href: '/f/transfers', label: 'Chuyển kho', icon: ArrowLeftRight, requires: 'view_transfers' },
+  { href: '/f/returns', label: 'Hàng hoàn', icon: Undo2, requires: 'view_returns' },
   { href: '/f/carrier-rates', label: 'Carrier rates', icon: Truck,           requires: 'view_carrier_rates' },
   { href: '/f/shipping-reconcile', label: 'Đối soát phí ship', icon: Receipt, requires: 'view_carrier_rates' },
   { href: '/f/mmp',           label: 'Products',      icon: Package,         requires: 'view_mmp_products' },
