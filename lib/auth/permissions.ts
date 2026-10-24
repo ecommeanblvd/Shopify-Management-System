@@ -72,7 +72,32 @@ export const CATALOG: ScopeDef[] = [
       edit: 'Mở chi tiết đơn, nhập giá vốn SKU, ghi đè phí ship & trọng lượng',
     },
   },
-  { key: 'orders.cogs', label: 'Đơn hàng — Giá vốn & lãi gộp', actions: ['view', 'edit'] },
+  /* `view` = quyền cũ `view_cogs`, ĐỨNG MỘT MÌNH CÓ TÁC DỤNG nên KHÔNG khai `canKem`:
+   *  - màn Lãi gộp `app/(dashboard)/f/orders/lai-gop/page.tsx:32` + nút vào ở
+   *    `app/(dashboard)/f/orders/page.tsx:31`;
+   *  - hai route xuất CSV `.../lai-gop/bang-thang.csv/route.ts:28`,
+   *    `.../lai-gop/chua-co-gia-von.csv/route.ts:22`;
+   *  - và nó là quyền MỞ MẶT giá vốn mức đơn trong NHẬT KÝ (`shipping_cost_override`,
+   *    `cost_override` — `features/nhat-ky/che-gia-tri.ts:125-139`). Mẩu "nhật ký" phải có
+   *    trong nhãn: bỏ tích ô này là che cả cột giá trị ở một module KHÁC, chỗ không ai nghĩ
+   *    tới khi đang đứng ở hàng "Đơn hàng".
+   *
+   * `edit` = `manage_cogs`, và chùm là `view` + `edit` (`lib/auth/permission-map.ts:62`) nên
+   * `edit` một mình KHÔNG mở ra gì → `canKem`. Chỗ kiểm thật:
+   *  - áp bảng kê giá vốn brand `features/cogs/actions.ts:30, 39`;
+   *  - tỉ giá USD→VND theo tháng `:52, :68` + form ở `components/cogs/TiGiaForm.tsx:22`;
+   *  - ước giá vốn dự tính theo store `:102`, phân bổ PO theo brand `:123`;
+   *  - trang Bảng kê brand `app/(dashboard)/f/orders/cogs/bang-ke/page.tsx:17`. */
+  {
+    key: 'orders.cogs',
+    label: 'Đơn hàng — Giá vốn & lãi gộp',
+    actions: ['view', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào màn Lãi gộp & tải CSV lãi gộp; mở mặt giá vốn mức đơn trong nhật ký',
+      edit: 'Áp bảng kê giá vốn brand, tỉ giá USD→VND theo tháng, ước giá vốn dự tính, phân bổ PO',
+    },
+    canKem: { edit: ['orders.cogs:view'] },
+  },
   /* `edit` là MỘT NỬA của quyền cũ `manage_fulfillment` (`lib/auth/permission-map.ts:40`),
    * và shim kiểm bằng `.every()` — tích riêng ô này KHÔNG mở ra việc gì, phải có kèm
    * `fulfillment.brand_requests:edit`. Đó là lý do có `canKem` bên dưới: nhãn cũ
@@ -121,17 +146,120 @@ export const CATALOG: ScopeDef[] = [
       edit: 'Chọn line ship & verify địa chỉ đơn',
     },
   },
-  { key: 'fulfillment.warehouse', label: 'Kho MEAN', actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'warehouse.receiving', label: 'Kho — Nhập hàng', actions: ['view', 'create', 'edit'] },
+  /* CẢ BỐN ô là MỘT quyền cũ duy nhất: `manage_warehouse`
+   * (`lib/auth/permission-map.ts:41`). Shim kiểm `.every()` nên tích ba ô, tích một ô, hay
+   * tích sai ô nào cũng là KHÔNG mở ra gì — vì vậy cả bốn mang CÙNG một nhãn và mỗi ô khai
+   * `canKem` ba ô kia. Nhãn khác nhau theo cột sẽ nói dối: ở đây không có "chỉ xem" và cũng
+   * không có "chỉ xoá".
+   *
+   * Lưu ý ô `view` KHÔNG phải cửa vào màn kho: màn `/f/warehouse` gác bằng `view_fulfillment`
+   * (`app/(dashboard)/f/warehouse/page.tsx:18`), không phải quyền này.
+   *
+   * Chỗ kiểm thật, đã đếm đủ:
+   *  - thêm/sửa SKU & vị trí `features/fulfillment/warehouse-actions.ts:39` (nút "+ Thêm SKU"
+   *    và form ở `components/fulfillment/WarehouseBoard.tsx:209, 220`);
+   *  - điều chỉnh tồn `:87` và chuyển kho `:131` (hai nút ở `WarehouseBoard.tsx:415`);
+   *  - ⚠ bổ sung ảnh hàng đến / biên bản / ảnh lỗi vào Sổ nhập Lark
+   *    `features/kho-nhan/bo-sung-anh-actions.ts:37`. Nhãn phải nói ra là tệp ĐI RA HỆ THỐNG
+   *    NGOÀI: hàm tải tệp lên Lark qua `uploadWhInventoryMedia` rồi ghi thẳng vào bảng Lark
+   *    của kho (`:7`, `:19-21`), và chú thích gốc ở `:28-29` nói rõ tệp nằm trong "Drive của
+   *    đội". Cùng loại rủi ro với `carrier_rates` chia sẻ tệp bằng chứng cho brand — ô nào đẩy
+   *    dữ liệu ra ngoài công ty thì nhãn phải nói, không để người cấp quyền tự đoán;
+   *  - cờ `canManage` của màn Kho MEAN `app/(dashboard)/f/warehouse/page.tsx:26`. */
+  {
+    key: 'fulfillment.warehouse',
+    label: 'Kho MEAN',
+    actions: ['view', 'create', 'edit', 'delete'],
+    nhanHanhDong: {
+      view: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      create: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      edit: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      delete: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+    },
+    canKem: {
+      view: ['fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
+      create: ['fulfillment.warehouse:view', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
+      edit: ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:delete'],
+      delete: ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:edit'],
+    },
+  },
+  /* `view` = quyền cũ `view_receiving` và ĐỨNG MỘT MÌNH CÓ TÁC DỤNG → KHÔNG khai `canKem`.
+   * Nó rộng hơn hẳn tên hàng: là cửa vào SÁU tab của module Kho
+   * (`app/(dashboard)/f/warehouse/layout.tsx:24, 33`) cùng các màn Nhận & kiểm hàng
+   * (`.../nhan-kcs/page.tsx:18`, `.../nhan-kcs/tem/page.tsx:22`,
+   * `.../nhan-kcs/bien-ban/page.tsx:16`), Đóng hàng (`.../dong-goi/page.tsx:23`),
+   * Sổ nhập & đối chiếu (`.../dong-bo/page.tsx:27`), Phiếu nhập (`.../receiving/page.tsx:46`,
+   * `.../receiving/[id]/page.tsx:47`, `.../receiving/tem/page.tsx:85`), Chờ KCS
+   * (`.../warehouse/qc/page.tsx:16`) và ảnh Lark (`app/api/kho-nhan/anh-lark/[token]/route.ts:30`).
+   *
+   * `create`/`edit` là hai PHẦN của `manage_receiving`, mà chùm đó còn gồm cả `:view`
+   * (`lib/auth/permission-map.ts:43`) — nên mỗi ô khai kèm HAI ô kia. Chỗ kiểm thật:
+   *  - tạo phiếu nhập + dòng hàng + ảnh phiếu `features/receiving/actions.ts:24, 42, 70`;
+   *  - mở phiếu theo brand, in tem từng món, nhận hàng ngoài kế hoạch, xác nhận quét
+   *    `features/receiving/nhan-nhanh-actions.ts:38, 48, 88, 111`;
+   *  - màn Quét nhập nhanh `app/(dashboard)/f/warehouse/receiving/quet/page.tsx:15`;
+   *  - cờ `canReceive` của hai màn phiếu nhập `.../receiving/page.tsx:49`,
+   *    `.../receiving/[id]/page.tsx:50`. */
+  {
+    key: 'warehouse.receiving',
+    label: 'Kho — Nhập hàng',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module Kho: Nhận & kiểm hàng, Đóng hàng, Sổ nhập & đối chiếu, Phiếu nhập, Nhập nhanh, Chờ KCS, Tem',
+      create: 'Ghi nhập hàng: tạo phiếu & dòng hàng, ảnh phiếu, in tem từng món, nhận ngoài kế hoạch, màn Quét nhập nhanh',
+      edit: 'Ghi nhập hàng: tạo phiếu & dòng hàng, ảnh phiếu, in tem từng món, nhận ngoài kế hoạch, màn Quét nhập nhanh',
+    },
+    canKem: {
+      create: ['warehouse.receiving:view', 'warehouse.receiving:edit'],
+      edit: ['warehouse.receiving:view', 'warehouse.receiving:create'],
+    },
+  },
   /** `override` = SỬA LẠI kết quả QC người khác đã chốt (quản lý duyệt lại). Tách khỏi
    *  `edit` vì `edit` do cả nhân sự QC nắm — người bấm sai không được tự gỡ cho mình. */
   // Nhãn `override`: quyền cũ `sua_ket_qua_qc`, chỗ kiểm thật là `suaKetQuaQc`
   // (`features/kho-nhan/qc-actions.ts:237`) và ô chọn ở `components/kho-nhan/OSuaQc.tsx`.
+  /* `view`/`create`/`edit` là MỘT quyền cũ duy nhất — `manage_qc`
+   * (`lib/auth/permission-map.ts:45`) — nên cả ba mang CÙNG nhãn và mỗi ô khai kèm hai ô kia.
+   *
+   * ⚠ Vì sao `:view` CŨNG phải khai `canKem`, khác với `warehouse.receiving:view` /
+   * `ship_ho:view` / `kol:view` / `cx.*:view` / `orders.cogs:view` (những ô đó ĐỨNG MỘT MÌNH
+   * CÓ TÁC DỤNG nên cố ý KHÔNG khai): `warehouse.qc:view` tuy có quyền cũ đứng riêng là
+   * `view_qc` (`permission-map.ts:44`), nhưng `view_qc` KHÔNG ĐƯỢC KIỂM Ở BẤT KỲ ĐÂU trong
+   * app — soát toàn repo 24/10/2026, chỉ còn trong danh sách `Permission` của
+   * `lib/auth/rbac.ts:43`, trong bản đồ, và trong hạt giống `OPERATOR_OLD`. Mọi màn QC gác
+   * bằng `view_receiving` (`app/(dashboard)/f/warehouse/qc/page.tsx:16`,
+   * `features/kho-nhan/qc-actions.ts:156`), KHÔNG phải `view_qc`. Nên tích `:view` một mình
+   * thật sự không mở ra gì, và im lặng ở đây là nói dối đúng cái kiểu `canKem` sinh ra để
+   * chặn. (Ô `fulfillment.pack_check:view` ở trên cùng cảnh ngộ — xem báo cáo.)
+   *
+   * Chỗ kiểm thật của `manage_qc`, đã đếm đủ:
+   *  - QC đạt / không đạt / thêm dòng lỗi / đặt cân từng chiếc
+   *    `features/kho-nhan/qc-actions.ts:24, 65, 118, 205` + `features/receiving/actions.ts:94`;
+   *  - ghi nhận từng chiếc theo dòng / PO / món Lark / hàng trả, gỡ chiếc nhận nhầm, xoá
+   *    chiếc, huỷ nhập chưa gửi `features/kho-nhan/nhan-actions.ts:49, 139, 209, 281, 365, 407, 422`;
+   *  - ghi nhận KCS + đẩy lại dòng lỗi `features/kho-nhan/actions.ts:16, 72`;
+   *  - đóng kiện + thêm/xoá ảnh kiện `features/dong-goi/actions.ts:37, 137, 161`;
+   *  - ảnh phiếu nhận `features/kho-nhan/anh-nhan.ts:21, 56`, đánh dấu đã in tem
+   *    `features/kho-nhan/tem-actions.ts:29`;
+   *  - đẩy / gỡ khỏi Lark WH `features/kho-nhan/day-wh-lark.ts:49, 217`;
+   *  - đánh dấu đã lập biên bản trả brand `features/kho-nhan/bien-ban.ts:75`;
+   *  - cờ `canQc` của hai màn `app/(dashboard)/f/warehouse/qc/page.tsx:19`,
+   *    `.../receiving/[id]/page.tsx:51`. */
   {
     key: 'warehouse.qc',
     label: 'Kho — QC',
     actions: ['view', 'create', 'edit', 'override'],
-    nhanHanhDong: { override: 'Sửa đè kết quả QC đã chốt' },
+    nhanHanhDong: {
+      view: 'Ghi QC & nhận từng chiếc: QC đạt/không đạt + dòng lỗi, cân chiếc, nhận/gỡ/xoá chiếc, đóng kiện & ảnh, in tem, đẩy Lark WH, biên bản trả brand',
+      create: 'Ghi QC & nhận từng chiếc: QC đạt/không đạt + dòng lỗi, cân chiếc, nhận/gỡ/xoá chiếc, đóng kiện & ảnh, in tem, đẩy Lark WH, biên bản trả brand',
+      edit: 'Ghi QC & nhận từng chiếc: QC đạt/không đạt + dòng lỗi, cân chiếc, nhận/gỡ/xoá chiếc, đóng kiện & ảnh, in tem, đẩy Lark WH, biên bản trả brand',
+      override: 'Sửa đè kết quả QC đã chốt',
+    },
+    canKem: {
+      view: ['warehouse.qc:create', 'warehouse.qc:edit'],
+      create: ['warehouse.qc:view', 'warehouse.qc:edit'],
+      edit: ['warehouse.qc:view', 'warehouse.qc:create'],
+    },
   },
   /* Nhãn `create`: quyền cũ `check_packed`, gác `markCheckPacked`
    * (`features/packing/actions.ts:94`) và cờ `canCheckPacked` của màn vòng đời đơn
@@ -140,13 +268,28 @@ export const CATALOG: ScopeDef[] = [
    *
    * `canKem`: `check_packed` ánh xạ sang CẢ `:view` và `:create`
    * (`lib/auth/permission-map.ts:51`), mà shim kiểm `.every()` — tích riêng `:create` là
-   * không bấm được nút nào. */
+   * không bấm được nút nào.
+   *
+   * ⚠ `:view` CŨNG phải khai nhãn + `canKem` (thêm 24/10/2026, soát lượt 2 — trước đó ô này
+   * trống trơn). Lý do GIỐNG HỆT `warehouse.qc:view`: quyền cũ `view_pack_check` có ánh xạ
+   * riêng nó (`permission-map.ts:50`) nhưng KHÔNG ĐƯỢC KIỂM Ở BẤT KỲ ĐÂU trong app — soát
+   * toàn repo, chỉ còn trong danh sách `Permission` (`lib/auth/rbac.ts:46`), trong bản đồ, và
+   * trong hạt giống `OPERATOR_OLD` (`:85`). Nên tích `:view` một mình thật sự không mở ra gì,
+   * và một ô trống chỗ này là một cảnh báo ĐÚNG đang thiếu trên màn hình.
+   *
+   * Hai ô mang CÙNG nhãn theo luật của chùm-trong-một-phạm-vi: ở đây không có "chỉ xem". */
   {
     key: 'fulfillment.pack_check',
     label: 'Vận hành — kiểm tra đóng gói',
     actions: ['view', 'create'],
-    nhanHanhDong: { create: 'Xác nhận đã kiểm kiện (check-packed)' },
-    canKem: { create: ['fulfillment.pack_check:view'] },
+    nhanHanhDong: {
+      view: 'Xác nhận đã kiểm kiện (check-packed)',
+      create: 'Xác nhận đã kiểm kiện (check-packed)',
+    },
+    canKem: {
+      view: ['fulfillment.pack_check:create'],
+      create: ['fulfillment.pack_check:view'],
+    },
   },
   /* `edit` là NỬA KIA của `manage_fulfillment` (xem `fulfillment.operations` ở trên): nó
    * không mở riêng việc gì của màn Yêu cầu brand — chính màn đó
@@ -159,26 +302,233 @@ export const CATALOG: ScopeDef[] = [
     nhanHanhDong: { edit: 'Duyệt & sửa yêu cầu brand' },
     canKem: { edit: ['fulfillment.operations:edit'] },
   },
-  { key: 'carrier_rates', label: 'Carrier rates', actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'carrier_rates.invoices', label: 'Hoá đơn nhà cung cấp', actions: ['view', 'create', 'edit'] },
+  /* `view` = quyền cũ `view_carrier_rates` ĐỨNG RIÊNG (`permission-map.ts:22`), KHÔNG thuộc
+   * chùm bên dưới — nên nó không khai `canKem`, và cố ý CHƯA đặt nhãn ở lượt này (nó gác
+   * nhiều cửa ngoài module: Đối soát phí ship, Báo cáo ship, `lib/nav.ts:60-61`).
+   *
+   * `create`/`edit`/`delete` là MỘT quyền cũ duy nhất: `manage_carrier_rates`
+   * (`permission-map.ts:21`) — ba ô cùng nhãn, mỗi ô khai kèm hai ô kia.
+   *
+   * Nhãn phải NÓI ĐỦ, vì quyền này rộng hơn "sửa bảng giá" theo đúng hướng nguy hiểm:
+   *  - tạo/sửa bảng giá + zone + bậc cân + workspace + remote postcode
+   *    `app/(dashboard)/f/carrier-rates/new/page.tsx:33`, `.../[id]/page.tsx:53`,
+   *    `.../[id]/zones/page.tsx:72`, `.../[id]/weight-tiers/page.tsx:49`,
+   *    `.../[id]/workspace/page.tsx:52`, `.../[id]/remote-postcodes/page.tsx:98`,
+   *    `features/carrier-rates/rate-cards-actions.ts:88`,
+   *    `features/carrier-rates/rate-card-upload-actions.ts:47, 85`;
+   *  - phụ phí, kèm tự lấy fuel của hãng và seed bảng Demand FedEx VN
+   *    `.../[id]/surcharges/page.tsx:366, 386, 404`;
+   *  - ⚠ CHIA SẺ TỆP BẰNG CHỨNG VÙNG XA RA NGOÀI cho brand — "bật cờ này là ĐẨY MỘT TỆP RA
+   *    NGOÀI công ty" (`features/carrier-rates/postcodes-actions.ts:305, 310`);
+   *  - ⚠ ghi THANH TOÁN hoá đơn carrier: ô này gác `payments`/xoá của màn hoá đơn, tách khỏi
+   *    quyền nhập hoá đơn (`.../[id]/bills/page.tsx:47-50, 194`);
+   *  - ⚠ NỐI carrier account vào market (thêm/xoá/bật-tắt) ở một module KHÁC —
+   *    `app/(dashboard)/f/markets/[handle]/page.tsx:67, 80, 90`;
+   *  - ⚠ và cùng `markets:apply` thì ĐẨY BẢNG GIÁ LÊN STORE THẬT
+   *    (`.../[id]/push/page.tsx:37, 45` — đòi CẢ HAI quyền).
+   *
+   * Mẩu cuối phải nằm TRONG NHÃN, không chỉ trong chú thích này (sửa 24/10/2026, soát lượt 2).
+   * Đây là lần THỨ BA cùng một bệnh, sau `markets:apply` và `orders:edit`: chú thích nói đủ mà
+   * nhãn nói hẹp, và hẹp theo đúng hướng nguy hiểm. Vai `operator` ĐÃ có `apply_markets` sẵn
+   * (`lib/auth/permission-map.ts:76`), nên tích ba ô này cho một vai kiểu operator là mở luôn
+   * đường đẩy ra production — người cấp quyền phải đọc thấy điều đó trong ô, chứ không phải
+   * đi đọc mã mới biết. */
+  {
+    key: 'carrier_rates',
+    label: 'Carrier rates',
+    actions: ['view', 'create', 'edit', 'delete'],
+    nhanHanhDong: {
+      create: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
+      edit: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
+      delete: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
+    },
+    canKem: {
+      create: ['carrier_rates:edit', 'carrier_rates:delete'],
+      edit: ['carrier_rates:create', 'carrier_rates:delete'],
+      delete: ['carrier_rates:create', 'carrier_rates:edit'],
+    },
+  },
+  /* CẢ BA ô là MỘT quyền cũ duy nhất: `manage_shipping_invoices`
+   * (`lib/auth/permission-map.ts:25`). Không có quyền cũ nào ánh xạ riêng `:view`, nên ô
+   * `Xem` ở hàng này cũng tích-một-mình-không-mở-ra-gì → cả ba đều khai `canKem`.
+   *
+   * Nhãn phải nói ra cả phần KPI: quyền này là "vị trí đang làm đối soát" (CEO 16/09/2026),
+   * nên nó gác luôn hai bài KPI của logistics — người gỡ tích vì tưởng chỉ gỡ quyền nhập hoá
+   * đơn sẽ chặn luôn việc nộp bài của cả vai. Chỗ kiểm thật, đã đếm đủ:
+   *  - tải CSV hoá đơn cước toàn hệ thống + theo store
+   *    `app/(dashboard)/f/orders/shipping-invoices/page.tsx:24, 57`,
+   *    `.../[storeId]/shipping-invoices/page.tsx:23`, nút vào ở `.../f/orders/page.tsx:30`;
+   *  - thêm/nhập hoá đơn & credit note của một carrier
+   *    `app/(dashboard)/f/carrier-rates/[id]/bills/page.tsx:50, 133, 143`,
+   *    `features/carrier-rates/ap/credit-note-import.ts:48`;
+   *  - đối soát hoá đơn DHL `features/carrier-rates/ap/dhl-reconcile-actions.ts:24`;
+   *  - gán lý do giao chậm `features/shipments/ly-do-actions.ts:21` + cờ `ganLyDoDuoc`
+   *    `app/(dashboard)/f/ship-report/page.tsx:176`;
+   *  - KPI tiêu chí 1.1 — giải trình đơn âm cước `features/kpi-logistics/giai-trinh-actions.ts:20`;
+   *  - KPI tiêu chí 1.2 — GỬI lý do giao chậm theo kỳ `features/kpi-logistics/nop-1-2-actions.ts:25`
+   *    (duyệt/trả lại thì CHỈ admin, không phải quyền này — `:33`). */
+  {
+    key: 'carrier_rates.invoices',
+    label: 'Hoá đơn nhà cung cấp',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Hoá đơn & đối soát cước: tải CSV hoá đơn, credit note, đối soát DHL, gán lý do giao chậm, nộp KPI 1.1 & 1.2',
+      create: 'Hoá đơn & đối soát cước: tải CSV hoá đơn, credit note, đối soát DHL, gán lý do giao chậm, nộp KPI 1.1 & 1.2',
+      edit: 'Hoá đơn & đối soát cước: tải CSV hoá đơn, credit note, đối soát DHL, gán lý do giao chậm, nộp KPI 1.1 & 1.2',
+    },
+    canKem: {
+      view: ['carrier_rates.invoices:create', 'carrier_rates.invoices:edit'],
+      create: ['carrier_rates.invoices:view', 'carrier_rates.invoices:edit'],
+      edit: ['carrier_rates.invoices:view', 'carrier_rates.invoices:create'],
+    },
+  },
   { key: 'shipping_reconcile', label: 'Đối soát phí ship', actions: ['view', 'edit'] },
   // Bảng điểm KPI của vị trí logistics: chính nhân sự đó xem kết quả của mình; SỬA số liệu vẫn chỉ quản lý (kiểm
   // trong features/kpi-logistics/actions.ts), nên ở đây chỉ mở action 'view'.
   { key: 'kpi.logistics', label: 'KPI vị trí Logistics', actions: ['view'] },
-  { key: 'mmp_products', label: 'Sản phẩm MMP', actions: ['view', 'create', 'edit', 'delete', 'push'] },
+  /* `view` = `view_mmp_products` đứng riêng (`permission-map.ts:28`), không thuộc chùm —
+   * chưa đặt nhãn ở lượt này.
+   *
+   * `create`/`edit`/`delete`/`push` là MỘT quyền cũ duy nhất: `manage_mmp_products`
+   * (`permission-map.ts:29`), nên bốn ô cùng nhãn + kèm lẫn nhau.
+   *
+   * ⚠ Nhãn ở đây phải nói NGƯỢC lại tên cột, vì tên cột đang hứa thừa. Soát toàn bộ app
+   * 24/10/2026, `manage_mmp_products` chỉ gác HAI chỗ:
+   *  - cờ `canManage` của `BrandStatusControl` — đổi trạng thái brand (active/deactive/
+   *    archived, kéo theo `curation_status` của mọi sản phẩm brand đó)
+   *    `app/(dashboard)/f/mmp/[brandSlug]/page.tsx:83, 123`;
+   *  - một ô chữ "Curation actions coming soon" ở màn chi tiết sản phẩm
+   *    `app/(dashboard)/f/mmp/[brandSlug]/[portalProductId]/page.tsx:54, 80` — CHƯA làm.
+   * Không có tạo / sửa / xoá sản phẩm, và `push` KHÔNG đẩy gì lên Shopify.
+   *
+   * Việc nó gác thì NHỎ nhưng KHÔNG nhẹ, nên nhãn nói ra phần lan toả: `archived` ép TOÀN BỘ
+   * sản phẩm của brand sang `archived`, `deactive` ép mọi sản phẩm `approved` về `draft`
+   * (`features/mmp/brand-actions.ts:40-54`) — một lệnh, không hoàn tác.
+   *
+   * (Tới 24/10/2026 nhãn này còn phải ghi "chỉ ẩn/hiện nút, server action chưa kiểm quyền",
+   * vì `setBrandStatus` không có dòng kiểm quyền nào. Đã vá: cổng `requirePerm` nằm trong
+   * chính hàm đó, nên nhãn hết phải nói hộ một lỗ.) */
+  {
+    key: 'mmp_products',
+    label: 'Sản phẩm MMP',
+    actions: ['view', 'create', 'edit', 'delete', 'push'],
+    nhanHanhDong: {
+      create: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      edit: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      delete: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      push: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+    },
+    canKem: {
+      create: ['mmp_products:edit', 'mmp_products:delete', 'mmp_products:push'],
+      edit: ['mmp_products:create', 'mmp_products:delete', 'mmp_products:push'],
+      delete: ['mmp_products:create', 'mmp_products:edit', 'mmp_products:push'],
+      push: ['mmp_products:create', 'mmp_products:edit', 'mmp_products:delete'],
+    },
+  },
   { key: 'functions', label: 'Functions', actions: ['view', 'edit'] },
   // CX — ticket liên bộ phận (bảng `CX - To Do` của Lark). 'edit' là quyền GHI HỘ:
   // người có nó ghi được phần việc của MỌI bộ phận, vì hệ thống chưa có tài khoản
   // cho PROCUREMENT / MERCHANDISE / WAREHOUSE (CEO 27/09/2026).
-  { key: 'cx.ticket', label: 'CX — Việc cần làm (ticket)', actions: ['view', 'create', 'edit'] },
+  /* `view` = `view_cx_ticket` ĐỨNG MỘT MÌNH CÓ TÁC DỤNG (không khai `canKem`), và nó là cửa
+   * vào CẢ module CX chứ không riêng tab này: `lib/nav.ts:59`,
+   * `app/(dashboard)/f/cx/layout.tsx:20, 28`, `.../f/cx/page.tsx:19`,
+   * `.../f/cx/viec-can-lam/page.tsx:26`, `features/cx-ticket/nguoi.ts:28`,
+   * `features/cx/quyen.ts:38`.
+   *
+   * `create`/`edit` là hai phần của `manage_cx_ticket`, chùm gồm cả `:view`
+   * (`permission-map.ts:64`) → mỗi ô kèm hai ô kia. Nghĩa thật là GHI HỘ: chỗ kiểm là cờ
+   * `toanQuyen` (`features/cx-ticket/nguoi.ts:37`), và nó mở ba việc mà người không có thì
+   * KHÔNG làm được dù đã gắn bộ phận — tạo/ghi ticket cho bộ phận KHÁC
+   * (`features/cx-ticket/actions.ts:37, 116`), đổi trạng thái ticket (`:171`), gắn/bỏ dòng
+   * đơn vào ticket (`:194, 211`). */
+  {
+    key: 'cx.ticket',
+    label: 'CX — Việc cần làm (ticket)',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào CẢ module CX (tab Hôm nay) và tab Việc cần làm',
+      create: 'Ghi hộ phần việc của MỌI bộ phận, đổi trạng thái ticket, gắn/bỏ dòng đơn vào ticket',
+      edit: 'Ghi hộ phần việc của MỌI bộ phận, đổi trạng thái ticket, gắn/bỏ dòng đơn vào ticket',
+    },
+    canKem: {
+      create: ['cx.ticket:view', 'cx.ticket:edit'],
+      edit: ['cx.ticket:view', 'cx.ticket:create'],
+    },
+  },
   // Tranh chấp / chargeback. Scope RIÊNG, không dùng chung với cx.ticket: đây là
   // tiền, và thường là việc của tài chính chứ không phải CX.
-  { key: 'cx.dispute', label: 'CX — Tranh chấp thanh toán', actions: ['view', 'create', 'edit'] },
+  /* `view` = `view_cx_dispute`, đứng một mình CÓ tác dụng (vào CX + tab Tranh chấp):
+   * `app/(dashboard)/f/cx/layout.tsx:21, 31`, `.../f/cx/page.tsx:20`,
+   * `.../f/cx/tranh-chap/page.tsx:24`, `features/dispute/queries.ts:47, 73, 87, 103`,
+   * `features/cx/quyen.ts:41` → KHÔNG khai `canKem`.
+   *
+   * `create`/`edit` là hai phần của `manage_cx_dispute` (chùm gồm cả `:view`,
+   * `permission-map.ts:66`). Chỗ kiểm thật: nhập tranh chấp
+   * `features/dispute/actions.ts:32`, thêm ghi chú `:102`, sửa phần CX `:124`, chạy đồng bộ
+   * hằng ngày `:145`; cờ `coQuyenGhi` ở `.../f/cx/tranh-chap/page.tsx:34`. */
+  {
+    key: 'cx.dispute',
+    label: 'CX — Tranh chấp thanh toán',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module CX và tab Tranh chấp',
+      create: 'Ghi tranh chấp: nhập mới, thêm ghi chú, sửa phần CX, chạy đồng bộ hằng ngày',
+      edit: 'Ghi tranh chấp: nhập mới, thêm ghi chú, sửa phần CX, chạy đồng bộ hằng ngày',
+    },
+    canKem: {
+      create: ['cx.dispute:view', 'cx.dispute:edit'],
+      edit: ['cx.dispute:view', 'cx.dispute:create'],
+    },
+  },
   // Sự cố + thiệt hại tiền quy về bộ phận. Scope riêng vì là tiền, giống cx.dispute.
-  { key: 'cx.incident', label: 'CX — Sự cố & thiệt hại', actions: ['view', 'create', 'edit'] },
+  /* `view` = `view_cx_incident`, đứng một mình CÓ tác dụng → KHÔNG khai `canKem`:
+   * `app/(dashboard)/f/cx/layout.tsx:22, 34`, `.../f/cx/page.tsx:21`,
+   * `.../f/cx/su-co/page.tsx:24`, `features/su-co/queries.ts:50, 83, 113`,
+   * `features/cx/quyen.ts:42`.
+   *
+   * `create`/`edit` = hai phần của `manage_cx_incident` (chùm gồm cả `:view`,
+   * `permission-map.ts:68`). Nhãn phải nói ra phần TIỀN và phần QUY TRÁCH NHIỆM, không chỉ
+   * "ghi sự cố": ghi sự cố `features/su-co/actions.ts:43`, thêm/xoá chi phí thiệt hại
+   * `:115, 134`, ghi chú `:146`, đổi trạng thái `:161`, đánh dấu đã xem lại `:180`, ĐỔI BỘ
+   * PHẬN CHỊU thiệt hại `:194`; cờ `coQuyenGhi` ở `.../f/cx/su-co/page.tsx:34`. */
+  {
+    key: 'cx.incident',
+    label: 'CX — Sự cố & thiệt hại',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module CX và tab Sự cố',
+      create: 'Ghi sự cố: tạo, thêm/xoá chi phí thiệt hại, đổi trạng thái, đổi bộ phận chịu, ghi chú',
+      edit: 'Ghi sự cố: tạo, thêm/xoá chi phí thiệt hại, đổi trạng thái, đổi bộ phận chịu, ghi chú',
+    },
+    canKem: {
+      create: ['cx.incident:view', 'cx.incident:edit'],
+      edit: ['cx.incident:view', 'cx.incident:create'],
+    },
+  },
   // Đánh giá Trustpilot / Judge.me. Scope riêng vì là DANH TIẾNG, không phải tiền:
   // mở được cho marketing mà không phải mở dữ liệu thiệt hại và tranh chấp.
-  { key: 'cx.review', label: 'CX — Đánh giá Trustpilot', actions: ['view', 'create', 'edit'] },
+  /* `view` = `view_cx_review`, đứng một mình CÓ tác dụng → KHÔNG khai `canKem`:
+   * `app/(dashboard)/f/cx/layout.tsx:23, 37`, `.../f/cx/page.tsx:22`,
+   * `.../f/cx/danh-gia/page.tsx:23`, `features/danh-gia/queries.ts:40, 71, 89`,
+   * `features/cx/quyen.ts:43`.
+   *
+   * `create`/`edit` = hai phần của `manage_cx_review` (chùm gồm cả `:view`,
+   * `permission-map.ts:70`): ghi đánh giá `features/danh-gia/actions.ts:21`, đổi trạng thái
+   * `:91`, sửa phần CX `:114`; cờ `coQuyenGhi` ở `.../f/cx/danh-gia/page.tsx:33`. */
+  {
+    key: 'cx.review',
+    label: 'CX — Đánh giá Trustpilot',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module CX và tab Đánh giá',
+      create: 'Ghi đánh giá: tạo, đổi trạng thái, sửa phần CX',
+      edit: 'Ghi đánh giá: tạo, đổi trạng thái, sửa phần CX',
+    },
+    canKem: {
+      create: ['cx.review:view', 'cx.review:edit'],
+      edit: ['cx.review:view', 'cx.review:create'],
+    },
+  },
   // Nhật ký thay đổi mức từng ô. CHỈ có action 'view': nhật ký do trigger Postgres ghi,
   // không màn nào sửa hay xoá dòng của nó (dọn dòng cũ là việc của cron giữ 12 tháng).
   { key: 'nhat_ky', label: 'Nhật ký thay đổi', actions: ['view'] },
@@ -246,10 +596,133 @@ export const CATALOG: ScopeDef[] = [
       apply: 'Đẩy settings lên store THẬT: áp dụng, reconcile, sửa override, rollback',
     },
   },
-  { key: 'ship_ho', label: 'Ship hộ', actions: ['view', 'create', 'edit'] },
-  { key: 'kol', label: 'Đơn KOL & chụp đồ', actions: ['view', 'create', 'edit'] },
-  { key: 'stores', label: 'Stores', actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'users_roles', label: 'Users & Roles', actions: ['view', 'create', 'edit', 'delete'] },
+  /* `view` = `view_ship_ho`, đứng một mình CÓ tác dụng → KHÔNG khai `canKem`. Nó gác cả
+   * module (`lib/nav.ts:57`, `app/(dashboard)/f/ship-ho/page.tsx:45`, `.../[id]/page.tsx:37`,
+   * `.../partners/page.tsx:21`, `.../partners/[slug]/contracts/page.tsx:18`,
+   * `.../statements/page.tsx:16`, `features/ship-ho/contract-actions.ts:36`) VÀ là quyền mở
+   * mặt gần như toàn bộ dữ liệu Ship hộ trong NHẬT KÝ — tên/giá vốn/cước/biên lãi/tracking…
+   * (`features/nhat-ky/che-gia-tri.ts:154-204`). Mẩu "nhật ký" phải có trong nhãn: bỏ tích là
+   * che cả một cột giá trị ở module khác.
+   *
+   * `create`/`edit` = hai phần của `manage_ship_ho` (chùm gồm cả `:view`,
+   * `permission-map.ts:58`) → mỗi ô kèm hai ô kia. Nó là CỔNG CHUNG của mọi server action ghi
+   * của module (`features/ship-ho/require-manage.ts:15`, gọi từ 16 tệp):
+   *  - đơn + nhập Excel `orders-actions.ts`, `import-actions.ts`;
+   *  - đối tác, yêu cầu đối tác, hợp đồng, rate card chào giá `partners-actions.ts`,
+   *    `partner-request-actions.ts`, `contract-actions.ts`, `offer-ratecard-actions.ts`;
+   *  - báo giá & chọn hãng `quote-lines-actions.ts`, `carrier-select-actions.ts`;
+   *  - cân đo lại `measure-actions.ts`, tracking `tracking-actions.ts`;
+   *  - bảng kê `statement-actions.ts`, đối soát + quyết định `reconcile-actions.ts`,
+   *    `reconcile-decision-actions.ts`, trang phụ phí `trang-phu-phi/actions.ts`;
+   *  - ⚠ ghi SỰ CỐ ship hộ trên màn Báo cáo ship `features/ship-ho/pillar2-actions.ts:35`,
+   *    cờ `ghiSuCoDuoc` ở `app/(dashboard)/f/ship-report/page.tsx:177`.
+   *
+   * Nó CÒN gác một hàm ĐỌC ở module khác: `features/geo/geo-actions.ts` chỉ có đúng MỘT export
+   * — `lookupPostcodeAction` (`:5`, gọi `lookupPostcode` của `./queries`) — tra mã bưu chính ra
+   * thành phố/tỉnh. Nhãn ghi riêng "(chỉ đọc)" chứ KHÔNG gộp vào danh sách ghi: bản đầu
+   * 24/10/2026 kể "vùng geo" lẫn trong chuỗi việc ghi, và nhãn RỘNG quá cũng là nhãn sai — chỉ
+   * sai hướng khác. Nó làm người đọc tưởng quyền này sửa được dữ liệu địa lý, mà không hề. */
+  {
+    key: 'ship_ho',
+    label: 'Ship hộ',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module Ship hộ (đơn, đối tác, hợp đồng, bảng kê) và mở mặt dữ liệu Ship hộ trong nhật ký',
+      create: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, ghi sự cố; kèm tra mã bưu chính (chỉ đọc)',
+      edit: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, ghi sự cố; kèm tra mã bưu chính (chỉ đọc)',
+    },
+    canKem: {
+      create: ['ship_ho:view', 'ship_ho:edit'],
+      edit: ['ship_ho:view', 'ship_ho:create'],
+    },
+  },
+  /* `view` = `view_kol`, đứng một mình CÓ tác dụng → KHÔNG khai `canKem`:
+   * `lib/nav.ts:58`, `app/(dashboard)/f/kol/page.tsx:30`, `.../nguoi-nhan/page.tsx:21`,
+   * `.../dang-muon/page.tsx:17`, `.../[ma]/page.tsx:16`, và cổng đọc gọi từ client
+   * `features/kol/perm.ts:27` (tra giá vốn / tìm biến thể khi gõ form).
+   *
+   * `create`/`edit` = hai phần của `manage_kol` (chùm gồm cả `:view`, `permission-map.ts:60`).
+   * Cổng chung: `features/kol/perm.ts:16`, mở `features/kol/actions.ts` — người nhận (tạo
+   * `:191`, sửa `:234`, ngưng dùng `:277`), đơn (tạo `:301`, chốt `:386`, lùi về nháp `:450`,
+   * đánh dấu đã gửi `:489`, huỷ `:577`), nhận trả về `:614`, sửa giá vốn `:703`. */
+  {
+    key: 'kol',
+    label: 'Đơn KOL & chụp đồ',
+    actions: ['view', 'create', 'edit'],
+    nhanHanhDong: {
+      view: 'Vào module Đơn KOL (đơn, người nhận, đang mượn) và tra giá vốn / tìm biến thể',
+      create: 'Ghi đơn KOL: tạo/chốt/huỷ đơn, lùi về nháp, đánh dấu đã gửi, nhận trả về, sửa giá vốn, quản lý người nhận',
+      edit: 'Ghi đơn KOL: tạo/chốt/huỷ đơn, lùi về nháp, đánh dấu đã gửi, nhận trả về, sửa giá vốn, quản lý người nhận',
+    },
+    canKem: {
+      create: ['kol:view', 'kol:edit'],
+      edit: ['kol:view', 'kol:create'],
+    },
+  },
+  /* CẢ BỐN ô là MỘT quyền cũ duy nhất: `manage_stores` (`lib/auth/permission-map.ts:12`) —
+   * cùng nhãn, kèm lẫn nhau. Ở hàng này KHÔNG có "chỉ xem store" và KHÔNG có "chỉ xoá store".
+   *
+   * Nhãn phải nói đủ, vì hai mẩu nằm ngoài chữ "Stores" và là chỗ người ta không ngờ:
+   *  - kết nối store Shopify qua OAuth (cấp scope) `app/api/auth/shopify/install/route.ts:36`,
+   *    mục menu `lib/nav.ts:86`, thẻ dashboard `app/(dashboard)/page.tsx:49`;
+   *  - test kết nối store `app/api/stores/[id]/test/route.ts:18`;
+   *  - ⚠ đặt TIỀN TỆ GIÁ VỐN + TỶ GIÁ + PHÍ ĐÓNG GÓI của store — ô này nằm trên màn ĐƠN HÀNG
+   *    per-store, không nằm trong module Stores (`features/shopify-orders/cost-fx-actions.ts:29`,
+   *    nút ở `app/(dashboard)/f/orders/[storeId]/page.tsx:191`). Hai số đó vào thẳng công thức
+   *    lãi gộp;
+   *  - ⚠ màn Shopify sync health + CHẠY BACKFILL đơn + ĐĂNG KÝ LẠI WEBHOOK
+   *    `app/(dashboard)/admin/shopify-sync-health/page.tsx:23, 67`,
+   *    `features/shopify-orders/backfill/actions.ts:36`. */
+  {
+    key: 'stores',
+    label: 'Stores',
+    actions: ['view', 'create', 'edit', 'delete'],
+    nhanHanhDong: {
+      view: 'Kết nối store Shopify (OAuth) & test kết nối, đặt tiền tệ giá vốn + tỷ giá + phí đóng gói của store, màn Sync health: chạy backfill đơn & đăng ký lại webhook',
+      create: 'Kết nối store Shopify (OAuth) & test kết nối, đặt tiền tệ giá vốn + tỷ giá + phí đóng gói của store, màn Sync health: chạy backfill đơn & đăng ký lại webhook',
+      edit: 'Kết nối store Shopify (OAuth) & test kết nối, đặt tiền tệ giá vốn + tỷ giá + phí đóng gói của store, màn Sync health: chạy backfill đơn & đăng ký lại webhook',
+      delete: 'Kết nối store Shopify (OAuth) & test kết nối, đặt tiền tệ giá vốn + tỷ giá + phí đóng gói của store, màn Sync health: chạy backfill đơn & đăng ký lại webhook',
+    },
+    canKem: {
+      view: ['stores:create', 'stores:edit', 'stores:delete'],
+      create: ['stores:view', 'stores:edit', 'stores:delete'],
+      edit: ['stores:view', 'stores:create', 'stores:delete'],
+      delete: ['stores:view', 'stores:create', 'stores:edit'],
+    },
+  },
+  /* CHÙM DUY NHẤT TRONG 15 CHÙM **KHÔNG** KHAI `canKem`, và đó là chủ ý.
+   *
+   * Bốn khoá này vừa hợp thành quyền cũ `manage_users` (`permission-map.ts:17`), VỪA được
+   * kiểm RIÊNG TỪNG CÁI bằng `can()` — khoá mới, không qua shim `.every()`:
+   * `app/(dashboard)/admin/roles/page.tsx:15, 29, 30, 31` và
+   * `features/users/role-actions.ts:18, 27, 43`. Nên tích một ô ở đây CÓ tác dụng thật, và
+   * khai "cần kèm" sẽ là nói dối theo chiều ngược lại.
+   *
+   * Nhưng nhãn vẫn phải nói ra phần chùm: tích ĐỦ cả bốn thì còn mở thêm `manage_users`, tức
+   * ba màn Admin mà không cột nào ở đây gợi ra — Users (gán vai, mời user, thu hồi lời mời)
+   * `app/(dashboard)/admin/users/page.tsx:31, 98, 116, 141`; Báo lỗi (xem, đổi trạng thái,
+   * xem ảnh) `app/(dashboard)/admin/issues/page.tsx:28`,
+   * `.../issues/[id]/anh/[n]/route.ts:16`, `features/issue-report/actions.ts:105`; Feature
+   * flags (xem + bật/tắt) `app/(dashboard)/admin/feature-flags/page.tsx:30, 61`; và bốn mục
+   * menu `lib/nav.ts:94-97`.
+   *
+   * `edit` còn một nghĩa thứ hai không ai đoán được từ chữ "Sửa": chính khoá
+   * `users_roles:edit` là DẤU "quản được user" của chốt chống tự khoá — `setRolePermissions`
+   * không cho bỏ nó khỏi Admin (`role-actions.ts:31`), ô của Admin bị khoá cứng trên lưới
+   * (`components/admin/RoleMatrix.tsx:87, 195`), và nó là nguồn sự thật cho bất biến
+   * "không gỡ người cuối cùng" (`features/users/role-queries.ts:22, 30`,
+   * `app/(dashboard)/admin/users/page.tsx:42`). */
+  {
+    key: 'users_roles',
+    label: 'Users & Roles',
+    actions: ['view', 'create', 'edit', 'delete'],
+    nhanHanhDong: {
+      view: 'Vào màn Roles & Permissions · đủ cả 4 ô mở thêm Users, Báo lỗi, Feature flags',
+      create: 'Tạo role mới · đủ cả 4 ô mở thêm Users, Báo lỗi, Feature flags',
+      edit: 'Sửa ô tích quyền của role; cũng là dấu "quản được user" của chốt chống tự khoá · đủ cả 4 ô mở thêm Users, Báo lỗi, Feature flags',
+      delete: 'Xoá role không phải hệ thống · đủ cả 4 ô mở thêm Users, Báo lỗi, Feature flags',
+    },
+  },
 ];
 
 export type PermissionKey = string; // `${scope}:${action}`

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CATALOG, ACTIONS, allPermissionKeys, isValidKey, nhanHanhDongLac, canKemLac } from './permissions';
+import { OLD_TO_NEW } from './permission-map';
 
 describe('permission catalog', () => {
   it('every scope key is unique', () => {
@@ -198,5 +199,322 @@ describe('điều kiện tích kèm (canKem)', () => {
         expect(s.nhanHanhDong?.[a as keyof typeof s.nhanHanhDong], `${s.key}:${a}`).toBeTruthy();
       }
     }
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * 15 chùm quyền cũ nhiều-khoá, gắn nhãn ngày 24/10/2026 (CEO: "làm nốt các chùm
+ * còn lại"). Mỗi `it` dưới đây ghim TỪNG MẨU PHẠM VI, không ghim nguyên văn: câu
+ * chữ được phép sửa cho gọn, phạm vi thì không được rụng. Mẩu chọn phải ĐẶC TRƯNG —
+ * `/kiện/i` từng khớp cả chữ "điều kiện" nên canh hờ.
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+function nhanCua(scopeKey: string): Partial<Record<string, string>> {
+  const s = CATALOG.find((x) => x.key === scopeKey);
+  expect(s, `thiếu phạm vi ${scopeKey}`).toBeDefined();
+  return (s!.nhanHanhDong ?? {}) as Partial<Record<string, string>>;
+}
+function kemCua(scopeKey: string): Partial<Record<string, readonly string[]>> {
+  const s = CATALOG.find((x) => x.key === scopeKey);
+  expect(s, `thiếu phạm vi ${scopeKey}`).toBeDefined();
+  return (s!.canKem ?? {}) as Partial<Record<string, readonly string[]>>;
+}
+/** Mọi mẩu phải nằm trong nhãn của MỌI action kể ra — dùng cho chùm "một quyền cũ". */
+function ghimMau(scopeKey: string, actions: string[], mau: RegExp[]): void {
+  const n = nhanCua(scopeKey);
+  for (const a of actions) {
+    const chu = n[a];
+    expect(chu, `${scopeKey}:${a} chưa có nhãn`).toBeTruthy();
+    for (const m of mau) expect(chu!, `${scopeKey}:${a} rụng mẩu ${m}`).toMatch(m);
+  }
+}
+
+describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
+  /**
+   * Hàng rào cấu trúc: khoá nào thuộc một quyền cũ ánh xạ sang NHIỀU khoá thì ô đó một mình
+   * không mở ra việc gì rõ ràng, nên BẮT BUỘC có nhãn. Lấy danh sách từ `OLD_TO_NEW` chứ
+   * không chép tay: thêm chùm mới mà quên nhãn thì test này đỏ, không cần ai nhớ.
+   *
+   * Danh sách ngoại lệ phải RỖNG DẦN và được ghim CHÍNH XÁC — ai gắn nhãn cho ô còn thiếu
+   * sẽ thấy test đỏ và gỡ nó khỏi đây, thay vì ngoại lệ nằm lại mãi không ai biết.
+   */
+  it('mọi khoá thuộc chùm nhiều-khoá đều có nhãn — không còn ô nào nợ', () => {
+    const coNhan = new Set(
+      CATALOG.flatMap((s) => Object.keys(s.nhanHanhDong ?? {}).map((a) => `${s.key}:${a}`)),
+    );
+    const trongChum = [...new Set(Object.values(OLD_TO_NEW).filter((v) => v.length > 1).flat())];
+    // Danh sách nợ ĐÃ RỖNG từ 24/10/2026 (soát lượt 2 gắn nhãn cho
+    // `fulfillment.pack_check:view` — ô cuối cùng còn trống).
+    expect(trongChum.filter((k) => !coNhan.has(k))).toEqual([]);
+  });
+
+  /**
+   * Hàng rào ĐỐI XỨNG với test trên, và là chỗ hàng rào cũ còn lỗ: trước 24/10/2026 (soát lượt
+   * 2) chỉ có luật "có `canKem` thì phải có nhãn" cộng vài `it.each` LẤY MẪU — gỡ `canKem` của
+   * `stores:create` thì KHÔNG test nào đỏ. Nay bắt buộc chiều ngược lại cho MỌI khoá.
+   *
+   * Danh sách ngoại lệ khai bằng KHOÁ (không phải "những ô view") và mỗi nhóm có lý do tại
+   * chỗ, vì đây đúng là chỗ sai thì dựng ra một cảnh báo SAI trên màn phân quyền.
+   */
+  it('mọi khoá thuộc chùm nhiều-khoá PHẢI có canKem, trừ danh sách ngoại lệ khai tường minh', () => {
+    /** Bốn khoá này được kiểm RIÊNG TỪNG CÁI bằng `can()` — khoá mới, không qua shim
+     *  `.every()`: `app/(dashboard)/admin/roles/page.tsx:15, 29-31` và
+     *  `features/users/role-actions.ts:18, 27, 43`. Tích một ô CÓ tác dụng thật. */
+    const KIEM_RIENG_BANG_CAN = [
+      'users_roles:view', 'users_roles:create', 'users_roles:edit', 'users_roles:delete',
+    ];
+    /** Tám ô này có quyền cũ một-khoá riêng ĐANG ĐƯỢC KIỂM trong app (`view_receiving`,
+     *  `view_ship_ho`, `view_kol`, `view_cogs`, `view_cx_ticket/dispute/incident/review`), nên
+     *  tích một mình là mở được màn xem. Khai `canKem` cho chúng là dồn người cấp quyền đi
+     *  tích thêm ô GHI chỉ để có quyền XEM.
+     *
+     *  CỐ Ý KHÔNG có `warehouse.qc:view` và `fulfillment.pack_check:view` ở đây: `view_qc` và
+     *  `view_pack_check` tuy cũng ánh xạ riêng nhưng KHÔNG chỗ nào kiểm (soát toàn repo
+     *  24/10/2026), nên hai ô đó tích một mình không mở ra gì và PHẢI có `canKem`. */
+    const DUNG_RIENG_CO_TAC_DUNG = [
+      'warehouse.receiving:view', 'ship_ho:view', 'kol:view', 'orders.cogs:view',
+      'cx.ticket:view', 'cx.dispute:view', 'cx.incident:view', 'cx.review:view',
+    ];
+    const mienTru = new Set([...KIEM_RIENG_BANG_CAN, ...DUNG_RIENG_CO_TAC_DUNG]);
+
+    const coKem = new Set(
+      CATALOG.flatMap((s) => Object.keys(s.canKem ?? {}).map((a) => `${s.key}:${a}`)),
+    );
+    const trongChum = [...new Set(Object.values(OLD_TO_NEW).filter((v) => v.length > 1).flat())];
+    expect(trongChum.filter((k) => !coKem.has(k) && !mienTru.has(k))).toEqual([]);
+
+    // Và ngoại lệ phải là ngoại lệ THẬT: khai một khoá không thuộc chùm nào, hoặc khai cho ô
+    // đã có `canKem`, là danh sách đã lạc — bắt luôn ở đây thay vì để nó mục ra.
+    const trongChumSet = new Set(trongChum);
+    expect([...mienTru].filter((k) => !trongChumSet.has(k))).toEqual([]);
+    expect([...mienTru].filter((k) => coKem.has(k))).toEqual([]);
+  });
+
+  /**
+   * Chùm "một quyền cũ, nhiều ô" thì MỌI ô phải mang CÙNG một nhãn: shim kiểm `.every()`
+   * nên không có ô nào mang nghĩa riêng. Nhãn khác nhau theo cột ở mấy hàng này là nói dối —
+   * nó mời người ta tưởng có "chỉ xem" hoặc "chỉ xoá", trong khi tích lẻ không mở ra gì.
+   */
+  it.each([
+    ['stores', ['view', 'create', 'edit', 'delete']],
+    ['fulfillment.warehouse', ['view', 'create', 'edit', 'delete']],
+    ['mmp_products', ['create', 'edit', 'delete', 'push']],
+    ['carrier_rates', ['create', 'edit', 'delete']],
+    ['carrier_rates.invoices', ['view', 'create', 'edit']],
+    ['warehouse.qc', ['view', 'create', 'edit']],
+    ['fulfillment.pack_check', ['view', 'create']],
+  ] as Array<[string, string[]]>)('%s: mọi ô của chùm mang cùng một nhãn', (scope, actions) => {
+    const n = nhanCua(scope);
+    const khac = new Set(actions.map((a) => n[a]));
+    expect([...khac].filter(Boolean)).toHaveLength(1);
+  });
+
+  /* 1. manage_stores — rủi ro: hai mẩu nằm NGOÀI chữ "Stores" (tỷ giá/phí đóng gói nằm ở màn
+   *    Đơn hàng, backfill/webhook nằm ở màn Sync health). Nhãn hẹp làm người ta tích vì tưởng
+   *    chỉ đụng module Stores. */
+  it('stores: nói cả OAuth, tỷ giá & phí đóng gói, backfill, webhook', () => {
+    ghimMau('stores', ['view', 'create', 'edit', 'delete'], [
+      /OAuth/, /tỷ giá/i, /phí đóng gói/i, /backfill/i, /webhook/i,
+    ]);
+  });
+
+  /* 2. manage_users — chùm DUY NHẤT có nhãn riêng từng ô, vì bốn khoá này còn được kiểm RIÊNG
+   *    bằng `can()` (`app/(dashboard)/admin/roles/page.tsx:15,29-31`). */
+  it('users_roles: mỗi ô nói việc riêng, và cả bốn nói ra phần chùm manage_users', () => {
+    const n = nhanCua('users_roles');
+    expect(n.view).toMatch(/Roles & Permissions/);
+    expect(n.create).toMatch(/^Tạo role mới/);
+    expect(n.edit).toMatch(/chống tự khoá/);
+    expect(n.delete).toMatch(/Xoá role/);
+    // Phần chùm: đủ cả 4 ô thì còn mở ba màn Admin mà không cột nào ở đây gợi ra.
+    for (const a of ['view', 'create', 'edit', 'delete']) {
+      expect(n[a], `users_roles:${a}`).toMatch(/đủ cả 4 ô/);
+      expect(n[a], `users_roles:${a}`).toMatch(/Feature flags/);
+      expect(n[a], `users_roles:${a}`).toMatch(/Báo lỗi/);
+    }
+  });
+
+  /* 3. manage_warehouse */
+  it('fulfillment.warehouse: nói cả điều chỉnh tồn, chuyển kho, và tệp đi LÊN LARK', () => {
+    ghimMau('fulfillment.warehouse', ['view', 'create', 'edit', 'delete'], [
+      /SKU & vị trí/, /điều chỉnh tồn/i, /chuyển kho/i, /biên bản/i,
+      // Ô nào ĐẨY DỮ LIỆU RA NGOÀI công ty thì nhãn phải nói: hàm tải tệp lên Lark
+      // (`uploadWhInventoryMedia`) rồi ghi thẳng vào bảng Lark của kho, tệp nằm trong Drive
+      // của đội. Cùng loại rủi ro với `carrier_rates` chia sẻ tệp bằng chứng cho brand.
+      /LARK/i,
+    ]);
+  });
+
+  /* 4. manage_mmp_products — nhãn ở đây phải nói NGƯỢC lại tên cột: `push` KHÔNG đẩy gì lên
+   *    Shopify và chùm KHÔNG tạo/sửa/xoá sản phẩm. Ghim cả hai phủ định: rụng cái nào là nhãn
+   *    quay về hứa thừa đúng như tên cột.
+   *
+   *    Mẩu `/archived/` ghim phần LAN TOẢ, không phải chữ cho đẹp: việc chùm này gác thì nhỏ
+   *    nhưng `archived` ép TOÀN BỘ sản phẩm của brand sang `archived` và không hoàn tác
+   *    (`features/mmp/brand-actions.ts`) — người cấp quyền phải đọc thấy điều đó.
+   *
+   *    ĐÃ BỎ mẩu `/chưa kiểm quyền/` ngày 24/10/2026: `setBrandStatus` nay gọi
+   *    `requirePerm('manage_mmp_products')` ở ngay đầu hàm nên câu đó thành SAI. Hàng rào cho
+   *    phần vá nằm ở `features/mmp/gate-actions.test.ts` — đúng chỗ của nó, không phải ghim
+   *    một lỗ quyền vào trong chuỗi nhãn. */
+  it('mmp_products: nói đúng là đổi trạng thái brand, và phủ định phần tên cột hứa thừa', () => {
+    ghimMau('mmp_products', ['create', 'edit', 'delete', 'push'], [
+      /trạng thái brand/i, /archived/, /KHÔNG tạo\/sửa\/xoá sản phẩm/, /KHÔNG đẩy lên Shopify/,
+    ]);
+  });
+
+  /* 5. manage_carrier_rates — rộng hơn "sửa bảng giá" theo đúng hướng nguy hiểm: nối carrier
+   *    vào MARKET (module khác), ghi THANH TOÁN, và CHIA SẺ TỆP RA NGOÀI công ty. */
+  it('carrier_rates: nói cả nối market, thanh toán, chia sẻ tệp ra ngoài, và đẩy lên store THẬT', () => {
+    ghimMau('carrier_rates', ['create', 'edit', 'delete'], [
+      /zone/i, /bậc cân/i, /phụ phí/i, /nối carrier vào market/i, /thanh toán hoá đơn/i, /RA NGOÀI/,
+      // Lần THỨ BA cùng một bệnh (sau `markets:apply`, `orders:edit`): chú thích nói đủ mà
+      // nhãn nói hẹp. Vai `operator` đã có `apply_markets` sẵn, nên ba ô này mở luôn đường
+      // đẩy ra production — mẩu này rụng là nhãn quay về hẹp đúng hướng nguy hiểm.
+      /store THẬT/,
+    ]);
+  });
+
+  /* 6. manage_shipping_invoices — gác luôn HAI bài KPI của logistics; gỡ tích vì tưởng chỉ gỡ
+   *    quyền nhập hoá đơn là chặn luôn việc nộp bài của cả vai. */
+  it('carrier_rates.invoices: nói cả credit note, DHL, lý do giao chậm, KPI 1.1 & 1.2', () => {
+    ghimMau('carrier_rates.invoices', ['view', 'create', 'edit'], [
+      /credit note/i, /DHL/, /lý do giao chậm/i, /KPI 1\.1/, /1\.2/,
+    ]);
+  });
+
+  /* 7. manage_receiving — `:view` (quyền cũ `view_receiving`) là cửa vào SÁU tab, không chỉ
+   *    hàng "Nhập hàng"; `:create`/`:edit` là phần ghi. */
+  it('warehouse.receiving: view kể đủ các màn, create/edit kể đủ việc ghi', () => {
+    ghimMau('warehouse.receiving', ['view'], [/Nhận & kiểm hàng/, /Sổ nhập/, /Chờ KCS/]);
+    ghimMau('warehouse.receiving', ['create', 'edit'], [
+      /in tem/i, /ngoài kế hoạch/i, /Quét nhập nhanh/i,
+    ]);
+  });
+
+  /* 8. manage_qc — `/đóng kiện/` chứ KHÔNG `/kiện/i` (chữ "điều kiện" cũng khớp). */
+  it('warehouse.qc: nói cả dòng lỗi, cân chiếc, đóng kiện, Lark WH, biên bản trả brand', () => {
+    ghimMau('warehouse.qc', ['view', 'create', 'edit'], [
+      /dòng lỗi/i, /cân chiếc/i, /đóng kiện/, /Lark WH/, /biên bản trả brand/i,
+    ]);
+    // `override` là quyền cũ RIÊNG (`sua_ket_qua_qc`) nên giữ nhãn riêng, không bị gộp.
+    expect(nhanCua('warehouse.qc').override).toMatch(/đã chốt/);
+  });
+
+  /* 9. manage_ship_ho — `:view` còn mở mặt dữ liệu Ship hộ trong NHẬT KÝ (module khác);
+   *    `:create`/`:edit` còn gác VÙNG GEO và GHI SỰ CỐ trên màn Báo cáo ship. */
+  it('ship_ho: view nói cả nhật ký; create/edit kể đủ việc ghi, geo chỉ là ĐỌC', () => {
+    ghimMau('ship_ho', ['view'], [/nhật ký/i]);
+    ghimMau('ship_ho', ['create', 'edit'], [
+      /nhập Excel/i, /ghi sự cố/i, /đối soát/i, /tracking/i,
+      // `features/geo/geo-actions.ts` chỉ có MỘT export và nó là hàm ĐỌC
+      // (`lookupPostcodeAction`). Bản đầu ghim `/vùng geo/i` trong khi nhãn kể nó lẫn vào
+      // danh sách việc GHI — tức test đang KHOÁ CÁI SAI lại. Ghim mẩu đã sửa, và ghim kèm
+      // chữ "chỉ đọc" để nó không lặng lẽ trôi về danh sách ghi.
+      /mã bưu chính/i, /chỉ đọc/i,
+    ]);
+  });
+
+  /* 10. manage_kol */
+  it('kol: view kể các màn, create/edit kể cả nhận trả về và sửa giá vốn', () => {
+    ghimMau('kol', ['view'], [/đang mượn/i]);
+    ghimMau('kol', ['create', 'edit'], [/nhận trả về/i, /giá vốn/i, /người nhận/i]);
+  });
+
+  /* 11. manage_cx_ticket — nghĩa thật là GHI HỘ mọi bộ phận (CEO 27/09/2026), và `:view` là
+   *     cửa vào CẢ module CX chứ không riêng tab Việc cần làm. */
+  it('cx.ticket: view nói cả module CX, create/edit nói ghi hộ mọi bộ phận', () => {
+    ghimMau('cx.ticket', ['view'], [/CẢ module CX/]);
+    ghimMau('cx.ticket', ['create', 'edit'], [/MỌI bộ phận/, /dòng đơn/i, /trạng thái ticket/i]);
+  });
+
+  /* 12-14. ba chùm CX còn lại: `:view` đứng một mình CÓ tác dụng nên nhãn nói đúng tab đó. */
+  it('cx.dispute: create/edit nói cả đồng bộ hằng ngày và sửa phần CX', () => {
+    ghimMau('cx.dispute', ['view'], [/tab Tranh chấp/]);
+    ghimMau('cx.dispute', ['create', 'edit'], [/đồng bộ/i, /phần CX/]);
+  });
+  it('cx.incident: create/edit nói cả chi phí thiệt hại và đổi bộ phận chịu', () => {
+    ghimMau('cx.incident', ['view'], [/tab Sự cố/]);
+    ghimMau('cx.incident', ['create', 'edit'], [/chi phí thiệt hại/i, /bộ phận chịu/i]);
+  });
+  it('cx.review: create/edit nói cả đổi trạng thái và sửa phần CX', () => {
+    ghimMau('cx.review', ['view'], [/tab Đánh giá/]);
+    ghimMau('cx.review', ['create', 'edit'], [/đổi trạng thái/i, /phần CX/]);
+  });
+
+  /* 15. manage_cogs — `:view` (quyền cũ `view_cogs`) còn mở mặt giá vốn mức đơn trong NHẬT KÝ
+   *     (`features/nhat-ky/che-gia-tri.ts:125-139`): bỏ tích là che cả một cột ở module khác. */
+  it('orders.cogs: view nói cả nhật ký, edit kể đủ việc ghi giá vốn', () => {
+    ghimMau('orders.cogs', ['view'], [/Lãi gộp/, /nhật ký/i]);
+    ghimMau('orders.cogs', ['edit'], [/tỉ giá/i, /ước giá vốn/i, /phân bổ PO/i]);
+  });
+});
+
+/**
+ * `canKem` của 15 chùm. Sai ở đây dựng ra một cảnh báo SAI trên màn phân quyền, nên ghim
+ * CHÍNH XÁC từng mảng — thêm/bớt một khoá là test đỏ.
+ */
+describe('canKem của 15 chùm', () => {
+  it.each([
+    ['stores', 'view', ['stores:create', 'stores:edit', 'stores:delete']],
+    ['stores', 'delete', ['stores:view', 'stores:create', 'stores:edit']],
+    ['fulfillment.warehouse', 'view', ['fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete']],
+    ['fulfillment.warehouse', 'delete', ['fulfillment.warehouse:view', 'fulfillment.warehouse:create', 'fulfillment.warehouse:edit']],
+    ['mmp_products', 'push', ['mmp_products:create', 'mmp_products:edit', 'mmp_products:delete']],
+    ['mmp_products', 'create', ['mmp_products:edit', 'mmp_products:delete', 'mmp_products:push']],
+    ['carrier_rates', 'create', ['carrier_rates:edit', 'carrier_rates:delete']],
+    ['carrier_rates', 'delete', ['carrier_rates:create', 'carrier_rates:edit']],
+    ['carrier_rates.invoices', 'view', ['carrier_rates.invoices:create', 'carrier_rates.invoices:edit']],
+    ['carrier_rates.invoices', 'edit', ['carrier_rates.invoices:view', 'carrier_rates.invoices:create']],
+    ['warehouse.receiving', 'create', ['warehouse.receiving:view', 'warehouse.receiving:edit']],
+    ['warehouse.receiving', 'edit', ['warehouse.receiving:view', 'warehouse.receiving:create']],
+    ['warehouse.qc', 'view', ['warehouse.qc:create', 'warehouse.qc:edit']],
+    ['warehouse.qc', 'create', ['warehouse.qc:view', 'warehouse.qc:edit']],
+    ['ship_ho', 'create', ['ship_ho:view', 'ship_ho:edit']],
+    ['kol', 'edit', ['kol:view', 'kol:create']],
+    ['cx.ticket', 'create', ['cx.ticket:view', 'cx.ticket:edit']],
+    ['cx.dispute', 'edit', ['cx.dispute:view', 'cx.dispute:create']],
+    ['cx.incident', 'create', ['cx.incident:view', 'cx.incident:edit']],
+    ['cx.review', 'edit', ['cx.review:view', 'cx.review:create']],
+    ['orders.cogs', 'edit', ['orders.cogs:view']],
+  ] as Array<[string, string, string[]]>)('%s:%s cần kèm đúng chùm của nó', (scope, action, mong) => {
+    expect(kemCua(scope)[action]).toEqual(mong);
+  });
+
+  /**
+   * ⚠ Nửa còn lại của sự thật, và là chỗ dễ sai nhất: mấy ô này tích MỘT MÌNH VẪN CÓ TÁC
+   * DỤNG, nên khai `canKem` cho chúng là nói dối theo chiều ngược lại — dồn người cấp quyền
+   * đi tích thêm hai ô GHI chỉ để có quyền XEM. Chúng đứng riêng được vì mỗi ô có một quyền
+   * cũ một-khoá riêng ĐANG ĐƯỢC KIỂM trong app (`view_receiving`, `view_ship_ho`, `view_kol`,
+   * `view_cogs`, `view_cx_*`), hoặc được kiểm trực tiếp bằng `can()` (bốn ô `users_roles`).
+   */
+  it.each([
+    'warehouse.receiving:view',
+    'ship_ho:view',
+    'kol:view',
+    'orders.cogs:view',
+    'cx.ticket:view',
+    'cx.dispute:view',
+    'cx.incident:view',
+    'cx.review:view',
+    'users_roles:view',
+    'users_roles:create',
+    'users_roles:edit',
+    'users_roles:delete',
+  ])('%s KHÔNG được khai canKem — tích một mình vẫn có tác dụng', (khoa) => {
+    const [scope, action] = khoa.split(':');
+    expect(kemCua(scope)[action]).toBeUndefined();
+  });
+
+  /**
+   * Ngược lại: `warehouse.qc:view` PHẢI có `canKem` dù quyền cũ `view_qc` ánh xạ riêng nó
+   * (`lib/auth/permission-map.ts:44`) — vì `view_qc` KHÔNG ĐƯỢC KIỂM Ở ĐÂU trong app (soát
+   * toàn repo 24/10/2026; màn QC gác bằng `view_receiving`). Test này canh đúng chỗ dễ bị
+   * "sửa lại cho giống mấy ô view khác": làm vậy là bỏ một cảnh báo ĐÚNG.
+   */
+  it('warehouse.qc:view vẫn phải cần kèm, vì view_qc không gác gì', () => {
+    expect(kemCua('warehouse.qc').view).toBeDefined();
+    expect(Object.values(OLD_TO_NEW).filter((v) => v.length === 1 && v[0] === 'warehouse.qc:view'))
+      .toHaveLength(1); // vẫn còn trong bản đồ — nên sự thật "không gác gì" phải nằm ở test
   });
 });
