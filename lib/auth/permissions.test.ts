@@ -299,11 +299,20 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
   });
 
   /* 4. manage_mmp_products — nhãn ở đây phải nói NGƯỢC lại tên cột: `push` KHÔNG đẩy gì lên
-   *    Shopify, và quyền chỉ ẩn/hiện nút (server action `setBrandStatus` không kiểm quyền).
-   *    Ghim cả hai phủ định: rụng cái nào là nhãn quay về hứa thừa. */
+   *    Shopify và chùm KHÔNG tạo/sửa/xoá sản phẩm. Ghim cả hai phủ định: rụng cái nào là nhãn
+   *    quay về hứa thừa đúng như tên cột.
+   *
+   *    Mẩu `/archived/` ghim phần LAN TOẢ, không phải chữ cho đẹp: việc chùm này gác thì nhỏ
+   *    nhưng `archived` ép TOÀN BỘ sản phẩm của brand sang `archived` và không hoàn tác
+   *    (`features/mmp/brand-actions.ts`) — người cấp quyền phải đọc thấy điều đó.
+   *
+   *    ĐÃ BỎ mẩu `/chưa kiểm quyền/` ngày 24/10/2026: `setBrandStatus` nay gọi
+   *    `requirePerm('manage_mmp_products')` ở ngay đầu hàm nên câu đó thành SAI. Hàng rào cho
+   *    phần vá nằm ở `features/mmp/gate-actions.test.ts` — đúng chỗ của nó, không phải ghim
+   *    một lỗ quyền vào trong chuỗi nhãn. */
   it('mmp_products: nói đúng là đổi trạng thái brand, và phủ định phần tên cột hứa thừa', () => {
     ghimMau('mmp_products', ['create', 'edit', 'delete', 'push'], [
-      /trạng thái brand/i, /chưa kiểm quyền/, /KHÔNG tạo\/sửa\/xoá sản phẩm/, /KHÔNG đẩy lên Shopify/,
+      /trạng thái brand/i, /archived/, /KHÔNG tạo\/sửa\/xoá sản phẩm/, /KHÔNG đẩy lên Shopify/,
     ]);
   });
 

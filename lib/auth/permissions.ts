@@ -375,19 +375,22 @@ export const CATALOG: ScopeDef[] = [
    *    `app/(dashboard)/f/mmp/[brandSlug]/[portalProductId]/page.tsx:54, 80` — CHƯA làm.
    * Không có tạo / sửa / xoá sản phẩm, và `push` KHÔNG đẩy gì lên Shopify.
    *
-   * ⚠ Và nó chỉ ẨN/HIỆN NÚT: server action `setStatusAction` (`.../[brandSlug]/page.tsx:86`)
-   * cùng `setBrandStatus` (`features/mmp/brand-actions.ts:15`) KHÔNG kiểm quyền, nên ai có
-   * `view_mmp_products` vẫn gọi được. Nhãn phải nói ra: người bỏ tích sẽ tưởng mình đã chặn
-   * được việc đổi trạng thái brand, mà thực ra chỉ ẩn cái nút. */
+   * Việc nó gác thì NHỎ nhưng KHÔNG nhẹ, nên nhãn nói ra phần lan toả: `archived` ép TOÀN BỘ
+   * sản phẩm của brand sang `archived`, `deactive` ép mọi sản phẩm `approved` về `draft`
+   * (`features/mmp/brand-actions.ts:40-54`) — một lệnh, không hoàn tác.
+   *
+   * (Tới 24/10/2026 nhãn này còn phải ghi "chỉ ẩn/hiện nút, server action chưa kiểm quyền",
+   * vì `setBrandStatus` không có dòng kiểm quyền nào. Đã vá: cổng `requirePerm` nằm trong
+   * chính hàm đó, nên nhãn hết phải nói hộ một lỗ.) */
   {
     key: 'mmp_products',
     label: 'Sản phẩm MMP',
     actions: ['view', 'create', 'edit', 'delete', 'push'],
     nhanHanhDong: {
-      create: 'Đổi trạng thái brand MMP — chỉ ẩn/hiện nút, server action chưa kiểm quyền. KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
-      edit: 'Đổi trạng thái brand MMP — chỉ ẩn/hiện nút, server action chưa kiểm quyền. KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
-      delete: 'Đổi trạng thái brand MMP — chỉ ẩn/hiện nút, server action chưa kiểm quyền. KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
-      push: 'Đổi trạng thái brand MMP — chỉ ẩn/hiện nút, server action chưa kiểm quyền. KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      create: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      edit: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      delete: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
+      push: 'Đổi trạng thái brand MMP (archived ép MỌI sản phẩm của brand về archived, không hoàn tác). KHÔNG tạo/sửa/xoá sản phẩm, KHÔNG đẩy lên Shopify',
     },
     canKem: {
       create: ['mmp_products:edit', 'mmp_products:delete', 'mmp_products:push'],
