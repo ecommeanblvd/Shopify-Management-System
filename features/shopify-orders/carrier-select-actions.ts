@@ -8,6 +8,7 @@ import { db, schema } from '@/db/client';
 import { quoteOrderAcrossCarriers, type CarrierQuoteRow } from '@/features/carrier-rates/compare/quote-order-carriers';
 import { laNhaDan } from '@/features/carrier-rates/residential-from-class';
 import { dayCourierLenLark } from '@/features/lark/push-courier';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
 
 export interface OrderCarrierComparison {
   rows: CarrierQuoteRow[];
@@ -76,11 +77,27 @@ export async function assignOrderCarrier(orderId: string, carrierKey: string): P
     return { ok: false, error: `${carrierKey} đang tạm ngưng${acc.reason ? ` (${acc.reason})` : ''}` };
   }
 
-  await db.update(schema.shopifyOrders).set({
-    selectedCarrierKey: carrierKey,
-    selectedCarrierAt: new Date(),
-    selectedCarrierBy: session.user.email ?? session.user.id,
-  }).where(eq(schema.shopifyOrders.id, orderId));
+  /* Gắn danh tính NGƯỜI cho đúng lệnh này: `selected_carrier_key` nằm trong danh sách theo
+   * dõi của `shopify_orders` (`features/nhat-ky/cot-theo-doi.ts:88`), và chọn hãng là quyết
+   * định của nhân sự — ngày trigger bật cho bảng này mà không bọc thì thao tác của người
+   * hiện ra "Chưa gắn danh tính", lẫn đúng vào nhóm lỗi quên bọc.
+   *
+   * Lệnh này TRƯỚC ĐÂY chạy trần, không giao dịch — `ghiVoi` mở một giao dịch mới, nên nó
+   * bọc ĐÚNG MỘT lệnh ghi, không hơn. Cố ý ĐỨNG NGOÀI: lệnh đọc `soDon` và
+   * `dayCourierLenLark` bên dưới (gọi API Lark hàng giây) — giữ khoá `shopify_orders` suốt
+   * lượt gọi mạng là chặn cả màn Orders, và bước Lark CỐ Ý best-effort (Lark hỏng không
+   * được cuốn ngược việc chọn hãng đã ghi). Cùng nếp `luuTrackingChoKien`
+   * (`features/dong-hang/actions.ts:653`).
+   *
+   * `selectedCarrierBy` vẫn ghi EMAIL như cũ: nó là cột hiển thị của màn Orders, khác việc
+   * của nhật ký — `tac_nhan_id` giữ `userId` để tra tên lúc đọc. */
+  await ghiVoi({ kieu: 'nguoi', userId: session.user.id }, (tx) =>
+    tx.update(schema.shopifyOrders).set({
+      selectedCarrierKey: carrierKey,
+      selectedCarrierAt: new Date(),
+      selectedCarrierBy: session.user.email ?? session.user.id,
+    }).where(eq(schema.shopifyOrders.id, orderId)),
+  );
 
   const [o] = await db.select({ soDon: schema.shopifyOrders.shopifyOrderNumber })
     .from(schema.shopifyOrders).where(eq(schema.shopifyOrders.id, orderId)).limit(1);

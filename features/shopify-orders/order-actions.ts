@@ -9,6 +9,7 @@ import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
 import { hasPermission } from '@/lib/auth/rbac';
+import { ghiVoi } from '@/features/nhat-ky/ghi-voi';
 import { resolveShippingEstimate } from './sync/resolve-shipping-estimate';
 import { computeOrderPnl, type ShipCostSource } from './pnl';
 
@@ -503,8 +504,18 @@ export async function updateOrderOverrides(
     .where(eq(schema.shopifyOrders.id, input.orderId));
   if (!order) throw new Error(`order ${input.orderId} not found`);
 
-  await db.transaction(async (tx) => {
-    await tx
+  /* `ghiVoi` thay cho `db.transaction` — ĐÚNG MỘT giao dịch như cũ, chỉ thêm một lệnh
+   * `set_config` ở đầu để trigger nhật ký biết AI vừa sửa.
+   *
+   * Phải là tác nhân NGƯỜI: ba cột ghi dưới đây (`shipping_cost_override*`,
+   * `ship_weight_kg_override`) nằm trong danh sách theo dõi của `shopify_orders`
+   * (`features/nhat-ky/cot-theo-doi.ts:88`), và chúng là CON SỐ TIỀN do người gõ tay.
+   * Không gắn danh tính thì ngày trigger bật cho bảng này, mỗi lần ai đó đè phí ship sẽ
+   * hiện "Chưa gắn danh tính" — lẫn với lỗi quên bọc, và mất đúng cái bằng chứng cần nhất.
+   *
+   * `revalidatePath` ở NGOÀI giao dịch: nó không phải lệnh ghi DB, kéo vào chỉ kéo dài khoá. */
+  await ghiVoi({ kieu: 'nguoi', userId: session.user.id }, (tx) =>
+    tx
       .update(schema.shopifyOrders)
       .set({
         shippingCostOverride:
@@ -513,8 +524,8 @@ export async function updateOrderOverrides(
         shipWeightKgOverride:
           input.shipWeightKgOverride === null ? null : input.shipWeightKgOverride.toString(),
       })
-      .where(eq(schema.shopifyOrders.id, input.orderId));
-  });
+      .where(eq(schema.shopifyOrders.id, input.orderId)),
+  );
 
   revalidatePath(`/f/orders/${order.storeId}`);
   return { shippingUpdated: true };

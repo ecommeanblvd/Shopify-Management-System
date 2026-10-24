@@ -27,6 +27,20 @@ export const MAY = {
   DONG_BO_LARK: 'Đồng bộ Lark',
   /** Webhook `/api/lark/pack` — Lark tự bắn một dòng sang ngay khi Ops sửa. */
   LARK_BAN_VE: 'Lark bắn về',
+  /**
+   * Bộ đồng bộ đơn Shopify — `upsertOrder` (`features/shopify-orders/sync/upsert-order.ts`),
+   * đường ghi DUY NHẤT vào `shopify_orders` / `shopify_order_lines` của cả ba kênh
+   * (webhook, cron hằng giờ, backfill).
+   *
+   * Vì sao phải có nhãn TRƯỚC khi bật trigger cho hai bảng đó: `cot-theo-doi.ts` theo dõi
+   * `quantity`/`unit_price`/`total`/`sku` của dòng đơn, mà mọi lượt đồng bộ đều ghi đúng
+   * mấy cột ấy. Chưa gắn nhãn thì mọi dòng nhật ký sinh ra rơi vào "Chưa gắn danh tính" —
+   * lẫn đúng vào nhóm LỖI QUÊN BỌC, nên không còn đếm được cái nào là cái nào.
+   *
+   * Cố ý MỘT nhãn cho cả ba kênh, không tách như Lark (`DONG_BO_LARK` / `LARK_BAN_VE`):
+   * ba kênh dùng chung một mapper và kênh nào ghi cũng đã nằm ở cột `shopify_orders.source`.
+   */
+  DONG_BO_SHOPIFY: 'Đồng bộ Shopify',
   /** Các cron khác không phải đồng bộ Lark. */
   CRON: 'Cron',
   /** Nhập tệp Excel LOG-Export (`features/shipments/import-actions.ts`). */

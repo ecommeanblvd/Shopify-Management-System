@@ -12,6 +12,16 @@ describe('nhanTacNhan', () => {
 });
 
 describe('MAY', () => {
+  /**
+   * Nhãn của bộ đồng bộ Shopify. Ghim nguyên văn: đây là chữ hiện trên màn "Lịch sử" cho
+   * mọi dòng `shopify_orders` / `shopify_order_lines` mà `upsertOrder` ghi, và là điều kiện
+   * tiên quyết để bật trigger cho hai bảng đó mà không nhầm với lỗi quên bọc.
+   */
+  it('có nhãn riêng cho bộ đồng bộ Shopify', () => {
+    expect(MAY.DONG_BO_SHOPIFY).toBe('Đồng bộ Shopify');
+    expect(nhanTacNhan({ kieu: 'may', nhan: MAY.DONG_BO_SHOPIFY })).toBe('Đồng bộ Shopify');
+  });
+
   it('nhãn máy KHÔNG được trùng nhau giữa các nguồn', () => {
     const ds = Object.values(MAY);
     expect(new Set(ds).size).toBe(ds.length);
