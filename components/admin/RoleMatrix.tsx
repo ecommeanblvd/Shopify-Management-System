@@ -34,6 +34,18 @@ const ACTION_LABELS: Record<ActionCol, string> = {
   override: 'Sửa đè',
 };
 
+/**
+ * Dựng chữ người đọc cho một khoá `canKem` TỪ chính danh mục ("Yêu cầu brand · Sửa"),
+ * không chép tay trong `permissions.ts`: chép tay thì đổi tên phạm vi xong là dòng "cần kèm"
+ * nói sai tên ô mà người ta phải đi tích.
+ */
+function moTaKhoa(catalog: ScopeDef[], key: string): string {
+  const [scopeKey, action] = key.split(':');
+  const scope = catalog.find((s) => s.key === scopeKey);
+  const nhanAction = ACTION_LABELS[action as ActionCol];
+  return scope ? `${scope.label} · ${nhanAction ?? action}` : key;
+}
+
 interface RoleRow {
   id: string;
   key: string;
@@ -183,9 +195,10 @@ function RoleCard({
                   const isAntiLockout = role.key === 'admin' && permKey === 'users_roles:edit';
                   const checked = localKeys.has(permKey);
                   const nhan = scope.nhanHanhDong?.[action];
+                  const kem = scope.canKem?.[action] ?? [];
                   return (
                     <td key={action} className="px-3 py-2.5 align-top">
-                      <label className="mx-auto flex max-w-[128px] cursor-pointer flex-col items-center gap-1">
+                      <label className="mx-auto flex max-w-[150px] cursor-pointer flex-col items-center gap-1">
                         <input
                           type="checkbox"
                           checked={checked}
@@ -202,6 +215,15 @@ function RoleCard({
                         {nhan && (
                           <span className="text-center text-[10px] leading-tight text-muted-foreground">
                             {nhan}
+                          </span>
+                        )}
+                        {/* "Cần kèm" là ĐIỀU KIỆN, không phải nghĩa của ô — nên tách dòng và
+                            đổi màu, đừng nối vào câu nhãn. Ô này tích một mình KHÔNG mở ra
+                            việc gì (shim kiểm `.every()`, `lib/auth/rbac.ts:131`), và đó là
+                            thứ người cấp quyền phải thấy TRƯỚC khi bấm Lưu rồi tưởng xong. */}
+                        {kem.length > 0 && (
+                          <span className="text-center text-[10px] leading-tight text-amber-700 dark:text-amber-500">
+                            cần kèm: {kem.map((k) => moTaKhoa(catalog, k)).join(' + ')}
                           </span>
                         )}
                       </label>
