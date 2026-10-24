@@ -46,13 +46,28 @@ describe('nhãn hành động trên lưới phân quyền', () => {
   });
 
   it('các ô create/edit mơ hồ khác đều đã có nhãn', () => {
-    expect(nhan('fulfillment.operations').edit).toMatch(/kiện/i);
+    // `/đóng\/mở kiện/` chứ KHÔNG phải `/kiện/i`: chữ "điều kiện" cũng khớp `/kiện/i`, nên
+    // mẩu phạm vi thật có thể rụng mà test vẫn xanh.
+    expect(nhan('fulfillment.operations').edit).toMatch(/đóng\/mở kiện/i);
     expect(nhan('warehouse.qc').override).toMatch(/QC/);
     expect(nhan('fulfillment.pack_check').create).toMatch(/kiểm kiện/i);
-    expect(nhan('orders').edit).toMatch(/giá vốn/i);
+    expect(nhan('fulfillment.brand_requests').edit).toMatch(/yêu cầu brand/i);
     // `create` của Settings Sync là QUẢN LÝ TEMPLATE, không phải "tạo" gì — đúng kiểu nhãn
     // mà thiếu thì người cấp quyền đoán sai.
     expect(nhan('settings_sync').create).toMatch(/template/i);
+  });
+
+  /**
+   * `orders:edit` (quyền cũ `manage_sku_costs`) gác CẢ việc mở chi tiết đơn
+   * (`components/shopify-orders/OrdersTable.tsx:142`). Rủi ro đi NGƯỢC chiều
+   * `markets:apply`: nhãn hẹp ở đây làm admin BỎ TÍCH vì tưởng chỉ gỡ quyền nhập giá vốn,
+   * rồi chặn luôn việc mở chi tiết đơn của cả vai đó. Ghim cả ba mẩu.
+   */
+  it('orders:edit nói ra cả việc mở chi tiết đơn', () => {
+    const n = nhan('orders').edit!;
+    expect(n).toMatch(/chi tiết đơn/i);
+    expect(n).toMatch(/giá vốn/i);
+    expect(n).toMatch(/trọng lượng/i);
   });
 
   /**
@@ -64,16 +79,45 @@ describe('nhãn hành động trên lưới phân quyền', () => {
    * nguyên văn: câu chữ được phép sửa cho gọn, phạm vi thì không được rụng.
    */
   it('nhãn của ô đẩy lên store thật phải kể đủ thứ nó đẩy', () => {
+    // SÁU đường của `apply_markets`, ghim từng cái: rút một mẩu khỏi nhãn thì test phải đỏ,
+    // nếu không thì phần nới nhãn hôm nay không được canh gì cả.
     const apMarket = nhan('markets').apply!;
     expect(apMarket).toMatch(/market/i);
     expect(apMarket).toMatch(/carrier rate/i);
+    expect(apMarket).toMatch(/carrier service/i);
     expect(apMarket).toMatch(/shipping profile/i);
+    expect(apMarket).toMatch(/manual shipping rates/i);
+    expect(apMarket).toMatch(/shipping hệ thống/i);
 
     // `settings_sync:apply` gom cả `apply_settings` lẫn `reconcile_store`, và mở luôn
     // rollback một lượt đã áp — ba việc khác hẳn nhau, nhãn phải nói ra cả ba.
     const apSettings = nhan('settings_sync').apply!;
     expect(apSettings).toMatch(/reconcile/i);
+    expect(apSettings).toMatch(/override/i);
     expect(apSettings).toMatch(/rollback/i);
+    // `run_feature` mở CẢ Settings Viewer, không riêng Settings Sync.
+    expect(nhan('settings_sync').edit).toMatch(/settings viewer/i);
+  });
+
+  /**
+   * `fulfillment.operations:edit` rộng hơn "đóng hàng" nhiều — nó gác cả SLA
+   * (`features/lifecycle/sla-actions.ts:15`) và đẩy đơn sang MMP
+   * (`features/mmp/order-push-query.ts:27`). Hai mẩu này vừa được thêm vào nhãn, nên phải
+   * có test ghim, không thì rút ra lúc nào cũng được mà suite vẫn xanh.
+   */
+  it('fulfillment.operations:edit kể cả SLA và đẩy đơn sang MMP', () => {
+    const n = nhan('fulfillment.operations').edit!;
+    expect(n).toMatch(/SLA/);
+    expect(n).toMatch(/MMP/);
+    expect(n).toMatch(/danh mục box/i);
+  });
+
+  /** `markets:view`/`fulfillment.logistics:edit` cũng vừa nới — ghim mẩu đã thêm. */
+  it('các nhãn vừa nới giữ nguyên mẩu phạm vi đã thêm', () => {
+    expect(nhan('markets').view).toMatch(/manual shipping rates/i);
+    expect(nhan('markets').edit).toMatch(/tạo/i);
+    expect(nhan('fulfillment.logistics').edit).toMatch(/verify địa chỉ/i);
+    expect(nhan('fulfillment.logistics').create).toMatch(/đóng hàng/i);
   });
 
   /** Trường tuỳ chọn: đa số phạm vi chưa khai, và điều đó PHẢI hợp lệ. */

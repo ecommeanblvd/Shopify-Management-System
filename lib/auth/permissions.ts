@@ -51,17 +51,26 @@ export interface ScopeDef {
 }
 
 export const CATALOG: ScopeDef[] = [
-  // `edit` KHÔNG phải "sửa đơn hàng": nó là quyền cũ `manage_sku_costs`, gác ĐỦ BA chỗ —
-  // trang nhập CSV giá vốn SKU (`app/(dashboard)/f/orders/[storeId]/costs/page.tsx:22`,
-  // cùng nút vào trang đó ở `.../[storeId]/page.tsx:201`), cờ `canEdit` của bảng đơn
-  // (`.../[storeId]/page.tsx:239`), và `updateOrderOverrides` — ghi đè phí ship VÀ trọng
-  // lượng cân lại (`features/shopify-orders/order-actions.ts:497`).
-  // Tỷ giá/phí đóng gói của store thì KHÔNG: cái đó gác `manage_stores` (`:191`).
+  /* `edit` KHÔNG phải "sửa đơn hàng": nó là quyền cũ `manage_sku_costs`. Đếm đủ chỗ kiểm:
+   *  - MỞ CHI TIẾT ĐƠN: cờ `canEdit` xuống `OrdersTable`, và `openRow` chặn ngay đầu hàm
+   *    (`components/shopify-orders/OrdersTable.tsx:142`) — `app/(dashboard)/f/orders/[storeId]/page.tsx:239`.
+   *    Hạt giống vai `logistics` nói đúng điều này: "Chi tiết đơn (modal) vẫn cần
+   *    manage_sku_costs nên logistics chỉ xem, không mở chi tiết" (`permission-map.ts:124`).
+   *  - trang nhập CSV giá vốn SKU (`.../[storeId]/costs/page.tsx:22`) + nút vào (`:201`);
+   *  - `updateOrderOverrides` — ghi đè phí ship VÀ trọng lượng cân lại
+   *    (`features/shopify-orders/order-actions.ts:497`).
+   * Tỷ giá/phí đóng gói của store thì KHÔNG: cái đó gác `manage_stores` (`:191`).
+   *
+   * Vì sao "mở chi tiết đơn" phải đứng ĐẦU nhãn: rủi ro của ô này đi NGƯỢC chiều
+   * `markets:apply`. Ở đó nhãn hẹp làm người ta TÍCH nhầm; ở đây nhãn hẹp làm người ta BỎ
+   * TÍCH vì tưởng chỉ gỡ quyền nhập giá vốn, rồi chặn luôn việc mở chi tiết đơn của cả vai. */
   {
     key: 'orders',
     label: 'Đơn hàng',
     actions: ['view', 'edit'],
-    nhanHanhDong: { edit: 'Nhập giá vốn SKU, ghi đè phí ship & trọng lượng đơn' },
+    nhanHanhDong: {
+      edit: 'Mở chi tiết đơn, nhập giá vốn SKU, ghi đè phí ship & trọng lượng',
+    },
   },
   { key: 'orders.cogs', label: 'Đơn hàng — Giá vốn & lãi gộp', actions: ['view', 'edit'] },
   /* `edit` là MỘT NỬA của quyền cũ `manage_fulfillment` (`lib/auth/permission-map.ts:40`),
@@ -204,7 +213,8 @@ export const CATALOG: ScopeDef[] = [
     nhanHanhDong: {
       view: 'Vào Markets + Manual Shipping Rates (kèm lịch sử áp dụng)',
       edit: 'Tạo & sửa template market',
-      apply: 'Đẩy lên store THẬT: market, carrier rate, carrier service, shipping profile',
+      apply:
+        'Đẩy lên store THẬT: market, carrier rate, carrier service, shipping profile, Manual Shipping Rates, seed shipping hệ thống',
     },
   },
   // settings_sync needs 3 distinct non-apply capabilities to mirror the legacy
@@ -254,16 +264,6 @@ export function isValidKey(key: string): boolean {
 }
 
 /**
- * Nhãn khai cho một action mà phạm vi KHÔNG có trong `actions` — tức nhãn không bao giờ
- * hiện ra ô nào. Trả về danh sách `scope:action` sai, rỗng là sạch.
- *
- * Vì sao cần một hàm riêng thay vì tin vào kiểu: `Partial<Record<Action, string>>` chỉ
- * chặn được tên action lạ, KHÔNG chặn được nhãn khai cho action đúng tên mà phạm vi này
- * không mở (ví dụ gỡ `view` khỏi `fulfillment.logistics` nhưng để lại nhãn `view`). Lúc đó
- * nhãn im lặng biến mất khỏi màn hình — đúng lại cái lỗi "quyền có mà không ai thấy" mà
- * trường này sinh ra để sửa. Test ghim bằng hàm này; chú thích thì không đỏ.
- */
-/**
  * Khai `canKem` hỏng: khai cho action mà phạm vi không có, trỏ tới khoá không tồn tại trong
  * danh mục, hoặc trỏ về CHÍNH nó. Trả về `scope:action -> khoá` sai, rỗng là sạch.
  *
@@ -288,6 +288,16 @@ export function canKemLac(catalog: readonly ScopeDef[] = CATALOG): string[] {
   return lac;
 }
 
+/**
+ * Nhãn khai cho một action mà phạm vi KHÔNG có trong `actions` — tức nhãn không bao giờ
+ * hiện ra ô nào. Trả về danh sách `scope:action` sai, rỗng là sạch.
+ *
+ * Vì sao cần một hàm riêng thay vì tin vào kiểu: `Partial<Record<Action, string>>` chỉ
+ * chặn được tên action lạ, KHÔNG chặn được nhãn khai cho action đúng tên mà phạm vi này
+ * không mở (ví dụ gỡ `view` khỏi `fulfillment.logistics` nhưng để lại nhãn `view`). Lúc đó
+ * nhãn im lặng biến mất khỏi màn hình — đúng lại cái lỗi "quyền có mà không ai thấy" mà
+ * trường này sinh ra để sửa. Test ghim bằng hàm này; chú thích thì không đỏ.
+ */
 export function nhanHanhDongLac(catalog: readonly ScopeDef[] = CATALOG): string[] {
   const lac: string[] = [];
   for (const s of catalog) {
