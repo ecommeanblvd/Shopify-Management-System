@@ -12,7 +12,7 @@
  * tồn đọng từ 2020 (2.233 đơn). Nút operator trong app vẫn không giới hạn.
  */
 import { retryFailedMmpPushes } from '@/features/mmp/order-push-retry';
-import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill';
+import { pushUnsentBrandOrders } from '@/features/mmp/order-backfill-core';
 import { chayCron } from '@/features/jobs/run';
 
 async function main() {

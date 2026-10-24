@@ -112,7 +112,7 @@ export const CATALOG: ScopeDef[] = [
    *    `app/(dashboard)/f/lifecycle/sla/page.tsx:18`, `.../lifecycle/[orderId]/page.tsx:62`;
    *  - yêu cầu brand `features/fulfillment/brand-actions.ts:15`;
    *  - ĐẨY ĐƠN SANG MMP + backfill `features/mmp/order-push-query.ts:27`,
-   *    `features/mmp/order-backfill.ts:38`, `app/(dashboard)/f/fulfillment/page.tsx:73-74`;
+   *    `features/mmp/order-backfill.ts:17`, `app/(dashboard)/f/fulfillment/page.tsx:73-74`;
    *  - `features/fulfillment/actions.ts:127, 267, 282, 303, 311, 320`. */
   {
     key: 'fulfillment.operations',
