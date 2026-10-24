@@ -238,14 +238,56 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
    * Danh sách ngoại lệ phải RỖNG DẦN và được ghim CHÍNH XÁC — ai gắn nhãn cho ô còn thiếu
    * sẽ thấy test đỏ và gỡ nó khỏi đây, thay vì ngoại lệ nằm lại mãi không ai biết.
    */
-  it('mọi khoá thuộc chùm nhiều-khoá đều có nhãn (trừ ô còn nợ, ghim đích danh)', () => {
+  it('mọi khoá thuộc chùm nhiều-khoá đều có nhãn — không còn ô nào nợ', () => {
     const coNhan = new Set(
       CATALOG.flatMap((s) => Object.keys(s.nhanHanhDong ?? {}).map((a) => `${s.key}:${a}`)),
     );
     const trongChum = [...new Set(Object.values(OLD_TO_NEW).filter((v) => v.length > 1).flat())];
-    expect(trongChum.filter((k) => !coNhan.has(k)))
-      // `check_packed` là chùm làm ở lượt trước; ô `:view` của nó chưa có nhãn.
-      .toEqual(['fulfillment.pack_check:view']);
+    // Danh sách nợ ĐÃ RỖNG từ 24/10/2026 (soát lượt 2 gắn nhãn cho
+    // `fulfillment.pack_check:view` — ô cuối cùng còn trống).
+    expect(trongChum.filter((k) => !coNhan.has(k))).toEqual([]);
+  });
+
+  /**
+   * Hàng rào ĐỐI XỨNG với test trên, và là chỗ hàng rào cũ còn lỗ: trước 24/10/2026 (soát lượt
+   * 2) chỉ có luật "có `canKem` thì phải có nhãn" cộng vài `it.each` LẤY MẪU — gỡ `canKem` của
+   * `stores:create` thì KHÔNG test nào đỏ. Nay bắt buộc chiều ngược lại cho MỌI khoá.
+   *
+   * Danh sách ngoại lệ khai bằng KHOÁ (không phải "những ô view") và mỗi nhóm có lý do tại
+   * chỗ, vì đây đúng là chỗ sai thì dựng ra một cảnh báo SAI trên màn phân quyền.
+   */
+  it('mọi khoá thuộc chùm nhiều-khoá PHẢI có canKem, trừ danh sách ngoại lệ khai tường minh', () => {
+    /** Bốn khoá này được kiểm RIÊNG TỪNG CÁI bằng `can()` — khoá mới, không qua shim
+     *  `.every()`: `app/(dashboard)/admin/roles/page.tsx:15, 29-31` và
+     *  `features/users/role-actions.ts:18, 27, 43`. Tích một ô CÓ tác dụng thật. */
+    const KIEM_RIENG_BANG_CAN = [
+      'users_roles:view', 'users_roles:create', 'users_roles:edit', 'users_roles:delete',
+    ];
+    /** Tám ô này có quyền cũ một-khoá riêng ĐANG ĐƯỢC KIỂM trong app (`view_receiving`,
+     *  `view_ship_ho`, `view_kol`, `view_cogs`, `view_cx_ticket/dispute/incident/review`), nên
+     *  tích một mình là mở được màn xem. Khai `canKem` cho chúng là dồn người cấp quyền đi
+     *  tích thêm ô GHI chỉ để có quyền XEM.
+     *
+     *  CỐ Ý KHÔNG có `warehouse.qc:view` và `fulfillment.pack_check:view` ở đây: `view_qc` và
+     *  `view_pack_check` tuy cũng ánh xạ riêng nhưng KHÔNG chỗ nào kiểm (soát toàn repo
+     *  24/10/2026), nên hai ô đó tích một mình không mở ra gì và PHẢI có `canKem`. */
+    const DUNG_RIENG_CO_TAC_DUNG = [
+      'warehouse.receiving:view', 'ship_ho:view', 'kol:view', 'orders.cogs:view',
+      'cx.ticket:view', 'cx.dispute:view', 'cx.incident:view', 'cx.review:view',
+    ];
+    const mienTru = new Set([...KIEM_RIENG_BANG_CAN, ...DUNG_RIENG_CO_TAC_DUNG]);
+
+    const coKem = new Set(
+      CATALOG.flatMap((s) => Object.keys(s.canKem ?? {}).map((a) => `${s.key}:${a}`)),
+    );
+    const trongChum = [...new Set(Object.values(OLD_TO_NEW).filter((v) => v.length > 1).flat())];
+    expect(trongChum.filter((k) => !coKem.has(k) && !mienTru.has(k))).toEqual([]);
+
+    // Và ngoại lệ phải là ngoại lệ THẬT: khai một khoá không thuộc chùm nào, hoặc khai cho ô
+    // đã có `canKem`, là danh sách đã lạc — bắt luôn ở đây thay vì để nó mục ra.
+    const trongChumSet = new Set(trongChum);
+    expect([...mienTru].filter((k) => !trongChumSet.has(k))).toEqual([]);
+    expect([...mienTru].filter((k) => coKem.has(k))).toEqual([]);
   });
 
   /**
@@ -260,6 +302,7 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
     ['carrier_rates', ['create', 'edit', 'delete']],
     ['carrier_rates.invoices', ['view', 'create', 'edit']],
     ['warehouse.qc', ['view', 'create', 'edit']],
+    ['fulfillment.pack_check', ['view', 'create']],
   ] as Array<[string, string[]]>)('%s: mọi ô của chùm mang cùng một nhãn', (scope, actions) => {
     const n = nhanCua(scope);
     const khac = new Set(actions.map((a) => n[a]));
@@ -292,9 +335,13 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
   });
 
   /* 3. manage_warehouse */
-  it('fulfillment.warehouse: nói cả điều chỉnh tồn, chuyển kho, biên bản Sổ nhập', () => {
+  it('fulfillment.warehouse: nói cả điều chỉnh tồn, chuyển kho, và tệp đi LÊN LARK', () => {
     ghimMau('fulfillment.warehouse', ['view', 'create', 'edit', 'delete'], [
       /SKU & vị trí/, /điều chỉnh tồn/i, /chuyển kho/i, /biên bản/i,
+      // Ô nào ĐẨY DỮ LIỆU RA NGOÀI công ty thì nhãn phải nói: hàm tải tệp lên Lark
+      // (`uploadWhInventoryMedia`) rồi ghi thẳng vào bảng Lark của kho, tệp nằm trong Drive
+      // của đội. Cùng loại rủi ro với `carrier_rates` chia sẻ tệp bằng chứng cho brand.
+      /LARK/i,
     ]);
   });
 
@@ -318,9 +365,13 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
 
   /* 5. manage_carrier_rates — rộng hơn "sửa bảng giá" theo đúng hướng nguy hiểm: nối carrier
    *    vào MARKET (module khác), ghi THANH TOÁN, và CHIA SẺ TỆP RA NGOÀI công ty. */
-  it('carrier_rates: nói cả nối carrier vào market, thanh toán, chia sẻ tệp ra ngoài', () => {
+  it('carrier_rates: nói cả nối market, thanh toán, chia sẻ tệp ra ngoài, và đẩy lên store THẬT', () => {
     ghimMau('carrier_rates', ['create', 'edit', 'delete'], [
       /zone/i, /bậc cân/i, /phụ phí/i, /nối carrier vào market/i, /thanh toán hoá đơn/i, /RA NGOÀI/,
+      // Lần THỨ BA cùng một bệnh (sau `markets:apply`, `orders:edit`): chú thích nói đủ mà
+      // nhãn nói hẹp. Vai `operator` đã có `apply_markets` sẵn, nên ba ô này mở luôn đường
+      // đẩy ra production — mẩu này rụng là nhãn quay về hẹp đúng hướng nguy hiểm.
+      /store THẬT/,
     ]);
   });
 
@@ -352,10 +403,15 @@ describe('nhãn 15 chùm quyền cũ nhiều-khoá', () => {
 
   /* 9. manage_ship_ho — `:view` còn mở mặt dữ liệu Ship hộ trong NHẬT KÝ (module khác);
    *    `:create`/`:edit` còn gác VÙNG GEO và GHI SỰ CỐ trên màn Báo cáo ship. */
-  it('ship_ho: view nói cả nhật ký, create/edit nói cả vùng geo và ghi sự cố', () => {
+  it('ship_ho: view nói cả nhật ký; create/edit kể đủ việc ghi, geo chỉ là ĐỌC', () => {
     ghimMau('ship_ho', ['view'], [/nhật ký/i]);
     ghimMau('ship_ho', ['create', 'edit'], [
-      /nhập Excel/i, /vùng geo/i, /ghi sự cố/i, /đối soát/i, /tracking/i,
+      /nhập Excel/i, /ghi sự cố/i, /đối soát/i, /tracking/i,
+      // `features/geo/geo-actions.ts` chỉ có MỘT export và nó là hàm ĐỌC
+      // (`lookupPostcodeAction`). Bản đầu ghim `/vùng geo/i` trong khi nhãn kể nó lẫn vào
+      // danh sách việc GHI — tức test đang KHOÁ CÁI SAI lại. Ghim mẩu đã sửa, và ghim kèm
+      // chữ "chỉ đọc" để nó không lặng lẽ trôi về danh sách ghi.
+      /mã bưu chính/i, /chỉ đọc/i,
     ]);
   });
 

@@ -159,18 +159,22 @@ export const CATALOG: ScopeDef[] = [
    *  - thêm/sửa SKU & vị trí `features/fulfillment/warehouse-actions.ts:39` (nút "+ Thêm SKU"
    *    và form ở `components/fulfillment/WarehouseBoard.tsx:209, 220`);
    *  - điều chỉnh tồn `:87` và chuyển kho `:131` (hai nút ở `WarehouseBoard.tsx:415`);
-   *  - bổ sung ảnh hàng đến / biên bản / ảnh lỗi vào Sổ nhập Lark
-   *    `features/kho-nhan/bo-sung-anh-actions.ts:37`;
+   *  - ⚠ bổ sung ảnh hàng đến / biên bản / ảnh lỗi vào Sổ nhập Lark
+   *    `features/kho-nhan/bo-sung-anh-actions.ts:37`. Nhãn phải nói ra là tệp ĐI RA HỆ THỐNG
+   *    NGOÀI: hàm tải tệp lên Lark qua `uploadWhInventoryMedia` rồi ghi thẳng vào bảng Lark
+   *    của kho (`:7`, `:19-21`), và chú thích gốc ở `:28-29` nói rõ tệp nằm trong "Drive của
+   *    đội". Cùng loại rủi ro với `carrier_rates` chia sẻ tệp bằng chứng cho brand — ô nào đẩy
+   *    dữ liệu ra ngoài công ty thì nhãn phải nói, không để người cấp quyền tự đoán;
    *  - cờ `canManage` của màn Kho MEAN `app/(dashboard)/f/warehouse/page.tsx:26`. */
   {
     key: 'fulfillment.warehouse',
     label: 'Kho MEAN',
     actions: ['view', 'create', 'edit', 'delete'],
     nhanHanhDong: {
-      view: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, bổ sung ảnh & biên bản vào Sổ nhập',
-      create: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, bổ sung ảnh & biên bản vào Sổ nhập',
-      edit: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, bổ sung ảnh & biên bản vào Sổ nhập',
-      delete: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, bổ sung ảnh & biên bản vào Sổ nhập',
+      view: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      create: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      edit: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
+      delete: 'Ghi kho MEAN: thêm/sửa SKU & vị trí, điều chỉnh tồn, chuyển kho, tải ảnh & biên bản LÊN LARK/DRIVE của đội kho (Sổ nhập)',
     },
     canKem: {
       view: ['fulfillment.warehouse:create', 'fulfillment.warehouse:edit', 'fulfillment.warehouse:delete'],
@@ -264,13 +268,28 @@ export const CATALOG: ScopeDef[] = [
    *
    * `canKem`: `check_packed` ánh xạ sang CẢ `:view` và `:create`
    * (`lib/auth/permission-map.ts:51`), mà shim kiểm `.every()` — tích riêng `:create` là
-   * không bấm được nút nào. */
+   * không bấm được nút nào.
+   *
+   * ⚠ `:view` CŨNG phải khai nhãn + `canKem` (thêm 24/10/2026, soát lượt 2 — trước đó ô này
+   * trống trơn). Lý do GIỐNG HỆT `warehouse.qc:view`: quyền cũ `view_pack_check` có ánh xạ
+   * riêng nó (`permission-map.ts:50`) nhưng KHÔNG ĐƯỢC KIỂM Ở BẤT KỲ ĐÂU trong app — soát
+   * toàn repo, chỉ còn trong danh sách `Permission` (`lib/auth/rbac.ts:46`), trong bản đồ, và
+   * trong hạt giống `OPERATOR_OLD` (`:85`). Nên tích `:view` một mình thật sự không mở ra gì,
+   * và một ô trống chỗ này là một cảnh báo ĐÚNG đang thiếu trên màn hình.
+   *
+   * Hai ô mang CÙNG nhãn theo luật của chùm-trong-một-phạm-vi: ở đây không có "chỉ xem". */
   {
     key: 'fulfillment.pack_check',
     label: 'Vận hành — kiểm tra đóng gói',
     actions: ['view', 'create'],
-    nhanHanhDong: { create: 'Xác nhận đã kiểm kiện (check-packed)' },
-    canKem: { create: ['fulfillment.pack_check:view'] },
+    nhanHanhDong: {
+      view: 'Xác nhận đã kiểm kiện (check-packed)',
+      create: 'Xác nhận đã kiểm kiện (check-packed)',
+    },
+    canKem: {
+      view: ['fulfillment.pack_check:create'],
+      create: ['fulfillment.pack_check:view'],
+    },
   },
   /* `edit` là NỬA KIA của `manage_fulfillment` (xem `fulfillment.operations` ở trên): nó
    * không mở riêng việc gì của màn Yêu cầu brand — chính màn đó
@@ -305,16 +324,23 @@ export const CATALOG: ScopeDef[] = [
    *    quyền nhập hoá đơn (`.../[id]/bills/page.tsx:47-50, 194`);
    *  - ⚠ NỐI carrier account vào market (thêm/xoá/bật-tắt) ở một module KHÁC —
    *    `app/(dashboard)/f/markets/[handle]/page.tsx:67, 80, 90`;
-   *  - và cùng `markets:apply` thì đẩy bảng giá lên store THẬT
-   *    (`.../[id]/push/page.tsx:37, 45` — đòi CẢ HAI quyền). */
+   *  - ⚠ và cùng `markets:apply` thì ĐẨY BẢNG GIÁ LÊN STORE THẬT
+   *    (`.../[id]/push/page.tsx:37, 45` — đòi CẢ HAI quyền).
+   *
+   * Mẩu cuối phải nằm TRONG NHÃN, không chỉ trong chú thích này (sửa 24/10/2026, soát lượt 2).
+   * Đây là lần THỨ BA cùng một bệnh, sau `markets:apply` và `orders:edit`: chú thích nói đủ mà
+   * nhãn nói hẹp, và hẹp theo đúng hướng nguy hiểm. Vai `operator` ĐÃ có `apply_markets` sẵn
+   * (`lib/auth/permission-map.ts:76`), nên tích ba ô này cho một vai kiểu operator là mở luôn
+   * đường đẩy ra production — người cấp quyền phải đọc thấy điều đó trong ô, chứ không phải
+   * đi đọc mã mới biết. */
   {
     key: 'carrier_rates',
     label: 'Carrier rates',
     actions: ['view', 'create', 'edit', 'delete'],
     nhanHanhDong: {
-      create: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand',
-      edit: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand',
-      delete: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand',
+      create: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
+      edit: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
+      delete: 'Bảng giá carrier: tạo/sửa, zone, bậc cân, phụ phí & fuel; nối carrier vào market; ghi thanh toán hoá đơn; chia sẻ tệp bằng chứng vùng xa RA NGOÀI cho brand; kèm quyền Markets·Áp dụng thì đẩy bảng giá lên store THẬT',
     },
     canKem: {
       create: ['carrier_rates:edit', 'carrier_rates:delete'],
@@ -588,17 +614,22 @@ export const CATALOG: ScopeDef[] = [
    *  - cân đo lại `measure-actions.ts`, tracking `tracking-actions.ts`;
    *  - bảng kê `statement-actions.ts`, đối soát + quyết định `reconcile-actions.ts`,
    *    `reconcile-decision-actions.ts`, trang phụ phí `trang-phu-phi/actions.ts`;
-   *  - ⚠ và VÙNG GEO ở một module khác — `features/geo/geo-actions.ts:2`;
    *  - ⚠ ghi SỰ CỐ ship hộ trên màn Báo cáo ship `features/ship-ho/pillar2-actions.ts:35`,
-   *    cờ `ghiSuCoDuoc` ở `app/(dashboard)/f/ship-report/page.tsx:177`. */
+   *    cờ `ghiSuCoDuoc` ở `app/(dashboard)/f/ship-report/page.tsx:177`.
+   *
+   * Nó CÒN gác một hàm ĐỌC ở module khác: `features/geo/geo-actions.ts` chỉ có đúng MỘT export
+   * — `lookupPostcodeAction` (`:5`, gọi `lookupPostcode` của `./queries`) — tra mã bưu chính ra
+   * thành phố/tỉnh. Nhãn ghi riêng "(chỉ đọc)" chứ KHÔNG gộp vào danh sách ghi: bản đầu
+   * 24/10/2026 kể "vùng geo" lẫn trong chuỗi việc ghi, và nhãn RỘNG quá cũng là nhãn sai — chỉ
+   * sai hướng khác. Nó làm người đọc tưởng quyền này sửa được dữ liệu địa lý, mà không hề. */
   {
     key: 'ship_ho',
     label: 'Ship hộ',
     actions: ['view', 'create', 'edit'],
     nhanHanhDong: {
       view: 'Vào module Ship hộ (đơn, đối tác, hợp đồng, bảng kê) và mở mặt dữ liệu Ship hộ trong nhật ký',
-      create: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, vùng geo, ghi sự cố',
-      edit: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, vùng geo, ghi sự cố',
+      create: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, ghi sự cố; kèm tra mã bưu chính (chỉ đọc)',
+      edit: 'Toàn bộ ghi của Ship hộ: đơn & nhập Excel, đối tác/hợp đồng/rate card, báo giá & chọn hãng, cân đo, tracking, bảng kê, đối soát, ghi sự cố; kèm tra mã bưu chính (chỉ đọc)',
     },
     canKem: {
       create: ['ship_ho:view', 'ship_ho:edit'],

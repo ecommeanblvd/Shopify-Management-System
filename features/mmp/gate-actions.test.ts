@@ -19,7 +19,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/* Đường dẫn suy từ VỊ TRÍ TỆP TEST, không từ `process.cwd()`: hai test quét tệp dưới đây mà
+ * phụ thuộc cwd thì chỉ đúng khi `vitest` chạy từ gốc repo — cấu hình hôm nay đúng vậy, nhưng
+ * một lượt chạy từ thư mục con sẽ làm test XANH OAN (không thấy tệp nào, danh sách rỗng). */
+const THU_MUC_MMP = fileURLToPath(new URL('.', import.meta.url));
+const GOC_REPO = fileURLToPath(new URL('../..', import.meta.url));
 
 /** Mọi payload đã gửi cho `.update(...).set(...)`, theo đúng thứ tự gọi. */
 const updateSets: Array<Record<string, unknown>> = [];
@@ -150,7 +157,7 @@ const CO_CONG = /requirePerm\s*\(|hasPermission\s*\(/;
 describe("features/mmp: mọi export của file 'use server' phải có cổng quyền", () => {
   it('danh sách export CHƯA gác đúng bằng danh sách đã biết và đã báo', () => {
     const chuaGac: string[] = [];
-    for (const p of moiFileTs('features/mmp')) {
+    for (const p of moiFileTs(THU_MUC_MMP)) {
       const s = readFileSync(p, 'utf8');
       // Chỉ tính chỉ thị ở ĐẦU file, không tính chữ 'use server' trong chú thích.
       if (!/^\s*(['"])use server\1\s*;?/.test(s)) continue;
@@ -160,7 +167,8 @@ describe("features/mmp: mọi export của file 'use server' phải có cổng q
       }
       for (let i = 0; i < moc.length; i++) {
         const than = s.slice(moc[i]!.tai, i + 1 < moc.length ? moc[i + 1]!.tai : s.length);
-        if (!CO_CONG.test(than)) chuaGac.push(`${p}:${moc[i]!.ten}`);
+        // Báo theo đường dẫn tương đối GỐC REPO để danh sách ghim không mang đường dẫn máy.
+        if (!CO_CONG.test(than)) chuaGac.push(`${relative(GOC_REPO, p)}:${moc[i]!.ten}`);
       }
     }
     /* Ba hàm này là LÕI KHÔNG-AUTH cố ý, gọi từ cron (`app/api/cron/retry-mmp-orders/route.ts`,
@@ -178,7 +186,7 @@ describe("features/mmp: mọi export của file 'use server' phải có cổng q
 
   /** Hàm vừa vá phải nằm NGOÀI danh sách trên — ghim đích danh cho khỏi lọt lại. */
   it('setBrandStatus có cổng quyền trong thân hàm', () => {
-    const s = readFileSync('features/mmp/brand-actions.ts', 'utf8');
+    const s = readFileSync(join(THU_MUC_MMP, 'brand-actions.ts'), 'utf8');
     const than = s.slice(s.indexOf('export async function setBrandStatus'));
     expect(than).toMatch(/requirePerm\('manage_mmp_products'\)/);
   });
