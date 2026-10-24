@@ -5,12 +5,22 @@
  * (`app/api/cron/retry-mmp-orders/route.ts`, gác bằng `CRON_SECRET`) và từ `scripts/`, nơi
  * không có phiên đăng nhập nào — thêm `requirePerm` vào là chặn nhầm cron.
  *
- * Nhưng cho tới 24/10/2026 cả ba nằm trong `order-backfill.ts`, một tệp `'use server'`. Trong
- * Next.js, MỌI export của tệp `'use server'` là một endpoint gọi được từ trình duyệt: không
- * cần nút, không cần trang, chỉ cần id của action. Nghĩa là bất kỳ ai cũng gọi được
- * `forcePushAllBrandOrders()` — hàm không mốc ngày nào, đẩy sạch 12.807 đơn từ 2020 sang MMP
- * của ĐỐI TÁC. Ẩn nút không chặn được gì; cổng quyền cũng không phải đường vá, vì chặn quyền
- * là chặn luôn cron. Đường vá là DỜI lõi RA KHỎI tệp `'use server'` — việc này.
+ * Nhưng cho tới 24/10/2026 cả ba nằm trong `order-backfill.ts`, một tệp `'use server'`.
+ *
+ * Nói cho đúng cơ chế, vì bản chú thích đầu của lượt này nói quá và người soát bắt được:
+ * Next KHÔNG cấp mã action cho export mà không biên client nào kéo tới — nó xoá hẳn khi
+ * build, "will not create a public endpoint"
+ * (`node_modules/next/dist/docs/01-app/02-guides/data-security.md:293-296`; đo trong repo
+ * này: 10 export của tệp action không có mã nào). Nên tới 24/10/2026 ba hàm này CHƯA phải
+ * endpoint đang hở — đây là lỗ CHỜ.
+ *
+ * Nhưng cùng trang tài liệu đó, `:282`, yêu cầu thẳng: coi MỌI server action như gọi được
+ * bằng POST trực tiếp và kiểm quyền TRONG từng hàm. Và mã được cấp NGAY khi có một biên
+ * client kéo tới — một dòng `import` là đủ. `forcePushAllBrandOrders()` không mốc ngày nào
+ * thì đẩy sạch 13.006 đơn từ 2020 sang MMP của ĐỐI TÁC (đếm thật 24/10/2026, dry-run).
+ *
+ * Ẩn nút không chặn được gì; cổng quyền cũng không phải đường vá, vì chặn quyền là chặn luôn
+ * cron. Đường vá là DỜI lõi RA KHỎI tệp `'use server'` — việc này.
  *
  * Nên: ĐỪNG thêm `'use server'` vào tệp này. `features/mmp/gate-actions.test.ts` ghim điều đó.
  * Chỗ gọi từ UI phải đi qua một action đã gác quyền, như `backfillMmpOrders` trong
@@ -28,7 +38,7 @@ import { BRAND_OWNED_STORES } from '@/features/mmp/brand-stores';
  * phải lúc mình nhận dữ liệu về.
  *
  * Thêm 04/10/2026 khi CEO yêu cầu đẩy lại cho MMP các đơn từ 2026: trước đó `forcePushAllBrandOrders`
- * không có mốc nào, đẩy là đẩy sạch 12.807 đơn từ 2020. Lọc ngày phải nằm TRONG hàm đẩy chứ
+ * không có mốc nào, đẩy là đẩy sạch mọi đời (13.006 đơn, đếm 24/10/2026). Lọc ngày phải nằm TRONG hàm đẩy chứ
  * không nằm trong script gọi nó — script có truy vấn riêng là bản thứ hai của cùng một câu hỏi,
  * đúng loại lỗi đã bỏ sót 5 đơn UPS ngày 03/10.
  */
@@ -176,7 +186,7 @@ export async function pushOwnedStoreOrders(opts?: {
  *  để script in tiến độ. */
 export async function forcePushAllBrandOrders(opts?: {
   limit?: number;
-  /** 'YYYY-MM-DD' — chỉ đơn đặt từ ngày này. Để trống = MỌI ĐỜI (12.807 đơn từ 2020). */
+  /** 'YYYY-MM-DD' — chỉ đơn đặt từ ngày này. Để trống = MỌI ĐỜI (13.006 đơn từ 2020, đếm 24/10/2026). */
   tuNgay?: string;
   /** Chỉ ĐẾM, không gửi gì. Luôn chạy một lượt này trước khi đẩy thật. */
   dryRun?: boolean;

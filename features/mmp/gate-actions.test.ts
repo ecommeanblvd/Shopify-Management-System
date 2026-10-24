@@ -60,7 +60,13 @@ vi.mock('@/lib/auth/role', () => ({ getRole: (...a: unknown[]) => getRoleMock(..
 const hasPermissionMock = vi.fn();
 vi.mock('@/lib/auth/rbac', () => ({ hasPermission: (...a: unknown[]) => hasPermissionMock(...a) }));
 
+const pushUnsentMock = vi.fn();
+vi.mock('@/features/mmp/order-backfill-core', () => ({
+  pushUnsentBrandOrders: (...a: unknown[]) => pushUnsentMock(...a),
+}));
+
 import { setBrandStatus } from './brand-actions';
+import { backfillMmpOrders } from './order-backfill';
 
 beforeEach(() => {
   updateSets.length = 0;
@@ -69,6 +75,7 @@ beforeEach(() => {
   getSessionMock.mockReset().mockResolvedValue({ user: { id: 'u1' } });
   getRoleMock.mockReset().mockResolvedValue('operator');
   hasPermissionMock.mockReset().mockReturnValue(true);
+  pushUnsentMock.mockReset().mockResolvedValue({ pushed: 0, skipped: 0, failed: 0, total: 0 });
 });
 
 describe('setBrandStatus — gác manage_mmp_products Ở TRONG HÀM, không tin trang gác hộ', () => {
@@ -154,17 +161,99 @@ function moiFileTs(thuMuc: string): string[] {
 /** Dấu hiệu "có cổng": đủ cho module này — mọi cổng ở đây đi qua một trong hai hàm. */
 const CO_CONG = /requirePerm\s*\(|hasPermission\s*\(/;
 
+/* ====================================================================================
+ * Ba hàm dưới đây có vì lượt soát 24/10/2026 chạy 4 đột biến và CẢ 4 ĐỀU XANH. Bài kiểm
+ * cấu trúc quét văn bản thô, nên mỗi chỗ nó đọc hơi khác mã thật là một đường tái mở lỗ:
+ *
+ *  1. `'use server'` đặt SAU khối chú thích vẫn là directive hợp lệ (đo bằng chính SWC của
+ *     Next 16: có `registerServerReference`). Mà `order-backfill-core.ts` mở đầu bằng một
+ *     khối chú thích dài — chỗ "tự nhiên" để người sau chèn directive chính là dưới nó.
+ *     Biểu thức chỉ neo `^` rồi khoảng trắng thì mù hoàn toàn với ca đó.
+ *  2. `export const x = async () => {}` cũng là server action, mà regex `export async
+ *     function` không thấy.
+ *  3. `import { f } from './core'; export { f };` trong tệp `'use server'` ĐƯỢC SWC nhận và
+ *     thành action — trả lại đúng ba endpoint bản vá vừa bỏ. (`export { f } from './core'`
+ *     và `export * from` thì đổ build, nên chỉ dạng import-rồi-export là đường thật.)
+ *  4. `CO_CONG` chạy trên văn bản CÓ chú thích, nên một dòng `// ... requirePerm(...)` là đủ
+ *     qua cổng — xoá sạch gác mà vẫn xanh.
+ * ==================================================================================== */
+
+/** Chỉ thị `'use server'` ĐẦU TỆP, cho phép chú thích đứng trước (đúng luật directive
+ *  prologue). Dùng CHUNG cho mọi chỗ nhận diện tệp action, để hai nơi không lệch nhau. */
+const CHI_THI_DAU_TEP = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*(['"])use server\1\s*;?/;
+
+/** Bỏ chú thích và chuỗi-trông-giống-chú-thích trước khi tìm cổng: cổng nằm trong chú thích
+ *  KHÔNG phải cổng. */
+function boChuThich(s: string): string {
+  return s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/[^\n]*$/gm, ' ');
+}
+
+/** Mọi tên export có thể thành server action: `export async function f`, `export const f =
+ *  async`, và danh sách `export { a, b }` (không có `from` — dạng có `from` đổ build). */
+function moiTenExport(s: string): string[] {
+  const ra: string[] = [];
+  for (const m of s.matchAll(/^export\s+async\s+function\s+(\w+)/gm)) ra.push(m[1]!);
+  for (const m of s.matchAll(/^export\s+(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=\s*(?:async\b|[^=]*=>)/gm)) ra.push(m[1]!);
+  for (const m of s.matchAll(/^export\s*\{([^}]*)\}\s*;?\s*$/gm)) {
+    for (const t of m[1]!.split(',')) {
+      const ten = t.trim().split(/\s+as\s+/).pop()?.trim();
+      if (ten && !/^type\b/.test(t.trim())) ra.push(ten);
+    }
+  }
+  return ra;
+}
+
+/**
+ * Lớp HÀNH VI cho action duy nhất của `order-backfill.ts`. Có vì lượt soát 24/10/2026 chứng
+ * minh ba bài quét-văn-bản ở dưới đều qua được bằng một dòng chú thích: xoá sạch
+ * `requirePerm` rồi để lại `// ... requirePerm('manage_fulfillment') ...` là vẫn xanh. Bài
+ * này không đọc văn bản nào — nó gọi hàm thật và đo xem lõi CÓ chạy hay không, nên một cái
+ * gác giả không lừa được.
+ *
+ * `pushUnsentBrandOrders` bị mock thành spy: nó là cú đẩy ra MMP của ĐỐI TÁC, nên "không gọi
+ * lần nào" chính là điều cần chứng minh, đúng khuôn `setBrandStatus` ở trên (NÉM *và* không
+ * chạm cú ghi).
+ */
+describe('backfillMmpOrders — gác manage_fulfillment Ở TRONG HÀM', () => {
+  it('thiếu manage_fulfillment → NÉM và KHÔNG đẩy đơn nào sang MMP', async () => {
+    hasPermissionMock.mockImplementation((_r: string, perm: string) => perm !== 'manage_fulfillment');
+    await expect(backfillMmpOrders({ limit: 5 })).rejects.toThrow('Forbidden');
+    expect(pushUnsentMock).not.toHaveBeenCalled();
+  });
+
+  it('chưa đăng nhập → NÉM và KHÔNG đẩy đơn nào', async () => {
+    getSessionMock.mockResolvedValue(null);
+    await expect(backfillMmpOrders()).rejects.toThrow('Unauthorized');
+    expect(pushUnsentMock).not.toHaveBeenCalled();
+  });
+
+  /* Gác ĐÚNG khoá: đổi sang một quyền rộng hơn (vd `view_mmp_products`) sẽ qua mọi bài khác. */
+  it('đủ quyền → gọi lõi đúng một lần, truyền nguyên opts', async () => {
+    await backfillMmpOrders({ limit: 7 });
+    expect(pushUnsentMock).toHaveBeenCalledTimes(1);
+    expect(pushUnsentMock).toHaveBeenCalledWith({ limit: 7 });
+    expect(hasPermissionMock).toHaveBeenCalledWith('operator', 'manage_fulfillment');
+  });
+});
+
 describe("features/mmp: mọi export của file 'use server' phải có cổng quyền", () => {
   it('danh sách export CHƯA gác đúng bằng danh sách đã biết và đã báo', () => {
     const chuaGac: string[] = [];
     for (const p of moiFileTs(THU_MUC_MMP)) {
-      const s = readFileSync(p, 'utf8');
-      // Chỉ tính chỉ thị ở ĐẦU file, không tính chữ 'use server' trong chú thích.
-      if (!/^\s*(['"])use server\1\s*;?/.test(s)) continue;
-      const moc: Array<{ ten: string; tai: number }> = [];
-      for (const m of s.matchAll(/^export\s+async\s+function\s+(\w+)/gm)) {
-        moc.push({ ten: m[1]!, tai: m.index! });
+      const goc = readFileSync(p, 'utf8');
+      if (!CHI_THI_DAU_TEP.test(goc)) continue;
+      const s = boChuThich(goc);
+      // Re-export (`export { f }`) không có thân để soi cổng — nó LÀ một endpoint không gác.
+      for (const m of s.matchAll(/^export\s*\{([^}]*)\}\s*;?\s*$/gm)) {
+        for (const t of m[1]!.split(',')) {
+          const ten = t.trim().split(/\s+as\s+/).pop()?.trim();
+          if (ten && !/^type\b/.test(t.trim())) chuaGac.push(`${relative(GOC_REPO, p)}:${ten} (re-export)`);
+        }
       }
+      const moc: Array<{ ten: string; tai: number }> = [];
+      for (const m of s.matchAll(/^export\s+async\s+function\s+(\w+)/gm)) moc.push({ ten: m[1]!, tai: m.index! });
+      for (const m of s.matchAll(/^export\s+(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=\s*(?:async\b|[^=]*=>)/gm)) moc.push({ ten: m[1]!, tai: m.index! });
+      moc.sort((a, b) => a.tai - b.tai);
       for (let i = 0; i < moc.length; i++) {
         const than = s.slice(moc[i]!.tai, i + 1 < moc.length ? moc[i + 1]!.tai : s.length);
         // Báo theo đường dẫn tương đối GỐC REPO để danh sách ghim không mang đường dẫn máy.
@@ -175,17 +264,19 @@ describe("features/mmp: mọi export của file 'use server' phải có cổng q
      * `forcePushAllBrandOrders`) từng nằm trong `order-backfill.ts` mà không có cổng nào — và
      * cổng quyền KHÔNG phải đường vá cho chúng, vì cron gọi chúng mà không có phiên đăng nhập.
      * Vá bằng cách DỜI cả ba sang `order-backfill-core.ts`, một tệp không có `'use server'`
-     * (24/10/2026). Hai bài kiểm ngay dưới ghim cả hai nửa của bản vá. */
+     * (24/10/2026). Ba bài kiểm ngay dưới ghim bản vá: hai bài CẤU TRÚC (quét văn bản) và
+     * một bài HÀNH VI. Bài hành vi là bài không phụ thuộc regex nào — xem chú thích của nó. */
     expect(chuaGac).toEqual([]);
   });
 
   /** NỬA MỘT của bản vá: tệp lõi không được mang `'use server'`. Thêm chỉ thị đó vào là ba hàm
    *  đẩy đơn thành endpoint công khai trở lại, và không bài nào khác bắt được —
-   *  `forcePushAllBrandOrders()` không mốc ngày là đẩy sạch 12.807 đơn từ 2020 sang MMP của
-   *  ĐỐI TÁC. Ghim bằng CHÍNH biểu thức mà bài trên dùng để nhận ra tệp action. */
+   *  `forcePushAllBrandOrders()` không mốc ngày là đẩy sạch 13.006 đơn từ 2020 sang MMP của
+   *  ĐỐI TÁC (đếm thật 24/10/2026). Ghim bằng CHÍNH biểu thức mà bài trên dùng để nhận ra tệp action. */
   it("order-backfill-core.ts KHÔNG mang 'use server'", () => {
     const s = readFileSync(join(THU_MUC_MMP, 'order-backfill-core.ts'), 'utf8');
-    expect(/^\s*(['"])use server\1\s*;?/.test(s)).toBe(false);
+    // Hằng CHUNG, nhận cả directive đặt sau chú thích — đột biến #1 của lượt soát.
+    expect(CHI_THI_DAU_TEP.test(s)).toBe(false);
     // Và ba lõi vẫn phải Ở ĐÂY: dời về lại tệp action thì bài trên bắt, dời sang một tệp thứ
     // ba (có `'use server'`) thì bài này bắt.
     for (const ten of ['pushUnsentBrandOrders', 'pushOwnedStoreOrders', 'forcePushAllBrandOrders']) {
@@ -196,9 +287,10 @@ describe("features/mmp: mọi export của file 'use server' phải có cổng q
   /** NỬA HAI: tệp action chỉ được có ĐÚNG MỘT export, và nó phải gác quyền trong thân hàm.
    *  Mỗi export thêm vào tệp đó là một endpoint công khai thêm. */
   it('order-backfill.ts chỉ có đúng một export, và nó gác quyền', () => {
-    const s = readFileSync(join(THU_MUC_MMP, 'order-backfill.ts'), 'utf8');
-    const ten = [...s.matchAll(/^export\s+async\s+function\s+(\w+)/gm)].map((m) => m[1]);
-    expect(ten).toEqual(['backfillMmpOrders']);
+    const s = boChuThich(readFileSync(join(THU_MUC_MMP, 'order-backfill.ts'), 'utf8'));
+    // Mọi DẠNG export, không chỉ `export async function` — đột biến #2 và #3.
+    expect(moiTenExport(s)).toEqual(['backfillMmpOrders']);
+    // Tìm cổng trên văn bản ĐÃ BỎ chú thích — đột biến #4.
     expect(s.slice(s.indexOf('export async function backfillMmpOrders')))
       .toMatch(/requirePerm\('manage_fulfillment'\)/);
   });
