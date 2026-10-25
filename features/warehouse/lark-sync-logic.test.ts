@@ -214,3 +214,49 @@ describe('phanLoaiVeKhong — tách "Lark nói 0" khỏi "Lark im"', () => {
     expect(r.larkIm).toEqual([]);
   });
 });
+
+/**
+ * Cờ một lượt nhường chốt chặn — nhưng CHỈ nhường đúng cái trần "quá nhiều dòng về 0",
+ * và CHỈ khi số khai khớp y hệt kế hoạch. Cổng "Lark trả 0 dòng" thì không bao giờ nhường.
+ */
+describe('lyDoTuChoiGhi + cờ một lượt', () => {
+  /** n dòng SMS đang có tồn mà Lark im → kế hoạch đưa cả n về 0. */
+  const dungCanh = (n: number) => {
+    const lark = new Map<string, { qty: number }>([['CON-HANG|GVM', { qty: 1 }]]);
+    const cur = Array.from({ length: n }, (_, i) => ({ sku: `S${i}`, warehouseCode: 'GVM', qtyOnHand: 1, qtyReserved: 0 }));
+    cur.push({ sku: 'CON-HANG', warehouseCode: 'GVM', qtyOnHand: 1, qtyReserved: 0 });
+    return { lark, cur, plan: reconcilePlan(lark, cur) };
+  };
+
+  it('không có cờ → từ chối khi vượt trần', () => {
+    const { lark, cur, plan } = dungCanh(40);
+    expect(lyDoTuChoiGhi(859, plan, cur, lark)).toMatch(/quá bất thường/);
+  });
+
+  it('cờ khai ĐÚNG số dòng về 0 → cho ghi', () => {
+    const { lark, cur, plan } = dungCanh(40);
+    expect(lyDoTuChoiGhi(859, plan, cur, lark, 40)).toBeNull();
+  });
+
+  /* Lệch một dòng cũng phải chặn: nếu view Lark bị sửa bộ lọc giữa lúc người ta đọc kế
+   * hoạch và lúc cron chạy, số sẽ khác — và đó đúng là ca chốt chặn sinh ra để chặn. */
+  it('cờ khai LỆCH số → vẫn từ chối, và nói rõ khai bao nhiêu / thật bao nhiêu', () => {
+    const { lark, cur, plan } = dungCanh(40);
+    const r = lyDoTuChoiGhi(859, plan, cur, lark, 39);
+    expect(r).toBeTruthy();
+    expect(r).toMatch(/khai 39/);
+    expect(r).toMatch(/thật 40/);
+  });
+
+  /** Cổng không bao giờ nhường: Lark trả 0 dòng là nghi lỗi đọc, cờ không vượt qua được. */
+  it('Lark trả 0 dòng → từ chối DÙ có cờ một lượt', () => {
+    const { lark, cur, plan } = dungCanh(40);
+    expect(lyDoTuChoiGhi(0, plan, cur, lark, 40)).toMatch(/Lark trả 0 dòng/);
+  });
+
+  it('dưới trần thì vẫn cho ghi như cũ, cờ hay không không đổi gì', () => {
+    const { lark, cur, plan } = dungCanh(3);
+    expect(lyDoTuChoiGhi(859, plan, cur, lark)).toBeNull();
+    expect(lyDoTuChoiGhi(859, plan, cur, lark, 3)).toBeNull();
+  });
+});

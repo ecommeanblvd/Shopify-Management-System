@@ -157,7 +157,17 @@ async function main(): Promise<void> {
   }
 
   console.log('\n──── Chốt chặn ghi ────');
-  console.log(tuChoi ? `  TỪ CHỐI: ${tuChoi}` : '  Không chặn — chạy job với WH_TON_KHO_LARK=ghi-that là ghi được.');
+  if (!tuChoi) {
+    console.log('  Không chặn — chạy job với WH_TON_KHO_LARK=ghi-that là ghi được.');
+  } else {
+    console.log(`  TỪ CHỐI: ${tuChoi}`);
+    const veKhong = tach.larkNoi0.length + tach.larkIm.length;
+    console.log('\n  Để ghi ĐÚNG MỘT LƯỢT kế hoạch này, đặt biến trên service "sync Lark operation":');
+    console.log(`\n      WH_TON_KHO_LARK=ghi-mot-luot:${veKhong}\n`);
+    console.log('  Cờ này TỰ HẾT HẠN: sau lượt sync, số dòng về 0 còn gần 0 nên giá trị trên');
+    console.log('  không còn khớp ⇒ mọi lượt cron sau đó quay lại CHẠY THỬ, không cần nhớ tắt.');
+    console.log('  Và nếu view Lark đổi bộ lọc giữa lúc đọc và lúc cron chạy thì số sẽ khác ⇒ vẫn bị chặn.');
+  }
 
   if (csvPath) {
     const nhom = (p: ReconcileItem): string =>

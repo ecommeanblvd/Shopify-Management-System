@@ -27,6 +27,13 @@ export interface WarehouseSyncSummary {
   dryRun: boolean;
   /** Lý do chốt chặn từ chối ghi thật (xem `lyDoTuChoiGhi`); chạy thử cũng báo để biết trước. */
   tuChoi?: string;
+  /**
+   * Câu env cần đặt để ghi ĐÚNG MỘT LƯỢT kế hoạch này. Chỉ có khi đang bị trần chặn.
+   *
+   * Phải in ra đây, vì nếu không thì người vận hành không có cách nào biết khai số nào —
+   * chốt chặn bảo "xem kế hoạch rồi quyết" mà không nói quyết bằng gì.
+   */
+  cachGhiMotLuot?: string;
   /** 15 dòng lệch lớn nhất — để người xem kế hoạch chạy thử mà không cần mở DB. */
   viDu: Array<{ sku: string; kho: string; truoc: number; sau: number; chamTran: boolean }>;
   /**
@@ -50,7 +57,7 @@ export interface WarehouseSyncSummary {
 }
 
 export async function syncWarehouseFromLark(
-  opts?: { dryRun?: boolean },
+  opts?: { dryRun?: boolean; veKhongChoPhep?: number | null },
 ): Promise<WarehouseSyncSummary> {
   const dryRun = opts?.dryRun ?? false;
 
@@ -114,8 +121,13 @@ export async function syncWarehouseFromLark(
       };
     })(),
   };
-  const tuChoi = lyDoTuChoiGhi(rows.length, plan, current, lark);
-  if (tuChoi) base.tuChoi = tuChoi;
+  const tuChoi = lyDoTuChoiGhi(rows.length, plan, current, lark, opts?.veKhongChoPhep);
+  if (tuChoi) {
+    base.tuChoi = tuChoi;
+    const veKhong = plan.filter((p) => !p.isNew && p.targetOnHand === 0).length;
+    // Chỉ gợi câu env khi cái chặn là TRẦN; nếu Lark trả 0 dòng thì không có cờ nào nhường.
+    if (rows.length > 0) base.cachGhiMotLuot = `WH_TON_KHO_LARK=ghi-mot-luot:${veKhong}`;
+  }
 
   if (dryRun) {
     // Ước lượng phân loại mà KHÔNG ghi.

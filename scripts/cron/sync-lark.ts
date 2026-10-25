@@ -21,7 +21,7 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { syncWarehouseFromLark } from '@/features/warehouse/lark-sync';
-import { docCheDoTonKho } from '@/features/warehouse/che-do-ton-kho';
+import { docCheDoTonKho, soVeKhongChoPhep } from '@/features/warehouse/che-do-ton-kho';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
 import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
@@ -124,6 +124,9 @@ async function main(): Promise<void> {
   // đã đọc kế hoạch ở /f/jobs. Đọc view riêng (bộ lọc khác bảng đầy đủ nên không dùng chung `daiWh`).
   await chayMotJob('dong-bo-ton-kho-lark', () => syncWarehouseFromLark({
     dryRun: docCheDoTonKho(process.env.WH_TON_KHO_LARK) !== 'ghi',
+    // Cờ MỘT LƯỢT `ghi-mot-luot:<n>`: n là số dòng-về-0 lấy từ kế hoạch đã đọc. Khớp y hệt
+    // thì trần được nhường đúng lượt này, rồi TỰ HẾT HẠN (sau sync số đó không còn khớp).
+    veKhongChoPhep: soVeKhongChoPhep(process.env.WH_TON_KHO_LARK),
   }), (tt) => {
     const t = tt as { errors?: string[] };
     return t.errors?.length ? t.errors[0].slice(0, 300) : null;

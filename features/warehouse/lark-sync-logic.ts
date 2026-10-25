@@ -195,12 +195,29 @@ export function lyDoTuChoiGhi(
   current: readonly CurrentInv[],
   /** Bản đồ tồn Lark — có thì thông điệp NÓI RA nguyên nhân thay vì chỉ "bất thường". */
   lark?: ReadonlyMap<string, { qty: number }>,
+  /**
+   * Cờ MỘT LƯỢT (`soVeKhongChoPhep`): số dòng-về-0 mà người vận hành khai là đã đọc trong
+   * kế hoạch. Khớp y hệt thì trần được nhường đúng lượt này.
+   *
+   * Nhường trần là ĐÚNG trong một ca cụ thể: trần 25% dựng để bắt lỗi đọc Lark, nhưng view
+   * "Qly tồn kho tổng hợp" KHÔNG BAO GIỜ nói 0 (đo 25/10/2026: 0 cặp có Final stock = 0) —
+   * hết hàng là rơi khỏi view. Nên lượt sync thật ĐẦU TIÊN sau nhiều tháng trôi tất yếu đưa
+   * rất nhiều dòng về 0, và trần không phân biệt được ca đó với ca lỗi đọc. Con số khai là
+   * thứ phân biệt: lỗi đọc cho ra số KHÁC, nên vẫn bị chặn.
+   */
+  veKhongChoPhep?: number | null,
 ): string | null {
+  // Cổng này KHÔNG BAO GIỜ nhường, kể cả có cờ: Lark trả rỗng là nghi lỗi đọc, và ghi theo
+  // một lượt đọc rỗng là quét sạch tồn.
   if (larkRows === 0) return 'Lark trả 0 dòng — nghi lỗi đọc bảng/đổi cột, KHÔNG ghi để khỏi xoá sạch tồn.';
   const dangCoTon = current.filter((c) => c.qtyOnHand > 0).length;
   const veKhong = plan.filter((p) => !p.isNew && p.targetOnHand === 0).length;
   const tran = Math.max(TRAN_VE_0_TOI_THIEU, Math.ceil(dangCoTon * TRAN_VE_0_TY_LE));
-  if (veKhong > tran) {
+  if (veKhongChoPhep != null && veKhong !== veKhongChoPhep) {
+    return `Cờ một lượt khai ${veKhongChoPhep} dòng về 0, kế hoạch thật ${veKhong} — KHÔNG ghi.`
+      + ' Kế hoạch đã đổi so với lúc đọc (hoặc view Lark vừa đổi bộ lọc). Chạy lại đối soát rồi khai số mới.';
+  }
+  if (veKhong > tran && veKhongChoPhep !== veKhong) {
     let vi = '';
     if (lark) {
       const t = phanLoaiVeKhong(lark, plan);
