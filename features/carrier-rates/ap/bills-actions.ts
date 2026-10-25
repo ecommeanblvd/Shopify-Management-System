@@ -1,9 +1,33 @@
-'use server';
+/*
+ * Sổ hoá đơn & thanh toán carrier. Tệp này CỐ Ý KHÔNG có `'use server'` nữa (bỏ 25/10/2026).
+ *
+ * Tới 24/10/2026 nó mang `'use server'` và CẢ 8 export không có một dòng kiểm quyền nào —
+ * tức 8 endpoint POST công khai lên sổ sách đo được 242 hoá đơn / 14.719.454.621 đ.
+ * `deleteBill` xoá một hoá đơn kèm cascade toàn bộ dòng và thanh toán của nó; không khoá
+ * ngoại nào chặn nên nó LUÔN thành công, trung bình ~60 triệu đồng sổ sách mỗi lệnh.
+ * `addPayment` bịa một khoản đã trả (kiểm duy nhất là `amount > 0`). `createBill` upsert theo
+ * (account, số hoá đơn): trùng số là ĐÈ số tiền bill cũ rồi xoá sạch dòng của nó (`:96-98`).
+ * Mà cửa vào trang chỉ đòi `view_carrier_rates` (`bills/page.tsx:41`) — vai `viewer` CÓ.
+ *
+ * Vá hai lớp, vì một lớp nào cũng từng được chứng minh là hụt:
+ *  1. Bỏ `'use server'` → không export nào còn là endpoint. An toàn: không component client
+ *     nào import tệp này theo GIÁ TRỊ (soát 25/10/2026 — chỉ `bills/page.tsx` là server
+ *     component, và `ap/invoice-upload.ts` là module thường). Các action thật nằm ở
+ *     `bills/page.tsx` (`:120, :156, :157`), mỗi cái có mã action riêng của nó.
+ *  2. Vẫn gác quyền TRONG từng hàm ghi. Vì chính ba action lồng ở trang đó cũng không kiểm
+ *     gì, nên nếu chỉ làm lớp 1 thì lỗ vẫn còn, chỉ dời lên một tầng.
+ *
+ * Ranh giới quyền lấy ĐÚNG như trang đang tách (`bills/page.tsx:47-50` và chú thích tại chỗ):
+ * nhập/thêm hoá đơn chỉ cần quyền hoá đơn — vai `logistics` có — còn thanh toán và xoá thì
+ * phải `manage_carrier_rates`. Siết `createBill` về một khoá duy nhất là chặn nhầm logistics.
+ */
 
 import { randomUUID } from 'crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { putObject } from '@/lib/storage/s3';
+import { requirePerm } from '@/features/receiving/perm';
+import { nguoiNhapHoaDon } from './perm';
 
 export interface UploadFile {
   bytes: Uint8Array;
@@ -54,6 +78,7 @@ export interface CreateBillInput {
 const numOrNull = (v: number | null | undefined) => (v == null ? null : String(v));
 
 export async function createBill(input: CreateBillInput): Promise<{ id: string }> {
+  await nguoiNhapHoaDon();
   if (!(input.amount > 0)) throw new Error('Số tiền hoá đơn phải > 0.');
   if (input.periodEnd < input.periodStart) throw new Error('Kỳ kết thúc phải ≥ kỳ bắt đầu.');
 
@@ -215,6 +240,7 @@ export interface AddPaymentInput {
 }
 
 export async function addPayment(input: AddPaymentInput): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   if (!(input.amount > 0)) throw new Error('Số tiền thanh toán phải > 0.');
   // Confirm the bill exists (and get account for the storage key).
   const [bill] = await db
@@ -317,9 +343,11 @@ export async function listAllBillLines(carrierAccountId: string): Promise<AllBil
 }
 
 export async function deleteBill(id: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   await db.delete(schema.carrierBills).where(eq(schema.carrierBills.id, id));
 }
 
 export async function deletePayment(id: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   await db.delete(schema.carrierBillPayments).where(eq(schema.carrierBillPayments.id, id));
 }

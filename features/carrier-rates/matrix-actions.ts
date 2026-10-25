@@ -4,6 +4,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import type { ParsedMatrixCsv } from './matrix-csv';
 import { splitPackageCells } from './matrix-package-split';
+import { requirePerm } from '@/features/receiving/perm';
 
 export interface MatrixCell {
   zoneId: string;
@@ -65,9 +66,39 @@ export async function loadMatrix(carrierAccountId: string, rateCardId: string): 
   return { zones, tiers, cells: packageCells, pakCells, pakTiers };
 }
 
+/*
+ * Ba hàm GHI ở dưới (`setCell`, `clearCell`, `importMatrix`) tự gác `manage_carrier_rates`
+ * trong thân hàm. Tới 25/10/2026 cả ba KHÔNG có một dòng kiểm quyền nào.
+ *
+ * Lý do chung của cả cụm carrier-rates ghi: cổng quyền phải nằm TRONG THÂN HÀM, không ở
+ * `page.tsx`. Mỗi export của tệp `'use server'` là một endpoint POST; thân trang chỉ chạy lúc
+ * RENDER nên một POST thẳng vào action không kích hoạt nó, và cổng duy nhất của dashboard
+ * (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi phiên đăng nhập gọi được, kể
+ * cả 3 tài khoản vai `viewer`.
+ *
+ * Vì sao nặng: `carrier_rate_cells` là bảng giá gốc mà route carrier-service đọc TRỰC TIẾP
+ * khi khách bấm thanh toán (`app/api/shopify/carrier-service/[storeId]/route.ts:63` →
+ * `features/carrier-rates/engine/snapshot-static.ts:149-150`). Sửa một ô là đổi GIÁ SHIP
+ * KHÁCH THẤY ở checkout, ngay lượt tiếp theo, không qua bước duyệt/đẩy nào. `importMatrix` còn
+ * tạo zone + bậc cân thiếu rồi ghi đè hàng loạt ô, và `clearCell` xoá ô thì cuốn giá về
+ * "không có giá".
+ *
+ * `userId` thôi là THAM SỐ. Trước đây người gọi tự khai danh tính nên kẻ gọi thẳng vừa ghi
+ * được vừa ĐỔ TÊN người khác vào `updated_by` của ô giá. Giờ danh tính lấy từ `requirePerm`
+ * (userId đã xác thực từ phiên).
+ *
+ * Khoá `manage_carrier_rates` là ĐÚNG khoá mà trang gọi cụm này đang dùng
+ * (`app/(dashboard)/f/carrier-rates/[id]/workspace/page.tsx:52`, `canManage`) — không tự nghĩ
+ * ra mức mới. Chú ý: không có chỗ gọi nào của ba hàm này trong toàn mã (đo 25/10/2026), nhưng
+ * chúng vẫn là endpoint vì nằm cùng tệp `'use server'` với `loadMatrix` mà client dùng.
+ *
+ * `loadMatrix` (hàm ĐỌC) cố ý KHÔNG gác: `workspace/page.tsx:11` gọi nó sau cổng
+ * `view_carrier_rates` của chính trang, và vai chỉ-xem phải đọc được ma trận.
+ */
 export async function setCell({
-  rateCardId, zoneId, tierId, costAmount, userId, packageType = 'package',
-}: { rateCardId: string; zoneId: string; tierId: string; costAmount: string; userId: string; packageType?: 'pak' | 'package' }): Promise<void> {
+  rateCardId, zoneId, tierId, costAmount, packageType = 'package',
+}: { rateCardId: string; zoneId: string; tierId: string; costAmount: string; packageType?: 'pak' | 'package' }): Promise<void> {
+  const userId = await requirePerm('manage_carrier_rates');
   const n = Number(costAmount);
   if (!Number.isFinite(n) || n < 0) throw new Error('Cost must be a non-negative number.');
 
@@ -95,6 +126,7 @@ export async function setCell({
 export async function clearCell({
   rateCardId, zoneId, tierId, packageType = 'package',
 }: { rateCardId: string; zoneId: string; tierId: string; packageType?: 'pak' | 'package' }): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   await db.delete(schema.carrierRateCells).where(and(
     eq(schema.carrierRateCells.rateCardId, rateCardId),
     eq(schema.carrierRateCells.carrierZoneId, zoneId),
@@ -105,15 +137,18 @@ export async function clearCell({
 
 /**
  * Imports a parsed CSV into the account, creating missing zones and tiers as
- * needed. Returns counts and warnings. Caller has already validated user
- * permission. Idempotent on cell upsert.
+ * needed. Returns counts and warnings. Idempotent on cell upsert.
+ *
+ * Tự gác `manage_carrier_rates` trong thân hàm (xem khối chú thích ở `setCell`). Câu cũ
+ * "Caller has already validated user permission" là SAI: không có chỗ gọi nào trong mã, nên
+ * chẳng có "caller" nào kiểm quyền cả — đã sửa.
  */
 export async function importMatrix(
   carrierAccountId: string,
   rateCardId: string,
   parsed: ParsedMatrixCsv,
-  userId: string,
 ): Promise<{ zonesCreated: number; tiersCreated: number; cellsWritten: number; warnings: string[] }> {
+  const userId = await requirePerm('manage_carrier_rates');
   const warnings = [...parsed.warnings];
 
   // 1. Resolve / create zones by label

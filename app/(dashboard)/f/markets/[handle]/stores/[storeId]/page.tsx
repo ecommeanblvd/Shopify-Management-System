@@ -43,7 +43,7 @@ export default async function OverridePage({
     'use server';
     const s = await auth.api.getSession({ headers: await headers() });
     if (!s) throw new Error('unauthenticated');
-    await saveOverride(o, s.user.id);
+    await saveOverride(o);
     revalidatePath(`/f/markets/${handle}/stores/${storeId}`);
     revalidatePath(`/f/markets/${handle}`);
   }

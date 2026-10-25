@@ -3,6 +3,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { parseShippingInvoiceCsv } from './parse-shipping-invoice';
+import { requirePerm } from '@/features/receiving/perm';
 
 export interface ApplyShippingInvoiceInput {
   storeId: string;
@@ -19,7 +20,28 @@ export interface ApplyShippingInvoiceResult {
   errors: Array<{ line: number; message: string }>;
 }
 
+/*
+ * `applyShippingInvoice` và `applyShippingInvoiceGlobal` tự gác `manage_shipping_invoices`
+ * trong thân hàm. Tới 25/10/2026 cả hai KHÔNG kiểm quyền. Action nội tuyến của trang theo
+ * store (`orders/[storeId]/shipping-invoices/page.tsx:38-49`) cũng không kiểm gì — quyền chỉ
+ * ở thân trang (`:23`); trang toàn cục (`orders/shipping-invoices/page.tsx:57`) có kiểm nhưng
+ * đó chỉ là một đường vào.
+ *
+ * Cổng quyền phải nằm TRONG THÂN HÀM, không ở `page.tsx`. Mỗi export của tệp `'use server'` là
+ * một endpoint POST; thân trang chỉ chạy lúc RENDER nên một POST thẳng không kích hoạt nó, và
+ * cổng duy nhất của dashboard (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi
+ * phiên đăng nhập gọi được, kể cả 3 tài khoản vai `viewer`.
+ *
+ * Hậu quả: hai hàm UPSERT vào `shipping_invoices` theo (store, tracking) — ghi đè chi phí vận
+ * chuyển THỰC của từng vận đơn. Bảng này được P&L đọc ưu tiên hơn ước tính của engine
+ * (`features/shopify-orders/dashboard-actions.ts:195-251`) nên sửa nó là đổi biên lợi nhuận
+ * từng đơn; bản Global còn tự dò store theo mã vận đơn nên một CSV chạm mọi store.
+ *
+ * Khoá `manage_shipping_invoices` là ĐÚNG khoá của cả hai trang (`:23`, và `:24`/`:57` ở trang
+ * toàn cục). Hai hàm này không nhận `userId` nên không có gì để bỏ.
+ */
 export async function applyShippingInvoice(input: ApplyShippingInvoiceInput): Promise<ApplyShippingInvoiceResult> {
+  await requirePerm('manage_shipping_invoices');
   const { rows, errors } = parseShippingInvoiceCsv(input.csvText);
   if (errors.length > 0) return { inserted: 0, overwritten: 0, errors };
   if (rows.length === 0) return { inserted: 0, overwritten: 0, errors: [] };
@@ -97,6 +119,7 @@ export interface ApplyShippingInvoiceGlobalResult {
 export async function applyShippingInvoiceGlobal(
   input: ApplyShippingInvoiceGlobalInput,
 ): Promise<ApplyShippingInvoiceGlobalResult> {
+  await requirePerm('manage_shipping_invoices');
   const { rows, errors } = parseShippingInvoiceCsv(input.csvText);
   if (errors.length > 0) return { inserted: 0, overwritten: 0, unmatched: [], errors };
   if (rows.length === 0) return { inserted: 0, overwritten: 0, unmatched: [], errors: [] };

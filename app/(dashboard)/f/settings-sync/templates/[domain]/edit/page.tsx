@@ -20,7 +20,7 @@ async function saveAction(domain: Domain, userId: string, formData: FormData) {
   const raw = String(formData.get('payload') ?? '');
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error('Payload must be valid JSON'); }
-  await saveTemplate(domain, parsed, userId);
+  await saveTemplate(domain, parsed);
   redirect('/f/settings-sync/templates');
 }
 

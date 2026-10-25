@@ -45,7 +45,7 @@ export default async function PushPage({ params }: { params: Promise<{ id: strin
     if (!r || !hasPermission(r, 'manage_carrier_rates') || !hasPermission(r, 'apply_markets')) {
       throw new Error('forbidden');
     }
-    const result = await commitPushPlan(id, s.user.id);
+    const result = await commitPushPlan(id);
     revalidatePath(`/f/carrier-rates/${id}/push`);
     revalidatePath('/f/markets');
     redirect(`/f/carrier-rates/${id}/push?committed=${result.marketsWritten}-${result.storesAffected}-${result.ratesEmitted}`);

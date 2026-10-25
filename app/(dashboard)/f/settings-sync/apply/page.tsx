@@ -23,7 +23,7 @@ async function runApplyAction(userId: string, formData: FormData) {
   const ids = formData.getAll('storeIds').map(String);
   const d = formData.get('domain') as Domain;
   const v = Number(formData.get('version'));
-  await executeApply(ids, d, v, userId);
+  await executeApply(ids, d, v);
   redirect('/f/settings-sync/history');
 }
 

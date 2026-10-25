@@ -2,6 +2,7 @@
 
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { requirePerm } from '@/features/receiving/perm';
 
 export type SurchargeKind = typeof schema.carrierSurchargeKindEnum.enumValues[number];
 
@@ -142,7 +143,33 @@ function parseCountryCodes(raw: string): string[] | null {
   return Array.from(new Set(codes));
 }
 
-export async function createSurcharge(input: CreateSurchargeInput, userId: string): Promise<string> {
+/*
+ * `createSurcharge`, `updateSurcharge`, `deleteSurcharge` tự gác `manage_carrier_rates` trong
+ * thân hàm. Tới 25/10/2026 cả ba KHÔNG có dòng kiểm quyền nào, còn ba action nội tuyến của
+ * trang (`surcharges/page.tsx:287`, `:315`, `:344`) cũng không kiểm — trang chỉ gác ở thân
+ * trang (`:397-403`).
+ *
+ * Lý do chung của cả cụm carrier-rates ghi: cổng quyền phải nằm TRONG THÂN HÀM, không ở
+ * `page.tsx`. Mỗi export của tệp `'use server'` là một endpoint POST; thân trang chỉ chạy lúc
+ * RENDER nên một POST thẳng vào action không kích hoạt nó, và cổng duy nhất của dashboard
+ * (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi phiên đăng nhập gọi được, kể
+ * cả 3 tài khoản vai `viewer`.
+ *
+ * Vì sao nặng: `carrier_surcharges` được engine nạp ở `engine/snapshot-static.ts:143-144` cho
+ * route carrier-service (`app/api/shopify/carrier-service/[storeId]/route.ts:63`). Một dòng
+ * `fuel_percent` / `markup_percent` đổi là cộng/trừ THẲNG vào giá ship khách thấy ở checkout
+ * (biên cho phép -100% đến +1000%, `parseValue` ở trên); `deleteSurcharge` gỡ một phụ phí
+ * khỏi báo giá.
+ *
+ * `userId` thôi là THAM SỐ (`createSurcharge`, `updateSurcharge`). Trước đây người gọi tự khai
+ * danh tính nên kẻ gọi thẳng đổ tên người khác vào `updated_by`. Giờ lấy từ `requirePerm`.
+ *
+ * Khoá `manage_carrier_rates` là ĐÚNG khoá của trang (`surcharges/page.tsx:365`, `:385`,
+ * `:403`). `listSurcharges` (ĐỌC) cố ý KHÔNG gác — trang gọi nó sau cổng `view_carrier_rates`
+ * (`:397`) và vai chỉ-xem phải đọc được.
+ */
+export async function createSurcharge(input: CreateSurchargeInput): Promise<string> {
+  const userId = await requirePerm('manage_carrier_rates');
   const n = parseValue(input.value, input.kind);
   const perKg = input.valuePerKg !== undefined ? parsePerKg(input.valuePerKg) : null;
   const countries = input.countryCodes !== undefined
@@ -189,7 +216,8 @@ export interface UpdateSurchargeInput {
   startsAt?: string | null;
 }
 
-export async function updateSurcharge(input: UpdateSurchargeInput, userId: string): Promise<void> {
+export async function updateSurcharge(input: UpdateSurchargeInput): Promise<void> {
+  const userId = await requirePerm('manage_carrier_rates');
   const [existing] = await db
     .select()
     .from(schema.carrierSurcharges)
@@ -227,5 +255,6 @@ export async function updateSurcharge(input: UpdateSurchargeInput, userId: strin
 }
 
 export async function deleteSurcharge(id: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   await db.delete(schema.carrierSurcharges).where(eq(schema.carrierSurcharges.id, id));
 }

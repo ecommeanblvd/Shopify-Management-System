@@ -1,4 +1,21 @@
-'use server';
+/*
+ * Nhập hoá đơn FBO (FedEx/UPS). Tệp này CỐ Ý KHÔNG có `'use server'` nữa (bỏ 25/10/2026):
+ * tới 24/10/2026 cả 4 export là endpoint POST công khai không kiểm quyền, và
+ * `importFboToDatabase` ghi trong MỘT transaction: tạo/đè `carrier_bills` +
+ * `carrier_bill_lines`, upsert `shipment_charges` (6.075 dòng hiện có); `applyFboBill` còn
+ * `putObject` lên R2 rồi chạy `applyPodDeliveries` / `applyReturnLinks`.
+ *
+ * An toàn khi bỏ directive: không component client nào import tệp này (soát 25/10/2026 —
+ * chỉ `ap/invoice-upload.ts`, `ap/ups-invoice-xml.ts`, `features/shipments/fedex-invoice-xml.ts`
+ * và `scripts/import-fedex-fbo.ts`, đều là module thường / CLI;
+ * `components/carrier-rates/CarrierInvoiceDialog.tsx` là `'use client'` nhưng chỉ
+ * `import type`, mà type bị xoá lúc biên dịch nên không tạo biên client).
+ *
+ * `importFboToDatabase` CỐ Ý KHÔNG gác quyền: `scripts/import-fedex-fbo.ts:41` gọi nó từ CLI,
+ * nơi không có phiên đăng nhập — thêm `requirePerm` là chặn nhầm script nhập hoá đơn FedEx.
+ * Nó an toàn vì đã thôi là endpoint (lớp 1), và vì ĐƯỜNG UI duy nhất tới nó là `applyFboBill`,
+ * hàm có gác ngay dưới đây.
+ */
 
 /**
  * Import file FedEx Billing Online (FBO) Excel qua UI:
@@ -19,6 +36,7 @@ import { parseFedexFbo, consolidateFboShipping, fboChargeUnchanged, type FboBill
 import { groupFboIntoBills, fboShippingTotal, type FboBill } from '@/features/shipments/fedex-fbo-bill';
 import { phanLoaiAwb } from './awb-ship-ho';
 import { invalidateReconcileCache } from '@/features/shipments/reconcile-cache';
+import { nguoiNhapHoaDon } from './perm';
 
 export interface FboBillSummary {
   billNumber: string | null;
@@ -112,11 +130,13 @@ function toSummary(bills: FboBill[]): FboBillSummary[] {
 
 /** Parse + thống kê, KHÔNG ghi gì. */
 export async function previewFboBill(bytes: Uint8Array): Promise<FboPreview> {
+  await nguoiNhapHoaDon();
   return previewFboRows(parseWorkbook(bytes));
 }
 
 /** Preview từ rows đã parse (dùng chung XLSX + XML). */
 export async function previewFboRows(rows: FboBilledRow[]): Promise<FboPreview> {
+  await nguoiNhapHoaDon();
   const bills = groupFboIntoBills(rows);
   const awbs = rows.map((r) => r.awb);
   const awbMap = await resolveAwbMap(awbs);
@@ -390,6 +410,7 @@ async function noiDutyChoShipHo(trackings: readonly string[]): Promise<number> {
 
 /** Action UI: parse + lưu file Excel lên R2 (đính chứng từ) + import. */
 export async function applyFboBill(input: ApplyFboInput): Promise<FboApplyResult> {
+  await nguoiNhapHoaDon();
   const rows = input.rows ?? parseWorkbook(input.bytes);
   const ext = input.filename.includes('.') ? input.filename.slice(input.filename.lastIndexOf('.')) : '.xlsx';
   const fileKey = `carrier-bills/${input.carrierAccountId}/${input.hang === 'ups' ? 'ups' : 'fbo'}-${randomUUID()}${ext}`;

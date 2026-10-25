@@ -2,6 +2,7 @@
 
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { requirePerm } from '@/features/receiving/perm';
 
 export interface WeightTierRow {
   id: string;
@@ -31,7 +32,28 @@ function parseUpperKg(input: string): number {
   return rounded;
 }
 
+/*
+ * `createWeightTier`, `deleteWeightTier`, `seedDefaultTiers` tự gác `manage_carrier_rates`
+ * trong thân hàm. Tới 25/10/2026 cả ba KHÔNG kiểm quyền, và ba action nội tuyến của trang
+ * (`weight-tiers/page.tsx:22`, `:28`, `:34`) cũng không — trang chỉ gác ở thân trang (`:43`).
+ *
+ * Lý do chung của cả cụm carrier-rates ghi: cổng quyền phải nằm TRONG THÂN HÀM, không ở
+ * `page.tsx`. Mỗi export của tệp `'use server'` là một endpoint POST; thân trang chỉ chạy lúc
+ * RENDER nên một POST thẳng vào action không kích hoạt nó, và cổng duy nhất của dashboard
+ * (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi phiên đăng nhập gọi được, kể
+ * cả 3 tài khoản vai `viewer`.
+ *
+ * Vì sao nặng: bậc cân là trục của bảng giá mà route carrier-service đọc khi khách thanh toán
+ * (`engine/snapshot-static.ts:140-142`). `deleteWeightTier` chạy ON DELETE CASCADE xoá TOÀN
+ * BỘ ô giá thuộc bậc đó — một POST là mất cả một hàng của bảng giá
+ * và checkout hết báo được giá cho khoảng cân ấy.
+ *
+ * Khoá `manage_carrier_rates` là ĐÚNG khoá của trang (`weight-tiers/page.tsx:49`,
+ * `canManage`). `listWeightTiers` (ĐỌC) cố ý KHÔNG gác — trang gọi nó sau cổng
+ * `view_carrier_rates` (`:43`).
+ */
 export async function createWeightTier(carrierAccountId: string, upperKgRaw: string): Promise<string> {
+  await requirePerm('manage_carrier_rates');
   const upperKg = parseUpperKg(upperKgRaw);
 
   // Avoid duplicates at the numeric level. The unique constraint also enforces this.
@@ -58,6 +80,7 @@ export async function createWeightTier(carrierAccountId: string, upperKgRaw: str
 }
 
 export async function deleteWeightTier(tierId: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   // ON DELETE CASCADE removes related rate_cells.
   await db.delete(schema.carrierWeightTiers).where(eq(schema.carrierWeightTiers.id, tierId));
 }
@@ -67,6 +90,7 @@ export async function deleteWeightTier(tierId: string): Promise<void> {
  * no tiers yet. Idempotent if called twice (skips existing).
  */
 export async function seedDefaultTiers(carrierAccountId: string): Promise<number> {
+  await requirePerm('manage_carrier_rates');
   const existing = await db
     .select()
     .from(schema.carrierWeightTiers)
