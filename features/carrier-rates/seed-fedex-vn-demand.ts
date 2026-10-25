@@ -2,6 +2,7 @@
 
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { requirePerm } from '@/features/receiving/perm';
 
 /**
  * Seed the FedEx Demand Surcharge table for export shipments FROM
@@ -129,12 +130,23 @@ export interface SeedResult {
  * account. Rows already present (same kind + value + country list) are
  * skipped so the operator can re-run safely after editing some rows.
  *
- * No permission check inside — the caller (a server action on a page
- * gated by `manage_carrier_rates`) owns the auth check.
+ * Tự gác `manage_carrier_rates` trong thân hàm. Câu cũ "No permission check inside — the
+ * caller ... owns the auth check" đúng một nửa: action nội tuyến của trang
+ * (`surcharges/page.tsx:381-390`) có kiểm, nhưng hàm này nằm trong tệp `'use server'` nên
+ * tự nó là một endpoint POST, gọi thẳng không qua trang. Thân trang chỉ chạy lúc render và
+ * cổng của dashboard (`app/(dashboard)/layout.tsx:10-11`) cũng vậy, nên vai `viewer` gọi
+ * được. Hậu quả: chèn tới 7 dòng `demand_per_kg` (11.300–39.700 VND/kg) vào
+ * `carrier_surcharges`, mà route carrier-service cộng thẳng vào giá ship khách thấy ở
+ * checkout (`engine/snapshot-static.ts:143-144`). Dedupe ở dưới chỉ chống trùng, không chống
+ * người không có quyền. Khoá là ĐÚNG khoá trang đang dùng (`surcharges/page.tsx:385`).
+ *
+ * `userId` thôi là THAM SỐ: trước đây người gọi tự khai nên có thể đổ tên người khác vào
+ * `updated_by`; giờ lấy từ `requirePerm`.
  */
 export async function seedFedexVietnamDemand(
-  carrierAccountId: string, userId: string,
+  carrierAccountId: string,
 ): Promise<SeedResult> {
+  const userId = await requirePerm('manage_carrier_rates');
   // Pull existing demand_per_kg rows once so we can dedupe in JS rather
   // than firing a SELECT per candidate.
   const existing = await db

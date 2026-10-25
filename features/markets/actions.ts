@@ -5,6 +5,7 @@ import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { runQuery } from '@/lib/shopify/connector';
 import { runMutation } from '@/lib/shopify/writer';
+import { requirePerm } from '@/features/receiving/perm';
 import { isFeatureEnabled } from '@/lib/flags/flags';
 import { recordAudit } from '@/lib/logging/audit';
 import { hashPayload } from '@/lib/snapshots/snapshots';
@@ -19,7 +20,38 @@ import type {
   Market, MarketStoreOverride, MarketPriceAdjustment, MarketShipping, EffectiveMarket,
 } from './types';
 
-export async function seedDefaultMarkets(userId: string): Promise<void> {
+/*
+ * Quyền kiểm Ở TRONG TỪNG HÀM của tệp này, không ở `page.tsx`. Tới 24/10/2026 cả 11 export
+ * của tệp KHÔNG có một dòng kiểm quyền nào, mà các trang `/f/markets/*` chỉ gác ở thân trang
+ * — thân trang chỉ chạy lúc RENDER, còn một server action được POST thẳng thì không kích hoạt
+ * nó. Cổng duy nhất của dashboard cũng nằm ở `app/(dashboard)/layout.tsx:10-11`, cũng là
+ * render. Nên mọi phiên đăng nhập đều gọi được, kể cả 3 tài khoản vai `viewer`.
+ *
+ * Nặng nhất là `executeMarketsApplyAll`: MỘT lệnh, vòng lặp mọi store active không bảo trì
+ * (đo 24/10/2026: 4 store đủ scope) và trên mỗi store chạy marketCreate/Update/DELETE, đổi
+ * tiền tệ, đổi ngôn ngữ web presence, tạo/xoá price list. Market đang sống trên store mà
+ * không có trong bản mẫu thì BỊ XOÁ (`diff.ts:113-118`, chỉ market primary được tha). Bốn
+ * chốt của `lib/shopify/writer.ts:35-66` không chặn đường này: `isReconciled` được truyền
+ * thẳng `async () => true` (`:196`) và snapshot do chính luồng apply ghi trước khi mutate.
+ * Và nó KHÔNG có chỗ gọi nào trong mã — vẫn là endpoint, vì ở cùng tệp `'use server'` với
+ * các export mà client dùng. Không ai thấy nút, vẫn gọi được.
+ *
+ * `userId` thôi là THAM SỐ. Trước đây người gọi tự khai danh tính, nên kẻ gọi thẳng vừa ghi
+ * được vừa ĐỔ TÊN cho người khác trong `updatedBy` và trong nhật ký — làm sai chính thứ nhật
+ * ký thay đổi dùng để trả lời "ai sửa". Giờ danh tính lấy từ phiên: `requirePerm` trả về
+ * userId đã xác thực. Mọi chỗ gọi đều đang truyền `session.user.id` nên đường hợp lệ không
+ * đổi gì; chỉ đường giả mạo bị đóng.
+ *
+ * Khoá quyền lấy ĐÚNG theo cổng mà từng trang đang dùng, không tự nghĩ ra mức mới:
+ * `manage_markets_template` (`page.tsx:35`, `[handle]/page.tsx:57`, `new/page.tsx:23`),
+ * `apply_markets` (`apply/page.tsx:19`, `[handle]/stores/[storeId]/page.tsx:25`).
+ *
+ * Hàm ĐỌC (`listTemplates`, `getOverride`, `listOverridesForStore`, `listApplyHistory`) cố ý
+ * KHÔNG gác: `listOverridesForStore` được `features/settings-sync/shipping-profiles-actions.ts:11`
+ * gọi nội bộ SAU cổng của chính nó, gác thêm ở đây là chặn nhầm.
+ */
+export async function seedDefaultMarkets(): Promise<void> {
+  const userId = await requirePerm('manage_markets_template');
   validateTemplate(DEFAULT_MARKETS);
   for (const m of DEFAULT_MARKETS) {
     const [existing] = await db
@@ -59,7 +91,8 @@ export async function listTemplates(): Promise<Market[]> {
   }));
 }
 
-export async function saveTemplate(market: Market, userId: string): Promise<void> {
+export async function saveTemplate(market: Market): Promise<void> {
+  const userId = await requirePerm('manage_markets_template');
   const allMarkets = await listTemplates();
   const next = allMarkets.filter((m) => m.handle !== market.handle).concat(market);
   validateTemplate(next);
@@ -97,6 +130,7 @@ export async function saveTemplate(market: Market, userId: string): Promise<void
 }
 
 export async function deleteTemplate(handle: string): Promise<void> {
+  await requirePerm('manage_markets_template');
   await db.delete(schema.marketTemplates).where(eq(schema.marketTemplates.handle, handle));
 }
 
@@ -116,9 +150,8 @@ export async function getOverride(
   };
 }
 
-export async function saveOverride(
-  override: MarketStoreOverride, userId: string,
-): Promise<void> {
+export async function saveOverride(override: MarketStoreOverride): Promise<void> {
+  const userId = await requirePerm('apply_markets');
   const [market] = await db.select().from(schema.marketTemplates)
     .where(eq(schema.marketTemplates.handle, override.marketHandle)).limit(1);
   if (!market) throw new Error(`Market ${override.marketHandle} not found`);
@@ -264,6 +297,7 @@ async function buildEffective(storeId: string): Promise<EffectiveMarket[]> {
 }
 
 export async function previewMarketsApply(storeId: string) {
+  await requirePerm('apply_markets');
   const [store] = await db.select().from(schema.stores)
     .where(eq(schema.stores.id, storeId)).limit(1);
   if (!store) throw new Error(`Store ${storeId} not found`);
@@ -277,7 +311,8 @@ export async function previewMarketsApply(storeId: string) {
   return { ops, live, effective };
 }
 
-export async function executeMarketsApply(storeId: string, userId: string) {
+export async function executeMarketsApply(storeId: string) {
+  const userId = await requirePerm('apply_markets');
   const [store] = await db.select().from(schema.stores)
     .where(eq(schema.stores.id, storeId)).limit(1);
   if (!store) throw new Error(`Store ${storeId} not found`);
@@ -305,13 +340,14 @@ export interface BackupApplyAllResult {
 
 /** Apply backup (đẩy cấu hình market + flat rates) lên TẤT CẢ store active,
  *  không bảo trì — tuần tự để không dội Shopify. Dùng khi carrier API gãy. */
-export async function executeMarketsApplyAll(userId: string): Promise<BackupApplyAllResult[]> {
+export async function executeMarketsApplyAll(): Promise<BackupApplyAllResult[]> {
+  await requirePerm('apply_markets');
   const stores = await db.select().from(schema.stores)
     .where(and(eq(schema.stores.status, 'active'), eq(schema.stores.maintenanceMode, false)));
   const out: BackupApplyAllResult[] = [];
   for (const s of stores) {
     try {
-      const r = await executeMarketsApply(s.id, userId);
+      const r = await executeMarketsApply(s.id);
       const errors = r.kind === 'applied' ? r.errors.map((e) => `${e.step}: ${e.error}`) : [];
       out.push({ storeId: s.id, storeName: s.name, ok: errors.length === 0, errors });
     } catch (e) {

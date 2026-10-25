@@ -67,14 +67,14 @@ async function submitReconcile(storeId: string, domain: Domain, currentJson: str
         });
     }
   }
-  await setStoreReconciled(storeId, domain, userId);
+  await setStoreReconciled(storeId, domain);
   await recordAudit({ userId, storeId, featureKey: settingsSyncManifest.key, action: 'reconcile_store', target: domain, result: 'success' });
   redirect('/f/settings-sync');
 }
 
 async function markReconciled(storeId: string, domain: Domain, userId: string) {
   'use server';
-  await setStoreReconciled(storeId, domain, userId);
+  await setStoreReconciled(storeId, domain);
   await recordAudit({ userId, storeId, featureKey: settingsSyncManifest.key, action: 'reconcile_store', target: domain, result: 'success' });
   redirect('/f/settings-sync');
 }

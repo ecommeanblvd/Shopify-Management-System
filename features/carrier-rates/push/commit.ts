@@ -3,6 +3,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { recordAudit } from '@/lib/logging/audit';
+import { requirePerm } from '@/features/receiving/perm';
 import { loadAccountSnapshot } from '../engine/load';
 import { classifyFeeCoverage, type FeeItem } from './fee-coverage';
 import { recalcMarket, type CarrierServiceForRecalc, type RecalcRateBreakdown } from './recalc';
@@ -255,11 +256,36 @@ export interface CommitPlanResult {
  *
  * Replaces the carrier-managed zone for each market on each store; preserves
  * priceAdjustment and any other zones the user may have authored manually.
+ *
+ * Tự gác CẢ HAI `manage_carrier_rates` VÀ `apply_markets` trong thân hàm. Tới 25/10/2026 hàm
+ * KHÔNG kiểm quyền nào; action nội tuyến của trang (`push/page.tsx:40-49`) có kiểm cả hai
+ * nhưng nó chỉ là MỘT đường vào — `commitPushPlan` nằm trong tệp `'use server'` nên tự nó là
+ * một endpoint POST, gọi thẳng không qua trang.
+ *
+ * Cổng quyền phải nằm TRONG THÂN HÀM, không ở `page.tsx`. Mỗi export của tệp `'use server'` là
+ * một endpoint POST; thân trang chỉ chạy lúc RENDER nên một POST thẳng không kích hoạt nó, và
+ * cổng duy nhất của dashboard (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi
+ * phiên đăng nhập gọi được, kể cả 3 tài khoản vai `viewer`.
+ *
+ * Hậu quả cụ thể: hàm GHI ĐÈ `market_store_overrides.shipping` của MỌI (market x store)
+ * đang link với account, cộng ghi nhật ký `carrier_rates_push`. Cột đó là nguồn cho các đường
+ * đẩy lên store Shopify thật (`features/markets/actions.ts` — `executeMarketsApply`,
+ * `executeMarketsApplyAll`), nên một lệnh sửa bảng ở đây rồi một lệnh apply là giá ship
+ * trên store thật đổi theo.
+ *
+ * Đòi cả hai khoá vì trang đòi cả hai (`push/page.tsx:37` `canPush`, `:45`): `manage_carrier_rates`
+ * vì nó đẩy bảng giá của carrier, `apply_markets` vì nó ghi vào cấu hình market theo store.
+ * Không tự nghĩ mức mới. `userId` thôi là THAM SỐ: trước đây người gọi tự khai nên có thể đổ
+ * tên người khác vào `updated_by` và vào nhật ký `carrier_rates_push`; giờ lấy từ phiên.
+ *
+ * `buildPushPlan` (ĐỌC, chỉ tính bản xem trước) cố ý KHÔNG gác: trang gọi nó sau cổng
+ * `view_carrier_rates` (`push/page.tsx:31`), và chính hàm này gọi nó nội bộ.
  */
 export async function commitPushPlan(
   carrierAccountId: string,
-  userId: string,
 ): Promise<CommitPlanResult> {
+  const userId = await requirePerm('manage_carrier_rates');
+  await requirePerm('apply_markets');
   const plan = await buildPushPlan(carrierAccountId);
   if (plan.rows.length === 0) {
     return { marketsWritten: 0, storesAffected: 0, ratesEmitted: 0, warnings: plan.warnings };

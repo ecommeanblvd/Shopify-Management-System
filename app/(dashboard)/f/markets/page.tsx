@@ -33,7 +33,7 @@ export default async function MarketsPage() {
     if (!s) throw new Error('unauthenticated');
     const r = await getRole(s.user.id);
     if (!hasPermission(r, 'manage_markets_template')) throw new Error('forbidden');
-    await seedDefaultMarkets(s.user.id);
+    await seedDefaultMarkets();
     revalidatePath('/f/markets');
   }
 

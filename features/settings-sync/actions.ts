@@ -5,6 +5,7 @@ import { db, schema } from '@/db/client';
 import { getStoreToken, graphqlCall } from '@/lib/shopify/client';
 import { runQuery } from '@/lib/shopify/connector';
 import { runMutation } from '@/lib/shopify/writer';
+import { requirePerm } from '@/features/receiving/perm';
 import { isFeatureEnabled } from '@/lib/flags/flags';
 import { recordAudit } from '@/lib/logging/audit';
 import { hashPayload } from '@/lib/snapshots/snapshots';
@@ -59,7 +60,28 @@ export async function getLatestTemplate(domain: Domain) {
   return row ?? null;
 }
 
-export async function saveTemplate(domain: Domain, payload: unknown, userId: string) {
+/*
+ * Quyền kiểm Ở TRONG TỪNG HÀM, không ở `page.tsx` — thân trang chỉ chạy lúc RENDER, một
+ * server action POST thẳng không kích hoạt nó. Tới 24/10/2026 cả 7 export của tệp không có
+ * dòng kiểm nào.
+ *
+ * Vì sao `setStoreReconciled` nguy hơn vẻ ngoài: `executeApply` MỘT MÌNH chưa ghi được, vì
+ * `apply.ts:55` và chốt 3 của `lib/shopify/writer.ts` đòi store đã đối soát, mà bảng
+ * `reconciliation_status` đo được 0 dòng `reconciled`. Nhưng `setStoreReconciled` nằm CÙNG
+ * TỆP và cũng không gác — nên HAI lệnh là mở được chốt, rồi `executeApply` đẩy
+ * `deliveryProfileUpdate` / `checkoutBuyerExperience` lên store THẬT. Chốt snapshot tự thoả
+ * vì chính luồng ghi snapshot (`apply.ts:69`). Gác một trong hai mà bỏ cái kia là vá hờ.
+ *
+ * `userId` thôi là tham số: danh tính lấy từ phiên qua `requirePerm`, nên `createdBy` /
+ * `reconciledBy` không đổ tên được cho người khác. Ba chỗ gọi đều truyền `session.user.id`
+ * nên đường hợp lệ không đổi.
+ *
+ * Khoá quyền đúng theo cổng từng trang đang dùng: `manage_settings_template`
+ * (`templates/[domain]/edit/page.tsx:42`), `reconcile_store`
+ * (`reconcile/[storeId]/[domain]/page.tsx:96`), `apply_settings` (`apply/page.tsx:36`).
+ */
+export async function saveTemplate(domain: Domain, payload: unknown) {
+  const userId = await requirePerm('manage_settings_template');
   const latest = await getLatestTemplate(domain);
   const nextVersion = (latest?.version ?? 0) + 1;
   const [row] = await db
@@ -85,7 +107,8 @@ export async function isStoreReconciled(storeId: string, domain: Domain): Promis
   return row?.status === 'reconciled';
 }
 
-export async function setStoreReconciled(storeId: string, domain: Domain, userId: string) {
+export async function setStoreReconciled(storeId: string, domain: Domain) {
+  const userId = await requirePerm('reconcile_store');
   const existing = await db
     .select()
     .from(schema.reconciliationStatus)
@@ -181,6 +204,7 @@ export async function previewApply(
   domain: Domain,
   templateVersion: number,
 ) {
+  await requirePerm('apply_settings');
   const [template] = await db.select().from(schema.settingTemplates).where(
     and(eq(schema.settingTemplates.domain, domain), eq(schema.settingTemplates.version, templateVersion)),
   ).limit(1);
@@ -208,8 +232,8 @@ export async function executeApply(
   storeIds: string[],
   domain: Domain,
   templateVersion: number,
-  userId: string,
 ) {
+  const userId = await requirePerm('apply_settings');
   const [template] = await db.select().from(schema.settingTemplates).where(
     and(eq(schema.settingTemplates.domain, domain), eq(schema.settingTemplates.version, templateVersion)),
   ).limit(1);

@@ -26,9 +26,9 @@ const FX_STALE_DAYS = 30;
 /** Hôm nay theo giờ VIỆT NAM — mốc so hiệu lực bảng giá, lệch một ngày là chọn sai bảng. */
 function todayIso(): string { return ngayKinhDoanh(new Date())!; }
 
-async function toggleEnabledAction(id: string, next: boolean, userId: string) {
+async function toggleEnabledAction(id: string, next: boolean) {
   'use server';
-  await updateAccount({ id, enabled: next }, userId);
+  await updateAccount({ id, enabled: next });
   revalidatePath(`/f/carrier-rates/${id}`);
   revalidatePath('/f/carrier-rates');
 }
@@ -85,7 +85,7 @@ export default async function CarrierAccountDetailPage({ params }: { params: Pro
           fxFormatted={String(fxFormatted)} fxAge={fxAge} fxStale={fxStale}
           costCurrency={account.costCurrency} displayCurrency={account.displayCurrency}
           weightUnit={account.weightUnit} notes={account.notes ?? null}
-          toggleAction={toggleEnabledAction.bind(null, id, !account.enabled, session.user.id)}
+          toggleAction={toggleEnabledAction.bind(null, id, !account.enabled)}
           deleteAction={deleteAccountAction.bind(null, id)}
         />
       </header>

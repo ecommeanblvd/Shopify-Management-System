@@ -284,7 +284,7 @@ function computeManualFuelStaleness(
   return stale ?? null;
 }
 
-async function createAction(accountId: string, kind: SurchargeKind, userId: string, formData: FormData) {
+async function createAction(accountId: string, kind: SurchargeKind, formData: FormData) {
   'use server';
   const value = String(formData.get('value') ?? '');
   const valuePerKg = formData.get('valuePerKg');
@@ -307,12 +307,11 @@ async function createAction(accountId: string, kind: SurchargeKind, userId: stri
       applyMode,
       startsAt: startsAt ? String(startsAt) : undefined,
     },
-    userId,
   );
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 
-async function updateAction(accountId: string, id: string, userId: string, formData: FormData) {
+async function updateAction(accountId: string, id: string, formData: FormData) {
   'use server';
   const value = formData.get('value');
   const valuePerKg = formData.get('valuePerKg');
@@ -339,7 +338,7 @@ async function updateAction(accountId: string, id: string, userId: string, formD
     patch.applyMode = applyModeRaw === 'when_billed' ? 'when_billed' : 'always';
   }
   if (startsAt !== null) patch.startsAt = String(startsAt);
-  await updateSurcharge({ id, ...patch }, userId);
+  await updateSurcharge({ id, ...patch });
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 
@@ -378,7 +377,7 @@ async function refreshFuelAction(accountId: string, userId: string) {
  * already exist), so the operator can re-run safely after tweaking
  * individual rows.
  */
-async function seedFedexVnDemandAction(accountId: string, userId: string) {
+async function seedFedexVnDemandAction(accountId: string) {
   'use server';
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('unauthenticated');
@@ -386,7 +385,7 @@ async function seedFedexVnDemandAction(accountId: string, userId: string) {
   if (!role || !hasPermission(role, 'manage_carrier_rates')) {
     throw new Error('forbidden');
   }
-  await seedFedexVietnamDemand(accountId, userId);
+  await seedFedexVietnamDemand(accountId);
   revalidatePath(`/f/carrier-rates/${accountId}/surcharges`);
 }
 
@@ -569,7 +568,7 @@ function KindCard({
   // seeded yet — once a row exists, the operator manages from there.
   const supportsDemandSeed = kind === 'demand_per_kg' && carrierKey === 'fedex';
   const seedDemandBound = supportsDemandSeed && canManage && list.length === 0
-    ? seedFedexVnDemandAction.bind(null, accountId, userId)
+    ? seedFedexVnDemandAction.bind(null, accountId)
     : null;
 
   return (
@@ -655,7 +654,6 @@ function KindCard({
                 currency={currency}
                 canManage={canManage}
                 accountId={accountId}
-                userId={userId}
                 countryOptions={countryOptions}
               />
             ))
@@ -740,7 +738,7 @@ function KindCard({
               perKgVisible={meta.supportsPerKg}
               kind={kind}
               defaultApplyMode="always"
-              saveAction={createAction.bind(null, accountId, kind, userId)}
+              saveAction={createAction.bind(null, accountId, kind)}
             />
           </div>
         )}
@@ -760,13 +758,12 @@ interface SurchargeSummaryRowProps {
   currency: string;
   canManage: boolean;
   accountId: string;
-  userId: string;
   countryOptions: { iso: string; name: string }[];
 }
 
 function SurchargeSummaryRow({
   row, meta, unitSuffix, perKgUnitSuffix, valueDecimals, perKgDecimals, countriesVisible,
-  currency, canManage, accountId, userId, countryOptions,
+  currency, canManage, accountId, countryOptions,
 }: SurchargeSummaryRowProps) {
   const perKgNumber = row.valuePerKg !== null ? Number(row.valuePerKg) : null;
   const hasPerKg = perKgNumber !== null && Number.isFinite(perKgNumber) && perKgNumber > 0;
@@ -865,7 +862,7 @@ function SurchargeSummaryRow({
           perKgVisible={meta.supportsPerKg}
           kind={row.kind}
           defaultApplyMode={row.applyMode}
-          saveAction={updateAction.bind(null, accountId, row.id, userId)}
+          saveAction={updateAction.bind(null, accountId, row.id)}
           deleteAction={deleteAction.bind(null, accountId, row.id)}
         />
       )}

@@ -35,7 +35,7 @@ export default async function ApplyPage() {
     'use server';
     const s = await auth.api.getSession({ headers: await headers() });
     if (!s) throw new Error('unauthenticated');
-    const r = await executeMarketsApply(storeId, s.user.id);
+    const r = await executeMarketsApply(storeId);
     return { errors: r.kind === 'applied' ? r.errors : [] };
   }
 

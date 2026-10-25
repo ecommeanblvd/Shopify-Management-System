@@ -46,7 +46,7 @@ export default async function MarketDetailPage({
     'use server';
     const s = await auth.api.getSession({ headers: await headers() });
     if (!s) throw new Error('unauthenticated');
-    await saveTemplate(m, s.user.id);
+    await saveTemplate(m);
   }
 
   async function handleDelete() {
@@ -68,7 +68,7 @@ export default async function MarketDetailPage({
     const carrierAccountId = String(formData.get('carrierAccountId') ?? '');
     const serviceLabel = String(formData.get('serviceLabel') ?? '');
     if (!carrierAccountId) return;
-    await createLink({ marketHandle: handle, carrierAccountId, serviceLabel }, s.user.id);
+    await createLink({ marketHandle: handle, carrierAccountId, serviceLabel });
     revalidatePath(`/f/markets/${handle}`);
   }
 
@@ -88,7 +88,7 @@ export default async function MarketDetailPage({
     if (!s) throw new Error('unauthenticated');
     const r = await getRole(s.user.id);
     if (!hasPermission(r, 'manage_carrier_rates')) throw new Error('forbidden');
-    await updateLink({ id: linkId, enabled: next }, s.user.id);
+    await updateLink({ id: linkId, enabled: next });
     revalidatePath(`/f/markets/${handle}`);
   }
 

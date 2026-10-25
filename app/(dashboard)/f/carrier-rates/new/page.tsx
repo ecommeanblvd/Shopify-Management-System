@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 
 export const dynamic = 'force-dynamic';
 
-async function handleSubmitAction(userId: string, formData: FormData) {
+async function handleSubmitAction(formData: FormData) {
   'use server';
   const carrierId = String(formData.get('carrierId') ?? '');
   const name = String(formData.get('name') ?? '');
@@ -22,7 +22,7 @@ async function handleSubmitAction(userId: string, formData: FormData) {
   const displayCurrency = String(formData.get('displayCurrency') ?? '').toUpperCase();
   const fxCostPerDisplay = String(formData.get('fxCostPerDisplay') ?? '');
   const notes = String(formData.get('notes') ?? '');
-  const id = await createAccount({ carrierId, name, costCurrency, displayCurrency, fxCostPerDisplay, notes }, userId);
+  const id = await createAccount({ carrierId, name, costCurrency, displayCurrency, fxCostPerDisplay, notes });
   redirect(`/f/carrier-rates/${id}`);
 }
 
@@ -40,7 +40,7 @@ export default async function NewCarrierAccountPage() {
   }
 
   const carriers = await listCarriers();
-  const submitBound = handleSubmitAction.bind(null, session.user.id);
+  const submitBound = handleSubmitAction;
 
   return (
     <div className="px-6 md:px-10 py-8 md:py-12 space-y-10">

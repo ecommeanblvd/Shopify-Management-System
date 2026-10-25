@@ -28,7 +28,7 @@ export default async function NewMarketPage() {
     'use server';
     const s = await auth.api.getSession({ headers: await headers() });
     if (!s) throw new Error('unauthenticated');
-    await saveTemplate(m, s.user.id);
+    await saveTemplate(m);
     redirect(`/f/markets/${m.handle}`);
   }
 

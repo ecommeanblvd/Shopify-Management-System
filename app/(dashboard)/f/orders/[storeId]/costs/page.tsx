@@ -39,7 +39,7 @@ export default async function CostsPage({ params }: { params: Promise<{ storeId:
     const file = form.get('file') as File;
     const csvText = await file.text();
     const r = await applySkuCosts({
-      storeId, csvText, filename: file.name, userId: session2.user.id,
+      storeId, csvText, filename: file.name,
     });
     revalidatePath(`/f/orders/${storeId}/costs`);
     return r;

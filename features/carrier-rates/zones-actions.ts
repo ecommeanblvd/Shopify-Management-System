@@ -2,6 +2,7 @@
 
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { requirePerm } from '@/features/receiving/perm';
 
 const ISO2_RE = /^[A-Z]{2}$/;
 
@@ -42,7 +43,28 @@ export async function listZonesWithCountries(carrierAccountId: string): Promise<
   }));
 }
 
+/*
+ * `createZone`, `renameZone`, `patchZoneCountries`, `deleteZone` tự gác `manage_carrier_rates`
+ * trong thân hàm. Tới 25/10/2026 cả bốn KHÔNG kiểm quyền, và bốn action nội tuyến của trang
+ * (`zones/page.tsx:25`, `:31`, `:38`, `:50`) cũng không — trang chỉ gác ở thân trang (`:66`).
+ *
+ * Lý do chung của cả cụm carrier-rates ghi: cổng quyền phải nằm TRONG THÂN HÀM, không ở
+ * `page.tsx`. Mỗi export của tệp `'use server'` là một endpoint POST; thân trang chỉ chạy lúc
+ * RENDER nên một POST thẳng vào action không kích hoạt nó, và cổng duy nhất của dashboard
+ * (`app/(dashboard)/layout.tsx:10-11`) cũng là render. Nên mọi phiên đăng nhập gọi được, kể
+ * cả 3 tài khoản vai `viewer`.
+ *
+ * Vì sao nặng: zone + danh sách nước của nó quyết định khách ở nước nào thì rơi vào cột giá
+ * nào (`engine/snapshot-static.ts:132-136`, nạp cho route carrier-service). `patchZoneCountries`
+ * chuyển một nước sang zone khác là đổi giá cả nước đó; `deleteZone` ON DELETE CASCADE xoá cả
+ * country-map lẫn mọi ô giá của zone (xem chú thích ở thân `deleteZone`).
+ *
+ * Khoá `manage_carrier_rates` là ĐÚNG khoá của trang (`zones/page.tsx:72`, `canManage`).
+ * `listZonesWithCountries` (ĐỌC) cố ý KHÔNG gác — trang gọi nó sau cổng `view_carrier_rates`
+ * (`:66`).
+ */
 export async function createZone(carrierAccountId: string, label: string): Promise<string> {
+  await requirePerm('manage_carrier_rates');
   const trimmed = label.trim();
   if (!trimmed) throw new Error('Zone label is required.');
 
@@ -59,12 +81,14 @@ export async function createZone(carrierAccountId: string, label: string): Promi
 }
 
 export async function renameZone(zoneId: string, label: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   const t = label.trim();
   if (!t) throw new Error('Label cannot be empty.');
   await db.update(schema.carrierZones).set({ label: t }).where(eq(schema.carrierZones.id, zoneId));
 }
 
 export async function deleteZone(zoneId: string): Promise<void> {
+  await requirePerm('manage_carrier_rates');
   // ON DELETE CASCADE removes zone_countries + rate_cells.
   await db.delete(schema.carrierZones).where(eq(schema.carrierZones.id, zoneId));
 }
@@ -84,6 +108,7 @@ export async function patchZoneCountries(
   carrierAccountId: string,
   patch: ZoneCountriesPatch,
 ): Promise<{ rejected: string[] }> {
+  await requirePerm('manage_carrier_rates');
   const cleanAdd = Array.from(new Set(patch.add.map((c) => c.trim().toUpperCase()))).filter((c) => ISO2_RE.test(c));
   const cleanRemove = Array.from(new Set(patch.remove.map((c) => c.trim().toUpperCase()))).filter((c) => ISO2_RE.test(c));
 
