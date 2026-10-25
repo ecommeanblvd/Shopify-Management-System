@@ -115,6 +115,67 @@ export function reconcilePlan(
   return out;
 }
 
+/** Kế hoạch "về 0" đã tách theo NGUYÊN NHÂN. */
+export interface VeKhongTheoNguyenNhan {
+  /** Lark CÓ cặp (sku,kho) và nói Final stock = 0 → tin được, SMS đang cũ. */
+  larkNoi0: ReconcileItem[];
+  /** Lark KHÔNG có cặp (sku,kho) → `reconcilePlan` suy ra 0, KHÔNG kết luận được. */
+  larkIm: ReconcileItem[];
+  /** Tập con của `larkIm`: SKU đó CÓ trên Lark nhưng ở KHO KHÁC → nghi lệch ánh xạ kho. */
+  khoKhac: ReconcileItem[];
+  /** Tập con của `larkIm`: SKU không hề xuất hiện trên Lark ở bất kỳ kho nào. */
+  larkImThatSu: ReconcileItem[];
+  chiecMatLarkNoi0: number;
+  chiecMatLarkIm: number;
+}
+
+/**
+ * THUẦN: tách nhóm "về 0" thành *Lark nói 0* và *Lark im*.
+ *
+ * Vì sao phải tách, và vì sao nó là phần thiếu của chốt chặn: `reconcilePlan` coi dòng
+ * VẮNG trên Lark là "đích = 0" (`:97`). Nên con số `zeroed` trộn hai nguyên nhân khác hẳn
+ * nhau — "Lark bảo hết hàng" (tin được, SMS cũ) và "Lark không nhắc tới dòng này" (có thể
+ * chỉ là view bị sửa bộ lọc, hoặc API trả thiếu giữa chừng). `lyDoTuChoiGhi` chặn đúng,
+ * nhưng thông điệp của nó bảo người ta "xem kế hoạch rồi quyết" mà kế hoạch lại KHÔNG
+ * chứa đúng cái tách này — nên không ai quyết được. Đo thật 25/10/2026: 351/882 dòng bị
+ * đưa về 0, và chốt chặn đã từ chối ghi suốt nhiều giờ mà không ai biết nguyên nhân nào.
+ *
+ * `khoKhac` là dấu hiệu riêng, đáng tách khỏi `larkImThatSu`: SMS ghi hàng ở kho X mà Lark
+ * có đúng SKU đó ở kho Y thì đây là **lệch ánh xạ kho**, không phải hết hàng — gộp chung
+ * là kết luận sai thành "hết hàng" rồi xoá tồn thật.
+ */
+export function phanLoaiVeKhong(
+  lark: ReadonlyMap<string, { qty: number }>,
+  plan: readonly ReconcileItem[],
+): VeKhongTheoNguyenNhan {
+  // Chỉ dòng ĐÃ CÓ ở SMS và đích thật sự là 0. Dòng bị `qty_reserved` chặn lại
+  // (targetOnHand > 0 do `Math.max(target, reserved)`) không phải "về 0".
+  //
+  // `!p.isNew` là chốt PHÒNG THỦ, không phải điều kiện sống, và không test nào canh được nó:
+  // với dòng mới thì `cur` rỗng nên `onHand = 0`, `delta = target`, mà `reconcilePlan` chỉ
+  // phát item khi `delta !== 0` (`:103`) ⇒ `targetOnHand === 0` không thể đi cùng `isNew`.
+  // Gỡ nó ra thì mọi test vẫn xanh (đo 25/10/2026, đột biến tương đương). Giữ lại vì hàm này
+  // là export công khai, có thể được gọi với một plan dựng tay.
+  const veKhong = plan.filter((p) => !p.isNew && p.targetOnHand === 0);
+  const skuCoTrenLark = new Set([...lark.keys()].map((k) => k.slice(0, k.lastIndexOf('|'))));
+
+  const larkNoi0: ReconcileItem[] = [];
+  const larkIm: ReconcileItem[] = [];
+  for (const p of veKhong) {
+    if (lark.has(key(p.sku, p.warehouseCode))) larkNoi0.push(p);
+    else larkIm.push(p);
+  }
+  const khoKhac = larkIm.filter((p) => skuCoTrenLark.has(p.sku));
+  const larkImThatSu = larkIm.filter((p) => !skuCoTrenLark.has(p.sku));
+  const chiec = (a: readonly ReconcileItem[]) => a.reduce((s, p) => s - p.deltaOnHand, 0);
+
+  return {
+    larkNoi0, larkIm, khoKhac, larkImThatSu,
+    chiecMatLarkNoi0: chiec(larkNoi0),
+    chiecMatLarkIm: chiec(larkIm),
+  };
+}
+
 /** Trần dòng bị ĐẶT VỀ 0 trong một lượt: tối thiểu 20, hoặc 25% số dòng đang có tồn. */
 export const TRAN_VE_0_TOI_THIEU = 20;
 export const TRAN_VE_0_TY_LE = 0.25;
@@ -132,13 +193,25 @@ export function lyDoTuChoiGhi(
   larkRows: number,
   plan: readonly ReconcileItem[],
   current: readonly CurrentInv[],
+  /** Bản đồ tồn Lark — có thì thông điệp NÓI RA nguyên nhân thay vì chỉ "bất thường". */
+  lark?: ReadonlyMap<string, { qty: number }>,
 ): string | null {
   if (larkRows === 0) return 'Lark trả 0 dòng — nghi lỗi đọc bảng/đổi cột, KHÔNG ghi để khỏi xoá sạch tồn.';
   const dangCoTon = current.filter((c) => c.qtyOnHand > 0).length;
   const veKhong = plan.filter((p) => !p.isNew && p.targetOnHand === 0).length;
   const tran = Math.max(TRAN_VE_0_TOI_THIEU, Math.ceil(dangCoTon * TRAN_VE_0_TY_LE));
   if (veKhong > tran) {
-    return `Kế hoạch đặt ${veKhong}/${dangCoTon} dòng tồn về 0 (trần ${tran}) — quá bất thường, KHÔNG ghi. Xem kế hoạch chạy thử rồi quyết.`;
+    let vi = '';
+    if (lark) {
+      const t = phanLoaiVeKhong(lark, plan);
+      // Nói ra NGUYÊN NHÂN ngay trong lý do từ chối: bản cũ chỉ nói "bất thường, xem kế
+      // hoạch rồi quyết", mà kế hoạch không chứa phần tách này nên không ai quyết được.
+      vi = ` Trong đó: ${t.larkNoi0.length} dòng Lark NÓI bằng 0 (${t.chiecMatLarkNoi0} chiếc — tin được, SMS cũ)`
+        + ` · ${t.larkIm.length} dòng Lark KHÔNG nhắc tới (${t.chiecMatLarkIm} chiếc — chưa kết luận được`
+        + `, gồm ${t.khoKhac.length} dòng có SKU đó ở KHO KHÁC trên Lark ⇒ nghi lệch ánh xạ kho`
+        + ` và ${t.larkImThatSu.length} dòng SKU không hề xuất hiện).`;
+    }
+    return `Kế hoạch đặt ${veKhong}/${dangCoTon} dòng tồn về 0 (trần ${tran}) — quá bất thường, KHÔNG ghi.${vi} Xem kế hoạch chạy thử rồi quyết.`;
   }
   return null;
 }

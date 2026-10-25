@@ -9,6 +9,7 @@ import {
   larkNumber,
   larkStockCounts,
   lyDoTuChoiGhi,
+  phanLoaiVeKhong,
   reconcilePlan,
   type CurrentInv,
   type LarkStockRow,
@@ -28,6 +29,24 @@ export interface WarehouseSyncSummary {
   tuChoi?: string;
   /** 15 dòng lệch lớn nhất — để người xem kế hoạch chạy thử mà không cần mở DB. */
   viDu: Array<{ sku: string; kho: string; truoc: number; sau: number; chamTran: boolean }>;
+  /**
+   * Nhóm "về 0" tách theo NGUYÊN NHÂN — phần quyết định được việc có nên ghi hay không.
+   *
+   * `reconcilePlan` coi dòng VẮNG trên Lark là đích 0, nên `zeroed` một mình trộn hai
+   * nguyên nhân khác hẳn nhau. Không có phần tách này thì chốt chặn bảo người ta "xem kế
+   * hoạch rồi quyết" mà kế hoạch không chứa cái để quyết (đo 25/10/2026: chốt chặn đã từ
+   * chối ghi suốt nhiều giờ, 351/882 dòng, không ai biết nguyên nhân nào).
+   */
+  veKhong: {
+    larkNoi0: number;
+    larkIm: number;
+    khoKhac: number;
+    larkImThatSu: number;
+    chiecMatLarkNoi0: number;
+    chiecMatLarkIm: number;
+    /** 10 dòng nghi LỆCH ÁNH XẠ KHO, kèm kho mà Lark đang ghi — soi được ngay từ /f/jobs. */
+    viDuKhoKhac: Array<{ sku: string; khoSms: string; smsDangCo: number; larkOKho: string }>;
+  };
 }
 
 export async function syncWarehouseFromLark(
@@ -77,8 +96,25 @@ export async function syncWarehouseFromLark(
         sku: p.sku, kho: p.warehouseCode, truoc: p.targetOnHand - p.deltaOnHand,
         sau: p.targetOnHand, chamTran: p.cappedByReserved,
       })),
+    veKhong: (() => {
+      const t = phanLoaiVeKhong(lark, plan);
+      const khoCua = (sku: string) => [...lark.keys()]
+        .filter((k) => k.slice(0, k.lastIndexOf('|')) === sku)
+        .map((k) => `${k.slice(k.lastIndexOf('|') + 1)}=${lark.get(k)!.qty}`).join(' ');
+      return {
+        larkNoi0: t.larkNoi0.length,
+        larkIm: t.larkIm.length,
+        khoKhac: t.khoKhac.length,
+        larkImThatSu: t.larkImThatSu.length,
+        chiecMatLarkNoi0: t.chiecMatLarkNoi0,
+        chiecMatLarkIm: t.chiecMatLarkIm,
+        viDuKhoKhac: t.khoKhac.slice(0, 10).map((p) => ({
+          sku: p.sku, khoSms: p.warehouseCode, smsDangCo: -p.deltaOnHand, larkOKho: khoCua(p.sku),
+        })),
+      };
+    })(),
   };
-  const tuChoi = lyDoTuChoiGhi(rows.length, plan, current);
+  const tuChoi = lyDoTuChoiGhi(rows.length, plan, current, lark);
   if (tuChoi) base.tuChoi = tuChoi;
 
   if (dryRun) {
