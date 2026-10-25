@@ -20,6 +20,13 @@
  *     có 2 (thiếu `warehouse.receiving:edit`). Nên gỡ KHÔNG đổi quyền thực tế một chút nào —
  *     nó chỉ bỏ một tín hiệu sai trên màn phân quyền. Giữ `:view` để họ còn xem được hàng
  *     đã về chưa trước khi lên vận đơn.
+ *  3. `logistics` không quản bảng giá carrier → gỡ `carrier_rates:create` (CEO 25/10/2026,
+ *     lượt sau). Cùng loại tích chết như (2): vai này có 1/3 khoá nên `manage_carrier_rates`
+ *     đã là `false`, gỡ đi vẫn `false`. Kiểm trước khi ghi: KHÔNG chỗ nào trong app kiểm
+ *     trực tiếp khoá `carrier_rates:*` bằng `can()` — chúng chỉ đi qua shim, nên không có
+ *     đường nào để tích này có tác dụng riêng. Giữ `carrier_rates:view` (họ còn vào xem được
+ *     bảng giá) và giữ nguyên cả ba khoá `carrier_rates.invoices:*` — đó là việc hoá đơn
+ *     THẬT của họ, `manage_shipping_invoices` phải còn `CÓ` sau lượt này.
  */
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
@@ -31,6 +38,7 @@ import { hasPermission, type Permission } from '@/lib/auth/rbac';
 const VIEC: Array<{ vai: string; go: string; soi: Permission[] }> = [
   { vai: 'operator', go: 'markets:apply', soi: ['apply_markets', 'view_markets_history', 'manage_markets_template'] },
   { vai: 'logistics', go: 'warehouse.receiving:create', soi: ['view_receiving', 'manage_receiving'] },
+  { vai: 'logistics', go: 'carrier_rates:create', soi: ['view_carrier_rates', 'manage_carrier_rates', 'manage_shipping_invoices'] },
 ];
 
 async function main(): Promise<void> {
