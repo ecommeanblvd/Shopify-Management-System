@@ -208,6 +208,13 @@ export interface TomTatGuiHangNgay {
   boQua?: string;
   dong?: number;
   chiec?: number;
+  /**
+   * Số dòng SKU `-sale` đã LOẠI. Phải có trong tóm tắt, vì nếu không thì không cách nào
+   * biết từ `job_runs` là lượt đó có chạy phần loại hay không — 26/10/2026 đúng chuyện đó
+   * xảy ra: lượt cron 05:23 báo 520 dòng, và chỉ sau khi đo tay mới biết 520 = 513 + 7, tức
+   * nó chạy ảnh deploy CŨ và đã ghi đè bản đã sửa bên MMP.
+   */
+  dongSaleBoRa?: number;
   dongLanTruoc?: number | null;
   snapshotId?: string;
   http?: number;
@@ -248,13 +255,17 @@ export async function chayGuiResaleHangNgay(): Promise<TomTatGuiHangNgay> {
   const chan = lyDoKhongGui(anh.items.length, mocSo);
   if (chan) {
     // Trả qua `errors` để lượt chạy đỏ trên /f/jobs — người xem rồi quyết, thay vì tự gửi.
-    return { dong: anh.items.length, chiec: thongKe.chiec, dongLanTruoc: mocSo, errors: [chan] };
+    return {
+      dong: anh.items.length, chiec: thongKe.chiec, dongSaleBoRa: thongKe.dongSaleBoRa,
+      dongLanTruoc: mocSo, errors: [chan],
+    };
   }
 
   const r = await guiAnhChupResale(anh, url);
   return {
     dong: anh.items.length,
     chiec: thongKe.chiec,
+    dongSaleBoRa: thongKe.dongSaleBoRa,
     dongLanTruoc: mocSo,
     snapshotId: anh.snapshotId,
     http: r.http,
