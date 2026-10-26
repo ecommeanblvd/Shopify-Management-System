@@ -124,3 +124,32 @@ railway run --service Shopify-Management-System npx tsx scripts/du-lieu/day-ton-
 # gửi thật toàn bộ
 ... --ap-dung
 ```
+
+## Cờ gửi lại một lượt — `MMP_RESALE_GUI_LAI`
+
+Job gửi có chốt **mỗi ngày một lần** (`nenGuiHomNay`, giờ nghiệp vụ `Asia/Bangkok`). Khi MMP
+đang giữ một ảnh chụp **sai** và không chờ được tới lượt hôm sau, đặt biến trên Railway:
+
+```
+MMP_RESALE_GUI_LAI=gui-lai:<YYYY-MM-DD>:<số dòng lần gửi thành công trước>
+```
+
+Ví dụ `gui-lai:2026-10-26:520`. Lượt cron `:15` kế tiếp sẽ gửi, và tóm tắt `job_runs` mang
+`coGuiLai: true` để chứng minh lượt đó đi bằng cờ.
+
+**Hết hạn theo HAI đường độc lập** — vì đây là ghi ra ngoài công ty nên không được có cờ nằm
+lại vô hạn:
+
+1. **Theo SỐ.** Chỉ khớp khi số bằng số dòng của lần gửi thành công **trước**. Gửi xong số đó
+   đổi ⇒ cùng giá trị cờ không còn khớp ⇒ chết sau **đúng một lượt**. Và muốn gõ đúng số thì
+   phải biết MMP đang giữ bản bao nhiêu dòng, tức đã thật sự đi đọc.
+2. **Theo NGÀY.** Chỉ khớp khi ngày bằng ngày nghiệp vụ hôm nay. Nên ngay cả trong ca hiếm
+   "số mới trùng số cũ" thì cờ cũng chết lúc nửa đêm.
+
+Khác với cờ `WH_TON_KHO_LARK=ghi-mot-luot:<n>` của đồng bộ tồn: cờ kia tự hết hạn chỉ bằng
+một số, vì số dòng-về-0 tụt về gần 0 sau lượt thành công. Ở đây số dòng ảnh chụp **ngày nào
+cũng xấp xỉ nhau**, nên một cờ chỉ-số sẽ không hết hạn — để quên là cron mỗi giờ gửi lại.
+
+**Fail-closed:** sai dạng, ngày lạ, số âm/thập phân/chữ, hoặc chưa có lần gửi nào trước đều
+KHÔNG mở cờ. Và cờ này **chỉ** mở chốt mỗi-ngày — chốt chống xoá sạch (`lyDoKhongGui`: 0 dòng,
+hoặc tụt quá nửa so với lần trước) vẫn chạy nguyên.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOAI_RESALE, chonVariantId, laLoaiResale, laSkuSale, skuGoc, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { LOAI_RESALE, chonVariantId, coCoGuiLai, laLoaiResale, laSkuSale, skuGoc, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
 
 const lo = (sku: string, kho: string, ngay: string, sl: number, loai: string): LoNhap =>
   ({ sku, kho, ngayNhapKho: ngay, soLuong: sl, loaiTon: loai });
@@ -234,5 +234,48 @@ describe('laSkuSale / skuGoc — nhận diện đuôi -sale', () => {
   it('đuôi LẶP chỉ bỏ một lớp', () => {
     expect(skuGoc('X-sale-Sale')).toBe('X-sale');
     expect(laSkuSale('X-sale-Sale')).toBe(true);
+  });
+});
+
+describe('coCoGuiLai — cờ gửi LẠI một lượt, hết hạn theo HAI đường độc lập', () => {
+  // 2026-10-26T12:15Z = 19:15 giờ Bangkok ⇒ ngày nghiệp vụ 2026-10-26.
+  const trongNgay = new Date('2026-10-26T12:15:00Z');
+
+  it('mở chốt khi ngày VÀ số đều khớp', () => {
+    expect(coCoGuiLai('gui-lai:2026-10-26:520', trongNgay, 520)).toBe(true);
+  });
+
+  it('HẾT HẠN THEO SỐ: gửi xong số lần trước đổi thành 513, cùng cờ đó không còn mở', () => {
+    expect(coCoGuiLai('gui-lai:2026-10-26:520', trongNgay, 513)).toBe(false);
+  });
+
+  it('HẾT HẠN THEO NGÀY: cờ của hôm qua không mở được hôm nay', () => {
+    expect(coCoGuiLai('gui-lai:2026-10-25:520', trongNgay, 520)).toBe(false);
+  });
+
+  it('ngày tính theo giờ NGHIỆP VỤ Bangkok, không theo UTC', () => {
+    // 2026-10-26T18:30Z = 01:30 ngày 27 ở Bangkok ⇒ cờ ghi 26 đã hết hạn, cờ ghi 27 còn sống.
+    const sauNuaDemVn = new Date('2026-10-26T18:30:00Z');
+    expect(coCoGuiLai('gui-lai:2026-10-26:520', sauNuaDemVn, 520)).toBe(false);
+    expect(coCoGuiLai('gui-lai:2026-10-27:520', sauNuaDemVn, 520)).toBe(true);
+  });
+
+  it('FAIL-CLOSED: biến trống, lạ, thiếu mốc, thừa mốc, số xấu đều KHÔNG mở', () => {
+    for (const v of [
+      undefined, '', '   ', 'ghi-that', 'gui-lai', 'gui-lai:', 'gui-lai:2026-10-26',
+      'gui-lai:2026-10-26:520:1', 'gui-lai:2026-10-26:52x', 'gui-lai:2026-10-26:-520',
+      'gui-lai:2026-10-26:520.0', 'gui-lai:26-10-2026:520', 'gui-lai:2026-10-26: 520',
+    ]) {
+      expect(coCoGuiLai(v, trongNgay, 520), `giá trị ${JSON.stringify(v)}`).toBe(false);
+    }
+  });
+
+  it('chưa có lần gửi nào trước thì KHÔNG mở — không có số để neo vào', () => {
+    expect(coCoGuiLai('gui-lai:2026-10-26:520', trongNgay, null)).toBe(false);
+    expect(coCoGuiLai('gui-lai:2026-10-26:0', trongNgay, null)).toBe(false);
+  });
+
+  it('bỏ khoảng trắng hai đầu và không phân biệt hoa thường', () => {
+    expect(coCoGuiLai('  GUI-LAI:2026-10-26:520  ', trongNgay, 520)).toBe(true);
   });
 });

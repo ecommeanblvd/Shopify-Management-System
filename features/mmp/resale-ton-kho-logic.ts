@@ -106,6 +106,52 @@ export function phanLoFifo(ton: readonly TonHienTai[], loNhap: readonly LoNhap[]
   return ra;
 }
 
+/** Tiền tố cờ gửi-lại-một-lượt (biến `MMP_RESALE_GUI_LAI`). */
+const TIEN_TO_GUI_LAI = 'gui-lai:';
+
+/**
+ * THUẦN: cờ `MMP_RESALE_GUI_LAI` có cho phép gửi LẠI trong hôm nay, bỏ qua chốt mỗi-ngày?
+ *
+ * Dạng: `gui-lai:<YYYY-MM-DD>:<số dòng lần trước>` — ví dụ `gui-lai:2026-10-26:520`.
+ *
+ * Vì sao cờ phải mang theo CẢ NGÀY VÀ SỐ, trong khi cờ đồng bộ tồn (`ghi-mot-luot:<n>`) chỉ
+ * cần một số: cờ kia tự hết hạn vì số dòng-về-0 tụt về gần 0 sau lượt thành công. Ở đây số
+ * dòng ảnh chụp **ngày nào cũng xấp xỉ nhau** (513 hôm nay, 513 mai), nên một cờ chỉ-số sẽ
+ * KHÔNG hết hạn — để quên là cron mỗi giờ gửi lại suốt ngày. Đây là ghi RA NGOÀI công ty nên
+ * phải có hạn chắc chắn, và hai đường hết hạn độc lập:
+ *
+ *  1. **Theo SỐ:** chỉ khớp khi `n` đúng bằng số dòng của lần gửi thành công TRƯỚC. Gửi xong,
+ *     số đó đổi ⇒ cùng giá trị cờ không còn khớp ⇒ chết sau ĐÚNG MỘT lượt. Đồng thời buộc
+ *     người đặt cờ phải biết MMP đang giữ bản bao nhiêu dòng, tức đã thật sự đi đọc.
+ *  2. **Theo NGÀY:** chỉ khớp khi ngày bằng ngày NGHIỆP VỤ hôm nay (`Asia/Bangkok`, cùng múi
+ *     với `nenGuiHomNay`). Nên ngay cả trong ca hiếm "số mới trùng số cũ" thì cờ cũng chết
+ *     lúc nửa đêm, không nằm lại vô hạn.
+ *
+ * FAIL-CLOSED: thiếu mốc, sai dạng, ngày lạ, số âm/thập phân/chữ, hoặc chưa có lần gửi nào
+ * trước (`dongLanTruoc === null`) đều trả `false`. Cờ này chỉ mở chốt mỗi-ngày; chốt chống
+ * xoá sạch (`lyDoKhongGui`) vẫn chạy nguyên.
+ */
+export function coCoGuiLai(
+  env: string | undefined,
+  bayGio: Date,
+  dongLanTruoc: number | null,
+): boolean {
+  /* Chốt này KHÔNG có bài test nào giết được, và đó là đúng — đã chạy đột biến 26/10/2026:
+   * bỏ nó đi thì luồng vẫn chạy tới `Number(so) === dongLanTruoc`, mà `520 === null` vẫn
+   * `false`. Nó chỉ đổi kết quả khi `dongLanTruoc` lớn tới mức không còn là số nguyên an
+   * toàn — bất khả vì trần ảnh chụp là 20.000 dòng. Giữ lại làm lời khai fail-closed. */
+  if (dongLanTruoc === null || !Number.isSafeInteger(dongLanTruoc)) return false;
+  const v = (env ?? '').trim().toLowerCase();
+  if (!v.startsWith(TIEN_TO_GUI_LAI)) return false;
+  const phan = v.slice(TIEN_TO_GUI_LAI.length).split(':');
+  if (phan.length !== 2) return false;
+  const [ngay, so] = phan;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ngay)) return false;
+  if (ngay !== bayGio.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })) return false;
+  if (!/^\d+$/.test(so)) return false;
+  return Number(so) === dongLanTruoc;
+}
+
 /** Tỷ lệ tụt dòng tối đa so với lần gửi thành công trước, trước khi từ chối gửi. */
 export const TRAN_TUT_TY_LE = 0.5;
 

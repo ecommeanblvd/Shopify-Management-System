@@ -216,6 +216,13 @@ export interface TomTatGuiHangNgay {
    */
   dongSaleBoRa?: number;
   dongLanTruoc?: number | null;
+  /**
+   * `true` khi lượt này đi bằng CỜ `MMP_RESALE_GUI_LAI`, không bằng chốt mỗi-ngày. Phải khai
+   * ở đây chứ không chỉ spread vào: spread không bị TypeScript kiểm thuộc tính thừa, nên một
+   * trường không khai vẫn biên dịch xanh mà không ai thấy nó tồn tại. Cùng lý do với
+   * `dongSaleBoRa` — thứ cron làm phải tự khai đủ để kiểm được từ `job_runs`.
+   */
+  coGuiLai?: true;
   snapshotId?: string;
   http?: number;
   than?: string;
@@ -246,8 +253,13 @@ export async function chayGuiResaleHangNgay(): Promise<TomTatGuiHangNgay> {
     : NaN;
   const mocSo = Number.isFinite(dongLanTruoc) ? dongLanTruoc : null;
 
-  const { nenGuiHomNay, lyDoKhongGui } = await import('./resale-ton-kho-logic');
-  if (!nenGuiHomNay(lanCuoi, new Date())) {
+  const { nenGuiHomNay, lyDoKhongGui, coCoGuiLai } = await import('./resale-ton-kho-logic');
+  const bayGio = new Date();
+  /* Cờ gửi-lại-một-lượt: mở chốt mỗi-ngày khi MMP đang giữ một ảnh chụp SAI và không chờ
+   * được tới lượt hôm sau. Hết hạn theo cả NGÀY và SỐ — xem `coCoGuiLai`. Chốt chống xoá
+   * sạch (`lyDoKhongGui`) vẫn chạy nguyên bên dưới. */
+  const coGuiLai = coCoGuiLai(process.env.MMP_RESALE_GUI_LAI, bayGio, mocSo);
+  if (!nenGuiHomNay(lanCuoi, bayGio) && !coGuiLai) {
     return { boQua: `hôm nay đã gửi thành công lúc ${lanCuoi?.toISOString()}`, dongLanTruoc: mocSo };
   }
 
@@ -267,6 +279,8 @@ export async function chayGuiResaleHangNgay(): Promise<TomTatGuiHangNgay> {
     chiec: thongKe.chiec,
     dongSaleBoRa: thongKe.dongSaleBoRa,
     dongLanTruoc: mocSo,
+    // Nói ra khi lượt này đi bằng CỜ, không bằng chốt thường — để `job_runs` chứng minh được.
+    ...(coGuiLai ? { coGuiLai: true } : {}),
     snapshotId: anh.snapshotId,
     http: r.http,
     than: r.than,
