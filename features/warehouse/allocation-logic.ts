@@ -83,6 +83,25 @@ export function validateMovement(
 const DUOI_SALE = /-sale$/i;
 
 /**
+ * NHÃN NGUỒN HÀNG dán thêm vào SKU, không phải phần của SKU sản phẩm (CEO chốt 26/10/2026).
+ *
+ * Khai bằng TÊN, và đây là điểm sống còn: đo đoạn ngay trước `-Sale` thì gần như luôn là
+ * MÃ MÀU — WHI 110, BLA 72, PLA 40, BEI 39, PIN 35, CRE 29 — chỉ `PO` (26) là nhãn nguồn.
+ * Bóc "thêm một đoạn" sẽ ăn mã màu và trỏ sang SẢN PHẨM KHÁC, tức lấy sai hàng ra khỏi kho.
+ * Thêm nhãn mới vào đây chỉ khi đã ĐO rằng nó là nhãn, không phải một phần SKU.
+ */
+const NHAN_NGUON = ['PO'] as const;
+
+/** Bỏ một nhãn nguồn ở cuối, nếu có. Khớp theo tên nên `-POP` KHÔNG bị coi là `-PO`. */
+function boNhanNguon(sku: string): string {
+  for (const nhan of NHAN_NGUON) {
+    const re = new RegExp(`-${nhan}$`, 'i');
+    if (re.test(sku)) return sku.replace(re, '');
+  }
+  return sku;
+}
+
+/**
  * THUẦN: danh sách SKU cần thử khi tìm tồn cho một dòng đơn, theo THỨ TỰ ưu tiên.
  *
  * Dòng đơn mang SKU `-sale` phải tìm được tồn của **SKU GỐC**: đó là CÙNG MỘT CHIẾC trong
@@ -96,8 +115,13 @@ const DUOI_SALE = /-sale$/i;
  * chiếc đó; chỉ khi không có mới mượn tồn của SKU gốc.
  */
 export function skuUngVien(sku: string): string[] {
-  const goc = sku.replace(DUOI_SALE, '');
-  return goc === sku ? [sku] : [sku, goc];
+  const ra = [sku];
+  // Bóc theo đúng thứ tự xuất hiện trong SKU: `-sale` ngoài cùng, rồi nhãn nguồn.
+  const boSale = sku.replace(DUOI_SALE, '');
+  if (boSale !== sku) ra.push(boSale);
+  const boNhan = boNhanNguon(ra[ra.length - 1]!);
+  if (boNhan !== ra[ra.length - 1]) ra.push(boNhan);
+  return ra;
 }
 
 /** Món tồn tối thiểu mà allocator cần để chọn. */

@@ -117,10 +117,16 @@ describe('skuUngVien — dòng đơn -sale phải tìm được tồn của SKU 
     ]);
   });
 
-  /** Ca thật: `...-PO-Sale` chỉ bóc một lớp, không ăn `-PO`. */
-  it('chỉ bóc một lớp đuôi', () => {
+  /* Bài này ĐÃ SỬA 26/10/2026, và lý do đáng ghi lại: bản đầu ghim rằng `...-PO-Sale` chỉ
+   * bóc một lớp và "không ăn `-PO`" — ghim ĐÚNG cú pháp nhưng SAI nghiệp vụ. `-PO` là nhãn
+   * nguồn hàng, không phải phần của SKU (CEO chốt), và đo được `X-PO` KHÔNG tồn tại ở đâu
+   * nên bóc một lớp tìm ra 0/21 SKU. Bài ghim cũ chính là thứ đã bảo vệ cái sai đó: khi sửa
+   * luật cho đúng thì NÓ đỏ. Đúng D-251 luật 4. */
+  it('-PO-Sale bóc cả hai lớp (nhãn nguồn + đuôi sale)', () => {
     expect(skuUngVien('Denio-DN0774+PKDN0729-S-NALM-PLA-PO-Sale')).toEqual([
-      'Denio-DN0774+PKDN0729-S-NALM-PLA-PO-Sale', 'Denio-DN0774+PKDN0729-S-NALM-PLA-PO',
+      'Denio-DN0774+PKDN0729-S-NALM-PLA-PO-Sale',
+      'Denio-DN0774+PKDN0729-S-NALM-PLA-PO',
+      'Denio-DN0774+PKDN0729-S-NALM-PLA',
     ]);
   });
 
@@ -168,5 +174,46 @@ describe('timUngVienCoMon — dừng ở ứng viên ĐẦU TIÊN có món, và 
     const r = await timUngVienCoMon(['X'], async (s) => { daTra.push(s); return [mon('a')]; });
     expect(r.sku).toBe('X');
     expect(daTra).toEqual(['X']);
+  });
+});
+
+describe('skuUngVien — nhãn nguồn -PO bóc theo TÊN, không bóc theo đoạn', () => {
+  /* CEO chốt 26/10/2026: `-PO` là NHÃN NGUỒN HÀNG (hàng đặt PO), không phải phần của SKU.
+   * Đo: 26/628 dòng `-Sale` có đuôi `-PO-Sale`, và 23/26 trong đó mang vendor brand gốc.
+   * Bóc đúng `-Sale` chỉ ra `X-PO` — thứ KHÔNG tồn tại ở đâu (0 dòng trong
+   * `warehouse_inventory`, 0 trong `lark_wh_inventory`) nên tìm được 0/21 SKU. Bóc cả
+   * `-PO-Sale` thì tìm được 13/21.
+   *
+   * NHƯNG phải bóc theo TÊN, không theo đoạn: đo đoạn ngay trước `-Sale` thì gần như luôn là
+   * MÃ MÀU (WHI 110, BLA 72, PLA 40, BEI 39, PIN 35, CRE 29...), chỉ `PO` (26) là nhãn
+   * nguồn. Bóc "thêm một đoạn" sẽ ăn mã màu và trỏ sang SẢN PHẨM KHÁC — lấy sai hàng ra kho. */
+  it('MÃ MÀU không bị bóc', () => {
+    expect(skuUngVien('Denio-DN0813-S-WWHI-PLA-Sale')).toEqual([
+      'Denio-DN0813-S-WWHI-PLA-Sale', 'Denio-DN0813-S-WWHI-PLA',
+    ]);
+    expect(skuUngVien('X-WHI-Sale')).toEqual(['X-WHI-Sale', 'X-WHI']);
+    expect(skuUngVien('X-BLA-Sale')).toEqual(['X-BLA-Sale', 'X-BLA']);
+  });
+
+  it('-PO-Sale ra BA ứng viên, nguyên văn → bỏ Sale → bỏ nhãn nguồn', () => {
+    expect(skuUngVien('MaisonDCP-MDC07DS25S005-SW002-L-CRE-PO-Sale')).toEqual([
+      'MaisonDCP-MDC07DS25S005-SW002-L-CRE-PO-Sale',
+      'MaisonDCP-MDC07DS25S005-SW002-L-CRE-PO',
+      'MaisonDCP-MDC07DS25S005-SW002-L-CRE',
+    ]);
+  });
+
+  /** `-PO` đứng một mình cũng là nhãn nguồn (đo: 3 dòng đơn như vậy). */
+  it('-PO không kèm Sale cũng bóc', () => {
+    expect(skuUngVien('X-CRE-PO')).toEqual(['X-CRE-PO', 'X-CRE']);
+  });
+
+  it('không phân biệt hoa thường cho cả hai nhãn', () => {
+    expect(skuUngVien('X-CRE-po-SALE')).toEqual(['X-CRE-po-SALE', 'X-CRE-po', 'X-CRE']);
+  });
+
+  /** Đoạn chỉ TRÔNG giống nhãn thì không bóc — `-POP` không phải `-PO`. */
+  it('đoạn trông giống nhãn nhưng khác thì không bóc', () => {
+    expect(skuUngVien('X-POP-Sale')).toEqual(['X-POP-Sale', 'X-POP']);
   });
 });
