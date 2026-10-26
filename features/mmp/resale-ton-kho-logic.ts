@@ -105,3 +105,47 @@ export function phanLoFifo(ton: readonly TonHienTai[], loNhap: readonly LoNhap[]
   }
   return ra;
 }
+
+/** Tỷ lệ tụt dòng tối đa so với lần gửi thành công trước, trước khi từ chối gửi. */
+export const TRAN_TUT_TY_LE = 0.5;
+
+/**
+ * THUẦN: hôm nay (giờ NGHIỆP VỤ) đã gửi thành công chưa?
+ *
+ * Job gửi nằm trong cron chạy MỖI GIỜ (`sync Lark operation`, `15 * * * *`) vì ảnh chụp phải
+ * dựng từ tồn VỪA được đồng bộ trong cùng tiến trình — đặt nó ở một service daily riêng thì
+ * không có gì bảo đảm thứ tự đó. Nên cadence "mỗi ngày" do chốt này quyết, không do lịch cron.
+ *
+ * Kiểm "đã gửi THÀNH CÔNG" chứ không phải "đã chạy": lượt lỗi mạng sẽ được giờ sau thử lại và
+ * tự khỏi, không cần ai bấm. Hợp đồng cho phép — mỗi lượt mang `snapshotId` mới, và MMP áp
+ * ảnh mới nhất.
+ *
+ * Ngày theo giờ nghiệp vụ (`Asia/Bangkok`): "mỗi ngày" là ngày làm việc của kho. Dùng mốc UTC
+ * sẽ gửi hai lần trong một ngày làm việc ở khoảng 00:00–07:00 giờ VN.
+ */
+export function nenGuiHomNay(lanCuoiThanhCong: Date | null, bayGio: Date): boolean {
+  if (!lanCuoiThanhCong) return true;
+  const ngay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  return ngay(lanCuoiThanhCong) !== ngay(bayGio);
+}
+
+/**
+ * THUẦN: lý do KHÔNG gửi ảnh chụp, hoặc `null` nếu an toàn.
+ *
+ * Vì sao cần, và vì sao nó khác mọi cổng khác trong repo: ảnh chụp mới **THAY HẲN** ảnh
+ * trước — biến thể không có trong ảnh được MMP hiểu là **tồn 0**. Nên một lượt đọc hụt (Lark
+ * lỗi giữa chừng, view bị sửa bộ lọc, một brand tạm biến mất khỏi sổ nhập) không chỉ sai một
+ * dòng: nó **xoá cả danh sách resale bên đối tác**, và nhân sự MMP thấy hàng biến mất khỏi
+ * màn Resale mà không biết vì sao. Cùng họ với `lyDoTuChoiGhi` của tồn kho — và cùng lý do:
+ * "không đọc được" trông y hệt "không còn hàng".
+ */
+export function lyDoKhongGui(soDong: number, soDongLanTruoc: number | null): string | null {
+  if (soDong === 0) {
+    return 'Ảnh chụp 0 dòng — nghi lỗi đọc sổ nhập/tồn. KHÔNG gửi, vì ảnh rỗng sẽ xoá sạch danh sách resale bên MMP.';
+  }
+  if (soDongLanTruoc != null && soDongLanTruoc > 0 && soDong < soDongLanTruoc * (1 - TRAN_TUT_TY_LE)) {
+    return `Ảnh chụp ${soDong} dòng, tụt quá nửa so với lần gửi trước (${soDongLanTruoc}) — KHÔNG gửi.`
+      + ' Chạy script đối soát xem vì sao rồi gửi tay nếu đúng là tồn giảm thật.';
+  }
+  return null;
+}

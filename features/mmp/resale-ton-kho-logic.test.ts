@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOAI_RESALE, laLoaiResale, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { LOAI_RESALE, laLoaiResale, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
 
 const lo = (sku: string, kho: string, ngay: string, sl: number, loai: string): LoNhap =>
   ({ sku, kho, ngayNhapKho: ngay, soLuong: sl, loaiTon: loai });
@@ -105,5 +105,62 @@ describe('phanLoFifo — chia tồn hiện tại vào các lô, CŨ TRƯỚC', (
       lo('A', 'GVM', '2026-01-05', 3, 'Tồn kho (PO)'),
     ]);
     expect(r).toEqual([{ sku: 'A', kho: 'GVM', ngayNhapKho: '2026-01-05', soLuong: 4, loaiTon: 'Tồn kho (PO)' }]);
+  });
+});
+
+describe('nenGuiHomNay — chốt MỖI NGÀY MỘT LẦN, nhưng lỗi thì giờ sau thử lại', () => {
+  /* Job gửi resale nằm trong cron CHẠY MỖI GIỜ (`sync Lark operation`, `15 * * * *`) vì
+   * ảnh chụp phải dựng từ tồn VỪA đồng bộ trong cùng tiến trình. Nên cadence "mỗi ngày"
+   * phải do chốt này quyết, không phải do lịch cron.
+   *
+   * Chốt kiểm "hôm nay đã gửi THÀNH CÔNG chưa", KHÔNG phải "đã chạy chưa" — để lượt lỗi
+   * mạng được giờ sau thử lại, tự khỏi mà không cần ai bấm. Ngày tính theo GIỜ NGHIỆP VỤ
+   * (Asia/Bangkok): "mỗi ngày" là ngày làm việc của kho, không phải ngày UTC. */
+  const t = (iso: string) => new Date(iso);
+
+  it('chưa gửi lần nào → gửi', () => {
+    expect(nenGuiHomNay(null, t('2026-10-26T03:00:00Z'))).toBe(true);
+  });
+
+  it('đã gửi thành công HÔM NAY (giờ VN) → bỏ qua', () => {
+    // 2026-10-26T01:00Z = 08:00 VN cùng ngày 26/10.
+    expect(nenGuiHomNay(t('2026-10-26T01:00:00Z'), t('2026-10-26T03:00:00Z'))).toBe(false);
+  });
+
+  it('lần cuối là HÔM QUA → gửi', () => {
+    expect(nenGuiHomNay(t('2026-10-25T03:00:00Z'), t('2026-10-26T03:00:00Z'))).toBe(true);
+  });
+
+  /* Ranh giới ngày theo giờ VN, không theo UTC: 2026-10-25T18:00Z là 01:00 VN ngày 26 —
+   * tức ĐÃ là hôm nay theo giờ nghiệp vụ, dù UTC còn là hôm qua. Dùng mốc UTC ở đây sẽ
+   * gửi hai lần trong một ngày làm việc. */
+  it('ranh giới ngày tính theo giờ VN, không theo UTC', () => {
+    expect(nenGuiHomNay(t('2026-10-25T18:00:00Z'), t('2026-10-26T03:00:00Z'))).toBe(false);
+    expect(nenGuiHomNay(t('2026-10-25T16:00:00Z'), t('2026-10-26T03:00:00Z'))).toBe(true);
+  });
+});
+
+describe('lyDoKhongGui — chặn ảnh chụp làm MMP hiểu sai TOÀN BỘ tồn resale', () => {
+  /* Ảnh chụp mới THAY HẲN ảnh trước: biến thể không có trong ảnh được MMP hiểu là tồn 0.
+   * Nên một lượt đọc hụt (Lark lỗi giữa chừng, view đổi bộ lọc) không chỉ sai một dòng —
+   * nó xoá cả danh sách resale bên đối tác. Cùng họ với `lyDoTuChoiGhi` của tồn kho. */
+  it('0 dòng → KHÔNG gửi (đừng xoá sạch danh sách bên MMP)', () => {
+    expect(lyDoKhongGui(0, 500)).toMatch(/0 dòng/);
+  });
+
+  it('tụt quá nửa so với lần gửi thành công trước → KHÔNG gửi', () => {
+    expect(lyDoKhongGui(200, 527)).toMatch(/tụt/);
+  });
+
+  it('tụt vừa phải thì cho gửi', () => {
+    expect(lyDoKhongGui(400, 527)).toBeNull();
+    expect(lyDoKhongGui(527, 527)).toBeNull();
+    expect(lyDoKhongGui(900, 527)).toBeNull();
+  });
+
+  /** Lần gửi ĐẦU TIÊN chưa có mốc so — chỉ cần khác 0 là gửi. */
+  it('chưa có lần trước → chỉ cần khác 0', () => {
+    expect(lyDoKhongGui(5, null)).toBeNull();
+    expect(lyDoKhongGui(0, null)).toMatch(/0 dòng/);
   });
 });

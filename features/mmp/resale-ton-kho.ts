@@ -146,3 +146,65 @@ export async function guiAnhChupResale(anh: AnhChupResale, url: string): Promise
     return { ok: false, loi: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/** Khoá job trong `job_runs` — cũng là khoá để tra lần gửi thành công trước. */
+export const JOB_KEY_RESALE = 'gui-ton-kho-resale-mmp';
+
+export interface TomTatGuiHangNgay {
+  boQua?: string;
+  dong?: number;
+  chiec?: number;
+  dongLanTruoc?: number | null;
+  snapshotId?: string;
+  http?: number;
+  than?: string;
+  errors?: string[];
+}
+
+/**
+ * Việc chạy trong cron: MỖI NGÀY gửi một ảnh chụp, lỗi thì giờ sau tự thử lại.
+ *
+ * Đặt trong `sync-lark` NGAY SAU job đồng bộ tồn, để ảnh chụp dựng từ tồn vừa khớp trong
+ * cùng tiến trình. Cadence "mỗi ngày" do `nenGuiHomNay` quyết, không do lịch cron — xem
+ * chú thích của hàm đó.
+ */
+export async function chayGuiResaleHangNgay(): Promise<TomTatGuiHangNgay> {
+  const url = process.env.MMP_RESALE_TON_KHO_URL
+    ?? 'https://portal.meanblvd.com/api/integration/resale/ton-kho';
+
+  // Lần gửi THÀNH CÔNG gần nhất: cho cả chốt mỗi-ngày và mốc so số dòng.
+  const truoc = await db.execute(sql`
+    select finished_at, summary from job_runs
+    where job_key = ${JOB_KEY_RESALE} and status = 'ok' and (summary ->> 'dong') is not null
+    order by started_at desc limit 1`);
+  const hang = ((truoc as unknown as { rows?: Array<Record<string, unknown>> }).rows
+    ?? (truoc as unknown as Array<Record<string, unknown>>))?.[0];
+  const lanCuoi = hang?.finished_at ? new Date(String(hang.finished_at)) : null;
+  const dongLanTruoc = hang?.summary
+    ? Number((hang.summary as Record<string, unknown>).dong ?? NaN)
+    : NaN;
+  const mocSo = Number.isFinite(dongLanTruoc) ? dongLanTruoc : null;
+
+  const { nenGuiHomNay, lyDoKhongGui } = await import('./resale-ton-kho-logic');
+  if (!nenGuiHomNay(lanCuoi, new Date())) {
+    return { boQua: `hôm nay đã gửi thành công lúc ${lanCuoi?.toISOString()}`, dongLanTruoc: mocSo };
+  }
+
+  const { anh, thongKe } = await dungAnhChupResale();
+  const chan = lyDoKhongGui(anh.items.length, mocSo);
+  if (chan) {
+    // Trả qua `errors` để lượt chạy đỏ trên /f/jobs — người xem rồi quyết, thay vì tự gửi.
+    return { dong: anh.items.length, chiec: thongKe.chiec, dongLanTruoc: mocSo, errors: [chan] };
+  }
+
+  const r = await guiAnhChupResale(anh, url);
+  return {
+    dong: anh.items.length,
+    chiec: thongKe.chiec,
+    dongLanTruoc: mocSo,
+    snapshotId: anh.snapshotId,
+    http: r.http,
+    than: r.than,
+    ...(r.ok ? {} : { errors: [r.loi ?? `http ${r.http}: ${r.than ?? ''}`] }),
+  };
+}

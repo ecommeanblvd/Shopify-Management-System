@@ -22,6 +22,7 @@ import { syncBrandReceived } from '@/features/lark/sync-brand-received';
 import { chayCron, chayMotJob } from '@/features/jobs/run';
 import { syncWarehouseFromLark } from '@/features/warehouse/lark-sync';
 import { docCheDoTonKho, soVeKhongChoPhep } from '@/features/warehouse/che-do-ton-kho';
+import { chayGuiResaleHangNgay, JOB_KEY_RESALE } from '@/features/mmp/resale-ton-kho';
 import { dongBoWhInventory } from '@/features/kho-nhan/dong-bo-wh-lark';
 import { dongBoCanTuLark } from '@/features/kho-nhan/dong-bo-can-lark';
 import { dayCanLenLark } from '@/features/kho-nhan/day-can-lark';
@@ -128,6 +129,13 @@ async function main(): Promise<void> {
     // thì trần được nhường đúng lượt này, rồi TỰ HẾT HẠN (sau sync số đó không còn khớp).
     veKhongChoPhep: soVeKhongChoPhep(process.env.WH_TON_KHO_LARK),
   }), (tt) => {
+    const t = tt as { errors?: string[] };
+    return t.errors?.length ? t.errors[0].slice(0, 300) : null;
+  });
+  // Gửi ảnh chụp tồn RESALE sang MMP — NGAY SAU job đồng bộ tồn, để ảnh dựng từ tồn vừa
+  // khớp trong cùng tiến trình. Hợp đồng đòi MỖI NGÀY; cadence do `nenGuiHomNay` quyết nên
+  // 23/24 lượt chỉ là một truy vấn rồi bỏ qua, còn lượt gửi lỗi thì giờ sau tự thử lại.
+  await chayMotJob(JOB_KEY_RESALE, chayGuiResaleHangNgay, (tt) => {
     const t = tt as { errors?: string[] };
     return t.errors?.length ? t.errors[0].slice(0, 300) : null;
   });
