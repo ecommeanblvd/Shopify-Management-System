@@ -75,3 +75,53 @@ export function validateMovement(
   if (reserved > onHand) return { ok: false, error: `reserved (${reserved}) vượt on_hand (${onHand})` };
   return { ok: true };
 }
+
+/**
+ * Đuôi `-sale`: SKU bản BÁN LẠI mà MMP dựng trên Shopify (`<Global SKU>-sale`).
+ * KHÔNG phân biệt hoa thường — dữ liệu thật dùng `-Sale` chữ S hoa.
+ */
+const DUOI_SALE = /-sale$/i;
+
+/**
+ * THUẦN: danh sách SKU cần thử khi tìm tồn cho một dòng đơn, theo THỨ TỰ ưu tiên.
+ *
+ * Dòng đơn mang SKU `-sale` phải tìm được tồn của **SKU GỐC**: đó là CÙNG MỘT CHIẾC trong
+ * kho, không phải mặt hàng mới (hợp đồng `docs/mmp/resale-ton-kho.md`, mục "Đơn hàng SKU
+ * -sale"). Trước 26/10/2026 allocator tra đúng `X-Sale` trong `goods_receipt_items`, không
+ * thấy, rồi đánh `out_of_stock` — đo được **622/628 dòng** `-Sale` nằm im ở đó suốt hai năm,
+ * không dòng nào nối tới tồn. Và nó không kêu, vì `out_of_stock` là trạng thái hợp lệ.
+ *
+ * Thứ tự có nghĩa: thử **nguyên văn trước**. Có 16 dòng tồn ghi ngay dưới SKU `-Sale` (bản
+ * bán lại dựng tay từ 2024), nên nếu kho đã earmark đúng chiếc cho bản sale thì phải lấy
+ * chiếc đó; chỉ khi không có mới mượn tồn của SKU gốc.
+ */
+export function skuUngVien(sku: string): string[] {
+  const goc = sku.replace(DUOI_SALE, '');
+  return goc === sku ? [sku] : [sku, goc];
+}
+
+/** Món tồn tối thiểu mà allocator cần để chọn. */
+export interface MonTon { id: string; warehouseCode: string | null; receivedAt: Date | null }
+
+/**
+ * Tra lần lượt các SKU ứng viên, DỪNG ở cái đầu tiên có món; trả về cả SKU đó.
+ *
+ * Bóc ra khỏi `allocateLine` vì đây là phần dễ sai nhất của bản vá `-sale` và nó vốn nằm
+ * trong một transaction nên không test thuần nào với tới. Hai tính chất được ghim:
+ *
+ *  1. **SKU trả về là SKU của CHIẾC** — dùng để ghi sổ cái. Ghi theo SKU dòng đơn khi đang
+ *     mượn tồn SKU gốc sẽ dựng một dòng `warehouse_inventory` mới cho `X-sale` và giữ chỗ ở
+ *     đó, trong khi chiếc hàng bị trừ khỏi kho của `X` — **đếm trùng**.
+ *  2. **Dừng ở ứng viên đầu tiên có món** — không trộn hai SKU vào một lượt chọn, để FIFO
+ *     vẫn là FIFO trong phạm vi một SKU.
+ */
+export async function timUngVienCoMon(
+  ungVien: readonly string[],
+  tra: (sku: string) => Promise<MonTon[]>,
+): Promise<{ sku: string; items: MonTon[] }> {
+  for (const sku of ungVien) {
+    const items = await tra(sku);
+    if (items.length > 0) return { sku, items };
+  }
+  return { sku: ungVien[0]!, items: [] };
+}

@@ -3,7 +3,7 @@
  *  Best-effort: lỗi không được phá sync đơn — caller bọc try/catch. */
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
-import { pickItem, fifoOrder } from './allocation-logic';
+import { pickItem, fifoOrder, skuUngVien, timUngVienCoMon } from './allocation-logic';
 import { applyMovement } from './ledger';
 import { recomputeRollup } from '@/features/fulfillment/rollup';
 import { nenGiuHang } from './nen-giu-hang';
@@ -63,18 +63,29 @@ export async function allocateLine(lineId: string): Promise<boolean> {
     if (!peek || !peek.sku) return false;
     if (peek.status !== 'pending_check' && peek.status !== 'out_of_stock') return false;
 
-    // 2) Lock các MÓN in_stock của SKU (ORDER BY id để thứ tự lock nhiều món
-    //    luôn xác định — hai allocator lock cùng chiều, không vòng chờ).
-    const items = await tx.select({
-      id: schema.goodsReceiptItems.id,
-      warehouseCode: schema.goodsReceiptItems.currentWarehouseCode,
-      receivedAt: schema.goodsReceiptItems.qcCheckedAt,
-    }).from(schema.goodsReceiptItems)
-      .where(and(eq(schema.goodsReceiptItems.sku, peek.sku),
-                 eq(schema.goodsReceiptItems.stockStatus, 'in_stock'),
-                 isNotNull(schema.goodsReceiptItems.currentWarehouseCode)))
-      .orderBy(asc(schema.goodsReceiptItems.id))
-      .for('update');
+    /* 2) Lock các MÓN in_stock của SKU (ORDER BY id để thứ tự lock nhiều món
+     *    luôn xác định — hai allocator lock cùng chiều, không vòng chờ).
+     *
+     *    Thử theo THỨ TỰ ứng viên (`skuUngVien`): nguyên văn trước, rồi SKU GỐC nếu dòng
+     *    mang đuôi `-sale`. Dòng `-sale` là bản BÁN LẠI do MMP dựng trên Shopify, còn kho
+     *    giữ hàng dưới SKU gốc — cùng một chiếc. Đo 26/10/2026: 622/628 dòng `-Sale` nằm ở
+     *    `out_of_stock` vì allocator chỉ tra đúng SKU dòng đơn.
+     *
+     *    DỪNG ở ứng viên ĐẦU TIÊN có món: không trộn hai SKU vào một lượt chọn, để FIFO vẫn
+     *    là FIFO trong phạm vi một SKU. */
+    // `skuGhiSo` là SKU của CHIẾC được chọn — dùng để ghi sổ cái, KHÔNG phải SKU dòng đơn.
+    // Luật chọn + hai tính chất của nó ghim ở `timUngVienCoMon`.
+    const { sku: skuGhiSo, items } = await timUngVienCoMon(skuUngVien(peek.sku), (ungVien) =>
+      tx.select({
+        id: schema.goodsReceiptItems.id,
+        warehouseCode: schema.goodsReceiptItems.currentWarehouseCode,
+        receivedAt: schema.goodsReceiptItems.qcCheckedAt,
+      }).from(schema.goodsReceiptItems)
+        .where(and(eq(schema.goodsReceiptItems.sku, ungVien),
+                   eq(schema.goodsReceiptItems.stockStatus, 'in_stock'),
+                   isNotNull(schema.goodsReceiptItems.currentWarehouseCode)))
+        .orderBy(asc(schema.goodsReceiptItems.id))
+        .for('update'));
 
     // 3) Giờ mới lock dòng đơn và RE-VALIDATE — trạng thái/SKU có thể đã
     //    đổi giữa bước đọc không lock và bước lock.
@@ -112,7 +123,7 @@ export async function allocateLine(lineId: string): Promise<boolean> {
       .set({ stockStatus: 'allocated', fulfillmentLineId: line.id, updatedAt: sql`now()` })
       .where(eq(schema.goodsReceiptItems.id, chosen.id));
     const invId = await applyMovement(tx, {
-      sku: line.sku, warehouseCode: chosen.warehouseCode,
+      sku: skuGhiSo, warehouseCode: chosen.warehouseCode,
       deltaOnHand: 0, deltaReserved: 1,
       reason: 'auto_allocate', refType: 'item', refId: chosen.id,
       actor: ACTOR,
@@ -123,7 +134,12 @@ export async function allocateLine(lineId: string): Promise<boolean> {
     await tx.insert(schema.orderFulfillmentEvents).values({
       fulfillmentId: line.fulfillmentId, lineId: line.id,
       fromStatus: line.status, toStatus: 'in_stock',
-      actor: ACTOR, note: `Auto-pick kho ${chosen.warehouseCode}`,
+      // Nói ra khi MƯỢN tồn SKU gốc, để người soi nhật ký hiểu vì sao dòng `-sale` lại
+      // giữ chỗ ở một SKU khác.
+      actor: ACTOR,
+      note: skuGhiSo === line.sku
+        ? `Auto-pick kho ${chosen.warehouseCode}`
+        : `Auto-pick kho ${chosen.warehouseCode} — lấy tồn SKU gốc ${skuGhiSo} cho dòng bán lại ${line.sku}`,
     });
     // Dòng từng out_of_stock có thể đã mở brand request — huỷ bản chưa gửi/chưa confirm để khỏi bị sendPendingBrandRequests kéo ngược về brand_requested.
     await tx.delete(schema.brandOrderRequests)
