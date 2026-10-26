@@ -14,18 +14,27 @@
  * Trải từ 16/06 đến 30/09, 234 SKU. (38 chiếc `allocated` còn lại là ĐÚNG — dòng của chúng
  * đang `in_stock`, khớp `qty_reserved = 38`.)
  *
- * ## NGUYÊN NHÂN CHƯA XÁC LẬP ĐƯỢC — nói rõ để lượt sau không tin nhầm
+ * ## NGUYÊN NHÂN — ĐÃ XÁC LẬP BẰNG SỐ ĐO (26/10/2026)
  *
- * Tôi đã đoán sai HAI lần (26/10/2026): đầu tiên bảo là `features/packing/actions.ts:136`
- * (ship kiện) không chạm `goods_receipt_items` — nhưng đường đó CÓ đặt `shippedAt`, mà cả
- * 334 dòng `shipped` đều KHÔNG có `shipped_at`, `picked_at`, `shipment_id`. Rồi bảo là
- * `scripts/dong-ho-so-don-da-giao.ts:52` — nhưng chính script đó có chốt "chỉ đụng dòng KHÔNG
- * giữ hàng" và không chạm `goods_receipt_items` lần nào.
+ * `scripts/don-giu-hang-oan.ts` nhả giữ oan cho đơn đã giao: nó ghi `release_allocation`
+ * (`deltaReserved: -1`) ở SỔ TỔNG, đẩy dòng sang `shipped`, xoá `warehouse_inventory_id` và
+ * `allocated_qty` — nhưng **không chạm `goods_receipt_items`**. Bản ghi CHIẾC nằm lại ở
+ * `allocated` vĩnh viễn.
  *
- * Nên: **chưa biết cái gì tạo ra 311 chiếc này**, và vì vậy **chưa biết nó có tái diễn hay
- * không**. Ứng viên còn lại chưa loại: `scripts/don-giu-hang-oan.ts:113`. Lượt dọn này vẫn
- * an toàn vì bằng chứng "hàng đã đi" KHÔNG dựa vào nguyên nhân (xem chốt chặn dưới), nhưng
- * đừng coi nó là đã chữa gốc.
+ * Dự đoán đặt trước rồi đo, 311/311 đúng cả bốn: `release_allocation` của actor
+ * `system:don-giu-hang-oan` = 311 · dòng đã bị xoá `warehouse_inventory_id` + `allocated_qty`
+ * = 311 · dòng không có `shipped_at` = 311.
+ *
+ * Vì sao KHÔNG cảnh báo nào nổi lên: sổ tổng vẫn tự nhất quán (349 − 311 = 38 = `qty_reserved`).
+ * Hai sự thật đá nhau mà mỗi bên đều "đúng" theo cách đo của riêng nó.
+ *
+ * Đường `shipped` thường (`features/fulfillment/actions.ts:107`) không vớt hộ được: nó chốt
+ * `stock_status='picked'`, mà các chiếc này chưa bao giờ qua bước pick.
+ *
+ * ĐÃ VÁ GỐC 26/10/2026: `don-giu-hang-oan.ts` giờ nâng cả bản ghi chiếc trong cùng transaction.
+ * (Ba đoán trước của tôi đều SAI và đều đã bị loại bằng đo: `features/packing/actions.ts:136`
+ * có đặt `shippedAt` — 334/334 dòng lại không có; `scripts/dong-ho-so-don-da-giao.ts:52` chỉ
+ * đụng dòng KHÔNG giữ hàng; và không script nào trong hai đó chạm `goods_receipt_items`.)
  *
  * ## Chốt chặn: đòi SHOPIFY xác nhận đơn đã giao
  *

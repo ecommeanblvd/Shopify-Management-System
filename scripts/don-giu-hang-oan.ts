@@ -93,7 +93,7 @@ async function main() {
    * `applyMovement` là chỗ duy nhất được phép đụng sổ kho — không tự UPDATE tồn kho bằng tay. */
   const { applyMovement } = await import('@/features/warehouse/ledger');
   const { recomputeRollup } = await import('@/features/fulfillment/rollup');
-  const { eq } = await import('drizzle-orm');
+  const { and, eq } = await import('drizzle-orm');
   const { schema } = await import('@/db/client');
   let nha = 0, loi = 0;
   for (const r of giuOan.rows) {
@@ -109,6 +109,21 @@ async function main() {
           note: `Nhả giữ oan: đơn ${r.don} đã giao xong (${CA_CU ? 'ca cũ trước 30/09/2026' : 'lượt nạp lịch sử 30/09/2026'})`,
           actor: 'system:don-giu-hang-oan',
         });
+        /* Nâng cả BẢN GHI CHIẾC, không chỉ sổ tổng.
+         *
+         * Bản đầu của script chỉ nhả `qty_reserved` ở sổ tổng rồi đẩy dòng sang 'shipped', mà
+         * để `goods_receipt_items.stock_status` nằm lại ở 'allocated'. Đo 26/10/2026: đúng 311
+         * chiếc kẹt như vậy — 311/311 có `release_allocation` của actor này, 311/311 dòng đã bị
+         * xoá `warehouse_inventory_id`, 311/311 không có `shipped_at`. Sổ tổng thì vẫn nhất
+         * quán (349 − 311 = 38 = `qty_reserved`), nên KHÔNG có cảnh báo nào nổi lên: hai sự
+         * thật đá nhau mà cả hai đều "đúng" theo cách đo của riêng nó.
+         *
+         * Đường `shipped` thường (`features/fulfillment/actions.ts:107`) không vớt hộ được: nó
+         * chốt `stock_status='picked'`, mà các chiếc này chưa bao giờ qua bước pick. */
+        await tx.update(schema.goodsReceiptItems)
+          .set({ stockStatus: 'shipped', updatedAt: sql`now()` })
+          .where(and(eq(schema.goodsReceiptItems.fulfillmentLineId, String(r.dong_id)),
+                     eq(schema.goodsReceiptItems.stockStatus, 'allocated')));
         await tx.update(schema.orderFulfillmentLines)
           .set({ status: 'shipped', warehouseInventoryId: null, allocatedQty: 0, updatedAt: sql`now()` })
           .where(eq(schema.orderFulfillmentLines.id, String(r.dong_id)));
