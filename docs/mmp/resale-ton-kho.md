@@ -73,6 +73,21 @@ snapshotId đã nhận; `boQua:"cu"` = MMP đã có ảnh mới hơn.
 | `503` | MMP chưa cấu hình secret | Báo MEAN, retry sau |
 | `500` | Lỗi tạm MMP | Retry có backoff (an toàn vì cùng snapshotId) |
 
+## Bổ sung MMP yêu cầu 26/10/2026 (sau ảnh chụp đầu)
+
+Ảnh đầu: 527 dòng, **279 (53%) chưa ghép**. MMP cho biết nguyên nhân: danh mục của họ còn
+nhiều SKU dạng **cũ của brand** (`DN0811-L-WHI`) trong khi SMS gửi Global SKU
+(`Denio-DN0811-L-WWHI-PLA`). MMP có sẵn mã biến thể Shopify đúng, nên chỉ cần SMS gửi kèm.
+
+- **`shopifyVariantId` lấy THẲNG từ Shopify, không đoán** — tra `shopify_variants` store
+  `meanblvd`, `sku` khớp **chính xác**, chỉ gửi khi ra **đúng 1** biến thể; 0 hoặc >1 thì để
+  trống. Đo 26/10: **417/476 SKU** ra đúng 1 ⇒ **445/520 dòng** mang được mã (86%); đúng
+  **1 SKU** ra nhiều hơn 1 nên để trống.
+- **`loaiTon` được chấp nhận chính thức** — chuỗi, không bắt buộc, ≤100 ký tự, gửi nguyên văn
+  tên loại tồn. MMP lưu theo từng lô và hiện cột "Loại tồn"; đang triển khai, trước khi xong
+  thì nhận mà không báo lỗi.
+- Sau khi sửa: **gửi lại ảnh chụp đầy đủ** với `snapshotId` mới.
+
 ## Phần SMS tự quyết, KHÔNG có trong hợp đồng gốc
 
 1. **`loaiTon` — trường THÊM.** CEO 26/10/2026 yêu cầu MMP thấy rõ loại hàng tồn
@@ -87,8 +102,10 @@ snapshotId đã nhận; `boQua:"cu"` = MMP đã có ảnh mới hơn.
    nhập Lark theo **cũ trước, trên MỌI loại**, rồi giữ phần rơi vào lô resale. FIFO trên
    mọi loại là bắt buộc: chỉ FIFO trên lô resale thì tồn ký gửi bị gán sai thành resale.
 4. **Trừ `qty_reserved`** — hàng đã hứa cho đơn chưa đóng, không mời bán lại.
-5. **`shopifyVariantId` bỏ trống** — MMP ghép theo ID TRƯỚC sku, nên một ID đoán sai là ghép
-   vào SẢN PHẨM KHÁC. Để trống thì ghép theo sku, đường hợp đồng đã bảo đảm.
+5. **`shopifyVariantId`** — lượt đầu 26/10 cố ý bỏ trống vì ĐOÁN mã là ghép sai sản phẩm
+   (MMP ghép theo ID TRƯỚC sku). MMP phản hồi rằng mã lấy THẲNG từ `shopify_variants` không
+   có rủi ro đó, nên từ lượt hai SMS gửi kèm — nhưng **chỉ khi SKU ra đúng MỘT biến thể**
+   (`chonVariantId`). Ra nhiều hơn một thì không có cách chọn đúng ⇒ vẫn để trống.
 
 ## Còn nợ: đơn SKU đuôi `-sale`
 

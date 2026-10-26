@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOAI_RESALE, laLoaiResale, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { LOAI_RESALE, chonVariantId, laLoaiResale, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
 
 const lo = (sku: string, kho: string, ngay: string, sl: number, loai: string): LoNhap =>
   ({ sku, kho, ngayNhapKho: ngay, soLuong: sl, loaiTon: loai });
@@ -162,5 +162,35 @@ describe('lyDoKhongGui — chặn ảnh chụp làm MMP hiểu sai TOÀN BỘ t�
   it('chưa có lần trước → chỉ cần khác 0', () => {
     expect(lyDoKhongGui(5, null)).toBeNull();
     expect(lyDoKhongGui(0, null)).toMatch(/0 dòng/);
+  });
+});
+
+describe('chonVariantId — chỉ gửi khi ra ĐÚNG MỘT biến thể', () => {
+  /* MMP ghép theo `shopifyVariantId` TRƯỚC khi ghép theo sku, nên một ID sai là ghép vào
+   * SẢN PHẨM KHÁC — tệ hơn là không gửi gì. Lượt đầu 26/10 em cố ý bỏ trống vì sợ đoán sai;
+   * MMP phản hồi rằng mã lấy THẲNG từ `shopify_variants` thì không có rủi ro đó, nhưng chỉ
+   * khi SKU ra đúng một biến thể. Ra nhiều hơn một thì KHÔNG có cách chọn đúng — để trống,
+   * MMP ghép theo sku như cũ. Đo 26/10: 417/476 SKU ra đúng 1, và đúng 1 SKU ra nhiều hơn 1. */
+  it('đúng một → gửi mã đó', () => {
+    expect(chonVariantId(['gid://shopify/ProductVariant/1'])).toBe('gid://shopify/ProductVariant/1');
+  });
+
+  it('nhiều hơn một → để TRỐNG, không chọn bừa', () => {
+    expect(chonVariantId(['gid://1', 'gid://2'])).toBeNull();
+  });
+
+  it('không có → để trống', () => {
+    expect(chonVariantId([])).toBeNull();
+    expect(chonVariantId(undefined)).toBeNull();
+  });
+
+  /** Trùng lặp cùng MỘT mã (hai dòng biến thể cùng id) vẫn là một biến thể → gửi được. */
+  it('trùng lặp cùng một mã vẫn tính là một', () => {
+    expect(chonVariantId(['gid://1', 'gid://1'])).toBe('gid://1');
+  });
+
+  it('bỏ qua mã rỗng', () => {
+    expect(chonVariantId(['', 'gid://1'])).toBe('gid://1');
+    expect(chonVariantId(['', '  '])).toBeNull();
   });
 });

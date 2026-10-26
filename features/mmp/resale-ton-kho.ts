@@ -10,7 +10,16 @@ import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
 import { mapWarehouseCode } from '@/features/warehouse/item-import-logic';
-import { phanLoFifo, type DongResale, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { chonVariantId, phanLoFifo, type DongResale, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+
+/**
+ * Store lấy `shopifyVariantId`: storefront CHÍNH của MEAN.
+ *
+ * Phải là store này, không phải store riêng của brand: danh mục MMP là danh mục sản phẩm MEAN
+ * đang bán, và MMP yêu cầu rõ "tra theo store meanblvd". Mã của một store khác là biến thể
+ * KHÁC trên Shopify, gửi sang là ghép sai sản phẩm.
+ */
+export const STORE_LAY_VARIANT = 'meanblvd';
 
 /** Trần của MMP: 8 MB mỗi request, tối đa 20.000 dòng. */
 export const TRAN_DONG = 20_000;
@@ -21,6 +30,8 @@ export interface AnhChupResale {
   guiLuc: string;
   items: Array<{
     sku: string;
+    /** Chỉ có khi SKU ra ĐÚNG MỘT biến thể trên store `meanblvd` — xem `chonVariantId`. */
+    shopifyVariantId?: string;
     soLuong: number;
     ngayNhapKho: string;
     kho?: string;
@@ -35,7 +46,13 @@ export interface AnhChupResale {
 /** Đọc hai nguồn rồi dựng ảnh chụp. CHỈ ĐỌC CSDL, không gọi ra ngoài. */
 export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
   anh: AnhChupResale;
-  thongKe: { dongTon: number; loNhap: number; dongResale: number; chiec: number; theoLoai: Record<string, number> };
+  thongKe: {
+    dongTon: number; loNhap: number; dongResale: number; chiec: number;
+    theoLoai: Record<string, number>;
+    /** Số dòng mang được `shopifyVariantId` — MMP ghép theo mã này trước sku. */
+    dongCoVariantId: number;
+    skuNhapNhang: number;
+  };
 }> {
   const tonRows = await db.select({
     sku: schema.warehouseInventory.sku,
@@ -73,6 +90,23 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
     }];
   });
 
+  // Mã biến thể LẤY THẲNG từ Shopify (bảng `shopify_variants`, store `meanblvd`) — MMP yêu
+  // cầu 26/10/2026 vì danh mục của họ còn nhiều SKU dạng cũ của brand nên ghép theo sku hụt
+  // 53%. Chỉ gửi khi SKU ra ĐÚNG MỘT biến thể; xem `chonVariantId`.
+  const [storeMb] = await db.select({ id: schema.stores.id }).from(schema.stores)
+    .where(eq(schema.stores.name, STORE_LAY_VARIANT)).limit(1);
+  const maTheoSku = new Map<string, string[]>();
+  if (storeMb) {
+    const bt = await db.select({ sku: schema.shopifyVariants.sku, vid: schema.shopifyVariants.shopifyVariantId })
+      .from(schema.shopifyVariants).where(eq(schema.shopifyVariants.storeId, storeMb.id));
+    for (const r of bt) {
+      if (!r.sku) continue;
+      const k = r.sku.trim();
+      const da = maTheoSku.get(k);
+      if (da) da.push(r.vid); else maTheoSku.set(k, [r.vid]);
+    }
+  }
+
   let dong: DongResale[] = phanLoFifo(ton, loNhap);
   // Giới hạn dùng cho lượt GỬI THỬ mà hợp đồng yêu cầu. Cắt theo thứ tự đã dựng, không
   // xáo — để lượt thử lặp lại được.
@@ -90,9 +124,14 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
       // `shopifyVariantId` CỐ Ý BỎ TRỐNG: hợp đồng cho phép, và MMP ghép theo ID TRƯỚC khi
       // ghép theo sku — gửi một ID đoán sai là ghép vào SẢN PHẨM KHÁC. Để trống thì MMP
       // ghép theo sku, đường đã được hợp đồng bảo đảm.
-      items: dong.map((d) => ({
-        sku: d.sku, soLuong: d.soLuong, ngayNhapKho: d.ngayNhapKho, kho: d.kho, loaiTon: d.loaiTon,
-      })),
+      items: dong.map((d) => {
+        const vid = chonVariantId(maTheoSku.get(d.sku));
+        return {
+          sku: d.sku,
+          ...(vid ? { shopifyVariantId: vid } : {}),
+          soLuong: d.soLuong, ngayNhapKho: d.ngayNhapKho, kho: d.kho, loaiTon: d.loaiTon,
+        };
+      }),
     },
     thongKe: {
       dongTon: ton.length,
@@ -100,6 +139,9 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
       dongResale: dong.length,
       chiec: dong.reduce((s, d) => s + d.soLuong, 0),
       theoLoai,
+      dongCoVariantId: dong.filter((d) => chonVariantId(maTheoSku.get(d.sku)) != null).length,
+      skuNhapNhang: [...new Set(dong.map((d) => d.sku))]
+        .filter((s) => (maTheoSku.get(s) ?? []).length > 1).length,
     },
   };
 }

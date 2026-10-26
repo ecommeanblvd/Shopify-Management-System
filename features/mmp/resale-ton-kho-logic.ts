@@ -149,3 +149,20 @@ export function lyDoKhongGui(soDong: number, soDongLanTruoc: number | null): str
   }
   return null;
 }
+
+/**
+ * THUẦN: chọn `shopifyVariantId` để gửi, hoặc `null` nếu không chắc.
+ *
+ * MMP ghép theo mã này **TRƯỚC** khi ghép theo sku, nên một mã sai là ghép vào **sản phẩm
+ * khác** — tệ hơn hẳn việc không gửi gì. Lượt đầu 26/10/2026 SMS cố ý bỏ trống vì sợ đoán
+ * sai; MMP phản hồi rằng mã lấy THẲNG từ `shopify_variants` thì không có rủi ro đó — nhưng
+ * chỉ đúng khi SKU ra **một** biến thể. Ra nhiều hơn một thì không có cách chọn đúng, nên để
+ * trống và để MMP ghép theo sku như cũ.
+ *
+ * Trùng lặp cùng MỘT mã (hai dòng biến thể mang cùng id) vẫn là một biến thể.
+ */
+export function chonVariantId(ma: readonly string[] | undefined): string | null {
+  if (!ma) return null;
+  const sach = [...new Set(ma.map((m) => m.trim()).filter((m) => m !== ''))];
+  return sach.length === 1 ? sach[0]! : null;
+}

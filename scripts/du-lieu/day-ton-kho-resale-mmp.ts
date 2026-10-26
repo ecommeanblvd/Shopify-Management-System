@@ -44,6 +44,8 @@ async function main(): Promise<void> {
   console.log(`  dòng       : ${so(thongKe.dongResale)} / trần ${so(TRAN_DONG)}`);
   console.log(`  chiếc      : ${so(thongKe.chiec)}`);
   console.log(`  byte       : ${so(Buffer.byteLength(JSON.stringify(anh), 'utf8'))}`);
+  console.log(`  có mã biến thể Shopify : ${so(thongKe.dongCoVariantId)} / ${so(thongKe.dongResale)} dòng`);
+  if (thongKe.skuNhapNhang > 0) console.log(`  SKU ra NHIỀU biến thể (để trống): ${thongKe.skuNhapNhang}`);
   if (gioiHan) console.log(`  (ĐÃ CẮT còn ${gioiHan} dòng đầu — lượt gửi thử)`);
 
   console.log('\n── Theo loại tồn (chiếc) ──');
