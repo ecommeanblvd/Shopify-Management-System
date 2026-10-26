@@ -166,3 +166,23 @@ export function chonVariantId(ma: readonly string[] | undefined): string | null 
   const sach = [...new Set(ma.map((m) => m.trim()).filter((m) => m !== ''))];
   return sach.length === 1 ? sach[0]! : null;
 }
+
+/**
+ * Đuôi `-sale`: SKU của **bản bán lại** mà MMP dựng trên Shopify (`<Global SKU>-sale`).
+ *
+ * KHÔNG phân biệt hoa thường: hợp đồng viết `-sale` chữ thường, nhưng dữ liệu THẬT dùng
+ * `-Sale` chữ S hoa — đo 26/10/2026: 628 dòng đơn, 1.322 biến thể Shopify, 16 dòng
+ * `warehouse_inventory`. So khớp đúng chữ thường thì lọc không bắt được gì.
+ *
+ * Neo ở CUỐI và đòi gạch nối: "Wholesale", "X-sales", "X-sale-M" đều KHÔNG phải bản sale.
+ */
+const DUOI_SALE = /-sale$/i;
+
+export function laSkuSale(sku: string): boolean {
+  return DUOI_SALE.test(sku);
+}
+
+/** Bỏ ĐÚNG MỘT đuôi `-sale` ở cuối. SKU không có đuôi thì trả nguyên văn. */
+export function skuGoc(sku: string): string {
+  return sku.replace(DUOI_SALE, '');
+}

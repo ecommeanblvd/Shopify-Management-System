@@ -10,7 +10,7 @@ import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { signMmpPayload } from '@/features/mmp/hmac';
 import { mapWarehouseCode } from '@/features/warehouse/item-import-logic';
-import { chonVariantId, phanLoFifo, type DongResale, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { chonVariantId, laSkuSale, phanLoFifo, type DongResale, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
 
 /**
  * Store lấy `shopifyVariantId`: storefront CHÍNH của MEAN.
@@ -52,6 +52,9 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
     /** Số dòng mang được `shopifyVariantId` — MMP ghép theo mã này trước sku. */
     dongCoVariantId: number;
     skuNhapNhang: number;
+    /** Dòng bị LOẠI vì SKU mang đuôi `-sale` — hợp đồng cấm gửi. Báo ra để không lặng lẽ. */
+    dongSaleBoRa: number;
+    chiecSaleBoRa: number;
   };
 }> {
   const tonRows = await db.select({
@@ -107,7 +110,14 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
     }
   }
 
-  let dong: DongResale[] = phanLoFifo(ton, loNhap);
+  const tatCa: DongResale[] = phanLoFifo(ton, loNhap);
+  // LOẠI SKU đuôi `-sale`: hợp đồng ghi rõ "gửi ảnh chụp tồn theo SKU gốc, KHÔNG gửi SKU
+  // -sale; MMP tự ghép sang bản sale". Lượt gửi 26/10/2026 đã LỌT 7 dòng loại này — đó là
+  // bản bán lại do người dựng tay trên Shopify từ 2024, và kho ghi tồn ngay dưới SKU `-Sale`
+  // đó (16 dòng, KHÔNG dòng nào có SKU gốc tương ứng trong `warehouse_inventory`). Gửi lên
+  // là MMP thấy hai mặt hàng cho cùng một chiếc.
+  const dongSale = tatCa.filter((d) => laSkuSale(d.sku));
+  let dong: DongResale[] = tatCa.filter((d) => !laSkuSale(d.sku));
   // Giới hạn dùng cho lượt GỬI THỬ mà hợp đồng yêu cầu. Cắt theo thứ tự đã dựng, không
   // xáo — để lượt thử lặp lại được.
   if (opts?.gioiHan != null && opts.gioiHan > 0) dong = dong.slice(0, opts.gioiHan);
@@ -142,6 +152,8 @@ export async function dungAnhChupResale(opts?: { gioiHan?: number }): Promise<{
       dongCoVariantId: dong.filter((d) => chonVariantId(maTheoSku.get(d.sku)) != null).length,
       skuNhapNhang: [...new Set(dong.map((d) => d.sku))]
         .filter((s) => (maTheoSku.get(s) ?? []).length > 1).length,
+      dongSaleBoRa: dongSale.length,
+      chiecSaleBoRa: dongSale.reduce((s, d) => s + d.soLuong, 0),
     },
   };
 }

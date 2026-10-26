@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOAI_RESALE, chonVariantId, laLoaiResale, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
+import { LOAI_RESALE, chonVariantId, laLoaiResale, laSkuSale, skuGoc, lyDoKhongGui, nenGuiHomNay, phanLoFifo, type LoNhap, type TonHienTai } from './resale-ton-kho-logic';
 
 const lo = (sku: string, kho: string, ngay: string, sl: number, loai: string): LoNhap =>
   ({ sku, kho, ngayNhapKho: ngay, soLuong: sl, loaiTon: loai });
@@ -192,5 +192,47 @@ describe('chonVariantId — chỉ gửi khi ra ĐÚNG MỘT biến thể', () =>
   it('bỏ qua mã rỗng', () => {
     expect(chonVariantId(['', 'gid://1'])).toBe('gid://1');
     expect(chonVariantId(['', '  '])).toBeNull();
+  });
+});
+
+describe('laSkuSale / skuGoc — nhận diện đuôi -sale', () => {
+  /* Hợp đồng viết đuôi là `-sale` chữ thường, nhưng dữ liệu THẬT trên Shopify dùng `-Sale`
+   * chữ S hoa (đo 26/10/2026: 628 dòng đơn, 1.322 biến thể, 16 dòng warehouse_inventory).
+   * So khớp phải KHÔNG phân biệt hoa thường, nếu không thì lọc không bắt được gì. */
+  it('nhận cả -sale, -Sale, -SALE', () => {
+    for (const s of ['X-sale', 'X-Sale', 'X-SALE', 'IHF-26F0223000912-S-BLA-Sale']) {
+      expect(laSkuSale(s)).toBe(true);
+    }
+  });
+
+  /** Đuôi phải ở CUỐI và có gạch nối. "sale" giữa chuỗi không tính. */
+  it('không nhận chữ sale ở giữa, hay thiếu gạch nối', () => {
+    for (const s of ['X-sale-M', 'Xsale', 'X-saleish', 'Wholesale', 'X-sales']) {
+      expect(laSkuSale(s)).toBe(false);
+    }
+  });
+
+  it('bỏ đuôi ra SKU gốc, giữ nguyên phần còn lại', () => {
+    expect(skuGoc('IHF-26F0223000912-S-BLA-Sale')).toBe('IHF-26F0223000912-S-BLA');
+    expect(skuGoc('MIRER-AND-BLK-S-sale')).toBe('MIRER-AND-BLK-S');
+  });
+
+  it('SKU không có đuôi thì trả nguyên văn', () => {
+    expect(skuGoc('MIRER-AND-BLK-S')).toBe('MIRER-AND-BLK-S');
+  });
+
+  /* Ca thật đo được: `Denio-DN0774+PKDN0729-S-NALM-PLA-PO-Sale` — chỉ bỏ ĐÚNG đuôi cuối,
+   * không được ăn thêm `-PO`. */
+  it('chỉ bỏ đúng một đuôi cuối', () => {
+    expect(skuGoc('Denio-DN0774+PKDN0729-S-NALM-PLA-PO-Sale')).toBe('Denio-DN0774+PKDN0729-S-NALM-PLA-PO');
+  });
+
+  /* Đuôi LẶP: `X-sale-Sale` phải ra `X-sale`, KHÔNG phải `X`. Bài này có vì lượt đột biến
+   * 26/10 cho thấy đổi mẫu sang `(-sale)+$` (ăn mọi đuôi) KHÔNG làm đỏ bài nào — tức câu
+   * "bỏ đúng một đuôi" trong chú thích chưa được ghim. Một bản sale của bản sale là hàng
+   * khác với bản gốc, nên bóc hết là trỏ sai mặt hàng. */
+  it('đuôi LẶP chỉ bỏ một lớp', () => {
+    expect(skuGoc('X-sale-Sale')).toBe('X-sale');
+    expect(laSkuSale('X-sale-Sale')).toBe(true);
   });
 });

@@ -46,6 +46,10 @@ async function main(): Promise<void> {
   console.log(`  byte       : ${so(Buffer.byteLength(JSON.stringify(anh), 'utf8'))}`);
   console.log(`  có mã biến thể Shopify : ${so(thongKe.dongCoVariantId)} / ${so(thongKe.dongResale)} dòng`);
   if (thongKe.skuNhapNhang > 0) console.log(`  SKU ra NHIỀU biến thể (để trống): ${thongKe.skuNhapNhang}`);
+  if (thongKe.dongSaleBoRa > 0) {
+    console.log(`  ĐÃ LOẠI ${so(thongKe.dongSaleBoRa)} dòng SKU đuôi -sale (${so(thongKe.chiecSaleBoRa)} chiếc)`);
+    console.log('    — hợp đồng cấm gửi SKU -sale; đó là bản bán lại, MMP tự ghép từ SKU gốc.');
+  }
   if (gioiHan) console.log(`  (ĐÃ CẮT còn ${gioiHan} dòng đầu — lượt gửi thử)`);
 
   console.log('\n── Theo loại tồn (chiếc) ──');
