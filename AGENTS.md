@@ -56,3 +56,28 @@ Chỉ khi diff chạm: chỉ thị `'use server'` · `app/**` (route/layout/page
 - **`vi.mock` được kéo lên đầu tệp**, nên factory chạy trước khi một `const` kịp khởi
   tạo. Dùng khai báo `function` cho hàm "chạm là ném", và dựng Proxy `schema` ngay
   trong factory. Biến đếm thì an toàn vì chỉ bị đọc/ghi lúc hàm được gọi.
+
+## Bẫy Railway: cron chạy ở SERVICE KHÁC, đặt biến sai chỗ là im lặng
+
+Project Railway này có **13 service**, không phải một. Các job cron **không** chạy trong
+`Shopify-Management-System`; chuỗi đồng bộ Lark (và job gửi tồn resale sang MMP bên trong nó,
+`scripts/cron/sync-lark.ts`) chạy ở service **`sync Lark operation`**. Còn có
+`cron-sync-orders`, `cron-retry-mmp`, `cron-track-shipments`, `cron-prune-logs`,
+`cron-retry-ship-ho`, `cron-sync-lifecycle`, `cron-cogs-own`.
+
+**Hệ quả, đo thật 26/10/2026:** đặt một biến môi trường lên `Shopify-Management-System` rồi
+chờ cron đọc ⇒ **không bao giờ đọc được**, và job **không báo lỗi** — nó chỉ chạy nhánh mặc
+định như chưa có gì. Mất hai lượt cron (≈1 giờ) mới tìm ra, và giữa đường tôi còn kết luận sai
+là "mã trên Railway là mã cũ" chỉ vì thấy deploy ở service kia bị `REMOVED`.
+
+Nên: **trước khi đặt biến cho một job cron, tìm ai gọi nó** (`grep -rn "<tên hàm>"`) rồi đặt
+vào service đang chạy tệp đó.
+
+```bash
+railway status --json                                      # xem đủ 13 service
+railway variables --service "sync Lark operation"          # kiểm đúng chỗ
+railway deployment list --service "sync Lark operation"    # deploy của RIÊNG service đó
+```
+
+Và **một deploy `REMOVED` ở service A không nói gì về service B** — mỗi service có dòng deploy
+riêng, cùng một cú `git push` sinh ra nhiều deploy độc lập.
