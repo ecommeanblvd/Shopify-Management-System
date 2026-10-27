@@ -8,9 +8,11 @@ interface SidebarProps {
   /** Hrefs the current role may see — computed server-side (the permission
    *  cache is empty in the browser, so the client must NOT re-derive it). */
   visibleHrefs: string[];
+  /** Số đỏ cạnh mục menu (href → số). Tính phía server. */
+  badges?: Record<string, number>;
 }
 
-export function Sidebar({ visibleHrefs }: SidebarProps) {
+export function Sidebar({ visibleHrefs, badges = {} }: SidebarProps) {
   // usePathname phản ứng theo client navigation — KHÔNG dùng prop server tĩnh,
   // nếu không highlight sẽ kẹt ở trang được render server lần đầu.
   const currentPath = usePathname() ?? '/';
@@ -35,6 +37,12 @@ export function Sidebar({ visibleHrefs }: SidebarProps) {
             >
               <Icon className="size-4" />
               {item.label}
+              {badges[item.href] > 0 && (
+                <span className="ml-auto rounded-full bg-red-600 px-1.5 text-xs font-medium text-white"
+                  aria-label={`${badges[item.href]} việc đang chờ`}>
+                  {badges[item.href]}
+                </span>
+              )}
             </Link>
           );
         })}

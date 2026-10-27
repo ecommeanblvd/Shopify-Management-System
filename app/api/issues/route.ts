@@ -15,6 +15,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { kiemTokenIssue } from '@/features/issue-report/api-auth';
 import type { AnhBaoLoi } from '@/features/issue-report/anh';
+import { NGUOI_TU_DONG, ghiSuKien } from '@/features/issue-report/su-kien';
 import { danhSachBaoLoi } from '@/features/issue-report/queries';
 import { GIOI_HAN, maBaoLoi, nhanModule, trangThaiHopLe } from '@/features/issue-report/phan-loai';
 
@@ -59,14 +60,24 @@ export async function PATCH(request: Request): Promise<Response> {
   if (body.trangThai !== undefined && !trangThaiHopLe(body.trangThai)) {
     return NextResponse.json({ ok: false, error: 'trangThai không hợp lệ' }, { status: 400 });
   }
+  const dieuKien = body.id ? eq(schema.issueReports.id, body.id) : eq(schema.issueReports.so, Number(body.so));
+  const [cu] = await db.select({ id: schema.issueReports.id, trangThai: schema.issueReports.trangThai })
+    .from(schema.issueReports).where(dieuKien).limit(1);
   const [r] = await db.update(schema.issueReports).set({
     ...(body.trangThai ? { trangThai: body.trangThai } : {}),
     ...(body.ghiChuXuLy !== undefined ? { ghiChuXuLy: body.ghiChuXuLy.slice(0, GIOI_HAN.ghiChu) } : {}),
     ...(body.prUrl !== undefined ? { prUrl: body.prUrl.slice(0, GIOI_HAN.prUrl) } : {}),
     xuLyLanCuoi: new Date(),
     updatedAt: new Date(),
-  }).where(body.id ? eq(schema.issueReports.id, body.id) : eq(schema.issueReports.so, Number(body.so)))
-    .returning({ so: schema.issueReports.so });
+  }).where(dieuKien).returning({ so: schema.issueReports.so });
   if (!r) return NextResponse.json({ ok: false, error: 'không tìm thấy' }, { status: 404 });
+  if (cu) {
+    await ghiSuKien({
+      issueId: cu.id, nguoi: NGUOI_TU_DONG,
+      loai: body.prUrl ? 'pr' : body.trangThai && body.trangThai !== cu.trangThai ? 'doi_trang_thai' : 'ghi_chu',
+      tuTrangThai: cu.trangThai, denTrangThai: body.trangThai ?? cu.trangThai,
+      ghiChu: body.ghiChuXuLy?.slice(0, GIOI_HAN.ghiChu) ?? null, prUrl: body.prUrl?.slice(0, GIOI_HAN.prUrl) ?? null,
+    });
+  }
   return NextResponse.json({ ok: true, ma: maBaoLoi(r.so) });
 }

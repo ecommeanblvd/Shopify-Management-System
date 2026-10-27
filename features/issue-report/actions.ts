@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { requirePerm } from '@/features/receiving/perm';
+import { ghiSuKien } from './su-kien';
 import { isStorageConfigured, putObject } from '@/lib/storage/s3';
 import {
   ANH_BYTE_TOI_DA, ANH_TOI_DA, khoaAnh, nhanDangAnh, tenHienThi, type AnhBaoLoi,
@@ -73,6 +74,11 @@ export async function guiBaoLoi(fd: FormData): Promise<Ket> {
     userAgent: (await headers()).get('user-agent')?.slice(0, 300) ?? null,
   }).returning({ id: schema.issueReports.id, so: schema.issueReports.so });
 
+  await ghiSuKien({
+    issueId: r.id, nguoi: session.user.email, loai: 'tao', denTrangThai: 'moi',
+    ghiChu: `Báo lỗi mới (${anhHopLe.length} ảnh)`,
+  });
+
   // Ảnh là phần PHỤ: báo lỗi đã ghi rồi, kho lưu trữ hỏng không được làm mất nó. Nói rõ cho
   // người báo biết ảnh chưa lên, để họ gửi lại ảnh qua cách khác thay vì tưởng đã đủ.
   let canhBao: string | undefined;
@@ -102,13 +108,24 @@ export async function guiBaoLoi(fd: FormData): Promise<Ket> {
 
 /** Admin đổi trạng thái tay (vd. đóng "không phải lỗi", mở lại cho bot). */
 export async function doiTrangThaiBaoLoi(id: string, trangThai: string, ghiChu?: string): Promise<Ket> {
-  await requirePerm('manage_users');
+  const userId = await requirePerm('manage_users');
   if (!trangThaiHopLe(trangThai)) return { ok: false, loi: 'Trạng thái không hợp lệ.' };
+  const [cu] = await db.select({ trangThai: schema.issueReports.trangThai }).from(schema.issueReports)
+    .where(eq(schema.issueReports.id, id)).limit(1);
+  if (!cu) return { ok: false, loi: 'Không tìm thấy báo lỗi.' };
+  const [nguoi] = await db.select({ email: schema.user.email }).from(schema.user)
+    .where(eq(schema.user.id, userId)).limit(1);
   await db.update(schema.issueReports).set({
     trangThai,
     ...(ghiChu ? { ghiChuXuLy: ghiChu.slice(0, GIOI_HAN.ghiChu) } : {}),
     updatedAt: new Date(),
   }).where(eq(schema.issueReports.id, id));
+  if (cu.trangThai !== trangThai || ghiChu) {
+    await ghiSuKien({
+      issueId: id, nguoi: nguoi?.email ?? userId, loai: 'doi_trang_thai',
+      tuTrangThai: cu.trangThai, denTrangThai: trangThai, ghiChu: ghiChu ?? null,
+    });
+  }
   revalidatePath('/admin/issues');
   return { ok: true };
 }

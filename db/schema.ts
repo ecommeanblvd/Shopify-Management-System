@@ -3662,3 +3662,17 @@ export const issueReports = pgTable('issue_reports', {
   index('issue_reports_trang_thai_idx').on(t.trangThai, t.createdAt.desc()),
   index('issue_reports_module_idx').on(t.module, t.createdAt.desc()),
 ]);
+
+/** Dòng thời gian xử lý của một báo lỗi (di trú 0214). Chỉ thêm, không sửa/xoá dòng cũ. */
+export const issueReportEvents = pgTable('issue_report_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  issueId: uuid('issue_id').references(() => issueReports.id, { onDelete: 'cascade' }).notNull(),
+  luc: timestamp('luc', { withTimezone: true }).notNull().defaultNow(),
+  nguoi: text('nguoi').notNull(),
+  /** `tao` | `doi_trang_thai` | `ghi_chu` | `pr`. */
+  loai: text('loai').notNull(),
+  tuTrangThai: text('tu_trang_thai'),
+  denTrangThai: text('den_trang_thai'),
+  ghiChu: text('ghi_chu'),
+  prUrl: text('pr_url'),
+}, (t) => [index('issue_report_events_issue_idx').on(t.issueId, t.luc)]);

@@ -78,6 +78,9 @@ export const NAV: NavItem[] = [
      `/f/nhat-ky` giữ lại làm TRANG XEM RỘNG (lọc theo người/trường/ngày, gửi được link) —
      panel có liên kết "Xem đầy đủ" trỏ sang đó. Thêm nó lại vào menu là quay lại đúng hình
      mà CEO đã bỏ. */
+  /* Báo lỗi nằm ở menu chính (không giấu trong Settings → Admin) vì admin cần thấy việc chờ
+     mình ngay khi vào app: Sidebar hiện số đỏ = báo lỗi ở "Cần người quyết" + "Chờ duyệt PR". */
+  { href: '/admin/issues',    label: 'Báo lỗi',       icon: Bug,             requires: 'manage_users' },
   { href: '/settings',        label: 'Settings',      icon: Settings,        requires: null },
 ];
 
@@ -91,7 +94,6 @@ export const SETTINGS_ITEMS: SettingsNavItem[] = [
   { href: '/f/markets/history',       label: 'Markets history', icon: History,     requires: 'view_markets_history',  group: 'Markets',       description: 'Changes to market configuration over time.' },
   { href: '/f/jobs',                  label: 'Tác vụ nền',      icon: Activity,    requires: 'view_functions',        group: 'Admin',         description: 'Tác vụ nào đang chạy, cái nào ngưng — đọc nhật ký do chính tác vụ ghi ra.' },
   { href: '/f/can-san-pham',           label: 'Sửa cân sản phẩm', icon: Target,      requires: 'view_kpi_logistics',    group: 'Admin',         description: 'SKU khai cân trên Shopify thấp hơn cân hãng tính (từ đơn âm cước tiêu chí 1.1). Quản lý duyệt để đẩy cân mới lên Shopify.' },
-  { href: '/admin/issues',            label: 'Báo lỗi',         icon: Bug,         requires: 'manage_users',          group: 'Admin',         description: 'Báo lỗi từ các module và trạng thái xử lý của tác vụ tự động hằng đêm.' },
   { href: '/admin/users',             label: 'Users',           icon: Users,       requires: 'manage_users',          group: 'Admin',         description: 'Manage users and their roles.' },
   { href: '/admin/roles',             label: 'Roles',           icon: ShieldCheck, requires: 'manage_users',          group: 'Admin',         description: 'Phân quyền theo role.' },
   { href: '/admin/feature-flags',     label: 'Feature flags',   icon: ToggleRight, requires: 'manage_users',          group: 'Admin',         description: 'Toggle features on or off.' },
