@@ -23,14 +23,18 @@ import { JOB_REGISTRY } from '@/features/jobs/registry';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/* Alias ĐẶT TRONG NGOẶC KÉP có chủ ý: Postgres hạ chữ thường mọi alias không trích dẫn, nên
+ * `as maNhapLuc` trả về khoá `manhapluc`. Tài liệu và prompt của tác vụ hằng đêm ghi tên kiểu
+ * camelCase, nên bỏ ngoặc kép là làm con bot đọc sai tên trường — đo thật 27/10/2026 ngay ở
+ * lượt kiểm sống đầu tiên. */
 type Dong = Record<string, unknown>;
 const dong = (r: unknown): Dong[] => (r as { rows?: Dong[] }).rows ?? (r as Dong[]) ?? [];
 
 async function chay(yc: YeuCauChanDoan): Promise<{ mota: string; data: unknown }> {
   if (yc.ten === 'job-runs') {
     const r = await db.execute(sql`
-      select started_at::text as batDau, finished_at::text as ketThuc, status,
-             summary::text as tomTat, left(coalesce(error,''), 500) as loi
+      select started_at::text as "batDau", finished_at::text as "ketThuc", status,
+             summary::text as "tomTat", left(coalesce(error,''), 500) as loi
       from job_runs where job_key = ${yc.key}
       order by started_at desc limit ${yc.limit}`);
     return { mota: `lượt chạy gần nhất của tác vụ '${yc.key}'`, data: dong(r) };
@@ -55,20 +59,20 @@ async function chay(yc: YeuCauChanDoan): Promise<{ mota: string; data: unknown }
     // KHÔNG trả mã bưu chính / thành phố / tên / địa chỉ — chỉ nói CÓ hay KHÔNG. Nước đến thì
     // trả thật, vì chính nó là đầu vào của nhánh `!k.country` trong `layGiaUocTinh`.
     const r = await db.execute(sql`
-      select s.log_unique_code as maLog, s.tracking_number as maVanDon, s.carrier_key as hang,
-             s.actual_weight_kg as canThat, s.sms_weight_kg as canSms,
+      select s.log_unique_code as "maLog", s.tracking_number as "maVanDon", s.carrier_key as hang,
+             s.actual_weight_kg as "canThat", s.sms_weight_kg as "canSms",
              s.dim_length_cm as dai, s.dim_width_cm as rong, s.dim_height_cm as cao,
-             s.origin_hub as khoDi, s.lark_record_id as dongLark,
-             s.label_created_at::text as nhanTaoLuc, s.created_at::text as taoLuc,
-             s.tracking_nhap_luc::text as maNhapLuc,
-             s.gia_uoc_tinh_ghi_luc::text as giaGhiLuc,
-             o.ship_country as nuocDen,
-             (o.ship_postcode is not null) as coMaBuuChinh,
-             (o.ship_city is not null) as coThanhPho,
-             o.addr_class as loaiDiaChi, o.selected_carrier_key as hangDaChon,
-             o.shopify_order_number as soDon,
-             o.fulfillment_status as trangThaiGiao,
-             (o.cancelled_at_shopify is not null) as daHuy
+             s.origin_hub as "khoDi", s.lark_record_id as "dongLark",
+             s.label_created_at::text as "nhanTaoLuc", s.created_at::text as "taoLuc",
+             s.tracking_nhap_luc::text as "maNhapLuc",
+             s.gia_uoc_tinh_ghi_luc::text as "giaGhiLuc",
+             o.ship_country as "nuocDen",
+             (o.ship_postcode is not null) as "coMaBuuChinh",
+             (o.ship_city is not null) as "coThanhPho",
+             o.addr_class as "loaiDiaChi", o.selected_carrier_key as "hangDaChon",
+             o.shopify_order_number as "soDon",
+             o.fulfillment_status as "trangThaiGiao",
+             (o.cancelled_at_shopify is not null) as "daHuy"
       from shipments s join shopify_orders o on o.id = s.order_id
       where upper(s.log_unique_code) = upper(${yc.ma})
          or upper(s.tracking_number) = upper(${yc.ma})
@@ -78,8 +82,8 @@ async function chay(yc: YeuCauChanDoan): Promise<{ mota: string; data: unknown }
 
   // kien-mac-gia — đúng năm điều kiện của `canDienBu`, xem features/dong-hang/dien-bu.ts
   const r = await db.execute(sql`
-    select log_unique_code as maLog, tracking_number as maVanDon, carrier_key as hang,
-           created_at::text as taoLuc, tracking_nhap_luc::text as maNhapLuc
+    select log_unique_code as "maLog", tracking_number as "maVanDon", carrier_key as hang,
+           created_at::text as "taoLuc", tracking_nhap_luc::text as "maNhapLuc"
     from shipments
     where tracking_number is not null and lark_record_id is not null
       and gia_uoc_tinh_ghi_luc is null and tracking_nhap_luc is not null
