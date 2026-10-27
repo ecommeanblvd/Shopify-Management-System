@@ -54,6 +54,12 @@ export const JOB_REGISTRY: readonly JobDinhNghia[] = [
     hauQua: 'MMP giữ chi phí ship cũ của TINH/Mirer khi hoá đơn về muộn' },
   { key: 'sync-lark-ship-ho', ten: 'Đồng bộ đơn ship hộ từ Lark', chuKyPhut: 1 * GIO,
     hauQua: 'Đơn Đức lên trên Lark không hiện trong hệ thống, ngày gửi bị lệch về ngày nhập' },
+  /* Thêm 27/10/2026 (BL-2). Khoá này TỪNG KHÔNG CÓ Ở ĐÂY, và đó là tầng thứ ba của cùng một
+   * thiếu sót: không npm script, không service Railway, và không có trong sổ đăng ký — nên
+   * trang giám sát cũng không thể báo "chưa ai lên lịch bao giờ". Route có từ 12/10, `job_runs`
+   * 0 lượt trong 15 ngày, và nhân sự thì được giao diện hứa "cron sẽ thử lại". */
+  { key: 'dien-bu-gia-uoc-tinh', ten: 'Điền bù giá ước tính lên Lark', chuKyPhut: 30 * PHUT,
+    hauQua: 'Kiện lỡ nhịp ghi giá ở lượt đầu nằm im vĩnh viễn — ô giá trên dòng LOG trống, mà Lark chỉ cho điền thêm nên không ai phát hiện' },
   { key: 'refresh-fuel', ten: 'Cập nhật phụ phí xăng dầu', chuKyPhut: 1 * NGAY,
     hauQua: 'Báo giá dùng mức xăng dầu tuần cũ' },
   { key: 'refresh-surcharges', ten: 'Cập nhật phụ phí hãng', chuKyPhut: 1 * NGAY,

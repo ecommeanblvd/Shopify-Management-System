@@ -59,6 +59,9 @@ export const NHOM_JOB: Record<string, readonly string[]> = {
   // nhìn "5,9 phút" không biết việc nào chậm.
   'theo-don': ['push-unsent-brand', 'refresh-owned-store', 'addr-verify', 'apply-pod', 'return-links', 'ship-ho-bao-gia', 'ship-ho-gia-thu', 'ship-ho-reconcile', 'doi-chieu-ly-do'],
   'hang-ngay': ['ship-ho-tiers', 'refresh-fuel', 'refresh-surcharges', 'sync-unit-cost', 'apply-own-cogs'],
+  // Service riêng `cron-dien-bu-gia` (*/30). Phải có service THẬT chạy nhóm này — xem cảnh
+  // báo ở đầu tệp: khai nhóm mà không service nào chạy = việc không bao giờ chạy.
+  'moi-30-phut': ['dien-bu-gia-uoc-tinh'],
   'hang-tuan': ['prune-logs'],
 
   // Không phải cron: Lark Automation gọi /api/lark/pack, mỗi request một dòng job_runs.

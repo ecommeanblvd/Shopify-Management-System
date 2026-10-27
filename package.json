@@ -37,6 +37,7 @@
     "cron:retry-mmp-orders": "dotenv -- tsx scripts/cron/retry-mmp-orders.ts",
     "cron:group": "dotenv -- tsx scripts/cron/run-group.ts",
     "cron:cogs-own": "dotenv -- tsx scripts/cron/cogs-own.ts",
+    "cron:dien-bu-gia-uoc-tinh": "dotenv -- tsx scripts/cron/dien-bu-gia-uoc-tinh.ts",
     "probe:lark-table": "dotenv -- tsx scripts/probe-lark-table.ts"
   },
   "dependencies": {

@@ -105,6 +105,22 @@ async function docFedexQuoteSnap(
  *      ghi `Couriers`). Chọn tay có thể sai (mã 1Z… từng bị ghi nhầm FedEx,
  *      CEO 19/09/2026) nên luôn xếp cuối.
  */
+/**
+ * Mọi đường ra `null` của `layGiaUocTinh` ĐI QUA ĐÂY, để lý do được ghi lại.
+ *
+ * Vì sao thêm (BL-2, 27/10/2026): kiện PK-22436 không lấy được giá, nhân sự báo lỗi, và
+ * **không có chỗ nào trên đời ghi vì sao**. `baoGiaUpsShop` CÓ trả `{ok:false, loi}` — mã cũ
+ * vứt đi bằng `if (!r.ok) return null`, và `catch` ở cuối hàm nuốt luôn ngoại lệ không log.
+ * Nên lượt chẩn phải dựng lại từ đầu bằng cách gọi tay từng biên, và nguyên nhân lần hỏng
+ * ĐẦU TIÊN thì vĩnh viễn không xác lập được vì log Railway đã trôi.
+ *
+ * `console.error` chứ không `warn`: đây là thứ duy nhất còn lại khi có người báo lỗi.
+ */
+function khongCoGia(shipmentId: string, lyDo: string): null {
+  console.error(`[dong-hang] layGiaUocTinh(${shipmentId}): không lấy được giá — ${lyDo}`);
+  return null;
+}
+
 export async function layGiaUocTinh(
   shipmentId: string,
   /**
@@ -134,14 +150,17 @@ export async function layGiaUocTinh(
     }).from(schema.shipments)
       .innerJoin(schema.shopifyOrders, eq(schema.shopifyOrders.id, schema.shipments.orderId))
       .where(eq(schema.shipments.id, shipmentId)).limit(1);
-    if (!k) return null;
+    if (!k) return khongCoGia(shipmentId, 'không thấy kiện (hoặc kiện chưa nối đơn Shopify)');
 
     const canDim = nguonCanDim(
       { canKg: k.smsWeightKg, daiCm: k.smsL, rongCm: k.smsW, caoCm: k.smsH },
       { canKg: k.weightKg, daiCm: k.l, rongCm: k.w, caoCm: k.h },
     );
     const weightKg = canDim.canKg;
-    if (!k.country || !weightKg) return null; // chưa đóng xong (thiếu cân thật) hoặc thiếu nước
+    // chưa đóng xong (thiếu cân thật) hoặc thiếu nước đến
+    if (!k.country || !weightKg) {
+      return khongCoGia(shipmentId, `thiếu đầu vào: nước đến=${k.country ?? 'trống'} cân=${weightKg ?? 'trống'}`);
+    }
 
     // Cao thiếu (ở cả SMS và Lark) → KHÔNG dựng `dims`, giống hệt cách cũ khi `k.h` null: thiếu
     // cao là dấu hiệu chọn giá Pak thay Package ở bước tính cước, không phải lỗi vá bằng 0.
@@ -243,13 +262,13 @@ export async function layGiaUocTinh(
         /* Quote lại hỏng mà dòng cũ không chứng minh được là tính cho đúng đầu vào này ⇒
          * KHÔNG rơi về dòng cũ: trả "chưa lấy được giá" (nhân sự vẫn lưu được mã vận đơn,
          * cron thử lại sau) còn hơn đưa họ một con số của cân khác mà không nói gì. */
-        if (!r.ok) return null;
+        if (!r.ok) return khongCoGia(shipmentId, `FedEx quote hỏng: ${'loi' in r ? r.loi : 'không rõ'}`);
       }
       const q = dungLai ? daCo : await docFedexQuoteSnap(shipmentId);
-      if (!q) return null;
+      if (!q) return khongCoGia(shipmentId, 'không đọc được dòng quote FedEx vừa ghi');
       // Mọi cột chi phí Lark là VND. Dòng quote mang đơn vị FedEx trả về — khác VND
       // thì KHÔNG ghi gì, thà trống còn hơn một con số sai đơn vị không sửa lại được.
-      if (q.tienTe !== 'VND') return null;
+      if (q.tienTe !== 'VND') return khongCoGia(shipmentId, `quote FedEx sai đơn vị tiền: ${q.tienTe}`);
       const gFedex = tuFedexQuote(q.snap);
       return {
         ...gFedex,
@@ -266,7 +285,7 @@ export async function layGiaUocTinh(
 
     if (nguon === 'ups-api') {
       const soTaiKhoan = process.env.UPS_ACCOUNT_NUMBER;
-      if (!soTaiKhoan) return null;
+      if (!soTaiKhoan) return khongCoGia(shipmentId, 'chưa khai UPS_ACCOUNT_NUMBER trên service đang chạy');
 
       /* Đọc thông số THẬT của nhãn trước, đúng như nhánh FedEx. Đo 16/10/2026: giá UPS khớp
        * số điền tay trên Lark **0/37 kiện**, và ba trong bốn nguyên nhân nằm ở đây. */
@@ -297,7 +316,7 @@ export async function layGiaUocTinh(
           ?? (dims ? { dai: dims.length, rong: dims.width, cao: dims.height } : null),
         nhaDan: isResidential,
       });
-      if (!r.ok) return null;
+      if (!r.ok) return khongCoGia(shipmentId, `UPS Rate API không trả giá: ${r.loi}`);
 
       /* ĐÚNG DỊCH VỤ CỦA NHÃN, không phải mức rẻ nhất. `chonMucReNhat` chỉ còn là lối thoát
        * khi hãng chưa có dữ liệu tra cứu — và khi đó `theoVanDon: false` để tầng trên nói ra.
@@ -305,8 +324,9 @@ export async function layGiaUocTinh(
        * 3.210.570 / 3.028.915; Lark điền 3.028.915 — đúng mức 65 của nhãn, KHÔNG phải mức rẻ
        * nhất (08). Lấy nhầm mức là sai giá của cả kiện mà không có dấu hiệu gì. */
       const re = chonMucTheoMa(r.ds, ts?.maDichVu ?? null) ?? chonMucReNhat(r.ds);
-      if (!re) return null;
-      if (re.tienTe !== 'VND') return null; // như nhánh FedEx: sai đơn vị thì không ghi
+      if (!re) return khongCoGia(shipmentId, `UPS trả ${r.ds.length} mức nhưng không chọn được mức nào (mã nhãn ${ts?.maDichVu ?? 'chưa rõ'})`);
+      // như nhánh FedEx: sai đơn vị thì không ghi
+      if (re.tienTe !== 'VND') return khongCoGia(shipmentId, `mức UPS sai đơn vị tiền: ${re.tienTe}`);
 
       /* KHÔNG cộng VAT. Ô VAT của kiện UPS trên Lark để TRỐNG, và tổng HỢP ĐỒNG khớp ô Tổng
        * của Lark y nguyên khi không cộng gì (1.268.060 và 1.652.990 trên hai kiện đo). Bản
@@ -325,16 +345,18 @@ export async function layGiaUocTinh(
     // bang-gia: gọi ĐÚNG hãng của kiện, KHÔNG qua quoteOrderAcrossCarriers — hàm
     // đó luôn kèm một lượt báo giá SỐNG UPS bị vứt đi (chi phí ẩn, lượt soát Task 4),
     // nhân lên theo từng kiện khi cron quét hàng loạt kiện Aramex/DHL.
-    if (!carrierKey) return null;
+    if (!carrierKey) return khongCoGia(shipmentId, 'không suy được hãng từ mã vận đơn, cột kiện, hay hãng đã chọn trên đơn');
     const row = await baoGiaBangGiaMotHang(carrierKey, {
       country: k.country, weightKg, postcode: k.postcode, city: k.city,
       dimensions: dims ? { lengthCm: dims.length, widthCm: dims.width, heightCm: dims.height } : null,
       effectiveDate: shipDate,
       isResidential,
     });
-    if (!row || !row.ok || !row.breakdown || row.vndCost == null) return null;
+    if (!row || !row.ok || !row.breakdown || row.vndCost == null) {
+      return khongCoGia(shipmentId, `bảng giá ${carrierKey} không ra số (ok=${row?.ok ?? 'không có dòng'})`);
+    }
     return tuEngine(row.breakdown, row.vndCost, row.heSoVnd ?? null);
-  } catch {
-    return null;
+  } catch (e) {
+    return khongCoGia(shipmentId, `ném lỗi giữa đường: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
   }
 }

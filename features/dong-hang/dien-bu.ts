@@ -133,3 +133,49 @@ export async function layKienCanDienBu(): Promise<KienCanDienBu[]> {
     .limit(SO_KIEN_MOI_LUOT);
   return rows;
 }
+
+export interface KetQuaDienBu {
+  tongSoXetDuyet: number;
+  ghiDuoc: number;
+  boQua: number;
+  canhBaos: string[];
+}
+
+/**
+ * MỘT lượt điền bù: chọn kiện lỡ nhịp rồi thử ghi giá lên Lark cho từng kiện.
+ *
+ * Ở ĐÂY chứ không trong route (BL-2, 27/10/2026): bản đầu đặt hàm này ngay trong
+ * `app/api/cron/dien-bu-gia-uoc-tinh/route.ts`, và route đó **chưa bao giờ được gọi** — không
+ * npm script, không cron service trong `.railway/railway.ts`, `job_runs` 0 lượt. Giao diện thì
+ * hứa với nhân sự *"cron sẽ thử lại"*, nên kiện PK-22436 nằm im 20 giờ và thành báo lỗi BL-2.
+ * Đưa ra module dùng chung để cron script, route, và lượt chạy tay đều đi CHUNG một đường —
+ * đúng thứ D-045 đòi.
+ *
+ * CHẠY TUẦN TỰ, không `Promise.all`: mỗi kiện là một lượt API giá của hãng cộng hai lượt Lark;
+ * bắn song song là dội cả hai bên cùng lúc. `SO_KIEN_MOI_LUOT` giới hạn quy mô mỗi lượt.
+ */
+export async function chayDienBuGiaUocTinh(): Promise<KetQuaDienBu> {
+  const { ghiGiaUocTinhLenLark } = await import('./ghi-gia-uoc-tinh-len-lark');
+  const kiens = await layKienCanDienBu();
+  let ghiDuoc = 0;
+  let boQua = 0;
+  const canhBaos: string[] = [];
+
+  for (const k of kiens) {
+    // Phòng dữ liệu đổi giữa lúc đọc danh sách (SQL) và lúc xử lý tới dòng này — xử lý tuần
+    // tự nên có thể có khoảng cách thời gian đáng kể.
+    if (!canDienBu(k)) { boQua++; continue; }
+    try {
+      const r = await ghiGiaUocTinhLenLark(k.id);
+      if (r.giaDaGhi) ghiDuoc++; else boQua++;
+      if (r.canhBao) canhBaos.push(`${k.id}: ${r.canhBao}`);
+    } catch (e) {
+      // `ghiGiaUocTinhLenLark` đã tự bọc try/catch nên nhánh này hiếm khi tới, nhưng một kiện
+      // hỏng bất ngờ KHÔNG được chặn các kiện sau trong lượt.
+      boQua++;
+      canhBaos.push(`${k.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return { tongSoXetDuyet: kiens.length, ghiDuoc, boQua, canhBaos: canhBaos.slice(0, 20) };
+}
