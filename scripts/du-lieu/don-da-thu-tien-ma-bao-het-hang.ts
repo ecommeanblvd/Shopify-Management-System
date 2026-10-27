@@ -44,6 +44,8 @@ async function main(): Promise<void> {
   const chiLoai = lAt >= 0 ? (process.argv[lAt + 1]?.toUpperCase() as Loai | undefined) : undefined;
   const cAt = process.argv.indexOf('--csv');
   const csvPath = cAt >= 0 ? process.argv[cAt + 1] : null;
+  const jAt = process.argv.indexOf('--json');
+  const jsonPath = jAt >= 0 ? process.argv[jAt + 1] : null;
 
   // Dòng out_of_stock trên đơn ĐÃ THU TIỀN, CHƯA giao xong, CHƯA huỷ.
   const dong = await db.select({
@@ -147,6 +149,11 @@ async function main(): Promise<void> {
       .concat(loc.map((r) => [r.loai, r.don, r.ngay, r.sku, r.skuTim, r.soChiec, r.tonCon, r.larkLoai].map(esc).join(',')));
     writeFileSync(csvPath, '﻿' + csv.join('\n'), 'utf8');
     console.log(`\nĐã xuất ${loc.length} dòng: ${csvPath}`);
+  }
+
+  if (jsonPath) {
+    writeFileSync(jsonPath, JSON.stringify(loc, null, 2), 'utf8');
+    console.log(`\nĐã ghi JSON ${loc.length} dòng: ${jsonPath}`);
   }
 
   console.log('\n──── Việc theo nhóm ────');
