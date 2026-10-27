@@ -60,3 +60,19 @@ export const MA_DI_CHUYEN_UPS = 'I';
 export function mocLayHangUps(suKien: readonly SuKienQuetToiThieu[]): Date | null {
   return mocSomNhat(suKien, MA_LAY_HANG_UPS) ?? mocSomNhat(suKien, MA_DI_CHUYEN_UPS);
 }
+
+/**
+ * THUẦN: lượt nạp ngày lấy hàng này có HỎNG không.
+ *
+ * Cùng khuôn `coiLaHong` của lượt track (`track-tom-tat.ts`): *có lỗi MÀ không làm được gì*.
+ * Ở đây "làm được gì" là `co + khong > 0` — chứ KHÔNG phải `co > 0`.
+ *
+ * Vì sao `khong` cũng tính là làm được việc: `khong` nghĩa là **hãng đã trả lời bình thường**
+ * mà đơn chưa có mốc quét lấy hàng. Đó là trạng thái HỢP LỆ và rất thường gặp (đơn vừa gửi).
+ * Nếu đòi `co > 0` thì mọi lượt mà cả lô đều "chưa tới giờ hãng quét" sẽ bị đánh đỏ — báo oan,
+ * và một tác vụ báo oan thì sau vài tuần không ai đọc nữa. Đúng cái bệnh đã làm
+ * `track-ship-ho` chết âm thầm.
+ */
+export function napNgayHong(k: { co: number; khong: number; loi: number }): boolean {
+  return k.loi > 0 && k.co + k.khong === 0;
+}

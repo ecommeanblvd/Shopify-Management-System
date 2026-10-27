@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mocLayHang, mocLayHangUps } from './ngay-lay-hang';
+import { mocLayHang, mocLayHangUps, napNgayHong } from './ngay-lay-hang';
 
 describe('mocLayHang', () => {
   /* Lịch sử THẬT của AWB 873918787369 (02/10/2026). `shipped_at` của SMS ghi 03/07 — đó là
@@ -72,5 +72,31 @@ describe('mocLayHangUps', () => {
 
   it('ngày hỏng thì bỏ qua', () => {
     expect(mocLayHangUps([{ eventType: 'P', date: 'khong-phai-ngay' }])).toBeNull();
+  });
+});
+
+describe('napNgayHong — có lỗi MÀ không làm được gì, không phải "không lấy được mốc nào"', () => {
+  it('cả lô đều lỗi, không đơn nào hãng trả lời được → HỎNG', () => {
+    expect(napNgayHong({ co: 0, khong: 0, loi: 19 })).toBe(true);
+  });
+
+  /* Ca này là cả lý do hàm tồn tại. Đơn vừa gửi thì hãng chưa quét lấy hàng, nên một lượt
+   * `co: 0, khong: 19` là BÌNH THƯỜNG. Chốt đòi `co > 0` sẽ đánh đỏ mọi lượt như vậy — báo
+   * oan, và tác vụ báo oan thì vài tuần sau không ai đọc nữa. */
+  it('hãng trả lời hết mà chưa đơn nào có mốc → KHÔNG hỏng', () => {
+    expect(napNgayHong({ co: 0, khong: 19, loi: 0 })).toBe(false);
+  });
+
+  it('lỗi lẻ mà vẫn có đơn hãng trả lời được → KHÔNG hỏng', () => {
+    expect(napNgayHong({ co: 5, khong: 3, loi: 11 })).toBe(false);
+    expect(napNgayHong({ co: 0, khong: 1, loi: 18 })).toBe(false);
+  });
+
+  it('lượt rỗng (không đơn nào để thử) → KHÔNG hỏng', () => {
+    expect(napNgayHong({ co: 0, khong: 0, loi: 0 })).toBe(false);
+  });
+
+  it('lấy được mốc hết, không lỗi → KHÔNG hỏng', () => {
+    expect(napNgayHong({ co: 19, khong: 0, loi: 0 })).toBe(false);
   });
 });

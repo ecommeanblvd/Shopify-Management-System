@@ -18,6 +18,7 @@ import { pushUnsentBrandOrders, pushOwnedStoreOrders } from '@/features/mmp/orde
 import { verifyUnverifiedAddresses } from '@/features/shopify-orders/address-verify';
 import { trackPendingShipHo, luotTrackHong } from '@/features/ship-ho/track';
 import { napNgayLayHang } from '@/features/ship-ho/nap-ngay-lay-hang';
+import { napNgayHong } from '@/features/ship-ho/ngay-lay-hang';
 import { doiChieuLyDoCham } from '@/features/shipments/doi-chieu-ly-do';
 import { refreshShipHoTiers } from '@/features/ship-ho/tier-refresh';
 import { boSungUocTinhShipHo, boSungGiaThuShipHo } from '@/features/ship-ho/auto-quote';
@@ -67,11 +68,19 @@ const VIEC: Array<{
    * chạy". Service `cron-sync-orders` đã có sẵn `FEDEX_TRACK_*` và đã chạy `track-ship-ho`
    * mỗi giờ, nên vào đây là đủ: không service mới, không biến mới.
    *
-   * KHÔNG có `kiemTra` — và đó là lỗ ĐÃ BIẾT, không phải quên. `napNgayLayHang` trả
-   * `{thu, co, khong, lech}` mà KHÔNG đếm lỗi, nên lượt "FedEx sập" và lượt "chưa có dữ liệu
-   * quét" trông GIỐNG HỆT nhau (`co: 0`). Mọi chốt viết được từ hình đó đều báo oan. Muốn gác
-   * thật thì phải thêm một ô đếm lỗi vào `KetQuaNapNgayLayHang` trước (chỗ `'loi' in r`). */
-  { key: 'nap-ngay-lay-hang', fn: () => napNgayLayHang({ gioiHan: 200 }) },
+   * `kiemTra` dùng được từ 27/10/2026, sau khi thêm ô `loi` vào `KetQuaNapNgayLayHang`. Trước
+   * đó ba ca cùng rơi vào `khong` (hãng lỗi · hãng không trả mã · hãng OK mà chưa có mốc), nên
+   * "FedEx sập" và "chưa tới giờ hãng quét" trông giống hệt nhau và mọi chốt đều báo oan. */
+  {
+    key: 'nap-ngay-lay-hang',
+    fn: () => napNgayLayHang({ gioiHan: 200 }),
+    kiemTra: (s: unknown) => {
+      const t = s as { co?: number; khong?: number; loi?: number; loiMau?: string };
+      return napNgayHong({ co: t.co ?? 0, khong: t.khong ?? 0, loi: t.loi ?? 0 })
+        ? `hãng không trả lời được lượt nào (${t.loi} lỗi): ${t.loiMau ?? 'không rõ'}`
+        : null;
+    },
+  },
   // Đối chiếu lý do chậm với FedEx: chạy SAU track-ship-ho, ở service có khoá Track API.
   {
     key: 'doi-chieu-ly-do',
