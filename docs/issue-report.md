@@ -45,8 +45,43 @@ Quy tắc cho bên xử lý:
    không tái hiện được → đặt `can_nguoi` kèm lý do, **không đoán**.
 4. Mỗi lượt claim bằng `dang_xu_ly` trước khi sửa để hai lượt không dẫm nhau.
 
+## Cổng chẩn đoán CHỈ-ĐỌC — `GET /api/issues/chan-doan`
+
+Cùng token, cùng tiền tố `/api/issues` (nên môi trường cloud tự gắn `Authorization`). Chỉ GET,
+chỉ các câu **khai sẵn**, không SQL tự do, không ghi, **không** trả tên/email/điện thoại/địa
+chỉ/mã bưu chính của khách.
+
+| `q` | tham số | trả về |
+|---|---|---|
+| `job-chua-chay` | — | khoá trong sổ đăng ký mà `job_runs` **chưa bao giờ** có dòng |
+| `job-runs` | `key`, `limit` | lượt chạy gần nhất của một khoá tác vụ |
+| `kien` | `ma` | một kiện theo mã LOG (`PK-…`) hoặc mã vận đơn |
+| `kien-mac-gia` | `limit` | kiện đã nhập mã qua hệ thống mà chưa ghi được giá lên Lark |
+
+```bash
+curl "$BASE/api/issues/chan-doan?q=job-chua-chay"
+curl "$BASE/api/issues/chan-doan?q=job-runs&key=dien-bu-gia-uoc-tinh&limit=5"
+curl "$BASE/api/issues/chan-doan?q=kien&ma=PK-22436"
+```
+
+**Vì sao có (27/10/2026, sau BL-2):** lượt chạy hằng đêm đã đi đúng con đường — grep ra
+`xem-truoc-van-don.ts`, tìm ra `lyDoTrong`, liệt kê đủ 12 đường `return null` của
+`lay-gia-uoc-tinh.ts` — rồi **phải dừng ở `can_nguoi`** vì mọi bằng chứng quyết định nằm trong
+CSDL mà nó không được đọc. Gốc thật là **`job_runs` có 0 lượt cho `dien-bu-gia-uoc-tinh`**: một
+truy vấn đếm. Thiếu nó thì với MỌI lỗi phụ thuộc dữ liệu, câu trả lời sẽ luôn là *"không tái
+hiện được"*. Nó còn tin **chú thích trong mã** (*"cron sẽ thử lại"*) thay vì kiểm sổ tác vụ —
+và đó đúng là câu sai.
+
+Luật "KHÔNG chạm CSDL production" vẫn giữ tinh thần: bên xử lý không có chuỗi kết nối, không
+chạy SQL của riêng nó. **Thêm một câu vào `TRUY_VAN_CHO_PHEP` là mở thêm quyền đọc** — một
+quyết định có ý thức, không phải tiện tay.
+
 ## Triển khai (làm tay, đúng thứ tự)
 
 1. Áp `db/migrations/0212_issue-reports.sql` `0213_issue-reports-anh.sql` rồi `0214_issue-report-events.sql` lên DB production, kiểm `information_schema`.
 2. Đặt `ISSUE_API_TOKEN` (`openssl rand -hex 32`) trong Railway.
 3. Deploy mã.
+4. **Lập lịch tác vụ hằng đêm** (routine cloud, xem danh sách ở `claude.ai/code/routines`). Bước
+   này TỪNG BỊ THIẾU trong tài liệu, và đó không phải chuyện nhỏ: mã có, API có, mà không ai
+   gọi thì **không bao giờ kêu**. Cùng một thiếu sót đã làm cron `dien-bu-gia-uoc-tinh` nằm im
+   15 ngày (D-262).
