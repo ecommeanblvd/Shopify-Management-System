@@ -12,6 +12,7 @@
  *   curl "$BASE/api/issues/chan-doan?q=job-runs&key=dien-bu-gia-uoc-tinh&limit=5"
  *   curl "$BASE/api/issues/chan-doan?q=kien&ma=PK-22436"
  *   curl "$BASE/api/issues/chan-doan?q=kien-mac-gia"
+ *   curl "$BASE/api/issues/chan-doan?q=lech-hang"
  */
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
@@ -78,6 +79,29 @@ async function chay(yc: YeuCauChanDoan): Promise<{ mota: string; data: unknown }
          or upper(s.tracking_number) = upper(${yc.ma})
       limit ${yc.limit}`);
     return { mota: `kiện theo mã '${yc.ma}' (không có dữ liệu cá nhân của khách)`, data: dong(r) };
+  }
+
+  if (yc.ten === 'lech-hang') {
+    /* Hai nguồn trong CÙNG MỘT DÒNG đá nhau: `carrier_key` (người nhập chọn hãng) và hãng của
+     * `carrier_account_id` (dính theo luồng báo giá). Không có cảnh báo nào nổi lên vì mỗi bên
+     * đều tự nhất quán — đúng hình dạng của 311 chiếc kẹt và của BL-2.
+     *
+     * Đo 28/10/2026: 2 đơn. Hậu quả KHÔNG phải một thứ: đơn `SF…` dưới tài khoản FedEx thì
+     * mỗi giờ tốn một lượt gọi FedEx vô ích và không bao giờ có ngày lấy hàng; và ảnh giá của
+     * nó được tính trên bảng giá hãng SAI (SF 1.050.300 vs FedEx 1.579.244 cho cùng kiện).
+     * Sửa bằng `scripts/du-lieu/sua-tai-khoan-hang-lech.ts` — từng đơn, có người xác nhận. */
+    const r = await db.execute(sql`
+      select o.code as "maDon", o.carrier_key as "hangTheoKey", c.key as "hangTheoTaiKhoan",
+             ca.name as "tenTaiKhoan", o.tracking_number as "maVanDon",
+             o.shipped_at::text as "ngayGui", o.picked_up_at::text as "ngayLayHang",
+             o.carrier_cost_vnd::text as "giaVon", o.charged_vnd::text as "thuBrand",
+             (o.statement_id is not null) as "daLenBangKe"
+      from ship_ho_orders o
+      join carrier_accounts ca on ca.id = o.carrier_account_id
+      join carriers c on c.id = ca.carrier_id
+      where o.carrier_key is not null and o.carrier_key <> c.key
+      order by o.code limit ${yc.limit}`);
+    return { mota: 'đơn ship hộ có carrier_key đá nhau với hãng của tài khoản đang gắn', data: dong(r) };
   }
 
   // kien-mac-gia — đúng năm điều kiện của `canDienBu`, xem features/dong-hang/dien-bu.ts

@@ -65,3 +65,18 @@ describe('docYeuCauChanDoan — DANH SÁCH TRẮNG, không có đường rơi v�
     expect(k.ok && k.yc.ma).toBe('PK-22436');
   });
 });
+
+describe('lech-hang — câu đọc thêm 28/10/2026', () => {
+  it('nằm trong danh sách trắng và KHÔNG đòi tham số nào', () => {
+    expect(TRUY_VAN_CHO_PHEP).toContain('lech-hang');
+    const k = doc('q=lech-hang');
+    expect(k.ok).toBe(true);
+    if (k.ok) expect(k.yc.limit).toBe(GIOI_HAN_DONG);
+  });
+
+  it('vẫn bị KẸP limit như mọi câu khác', () => {
+    const k = doc('q=lech-hang&limit=9999');
+    expect(k.ok).toBe(true);
+    if (k.ok) expect(k.yc.limit).toBe(GIOI_HAN_DONG);
+  });
+});

@@ -30,6 +30,7 @@ export const TRUY_VAN_CHO_PHEP = [
   'job-chua-chay', // khoá trong sổ đăng ký mà `job_runs` CHƯA BAO GIỜ có dòng nào
   'kien',          // một kiện theo mã LOG hoặc mã vận đơn (cần `ma`)
   'kien-mac-gia',  // kiện đã nhập mã qua hệ thống mà chưa ghi được giá lên Lark
+  'lech-hang',     // đơn ship hộ có `carrier_key` đá nhau với hãng của tài khoản đang gắn
 ] as const;
 export type TenTruyVan = (typeof TRUY_VAN_CHO_PHEP)[number];
 
