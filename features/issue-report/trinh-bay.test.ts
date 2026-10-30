@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nhanNguoiSuKien, nhanNguoiBao, laLienKetAnToan, cauChuaXuLy } from './trinh-bay';
-import { NGUOI_TU_DONG } from './su-kien';
-import { TRANG_THAI } from './phan-loai';
+import { NGUOI_TU_DONG, TRANG_THAI } from './phan-loai';
 
 describe('nhanNguoiSuKien', () => {
   it('dòng của bot ghi "ghi qua đường tự động", không ghi "Hệ thống tự động"', () => {

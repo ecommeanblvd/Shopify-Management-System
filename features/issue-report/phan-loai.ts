@@ -84,6 +84,16 @@ export const CON_VIEC_CHO_BOT: readonly TrangThai[] = ['moi'];
 
 export const GIOI_HAN = { tieuDe: 120, moTa: 4000, ghiChu: 4000, duongDan: 500, prUrl: 500 } as const;
 
+/**
+ * Người thực hiện mà đường `PATCH /api/issues` (không session) ghi vào dòng thời gian.
+ *
+ * Nằm Ở ĐÂY, không ở `su-kien.ts`: tệp đó import `@/db/client`, tức kéo `pg` và hai built-in
+ * `dns`/`fs` vào bundle CLIENT nếu một component client chạm tới hằng này. Đo thật 30/10/2026
+ * — `npm run build` đỏ 7 lỗi, `tsc` thì xanh. Cùng cái bẫy mà `lib/auth/role-cache.ts` đã tách
+ * ra để tránh. `su-kien.ts` export lại để không tệp nào khác phải sửa.
+ */
+export const NGUOI_TU_DONG = 'tác vụ tự động';
+
 export function maBaoLoi(so: number): string {
   return `BL-${so}`;
 }

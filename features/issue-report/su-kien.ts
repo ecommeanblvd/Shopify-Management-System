@@ -1,6 +1,8 @@
 import { db, schema } from '@/db/client';
 
-export const NGUOI_TU_DONG = 'tác vụ tự động';
+/* Export LẠI từ `phan-loai.ts` (thuần, không import CSDL) để nơi nào đang lấy hằng này từ đây
+ * không phải sửa — xem chú thích tại chỗ khai về lý do nó không được nằm trong tệp này. */
+export { NGUOI_TU_DONG } from './phan-loai';
 
 export interface SuKienVao {
   issueId: string;

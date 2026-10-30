@@ -2,7 +2,7 @@
  * THUẦN: chữ hiện lên modal chi tiết báo lỗi. Tách khỏi component vì vitest **chỉ bắt
  * `.test.ts`, KHÔNG bắt `.test.tsx`** — logic nằm trong `.tsx` là logic không ai gác.
  */
-import { NGUOI_TU_DONG } from './su-kien';
+import { NGUOI_TU_DONG } from './phan-loai';
 
 /**
  * Nhãn cho một dòng trong dòng thời gian.

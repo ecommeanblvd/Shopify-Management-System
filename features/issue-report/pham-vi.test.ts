@@ -99,6 +99,14 @@ describe('xemDuocChu', () => {
 });
 
 describe('xemDuocAnh', () => {
+  it('tat_ca xem được', () => {
+    expect(xemDuocAnh({ roleKey: 'xem_het', laNguoiBao: false })).toBe(true);
+  });
+
+  it('người báo xem được dù không có quyền module nào', () => {
+    expect(xemDuocAnh({ roleKey: 'khong_quyen_bao_loi', laNguoiBao: true })).toBe(true);
+  });
+
   it('cùng module mà không phải người báo và không tat_ca thì KHÔNG xem được ảnh', () => {
     // Ca chặn của lối (b) — thiết kế §11: chữ hiện theo quyền module, ẢNH thì không.
     expect(xemDuocChu({ roleKey: 'chi_ship_ho', module: 'ship-ho', laNguoiBao: false })).toBe(true);

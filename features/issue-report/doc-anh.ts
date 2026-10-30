@@ -4,7 +4,17 @@ import { db, schema } from '@/db/client';
 import { getObject } from '@/lib/storage/s3';
 import type { AnhBaoLoi } from './anh';
 
-const UUID = /^[0-9a-f-]{36}$/;
+/**
+ * Khoá UUID của một báo lỗi. Chặt theo khuôn 8-4-4-4-12 chữ số hex, KHÔNG phải
+ * `/^[0-9a-f-]{36}$/` — khuôn lỏng đó nhận cả `------------------------------------`.
+ *
+ * Export để nơi gọi chặn TRƯỚC khi id tới Postgres: route ảnh của nhân sự phải đọc
+ * `reporter_id` trước khi quyết quyền, nên một id rác đi thẳng vào `eq(id, …)` làm Postgres
+ * ném "invalid input syntax for type uuid" ⇒ 500 thay vì 404.
+ */
+export function laUuidBaoLoi(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
 
 /**
  * Trả bytes của ảnh thứ `n` (bắt đầu từ 1) của một báo lỗi. KHÔNG kiểm quyền — nơi gọi phải
@@ -13,7 +23,7 @@ const UUID = /^[0-9a-f-]{36}$/;
  */
 export async function phucVuAnh(id: string, n: string): Promise<Response> {
   const thuTu = Number(n);
-  if (!UUID.test(id) || !Number.isInteger(thuTu) || thuTu < 1) {
+  if (!laUuidBaoLoi(id) || !Number.isInteger(thuTu) || thuTu < 1) {
     return NextResponse.json({ ok: false, error: 'bad request' }, { status: 400 });
   }
   const [r] = await db.select({ anh: schema.issueReports.anh }).from(schema.issueReports)
