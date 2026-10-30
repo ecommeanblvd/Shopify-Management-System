@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { laUuidBaoLoi } from './doc-anh';
+import { khongTimThayAnh, laUuidBaoLoi } from './doc-anh';
 
 describe('laUuidBaoLoi', () => {
   it('chặn id không phải UUID trước khi nó tới Postgres', () => {
@@ -12,5 +12,20 @@ describe('laUuidBaoLoi', () => {
 
   it('nhận UUID thật', () => {
     expect(laUuidBaoLoi('5b674e6a-271f-4283-9eb7-ee814b302863')).toBe(true);
+  });
+});
+
+describe('khongTimThayAnh', () => {
+  it('mỗi lượt trả một Response MỚI — thân Response dùng một lần', async () => {
+    // Giữ MỘT đối tượng Response ở mức module rồi trả nó nhiều lượt: lượt đầu đúng 404, mọi
+    // lượt sau ném 'Body is unusable' ⇒ 500. Nghĩa là người không được xem ảnh bấm link lần
+    // thứ hai sẽ nhận 500 — biến một nhánh gác cố ý thành lỗi hệ thống.
+    const a = khongTimThayAnh();
+    const b = khongTimThayAnh();
+    expect(a).not.toBe(b);
+    expect(a.status).toBe(404);
+    expect(b.status).toBe(404);
+    await expect(a.text()).resolves.toContain('không tìm thấy');
+    await expect(b.text()).resolves.toContain('không tìm thấy');
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { primeRoleCache } from '@/lib/auth/access';
 import { SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
-import { quyenCuaModule, moduleXemDuoc, xemDuocChu, xemDuocAnh, phamViDoc } from './pham-vi';
+import { quyenCuaModule, moduleXemDuoc, xemDuocChu, xemDuocAnh, phamViDoc, quyenCoHieuLuc } from './pham-vi';
 import { moduleTuDuongDan } from './phan-loai';
 
 /**
@@ -37,6 +37,17 @@ describe('quyenCuaModule', () => {
     const q = quyenCuaModule().get('ship-report');
     expect(q).toContain('view_carrier_rates');
     expect(q).toContain('view_kpi_logistics');
+  });
+
+  it('quyền ánh xạ RỖNG không dựng được phạm vi', () => {
+    // `OLD_TO_NEW.view = []` và `[].every(...) === true`, nên `hasPermission(bất kỳ vai, 'view')`
+    // LUÔN đúng. Một mục `NAV` khai `requires: 'view'` sẽ biến module đó thành "ai cũng thấy" —
+    // cùng hạng lỗi với `requires: null`, nên phải chặn cùng một chỗ.
+    expect(quyenCoHieuLuc('view')).toBe(false);
+    expect(quyenCoHieuLuc('view_ship_ho')).toBe(true);
+    for (const [ma, ds] of quyenCuaModule()) {
+      for (const q of ds) expect(quyenCoHieuLuc(q), `${ma} → ${q}`).toBe(true);
+    }
   });
 
   it('requires null thì KHÔNG dựng quyền', () => {

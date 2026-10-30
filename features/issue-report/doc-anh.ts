@@ -17,6 +17,18 @@ export function laUuidBaoLoi(id: string): boolean {
 }
 
 /**
+ * 404 cho mọi nhánh "không được xem / không có" của route ảnh.
+ *
+ * HÀM, không phải hằng mức module: thân một `Response` là stream **dùng một lần**, nên giữ một
+ * đối tượng rồi trả nhiều lượt làm lượt đầu đúng 404 và **mọi lượt sau ném "Body is unusable"
+ * ⇒ 500**. Đo thật 30/10/2026. Nó biến một nhánh gác cố ý thành lỗi hệ thống — và một mã 500
+ * ổn định cũng là dấu hiệu bất thường, đúng thứ việc trả 404 sinh ra để tránh.
+ */
+export function khongTimThayAnh(): Response {
+  return NextResponse.json({ ok: false, error: 'không tìm thấy' }, { status: 404 });
+}
+
+/**
  * Trả bytes của ảnh thứ `n` (bắt đầu từ 1) của một báo lỗi. KHÔNG kiểm quyền — nơi gọi phải
  * kiểm trước (phiên admin hoặc token). Stream qua app thay vì chuyển hướng sang URL S3 ký sẵn:
  * phiên chạy đêm chỉ được phép gọi tới domain của app, không tới domain kho lưu trữ.
@@ -29,7 +41,7 @@ export async function phucVuAnh(id: string, n: string): Promise<Response> {
   const [r] = await db.select({ anh: schema.issueReports.anh }).from(schema.issueReports)
     .where(eq(schema.issueReports.id, id)).limit(1);
   const a = (r?.anh as AnhBaoLoi[] | undefined)?.[thuTu - 1];
-  if (!a) return NextResponse.json({ ok: false, error: 'không tìm thấy' }, { status: 404 });
+  if (!a) return khongTimThayAnh();
   try {
     const bytes = await getObject(a.key);
     return new Response(Buffer.from(bytes), {

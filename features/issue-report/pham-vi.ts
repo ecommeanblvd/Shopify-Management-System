@@ -32,11 +32,25 @@
  */
 import { NAV, SETTINGS_ITEMS } from '@/lib/nav';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
+import { OLD_TO_NEW } from '@/lib/auth/permission-map';
 import { moduleTuDuongDan } from './phan-loai';
 
 /* `NAV` và `SETTINGS_ITEMS` là hằng tĩnh nên bản đồ dựng MỘT lần cho cả tiến trình. Không phụ
  * thuộc vai nào, nên nhớ đệm ở đây không làm lẫn quyền giữa hai người đọc. */
 let dem: ReadonlyMap<string, readonly Permission[]> | null = null;
+
+/**
+ * Quyền này có gác được gì không.
+ *
+ * `OLD_TO_NEW.view = []` và `[].every(...) === true`, nên `hasPermission(bất kỳ vai, 'view')`
+ * LUÔN đúng — xem chú thích tại `lib/auth/rbac.ts`. Một mục `NAV` khai `requires: 'view'` vì thế
+ * sẽ biến module đó thành "ai cũng thấy": **cùng hạng lỗi với `requires: null`**, nên chặn cùng
+ * một chỗ. Hôm nay chưa mục nào khai thế; chốt này là để ngày mai thêm một dòng `NAV` không
+ * lặng lẽ mở một bộ phận ra cho cả nhà.
+ */
+export function quyenCoHieuLuc(q: Permission): boolean {
+  return (OLD_TO_NEW[q]?.length ?? 0) > 0;
+}
 
 /** Mã module → danh sách quyền MỞ ĐƯỢC màn đó, nghĩa OR. Mục `requires: null` bị bỏ qua. */
 export function quyenCuaModule(): ReadonlyMap<string, readonly Permission[]> {
@@ -47,8 +61,8 @@ export function quyenCuaModule(): ReadonlyMap<string, readonly Permission[]> {
     const ma = moduleTuDuongDan(muc.href).ma;
     const them = Array.isArray(muc.requires) ? muc.requires : [muc.requires];
     const co = ra.get(ma) ?? [];
-    for (const q of them) if (!co.includes(q)) co.push(q);
-    ra.set(ma, co);
+    for (const q of them) if (quyenCoHieuLuc(q) && !co.includes(q)) co.push(q);
+    if (co.length > 0) ra.set(ma, co);
   }
   dem = ra;
   return ra;
@@ -73,9 +87,13 @@ export function moduleXemDuoc(roleKey: string): { tatCa: boolean; module: Readon
 /**
  * Đọc được phần CHỮ của một báo lỗi hay không.
  *
- * `laNguoiBao` chặn ngắn TRƯỚC cả `view_bao_loi`, cố ý: giấu báo lỗi của một người khỏi chính
- * họ chỉ vì một khoá quyền chưa được seed là tái hiện đúng thất bại mà màn này sinh ra để sửa
- * (ghi chú 1.069 ký tự viết riêng cho Tú mà Tú không với tới được).
+ * `laNguoiBao` chặn ngắn TRƯỚC cả `view_bao_loi`.
+ *
+ * NÓI RÕ GIỚI HẠN: hai lối vào đều đòi `view_bao_loi` trước khi gọi tới đây — `docLichSuBaoLoi`
+ * trả `ok: false`, trang `/f/bao-loi` thì `redirect('/')`. Nên nhánh này KHÔNG phải một đường
+ * cho người thiếu khoá đọc lỗi của mình; nó chỉ bảo đảm rằng khi đã vào được, báo lỗi của chính
+ * mình không bị luật module giấu đi — ca `module: 'khac'` khi gửi từ Dashboard. Đừng đọc chú
+ * thích này thành một lời hứa rộng hơn thế.
  */
 export function xemDuocChu(a: { roleKey: string; module: string; laNguoiBao: boolean }): boolean {
   if (a.laNguoiBao) return true;

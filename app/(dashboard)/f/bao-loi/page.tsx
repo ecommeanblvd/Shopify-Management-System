@@ -35,10 +35,10 @@ export default async function TrangBaoLoi({ searchParams }: {
     Object.entries(sp).flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as [string, string]] : [])),
   ));
 
-  const [dem, pv] = await Promise.all([
-    demTrangThaiTrongPhamVi({ roleKey, userId }),
-    Promise.resolve(moduleXemDuoc(roleKey)),
-  ]);
+  /* `module` phải vào CẢ ô đếm: thiếu nó thì ô đếm nói con số toàn phạm vi còn danh sách lọc
+   * theo module ⇒ "ô đếm nói có 5, bảng nói không có gì". */
+  const dem = await demTrangThaiTrongPhamVi({ roleKey, userId, module: ts.module ?? undefined });
+  const pv = moduleXemDuoc(roleKey);
 
   /* `?bl=` tra riêng: báo lỗi được trỏ tới có thể không nằm trong 20 dòng đầu của danh sách.
    * Ngoài phạm vi ⇒ `baoLoiTheoSo` trả null ⇒ hiện "không tìm thấy". ĐỪNG nói "không có quyền":
@@ -110,8 +110,10 @@ export default async function TrangBaoLoi({ searchParams }: {
         </p>
       )}
 
+      {/* Trang này để xem CHÉO mọi module nên trần cao hơn panel (20); kèm câu nói rõ đang
+          xem bao nhiêu dòng, để không ai tưởng đó là tất cả. */}
       <BangLichSuBaoLoi module={ts.module ?? undefined} trangThai={ts.trangThai ?? undefined}
-        hienNhanModule />
+        gioiHan={100} hienNhanModule />
 
       {duMot && duMot.dong[0] && (
         <MoSanBaoLoi baoLoi={duMot.dong[0]} suKien={duMot.suKien[duMot.dong[0].id] ?? []}

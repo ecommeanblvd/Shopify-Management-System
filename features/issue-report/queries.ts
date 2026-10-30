@@ -113,14 +113,25 @@ export async function baoLoiTheoSo(a: {
   return r ?? null;
 }
 
-/** Đếm theo trạng thái TRONG phạm vi — ô đếm ở trang rộng dùng nó làm bộ lọc. */
+/**
+ * Đếm theo trạng thái TRONG phạm vi — ô đếm ở trang rộng dùng nó làm bộ lọc.
+ *
+ * `module` BẮT BUỘC đi cùng khi trang đang lọc theo module: thiếu nó thì ô đếm nói con số toàn
+ * phạm vi còn danh sách lọc theo module, tức "ô đếm nói có 5, bảng nói không có gì" — đúng câu
+ * làm người dùng kết luận hệ thống mất báo lỗi của họ.
+ */
 export async function demTrangThaiTrongPhamVi(a: {
-  roleKey: string; userId: string;
+  roleKey: string; userId: string; module?: string;
 }): Promise<Record<string, number>> {
+  const dk: SQL[] = [];
   const pv = dieuKienPhamVi(a.roleKey, a.userId);
+  if (pv) dk.push(pv);
+  if (a.module) dk.push(eq(schema.issueReports.module, a.module));
   const rows = await db.select({
     trangThai: schema.issueReports.trangThai,
     n: sql<number>`count(*)::int`,
-  }).from(schema.issueReports).where(pv).groupBy(schema.issueReports.trangThai);
+  }).from(schema.issueReports)
+    .where(dk.length ? and(...dk) : undefined)
+    .groupBy(schema.issueReports.trangThai);
   return Object.fromEntries(rows.map((r) => [r.trangThai, r.n]));
 }

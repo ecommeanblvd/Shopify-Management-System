@@ -21,11 +21,13 @@ const DA_XONG = new Set(['da_xong', 'tu_choi']);
  * Tải qua server action thay vì nhận props từ server component: tab trong panel chỉ mở khi người
  * dùng bấm, nên nạp sẵn ở mọi lượt dựng trang là tốn một truy vấn cho việc chưa chắc ai xem.
  */
-export function BangLichSuBaoLoi({ module, trangThai, hienNhanModule }: {
+export function BangLichSuBaoLoi({ module, trangThai, gioiHan, hienNhanModule }: {
   /** Lọc theo một module; để trống là xem mọi module trong phạm vi. */
   module?: string;
   /** Lọc theo trạng thái; để trống là mọi trạng thái. */
   trangThai?: string;
+  /** Trần số dòng. Mặc định 20 cho panel; trang rộng truyền cao hơn. */
+  gioiHan?: number;
   /** Hiện thêm chip module trên mỗi dòng — trang rộng cần, tab trong panel thì không. */
   hienNhanModule?: boolean;
 }) {
@@ -36,11 +38,11 @@ export function BangLichSuBaoLoi({ module, trangThai, hienNhanModule }: {
 
   useEffect(() => {
     batDau(async () => {
-      const r = await docLichSuBaoLoi({ module, trangThai });
+      const r = await docLichSuBaoLoi({ module, trangThai, gioiHan });
       if (r.ok) { setKq(r.kq); setLoi(null); } else { setKq(null); setLoi(r.loi); }
     });
     // `batDau` từ useTransition ổn định giữa các lượt dựng; chỉ `module` mới đáng nạp lại.
-  }, [module, trangThai]);
+  }, [module, trangThai, gioiHan]);
 
   if (loi) return <p className="px-1 py-3 text-sm text-muted-foreground">{loi}</p>;
   if (!kq) return <p className="px-1 py-3 text-sm text-muted-foreground">{dangTai ? 'Đang tải…' : ''}</p>;
@@ -79,6 +81,13 @@ export function BangLichSuBaoLoi({ module, trangThai, hienNhanModule }: {
             </li>
           ))}
         </ul>
+      )}
+
+      {kq.dong.length > 0 && kq.dong.length === (gioiHan ?? 20) && (
+        <p className="px-1 pt-1 text-xs text-muted-foreground">
+          Đang xem {kq.dong.length} báo lỗi gần nhất. Có thể còn cũ hơn — lọc theo trạng thái
+          hoặc module để thu hẹp.
+        </p>
       )}
 
       {!hienNhanModule && (

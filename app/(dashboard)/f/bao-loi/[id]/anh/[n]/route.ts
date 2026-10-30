@@ -4,13 +4,11 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { getRole } from '@/lib/auth/role';
-import { laUuidBaoLoi, phucVuAnh } from '@/features/issue-report/doc-anh';
+import { khongTimThayAnh, laUuidBaoLoi, phucVuAnh } from '@/features/issue-report/doc-anh';
 import { xemDuocAnh } from '@/features/issue-report/pham-vi';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const KHONG_THAY = NextResponse.json({ ok: false, error: 'không tìm thấy' }, { status: 404 });
 
 /**
  * Ảnh báo lỗi cho NHÂN SỰ — gác bằng luật ẢNH, không phải luật chữ (thiết kế §11, lối (b)).
@@ -29,15 +27,15 @@ export async function GET(
 
   const { id, n } = await ctx.params;
   // Chặn id rác TRƯỚC khi nó tới Postgres — `eq(id, 'abc')` ném, tức 500 thay vì 404.
-  if (!laUuidBaoLoi(id)) return KHONG_THAY;
+  if (!laUuidBaoLoi(id)) return khongTimThayAnh();
   /* Phải biết AI BÁO trước khi quyết, nên đọc đúng một cột. `phucVuAnh` không kiểm quyền —
    * chú thích của chính nó nói nơi gọi phải kiểm trước. */
   const [row] = await db.select({ reporterId: schema.issueReports.reporterId })
     .from(schema.issueReports).where(eq(schema.issueReports.id, id)).limit(1);
-  if (!row) return KHONG_THAY;
+  if (!row) return khongTimThayAnh();
 
   const roleKey = await getRole(session.user.id);
-  if (!xemDuocAnh({ roleKey, laNguoiBao: row.reporterId === session.user.id })) return KHONG_THAY;
+  if (!xemDuocAnh({ roleKey, laNguoiBao: row.reporterId === session.user.id })) return khongTimThayAnh();
 
   return phucVuAnh(id, n);
 }
