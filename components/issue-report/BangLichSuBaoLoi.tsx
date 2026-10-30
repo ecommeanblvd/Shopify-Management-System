@@ -21,9 +21,11 @@ const DA_XONG = new Set(['da_xong', 'tu_choi']);
  * Tải qua server action thay vì nhận props từ server component: tab trong panel chỉ mở khi người
  * dùng bấm, nên nạp sẵn ở mọi lượt dựng trang là tốn một truy vấn cho việc chưa chắc ai xem.
  */
-export function BangLichSuBaoLoi({ module, hienNhanModule }: {
+export function BangLichSuBaoLoi({ module, trangThai, hienNhanModule }: {
   /** Lọc theo một module; để trống là xem mọi module trong phạm vi. */
   module?: string;
+  /** Lọc theo trạng thái; để trống là mọi trạng thái. */
+  trangThai?: string;
   /** Hiện thêm chip module trên mỗi dòng — trang rộng cần, tab trong panel thì không. */
   hienNhanModule?: boolean;
 }) {
@@ -34,11 +36,11 @@ export function BangLichSuBaoLoi({ module, hienNhanModule }: {
 
   useEffect(() => {
     batDau(async () => {
-      const r = await docLichSuBaoLoi({ module });
+      const r = await docLichSuBaoLoi({ module, trangThai });
       if (r.ok) { setKq(r.kq); setLoi(null); } else { setKq(null); setLoi(r.loi); }
     });
     // `batDau` từ useTransition ổn định giữa các lượt dựng; chỉ `module` mới đáng nạp lại.
-  }, [module]);
+  }, [module, trangThai]);
 
   if (loi) return <p className="px-1 py-3 text-sm text-muted-foreground">{loi}</p>;
   if (!kq) return <p className="px-1 py-3 text-sm text-muted-foreground">{dangTai ? 'Đang tải…' : ''}</p>;
