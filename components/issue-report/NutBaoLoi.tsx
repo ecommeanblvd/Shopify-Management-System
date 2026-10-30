@@ -12,6 +12,8 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet';
 import { FileDrop } from '@/components/ui/file-drop';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BangLichSuBaoLoi } from './BangLichSuBaoLoi';
 import { guiBaoLoi } from '@/features/issue-report/actions';
 import { ANH_BYTE_TOI_DA, ANH_TOI_DA } from '@/features/issue-report/anh';
 import { DANH_SACH_MODULE, MUC_DO, moduleTuDuongDan } from '@/features/issue-report/phan-loai';
@@ -21,8 +23,16 @@ import { DANH_SACH_MODULE, MUC_DO, moduleTuDuongDan } from '@/features/issue-rep
  * (CEO 20/10/2026: cùng một vị trí, không tách sang trang khác). Module do server suy từ
  * đường dẫn lúc gửi; ở đây chỉ hiện nhãn để người báo biết mình đang báo cho phần nào.
  * Là panel trượt để người dùng không mất bộ lọc / vị trí cuộn của màn đang xem.
+ *
+ * Từ 30/10/2026 có TAB THỨ HAI "Lịch sử": báo lỗi của màn đang đứng, trong phạm vi người đọc
+ * (`features/issue-report/pham-vi.ts`). Cùng khuôn với panel Nhật ký — CEO 20/10/2026: *"người
+ * dùng đang xem bảng nào sẽ soi luôn log của bảng đó thay vì chuyển sang module khác"*.
+ *
+ * `coLichSu` là prop DỮ LIỆU, không phải prop dáng: quyền phải tính ở server (`hasPermission`
+ * đọc cache quyền của tiến trình) nên `Topbar` truyền xuống. Component vẫn KHÔNG nhận
+ * `className` hay prop vị trí — nút phải ở cùng một chỗ trên mọi module.
  */
-export function NutBaoLoi() {
+export function NutBaoLoi({ coLichSu = false }: { coLichSu?: boolean }) {
   const pathname = usePathname();
   const [mo, setMo] = useState(false);
   const [tieuDe, setTieuDe] = useState('');
@@ -69,7 +79,7 @@ export function NutBaoLoi() {
     });
   }
 
-  return (
+  const than = (
     <Sheet open={mo} onOpenChange={setMo}>
       <SheetTrigger render={<Button type="button" variant="outline" size="sm" className="h-9 gap-2" />}>
         <Bug className="size-4" />
@@ -83,6 +93,13 @@ export function NutBaoLoi() {
             của bạn.
           </SheetDescription>
         </SheetHeader>
+        {coLichSu && (
+          <TabsList className="mx-4 mb-2">
+            <TabsTrigger value="gui">Báo lỗi</TabsTrigger>
+            <TabsTrigger value="lich-su">Lịch sử</TabsTrigger>
+          </TabsList>
+        )}
+        <KhungGui coLichSu={coLichSu}>
         <div className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-1.5">
             <Label htmlFor="bl-module">Lỗi xảy ra ở module nào?</Label>
@@ -138,7 +155,24 @@ export function NutBaoLoi() {
             {dangGui ? 'Đang gửi…' : 'Gửi báo lỗi'}
           </Button>
         </div>
+        </KhungGui>
+        {coLichSu && (
+          <TabsContent value="lich-su" className="overflow-y-auto px-4 pb-4">
+            {/* Lọc theo module của TRANG ĐANG ĐỨNG, không theo ô chọn module trong form:
+                người dùng đổi ô chọn là để gửi lỗi cho module khác, không phải để đổi cái
+                họ đang soi. */}
+            <BangLichSuBaoLoi module={mod.ma} />
+          </TabsContent>
+        )}
       </SheetContent>
     </Sheet>
   );
+  return coLichSu ? <Tabs defaultValue="gui">{than}</Tabs> : than;
+}
+
+/** Thân form: bọc trong `TabsContent` khi có tab, trả thẳng khi không — để panel của người
+ *  chưa có quyền xem lịch sử giữ nguyên hình dạng cũ, không có thanh tab trống một mục. */
+function KhungGui({ coLichSu, children }: { coLichSu: boolean; children: React.ReactNode }) {
+  if (!coLichSu) return <>{children}</>;
+  return <TabsContent value="gui" className="overflow-y-auto">{children}</TabsContent>;
 }

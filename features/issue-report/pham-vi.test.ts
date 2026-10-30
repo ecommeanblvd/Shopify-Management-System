@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { primeRoleCache } from '@/lib/auth/access';
 import { SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
 import { quyenCuaModule, moduleXemDuoc, xemDuocChu, xemDuocAnh, phamViDoc } from './pham-vi';
+import { moduleTuDuongDan } from './phan-loai';
 
 /**
  * Vai GIẢ chỉ dùng trong test, dựng để cô lập đúng một điều kiện mỗi vai. Vai thật trong
@@ -131,5 +132,18 @@ describe('phamViDoc — mô tả phạm vi để dựng điều kiện SQL', () 
     if (a.kieu !== 'loc' || b.kieu !== 'loc') throw new Error('sai nhánh');
     expect(a.module).toEqual(b.module);
     expect(a.module).toEqual([...a.module].sort());
+  });
+});
+
+describe('tab Lịch sử mở trên trang không thuộc module nào', () => {
+  it('module của trang Dashboard là khac, nên nhân sự chỉ thấy báo lỗi của chính mình ở đó', () => {
+    // Panel Báo lỗi nằm ở Topbar nên mở được ở MỌI trang, gồm `/`. Nếu tab Lịch sử hiện một
+    // bảng trống ở đó thì người dùng kết luận "hệ thống mất báo lỗi của tôi".
+    const ma = moduleTuDuongDan('/').ma;
+    expect(ma).toBe('khac');
+    expect(xemDuocChu({ roleKey: 'chi_ship_ho', module: ma, laNguoiBao: false })).toBe(false);
+    expect(xemDuocChu({ roleKey: 'chi_ship_ho', module: ma, laNguoiBao: true })).toBe(true);
+    // Và phạm vi của vai đó KHÔNG chứa `khac` — nên nơi gọi biết phải hiện câu giải thích.
+    expect(moduleXemDuoc('chi_ship_ho').module.has('khac')).toBe(false);
   });
 });

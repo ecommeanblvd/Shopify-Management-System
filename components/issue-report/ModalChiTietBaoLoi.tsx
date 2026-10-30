@@ -29,6 +29,8 @@ export interface DongBaoLoi {
   createdAt: string;
   tenNguoiBao: string | null;
   emailNguoiBao: string | null;
+  /** Tính Ở SERVER (`xemDuocAnh`) — client không đọc được cache quyền. */
+  xemAnh: boolean;
 }
 
 export interface DongSuKien {
@@ -46,19 +48,19 @@ const gio = (s: string | null) => (s ? GIO.format(new Date(s)) : '—');
 /**
  * Modal chi tiết báo lỗi cho NHÂN SỰ — chỉ đọc, không có nút đổi trạng thái.
  *
- * `xemAnh` là boolean TÍNH SẴN ở server, không gọi `xemDuocAnh` tại đây: hàm đó đọc cache quyền
- * ở tiến trình server, component client không với tới được.
+ * `baoLoi.xemAnh` là boolean TÍNH SẴN ở server (`xemDuocAnh`), không gọi lại tại đây: hàm đó đọc
+ * cache quyền ở tiến trình server, component client không với tới được. Một nguồn duy nhất — đừng
+ * thêm prop `xemAnh` song song, hai nguồn thì sớm muộn lệch nhau.
  *
  * KHÔNG thêm `relative` vào `DialogContent` (bản gốc là `fixed top-1/2 left-1/2 -translate-*`,
  * twMerge sẽ đè mất `fixed`), và bề rộng phải khai bằng `sm:max-w-*` — `max-w-*` là class chết,
  * `components/ui/dialog-max-w.test.ts` chặn việc đó.
  */
 export function ModalChiTietBaoLoi({
-  baoLoi, suKien, xemAnh, tenNguoi, mo, onMoChange,
+  baoLoi, suKien, tenNguoi, mo, onMoChange,
 }: {
   baoLoi: DongBaoLoi | null;
   suKien: DongSuKien[];
-  xemAnh: boolean;
   /** email → tên, để dòng thời gian hiện tên thay vì email đồng nghiệp. */
   tenNguoi: Record<string, string>;
   mo: boolean;
@@ -88,7 +90,7 @@ export function ModalChiTietBaoLoi({
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lỗi ở đâu</h3>
                 <p className="whitespace-pre-wrap text-sm">{baoLoi.description}</p>
-                {baoLoi.anh.length > 0 && (xemAnh ? (
+                {baoLoi.anh.length > 0 && (baoLoi.xemAnh ? (
                   <div className="flex flex-wrap gap-2">
                     {baoLoi.anh.map((a, i) => (
                       <a key={a.key} href={`/f/bao-loi/${baoLoi.id}/anh/${i + 1}`}

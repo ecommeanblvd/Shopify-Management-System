@@ -1,12 +1,17 @@
 'use server';
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { db, schema } from '@/db/client';
 import { auth } from '@/lib/auth/auth';
 import { requirePerm } from '@/features/receiving/perm';
 import { ghiSuKien } from './su-kien';
+import { getRole } from '@/lib/auth/role';
+import { hasPermission } from '@/lib/auth/rbac';
+import { moduleXemDuoc, xemDuocAnh } from './pham-vi';
+import { baoLoiTrongPhamVi, suKienCuaCacBaoLoi } from './queries';
+import type { DongBaoLoi, DongSuKien } from '@/components/issue-report/ModalChiTietBaoLoi';
 import { isStorageConfigured, putObject } from '@/lib/storage/s3';
 import {
   ANH_BYTE_TOI_DA, ANH_TOI_DA, khoaAnh, nhanDangAnh, tenHienThi, type AnhBaoLoi,
@@ -128,4 +133,82 @@ export async function doiTrangThaiBaoLoi(id: string, trangThai: string, ghiChu?:
   }
   revalidatePath('/admin/issues');
   return { ok: true };
+}
+
+/* ── Màn lịch sử báo lỗi cho nhân sự ───────────────────────────────────────── */
+
+export interface LichSuBaoLoi {
+  dong: DongBaoLoi[];
+  suKien: Record<string, DongSuKien[]>;
+  /** email → tên, cho dòng thời gian. */
+  tenNguoi: Record<string, string>;
+  /** `true` khi `module` nằm trong phạm vi người đọc. `false` ⇒ họ chỉ thấy lỗi của chính mình
+   *  ở màn này, nên giao diện phải nói ra điều đó thay vì hiện bảng trống. */
+  trongPhamVi: boolean;
+  xemHet: boolean;
+}
+
+/**
+ * Lịch sử báo lỗi TRONG PHẠM VI người đang đăng nhập.
+ *
+ * Thiếu `view_bao_loi` ⇒ trả `ok: false`. Nơi gọi (tab trong panel) không hiện tab, nhưng hàm
+ * vẫn phải tự gác: đây là cổng dữ liệu, không phải cổng hiển thị.
+ */
+export async function docLichSuBaoLoi(
+  vao: { module?: string; gioiHan?: number } = {},
+): Promise<{ ok: true; kq: LichSuBaoLoi } | { ok: false; loi: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, loi: 'Bạn cần đăng nhập.' };
+  const roleKey = await getRole(session.user.id);
+  if (!hasPermission(roleKey, 'view_bao_loi')) {
+    return { ok: false, loi: 'Vai trò của bạn chưa có quyền xem lịch sử báo lỗi.' };
+  }
+  const userId = session.user.id;
+  const pv = moduleXemDuoc(roleKey);
+  const moduleLoc = vao.module && moduleHopLe(vao.module) ? vao.module : undefined;
+
+  const rows = await baoLoiTrongPhamVi({
+    roleKey, userId, module: moduleLoc, gioiHan: vao.gioiHan ?? 20,
+  });
+  const suKien = await suKienCuaCacBaoLoi(rows.map((r) => r.id));
+
+  /* Tên người: gộp email của người báo và của mọi dòng thời gian thành MỘT lượt đọc. */
+  const email = new Set<string>();
+  for (const r of rows) if (r.reporterEmail) email.add(r.reporterEmail);
+  for (const ds of suKien.values()) for (const e of ds) email.add(e.nguoi);
+  const tenNguoi: Record<string, string> = {};
+  if (email.size > 0) {
+    for (const u of await db.select({ email: schema.user.email, name: schema.user.name })
+      .from(schema.user).where(inArray(schema.user.email, [...email]))) {
+      if (u.name) tenNguoi[u.email] = u.name;
+    }
+  }
+
+  const iso = (d: Date | null) => (d ? d.toISOString() : null);
+  return {
+    ok: true,
+    kq: {
+      trongPhamVi: pv.tatCa || (moduleLoc == null ? true : pv.module.has(moduleLoc)),
+      xemHet: pv.tatCa,
+      tenNguoi,
+      dong: rows.map((r) => ({
+        id: r.id, so: r.so, module: r.module, pagePath: r.pagePath, title: r.title,
+        description: r.description, mucDo: r.mucDo, trangThai: r.trangThai,
+        anh: r.anh as AnhBaoLoi[],
+        ghiChuXuLy: r.ghiChuXuLy, prUrl: r.prUrl,
+        xuLyLanCuoi: iso(r.xuLyLanCuoi), createdAt: r.createdAt.toISOString(),
+        tenNguoiBao: r.reporterEmail ? (tenNguoi[r.reporterEmail] ?? null) : null,
+        emailNguoiBao: r.reporterEmail,
+        // Ảnh siết hơn chữ (thiết kế §11) — tính Ở ĐÂY, client không tự quyết được.
+        xemAnh: xemDuocAnh({ roleKey, laNguoiBao: r.reporterId === userId }),
+      })),
+      suKien: Object.fromEntries([...suKien.entries()].map(([id, ds]) => [
+        id, ds.map((e) => ({
+          id: e.id, luc: e.luc.toISOString(), nguoi: e.nguoi,
+          tuTrangThai: e.tuTrangThai, denTrangThai: e.denTrangThai,
+          ghiChu: e.ghiChu, prUrl: e.prUrl,
+        })),
+      ])),
+    },
+  };
 }
