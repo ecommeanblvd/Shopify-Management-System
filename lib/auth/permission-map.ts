@@ -69,6 +69,8 @@ export const OLD_TO_NEW: Record<string, PermissionKey[]> = {
   view_cx_review: ['cx.review:view'],
   manage_cx_review: ['cx.review:view', 'cx.review:create', 'cx.review:edit'],
   view_nhat_ky: ['nhat_ky:view'],
+  view_bao_loi: ['bao_loi:view'],
+  view_bao_loi_tat_ca: ['bao_loi.tat_ca:view'],
 };
 
 const OPERATOR_OLD = [
@@ -89,13 +91,13 @@ const OPERATOR_OLD = [
   'view_cx_dispute', 'manage_cx_dispute',
   'view_cx_incident', 'manage_cx_incident',
   'view_cx_review', 'manage_cx_review',
-  'view_nhat_ky',
+  'view_nhat_ky', 'view_bao_loi',
 ];
 const VIEWER_OLD = [
   'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
   'view_orders', 'view_functions', 'view_mmp_products', 'view_fulfillment',
   'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
-  'view_nhat_ky',
+  'view_nhat_ky', 'view_bao_loi',
 ];
 
 function expand(oldPerms: string[]): PermissionKey[] {
@@ -158,7 +160,7 @@ export const SYSTEM_ROLE_SEEDS: Record<string, RoleSeed> = {
  *
  * CHỈ dùng cho quyền mà câu trả lời đúng là "ai cũng có". Đừng nhét quyền ghi vào đây.
  */
-export const QUYEN_MOI_VAI_TRO: readonly PermissionKey[] = ['nhat_ky:view'];
+export const QUYEN_MOI_VAI_TRO: readonly PermissionKey[] = ['nhat_ky:view', 'bao_loi:view'];
 
 /**
  * Quyền cấp cho một vai trò CẤP TAY trong Settings (không có hạt giống trong
@@ -175,5 +177,8 @@ export const QUYEN_MOI_VAI_TRO: readonly PermissionKey[] = ['nhat_ky:view'];
  * `seedRoles()` chỉ cấp khi vai ĐANG TỒN TẠI — không tự tạo vai mới.
  */
 export const QUYEN_THEO_VAI_NGOAI_HAT_GIONG: Record<string, readonly PermissionKey[]> = {
-  OC: ['fulfillment.logistics:create'],
+  /* `bao_loi.tat_ca:view`: CEO 30/10/2026 — "admin và Operation Coordinator thì xem được hết".
+   * Không nhét vào `QUYEN_MOI_VAI_TRO` vì khoá này mở cả ảnh đính kèm của mọi bộ phận, nên
+   * "ai cũng có" là câu trả lời SAI. `admin` tự có qua `allPermissionKeys()`. */
+  OC: ['fulfillment.logistics:create', 'bao_loi.tat_ca:view'],
 };

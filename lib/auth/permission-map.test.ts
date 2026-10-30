@@ -224,8 +224,13 @@ describe('quyền tạo vận đơn', () => {
   // Vai `OC` cấp TAY trên production, không có hạt giống — `SYSTEM_ROLE_SEEDS` không tới
   // được nó, mà `QUYEN_MOI_VAI_TRO` thì cấp cho MỌI vai (gồm `viewer`) nên cũng không dùng
   // được. Đường cấp đúng là map theo tên vai.
+  // `arrayContaining` chứ không `toEqual`: danh sách của `OC` còn nhận thêm khoá khác
+  // (30/10/2026 thêm `bao_loi.tat_ca:view`). Phép so bằng cả mảng biến "OC có quyền tạo vận
+  // đơn" thành "OC có ĐÚNG quyền đó và không gì khác" — mạnh hơn điều test này muốn nói, và
+  // nó sẽ đỏ mỗi lần vai `OC` được cấp thêm bất cứ gì.
   it('vai OC (cấp tay) được cấp qua QUYEN_THEO_VAI_NGOAI_HAT_GIONG', () => {
-    expect(QUYEN_THEO_VAI_NGOAI_HAT_GIONG['OC']).toEqual(OLD_TO_NEW['tao_van_don']);
+    expect(QUYEN_THEO_VAI_NGOAI_HAT_GIONG['OC'])
+      .toEqual(expect.arrayContaining(OLD_TO_NEW['tao_van_don']));
   });
 
   it('quyền này KHÔNG nằm trong nền chung cấp-cho-mọi-vai (viewer sẽ dính)', () => {
@@ -263,6 +268,54 @@ describe('scope fulfillment.logistics — chỉ còn hai hành động có thậ
     for (const [vai, seed] of Object.entries(SYSTEM_ROLE_SEEDS)) {
       expect(seed.keys, `vai ${vai}`).not.toContain('fulfillment.logistics:view');
       expect(seed.keys, `vai ${vai}`).not.toContain('fulfillment.logistics:delete');
+    }
+  });
+});
+
+/**
+ * Hai phạm vi quyền của màn lịch sử báo lỗi cho nhân sự (30/10/2026).
+ *
+ * `bao_loi:view` theo đúng khuôn `nhat_ky:view`: cấp cho MỌI vai trò qua `QUYEN_MOI_VAI_TRO`, kể
+ * cả vai cấp tay như `OC` vốn không có hạt giống nào. `bao_loi.tat_ca:view` thì KHÔNG — "ai cũng
+ * có" là câu trả lời SAI ở đây: nó mở ảnh đính kèm và lỗi của mọi bộ phận.
+ */
+describe('quyền màn lịch sử báo lỗi', () => {
+  it('bao_loi:view cấp cho MỌI vai trò, cùng khuôn nhat_ky:view', () => {
+    expect(QUYEN_MOI_VAI_TRO).toContain('bao_loi:view');
+  });
+
+  it('bao_loi.tat_ca:view KHÔNG cấp cho mọi vai', () => {
+    expect(QUYEN_MOI_VAI_TRO).not.toContain('bao_loi.tat_ca:view');
+  });
+
+  it('vai OC có bao_loi.tat_ca:view', () => {
+    expect(QUYEN_THEO_VAI_NGOAI_HAT_GIONG.OC).toContain('bao_loi.tat_ca:view');
+  });
+
+  it('hạt giống admin có cả hai khoá', () => {
+    expect(SYSTEM_ROLE_SEEDS.admin.keys).toContain('bao_loi:view');
+    expect(SYSTEM_ROLE_SEEDS.admin.keys).toContain('bao_loi.tat_ca:view');
+  });
+
+  it('tên cũ ánh xạ sang đúng một khoá mới', () => {
+    expect(OLD_TO_NEW.view_bao_loi).toEqual(['bao_loi:view']);
+    expect(OLD_TO_NEW.view_bao_loi_tat_ca).toEqual(['bao_loi.tat_ca:view']);
+  });
+
+  it('hai phạm vi có trong danh mục, mỗi phạm vi đúng một action view', () => {
+    for (const khoa of ['bao_loi', 'bao_loi.tat_ca']) {
+      const scope = CATALOG.find((s) => s.key === khoa);
+      expect(scope, `phạm vi ${khoa}`).toBeDefined();
+      expect(scope!.actions).toEqual(['view']);
+      // Lưới /admin/roles là module × action nên thiếu nhãn là ô hiện ra vô nghĩa.
+      expect(scope!.nhanHanhDong?.view, `nhãn của ${khoa}`).toBeTruthy();
+    }
+  });
+
+  it('hạt giống operator và viewer có bao_loi:view mà KHÔNG có bao_loi.tat_ca:view', () => {
+    for (const vai of ['operator', 'viewer'] as const) {
+      expect(SYSTEM_ROLE_SEEDS[vai].keys, `vai ${vai}`).toContain('bao_loi:view');
+      expect(SYSTEM_ROLE_SEEDS[vai].keys, `vai ${vai}`).not.toContain('bao_loi.tat_ca:view');
     }
   });
 });

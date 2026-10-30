@@ -532,6 +532,20 @@ export const CATALOG: ScopeDef[] = [
   // Nhật ký thay đổi mức từng ô. CHỈ có action 'view': nhật ký do trigger Postgres ghi,
   // không màn nào sửa hay xoá dòng của nó (dọn dòng cũ là việc của cron giữ 12 tháng).
   { key: 'nhat_ky', label: 'Nhật ký thay đổi', actions: ['view'] },
+  /* Màn lịch sử báo lỗi cho nhân sự (CEO 30/10/2026). HAI phạm vi chứ không một phạm vi hai
+   * action, vì `ACTIONS` ở trên là TẬP ĐÓNG — không có action nào mang nghĩa "xem hết".
+   *
+   * Phạm vi ai thấy được gì KHÔNG nằm ở đây mà ở `features/issue-report/pham-vi.ts`: nó suy
+   * quyền của từng module từ `NAV` + `SETTINGS_ITEMS`, tức "đọc được lỗi của màn mình mở
+   * được". Luật đó tự đúng khi thêm người hoặc đổi quyền. */
+  {
+    key: 'bao_loi', label: 'Báo lỗi — lịch sử', actions: ['view'],
+    nhanHanhDong: { view: 'Xem báo lỗi của các màn mình mở được, và báo lỗi của chính mình' },
+  },
+  {
+    key: 'bao_loi.tat_ca', label: 'Báo lỗi — xem mọi bộ phận', actions: ['view'],
+    nhanHanhDong: { view: 'Xem báo lỗi của MỌI bộ phận, kèm ảnh đính kèm' },
+  },
   /* Ba action ở đây KHÔNG theo nghĩa thường, và cả ba đều RỘNG HƠN tên module.
    * Bản đồ quyền cũ: `lib/auth/permission-map.ts:18-20`.
    *

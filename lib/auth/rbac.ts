@@ -72,7 +72,14 @@ export type Permission =
   /** Xem nhật ký thay đổi (ai sửa ô nào, từ giá trị nào sang giá trị nào). MỌI vai trò
    *  đều có — CEO chốt 20/10/2026. Vẫn là quyền RIÊNG để sau này siết được một vai
    *  trò mà không phải sửa mã. Giá trị nhạy cảm che riêng theo `features/nhat-ky/che-gia-tri.ts`. */
-  | 'view_nhat_ky';
+  | 'view_nhat_ky'
+  /** Xem báo lỗi của các màn mình mở được, và báo lỗi của chính mình. MỌI vai trò đều có —
+   *  cùng khuôn `view_nhat_ky`. Vẫn là quyền RIÊNG để sau này siết được một vai mà không
+   *  phải sửa mã. Luật phạm vi ở `features/issue-report/pham-vi.ts`. */
+  | 'view_bao_loi'
+  /** Xem báo lỗi của MỌI bộ phận, KÈM ảnh đính kèm. Chỉ `admin` và `OC` (CEO 30/10/2026).
+   *  Tách riêng vì ảnh là chỗ lọt dữ liệu ngoài ý muốn — xem thiết kế §11. */
+  | 'view_bao_loi_tat_ca';
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -93,7 +100,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
     'view_cx_review', 'manage_cx_review',
-    'view_nhat_ky',
+    'view_nhat_ky', 'view_bao_loi', 'view_bao_loi_tat_ca',
   ],
   operator: [
     'view', 'run_feature',
@@ -110,7 +117,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_cx_dispute', 'manage_cx_dispute',
     'view_cx_incident', 'manage_cx_incident',
     'view_cx_review', 'manage_cx_review',
-    'view_nhat_ky',
+    'view_nhat_ky', 'view_bao_loi',
   ],
   viewer: [
     'view', 'view_settings_history', 'view_markets_history', 'view_carrier_rates',
@@ -118,7 +125,7 @@ const MATRIX: Record<Role, Permission[]> = {
     'view_mmp_products',
     'view_fulfillment',
     'view_cx_ticket', 'view_cx_dispute', 'view_cx_incident', 'view_cx_review',
-    'view_nhat_ky',
+    'view_nhat_ky', 'view_bao_loi',
   ],
 };
 
