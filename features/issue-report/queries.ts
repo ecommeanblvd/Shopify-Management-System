@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db, schema } from '@/db/client';
+import { phamViDoc } from './pham-vi';
 
 export type BaoLoi = typeof schema.issueReports.$inferSelect;
 
@@ -64,4 +65,62 @@ export async function lanXuLyGanNhat(): Promise<Date | null> {
   const [r] = await db.select({ luc: sql<Date | null>`max(${schema.issueReports.xuLyLanCuoi})` })
     .from(schema.issueReports);
   return r?.luc ? new Date(r.luc) : null;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Đọc theo PHẠM VI cho màn nhân sự (`/f/bao-loi` và tab Lịch sử). Khác
+ * `danhSachBaoLoi` ở trên — hàm đó không gác gì, chỉ `/admin/issues` dùng.
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Điều kiện phạm vi: `undefined` = không lọc (xem hết).
+ *
+ * `reporter_id = người đọc` LUÔN là một nhánh OR, nên người báo đọc được lỗi của mình kể cả khi
+ * module của nó nằm ngoài phạm vi — xem `xemDuocChu` và thiết kế §6.2b.
+ */
+function dieuKienPhamVi(roleKey: string, userId: string): SQL | undefined {
+  const pv = phamViDoc(roleKey);
+  if (pv.kieu === 'tat_ca') return undefined;
+  const nhanh: SQL[] = [eq(schema.issueReports.reporterId, userId)];
+  if (pv.module.length > 0) nhanh.push(inArray(schema.issueReports.module, pv.module));
+  return or(...nhanh);
+}
+
+/** Tham số `module` / `trangThai` chỉ THU HẸP thêm, không bao giờ mở rộng phạm vi. */
+export async function baoLoiTrongPhamVi(a: {
+  roleKey: string; userId: string; module?: string; trangThai?: string; gioiHan?: number;
+}): Promise<BaoLoi[]> {
+  const dk: SQL[] = [];
+  const pv = dieuKienPhamVi(a.roleKey, a.userId);
+  if (pv) dk.push(pv);
+  if (a.module) dk.push(eq(schema.issueReports.module, a.module));
+  if (a.trangThai) dk.push(eq(schema.issueReports.trangThai, a.trangThai));
+  return db.select().from(schema.issueReports)
+    .where(dk.length ? and(...dk) : undefined)
+    .orderBy(desc(schema.issueReports.createdAt))
+    .limit(Math.min(Math.max(a.gioiHan ?? 100, 1), 500));
+}
+
+/** `null` khi không có, HOẶC khi có mà ngoài phạm vi — nơi gọi nói "không tìm thấy" cho cả hai
+ *  ca, đừng nói "không có quyền": câu đó xác nhận báo lỗi đó tồn tại. */
+export async function baoLoiTheoSo(a: {
+  so: number; roleKey: string; userId: string;
+}): Promise<BaoLoi | null> {
+  const dk: SQL[] = [eq(schema.issueReports.so, a.so)];
+  const pv = dieuKienPhamVi(a.roleKey, a.userId);
+  if (pv) dk.push(pv);
+  const [r] = await db.select().from(schema.issueReports).where(and(...dk)).limit(1);
+  return r ?? null;
+}
+
+/** Đếm theo trạng thái TRONG phạm vi — ô đếm ở trang rộng dùng nó làm bộ lọc. */
+export async function demTrangThaiTrongPhamVi(a: {
+  roleKey: string; userId: string;
+}): Promise<Record<string, number>> {
+  const pv = dieuKienPhamVi(a.roleKey, a.userId);
+  const rows = await db.select({
+    trangThai: schema.issueReports.trangThai,
+    n: sql<number>`count(*)::int`,
+  }).from(schema.issueReports).where(pv).groupBy(schema.issueReports.trangThai);
+  return Object.fromEntries(rows.map((r) => [r.trangThai, r.n]));
 }

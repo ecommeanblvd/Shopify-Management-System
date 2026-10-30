@@ -87,3 +87,23 @@ export function xemDuocChu(a: { roleKey: string; module: string; laNguoiBao: boo
 export function xemDuocAnh(a: { roleKey: string; laNguoiBao: boolean }): boolean {
   return a.laNguoiBao || hasPermission(a.roleKey, 'view_bao_loi_tat_ca');
 }
+
+/**
+ * Mô tả phạm vi đọc, dạng dữ liệu THUẦN để tầng truy vấn dựng điều kiện SQL từ nó.
+ *
+ * Vì sao là mô tả chứ không phải điều kiện Drizzle: quyết định thật nằm ở "lọc hay không, và
+ * lọc những module nào" — kiểm được bằng một phép so đối tượng. Dựng sẵn điều kiện Drizzle rồi
+ * đi so chuỗi SQL là đi kiểm bản dịch, không kiểm quyết định.
+ */
+export type PhamViDoc =
+  | { kieu: 'tat_ca' }
+  /** Lọc: `reporter_id = người đọc` **HOẶC** `module` nằm trong danh sách. Danh sách rỗng là
+   *  hợp lệ — khi đó chỉ còn nhánh người báo, đúng ý §6.2b. */
+  | { kieu: 'loc'; module: string[] };
+
+/** Danh sách module SẮP sẵn: cùng một vai phải ra cùng một câu SQL giữa hai lượt chạy. */
+export function phamViDoc(roleKey: string): PhamViDoc {
+  const pv = moduleXemDuoc(roleKey);
+  if (pv.tatCa) return { kieu: 'tat_ca' };
+  return { kieu: 'loc', module: [...pv.module].sort() };
+}

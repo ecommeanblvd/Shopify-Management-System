@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { primeRoleCache } from '@/lib/auth/access';
 import { SYSTEM_ROLE_SEEDS } from '@/lib/auth/permission-map';
-import { quyenCuaModule, moduleXemDuoc, xemDuocChu, xemDuocAnh } from './pham-vi';
+import { quyenCuaModule, moduleXemDuoc, xemDuocChu, xemDuocAnh, phamViDoc } from './pham-vi';
 
 /**
  * Vai GIẢ chỉ dùng trong test, dựng để cô lập đúng một điều kiện mỗi vai. Vai thật trong
@@ -102,5 +102,34 @@ describe('xemDuocAnh', () => {
     // Ca chặn của lối (b) — thiết kế §11: chữ hiện theo quyền module, ẢNH thì không.
     expect(xemDuocChu({ roleKey: 'chi_ship_ho', module: 'ship-ho', laNguoiBao: false })).toBe(true);
     expect(xemDuocAnh({ roleKey: 'chi_ship_ho', laNguoiBao: false })).toBe(false);
+  });
+});
+
+describe('phamViDoc — mô tả phạm vi để dựng điều kiện SQL', () => {
+  it('tat_ca thì không lọc gì', () => {
+    expect(phamViDoc('xem_het')).toEqual({ kieu: 'tat_ca' });
+  });
+
+  it('vai thường thì lọc theo danh sách module xem được', () => {
+    const pv = phamViDoc('chi_ship_ho');
+    expect(pv.kieu).toBe('loc');
+    if (pv.kieu !== 'loc') throw new Error('sai nhánh');
+    expect(pv.module).toContain('ship-ho');
+    expect(pv.module).not.toContain('orders');
+    expect(pv.module).not.toContain('khac');
+  });
+
+  it('không có view_bao_loi thì danh sách module RỖNG — nhưng vẫn là loc, không phải chặn hết', () => {
+    // Điều kiện SQL luôn còn nhánh `reporter_id = tôi`, nên người báo vẫn đọc được lỗi của
+    // mình kể cả khi vai chưa được seed quyền. Trả `tat_ca` ở đây thì ngược lại: mở hết.
+    expect(phamViDoc('khong_quyen_bao_loi')).toEqual({ kieu: 'loc', module: [] });
+  });
+
+  it('danh sách module sắp ổn định để câu SQL không đổi giữa hai lượt chạy', () => {
+    const a = phamViDoc('operator');
+    const b = phamViDoc('operator');
+    if (a.kieu !== 'loc' || b.kieu !== 'loc') throw new Error('sai nhánh');
+    expect(a.module).toEqual(b.module);
+    expect(a.module).toEqual([...a.module].sort());
   });
 });
